@@ -101,8 +101,13 @@ export function createRenderer(): Renderer {
       let value = initial;
       return [() => value, (next: T) => (value = next)];
     },
-    // No memo: every read recomputes, which is what a test wants.
-    computed: <T>(fn: () => T) => fn,
+    // No memo: every read recomputes, which is what a test wants. It runs
+    // once on definition, as the real renderer does, so a read of state
+    // declared further down the module fails here too.
+    computed: <T>(fn: () => T) => {
+      fn();
+      return fn;
+    },
     sidebar: (root: () => unknown) => {
       r.roots.push(root);
     },
