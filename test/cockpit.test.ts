@@ -329,6 +329,18 @@ describe("Move to project override (issue #8)", () => {
     assert.equal(model.hasProjectOverride(a), false);
   });
 
+  it("moveToProject persists the new key, clearProjectOverride a delete", () => {
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    r.opened.length = 0;
+    model.moveToProject(a, "/dev/app-two");
+    assert.deepEqual(r.opened, ["cmux-cockpit://set?key=projectOverride.a&value=%22%2Fdev%2Fapp-two%22"]);
+
+    r.opened.length = 0;
+    model.clearProjectOverride(a);
+    assert.deepEqual(r.opened, ["cmux-cockpit://set?key=projectOverride.a"]);
+  });
+
   it("ignores a key that is not a configured project", () => {
     const a = byId("a");
     if (!a) throw new Error("fixture");

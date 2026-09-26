@@ -4,7 +4,8 @@
 // Optimistic overrides flip locally the same frame, then clear once the data
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
-import { PROJECTS, type Project, projectId, projectOf } from "../shared/projects.ts";
+import { persistSet, SAVED_STATE } from "../shared/persist.ts";
+import { isProjectKey, PROJECTS, type Project, projectId, projectOf } from "../shared/projects.ts";
 import { nowEpoch } from "../shared/time.ts";
 import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
@@ -90,11 +91,18 @@ export function moveToLane(w: Workspace | undefined, laneKey: LaneKey): void {
   bump();
 }
 
-// Session-only "Move to project" override (issue #8): no cmux field holds
-// project membership, so this map is the whole persistence story, and it is
-// gone on reload. Consulted before the path match, the way laneOf consults
-// laneOverride, but with no decay: nothing in cmux ever supersedes it.
-const projectOverride = new Map<string, string>(); // wsId -> project key
+// "Move to project" override (issue #8): no cmux field holds project
+// membership. Seeded from the saved state at startup, and moveToProject and
+// clearProjectOverride call persistSet, so a choice survives a reload.
+// Never pruned: a workspace missing from one frame may be cmux still starting
+// up or refreshing, and an entry for a closed workspace is unreachable and
+// capped by the state file. Consulted before the path match, the way laneOf
+// consults laneOverride, but with no decay: nothing in cmux ever supersedes
+// it.
+// wsId -> project key
+const projectOverride = new Map<string, string>(
+  Object.entries(SAVED_STATE.projectOverride).filter(([, key]) => isProjectKey(key)),
+);
 // Declared here, above allWorkspaces(), because the renderer evaluates a
 // computed() as soon as it is defined, so its reads run during module load.
 
@@ -111,7 +119,6 @@ export function overrideOrder(ids: string[]): void {
 function allWorkspaces(): Workspace[] {
   tick();
   let ws = data.workspaces() ?? [];
-  pruneProjectOverride(ws);
   if (orderOverride) {
     const ids = orderOverride.ids.filter((id) => ws.some((w) => w.id === id));
     if (ws.map((w) => w.id).join(",") === ids.join(",") || nowEpoch() - orderOverride.at > OVERRIDE_SECS) {
@@ -218,15 +225,6 @@ export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => la
 
 const OTHER: Project = { match: "other", name: "Other", color: "#A09E95", icon: "terminal" };
 
-// Drops overrides for workspaces cmux no longer reports (closed sessions),
-// so the map does not grow forever across a long-running sidebar. Not a
-// write anyone reads reactively: what shows is unchanged, so no bump().
-function pruneProjectOverride(ws: readonly Workspace[]): void {
-  if (!projectOverride.size) return;
-  const ids = new Set(ws.map((w) => w.id));
-  for (const id of projectOverride.keys()) if (!ids.has(id)) projectOverride.delete(id);
-}
-
 export const projectKey = (w: Workspace): string => {
   tick();
   const o = projectOverride.get(w.id);
@@ -235,16 +233,19 @@ export const projectKey = (w: Workspace): string => {
   return PROJECTS.includes(p) ? projectId(p) : projectId(OTHER);
 };
 
-/** Move a workspace to a project for the rest of this session. Used by the context menu. */
+/** Move a workspace to a project, kept across a reload until cleared. Used by the context menu. */
 export function moveToProject(w: Workspace | undefined, key: string): void {
-  if (!w || !PROJECTS.some((p) => projectId(p) === key)) return;
+  if (!w || !isProjectKey(key)) return;
   projectOverride.set(w.id, key);
   bump();
+  persistSet(`projectOverride.${w.id}`, key);
 }
 
 /** Drop the override, so the workspace falls back to its path match. */
 export function clearProjectOverride(w: Workspace | undefined): void {
-  if (w && projectOverride.delete(w.id)) bump();
+  if (!w || !projectOverride.delete(w.id)) return;
+  bump();
+  persistSet(`projectOverride.${w.id}`, null);
 }
 
 export const hasProjectOverride = (w: Workspace | undefined): boolean => {
