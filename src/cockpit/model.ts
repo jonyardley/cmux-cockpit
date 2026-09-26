@@ -90,6 +90,14 @@ export function moveToLane(w: Workspace | undefined, laneKey: LaneKey): void {
   bump();
 }
 
+// Session-only "Move to project" override (issue #8): no cmux field holds
+// project membership, so this map is the whole persistence story, and it is
+// gone on reload. Consulted before the path match, the way laneOf consults
+// laneOverride, but with no decay: nothing in cmux ever supersedes it.
+const projectOverride = new Map<string, string>(); // wsId -> project key
+// Declared here, above allWorkspaces(), because the renderer evaluates a
+// computed() as soon as it is defined, so its reads run during module load.
+
 // --- order ---------------------------------------------------------------------------
 
 let orderOverride: { ids: string[]; at: number } | null = null;
@@ -209,12 +217,6 @@ export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => la
 // local only: projects are not cmux groups.
 
 const OTHER: Project = { match: "other", name: "Other", color: "#A09E95", icon: "terminal" };
-
-// Session-only "Move to project" override (issue #8): no cmux field holds
-// project membership, so this map is the whole persistence story, and it is
-// gone on reload. Consulted before the path match, the way laneOf consults
-// laneOverride, but with no decay: nothing in cmux ever supersedes it.
-const projectOverride = new Map<string, string>(); // wsId -> project key
 
 // Drops overrides for workspaces cmux no longer reports (closed sessions),
 // so the map does not grow forever across a long-running sidebar. Not a
