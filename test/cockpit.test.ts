@@ -119,6 +119,14 @@ describe("a real workspace anchoring a single-member group", () => {
       ["real-parked"],
     );
   });
+
+  it("still pins the real anchor's card, same as any group's anchor", () => {
+    r.data.epoch += 100;
+    r.data.selectedId = null;
+    r.data.groups = [group("g-parked", "Parked", { anchorId: "real-parked" })];
+    r.data.workspaces = [ws("real-parked", { directory: "/Users/coder/dev/app-three", group: "g-parked" })];
+    assert.equal(drop.isForeignAnchor("real-parked"), true);
+  });
 });
 
 describe("resolveDrop", () => {
