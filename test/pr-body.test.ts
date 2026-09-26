@@ -57,6 +57,18 @@ describe("missingSections", () => {
       "_TBD_.",
       "  pending \u2026",
       "<!-- Required. -->\nPending.",
+      "- Pending.",
+      "> TBD",
+      "1. TODO",
+      "(pending)",
+      "[TBD]",
+      "~~WIP~~",
+      "to-do",
+      "T.B.D.",
+      "TBC",
+      "Pending review.",
+      "### Findings\nPending.",
+      "Pending.\n\nTBD",
     ];
     for (const text of standIns) {
       const body = filled.replace("/code-review high: two findings, both fixed.", text);
@@ -77,6 +89,9 @@ describe("missingSections", () => {
       "Not yet reloaded, but nothing on screen changes.",
       "Pending.\nThen reviewed: no findings.",
       "pendingly",
+      "TODO: fill in after review, but one finding is already fixed.",
+      "### Findings\nNone.",
+      "- Pending\n- /code-review high: no findings",
     ];
     for (const text of real) {
       const body = filled.replace("/code-review high: two findings, both fixed.", text);

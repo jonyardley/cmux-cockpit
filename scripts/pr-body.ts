@@ -11,19 +11,21 @@ export const REQUIRED = ["Look at after reload", "Review"] as const;
 
 const FOOTER = /^🤖 Generated with \[Claude Code\]\(.*\)\s*$/;
 
-// Words that hold a section's place until the real text arrives. Matched
-// against the whole section, so real text that mentions one still counts.
-const PLACEHOLDERS = new Set(["pending", "tbd", "todo", "wip", "to do", "review pending", "not yet"]);
+// Words that hold a section's place until the real text arrives, as their
+// letters only, so "To do", "to-do" and "T.B.D." all match. Matched against
+// whole lines, so real text that mentions one still counts.
+const PLACEHOLDERS = new Set(["pending", "tbd", "tbc", "todo", "wip", "reviewpending", "pendingreview", "notyet"]);
 
-// True when the section's text is only a placeholder, ignoring case, spacing,
-// trailing punctuation and wrapping emphasis ("**Pending.**").
+// True when every line of the section with any letters is a placeholder or a
+// sub-heading, and at least one is a placeholder. Case, spacing, punctuation
+// and markdown ("- **Pending.**", "> TBD", "(wip)") are ignored.
 function isPlaceholder(text: string): boolean {
-  const bare = text
-    .replace(/^[\s*_`]+/, "")
-    .replace(/[\s*_`.!?:;,\u2026]+$/, "")
-    .replace(/\s+/g, " ")
-    .toLowerCase();
-  return PLACEHOLDERS.has(bare);
+  const words = text
+    .split("\n")
+    .filter((l) => !/^\s*#{1,6}\s/.test(l))
+    .map((l) => l.replace(/[^\p{L}]/gu, "").toLowerCase())
+    .filter((l) => l !== "");
+  return words.length > 0 && words.every((w) => PLACEHOLDERS.has(w));
 }
 
 // Lines of the body with comments and the footer removed, and each line
