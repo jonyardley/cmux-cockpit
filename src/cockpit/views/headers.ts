@@ -4,9 +4,11 @@ import { glyphColor } from "../../shared/contrast.ts";
 import { dropLane } from "../drop.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
+  canOpenProject,
   isCollapsed,
   isProjectCollapsed,
   laneCount,
+  openProjectWorkspace,
   projectByKey,
   projectCount,
   toggleLane,
@@ -106,6 +108,17 @@ export function laneHeader(laneKey: LaneKey): View {
     .onTap(() => toggleLane(lane));
 }
 
+// A quiet glyph, not a chip: the header already has an edge. The shape gives
+// the tap a full 20pt target (a framed Image only takes taps on its glyph),
+// and its own onTap keeps it independent of the header row's collapse tap.
+function addProjectButton(k: string): View {
+  return ZStack({}, [Circle({ size: 20 }).fill("clear"), Image("plus").font(11).weight("semibold").color(C.secondary)])
+    .frame({ width: 20, height: 20 })
+    .cornerRadius(10)
+    .hoverBackground(C.hover)
+    .onTap(() => openProjectWorkspace(k));
+}
+
 export function projectHeader(k: string): View {
   const p = projectByKey(k);
   return HStack({ spacing: 8 }, [
@@ -117,6 +130,7 @@ export function projectHeader(k: string): View {
     Text(p.name).font(12.5).weight("semibold").color("#3D3D3A"),
     countPill(() => projectCount(k)),
     Spacer(),
+    ...(canOpenProject(k) ? [addProjectButton(k)] : []),
   ])
     .paddingHorizontal(8)
     .paddingTop(14)

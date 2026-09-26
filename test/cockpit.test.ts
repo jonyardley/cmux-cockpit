@@ -357,6 +357,20 @@ describe("Move to project override (issue #8)", () => {
     // app-one's header still shows (every project does), but a moved out of it.
     assert.equal(ids[ids.indexOf("p:/dev/app-one") + 1], "p:/dev/app-one:empty");
   });
+
+  it("offers + only for a project with a root, and opens a workspace there", () => {
+    // The example table gives App One a root; App Two and Other have none.
+    assert.equal(model.canOpenProject("/dev/app-one"), true);
+    assert.equal(model.canOpenProject("/dev/app-two"), false);
+    assert.equal(model.canOpenProject("other"), false);
+    model.openProjectWorkspace("/dev/app-one");
+    assert.deepEqual(r.calls, [{ method: "workspace.create", params: { cwd: "~/dev/app-one", focus: true } }]);
+  });
+
+  it("does nothing when the project has no root", () => {
+    model.openProjectWorkspace("/dev/app-two");
+    assert.deepEqual(r.calls, []);
+  });
 });
 
 describe("chips", () => {

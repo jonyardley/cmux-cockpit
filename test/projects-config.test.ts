@@ -32,4 +32,11 @@ describe("project table validation", () => {
   it("rejects two projects with the same name, the #26 table", () => {
     assert.match(error([p("/.config/cmux", "Cockpit"), p("/dev/cmux-cockpit", "Cockpit")]), /named "Cockpit"/);
   });
+
+  it("accepts an absolute or ~ root, rejects a relative or empty one", () => {
+    assert.ok(validateProjects([{ ...p("/a"), root: "/Users/jon/dev/app" }]).ok);
+    assert.ok(validateProjects([{ ...p("/a"), root: "~/dev/app" }]).ok);
+    assert.match(error([{ ...p("/a"), root: "dev/app" }]), /absolute path/);
+    assert.match(error([{ ...p("/a"), root: "" }]), /absolute path/);
+  });
 });

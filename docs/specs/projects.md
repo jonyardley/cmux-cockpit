@@ -75,8 +75,9 @@ project's name, colour or icon into the sidebar itself.
 
 1. **Made of:** already fully specified by `Project` in
    `src/shared/projects.ts`: `match` (string or list), `name`, `color`,
-   `icon` (SF Symbol). Ordering is array order in `config/projects.json`.
-   Nothing else is modelled.
+   `icon` (SF Symbol), and an optional `root` (absolute path, `~` allowed)
+   that shows a "+" on the project's header to open a new workspace there.
+   Ordering is array order in `config/projects.json`.
 2. **Where it lives:** stays `config/projects.json` (gitignored) plus
    `config/projects.example.json` (committed sample), validated by
    `scripts/projects-config.ts`, injected by `scripts/build.ts`. This is

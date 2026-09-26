@@ -1,5 +1,5 @@
 [
-  { "match": "/dev/app-one", "name": "App One", "color": "#D97757", "icon": "star.fill" },
+  { "match": "/dev/app-one", "name": "App One", "color": "#D97757", "icon": "star.fill", "root": "~/dev/app-one" },
   { "match": ["/dev/app-two", "/.config/app-two"], "name": "App Two", "color": "#6A9BCC", "icon": "cube.fill" },
   { "match": "/dev/app-three", "name": "App Three", "color": "#788C5D", "icon": "leaf.fill" }
 ]

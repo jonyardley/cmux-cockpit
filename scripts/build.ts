@@ -3,9 +3,12 @@
 // The project table is read from config/projects.json (gitignored, Jon's real
 // table), falling back to the committed config/projects.example.json, and
 // injected as the __PROJECTS__ define so src/shared/projects.ts can read it.
+// A `root` field's leading `~` is expanded against HOME here, since a sidebar
+// has no filesystem access to do it at runtime.
 //   node scripts/build.ts    build once
 
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { build } from "esbuild";
 import { type Project, validateProjects } from "./projects-config.ts";
 
@@ -32,7 +35,18 @@ function loadProjects(): readonly Project[] {
   return result.projects;
 }
 
-const projects = loadProjects();
+/** Expands a leading `~` (bare, or `~/...`) against HOME. Other roots pass through. */
+function expandRoot(root: string): string {
+  if (root === "~") return homedir();
+  if (root.startsWith("~/")) return homedir() + root.slice(1);
+  return root;
+}
+
+function withExpandedRoots(projects: readonly Project[]): readonly Project[] {
+  return projects.map((p) => (p.root ? { ...p, root: expandRoot(p.root) } : p));
+}
+
+const projects = withExpandedRoots(loadProjects());
 
 for (const name of ENTRIES) {
   const outfile = `sidebars/${name}.js`;

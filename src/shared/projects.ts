@@ -11,6 +11,8 @@ export interface Project {
   color: string;
   /** SF Symbol name. */
   icon: string;
+  /** Absolute path (build.ts expands a leading `~`) to open a new workspace in. */
+  root?: string;
 }
 
 export const PROJECTS: readonly Project[] = __PROJECTS__;
