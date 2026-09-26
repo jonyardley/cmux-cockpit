@@ -3,6 +3,7 @@
 
 import { byActivity, sinceOrActivity } from "../shared/activity.ts";
 import { markLast } from "../shared/list.ts";
+import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
 import { cardMessage } from "../shared/text.ts";
 import { fmtAge, fmtElapsed, nowEpoch } from "../shared/time.ts";
@@ -17,11 +18,12 @@ export interface AgentEntry {
 
 // ---- Waiting on you -----------------------------------------------------
 
-/** Workspaces with a needs_input agent, longest-waiting first, at most 20. */
+/** Workspaces with a needs_input agent, longest-waiting first, at most 20.
+ * Idle nudges and dismissed asks read as idle (src/shared/needs.ts). */
 export const waiting = computed(() => {
   const out: AgentEntry[] = [];
   for (const w of data.workspaces() ?? []) {
-    const a = (w.agents ?? []).find((x) => x.status === "needs_input");
+    const a = agentsOf(w).find((x) => x.status === "needs_input");
     if (!a) continue;
     out.push({ key: "w:" + w.id, ws: w, a, project: projectOf(w.directory) });
   }
@@ -49,7 +51,7 @@ export const roster = computed(() => {
   const idle: (AgentEntry & { kind: "idle" })[] = [];
   for (const w of data.workspaces() ?? []) {
     if (w.selected) continue;
-    const a = [...(w.agents ?? [])].sort(byActivity)[0];
+    const a = agentsOf(w).sort(byActivity)[0];
     if (!a) continue;
     const e = { ws: w, a, project: projectOf(w.directory) };
     if (a.status === "working") run.push({ ...e, key: "r:" + w.id, kind: "run" });
@@ -88,7 +90,7 @@ export interface Current {
 export const current = computed((): Current | null => {
   const w = (data.workspaces() ?? []).find((x) => x.selected);
   if (!w) return null;
-  const agents = [...(w.agents ?? [])].sort(byActivity);
+  const agents = agentsOf(w).sort(byActivity);
   return { ws: w, a: agents[0] ?? null, agents, project: projectOf(w.directory) };
 });
 

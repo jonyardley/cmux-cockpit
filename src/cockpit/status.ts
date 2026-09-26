@@ -1,50 +1,19 @@
-// A workspace's status, from its most active agent, with "needs you"
-// dismissals applied.
+// A workspace's status, from its most active agent, with idle nudges and
+// "needs you" dismissals applied (src/shared/needs.ts).
 
 import { mostActive } from "../shared/activity.ts";
+import { agentsOf } from "../shared/needs.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
-import { bump, tick } from "./state.ts";
 import { C } from "./theme.ts";
 
 export type Status = AgentStatus | "none";
 
 export function agentOf(w: Workspace | undefined): Agent | null {
-  return mostActive(w?.agents);
-}
-
-// A dismissed "needs you" reads as idle until the agent asks again: the
-// dismissal is keyed to the start of that needs_input spell, so a new one
-// (a new start) shows. Local only, so a reload forgets it.
-const dismissedNeeds = new Map<string, number>(); // wsId -> needs_input start
-const needsStart = (a: Agent | null): number => (a && (a.sinceEpoch || a.lastActivityAt)) || 0;
-
-function rawStatusOf(w: Workspace | undefined): Status {
-  const a = agentOf(w);
-  return a ? a.status : "none";
-}
-
-export function isNeedsDismissed(w: Workspace | undefined): boolean {
-  tick();
-  if (!w || !dismissedNeeds.has(w.id)) return false;
-  const a = agentOf(w);
-  if (a && a.status === "needs_input" && needsStart(a) === dismissedNeeds.get(w.id)) return true;
-  dismissedNeeds.delete(w.id);
-  return false;
+  return mostActive(agentsOf(w));
 }
 
 export function statusOf(w: Workspace | undefined): Status {
-  const st = rawStatusOf(w);
-  return st === "needs_input" && isNeedsDismissed(w) ? "idle" : st;
-}
-
-export function dismissNeeds(w: Workspace | undefined): void {
-  if (!w || rawStatusOf(w) !== "needs_input") return;
-  dismissedNeeds.set(w.id, needsStart(agentOf(w)));
-  bump();
-}
-
-export function restoreNeeds(w: Workspace | undefined): void {
-  if (w && dismissedNeeds.delete(w.id)) bump();
+  return agentOf(w)?.status ?? "none";
 }
 
 /** When the current status began: agent start, else its activity, else the workspace's. */

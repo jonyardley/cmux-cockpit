@@ -1,6 +1,7 @@
 // Rows for the Waiting, Running and Pull requests panels.
 
 import type { Last } from "../../shared/list.ts";
+import { dismissNeeds } from "../../shared/needs.ts";
 import { readable } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
@@ -53,6 +54,15 @@ export function waitingRow(e: () => Last<AgentEntry>): View {
         8,
         true,
       ).onTap(() => jump(w().id, a().surfaceId)),
+      // Local to this panel: the cockpit's dismissals are not visible here (issue #3).
+      Text("Dismiss")
+        .font(12)
+        .color(T.secondary)
+        .paddingHorizontal(8)
+        .paddingVertical(4)
+        .hoverBackground(T.hover)
+        .cornerRadius(8)
+        .onTap(() => dismissNeeds(w())),
       Spacer(),
     ]),
   ])

@@ -1,7 +1,8 @@
 // agents: Jon's right panel. Four sections over live workspace/agent data:
 //   This workspace - the selected workspace in detail (views/current.ts).
 //   Waiting on you - workspaces with a needs_input agent, latest message,
-//                    Jump (select + focus surface). No Allow/Deny here: that
+//                    Jump (select + focus surface) and Dismiss (local to
+//                    this panel, src/shared/needs.ts). No Allow/Deny here: that
 //                    needs the real diff/tool-call payload, which this data
 //                    context does not carry, so it is not faked.
 //   Running        - working agents in other workspaces, longest-running
