@@ -92,10 +92,10 @@ describe("runningRows", () => {
   const idleWorkspaces = (n: number) =>
     Array.from({ length: n }, (_, i) => ws("i" + i, { agents: [agent("idle", { lastActivityAt: i })] }));
 
-  it("shows Nothing running, three idle inline, then a toggle for the rest", () => {
+  it("shows Nothing running, an Idle heading, three idle inline, then a toggle for the rest", () => {
     r.data.workspaces = idleWorkspaces(5);
     const kinds = m.runningRows().map((e) => e.kind);
-    assert.deepEqual(kinds, ["empty", "idle", "idle", "idle", "toggle"]);
+    assert.deepEqual(kinds, ["empty", "idle-heading", "idle", "idle", "idle", "toggle"]);
     const toggle = m.runningRows().at(-1);
     assert.equal(toggle?.kind === "toggle" && toggle.count, 2);
   });
@@ -119,16 +119,25 @@ describe("runningRows", () => {
       m.runningRows().map((e) => [e.kind, e.last]),
       [
         ["empty", false],
+        ["idle-heading", false],
         ["idle", true],
       ],
     );
   });
 
-  it("drops the empty row once something is working", () => {
+  it("drops the empty row once something is working, but keeps the Idle heading", () => {
     r.data.workspaces = [ws("r", { agents: [agent("working")] }), ...idleWorkspaces(1)];
     assert.deepEqual(
       m.runningRows().map((e) => e.kind),
-      ["run", "idle"],
+      ["run", "idle-heading", "idle"],
+    );
+  });
+
+  it("leaves out the Idle heading when nothing is idle", () => {
+    r.data.workspaces = [ws("r", { agents: [agent("working")] })];
+    assert.deepEqual(
+      m.runningRows().map((e) => e.kind),
+      ["run"],
     );
   });
 
@@ -136,7 +145,7 @@ describe("runningRows", () => {
     r.data.workspaces = idleWorkspaces(2);
     assert.deepEqual(
       m.runningRows().map((e) => e.last),
-      [false, false, true],
+      [false, false, false, true],
     );
   });
 

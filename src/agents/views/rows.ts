@@ -143,6 +143,19 @@ function idleRow(e: () => Last<AgentEntry>): View {
   return ruled(row, () => e().last);
 }
 
+// Sits between the running rows (or "Nothing running") and the idle ones,
+// so a dimmed idle row never reads as contradicting "Nothing running".
+function idleHeadingRow(): View {
+  return Text("Idle")
+    .font(10.5)
+    .weight("semibold")
+    .color(T.tertiary)
+    .paddingHorizontal(12)
+    .paddingTop(8)
+    .paddingBottom(2)
+    .frame({ maxWidth: "infinity", alignment: "leading" });
+}
+
 function toggleRow(count: () => number, isLast: () => boolean): View {
   const row = HStack({ spacing: 6 }, [
     Image(() => (idleOpen() ? "chevron.up" : "chevron.down"))
@@ -181,6 +194,7 @@ export function rosterRow(e: () => Last<RosterRow>): View {
     };
     return toggleRow(count, () => e().last);
   }
+  if (kind === "idle-heading") return idleHeadingRow();
   return ruled(emptyRow("Nothing running"), () => e().last);
 }
 
