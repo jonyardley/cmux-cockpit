@@ -68,6 +68,22 @@ those: run `npm run agents`.
 `cmux sidebar validate` only reads `~/.config/cmux/sidebars`, so it runs in
 the main checkout only; in a worktree `npm run validate` skips with a note.
 
+## State loop
+
+A sidebar cannot save anything, so dismissals and "Move to project" choices
+go out through a small URL handler app that writes `config/state.json` and
+rebuilds the sidebars ([docs/state-loop.md](docs/state-loop.md)). Once per
+machine, from the main checkout:
+
+```
+npm run helper      # builds ~/Applications/CmuxCockpit.app and registers cmux-cockpit://
+```
+
+A change shows after the rebuild, a few seconds. Each call is logged to
+`~/Library/Logs/cmux-cockpit-state.log`. Without the helper everything still
+works, but only for the session. The helper bakes in this machine's node
+path, so rerun `npm run helper` after a node upgrade.
+
 ## Rules the renderer taught me
 
 - Sidebars cannot import at runtime, so `src/` is bundled into one flat
