@@ -7,19 +7,8 @@
       "then": [
         {
           "action": "run",
-          "command": "sleep 2; cmux right-sidebar set custom agents --no-focus",
-          "timeout_seconds": 15
-        }
-      ]
-    },
-    {
-      "id": "restore-agents-panel-on-workspace",
-      "when": { "event": "workspace.created" },
-      "then": [
-        {
-          "action": "run",
-          "command": "sleep 2; cmux right-sidebar set custom agents --no-focus",
-          "timeout_seconds": 15
+          "command": "\"$HOME/.config/cmux/scripts/restore-agents.sh\"",
+          "timeout_seconds": 20
         }
       ]
     }

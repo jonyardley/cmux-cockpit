@@ -61,20 +61,29 @@ cmux sidebar reload cockpit         # show the change
 `cmux right-sidebar set custom agents`), in case it ever gets swapped out.
 
 A rebuild of `sidebars/*.js` after a branch checkout or a pull (see below)
-drops cmux out of custom right-sidebar mode; in the main checkout the
-post-checkout and post-merge hooks restore it to `agents` automatically.
+has seemed to drop cmux out of custom right-sidebar mode (not reproduced);
+in the main checkout the post-checkout and post-merge hooks restore it to
+`agents` as a safeguard.
 
 cmux also drops it when it creates a window (an app restart, `cmux
-restore-session`), and possibly a workspace: it falls back to Files if the
-custom sidebar is not available yet and saves that over the remembered mode
-(#27). The rules in `automations.json` restore `agents` two seconds after
-either event. cmux reads rules only from `~/.cmuxterm/automations.json`, so
-link it once per machine:
+restore-session`): it falls back to Files if the custom sidebar is not
+available yet and saves that over the remembered mode (#27). The
+`restore-agents-panel` rule in `automations.json` runs
+`scripts/restore-agents.sh` on `window.created`, which puts that window
+back in agents mode if it falls out in the next ten seconds. cmux reads
+rules only from `~/.cmuxterm/automations.json`, so link it once per
+machine. If that file already exists, merge its rules into ours first,
+since the link replaces it:
 
 ```sh
 ln -s ~/.config/cmux/automations.json ~/.cmuxterm/automations.json
 cmux automation reload
 ```
+
+`cmux automation enable` or `disable` may rewrite the file, through the
+link into the repo or over the link with a plain copy; edit the repo file
+instead. If the panel is still gone after a restart, `npm run agents`
+brings it back.
 
 `cmux sidebar validate` only reads `~/.config/cmux/sidebars`, so it runs in
 the main checkout only; in a worktree `npm run validate` skips with a note.
