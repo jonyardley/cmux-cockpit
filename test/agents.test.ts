@@ -5,7 +5,6 @@ import { installRenderer } from "./support/renderer.ts";
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
-const { T } = await import("../src/agents/theme.ts");
 const { cardMessage } = await import("../src/shared/text.ts");
 
 beforeEach(() => {
@@ -240,13 +239,8 @@ describe("status words", () => {
     assert.equal(m.hollowDot(agent("ended")), false);
   });
 
-  it("haloFor rings working and needs dots only", () => {
-    assert.equal(m.haloFor(agent("working")), T.blueHalo);
-    assert.equal(m.haloFor(agent("needs_input")), T.clayHalo);
-    assert.equal(m.haloFor(agent("idle")), "clear");
-    assert.equal(m.haloFor(agent("ended")), "clear");
-    assert.equal(m.haloFor(null), "clear");
-  });
+  // haloFor is covered in test/halo.test.ts, alongside the shared halo
+  // decision it maps and the left sidebar's own mapping of the same one.
 });
 
 describe("prs", () => {

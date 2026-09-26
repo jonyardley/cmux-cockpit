@@ -4,6 +4,7 @@
 import { mostActive } from "../shared/activity.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
+import { type HaloStatus, haloColor } from "../shared/ui.ts";
 import { C } from "./theme.ts";
 
 export type Status = AgentStatus | "none";
@@ -37,12 +38,16 @@ export interface StatusStyle {
   text: string;
 }
 
+// The halo colour for each of shared/ui.ts's two haloed statuses; every
+// other status reads "clear" (haloColor falls back to it via haloStatus).
+const HALO_COLOR: Record<HaloStatus, string> = { working: C.blueHalo, needs_input: C.clayHalo };
+
 const STATUS: Record<Status, StatusStyle> = {
-  working: { label: "Working", dot: C.blue, halo: C.blueHalo, text: "#2F5690" },
-  needs_input: { label: "Needs you", dot: C.clay, halo: C.clayHalo, text: C.clayText },
-  idle: { label: "Idle", dot: null, halo: "clear", text: "#6B6A64" },
-  ended: { label: "Done", dot: C.green, halo: "clear", text: "#5E7A40" },
-  none: { label: "No agent", dot: null, halo: "clear", text: "#8A8880" },
+  working: { label: "Working", dot: C.blue, halo: haloColor("working", HALO_COLOR), text: "#2F5690" },
+  needs_input: { label: "Needs you", dot: C.clay, halo: haloColor("needs_input", HALO_COLOR), text: C.clayText },
+  idle: { label: "Idle", dot: null, halo: haloColor("idle", HALO_COLOR), text: "#6B6A64" },
+  ended: { label: "Done", dot: C.green, halo: haloColor("ended", HALO_COLOR), text: "#5E7A40" },
+  none: { label: "No agent", dot: null, halo: haloColor("none", HALO_COLOR), text: "#8A8880" },
 };
 
 export const statusInfo = (w: Workspace | undefined): StatusStyle => STATUS[statusOf(w)] ?? STATUS.none;
