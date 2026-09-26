@@ -1,5 +1,6 @@
 // Small pieces shared by the cockpit's cards and rows.
 
+import { glyphColor } from "../../shared/contrast.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
 import { projectOf } from "../../shared/projects.ts";
 import { displayTitle } from "../../shared/titles.ts";
@@ -43,12 +44,15 @@ export function statusDot(w: WsAccessor, size: number): View {
 }
 
 export function glyph(w: WsAccessor, size: number, radius: number, font: number): View {
+  // computed(), not a plain thunk: fill, icon and glyph colour all read it,
+  // so the directory is looked up once per change, not once per reader.
+  const project = computed(() => projectOf(w()?.directory));
   return ZStack({}, [
-    RoundedRectangle({ cornerRadius: radius }).fill(() => projectOf(w()?.directory).color),
-    Image(() => projectOf(w()?.directory).icon)
+    RoundedRectangle({ cornerRadius: radius }).fill(() => project().color),
+    Image(() => project().icon)
       .font(font)
       .weight("semibold")
-      .color("#FFFFFF"),
+      .color(() => glyphColor(project().color, C.text)),
   ]).frame({ width: size, height: size });
 }
 

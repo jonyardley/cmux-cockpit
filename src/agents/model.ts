@@ -8,6 +8,8 @@ import { type Project, projectOf } from "../shared/projects.ts";
 import { cardMessage } from "../shared/text.ts";
 import { fmtAge, fmtElapsed, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
+import { type HaloStatus, haloColor } from "../shared/ui.ts";
+import { T } from "./theme.ts";
 
 export interface AgentEntry {
   key: string;
@@ -99,6 +101,14 @@ export const cur = (): Current => current() ?? { ws: { id: "" }, a: null, agents
 
 /** Idle and no agent draw a hollow ring, as the Running rows and the left sidebar do. */
 export const hollowDot = (a: Agent | null): boolean => !a || a.status === "idle";
+
+// The halo colour for each of shared/ui.ts's two haloed statuses; every
+// other status reads "clear" (haloColor falls back to it via haloStatus),
+// matching the left sidebar's status.ts.
+const HALO_COLOR: Record<HaloStatus, string> = { working: T.blueHalo, needs_input: T.clayHalo };
+
+/** Board 1's soft halo round a live dot: working and needs only, as the left sidebar rings them. */
+export const haloFor = (a: Agent | null): string => haloColor(a?.status, HALO_COLOR);
 
 /** Coarse age for rows, "12m" since `at`; "" without a timestamp or clock. A
  * timestamp ahead of the clock reads as "<1m", never blank. */

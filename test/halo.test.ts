@@ -4,11 +4,13 @@ import { installRenderer } from "./support/renderer.ts";
 
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const { haloSize } = await import("../src/shared/ui.ts");
+const { haloSize, haloStatus } = await import("../src/shared/ui.ts");
 const { C } = await import("../src/cockpit/theme.ts");
+const { T } = await import("../src/agents/theme.ts");
 const { laneByKey } = await import("../src/cockpit/lanes.ts");
 const status = await import("../src/cockpit/status.ts");
 const { dismissNeeds } = await import("../src/shared/needs.ts");
+const agentsModel = await import("../src/agents/model.ts");
 
 const haloOf = (w: Workspace | undefined) => status.statusInfo(w).halo;
 
@@ -16,6 +18,27 @@ describe("haloSize", () => {
   it("is board 1's 13pt round a 7pt dot, 3pt each side", () => {
     assert.equal(haloSize(7), 13);
     assert.equal(haloSize(6), 12);
+  });
+});
+
+describe("haloStatus", () => {
+  it("is the one decision behind board 1's halo: working and needs only", () => {
+    assert.equal(haloStatus("working"), "working");
+    assert.equal(haloStatus("needs_input"), "needs_input");
+    assert.equal(haloStatus("idle"), null);
+    assert.equal(haloStatus("ended"), null);
+    assert.equal(haloStatus("none"), null);
+    assert.equal(haloStatus(undefined), null);
+  });
+});
+
+describe("agents halo", () => {
+  it("maps the shared halo decision to the agents panel's own tokens", () => {
+    assert.equal(agentsModel.haloFor(agent("working")), T.blueHalo);
+    assert.equal(agentsModel.haloFor(agent("needs_input")), T.clayHalo);
+    assert.equal(agentsModel.haloFor(agent("idle")), "clear");
+    assert.equal(agentsModel.haloFor(agent("ended")), "clear");
+    assert.equal(agentsModel.haloFor(null), "clear");
   });
 });
 

@@ -238,6 +238,9 @@ describe("status words", () => {
     assert.equal(m.hollowDot(agent("needs_input")), false);
     assert.equal(m.hollowDot(agent("ended")), false);
   });
+
+  // haloFor is covered in test/halo.test.ts, alongside the shared halo
+  // decision it maps and the left sidebar's own mapping of the same one.
 });
 
 describe("prs", () => {

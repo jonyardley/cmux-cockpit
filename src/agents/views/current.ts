@@ -1,11 +1,12 @@
 // "This workspace": the selected workspace's card. Checks, subagents and
 // todo are not in the sidebar data (issue #7), so they are left out.
 
+import { glyphColor } from "../../shared/contrast.ts";
 import { type Last, markLast } from "../../shared/list.ts";
 import { cardMessage, readable } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
-import { cur, hollowDot, statusLine, statusPhrase } from "../model.ts";
+import { cur, haloFor, hollowDot, statusLine, statusPhrase } from "../model.ts";
 import { chipColors, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
 import { agentDot, chip, jump, meta, openIfUrl, panel, ruled } from "./parts.ts";
 
@@ -14,7 +15,7 @@ function agentLine(e: () => Last<{ key: string; a: Agent }>): View {
   return HStack({ spacing: 8 }, [
     agentDot(
       () => STATUS_DOT[a().status] ?? T.grey,
-      () => "clear",
+      () => haloFor(a()),
       () => hollowDot(a()),
     ),
     Text(() => readable(a().title) || a().name || a().kind || "agent")
@@ -44,7 +45,7 @@ function currentHead(): View {
         RoundedRectangle({ cornerRadius: 8 }).fill(() => cur().project.color),
         Image(() => cur().project.icon)
           .font(12)
-          .color("#FFFFFF"),
+          .color(() => glyphColor(cur().project.color, T.text)),
       ]).frame({ width: 26, height: 26 }),
       VStack({ spacing: 1, alignment: "leading" }, [
         Text(() => displayTitle(w()) || "untitled")
@@ -85,7 +86,7 @@ function currentHead(): View {
           const s = status();
           return s ? STATUS_DOT[s] : T.grey;
         },
-        () => (status() === "working" ? T.blueHalo : "clear"),
+        () => haloFor(a()),
         () => hollowDot(a()),
       ),
       Text(() => statusPhrase(a()))
