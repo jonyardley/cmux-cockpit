@@ -44,12 +44,13 @@ export function statusDot(w: WsAccessor, size: number): View {
 }
 
 export function glyph(w: WsAccessor, size: number, radius: number, font: number): View {
+  const project = () => projectOf(w()?.directory);
   return ZStack({}, [
-    RoundedRectangle({ cornerRadius: radius }).fill(() => projectOf(w()?.directory).color),
-    Image(() => projectOf(w()?.directory).icon)
+    RoundedRectangle({ cornerRadius: radius }).fill(() => project().color),
+    Image(() => project().icon)
       .font(font)
       .weight("semibold")
-      .color(() => glyphColor(projectOf(w()?.directory).color)),
+      .color(() => glyphColor(project().color)),
   ]).frame({ width: size, height: size });
 }
 
