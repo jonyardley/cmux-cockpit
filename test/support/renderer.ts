@@ -8,11 +8,22 @@
 
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import { emptyState } from "../../scripts/state-config.ts";
 
 // Sidebar modules read PROJECTS from this define at import time (build.ts
 // injects it for real; tests stand in the example table instead).
 const EXAMPLE_PROJECTS: unknown = JSON.parse(readFileSync("config/projects.example.json", "utf8"));
 (globalThis as Record<string, unknown>).__PROJECTS__ = EXAMPLE_PROJECTS;
+
+// Same story for __STATE__, but defaulting to empty rather than a fixture:
+// most tests have nothing saved. A test that wants a saved state sets
+// globalThis.__STATE__ itself, in a file of its own, before dynamically
+// importing this module (a static import here would already have set the
+// default by the time that assignment ran).
+const EMPTY_STATE = emptyState();
+if (!("__STATE__" in (globalThis as Record<string, unknown>))) {
+  (globalThis as Record<string, unknown>).__STATE__ = EMPTY_STATE;
+}
 
 export interface FakeData {
   workspaces: Workspace[];
@@ -136,8 +147,8 @@ export function installRenderer(): Renderer {
 
 /** Runs a built sidebars/*.js file the way cmux does: one flat script. */
 export function runBuilt(file: string, r: Renderer): void {
-  // The build inlines the real __PROJECTS__ literal, so this is only a
-  // fallback for a bundle built without that define.
-  const context = vm.createContext({ __PROJECTS__: EXAMPLE_PROJECTS, ...r.globals });
+  // The build inlines the real __PROJECTS__ and __STATE__ literals, so this
+  // is only a fallback for a bundle built without those defines.
+  const context = vm.createContext({ __PROJECTS__: EXAMPLE_PROJECTS, __STATE__: EMPTY_STATE, ...r.globals });
   vm.runInContext(readFileSync(file, "utf8"), context, { filename: file });
 }

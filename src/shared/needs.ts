@@ -4,6 +4,7 @@
 // holds its own dismissals, and a reload forgets them (issues #3 and #5).
 
 import { sinceOrActivity } from "./activity.ts";
+import { persistSet, SAVED_STATE } from "./persist.ts";
 
 /** Seconds between an agent's last activity and a needs_input that is only a nudge. */
 export const NUDGE_GAP = 45;
@@ -25,8 +26,13 @@ export function isIdleNudge(a: Agent, w?: Workspace): boolean {
 
 // A dismissal is keyed to the workspace, the agent and the start of that
 // needs_input spell, so a new ask (a new start) shows again. Plain Maps, so
-// reads call tick() and writes call bump().
-const dismissed = new Map<string, Map<string, number>>(); // wsId -> agent id -> needs_input start
+// reads call tick() and writes call bump(). Seeded from SAVED_STATE so a
+// dismissal made before the last reload still holds (issue #5); dismissNeeds
+// and restoreNeeds call persistSet so a new one survives the next reload.
+// wsId -> agent id -> needs_input start
+const dismissed = new Map<string, Map<string, number>>(
+  Object.entries(SAVED_STATE.dismissed).map(([wsId, starts]) => [wsId, new Map(Object.entries(starts))]),
+);
 const [tick, setTick] = signal(0);
 const bump = () => setTick(tick() + 1);
 
@@ -41,7 +47,9 @@ function isDismissed(w: Workspace | undefined, a: Agent): boolean {
 
 // Drops dismissals whose spell has ended, so a later ask with the same start
 // (or none) is not hidden. Not a write anyone reads reactively: what shows
-// is unchanged, so no bump().
+// is unchanged, so no bump(). Runs during render, so it never persists: a
+// stale saved entry is harmless (issue #5), since it can only match its exact
+// start, and the file caps entries.
 function prune(w: Workspace): void {
   const byAgent = dismissed.get(w.id);
   if (!byAgent) return;
@@ -74,10 +82,14 @@ export function isNeedsDismissed(w: Workspace | undefined): boolean {
 export function dismissNeeds(w: Workspace | undefined): void {
   const list = asking(w);
   if (!w || !list.length) return;
-  dismissed.set(w.id, new Map(list.map((a) => [a.id, sinceOrActivity(a)])));
+  const starts = new Map(list.map((a) => [a.id, sinceOrActivity(a)]));
+  dismissed.set(w.id, starts);
   bump();
+  persistSet(`dismissed.${w.id}`, Object.fromEntries(starts));
 }
 
 export function restoreNeeds(w: Workspace | undefined): void {
-  if (w && dismissed.delete(w.id)) bump();
+  if (!w || !dismissed.delete(w.id)) return;
+  bump();
+  persistSet(`dismissed.${w.id}`, null);
 }

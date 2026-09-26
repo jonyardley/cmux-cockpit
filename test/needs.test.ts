@@ -128,6 +128,29 @@ describe("dismissals", () => {
     assert.equal(needs.isNeedsDismissed(w), false);
     assert.deepEqual(needs.agentsOf(undefined), []);
   });
+
+  it("dismissNeeds persists the workspace's dismissed asks, restoreNeeds a delete (issue #5)", () => {
+    r.opened.length = 0;
+    const asker = agent("needs_input", { sinceEpoch: 500 });
+    const w = ws("persist-d", { agents: [asker] });
+    needs.dismissNeeds(w);
+    assert.deepEqual(r.opened, [
+      `cmux-cockpit://set?key=dismissed.persist-d&value=${encodeURIComponent(JSON.stringify({ [asker.id]: 500 }))}`,
+    ]);
+
+    r.opened.length = 0;
+    needs.restoreNeeds(w);
+    assert.deepEqual(r.opened, ["cmux-cockpit://set?key=dismissed.persist-d"]);
+  });
+
+  it("does not persist anything when there is nothing to dismiss or restore", () => {
+    r.opened.length = 0;
+    needs.dismissNeeds(ws("empty-persist", { agents: [agent("working")] }));
+    needs.dismissNeeds(undefined);
+    needs.restoreNeeds(ws("never-dismissed"));
+    needs.restoreNeeds(undefined);
+    assert.deepEqual(r.opened, []);
+  });
 });
 
 describe("both sidebars apply the rule", () => {

@@ -5,12 +5,17 @@
 // injected as the __PROJECTS__ define so src/shared/projects.ts can read it.
 // A `root` field's leading `~` is expanded against HOME here, since a sidebar
 // has no filesystem access to do it at runtime.
+//
+// config/state.json (gitignored, written by the URL handler) is read the
+// same way and injected as __STATE__, so a sidebar starts from whatever was
+// saved last (docs/state-loop.md).
 //   node scripts/build.ts    build once
 
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { build } from "esbuild";
 import { type Project, validateProjects } from "./projects-config.ts";
+import { emptyState, type State, validateState } from "./state-config.ts";
 
 const ENTRIES = ["agents", "cockpit"] as const;
 
@@ -46,7 +51,21 @@ function withExpandedRoots(projects: readonly Project[]): readonly Project[] {
   return projects.map((p) => (p.root ? { ...p, root: expandRoot(p.root) } : p));
 }
 
+// A bad or missing state file must never break the build: it is Jon's saved
+// dismissals and project overrides, not something CI or a clean clone has.
+function loadState(): State {
+  const path = "config/state.json";
+  if (!existsSync(path)) return emptyState();
+  try {
+    return validateState(JSON.parse(readFileSync(path, "utf8")));
+  } catch (err) {
+    console.warn(`build: cannot read or parse ${path}, starting from empty state: ${(err as Error).message}`);
+    return emptyState();
+  }
+}
+
 const projects = withExpandedRoots(loadProjects());
+const state = loadState();
 
 for (const name of ENTRIES) {
   const outfile = `sidebars/${name}.js`;
@@ -61,7 +80,7 @@ for (const name of ENTRIES) {
     charset: "utf8",
     legalComments: "none",
     banner: { js: `// GENERATED from src/${name}/ by \`npm run build\`. Do not edit.` },
-    define: { __PROJECTS__: JSON.stringify(projects) },
+    define: { __PROJECTS__: JSON.stringify(projects), __STATE__: JSON.stringify(state) },
     logLevel: "warning",
   });
 }
