@@ -10,5 +10,9 @@ on open location theURL
 	set nodePath to "__NODE__"
 	set repoRoot to "__ROOT__"
 	set scriptPath to repoRoot & "/__SCRIPT__"
-	do shell script (quoted form of nodePath) & " " & (quoted form of scriptPath) & " " & (quoted form of theURL)
+	-- A refused or failed URL exits non-zero, which would raise a modal error
+	-- dialog; state-set.ts has already logged it, so stay silent here.
+	try
+		do shell script (quoted form of nodePath) & " " & (quoted form of scriptPath) & " " & (quoted form of theURL)
+	end try
 end open location

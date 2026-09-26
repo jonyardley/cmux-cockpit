@@ -11,8 +11,8 @@
 // shell, so nothing here is exposed to PATH lookup or shell interpolation.
 
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 
 const BUNDLE_ID = "com.jonyardley.cmux-cockpit";
@@ -21,16 +21,21 @@ const LSREGISTER =
   "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
 
 interface Args {
-  out: string;
+  /** Null means the default, ~/Applications. */
+  out: string | null;
   register: boolean;
 }
 
-function parseArgs(argv: readonly string[]): Args {
-  let out = join(homedir(), "Applications");
+// Unknown or malformed flags are refused: a mistyped --out must not fall
+// through to replacing the installed app.
+function parseArgs(argv: readonly string[]): Args | string {
+  let out: string | null = null;
   let register = true;
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === "--out") out = argv[++i] ?? out;
-    else if (argv[i] === "--no-register") register = false;
+    const arg = argv[i];
+    if (arg === "--no-register") register = false;
+    else if (arg === "--out" && argv[i + 1]) out = argv[++i] ?? null;
+    else return `unknown or incomplete argument ${JSON.stringify(arg)}`;
   }
   return { out, register };
 }
@@ -47,10 +52,7 @@ function warnAboutSpike(): void {
 
 // cmux loads the sidebars from the main checkout, so a handler built from a
 // worktree would write state and rebuild bundles cmux never reads.
-function warnAboutWorktree(root: string): void {
-  const main = join(homedir(), ".config", "cmux");
-  if (root !== main) console.warn(`install-helper: built from ${root}, but cmux reads ${main}. Run it there.`);
-}
+const MAIN_CHECKOUT = join(homedir(), ".config", "cmux");
 
 // The paths land inside AppleScript string literals, so escape what would end one.
 const asLiteral = (s: string): string => s.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
@@ -74,25 +76,39 @@ function urlTypesXml(): string {
 }
 
 function main(): number {
-  const { out, register } = parseArgs(process.argv.slice(2));
+  const args = parseArgs(process.argv.slice(2));
+  if (typeof args === "string") {
+    console.error(`install-helper: ${args}`);
+    return 1;
+  }
   const root = join(import.meta.dirname, "..");
+  if (root !== MAIN_CHECKOUT && args.out === null) {
+    console.error(`install-helper: run from ${root}, but cmux reads ${MAIN_CHECKOUT}. Run it there, or pass --out.`);
+    return 1;
+  }
+  const { register } = args;
+  const out = args.out ?? join(homedir(), "Applications");
   warnAboutSpike();
-  warnAboutWorktree(root);
 
-  const scratch = mkdtempSync(join(tmpdir(), "cmux-cockpit-helper-"));
+  // Built beside the target (same volume, so the final rename is atomic) and
+  // swapped in only once every step has succeeded, so a failed install keeps
+  // the working app.
+  mkdirSync(out, { recursive: true });
+  const scratch = mkdtempSync(join(out, ".CmuxCockpit-build-"));
   const filledPath = join(scratch, "CmuxCockpit.applescript");
   writeFileSync(filledPath, filledScript(root));
 
+  const built = join(scratch, "CmuxCockpit.app");
+  const plistPath = join(built, "Contents", "Info.plist");
   const appPath = join(out, "CmuxCockpit.app");
-  const plistPath = join(appPath, "Contents", "Info.plist");
   try {
-    // A fresh bundle each time, so a reinstall does not trip over the keys added below.
-    rmSync(appPath, { recursive: true, force: true });
-    execFileSync("/usr/bin/osacompile", ["-o", appPath, filledPath]);
+    execFileSync("/usr/bin/osacompile", ["-o", built, filledPath]);
     execFileSync("/usr/bin/plutil", ["-replace", "CFBundleIdentifier", "-string", BUNDLE_ID, plistPath]);
     execFileSync("/usr/bin/plutil", ["-insert", "CFBundleURLTypes", "-xml", urlTypesXml(), plistPath]);
     execFileSync("/usr/bin/plutil", ["-insert", "LSUIElement", "-bool", "true", plistPath]);
-    execFileSync("/usr/bin/codesign", ["-f", "-s", "-", appPath]);
+    execFileSync("/usr/bin/codesign", ["-f", "-s", "-", built]);
+    rmSync(appPath, { recursive: true, force: true });
+    renameSync(built, appPath);
     if (register) execFileSync(LSREGISTER, ["-f", appPath]);
   } finally {
     rmSync(scratch, { recursive: true, force: true });
