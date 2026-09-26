@@ -37,6 +37,8 @@ export interface Renderer {
   /** Every cmux() dispatch, in order. */
   calls: { method: string; params: Record<string, unknown> }[];
   opened: string[];
+  /** Every menu item built, as "button:<label>", "menu:<label>" or "divider". */
+  menu: string[];
   roots: (() => unknown)[];
   globals: Record<string, unknown>;
 }
@@ -82,6 +84,7 @@ export function createRenderer(): Renderer {
     data: { workspaces: [], groups: [], epoch: 1_000_000, selectedId: null },
     calls: [],
     opened: [],
+    menu: [],
     roots: [],
     globals: {},
   };
@@ -103,11 +106,17 @@ export function createRenderer(): Renderer {
     ForEach: list,
     Reorderable: list,
     Button: (label: Reactive<string>) => {
-      evaluate(label);
+      r.menu.push("button:" + (typeof label === "function" ? label() : label));
       return menuItem();
     },
-    Menu: menuItem,
-    Divider: menuItem,
+    Menu: (label: string) => {
+      r.menu.push("menu:" + label);
+      return menuItem();
+    },
+    Divider: () => {
+      r.menu.push("divider");
+      return menuItem();
+    },
     signal: <T>(initial: T) => {
       let value = initial;
       return [() => value, (next: T) => (value = next)];

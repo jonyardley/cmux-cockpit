@@ -10,7 +10,7 @@ const state = await import("../src/cockpit/state.ts");
 const status = await import("../src/cockpit/status.ts");
 const needs = await import("../src/shared/needs.ts");
 const { LANES, laneByKey } = await import("../src/cockpit/lanes.ts");
-const { chipsFor } = await import("../src/cockpit/views/parts.ts");
+const { cardMenu, chipsFor } = await import("../src/cockpit/views/parts.ts");
 
 // Groups mirror cmux: each lane group has a generated anchor workspace.
 // Each test starts later than the last, so earlier optimistic overrides expire.
@@ -396,5 +396,22 @@ describe("chips", () => {
       ["#7 open", "feat •"],
     );
     assert.equal(chipsFor(ws("y", { branch: "feat" }), false).length, 0);
+  });
+});
+
+// cmux drops submenus from a context menu, so a Menu() here would hide its
+// items entirely (issue #8's "Move to project" never showed).
+describe("card menu", () => {
+  beforeEach(setup);
+
+  it("builds no submenus, and offers every lane and project at the top level", () => {
+    r.menu.length = 0;
+    cardMenu(() => byId("a"));
+    assert.ok(!r.menu.some((m) => m.startsWith("menu:")), r.menu.join(", "));
+    assert.ok(r.menu.includes("button:✓ Lane: Main activity"));
+    for (const lane of LANES.filter((l) => l.key !== "main")) assert.ok(r.menu.includes("button:Lane: " + lane.name));
+    assert.ok(r.menu.some((m) => m.startsWith("button:") && m.includes("Project: ")));
+    // Earlier tests may leave an override on "a", so either wording counts.
+    assert.ok(r.menu.some((m) => /^button:(No project override set|Clear project override)$/.test(m)));
   });
 });
