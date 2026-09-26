@@ -80,8 +80,14 @@ export function handleMove(key: string, index: number): void {
   if (changesLane) moveToLane(w, target.laneKey);
 }
 
-// A project group's anchor IS that group in cmux, so it cannot leave it:
-// its card is pinned in place instead of jumping and snapping back.
+// A group's anchor IS that group in cmux, so it cannot leave it: its card is
+// pinned in place instead of jumping and snapping back. That covers a
+// project group's anchor, and also a lane group anchored on a real
+// workspace rather than a generated placeholder (model.ts's
+// isGeneratedAnchor): laneAnchorIds() no longer hides that real anchor, so
+// it shows as a normal card here, but it stays undraggable for the same
+// reason. The context menu still offers "Move to lane", so it is never
+// stuck.
 export function isForeignAnchor(wsId: string): boolean {
   const lanes = laneAnchorIds();
   return groups().some((g) => g.anchorId === wsId && !lanes.has(wsId));

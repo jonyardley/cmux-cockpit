@@ -43,6 +43,7 @@ export const [idleOpen, setIdleOpen] = signal(false);
 export type RosterRow =
   | (AgentEntry & { kind: "run" | "idle" })
   | { key: "toggle"; kind: "toggle"; count: number }
+  | { key: "idle-heading"; kind: "idle-heading" }
   | { key: "empty"; kind: "empty" };
 
 // One row per workspace, from its most active agent, so a stale idle session
@@ -68,11 +69,15 @@ export const roster = computed(() => {
 const INLINE_IDLE = 3;
 
 // Panel rows: running (or a "Nothing running" row when nothing is working),
-// then idle, all of them when expanded, then the idle toggle.
+// then an "Idle" subheading and the idle rows (else "Nothing running" reads
+// as a contradiction sat right above them), all of them when expanded, then
+// the idle toggle.
 export const runningRows = computed(() => {
   const { run, idle } = roster();
   const out: RosterRow[] = run.length ? [...run] : [{ key: "empty", kind: "empty" }];
-  out.push(...(idleOpen() ? idle : idle.slice(0, INLINE_IDLE)));
+  const shown = idleOpen() ? idle : idle.slice(0, INLINE_IDLE);
+  if (shown.length) out.push({ key: "idle-heading", kind: "idle-heading" });
+  out.push(...shown);
   const more = idle.length - INLINE_IDLE;
   if (more > 0) out.push({ key: "toggle", kind: "toggle", count: more });
   return markLast(out);

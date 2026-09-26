@@ -28,12 +28,28 @@ export const groups = (): WorkspaceGroup[] => data.groups() ?? [];
 export const groupForLane = (lane: Lane): WorkspaceGroup | null =>
   lane.key === "unsorted" ? null : (groups().find((g) => g.name === lane.name) ?? null);
 
-// Each lane group's anchor is a generated workspace, not a real card.
+// A lane group's anchor is usually a generated placeholder workspace, but
+// cmux can also anchor a single-member group on a real workspace (e.g. a
+// group made from one existing tab), and that one belongs in its lane, its
+// count and Needs you like any other card.
+//
+// The renderer's data has no "generated" flag for a workspace (issue #7), so
+// this is a heuristic pending one: a generated anchor's title always matches
+// its group's name and it carries no agents, so anything else showing under
+// that title, or any agents at all, means it is a real workspace instead.
+function isGeneratedAnchor(g: WorkspaceGroup, w: Workspace | undefined): boolean {
+  if (!w) return true;
+  if ((w.agents ?? []).length > 0) return false;
+  return (w.title ?? "").trim().toLowerCase() === g.name.trim().toLowerCase();
+}
+
+// Each lane group's generated anchor is not a real card; a real workspace
+// used as an anchor is.
 export function laneAnchorIds(): Set<string> {
   const out = new Set<string>();
   for (const lane of LANES) {
     const g = groupForLane(lane);
-    if (g?.anchorId) out.add(g.anchorId);
+    if (g?.anchorId && isGeneratedAnchor(g, wsById(g.anchorId))) out.add(g.anchorId);
   }
   return out;
 }

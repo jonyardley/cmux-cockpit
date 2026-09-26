@@ -18,7 +18,7 @@ function busyRenderer() {
     group("g-proj", "app-one", { anchorId: "x" }),
   ];
   r.data.workspaces = [
-    ws("anchor", { group: "g-main" }),
+    ws("anchor", { title: "Main activity", group: "g-main" }),
     ws("x", {
       title: "✳ Busy",
       group: "g-main",
