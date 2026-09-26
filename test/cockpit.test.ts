@@ -10,7 +10,8 @@ const state = await import("../src/cockpit/state.ts");
 const status = await import("../src/cockpit/status.ts");
 const needs = await import("../src/shared/needs.ts");
 const { LANES, laneByKey } = await import("../src/cockpit/lanes.ts");
-const { chipsFor } = await import("../src/cockpit/views/parts.ts");
+const { cardMenu, chipsFor } = await import("../src/cockpit/views/parts.ts");
+const projects = await import("../src/shared/projects.ts");
 
 // Groups mirror cmux: each lane group has a generated anchor workspace.
 // Each test starts later than the last, so earlier optimistic overrides expire.
@@ -396,5 +397,40 @@ describe("chips", () => {
       ["#7 open", "feat •"],
     );
     assert.equal(chipsFor(ws("y", { branch: "feat" }), false).length, 0);
+  });
+});
+
+// cmux drops submenus from a context menu, so every item must sit at the
+// top level (issue #8's "Move to project" never showed). renderer.d.ts no
+// longer declares Menu(), so the compiler refuses a submenu anywhere.
+describe("card menu", () => {
+  beforeEach(setup);
+
+  it("offers every lane and project at the top level, ticking the current ones", () => {
+    const { PROJECTS } = projects;
+    model.clearProjectOverride(byId("a"));
+    r.menu.length = 0;
+    cardMenu(() => byId("a"));
+    assert.ok(r.menu.includes("button:✓ Lane: Main activity"));
+    for (const lane of LANES.filter((l) => l.key !== "main")) assert.ok(r.menu.includes("button:Lane: " + lane.name));
+    for (const p of PROJECTS) assert.ok(r.menu.includes("button:Project: " + p.name));
+    // "a" has no directory, so it falls in Other: only its lane is ticked.
+    assert.deepEqual(
+      r.menu.filter((m) => m.startsWith("button:✓ ")),
+      ["button:✓ Lane: Main activity"],
+    );
+    assert.ok(r.menu.includes("button:No project override set"));
+  });
+
+  it("offers to clear an override once one is set", () => {
+    const { PROJECTS, projectId } = projects;
+    const first = PROJECTS[0];
+    assert.ok(first);
+    model.moveToProject(byId("a"), projectId(first));
+    r.menu.length = 0;
+    cardMenu(() => byId("a"));
+    assert.ok(r.menu.includes("button:✓ Project: " + first.name));
+    assert.ok(r.menu.includes("button:Clear project override"));
+    model.clearProjectOverride(byId("a"));
   });
 });

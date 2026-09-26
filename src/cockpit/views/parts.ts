@@ -203,36 +203,40 @@ function workspaceAction(w: Workspace | undefined, action: string): void {
   if (w) cmux("workspace.action", { action, workspace_id: w.id });
 }
 
-// A session-only override (issue #8): nothing in cmux carries project
-// membership, so the label says outright that a reload drops it.
+// cmux drops Menu() submenus from a context menu without a word, so every
+// item sits at the top level, grouped by dividers and prefixed by what it
+// moves. The project override persists through the state loop (issue #8).
+function laneItems(w: WsAccessor): MenuItem[] {
+  return LANES.map((lane) =>
+    Button(
+      () => (laneOf(w() ?? { id: "" }) === lane.key ? "✓ " : "") + "Lane: " + lane.name,
+      () => moveToLane(w(), lane.key),
+    ),
+  );
+}
+
 function projectItems(w: WsAccessor): MenuItem[] {
   const items = PROJECTS.map((p) => {
     const key = projectId(p);
     return Button(
-      () => (projectKey(w() ?? { id: "" }) === key ? "✓ " + p.name : p.name),
+      () => (projectKey(w() ?? { id: "" }) === key ? "✓ " : "") + "Project: " + p.name,
       () => moveToProject(w(), key),
     );
   });
   return [
     ...items,
-    Divider(),
     Button(
-      () => (hasProjectOverride(w()) ? "Clear override" : "No override set"),
+      () => (hasProjectOverride(w()) ? "Clear project override" : "No project override set"),
       () => clearProjectOverride(w()),
     ),
   ];
 }
 
 export function cardMenu(w: WsAccessor): MenuItem[] {
-  const laneItems = LANES.map((lane) =>
-    Button(
-      () => (laneOf(w() ?? { id: "" }) === lane.key ? "✓ " + lane.name : lane.name),
-      () => moveToLane(w(), lane.key),
-    ),
-  );
   return [
-    Menu("Move to", laneItems),
-    Menu("Move to project (until reload)", projectItems(w)),
+    ...laneItems(w),
+    Divider(),
+    ...projectItems(w),
     Divider(),
     Button(
       () => (w()?.pinned ? "Unpin" : "Pin"),

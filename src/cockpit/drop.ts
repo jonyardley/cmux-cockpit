@@ -86,7 +86,7 @@ export function handleMove(key: string, index: number): void {
 // workspace rather than a generated placeholder (model.ts's
 // isGeneratedAnchor): laneAnchorIds() no longer hides that real anchor, so
 // it shows as a normal card here, but it stays undraggable for the same
-// reason. The context menu still offers "Move to lane", so it is never
+// reason. The context menu still offers its "Lane:" items, so it is never
 // stuck.
 export function isForeignAnchor(wsId: string): boolean {
   const lanes = laneAnchorIds();
