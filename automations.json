@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "restore-agents-panel",
+      "when": { "event": "window.created" },
+      "then": [
+        {
+          "action": "run",
+          "command": "\"$HOME/.config/cmux/scripts/restore-agents.sh\"",
+          "timeout_seconds": 20
+        }
+      ]
+    }
+  ]
+}

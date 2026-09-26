@@ -32,7 +32,8 @@ and needs nothing installed or linked. Back up any existing
   never edited by hand.
 - `sidebars/probe.swift`: a diagnostic sidebar for testing what the renderer
   supports. `*.parked` files are retired experiments.
-- `cmux.json`: app settings. `dock.json`: dock controls.
+- `cmux.json`: app settings. `dock.json`: dock controls. `automations.json`:
+  cmux automation rules, linked into `~/.cmuxterm/` (see below).
 - `config/projects.example.json`: the committed sample project table.
   `config/projects.json` is your real, gitignored table; never commit it.
   Each entry is `match`, `name`, `color`, `icon`, plus an optional `root`
@@ -60,10 +61,29 @@ cmux sidebar reload cockpit         # show the change
 `cmux right-sidebar set custom agents`), in case it ever gets swapped out.
 
 A rebuild of `sidebars/*.js` after a branch checkout or a pull (see below)
-drops cmux out of custom right-sidebar mode; in the main checkout the
-post-checkout and post-merge hooks restore it to `agents` automatically. An
-app restart or `cmux restore-session` can drop it too, and no hook sees
-those: run `npm run agents`.
+has seemed to drop cmux out of custom right-sidebar mode (not reproduced);
+in the main checkout the post-checkout and post-merge hooks restore it to
+`agents` as a safeguard.
+
+cmux also drops it when it creates a window (an app restart, `cmux
+restore-session`): it falls back to Files if the custom sidebar is not
+available yet and saves that over the remembered mode (#27). The
+`restore-agents-panel` rule in `automations.json` runs
+`scripts/restore-agents.sh` on `window.created`, which puts that window
+back in agents mode if it falls out in the next ten seconds. cmux reads
+rules only from `~/.cmuxterm/automations.json`, so link it once per
+machine. If that file already exists, merge its rules into ours first,
+since the link replaces it:
+
+```sh
+ln -s ~/.config/cmux/automations.json ~/.cmuxterm/automations.json
+cmux automation reload
+```
+
+`cmux automation enable` or `disable` may rewrite the file, through the
+link into the repo or over the link with a plain copy; edit the repo file
+instead. If the panel is still gone after a restart, `npm run agents`
+brings it back.
 
 `cmux sidebar validate` only reads `~/.config/cmux/sidebars`, so it runs in
 the main checkout only; in a worktree `npm run validate` skips with a note.

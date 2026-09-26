@@ -7,8 +7,9 @@ if [ ! -d node_modules ]; then
 fi
 npm run --silent build
 
-# A fresh build of sidebars/*.js drops cmux out of custom right-sidebar
-# mode until `cmux right-sidebar set custom agents` runs by hand (#16).
+# A fresh build of sidebars/*.js has seemed to drop cmux out of custom
+# right-sidebar mode (not reproduced; #27 has the confirmed cause, window
+# creation), so restore it here as a cheap safeguard.
 # Only on a branch checkout (git's third arg is 1, not a same-branch file
 # checkout), only in the main checkout (cmux loads its sidebars from there,
 # and agents creating worktrees must not reset it mid-session), only when

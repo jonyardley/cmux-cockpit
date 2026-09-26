@@ -9,9 +9,9 @@ if ! git diff --quiet ORIG_HEAD HEAD -- package-lock.json 2>/dev/null; then
   npm ci --silent
 fi
 npm run --silent build
-# The rebuild drops cmux out of custom right-sidebar mode, as a checkout's
-# does, so restore the agents panel the same way post-checkout does: main
-# checkout only, never failing the pull.
+# The rebuild may drop cmux out of custom right-sidebar mode, as a
+# checkout's may (#27), so restore the agents panel the same way
+# post-checkout does: main checkout only, never failing the pull.
 if [ "$(git rev-parse --git-dir)" = "$(git rev-parse --git-common-dir)" ] &&
   command -v cmux >/dev/null 2>&1; then
   cmux right-sidebar set custom agents >/dev/null 2>&1
