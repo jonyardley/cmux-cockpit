@@ -96,7 +96,7 @@ export function idleRing(): View {
 export function glyph(p: Project): View {
   return ZStack({}, [
     RoundedRectangle({ cornerRadius: 5 }).fill(p.color),
-    Image(p.icon).font(9).color(glyphColor(p.color)),
+    Image(p.icon).font(9).color(glyphColor(p.color, T.text)),
   ]).frame({ width: 18, height: 18 });
 }
 

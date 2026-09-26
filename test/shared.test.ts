@@ -80,17 +80,31 @@ describe("projectOf", () => {
 });
 
 describe("glyphColor", () => {
+  const DARK = "#141413"; // stands in for a sidebar's own `text` token
+
   it("picks a dark glyph on light project colours, issue #2's low-contrast case included", () => {
-    assert.equal(glyphColor("#B0AEA5"), "#141413");
-    assert.equal(glyphColor("#FFFFFF"), "#141413");
+    assert.equal(glyphColor("#B0AEA5", DARK), DARK);
+    assert.equal(glyphColor("#FFFFFF", DARK), DARK);
   });
   it("picks a white glyph on dark colours", () => {
-    assert.equal(glyphColor("#141413"), "#FFFFFF");
-    assert.equal(glyphColor("#000000"), "#FFFFFF");
+    assert.equal(glyphColor(DARK, DARK), "#FFFFFF");
+    assert.equal(glyphColor("#000000", DARK), "#FFFFFF");
   });
   it("reads a 3-digit hex the same as its expansion", () => {
-    assert.equal(glyphColor("#fff"), glyphColor("#ffffff"));
-    assert.equal(glyphColor("#000"), glyphColor("#000000"));
+    assert.equal(glyphColor("#fff", DARK), glyphColor("#ffffff", DARK));
+    assert.equal(glyphColor("#000", DARK), glyphColor("#000000", DARK));
+  });
+  it("reads a 4 or 8-digit hex, ignoring the trailing alpha pair", () => {
+    assert.equal(glyphColor("#fffa", DARK), glyphColor("#ffffff", DARK));
+    assert.equal(glyphColor("#B0AEA580", DARK), glyphColor("#B0AEA5", DARK));
+  });
+  it("falls back to white for a background that is not a hex colour", () => {
+    assert.equal(glyphColor("yellow", DARK), "#FFFFFF");
+    assert.equal(glyphColor("clear", DARK), "#FFFFFF");
+    assert.equal(glyphColor("", DARK), "#FFFFFF");
+  });
+  it("uses the caller's own dark token, not a fixed one", () => {
+    assert.equal(glyphColor("#B0AEA5", "#000000"), "#000000");
   });
 });
 

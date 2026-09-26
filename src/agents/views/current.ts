@@ -45,7 +45,7 @@ function currentHead(): View {
         RoundedRectangle({ cornerRadius: 8 }).fill(() => cur().project.color),
         Image(() => cur().project.icon)
           .font(12)
-          .color(() => glyphColor(cur().project.color)),
+          .color(() => glyphColor(cur().project.color, T.text)),
       ]).frame({ width: 26, height: 26 }),
       VStack({ spacing: 1, alignment: "leading" }, [
         Text(() => displayTitle(w()) || "untitled")

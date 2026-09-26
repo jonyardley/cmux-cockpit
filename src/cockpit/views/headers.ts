@@ -112,7 +112,7 @@ export function projectHeader(k: string): View {
     chevron(() => isProjectCollapsed(k)),
     ZStack({}, [
       RoundedRectangle({ cornerRadius: 5 }).fill(p.color),
-      Image(p.icon).font(10).weight("semibold").color(glyphColor(p.color)),
+      Image(p.icon).font(10).weight("semibold").color(glyphColor(p.color, C.text)),
     ]).frame({ width: 18, height: 18 }),
     Text(p.name).font(12.5).weight("semibold").color("#3D3D3A"),
     countPill(() => projectCount(k)),

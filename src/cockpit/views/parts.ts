@@ -44,13 +44,15 @@ export function statusDot(w: WsAccessor, size: number): View {
 }
 
 export function glyph(w: WsAccessor, size: number, radius: number, font: number): View {
-  const project = () => projectOf(w()?.directory);
+  // computed(), not a plain thunk: fill, icon and glyph colour all read it,
+  // so the directory is looked up once per change, not once per reader.
+  const project = computed(() => projectOf(w()?.directory));
   return ZStack({}, [
     RoundedRectangle({ cornerRadius: radius }).fill(() => project().color),
     Image(() => project().icon)
       .font(font)
       .weight("semibold")
-      .color(() => glyphColor(project().color)),
+      .color(() => glyphColor(project().color, C.text)),
   ]).frame({ width: size, height: size });
 }
 
