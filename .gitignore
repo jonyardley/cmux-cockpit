@@ -12,6 +12,7 @@ sidebars/agents.js
 sidebars/cockpit.js
 sidebars/focus.js
 config/projects.json
+config/state.json
 
 # Claude Code worktrees live under .claude/; only settings.json is shared.
 .claude/*
