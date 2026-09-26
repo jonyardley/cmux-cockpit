@@ -1,14 +1,32 @@
 // CI check that a pull request's body fills in the sections the template
 // asks for. "Look at after reload" matters because CI cannot run the cmux
 // renderer; "Review" records the self-review before Jon's. A section counts
-// as empty when it holds only the template's HTML comment or the Claude Code
-// attribution footer. Headings inside code fences do not end a section.
+// as empty when it holds only the template's HTML comment, the Claude Code
+// attribution footer, or a placeholder such as "Pending." standing in for the
+// real text. Headings inside code fences do not end a section.
 
 import { readFileSync } from "node:fs";
 
 export const REQUIRED = ["Look at after reload", "Review"] as const;
 
 const FOOTER = /^🤖 Generated with \[Claude Code\]\(.*\)\s*$/;
+
+// Words that hold a section's place until the real text arrives, as their
+// letters only, so "To do", "to-do" and "T.B.D." all match. Matched against
+// whole lines, so real text that mentions one still counts.
+const PLACEHOLDERS = new Set(["pending", "tbd", "tbc", "todo", "wip", "reviewpending", "pendingreview", "notyet"]);
+
+// True when every line of the section with any letters is a placeholder or a
+// sub-heading, and at least one is a placeholder. Case, spacing, punctuation
+// and markdown ("- **Pending.**", "> TBD", "(wip)") are ignored.
+function isPlaceholder(text: string): boolean {
+  const words = text
+    .split("\n")
+    .filter((l) => !/^\s*#{1,6}\s/.test(l))
+    .map((l) => l.replace(/[^\p{L}]/gu, "").toLowerCase())
+    .filter((l) => l !== "");
+  return words.length > 0 && words.every((w) => PLACEHOLDERS.has(w));
+}
 
 // Lines of the body with comments and the footer removed, and each line
 // flagged when it is a real "## " heading rather than one inside a fence.
@@ -31,7 +49,8 @@ export function missingSections(body: string): string[] {
     if (at === -1) return true;
     const rest = all.slice(at + 1);
     const end = rest.findIndex((l) => l.heading);
-    return (end === -1 ? rest : rest.slice(0, end)).every((l) => l.text.trim() === "");
+    const text = (end === -1 ? rest : rest.slice(0, end)).map((l) => l.text).join("\n");
+    return text.trim() === "" || isPlaceholder(text);
   });
 }
 
