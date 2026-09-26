@@ -23,12 +23,14 @@ function setup(): void {
     group("g-parked", "Parked", { anchorId: "anchor-parked" }),
   ];
   r.data.workspaces = [
-    ws("anchor-main", { group: "g-main" }),
+    // A generated anchor's title always echoes its group's name and it
+    // carries no agents (model.ts's isGeneratedAnchor).
+    ws("anchor-main", { title: "Main activity", group: "g-main" }),
     ws("a", { group: "g-main" }),
     ws("b", { group: "g-main" }),
-    ws("anchor-review", { group: "g-review" }),
+    ws("anchor-review", { title: "For review", group: "g-review" }),
     ws("c", { group: "g-review" }),
-    ws("anchor-parked", { group: "g-parked" }),
+    ws("anchor-parked", { title: "Parked", group: "g-parked" }),
     ws("p", { group: "g-parked" }),
     ws("u"),
   ];
@@ -79,6 +81,43 @@ describe("lanes", () => {
   it("laneByKey falls back to Unsorted and LANES ends with it", () => {
     assert.equal(LANES.at(-1)?.key, "unsorted");
     assert.equal(laneByKey("bg").name, "Background");
+  });
+});
+
+// Live shape from `cmux rpc workspace.group.list` + `extension.sidebar.snapshot`
+// (2026-09-26): a single-member group's anchor can be a real workspace, not a
+// generated placeholder, and it must not vanish from its lane.
+describe("a real workspace anchoring a single-member group", () => {
+  it("hides the generated anchor but shows the real one, counted and in Needs you", () => {
+    r.data.epoch += 100;
+    r.data.selectedId = null;
+    r.data.groups = [
+      group("g-main", "Main activity", { anchorId: "gen-main" }),
+      group("g-parked", "Parked", { anchorId: "real-parked" }),
+    ];
+    r.data.workspaces = [
+      ws("gen-main", { title: "Main activity", directory: "/Users/jonyardley/Dev", group: "g-main" }),
+      ws("real-parked", {
+        title: "PR #155 wireless spike measurement",
+        directory: "/Users/coder/dev/app-three",
+        group: "g-parked",
+        agents: [agent("needs_input", { sinceEpoch: 1 })],
+      }),
+    ];
+
+    assert.deepEqual([...model.laneAnchorIds()], ["gen-main"]);
+    assert.deepEqual(
+      model.cardWorkspaces().map((w) => w.id),
+      ["real-parked"],
+    );
+    const parked = r.data.workspaces.find((w) => w.id === "real-parked");
+    if (!parked) throw new Error("fixture");
+    assert.equal(model.laneOf(parked), "parked");
+    assert.equal(model.laneCount("parked"), 1);
+    assert.deepEqual(
+      model.needsList().map((w) => w.id),
+      ["real-parked"],
+    );
   });
 });
 
