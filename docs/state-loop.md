@@ -25,7 +25,7 @@ cmux-cockpit://set?key=<map>.<wsId>            (no value: delete the entry)
 | map               | value                          | issue |
 | ----------------- | ------------------------------ | ----- |
 | `dismissed`       | `{"<agentId>": <epoch>, ...}`  | #5    |
-| `projectOverride` | `"<project key>"`              | #8    |
+| `projectOverride` | `"<project key>"`, its first match path, e.g. `"/dev/alpha"` | #8    |
 
 Any other host, path or map is refused. `scripts/state-config.ts` holds the
 rules (`applySet`, `validateState`) and their tests.
@@ -34,12 +34,20 @@ rules (`applySet`, `validateState`) and their tests.
 
 ```json
 { "dismissed": { "<wsId>": { "<agentId>": 1790416690 } },
-  "projectOverride": { "<wsId>": "alpha" } }
+  "projectOverride": { "<wsId>": "/dev/alpha" } }
 ```
 
 A missing or malformed file reads as empty state; bad entries are dropped,
 never fatal, so a bad write cannot break the build. Each map keeps its newest
 256 entries.
+
+## Cost of a save
+
+Every save rebuilds both bundles and cmux reloads both sidebars. Anything
+held only for the session goes with it: a card just dragged to a lane can
+snap back until cmux reports the move, and the agents panel reloads for a
+change it does not use. Saves are rare (a dismissal, a project move), so this
+is accepted until cmux's own store lands (#20).
 
 ## Trust
 

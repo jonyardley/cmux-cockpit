@@ -18,7 +18,7 @@ export const SAVED_STATE: State = __STATE__;
  * null value asks for a delete instead of a set. With no handler installed,
  * openURL to the unclaimed cmux-cockpit:// scheme does nothing.
  */
-export function persistSet(key: string, value: unknown | null): void {
+export function persistSet(key: string, value: string | Record<string, number> | null): void {
   const q = value === null ? "" : `&value=${encodeURIComponent(JSON.stringify(value))}`;
   openURL(`cmux-cockpit://set?key=${encodeURIComponent(key)}${q}`);
 }

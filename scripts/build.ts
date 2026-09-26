@@ -59,7 +59,9 @@ function loadState(): State {
   try {
     return validateState(JSON.parse(readFileSync(path, "utf8")));
   } catch (err) {
-    console.warn(`build: cannot read or parse ${path}, starting from empty state: ${(err as Error).message}`);
+    console.warn(
+      `build: cannot read or parse ${path}, starting from empty state: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return emptyState();
   }
 }

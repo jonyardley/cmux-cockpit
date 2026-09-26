@@ -16,11 +16,14 @@ export interface State {
 
 export const emptyState = (): State => ({ dismissed: {}, projectOverride: {} });
 
-// Workspace ids are UUIDs and agent ids are short tokens; both stay well inside this.
-// Object prototype names are refused too, so no entry can land on a prototype.
-const ID_SHAPE = /^[A-Za-z0-9._:-]{1,64}$/;
+// renderer.d.ts puts no shape on workspace or agent ids, and a project key is
+// its first match path ("/dev/app"), so only length is bounded. Object
+// prototype names are refused, so no entry can land on a prototype.
+// Numeric-looking ids would sort first in Object.entries and so be evicted
+// first; cmux ids are UUIDs, so that is accepted rather than worked round.
 const RESERVED = new Set(["__proto__", "constructor", "prototype"]);
-const isId = (v: string): boolean => ID_SHAPE.test(v) && !RESERVED.has(v);
+const isId = (v: string): boolean => v.length > 0 && v.length <= 128 && !RESERVED.has(v);
+const MAX_PROJECT_KEY = 512;
 /** Entries kept per map, so a flood of URLs cannot grow the file without bound. */
 export const MAX_ENTRIES = 256;
 
@@ -35,7 +38,8 @@ function agentStarts(v: unknown): Record<string, number> | null {
   return Object.keys(out).length ? out : null;
 }
 
-const projectKey = (v: unknown): string | null => (typeof v === "string" && isId(v) ? v : null);
+const projectKey = (v: unknown): string | null =>
+  typeof v === "string" && v.length > 0 && v.length <= MAX_PROJECT_KEY ? v : null;
 
 // Keeps the last MAX_ENTRIES valid entries, in insertion order.
 function cleanMap<T>(v: unknown, clean: (value: unknown) => T | null): Record<string, T> {

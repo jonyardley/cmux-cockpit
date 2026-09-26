@@ -46,15 +46,18 @@ function isDismissed(w: Workspace | undefined, a: Agent): boolean {
 }
 
 // Drops dismissals whose spell has ended, so a later ask with the same start
-// (or none) is not hidden. Not a write anyone reads reactively: what shows
-// is unchanged, so no bump(). Runs during render, so it never persists: a
-// stale saved entry is harmless (issue #5), since it can only match its exact
-// start, and the file caps entries.
+// (or none) is not hidden. Only for agents the workspace reports: straight
+// after a reload cmux can report a workspace before its agents, and that must
+// not wipe a dismissal seeded from disk. Not a write anyone reads reactively:
+// what shows is unchanged, so no bump(). Runs during render, so it never
+// persists: a stale saved entry is harmless (issue #5), since it can only
+// match its exact start, and the file caps entries.
 function prune(w: Workspace): void {
   const byAgent = dismissed.get(w.id);
   if (!byAgent) return;
+  const reported = new Set((w.agents ?? []).filter((a) => !!a).map((a) => a.id));
   const live = new Map(asking(w).map((a) => [a.id, sinceOrActivity(a)]));
-  for (const [id, start] of byAgent) if (live.get(id) !== start) byAgent.delete(id);
+  for (const [id, start] of byAgent) if (reported.has(id) && live.get(id) !== start) byAgent.delete(id);
   if (!byAgent.size) dismissed.delete(w.id);
 }
 
@@ -85,7 +88,10 @@ export function dismissNeeds(w: Workspace | undefined): void {
   const starts = new Map(list.map((a) => [a.id, sinceOrActivity(a)]));
   dismissed.set(w.id, starts);
   bump();
-  persistSet(`dismissed.${w.id}`, Object.fromEntries(starts));
+  // A start of 0 means the agent had no timestamp, so a later ask without one
+  // would match it too; that dismissal holds for this session only.
+  const dated = [...starts].filter(([, start]) => start > 0);
+  persistSet(`dismissed.${w.id}`, dated.length ? Object.fromEntries(dated) : null);
 }
 
 export function restoreNeeds(w: Workspace | undefined): void {

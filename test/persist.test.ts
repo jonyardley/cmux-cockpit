@@ -3,6 +3,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { applySet, emptyState } from "../scripts/state-config.ts";
 import { installRenderer } from "./support/renderer.ts";
 
 const r = installRenderer();
@@ -38,5 +39,32 @@ describe("persistSet", () => {
     // The raw space and ampersand must not survive unencoded.
     assert.doesNotMatch(url, /dismissed\.w 1/);
     assert.doesNotMatch(url, /value="a b&c"/);
+  });
+});
+
+// What the handler does with the URL, minus the file: read key and value back
+// out and apply them. Catches a sidebar sending something the contract refuses.
+function applyOpened(url: string) {
+  const q = new URL(url).searchParams;
+  return applySet(emptyState(), q.get("key") ?? "", q.get("value"));
+}
+
+describe("persistSet URLs pass the contract", () => {
+  const ws = "8F3C2A1E-0B6D-4E57-9A8B-1C2D3E4F5A6B";
+
+  it("accepts a path-shaped project key", () => {
+    r.opened.length = 0;
+    persistSet(`projectOverride.${ws}`, "/dev/app-one");
+    const result = applyOpened(r.opened[0] ?? "");
+    assert.deepEqual(result.ok && result.state.projectOverride, { [ws]: "/dev/app-one" });
+  });
+
+  it("accepts a dismissal and a delete", () => {
+    r.opened.length = 0;
+    persistSet(`dismissed.${ws}`, { "agent/1": 500 });
+    persistSet(`dismissed.${ws}`, null);
+    const [set, del] = r.opened.map(applyOpened);
+    assert.deepEqual(set?.ok && set.state.dismissed, { [ws]: { "agent/1": 500 } });
+    assert.equal(del?.ok, true);
   });
 });

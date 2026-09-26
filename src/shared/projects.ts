@@ -29,6 +29,9 @@ export function projectId(p: Project): string {
   return matchesOf(p)[0] ?? "";
 }
 
+/** True when `key` is a configured project's projectId. */
+export const isProjectKey = (key: string): boolean => PROJECTS.some((p) => projectId(p) === key);
+
 /** The matching project, or NO_PROJECT (a fresh copy) when none matches. */
 export function projectOf(directory: string | null | undefined): Project {
   const d = String(directory ?? "").toLowerCase();

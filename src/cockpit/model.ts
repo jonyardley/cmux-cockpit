@@ -5,7 +5,7 @@
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
-import { PROJECTS, type Project, projectId, projectOf } from "../shared/projects.ts";
+import { isProjectKey, PROJECTS, type Project, projectId, projectOf } from "../shared/projects.ts";
 import { nowEpoch } from "../shared/time.ts";
 import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
@@ -93,21 +93,16 @@ export function moveToLane(w: Workspace | undefined, laneKey: LaneKey): void {
 
 // "Move to project" override (issue #8): no cmux field holds project
 // membership. Seeded from the saved state at startup, and moveToProject and
-// clearProjectOverride call persistSet, so a choice survives a reload; a
-// stale entry for a now-closed workspace is only dropped once cmux reports
-// a workspace list that both is non-empty and does not include it (see
-// pruneProjectOverride). Consulted before the path match, the way laneOf
+// clearProjectOverride call persistSet, so a choice survives a reload.
+// Never pruned: a workspace missing from one frame may be cmux still starting
+// up or refreshing, and an entry for a closed workspace is unreachable and
+// capped by the state file. Consulted before the path match, the way laneOf
 // consults laneOverride, but with no decay: nothing in cmux ever supersedes
 // it.
 // wsId -> project key
 const projectOverride = new Map<string, string>(
-  Object.entries(SAVED_STATE.projectOverride).filter(([, key]) => PROJECTS.some((p) => projectId(p) === key)),
+  Object.entries(SAVED_STATE.projectOverride).filter(([, key]) => isProjectKey(key)),
 );
-// wsIds moveToProject has set (or reaffirmed) this session. pruneProjectOverride
-// only ever drops one of these: a workspace list that is briefly empty or
-// missing entries while cmux is still starting up must not wipe an override
-// that was only just seeded from disk and has not been touched this session.
-const sessionOverrideIds = new Set<string>();
 // Declared here, above allWorkspaces(), because the renderer evaluates a
 // computed() as soon as it is defined, so its reads run during module load.
 
@@ -124,7 +119,6 @@ export function overrideOrder(ids: string[]): void {
 function allWorkspaces(): Workspace[] {
   tick();
   let ws = data.workspaces() ?? [];
-  pruneProjectOverride(ws);
   if (orderOverride) {
     const ids = orderOverride.ids.filter((id) => ws.some((w) => w.id === id));
     if (ws.map((w) => w.id).join(",") === ids.join(",") || nowEpoch() - orderOverride.at > OVERRIDE_SECS) {
@@ -231,27 +225,6 @@ export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => la
 
 const OTHER: Project = { match: "other", name: "Other", color: "#A09E95", icon: "terminal" };
 
-// Drops overrides for workspaces cmux no longer reports (closed sessions),
-// so the map does not grow forever across a long-running sidebar. Only
-// touches ids set this session (see sessionOverrideIds), and never runs
-// against an empty list: either could otherwise be an in-progress cmux
-// start-up rather than a real close, which would wipe a seeded override
-// before its workspace has been reported at all. Not a write anyone reads
-// reactively: what shows is unchanged, so no bump(). Never persists either:
-// the file already reflects these entries, and a closed workspace's stale
-// entry is harmless (it is bounded by MAX_ENTRIES and unreachable once the
-// workspace is gone).
-function pruneProjectOverride(ws: readonly Workspace[]): void {
-  if (!sessionOverrideIds.size || !ws.length) return;
-  const ids = new Set(ws.map((w) => w.id));
-  for (const id of sessionOverrideIds) {
-    if (!ids.has(id)) {
-      projectOverride.delete(id);
-      sessionOverrideIds.delete(id);
-    }
-  }
-}
-
 export const projectKey = (w: Workspace): string => {
   tick();
   const o = projectOverride.get(w.id);
@@ -262,9 +235,8 @@ export const projectKey = (w: Workspace): string => {
 
 /** Move a workspace to a project, kept across a reload until cleared. Used by the context menu. */
 export function moveToProject(w: Workspace | undefined, key: string): void {
-  if (!w || !PROJECTS.some((p) => projectId(p) === key)) return;
+  if (!w || !isProjectKey(key)) return;
   projectOverride.set(w.id, key);
-  sessionOverrideIds.add(w.id);
   bump();
   persistSet(`projectOverride.${w.id}`, key);
 }
@@ -272,7 +244,6 @@ export function moveToProject(w: Workspace | undefined, key: string): void {
 /** Drop the override, so the workspace falls back to its path match. */
 export function clearProjectOverride(w: Workspace | undefined): void {
   if (!w || !projectOverride.delete(w.id)) return;
-  sessionOverrideIds.delete(w.id);
   bump();
   persistSet(`projectOverride.${w.id}`, null);
 }

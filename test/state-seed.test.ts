@@ -44,7 +44,7 @@ describe("model.ts seeds projectOverride from the saved state (issue #8)", () =>
 
   it("keeps the seeded override through an empty or partial workspace list at startup", () => {
     r.data.workspaces = [];
-    model.cardWorkspaces(); // triggers pruneProjectOverride; must not touch a seeded entry
+    model.cardWorkspaces(); // a render against an empty list must not touch a seeded entry
     assert.equal(model.hasProjectOverride(ws("w2")), true);
 
     r.data.workspaces = [ws("other")]; // partial: w2 still not reported yet

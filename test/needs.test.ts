@@ -143,6 +143,25 @@ describe("dismissals", () => {
     assert.deepEqual(r.opened, ["cmux-cockpit://set?key=dismissed.persist-d"]);
   });
 
+  it("persists only dated spells, so an undated ask cannot stay hidden across reloads", () => {
+    r.opened.length = 0;
+    const undated = agent("needs_input");
+    const w = ws("undated", { agents: [undated] });
+    needs.dismissNeeds(w);
+    assert.equal(needs.isNeedsDismissed(w), true);
+    assert.deepEqual(r.opened, ["cmux-cockpit://set?key=dismissed.undated"]);
+  });
+
+  it("keep a dismissal while its agent is not reported yet, as straight after a reload", () => {
+    const asker = agent("needs_input", { sinceEpoch: 700 });
+    const w = ws("late-agents", { agents: [asker] });
+    needs.dismissNeeds(w);
+    w.agents = [];
+    needs.agentsOf(w);
+    w.agents = [asker];
+    assert.equal(needs.isNeedsDismissed(w), true);
+  });
+
   it("does not persist anything when there is nothing to dismiss or restore", () => {
     r.opened.length = 0;
     needs.dismissNeeds(ws("empty-persist", { agents: [agent("working")] }));
