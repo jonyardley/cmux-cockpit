@@ -54,6 +54,14 @@ describe("effectiveAgent", () => {
     const busy = agent("working");
     assert.equal(needs.effectiveAgent(busy), busy);
   });
+
+  it("dates a nudge's idle from the end of the turn", () => {
+    assert.equal(needs.effectiveAgent(claude(1000, 1060)).sinceEpoch, 1000);
+    const byMessage = agent("needs_input", { kind: "claude", sinceEpoch: 1060 });
+    const shown = needs.effectiveAgent(byMessage, ws("m", { latestAt: 1000 }));
+    assert.equal(shown.status, "idle");
+    assert.equal(shown.sinceEpoch, 1060);
+  });
 });
 
 describe("dismissals", () => {
@@ -82,6 +90,35 @@ describe("dismissals", () => {
     assert.equal(needs.isNeedsDismissed(a), false);
     needs.restoreNeeds(a);
     assert.equal(needs.isNeedsDismissed(a), false);
+  });
+
+  it("end with the spell, so a later ask with the same start still shows", () => {
+    const asker = agent("needs_input");
+    const w = ws("s", { agents: [asker] });
+    needs.dismissNeeds(w);
+    assert.equal(needs.agentsOf(w)[0]?.status, "idle");
+    w.agents = [{ ...asker, status: "working" }];
+    needs.agentsOf(w);
+    w.agents = [asker];
+    assert.equal(needs.agentsOf(w)[0]?.status, "needs_input");
+  });
+
+  it("do not hide a second agent that asks after the dismissal", () => {
+    const first = agent("needs_input", { sinceEpoch: 500 });
+    const w = ws("t", { agents: [first] });
+    needs.dismissNeeds(w);
+    w.agents = [first, agent("needs_input", { sinceEpoch: 500 })];
+    assert.equal(needs.isNeedsDismissed(w), false, "the menu offers Dismiss, not Restore");
+    assert.deepEqual(
+      needs.agentsOf(w).map((a) => a.status),
+      ["idle", "needs_input"],
+    );
+  });
+
+  it("have nothing to dismiss when the only ask is a nudge", () => {
+    const w = ws("n", { agents: [claude(1000, 1060)] });
+    needs.dismissNeeds(w);
+    assert.equal(needs.isNeedsDismissed(w), false);
   });
 
   it("ignore a workspace with nothing to dismiss", () => {
