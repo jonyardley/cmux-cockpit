@@ -33,10 +33,14 @@ describe("project table validation", () => {
     assert.match(error([p("/.config/cmux", "Cockpit"), p("/dev/cmux-cockpit", "Cockpit")]), /named "Cockpit"/);
   });
 
-  it("accepts an absolute or ~ root, rejects a relative or empty one", () => {
+  it("accepts an absolute, bare ~, or ~/ root; rejects anything else, including a bare ~name", () => {
     assert.ok(validateProjects([{ ...p("/a"), root: "/Users/jon/dev/app" }]).ok);
     assert.ok(validateProjects([{ ...p("/a"), root: "~/dev/app" }]).ok);
+    assert.ok(validateProjects([{ ...p("/a"), root: "~" }]).ok);
     assert.match(error([{ ...p("/a"), root: "dev/app" }]), /absolute path/);
     assert.match(error([{ ...p("/a"), root: "" }]), /absolute path/);
+    // build.ts's expandRoot only expands a bare "~" or a "~/..." prefix, so a
+    // "~name/..." form (no slash right after ~) would reach the sidebar unexpanded.
+    assert.match(error([{ ...p("/a"), root: "~jon/dev/app" }]), /absolute path/);
   });
 });

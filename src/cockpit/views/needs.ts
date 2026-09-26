@@ -7,7 +7,7 @@ import { haloDot, when } from "../../shared/ui.ts";
 import { needsList, selectWorkspace } from "../model.ts";
 import { ageOf } from "../status.ts";
 import { C } from "../theme.ts";
-import { cardMenu, meta, ring, type WsAccessor } from "./parts.ts";
+import { cardMenu, glyphButton, meta, ring, type WsAccessor } from "./parts.ts";
 
 function needsRow(w: WsAccessor): View {
   const row = HStack({ spacing: 10, alignment: "top" }, [
@@ -29,14 +29,7 @@ function needsRow(w: WsAccessor): View {
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
     meta(() => ageOf(w()), C.secondary),
-    // A quiet glyph, not a chip: the row already has an edge. The shape
-    // gives the tap a full 16pt target (a framed Image only takes taps on
-    // its glyph).
-    ZStack({}, [Circle({ size: 16 }).fill("clear"), Image("xmark").font(8.5).weight("semibold").color(C.tertiary)])
-      .frame({ width: 16, height: 16 })
-      .cornerRadius(8)
-      .hoverBackground(C.hover)
-      .onTap(() => dismissNeeds(w())),
+    glyphButton("xmark", 16, 8.5, C.tertiary, () => dismissNeeds(w())),
   ])
     .paddingHorizontal(10)
     .paddingVertical(9)

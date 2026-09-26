@@ -22,6 +22,18 @@ import { C } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;
 
+// A quiet glyph, not a chip: for a control that sits inside a row or header
+// which already has its own edge and its own onTap. The shape gives the tap
+// a full frame-sized target (a framed Image only takes taps on its glyph),
+// and its own onTap keeps it independent of the parent's tap.
+export function glyphButton(icon: string, size: number, fontSize: number, color: string, onTap: () => void): View {
+  return ZStack({}, [Circle({ size }).fill("clear"), Image(icon).font(fontSize).weight("semibold").color(color)])
+    .frame({ width: size, height: size })
+    .cornerRadius(size / 2)
+    .hoverBackground(C.hover)
+    .onTap(onTap);
+}
+
 // Edge as a filled ring: the edge colour fills an outer rounded box and the
 // face sits inset by the edge width. A borderWidth stroke is clipped by the
 // corner radius and thins out round every corner. `hug` keeps the face at its

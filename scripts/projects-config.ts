@@ -23,9 +23,13 @@ function isMatch(value: unknown): value is string | string[] {
   return Array.isArray(value) && value.length > 0 && value.every(isMatchString);
 }
 
-// Absolute, `~` allowed; unlike match this keeps its case and is not a fragment.
+// Absolute, or exactly `~` or `~/...` (what build.ts's expandRoot actually expands); unlike
+// match this keeps its case and is not a fragment. A bare "~jon/..." would reach the sidebar
+// unexpanded, so it is rejected here rather than passed through.
 function isRoot(value: unknown): value is string {
-  return typeof value === "string" && value !== "" && (value.startsWith("/") || value.startsWith("~"));
+  return (
+    typeof value === "string" && value !== "" && (value.startsWith("/") || value === "~" || value.startsWith("~/"))
+  );
 }
 
 function isProject(value: unknown): value is Project {
