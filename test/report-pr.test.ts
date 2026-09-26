@@ -21,6 +21,16 @@ describe("createdPrUrl", () => {
     assert.equal(createdPrUrl(bash("gh -R o/r pr new", `Creating pull request\n${URL}\n`)), URL);
   });
 
+  it("takes the last URL, the one the create printed", () => {
+    const out = "https://github.com/o/r/pull/20\nhttps://github.com/o/r/pull/21\n";
+    assert.equal(createdPrUrl(bash("gh pr view 20 -q .url && gh pr create --fill", out)), URL);
+  });
+
+  it("ignores a command that only mentions gh pr create", () => {
+    assert.equal(createdPrUrl(bash('grep -rn "gh pr create" docs')), null);
+    assert.equal(createdPrUrl(bash("echo gh pr create")), null);
+  });
+
   it("ignores a create that printed no URL, so a failed create reports nothing", () => {
     assert.equal(createdPrUrl(bash("gh pr create", "")), null);
   });
@@ -64,5 +74,11 @@ describe("payload", () => {
   it("gives up without cmux ids or on an unknown state", () => {
     assert.equal(payload(PR, { CMUX_TAB_ID: "tab1" }), null);
     assert.equal(payload({ ...PR, state: "DRAFT" }, ENV), null);
+    assert.equal(payload({ ...PR, state: "constructor" }, ENV), null);
+  });
+
+  it("gives up on a field with whitespace that would split the line", () => {
+    assert.equal(payload(PR, { ...ENV, CMUX_PANEL_ID: "panel 1" }), null);
+    assert.equal(payload({ ...PR, url: `${URL} x` }, ENV), null);
   });
 });

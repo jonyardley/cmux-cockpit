@@ -27,9 +27,11 @@ interface CmuxEnv {
   CMUX_SOCKET_CAPABILITY?: string | undefined;
 }
 
-// `gh [global flags] pr create|new`, as a command word, not a longer name.
-const PR_CREATE = /\bgh\s+(?:\S+\s+)*?pr\s+(?:create|new)(?![\w-])/;
-const PR_URL = /https:\/\/\S+\/pull\/\d+/;
+// `gh [global flags] pr create|new` at the start of a shell segment, so a
+// command that only mentions it (grep, a quoted body) does not count.
+const PR_CREATE = /^\s*gh\s+(?:-\S+\s+(?:[^-\s]\S*\s+)?)*pr\s+(?:create|new)(?![\w-])/;
+const SEGMENTS = /&&|\|\||[;|\n]/;
+const PR_URL = /https:\/\/\S+\/pull\/\d+/g;
 
 function field(obj: unknown, key: string): unknown {
   return typeof obj === "object" && obj !== null && key in obj ? Reflect.get(obj, key) : undefined;
@@ -41,10 +43,11 @@ function field(obj: unknown, key: string): unknown {
 export function createdPrUrl(event: unknown): string | null {
   if (field(event, "tool_name") !== "Bash") return null;
   const command = field(field(event, "tool_input"), "command");
-  if (typeof command !== "string" || !PR_CREATE.test(command)) return null;
+  if (typeof command !== "string" || !command.split(SEGMENTS).some((c) => PR_CREATE.test(c))) return null;
   const stdout = field(field(event, "tool_response"), "stdout");
   if (typeof stdout !== "string") return null;
-  return PR_URL.exec(stdout)?.[0] ?? null;
+  // gh prints the new PR's URL last, after anything earlier commands printed.
+  return stdout.match(PR_URL)?.at(-1) ?? null;
 }
 
 export function parsePr(json: string): Pr | null {
@@ -60,7 +63,11 @@ export function parsePr(json: string): Pr | null {
   return { number, url, state, headRefName };
 }
 
-const STATES: Record<string, string> = { OPEN: "open", MERGED: "merged", CLOSED: "closed" };
+const STATES = new Map([
+  ["OPEN", "open"],
+  ["MERGED", "merged"],
+  ["CLOSED", "closed"],
+]);
 const TOKEN = /^\S+$/;
 
 // The socket line, as the shell integration writes it, or null when cmux's
@@ -69,7 +76,7 @@ const TOKEN = /^\S+$/;
 // branch, which is the same name unless it was pushed under another.
 export function payload(pr: Pr, env: CmuxEnv): string | null {
   const { CMUX_TAB_ID: tab, CMUX_PANEL_ID: panel, CMUX_SOCKET_CAPABILITY: cap } = env;
-  const state = STATES[pr.state];
+  const state = STATES.get(pr.state);
   if (!tab || !panel || !state) return null;
   if (![pr.url, tab, panel].every((f) => TOKEN.test(f))) return null;
   const branch = pr.headRefName.replaceAll('"', '\\"');
@@ -80,6 +87,8 @@ export function payload(pr: Pr, env: CmuxEnv): string | null {
 function send(socket: string, line: string): Promise<void> {
   return new Promise((resolve) => {
     const conn = createConnection(socket, () => conn.end(`${line}\n`));
+    // Drain any reply so the socket closes when cmux does, not on the timeout.
+    conn.resume();
     conn.setTimeout(1000, () => conn.destroy());
     conn.on("error", (err) => console.error(`report-pr: socket: ${err.message}`));
     conn.on("close", () => resolve());
@@ -104,7 +113,8 @@ async function main(): Promise<void> {
   const pr = gh.status === 0 ? parsePr(gh.stdout) : null;
   if (!pr) return console.error(`report-pr: skipped, gh could not read ${url}`);
   const line = payload(pr, process.env);
-  if (!line) return console.error("report-pr: skipped, cmux tab or panel id missing");
+  if (!line)
+    return console.error("report-pr: skipped, cmux tab or panel id missing, or an unexpected PR state or field");
   await send(socket, line);
 }
 
