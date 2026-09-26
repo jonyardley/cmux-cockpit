@@ -15,6 +15,7 @@ import { setDrag } from "./state.ts";
 import { cardFor, projectRow } from "./views/cards.ts";
 import { laneHeader, projectHeader, segmented } from "./views/headers.ts";
 import { needsStrip } from "./views/needs.ts";
+import { emptyRow } from "./views/parts.ts";
 
 sidebar(() =>
   VStack({ spacing: 0, alignment: "leading" }, [
@@ -41,6 +42,7 @@ sidebar(() =>
       ForEach({ items: projectEntries, key: (e) => e.id }, (e) => {
         const entry = e();
         if (entry.kind === "header") return projectHeader(entry.project);
+        if (entry.kind === "empty") return emptyRow("No sessions");
         return projectRow(() => wsById(entry.wsId), entry.id);
       }),
     ]).paddingHorizontal(10),

@@ -2,11 +2,20 @@
 
 import { glyphColor } from "../../shared/contrast.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
-import { projectOf } from "../../shared/projects.ts";
+import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot } from "../../shared/ui.ts";
 import { LANES } from "../lanes.ts";
-import { isSelected, laneOf, moveToLane, selectWorkspace } from "../model.ts";
+import {
+  clearProjectOverride,
+  hasProjectOverride,
+  isSelected,
+  laneOf,
+  moveToLane,
+  moveToProject,
+  projectKey,
+  selectWorkspace,
+} from "../model.ts";
 import { drag } from "../state.ts";
 import { ageOf, statusInfo } from "../status.ts";
 import { C } from "../theme.ts";
@@ -182,6 +191,26 @@ function workspaceAction(w: Workspace | undefined, action: string): void {
   if (w) cmux("workspace.action", { action, workspace_id: w.id });
 }
 
+// A session-only override (issue #8): nothing in cmux carries project
+// membership, so the label says outright that a reload drops it.
+function projectItems(w: WsAccessor): MenuItem[] {
+  const items = PROJECTS.map((p) => {
+    const key = projectId(p);
+    return Button(
+      () => (projectKey(w() ?? { id: "" }) === key ? "✓ " + p.name : p.name),
+      () => moveToProject(w(), key),
+    );
+  });
+  return [
+    ...items,
+    Divider(),
+    Button(
+      () => (hasProjectOverride(w()) ? "Clear override" : "No override set"),
+      () => clearProjectOverride(w()),
+    ),
+  ];
+}
+
 export function cardMenu(w: WsAccessor): MenuItem[] {
   const laneItems = LANES.map((lane) =>
     Button(
@@ -191,6 +220,7 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
   );
   return [
     Menu("Move to", laneItems),
+    Menu("Move to project (until reload)", projectItems(w)),
     Divider(),
     Button(
       () => (w()?.pinned ? "Unpin" : "Pin"),
@@ -202,6 +232,17 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
       () => (isNeedsDismissed(w()) ? restoreNeeds(w()) : dismissNeeds(w())),
     ),
   ];
+}
+
+// A project with no open sessions still shows its header (issue #8); this is
+// its one row. No tap: opening a workspace from here is a separate decision.
+export function emptyRow(text: string): View {
+  return Text(text)
+    .font(12)
+    .color(C.tertiary)
+    .paddingHorizontal(12)
+    .paddingVertical(10)
+    .frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
 // White card, hairline edge, clay outline when selected or dragged.
