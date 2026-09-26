@@ -1,5 +1,6 @@
 // The PR description check: both required sections must hold real text,
-// not only the template's placeholder comment or the attribution footer.
+// not only the template's placeholder comment, the attribution footer, or a
+// stand-in such as "Pending.".
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -40,6 +41,47 @@ describe("missingSections", () => {
   it("flags a missing heading and an empty last section", () => {
     const body = "## What changed\n\nA thing.\n\n## Review\n\n";
     assert.deepEqual(missingSections(body), ["Look at after reload", "Review"]);
+  });
+
+  it("flags a section whose whole text is a placeholder", () => {
+    const standIns = [
+      "Pending.",
+      "pending",
+      "TBD",
+      "todo!",
+      "WIP...",
+      "To do",
+      "Review pending.",
+      "Not yet.",
+      "**Pending.**",
+      "_TBD_.",
+      "  pending \u2026",
+      "<!-- Required. -->\nPending.",
+    ];
+    for (const text of standIns) {
+      const body = filled.replace("/code-review high: two findings, both fixed.", text);
+      assert.deepEqual(missingSections(body), ["Review"], JSON.stringify(text));
+    }
+    const both = filled
+      .replace("Nothing on screen.", "TBD")
+      .replace("/code-review high: two findings, both fixed.", "wip");
+    assert.deepEqual(missingSections(both), ["Look at after reload", "Review"]);
+  });
+
+  it("passes real text that only mentions a placeholder word", () => {
+    const real = [
+      "No findings; nothing pending.",
+      "Pending: one finding, answered below.",
+      "TBD in a follow-up: the colour token, tracked in #30.",
+      "/code-review high: one finding, a stale todo comment, fixed.",
+      "Not yet reloaded, but nothing on screen changes.",
+      "Pending.\nThen reviewed: no findings.",
+      "pendingly",
+    ];
+    for (const text of real) {
+      const body = filled.replace("/code-review high: two findings, both fixed.", text);
+      assert.deepEqual(missingSections(body), [], JSON.stringify(text));
+    }
   });
 
   it("does not take a longer heading for the required one", () => {
