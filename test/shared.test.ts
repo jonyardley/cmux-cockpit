@@ -4,6 +4,7 @@ import { installRenderer } from "./support/renderer.ts";
 
 const r = installRenderer();
 const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/activity.ts");
+const { glyphColor } = await import("../src/shared/contrast.ts");
 const { markLast } = await import("../src/shared/list.ts");
 const { PROJECTS, matchesOf, projectId, projectOf } = await import("../src/shared/projects.ts");
 const { cleanTitle, oneLine, readable, tracked } = await import("../src/shared/text.ts");
@@ -75,6 +76,21 @@ describe("projectOf", () => {
     assert.equal(p.icon, "terminal");
     assert.ok(!PROJECTS.includes(p));
     assert.notEqual(projectOf(undefined), projectOf(undefined));
+  });
+});
+
+describe("glyphColor", () => {
+  it("picks a dark glyph on light project colours, issue #2's low-contrast case included", () => {
+    assert.equal(glyphColor("#B0AEA5"), "#141413");
+    assert.equal(glyphColor("#FFFFFF"), "#141413");
+  });
+  it("picks a white glyph on dark colours", () => {
+    assert.equal(glyphColor("#141413"), "#FFFFFF");
+    assert.equal(glyphColor("#000000"), "#FFFFFF");
+  });
+  it("reads a 3-digit hex the same as its expansion", () => {
+    assert.equal(glyphColor("#fff"), glyphColor("#ffffff"));
+    assert.equal(glyphColor("#000"), glyphColor("#000000"));
   });
 });
 

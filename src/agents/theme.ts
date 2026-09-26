@@ -13,6 +13,7 @@ export const T = {
   clayButton: "#B5532F",
   blue: "#3B6FB6",
   blueHalo: "#3B6FB62E",
+  clayHalo: "#D9775738",
   grey: "#A09E95",
   hover: "#7f7f7f0F",
 } as const;

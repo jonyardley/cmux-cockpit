@@ -1,5 +1,6 @@
 // Small pieces shared by the agents panel's sections.
 
+import { glyphColor } from "../../shared/contrast.ts";
 import type { Project } from "../../shared/projects.ts";
 import { haloDot } from "../../shared/ui.ts";
 import { type ChipColors, T } from "../theme.ts";
@@ -95,7 +96,7 @@ export function idleRing(): View {
 export function glyph(p: Project): View {
   return ZStack({}, [
     RoundedRectangle({ cornerRadius: 5 }).fill(p.color),
-    Image(p.icon).font(9).color("#FFFFFF"),
+    Image(p.icon).font(9).color(glyphColor(p.color)),
   ]).frame({ width: 18, height: 18 });
 }
 

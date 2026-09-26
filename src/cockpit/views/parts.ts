@@ -1,5 +1,6 @@
 // Small pieces shared by the cockpit's cards and rows.
 
+import { glyphColor } from "../../shared/contrast.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
 import { projectOf } from "../../shared/projects.ts";
 import { displayTitle } from "../../shared/titles.ts";
@@ -48,7 +49,7 @@ export function glyph(w: WsAccessor, size: number, radius: number, font: number)
     Image(() => projectOf(w()?.directory).icon)
       .font(font)
       .weight("semibold")
-      .color("#FFFFFF"),
+      .color(() => glyphColor(projectOf(w()?.directory).color)),
   ]).frame({ width: size, height: size });
 }
 
