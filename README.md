@@ -35,6 +35,9 @@ and needs nothing installed or linked. Back up any existing
 - `cmux.json`: app settings. `dock.json`: dock controls.
 - `config/projects.example.json`: the committed sample project table.
   `config/projects.json` is your real, gitignored table; never commit it.
+  Each entry is `match`, `name`, `color`, `icon`, plus an optional `root`
+  (an absolute path, `~` allowed) that puts a "+" on the project's header
+  in the Projects view, opening a new workspace there.
 
 ## Setup
 

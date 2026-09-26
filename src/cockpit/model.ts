@@ -260,6 +260,16 @@ export const toggleProject = (k: string) =>
   );
 export const projectCount = (k: string) => cardWorkspaces().filter((w) => projectKey(w) === k).length;
 
+/** Whether the project's header should offer "+": it has a folder to open. */
+export const canOpenProject = (k: string): boolean => !!projectByKey(k).root;
+
+/** Opens a new workspace in the project's root, if it has one. */
+export function openProjectWorkspace(k: string): void {
+  const root = projectByKey(k).root;
+  if (!root) return;
+  cmux("workspace.create", { cwd: root, focus: true });
+}
+
 export type ProjectEntry =
   | { kind: "header"; id: string; project: string }
   | { kind: "ws"; id: string; wsId: string }

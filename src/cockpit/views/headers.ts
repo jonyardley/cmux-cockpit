@@ -4,9 +4,11 @@ import { glyphColor } from "../../shared/contrast.ts";
 import { dropLane } from "../drop.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
+  canOpenProject,
   isCollapsed,
   isProjectCollapsed,
   laneCount,
+  openProjectWorkspace,
   projectByKey,
   projectCount,
   toggleLane,
@@ -14,7 +16,7 @@ import {
 } from "../model.ts";
 import { mode, projectsMode, setMode } from "../state.ts";
 import { C } from "../theme.ts";
-import { ring } from "./parts.ts";
+import { glyphButton, ring } from "./parts.ts";
 
 function segButton(label: string, icon: string | null, on: () => boolean, set: () => void): View {
   return ZStack({}, [
@@ -117,6 +119,7 @@ export function projectHeader(k: string): View {
     Text(p.name).font(12.5).weight("semibold").color("#3D3D3A"),
     countPill(() => projectCount(k)),
     Spacer(),
+    ...(canOpenProject(k) ? [glyphButton("plus", 20, 11, C.secondary, () => openProjectWorkspace(k))] : []),
   ])
     .paddingHorizontal(8)
     .paddingTop(14)

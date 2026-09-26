@@ -6,6 +6,8 @@ export interface Project {
   name: string;
   color: string;
   icon: string;
+  /** Absolute path (`~` allowed) to open a new workspace in. Optional. */
+  root?: string;
 }
 
 export type ProjectsResult = { ok: true; projects: readonly Project[] } | { ok: false; error: string };
@@ -21,10 +23,22 @@ function isMatch(value: unknown): value is string | string[] {
   return Array.isArray(value) && value.length > 0 && value.every(isMatchString);
 }
 
+// Absolute, or exactly `~` or `~/...` (what build.ts's expandRoot actually expands); unlike
+// match this keeps its case and is not a fragment. A bare "~jon/..." would reach the sidebar
+// unexpanded, so it is rejected here rather than passed through.
+function isRoot(value: unknown): value is string {
+  return (
+    typeof value === "string" && value !== "" && (value.startsWith("/") || value === "~" || value.startsWith("~/"))
+  );
+}
+
 function isProject(value: unknown): value is Project {
   if (typeof value !== "object" || value === null) return false;
   const v = value as Record<string, unknown>;
-  return isMatch(v.match) && typeof v.name === "string" && typeof v.color === "string" && typeof v.icon === "string";
+  if (!isMatch(v.match) || typeof v.name !== "string" || typeof v.color !== "string" || typeof v.icon !== "string") {
+    return false;
+  }
+  return v.root === undefined || isRoot(v.root);
 }
 
 /** The first value seen twice, if any. */
@@ -43,7 +57,8 @@ export function validateProjects(parsed: unknown): ProjectsResult {
     return {
       ok: false,
       error:
-        "must be a JSON array of { match, name, color, icon } strings; match is a non-empty lowercase string or a list of them",
+        "must be a JSON array of { match, name, color, icon, root? } strings; match is a non-empty lowercase" +
+        " string or a list of them, root (if given) is a non-empty absolute path starting with / or ~",
     };
   }
   const projects: readonly Project[] = parsed;
