@@ -37,7 +37,7 @@ export interface Renderer {
   /** Every cmux() dispatch, in order. */
   calls: { method: string; params: Record<string, unknown> }[];
   opened: string[];
-  /** Every menu item built, as "button:<label>", "menu:<label>" or "divider". */
+  /** Every menu item built, as "button:<label>" or "divider". */
   menu: string[];
   roots: (() => unknown)[];
   globals: Record<string, unknown>;
@@ -107,10 +107,6 @@ export function createRenderer(): Renderer {
     Reorderable: list,
     Button: (label: Reactive<string>) => {
       r.menu.push("button:" + (typeof label === "function" ? label() : label));
-      return menuItem();
-    },
-    Menu: (label: string) => {
-      r.menu.push("menu:" + label);
       return menuItem();
     },
     Divider: () => {

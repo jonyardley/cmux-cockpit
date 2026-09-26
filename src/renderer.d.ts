@@ -93,7 +93,8 @@ declare function ForEach<T>(options: ForEachOptions<T>, render: (item: () => T) 
 declare function Reorderable<T>(options: ReorderableOptions<T>, render: (item: () => T) => View): View;
 
 declare function Button(label: Reactive<string>, action: () => void): MenuItem;
-declare function Menu(label: string, items: MenuItem[]): MenuItem;
+// No Menu(): cmux drops submenus from a context menu without an error, so
+// leaving it undeclared makes the compiler refuse one (PR #26).
 declare function Divider(): MenuItem;
 
 /** Author state local to this sidebar: a getter and a setter. */
