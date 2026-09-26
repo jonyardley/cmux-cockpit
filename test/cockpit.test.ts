@@ -226,6 +226,57 @@ describe("projects mode", () => {
   });
 });
 
+describe("Move to project override (issue #8)", () => {
+  beforeEach(setup);
+
+  it("has no override until one is set", () => {
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    assert.equal(model.hasProjectOverride(a), false);
+  });
+
+  it("overrides the path match until cleared", () => {
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    a.directory = "/Users/coder/dev/app-one";
+    assert.equal(model.projectKey(a), "/dev/app-one");
+    model.moveToProject(a, "/dev/app-two");
+    assert.equal(model.projectKey(a), "/dev/app-two");
+    assert.equal(model.hasProjectOverride(a), true);
+    model.clearProjectOverride(a);
+    assert.equal(model.projectKey(a), "/dev/app-one");
+    assert.equal(model.hasProjectOverride(a), false);
+  });
+
+  it("ignores a key that is not a configured project", () => {
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    a.directory = "/Users/coder/dev/app-one";
+    model.moveToProject(a, "not-a-project");
+    assert.equal(model.projectKey(a), "/dev/app-one");
+    assert.equal(model.hasProjectOverride(a), false);
+  });
+
+  it("moves a workspace with no path match into a project too", () => {
+    const u = byId("u");
+    if (!u) throw new Error("fixture");
+    assert.equal(model.projectKey(u), "other");
+    model.moveToProject(u, "/dev/app-three");
+    assert.equal(model.projectKey(u), "/dev/app-three");
+  });
+
+  it("regroups projectEntries by the override, not the path", () => {
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    a.directory = "/Users/coder/dev/app-one";
+    model.moveToProject(a, "/dev/app-two");
+    state.setMode("projects");
+    const ids = model.projectEntries().map((e) => e.id);
+    assert.ok(ids.includes("p:/dev/app-two"));
+    assert.equal(ids.includes("p:/dev/app-one"), false);
+  });
+});
+
 describe("chips", () => {
   it("shows the PR, then the branch with a dirty marker", () => {
     const chips = chipsFor(

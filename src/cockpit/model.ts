@@ -192,10 +192,40 @@ export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => la
 // local only: projects are not cmux groups.
 
 const OTHER: Project = { match: "other", name: "Other", color: "#A09E95", icon: "terminal" };
-const projectKey = (w: Workspace): string => {
+
+// Session-only "Move to project" override (issue #8): no cmux field holds
+// project membership, so this map is the whole persistence story, and it is
+// gone on reload. Consulted before the path match, the way laneOf consults
+// laneOverride, but with no decay: nothing in cmux ever supersedes it.
+const projectOverride = new Map<string, string>(); // wsId -> project key
+
+export const projectKey = (w: Workspace): string => {
+  tick();
+  const o = projectOverride.get(w.id);
+  if (o) return o;
   const p = projectOf(w.directory);
   return PROJECTS.includes(p) ? projectId(p) : projectId(OTHER);
 };
+
+/** Move a workspace to a project for the rest of this session. Used by the context menu. */
+export function moveToProject(w: Workspace | undefined, key: string): void {
+  if (!w || !PROJECTS.some((p) => projectId(p) === key)) return;
+  projectOverride.set(w.id, key);
+  bump();
+}
+
+/** Drop the override, so the workspace falls back to its path match. */
+export function clearProjectOverride(w: Workspace | undefined): void {
+  if (!w) return;
+  projectOverride.delete(w.id);
+  bump();
+}
+
+export const hasProjectOverride = (w: Workspace | undefined): boolean => {
+  tick();
+  return !!w && projectOverride.has(w.id);
+};
+
 export const projectByKey = (k: string): Project => PROJECTS.find((p) => projectId(p) === k) ?? OTHER;
 export const isProjectCollapsed = (k: string) => collapsedProjects().includes(k);
 export const toggleProject = (k: string) =>
