@@ -1,0 +1,162 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { installRenderer } from "./support/renderer.ts";
+
+const r = installRenderer();
+const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/activity.ts");
+const { markLast } = await import("../src/shared/list.ts");
+const { PROJECTS, matchesOf, projectId, projectOf } = await import("../src/shared/projects.ts");
+const { cleanTitle, oneLine, readable, tracked } = await import("../src/shared/text.ts");
+const { fmtAge, fmtElapsed, nowEpoch } = await import("../src/shared/time.ts");
+const { agent } = await import("./support/fixtures.ts");
+
+describe("cleanTitle", () => {
+  it("drops a leading spinner glyph", () => {
+    assert.equal(cleanTitle("✳ Fix the bridge"), "Fix the bridge");
+    assert.equal(cleanTitle("⠋⠙ working"), "working");
+  });
+  it("keeps titles that start with a path, hash or bracket", () => {
+    assert.equal(cleanTitle("~/dev/app-one"), "~/dev/app-one");
+    assert.equal(cleanTitle("#42 review"), "#42 review");
+    assert.equal(cleanTitle("[wip] thing"), "[wip] thing");
+  });
+  it("treats missing as empty", () => {
+    assert.equal(cleanTitle(undefined), "");
+    assert.equal(cleanTitle(null), "");
+  });
+});
+
+describe("readable", () => {
+  it("strips whole tag blocks, including nested ones", () => {
+    assert.equal(readable("Done <task-notification><id>1</id></task-notification> now"), "Done now");
+  });
+  it("strips lone and unterminated tags", () => {
+    assert.equal(readable("Hello <br/> world <unfinished"), "Hello world");
+  });
+  it("strips image and pasted-text placeholders", () => {
+    assert.equal(readable("Look [Image #1] here [Pasted text #2 +40 lines]"), "Look here");
+  });
+  it("returns empty for path-only or markup-only messages", () => {
+    assert.equal(readable("/private/tmp/claude/task-output.txt"), "");
+    assert.equal(readable("<system-reminder>x</system-reminder>"), "");
+    assert.equal(readable("~/a/b ../c"), "");
+  });
+  it("keeps a message that mentions a path among words", () => {
+    assert.equal(readable("Wrote ~/notes.md for you"), "Wrote ~/notes.md for you");
+  });
+});
+
+describe("oneLine", () => {
+  it("cuts with an ellipsis at max characters", () => {
+    assert.equal(oneLine("abcdefghij words", 8), "abcdefg…");
+    assert.equal(oneLine("short words", 80), "short words");
+  });
+});
+
+describe("projectOf", () => {
+  it("matches the directory case-insensitively", () => {
+    assert.equal(projectOf("/Users/coder/Dev/App-One/app").name, "App One");
+  });
+  it("matches any of a project's several paths", () => {
+    assert.equal(projectOf("/Users/coder/Dev/App-Two/src").name, "App Two");
+    assert.equal(projectOf("/Users/coder/.config/app-two").name, "App Two");
+  });
+  it("reads a single match or a list the same way, keyed by the first", () => {
+    const one = { match: "/a", name: "A", color: "#000000", icon: "x" };
+    const many = { match: ["/b", "/c"], name: "B", color: "#000000", icon: "x" };
+    assert.deepEqual(matchesOf(one), ["/a"]);
+    assert.deepEqual(matchesOf(many), ["/b", "/c"]);
+    assert.equal(projectId(one), "/a");
+    assert.equal(projectId(many), "/b");
+  });
+  it("falls back to a fresh no-project value that is never a PROJECTS member", () => {
+    const p = projectOf("/tmp/elsewhere");
+    assert.equal(p.name, "");
+    assert.equal(p.icon, "terminal");
+    assert.ok(!PROJECTS.includes(p));
+    assert.notEqual(projectOf(undefined), projectOf(undefined));
+  });
+});
+
+describe("activity ranking", () => {
+  it("orders needs_input, working, idle, ended", () => {
+    const list = [agent("ended"), agent("idle"), agent("needs_input"), agent("working")];
+    assert.deepEqual(
+      [...list].sort(byActivity).map((a) => a.status),
+      ["needs_input", "working", "idle", "ended"],
+    );
+  });
+  it("breaks ties by latest activity", () => {
+    const old = agent("idle", { lastActivityAt: 10 });
+    const recent = agent("idle", { lastActivityAt: 20 });
+    assert.equal([old, recent].sort(byActivity)[0], recent);
+    assert.equal(mostActive([old, recent]), recent);
+  });
+  it("mostActive agrees with sorting and keeps the first on a full tie", () => {
+    const a = agent("working", { lastActivityAt: 5 });
+    const b = agent("working", { lastActivityAt: 5 });
+    assert.equal(mostActive([a, b]), a);
+    assert.equal([a, b].sort(byActivity)[0], a);
+  });
+  it("mostActive skips holes and handles no agents", () => {
+    const a = agent("idle");
+    assert.equal(mostActive([null, a, undefined]), a);
+    assert.equal(mostActive(undefined), null);
+    assert.equal(mostActive([]), null);
+  });
+  it("sinceOrActivity prefers the status start, then last activity, then 0", () => {
+    assert.equal(sinceOrActivity(agent("working", { sinceEpoch: 5, lastActivityAt: 9 })), 5);
+    assert.equal(sinceOrActivity(agent("working", { lastActivityAt: 9 })), 9);
+    assert.equal(sinceOrActivity(agent("working")), 0);
+  });
+});
+
+describe("markLast", () => {
+  it("flags only the final item", () => {
+    assert.deepEqual(
+      markLast([{ id: "a" }, { id: "b" }]).map((e) => e.last),
+      [false, true],
+    );
+    assert.deepEqual(markLast([]), []);
+  });
+});
+
+describe("time", () => {
+  it("reads the app clock", () => {
+    r.data.epoch = 1234;
+    assert.equal(nowEpoch(), 1234);
+  });
+  it("fmtAge buckets coarsely", () => {
+    assert.equal(fmtAge(0), "<1m");
+    assert.equal(fmtAge(59), "<1m");
+    assert.equal(fmtAge(60), "1m");
+    assert.equal(fmtAge(3599), "59m");
+    assert.equal(fmtAge(3600), "1h");
+    assert.equal(fmtAge(86400 * 3), "3d");
+    assert.equal(fmtAge(-1), "");
+    assert.equal(fmtAge(Number.NaN), "");
+  });
+  it("fmtElapsed shows seconds and hours with minutes", () => {
+    assert.equal(fmtElapsed(-5), "0s");
+    assert.equal(fmtElapsed(45.9), "45s");
+    assert.equal(fmtElapsed(720), "12m");
+    assert.equal(fmtElapsed(3 * 3600 + 5 * 60), "3h 5m");
+    assert.equal(fmtElapsed(2 * 86400), "2d");
+  });
+});
+
+describe("tracked", () => {
+  it("puts a hair space between letters, none at the ends", () => {
+    assert.equal(tracked("ABC"), "A B C");
+  });
+  it("keeps a word gap as a plain space with no hair spaces round it", () => {
+    assert.equal(tracked("AB CD"), "A B C D");
+  });
+  it("splits by character, not UTF-16 unit", () => {
+    assert.equal(tracked("É😀"), "É 😀");
+  });
+  it("leaves empty and single-letter labels alone", () => {
+    assert.equal(tracked(""), "");
+    assert.equal(tracked("A"), "A");
+  });
+});

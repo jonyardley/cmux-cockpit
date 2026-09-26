@@ -1,0 +1,9 @@
+{
+  "controls": [
+    {
+      "id": "inbox",
+      "title": "Inbox",
+      "command": "while :; do clear; gh status; sleep 300; done"
+    }
+  ]
+}

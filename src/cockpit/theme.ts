@@ -1,0 +1,25 @@
+// Cockpit colour tokens.
+
+export const C = {
+  ground: "#F4F2EA",
+  card: "#FFFFFF",
+  hairline: "#E2DFD3",
+  cardEdge: "#1414131F",
+  text: "#141413",
+  secondary: "#5E5D59",
+  tertiary: "#73726C",
+  clay: "#D97757",
+  clayText: "#A34A2A",
+  blue: "#3B6FB6",
+  blueHalo: "#3B6FB62E",
+  clayHalo: "#D9775738",
+  green: "#788C5D",
+  grey: "#A09E95",
+  segTrack: "#E5E2D6",
+  needsBg: "#FBECE4",
+  needsEdge: "#F0D2C3",
+  needsRowEdge: "#A34A2A29",
+  hover: "#7f7f7f14",
+  laneBackground: "#788C5D",
+  laneUnsorted: "#B0AEA5",
+} as const;

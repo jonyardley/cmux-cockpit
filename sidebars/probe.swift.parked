@@ -1,0 +1,25 @@
+// Diagnostic 2: trailing-closure filters, agents access, and the sectioned
+// layout. Any missing line is a construct 0.64.22 drops.
+let needs = workspaces.filter { $0.unread > 0 }
+let agentsSeen = workspaces.filter { $0.agents != nil }
+let working = workspaces.filter { $0.agents != nil && $0.agents.count > 0 && $0.agents[0].status == "working" }
+let idle = workspaces.filter { $0.unread == 0 }
+
+VStack(alignment: .leading, spacing: 3) {
+    Text("J needs \(needs.count)").font(.system(size: 11))
+    Text("K agentsSeen \(agentsSeen.count)").font(.system(size: 11))
+    Text("L working \(working.count)").font(.system(size: 11))
+    Text("M idle \(idle.count)").font(.system(size: 11))
+    if idle.count > 0 {
+        Text("N if-let-count ok").font(.system(size: 11))
+    }
+    ForEach(idle) { w in
+        VStack(alignment: .leading, spacing: 1) {
+            Text("O \(w.title)").font(.system(size: 11)).lineLimit(1)
+            if w.branch != nil {
+                Text("   branch \(w.branch)").font(.system(size: 10)).foregroundColor(.secondary)
+            }
+        }
+    }
+    Spacer()
+}

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Installed by `npm run hooks`. Bypass once with `git commit --no-verify`.
+set -e
+npm run --silent check
