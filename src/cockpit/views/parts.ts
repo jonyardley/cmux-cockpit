@@ -234,6 +234,17 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
   ];
 }
 
+// A project with no open sessions still shows its header (issue #8); this is
+// its one row. No tap: opening a workspace from here is a separate decision.
+export function emptyRow(text: string): View {
+  return Text(text)
+    .font(12)
+    .color(C.tertiary)
+    .paddingHorizontal(12)
+    .paddingVertical(10)
+    .frame({ maxWidth: "infinity", alignment: "leading" });
+}
+
 // White card, hairline edge, clay outline when selected or dragged.
 export function cardChrome(view: View, w: WsAccessor, key: string, radius: number): View {
   const lit = () => drag()?.id === key || isSelected(w());

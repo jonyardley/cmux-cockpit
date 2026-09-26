@@ -186,7 +186,7 @@ describe("needs you", () => {
 describe("projects mode", () => {
   beforeEach(setup);
 
-  it("groups by project in PROJECTS order, then Other", () => {
+  it("groups by project in PROJECTS order, then Other, with an empty project's header still showing", () => {
     const a = byId("a");
     const c = byId("c");
     if (!a || !c) throw new Error("fixture");
@@ -195,7 +195,19 @@ describe("projects mode", () => {
     state.setMode("projects");
     assert.deepEqual(
       model.projectEntries().map((e) => e.id),
-      ["p:/dev/app-one", "c@p", "p:/dev/app-two", "a@p", "p:other", "b@p", "p@p", "u@p"],
+      [
+        "p:/dev/app-one",
+        "c@p",
+        "p:/dev/app-two",
+        "a@p",
+        // app-three has no sessions: header stands, one empty row, no Other mixed in.
+        "p:/dev/app-three",
+        "p:/dev/app-three:empty",
+        "p:other",
+        "b@p",
+        "p@p",
+        "u@p",
+      ],
     );
   });
 
@@ -206,9 +218,11 @@ describe("projects mode", () => {
     a.directory = "/Users/coder/dev/app-two/src";
     b.directory = "/Users/coder/.config/app-two";
     state.setMode("projects");
-    const ids = model.projectEntries().map((e) => e.id);
-    assert.deepEqual(ids.slice(0, 3), ["p:/dev/app-two", "a@p", "b@p"]);
-    assert.equal(ids.filter((id) => id.startsWith("p:") && id !== "p:other").length, 1);
+    const entries = model.projectEntries();
+    assert.equal(entries.filter((e) => e.kind === "header" && e.project === "/dev/app-two").length, 1);
+    const ids = entries.map((e) => e.id);
+    const at = ids.indexOf("p:/dev/app-two");
+    assert.deepEqual(ids.slice(at, at + 3), ["p:/dev/app-two", "a@p", "b@p"]);
     assert.equal(model.projectCount("/dev/app-two"), 2);
     assert.equal(model.projectByKey("/dev/app-two").name, "App Two");
   });
@@ -222,7 +236,27 @@ describe("projects mode", () => {
     state.setMode("projects");
     model.toggleProject("/dev/app-two");
     const ids = model.projectEntries().map((e) => e.id);
-    assert.deepEqual(ids.slice(0, 2), ["p:/dev/app-two", "p:other"]);
+    assert.equal(ids.includes("a@p"), false);
+    assert.equal(ids.includes("b@p"), false);
+    assert.equal(ids[ids.indexOf("p:/dev/app-two") + 1], "p:/dev/app-three");
+  });
+
+  it("shows a project with no sessions as a header plus one empty row", () => {
+    state.setMode("projects");
+    const entries = model.projectEntries();
+    const at = entries.findIndex((e) => e.kind === "header" && e.project === "/dev/app-three");
+    assert.notEqual(at, -1);
+    assert.deepEqual(entries[at + 1], { kind: "empty", id: "p:/dev/app-three:empty" });
+  });
+
+  it("never shows Other as a header when nothing falls into it", () => {
+    for (const w of r.data.workspaces) w.directory = "/Users/coder/dev/app-one";
+    state.setMode("projects");
+    const entries = model.projectEntries();
+    assert.equal(
+      entries.some((e) => e.kind === "header" && e.project === "other"),
+      false,
+    );
   });
 });
 
@@ -272,8 +306,9 @@ describe("Move to project override (issue #8)", () => {
     model.moveToProject(a, "/dev/app-two");
     state.setMode("projects");
     const ids = model.projectEntries().map((e) => e.id);
-    assert.ok(ids.includes("p:/dev/app-two"));
-    assert.equal(ids.includes("p:/dev/app-one"), false);
+    assert.equal(ids[ids.indexOf("p:/dev/app-two") + 1], "a@p");
+    // app-one's header still shows (every project does), but a moved out of it.
+    assert.equal(ids[ids.indexOf("p:/dev/app-one") + 1], "p:/dev/app-one:empty");
   });
 });
 

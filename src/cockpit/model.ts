@@ -87,6 +87,7 @@ export function overrideOrder(ids: string[]): void {
 function allWorkspaces(): Workspace[] {
   tick();
   let ws = data.workspaces() ?? [];
+  pruneProjectOverride(ws);
   if (orderOverride) {
     const ids = orderOverride.ids.filter((id) => ws.some((w) => w.id === id));
     if (ws.map((w) => w.id).join(",") === ids.join(",") || nowEpoch() - orderOverride.at > OVERRIDE_SECS) {
@@ -199,6 +200,15 @@ const OTHER: Project = { match: "other", name: "Other", color: "#A09E95", icon: 
 // laneOverride, but with no decay: nothing in cmux ever supersedes it.
 const projectOverride = new Map<string, string>(); // wsId -> project key
 
+// Drops overrides for workspaces cmux no longer reports (closed sessions),
+// so the map does not grow forever across a long-running sidebar. Not a
+// write anyone reads reactively: what shows is unchanged, so no bump().
+function pruneProjectOverride(ws: readonly Workspace[]): void {
+  if (!projectOverride.size) return;
+  const ids = new Set(ws.map((w) => w.id));
+  for (const id of projectOverride.keys()) if (!ids.has(id)) projectOverride.delete(id);
+}
+
 export const projectKey = (w: Workspace): string => {
   tick();
   const o = projectOverride.get(w.id);
@@ -216,9 +226,7 @@ export function moveToProject(w: Workspace | undefined, key: string): void {
 
 /** Drop the override, so the workspace falls back to its path match. */
 export function clearProjectOverride(w: Workspace | undefined): void {
-  if (!w) return;
-  projectOverride.delete(w.id);
-  bump();
+  if (w && projectOverride.delete(w.id)) bump();
 }
 
 export const hasProjectOverride = (w: Workspace | undefined): boolean => {
@@ -234,20 +242,36 @@ export const toggleProject = (k: string) =>
   );
 export const projectCount = (k: string) => cardWorkspaces().filter((w) => projectKey(w) === k).length;
 
-export type ProjectEntry = { kind: "header"; id: string; project: string } | { kind: "ws"; id: string; wsId: string };
+export type ProjectEntry =
+  | { kind: "header"; id: string; project: string }
+  | { kind: "ws"; id: string; wsId: string }
+  | { kind: "empty"; id: string };
 
 export const projectEntries = computed(() => {
   if (!projectsMode()) return [];
   const cards = cardWorkspaces();
   const entries: ProjectEntry[] = [];
-  for (const p of [...PROJECTS, OTHER]) {
+  // Every configured project shows, even with no sessions; Other only shows
+  // once something actually falls into it.
+  for (const p of PROJECTS) {
     const k = projectId(p);
     const rows = cards.filter((w) => projectKey(w) === k);
-    if (!rows.length) continue;
     entries.push({ kind: "header", id: "p:" + k, project: k });
     if (isProjectCollapsed(k)) continue;
+    if (!rows.length) {
+      entries.push({ kind: "empty", id: "p:" + k + ":empty" });
+      continue;
+    }
     // One row shape in Projects mode, so the lane no longer rides in the id.
     for (const w of rows) entries.push({ kind: "ws", id: w.id + "@p", wsId: w.id });
+  }
+  const otherKey = projectId(OTHER);
+  const otherRows = cards.filter((w) => projectKey(w) === otherKey);
+  if (otherRows.length) {
+    entries.push({ kind: "header", id: "p:" + otherKey, project: otherKey });
+    if (!isProjectCollapsed(otherKey)) {
+      for (const w of otherRows) entries.push({ kind: "ws", id: w.id + "@p", wsId: w.id });
+    }
   }
   return entries;
 });
