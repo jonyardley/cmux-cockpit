@@ -41,7 +41,7 @@ and needs nothing installed or linked. Back up any existing
 ```
 npm ci
 cp config/projects.example.json config/projects.json   # then edit in your own projects
-npm run hooks     # pre-commit runs npm run check; pulls and branch switches rebuild sidebars (and rerun npm ci when the lockfile changed); a branch checkout also restores the right sidebar to agents mode
+npm run hooks     # pre-commit runs npm run check; pulls and branch switches rebuild sidebars (and rerun npm ci when the lockfile changed); a branch checkout or pull in the main checkout also restores the right sidebar to agents mode
 npm run build
 ```
 
@@ -56,9 +56,11 @@ cmux sidebar reload cockpit         # show the change
 `npm run agents` restores the agents panel in the right sidebar (wraps
 `cmux right-sidebar set custom agents`), in case it ever gets swapped out.
 
-A branch checkout's rebuild of `sidebars/*.js` (see below) drops cmux out
-of custom right-sidebar mode; in the main checkout the post-checkout hook
-restores it to `agents` automatically.
+A rebuild of `sidebars/*.js` after a branch checkout or a pull (see below)
+drops cmux out of custom right-sidebar mode; in the main checkout the
+post-checkout and post-merge hooks restore it to `agents` automatically. An
+app restart or `cmux restore-session` can drop it too, and no hook sees
+those: run `npm run agents`.
 
 `cmux sidebar validate` only reads `~/.config/cmux/sidebars`, so it runs in
 the main checkout only; in a worktree `npm run validate` skips with a note.
