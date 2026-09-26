@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "restore-agents-panel",
+      "when": { "event": "window.created" },
+      "then": [
+        {
+          "action": "run",
+          "command": "sleep 2; cmux right-sidebar set custom agents --no-focus",
+          "timeout_seconds": 15
+        }
+      ]
+    },
+    {
+      "id": "restore-agents-panel-on-workspace",
+      "when": { "event": "workspace.created" },
+      "then": [
+        {
+          "action": "run",
+          "command": "sleep 2; cmux right-sidebar set custom agents --no-focus",
+          "timeout_seconds": 15
+        }
+      ]
+    }
+  ]
+}
