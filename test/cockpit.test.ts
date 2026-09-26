@@ -8,6 +8,7 @@ const model = await import("../src/cockpit/model.ts");
 const drop = await import("../src/cockpit/drop.ts");
 const state = await import("../src/cockpit/state.ts");
 const status = await import("../src/cockpit/status.ts");
+const needs = await import("../src/shared/needs.ts");
 const { LANES, laneByKey } = await import("../src/cockpit/lanes.ts");
 const { chipsFor } = await import("../src/cockpit/views/parts.ts");
 
@@ -175,7 +176,7 @@ describe("needs you", () => {
     const a = byId("a");
     if (!a) throw new Error("fixture");
     a.agents = [agent("needs_input", { sinceEpoch: 500 })];
-    status.dismissNeeds(a);
+    needs.dismissNeeds(a);
     assert.equal(status.statusOf(a), "idle");
     a.agents = [agent("needs_input", { sinceEpoch: 900 })];
     assert.equal(status.statusOf(a), "needs_input");

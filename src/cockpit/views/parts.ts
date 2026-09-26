@@ -1,12 +1,13 @@
 // Small pieces shared by the cockpit's cards and rows.
 
+import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
 import { projectOf } from "../../shared/projects.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot } from "../../shared/ui.ts";
 import { LANES } from "../lanes.ts";
 import { isSelected, laneOf, moveToLane, selectWorkspace } from "../model.ts";
 import { drag } from "../state.ts";
-import { ageOf, dismissNeeds, isNeedsDismissed, restoreNeeds, statusInfo } from "../status.ts";
+import { ageOf, statusInfo } from "../status.ts";
 import { C } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;

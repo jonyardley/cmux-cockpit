@@ -1,10 +1,11 @@
 // The "Needs you" strip: every workspace whose agent is waiting on input.
 
+import { dismissNeeds } from "../../shared/needs.ts";
 import { cardMessage, oneLine } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot, when } from "../../shared/ui.ts";
 import { needsList, selectWorkspace } from "../model.ts";
-import { ageOf, dismissNeeds } from "../status.ts";
+import { ageOf } from "../status.ts";
 import { C } from "../theme.ts";
 import { cardMenu, meta, ring, type WsAccessor } from "./parts.ts";
 

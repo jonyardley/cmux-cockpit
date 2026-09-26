@@ -8,6 +8,7 @@ const { haloSize } = await import("../src/shared/ui.ts");
 const { C } = await import("../src/cockpit/theme.ts");
 const { laneByKey } = await import("../src/cockpit/lanes.ts");
 const status = await import("../src/cockpit/status.ts");
+const { dismissNeeds } = await import("../src/shared/needs.ts");
 
 const haloOf = (w: Workspace | undefined) => status.statusInfo(w).halo;
 
@@ -30,7 +31,7 @@ describe("cockpit status halo", () => {
   it("drops the halo once needs you is dismissed", () => {
     r.data.epoch += 100;
     const w = ws("d", { agents: [agent("needs_input", { sinceEpoch: 500 })] });
-    status.dismissNeeds(w);
+    dismissNeeds(w);
     assert.equal(haloOf(w), "clear");
   });
 });

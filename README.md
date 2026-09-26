@@ -25,7 +25,8 @@ and needs nothing installed or linked. Back up any existing
   matched by name) or grouped by project.
 - `src/agents/`: the agents panel, shown in the right sidebar.
 - `src/shared/`: helpers the sidebars share (text clean-up, projects, agent
-  ranking, time).
+  ranking, time, and the "needs you" rules both sidebars apply: Claude
+  Code's idle nudge reads as idle, and dismissals).
 - `src/renderer.d.ts`: types for the renderer's globals and live data.
 - `sidebars/*.js`: local build output, built from `src/`. Never committed,
   never edited by hand.
