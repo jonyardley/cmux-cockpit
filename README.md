@@ -30,8 +30,10 @@ and needs nothing installed or linked. Back up any existing
 - `src/renderer.d.ts`: types for the renderer's globals and live data.
 - `sidebars/*.js`: local build output, built from `src/`. Never committed,
   never edited by hand.
-- `sidebars/*.parked`: retired experiments, including `probe.swift.parked`,
-  the diagnostic sidebar for testing what the renderer supports.
+- `sidebars/*.parked`: retired experiments cmux does not load. Rename one
+  to `.swift` to load it again. `probe.swift.parked` probes what the Swift
+  renderer supports; on cmux 0.64.25 a `let` derived from `data` renders
+  empty, so filters go inline in the view.
 - `cmux.json`: app settings. `dock.json`: dock controls. `automations.json`:
   cmux automation rules, linked into `~/.cmuxterm/` (see below).
 - `config/projects.example.json`: the committed sample project table.
