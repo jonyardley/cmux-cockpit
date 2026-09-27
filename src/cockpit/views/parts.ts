@@ -141,6 +141,7 @@ export interface Chip {
   url?: string;
   status?: PrStatus;
   health?: PrHealth;
+  draft?: boolean;
 }
 
 export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] {
@@ -148,7 +149,7 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
   if (!w) return out;
   const pr = prSummary(w);
   if (pr) {
-    const c: Chip = { id: "pr", kind: "pr", text: pr.text, health: pr.health };
+    const c: Chip = { id: "pr", kind: "pr", text: pr.text, health: pr.health, draft: pr.draft };
     if (pr.url) c.url = pr.url;
     if (pr.status) c.status = pr.status;
     out.push(c);
@@ -158,7 +159,7 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
 }
 
 function chip(c: () => Chip): View {
-  const st = () => prChipColors(c().health ?? "quiet", c().status);
+  const st = () => prChipColors(c().health ?? "quiet", c().status, c().draft);
   const isPr = () => c().kind === "pr";
   const body = HStack({ spacing: 4 }, [
     Image(() => (isPr() ? "arrow.triangle.pull" : "arrow.branch"))

@@ -2,7 +2,8 @@
 // in each. Hue on the chip says what the PR needs: red failing, blue running
 // (the Checks block's pending dot and the working dot are blue too), deep
 // green ready. A quiet chip keeps its status colour: open green, merged
-// purple, closed neutral.
+// purple, closed neutral, except an open draft, which is slate so it reads
+// neither ready for review nor dead.
 
 import type { PrHealth } from "./prs.ts";
 
@@ -24,8 +25,15 @@ const HEALTH_CHIP: Record<Exclude<PrHealth, "quiet">, ChipColors> = {
   ready: { bg: "#DCEBCF", fg: "#2F4A1C", edge: "#BFD9A9" },
 };
 
-/** A PR chip's colours: its health when it has one, else its status; neutral with neither. */
-export function prChipColors(health: PrHealth, status: PrStatus | undefined): ChipColors {
+const DRAFT_CHIP: ChipColors = { bg: "#ECEFF3", fg: "#4A5566", edge: "#D9DEE6" };
+
+/**
+ * A PR chip's colours: its health when it has one, else slate for an open
+ * draft, else its status; neutral with neither. Only the saved PR carries
+ * draft (renderer.d.ts), so cmux's own PR data always takes its status colour.
+ */
+export function prChipColors(health: PrHealth, status: PrStatus | undefined, draft = false): ChipColors {
   if (health !== "quiet") return HEALTH_CHIP[health];
+  if (status === "open" && draft) return DRAFT_CHIP;
   return status ? STATUS_CHIP[status] : STATUS_CHIP.closed;
 }

@@ -365,20 +365,14 @@ export interface PrEntry {
   title: string;
 }
 
-/** What a PR row's chip says and which palette it takes. */
-export interface PrChip {
-  text: string;
-  tone: PrStatus | "draft" | undefined;
-}
-
 /**
- * An open draft says "draft" in a neutral tone, since open green reads as
- * ready for review; a merged or closed PR says its status whatever its draft
- * flag. Stale rides inside the chip (see prRow).
+ * What a PR row's chip says: "draft" for an open draft, since "open" reads as
+ * ready for review, else the status; a merged or closed PR says its status
+ * whatever its draft flag. Stale rides inside the chip (see prRow).
  */
-export function prChip(pr: PullRequest): PrChip {
-  const tone = pr.status === "open" && pr.draft ? "draft" : pr.status;
-  return { text: (tone ?? "") + (pr.stale ? " · stale" : ""), tone };
+export function prChipText(pr: PullRequest): string {
+  const word = pr.status === "open" && pr.draft ? "draft" : pr.status;
+  return [word, pr.stale ? "stale" : undefined].filter(Boolean).join(" · ");
 }
 
 const PR_RANK: Record<PrStatus, number> = { open: 0, merged: 1, closed: 2 };

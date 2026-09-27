@@ -70,6 +70,8 @@ export interface PrSummary {
   status: PrStatus | undefined;
   url: string | undefined;
   health: PrHealth;
+  /** An open draft, so the chip can take the draft colour. */
+  draft: boolean;
   /** The number alone, "#12", for the row density so rows do not widen. */
   tag: string;
   /** The full words: "#35 · 1 failing", "#9 · draft · running", "#35 · ready", "#11 · merged". */
@@ -85,5 +87,6 @@ export function prSummary(w: Workspace | undefined): PrSummary | undefined {
   const health = healthOf(pr, checks, failing);
   const tag = "#" + pr.number;
   const text = [tag, ...wordsOf(pr, health, failing)].join(" · ");
-  return { number: pr.number, status: pr.status, url: pr.url, health, tag, text };
+  const draft = pr.status === "open" && pr.draft === true;
+  return { number: pr.number, status: pr.status, url: pr.url, health, draft, tag, text };
 }

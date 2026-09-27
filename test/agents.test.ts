@@ -353,16 +353,17 @@ describe("prs", () => {
   });
 });
 
-describe("prChip", () => {
-  it("says draft for an open draft, in its own tone, else the status", () => {
-    assert.deepEqual(m.prChip({ status: "open", draft: true }), { text: "draft", tone: "draft" });
-    assert.deepEqual(m.prChip({ status: "open" }), { text: "open", tone: "open" });
-    assert.deepEqual(m.prChip({ status: "merged", draft: true }), { text: "merged", tone: "merged" });
-    assert.deepEqual(m.prChip({}), { text: "", tone: undefined });
+describe("prChipText", () => {
+  it("says draft for an open draft, else the status", () => {
+    assert.equal(m.prChipText({ status: "open", draft: true }), "draft");
+    assert.equal(m.prChipText({ status: "open" }), "open");
+    assert.equal(m.prChipText({ status: "merged", draft: true }), "merged");
+    assert.equal(m.prChipText({}), "");
   });
 
-  it("keeps stale inside the chip", () => {
-    assert.deepEqual(m.prChip({ status: "open", draft: true, stale: true }), { text: "draft · stale", tone: "draft" });
+  it("keeps stale inside the chip, with no stray separator", () => {
+    assert.equal(m.prChipText({ status: "open", draft: true, stale: true }), "draft · stale");
+    assert.equal(m.prChipText({ stale: true }), "stale");
   });
 });
 
