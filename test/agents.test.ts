@@ -390,3 +390,67 @@ describe("subagents", () => {
     assert.ok(keys.some((k) => k.startsWith("s:" + a2.id + ":")));
   });
 });
+
+describe("agentRows", () => {
+  it("hides ended agents and shows no list with only one live agent", () => {
+    r.data.workspaces = [
+      ws("w", {
+        selected: true,
+        agents: [agent("working", { name: "Claude" }), agent("ended", { name: "Claude" }), agent("ended")],
+      }),
+    ];
+    assert.deepEqual(m.agentRows(), []);
+  });
+
+  it("numbers agents sharing a fallback label in cmux's order, and a real title wins", () => {
+    const first = agent("idle", { name: "Claude", lastActivityAt: 100 });
+    const second = agent("working", { name: "Claude" });
+    const titled = agent("idle", { name: "Claude", title: "Fix the poller", lastActivityAt: 50 });
+    const gone = agent("ended", { name: "Claude" });
+    r.data.workspaces = [ws("w", { selected: true, agents: [first, gone, second, titled] })];
+    const rows = m.agentRows();
+    // Most active first; numbers follow cmux's order, ended agents included.
+    assert.deepEqual(
+      rows.map((e) => [e.key, e.label, e.last]),
+      [
+        ["a:" + second.id, "Claude 3", false],
+        ["a:" + first.id, "Claude 1", false],
+        ["a:" + titled.id, "Fix the poller", true],
+      ],
+    );
+  });
+
+  it("keeps each agent's number when an earlier one ends", () => {
+    const one = agent("working", { name: "Claude" });
+    const two = agent("idle", { name: "Claude", lastActivityAt: 100 });
+    const three = agent("idle", { name: "Claude", lastActivityAt: 50 });
+    r.data.workspaces = [ws("w", { selected: true, agents: [one, two, three] })];
+    assert.deepEqual(
+      m.agentRows().map((e) => e.label),
+      ["Claude 1", "Claude 2", "Claude 3"],
+    );
+    one.status = "ended";
+    r.data.workspaces = [ws("w", { selected: true, agents: [one, two, three] })];
+    assert.deepEqual(
+      m.agentRows().map((e) => e.label),
+      ["Claude 2", "Claude 3"],
+    );
+  });
+
+  it("leaves a unique fallback label unnumbered", () => {
+    r.data.workspaces = [
+      ws("w", { selected: true, agents: [agent("working", { name: "Claude" }), agent("idle", { kind: "codex" })] }),
+    ];
+    assert.deepEqual(
+      m.agentRows().map((e) => e.label),
+      ["Claude", "codex"],
+    );
+  });
+
+  it("caps at six rows", () => {
+    r.data.workspaces = [ws("w", { selected: true, agents: Array.from({ length: 8 }, () => agent("idle")) })];
+    const rows = m.agentRows();
+    assert.equal(rows.length, 6);
+    assert.equal(rows[0]?.label, "agent 1");
+  });
+});

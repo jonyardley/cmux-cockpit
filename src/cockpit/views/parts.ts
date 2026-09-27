@@ -19,6 +19,8 @@ import {
   laneOf,
   moveToLane,
   moveToProject,
+  newSessionFor,
+  newSessionLabel,
   projectKey,
   removeProject,
   selectWorkspace,
@@ -259,6 +261,11 @@ function inAppProjectItems(w: WsAccessor): MenuItem[] {
 
 export function cardMenu(w: WsAccessor): MenuItem[] {
   return [
+    Button(
+      () => newSessionLabel(w()),
+      () => newSessionFor(w()),
+    ),
+    Divider(),
     ...laneItems(w),
     Divider(),
     ...projectItems(w),

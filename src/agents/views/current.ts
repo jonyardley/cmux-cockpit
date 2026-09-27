@@ -2,12 +2,13 @@
 // sidebar data (issue #7), so it is left out; checks come from the PR poller.
 
 import { glyphColor } from "../../shared/contrast.ts";
-import { type Last, markLast } from "../../shared/list.ts";
 import { prOf } from "../../shared/prs.ts";
-import { cardMessage, readable, tracked } from "../../shared/text.ts";
+import { cardMessage, tracked } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
 import {
+  type AgentRow,
+  agentRows,
   type CheckRow,
   checkDot,
   checks,
@@ -27,7 +28,7 @@ import {
 import { chipColors, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
 import { agentDot, chip, jump, meta, openIfUrl, panel, ruled } from "./parts.ts";
 
-function agentLine(e: () => Last<{ key: string; a: Agent }>): View {
+function agentLine(e: () => AgentRow): View {
   const a = () => e().a;
   return HStack({ spacing: 8 }, [
     agentDot(
@@ -35,7 +36,7 @@ function agentLine(e: () => Last<{ key: string; a: Agent }>): View {
       () => haloFor(a()),
       () => hollowDot(a()),
     ),
-    Text(() => readable(a().title) || a().name || a().kind || "agent")
+    Text(() => e().label)
       .font(12)
       .color(T.text)
       .lineLimit(1)
@@ -265,23 +266,10 @@ function currentHead(): View {
 }
 
 export function currentPanel(): View {
-  // One agent is already the header; list them only when there are several.
-  const many = () => cur().agents.length > 1;
+  // One live agent is already the header; list them only when there are several.
+  const many = () => agentRows().length > 0;
   return panel([
     ruled(currentHead(), () => !many()),
-    ForEach(
-      {
-        items: () =>
-          many()
-            ? markLast(
-                cur()
-                  .agents.slice(0, 6)
-                  .map((a) => ({ key: "a:" + a.id, a })),
-              )
-            : [],
-        key: (e) => e.key,
-      },
-      (e) => ruled(agentLine(e), () => e().last),
-    ),
+    ForEach({ items: () => agentRows(), key: (e) => e.key }, (e) => ruled(agentLine(e), () => e().last)),
   ]);
 }
