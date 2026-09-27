@@ -6,7 +6,9 @@ const r = installRenderer();
 const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/activity.ts");
 const { glyphColor } = await import("../src/shared/contrast.ts");
 const { markLast } = await import("../src/shared/list.ts");
-const { PROJECTS, matchesOf, projectId, projectOf } = await import("../src/shared/projects.ts");
+const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, nextIn, projectId, projectOf } = await import(
+  "../src/shared/projects.ts"
+);
 const { cleanTitle, oneLine, readable, tracked } = await import("../src/shared/text.ts");
 const { fmtAge, fmtElapsed, nowEpoch } = await import("../src/shared/time.ts");
 const { agent } = await import("./support/fixtures.ts");
@@ -188,5 +190,55 @@ describe("tracked", () => {
   it("leaves empty and single-letter labels alone", () => {
     assert.equal(tracked(""), "");
     assert.equal(tracked("A"), "A");
+  });
+});
+
+describe("newProject (issue #9)", () => {
+  const taken = (name: string, color: string) => ({ match: "/x/" + name, name, color, icon: "x" });
+
+  it("matches and roots at the folder, named after its last segment", () => {
+    assert.deepEqual(newProject("/Users/jon/dev/scratch/", []), {
+      key: "/users/jon/dev/scratch/",
+      spec: { name: "Scratch", color: PROJECT_COLORS[0], icon: PROJECT_ICONS[0], root: "/Users/jon/dev/scratch" },
+    });
+  });
+
+  it("cleans a folder name the state contract would refuse", () => {
+    assert.equal(newProject("/dev/ my\u0007 notes ", [])?.spec.name, "My notes");
+    const long = newProject("/dev/" + "x".repeat(80), [])?.spec.name ?? "";
+    assert.equal(long.length, 60);
+    assert.equal(newProject("/dev/   ", []), null);
+  });
+
+  it("numbers a name that is taken", () => {
+    const made = newProject("/dev/scratch", [taken("Scratch", "#000000"), taken("Scratch 2", "#000000")]);
+    assert.equal(made?.spec.name, "Scratch 3");
+  });
+
+  it("takes the first colour no project uses, case-insensitively", () => {
+    const made = newProject("/dev/s", [taken("A", PROJECT_COLORS[0].toLowerCase()), taken("B", PROJECT_COLORS[1])]);
+    assert.equal(made?.spec.color, PROJECT_COLORS[2]);
+  });
+
+  it("cycles by count once every colour is used", () => {
+    const all = PROJECT_COLORS.map((c, i) => taken("P" + i, c));
+    assert.equal(newProject("/dev/s", [...all, taken("Q", "#000000")])?.spec.color, PROJECT_COLORS[1]);
+  });
+
+  it("is null without an absolute folder two segments deep", () => {
+    for (const d of [undefined, null, "", "/", "/dev", "/dev/", "~/dev/s", "dev/s"])
+      assert.equal(newProject(d, []), null, String(d));
+  });
+});
+
+describe("nextIn", () => {
+  it("steps to the next item and wraps", () => {
+    assert.equal(nextIn(PROJECT_ICONS, PROJECT_ICONS[0]), PROJECT_ICONS[1]);
+    assert.equal(nextIn(PROJECT_ICONS, PROJECT_ICONS[PROJECT_ICONS.length - 1] ?? ""), PROJECT_ICONS[0]);
+  });
+
+  it("matches colours case-insensitively and starts over from an unknown value", () => {
+    assert.equal(nextIn(PROJECT_COLORS, PROJECT_COLORS[0].toLowerCase()), PROJECT_COLORS[1]);
+    assert.equal(nextIn(PROJECT_COLORS, "#000000"), PROJECT_COLORS[0]);
   });
 });

@@ -12,9 +12,19 @@ export interface State {
   dismissed: Record<string, Record<string, number>>;
   /** wsId -> project key chosen by "Move to project" (issue #8). */
   projectOverride: Record<string, string>;
+  /** match path -> a project made in the sidebar, merged over projects.json at build (issue #9). */
+  projects: Record<string, ProjectSpec>;
 }
 
-export const emptyState = (): State => ({ dismissed: {}, projectOverride: {} });
+/** A project made in the sidebar. Its match is the key it is stored under. */
+export interface ProjectSpec {
+  name: string;
+  color: string;
+  icon: string;
+  root?: string;
+}
+
+export const emptyState = (): State => ({ dismissed: {}, projectOverride: {}, projects: {} });
 
 // renderer.d.ts puts no shape on workspace or agent ids, and a project key is
 // its first match path ("/dev/app"), so only length is bounded. Object
@@ -41,11 +51,37 @@ function agentStarts(v: unknown): Record<string, number> | null {
 const projectKey = (v: unknown): string | null =>
   typeof v === "string" && v.length > 0 && v.length <= MAX_PROJECT_KEY ? v : null;
 
+// A sidebar-made project is keyed by its match: an absolute, lowercase
+// directory ending in "/", so it matches that folder and no sibling that
+// shares its prefix (projectOf adds the same "/" to the directory). At least
+// two segments deep, so no URL can plant a "/" that swallows every folder.
+const isMatchKey = (v: string): boolean =>
+  /^(\/[^/]+){2,}\/$/.test(v) && v.length <= MAX_PROJECT_KEY && v === v.toLowerCase();
+
+const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
+// SF Symbol names are dotted lowercase words, e.g. "music.note".
+const isSymbol = (v: unknown): v is string =>
+  typeof v === "string" && /^[a-z0-9]+(\.[a-z0-9]+)*$/.test(v) && v.length <= 64;
+const isName = (v: unknown): v is string =>
+  typeof v === "string" &&
+  v.trim() === v &&
+  v.length > 0 &&
+  v.length <= 64 &&
+  [...v].every((c) => c.charCodeAt(0) >= 32);
+
+function projectSpec(v: unknown): ProjectSpec | null {
+  if (!isRecord(v) || !isName(v.name) || !isHex(v.color) || !isSymbol(v.icon)) return null;
+  const spec: ProjectSpec = { name: v.name, color: v.color, icon: v.icon };
+  if (v.root === undefined) return spec;
+  const root = v.root;
+  return typeof root === "string" && root.startsWith("/") && root.length <= MAX_PROJECT_KEY ? { ...spec, root } : null;
+}
+
 // Keeps the last MAX_ENTRIES valid entries, in insertion order.
-function cleanMap<T>(v: unknown, clean: (value: unknown) => T | null): Record<string, T> {
+function cleanMap<T>(v: unknown, clean: (value: unknown) => T | null, validId = isId): Record<string, T> {
   if (!isRecord(v)) return {};
   const kept = Object.entries(v).flatMap(([id, value]): [string, T][] => {
-    const c = isId(id) ? clean(value) : null;
+    const c = validId(id) ? clean(value) : null;
     return c === null ? [] : [[id, c]];
   });
   return Object.fromEntries(kept.slice(-MAX_ENTRIES));
@@ -57,25 +93,73 @@ export function validateState(raw: unknown): State {
   return {
     dismissed: cleanMap(v.dismissed, agentStarts),
     projectOverride: cleanMap(v.projectOverride, projectKey),
+    projects: cleanMap(v.projects, projectSpec, isMatchKey),
   };
 }
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
+type MapName = keyof State;
+const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects"];
+const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
+
+function without<T>(entries: Record<string, T>, id: string): Record<string, T> {
+  const next = { ...entries };
+  delete next[id];
+  return next;
+}
+
+// One case per map, so each keeps its own entry type.
+function withoutEntry(state: State, map: MapName, id: string): State {
+  switch (map) {
+    case "dismissed":
+      return { ...state, dismissed: without(state.dismissed, id) };
+    case "projectOverride":
+      return { ...state, projectOverride: without(state.projectOverride, id) };
+    case "projects":
+      return { ...state, projects: without(state.projects, id) };
+  }
+}
+
+// Adds one parsed entry, or says what the map wanted instead.
+function withEntry(state: State, map: MapName, id: string, parsed: unknown): State | string {
+  switch (map) {
+    case "dismissed": {
+      const starts = agentStarts(parsed);
+      return starts
+        ? { ...state, dismissed: { ...state.dismissed, [id]: starts } }
+        : "dismissed wants {agentId: epoch}";
+    }
+    case "projectOverride": {
+      const key = projectKey(parsed);
+      return key
+        ? { ...state, projectOverride: { ...state.projectOverride, [id]: key } }
+        : "projectOverride wants a project key string";
+    }
+    case "projects": {
+      const spec = projectSpec(parsed);
+      return spec
+        ? { ...state, projects: { ...state.projects, [id]: spec } }
+        : "projects wants {name, color: #rrggbb, icon: SF Symbol, root?}";
+    }
+  }
+}
+
 /**
- * Applies one `set`: `key` is `<map>.<wsId>`, `value` the JSON for that entry,
- * or null to delete it. Returns a new State; the input is not changed.
+ * Applies one `set`: `key` is `<map>.<id>`, `value` the JSON for that entry,
+ * or null to delete it. The id is a workspace id, or for `projects` the
+ * project's match path. Returns a new State; the input is not changed.
  */
 export function applySet(state: State, key: string, value: string | null): SetResult {
   const dot = key.indexOf(".");
   const map = key.slice(0, dot);
   const id = key.slice(dot + 1);
-  if (dot < 1 || !isId(id)) return { ok: false, error: `bad key ${JSON.stringify(key)}` };
-  if (map !== "dismissed" && map !== "projectOverride") return { ok: false, error: `unknown map ${map}` };
+  if (dot < 1) return { ok: false, error: `bad key ${JSON.stringify(key)}` };
+  if (!isMapName(map)) return { ok: false, error: `unknown map ${map}` };
+  if (!(map === "projects" ? isMatchKey(id) : isId(id))) return { ok: false, error: `bad key ${JSON.stringify(key)}` };
 
-  const next: State = { dismissed: { ...state.dismissed }, projectOverride: { ...state.projectOverride } };
-  delete next[map][id];
-  if (value === null) return { ok: true, state: next };
+  const cleared = withoutEntry(state, map, id);
+  if (value === null) return { ok: true, state: cleared };
 
   let parsed: unknown;
   try {
@@ -83,14 +167,6 @@ export function applySet(state: State, key: string, value: string | null): SetRe
   } catch {
     return { ok: false, error: "value is not JSON" };
   }
-  if (map === "dismissed") {
-    const starts = agentStarts(parsed);
-    if (!starts) return { ok: false, error: "dismissed wants {agentId: epoch}" };
-    next.dismissed[id] = starts;
-  } else {
-    const project = projectKey(parsed);
-    if (!project) return { ok: false, error: "projectOverride wants a project key string" };
-    next.projectOverride[id] = project;
-  }
-  return { ok: true, state: validateState(next) };
+  const next = withEntry(cleared, map, id, parsed);
+  return typeof next === "string" ? { ok: false, error: next } : { ok: true, state: validateState(next) };
 }

@@ -11,9 +11,12 @@ import vm from "node:vm";
 import { emptyState } from "../../scripts/state-config.ts";
 
 // Sidebar modules read PROJECTS from this define at import time (build.ts
-// injects it for real; tests stand in the example table instead).
+// injects it for real; tests stand in the example table instead). As with
+// __STATE__ below, a test file can seed its own table before importing this.
 const EXAMPLE_PROJECTS: unknown = JSON.parse(readFileSync("config/projects.example.json", "utf8"));
-(globalThis as Record<string, unknown>).__PROJECTS__ = EXAMPLE_PROJECTS;
+if (!("__PROJECTS__" in (globalThis as Record<string, unknown>))) {
+  (globalThis as Record<string, unknown>).__PROJECTS__ = EXAMPLE_PROJECTS;
+}
 
 // Same story for __STATE__, but defaulting to empty rather than a fixture:
 // most tests have nothing saved. A test that wants a saved state sets

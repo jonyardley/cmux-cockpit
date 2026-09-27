@@ -7,13 +7,19 @@ import { displayTitle } from "../../shared/titles.ts";
 import { haloDot } from "../../shared/ui.ts";
 import { LANES } from "../lanes.ts";
 import {
+  canCreateProject,
   clearProjectOverride,
+  createProjectFrom,
+  cycleProjectColor,
+  cycleProjectIcon,
   hasProjectOverride,
+  inAppProjectName,
   isSelected,
   laneOf,
   moveToLane,
   moveToProject,
   projectKey,
+  removeProject,
   selectWorkspace,
 } from "../model.ts";
 import { drag } from "../state.ts";
@@ -232,11 +238,31 @@ function projectItems(w: WsAccessor): MenuItem[] {
   ];
 }
 
+// Projects made in the sidebar (issue #9). The menu's items are fixed when the
+// card is built, so an item that does not apply says why instead of vanishing.
+function inAppProjectItems(w: WsAccessor): MenuItem[] {
+  const named = (verb: string) => () => {
+    const name = inAppProjectName(w());
+    return name ? `${verb}: ${name}` : `${verb} (sidebar-made projects only)`;
+  };
+  return [
+    Button(
+      () => (canCreateProject(w()) ? "New project from this folder" : "New project (folder has one, or none)"),
+      () => createProjectFrom(w()),
+    ),
+    Button(named("Next colour"), () => cycleProjectColor(w())),
+    Button(named("Next icon"), () => cycleProjectIcon(w())),
+    Button(named("Remove project"), () => removeProject(w())),
+  ];
+}
+
 export function cardMenu(w: WsAccessor): MenuItem[] {
   return [
     ...laneItems(w),
     Divider(),
     ...projectItems(w),
+    Divider(),
+    ...inAppProjectItems(w),
     Divider(),
     Button(
       () => (w()?.pinned ? "Unpin" : "Pin"),
