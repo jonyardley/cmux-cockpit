@@ -20,6 +20,12 @@ export interface State {
    * Written only by the poller, never by a URL: a URL could plant a link.
    */
   prs: Record<string, SavedPr>;
+  /**
+   * wsId -> the workspace's subagent runs, oldest first, recorded by
+   * scripts/hooks/report-subagent.ts because cmux sends custom sidebars none
+   * (issue #6). Written only by the hook, never by a URL.
+   */
+  subagents: Record<string, SavedSubagent[]>;
 }
 
 /** A project made in the sidebar. Its match is the key it is stored under. */
@@ -58,10 +64,38 @@ export interface SavedCheck {
 
 export type CheckState = "pass" | "fail" | "pending";
 
+/**
+ * A subagent run as the hook saves it, shaped like renderer.d.ts's
+ * SubagentRun. Its entry is made when the Agent tool is called, before the
+ * run has an agent id, so it is keyed by the call instead.
+ */
+export interface SavedSubagent {
+  /** The Agent tool call's tool_use_id. */
+  id: string;
+  /** The Claude Code session that called it. */
+  session: string;
+  /** Claude Code's agent_id, set when the run starts; SubagentStop names it. */
+  agentId?: string;
+  /** The Agent call's tool_input.subagent_type, so a SubagentStart with
+   * several unpaired calls in the same session pairs to the right one. */
+  type?: string;
+  /** The Agent call's description, at most MAX_LABEL characters. */
+  label: string;
+  /** Epoch seconds the Agent tool was called. */
+  startedEpoch: number;
+  /** Epoch seconds the run stopped; absent while it runs. */
+  endedEpoch?: number;
+}
+
+/** Runs kept per workspace, newest kept, so a busy agent cannot bloat the file. */
+export const MAX_SUBAGENTS = 10;
+/** The longest label kept; the hook cuts a description to this. */
+export const MAX_LABEL = 120;
+
 /** Checks kept per PR, so one PR with a huge matrix cannot bloat the file. */
 export const MAX_CHECKS = 20;
 
-export const emptyState = (): State => ({ dismissed: {}, projectOverride: {}, projects: {}, prs: {} });
+export const emptyState = (): State => ({ dismissed: {}, projectOverride: {}, projects: {}, prs: {}, subagents: {} });
 
 // renderer.d.ts puts no shape on workspace or agent ids, and a project key is
 // its first match path ("/dev/app"), so only length is bounded. Object
@@ -100,12 +134,22 @@ const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{
 // SF Symbol names are dotted lowercase words, e.g. "music.note".
 const isSymbol = (v: unknown): v is string =>
   typeof v === "string" && /^[a-z0-9]+(\.[a-z0-9]+)*$/.test(v) && v.length <= 64;
-const isName = (v: unknown): v is string =>
-  typeof v === "string" &&
-  v.trim() === v &&
-  v.length > 0 &&
-  v.length <= 64 &&
-  [...v].every((c) => c.charCodeAt(0) >= 32);
+
+// A control character, 0-31 or 127 (DEL): the same rule the hook's own
+// dropControl uses (scripts/hooks/report-subagent.ts), so a label that
+// reads as clean there reads as clean here too.
+const isCleanChar = (c: string): boolean => {
+  const code = c.charCodeAt(0);
+  return code >= 32 && code !== 127;
+};
+
+// Plain, single-line text with no leading, trailing or control characters,
+// up to `max` long. Shared by isName and isLabel so both keep one rule.
+function isText(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.trim() === v && v.length > 0 && v.length <= max && [...v].every(isCleanChar);
+}
+
+const isName = (v: unknown): v is string => isText(v, 64);
 
 function projectSpec(v: unknown): ProjectSpec | null {
   if (!isRecord(v) || !isName(v.name) || !isHex(v.color) || !isSymbol(v.icon)) return null;
@@ -145,6 +189,28 @@ function savedPr(v: unknown): SavedPr | null {
   return checks.length ? { ...pr, checks } : pr;
 }
 
+const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
+
+const isOptionalId = (v: unknown): boolean => v === undefined || (typeof v === "string" && isId(v));
+
+function savedSubagent(v: unknown): SavedSubagent[] {
+  if (!isRecord(v) || !isLabel(v.label) || !isEpoch(v.startedEpoch)) return [];
+  const { id, session, agentId, type, endedEpoch } = v;
+  if (typeof id !== "string" || !isId(id) || typeof session !== "string" || !isId(session)) return [];
+  if (!isOptionalId(agentId) || !isOptionalId(type)) return [];
+  if (endedEpoch !== undefined && !isEpoch(endedEpoch)) return [];
+  const run: SavedSubagent = { id, session, label: v.label, startedEpoch: v.startedEpoch };
+  if (typeof agentId === "string") run.agentId = agentId;
+  if (typeof type === "string") run.type = type;
+  if (isEpoch(endedEpoch)) run.endedEpoch = endedEpoch;
+  return [run];
+}
+
+function savedSubagents(v: unknown): SavedSubagent[] | null {
+  const runs = Array.isArray(v) ? v.flatMap(savedSubagent).slice(-MAX_SUBAGENTS) : [];
+  return runs.length ? runs : null;
+}
+
 // Keeps the last MAX_ENTRIES valid entries, in insertion order.
 function cleanMap<T>(v: unknown, clean: (value: unknown) => T | null, validId = isId): Record<string, T> {
   if (!isRecord(v)) return {};
@@ -163,12 +229,13 @@ export function validateState(raw: unknown): State {
     projectOverride: cleanMap(v.projectOverride, projectKey),
     projects: cleanMap(v.projects, projectSpec, isMatchKey),
     prs: cleanMap(v.prs, savedPr),
+    subagents: cleanMap(v.subagents, savedSubagents),
   };
 }
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-// The maps a URL may set. `prs` is left out on purpose (see State).
+// The maps a URL may set. `prs` and `subagents` are left out on purpose (see State).
 type MapName = "dismissed" | "projectOverride" | "projects";
 const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects"];
 const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);

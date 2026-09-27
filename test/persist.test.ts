@@ -11,7 +11,7 @@ const { SAVED_STATE, persistSet } = await import("../src/shared/persist.ts");
 
 describe("SAVED_STATE", () => {
   it("defaults to empty when no test file has seeded __STATE__", () => {
-    assert.deepEqual(SAVED_STATE, { dismissed: {}, projectOverride: {}, projects: {}, prs: {} });
+    assert.deepEqual(SAVED_STATE, { dismissed: {}, projectOverride: {}, projects: {}, prs: {}, subagents: {} });
   });
 });
 

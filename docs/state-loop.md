@@ -137,3 +137,91 @@ opened or merged), so this is accepted until cmux's own store lands (#20).
 Any web page can open a `cmux-cockpit://` URL. The worst it can do is write a
 bounded, validated entry and trigger a rebuild. The handler never passes URL
 content to a shell.
+
+## Subagent runs: the map no URL writes either
+
+cmux sends custom sidebars no subagent data at all (#6), so
+`scripts/hooks/report-subagent.ts` records them itself, from three Claude
+Code hooks, in a fifth map, `subagents`: workspace id to a list of runs,
+oldest first, each `{"id", "session", "agentId"?, "type"?, "label",
+"startedEpoch", "endedEpoch"?}`. `src/shared/subagents.ts` reads it back for
+the agents model while cmux carries no agent's own subagent runs
+(`children`) of its own.
+
+A run is keyed by the Agent tool call rather than the agent, since Claude
+Code names the call before it can name the run: `PreToolUse` (matcher
+`"Agent"`) appends a run keyed by `tool_use_id` (a duplicate delivery of the
+same call, from the hook being registered twice or a redelivered event, is
+a no-op), labelled from the call's `description` (cleaned up and cut to
+`MAX_LABEL` code points, so a surrogate pair is never split, then trimmed),
+falling back to `subagent_type`, then `"subagent"`; it also saves the call's
+`subagent_type` as the run's `type`, unshown but used for pairing.
+`SubagentStart` fires moments later with an `agent_id`, an `agent_type` and
+no description, so it gives the oldest run in that session with no
+`agentId` yet whose `type` matches this `agent_type` that id, falling back
+to the oldest unpaired run in the session when none matches (there is
+nothing better in `SubagentStart` to go on); when there is no unpaired run
+at all (the `PreToolUse` was missed), it appends one instead, labelled from
+`agent_type`. `SubagentStop` finds the run by `agentId` and sets
+`endedEpoch`, unless it already has one (a duplicate delivery of the same
+Stop).
+
+**Residual case:** a denied or failed Agent call never gets a
+`SubagentStart`, so its row sits unpaired. If a second call of the same
+`subagent_type` in the same session is approved within the unpaired
+pruning window below, `SubagentStart` still pairs to the denied call's
+older row first, mislabelling which run actually started; nothing recorded
+here can tell the two calls apart beyond session and type.
+
+A crashed agent never sends `SubagentStop`, so every write also prunes
+(`scripts/subagent-runs.ts`, shared with `scripts/pr-poll.ts` below): a run
+with no `agentId` yet (a denied or failed call that never starts) is
+dropped after ten minutes, a still-running, paired run is dropped after two
+hours, and a finished one is dropped ten minutes after it ended, so the
+sidebar has had a good while to show it settling. `MAX_SUBAGENTS`
+(`scripts/state-config.ts`) then caps each workspace's list at its most
+recent runs, the same as every other map's cap.
+
+Pruning also runs inside `pr-poll.ts`'s own state write, on every poll, not
+only when a subagent event rebuilds: the `pr-poll-turn` and
+`pr-poll-select` rules already fire on every agent turn end and workspace
+select, so a done row or a crashed run clears on the next poll even when
+nothing reports a new subagent event in between.
+
+Add these three hooks to `~/.claude/settings.json` to feed it (matching how
+`report-pr.ts` is registered there):
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Agent", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
+    ],
+    "SubagentStart": [
+      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
+    ],
+    "SubagentStop": [
+      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
+    ]
+  }
+}
+```
+
+Each run gets the event as JSON on stdin and reads the workspace from
+`CMUX_WORKSPACE_ID`; a missing workspace id, unparseable JSON, or an event
+it does not recognise is a quiet exit 0, never a failure. The write itself
+goes through `state-url.ts`'s `writeSubagents`, the same locked
+read-modify-write as a URL's `set` or `writePrs`'s whole-map replace, so it
+cannot race either.
+
+Pairing a `SubagentStart` to its call only sets `agentId`, which the
+sidebar never shows, so that alone does not trigger a rebuild; a new run
+appearing, one ending, or one being pruned does. Since `SubagentStart`
+fires moments after the `PreToolUse` that starts the same run, and
+independent subagents can start together, a rebuild is coalesced rather
+than fired per event: the first event to find no build already in flight
+takes a lockfile (`config/subagent-build.lock`) and spawns a detached,
+short-sleeping build of its own; every other event in that window finds
+the lock held and does nothing, trusting the build already running to pick
+up its write once it runs. A lock older than a minute is a crashed build's
+and is retaken.

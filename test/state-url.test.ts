@@ -3,8 +3,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
-import { emptyState } from "../scripts/state-config.ts";
-import { parseSetUrl, readApplyWrite } from "../scripts/state-url.ts";
+import { emptyState, type State } from "../scripts/state-config.ts";
+import { parseSetUrl, readApplyWrite, writeSubagents } from "../scripts/state-url.ts";
 
 describe("parseSetUrl", () => {
   it("parses a set with a value", () => {
@@ -75,6 +75,7 @@ describe("readApplyWrite", () => {
       projectOverride: { w1: "alpha" },
       projects: {},
       prs: {},
+      subagents: {},
     });
   });
 
@@ -101,6 +102,70 @@ describe("readApplyWrite", () => {
     const result = readApplyWrite(path, "projectOverride.w1", "not json");
     assert.equal(result.ok, false);
     assert.equal(readFileSync(path, "utf8"), before);
+  });
+});
+
+describe("writeSubagents", () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+  function tempFile(): string {
+    const dir = mkdtempSync(join(tmpdir(), "state-url-subagents-"));
+    dirs.push(dir);
+    return join(dir, "state.json");
+  }
+
+  const run = { id: "toolu_1", session: "s1", label: "Review", startedEpoch: 100 };
+
+  it("writes the map update returns, leaving the rest of the state alone", () => {
+    const path = tempFile();
+    readApplyWrite(path, "projectOverride.w1", '"alpha"');
+    const result = writeSubagents(path, () => ({ w1: [run] }));
+    assert.deepEqual(result, { ok: true, changed: true });
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    assert.deepEqual(saved.subagents, { w1: [run] });
+    assert.deepEqual(saved.projectOverride, { w1: "alpha" });
+  });
+
+  it("passes the current map to update, so a fold can read it back", () => {
+    const path = tempFile();
+    writeSubagents(path, () => ({ w1: [run] }));
+    let seen: State["subagents"] | undefined;
+    writeSubagents(path, (subagents) => {
+      seen = subagents;
+      return subagents;
+    });
+    assert.deepEqual(seen, { w1: [run] });
+  });
+
+  it("sorts workspace keys, so reordering them is not seen as a change", () => {
+    const path = tempFile();
+    writeSubagents(path, () => ({ w2: [run], w1: [run] }));
+    assert.deepEqual(
+      writeSubagents(path, (subagents) => subagents),
+      { ok: true, changed: false },
+    );
+    assert.deepEqual(Object.keys(JSON.parse(readFileSync(path, "utf8")).subagents), ["w1", "w2"]);
+  });
+
+  it("drops an entry the update clears back to empty state", () => {
+    const path = tempFile();
+    writeSubagents(path, () => ({ w1: [run] }));
+    const result = writeSubagents(path, () => ({}));
+    assert.deepEqual(result, { ok: true, changed: true });
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).subagents, {});
+  });
+
+  it("validates on the way out, dropping a malformed run rather than writing it", () => {
+    const path = tempFile();
+    writeSubagents(path, () => ({ w1: [run] }));
+    // An empty label is a valid SavedSubagent to the type checker; only
+    // validateState's isLabel (a runtime check) rejects it.
+    const bad: State["subagents"] = { w1: [{ id: "toolu_1", session: "s1", label: "", startedEpoch: 100 }] };
+    const result = writeSubagents(path, () => bad);
+    assert.deepEqual(result, { ok: true, changed: true });
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).subagents, {});
   });
 });
 

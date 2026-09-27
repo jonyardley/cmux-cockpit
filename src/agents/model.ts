@@ -7,6 +7,7 @@ import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
 import { checksOf, prsOf } from "../shared/prs.ts";
+import { type SavedRun, savedRuns } from "../shared/subagents.ts";
 import { cardMessage, readable } from "../shared/text.ts";
 import { fmtAge, fmtElapsed, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
@@ -242,38 +243,80 @@ export interface SubagentRow {
 // subagent never ticks on as running.
 const isRunning = (c: SubagentRun, owner: Agent): boolean => owner.status !== "ended" && (c.running ?? !c.endedEpoch);
 
-interface Run {
-  owner: Agent;
-  c: SubagentRun;
-  i: number;
+// A run ranked for sorting and display, whichever source it came from.
+interface Ranked {
+  key: string;
+  label: string;
   running: boolean;
+  startedEpoch: number | undefined;
+  endedEpoch: number | undefined;
 }
 
 // Running runs first, oldest start first; then settled ones, newest end
 // first, falling back on their start when cmux sends no end.
-function byRun(x: Run, y: Run): number {
+function byRun(x: Ranked, y: Ranked): number {
   if (x.running !== y.running) return x.running ? -1 : 1;
-  if (x.running) return (x.c.startedEpoch ?? 0) - (y.c.startedEpoch ?? 0);
-  return (y.c.endedEpoch ?? y.c.startedEpoch ?? 0) - (x.c.endedEpoch ?? x.c.startedEpoch ?? 0);
+  if (x.running) return (x.startedEpoch ?? 0) - (y.startedEpoch ?? 0);
+  return (y.endedEpoch ?? y.startedEpoch ?? 0) - (x.endedEpoch ?? x.startedEpoch ?? 0);
 }
 
-/** The selected workspace's subagent runs across all its agents, at most 5.
- * Settled runs stay until cmux prunes them. No clock read, so it only
- * rebuilds when the data changes; the figure is subagentFigure's. */
-export const subagents = computed((): SubagentRow[] => {
-  const runs = cur().agents.flatMap((owner) =>
-    (owner.children ?? []).flatMap((c, i) => (c ? [{ owner, c, i, running: isRunning(c, owner) }] : [])),
+function toRow(r: Ranked): SubagentRow {
+  return { key: r.key, label: r.label, running: r.running, startedEpoch: r.startedEpoch };
+}
+
+// cmux's own children, ranked; empty when every agent has none, so a
+// workspace with no live cmux data falls through to the saved runs.
+function childRanked(agents: Agent[]): Ranked[] {
+  return agents.flatMap((owner) =>
+    (owner.children ?? []).flatMap((c, i) =>
+      c
+        ? [
+            {
+              // The index stands in for a missing id; cmux keeps children oldest first.
+              key: "s:" + owner.id + ":" + (c.id ?? "#" + i),
+              label: readable(c.label) || "subagent",
+              running: isRunning(c, owner),
+              startedEpoch: c.startedEpoch,
+              endedEpoch: c.endedEpoch,
+            },
+          ]
+        : [],
+    ),
   );
-  return runs
-    .sort(byRun)
-    .slice(0, 5)
-    .map(({ owner, c, i, running }) => ({
-      // The index stands in for a missing id; cmux keeps children oldest first.
-      key: "s:" + owner.id + ":" + (c.id ?? "#" + i),
-      label: readable(c.label) || "subagent",
-      running,
-      startedEpoch: c.startedEpoch,
-    }));
+}
+
+// A saved run's owner is the workspace agent whose id matches its session,
+// when there is one (unconfirmed whether cmux agent ids are Claude session
+// ids); otherwise the run belongs to the workspace as a whole, and only
+// counts as running while it has no end and the workspace still has a live
+// agent, so a closed session never ticks on.
+function savedRanked(run: SavedRun, agents: Agent[]): Ranked {
+  const owner = agents.find((a) => a.id === run.session);
+  const running =
+    run.endedEpoch === undefined && (owner ? owner.status !== "ended" : agents.some((a) => a.status !== "ended"));
+  return {
+    key: "s:" + (owner?.id ?? "ws") + ":" + run.id,
+    label: readable(run.label) || "subagent",
+    running,
+    startedEpoch: run.startedEpoch,
+    endedEpoch: run.endedEpoch,
+  };
+}
+
+/** The selected workspace's subagent runs, at most 5: cmux's own `children`
+ * while any agent carries some, else the saved runs from config/state.json
+ * (issue #6). Settled runs stay until their source drops them. No clock
+ * read, so it only rebuilds when the data changes; the figure is
+ * subagentFigure's. */
+export const subagents = computed((): SubagentRow[] => {
+  const { ws, agents } = cur();
+  // cmux can send a children array full of holes (agentRows survives the
+  // same); only a real, truthy child should count as cmux having its own
+  // data, else an all-holes array would show nothing rather than fall back.
+  const ranked = agents.some((a) => (a.children ?? []).some((c) => c))
+    ? childRanked(agents)
+    : savedRuns(ws.id).map((r) => savedRanked(r, agents));
+  return ranked.sort(byRun).slice(0, 5).map(toRow);
 });
 
 /** Board 1's right-hand figure: coarse elapsed while running ("running"

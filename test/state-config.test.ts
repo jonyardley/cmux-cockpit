@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applySet, emptyState, MAX_ENTRIES, validateState } from "../scripts/state-config.ts";
+import { applySet, emptyState, MAX_ENTRIES, MAX_LABEL, MAX_SUBAGENTS, validateState } from "../scripts/state-config.ts";
 
 test("validateState reads a good file unchanged", () => {
   const raw = {
@@ -15,6 +15,12 @@ test("validateState reads a good file unchanged", () => {
       },
     },
     prs: { w3: { number: 7, url: "https://github.com/o/r/pull/7", status: "open", branch: "feat" } },
+    subagents: {
+      w4: [
+        { id: "toolu_1", session: "s1", agentId: "a1", label: "Review the diff", startedEpoch: 100, endedEpoch: 160 },
+        { id: "toolu_2", session: "s1", label: "Probe the hook", startedEpoch: 150 },
+      ],
+    },
   };
   assert.deepEqual(validateState(raw), raw);
 });
@@ -34,7 +40,71 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     projectOverride: { w6: "ok" },
     projects: {},
     prs: {},
+    subagents: {},
   });
+});
+
+test("validateState keeps good subagent runs, drops bad ones and keeps the newest MAX_SUBAGENTS", () => {
+  const run = (i: number, extra: Record<string, unknown> = {}) => ({
+    id: `t${i}`,
+    session: "s1",
+    label: "Run",
+    startedEpoch: i,
+    ...extra,
+  });
+  const bad = [
+    run(1, { label: " padded" }),
+    run(2, { label: "x".repeat(MAX_LABEL + 1) }),
+    run(3, { session: "" }),
+    run(4, { agentId: 5 }),
+    run(5, { endedEpoch: -1 }),
+    run(6, { id: "__proto__" }),
+    run(7, { label: "tab\there" }),
+  ];
+  const good = Array.from({ length: MAX_SUBAGENTS + 2 }, (_, i) => run(10 + i));
+  const { subagents } = validateState({ subagents: { w1: [...bad, ...good], w2: bad, w3: "x" } });
+  assert.deepEqual(Object.keys(subagents), ["w1"]);
+  assert.deepEqual(
+    subagents.w1?.map((r) => r.id),
+    good.slice(2).map((r) => r.id),
+  );
+});
+
+test("applySet refuses to set subagents from a URL", () => {
+  assert.deepEqual(applySet(emptyState(), "subagents.w1", "[]"), { ok: false, error: "unknown map subagents" });
+});
+
+test("validateState keeps a good subagent type, bounded like an id, and drops a bad one", () => {
+  const run = (extra: Record<string, unknown> = {}) => ({
+    id: "t1",
+    session: "s1",
+    label: "Run",
+    startedEpoch: 1,
+    ...extra,
+  });
+  const { subagents } = validateState({
+    subagents: {
+      w1: [run({ type: "code-reviewer" })],
+      w2: [run({ type: "" })],
+      w3: [run({ type: "x".repeat(129) })],
+      w4: [run({ type: 5 })],
+      w5: [run()],
+    },
+  });
+  assert.equal(subagents.w1?.[0]?.type, "code-reviewer");
+  assert.equal(subagents.w2?.[0]?.type, undefined);
+  assert.equal(subagents.w3, undefined);
+  assert.equal(subagents.w4, undefined);
+  assert.equal(subagents.w5?.[0]?.type, undefined);
+});
+
+test("isName and isLabel reject code 127 (DEL), the same control character the hook's dropControl turns to a space", () => {
+  const run = { id: "t1", session: "s1", startedEpoch: 1, label: `a\u007fb` };
+  assert.deepEqual(validateState({ subagents: { w1: [run] } }).subagents, {});
+  assert.deepEqual(
+    validateState({ projects: { "/dev/s/": { name: "a\u007fb", color: "#6A9BCC", icon: "folder.fill" } } }).projects,
+    {},
+  );
 });
 
 test("validateState keeps only the newest MAX_ENTRIES per map", () => {
@@ -49,7 +119,7 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
   const set = applySet(start, "projectOverride.w1", '"alpha"');
   assert.deepEqual(set, {
     ok: true,
-    state: { dismissed: {}, projectOverride: { w1: "alpha" }, projects: {}, prs: {} },
+    state: { dismissed: {}, projectOverride: { w1: "alpha" }, projects: {}, prs: {}, subagents: {} },
   });
   assert.deepEqual(start, emptyState());
   if (!set.ok) return;

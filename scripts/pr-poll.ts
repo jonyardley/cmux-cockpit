@@ -27,7 +27,8 @@ import {
   validateState,
 } from "./state-config.ts";
 import { logLine } from "./state-log.ts";
-import { writePrs } from "./state-url.ts";
+import { writePrs, writeSubagents } from "./state-url.ts";
+import { prune } from "./subagent-runs.ts";
 
 const TIMEOUT_MS = 15_000;
 // Once this much of a run has passed, remaining lookups are skipped rather
@@ -308,6 +309,26 @@ function acquireLock(lockFile: string): boolean {
   }
 }
 
+/**
+ * Writes the new `prs` map and, in the same pass, prunes the `subagents`
+ * map (scripts/subagent-runs.ts): the pr-poll rules already run this on
+ * every agent turn end and workspace select, so pruning here too means a
+ * done row or a crashed run clears without waiting on a new subagent event
+ * to trigger its own rebuild. `changed` is true when either write changed
+ * the file, so the caller knows whether a rebuild is owed.
+ */
+export function writePollState(
+  stateFile: string,
+  prs: State["prs"],
+  now: number,
+): { ok: true; changed: boolean } | { ok: false; error: string } {
+  const prsResult = writePrs(stateFile, prs);
+  if (!prsResult.ok) return prsResult;
+  const subagentsResult = writeSubagents(stateFile, (subagents) => prune(subagents, now));
+  if (!subagentsResult.ok) return subagentsResult;
+  return { ok: true, changed: prsResult.changed || subagentsResult.changed };
+}
+
 function poll(root: string): number {
   const cmux = tool("cmux", [CMUX_FALLBACK]);
   const git = tool("git", ["/opt/homebrew/bin/git", "/usr/bin/git"]);
@@ -320,7 +341,9 @@ function poll(root: string): number {
   }
 
   const stateFile = join(root, "config", "state.json");
-  const previous = validateState(existsSync(stateFile) ? parseJson(readFileSync(stateFile, "utf8")) : undefined).prs;
+  const before = validateState(existsSync(stateFile) ? parseJson(readFileSync(stateFile, "utf8")) : undefined);
+  const previous = before.prs;
+  const previousSubagents = before.subagents;
 
   const deadline = Date.now() + DEADLINE_MS;
   const pastDeadline = () => Date.now() > deadline;
@@ -333,9 +356,9 @@ function poll(root: string): number {
     },
   });
 
-  let applied: ReturnType<typeof writePrs>;
+  let applied: ReturnType<typeof writePollState>;
   try {
-    applied = writePrs(stateFile, prs);
+    applied = writePollState(stateFile, prs, Math.floor(Date.now() / 1000));
   } catch (err) {
     log(`error: write failed (${err instanceof Error ? err.message : String(err)})`);
     return 0;
@@ -356,12 +379,13 @@ function poll(root: string): number {
     return 0;
   }
 
-  // The build failed with the new map in place: write the old one back so
+  // The build failed with the new maps in place: write the old ones back so
   // the file matches what actually shows, and so the next poll sees a
   // change again and retries the build instead of staying silent.
   log("error: build failed, reverted");
   try {
     writePrs(stateFile, previous);
+    writeSubagents(stateFile, () => previousSubagents);
   } catch (err) {
     log(`error: revert failed (${err instanceof Error ? err.message : String(err)})`);
   }
