@@ -19,7 +19,7 @@ import {
   toggleProject,
   wsById,
 } from "../model.ts";
-import { isSelected, mode, projectsMode, selectWorkspace } from "../state.ts";
+import { isMode, isSelected, projectsMode, selectWorkspace } from "../state.ts";
 import { C } from "../theme.ts";
 import { glyphButton, ring, statusDot, unreadBadge } from "./parts.ts";
 
@@ -51,12 +51,7 @@ function segButton(label: string, icon: string | null, on: () => boolean, set: (
 // background under every padding, so the track swallowed the margin.
 export function segmented(): View {
   const track = HStack({ spacing: 0 }, [
-    segButton(
-      "All",
-      null,
-      () => mode() === "all",
-      () => chooseMode("all"),
-    ),
+    segButton("All", null, isMode("all"), () => chooseMode("all")),
     segButton("Projects", null, projectsMode, () => chooseMode("projects")),
   ]).padding(3);
   return VStack({ spacing: 0 }, [ring(track, C.segTrack, C.hairline, 1, 10).frame({ maxWidth: "infinity" })])
