@@ -110,9 +110,17 @@ function dropHint(target: () => boolean): View {
     .lineLimit(1);
 }
 
-// The gap above a header sits outside its hover and drop shading, so the
-// grey hugs the row instead of hanging a band of empty space over it.
-const headerGap = (row: View): View => VStack({ spacing: 0 }, [row]).paddingTop(9).frame({ maxWidth: "infinity" });
+// A header sits SECTION_GAP below the section above, the same as emptyFold
+// and quietLine. The gap goes on a wrapper outside the hover and drop
+// shading, so the grey hugs the row; the tap stays on the wrapper, as on
+// cards, so the gap still folds the header.
+const SECTION_GAP = 14;
+const HEADER_PAD = 5;
+const headerGap = (row: View, tap: () => void): View =>
+  VStack({ spacing: 0 }, [row])
+    .paddingTop(SECTION_GAP - HEADER_PAD)
+    .frame({ maxWidth: "infinity" })
+    .onTap(tap);
 
 const laneMarker = (color: string): View =>
   RoundedRectangle({ cornerRadius: 3 }).fill(color).frame({ width: 9, height: 9 });
@@ -130,13 +138,12 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
     dropHint(target),
   ])
     .paddingHorizontal(8)
-    .paddingVertical(5)
+    .paddingVertical(HEADER_PAD)
     .cornerRadius(8)
     .background(() => (target() ? C.dropTarget : "clear"))
     .hoverBackground(() => (target() ? C.dropTarget : C.hover))
-    .frame({ maxWidth: "infinity" })
-    .onTap(() => toggleLane(lane));
-  return headerGap(row).fixed();
+    .frame({ maxWidth: "infinity" });
+  return headerGap(row, () => toggleLane(lane)).fixed();
 }
 
 // An empty lane (issue #50): a zone row that only opens while a card is
@@ -185,8 +192,8 @@ export function emptyFold(): View {
     .lineLimit(1)
     .truncation("tail")
     .paddingHorizontal(8)
-    .paddingTop(rest(14))
-    .paddingBottom(rest(5))
+    .paddingTop(rest(SECTION_GAP))
+    .paddingBottom(rest(HEADER_PAD))
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .fixed();
 }
@@ -227,8 +234,8 @@ export function quietLine(): View {
     Spacer({ minLength: 0 }),
   ])
     .paddingHorizontal(8)
-    .paddingTop(14)
-    .paddingBottom(5)
+    .paddingTop(SECTION_GAP)
+    .paddingBottom(HEADER_PAD)
     .frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
@@ -243,10 +250,9 @@ export function projectHeader(k: string): View {
     ...(canOpenProject(k) ? [glyphButton("plus", 20, 11, C.secondary, () => openProjectWorkspace(k))] : []),
   ])
     .paddingHorizontal(8)
-    .paddingVertical(5)
+    .paddingVertical(HEADER_PAD)
     .cornerRadius(8)
     .hoverBackground(C.hover)
-    .frame({ maxWidth: "infinity" })
-    .onTap(() => toggleProject(k));
-  return headerGap(row);
+    .frame({ maxWidth: "infinity" });
+  return headerGap(row, () => toggleProject(k));
 }
