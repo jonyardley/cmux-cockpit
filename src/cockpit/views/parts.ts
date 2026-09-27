@@ -3,7 +3,7 @@
 import { glyphColor } from "../../shared/contrast.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
-import { prOf } from "../../shared/prs.ts";
+import { type PrHealth, prChipText, prHealth, prOf } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot } from "../../shared/ui.ts";
 import { LANES } from "../lanes.ts";
@@ -27,7 +27,7 @@ import {
 } from "../model.ts";
 import { drag } from "../state.ts";
 import { ageOf, statusInfo } from "../status.ts";
-import { C, PR_STYLE } from "../theme.ts";
+import { C, prChipStyle } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;
 
@@ -95,13 +95,13 @@ export function unreadBadge(w: WsAccessor): View {
     .color("white")
     .paddingHorizontal(() => (has() ? 5 : 0))
     .paddingVertical(() => (has() ? 1 : 0))
-    .background(() => (has() ? C.clay : "clear"))
+    .background(() => (has() ? C.unreadBg : "clear"))
     .cornerRadius(7);
 }
 
 // Trailing metadata (PR number, age) never wraps: it keeps its width and the
 // title truncates instead.
-export function meta(fn: () => string, color: string = C.tertiary): View {
+export function meta(fn: () => string, color: Reactive<string> = C.tertiary): View {
   return Text(fn).font(11).monospaced().color(color).lineLimit(1).layoutPriority(2);
 }
 
@@ -139,6 +139,7 @@ export interface Chip {
   text: string;
   url?: string;
   status?: PrStatus;
+  health?: PrHealth;
 }
 
 export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] {
@@ -146,7 +147,7 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
   if (!w) return out;
   const pr = prOf(w);
   if (pr?.number) {
-    const c: Chip = { id: "pr", kind: "pr", text: "#" + pr.number + " " + (pr.status || "") };
+    const c: Chip = { id: "pr", kind: "pr", text: prChipText(w), health: prHealth(w) };
     if (pr.url) c.url = pr.url;
     if (pr.status) c.status = pr.status;
     out.push(c);
@@ -156,10 +157,7 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
 }
 
 function chip(c: () => Chip): View {
-  const st = () => {
-    const s = c().status;
-    return s ? PR_STYLE[s] : PR_STYLE.closed;
-  };
+  const st = () => prChipStyle(c().health ?? "quiet", c().status);
   const isPr = () => c().kind === "pr";
   const body = HStack({ spacing: 4 }, [
     Image(() => (isPr() ? "arrow.triangle.pull" : "arrow.branch"))
@@ -169,22 +167,29 @@ function chip(c: () => Chip): View {
       .font(11)
       .weight("medium")
       .lineLimit(1)
-      .truncation("middle")
+      .truncation("tail")
       .color(() => (isPr() ? st().fg : C.chipText)),
   ])
     .paddingHorizontal(6)
     .paddingVertical(1);
-  return ring(
-    body,
-    () => (isPr() ? st().bg : C.ground),
-    () => (isPr() ? st().edge : C.chipEdge),
-    1,
-    6,
-    true,
-  ).onTap(() => {
-    const url = c().url;
-    if (url) openURL(url);
-  });
+  // The PR chip is short and says the most, so it holds its width and the
+  // branch chip gives way, cut at its end.
+  return (
+    ring(
+      body,
+      () => (isPr() ? st().bg : C.ground),
+      () => (isPr() ? st().edge : C.chipEdge),
+      1,
+      6,
+      true,
+    )
+      // Read once: a ForEach row's kind is fixed by its key ("pr" or "br").
+      .layoutPriority(c().kind === "pr" ? 2 : 0)
+      .onTap(() => {
+        const url = c().url;
+        if (url) openURL(url);
+      })
+  );
 }
 
 export function chipsRow(w: WsAccessor, withBranch: boolean): View {
@@ -283,13 +288,13 @@ export function emptyRow(text: string): View {
     .frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
-// White card, hairline edge, clay outline when selected or dragged.
+// White card, hairline edge, ink outline when selected or dragged.
 export function cardChrome(view: View, w: WsAccessor, key: string, radius: number): View {
   const lit = () => drag()?.id === key || isSelected(w());
   const face = ring(
     view,
     C.card,
-    () => (lit() ? C.clay : C.cardEdge),
+    () => (lit() ? C.select : C.cardEdge),
     () => (lit() ? 1.5 : 1),
     radius,
   ).frame({ maxWidth: "infinity" });

@@ -2,7 +2,7 @@
 // sidebar data (issue #7), so it is left out; checks come from the PR poller.
 
 import { glyphColor } from "../../shared/contrast.ts";
-import { prOf } from "../../shared/prs.ts";
+import { prChipText, prHealth, prOf } from "../../shared/prs.ts";
 import { cardMessage, tracked } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
@@ -25,7 +25,7 @@ import {
   subagentHalo,
   subagents,
 } from "../model.ts";
-import { chipColors, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
+import { chipColors, prChipColors, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
 import { agentDot, chip, jump, meta, openIfUrl, panel, ruled } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
@@ -208,10 +208,13 @@ function currentHead(): View {
         "cur-pr",
         () => !!prOf(w()),
         () =>
+          // Priority over the status phrase, so the chip is never the one cut.
           chip(
-            () => "#" + (prOf(w())?.number ?? "") + " " + (prOf(w())?.status ?? ""),
-            () => chipColors(prOf(w())?.status),
-          ).onTap(() => openIfUrl(prOf(w())?.url)),
+            () => prChipText(w()),
+            () => prChipColors(prHealth(w()), prOf(w())?.status),
+          )
+            .layoutPriority(2)
+            .onTap(() => openIfUrl(prOf(w())?.url)),
       ),
     ])
       .frame({ maxWidth: "infinity" })

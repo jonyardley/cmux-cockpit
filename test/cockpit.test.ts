@@ -411,7 +411,7 @@ describe("chips", () => {
     );
     assert.deepEqual(
       chips.map((c) => c.text),
-      ["#7 open", "feat •"],
+      ["#7", "feat •"],
     );
     assert.equal(chipsFor(ws("y", { branch: "feat" }), false).length, 0);
   });

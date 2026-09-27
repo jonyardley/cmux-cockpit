@@ -16,10 +16,10 @@ export interface Lane {
 const UNSORTED: Lane = { key: "unsorted", name: "Unsorted", color: C.laneUnsorted, density: "row" };
 
 export const LANES: readonly Lane[] = [
-  { key: "main", name: "Main activity", color: "#D97757", density: "full" },
-  { key: "review", name: "For review", color: "#4F7CC0", density: "compact" },
+  { key: "main", name: "Main activity", color: C.laneMain, density: "full" },
+  { key: "review", name: "For review", color: C.laneReview, density: "compact" },
   { key: "bg", name: "Background", color: C.laneBackground, density: "compact" },
-  { key: "parked", name: "Parked", color: "#B0AEA5", density: "row", startsCollapsed: true },
+  { key: "parked", name: "Parked", color: C.laneParked, density: "row", startsCollapsed: true },
   UNSORTED,
 ];
 

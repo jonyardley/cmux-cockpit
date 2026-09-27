@@ -141,7 +141,8 @@ export function pickPr(text: string, branch: string): SavedPr | null | undefined
     const status = typeof p.state === "string" ? STATUS[p.state] : undefined;
     if (!status || typeof p.number !== "number" || typeof p.url !== "string") return [];
     const updatedAt = typeof p.updatedAt === "string" ? p.updatedAt : "";
-    return [{ number: p.number, url: p.url, status, branch, updatedAt, rollup: p.statusCheckRollup }];
+    const draft = p.isDraft === true ? { draft: true as const } : {};
+    return [{ number: p.number, url: p.url, status, branch, ...draft, updatedAt, rollup: p.statusCheckRollup }];
   });
   prs.sort(
     (a, b) => Number(b.status === "open") - Number(a.status === "open") || b.updatedAt.localeCompare(a.updatedAt),
@@ -149,12 +150,13 @@ export function pickPr(text: string, branch: string): SavedPr | null | undefined
   const top = prs[0];
   if (!top) return null;
   const pr: SavedPr = { number: top.number, url: top.url, status: top.status, branch: top.branch };
+  if (top.draft) pr.draft = true;
   const checks = checksFrom(top.rollup);
   return checks.length ? { ...pr, checks } : pr;
 }
 
 // The fields pickPr reads.
-const PR_FIELDS = "number,state,url,headRefName,updatedAt,isCrossRepository,statusCheckRollup";
+const PR_FIELDS = "number,state,url,headRefName,updatedAt,isCrossRepository,isDraft,statusCheckRollup";
 
 export interface Lookups {
   /**

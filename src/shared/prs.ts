@@ -35,3 +35,34 @@ export function checksOf(w: Workspace): SavedCheck[] {
   if (w.prs?.length || w.pr) return [];
   return savedFor(w)?.checks ?? [];
 }
+
+/**
+ * What a card's PR chip says about the PR, so a problem shows without
+ * selecting the workspace. Only an open PR has a health: failing wins over
+ * running, and ready means every saved check passed on a PR out of draft.
+ * With no saved checks (cmux's own PR, or a repo without CI) it stays quiet
+ * rather than claim a ready it cannot see.
+ */
+export type PrHealth = "failing" | "running" | "ready" | "quiet";
+
+export function prHealth(w: Workspace | undefined): PrHealth {
+  const pr = prOf(w);
+  if (!w || pr?.status !== "open") return "quiet";
+  const checks = checksOf(w);
+  if (checks.some((c) => c.state === "fail")) return "failing";
+  if (checks.some((c) => c.state === "pending")) return "running";
+  return checks.length > 0 && !pr.draft ? "ready" : "quiet";
+}
+
+/** The chip's words: "#35 · 1 failing", "#35 · running", "#35 · ready", "#35 draft", "#35", "#35 merged". */
+export function prChipText(w: Workspace | undefined): string {
+  const pr = prOf(w);
+  if (!w || !pr?.number) return "";
+  const n = "#" + pr.number;
+  const health = prHealth(w);
+  if (health === "failing") return n + " · " + checksOf(w).filter((c) => c.state === "fail").length + " failing";
+  if (health === "running") return n + " · running";
+  if (health === "ready") return n + " · ready";
+  if (pr.status === "open") return pr.draft ? n + " draft" : n;
+  return pr.status ? n + " " + pr.status : n;
+}

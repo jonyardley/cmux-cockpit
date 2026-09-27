@@ -95,7 +95,7 @@ export function laneHeader(laneKey: LaneKey): View {
     Text(() => (target() ? "Drop here" : ""))
       .font(11)
       .weight("medium")
-      .color(C.clayText),
+      .color(C.heading),
   ])
     .paddingHorizontal(8)
     .paddingTop(14)

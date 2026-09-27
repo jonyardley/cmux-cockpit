@@ -168,6 +168,20 @@ describe("pickPr with checks", () => {
     assert.deepEqual(pickPr(text, "feat"), pr(1, { checks: [{ name: "check", state: "pass" }] }));
     assert.deepEqual(pickPr(gh([{ ...ghPr(1, "OPEN", "2026-09-01"), statusCheckRollup: [] }]), "feat"), pr(1));
   });
+
+  it("marks a draft, and leaves a ready PR's entry as it was", () => {
+    assert.deepEqual(pickPr(gh([{ ...ghPr(1, "OPEN", "2026-09-01"), isDraft: true }]), "feat"), pr(1, { draft: true }));
+    assert.deepEqual(pickPr(gh([{ ...ghPr(1, "OPEN", "2026-09-01"), isDraft: false }]), "feat"), pr(1));
+  });
+});
+
+describe("the saved draft flag", () => {
+  it("survives validation only as true", () => {
+    const saved = (draft: unknown) => validateState({ prs: { w1: { ...pr(1), draft } } }).prs.w1;
+    assert.deepEqual(saved(true), pr(1, { draft: true }));
+    assert.deepEqual(saved(false), pr(1));
+    assert.deepEqual(saved("yes"), pr(1));
+  });
 });
 
 describe("branchFromGit", () => {

@@ -1,6 +1,7 @@
 // Agents panel colour tokens and status styling.
 
 import type { CheckState } from "../../scripts/state-config.ts";
+import type { PrHealth } from "../shared/prs.ts";
 
 export const T = {
   ground: "#F6F4EC",
@@ -58,4 +59,16 @@ export function chipColors(status: PrStatus | "port" | undefined): ChipColors {
   if (status === "open") return { bg: "#EAF1E4", fg: "#3F5A2C", edge: "#D6E4CB" };
   if (status === "merged") return { bg: "#EFEAF7", fg: "#5B3E91", edge: "#DED4EF" };
   return { bg: "#F4F2EA", fg: "#4A4945", edge: "#E8E5DA" };
+}
+
+// The cockpit's HEALTH_STYLE, so the PR chip reads the same in both sidebars.
+const HEALTH_COLORS: Record<Exclude<PrHealth, "quiet">, ChipColors> = {
+  failing: { bg: "#F8E4E2", fg: "#9E2F27", edge: "#EDC9C5" },
+  running: { bg: "#F6EEDA", fg: "#7A5A12", edge: "#EADFC2" },
+  ready: { bg: "#DCEBCF", fg: "#2F4A1C", edge: "#BFD9A9" },
+};
+
+/** The PR chip's colours: its health when it has one, else its status. */
+export function prChipColors(health: PrHealth, status: PrStatus | undefined): ChipColors {
+  return health === "quiet" ? chipColors(status) : HEALTH_COLORS[health];
 }
