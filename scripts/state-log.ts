@@ -6,7 +6,7 @@ import { appendFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const LOG_PATH = join(homedir(), "Library", "Logs", "cmux-cockpit-state.log");
+export const LOG_PATH = join(homedir(), "Library", "Logs", "cmux-cockpit-state.log");
 
 /** Appends one timestamped line. Best-effort: a logging failure never fails the caller. */
 export function logLine(line: string): void {

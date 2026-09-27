@@ -12,9 +12,10 @@
 // the hook: every problem is a note on stderr and exit 0.
 
 import { spawn, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { join } from "node:path";
+import { LOG_PATH } from "../state-log.ts";
 
 export interface Pr {
   number: number;
@@ -110,14 +111,27 @@ export function delayedPoll(hookDir: string, node: string): Spawn {
 
 // Detached and unreferenced, so the hook returns at once and the poll
 // outlives it; its lockfile keeps it from overlapping an automation's run.
+// Its stderr goes to the state log, so a poll that crashes before it can log
+// still leaves a trace; if the log cannot be opened the poll runs without.
+function logFd(): number | "ignore" {
+  try {
+    return openSync(LOG_PATH, "a");
+  } catch {
+    return "ignore";
+  }
+}
+
 function startPoll(): void {
   const { command, args, cwd } = delayedPoll(import.meta.dirname, process.execPath);
+  const log = logFd();
   try {
-    const child = spawn(command, args, { cwd, detached: true, stdio: "ignore" });
+    const child = spawn(command, args, { cwd, detached: true, stdio: ["ignore", "ignore", log] });
     child.on("error", (err) => console.error(`report-pr: poll: ${err.message}`));
     child.unref();
   } catch (err) {
     console.error(`report-pr: poll: ${err instanceof Error ? err.message : String(err)}`);
+  } finally {
+    if (log !== "ignore") closeSync(log);
   }
 }
 
@@ -141,9 +155,9 @@ async function main(): Promise<void> {
   }
   const url = createdPrUrl(event);
   if (!url) return;
-  startPoll();
   const socket = process.env.CMUX_SOCKET_PATH;
   if (!socket) return console.error("report-pr: skipped, not in a cmux terminal");
+  startPoll();
   const gh = spawnSync("gh", ["pr", "view", url, "--json", "number,url,state,headRefName"], {
     encoding: "utf8",
     timeout: 5000,

@@ -83,9 +83,12 @@ five-minute timeout; the poller itself gives up on new lookups after four
 minutes, so a slow directory cannot starve the rest. The poll a turn end
 fires straight after an agent's `gh pr create` can run before gh lists the
 new PR, so the `report-pr` hook (`scripts/hooks/report-pr.ts`) also starts
-one detached run with `--delay 10`: it sleeps ten seconds, then waits up to
-a minute for the lock instead of skipping, since the run holding it may be
-the one that missed the PR.
+one detached run with `--delay 10` when it runs in a cmux terminal: it
+sleeps ten seconds, then waits for the lock instead of skipping, since the
+run holding it may be the one that missed the PR, for as long as a live
+run can hold it (five minutes). Its stderr goes to the state log, and the
+rebuild after a change is limited to a minute, since this run has no outer
+timeout.
 `src/shared/prs.ts` reads it back: cmux's own `pr`/`prs` win when present. A
 saved PR shows while the workspace's branch is not yet known, or still
 matches the branch it was found for, and hides once the workspace has moved

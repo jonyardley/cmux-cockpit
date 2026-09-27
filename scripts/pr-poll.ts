@@ -4,13 +4,14 @@
 //   node scripts/pr-poll.ts [--delay <seconds>]
 // Run by the pr-poll rules in automations.json when an agent's turn ends or a
 // workspace is selected, and by the report-pr hook with a delay after an
-// agent opens a PR, since gh can take a few seconds to list a new one. For every workspace in every window it reads the git
-// branch of its directory and asks gh for that branch's PR and its checks,
-// then rebuilds the sidebars only if a PR or a check's state changed. It never fails loudly: every problem is a log
-// line and exit 0. No shell: every command is spawnSync with an argument
-// array, since directories and branch names come from outside. A lockfile
-// stops two runs overlapping, and an overall deadline stops one slow run
-// blocking every workspace behind it.
+// agent opens a PR, since gh can take a few seconds to list a new one. For
+// every workspace in every window it reads the git branch of its directory
+// and asks gh for that branch's PR and its checks, then rebuilds the
+// sidebars only if a PR or a check's state changed. It never fails loudly:
+// every problem is a log line and exit 0. No shell: every command is
+// spawnSync with an argument array, since directories and branch names come
+// from outside. A lockfile stops two runs overlapping, and an overall
+// deadline stops one slow run blocking every workspace behind it.
 
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, rmSync, statSync } from "node:fs";
@@ -34,12 +35,17 @@ const TIMEOUT_MS = 15_000;
 const DEADLINE_MS = 240_000;
 // A lockfile older than this is a crashed run's, not a live one's.
 const LOCK_STALE_MS = 5 * 60_000;
-// The longest --delay honoured, and how long a delayed run waits for a busy
-// lock: it was started to catch a PR the busy run may have missed, so it
-// waits its turn rather than skip.
+// The longest --delay honoured. A delayed run was started to catch a PR the
+// run holding the lock may have missed, so it waits its turn rather than
+// skip, for as long as a live run can hold the lock: past LOCK_STALE_MS the
+// lock is taken as a crashed run's anyway.
 const MAX_DELAY_SECONDS = 60;
-const LOCK_WAIT_MS = 60_000;
 const LOCK_RETRY_MS = 2_000;
+const LOCK_RETRIES = LOCK_STALE_MS / LOCK_RETRY_MS;
+// The rebuild after a change. Without a limit a hung build would hold the
+// lock with nothing to kill it, as the hook's detached run has no outer
+// timeout the way the automation runs do.
+const BUILD_TIMEOUT_MS = 60_000;
 const CMUX_FALLBACK = "/Applications/cmux.app/Contents/Resources/bin/cmux";
 
 function log(line: string): void {
@@ -334,7 +340,11 @@ function poll(root: string): number {
     return 0;
   }
 
-  const build = spawnSync(process.execPath, ["scripts/build.ts"], { cwd: root, stdio: "ignore" });
+  const build = spawnSync(process.execPath, ["scripts/build.ts"], {
+    cwd: root,
+    stdio: "ignore",
+    timeout: BUILD_TIMEOUT_MS,
+  });
   if (build.status === 0) {
     log(`ok, ${Object.keys(prs).length} PRs`);
     return 0;
@@ -367,12 +377,18 @@ export function delayFrom(argv: string[]): number {
   return seconds >= 1 && seconds <= MAX_DELAY_SECONDS ? seconds * 1000 : 0;
 }
 
-// The lock, retrying for up to waitMs while another run holds it.
-async function lockWithin(lockFile: string, waitMs: number): Promise<boolean> {
-  const until = Date.now() + waitMs;
-  while (!acquireLock(lockFile)) {
-    if (Date.now() >= until) return false;
-    await sleep(LOCK_RETRY_MS);
+/**
+ * Takes the lock with `acquire`, trying again up to `retries` times with a
+ * `wait` between tries while another run holds it. Zero retries is one try.
+ */
+export async function lockWithin(
+  acquire: () => boolean,
+  retries: number,
+  wait: () => Promise<unknown>,
+): Promise<boolean> {
+  for (let tries = 0; !acquire(); tries++) {
+    if (tries >= retries) return false;
+    await wait();
   }
   return true;
 }
@@ -382,7 +398,12 @@ async function main(): Promise<number> {
   const lockFile = join(root, "config", "pr-poll.lock");
   const delay = delayFrom(process.argv.slice(2));
   if (delay) await sleep(delay);
-  if (!(await lockWithin(lockFile, delay ? LOCK_WAIT_MS : 0))) {
+  const locked = await lockWithin(
+    () => acquireLock(lockFile),
+    delay ? LOCK_RETRIES : 0,
+    () => sleep(LOCK_RETRY_MS),
+  );
+  if (!locked) {
     log("skipped: another poll is running");
     return 0;
   }
