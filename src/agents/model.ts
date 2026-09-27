@@ -2,7 +2,7 @@
 // workspace, and every PR. Pure reads of `data`, so each is testable alone.
 
 import { byActivity, sinceOrActivity } from "../shared/activity.ts";
-import { markLast } from "../shared/list.ts";
+import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
 import { prsOf } from "../shared/prs.ts";
@@ -152,6 +152,52 @@ export function statusPhrase(a: Agent | null): string {
   const word = { needs_input: "Needs you", working: "Working", idle: "Idle" }[a.status] ?? a.status;
   return age ? word + " for " + age : word;
 }
+
+// ---- This workspace's agent list -------------------------------------------
+
+export interface AgentRow {
+  key: string;
+  a: Agent;
+  label: string;
+}
+
+const fallbackLabel = (a: Agent): string => a.name || a.kind || "agent";
+
+// A real title wins; otherwise agents sharing a fallback label are numbered
+// in cmux's own order, which holds still as their activity changes.
+function labelsFor(live: Agent[], ws: Workspace): Map<string, string> {
+  const order = new Map((ws.agents ?? []).map((a, i) => [a?.id, i]));
+  const byCmux = [...live].sort((x, y) => (order.get(x.id) ?? 0) - (order.get(y.id) ?? 0));
+  const shared = new Map<string, number>();
+  for (const a of byCmux) {
+    if (!readable(a.title)) shared.set(fallbackLabel(a), (shared.get(fallbackLabel(a)) ?? 0) + 1);
+  }
+  const seen = new Map<string, number>();
+  const out = new Map<string, string>();
+  for (const a of byCmux) {
+    const title = readable(a.title);
+    const base = fallbackLabel(a);
+    if (title || (shared.get(base) ?? 0) < 2) {
+      out.set(a.id, title || base);
+      continue;
+    }
+    const n = (seen.get(base) ?? 0) + 1;
+    seen.set(base, n);
+    out.set(a.id, `${base} ${n}`);
+  }
+  return out;
+}
+
+/** The selected workspace's live agents, most active first, at most 6. Ended
+ * agents are left out, and the list is empty unless two or more remain: the
+ * header already shows one. */
+export const agentRows = computed((): Last<AgentRow>[] => {
+  const { ws, agents } = cur();
+  const live = agents.filter((a) => a.status !== "ended");
+  if (live.length < 2) return [];
+  const labels = labelsFor(live, ws);
+  return markLast(live.slice(0, 6).map((a) => ({ key: "a:" + a.id, a, label: labels.get(a.id) ?? fallbackLabel(a) })));
+});
 
 // ---- Subagents ---------------------------------------------------------------
 

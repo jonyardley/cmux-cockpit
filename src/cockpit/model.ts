@@ -361,6 +361,19 @@ export function openProjectWorkspace(k: string): void {
   cmux("workspace.create", { cwd: root, focus: true });
 }
 
+/** The card menu's new session label. Menu items are fixed when the card is
+ * built, so a project with no folder says why instead of vanishing. */
+export function newSessionLabel(w: Workspace | undefined): string {
+  if (!w) return "New session (no workspace)";
+  const k = projectKey(w);
+  return canOpenProject(k) ? `New session in ${projectByKey(k).name}` : "New session (project has no folder)";
+}
+
+/** Opens a new session in the card's project folder; a no-op without one. */
+export function newSessionFor(w: Workspace | undefined): void {
+  if (w) openProjectWorkspace(projectKey(w));
+}
+
 export type ProjectEntry =
   | { kind: "header"; id: string; project: string }
   | { kind: "ws"; id: string; wsId: string }
