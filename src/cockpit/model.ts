@@ -5,6 +5,7 @@
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
+import { chunk } from "../shared/list.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import {
   inAppSpec,
@@ -500,19 +501,23 @@ export const projectCount = (k: string) => cardWorkspaces().filter((w) => projec
 /** Whether the project's header should offer "+": it has a folder to open. */
 export const canOpenProject = (k: string): boolean => !!projectByKey(k).root;
 
-/** Opens a new workspace in the project's root, if it has one. */
+/** Opens a new workspace in the project's root, if it has one. A folded
+ * project unfolds first, so the new card is not hidden under its header. */
 export function openProjectWorkspace(k: string): void {
   const root = projectByKey(k).root;
   if (!root) return;
+  if (isProjectCollapsed(k)) toggleProject(k);
   cmux("workspace.create", { cwd: root, focus: true });
 }
+
+const openLabel = (k: string): string => `New session in ${projectByKey(k).name}`;
 
 /** The card menu's new session label. Menu items are fixed when the card is
  * built, so a project with no folder says why instead of vanishing. */
 export function newSessionLabel(w: Workspace | undefined): string {
   if (!w) return "New session (no workspace)";
   const k = projectKey(w);
-  return canOpenProject(k) ? `New session in ${projectByKey(k).name}` : "New session (project has no folder)";
+  return canOpenProject(k) ? openLabel(k) : "New session (project has no folder)";
 }
 
 /** Opens a new session in the card's project folder; a no-op without one. */
@@ -520,37 +525,62 @@ export function newSessionFor(w: Workspace | undefined): void {
   if (w) openProjectWorkspace(projectKey(w));
 }
 
+/** The quiet line's label for one project: what a tap does, or why it does nothing. */
+export const quietLabel = (k: string): string =>
+  canOpenProject(k) ? openLabel(k) : `${projectByKey(k).name} has no folder to open`;
+
 export type ProjectEntry =
   | { kind: "header"; id: string; project: string }
   | { kind: "ws"; id: string; wsId: string }
-  | { kind: "empty"; id: string };
+  | { kind: "quiet"; id: string };
+
+/** The cards grouped by project key, in one pass over the cards. */
+const cardsByProject = computed(() => {
+  const groups = new Map<string, Workspace[]>();
+  for (const w of cardWorkspaces()) {
+    const k = projectKey(w);
+    const rows = groups.get(k);
+    if (rows) rows.push(w);
+    else groups.set(k, [w]);
+  }
+  return groups;
+});
+
+/**
+ * Configured projects with no sessions, in table order (issue #54). They fold
+ * into one "Quiet" line of icons rather than a header each.
+ */
+export const quietProjects = computed(() => {
+  const groups = cardsByProject();
+  return PROJECTS.map(projectId).filter((k) => !groups.has(k));
+});
+
+/** Icons per quiet line row: the renderer cannot wrap, so the model does. */
+const QUIET_PER_ROW = 7;
+
+/** The quiet icons split into rows that fit the sidebar, keyed by position. */
+export const quietRows = computed(() =>
+  chunk(quietProjects(), QUIET_PER_ROW).map((keys, i) => ({ id: "q" + i, keys })),
+);
+
+function pushGroup(entries: ProjectEntry[], k: string, rows: readonly Workspace[]): void {
+  entries.push({ kind: "header", id: "p:" + k, project: k });
+  if (isProjectCollapsed(k)) return;
+  // One row shape in Projects mode, so the lane no longer rides in the id.
+  for (const w of rows) entries.push({ kind: "ws", id: w.id + "@p", wsId: w.id });
+}
 
 export const projectEntries = computed(() => {
   if (!projectsMode()) return [];
-  const cards = cardWorkspaces();
+  const groups = cardsByProject();
   const entries: ProjectEntry[] = [];
-  // Every configured project shows, even with no sessions; Other only shows
-  // once something actually falls into it.
-  for (const p of PROJECTS) {
-    const k = projectId(p);
-    const rows = cards.filter((w) => projectKey(w) === k);
-    entries.push({ kind: "header", id: "p:" + k, project: k });
-    if (isProjectCollapsed(k)) continue;
-    if (!rows.length) {
-      entries.push({ kind: "empty", id: "p:" + k + ":empty" });
-      continue;
-    }
-    // One row shape in Projects mode, so the lane no longer rides in the id.
-    for (const w of rows) entries.push({ kind: "ws", id: w.id + "@p", wsId: w.id });
+  // A project with sessions gets a header; the quiet ones share one line at
+  // the bottom. Other only shows once something actually falls into it.
+  for (const k of [...PROJECTS.map(projectId), projectId(OTHER)]) {
+    const rows = groups.get(k);
+    if (rows) pushGroup(entries, k, rows);
   }
-  const otherKey = projectId(OTHER);
-  const otherRows = cards.filter((w) => projectKey(w) === otherKey);
-  if (otherRows.length) {
-    entries.push({ kind: "header", id: "p:" + otherKey, project: otherKey });
-    if (!isProjectCollapsed(otherKey)) {
-      for (const w of otherRows) entries.push({ kind: "ws", id: w.id + "@p", wsId: w.id });
-    }
-  }
+  if (quietProjects().length) entries.push({ kind: "quiet", id: "p:quiet" });
   return entries;
 });
 
