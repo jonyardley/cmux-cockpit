@@ -260,7 +260,9 @@ Every write drops entries older than seven days, and `MAX_ENTRIES` caps
 the map. Only a `https://claude.ai/artifact/<id>` or
 `https://claude.ai/code/artifact/<id>` link is kept, since the sidebar will
 open it on a tap, and no URL can set the map. `src/shared/published.ts`
-reads it back, newest first, for the view to come.
+reads it back, newest first, for the view to come, and applies the same
+seven days itself (`src/shared/published-age.ts`), since the hook prunes
+only when it writes.
 
 It runs as a PostToolUse hook:
 
@@ -269,7 +271,7 @@ It runs as a PostToolUse hook:
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__create",
+        "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch",
         "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }]
       }
     ]
@@ -280,9 +282,20 @@ It runs as a PostToolUse hook:
 An Artifact call counts only as a page publish (no `action`, or
 `publish`, and not an `asset` upload); a Claude Docs `batch` counts only
 when its `tool_input.container.create` is set, so edits to an existing doc
-are not recorded again. The link is `tool_input.url` when an Artifact
-update names one, else the first claude.ai artifact link in any string
-anywhere in `tool_response`, whose shape is not documented. The title is
-the published HTML file's `<title>`, then `tool_input.title`, then the
-file's name for a page, or `tool_input.container.create.name` for a doc.
-It never fails the hook: a problem is a line on stderr and exit 0.
+are not recorded again. Docs' `create` tool is not hooked: it adds a tab,
+comment or upload to a doc that already exists. The link is
+`tool_input.url` when an Artifact update names one, else the first
+claude.ai artifact link in any string anywhere in `tool_response` (whose
+shape is not documented) that the call's own input does not name, so a
+type or source artifact echoed back is skipped. The title is the published
+HTML file's `<title>` (only its first 256 KB is read), then
+`tool_input.title`, then the file's name for a page, or
+`tool_input.container.create.name` for a doc. It never fails the hook: a
+problem is a line on stderr and exit 0.
+
+Two gaps are known. One artifact has two link forms,
+`claude.ai/artifact/<id>` and `claude.ai/code/artifact/<uuid>`, with
+different ids and no local way to map one to the other, so republishing
+under the other form adds a second entry. And an update that names its
+`url` is recorded without reading the result, so a refused republish
+(which returns the live version rather than failing) still counts.

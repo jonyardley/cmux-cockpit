@@ -8,8 +8,9 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
-import { applyPublished, MAX_AGE_S, publishedFrom, titleFromHtml } from "../scripts/hooks/report-published.ts";
+import { applyPublished, publishedFrom, titleFromHtml } from "../scripts/hooks/report-published.ts";
 import type { SavedPublished } from "../scripts/state-config.ts";
+import { PUBLISHED_MAX_AGE_S as MAX_AGE_S } from "../src/shared/published-age.ts";
 
 const PAGE = "https://claude.ai/code/artifact/0b3c9e2a-1f4d-4c6e-9a8b-7d6e5f4a3b2c";
 const DOC = "https://claude.ai/artifact/H3otueVrHj1e6AfEbuQUoZ";
@@ -92,6 +93,17 @@ describe("publishedFrom: the Artifact tool", () => {
     assert.notEqual(publishedFrom(artifact({ action: "publish", file_path: "/w/p.html" }), "w1", NOW, noFile), null);
   });
 
+  it("skips links the call's own input names, such as the type or a source artifact", () => {
+    const type = "https://claude.ai/artifact/slidesType";
+    const source = "https://claude.ai/artifact/designSystem";
+    const input = { type_url: type, title: "Deck", files: { "a.css": { artifact: source, path: "a.css" } } };
+    const response = [
+      { type: "text", text: `Type ${type}, design system ${source}` },
+      { type: "text", text: PAGE },
+    ];
+    assert.equal(publishedFrom(artifact(input, response), "w1", NOW, noFile)?.url, PAGE);
+  });
+
   it("ignores a publish whose result names no claude.ai artifact", () => {
     const event = artifact({ file_path: "/w/p.html" }, "Error: refused");
     assert.equal(publishedFrom(event, "w1", NOW, noFile), null);
@@ -112,9 +124,9 @@ describe("publishedFrom: Claude Docs", () => {
     });
   });
 
-  it("records the create tool too", () => {
+  it("ignores Docs' create tool, which only adds to an existing doc", () => {
     const event = docs("mcp__claude_ai_Claude_Docs__create", { title: "Notes" }, { url: DOC });
-    assert.deepEqual(publishedFrom(event, "w1", NOW, noFile)?.title, "Notes");
+    assert.equal(publishedFrom(event, "w1", NOW, noFile), null);
   });
 
   it("ignores a batch that edits an existing doc", () => {
@@ -123,7 +135,7 @@ describe("publishedFrom: Claude Docs", () => {
   });
 
   it("ignores other docs tools", () => {
-    for (const tool of ["mcp__claude_ai_Claude_Docs__update", "mcp__claude_ai_Claude_Docs__read"]) {
+    for (const tool of ["mcp__claude_ai_Claude_Docs__update", "mcp__claude_ai_Claude_Docs__create"]) {
       assert.equal(publishedFrom(docs(tool, createDoc, `${DOC}`), "w1", NOW, noFile), null, tool);
     }
   });
@@ -157,6 +169,14 @@ describe("titleFromHtml", () => {
   it("reads the first <title>, decoding the common entities", () => {
     assert.equal(titleFromHtml("<head><TITLE lang=en> A &amp; B &lt;3&gt; </TITLE></head>"), " A & B <3> ");
     assert.equal(titleFromHtml("<title>Tom&#39;s &quot;page&quot;</title>"), `Tom's "page"`);
+  });
+
+  it("decodes numeric references and the common typographic names, leaving unknown ones", () => {
+    assert.equal(
+      titleFromHtml("<title>Jon&#8217;s &#x2014; notes&nbsp;&hellip;</title>"),
+      "Jon\u2019s \u2014 notes \u2026",
+    );
+    assert.equal(titleFromHtml("<title>&bogus; &#0; &#x110000;</title>"), "&bogus; &#0; &#x110000;");
   });
 
   it("has none without a title", () => {

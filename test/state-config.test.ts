@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   applySet,
+  cleanLabel,
   emptyState,
+  labelFrom,
   MAX_ENTRIES,
   MAX_LABEL,
   MAX_SUBAGENTS,
@@ -356,4 +358,21 @@ test("rebuildsOn skips the build for the cockpit's own view and folds only", () 
   assert.equal(rebuildsOn("ui.collapsed"), false);
   for (const key of ["dismissed.w1", "projectOverride.w1", "projects./dev/a/"])
     assert.equal(rebuildsOn(key), true, key);
+});
+
+test("cleanLabel cuts by the length isLabel measures, so an astral title still validates", () => {
+  // 119 units then a two-unit emoji: the emoji would make 121, so it goes whole.
+  const title = cleanLabel("\u{1F3B9}" + "x".repeat(117) + "\u{1F3B9}x") ?? "";
+  assert.equal(title.length, MAX_LABEL - 1);
+  assert.ok(title.startsWith("\u{1F3B9}x") && title.endsWith("x"));
+  const entry = { url: "https://claude.ai/artifact/a", title, kind: "page", workspace: "w", epoch: 1 };
+  assert.deepEqual(validateState({ published: { [entry.url]: entry } }).published, { [entry.url]: entry });
+  assert.equal(cleanLabel("a\u0000\u007f\tb"), "a b");
+  assert.equal(cleanLabel(" \n "), null);
+  assert.equal(cleanLabel(5), null);
+});
+
+test("labelFrom takes the first usable candidate, else the fallback", () => {
+  assert.equal(labelFrom("none", undefined, "  ", "Second"), "Second");
+  assert.equal(labelFrom("none"), "none");
 });

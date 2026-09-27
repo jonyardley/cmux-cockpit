@@ -26,12 +26,21 @@ const entry = (id: string, epoch: number) => ({
 const { installRenderer } = await import("./support/renderer.ts");
 installRenderer();
 const { savedPublished } = await import("../src/shared/published.ts");
+const { PUBLISHED_MAX_AGE_S } = await import("../src/shared/published-age.ts");
 
 describe("savedPublished", () => {
   it("lists every saved page and doc, newest first", () => {
     assert.deepEqual(
-      savedPublished().map((e) => e.title),
+      savedPublished(400).map((e) => e.title),
       ["Title b", "Title c", "Title a"],
+    );
+  });
+
+  it("leaves out entries older than seven days, even though the file still holds them", () => {
+    const now = 200 + PUBLISHED_MAX_AGE_S;
+    assert.deepEqual(
+      savedPublished(now).map((e) => e.title),
+      ["Title b", "Title c"],
     );
   });
 });

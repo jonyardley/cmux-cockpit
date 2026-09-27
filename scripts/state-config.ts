@@ -204,13 +204,46 @@ const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{
 const isSymbol = (v: unknown): v is string =>
   typeof v === "string" && /^[a-z0-9]+(\.[a-z0-9]+)*$/.test(v) && v.length <= 64;
 
-// A control character, 0-31 or 127 (DEL): the same rule the hook's own
-// dropControl uses (scripts/hooks/report-subagent.ts), so a label that
-// reads as clean there reads as clean here too.
+// A control character, 0-31 or 127 (DEL): the same rule cleanLabel uses
+// to turn them to spaces, so a label it cleans reads as clean here too.
 const isCleanChar = (c: string): boolean => {
   const code = c.charCodeAt(0);
   return code >= 32 && code !== 127;
 };
+
+// Keeps whole code points (so a surrogate pair is never split in two) while
+// the UTF-16 length, the one isLabel measures, stays within MAX_LABEL.
+function cutToLabel(text: string): string {
+  let out = "";
+  for (const c of text) {
+    if (out.length + c.length > MAX_LABEL) break;
+    out += c;
+  }
+  return out;
+}
+
+/**
+ * Turns hook input into a label isLabel accepts: control characters and
+ * whitespace runs become one space, it is cut to MAX_LABEL, and only then
+ * trimmed, since trimming first and cutting after can leave a trailing
+ * space that isLabel refuses and validateState drops the entry over. Null
+ * for anything unusable. Shared by the subagent and published hooks.
+ */
+export function cleanLabel(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const spaced = [...raw].map((c) => (isCleanChar(c) ? c : " ")).join("");
+  const cleaned = cutToLabel(spaced.replaceAll(/\s+/g, " ")).trim();
+  return cleaned.length ? cleaned : null;
+}
+
+/** The first candidate that cleans up to a label, else `fallback`. */
+export function labelFrom(fallback: string, ...candidates: unknown[]): string {
+  for (const candidate of candidates) {
+    const cleaned = cleanLabel(candidate);
+    if (cleaned) return cleaned;
+  }
+  return fallback;
+}
 
 // Plain, single-line text with no leading, trailing or control characters,
 // up to `max` long. Shared by isName and isLabel so both keep one rule.

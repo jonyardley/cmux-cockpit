@@ -33,7 +33,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scheduleBuild } from "../hook-build.ts";
-import { MAX_LABEL, type SavedSubagent, type State, validateState } from "../state-config.ts";
+import { labelFrom, type SavedSubagent, type State, validateState } from "../state-config.ts";
 import { writeSubagents } from "../state-url.ts";
 import { prune } from "../subagent-runs.ts";
 
@@ -45,35 +45,6 @@ type SubagentMap = State["subagents"];
 
 function field(obj: unknown, key: string): unknown {
   return typeof obj === "object" && obj !== null && key in obj ? Reflect.get(obj, key) : undefined;
-}
-
-// Control characters are turned to spaces by code point rather than a regex
-// literal (Biome disallows one; state-config.ts's isName does the same).
-function dropControl(raw: string): string {
-  return [...raw].map((c) => (c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127 ? " " : c)).join("");
-}
-
-/**
- * Collapses whitespace and control characters, cuts to MAX_LABEL code
- * points (Array.from, so a surrogate pair is never split in two), and only
- * then trims: trimming first and slicing after can cut a label right after
- * a space, leaving a trailing space that isLabel then refuses and
- * validateState drops the whole run over. Null for anything unusable.
- */
-export function cleanLabel(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  const collapsed = dropControl(raw).replaceAll(/\s+/g, " ");
-  const cleaned = Array.from(collapsed).slice(0, MAX_LABEL).join("").trim();
-  return cleaned.length ? cleaned : null;
-}
-
-/** The first candidate that cleans up to something, else "subagent". */
-function labelFrom(...candidates: unknown[]): string {
-  for (const candidate of candidates) {
-    const cleaned = cleanLabel(candidate);
-    if (cleaned) return cleaned;
-  }
-  return "subagent";
 }
 
 // A run's type, kept only when it is a non-empty string: cleanLabel's rules
@@ -96,7 +67,7 @@ function onPreToolUse(runs: SavedSubagent[], event: unknown, now: number): Saved
   if (runs.some((r) => r.id === toolUseId)) return runs;
   const input = field(event, "tool_input");
   const subagentType = field(input, "subagent_type");
-  const label = labelFrom(field(input, "description"), subagentType);
+  const label = labelFrom("subagent", field(input, "description"), subagentType);
   const type = typeOf(subagentType);
   return [...runs, { id: toolUseId, session, label, startedEpoch: now, ...(type ? { type } : {}) }];
 }
@@ -118,7 +89,7 @@ function onSubagentStart(runs: SavedSubagent[], event: unknown, now: number): Sa
   const byType = type ? runs.findIndex((r) => unpaired(r) && r.type === type) : -1;
   const index = byType !== -1 ? byType : runs.findIndex(unpaired);
   if (index === -1) {
-    const label = labelFrom(agentType);
+    const label = labelFrom("subagent", agentType);
     return [...runs, { id: agentId, session, agentId, label, startedEpoch: now, ...(type ? { type } : {}) }];
   }
   return runs.map((r, i) => (i === index ? { ...r, agentId } : r));
