@@ -1,23 +1,27 @@
 // The segmented mode control and the lane and project section headers.
 
 import { glyphColor } from "../../shared/contrast.ts";
-import { dropLane } from "../drop.ts";
+import { dragging, dropLane } from "../drop.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
   chooseMode,
+  emptyLaneNames,
   isCollapsed,
   isProjectCollapsed,
+  isSelected,
   laneCount,
   openProjectWorkspace,
   projectByKey,
   projectCount,
+  selectWorkspace,
   toggleLane,
   toggleProject,
+  wsById,
 } from "../model.ts";
 import { mode, projectsMode } from "../state.ts";
 import { C } from "../theme.ts";
-import { glyphButton, ring } from "./parts.ts";
+import { glyphButton, ring, statusDot, unreadBadge } from "./parts.ts";
 
 function segButton(label: string, icon: string | null, on: () => boolean, set: () => void): View {
   return ZStack({}, [
@@ -88,20 +92,43 @@ function chevron(collapsed: () => boolean): View {
     .frame({ width: 12, height: 16 });
 }
 
-export function laneHeader(laneKey: LaneKey): View {
+// A lane's generated anchor with an agent or unread messages (issue #49): its
+// dot and unread count sit on the header, shaded while it is selected, since
+// it has no card to carry the selection. Its own onTap selects it rather
+// than folding the lane, as the project header's "+" does.
+function anchorStatus(anchorId: string): View {
+  const w = () => wsById(anchorId);
+  return HStack({ spacing: 5 }, [statusDot(w, 7), unreadBadge(w)])
+    .paddingHorizontal(4)
+    .frame({ height: 16 })
+    .cornerRadius(6)
+    .background(() => (isSelected(w()) ? C.anchorSelected : "clear"))
+    .hoverBackground(C.hover)
+    .onTap(() => selectWorkspace(anchorId));
+}
+
+function dropHint(target: () => boolean): View {
+  return Text(() => (target() ? "Drop here" : ""))
+    .font(11)
+    .weight("medium")
+    .color(C.heading)
+    .lineLimit(1);
+}
+
+const laneMarker = (color: string): View =>
+  RoundedRectangle({ cornerRadius: 3 }).fill(color).frame({ width: 9, height: 9 });
+
+export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
   const lane = laneByKey(laneKey);
   const target = () => dropLane() === laneKey;
   return HStack({ spacing: 8 }, [
     chevron(() => isCollapsed(lane)),
-    RoundedRectangle({ cornerRadius: 3 }).fill(lane.color).frame({ width: 9, height: 9 }),
+    laneMarker(lane.color),
     headerName(lane.name, laneKey === "parked" ? C.faint : C.heading),
+    ...(anchorId ? [anchorStatus(anchorId)] : []),
     countPill(() => laneCount(laneKey)),
     Spacer({ minLength: 4 }),
-    Text(() => (target() ? "Drop here" : ""))
-      .font(11)
-      .weight("medium")
-      .color(C.heading)
-      .lineLimit(1),
+    dropHint(target),
   ])
     .paddingHorizontal(8)
     .paddingTop(14)
@@ -112,6 +139,58 @@ export function laneHeader(laneKey: LaneKey): View {
     .frame({ maxWidth: "infinity" })
     .fixed()
     .onTap(() => toggleLane(lane));
+}
+
+// An empty lane (issue #50): a zone row that only opens while a card is
+// dragged, and folds to nothing at rest (the row stays, so the drop index
+// never shifts). The renderer has no dashed stroke, so the open zone is a
+// quiet ring that turns solid ink under the pointer.
+export function dropZone(laneKey: LaneKey): View {
+  const lane = laneByKey(laneKey);
+  const target = () => dropLane() === laneKey;
+  const open = (v: number) => () => (dragging() ? v : 0);
+  const row = HStack({ spacing: 8 }, [
+    RoundedRectangle({ cornerRadius: 3 })
+      .fill(() => (dragging() ? lane.color : "clear"))
+      .frame({ width: open(9), height: open(9) }),
+    Text(() => (dragging() ? lane.name : ""))
+      .font(12.5)
+      .weight("semibold")
+      .color(C.faint)
+      .lineLimit(1)
+      .truncation("tail")
+      .layoutPriority(1),
+    Spacer({ minLength: 0 }),
+    dropHint(target),
+  ])
+    .paddingHorizontal(open(10))
+    .paddingVertical(open(8));
+  const zone = ring(
+    row,
+    () => (target() ? C.zoneLit : dragging() ? C.ground : "clear"),
+    () => (target() ? C.heading : dragging() ? C.zoneEdge : "clear"),
+    open(1),
+    8,
+  );
+  return VStack({ spacing: 0 }, [zone.frame({ maxWidth: "infinity" })])
+    .paddingTop(open(8))
+    .fixed();
+}
+
+// The empty lanes at rest (issue #50): one quiet line, no tap. It folds to
+// nothing while a card is dragged, when the zones open instead.
+export function emptyFold(): View {
+  const rest = (v: number) => () => (dragging() ? 0 : v);
+  return Text(() => (dragging() ? "" : "Empty: " + emptyLaneNames().join(" · ")))
+    .font(11.5)
+    .color(C.faint)
+    .lineLimit(1)
+    .truncation("tail")
+    .paddingHorizontal(8)
+    .paddingTop(rest(14))
+    .paddingBottom(rest(5))
+    .frame({ maxWidth: "infinity", alignment: "leading" })
+    .fixed();
 }
 
 export function projectHeader(k: string): View {

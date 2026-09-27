@@ -49,13 +49,15 @@ export const groupForLane = (lane: Lane): WorkspaceGroup | null =>
 // group made from one existing tab), and that one belongs in its lane, its
 // count and Needs you like any other card.
 //
-// The renderer's data has no "generated" flag for a workspace (issue #7), so
-// this is a heuristic pending one: a generated anchor's title always matches
-// its group's name and it carries no agents, so anything else showing under
-// that title, or any agents at all, means it is a real workspace instead.
+// cmux's own group list says which anchors it generated, but the renderer's
+// data has no such flag (issue #7), so this is a heuristic pending one: a
+// generated anchor's title always matches its group's name, so an anchor
+// under that title is the placeholder even with agents running in it (they
+// show on the lane header instead). It gets two cases wrong: a real
+// workspace Jon titles exactly after its lane hides as the placeholder, and
+// a placeholder he renames shows as a card.
 function isGeneratedAnchor(g: WorkspaceGroup, w: Workspace | undefined): boolean {
   if (!w) return true;
-  if ((w.agents ?? []).length > 0) return false;
   return (w.title ?? "").trim().toLowerCase() === g.name.trim().toLowerCase();
 }
 
@@ -64,11 +66,18 @@ function isGeneratedAnchor(g: WorkspaceGroup, w: Workspace | undefined): boolean
 export function laneAnchorIds(): Set<string> {
   const out = new Set<string>();
   for (const lane of LANES) {
-    const g = groupForLane(lane);
-    if (g?.anchorId && isGeneratedAnchor(g, wsById(g.anchorId))) out.add(g.anchorId);
-    else if (!g && awaitingLane(lane.key)) hideNewAnchor(lane, out);
+    const id = generatedAnchorId(lane);
+    if (id) out.add(id);
+    else if (!groupForLane(lane) && awaitingLane(lane.key)) hideNewAnchor(lane, out);
   }
   return out;
+}
+
+// The lane group's generated anchor, if it has one. A workspace not in the
+// data yet counts, so it never flashes up as a card when it arrives.
+function generatedAnchorId(lane: Lane): string | null {
+  const g = groupForLane(lane);
+  return g?.anchorId && isGeneratedAnchor(g, wsById(g.anchorId)) ? g.anchorId : null;
 }
 
 // cmux can publish a new group's anchor a frame before the group itself, so
@@ -121,8 +130,10 @@ export function laneOf(w: Workspace): LaneKey {
 // Move a workspace into a lane (no reorder). Used by the context menu and drops.
 // Moving a card back to where cmux still has it cancels the pending move, so
 // a group that arrives later never files it against the last choice.
+// A lane's generated anchor IS its group, so it never moves (Needs you still
+// lists one, with the card menu).
 export function moveToLane(w: Workspace | undefined, laneKey: LaneKey): void {
-  if (!w) return;
+  if (!w || laneAnchorIds().has(w.id)) return;
   if (actualLaneOf(w) === laneKey) {
     if (laneOverride.delete(w.id)) bump();
     return;
@@ -308,22 +319,75 @@ export function chooseMode(m: ViewMode): void {
 
 // --- All mode: one flat list of lane headers and cards --------------------------------
 
+// A header's key carries the anchor it shows (issue #49), and an empty lane
+// is a zone or part of the folded line (issue #50), since a row's kind is
+// fixed by its key.
 export type LaneEntry =
-  | { kind: "header"; id: string; lane: LaneKey }
+  | { kind: "header"; id: string; lane: LaneKey; anchorId: string | null }
+  | { kind: "zone"; id: string; lane: LaneKey }
+  | { kind: "fold"; id: string }
   | { kind: "ws"; id: string; wsId: string; lane: LaneKey };
 
-const laneEntries = computed(() => {
+/** A lane's generated anchor when it has an agent or unread messages, so its header shows them. */
+function headerAnchorId(lane: Lane): string | null {
+  const id = generatedAnchorId(lane);
+  const w = id ? wsById(id) : undefined;
+  return w && ((w.agents ?? []).length > 0 || (w.unread ?? 0) > 0) ? w.id : null;
+}
+
+interface LaneSection {
+  lane: Lane;
+  rows: Workspace[];
+  anchorId: string | null;
+}
+
+// Nothing to show: no cards, and no anchor status on the header.
+const isEmpty = (s: LaneSection): boolean => s.rows.length === 0 && !s.anchorId;
+
+const laneSections = computed((): LaneSection[] => {
   const cards = cardWorkspaces();
+  return LANES.map((lane) => ({
+    lane,
+    rows: cards.filter((w) => laneOf(w) === lane.key),
+    anchorId: headerAnchorId(lane),
+  }));
+});
+
+function sectionEntries(s: LaneSection): LaneEntry[] {
+  const key = s.lane.key;
+  const header: LaneEntry = {
+    kind: "header",
+    id: s.anchorId ? `h:${key}:${s.anchorId}` : `h:${key}`,
+    lane: key,
+    anchorId: s.anchorId,
+  };
+  if (isCollapsed(s.lane)) return [header];
+  return [header, ...s.rows.map((w): LaneEntry => ({ kind: "ws", id: w.id + "@" + key, wsId: w.id, lane: key }))];
+}
+
+// An empty lane is always a zone row in its own place, and the folded line
+// follows the lanes; views/headers.ts shows one or the other by drag(). The
+// rows never change as a drag starts or ends, so the renderer's drop index
+// always counts the same rows resolveDrop does.
+const laneEntries = computed(() => {
   const entries: LaneEntry[] = [];
-  for (const lane of LANES) {
-    entries.push({ kind: "header", id: "h:" + lane.key, lane: lane.key });
-    if (isCollapsed(lane)) continue;
-    for (const w of cards) {
-      if (laneOf(w) === lane.key) entries.push({ kind: "ws", id: w.id + "@" + lane.key, wsId: w.id, lane: lane.key });
+  let folded = false;
+  for (const s of laneSections()) {
+    if (!isEmpty(s)) entries.push(...sectionEntries(s));
+    else {
+      entries.push({ kind: "zone", id: "z:" + s.lane.key, lane: s.lane.key });
+      folded = true;
     }
   }
+  if (folded) entries.push({ kind: "fold", id: "f:empty" });
   return entries;
 });
+
+/** The empty lanes' names, in lane order, for the folded line. */
+export const emptyLaneNames = (): string[] =>
+  laneSections()
+    .filter(isEmpty)
+    .map((s) => s.lane.name);
 
 // The lanes' Reorderable goes empty in Projects mode, so a drag there can
 // never resolve to a lane move.
@@ -512,9 +576,12 @@ export const projectEntries = computed(() => {
 
 // --- Needs you ---------------------------------------------------------------------------
 
-/** Workspaces waiting on Jon, longest-waiting first. */
+/**
+ * Workspaces waiting on Jon, longest-waiting first. A lane's generated
+ * anchor counts too: it is off the cards, but an agent in it can still ask.
+ */
 export const needsList = computed(() =>
-  cardWorkspaces()
+  allWorkspaces()
     .filter((w) => statusOf(w) === "needs_input")
     .sort((a, b) => sinceOf(a) - sinceOf(b)),
 );

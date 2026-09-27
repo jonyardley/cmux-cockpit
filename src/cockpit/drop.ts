@@ -9,6 +9,7 @@ import {
   flatEntries,
   groupForLane,
   groups,
+  type LaneEntry,
   laneAnchorIds,
   laneOf,
   moveToLane,
@@ -25,13 +26,24 @@ export interface DropTarget {
   prevRef: string | null;
 }
 
+// The lane of the nearest row above the slot that belongs to one (the
+// folded line holds several lanes, so it is skipped).
+function laneAbove(entries: LaneEntry[], index: number): LaneKey {
+  for (let i = index - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (e && e.kind !== "fold") return e.lane;
+  }
+  return FIRST_LANE;
+}
+
 // `index` is the dragged row's slot in the flat list with the row removed.
-// The lane is whatever the row above the slot belongs to (a header counts,
-// so dropping just under a collapsed lane's header files the card there).
+// The lane is whatever the row above the slot belongs to (a header or an
+// empty lane's zone counts, so dropping just under one files the card
+// there).
 export function resolveDrop(key: string, index: number): DropTarget {
   const entries = flatEntries().filter((e) => e.id !== key);
   const prev = index > 0 ? entries[index - 1] : undefined;
-  const laneKey = prev ? prev.lane : FIRST_LANE;
+  const laneKey = laneAbove(entries, index);
   const next = entries[index];
   const nextRef = next?.kind === "ws" && next.lane === laneKey ? next.wsId : null;
   const prevRef = prev?.kind === "ws" ? prev.wsId : null;
@@ -95,7 +107,10 @@ export function isForeignAnchor(wsId: string): boolean {
   return groups().some((g) => g.anchorId === wsId && !lanes.has(wsId));
 }
 
-/** The lane the current drag would drop into, for the header's "Drop here". */
+/** True while a card is being dragged: empty lanes open as zones. */
+export const dragging = (): boolean => drag() !== null;
+
+/** The lane the current drag would drop into, for a header's "Drop here" and a lit zone. */
 export const dropLane = (): LaneKey | null => {
   const d = drag();
   if (!d?.id) return null;
