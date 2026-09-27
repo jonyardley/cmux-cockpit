@@ -1,9 +1,8 @@
 // Small pieces shared by the agents panel's sections.
 
-import { glyphColor } from "../../shared/contrast.ts";
 import type { ChipColors } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
-import { haloDot } from "../../shared/ui.ts";
+import { haloDot, projectBadge } from "../../shared/ui.ts";
 import { T } from "../theme.ts";
 
 // Edge as a filled ring: the edge colour fills an outer rounded box and the
@@ -96,14 +95,7 @@ export function idleRing(): View {
 
 // Reactive, so a row whose key outlives its project (a Made here row, keyed
 // by link, whose workspace loads late or closes) still follows it.
-export function glyph(p: () => Project): View {
-  return ZStack({}, [
-    RoundedRectangle({ cornerRadius: 5 }).fill(() => p().color),
-    Image(() => p().icon)
-      .font(9)
-      .color(() => glyphColor(p().color, T.text)),
-  ]).frame({ width: 18, height: 18 });
-}
+export const glyph = (p: () => Project): View => projectBadge(p, 18, 9, T.text);
 
 export function chip(label: () => string, colors: () => ChipColors): View {
   return ring(

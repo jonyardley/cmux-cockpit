@@ -1,5 +1,8 @@
 // View helpers shared by both sidebars.
 
+import { glyphColor } from "./contrast.ts";
+import type { Project } from "./projects.ts";
+
 /**
  * Shows `view` only while `pred()` is true (a ForEach over zero or one item).
  * A layoutPriority set inside `view` does not reach the parent stack, so set it
@@ -38,4 +41,25 @@ export function haloColor(status: string | undefined, colors: Record<HaloStatus,
 export function haloDot(dot: View, halo: Reactive<string>, size: number): View {
   const outer = haloSize(size);
   return ZStack({}, [Circle({ size: outer }).fill(halo), dot]).frame({ width: outer, height: outer });
+}
+
+/**
+ * A project's badge: its icon on a rounded square of its colour, the glyph
+ * inked light or dark for contrast. `ink` is the caller's dark text token.
+ * `p` is a getter so a caller whose row outlives its project can follow it.
+ */
+export function projectBadge(
+  p: () => Project,
+  size: number,
+  font: number,
+  ink: string,
+  weight: Weight = "regular",
+): View {
+  return ZStack({}, [
+    RoundedRectangle({ cornerRadius: 5 }).fill(() => p().color),
+    Image(() => p().icon)
+      .font(font)
+      .weight(weight)
+      .color(() => glyphColor(p().color, ink)),
+  ]).frame({ width: size, height: size });
 }
