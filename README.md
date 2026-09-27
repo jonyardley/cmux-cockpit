@@ -43,10 +43,9 @@ and needs nothing installed or linked. Back up any existing
   in the Projects view, opening a new workspace there. Projects with no
   sessions fold into one "Quiet" line of icons at the bottom; tapping an
   icon does the same as "+", and one without a `root` sits dimmed with no
-  tap. A card's menu can
-  also make its folder a project ("New project from this folder"), then
-  step its colour and icon or remove it; those live in `config/state.json`
-  and are merged after the file's projects at build.
+  tap. A card's menu can also make its folder a project ("New project from
+  this folder"), then step its colour and icon or remove it; those live in
+  `config/state.json` and are merged after the file's projects at build.
 
 ## Setup
 

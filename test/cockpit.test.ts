@@ -567,9 +567,29 @@ describe("projects mode", () => {
   it("labels a quiet icon by what a tap does, or why it does nothing", () => {
     // The example table gives App One a root; App Two has none.
     assert.equal(model.quietLabel("/dev/app-one"), "New session in App One");
-    assert.equal(model.quietLabel("/dev/app-two"), "App Two (no folder)");
+    assert.equal(model.quietLabel("/dev/app-two"), "App Two has no folder to open");
     model.openProjectWorkspace("/dev/app-two");
     assert.deepEqual(r.calls, []);
+    model.openProjectWorkspace("/dev/app-one");
+    assert.deepEqual(r.calls, [{ method: "workspace.create", params: { cwd: "~/dev/app-one", focus: true } }]);
+  });
+
+  it("unfolds a folded quiet project when a session opens there, so the new card shows", () => {
+    state.setMode("projects");
+    model.toggleProject("/dev/app-one");
+    assert.equal(model.isProjectCollapsed("/dev/app-one"), true);
+    model.openProjectWorkspace("/dev/app-one");
+    assert.equal(model.isProjectCollapsed("/dev/app-one"), false);
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    a.directory = "/Users/coder/dev/app-one";
+    const ids = model.projectEntries().map((e) => e.id);
+    assert.equal(ids[ids.indexOf("p:/dev/app-one") + 1], "a@p");
+  });
+
+  it("splits the quiet icons into rows, since the renderer cannot wrap", () => {
+    state.setMode("projects");
+    assert.deepEqual(model.quietRows(), [{ id: "q0", keys: ["/dev/app-one", "/dev/app-two", "/dev/app-three"] }]);
   });
 
   it("never shows Other as a header when nothing falls into it", () => {
