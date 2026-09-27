@@ -37,13 +37,16 @@ const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open",
   },
   ownPrs: {
     // Also w1's PR, so the list shows it once, under the workspace's title.
-    [saved.url]: { ...saved, title: "Own copy of 7" },
+    [saved.url]: { number: 7, url: saved.url, status: "open", branch: "feat", title: "Own copy of 7", repo: "/r" },
+    // Numbered above the workspace's PR, yet listed after it.
     "https://github.com/o/r/pull/42": {
       number: 42,
       url: "https://github.com/o/r/pull/42",
       status: "open",
       branch: "closed-ws",
+      draft: true,
       title: "Fix the hook",
+      repo: "/r",
     },
   },
 };
@@ -81,24 +84,30 @@ describe("prsOf", () => {
 });
 
 describe("the agents panel's Pull requests list", () => {
-  it("lists the saved PR, then Jon's own open PRs no workspace holds, once each", () => {
+  it("lists workspace PRs first, then Jon's own open PRs no workspace holds, once each", () => {
     r.data.workspaces = [ws("w1", { title: "Workspace", branch: "feat" })];
     r.data.epoch++;
     assert.deepEqual(
       agents.prs().map((e) => [e.pr.number, e.title]),
       [
-        [42, "Fix the hook"],
         [7, "Workspace"],
+        [42, "Fix the hook"],
       ],
     );
   });
 
-  it("keeps an own PR's title off the PR itself, so the row reads like any other", () => {
+  it("gives an own PR's row the PR fields alone, with its draft flag", () => {
     r.data.workspaces = [];
     r.data.epoch++;
     const own = agents.prs().find((e) => e.pr.number === 42);
     assert.equal(own?.title, "Fix the hook");
-    assert.equal(own !== undefined && "title" in own.pr, false);
+    assert.deepEqual(own?.pr, {
+      number: 42,
+      url: "https://github.com/o/r/pull/42",
+      status: "open",
+      branch: "closed-ws",
+      draft: true,
+    });
   });
 });
 

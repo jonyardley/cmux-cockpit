@@ -131,13 +131,16 @@ A PR is found through a workspace's branch, so closing the workspace hid a
 PR still waiting on review. Each poll therefore also asks, once per repo any
 workspace sits in (git's common dir, so every worktree of a repo counts
 once), for `gh pr list --author @me --state open`, and saves the result in
-`ownPrs`: PR url to the same entry as in `prs` plus a `title` (control
-characters dropped, cut to 120 characters, the branch when there is none).
+`ownPrs`: PR url to its number, url, branch, draft flag, `title` (control
+characters become spaces, cut to 120 characters, the branch when there is
+none) and `repo`, the common dir it was found in. Checks and the merge
+verdict are left out, so CI on a PR no workspace holds never rewrites the
+file or rebuilds. A fork's PR counts here, unlike for a workspace's branch.
 The agents panel's Pull requests list shows these after the workspaces'
-own PRs, skipping any a workspace already shows. If any repo's lookup
-fails, the previous entries are kept under the new ones, since which repo
-a saved PR came from is not recorded; the next clean poll drops whatever
-has since merged or closed.
+own PRs, skipping any a workspace already shows. A repo whose lookup fails
+keeps its previous entries, and only its own; a repo no workspace sits in
+any more drops out. The poll writes `prs`, `ownPrs` and the subagent prune
+in one locked pass.
 
 `applySet` refuses `prs` and `ownPrs`, so no URL can plant a link the
 sidebar would open, and `validateState` keeps only

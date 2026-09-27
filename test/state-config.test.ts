@@ -30,6 +30,7 @@ test("validateState reads a good file unchanged", () => {
         status: "open",
         branch: "mine",
         title: "Mine",
+        repo: "/r/.git",
       },
     },
     subagents: {
@@ -139,7 +140,15 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
   const set = applySet(start, "projectOverride.w1", '"alpha"');
   assert.deepEqual(set, {
     ok: true,
-    state: { dismissed: {}, projectOverride: { w1: "alpha" }, projects: {}, prs: {}, ownPrs: {}, subagents: {}, ui: {} },
+    state: {
+      dismissed: {},
+      projectOverride: { w1: "alpha" },
+      projects: {},
+      prs: {},
+      ownPrs: {},
+      subagents: {},
+      ui: {},
+    },
   });
   assert.deepEqual(start, emptyState());
   if (!set.ok) return;

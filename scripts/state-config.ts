@@ -73,9 +73,21 @@ export interface SavedPr {
   checks?: SavedCheck[];
 }
 
-/** One of Jon's own open PRs: a saved PR plus its title, since no workspace names it. */
-export interface SavedOwnPr extends SavedPr {
+/**
+ * One of Jon's own open PRs. Only what the Pull requests list shows is
+ * kept (no checks or merge verdict), so CI on a PR no workspace holds never
+ * rewrites the file or rebuilds the sidebars.
+ */
+export interface SavedOwnPr {
+  number: number;
+  url: string;
+  status: "open";
+  branch: string;
+  draft?: true;
+  /** Its title, since no workspace names it. */
   title: string;
+  /** The repo it was found in (git's common dir), so a failed lookup keeps only that repo's entries. */
+  repo: string;
 }
 
 /**
@@ -253,10 +265,22 @@ const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
 /** Whether a character is one a label keeps (no control characters). */
 export const isLabelChar = isCleanChar;
 
+const isRepoDir = (v: unknown): v is string =>
+  typeof v === "string" && v.startsWith("/") && v.length <= MAX_PROJECT_KEY;
+
 function savedOwnPr(v: unknown): SavedOwnPr | null {
   const pr = savedPr(v);
-  if (!pr || !isRecord(v) || !isLabel(v.title)) return null;
-  return { ...pr, title: v.title };
+  if (pr?.status !== "open" || !isRecord(v) || !isLabel(v.title) || !isRepoDir(v.repo)) return null;
+  const own: SavedOwnPr = {
+    number: pr.number,
+    url: pr.url,
+    status: "open",
+    branch: pr.branch,
+    title: v.title,
+    repo: v.repo,
+  };
+  if (pr.draft) own.draft = true;
+  return own;
 }
 
 const isOptionalId = (v: unknown): boolean => v === undefined || (typeof v === "string" && isId(v));

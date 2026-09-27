@@ -377,6 +377,8 @@ export function prChipText(pr: PullRequest): string {
 
 const PR_RANK: Record<PrStatus, number> = { open: 0, merged: 1, closed: 2 };
 const prRank = (pr: PullRequest): number => (pr.status ? PR_RANK[pr.status] : 3);
+const byRankThenNewest = (x: PrEntry, y: PrEntry): number =>
+  prRank(x.pr) - prRank(y.pr) || (y.pr.number ?? 0) - (x.pr.number ?? 0);
 
 // The workspace's title, else a real label (it is often just "PR"), else the branch.
 function prTitle(w: Workspace, pr: PullRequest): string {
@@ -384,9 +386,10 @@ function prTitle(w: Workspace, pr: PullRequest): string {
   return displayTitle(w) || (/^pr$/i.test(label) ? "" : label) || pr.branch || "";
 }
 
-// Every PR across workspaces, then Jon's own open PRs no workspace holds,
-// de-duplicated by url, open first then merged then closed, newest first
-// within each.
+// Every PR across workspaces, open first then merged then closed, newest
+// first within each; then Jon's own open PRs no workspace holds, newest
+// first. Workspace PRs rank first, so a long list of his own PRs in a busy
+// repo can never push one out of the cut to 30.
 export const prs = computed(() => {
   const seen = new Set<string>();
   const out: PrEntry[] = [];
@@ -397,11 +400,16 @@ export const prs = computed(() => {
       out.push({ key: pr.url, pr, title: prTitle(w, pr) });
     }
   }
-  for (const { title, ...pr } of savedOwnPrs()) {
-    if (seen.has(pr.url)) continue;
-    seen.add(pr.url);
-    out.push({ key: pr.url, pr, title });
+  out.sort(byRankThenNewest);
+  const own: PrEntry[] = [];
+  for (const o of savedOwnPrs()) {
+    if (seen.has(o.url)) continue;
+    seen.add(o.url);
+    const pr: PullRequest = { number: o.number, url: o.url, status: o.status, branch: o.branch };
+    if (o.draft) pr.draft = true;
+    own.push({ key: o.url, pr, title: o.title });
   }
-  out.sort((x, y) => prRank(x.pr) - prRank(y.pr) || (y.pr.number ?? 0) - (x.pr.number ?? 0));
+  own.sort(byRankThenNewest);
+  out.push(...own);
   return markLast(out.slice(0, 30));
 });

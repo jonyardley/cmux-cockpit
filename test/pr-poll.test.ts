@@ -23,7 +23,7 @@ import {
   pickPr,
   writePollState,
 } from "../scripts/pr-poll.ts";
-import { applySet, emptyState, type SavedPr, validateState } from "../scripts/state-config.ts";
+import { applySet, emptyState, type SavedOwnPr, type SavedPr, validateState } from "../scripts/state-config.ts";
 import { writePrs, writeSubagents } from "../scripts/state-url.ts";
 
 const url = (n: number) => `https://github.com/o/r/pull/${n}`;
@@ -268,99 +268,142 @@ describe("findPrs", () => {
   });
 });
 
+const own = (n: number, extra: Partial<SavedOwnPr> = {}): SavedOwnPr => ({
+  number: n,
+  url: url(n),
+  status: "open",
+  branch: "feat",
+  title: "PR " + n,
+  repo: "/a/.git",
+  ...extra,
+});
+
 describe("ownPrsFrom", () => {
-  const own = (n: number, extra: Record<string, unknown> = {}) => ({
+  const listed = (n: number, extra: Record<string, unknown> = {}) => ({
     ...ghPr(n, "OPEN", "t"),
     title: "PR " + n,
     ...extra,
   });
 
-  it("keeps open PRs keyed by url, with title, draft, verdict and checks", () => {
+  it("keeps open PRs keyed by url, with title, draft and repo, and nothing CI says", () => {
     const rollup = [{ __typename: "CheckRun", name: "ci", status: "COMPLETED", conclusion: "SUCCESS" }];
-    const text = gh([own(1, { isDraft: true }), own(2, { mergeStateStatus: "CLEAN", statusCheckRollup: rollup })]);
-    assert.deepEqual(ownPrsFrom(text), {
-      [url(1)]: { ...pr(1, { draft: true }), title: "PR 1" },
-      [url(2)]: { ...pr(2, { mergeable: true, checks: [{ name: "ci", state: "pass" }] }), title: "PR 2" },
-    });
+    const text = gh([
+      listed(1, { isDraft: true }),
+      listed(2, { mergeStateStatus: "CLEAN", statusCheckRollup: rollup }),
+    ]);
+    assert.deepEqual(ownPrsFrom(text, "/a/.git"), { [url(1)]: own(1, { draft: true }), [url(2)]: own(2) });
   });
 
-  it("drops closed, merged, fork and malformed entries", () => {
-    const text = gh([own(1, { state: "MERGED" }), own(2, { isCrossRepository: true }), { number: 3 }, "x", own(4)]);
-    assert.deepEqual(Object.keys(ownPrsFrom(text) ?? {}), [url(4)]);
+  it("keeps a fork's PR, since it is still Jon's", () => {
+    assert.deepEqual(Object.keys(ownPrsFrom(gh([listed(1, { isCrossRepository: true })]), "/a/.git") ?? {}), [url(1)]);
+  });
+
+  it("drops closed, merged and malformed entries", () => {
+    const text = gh([listed(1, { state: "MERGED" }), listed(2, { state: "CLOSED" }), { number: 3 }, "x", listed(4)]);
+    assert.deepEqual(Object.keys(ownPrsFrom(text, "/a/.git") ?? {}), [url(4)]);
   });
 
   it("titles a PR with no readable title by its branch", () => {
-    assert.equal(ownPrsFrom(gh([own(1, { title: " \n " })]))?.[url(1)]?.title, "feat");
-    assert.equal(ownPrsFrom(gh([own(1, { title: 5 })]))?.[url(1)]?.title, "feat");
+    assert.equal(ownPrsFrom(gh([listed(1, { title: " \n " })]), "/r")?.[url(1)]?.title, "feat");
+    assert.equal(ownPrsFrom(gh([listed(1, { title: 5 })]), "/r")?.[url(1)]?.title, "feat");
   });
 
   it("is undefined when gh's output cannot be read", () => {
-    assert.equal(ownPrsFrom("not json"), undefined);
-    assert.equal(ownPrsFrom("{}"), undefined);
+    assert.equal(ownPrsFrom("not json", "/r"), undefined);
+    assert.equal(ownPrsFrom("{}", "/r"), undefined);
+  });
+});
+
+describe("pickPr and forks", () => {
+  it("never picks a fork's PR for a workspace's branch", () => {
+    assert.equal(pickPr(gh([{ ...ghPr(1, "OPEN", "t"), isCrossRepository: true }]), "feat"), null);
   });
 });
 
 describe("cleanTitle", () => {
-  it("turns control characters and runs of space into one space, trimmed", () => {
-    assert.equal(cleanTitle("  Fix\tthe\n\nhook\u007f "), "Fix the hook");
+  it("turns control characters, C1 ones too, and runs of space into one space, trimmed", () => {
+    assert.equal(cleanTitle("  Fix\tthe\n\nhook\u007f\u0085now "), "Fix the hook now");
   });
 
-  it("cuts to the label length", () => {
+  it("cuts to the label length in whole characters, never half an emoji", () => {
     assert.equal(cleanTitle("x".repeat(500)).length, 120);
+    const cut = cleanTitle("x".repeat(119) + "😀tail");
+    assert.equal(cut, "x".repeat(119) + "😀");
   });
 });
 
 describe("findOwnPrs", () => {
   const ws = (id: string, directory: string) => ({ id, directory });
-  const own = (n: number) => ({ ...pr(n), title: "PR " + n });
+  const repoByDir = (d: string) => (d.startsWith("/a") ? "/a/.git" : "/b/.git");
+  const b = (n: number) => own(n, { repo: "/b/.git" });
 
-  it("asks once per repo, however many workspaces or worktrees share it", () => {
-    const asked: string[] = [];
+  it("asks git once per directory and gh once per repo", () => {
+    const gitAsked: string[] = [];
+    const ghAsked: string[] = [];
     const look: OwnLookups = {
-      repoOf: (d) => (d.startsWith("/a") ? "/a/.git" : "/b/.git"),
-      ownPrs: (d) => {
-        asked.push(d);
-        return d.startsWith("/a") ? { [url(1)]: own(1) } : { [url(2)]: own(2) };
+      repoOf: (d) => {
+        gitAsked.push(d);
+        return repoByDir(d);
+      },
+      ownPrs: (d, repo) => {
+        ghAsked.push(d);
+        return repo === "/a/.git" ? { [url(1)]: own(1) } : { [url(2)]: b(2) };
       },
     };
-    const found = findOwnPrs([ws("1", "/a"), ws("2", "/a-wt"), ws("3", "/b")], { [url(9)]: own(9) }, look);
-    assert.deepEqual(found, { [url(1)]: own(1), [url(2)]: own(2) });
-    assert.deepEqual(asked, ["/a", "/b"]);
+    const found = findOwnPrs(
+      [ws("1", "/a"), ws("2", "/a"), ws("3", "/a-wt"), ws("4", "/b")],
+      { [url(9)]: own(9) },
+      look,
+    );
+    assert.deepEqual(found, { [url(1)]: own(1), [url(2)]: b(2) });
+    assert.deepEqual(gitAsked, ["/a", "/a-wt", "/b"]);
+    assert.deepEqual(ghAsked, ["/a", "/b"]);
   });
 
-  it("skips a directory that is not a repo", () => {
+  it("drops everything when no workspace sits in a repo", () => {
     const look: OwnLookups = { repoOf: () => null, ownPrs: () => ({ [url(1)]: own(1) }) };
     assert.deepEqual(findOwnPrs([ws("1", "/x")], { [url(9)]: own(9) }, look), {});
   });
 
-  it("keeps the previous entries under the new ones when gh or git failed", () => {
-    const previous = { [url(1)]: own(1), [url(9)]: own(9) };
-    const fresh = { ...own(1), title: "New" };
-    const ghFails: OwnLookups = {
-      repoOf: (d) => d,
-      ownPrs: (d) => (d === "/a" ? { [url(1)]: fresh } : undefined),
+  it("keeps a failed repo's previous entries, and only that repo's", () => {
+    const previous = { [url(1)]: own(1), [url(8)]: b(8), [url(9)]: own(9) };
+    const look: OwnLookups = {
+      repoOf: repoByDir,
+      ownPrs: (_d, repo) => (repo === "/a/.git" ? { [url(1)]: own(1, { title: "New" }) } : undefined),
     };
-    assert.deepEqual(findOwnPrs([ws("1", "/a"), ws("2", "/b")], previous, ghFails), {
-      [url(1)]: fresh,
-      [url(9)]: own(9),
+    assert.deepEqual(findOwnPrs([ws("1", "/a"), ws("2", "/b")], previous, look), {
+      [url(8)]: b(8),
+      [url(1)]: own(1, { title: "New" }),
     });
-    const gitFails: OwnLookups = { repoOf: () => undefined, ownPrs: () => ({}) };
-    assert.deepEqual(findOwnPrs([ws("1", "/a")], previous, gitFails), previous);
+  });
+
+  it("drops a repo no workspace sits in any more, even when another repo failed", () => {
+    const previous = { [url(8)]: b(8) };
+    const look: OwnLookups = { repoOf: () => "/a/.git", ownPrs: () => undefined };
+    assert.deepEqual(findOwnPrs([ws("1", "/a")], previous, look), {});
+  });
+
+  it("keeps entries from repos not freshly asked when git could not name a directory's repo", () => {
+    const previous = { [url(1)]: own(1), [url(8)]: b(8) };
+    const look: OwnLookups = {
+      repoOf: (d) => (d === "/a" ? "/a/.git" : undefined),
+      ownPrs: () => ({}),
+    };
+    assert.deepEqual(findOwnPrs([ws("1", "/a"), ws("2", "/b")], previous, look), { [url(8)]: b(8) });
   });
 });
 
 describe("the ownPrs map in state.json", () => {
-  const own = (n: number) => ({ ...pr(n), title: "PR " + n });
-
-  it("keeps a valid entry keyed by its url, and drops bad keys, titles and PRs", () => {
+  it("keeps a valid entry keyed by its url, and drops bad keys, titles, repos and statuses", () => {
     const raw = {
       ownPrs: {
-        [url(1)]: own(1),
+        [url(1)]: { ...own(1), checks: [{ name: "ci", state: "pass" }], mergeable: true },
         notAUrl: own(2),
-        [url(3)]: { ...own(3), title: "" },
-        [url(4)]: { ...own(4), title: "a\nb" },
-        [url(5)]: { ...own(5), status: "draft" },
+        [url(3)]: own(3, { title: "" }),
+        [url(4)]: own(4, { title: "a\nb" }),
+        [url(5)]: { ...own(5), status: "merged" },
         [url(6)]: pr(6),
+        [url(7)]: own(7, { repo: "relative" }),
       },
     };
     assert.deepEqual(validateState(raw).ownPrs, { [url(1)]: own(1) });
