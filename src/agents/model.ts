@@ -2,12 +2,13 @@
 // question, when its agent needs you), who is working and who is idle, and
 // every PR. Pure reads of `data`, so each is testable alone.
 
-import type { CheckState } from "../../scripts/state-config.ts";
+import type { CheckState, PublishedKind, SavedPublished } from "../../scripts/state-config.ts";
 import { byActivity, sinceOrActivity } from "../shared/activity.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
 import { checksOf, type PrSummary, prSummary, prsOf, savedOwnPrs } from "../shared/prs.ts";
+import { savedPublished } from "../shared/published.ts";
 import { type SavedRun, savedRuns } from "../shared/subagents.ts";
 import { cardMessage, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
@@ -466,3 +467,61 @@ export const prs = computed(() => {
   out.push(...own);
   return markLast(out.slice(0, 30));
 });
+
+// ---- Made here ------------------------------------------------------------------
+// Pages and docs agents published (#52), from the saved state the published
+// hook writes (src/shared/published.ts). Empty without the hook: the
+// section is then its heading and count alone.
+
+export interface MadeEntry {
+  key: string;
+  url: string;
+  title: string;
+  kind: PublishedKind;
+  /** The project of the workspace it was made in; none when that workspace has gone. */
+  project: Project;
+  /** Made in the selected workspace. */
+  here: boolean;
+  epoch: number;
+}
+
+/** The selected workspace's own entries shown at most. */
+const MADE_HERE_OWN = 5;
+/** Other workspaces' entries shown at most, the latest few. */
+const MADE_ELSEWHERE = 3;
+
+function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, selected: string | undefined): MadeEntry {
+  return {
+    key: "m:" + e.url,
+    url: e.url,
+    title: readable(e.title) || "Untitled",
+    kind: e.kind,
+    project: projectOf(dirs.get(e.workspace)),
+    here: e.workspace === selected,
+    epoch: e.epoch,
+  };
+}
+
+/** The Made here rows: the selected workspace's own pages and docs first,
+ * newest first, then the latest few from other workspaces. Anything past
+ * seven days drops off (shared/published-age.ts). */
+export const madeHere = computed((): Last<MadeEntry>[] => {
+  const workspaces = data.workspaces() ?? [];
+  const dirs = new Map(workspaces.map((w) => [w.id, w.directory]));
+  const selected = workspaces.find((w) => w.selected)?.id;
+  const all = savedPublished(nowEpoch()).map((e) => madeEntry(e, dirs, selected));
+  const own = all.filter((e) => e.here).slice(0, MADE_HERE_OWN);
+  const others = all.filter((e) => !e.here).slice(0, MADE_ELSEWHERE);
+  return markLast([...own, ...others]);
+});
+
+const MADE_ICON: Record<PublishedKind, string> = { page: "macwindow", doc: "doc.text" };
+
+/** A Made here row's leading symbol: a window for a page, a sheet for a doc. */
+export const madeIcon = (e: MadeEntry): string => MADE_ICON[e.kind];
+
+/** Other workspaces' titles sit a step back, so this workspace's lead. */
+export const madeTitleColor = (e: MadeEntry): string => (e.here ? T.text : T.secondary);
+
+/** A Made here row's age, "3h" since it was last published. */
+export const madeAge = (e: MadeEntry): string => ageSince(e.epoch);

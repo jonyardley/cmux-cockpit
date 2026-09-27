@@ -14,15 +14,18 @@
 //   Idle           - idle agents in other workspaces, most recent first,
 //                    collapsed behind "N more idle".
 //   Pull requests  - every PR across workspaces, tap opens the url.
+//   Made here      - pages and docs agents published (#52): this workspace's
+//                    first, then the latest few from others; tap opens it.
+//                    Empty until the published hook is installed.
 // An empty section is its heading and count alone, with no empty card.
 //
 //   cmux right-sidebar set custom agents
 
 import { when } from "../shared/ui.ts";
-import { current, idleRows, prs, roster, workingRows } from "./model.ts";
+import { current, idleRows, madeHere, prs, roster, workingRows } from "./model.ts";
 import { currentPanel } from "./views/current.ts";
 import { panel, sectionHeader } from "./views/parts.ts";
-import { prRow, rosterRow } from "./views/rows.ts";
+import { madeRow, prRow, rosterRow } from "./views/rows.ts";
 
 function currentSection(): View {
   return when(
@@ -57,7 +60,7 @@ sidebar(
       listSection("WORKING", "working", () => roster().run.length, workingRows, rosterRow),
       listSection("IDLE", "idle", () => roster().idle.length, idleRows, rosterRow),
       listSection("PULL REQUESTS", "prs", () => prs().length, prs, prRow),
-      // Made here (#52) goes here, under Pull requests, as one more listSection.
+      listSection("MADE HERE", "made", () => madeHere().length, madeHere, madeRow),
       Spacer(),
     ])
       .paddingHorizontal(14)

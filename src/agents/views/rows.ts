@@ -1,4 +1,4 @@
-// Rows for the Working, Idle and Pull requests panels.
+// Rows for the Working, Idle, Pull requests and Made here panels.
 
 import type { Last } from "../../shared/list.ts";
 import { readable } from "../../shared/text.ts";
@@ -6,6 +6,10 @@ import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
 import {
   idleOpen,
+  type MadeEntry,
+  madeAge,
+  madeIcon,
+  madeTitleColor,
   type PrEntry,
   prChipText,
   type RosterEntry,
@@ -165,5 +169,30 @@ export function prRow(e: () => Last<PrEntry>): View {
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => openIfUrl(p().url));
+  return ruled(row, () => e().last);
+}
+
+/** One page or doc an agent published: tap opens it on claude.ai. */
+export function madeRow(e: () => Last<MadeEntry>): View {
+  const row = HStack({ spacing: 10 }, [
+    Image(() => madeIcon(e()))
+      .font(11)
+      .color(T.tertiary)
+      .frame({ width: 16 }),
+    Text(() => e().title)
+      .font(12.5)
+      .color(() => madeTitleColor(e()))
+      .lineLimit(1)
+      .truncation("tail")
+      .layoutPriority(1),
+    Spacer({ minLength: 4 }),
+    meta(() => madeAge(e())),
+    glyph(e().project),
+  ])
+    .paddingHorizontal(12)
+    .paddingVertical(10)
+    .hoverBackground(T.hover)
+    .frame({ maxWidth: "infinity", alignment: "leading" })
+    .onTap(() => openIfUrl(e().url));
   return ruled(row, () => e().last);
 }
