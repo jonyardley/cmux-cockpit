@@ -242,8 +242,47 @@ appearing, one ending, or one being pruned does. Since `SubagentStart`
 fires moments after the `PreToolUse` that starts the same run, and
 independent subagents can start together, a rebuild is coalesced rather
 than fired per event: the first event to find no build already in flight
-takes a lockfile (`config/subagent-build.lock`) and spawns a detached,
+takes a lockfile (`config/hook-build.lock`) and spawns a detached,
 short-sleeping build of its own; every other event in that window finds
 the lock held and does nothing, trusting the build already running to pick
-up its write once it runs. A lock older than a minute is a crashed build's
-and is retaken.
+up its write once it runs. A lock older than two minutes is a crashed
+build's and is retaken. The coalescing lives in `scripts/hook-build.ts`,
+shared with the published-links hook below, so the two never build at once.
+
+## Published pages and docs
+
+cmux knows nothing about the pages and docs agents publish on claude.ai
+(issue #52), so `scripts/hooks/report-published.ts` records them in a sixth
+map, `published`: link to `{"url", "title", "kind", "workspace", "epoch"}`,
+oldest first, where `kind` is `page` (the Artifact tool) or `doc` (Claude
+Docs). Keyed by the link, a republish replaces its entry and moves it last.
+Every write drops entries older than seven days, and `MAX_ENTRIES` caps
+the map. Only a `https://claude.ai/artifact/<id>` or
+`https://claude.ai/code/artifact/<id>` link is kept, since the sidebar will
+open it on a tap, and no URL can set the map. `src/shared/published.ts`
+reads it back, newest first, for the view to come.
+
+It runs as a PostToolUse hook:
+
+```json
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__create",
+        "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }]
+      }
+    ]
+  }
+}
+```
+
+An Artifact call counts only as a page publish (no `action`, or
+`publish`, and not an `asset` upload); a Claude Docs `batch` counts only
+when its `tool_input.container.create` is set, so edits to an existing doc
+are not recorded again. The link is `tool_input.url` when an Artifact
+update names one, else the first claude.ai artifact link in any string
+anywhere in `tool_response`, whose shape is not documented. The title is
+the published HTML file's `<title>`, then `tool_input.title`, then the
+file's name for a page, or `tool_input.container.create.name` for a doc.
+It never fails the hook: a problem is a line on stderr and exit 0.

@@ -39,6 +39,15 @@ test("validateState reads a good file unchanged", () => {
         { id: "toolu_2", session: "s1", label: "Probe the hook", startedEpoch: 150 },
       ],
     },
+    published: {
+      "https://claude.ai/code/artifact/0b3c-9e2a": {
+        url: "https://claude.ai/code/artifact/0b3c-9e2a",
+        title: "Lane board",
+        kind: "page",
+        workspace: "w5",
+        epoch: 200,
+      },
+    },
     ui: { mode: "projects", collapsed: { "lane:parked": 0, "project:/dev/a": 1 } },
   };
   assert.deepEqual(validateState(raw), raw);
@@ -61,6 +70,7 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     prs: {},
     ownPrs: {},
     subagents: {},
+    published: {},
     ui: {},
   });
 });
@@ -89,6 +99,39 @@ test("validateState keeps good subagent runs, drops bad ones and keeps the newes
     subagents.w1?.map((r) => r.id),
     good.slice(2).map((r) => r.id),
   );
+});
+
+test("validateState keeps good published links and drops bad ones", () => {
+  const good = { url: "https://claude.ai/artifact/abc", title: "Plan", kind: "doc", workspace: "w1", epoch: 5 };
+  const bad = [
+    { ...good, url: "https://evil.example/artifact/abc" },
+    { ...good, url: "https://claude.ai/artifact/abc?x=1" },
+    { ...good, title: " padded " },
+    { ...good, title: "" },
+    { ...good, kind: "deck" },
+    { ...good, workspace: "" },
+    { ...good, workspace: 7 },
+    { ...good, epoch: -1 },
+    "not an entry",
+  ];
+  const raw = Object.fromEntries([[good.url, good], ...bad.map((b, i) => [`https://claude.ai/artifact/b${i}`, b])]);
+  assert.deepEqual(validateState({ published: raw }).published, { [good.url]: good });
+  const badKey = validateState({ published: { "https://example.com/x": good } }).published;
+  assert.deepEqual(badKey, {});
+});
+
+test("applySet refuses to set published links from a URL", () => {
+  const value = JSON.stringify({
+    url: "https://claude.ai/artifact/a",
+    title: "T",
+    kind: "page",
+    workspace: "w",
+    epoch: 1,
+  });
+  assert.deepEqual(applySet(emptyState(), "published.https://claude.ai/artifact/a", value), {
+    ok: false,
+    error: "unknown map published",
+  });
 });
 
 test("applySet refuses to set subagents from a URL", () => {
@@ -147,6 +190,7 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
       prs: {},
       ownPrs: {},
       subagents: {},
+      published: {},
       ui: {},
     },
   });

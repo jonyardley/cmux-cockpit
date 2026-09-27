@@ -32,6 +32,13 @@ export interface State {
    * (issue #6). Written only by the hook, never by a URL.
    */
   subagents: Record<string, SavedSubagent[]>;
+  /**
+   * url -> a page or doc an agent published, recorded by
+   * scripts/hooks/report-published.ts (issue #52), oldest first. Keyed by
+   * URL so a republish replaces its entry. Written only by the hook, never
+   * by a URL: a URL could plant a link.
+   */
+  published: Record<string, SavedPublished>;
   /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
   ui: UiState;
 }
@@ -124,6 +131,22 @@ export interface SavedSubagent {
   endedEpoch?: number;
 }
 
+/** What an agent published: a claude.ai page (Artifact) or doc (Claude Docs). */
+export type PublishedKind = "page" | "doc";
+
+/** A page or doc an agent published, as the hook saves it. */
+export interface SavedPublished {
+  /** Its claude.ai artifact link, the map key too. */
+  url: string;
+  /** Its title, at most MAX_LABEL characters. */
+  title: string;
+  kind: PublishedKind;
+  /** The cmux workspace the agent ran in (CMUX_WORKSPACE_ID). */
+  workspace: string;
+  /** Epoch seconds it was last published. */
+  epoch: number;
+}
+
 /** Runs kept per workspace, newest kept, so a busy agent cannot bloat the file. */
 export const MAX_SUBAGENTS = 10;
 /** The longest label kept; the hook cuts a description to this. */
@@ -139,6 +162,7 @@ export const emptyState = (): State => ({
   prs: {},
   ownPrs: {},
   subagents: {},
+  published: {},
   ui: {},
 });
 
@@ -298,6 +322,22 @@ function savedSubagent(v: unknown): SavedSubagent[] {
   return [run];
 }
 
+/**
+ * Only a claude.ai artifact link, the form both an Artifact publish and a
+ * Claude Docs doc get, since the sidebar will open it on a tap.
+ */
+export const isPublishedUrl = (v: unknown): v is string =>
+  typeof v === "string" && v.length <= 512 && /^https:\/\/claude\.ai\/(?:code\/)?artifact\/[\w-]+$/.test(v);
+const KINDS: readonly unknown[] = ["page", "doc"];
+const isKind = (v: unknown): v is PublishedKind => KINDS.includes(v);
+
+function savedPublished(v: unknown): SavedPublished | null {
+  if (!isRecord(v) || !isPublishedUrl(v.url) || !isLabel(v.title) || !isKind(v.kind) || !isEpoch(v.epoch)) return null;
+  const { workspace } = v;
+  if (typeof workspace !== "string" || !isId(workspace)) return null;
+  return { url: v.url, title: v.title, kind: v.kind, workspace, epoch: v.epoch };
+}
+
 function savedSubagents(v: unknown): SavedSubagent[] | null {
   const runs = Array.isArray(v) ? v.flatMap(savedSubagent).slice(-MAX_SUBAGENTS) : [];
   return runs.length ? runs : null;
@@ -323,13 +363,14 @@ export function validateState(raw: unknown): State {
     prs: cleanMap(v.prs, savedPr),
     ownPrs: cleanMap(v.ownPrs, savedOwnPr, isPrUrl),
     subagents: cleanMap(v.subagents, savedSubagents),
+    published: cleanMap(v.published, savedPublished, isPublishedUrl),
     ui: uiState(v.ui),
   };
 }
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-// The maps a URL may set. `prs` and `subagents` are left out on purpose (see State).
+// The maps a URL may set. `prs`, `ownPrs`, `subagents` and `published` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS.
 type MapName = "dismissed" | "projectOverride" | "projects" | "ui";
 const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui"];
