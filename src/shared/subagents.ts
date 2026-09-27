@@ -14,7 +14,18 @@ export interface SavedRun extends SubagentRun {
 
 /** The workspace's saved runs, oldest first; none when it has none. */
 export function savedRuns(wsId: string): SavedRun[] {
-  void wsId;
-  void SAVED_STATE;
-  return [];
+  // A test can seed __STATE__ from before this field existed, so the map
+  // itself may be missing at runtime even though State says it is not.
+  const map = SAVED_STATE.subagents;
+  const list = map && Object.hasOwn(map, wsId) ? map[wsId] : undefined;
+  if (!list) return [];
+  return list.map((s) => ({
+    id: s.id,
+    session: s.session,
+    label: s.label,
+    startedEpoch: s.startedEpoch,
+    running: s.endedEpoch === undefined,
+    // Left out rather than set to undefined: exactOptionalPropertyTypes.
+    ...(s.endedEpoch === undefined ? {} : { endedEpoch: s.endedEpoch }),
+  }));
 }

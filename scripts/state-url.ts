@@ -99,6 +99,28 @@ export function writePrs(path: string, prs: State["prs"]): ApplyResult {
   return readUpdateWrite(path, (before) => ({ ok: true, state: validateState({ ...before, prs: sorted }) }));
 }
 
+/**
+ * Folds `update` over the whole `subagents` map (scripts/hooks/report-subagent.ts),
+ * the same locked read-modify-write step writePrs uses for its map. `update`
+ * gets the current map and returns the next one; keys are sorted before
+ * writing, so touching one workspace never shows as a change to another's
+ * position in the file.
+ */
+export function writeSubagents(
+  path: string,
+  update: (subagents: State["subagents"]) => State["subagents"],
+): ApplyResult {
+  return readUpdateWrite(path, (before) => {
+    const next = update(before.subagents);
+    const sorted = Object.fromEntries(
+      Object.keys(next)
+        .sort()
+        .map((id) => [id, next[id]]),
+    );
+    return { ok: true, state: validateState({ ...before, subagents: sorted }) };
+  });
+}
+
 function readUpdateWrite(path: string, update: (before: State) => SetResult): ApplyResult {
   mkdirSync(dirname(path), { recursive: true });
   return withLock(path, () => {
