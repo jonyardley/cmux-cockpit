@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { applySet, emptyState, MAX_ENTRIES, MAX_LABEL, MAX_SUBAGENTS, validateState } from "../scripts/state-config.ts";
+import {
+  applySet,
+  emptyState,
+  MAX_ENTRIES,
+  MAX_LABEL,
+  MAX_SUBAGENTS,
+  rebuildsOn,
+  validateState,
+} from "../scripts/state-config.ts";
 
 test("validateState reads a good file unchanged", () => {
   const raw = {
@@ -266,8 +274,23 @@ test("validateState keeps a good ui and drops bad modes and flags", () => {
     collapsed: { "lane:main": 1 },
   });
   assert.deepEqual(
-    validateState({ ui: { mode: "grid", collapsed: { a: "1", constructor: 1, [`x${"y".repeat(128)}`]: 1 } } }).ui,
+    validateState({ ui: { mode: "grid", collapsed: { a: "1", constructor: 1, [`project:${"y".repeat(600)}`]: 1 } } })
+      .ui,
     {},
   );
   assert.deepEqual(validateState({ ui: "projects" }).ui, {});
+});
+
+test("a fold on a project with a long match path is kept, not dropped", () => {
+  const key = `project:/users/jon/${"deep/".repeat(40)}`;
+  const set = applySet(emptyState(), "ui.collapsed", JSON.stringify({ [key]: 1 }));
+  assert.ok(set.ok);
+  if (set.ok) assert.deepEqual(set.state.ui.collapsed, { [key]: 1 });
+});
+
+test("rebuildsOn skips the build for the cockpit's own view and folds only", () => {
+  assert.equal(rebuildsOn("ui.mode"), false);
+  assert.equal(rebuildsOn("ui.collapsed"), false);
+  for (const key of ["dismissed.w1", "projectOverride.w1", "projects./dev/a/"])
+    assert.equal(rebuildsOn(key), true, key);
 });

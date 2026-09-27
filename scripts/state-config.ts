@@ -213,12 +213,17 @@ function savedPr(v: unknown): SavedPr | null {
 const VIEW_MODES: readonly unknown[] = ["all", "projects"];
 const isViewMode = (v: unknown): v is ViewMode => VIEW_MODES.includes(v);
 
+// A fold key is "lane:<key>" or "project:<key>", and a project key can be a
+// match path as long as MAX_PROJECT_KEY, so it gets that bound plus room for
+// the prefix rather than isId's.
+const isFoldKey = (v: string): boolean => v.length > 0 && v.length <= MAX_PROJECT_KEY + 16 && !RESERVED.has(v);
+
 // A fold flag per section, bounded like any other map. Empty reads as none,
 // so an empty object is a delete rather than a set.
 function foldFlags(v: unknown): Record<string, number> | null {
   if (!isRecord(v)) return null;
   const kept = Object.entries(v).flatMap(([id, flag]): [string, number][] =>
-    isId(id) && (flag === 0 || flag === 1) ? [[id, flag]] : [],
+    isFoldKey(id) && (flag === 0 || flag === 1) ? [[id, flag]] : [],
   );
   return kept.length ? Object.fromEntries(kept.slice(-MAX_ENTRIES)) : null;
 }
@@ -299,8 +304,10 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       return { ...state, projectOverride: without(state.projectOverride, id) };
     case "projects":
       return { ...state, projects: without(state.projects, id) };
-    case "ui":
-      return { ...state, ui: uiState(Object.fromEntries(Object.entries(state.ui).filter(([k]) => k !== id))) };
+    case "ui": {
+      const { mode, collapsed } = state.ui;
+      return { ...state, ui: id === "mode" ? (collapsed ? { collapsed } : {}) : mode ? { mode } : {} };
+    }
   }
 }
 
@@ -344,6 +351,14 @@ function isKeyFor(map: MapName, id: string): boolean {
   if (map === "ui") return UI_KEYS.includes(id);
   return isId(id);
 }
+
+/**
+ * Whether a set needs a rebuild to show. The sidebar already shows its own
+ * view and folds, and every rebuild bakes in the file as it stands, so a `ui`
+ * set only has to be written: rebuilding on each tap would reload the
+ * sidebar under the tap.
+ */
+export const rebuildsOn = (key: string): boolean => !key.startsWith("ui.");
 
 /**
  * Applies one `set`: `key` is `<map>.<id>`, `value` the JSON for that entry,

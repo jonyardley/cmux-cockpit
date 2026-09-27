@@ -576,6 +576,18 @@ describe("saving the view and folds", () => {
     assert.equal(last[1]["project:/dev/app-two"], 1);
   });
 
+  it("drops folds on projects that are gone, and sorts the rest", () => {
+    state.setCollapsedProjects(["/dev/gone", "/dev/app-two", "/dev/app-one"]);
+    r.opened.length = 0;
+    model.toggleLane(laneByKey("unsorted"));
+    const last = sent().at(-1);
+    assert.ok(Array.isArray(last));
+    const keys = Object.keys(last[1]);
+    assert.equal(keys.includes("project:/dev/gone"), false);
+    assert.deepEqual(keys, [...keys].sort());
+    assert.ok(keys.includes("project:/dev/app-one") && keys.includes("project:/dev/app-two"));
+  });
+
   it("marks a lane that starts folded as touched once it is opened", () => {
     const parked = laneByKey("parked");
     r.opened.length = 0;

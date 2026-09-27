@@ -4,7 +4,7 @@
 // Optimistic overrides flip locally the same frame, then clear once the data
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
-import type { ProjectSpec } from "../../scripts/state-config.ts";
+import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import {
   inAppSpec,
@@ -24,7 +24,6 @@ import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
   bump,
   collapsedProjects,
-  type Mode,
   mode,
   projectsMode,
   savedFolds,
@@ -214,16 +213,19 @@ export function toggleLane(lane: Lane): void {
 }
 
 // Sends every fold at once, so the saved copy never lags a quick second tap.
-// cmux holds a lane group's own fold; the flag only marks it as touched.
+// cmux holds a lane group's own fold; its flag marks it as touched, and only
+// Unsorted's value is read back. Folds on projects that are gone are dropped,
+// and keys are sorted so the same folds always write the same file.
 function saveFolds(): void {
-  const folds: Record<string, number> = {};
-  for (const lane of LANES) if (touchedLanes.has(lane.key)) folds[`lane:${lane.key}`] = isCollapsed(lane) ? 1 : 0;
-  for (const k of collapsedProjects()) folds[`project:${k}`] = 1;
-  persistSet("ui.collapsed", Object.keys(folds).length ? folds : null);
+  const folds: [string, number][] = [];
+  for (const lane of LANES) if (touchedLanes.has(lane.key)) folds.push([`lane:${lane.key}`, isCollapsed(lane) ? 1 : 0]);
+  for (const k of collapsedProjects()) if (isProjectKey(k) || k === projectId(OTHER)) folds.push([`project:${k}`, 1]);
+  folds.sort(([a], [b]) => (a < b ? -1 : 1));
+  persistSet("ui.collapsed", folds.length ? Object.fromEntries(folds) : null);
 }
 
 /** Switches between All and Projects, kept across a reload. */
-export function chooseMode(m: Mode): void {
+export function chooseMode(m: ViewMode): void {
   if (mode() === m) return;
   setMode(m);
   persistSet("ui.mode", m);

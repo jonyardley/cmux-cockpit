@@ -10,8 +10,7 @@ export const savedFolds: Readonly<Record<string, number>> = SAVED_STATE.ui.colla
 const PROJECT_FOLD = "project:";
 
 // View mode: "all" (lanes) or "projects" (cards grouped by project, not lane).
-export type Mode = ViewMode;
-export const [mode, setMode] = signal<Mode>(SAVED_STATE.ui.mode ?? "all");
+export const [mode, setMode] = signal<ViewMode>(SAVED_STATE.ui.mode ?? "all");
 export const projectsMode = () => mode() === "projects";
 
 export const [unsortedCollapsed, setUnsortedCollapsed] = signal(savedFolds["lane:unsorted"] === 1);

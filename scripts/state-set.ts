@@ -1,7 +1,8 @@
 // The URL handler entry (docs/state-loop.md):
 //   node scripts/state-set.ts '<url>'
 // Parses the URL, applies the set to config/state.json, and rebuilds the
-// sidebars so the change takes effect. Any web page can open this URL, so
+// sidebars so the change takes effect (except a `ui` set, which the sidebar
+// already shows; see rebuildsOn). Any web page can open this URL, so
 // this stays a thin wrapper: the pure parsing and file work live in
 // state-url.ts, and URL content never reaches a shell (spawnSync with an
 // argument array, no shell: true). The log names the key JSON-quoted, so a
@@ -9,6 +10,7 @@
 
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { rebuildsOn } from "./state-config.ts";
 import { logLine as log } from "./state-log.ts";
 import { parseSetUrl, readApplyWrite } from "./state-url.ts";
 
@@ -40,6 +42,11 @@ function main(): number {
   }
   if (!applied.changed) {
     log(`ok, unchanged key=${key}`);
+    return 0;
+  }
+
+  if (!rebuildsOn(parsed.key)) {
+    log(`ok, kept for the next build key=${key}`);
     return 0;
   }
 
