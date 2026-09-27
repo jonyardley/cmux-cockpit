@@ -1,5 +1,5 @@
-// The agents panel's data: who is waiting, who is running, the selected
-// workspace, and every PR. Pure reads of `data`, so each is testable alone.
+// The agents panel's data: the selected workspace (and its question, when
+// its agent needs you), who is running, and every PR. Pure reads of `data`, so each is testable alone.
 
 import type { CheckState } from "../../scripts/state-config.ts";
 import { byActivity, sinceOrActivity } from "../shared/activity.ts";
@@ -19,24 +19,6 @@ export interface AgentEntry {
   a: Agent;
   project: Project;
 }
-
-// ---- Waiting on you -----------------------------------------------------
-
-/** Workspaces with a needs_input agent, longest-waiting first, at most 20.
- * Idle nudges and dismissed asks read as idle (src/shared/needs.ts). */
-export const waiting = computed(() => {
-  const out: AgentEntry[] = [];
-  for (const w of data.workspaces() ?? []) {
-    const a = agentsOf(w).find((x) => x.status === "needs_input");
-    if (!a) continue;
-    out.push({ key: "w:" + w.id, ws: w, a, project: projectOf(w.directory) });
-  }
-  out.sort((x, y) => sinceOrActivity(x.a) - sinceOrActivity(y.a));
-  return markLast(out.slice(0, 20));
-});
-
-/** The Waiting on you card's message: the agent's words, not an echo of the prompt. */
-export const waitingText = (w: Workspace): string => cardMessage(w) || "Waiting for your reply";
 
 // ---- Running --------------------------------------------------------------
 
@@ -110,6 +92,26 @@ export const current = computed((): Current | null => {
 /** current(), or an empty stand-in so views never branch on null. */
 export const cur = (): Current =>
   current() ?? { ws: { id: "" }, a: null, agents: [], inOrder: [], project: projectOf("") };
+
+/** The selected workspace's open question. `text` is the agent's words, or
+ * "" when there are none beyond the generic "waiting for your reply", so the
+ * card shows just the Answer button. */
+export interface Ask {
+  a: Agent;
+  text: string;
+}
+
+/** Whether the selected workspace needs you, by the Needs you strip's rule:
+ * its most active agent reads needs_input once nudges and dismissals are
+ * applied (src/shared/needs.ts). Null otherwise. */
+export const currentAsk = computed((): Ask | null => {
+  const c = current();
+  if (c?.a?.status !== "needs_input") return null;
+  return { a: c.a, text: cardMessage(c.ws) };
+});
+
+/** The card's quiet message line; empty while the question block shows the words. */
+export const cardLine = computed((): string => (currentAsk() ? "" : cardMessage(cur().ws)));
 
 /** Idle and no agent draw a hollow ring, as the Running rows and the left sidebar do. */
 export const hollowDot = (a: Agent | null): boolean => !a || a.status === "idle";

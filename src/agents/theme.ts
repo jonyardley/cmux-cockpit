@@ -19,6 +19,8 @@ export const T = {
   clay: "#D97757",
   clayText: "#A34A2A",
   clayButton: "#B5532F",
+  clayButtonHover: "#9E4727",
+  clayButtonText: "#FFFFFF",
   blue: "#3B6FB6",
   blueHalo: "#3B6FB62E",
   clayHalo: "#D9775738",
