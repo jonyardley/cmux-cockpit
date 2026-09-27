@@ -5,7 +5,16 @@
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { createdPrUrl, delayedPoll, type Pr, parsePr, payload } from "../scripts/hooks/report-pr.ts";
+import {
+  createdPrUrl,
+  delayedPoll,
+  type Pr,
+  parsePr,
+  payload,
+  SETTLE_DELAY_SECONDS,
+  settledPr,
+  stepFor,
+} from "../scripts/hooks/report-pr.ts";
 
 const URL = "https://github.com/o/r/pull/21";
 const bash = (command: string, stdout = `${URL}\n`) => ({
@@ -98,6 +107,44 @@ describe("payload", () => {
   });
 });
 
+describe("settledPr", () => {
+  it("sees gh pr ready and gh pr merge, however gh was started", () => {
+    assert.equal(settledPr(bash("gh pr ready 68")), true);
+    assert.equal(settledPr(bash("cd /x && rtk gh pr merge 68 --squash")), true);
+    assert.equal(settledPr(bash("GH_REPO=o/r gh -R o/r pr ready")), true);
+    assert.equal(settledPr(bash("npm run check && gh pr ready")), true);
+    assert.equal(settledPr(bash("gh pr close 68")), true);
+    assert.equal(settledPr(bash("gh pr reopen 68")), true);
+  });
+
+  it("leaves a backgrounded call to the turn-end poll, since the hook fires before gh runs", () => {
+    const event = bash("npm run check && gh pr ready 70");
+    assert.equal(settledPr({ ...event, tool_input: { ...event.tool_input, run_in_background: true } }), false);
+  });
+
+  it("ignores mentions, other gh pr commands, other tools and junk", () => {
+    assert.equal(settledPr(bash('grep -rn "gh pr ready" docs')), false);
+    assert.equal(settledPr(bash("gh pr view 68")), false);
+    assert.equal(settledPr(bash("gh pr create --fill")), false);
+    assert.equal(settledPr(bash("gh pr merge-foo")), false);
+    assert.equal(settledPr({ ...bash("gh pr ready"), tool_name: "Edit" }), false);
+    assert.equal(settledPr(null), false);
+  });
+});
+
+describe("stepFor", () => {
+  it("reports a create, polls after a settle, and does nothing otherwise", () => {
+    assert.deepEqual(stepFor(bash("gh pr create --fill")), { kind: "report", url: URL });
+    assert.deepEqual(stepFor(bash("gh pr merge 21 --squash", "")), { kind: "poll" });
+    assert.equal(stepFor(bash("gh pr view 21")), null);
+    assert.equal(stepFor(null), null);
+  });
+
+  it("does nothing for a create that printed no URL", () => {
+    assert.equal(stepFor(bash("gh pr create", "")), null);
+  });
+});
+
 describe("delayedPoll", () => {
   it("runs this checkout's pr-poll.ts with the hook's node after a delay, with no shell", () => {
     const root = join("/repo", "cmux");
@@ -106,5 +153,11 @@ describe("delayedPoll", () => {
       args: [join(root, "scripts", "pr-poll.ts"), "--delay", "10"],
       cwd: root,
     });
+  });
+
+  it("takes a shorter delay for a ready or merge", () => {
+    const root = join("/repo", "cmux");
+    const poll = delayedPoll(join(root, "scripts", "hooks"), "/bin/node", SETTLE_DELAY_SECONDS);
+    assert.deepEqual(poll.args, [join(root, "scripts", "pr-poll.ts"), "--delay", "1"]);
   });
 });

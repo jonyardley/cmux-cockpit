@@ -83,15 +83,21 @@ found nothing new, was skipped, or hit an error.
 
 The `pr-poll-turn` and `pr-poll-select` rules in `automations.json` run it
 (through `scripts/pr-poll.sh`, which finds node) when an agent's turn ends
-and when a workspace is selected, each at most once every 30 seconds, with a
+(cmux's `agent.hook.Stop` event: `agent.turn.completed` only ever arrives
+inside a notification event's payload, so a rule on it never fires) and
+when a workspace is selected, each at most once every 30 seconds, with a
 five-minute timeout; the poller itself gives up on new lookups after four
-minutes, so a slow directory cannot starve the rest. The poll a turn end
-fires straight after an agent's `gh pr create` can run before gh lists the
-new PR, so the `report-pr` hook (`scripts/hooks/report-pr.ts`) also starts
+minutes, so a slow directory cannot starve the rest. A poll straight after
+an agent's `gh pr create` can run before gh lists the new PR, so the `report-pr` hook (`scripts/hooks/report-pr.ts`) also starts
 one detached run with `--delay 10` when it runs in a cmux terminal: it
 sleeps ten seconds, then waits for the lock instead of skipping, since the
 run holding it may be the one that missed the PR, for as long as a live
-run can hold it (five minutes). Its stderr goes to the state log, and the
+run can hold it (five minutes). After an agent's `gh pr ready`, `merge`,
+`close` or `reopen` in the foreground the hook starts the same run with
+`--delay 1` (a backgrounded one fires the hook before gh has run, so it is
+left to the turn-end poll), since GitHub
+already has the new state and waiting for the lock is the part that matters.
+Its stderr goes to the state log, and the
 rebuild after a change is limited to a minute, since this run has no outer
 timeout.
 `src/shared/prs.ts` reads it back: cmux's own `pr`/`prs` win when present. A

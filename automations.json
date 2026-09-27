@@ -14,7 +14,7 @@
     },
     {
       "id": "pr-poll-turn",
-      "when": { "event": "agent.turn.completed" },
+      "when": { "event": "agent.hook.Stop" },
       "rate_limit": { "interval_seconds": 30, "maximum": 1 },
       "then": [
         {
