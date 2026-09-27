@@ -28,10 +28,17 @@ describe("createdPrUrl", () => {
     assert.equal(createdPrUrl(bash("gh pr view 20 -q .url && gh pr create --fill", out)), URL);
   });
 
-  it("sees a create that RTK rewrote to rtk gh, as the hook receives it", () => {
-    assert.equal(createdPrUrl(bash("cd /x && rtk gh pr create --fill")), URL);
-    assert.equal(createdPrUrl(bash("rtk gh -R o/r pr new")), URL);
-    assert.equal(createdPrUrl(bash("rtk gh pr view 21")), null);
+  it("sees a create that RTK rewrote to rtk gh, with RTK's own output", () => {
+    // RTK prints "ok" per push step, then gh's URL, as seen on #41 and #42.
+    const out = `ok\nremote: \nok\n${URL}\n`;
+    assert.equal(createdPrUrl(bash("cd /x && rtk gh pr create --fill", out)), URL);
+    assert.equal(createdPrUrl(bash("GH_REPO=o/r rtk gh pr create --fill", out)), URL);
+    assert.equal(createdPrUrl(bash("rtk gh pr view 21", out)), null);
+  });
+
+  it("sees a create behind env assignments", () => {
+    assert.equal(createdPrUrl(bash("GH_REPO=o/r gh pr create --fill")), URL);
+    assert.equal(createdPrUrl(bash("A=1 B= gh pr new")), URL);
   });
 
   it("ignores a command that only mentions gh pr create", () => {

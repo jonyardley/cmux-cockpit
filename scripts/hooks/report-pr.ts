@@ -32,10 +32,12 @@ interface CmuxEnv {
 }
 
 // `gh [global flags] pr create|new` at the start of a shell segment, so a
-// command that only mentions it (grep, a quoted body) does not count. The
-// RTK PreToolUse hook rewrites `gh` to `rtk gh` before it runs, and this
-// hook sees the rewritten command, so an `rtk` prefix counts too.
-const PR_CREATE = /^\s*(?:rtk\s+)?gh\s+(?:-\S+\s+(?:[^-\s]\S*\s+)?)*pr\s+(?:create|new)(?![\w-])/;
+// command that only mentions it (grep, a quoted body) does not count.
+// Leading env assignments (`GH_REPO=o/r gh ...`) count too, and so does an
+// `rtk` prefix: the RTK PreToolUse hook rewrites most creates to `rtk gh`,
+// this hook sees the rewritten command, and RTK leaves some forms (a heredoc
+// body, `gh -R`) as plain `gh`, so both must match.
+const PR_CREATE = /^\s*(?:\w+=\S*\s+)*(?:rtk\s+)?gh\s+(?:-\S+\s+(?:[^-\s]\S*\s+)?)*pr\s+(?:create|new)(?![\w-])/;
 const SEGMENTS = /&&|\|\||[;|\n]/;
 const PR_URL = /https:\/\/\S+\/pull\/\d+/g;
 
