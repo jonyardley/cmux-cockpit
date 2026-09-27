@@ -78,16 +78,34 @@ describe("lanes", () => {
 
   it("stays built under Projects, so the hidden lanes need no rebuild", () => {
     const all = ids();
+    assert.ok(all.length > 0);
     state.setMode("projects");
     assert.deepEqual(ids(), all);
   });
 
-  it("shows only the chosen mode's panel", () => {
-    const lanes = model.panelOpacity("all");
-    const projectsPanel = model.panelOpacity("projects");
-    assert.deepEqual([lanes(), projectsPanel()], [1, 0]);
+  it("shows only the chosen mode's panel, hiding the other at zero height", () => {
+    const shown = (m: "all" | "projects") => [model.panelOpacity(m)(), model.panelMaxHeight(m)()];
+    assert.deepEqual(
+      [shown("all"), shown("projects")],
+      [
+        [1, "infinity"],
+        [0, 0],
+      ],
+    );
     state.setMode("projects");
-    assert.deepEqual([lanes(), projectsPanel()], [0, 1]);
+    assert.deepEqual(
+      [shown("all"), shown("projects")],
+      [
+        [0, 0],
+        [1, "infinity"],
+      ],
+    );
+  });
+
+  it("marks one tab chosen at a time", () => {
+    assert.deepEqual([state.isMode("all")(), state.projectsMode()], [true, false]);
+    state.setMode("projects");
+    assert.deepEqual([state.isMode("all")(), state.projectsMode()], [false, true]);
   });
 
   it("laneByKey falls back to Unsorted and LANES ends with it", () => {
@@ -202,6 +220,20 @@ describe("handleMove", () => {
   it("clears the drag state", () => {
     state.setDrag({ id: "a@main", index: 1 });
     drop.handleMove("a@main", 1);
+    assert.equal(state.drag(), null);
+  });
+
+  it("ignores a drag on the hidden lanes under Projects, so no zone or drop lane lights", () => {
+    state.setMode("projects");
+    drop.handleDragChange({ id: "a@main", index: 4 });
+    assert.equal(drop.dragging(), false);
+    assert.equal(drop.dropLane(), null);
+  });
+
+  it("tracks a drag in All", () => {
+    drop.handleDragChange({ id: "a@main", index: 4 });
+    assert.deepEqual(state.drag(), { id: "a@main", index: 4 });
+    drop.handleDragChange(null);
     assert.equal(state.drag(), null);
   });
 

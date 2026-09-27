@@ -10,12 +10,12 @@
 // The lanes are ONE flat Reorderable of fixed headers plus card rows, so a
 // card can be dragged between lanes in one gesture (see drop.ts).
 //
-// Both panels stay built, stacked in one ZStack; the tab only flips their
-// opacity (model.ts's panelOpacity), so a switch never rebuilds a list.
+// Both panels stay built; the tab only hides one (model.ts's panelOpacity
+// and panelMaxHeight), so a switch never rebuilds a list.
 
-import { handleMove, isForeignAnchor } from "./drop.ts";
-import { flatEntries, panelOpacity, projectEntries, wsById } from "./model.ts";
-import { setDrag } from "./state.ts";
+import type { ViewMode } from "../../scripts/state-config.ts";
+import { handleDragChange, handleMove, isForeignAnchor } from "./drop.ts";
+import { flatEntries, panelMaxHeight, panelOpacity, projectEntries, wsById } from "./model.ts";
 import { cardFor, projectRow } from "./views/cards.ts";
 import { dropZone, emptyFold, laneHeader, projectHeader, segmented } from "./views/headers.ts";
 import { needsStrip } from "./views/needs.ts";
@@ -25,13 +25,16 @@ sidebar(() =>
   VStack({ spacing: 0, alignment: "leading" }, [
     segmented(),
     needsStrip(),
-    ZStack({ alignment: "top" }, [
-      lanesPanel().opacity(panelOpacity("all")),
-      projectsPanel().opacity(panelOpacity("projects")),
-    ]),
+    panel("all", lanesPanel()),
+    panel("projects", projectsPanel()),
     Spacer(),
   ]).paddingBottom(12),
 );
+
+// Top-aligned, so a zero-height panel's rows overflow downward, unseen.
+function panel(m: ViewMode, content: View): View {
+  return content.opacity(panelOpacity(m)).frame({ maxHeight: panelMaxHeight(m), alignment: "top" });
+}
 
 function lanesPanel(): View {
   return VStack({ spacing: 0 }, [
@@ -41,7 +44,7 @@ function lanesPanel(): View {
         key: (e) => e.id,
         spacing: 2,
         onMove: handleMove,
-        onDragChange: setDrag,
+        onDragChange: handleDragChange,
       },
       (e) => {
         const entry = e(); // kind, lane, anchorId and wsId are fixed per key

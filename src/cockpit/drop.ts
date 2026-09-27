@@ -109,6 +109,11 @@ export function isForeignAnchor(wsId: string): boolean {
   return groups().some((g) => g.anchorId === wsId && !lanes.has(wsId));
 }
 
+/** Reorderable's onDragChange: a drag only counts in All, where the lanes show. */
+export function handleDragChange(d: DragState | null): void {
+  setDrag(mode() === "all" ? d : null);
+}
+
 /** True while a card is being dragged: empty lanes open as zones. */
 export const dragging = (): boolean => drag() !== null;
 

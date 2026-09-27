@@ -25,6 +25,7 @@ import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
   bump,
   collapsedProjects,
+  isMode,
   mode,
   savedFolds,
   setCollapsedProjects,
@@ -317,12 +318,15 @@ export function chooseMode(m: ViewMode): void {
   persistSet("ui.mode", m);
 }
 
-// Both panels stay built and are stacked in one place; switching tabs only
-// flips their opacity, so neither list is torn down and rebuilt (the
-// flicker). A slide between them would add an offset here, once the
-// renderer can animate one.
+// Both panels stay built; switching tabs only flips these two live values,
+// so neither list is torn down and rebuilt (the flicker). The hidden panel
+// is transparent AND zero height, so it neither leaves blank space nor
+// relies on the app ignoring taps on a transparent view. A slide between
+// the panels would add an offset here, once the renderer can animate one.
 /** 1 while `m` is the chosen mode, else 0: a live value for `.opacity()`. */
-export const panelOpacity = (m: ViewMode) => (): number => (mode() === m ? 1 : 0);
+export const panelOpacity = (m: ViewMode) => (): number => (isMode(m)() ? 1 : 0);
+/** Unbounded while `m` is the chosen mode, else 0: for `.frame({ maxHeight })`. */
+export const panelMaxHeight = (m: ViewMode) => (): number | "infinity" => (isMode(m)() ? "infinity" : 0);
 
 // --- All mode: one flat list of lane headers and cards --------------------------------
 
@@ -397,8 +401,8 @@ export const emptyLaneNames = (): string[] =>
     .map((s) => s.lane.name);
 
 // Built in both modes: the lanes panel stays mounted under Projects, hidden
-// (panelOpacity). drop.ts's handleMove ignores a move outside All instead.
-export const flatEntries = (): LaneEntry[] => laneEntries();
+// (panelOpacity). drop.ts ignores a drag or move outside All instead.
+export const flatEntries: () => LaneEntry[] = laneEntries;
 
 export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => laneOf(w) === laneKey).length;
 

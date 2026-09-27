@@ -11,7 +11,9 @@ const PROJECT_FOLD = "project:";
 
 // View mode: "all" (lanes) or "projects" (cards grouped by project, not lane).
 export const [mode, setMode] = signal<ViewMode>(SAVED_STATE.ui.mode ?? "all");
-export const projectsMode = () => mode() === "projects";
+/** A live check that `m` is the chosen mode, shared by the tab and its panel. */
+export const isMode = (m: ViewMode) => (): boolean => mode() === m;
+export const projectsMode = isMode("projects");
 
 export const [unsortedCollapsed, setUnsortedCollapsed] = signal(savedFolds["lane:unsorted"] === 1);
 export const [collapsedProjects, setCollapsedProjects] = signal<string[]>(
