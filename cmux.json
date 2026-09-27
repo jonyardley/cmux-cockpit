@@ -21,7 +21,7 @@
     "paneFlashColor": "#d97757"
   },
   "terminal": {
-    "sessionContentMaxWidth": 560,
+    "sessionContentMaxWidth": 660,
     "sessionContentAlignment": "left"
   },
   "paneBorderColor": "#e8e6dc",
