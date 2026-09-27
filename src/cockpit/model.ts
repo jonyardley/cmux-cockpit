@@ -34,7 +34,7 @@ import {
   tick,
   unsortedCollapsed,
 } from "./state.ts";
-import { sinceOf, statusOf } from "./status.ts";
+import { isReady, sinceOf, statusOf } from "./status.ts";
 
 const OVERRIDE_SECS = 4;
 
@@ -628,3 +628,17 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
   if (port) out.push(port);
   return out;
 }
+
+// Ready cards (issue #53).
+
+/** A Ready card offers "To review", unless it is already in For review (or is a lane's anchor, which never moves). */
+export function canFileForReview(w: Workspace | undefined): boolean {
+  return !!w && isReady(w) && laneOf(w) !== "review" && !laneAnchorIds().has(w.id);
+}
+
+/** Files a Ready card into For review. */
+export const fileForReview = (w: Workspace | undefined): void => moveToLane(w, "review");
+
+/** True when a card's chips row has anything to show: a chip, or the To review action. */
+export const hasChipsRow = (w: Workspace | undefined, withBranch: boolean): boolean =>
+  chipsFor(w, withBranch).length > 0 || canFileForReview(w);

@@ -11,11 +11,13 @@ import {
   type Chip,
   type ChipId,
   canCreateProject,
+  canFileForReview,
   chipsFor,
   clearProjectOverride,
   createProjectFrom,
   cycleProjectColor,
   cycleProjectIcon,
+  fileForReview,
   hasProjectOverride,
   inAppProjectName,
   isSelected,
@@ -29,7 +31,7 @@ import {
   selectWorkspace,
 } from "../model.ts";
 import { drag } from "../state.ts";
-import { ageOf, statusInfo, statusLine } from "../status.ts";
+import { ageOf, badgeCount, isReady, statusInfo, statusLine } from "../status.ts";
 import { C } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;
@@ -89,8 +91,7 @@ export function glyph(w: WsAccessor, size: number, radius: number, font: number)
   ]).frame({ width: size, height: size });
 }
 
-export function unreadBadge(w: WsAccessor): View {
-  const n = () => w()?.unread ?? 0;
+export function unreadBadge(w: WsAccessor, n: () => number = () => w()?.unread ?? 0): View {
   const has = () => n() > 0;
   return Text(() => (has() ? String(n()) : ""))
     .font(10)
@@ -108,8 +109,28 @@ export function meta(fn: () => string, color: Reactive<string> = C.tertiary): Vi
   return Text(fn).font(11).monospaced().color(color).lineLimit(1).layoutPriority(2);
 }
 
-// Title row shared by the card densities: title takes the slack, badge and
-// age hold their width on the right.
+// The green "Ready" pill (issue #53): the agent finished while Jon was
+// elsewhere. It stands in for the unread badge, and clears once he opens
+// the workspace. Behind a when(), so it takes no slot otherwise.
+function readyPill(w: WsAccessor): View {
+  return when(
+    "ready",
+    () => isReady(w()),
+    () =>
+      Text("Ready")
+        .font(10.5)
+        .weight("medium")
+        .color(C.greenText)
+        .lineLimit(1)
+        .paddingHorizontal(7)
+        .paddingVertical(1)
+        .background(C.readyBg)
+        .cornerRadius(8),
+  ).layoutPriority(2);
+}
+
+// Title row shared by the card densities: title takes the slack, pill or
+// badge and age hold their width on the right.
 export function titleRow(w: WsAccessor, size: number): View {
   return HStack({ spacing: 6 }, [
     Text(() => displayTitle(w()))
@@ -120,7 +141,8 @@ export function titleRow(w: WsAccessor, size: number): View {
       .truncation("middle")
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
-    unreadBadge(w),
+    readyPill(w),
+    unreadBadge(w, () => badgeCount(w())),
     meta(() => ageOf(w())),
   ]).frame({ maxWidth: "infinity" });
 }
@@ -184,6 +206,23 @@ function chipById(chips: readonly Chip[], id: ChipId): Chip {
   return chips.find((c) => c.id === id) ?? { id, text: "" };
 }
 
+// "To review →" on a Ready card: files it into For review (issue #53). A
+// quiet chip with its own onTap, so the tap never also selects the card.
+function toReviewAction(w: WsAccessor): View {
+  const body = Text("To review →")
+    .font(11)
+    .weight("medium")
+    .color(C.secondary)
+    .lineLimit(1)
+    .paddingHorizontal(7)
+    .paddingVertical(1);
+  return when(
+    "to-review",
+    () => canFileForReview(w()),
+    () => ring(body, C.card, C.chipEdge, 1, 6, true).onTap(() => fileForReview(w())),
+  ).layoutPriority(2);
+}
+
 // One when() per chip, so each has a fixed key and its own place in the
 // HStack. The PR and ports chips are short and say the most, so they hold
 // their width and the branch chip gives way, cut at its end. The priority
@@ -199,7 +238,12 @@ export function chipsRow(w: WsAccessor, withBranch: boolean): View {
       () => chips().some((c) => c.id === id),
       () => chip(id, () => chipById(chips(), id)),
     );
-  return HStack({ spacing: 5 }, [one("pr").layoutPriority(2), one("br"), one("port").layoutPriority(2)]).frame({
+  return HStack({ spacing: 5 }, [
+    one("pr").layoutPriority(2),
+    one("br"),
+    one("port").layoutPriority(2),
+    toReviewAction(w),
+  ]).frame({
     maxWidth: "infinity",
     alignment: "leading",
   });

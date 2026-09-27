@@ -75,6 +75,9 @@ export function agentsOf(w: Workspace | undefined): Agent[] {
   return (w?.agents ?? []).filter((a) => !!a).map((a) => effectiveAgent(a, w));
 }
 
+/** True while any agent in the workspace is really asking, dismissed or not. */
+export const hasRealAsk = (w: Workspace | undefined): boolean => asking(w).length > 0;
+
 /** True when dismissals are all that keep the workspace from showing needs you. */
 export function isNeedsDismissed(w: Workspace | undefined): boolean {
   const list = asking(w);
