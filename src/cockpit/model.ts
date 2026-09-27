@@ -24,9 +24,12 @@ import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
   bump,
   collapsedProjects,
+  type Mode,
   mode,
   projectsMode,
+  savedFolds,
   setCollapsedProjects,
+  setMode,
   setUnsortedCollapsed,
   tick,
   unsortedCollapsed,
@@ -176,7 +179,9 @@ export function selectWorkspace(id: string | undefined): void {
 // --- lane collapse -------------------------------------------------------------------
 
 const collapseOverride = new Map<string, boolean>(); // groupId -> collapsed
-const touchedLanes = new Set<LaneKey>();
+// A lane with a saved flag has been toggled before, so startsCollapsed no
+// longer applies to it after a reload.
+const touchedLanes = new Set<LaneKey>(LANES.filter((l) => `lane:${l.key}` in savedFolds).map((l) => l.key));
 
 export function isCollapsed(lane: Lane): boolean {
   tick();
@@ -197,6 +202,7 @@ export function toggleLane(lane: Lane): void {
   touchedLanes.add(lane.key);
   if (lane.key === "unsorted") {
     setUnsortedCollapsed(next);
+    saveFolds();
     return;
   }
   const g = groupForLane(lane);
@@ -204,6 +210,23 @@ export function toggleLane(lane: Lane): void {
   collapseOverride.set(g.id, next);
   bump();
   cmux(next ? "workspace.group.collapse" : "workspace.group.expand", { group_id: g.id });
+  saveFolds();
+}
+
+// Sends every fold at once, so the saved copy never lags a quick second tap.
+// cmux holds a lane group's own fold; the flag only marks it as touched.
+function saveFolds(): void {
+  const folds: Record<string, number> = {};
+  for (const lane of LANES) if (touchedLanes.has(lane.key)) folds[`lane:${lane.key}`] = isCollapsed(lane) ? 1 : 0;
+  for (const k of collapsedProjects()) folds[`project:${k}`] = 1;
+  persistSet("ui.collapsed", Object.keys(folds).length ? folds : null);
+}
+
+/** Switches between All and Projects, kept across a reload. */
+export function chooseMode(m: Mode): void {
+  if (mode() === m) return;
+  setMode(m);
+  persistSet("ui.mode", m);
 }
 
 // --- All mode: one flat list of lane headers and cards --------------------------------
@@ -345,10 +368,12 @@ export const hasProjectOverride = (w: Workspace | undefined): boolean => {
 
 export const projectByKey = (k: string): Project => PROJECTS.find((p) => projectId(p) === k) ?? OTHER;
 export const isProjectCollapsed = (k: string) => collapsedProjects().includes(k);
-export const toggleProject = (k: string) =>
+export function toggleProject(k: string): void {
   setCollapsedProjects(
     isProjectCollapsed(k) ? collapsedProjects().filter((x) => x !== k) : [...collapsedProjects(), k],
   );
+  saveFolds();
+}
 export const projectCount = (k: string) => cardWorkspaces().filter((w) => projectKey(w) === k).length;
 
 /** Whether the project's header should offer "+": it has a folder to open. */

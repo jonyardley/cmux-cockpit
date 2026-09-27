@@ -21,6 +21,7 @@ test("validateState reads a good file unchanged", () => {
         { id: "toolu_2", session: "s1", label: "Probe the hook", startedEpoch: 150 },
       ],
     },
+    ui: { mode: "projects", collapsed: { "lane:parked": 0, "project:/dev/a": 1 } },
   };
   assert.deepEqual(validateState(raw), raw);
 });
@@ -41,6 +42,7 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     projects: {},
     prs: {},
     subagents: {},
+    ui: {},
   });
 });
 
@@ -119,7 +121,7 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
   const set = applySet(start, "projectOverride.w1", '"alpha"');
   assert.deepEqual(set, {
     ok: true,
-    state: { dismissed: {}, projectOverride: { w1: "alpha" }, projects: {}, prs: {}, subagents: {} },
+    state: { dismissed: {}, projectOverride: { w1: "alpha" }, projects: {}, prs: {}, subagents: {}, ui: {} },
   });
   assert.deepEqual(start, emptyState());
   if (!set.ok) return;
@@ -223,4 +225,49 @@ test("validateState drops bad projects and keeps good ones", () => {
     },
   };
   assert.deepEqual(validateState(raw).projects, { "/dev/good/": spec });
+});
+
+test("applySet sets and deletes the cockpit's view and folds under ui", () => {
+  const mode = applySet(emptyState(), "ui.mode", '"projects"');
+  assert.ok(mode.ok);
+  if (!mode.ok) return;
+  assert.deepEqual(mode.state.ui, { mode: "projects" });
+
+  const folds = applySet(mode.state, "ui.collapsed", '{"lane:unsorted":1,"lane:parked":0,"project:/dev/a":1}');
+  assert.ok(folds.ok);
+  if (!folds.ok) return;
+  assert.deepEqual(folds.state.ui, {
+    mode: "projects",
+    collapsed: { "lane:unsorted": 1, "lane:parked": 0, "project:/dev/a": 1 },
+  });
+
+  const cleared = applySet(folds.state, "ui.mode", null);
+  assert.ok(cleared.ok);
+  if (cleared.ok) assert.deepEqual(cleared.state.ui, { collapsed: folds.state.ui.collapsed });
+});
+
+test("applySet refuses a bad ui key or value", () => {
+  for (const [key, value] of [
+    ["ui.other", '"all"'],
+    ["ui.__proto__", '"all"'],
+    ["ui.mode", '"lanes"'],
+    ["ui.mode", "1"],
+    ["ui.collapsed", "{}"],
+    ["ui.collapsed", '{"lane:main":2}'],
+    ["ui.collapsed", '["lane:main"]'],
+  ] as const) {
+    assert.equal(applySet(emptyState(), key, value).ok, false, `${key} = ${value}`);
+  }
+});
+
+test("validateState keeps a good ui and drops bad modes and flags", () => {
+  assert.deepEqual(validateState({ ui: { mode: "all", collapsed: { "lane:main": 1 } } }).ui, {
+    mode: "all",
+    collapsed: { "lane:main": 1 },
+  });
+  assert.deepEqual(
+    validateState({ ui: { mode: "grid", collapsed: { a: "1", constructor: 1, [`x${"y".repeat(128)}`]: 1 } } }).ui,
+    {},
+  );
+  assert.deepEqual(validateState({ ui: "projects" }).ui, {});
 });

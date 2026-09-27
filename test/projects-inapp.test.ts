@@ -11,7 +11,14 @@ const spec = { name: "Scratch", color: "#6A9BCC", icon: "folder.fill", root: "/U
 const key = "/users/jon/dev/scratch/";
 const g = globalThis as Record<string, unknown>;
 g.__PROJECTS__ = [...JSON.parse(readFileSync("config/projects.example.json", "utf8")), { match: key, ...spec }];
-g.__STATE__ = { dismissed: {}, projectOverride: { w2: key, w3: "/dev/app-one" }, projects: { [key]: spec }, prs: {} };
+g.__STATE__ = {
+  dismissed: {},
+  projectOverride: { w2: key, w3: "/dev/app-one" },
+  projects: { [key]: spec },
+  prs: {},
+  subagents: {},
+  ui: {},
+};
 
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();

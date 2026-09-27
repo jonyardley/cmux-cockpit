@@ -5,6 +5,7 @@ import { dropLane } from "../drop.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
+  chooseMode,
   isCollapsed,
   isProjectCollapsed,
   laneCount,
@@ -14,7 +15,7 @@ import {
   toggleLane,
   toggleProject,
 } from "../model.ts";
-import { mode, projectsMode, setMode } from "../state.ts";
+import { mode, projectsMode } from "../state.ts";
 import { C } from "../theme.ts";
 import { glyphButton, ring } from "./parts.ts";
 
@@ -50,9 +51,9 @@ export function segmented(): View {
       "All",
       null,
       () => mode() === "all",
-      () => setMode("all"),
+      () => chooseMode("all"),
     ),
-    segButton("Projects", null, projectsMode, () => setMode("projects")),
+    segButton("Projects", null, projectsMode, () => chooseMode("projects")),
   ]).padding(3);
   return VStack({ spacing: 0 }, [ring(track, C.segTrack, C.hairline, 1, 10).frame({ maxWidth: "infinity" })])
     .paddingHorizontal(14)
