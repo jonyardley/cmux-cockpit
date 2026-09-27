@@ -6,7 +6,7 @@ import { agentsOf } from "../shared/needs.ts";
 import { prChipColors } from "../shared/pr-colors.ts";
 import type { PrSummary } from "../shared/prs.ts";
 import { liveRunCount } from "../shared/subagents.ts";
-import { cardMessage, oneLine } from "../shared/text.ts";
+import { cardMessage, clip, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
 import { C } from "./theme.ts";
@@ -66,11 +66,13 @@ export function prTextColor(pr: PrSummary | undefined, quiet: string): string {
 
 // --- the card's second line (issue #47) ----------------------------------------------
 
-/** The status and how long it has held ("Working 14m"); no time without an agent. */
+/** The status and how long it has held ("Working 14m"). Only the agent's
+ * sinceEpoch says when the status began; sinceOf's fallbacks (last activity,
+ * the workspace's latestAt) do not, so without it the time is left off. */
 export function statusLine(w: Workspace | undefined): string {
   const label = statusInfo(w).label;
-  if (!agentOf(w)) return label;
-  const age = ageOf(w);
+  const since = agentOf(w)?.sinceEpoch;
+  const age = since ? fmtAge(nowEpoch() - since) : "";
   return age ? label + " " + age : label;
 }
 
@@ -86,7 +88,8 @@ export const DETAIL_MAX = 140;
 
 /** The agent's latest message (never a prompt echo), else the description. */
 export function cardDetail(w: Workspace | undefined): string {
-  return oneLine(cardMessage(w) || w?.description, DETAIL_MAX);
+  // cardMessage is already readable(), so only the description needs it.
+  return clip(cardMessage(w) || readable(w?.description), DETAIL_MAX);
 }
 
 /** The progress bar's fraction, held to 0 to 1; null when no value is sent. */

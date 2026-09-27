@@ -34,10 +34,14 @@ export function readable(s: string | null | undefined): string {
   return /[A-Za-z]{2,}/.test(words) ? t : "";
 }
 
+/** `t` cut to `max` characters with an ellipsis. */
+export function clip(t: string, max: number): string {
+  return t.length > max ? t.slice(0, max - 1) + "…" : t;
+}
+
 /** readable(), cut to `max` characters with an ellipsis. */
 export function oneLine(s: string | null | undefined, max: number): string {
-  const t = readable(s);
-  return t.length > max ? t.slice(0, max - 1) + "…" : t;
+  return clip(readable(s), max);
 }
 
 // The renderer has no letter-spacing modifier, so tracking goes in the string:

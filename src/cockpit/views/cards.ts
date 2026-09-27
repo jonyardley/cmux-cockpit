@@ -35,16 +35,23 @@ function progressBar(w: WsAccessor, key: string): View {
   );
 }
 
-// The live helper count after the status, in the message's quiet colour.
+// The live helper count after the status, in a quiet colour. Behind a
+// when(), so with no helpers it takes no slot in the status line's spacing.
 function helpers(w: WsAccessor, size: number): View {
-  return Text(() => helperText(w()))
-    .font(size)
-    .color(C.tertiary)
-    .lineLimit(1)
-    .layoutPriority(2);
+  return when(
+    "helpers",
+    () => !!helperText(w()),
+    () =>
+      Text(() => helperText(w()))
+        .font(size)
+        .color(C.tertiary)
+        .lineLimit(1),
+  ).layoutPriority(2);
 }
 
 function fullCard(w: WsAccessor, key: string): View {
+  // Read by the when() and its Text, so the message is worked out once per change.
+  const detail = computed(() => cardDetail(w()));
   const body = HStack({ spacing: 10, alignment: "top" }, [
     glyph(w, 26, 8, 12),
     VStack({ alignment: "leading", spacing: 4 }, [
@@ -54,9 +61,9 @@ function fullCard(w: WsAccessor, key: string): View {
         .frame({ maxWidth: "infinity", alignment: "leading" }),
       when(
         "detail",
-        () => !!cardDetail(w()),
+        () => !!detail(),
         () =>
-          Text(() => cardDetail(w()))
+          Text(detail)
             .font(12)
             .color(C.secondary)
             .lineLimit(2)

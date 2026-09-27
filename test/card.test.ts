@@ -33,6 +33,14 @@ describe("statusLine", () => {
     assert.equal(status.statusLine(ws("x", { agents: [agent("idle")] })), "Idle");
   });
 
+  it("never reads last activity or latestAt as the status start", () => {
+    const w = ws("x", {
+      latestAt: r.data.epoch - 600,
+      agents: [agent("working", { lastActivityAt: r.data.epoch - 5 })],
+    });
+    assert.equal(status.statusLine(w), "Working");
+  });
+
   it("gives no time for a workspace with no agent", () => {
     assert.equal(status.statusLine(ws("x", { latestAt: r.data.epoch - 600 })), "No agent");
     assert.equal(status.statusLine(undefined), "No agent");

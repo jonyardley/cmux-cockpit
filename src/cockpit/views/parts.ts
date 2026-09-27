@@ -144,15 +144,12 @@ function chip(id: ChipId, c: () => Chip): View {
   const isPr = id === "pr";
   const st = () => prChipColors(c().health ?? "quiet", c().status, c().draft);
   const fg = () => (isPr ? st().fg : C.chipText);
-  const text = Text(() => c().text)
-    .font(11)
-    .weight("medium")
-    .lineLimit(1)
-    .truncation("tail")
-    .color(fg);
+  // Monospaced straight after the font, as meta() does, so port digits hold still.
+  const sized = Text(() => c().text).font(11);
+  const text = (id === "port" ? sized.monospaced() : sized).weight("medium").lineLimit(1).truncation("tail").color(fg);
   const parts: View[] =
     id === "port"
-      ? [text.monospaced()]
+      ? [text]
       : [
           Image(isPr ? "arrow.triangle.pull" : "arrow.branch")
             .font(9)
@@ -182,9 +179,9 @@ function chip(id: ChipId, c: () => Chip): View {
   });
 }
 
-/** The chip with `id` from `chipsFor`, or an empty one while it is absent. */
-function chipById(w: Workspace | undefined, withBranch: boolean, id: ChipId): Chip {
-  return chipsFor(w, withBranch).find((c) => c.id === id) ?? { id, text: "" };
+/** The chip with `id` from a `chipsFor` list, or an empty one while it is absent. */
+function chipById(chips: readonly Chip[], id: ChipId): Chip {
+  return chips.find((c) => c.id === id) ?? { id, text: "" };
 }
 
 // One when() per chip, so each has a fixed key and its own place in the
@@ -194,11 +191,13 @@ function chipById(w: Workspace | undefined, withBranch: boolean, id: ChipId): Ch
 // HStack. No Spacer: it is flexible too and would split the free width with
 // the branch chip, so the frame left-aligns instead.
 export function chipsRow(w: WsAccessor, withBranch: boolean): View {
+  // One chip list per change, read by every predicate and chip below.
+  const chips = computed(() => chipsFor(w(), withBranch));
   const one = (id: ChipId) =>
     when(
       id,
-      () => chipsFor(w(), withBranch).some((c) => c.id === id),
-      () => chip(id, () => chipById(w(), withBranch, id)),
+      () => chips().some((c) => c.id === id),
+      () => chip(id, () => chipById(chips(), id)),
     );
   return HStack({ spacing: 5 }, [one("pr").layoutPriority(2), one("br"), one("port").layoutPriority(2)]).frame({
     maxWidth: "infinity",
