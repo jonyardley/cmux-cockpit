@@ -49,7 +49,7 @@ export function needsStrip(): View {
     () => needsList().length > 0,
     () =>
       // Top 6 + the segmented control's 8 gives the board's 14 above the strip;
-      // bottom 8 + the lane header's 14 matches its gap below.
+      // bottom 8 + the lane header's 14 section gap matches its gap below.
       VStack({ spacing: 0 }, [
         ring(
           VStack({ alignment: "leading", spacing: 6 }, [
