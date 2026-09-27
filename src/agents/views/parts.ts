@@ -93,7 +93,9 @@ export function idleRing(): View {
   );
 }
 
-export const glyph = (p: Project): View => projectBadge(p, 18, 9, T.text);
+// Reactive, so a row whose key outlives its project (a Made here row, keyed
+// by link, whose workspace loads late or closes) still follows it.
+export const glyph = (p: () => Project): View => projectBadge(p, 18, 9, T.text);
 
 export function chip(label: () => string, colors: () => ChipColors): View {
   return ring(

@@ -193,8 +193,10 @@ export function emptyFold(): View {
     .fixed();
 }
 
-const badge = (k: string, size: number, font: number): View =>
-  projectBadge(projectByKey(k), size, font, C.text, "semibold");
+const badge = (k: string, size: number, font: number): View => {
+  const p = projectByKey(k);
+  return projectBadge(() => p, size, font, C.text, "semibold");
+};
 
 // One icon in the quiet line. The renderer has no hover tooltip, so the
 // context menu carries the name. A project with no folder has no tap and
