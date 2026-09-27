@@ -30,8 +30,8 @@ and needs nothing installed or linked. Back up any existing
 - `src/renderer.d.ts`: types for the renderer's globals and live data.
 - `sidebars/*.js`: local build output, built from `src/`. Never committed,
   never edited by hand.
-- `sidebars/probe.swift`: a diagnostic sidebar for testing what the renderer
-  supports. `*.parked` files are retired experiments.
+- `sidebars/*.parked`: retired experiments, including `probe.swift.parked`,
+  the diagnostic sidebar for testing what the renderer supports.
 - `cmux.json`: app settings. `dock.json`: dock controls. `automations.json`:
   cmux automation rules, linked into `~/.cmuxterm/` (see below).
 - `config/projects.example.json`: the committed sample project table.
