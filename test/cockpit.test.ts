@@ -466,6 +466,14 @@ describe("empty lanes", () => {
     assert.ok(!drop.dragging());
   });
 
+  it("caps a zone's height at 0 at rest and lifts the cap mid-drag", () => {
+    assert.equal(drop.zoneMaxHeight(), 0);
+    state.setDrag({ id: "a@main", index: 1 });
+    assert.equal(drop.zoneMaxHeight(), "infinity");
+    state.setDrag(null);
+    assert.equal(drop.zoneMaxHeight(), 0);
+  });
+
   it("resolves a drop just under a zone to that zone's lane, and lights it", () => {
     state.setDrag({ id: "a@main", index: 0 });
     // Without a@main: [h:main, b@main, h:review, c@review, z:bg, ...].

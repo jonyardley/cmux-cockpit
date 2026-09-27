@@ -1,7 +1,7 @@
 // The segmented mode control and the lane and project section headers.
 
 import { projectBadge } from "../../shared/ui.ts";
-import { dragging, dropLane } from "../drop.ts";
+import { dragging, dropLane, zoneMaxHeight } from "../drop.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
@@ -149,8 +149,11 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
 
 // An empty lane (issue #50): a zone row that only opens while a card is
 // dragged, and folds to nothing at rest (the row stays, so the drop index
-// never shifts). The renderer has no dashed stroke, so the open zone is a
-// quiet ring that turns solid ink under the pointer.
+// never shifts). After a drag, zero padding alone seemed to leave the row at
+// its open height, a blank gap until a tab switch forced a relayout (read
+// from screenshots, not seen in the renderer), so the row also caps its
+// height the way a hidden panel does. The renderer has no dashed stroke, so
+// the open zone is a quiet ring that turns solid ink under the pointer.
 export function dropZone(laneKey: LaneKey): View {
   const lane = laneByKey(laneKey);
   const target = () => dropLane() === laneKey;
@@ -180,6 +183,7 @@ export function dropZone(laneKey: LaneKey): View {
   );
   return VStack({ spacing: 0 }, [zone.frame({ maxWidth: "infinity" })])
     .paddingTop(open(8))
+    .frame({ maxHeight: zoneMaxHeight, alignment: "top" })
     .fixed();
 }
 
