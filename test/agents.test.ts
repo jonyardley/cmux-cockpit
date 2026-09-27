@@ -288,3 +288,83 @@ describe("prs", () => {
     );
   });
 });
+
+describe("subagents", () => {
+  const run = (id: string, extra: Partial<SubagentRun> = {}): SubagentRun => ({ id, ...extra });
+  const sel = (agents: Agent[]) => {
+    r.data.workspaces = [
+      ws("other", { agents: [agent("working", { children: [run("x", { running: true })] })] }),
+      ws("sel", { selected: true, agents }),
+    ];
+  };
+
+  it("is empty with no selection, no agents, or no children", () => {
+    assert.deepEqual(m.subagents(), []);
+    sel([]);
+    assert.deepEqual(m.subagents(), []);
+    sel([agent("working")]);
+    assert.deepEqual(m.subagents(), []);
+  });
+
+  it("puts running runs first, oldest start first, then settled ones newest end first", () => {
+    sel([
+      agent("working", {
+        children: [
+          run("old-done", { running: false, startedEpoch: 100, endedEpoch: 200 }),
+          run("late", { running: true, startedEpoch: 900 }),
+          run("new-done", { running: false, startedEpoch: 100, endedEpoch: 800 }),
+          run("early", { running: true, startedEpoch: 300 }),
+        ],
+      }),
+    ]);
+    const rows = m.subagents();
+    assert.deepEqual(
+      rows.map((e) => e.key.split(":")[2]),
+      ["early", "late", "new-done", "old-done"],
+    );
+    assert.deepEqual(
+      rows.map((e) => e.last),
+      [false, false, false, true],
+    );
+  });
+
+  it("shows coarse elapsed while running and done once settled", () => {
+    sel([
+      agent("working", {
+        children: [
+          run("a", { label: "Edge-case review", running: true, startedEpoch: 10_000 - 240 }),
+          run("b", { label: "Write builder tests", running: false, startedEpoch: 100, endedEpoch: 9_000 }),
+        ],
+      }),
+    ]);
+    assert.deepEqual(
+      m.subagents().map((e) => [e.label, e.running, e.figure]),
+      [
+        ["Edge-case review", true, "4m"],
+        ["Write builder tests", false, "done"],
+      ],
+    );
+  });
+
+  it("falls back on a label and on running when cmux leaves them out", () => {
+    sel([agent("working", { children: [run("live", { startedEpoch: 9_990 }), run("gone", { endedEpoch: 9_000 })] })]);
+    assert.deepEqual(
+      m.subagents().map((e) => [e.label, e.running]),
+      [
+        ["subagent", true],
+        ["subagent", false],
+      ],
+    );
+  });
+
+  it("gathers runs across the workspace's agents with distinct keys, at most 5", () => {
+    const three = (p: string) => [0, 1, 2].map((i) => run(p + i, { running: true, startedEpoch: 100 + i }));
+    const a1 = agent("working", { children: three("s") });
+    const a2 = agent("idle", { children: three("s") });
+    sel([a1, a2]);
+    const keys = m.subagents().map((e) => e.key);
+    assert.equal(keys.length, 5);
+    assert.equal(new Set(keys).size, 5);
+    assert.ok(keys.some((k) => k.startsWith("s:" + a2.id + ":")));
+  });
+});

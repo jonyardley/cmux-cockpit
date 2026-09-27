@@ -2,10 +2,10 @@
 // workspace, and every PR. Pure reads of `data`, so each is testable alone.
 
 import { byActivity, sinceOrActivity } from "../shared/activity.ts";
-import { markLast } from "../shared/list.ts";
+import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
-import { cardMessage } from "../shared/text.ts";
+import { cardMessage, readable } from "../shared/text.ts";
 import { fmtAge, fmtElapsed, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
@@ -151,6 +151,45 @@ export function statusPhrase(a: Agent | null): string {
   const word = { needs_input: "Needs you", working: "Working", idle: "Idle" }[a.status] ?? a.status;
   return age ? word + " for " + age : word;
 }
+
+// ---- Subagents ---------------------------------------------------------------
+
+export interface SubagentRow {
+  key: string;
+  label: string;
+  running: boolean;
+  /** Board 1's right-hand figure: coarse elapsed while running, "done" after. */
+  figure: string;
+}
+
+// Upstream always sends `running`; without it, a run with no end is live.
+const isRunning = (c: SubagentRun): boolean => c.running ?? !c.endedEpoch;
+
+// Running runs first, oldest start first; then settled ones, newest end first.
+function bySubagent(a: SubagentRun, b: SubagentRun): number {
+  const ra = isRunning(a);
+  const rb = isRunning(b);
+  if (ra !== rb) return ra ? -1 : 1;
+  return ra ? (a.startedEpoch ?? 0) - (b.startedEpoch ?? 0) : (b.endedEpoch ?? 0) - (a.endedEpoch ?? 0);
+}
+
+/** The selected workspace's subagent runs across all its agents, at most 5.
+ * Settled runs stay until cmux prunes them. */
+export const subagents = computed((): Last<SubagentRow>[] => {
+  const runs = cur().agents.flatMap((a) => (a.children ?? []).map((c) => ({ owner: a.id, c })));
+  runs.sort((x, y) => bySubagent(x.c, y.c));
+  return markLast(
+    runs.slice(0, 5).map(({ owner, c }) => {
+      const running = isRunning(c);
+      return {
+        key: "s:" + owner + ":" + c.id,
+        label: readable(c.label) || "subagent",
+        running,
+        figure: running ? ageSince(c.startedEpoch) : "done",
+      };
+    }),
+  );
+});
 
 // ---- Pull requests ----------------------------------------------------------
 

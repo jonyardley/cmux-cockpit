@@ -109,6 +109,19 @@ declare function openURL(url: string): void;
 type AgentStatus = "needs_input" | "working" | "idle" | "ended";
 type PrStatus = "open" | "merged" | "closed";
 
+/** A subagent run nested under an agent session, e.g. a Task tool subagent.
+ * cmux prunes settled runs after a short retention. */
+interface SubagentRun {
+  /** Stable for the run's lifetime. */
+  id: string;
+  label?: string;
+  running?: boolean;
+  /** Epoch seconds the run started. */
+  startedEpoch?: number;
+  /** Epoch seconds the run settled. */
+  endedEpoch?: number;
+}
+
 interface Agent {
   id: string;
   status: AgentStatus;
@@ -120,6 +133,8 @@ interface Agent {
   sinceEpoch?: number;
   /** Epoch seconds of the agent's latest activity. */
   lastActivityAt?: number;
+  /** Subagent runs under this session, oldest first; omitted when none. */
+  children?: SubagentRun[];
 }
 
 interface PullRequest {
