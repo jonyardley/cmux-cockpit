@@ -4,7 +4,8 @@
 //   node scripts/pr-poll.ts [--delay <seconds>]
 // Run by the pr-poll rules in automations.json when an agent's turn ends or a
 // workspace is selected, and by the report-pr hook with a delay after an
-// agent opens a PR, since gh can take a few seconds to list a new one. For
+// agent opens a PR, since gh can take a few seconds to list a new one, or
+// marks one ready or merges it. For
 // every workspace in every window it reads the git branch of its directory
 // and asks gh for that branch's PR and its checks, then rebuilds the
 // sidebars only if a PR or a check's state changed. It never fails loudly:

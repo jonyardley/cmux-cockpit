@@ -8,8 +8,10 @@
 // integration would (Resources/shell-integration/cmux-zsh-integration.zsh,
 // `report_pr` and `_cmux_write_socket_payload`, cmux 0.64). It also starts
 // a PR poll a few seconds later, since the poll the agent's turn end fires
-// straight after a create can run before gh lists the new PR. It never fails
-// the hook: every problem is a note on stderr and exit 0.
+// straight after a create can run before gh lists the new PR. After a
+// `gh pr ready` or `gh pr merge` it starts a poll too, so the chip catches
+// up without waiting for the next turn end or workspace switch. It never
+// fails the hook: every problem is a note on stderr and exit 0.
 
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, openSync, readFileSync } from "node:fs";
@@ -37,7 +39,11 @@ interface CmuxEnv {
 // `rtk` prefix: the RTK PreToolUse hook rewrites most creates to `rtk gh`,
 // this hook sees the rewritten command, and RTK leaves some forms (a heredoc
 // body, `gh -R`) as plain `gh`, so both must match.
-const PR_CREATE = /^\s*(?:\w+=\S*\s+)*(?:rtk\s+)?gh\s+(?:-\S+\s+(?:[^-\s]\S*\s+)?)*pr\s+(?:create|new)(?![\w-])/;
+const ghPr = (verbs: string) =>
+  new RegExp(String.raw`^\s*(?:\w+=\S*\s+)*(?:rtk\s+)?gh\s+(?:-\S+\s+(?:[^-\s]\S*\s+)?)*pr\s+(?:${verbs})(?![\w-])`);
+const PR_CREATE = ghPr("create|new");
+// The commands that change a PR's draft or merged state on GitHub.
+const PR_SETTLE = ghPr("ready|merge");
 const SEGMENTS = /&&|\|\||[;|\n]/;
 const PR_URL = /https:\/\/\S+\/pull\/\d+/g;
 
@@ -56,6 +62,14 @@ export function createdPrUrl(event: unknown): string | null {
   if (typeof stdout !== "string") return null;
   // gh prints the new PR's URL last, after anything earlier commands printed.
   return stdout.match(PR_URL)?.at(-1) ?? null;
+}
+
+// True when the event is a Bash call that ran `gh pr ready` or `gh pr merge`.
+// A failed one still counts: the poll it starts finds nothing changed.
+export function settledPr(event: unknown): boolean {
+  if (field(event, "tool_name") !== "Bash") return false;
+  const command = field(field(event, "tool_input"), "command");
+  return typeof command === "string" && command.split(SEGMENTS).some((c) => PR_SETTLE.test(c));
 }
 
 export function parsePr(json: string): Pr | null {
@@ -95,6 +109,10 @@ export function payload(pr: Pr, env: CmuxEnv): string | null {
 // Long enough for gh to list a PR it has just created: the turn-end poll a
 // second after the create found none (docs/state-loop.md).
 const POLL_DELAY_SECONDS = 10;
+// After a ready or merge GitHub already has the new state, so a second is
+// enough. Any delay at all makes the poll wait for a run holding the lock
+// rather than skip, and that run may have read GitHub before the change.
+export const SETTLE_DELAY_SECONDS = 1;
 
 export interface Spawn {
   command: string;
@@ -104,11 +122,11 @@ export interface Spawn {
 
 // The delayed poll to start after a create: pr-poll.ts in this checkout,
 // run by the node running this hook, so no PATH lookup or shell is needed.
-export function delayedPoll(hookDir: string, node: string): Spawn {
+export function delayedPoll(hookDir: string, node: string, seconds = POLL_DELAY_SECONDS): Spawn {
   const root = join(hookDir, "..", "..");
   return {
     command: node,
-    args: [join(root, "scripts", "pr-poll.ts"), "--delay", String(POLL_DELAY_SECONDS)],
+    args: [join(root, "scripts", "pr-poll.ts"), "--delay", String(seconds)],
     cwd: root,
   };
 }
@@ -125,8 +143,8 @@ function logFd(): number | "ignore" {
   }
 }
 
-function startPoll(): void {
-  const { command, args, cwd } = delayedPoll(import.meta.dirname, process.execPath);
+function startPoll(seconds?: number): void {
+  const { command, args, cwd } = delayedPoll(import.meta.dirname, process.execPath, seconds);
   const log = logFd();
   try {
     const child = spawn(command, args, { cwd, detached: true, stdio: ["ignore", "ignore", log] });
@@ -158,9 +176,10 @@ async function main(): Promise<void> {
     return;
   }
   const url = createdPrUrl(event);
-  if (!url) return;
+  if (url === null && !settledPr(event)) return;
   const socket = process.env.CMUX_SOCKET_PATH;
   if (!socket) return console.error("report-pr: skipped, not in a cmux terminal");
+  if (url === null) return startPoll(SETTLE_DELAY_SECONDS);
   startPoll();
   const gh = spawnSync("gh", ["pr", "view", url, "--json", "number,url,state,headRefName"], {
     encoding: "utf8",
