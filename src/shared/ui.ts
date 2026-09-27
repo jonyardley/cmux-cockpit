@@ -1,6 +1,10 @@
 // View helpers shared by both sidebars.
 
-/** Shows `view` only while `pred()` is true (a ForEach over zero or one item). */
+/**
+ * Shows `view` only while `pred()` is true (a ForEach over zero or one item).
+ * A layoutPriority set inside `view` does not reach the parent stack, so set it
+ * on the `when()` result.
+ */
 export function when(key: string, pred: () => boolean, view: () => View): View {
   return ForEach({ items: () => (pred() ? [{ id: key }] : []), key: (x) => x.id }, view);
 }

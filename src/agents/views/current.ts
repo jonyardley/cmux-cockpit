@@ -214,10 +214,11 @@ function currentHead(): View {
             () => pr()?.text ?? "",
             () => prChipColors(pr()?.health ?? "quiet", pr()?.status),
           ).onTap(() => openIfUrl(pr()?.url)),
+      )
         // Priority over the status phrase, so the chip is never the one cut.
         // It sits on the when() result because a priority inside it does not
         // reach this HStack.
-      ).layoutPriority(2),
+        .layoutPriority(2),
     ])
       .frame({ maxWidth: "infinity" })
       .paddingTop(14),

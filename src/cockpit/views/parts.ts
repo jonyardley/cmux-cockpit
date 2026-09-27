@@ -6,7 +6,7 @@ import { prChipColors } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
 import { type PrHealth, prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
-import { haloDot } from "../../shared/ui.ts";
+import { haloDot, when } from "../../shared/ui.ts";
 import { LANES } from "../lanes.ts";
 import {
   canCreateProject,
@@ -173,33 +173,35 @@ function chip(c: () => Chip): View {
   ])
     .paddingHorizontal(6)
     .paddingVertical(1);
-  // The PR chip is short and says the most, so it holds its width and the
-  // branch chip gives way, cut at its end.
-  return (
-    ring(
-      body,
-      () => (isPr() ? st().bg : C.ground),
-      () => (isPr() ? st().edge : C.chipEdge),
-      1,
-      6,
-      true,
-    )
-      // Read once: a ForEach row's kind is fixed by its key ("pr" or "br").
-      .layoutPriority(c().kind === "pr" ? 2 : 0)
-      .onTap(() => {
-        const url = c().url;
-        if (url) openURL(url);
-      })
-  );
+  return ring(
+    body,
+    () => (isPr() ? st().bg : C.ground),
+    () => (isPr() ? st().edge : C.chipEdge),
+    1,
+    6,
+    true,
+  ).onTap(() => {
+    const url = c().url;
+    if (url) openURL(url);
+  });
 }
 
-// No Spacer beside the ForEach: both are flexible, so the HStack would split
-// the free width between them and cut the chips at half the row. The frame
-// left-aligns instead, and the priority on the ForEach itself reaches the
-// HStack, which the priorities on each chip inside it do not.
+/** The chip with `id` from `chipsFor`, or an empty one of that kind while it is absent. */
+function chipById(w: Workspace | undefined, withBranch: boolean, id: "pr" | "br"): Chip {
+  return chipsFor(w, withBranch).find((c) => c.id === id) ?? { id, kind: id === "pr" ? "pr" : "branch", text: "" };
+}
+
+// One when() per chip, so each has a fixed key and its own place in the
+// HStack. The PR chip is short and says the most, so it holds its width and
+// the branch chip gives way, cut at its end. The priority sits on the when()
+// result because a priority inside it does not reach the HStack. No Spacer:
+// it is flexible too and would split the free width with the branch chip, so
+// the frame left-aligns instead.
 export function chipsRow(w: WsAccessor, withBranch: boolean): View {
+  const has = (id: "pr" | "br") => () => chipsFor(w(), withBranch).some((c) => c.id === id);
   return HStack({ spacing: 5 }, [
-    ForEach({ items: () => chipsFor(w(), withBranch), key: (c) => c.id }, (c) => chip(c)).layoutPriority(1),
+    when("pr", has("pr"), () => chip(() => chipById(w(), withBranch, "pr"))).layoutPriority(2),
+    when("br", has("br"), () => chip(() => chipById(w(), withBranch, "br"))),
   ]).frame({ maxWidth: "infinity", alignment: "leading" });
 }
 

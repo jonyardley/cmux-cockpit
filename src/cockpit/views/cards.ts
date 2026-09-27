@@ -39,8 +39,9 @@ function fullCard(w: WsAccessor, key: string): View {
         statusDot(w, 7),
         statusLabel(w, 12, "medium"),
         Text(detail).font(12).color(C.secondary).lineLimit(1).truncation("tail"),
-        Spacer({ minLength: 0 }),
-      ]).frame({ maxWidth: "infinity" }),
+        // Left-aligned by the frame, not a Spacer, which would split the free
+        // width with the detail text and cut it at half the row.
+      ]).frame({ maxWidth: "infinity", alignment: "leading" }),
       chipsRow(w, true),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
@@ -71,8 +72,8 @@ export function compactCard(w: WsAccessor, key: string): View {
           .color(() => prTextColor(pr(), C.secondary))
           .lineLimit(1)
           .layoutPriority(2),
-        Spacer({ minLength: 0 }),
-      ]).frame({ maxWidth: "infinity" }),
+        // Left-aligned by the frame, not a Spacer, as on the full card.
+      ]).frame({ maxWidth: "infinity", alignment: "leading" }),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
@@ -106,8 +107,9 @@ function denseRow(w: WsAccessor, key: string): View {
           () => pr()?.tag ?? "",
           () => prTextColor(pr(), C.metaText),
         ),
+    )
       // On the when() result: the priority inside meta() does not reach this HStack.
-    ).layoutPriority(2),
+      .layoutPriority(2),
     meta(() => ageOf(w()), C.metaText),
   ])
     .paddingLeading(25)
