@@ -76,9 +76,18 @@ describe("lanes", () => {
     ]);
   });
 
-  it("is empty outside All mode, so no drag resolves there", () => {
+  it("stays built under Projects, so the hidden lanes need no rebuild", () => {
+    const all = ids();
     state.setMode("projects");
-    assert.deepEqual(model.flatEntries(), []);
+    assert.deepEqual(ids(), all);
+  });
+
+  it("shows only the chosen mode's panel", () => {
+    const lanes = model.panelOpacity("all");
+    const projectsPanel = model.panelOpacity("projects");
+    assert.deepEqual([lanes(), projectsPanel()], [1, 0]);
+    state.setMode("projects");
+    assert.deepEqual([lanes(), projectsPanel()], [0, 1]);
   });
 
   it("laneByKey falls back to Unsorted and LANES ends with it", () => {
@@ -193,6 +202,14 @@ describe("handleMove", () => {
   it("clears the drag state", () => {
     state.setDrag({ id: "a@main", index: 1 });
     drop.handleMove("a@main", 1);
+    assert.equal(state.drag(), null);
+  });
+
+  it("ignores a move from the hidden lanes under Projects", () => {
+    state.setMode("projects");
+    state.setDrag({ id: "a@main", index: 1 });
+    drop.handleMove("a@main", 4);
+    assert.deepEqual(r.calls, []);
     assert.equal(state.drag(), null);
   });
 });

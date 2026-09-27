@@ -9,9 +9,12 @@
 //
 // The lanes are ONE flat Reorderable of fixed headers plus card rows, so a
 // card can be dragged between lanes in one gesture (see drop.ts).
+//
+// Both panels stay built, stacked in one ZStack; the tab only flips their
+// opacity (model.ts's panelOpacity), so a switch never rebuilds a list.
 
 import { handleMove, isForeignAnchor } from "./drop.ts";
-import { flatEntries, projectEntries, wsById } from "./model.ts";
+import { flatEntries, panelOpacity, projectEntries, wsById } from "./model.ts";
 import { setDrag } from "./state.ts";
 import { cardFor, projectRow } from "./views/cards.ts";
 import { dropZone, emptyFold, laneHeader, projectHeader, segmented } from "./views/headers.ts";
@@ -22,33 +25,43 @@ sidebar(() =>
   VStack({ spacing: 0, alignment: "leading" }, [
     segmented(),
     needsStrip(),
-    VStack({ spacing: 0 }, [
-      Reorderable(
-        {
-          items: flatEntries,
-          key: (e) => e.id,
-          spacing: 2,
-          onMove: handleMove,
-          onDragChange: setDrag,
-        },
-        (e) => {
-          const entry = e(); // kind, lane, anchorId and wsId are fixed per key
-          if (entry.kind === "header") return laneHeader(entry.lane, entry.anchorId);
-          if (entry.kind === "zone") return dropZone(entry.lane);
-          if (entry.kind === "fold") return emptyFold();
-          const row = cardFor(() => wsById(entry.wsId), entry);
-          return isForeignAnchor(entry.wsId) ? row.fixed() : row;
-        },
-      ),
-    ]).paddingHorizontal(10),
-    VStack({ spacing: 2 }, [
-      ForEach({ items: projectEntries, key: (e) => e.id }, (e) => {
-        const entry = e();
-        if (entry.kind === "header") return projectHeader(entry.project);
-        if (entry.kind === "empty") return emptyRow("No sessions");
-        return projectRow(() => wsById(entry.wsId), entry.id);
-      }),
-    ]).paddingHorizontal(10),
+    ZStack({ alignment: "top" }, [
+      lanesPanel().opacity(panelOpacity("all")),
+      projectsPanel().opacity(panelOpacity("projects")),
+    ]),
     Spacer(),
   ]).paddingBottom(12),
 );
+
+function lanesPanel(): View {
+  return VStack({ spacing: 0 }, [
+    Reorderable(
+      {
+        items: flatEntries,
+        key: (e) => e.id,
+        spacing: 2,
+        onMove: handleMove,
+        onDragChange: setDrag,
+      },
+      (e) => {
+        const entry = e(); // kind, lane, anchorId and wsId are fixed per key
+        if (entry.kind === "header") return laneHeader(entry.lane, entry.anchorId);
+        if (entry.kind === "zone") return dropZone(entry.lane);
+        if (entry.kind === "fold") return emptyFold();
+        const row = cardFor(() => wsById(entry.wsId), entry);
+        return isForeignAnchor(entry.wsId) ? row.fixed() : row;
+      },
+    ),
+  ]).paddingHorizontal(10);
+}
+
+function projectsPanel(): View {
+  return VStack({ spacing: 2 }, [
+    ForEach({ items: projectEntries, key: (e) => e.id }, (e) => {
+      const entry = e();
+      if (entry.kind === "header") return projectHeader(entry.project);
+      if (entry.kind === "empty") return emptyRow("No sessions");
+      return projectRow(() => wsById(entry.wsId), entry.id);
+    }),
+  ]).paddingHorizontal(10);
+}

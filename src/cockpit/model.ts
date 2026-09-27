@@ -26,7 +26,6 @@ import {
   bump,
   collapsedProjects,
   mode,
-  projectsMode,
   savedFolds,
   setCollapsedProjects,
   setMode,
@@ -318,6 +317,13 @@ export function chooseMode(m: ViewMode): void {
   persistSet("ui.mode", m);
 }
 
+// Both panels stay built and are stacked in one place; switching tabs only
+// flips their opacity, so neither list is torn down and rebuilt (the
+// flicker). A slide between them would add an offset here, once the
+// renderer can animate one.
+/** 1 while `m` is the chosen mode, else 0: a live value for `.opacity()`. */
+export const panelOpacity = (m: ViewMode) => (): number => (mode() === m ? 1 : 0);
+
 // --- All mode: one flat list of lane headers and cards --------------------------------
 
 // A header's key carries the anchor it shows (issue #49), and an empty lane
@@ -390,9 +396,9 @@ export const emptyLaneNames = (): string[] =>
     .filter(isEmpty)
     .map((s) => s.lane.name);
 
-// The lanes' Reorderable goes empty in Projects mode, so a drag there can
-// never resolve to a lane move.
-export const flatEntries = (): LaneEntry[] => (mode() === "all" ? laneEntries() : []);
+// Built in both modes: the lanes panel stays mounted under Projects, hidden
+// (panelOpacity). drop.ts's handleMove ignores a move outside All instead.
+export const flatEntries = (): LaneEntry[] => laneEntries();
 
 export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => laneOf(w) === laneKey).length;
 
@@ -547,7 +553,6 @@ export type ProjectEntry =
   | { kind: "empty"; id: string };
 
 export const projectEntries = computed(() => {
-  if (!projectsMode()) return [];
   const cards = cardWorkspaces();
   const entries: ProjectEntry[] = [];
   // Every configured project shows, even with no sessions; Other only shows
