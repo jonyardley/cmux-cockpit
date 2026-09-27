@@ -149,8 +149,11 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
 
 // An empty lane (issue #50): a zone row that only opens while a card is
 // dragged, and folds to nothing at rest (the row stays, so the drop index
-// never shifts). The renderer has no dashed stroke, so the open zone is a
-// quiet ring that turns solid ink under the pointer.
+// never shifts). Zero padding alone left the row at its open height after a
+// drag, as a blank gap until the next relayout, so the row also caps its
+// height the way a hidden panel does (panelMaxHeight). The renderer has no
+// dashed stroke, so the open zone is a quiet ring that turns solid ink under
+// the pointer.
 export function dropZone(laneKey: LaneKey): View {
   const lane = laneByKey(laneKey);
   const target = () => dropLane() === laneKey;
@@ -180,11 +183,13 @@ export function dropZone(laneKey: LaneKey): View {
   );
   return VStack({ spacing: 0 }, [zone.frame({ maxWidth: "infinity" })])
     .paddingTop(open(8))
+    .frame({ maxHeight: () => (dragging() ? "infinity" : 0), alignment: "top" })
     .fixed();
 }
 
 // The empty lanes at rest (issue #50): one quiet line, no tap. It folds to
-// nothing while a card is dragged, when the zones open instead.
+// nothing while a card is dragged, when the zones open instead, and caps
+// its height then for the same reason as a zone.
 export function emptyFold(): View {
   const rest = (v: number) => () => (dragging() ? 0 : v);
   return Text(() => (dragging() ? "" : "Empty: " + emptyLaneNames().join(" · ")))
@@ -195,7 +200,7 @@ export function emptyFold(): View {
     .paddingHorizontal(8)
     .paddingTop(rest(SECTION_GAP))
     .paddingBottom(rest(HEADER_PAD))
-    .frame({ maxWidth: "infinity", alignment: "leading" })
+    .frame({ maxWidth: "infinity", maxHeight: () => (dragging() ? 0 : "infinity"), alignment: "leading" })
     .fixed();
 }
 
