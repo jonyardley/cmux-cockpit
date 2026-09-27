@@ -165,7 +165,7 @@ function currentHead(): View {
             .join(" · "),
         )
           .font(11.5)
-          .color("#6B6A64")
+          .color(T.muted)
           .lineLimit(1)
           .truncation("tail"),
       ])
