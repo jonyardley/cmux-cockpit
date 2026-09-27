@@ -409,14 +409,31 @@ describe("agentRows", () => {
     const gone = agent("ended", { name: "Claude" });
     r.data.workspaces = [ws("w", { selected: true, agents: [first, gone, second, titled] })];
     const rows = m.agentRows();
-    // Most active first; numbers follow cmux's order, so they hold still.
+    // Most active first; numbers follow cmux's order, ended agents included.
     assert.deepEqual(
       rows.map((e) => [e.key, e.label, e.last]),
       [
-        ["a:" + second.id, "Claude 2", false],
+        ["a:" + second.id, "Claude 3", false],
         ["a:" + first.id, "Claude 1", false],
         ["a:" + titled.id, "Fix the poller", true],
       ],
+    );
+  });
+
+  it("keeps each agent's number when an earlier one ends", () => {
+    const one = agent("working", { name: "Claude" });
+    const two = agent("idle", { name: "Claude", lastActivityAt: 100 });
+    const three = agent("idle", { name: "Claude", lastActivityAt: 50 });
+    r.data.workspaces = [ws("w", { selected: true, agents: [one, two, three] })];
+    assert.deepEqual(
+      m.agentRows().map((e) => e.label),
+      ["Claude 1", "Claude 2", "Claude 3"],
+    );
+    one.status = "ended";
+    r.data.workspaces = [ws("w", { selected: true, agents: [one, two, three] })];
+    assert.deepEqual(
+      m.agentRows().map((e) => e.label),
+      ["Claude 2", "Claude 3"],
     );
   });
 

@@ -91,19 +91,24 @@ export const runningRows = computed(() => {
 export interface Current {
   ws: Workspace;
   a: Agent | null;
+  /** Most active first. */
   agents: Agent[];
+  /** The same agents in cmux's own order. */
+  inOrder: Agent[];
   project: Project;
 }
 
 export const current = computed((): Current | null => {
   const w = (data.workspaces() ?? []).find((x) => x.selected);
   if (!w) return null;
-  const agents = agentsOf(w).sort(byActivity);
-  return { ws: w, a: agents[0] ?? null, agents, project: projectOf(w.directory) };
+  const inOrder = agentsOf(w);
+  const agents = [...inOrder].sort(byActivity);
+  return { ws: w, a: agents[0] ?? null, agents, inOrder, project: projectOf(w.directory) };
 });
 
 /** current(), or an empty stand-in so views never branch on null. */
-export const cur = (): Current => current() ?? { ws: { id: "" }, a: null, agents: [], project: projectOf("") };
+export const cur = (): Current =>
+  current() ?? { ws: { id: "" }, a: null, agents: [], inOrder: [], project: projectOf("") };
 
 /** Idle and no agent draw a hollow ring, as the Running rows and the left sidebar do. */
 export const hollowDot = (a: Agent | null): boolean => !a || a.status === "idle";
@@ -164,20 +169,16 @@ export interface AgentRow {
 const fallbackLabel = (a: Agent): string => a.name || a.kind || "agent";
 
 // A real title wins; otherwise agents sharing a fallback label are numbered
-// in cmux's own order, which holds still as their activity changes.
-function labelsFor(live: Agent[], ws: Workspace): Map<string, string> {
-  const order = new Map((ws.agents ?? []).map((a, i) => [a?.id, i]));
-  const byCmux = [...live].sort((x, y) => (order.get(x.id) ?? 0) - (order.get(y.id) ?? 0));
-  const shared = new Map<string, number>();
-  for (const a of byCmux) {
-    if (!readable(a.title)) shared.set(fallbackLabel(a), (shared.get(fallbackLabel(a)) ?? 0) + 1);
-  }
+// in cmux's own order, ended ones included, so a number holds still as
+// activity changes and as earlier agents end.
+function labelsFor(inOrder: Agent[]): Map<string, string> {
+  const plain = inOrder.map((a) => ({ a, title: readable(a.title), base: fallbackLabel(a) }));
+  const count = new Map<string, number>();
+  for (const e of plain) if (!e.title) count.set(e.base, (count.get(e.base) ?? 0) + 1);
   const seen = new Map<string, number>();
   const out = new Map<string, string>();
-  for (const a of byCmux) {
-    const title = readable(a.title);
-    const base = fallbackLabel(a);
-    if (title || (shared.get(base) ?? 0) < 2) {
+  for (const { a, title, base } of plain) {
+    if (title || (count.get(base) ?? 0) < 2) {
       out.set(a.id, title || base);
       continue;
     }
@@ -192,10 +193,10 @@ function labelsFor(live: Agent[], ws: Workspace): Map<string, string> {
  * agents are left out, and the list is empty unless two or more remain: the
  * header already shows one. */
 export const agentRows = computed((): Last<AgentRow>[] => {
-  const { ws, agents } = cur();
+  const { agents, inOrder } = cur();
   const live = agents.filter((a) => a.status !== "ended");
   if (live.length < 2) return [];
-  const labels = labelsFor(live, ws);
+  const labels = labelsFor(inOrder);
   return markLast(live.slice(0, 6).map((a) => ({ key: "a:" + a.id, a, label: labels.get(a.id) ?? fallbackLabel(a) })));
 });
 
