@@ -384,6 +384,23 @@ describe("Move to project override (issue #8)", () => {
     model.openProjectWorkspace("/dev/app-two");
     assert.deepEqual(r.calls, []);
   });
+
+  it("labels the card menu's new session by project, or says why it cannot", () => {
+    const one = ws("one", { directory: "/Users/coder/dev/app-one" });
+    const two = ws("two", { directory: "/Users/coder/dev/app-two" });
+    assert.equal(model.newSessionLabel(one), "New session in App One");
+    assert.equal(model.newSessionLabel(two), "New session (project has no folder)");
+    assert.equal(model.newSessionLabel(byId("u")), "New session (project has no folder)");
+    assert.equal(model.newSessionLabel(undefined), "New session (no workspace)");
+    model.newSessionFor(two);
+    model.newSessionFor(undefined);
+    assert.deepEqual(r.calls, []);
+    model.newSessionFor(one);
+    assert.deepEqual(r.calls, [{ method: "workspace.create", params: { cwd: "~/dev/app-one", focus: true } }]);
+    r.menu.length = 0;
+    cardMenu(() => one);
+    assert.equal(r.menu[0], "button:New session in App One");
+  });
 });
 
 describe("chips", () => {
