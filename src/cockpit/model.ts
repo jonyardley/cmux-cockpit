@@ -5,7 +5,6 @@
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
-import { chunk } from "../shared/list.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import {
   inAppSpec,
@@ -546,14 +545,15 @@ export function newSessionFor(w: Workspace | undefined): void {
   if (w) openProjectWorkspace(projectKey(w));
 }
 
-/** The quiet line's label for one project: what a tap does, or why it does nothing. */
+/** A quiet row's menu label: what a tap does, or why it does nothing. */
 export const quietLabel = (k: string): string =>
   canOpenProject(k) ? openLabel(k) : `${projectByKey(k).name} has no folder to open`;
 
 export type ProjectEntry =
   | { kind: "header"; id: string; project: string }
   | { kind: "ws"; id: string; wsId: string }
-  | { kind: "quiet"; id: string };
+  | { kind: "quiet"; id: string }
+  | { kind: "idle"; id: string; project: string };
 
 /** The cards grouped by project key, in one pass over the cards. */
 const cardsByProject = computed(() => {
@@ -568,21 +568,19 @@ const cardsByProject = computed(() => {
 });
 
 /**
- * Configured projects with no sessions, in table order (issue #54). They fold
- * into one "Quiet" line of icons rather than a header each.
+ * Configured projects with no sessions, in table order (issue #54). They sit
+ * under one "Quiet" header as a short row each rather than a full header.
  */
 export const quietProjects = computed(() => {
   const groups = cardsByProject();
   return PROJECTS.map(projectId).filter((k) => !groups.has(k));
 });
 
-/** Icons per quiet line row: the renderer cannot wrap, so the model does. */
-const QUIET_PER_ROW = 7;
-
-/** The quiet icons split into rows that fit the sidebar, keyed by position. */
-export const quietRows = computed(() =>
-  chunk(quietProjects(), QUIET_PER_ROW).map((keys, i) => ({ id: "q" + i, keys })),
-);
+/** The Quiet header's fold, kept with the project folds. No project key is
+ * a bare word (they are match paths, or "other"), so this cannot collide. */
+const QUIET_FOLD = "quiet";
+export const isQuietCollapsed = () => isProjectCollapsed(QUIET_FOLD);
+export const toggleQuiet = () => toggleProject(QUIET_FOLD);
 
 function pushGroup(entries: ProjectEntry[], k: string, rows: readonly Workspace[]): void {
   entries.push({ kind: "header", id: "p:" + k, project: k });
@@ -595,13 +593,16 @@ export const projectEntries = computed(() => {
   if (!projectsMode()) return [];
   const groups = cardsByProject();
   const entries: ProjectEntry[] = [];
-  // A project with sessions gets a header; the quiet ones share one line at
-  // the bottom. Other only shows once something actually falls into it.
+  // A project with sessions gets a header; the quiet ones share one header at
+  // the bottom, a short row each. Other only shows once something falls into it.
   for (const k of [...PROJECTS.map(projectId), projectId(OTHER)]) {
     const rows = groups.get(k);
     if (rows) pushGroup(entries, k, rows);
   }
-  if (quietProjects().length) entries.push({ kind: "quiet", id: "p:quiet" });
+  const quiet = quietProjects();
+  if (!quiet.length) return entries;
+  entries.push({ kind: "quiet", id: "p:quiet" });
+  if (!isQuietCollapsed()) for (const k of quiet) entries.push({ kind: "idle", id: "q:" + k, project: k });
   return entries;
 });
 
