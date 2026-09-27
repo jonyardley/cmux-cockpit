@@ -14,9 +14,8 @@ import { handleMove, isForeignAnchor } from "./drop.ts";
 import { flatEntries, projectEntries, wsById } from "./model.ts";
 import { setDrag } from "./state.ts";
 import { cardFor, projectRow } from "./views/cards.ts";
-import { dropZone, emptyFold, laneHeader, projectHeader, segmented } from "./views/headers.ts";
+import { dropZone, emptyFold, laneHeader, projectHeader, quietLine, segmented } from "./views/headers.ts";
 import { needsStrip } from "./views/needs.ts";
-import { emptyRow } from "./views/parts.ts";
 
 sidebar(() =>
   VStack({ spacing: 0, alignment: "leading" }, [
@@ -45,7 +44,7 @@ sidebar(() =>
       ForEach({ items: projectEntries, key: (e) => e.id }, (e) => {
         const entry = e();
         if (entry.kind === "header") return projectHeader(entry.project);
-        if (entry.kind === "empty") return emptyRow("No sessions");
+        if (entry.kind === "quiet") return quietLine();
         return projectRow(() => wsById(entry.wsId), entry.id);
       }),
     ]).paddingHorizontal(10),

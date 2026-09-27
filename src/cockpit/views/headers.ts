@@ -14,6 +14,8 @@ import {
   openProjectWorkspace,
   projectByKey,
   projectCount,
+  quietLabel,
+  quietProjects,
   selectWorkspace,
   toggleLane,
   toggleProject,
@@ -193,14 +195,47 @@ export function emptyFold(): View {
     .fixed();
 }
 
+function projectBadge(k: string, size: number, font: number): View {
+  const p = projectByKey(k);
+  return ZStack({}, [
+    RoundedRectangle({ cornerRadius: 5 }).fill(p.color),
+    Image(p.icon).font(font).weight("semibold").color(glyphColor(p.color, C.text)),
+  ]).frame({ width: size, height: size });
+}
+
+// One icon in the quiet line. The renderer has no hover tooltip, so the
+// context menu carries the name. A project with no folder has no tap and
+// sits dimmed, so it does not read as a button.
+function quietIcon(k: string): View {
+  const menu = [Button(quietLabel(k), () => openProjectWorkspace(k))];
+  if (!canOpenProject(k)) return projectBadge(k, 20, 10.5).opacity(0.55).contextMenu(menu);
+  return ZStack({}, [projectBadge(k, 20, 10.5)])
+    .padding(2)
+    .cornerRadius(7)
+    .hoverBackground(C.hover)
+    .onTap(() => openProjectWorkspace(k))
+    .contextMenu(menu);
+}
+
+// Projects with no sessions (issue #54): one line of icons at the bottom
+// instead of a header each, so the busy projects stand out.
+export function quietLine(): View {
+  return HStack({ spacing: 6 }, [
+    Text("Quiet").font(11.5).color(C.faint).lineLimit(1),
+    HStack({ spacing: 2 }, [ForEach({ items: quietProjects, key: (k) => k }, (k) => quietIcon(k()))]),
+    Spacer({ minLength: 0 }),
+  ])
+    .paddingHorizontal(8)
+    .paddingTop(14)
+    .paddingBottom(5)
+    .frame({ maxWidth: "infinity", alignment: "leading" });
+}
+
 export function projectHeader(k: string): View {
   const p = projectByKey(k);
   return HStack({ spacing: 8 }, [
     chevron(() => isProjectCollapsed(k)),
-    ZStack({}, [
-      RoundedRectangle({ cornerRadius: 5 }).fill(p.color),
-      Image(p.icon).font(10).weight("semibold").color(glyphColor(p.color, C.text)),
-    ]).frame({ width: 18, height: 18 }),
+    projectBadge(k, 18, 10),
     headerName(p.name, C.heading),
     countPill(() => projectCount(k)),
     Spacer({ minLength: 4 }),
