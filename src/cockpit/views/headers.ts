@@ -1,12 +1,11 @@
 // The segmented mode control and the lane and project section headers.
 
 import { projectBadge } from "../../shared/ui.ts";
-import { dragging, dropLane, zoneMaxHeight } from "../drop.ts";
+import { dropLane } from "../drop.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
   chooseMode,
-  emptyLaneNames,
   isCollapsed,
   isProjectCollapsed,
   laneCount,
@@ -111,8 +110,7 @@ function dropHint(target: () => boolean): View {
     .lineLimit(1);
 }
 
-// A header sits SECTION_GAP below the section above, the same as emptyFold
-// and quietLine. The gap goes on a wrapper outside the hover and drop
+// A header sits SECTION_GAP below the section above. The gap goes on a wrapper outside the hover and drop
 // shading, so the grey hugs the row; the tap stays on the wrapper, as on
 // cards, so the gap still folds the header.
 const SECTION_GAP = 14;
@@ -147,60 +145,29 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
   return headerGap(row, () => toggleLane(lane)).fixed();
 }
 
-// An empty lane (issue #50): a zone row that only opens while a card is
-// dragged, and folds to nothing at rest (the row stays, so the drop index
-// never shifts). After a drag, zero padding alone seemed to leave the row at
-// its open height, a blank gap until a tab switch forced a relayout (read
-// from screenshots, not seen in the renderer), so the row also caps its
-// height the way a hidden panel does. The renderer has no dashed stroke, so
-// the open zone is a quiet ring that turns solid ink under the pointer.
+// An empty lane (issue #50): a faint box in its own place, drawn the same
+// whether or not a card is dragged, so nothing opens or closes when a drag
+// starts or ends. The renderer has no dashed stroke, so the box is a quiet
+// ring that turns solid ink under the pointer.
 export function dropZone(laneKey: LaneKey): View {
   const lane = laneByKey(laneKey);
   const target = () => dropLane() === laneKey;
-  const open = (v: number) => () => (dragging() ? v : 0);
   const row = HStack({ spacing: 8 }, [
-    RoundedRectangle({ cornerRadius: 3 })
-      .fill(() => (dragging() ? lane.color : "clear"))
-      .frame({ width: open(9), height: open(9) }),
-    Text(() => (dragging() ? lane.name : ""))
-      .font(12.5)
-      .weight("semibold")
-      .color(C.faint)
-      .lineLimit(1)
-      .truncation("tail")
-      .layoutPriority(1),
+    laneMarker(lane.color),
+    Text(lane.name).font(12.5).weight("semibold").color(C.faint).lineLimit(1).truncation("tail").layoutPriority(1),
     Spacer({ minLength: 0 }),
     dropHint(target),
   ])
-    .paddingHorizontal(open(10))
-    .paddingVertical(open(8));
+    .paddingHorizontal(10)
+    .paddingVertical(8);
   const zone = ring(
     row,
-    () => (target() ? C.zoneLit : dragging() ? C.ground : "clear"),
-    () => (target() ? C.heading : dragging() ? C.zoneEdge : "clear"),
-    open(1),
+    () => (target() ? C.zoneLit : C.ground),
+    () => (target() ? C.heading : C.zoneEdge),
+    1,
     8,
   );
-  return VStack({ spacing: 0 }, [zone.frame({ maxWidth: "infinity" })])
-    .paddingTop(open(8))
-    .frame({ maxHeight: zoneMaxHeight, alignment: "top" })
-    .fixed();
-}
-
-// The empty lanes at rest (issue #50): one quiet line, no tap. It folds to
-// nothing while a card is dragged, when the zones open instead.
-export function emptyFold(): View {
-  const rest = (v: number) => () => (dragging() ? 0 : v);
-  return Text(() => (dragging() ? "" : "Empty: " + emptyLaneNames().join(" · ")))
-    .font(11.5)
-    .color(C.faint)
-    .lineLimit(1)
-    .truncation("tail")
-    .paddingHorizontal(8)
-    .paddingTop(rest(SECTION_GAP))
-    .paddingBottom(rest(HEADER_PAD))
-    .frame({ maxWidth: "infinity", alignment: "leading" })
-    .fixed();
+  return VStack({ spacing: 0 }, [zone]).paddingTop(8).fixed();
 }
 
 const badge = (k: string, size: number, font: number): View => {
