@@ -44,8 +44,8 @@ sidebar(() =>
       ForEach({ items: projectEntries, key: (e) => e.id }, (e) => {
         const entry = e();
         if (entry.kind === "header") return projectHeader(entry.project);
-        if (entry.kind === "quiet") return quietHeader();
-        if (entry.kind === "idle") return quietRow(entry.project);
+        if (entry.kind === "quietHeader") return quietHeader();
+        if (entry.kind === "quietRow") return quietRow(entry.project);
         return projectRow(() => wsById(entry.wsId), entry.id);
       }),
     ]).paddingHorizontal(10),

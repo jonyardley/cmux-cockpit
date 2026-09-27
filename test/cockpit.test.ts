@@ -491,7 +491,7 @@ describe("projects mode", () => {
         "b@p",
         "p@p",
         "u@p",
-        "p:quiet",
+        "quiet",
         "q:/dev/app-three",
       ],
     );
@@ -536,22 +536,22 @@ describe("projects mode", () => {
       entries.some((e) => e.kind === "header" && e.project !== "other"),
       false,
     );
-    assert.equal(entries.filter((e) => e.kind === "quiet").length, 1);
+    assert.equal(entries.filter((e) => e.kind === "quietHeader").length, 1);
     assert.deepEqual(entries.slice(-4), [
-      { kind: "quiet", id: "p:quiet" },
-      { kind: "idle", id: "q:/dev/app-one", project: "/dev/app-one" },
-      { kind: "idle", id: "q:/dev/app-two", project: "/dev/app-two" },
-      { kind: "idle", id: "q:/dev/app-three", project: "/dev/app-three" },
+      { kind: "quietHeader", id: "quiet" },
+      { kind: "quietRow", id: "q:/dev/app-one", project: "/dev/app-one" },
+      { kind: "quietRow", id: "q:/dev/app-two", project: "/dev/app-two" },
+      { kind: "quietRow", id: "q:/dev/app-three", project: "/dev/app-three" },
     ]);
   });
 
   it("folds the quiet rows under their header, and unfolds them again", () => {
     state.setMode("projects");
-    assert.equal(model.isQuietCollapsed(), false);
+    assert.equal(state.quietCollapsed(), false);
     model.toggleQuiet();
-    assert.equal(model.isQuietCollapsed(), true);
+    assert.equal(state.quietCollapsed(), true);
     const ids = model.projectEntries().map((e) => e.id);
-    assert.equal(ids.at(-1), "p:quiet");
+    assert.equal(ids.at(-1), "quiet");
     assert.equal(
       ids.some((id) => id.startsWith("q:")),
       false,
@@ -571,7 +571,7 @@ describe("projects mode", () => {
     state.setMode("projects");
     assert.deepEqual(model.quietProjects(), []);
     assert.equal(
-      model.projectEntries().some((e) => e.kind === "quiet" || e.kind === "idle"),
+      model.projectEntries().some((e) => e.kind === "quietHeader" || e.kind === "quietRow"),
       false,
     );
   });
@@ -875,6 +875,19 @@ describe("saving the view and folds", () => {
     assert.equal(last[0], "ui.collapsed");
     assert.equal(last[1]["lane:unsorted"], 1);
     assert.equal(last[1]["project:/dev/app-two"], 1);
+  });
+
+  it("saves the Quiet fold under its own key, so the stale-project prune keeps it", () => {
+    r.opened.length = 0;
+    model.toggleQuiet();
+    const folded = sent().at(-1);
+    assert.ok(Array.isArray(folded));
+    assert.equal(folded[0], "ui.collapsed");
+    assert.equal(folded[1].quiet, 1);
+    model.toggleQuiet();
+    const open = sent().at(-1);
+    assert.ok(Array.isArray(open));
+    assert.equal(open[1]?.quiet, undefined);
   });
 
   it("drops folds on projects that are gone, and sorts the rest", () => {
