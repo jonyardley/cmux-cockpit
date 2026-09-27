@@ -38,6 +38,7 @@ function setup(): void {
   r.calls.length = 0;
   state.setMode("all");
   state.setCollapsedProjects([]);
+  state.setDrag(null);
 }
 
 const ids = () => model.flatEntries().map((e) => e.id);
@@ -67,10 +68,10 @@ describe("lanes", () => {
       "b@main",
       "h:review",
       "c@review",
-      "h:bg",
       "h:parked",
       "h:unsorted",
       "u@unsorted",
+      "f:empty",
     ]);
   });
 
@@ -251,10 +252,12 @@ describe("missing lane groups", () => {
 
   it("cancels the wait when the card is dragged back to Unsorted", () => {
     model.moveToLane(byId("u"), "bg");
+    // Unsorted is empty now, so it only shows as a drop zone mid-drag.
+    drop.handleDragChange({ id: "u@bg", index: 0 });
     const slot =
       ids()
         .filter((id) => id !== "u@bg")
-        .indexOf("h:unsorted") + 1;
+        .indexOf("z:unsorted") + 1;
     drop.handleMove("u@bg", slot);
     assert.equal(model.laneOf(byId("u") ?? ws("?")), "unsorted");
     r.calls.length = 0;
@@ -286,10 +289,11 @@ describe("missing lane groups", () => {
   });
 
   it("files a dropped card into a lane that has no group yet", () => {
+    drop.handleDragChange({ id: "u@unsorted", index: 0 });
     const slot =
       ids()
         .filter((id) => id !== "u@unsorted")
-        .indexOf("h:bg") + 1;
+        .indexOf("z:bg") + 1;
     drop.handleMove("u@unsorted", slot);
     assert.ok(r.calls.some((c) => c.method === "workspace.group.create"));
     assert.equal(model.laneOf(byId("u") ?? ws("?")), "bg");
@@ -303,6 +307,145 @@ describe("foreign anchors", () => {
     r.data.groups.push(group("g-proj", "app-one", { anchorId: "a" }));
     assert.equal(drop.isForeignAnchor("a"), true);
     assert.equal(drop.isForeignAnchor("anchor-main"), false);
+  });
+});
+
+// Issue #49: cmux marks a lane group's anchor as generated, but the
+// renderer's data does not (#7), so the title decides.
+describe("a lane's generated anchor", () => {
+  beforeEach(setup);
+
+  const anchor = () => byId("anchor-review") ?? ws("?");
+  const header = (lane: string) => model.flatEntries().find((e) => e.kind === "header" && e.lane === lane);
+
+  it("stays off the cards when an agent runs in it, and its lane counts only real cards", () => {
+    anchor().agents = [agent("working")];
+    assert.ok(!model.cardWorkspaces().some((w) => w.id === "anchor-review"));
+    assert.equal(model.laneCount("review"), 1);
+    assert.ok(!ids().includes("anchor-review@review"));
+  });
+
+  it("puts its status on the lane header, under a key of its own", () => {
+    anchor().agents = [agent("working")];
+    assert.deepEqual(header("review"), {
+      kind: "header",
+      id: "h:review:anchor-review",
+      lane: "review",
+      anchorId: "anchor-review",
+    });
+  });
+
+  it("leaves the header plain when the anchor has no agent", () => {
+    assert.deepEqual(header("review"), { kind: "header", id: "h:review", lane: "review", anchorId: null });
+    assert.ok(!model.cardWorkspaces().some((w) => w.id === "anchor-review"));
+  });
+
+  it("keeps a real workspace used as an anchor as a card, with or without an agent", () => {
+    r.data.groups = [group("g-bg", "Background", { anchorId: "real" })];
+    r.data.workspaces = [ws("real", { title: "Spike: wireless", group: "g-bg" })];
+    assert.deepEqual(
+      model.cardWorkspaces().map((w) => w.id),
+      ["real"],
+    );
+    assert.equal(header("bg")?.id, "h:bg");
+    const real = byId("real");
+    if (!real) throw new Error("fixture");
+    real.agents = [agent("working")];
+    assert.deepEqual(
+      model.cardWorkspaces().map((w) => w.id),
+      ["real"],
+    );
+  });
+
+  it("keeps a lane whose only activity is its anchor's agent open, not folded", () => {
+    r.data.workspaces = r.data.workspaces.filter((w) => w.id !== "c");
+    anchor().agents = [agent("needs_input", { sinceEpoch: 1 })];
+    assert.ok(ids().includes("h:review:anchor-review"));
+    assert.deepEqual(model.emptyLaneNames(), ["Background"]);
+  });
+
+  it("still lists a waiting anchor in Needs you", () => {
+    anchor().agents = [agent("needs_input", { sinceEpoch: 1 })];
+    assert.deepEqual(
+      model.needsList().map((w) => w.id),
+      ["anchor-review"],
+    );
+  });
+});
+
+// Issue #50: empty lanes fold into one line at rest and open as drop zones
+// while a card is being dragged.
+describe("empty lanes", () => {
+  beforeEach(setup);
+
+  const dropEmpty = () => (r.data.workspaces = r.data.workspaces.filter((w) => w.id !== "c"));
+
+  it("fold into one line after the lanes at rest, in lane order", () => {
+    dropEmpty();
+    assert.deepEqual(model.emptyLaneNames(), ["For review", "Background"]);
+    assert.ok(!ids().includes("h:review"));
+    assert.ok(!ids().includes("h:bg"));
+    assert.equal(ids().at(-1), "f:empty");
+  });
+
+  it("leaves out the folded line when no lane is empty", () => {
+    r.data.workspaces.push(ws("d", { group: "g-bg" }));
+    r.data.groups.push(group("g-bg", "Background", { anchorId: "anchor-bg" }));
+    assert.ok(!ids().includes("f:empty"));
+  });
+
+  it("open as drop zones in their lane's place while a card is dragged", () => {
+    state.setDrag({ id: "a@main", index: 1 });
+    assert.deepEqual(ids(), [
+      "h:main",
+      "a@main",
+      "b@main",
+      "h:review",
+      "c@review",
+      "z:bg",
+      "h:parked",
+      "h:unsorted",
+      "u@unsorted",
+    ]);
+  });
+
+  it("resolves a drop just under a zone to that zone's lane, and lights it", () => {
+    state.setDrag({ id: "a@main", index: 0 });
+    // Without a@main: [h:main, b@main, h:review, c@review, z:bg, ...].
+    const slot = 5;
+    assert.deepEqual(drop.resolveDrop("a@main", slot), { laneKey: "bg", nextRef: null, prevRef: null });
+    state.setDrag({ id: "a@main", index: slot });
+    assert.equal(drop.dropLane(), "bg");
+  });
+
+  it("files a card dropped on a zone into a lane that already has a group", () => {
+    dropEmpty();
+    drop.handleDragChange({ id: "a@main", index: 0 });
+    const slot =
+      ids()
+        .filter((id) => id !== "a@main")
+        .indexOf("z:review") + 1;
+    drop.handleMove("a@main", slot);
+    assert.ok(r.calls.some((c) => c.method === "workspace.group.add" && c.params.group_id === "g-review"));
+    assert.equal(model.laneOf(byId("a") ?? ws("?")), "review");
+  });
+
+  it("resolves the drop against the drag's rows even when the drag ends first", () => {
+    drop.handleDragChange({ id: "u@unsorted", index: 0 });
+    const slot =
+      ids()
+        .filter((id) => id !== "u@unsorted")
+        .indexOf("z:bg") + 1;
+    drop.handleDragChange(null);
+    assert.ok(ids().includes("f:empty"));
+    drop.handleMove("u@unsorted", slot);
+    assert.ok(r.calls.some((c) => c.method === "workspace.group.create" && c.params.name === "Background"));
+    assert.equal(state.drag(), null);
+  });
+
+  it("skips the folded line when finding the lane above a slot", () => {
+    const rows = ids().filter((id) => id !== "a@main");
+    assert.equal(drop.resolveDrop("a@main", rows.length).laneKey, "unsorted");
   });
 });
 

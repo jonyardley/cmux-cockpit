@@ -35,6 +35,10 @@ export const C = {
   heading: "#3D3D3A",
   // Clearly stronger than hover, so a drop target reads under the pointer.
   dropTarget: "#1414131F",
+  // An empty lane's drop zone mid-drag: a quiet edge, then solid face and
+  // ink edge under the pointer (opaque, since ring() fills behind the face).
+  zoneEdge: "#D3CFC1",
+  zoneLit: "#E7E4D9",
   needsHover: "#FFFDFB",
   chipText: "#4A4945",
   chipEdge: "#E8E5DA",

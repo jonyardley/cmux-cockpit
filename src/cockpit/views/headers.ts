@@ -6,18 +6,21 @@ import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
   chooseMode,
+  emptyLaneNames,
   isCollapsed,
   isProjectCollapsed,
   laneCount,
   openProjectWorkspace,
   projectByKey,
   projectCount,
+  selectWorkspace,
   toggleLane,
   toggleProject,
+  wsById,
 } from "../model.ts";
 import { mode, projectsMode } from "../state.ts";
 import { C } from "../theme.ts";
-import { glyphButton, ring } from "./parts.ts";
+import { glyphButton, ring, statusDot, unreadBadge } from "./parts.ts";
 
 function segButton(label: string, icon: string | null, on: () => boolean, set: () => void): View {
   return ZStack({}, [
@@ -88,20 +91,41 @@ function chevron(collapsed: () => boolean): View {
     .frame({ width: 12, height: 16 });
 }
 
-export function laneHeader(laneKey: LaneKey): View {
+// A lane's generated anchor with an agent in it (issue #49): its dot and
+// unread count sit on the header, and a tap there selects it rather than
+// folding the lane.
+function anchorStatus(anchorId: string): View {
+  const w = () => wsById(anchorId);
+  return HStack({ spacing: 5 }, [statusDot(w, 7), unreadBadge(w)])
+    .paddingHorizontal(4)
+    .frame({ height: 16 })
+    .cornerRadius(6)
+    .hoverBackground(C.hover)
+    .onTap(() => selectWorkspace(anchorId));
+}
+
+function dropHint(target: () => boolean): View {
+  return Text(() => (target() ? "Drop here" : ""))
+    .font(11)
+    .weight("medium")
+    .color(C.heading)
+    .lineLimit(1);
+}
+
+const laneMarker = (color: string): View =>
+  RoundedRectangle({ cornerRadius: 3 }).fill(color).frame({ width: 9, height: 9 });
+
+export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
   const lane = laneByKey(laneKey);
   const target = () => dropLane() === laneKey;
   return HStack({ spacing: 8 }, [
     chevron(() => isCollapsed(lane)),
-    RoundedRectangle({ cornerRadius: 3 }).fill(lane.color).frame({ width: 9, height: 9 }),
+    laneMarker(lane.color),
     headerName(lane.name, laneKey === "parked" ? C.faint : C.heading),
+    ...(anchorId ? [anchorStatus(anchorId)] : []),
     countPill(() => laneCount(laneKey)),
     Spacer({ minLength: 4 }),
-    Text(() => (target() ? "Drop here" : ""))
-      .font(11)
-      .weight("medium")
-      .color(C.heading)
-      .lineLimit(1),
+    dropHint(target),
   ])
     .paddingHorizontal(8)
     .paddingTop(14)
@@ -112,6 +136,45 @@ export function laneHeader(laneKey: LaneKey): View {
     .frame({ maxWidth: "infinity" })
     .fixed()
     .onTap(() => toggleLane(lane));
+}
+
+// An empty lane mid-drag (issue #50). The renderer has no dashed stroke, so
+// the zone is a quiet ring that turns solid ink under the pointer.
+export function dropZone(laneKey: LaneKey): View {
+  const lane = laneByKey(laneKey);
+  const target = () => dropLane() === laneKey;
+  const row = HStack({ spacing: 8 }, [
+    laneMarker(lane.color),
+    headerName(lane.name, C.faint),
+    Spacer({ minLength: 4 }),
+    dropHint(target),
+  ])
+    .paddingHorizontal(10)
+    .paddingVertical(8);
+  const zone = ring(
+    row,
+    () => (target() ? C.zoneLit : C.ground),
+    () => (target() ? C.heading : C.zoneEdge),
+    1,
+    8,
+  );
+  return VStack({ spacing: 0 }, [zone.frame({ maxWidth: "infinity" })])
+    .paddingTop(8)
+    .fixed();
+}
+
+// The empty lanes at rest (issue #50): one quiet line, no tap.
+export function emptyFold(): View {
+  return Text(() => "Empty: " + emptyLaneNames().join(" · "))
+    .font(11.5)
+    .color(C.faint)
+    .lineLimit(1)
+    .truncation("tail")
+    .paddingHorizontal(8)
+    .paddingTop(14)
+    .paddingBottom(5)
+    .frame({ maxWidth: "infinity", alignment: "leading" })
+    .fixed();
 }
 
 export function projectHeader(k: string): View {
