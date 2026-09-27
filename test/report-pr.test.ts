@@ -1,9 +1,11 @@
 // The PR reporter hook (#7): which events it acts on and the socket line it
-// sends. The socket write and the gh call are not covered.
+// sends, and the delayed poll it starts. The socket write, the gh call and
+// the spawn itself are not covered.
 
 import assert from "node:assert/strict";
+import { join } from "node:path";
 import { describe, it } from "node:test";
-import { createdPrUrl, type Pr, parsePr, payload } from "../scripts/hooks/report-pr.ts";
+import { createdPrUrl, delayedPoll, type Pr, parsePr, payload } from "../scripts/hooks/report-pr.ts";
 
 const URL = "https://github.com/o/r/pull/21";
 const bash = (command: string, stdout = `${URL}\n`) => ({
@@ -80,5 +82,16 @@ describe("payload", () => {
   it("gives up on a field with whitespace that would split the line", () => {
     assert.equal(payload(PR, { ...ENV, CMUX_PANEL_ID: "panel 1" }), null);
     assert.equal(payload({ ...PR, url: `${URL} x` }, ENV), null);
+  });
+});
+
+describe("delayedPoll", () => {
+  it("runs this checkout's pr-poll.ts with the hook's node after a delay, with no shell", () => {
+    const root = join("/repo", "cmux");
+    assert.deepEqual(delayedPoll(join(root, "scripts", "hooks"), "/bin/node"), {
+      command: "/bin/node",
+      args: [join(root, "scripts", "pr-poll.ts"), "--delay", "10"],
+      cwd: root,
+    });
   });
 });
