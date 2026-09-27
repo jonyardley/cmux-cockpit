@@ -22,11 +22,14 @@ export interface AgentEntry {
   project: Project;
 }
 
-// ---- Working and Idle --------------------------------------------------------------
+// Working and Idle
 
 export const [idleOpen, setIdleOpen] = signal(false);
 
-export type RosterRow = (AgentEntry & { kind: "run" | "idle" }) | { key: "toggle"; kind: "toggle"; count: number };
+/** A Working or Idle row's workspace and agent. */
+export type RosterEntry = AgentEntry & { kind: "run" | "idle" };
+
+export type RosterRow = RosterEntry | { key: "toggle"; kind: "toggle"; count: number };
 
 // One row per workspace, from its most active agent, so a stale idle session
 // beside a working one never lists the workspace as idle. The selected
@@ -169,15 +172,41 @@ const STATUS_WORD: Record<AgentStatus, string> = {
 /** Short form for agent rows, with the rows' coarse age: "working 12m". */
 export function statusLine(a: Agent | null): string {
   if (!a) return "";
-  const age = ageSince(statusSince(a));
+  const age = sinceAge(a);
   return (STATUS_WORD[a.status] ?? a.status) + (age ? " " + age : "");
 }
 
-/** The one age the roster rows and the card's head show: "<1m", "12m",
- * counted as statusLine counts it; "" without an agent or a timestamp. */
-export const sinceAge = (a: Agent | null): string => (a ? ageSince(statusSince(a)) : "");
+/** The one age format the card shows: "<1m", "12m", counted from the
+ * start of the status (idle and ended from their last activity); "" without
+ * an agent or a timestamp. */
+export function sinceAge(a: Agent | null): string {
+  return a ? ageSince(statusSince(a)) : "";
+}
 
-// ---- The card's details ------------------------------------------------------
+/** A Working or Idle row's age, in the same format. A working row counts
+ * from its start alone: its last activity resets while it works, so it
+ * would read as a new run. */
+export function rosterAge(e: RosterEntry): string {
+  return e.kind === "run" ? ageSince(e.a.sinceEpoch) : ageSince(e.a.lastActivityAt);
+}
+
+const HEAD_WORD: Record<AgentStatus, string> = {
+  needs_input: "Needs you",
+  working: "Working",
+  idle: "Idle",
+  ended: "Ended",
+};
+
+/** The card head's status: "Working 14m", "Ended 3m ago", "No agent". */
+export function headStatus(a: Agent | null): string {
+  if (!a) return "No agent";
+  const word = HEAD_WORD[a.status] ?? a.status;
+  const age = sinceAge(a);
+  if (!age) return word;
+  return a.status === "ended" ? word + " " + age + " ago" : word + " " + age;
+}
+
+// The card's details
 
 /** The Branch detail: the branch, then "uncommitted changes" when dirty.
  * cmux sends no file count, so it never says how many. */
@@ -199,6 +228,9 @@ export const portChips = computed((): PortChip[] =>
 
 /** The workspace's PR with its state, as the chip shows it. */
 export const currentPr = computed((): PrSummary | undefined => prSummary(cur().ws));
+
+/** Whether any of Branch, Ports or PR shows, so an empty block costs no gap. */
+export const hasDetails = computed((): boolean => !!branchDetail() || portChips().length > 0 || !!currentPr());
 
 // ---- This workspace's agent list -------------------------------------------
 
@@ -334,11 +366,12 @@ export const subagents = computed((): SubagentRow[] => {
 });
 
 /** Board 1's right-hand figure: coarse elapsed while running ("running"
- * without a start or clock), "finished 3m ago" once settled ("finished"
- * without an end or clock). */
+ * without a start or clock), "finished 3m ago" once settled ("finished
+ * just now" inside a minute, "finished" without an end or clock). */
 export function subagentFigure(s: SubagentRow): string {
   if (s.running) return ageSince(s.startedEpoch) || "running";
   const age = ageSince(s.endedEpoch);
+  if (age === "<1m") return "finished just now";
   return age ? "finished " + age + " ago" : "finished";
 }
 

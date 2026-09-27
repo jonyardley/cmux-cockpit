@@ -5,18 +5,18 @@ import { readable } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
 import {
-  type AgentEntry,
   idleOpen,
   type PrEntry,
   prChipText,
+  type RosterEntry,
   type RosterRow,
+  rosterAge,
   setIdleOpen,
-  sinceAge,
 } from "../model.ts";
 import { chipColors, T } from "../theme.ts";
 import { glyph, idleRing, jump, meta, openIfUrl, ring, ruled, statusDot } from "./parts.ts";
 
-function runningRow(e: () => Last<AgentEntry>): View {
+function runningRow(e: () => Last<RosterEntry>): View {
   const w = () => e().ws;
   const a = () => e().a;
   const row = HStack({ spacing: 10, alignment: "top" }, [
@@ -31,7 +31,7 @@ function runningRow(e: () => Last<AgentEntry>): View {
           .truncation("middle")
           .layoutPriority(1),
         Spacer({ minLength: 4 }),
-        meta(() => sinceAge(a())),
+        meta(() => rosterAge(e())),
       ]).frame({ maxWidth: "infinity" }),
       when(
         "progress",
@@ -64,7 +64,7 @@ function runningRow(e: () => Last<AgentEntry>): View {
   return ruled(row, () => e().last);
 }
 
-function idleRow(e: () => Last<AgentEntry>): View {
+function idleRow(e: () => Last<RosterEntry>): View {
   const w = () => e().ws;
   const a = () => e().a;
   const row = HStack({ spacing: 10 }, [
@@ -77,7 +77,7 @@ function idleRow(e: () => Last<AgentEntry>): View {
       .truncation("middle")
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
-    meta(() => sinceAge(a())),
+    meta(() => rosterAge(e())),
     glyph(e().project),
   ])
     .paddingHorizontal(12)
@@ -118,7 +118,7 @@ export function rosterRow(e: () => Last<RosterRow>): View {
     };
     return toggleRow(count, () => e().last);
   }
-  const entry = (): Last<AgentEntry> => {
+  const entry = (): Last<RosterEntry> => {
     const r = e();
     if (r.kind === "toggle") throw new Error("roster row changed kind under key " + r.key);
     return r;

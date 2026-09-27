@@ -22,10 +22,11 @@ import {
   currentAsk,
   currentPr,
   haloFor,
+  hasDetails,
+  headStatus,
   hollowDot,
   portChips,
   type SubagentRow,
-  sinceAge,
   statusLine,
   subagentDot,
   subagentFigure,
@@ -78,7 +79,9 @@ function subagentLine(e: () => SubagentRow): View {
       .font(11)
       .monospaced()
       .color(T.secondary)
-      .lineLimit(1),
+      .lineLimit(1)
+      // Over the label's priority, so "finished 12m ago" is never the one cut.
+      .layoutPriority(2),
   ])
     .paddingVertical(5)
     .frame({ maxWidth: "infinity", alignment: "leading" });
@@ -213,7 +216,7 @@ function askBlock(): View {
 }
 
 // Title and project (the branch is in the details below), then the status
-// dot and its age in the roster's one format, then the unread badge.
+// dot with its word and age ("Working 14m"), then the unread badge.
 function currentTitle(): View {
   const w = () => cur().ws;
   const a = () => cur().a;
@@ -250,9 +253,8 @@ function currentTitle(): View {
         () => haloFor(a()),
         () => hollowDot(a()),
       ),
-      Text(() => sinceAge(a()))
+      Text(() => headStatus(a()))
         .font(12)
-        .monospaced()
         .weight("medium")
         .color(() => {
           const s = status();
@@ -327,46 +329,51 @@ function detailLine(key: string, label: string, show: () => boolean, value: () =
 }
 
 function detailsBlock(): View {
-  return VStack({ spacing: 0, alignment: "leading" }, [
-    detailLine(
-      "cur-branch",
-      "Branch",
-      () => !!branchDetail(),
-      () =>
-        Text(() => branchDetail())
-          .font(11.5)
-          .color(T.secondary)
-          .lineLimit(1)
-          .truncation("middle")
-          .layoutPriority(1),
-    ),
-    detailLine(
-      "cur-ports",
-      "Ports",
-      () => portChips().length > 0,
-      () =>
-        HStack({ spacing: 6 }, [
-          ForEach({ items: () => portChips(), key: (x) => x.key }, (x) =>
+  return when(
+    "cur-details",
+    () => hasDetails(),
+    () =>
+      VStack({ spacing: 0, alignment: "leading" }, [
+        detailLine(
+          "cur-branch",
+          "Branch",
+          () => !!branchDetail(),
+          () =>
+            Text(() => branchDetail())
+              .font(11.5)
+              .color(T.secondary)
+              .lineLimit(1)
+              .truncation("middle")
+              .layoutPriority(1),
+        ),
+        detailLine(
+          "cur-ports",
+          "Ports",
+          () => portChips().length > 0,
+          () =>
+            HStack({ spacing: 6 }, [
+              ForEach({ items: () => portChips(), key: (x) => x.key }, (x) =>
+                chip(
+                  () => x().label,
+                  () => chipColors("port"),
+                ).onTap(() => openURL(x().url)),
+              ),
+            ]),
+        ),
+        detailLine(
+          "cur-pr",
+          "PR",
+          () => !!currentPr(),
+          () =>
             chip(
-              () => x().label,
-              () => chipColors("port"),
-            ).onTap(() => openURL(x().url)),
-          ),
-        ]),
-    ),
-    detailLine(
-      "cur-pr",
-      "PR",
-      () => !!currentPr(),
-      () =>
-        chip(
-          () => currentPr()?.text ?? "",
-          () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
-        ).onTap(() => openIfUrl(currentPr()?.url)),
-    ),
-  ])
-    .frame({ maxWidth: "infinity", alignment: "leading" })
-    .paddingTop(10);
+              () => currentPr()?.text ?? "",
+              () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
+            ).onTap(() => openIfUrl(currentPr()?.url)),
+        ),
+      ])
+        .frame({ maxWidth: "infinity", alignment: "leading" })
+        .paddingTop(10),
+  );
 }
 
 function currentHead(): View {

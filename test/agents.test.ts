@@ -131,7 +131,43 @@ describe("sinceAge", () => {
   });
 });
 
+describe("rosterAge", () => {
+  it("counts a working row from its start only, and an idle row from its last activity", () => {
+    const run = (a: Agent) => ({ key: "r", kind: "run" as const, ws: ws("w"), a, project: m.cur().project });
+    const idle = (a: Agent) => ({ key: "i", kind: "idle" as const, ws: ws("w"), a, project: m.cur().project });
+    assert.equal(m.rosterAge(run(agent("working", { sinceEpoch: 10_000 - 720 }))), "12m");
+    // No start: blank, never the last activity, which resets while it works.
+    assert.equal(m.rosterAge(run(agent("working", { lastActivityAt: 10_000 - 5 }))), "");
+    assert.equal(m.rosterAge(idle(agent("idle", { sinceEpoch: 1, lastActivityAt: 10_000 - 46 }))), "<1m");
+  });
+});
+
+describe("headStatus", () => {
+  it("says the status in words beside its age", () => {
+    assert.equal(m.headStatus(agent("working", { sinceEpoch: 10_000 - 840 })), "Working 14m");
+    assert.equal(m.headStatus(agent("needs_input", { sinceEpoch: 10_000 - 5 })), "Needs you <1m");
+    assert.equal(m.headStatus(agent("idle", { lastActivityAt: 10_000 - 120 })), "Idle 2m");
+    assert.equal(m.headStatus(agent("ended", { lastActivityAt: 10_000 - 180 })), "Ended 3m ago");
+  });
+
+  it("says the word alone without a time, and No agent without an agent", () => {
+    assert.equal(m.headStatus(agent("ended")), "Ended");
+    assert.equal(m.headStatus(null), "No agent");
+  });
+});
+
 describe("the card's details", () => {
+  it("shows the details block only while a line has something to say", () => {
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.equal(m.hasDetails(), false);
+    r.data.workspaces = [ws("sel", { selected: true, ports: [3000] })];
+    assert.equal(m.hasDetails(), true);
+    r.data.workspaces = [ws("sel", { selected: true, dirty: true })];
+    assert.equal(m.hasDetails(), true);
+    r.data.workspaces = [ws("sel", { selected: true, pr: { number: 1, url: "u/1", status: "open" } })];
+    assert.equal(m.hasDetails(), true);
+  });
+
   it("says the branch and uncommitted changes when dirty, never a file count", () => {
     r.data.workspaces = [ws("sel", { selected: true, branch: "main", dirty: true })];
     assert.equal(m.branchDetail(), "main · uncommitted changes");
@@ -428,6 +464,7 @@ describe("subagents", () => {
           run("b", { label: "No start yet", running: true }),
           run("c", { label: "Write builder tests", running: false, startedEpoch: 100, endedEpoch: 10_000 - 180 }),
           run("d", { label: "No end sent", running: false, startedEpoch: 50 }),
+          run("e", { label: "Just now", running: false, startedEpoch: 60, endedEpoch: 10_000 - 20 }),
         ],
       }),
     ]);
@@ -436,6 +473,7 @@ describe("subagents", () => {
       [
         ["No start yet", "running"],
         ["Edge-case review", "4m"],
+        ["Just now", "finished just now"],
         ["Write builder tests", "finished 3m ago"],
         ["No end sent", "finished"],
       ],
