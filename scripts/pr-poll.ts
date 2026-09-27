@@ -1,9 +1,10 @@
 // Finds each cmux workspace's pull request and saves it in config/state.json
 // (the `prs` map, docs/state-loop.md), because cmux sends custom sidebars no
 // PR data (issue #7).
-//   node scripts/pr-poll.ts
+//   node scripts/pr-poll.ts [--delay <seconds>]
 // Run by the pr-poll rules in automations.json when an agent's turn ends or a
-// workspace is selected. For every workspace in every window it reads the git
+// workspace is selected, and by the report-pr hook with a delay after an
+// agent opens a PR, since gh can take a few seconds to list a new one. For every workspace in every window it reads the git
 // branch of its directory and asks gh for that branch's PR and its checks,
 // then rebuilds the sidebars only if a PR or a check's state changed. It never fails loudly: every problem is a log
 // line and exit 0. No shell: every command is spawnSync with an argument
@@ -14,6 +15,7 @@
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import {
   type CheckState,
   isRecord,
@@ -32,6 +34,12 @@ const TIMEOUT_MS = 15_000;
 const DEADLINE_MS = 240_000;
 // A lockfile older than this is a crashed run's, not a live one's.
 const LOCK_STALE_MS = 5 * 60_000;
+// The longest --delay honoured, and how long a delayed run waits for a busy
+// lock: it was started to catch a PR the busy run may have missed, so it
+// waits its turn rather than skip.
+const MAX_DELAY_SECONDS = 60;
+const LOCK_WAIT_MS = 60_000;
+const LOCK_RETRY_MS = 2_000;
 const CMUX_FALLBACK = "/Applications/cmux.app/Contents/Resources/bin/cmux";
 
 function log(line: string): void {
@@ -344,10 +352,37 @@ function poll(root: string): number {
   return 0;
 }
 
-function main(): number {
+/**
+ * The delay in milliseconds from `--delay <seconds>` or `--delay=<seconds>`:
+ * a whole number from 1 to MAX_DELAY_SECONDS. Anything else, or no flag,
+ * is no delay, so a bad argument never stops the poll.
+ */
+export function delayFrom(argv: string[]): number {
+  const i = argv.findIndex((a) => a === "--delay" || a.startsWith("--delay="));
+  if (i === -1) return 0;
+  const flag = argv[i] ?? "";
+  const value = flag.includes("=") ? flag.slice(flag.indexOf("=") + 1) : (argv[i + 1] ?? "");
+  if (!/^\d+$/.test(value)) return 0;
+  const seconds = Number(value);
+  return seconds >= 1 && seconds <= MAX_DELAY_SECONDS ? seconds * 1000 : 0;
+}
+
+// The lock, retrying for up to waitMs while another run holds it.
+async function lockWithin(lockFile: string, waitMs: number): Promise<boolean> {
+  const until = Date.now() + waitMs;
+  while (!acquireLock(lockFile)) {
+    if (Date.now() >= until) return false;
+    await sleep(LOCK_RETRY_MS);
+  }
+  return true;
+}
+
+async function main(): Promise<number> {
   const root = join(import.meta.dirname, "..");
   const lockFile = join(root, "config", "pr-poll.lock");
-  if (!acquireLock(lockFile)) {
+  const delay = delayFrom(process.argv.slice(2));
+  if (delay) await sleep(delay);
+  if (!(await lockWithin(lockFile, delay ? LOCK_WAIT_MS : 0))) {
     log("skipped: another poll is running");
     return 0;
   }
@@ -358,4 +393,4 @@ function main(): number {
   }
 }
 
-if (import.meta.main) process.exit(main());
+if (import.meta.main) process.exit(await main());

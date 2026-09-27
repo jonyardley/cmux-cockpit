@@ -80,7 +80,12 @@ The `pr-poll-turn` and `pr-poll-select` rules in `automations.json` run it
 (through `scripts/pr-poll.sh`, which finds node) when an agent's turn ends
 and when a workspace is selected, each at most once every 30 seconds, with a
 five-minute timeout; the poller itself gives up on new lookups after four
-minutes, so a slow directory cannot starve the rest.
+minutes, so a slow directory cannot starve the rest. The poll a turn end
+fires straight after an agent's `gh pr create` can run before gh lists the
+new PR, so the `report-pr` hook (`scripts/hooks/report-pr.ts`) also starts
+one detached run with `--delay 10`: it sleeps ten seconds, then waits up to
+a minute for the lock instead of skipping, since the run holding it may be
+the one that missed the PR.
 `src/shared/prs.ts` reads it back: cmux's own `pr`/`prs` win when present. A
 saved PR shows while the workspace's branch is not yet known, or still
 matches the branch it was found for, and hides once the workspace has moved

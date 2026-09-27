@@ -10,6 +10,7 @@ import { after, describe, it } from "node:test";
 import {
   branchFromGit,
   checksFrom,
+  delayFrom,
   findPrs,
   type Lookups,
   parseWindowIds,
@@ -292,5 +293,27 @@ describe("the prs map in state.json", () => {
     const path = join(dir, "state-order.json");
     assert.deepEqual(writePrs(path, { b: pr(2, { branch: "b" }), a: pr(1) }), { ok: true, changed: true });
     assert.deepEqual(writePrs(path, { a: pr(1), b: pr(2, { branch: "b" }) }), { ok: true, changed: false });
+  });
+});
+
+describe("delayFrom", () => {
+  it("reads --delay in either form, in seconds", () => {
+    assert.equal(delayFrom(["--delay", "10"]), 10_000);
+    assert.equal(delayFrom(["--delay=10"]), 10_000);
+    assert.equal(delayFrom(["--delay", "60"]), 60_000);
+  });
+
+  it("is no delay without the flag", () => {
+    assert.equal(delayFrom([]), 0);
+    assert.equal(delayFrom(["10"]), 0);
+  });
+
+  it("is no delay for a missing, malformed or out of range value", () => {
+    assert.equal(delayFrom(["--delay"]), 0);
+    assert.equal(delayFrom(["--delay", "--x"]), 0);
+    assert.equal(delayFrom(["--delay", "1.5"]), 0);
+    assert.equal(delayFrom(["--delay=-5"]), 0);
+    assert.equal(delayFrom(["--delay", "0"]), 0);
+    assert.equal(delayFrom(["--delay", "61"]), 0);
   });
 });

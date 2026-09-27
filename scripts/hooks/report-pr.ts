@@ -6,12 +6,15 @@
 // Run as a Claude Code PostToolUse hook on Bash: after a `gh pr create` that
 // printed a PR URL, it asks gh for that PR and sends the line the shell
 // integration would (Resources/shell-integration/cmux-zsh-integration.zsh,
-// `report_pr` and `_cmux_write_socket_payload`, cmux 0.64). It never fails
+// `report_pr` and `_cmux_write_socket_payload`, cmux 0.64). It also starts
+// a PR poll a few seconds later, since the poll the agent's turn end fires
+// straight after a create can run before gh lists the new PR. It never fails
 // the hook: every problem is a note on stderr and exit 0.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createConnection } from "node:net";
+import { join } from "node:path";
 
 export interface Pr {
   number: number;
@@ -84,6 +87,40 @@ export function payload(pr: Pr, env: CmuxEnv): string | null {
   return cap && TOKEN.test(cap) ? `_cmux_capability_v1 ${cap} ${line}` : line;
 }
 
+// Long enough for gh to list a PR it has just created: the turn-end poll a
+// second after the create found none (docs/state-loop.md).
+const POLL_DELAY_SECONDS = 10;
+
+export interface Spawn {
+  command: string;
+  args: string[];
+  cwd: string;
+}
+
+// The delayed poll to start after a create: pr-poll.ts in this checkout,
+// run by the node running this hook, so no PATH lookup or shell is needed.
+export function delayedPoll(hookDir: string, node: string): Spawn {
+  const root = join(hookDir, "..", "..");
+  return {
+    command: node,
+    args: [join(root, "scripts", "pr-poll.ts"), "--delay", String(POLL_DELAY_SECONDS)],
+    cwd: root,
+  };
+}
+
+// Detached and unreferenced, so the hook returns at once and the poll
+// outlives it; its lockfile keeps it from overlapping an automation's run.
+function startPoll(): void {
+  const { command, args, cwd } = delayedPoll(import.meta.dirname, process.execPath);
+  try {
+    const child = spawn(command, args, { cwd, detached: true, stdio: "ignore" });
+    child.on("error", (err) => console.error(`report-pr: poll: ${err.message}`));
+    child.unref();
+  } catch (err) {
+    console.error(`report-pr: poll: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 function send(socket: string, line: string): Promise<void> {
   return new Promise((resolve) => {
     const conn = createConnection(socket, () => conn.end(`${line}\n`));
@@ -104,6 +141,7 @@ async function main(): Promise<void> {
   }
   const url = createdPrUrl(event);
   if (!url) return;
+  startPoll();
   const socket = process.env.CMUX_SOCKET_PATH;
   if (!socket) return console.error("report-pr: skipped, not in a cmux terminal");
   const gh = spawnSync("gh", ["pr", "view", url, "--json", "number,url,state,headRefName"], {
