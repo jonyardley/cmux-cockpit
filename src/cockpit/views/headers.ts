@@ -65,10 +65,17 @@ function countPill(count: () => number): View {
     .font(11)
     .weight("medium")
     .color(C.metaText)
+    .lineLimit(1)
     .paddingHorizontal(7)
     .paddingVertical(1)
     .background(C.segTrack)
     .cornerRadius(10);
+}
+
+// The name wins the row's width and truncates rather than wrapping; the pill
+// and hint stay on one line too, so no child of the header can wrap.
+function headerName(name: string, color: string): View {
+  return Text(name).font(12.5).weight("semibold").color(color).lineLimit(1).truncation("tail").layoutPriority(1);
 }
 
 function chevron(collapsed: () => boolean): View {
@@ -86,16 +93,14 @@ export function laneHeader(laneKey: LaneKey): View {
   return HStack({ spacing: 8 }, [
     chevron(() => isCollapsed(lane)),
     RoundedRectangle({ cornerRadius: 3 }).fill(lane.color).frame({ width: 9, height: 9 }),
-    Text(lane.name)
-      .font(12.5)
-      .weight("semibold")
-      .color(laneKey === "parked" ? C.faint : C.heading),
+    headerName(lane.name, laneKey === "parked" ? C.faint : C.heading),
     countPill(() => laneCount(laneKey)),
-    Spacer(),
+    Spacer({ minLength: 4 }),
     Text(() => (target() ? "Drop here" : ""))
       .font(11)
       .weight("medium")
-      .color(C.heading),
+      .color(C.heading)
+      .lineLimit(1),
   ])
     .paddingHorizontal(8)
     .paddingTop(14)
@@ -116,9 +121,9 @@ export function projectHeader(k: string): View {
       RoundedRectangle({ cornerRadius: 5 }).fill(p.color),
       Image(p.icon).font(10).weight("semibold").color(glyphColor(p.color, C.text)),
     ]).frame({ width: 18, height: 18 }),
-    Text(p.name).font(12.5).weight("semibold").color(C.heading),
+    headerName(p.name, C.heading),
     countPill(() => projectCount(k)),
-    Spacer(),
+    Spacer({ minLength: 4 }),
     ...(canOpenProject(k) ? [glyphButton("plus", 20, 11, C.secondary, () => openProjectWorkspace(k))] : []),
   ])
     .paddingHorizontal(8)
