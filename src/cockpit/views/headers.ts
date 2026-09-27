@@ -64,7 +64,7 @@ function countPill(count: () => number): View {
   return Text(() => String(count()))
     .font(11)
     .weight("medium")
-    .color("#6B6A64")
+    .color(C.metaText)
     .paddingHorizontal(7)
     .paddingVertical(1)
     .background(C.segTrack)
@@ -75,7 +75,7 @@ function chevron(collapsed: () => boolean): View {
   return Image("chevron.right")
     .font(10)
     .weight("semibold")
-    .color("#8A8880")
+    .color(C.faint)
     .rotation(() => (collapsed() ? 0 : 90))
     .frame({ width: 12, height: 16 });
 }
@@ -89,7 +89,7 @@ export function laneHeader(laneKey: LaneKey): View {
     Text(lane.name)
       .font(12.5)
       .weight("semibold")
-      .color(laneKey === "parked" ? "#8A8880" : "#3D3D3A"),
+      .color(laneKey === "parked" ? C.faint : C.heading),
     countPill(() => laneCount(laneKey)),
     Spacer(),
     Text(() => (target() ? "Drop here" : ""))
@@ -101,8 +101,8 @@ export function laneHeader(laneKey: LaneKey): View {
     .paddingTop(14)
     .paddingBottom(5)
     .cornerRadius(8)
-    .background(() => (target() ? "#D977571F" : "clear"))
-    .hoverBackground(() => (target() ? "#D977571F" : C.hover))
+    .background(() => (target() ? C.dropTarget : "clear"))
+    .hoverBackground(() => (target() ? C.dropTarget : C.hover))
     .frame({ maxWidth: "infinity" })
     .fixed()
     .onTap(() => toggleLane(lane));
@@ -116,7 +116,7 @@ export function projectHeader(k: string): View {
       RoundedRectangle({ cornerRadius: 5 }).fill(p.color),
       Image(p.icon).font(10).weight("semibold").color(glyphColor(p.color, C.text)),
     ]).frame({ width: 18, height: 18 }),
-    Text(p.name).font(12.5).weight("semibold").color("#3D3D3A"),
+    Text(p.name).font(12.5).weight("semibold").color(C.heading),
     countPill(() => projectCount(k)),
     Spacer(),
     ...(canOpenProject(k) ? [glyphButton("plus", 20, 11, C.secondary, () => openProjectWorkspace(k))] : []),

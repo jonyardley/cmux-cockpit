@@ -26,7 +26,7 @@ export function waitingRow(e: () => Last<AgentEntry>): View {
       glyph(e().project),
       Text(() => displayTitle(w()) || "untitled")
         .font(11.5)
-        .color(T.muted)
+        .color(T.metaText)
         .lineLimit(1)
         .truncation("middle")
         .layoutPriority(1),

@@ -10,7 +10,7 @@ export const T = {
   text: "#141413",
   secondary: "#5E5D59",
   tertiary: "#73726C",
-  muted: "#6B6A64",
+  metaText: "#6B6A64",
   countBg: "#E5E2D6",
   buttonText: "#3D3D3A",
   buttonHover: "#F4F2EA",
@@ -27,9 +27,9 @@ export const T = {
 } as const;
 
 export const STATUS_DOT: Record<AgentStatus, string> = {
-  needs_input: "#D97757",
-  working: "#3B6FB6",
-  idle: "#A09E95",
+  needs_input: T.clay,
+  working: T.blue,
+  idle: T.grey,
   ended: "#788C5D",
 };
 
