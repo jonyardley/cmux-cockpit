@@ -76,6 +76,7 @@ describe("readApplyWrite", () => {
       projects: {},
       prs: {},
       subagents: {},
+      ui: {},
     });
   });
 

@@ -543,3 +543,57 @@ describe("new project from a card (issue #9)", () => {
     assert.ok(r.menu.includes("button:New project (folder has one, or none)"));
   });
 });
+
+// Each rebuild reloads the sidebar, so the view and the folds go out to the
+// saved state as they change (state.ts seeds them back; test/ui-seed.test.ts).
+describe("saving the view and folds", () => {
+  beforeEach(setup);
+
+  const sent = (): unknown[] =>
+    r.opened.map((u) => {
+      const q = new URL(u).searchParams;
+      const v = q.get("value");
+      return [q.get("key"), v === null ? null : JSON.parse(v)];
+    });
+
+  it("saves a switch between All and Projects, and not a tap on the one already shown", () => {
+    r.opened.length = 0;
+    model.chooseMode("all");
+    assert.deepEqual(r.opened, []);
+    model.chooseMode("projects");
+    assert.equal(state.mode(), "projects");
+    assert.deepEqual(sent(), [["ui.mode", "projects"]]);
+  });
+
+  it("saves every fold at once when a lane or project is toggled", () => {
+    r.opened.length = 0;
+    model.toggleLane(laneByKey("unsorted"));
+    model.toggleProject("/dev/app-two");
+    const last = sent().at(-1);
+    assert.ok(Array.isArray(last));
+    assert.equal(last[0], "ui.collapsed");
+    assert.equal(last[1]["lane:unsorted"], 1);
+    assert.equal(last[1]["project:/dev/app-two"], 1);
+  });
+
+  it("drops folds on projects that are gone, and sorts the rest", () => {
+    state.setCollapsedProjects(["/dev/gone", "/dev/app-two", "/dev/app-one"]);
+    r.opened.length = 0;
+    model.toggleLane(laneByKey("unsorted"));
+    const last = sent().at(-1);
+    assert.ok(Array.isArray(last));
+    const keys = Object.keys(last[1]);
+    assert.equal(keys.includes("project:/dev/gone"), false);
+    assert.deepEqual(keys, [...keys].sort());
+    assert.ok(keys.includes("project:/dev/app-one") && keys.includes("project:/dev/app-two"));
+  });
+
+  it("marks a lane that starts folded as touched once it is opened", () => {
+    const parked = laneByKey("parked");
+    r.opened.length = 0;
+    if (model.isCollapsed(parked)) model.toggleLane(parked);
+    const last = sent().at(-1);
+    assert.ok(Array.isArray(last));
+    assert.equal(last[1]["lane:parked"], 0);
+  });
+});

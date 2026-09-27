@@ -13,6 +13,8 @@ import { describe, it } from "node:test";
   projectOverride: { w2: "/dev/app-one", w3: "not-a-project" },
   projects: {},
   prs: {},
+  subagents: {},
+  ui: {},
 };
 
 const { installRenderer } = await import("./support/renderer.ts");

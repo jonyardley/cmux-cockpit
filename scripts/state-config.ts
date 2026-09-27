@@ -26,6 +26,20 @@ export interface State {
    * (issue #6). Written only by the hook, never by a URL.
    */
   subagents: Record<string, SavedSubagent[]>;
+  /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
+  ui: UiState;
+}
+
+export type ViewMode = "all" | "projects";
+
+/**
+ * The cockpit's own view state. Each rebuild hot-reloads the sidebar, which
+ * would otherwise land back on All with everything unfolded.
+ */
+export interface UiState {
+  mode?: ViewMode;
+  /** "lane:<key>" or "project:<key>" -> 1 folded, 0 unfolded. */
+  collapsed?: Record<string, number>;
 }
 
 /** A project made in the sidebar. Its match is the key it is stored under. */
@@ -95,7 +109,14 @@ export const MAX_LABEL = 120;
 /** Checks kept per PR, so one PR with a huge matrix cannot bloat the file. */
 export const MAX_CHECKS = 20;
 
-export const emptyState = (): State => ({ dismissed: {}, projectOverride: {}, projects: {}, prs: {}, subagents: {} });
+export const emptyState = (): State => ({
+  dismissed: {},
+  projectOverride: {},
+  projects: {},
+  prs: {},
+  subagents: {},
+  ui: {},
+});
 
 // renderer.d.ts puts no shape on workspace or agent ids, and a project key is
 // its first match path ("/dev/app"), so only length is bounded. Object
@@ -189,6 +210,32 @@ function savedPr(v: unknown): SavedPr | null {
   return checks.length ? { ...pr, checks } : pr;
 }
 
+const VIEW_MODES: readonly unknown[] = ["all", "projects"];
+const isViewMode = (v: unknown): v is ViewMode => VIEW_MODES.includes(v);
+
+// A fold key is "lane:<key>" or "project:<key>", and a project key can be a
+// match path as long as MAX_PROJECT_KEY, so it gets that bound plus room for
+// the prefix rather than isId's.
+const isFoldKey = (v: string): boolean => v.length > 0 && v.length <= MAX_PROJECT_KEY + 16 && !RESERVED.has(v);
+
+// A fold flag per section, bounded like any other map. Empty reads as none,
+// so an empty object is a delete rather than a set.
+function foldFlags(v: unknown): Record<string, number> | null {
+  if (!isRecord(v)) return null;
+  const kept = Object.entries(v).flatMap(([id, flag]): [string, number][] =>
+    isFoldKey(id) && (flag === 0 || flag === 1) ? [[id, flag]] : [],
+  );
+  return kept.length ? Object.fromEntries(kept.slice(-MAX_ENTRIES)) : null;
+}
+
+function uiState(v: unknown): UiState {
+  if (!isRecord(v)) return {};
+  const collapsed = foldFlags(v.collapsed);
+  return { ...(isViewMode(v.mode) ? { mode: v.mode } : {}), ...(collapsed ? { collapsed } : {}) };
+}
+
+const UI_KEYS: readonly string[] = ["mode", "collapsed"];
+
 const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
 
 const isOptionalId = (v: unknown): boolean => v === undefined || (typeof v === "string" && isId(v));
@@ -230,14 +277,16 @@ export function validateState(raw: unknown): State {
     projects: cleanMap(v.projects, projectSpec, isMatchKey),
     prs: cleanMap(v.prs, savedPr),
     subagents: cleanMap(v.subagents, savedSubagents),
+    ui: uiState(v.ui),
   };
 }
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
 // The maps a URL may set. `prs` and `subagents` are left out on purpose (see State).
-type MapName = "dismissed" | "projectOverride" | "projects";
-const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects"];
+// `ui` is not keyed by id: its only keys are UI_KEYS.
+type MapName = "dismissed" | "projectOverride" | "projects" | "ui";
+const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui"];
 const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
 
 function without<T>(entries: Record<string, T>, id: string): Record<string, T> {
@@ -255,6 +304,10 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       return { ...state, projectOverride: without(state.projectOverride, id) };
     case "projects":
       return { ...state, projects: without(state.projects, id) };
+    case "ui": {
+      const { mode, collapsed } = state.ui;
+      return { ...state, ui: id === "mode" ? (collapsed ? { collapsed } : {}) : mode ? { mode } : {} };
+    }
   }
 }
 
@@ -279,8 +332,33 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
         ? { ...state, projects: { ...state.projects, [id]: spec } }
         : "projects wants {name, color: #rrggbb, icon: SF Symbol, root?}";
     }
+    case "ui":
+      return uiEntry(state, id, parsed);
   }
 }
+
+function uiEntry(state: State, id: string, parsed: unknown): State | string {
+  if (id === "mode")
+    return isViewMode(parsed) ? { ...state, ui: { ...state.ui, mode: parsed } } : 'ui.mode wants "all" or "projects"';
+  const collapsed = foldFlags(parsed);
+  return collapsed ? { ...state, ui: { ...state.ui, collapsed } } : "ui.collapsed wants {section: 0 or 1}";
+}
+
+// Which ids a map takes: a match path for `projects`, a fixed name for `ui`,
+// a workspace id for the rest.
+function isKeyFor(map: MapName, id: string): boolean {
+  if (map === "projects") return isMatchKey(id);
+  if (map === "ui") return UI_KEYS.includes(id);
+  return isId(id);
+}
+
+/**
+ * Whether a set needs a rebuild to show. The sidebar already shows its own
+ * view and folds, and every rebuild bakes in the file as it stands, so a `ui`
+ * set only has to be written: rebuilding on each tap would reload the
+ * sidebar under the tap.
+ */
+export const rebuildsOn = (key: string): boolean => !key.startsWith("ui.");
 
 /**
  * Applies one `set`: `key` is `<map>.<id>`, `value` the JSON for that entry,
@@ -293,7 +371,7 @@ export function applySet(state: State, key: string, value: string | null): SetRe
   const id = key.slice(dot + 1);
   if (dot < 1) return { ok: false, error: `bad key ${JSON.stringify(key)}` };
   if (!isMapName(map)) return { ok: false, error: `unknown map ${map}` };
-  if (!(map === "projects" ? isMatchKey(id) : isId(id))) return { ok: false, error: `bad key ${JSON.stringify(key)}` };
+  if (!isKeyFor(map, id)) return { ok: false, error: `bad key ${JSON.stringify(key)}` };
 
   const cleared = withoutEntry(state, map, id);
   if (value === null) return { ok: true, state: cleared };

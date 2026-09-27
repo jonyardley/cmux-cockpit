@@ -4,7 +4,7 @@
 // Optimistic overrides flip locally the same frame, then clear once the data
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
-import type { ProjectSpec } from "../../scripts/state-config.ts";
+import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import {
   inAppSpec,
@@ -26,7 +26,9 @@ import {
   collapsedProjects,
   mode,
   projectsMode,
+  savedFolds,
   setCollapsedProjects,
+  setMode,
   setUnsortedCollapsed,
   tick,
   unsortedCollapsed,
@@ -176,7 +178,9 @@ export function selectWorkspace(id: string | undefined): void {
 // --- lane collapse -------------------------------------------------------------------
 
 const collapseOverride = new Map<string, boolean>(); // groupId -> collapsed
-const touchedLanes = new Set<LaneKey>();
+// A lane with a saved flag has been toggled before, so startsCollapsed no
+// longer applies to it after a reload.
+const touchedLanes = new Set<LaneKey>(LANES.filter((l) => `lane:${l.key}` in savedFolds).map((l) => l.key));
 
 export function isCollapsed(lane: Lane): boolean {
   tick();
@@ -197,6 +201,7 @@ export function toggleLane(lane: Lane): void {
   touchedLanes.add(lane.key);
   if (lane.key === "unsorted") {
     setUnsortedCollapsed(next);
+    saveFolds();
     return;
   }
   const g = groupForLane(lane);
@@ -204,6 +209,26 @@ export function toggleLane(lane: Lane): void {
   collapseOverride.set(g.id, next);
   bump();
   cmux(next ? "workspace.group.collapse" : "workspace.group.expand", { group_id: g.id });
+  saveFolds();
+}
+
+// Sends every fold at once, so the saved copy never lags a quick second tap.
+// cmux holds a lane group's own fold; its flag marks it as touched, and only
+// Unsorted's value is read back. Folds on projects that are gone are dropped,
+// and keys are sorted so the same folds always write the same file.
+function saveFolds(): void {
+  const folds: [string, number][] = [];
+  for (const lane of LANES) if (touchedLanes.has(lane.key)) folds.push([`lane:${lane.key}`, isCollapsed(lane) ? 1 : 0]);
+  for (const k of collapsedProjects()) if (isProjectKey(k) || k === projectId(OTHER)) folds.push([`project:${k}`, 1]);
+  folds.sort(([a], [b]) => (a < b ? -1 : 1));
+  persistSet("ui.collapsed", folds.length ? Object.fromEntries(folds) : null);
+}
+
+/** Switches between All and Projects, kept across a reload. */
+export function chooseMode(m: ViewMode): void {
+  if (mode() === m) return;
+  setMode(m);
+  persistSet("ui.mode", m);
 }
 
 // --- All mode: one flat list of lane headers and cards --------------------------------
@@ -345,10 +370,12 @@ export const hasProjectOverride = (w: Workspace | undefined): boolean => {
 
 export const projectByKey = (k: string): Project => PROJECTS.find((p) => projectId(p) === k) ?? OTHER;
 export const isProjectCollapsed = (k: string) => collapsedProjects().includes(k);
-export const toggleProject = (k: string) =>
+export function toggleProject(k: string): void {
   setCollapsedProjects(
     isProjectCollapsed(k) ? collapsedProjects().filter((x) => x !== k) : [...collapsedProjects(), k],
   );
+  saveFolds();
+}
 export const projectCount = (k: string) => cardWorkspaces().filter((w) => projectKey(w) === k).length;
 
 /** Whether the project's header should offer "+": it has a folder to open. */

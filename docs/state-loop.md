@@ -27,9 +27,14 @@ cmux-cockpit://set?key=<map>.<id>            (no value: delete the entry)
 | `dismissed`       | `{"<agentId>": <epoch>, ...}`  | #5    |
 | `projectOverride` | `"<project key>"`, its first match path, e.g. `"/dev/alpha"` | #8    |
 | `projects`        | `{"name", "color": "#rrggbb", "icon": "<SF Symbol>", "root"?}` | #9    |
+| `ui`              | `ui.mode`: `"all"` or `"projects"`; `ui.collapsed`: `{"lane:<key>" or "project:<key>": 0 or 1}` |       |
 
 The id is a workspace id, except for `projects`, where it is the project's
-match: an absolute, lowercase directory. Only the first dot splits the key,
+match: an absolute, lowercase directory, and `ui`, whose only ids are `mode`
+and `collapsed`. `ui` exists because every rebuild hot-reloads the sidebar:
+without it, a PR poll or a dismissal would drop the cockpit back on All with
+its folds reset. A lane group's fold lives in cmux; its `lane:` flag only
+records that it was toggled, so Parked stops starting folded. Only the first dot splits the key,
 so a dotted path stays whole.
 Any other host, path or map is refused. `scripts/state-config.ts` holds the
 rules (`applySet`, `validateState`) and their tests.
