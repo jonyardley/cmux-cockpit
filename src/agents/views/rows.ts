@@ -9,6 +9,7 @@ import {
   ageSince,
   idleOpen,
   type PrEntry,
+  prChipText,
   type RosterRow,
   setIdleOpen,
   statusLine,
@@ -145,6 +146,7 @@ export function rosterRow(e: () => Last<RosterRow>): View {
 
 export function prRow(e: () => Last<PrEntry>): View {
   const p = () => e().pr;
+  const colors = () => chipColors(p().status, p().draft === true);
   const row = HStack({ spacing: 10 }, [
     Text(() => "#" + (p().number ?? ""))
       .font(12)
@@ -162,15 +164,15 @@ export function prRow(e: () => Last<PrEntry>): View {
     // Stale rides inside the chip: an empty sibling Text would still cost
     // its HStack spacing and squeeze the title.
     ring(
-      Text(() => (p().status || "") + (p().stale ? " · stale" : ""))
+      Text(() => prChipText(p()))
         .font(11)
         .weight("medium")
         .lineLimit(1)
         .paddingHorizontal(6)
         .paddingVertical(1)
-        .color(() => chipColors(p().status).fg),
-      () => chipColors(p().status).bg,
-      () => chipColors(p().status).edge,
+        .color(() => colors().fg),
+      () => colors().bg,
+      () => colors().edge,
       1,
       6,
       true,

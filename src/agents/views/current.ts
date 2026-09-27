@@ -280,7 +280,7 @@ function currentHead(): View {
         () =>
           chip(
             () => pr()?.text ?? "",
-            () => prChipColors(pr()?.health ?? "quiet", pr()?.status),
+            () => prChipColors(pr()?.health ?? "quiet", pr()?.status, pr()?.draft),
           ).onTap(() => openIfUrl(pr()?.url)),
       )
         // Priority over the status phrase, so the chip is never the one cut.

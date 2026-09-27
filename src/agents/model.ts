@@ -365,6 +365,16 @@ export interface PrEntry {
   title: string;
 }
 
+/**
+ * What a PR row's chip says: "draft" for an open draft, since "open" reads as
+ * ready for review, else the status; a merged or closed PR says its status
+ * whatever its draft flag. Stale rides inside the chip (see prRow).
+ */
+export function prChipText(pr: PullRequest): string {
+  const word = pr.status === "open" && pr.draft ? "draft" : pr.status;
+  return [word, pr.stale ? "stale" : undefined].filter(Boolean).join(" · ");
+}
+
 const PR_RANK: Record<PrStatus, number> = { open: 0, merged: 1, closed: 2 };
 const prRank = (pr: PullRequest): number => (pr.status ? PR_RANK[pr.status] : 3);
 

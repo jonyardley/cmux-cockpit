@@ -139,6 +139,11 @@ describe("prSummary", () => {
     assert.deepEqual(said("draft"), ["quiet", "#9 · draft"]);
   });
 
+  it("flags an open draft for the chip colour, and nothing else", () => {
+    assert.equal(prSummary(at("draft"))?.draft, true);
+    assert.equal(prSummary(at("green"))?.draft, false);
+  });
+
   it("keeps a draft's marker in every health, with one separator", () => {
     assert.deepEqual(said("draftFailing"), ["failing", "#14 · draft · 1 failing"]);
     assert.deepEqual(said("draftRunning"), ["running", "#15 · draft · running"]);
@@ -155,6 +160,7 @@ describe("prSummary", () => {
       status: "merged",
       url: "https://github.com/o/r/pull/7",
       health: "quiet",
+      draft: false,
       tag: "#11",
       text: "#11 · merged",
     });
@@ -169,6 +175,7 @@ describe("prSummary", () => {
       status: undefined,
       url: undefined,
       health: "quiet",
+      draft: false,
       tag: "#3",
       text: "#3",
     });

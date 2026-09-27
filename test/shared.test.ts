@@ -257,4 +257,13 @@ describe("prChipColors", () => {
     assert.deepEqual(prChipColors("quiet", undefined), prChipColors("quiet", "closed"));
     assert.deepEqual(prChipColors("quiet", undefined), { bg: "#F4F2EA", fg: "#4A4945", edge: "#E8E5DA" });
   });
+
+  it("takes slate for a quiet open draft only, distinct from open and closed", () => {
+    const draft = prChipColors("quiet", "open", true);
+    assert.equal(draft.fg, "#4A5566");
+    assert.notDeepEqual(draft, prChipColors("quiet", "open"));
+    assert.notDeepEqual(draft, prChipColors("quiet", "closed"));
+    assert.deepEqual(prChipColors("quiet", "merged", true), prChipColors("quiet", "merged"));
+    assert.deepEqual(prChipColors("failing", "open", true), prChipColors("failing", "open"));
+  });
 });

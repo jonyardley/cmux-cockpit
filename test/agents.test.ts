@@ -353,6 +353,20 @@ describe("prs", () => {
   });
 });
 
+describe("prChipText", () => {
+  it("says draft for an open draft, else the status", () => {
+    assert.equal(m.prChipText({ status: "open", draft: true }), "draft");
+    assert.equal(m.prChipText({ status: "open" }), "open");
+    assert.equal(m.prChipText({ status: "merged", draft: true }), "merged");
+    assert.equal(m.prChipText({}), "");
+  });
+
+  it("keeps stale inside the chip, with no stray separator", () => {
+    assert.equal(m.prChipText({ status: "open", draft: true, stale: true }), "draft · stale");
+    assert.equal(m.prChipText({ stale: true }), "stale");
+  });
+});
+
 describe("subagents", () => {
   const run = (id: string, extra: Partial<SubagentRun> = {}): SubagentRun => ({ id, ...extra });
   const sel = (agents: Agent[]) => {

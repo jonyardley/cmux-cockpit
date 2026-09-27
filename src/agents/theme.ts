@@ -50,6 +50,6 @@ export const CHECK_DOT: Record<CheckState, string> = {
 };
 
 /** A quiet chip: a PR by its status (shared/pr-colors.ts), a port neutral. */
-export function chipColors(status: PrStatus | "port" | undefined): ChipColors {
-  return prChipColors("quiet", status === "port" ? undefined : status);
+export function chipColors(status: PrStatus | "port" | undefined, draft = false): ChipColors {
+  return prChipColors("quiet", status === "port" ? undefined : status, draft);
 }
