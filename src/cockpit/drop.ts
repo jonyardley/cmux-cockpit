@@ -117,6 +117,9 @@ export function handleDragChange(d: DragState | null): void {
 /** True while a card is being dragged: empty lanes open as zones. */
 export const dragging = (): boolean => drag() !== null;
 
+/** An empty lane's zone height cap: unbounded mid-drag, else 0, so it takes no room at rest. */
+export const zoneMaxHeight = (): number | "infinity" => (dragging() ? "infinity" : 0);
+
 /** The lane the current drag would drop into, for a header's "Drop here" and a lit zone. */
 export const dropLane = (): LaneKey | null => {
   const d = drag();
