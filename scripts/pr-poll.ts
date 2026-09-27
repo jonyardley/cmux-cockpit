@@ -4,8 +4,8 @@
 //   node scripts/pr-poll.ts
 // Run by the pr-poll rules in automations.json when an agent's turn ends or a
 // workspace is selected. For every workspace in every window it reads the git
-// branch of its directory and asks gh for that branch's PR, then rebuilds the
-// sidebars only if a PR changed. It never fails loudly: every problem is a log
+// branch of its directory and asks gh for that branch's PR and its checks,
+// then rebuilds the sidebars only if a PR or a check's state changed. It never fails loudly: every problem is a log
 // line and exit 0. No shell: every command is spawnSync with an argument
 // array, since directories and branch names come from outside. A lockfile
 // stops two runs overlapping, and an overall deadline stops one slow run
@@ -14,7 +14,15 @@
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { isRecord, type SavedPr, type State, validateState } from "./state-config.ts";
+import {
+  type CheckState,
+  isRecord,
+  MAX_CHECKS,
+  type SavedCheck,
+  type SavedPr,
+  type State,
+  validateState,
+} from "./state-config.ts";
 import { logLine } from "./state-log.ts";
 import { writePrs } from "./state-url.ts";
 
@@ -63,8 +71,63 @@ export function parseWorkspaces(text: string): WorkspaceDir[] | null {
 
 const STATUS: Record<string, SavedPr["status"]> = { OPEN: "open", MERGED: "merged", CLOSED: "closed" };
 
+// A finished check run's conclusion: success and the ones GitHub lets
+// through a required check (neutral, skipped) pass; the rest fail.
+const PASSING = new Set(["SUCCESS", "NEUTRAL", "SKIPPED"]);
+
+// A CheckRun (Actions and apps) or a StatusContext (the older commit
+// status API) from statusCheckRollup, in three states.
+function checkState(c: Record<string, unknown>): CheckState {
+  if (c.__typename === "StatusContext") {
+    if (c.state === "SUCCESS") return "pass";
+    return c.state === "PENDING" || c.state === "EXPECTED" ? "pending" : "fail";
+  }
+  if (c.status !== "COMPLETED") return "pending";
+  return typeof c.conclusion === "string" && PASSING.has(c.conclusion) ? "pass" : "fail";
+}
+
+interface RolledCheck extends SavedCheck {
+  id: string;
+  startedAt: string;
+}
+
+function rolledCheck(c: unknown): RolledCheck[] {
+  if (!isRecord(c)) return [];
+  const name = typeof c.name === "string" ? c.name : c.context;
+  if (typeof name !== "string" || !name.trim()) return [];
+  const workflow = typeof c.workflowName === "string" ? c.workflowName : "";
+  const startedAt = typeof c.startedAt === "string" ? c.startedAt : "";
+  return [{ id: `${workflow}\n${name}`, name: name.trim().slice(0, 64).trim(), state: checkState(c), startedAt }];
+}
+
+// A queued run has no start yet (gh sends "" or its zero time), and is
+// the newest run of its check, so it sorts after any real start.
+const startKey = (at: string): string => (!at || at.startsWith("0001-") ? "\uffff" : at);
+
+// Failing first, then running, so the cap never drops a red check.
+const STATE_RANK: Record<CheckState, number> = { fail: 0, pending: 1, pass: 2 };
+
 /**
- * The branch's PR from `gh pr list --json number,state,url,headRefName,updatedAt,isCrossRepository`:
+ * The checks from gh's statusCheckRollup, failing first, then running,
+ * then passed, by name within each. A workflow run again (an edited PR
+ * body reruns its check) appears once per run, so only the latest started
+ * run of each workflow and name is kept.
+ */
+export function checksFrom(rollup: unknown): SavedCheck[] {
+  if (!Array.isArray(rollup)) return [];
+  const latest = new Map<string, RolledCheck>();
+  for (const c of rollup.flatMap(rolledCheck)) {
+    const seen = latest.get(c.id);
+    if (!seen || startKey(c.startedAt) >= startKey(seen.startedAt)) latest.set(c.id, c);
+  }
+  return [...latest.values()]
+    .map(({ name, state }) => ({ name, state }))
+    .sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || a.name.localeCompare(b.name))
+    .slice(0, MAX_CHECKS);
+}
+
+/**
+ * The branch's PR from `gh pr list --json <PR_FIELDS>`, with its checks:
  * an open one first, else the most recently updated. A fork's PR
  * (isCrossRepository) is never picked, since the sidebar cannot open it the
  * way it opens one of ours. Null when there is none; undefined when the
@@ -73,19 +136,25 @@ const STATUS: Record<string, SavedPr["status"]> = { OPEN: "open", MERGED: "merge
 export function pickPr(text: string, branch: string): SavedPr | null | undefined {
   const v = parseJson(text);
   if (!Array.isArray(v)) return undefined;
-  const prs = v.flatMap((p): (SavedPr & { updatedAt: string })[] => {
+  const prs = v.flatMap((p): (SavedPr & { updatedAt: string; rollup: unknown })[] => {
     if (!isRecord(p) || p.headRefName !== branch || p.isCrossRepository === true) return [];
     const status = typeof p.state === "string" ? STATUS[p.state] : undefined;
     if (!status || typeof p.number !== "number" || typeof p.url !== "string") return [];
     const updatedAt = typeof p.updatedAt === "string" ? p.updatedAt : "";
-    return [{ number: p.number, url: p.url, status, branch, updatedAt }];
+    return [{ number: p.number, url: p.url, status, branch, updatedAt, rollup: p.statusCheckRollup }];
   });
   prs.sort(
     (a, b) => Number(b.status === "open") - Number(a.status === "open") || b.updatedAt.localeCompare(a.updatedAt),
   );
   const top = prs[0];
-  return top ? { number: top.number, url: top.url, status: top.status, branch: top.branch } : null;
+  if (!top) return null;
+  const pr: SavedPr = { number: top.number, url: top.url, status: top.status, branch: top.branch };
+  const checks = checksFrom(top.rollup);
+  return checks.length ? { ...pr, checks } : pr;
 }
+
+// The fields pickPr reads.
+const PR_FIELDS = "number,state,url,headRefName,updatedAt,isCrossRepository,statusCheckRollup";
 
 export interface Lookups {
   /**
@@ -239,8 +308,7 @@ function poll(root: string): number {
     branchOf: (dir) => (pastDeadline() ? undefined : gitBranch(git, dir)),
     prFor: (dir, branch) => {
       if (pastDeadline()) return undefined;
-      const fields = "number,state,url,headRefName,updatedAt,isCrossRepository";
-      const out = run(gh, ["pr", "list", "--head", branch, "--state", "all", "--limit", "5", "--json", fields], dir);
+      const out = run(gh, ["pr", "list", "--head", branch, "--state", "all", "--limit", "5", "--json", PR_FIELDS], dir);
       return out === null ? undefined : pickPr(out, branch);
     },
   });

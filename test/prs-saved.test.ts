@@ -6,7 +6,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open", branch: "feat" };
+const checks = [
+  { name: "lint", state: "fail" },
+  { name: "test", state: "pending" },
+  { name: "build", state: "pass" },
+];
+const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open", branch: "feat", checks };
 (globalThis as Record<string, unknown>).__STATE__ = {
   dismissed: {},
   projectOverride: {},
@@ -17,7 +22,7 @@ const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open",
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
-const { prOf, prsOf } = await import("../src/shared/prs.ts");
+const { checksOf, prOf, prsOf } = await import("../src/shared/prs.ts");
 const agents = await import("../src/agents/model.ts");
 
 describe("prsOf", () => {
@@ -54,5 +59,43 @@ describe("the agents panel's Pull requests list", () => {
       agents.prs().map((e) => e.pr.number),
       [7],
     );
+  });
+});
+
+describe("checksOf", () => {
+  it("gives the saved PR's checks while it shows", () => {
+    assert.deepEqual(checksOf(ws("w1", { branch: "feat" })), checks);
+    assert.deepEqual(checksOf(ws("w1")), checks);
+  });
+
+  it("has none once the branch moves, when cmux sends its own PR, or for an unknown workspace", () => {
+    assert.deepEqual(checksOf(ws("w1", { branch: "main" })), []);
+    assert.deepEqual(checksOf(ws("w1", { branch: "feat", pr: { number: 9 } })), []);
+    assert.deepEqual(checksOf(ws("w2")), []);
+  });
+});
+
+describe("the agents panel's Checks block", () => {
+  it("lists the selected workspace's checks with passed over total", () => {
+    r.data.workspaces = [ws("w1", { branch: "feat", selected: true })];
+    r.data.epoch++;
+    const rows = agents.checks();
+    assert.deepEqual(
+      rows.map((c) => [c.name, agents.checkWord(c), agents.checkDot(c)]),
+      [
+        ["lint", "failed", "#C0453A"],
+        ["test", "running", "#3B6FB6"],
+        ["build", "passed", "#788C5D"],
+      ],
+    );
+    assert.equal(agents.checksFigure(rows), "1 / 3");
+    assert.equal(new Set(rows.map((c) => c.key)).size, 3);
+  });
+
+  it("is empty when nothing is selected", () => {
+    r.data.workspaces = [ws("w1", { branch: "feat" })];
+    r.data.epoch++;
+    assert.deepEqual(agents.checks(), []);
+    assert.equal(agents.checksFigure([]), "0 / 0");
   });
 });

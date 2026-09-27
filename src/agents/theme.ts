@@ -1,5 +1,7 @@
 // Agents panel colour tokens and status styling.
 
+import type { CheckState } from "../../scripts/state-config.ts";
+
 export const T = {
   ground: "#F6F4EC",
   panel: "#FFFFFF",
@@ -15,6 +17,7 @@ export const T = {
   blueHalo: "#3B6FB62E",
   clayHalo: "#D9775738",
   grey: "#A09E95",
+  red: "#C0453A",
   hover: "#7f7f7f0F",
 } as const;
 
@@ -31,6 +34,13 @@ export const STATUS_TEXT: Record<AgentStatus, string> = {
   working: "#2F5690",
   idle: T.secondary,
   ended: "#4E6A3A",
+};
+
+// A CI check's dot on the card: board 1's green pass, red fail, blue running.
+export const CHECK_DOT: Record<CheckState, string> = {
+  pass: STATUS_DOT.ended,
+  fail: T.red,
+  pending: T.blue,
 };
 
 export interface ChipColors {
