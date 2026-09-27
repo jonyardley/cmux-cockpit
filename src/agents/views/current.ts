@@ -1,16 +1,17 @@
-// "This workspace": the selected workspace's card. Todo is not in the
-// sidebar data (issue #7), so it is left out; checks come from the PR poller.
+// "This workspace": the selected workspace in detail, what its card on the
+// left has no room for. Todo is not in the sidebar data (issue #7), so it is
+// left out; checks come from the PR poller.
 
 import { glyphColor } from "../../shared/contrast.ts";
 import { dismissNeeds } from "../../shared/needs.ts";
 import { prChipColors } from "../../shared/pr-colors.ts";
-import { prSummary } from "../../shared/prs.ts";
 import { tracked } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
 import {
   type AgentRow,
   agentRows,
+  branchDetail,
   type CheckRow,
   cardLine,
   checkDot,
@@ -19,14 +20,18 @@ import {
   checkWord,
   cur,
   currentAsk,
+  currentPr,
   haloFor,
+  hasDetails,
+  headStatus,
   hollowDot,
+  portChips,
   type SubagentRow,
   statusLine,
-  statusPhrase,
   subagentDot,
   subagentFigure,
   subagentHalo,
+  subagentLabelColor,
   subagents,
 } from "../model.ts";
 import { chipColors, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
@@ -65,7 +70,7 @@ function subagentLine(e: () => SubagentRow): View {
     ),
     Text(() => e().label)
       .font(12)
-      .color(T.text)
+      .color(() => subagentLabelColor(e()))
       .lineLimit(1)
       .truncation("tail")
       .layoutPriority(1),
@@ -74,7 +79,9 @@ function subagentLine(e: () => SubagentRow): View {
       .font(11)
       .monospaced()
       .color(T.secondary)
-      .lineLimit(1),
+      .lineLimit(1)
+      // Over the label's priority, so "finished 12m ago" is never the one cut.
+      .layoutPriority(2),
   ])
     .paddingVertical(5)
     .frame({ maxWidth: "infinity", alignment: "leading" });
@@ -208,54 +215,36 @@ function askBlock(): View {
   );
 }
 
-function currentHead(): View {
+// Title and project (the branch is in the details below), then the status
+// dot with its word and age ("Working 14m"), then the unread badge.
+function currentTitle(): View {
   const w = () => cur().ws;
   const a = () => cur().a;
   const status = () => a()?.status;
   const unread = () => w().unread ?? 0;
-  const pr = computed(() => prSummary(w()));
-  return VStack({ spacing: 0, alignment: "leading" }, [
-    HStack({ spacing: 10 }, [
-      ZStack({}, [
-        RoundedRectangle({ cornerRadius: 8 }).fill(() => cur().project.color),
-        Image(() => cur().project.icon)
-          .font(12)
-          .color(() => glyphColor(cur().project.color, T.text)),
-      ]).frame({ width: 26, height: 26 }),
-      VStack({ spacing: 1, alignment: "leading" }, [
-        Text(() => displayTitle(w()) || "untitled")
-          .font(14)
-          .weight("semibold")
-          .color(T.text)
-          .lineLimit(1)
-          .truncation("middle"),
-        Text(() =>
-          [cur().project.name, w().branch ? w().branch + (w().dirty ? " · uncommitted" : "") : ""]
-            .filter(Boolean)
-            .join(" · "),
-        )
-          .font(11.5)
-          .color(T.metaText)
-          .lineLimit(1)
-          .truncation("tail"),
-      ])
-        .frame({ maxWidth: "infinity", alignment: "leading" })
-        .layoutPriority(1),
-      when(
-        "cur-unread",
-        () => unread() > 0,
-        () =>
-          Text(() => String(unread()))
-            .font(10)
-            .bold()
-            .color(T.onClay)
-            .paddingHorizontal(5)
-            .paddingVertical(1)
-            .background(T.clayButton)
-            .cornerRadius(7),
-      ),
-    ]).frame({ maxWidth: "infinity" }),
-    HStack({ spacing: 8 }, [
+  return HStack({ spacing: 10 }, [
+    ZStack({}, [
+      RoundedRectangle({ cornerRadius: 8 }).fill(() => cur().project.color),
+      Image(() => cur().project.icon)
+        .font(12)
+        .color(() => glyphColor(cur().project.color, T.text)),
+    ]).frame({ width: 26, height: 26 }),
+    VStack({ spacing: 1, alignment: "leading" }, [
+      Text(() => displayTitle(w()) || "untitled")
+        .font(14)
+        .weight("semibold")
+        .color(T.text)
+        .lineLimit(1)
+        .truncation("middle"),
+      Text(() => cur().project.name)
+        .font(11.5)
+        .color(T.metaText)
+        .lineLimit(1)
+        .truncation("tail"),
+    ])
+      .frame({ maxWidth: "infinity", alignment: "leading" })
+      .layoutPriority(1),
+    HStack({ spacing: 6 }, [
       agentDot(
         () => {
           const s = status();
@@ -264,80 +253,138 @@ function currentHead(): View {
         () => haloFor(a()),
         () => hollowDot(a()),
       ),
-      Text(() => statusPhrase(a()))
-        .font(13)
+      Text(() => headStatus(a()))
+        .font(12)
         .weight("medium")
         .color(() => {
           const s = status();
           return s ? STATUS_TEXT[s] : T.secondary;
         })
-        .lineLimit(1)
-        .layoutPriority(1),
-      Spacer({ minLength: 4 }),
-      when(
-        "cur-pr",
-        () => !!pr(),
-        () =>
-          chip(
-            () => pr()?.text ?? "",
-            () => prChipColors(pr()?.health ?? "quiet", pr()?.status, pr()?.draft),
-          ).onTap(() => openIfUrl(pr()?.url)),
-      )
-        // Priority over the status phrase, so the chip is never the one cut.
-        // It sits on the when() result because a priority inside it does not
-        // reach this HStack.
-        .layoutPriority(2),
-    ])
-      .frame({ maxWidth: "infinity" })
-      .paddingTop(14),
-    askBlock(),
+        .lineLimit(1),
+    ]).layoutPriority(2),
     when(
-      "cur-msg",
-      () => !!cardLine(),
+      "cur-unread",
+      () => unread() > 0,
       () =>
-        Text(() => cardLine())
-          .font(12)
+        Text(() => String(unread()))
+          .font(10)
+          .bold()
+          .color(T.onClay)
+          .paddingHorizontal(5)
+          .paddingVertical(1)
+          .background(T.clayButton)
+          .cornerRadius(7),
+    ),
+  ]).frame({ maxWidth: "infinity" });
+}
+
+// The agent's latest message, set apart on a faint face.
+function messageBlock(): View {
+  return when(
+    "cur-msg",
+    () => !!cardLine(),
+    () =>
+      Text(() => cardLine())
+        .font(12)
+        .color(T.secondary)
+        .lineLimit(4)
+        .truncation("tail")
+        .paddingHorizontal(8)
+        .paddingVertical(6)
+        .frame({ maxWidth: "infinity", alignment: "leading" })
+        .background(T.quote)
+        .cornerRadius(6)
+        .paddingTop(10),
+  );
+}
+
+function progressBlock(): View {
+  const w = () => cur().ws;
+  return when(
+    "cur-progress",
+    () => !!w().progress,
+    () =>
+      VStack({ spacing: 4, alignment: "leading" }, [
+        ProgressView()
+          .value(() => Math.max(0, Math.min(1, w().progress?.value ?? 0)))
+          .frame({ maxWidth: "infinity" }),
+        Text(() => w().progress?.label || "")
+          .font(11)
           .color(T.secondary)
-          .lineLimit(3)
-          .truncation("tail")
-          .frame({ maxWidth: "infinity", alignment: "leading" })
-          .paddingTop(6),
-    ),
-    when(
-      "cur-progress",
-      () => !!w().progress,
-      () =>
-        VStack({ spacing: 4, alignment: "leading" }, [
-          ProgressView()
-            .value(() => Math.max(0, Math.min(1, w().progress?.value ?? 0)))
-            .frame({ maxWidth: "infinity" }),
-          Text(() => w().progress?.label || "")
-            .font(11)
-            .color(T.secondary)
-            .lineLimit(1),
-        ]).paddingTop(10),
-    ),
-    when(
-      "cur-ports",
-      () => (w().ports ?? []).length > 0,
-      () =>
-        HStack({ spacing: 6 }, [
-          ForEach(
-            { items: () => (w().ports ?? []).slice(0, 3).map((n) => ({ id: "p" + n, n })), key: (x) => x.id },
-            (x) =>
-              chip(
-                () => ":" + x().n,
-                () => chipColors("port"),
-              ).onTap(() => openURL("http://localhost:" + x().n)),
-          ),
-          // Left-aligned by the frame, not a Spacer, which would take half the
-          // row from the port chips.
-        ])
-          .frame({ maxWidth: "infinity", alignment: "leading" })
-          .paddingTop(10),
-    ),
-    checksBlock(),
+          .lineLimit(1),
+      ]).paddingTop(10),
+  );
+}
+
+// One "Branch", "Ports" or "PR" line: a quiet label column, then the value.
+function detailLine(key: string, label: string, show: () => boolean, value: () => View): View {
+  return when(key, show, () =>
+    HStack({ spacing: 8 }, [
+      Text(label).font(11.5).color(T.tertiary).lineLimit(1).frame({ width: 48, alignment: "leading" }),
+      value(),
+    ])
+      .paddingVertical(3)
+      .frame({ maxWidth: "infinity", alignment: "leading" }),
+  );
+}
+
+function detailsBlock(): View {
+  return when(
+    "cur-details",
+    () => hasDetails(),
+    () =>
+      VStack({ spacing: 0, alignment: "leading" }, [
+        detailLine(
+          "cur-branch",
+          "Branch",
+          () => !!branchDetail(),
+          () =>
+            Text(() => branchDetail())
+              .font(11.5)
+              .color(T.secondary)
+              .lineLimit(1)
+              .truncation("middle")
+              .layoutPriority(1),
+        ),
+        detailLine(
+          "cur-ports",
+          "Ports",
+          () => portChips().length > 0,
+          () =>
+            HStack({ spacing: 6 }, [
+              ForEach({ items: () => portChips(), key: (x) => x.key }, (x) =>
+                chip(
+                  () => x().label,
+                  () => chipColors("port"),
+                ).onTap(() => openURL(x().url)),
+              ),
+            ]),
+        ),
+        detailLine(
+          "cur-pr",
+          "PR",
+          () => !!currentPr(),
+          () =>
+            chip(
+              () => currentPr()?.text ?? "",
+              () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
+            ).onTap(() => openIfUrl(currentPr()?.url)),
+        ),
+      ])
+        .frame({ maxWidth: "infinity", alignment: "leading" })
+        .paddingTop(10),
+  );
+}
+
+function currentHead(): View {
+  return VStack({ spacing: 0, alignment: "leading" }, [
+    currentTitle(),
+    askBlock(),
+    messageBlock(),
+    progressBlock(),
     subagentsBlock(),
+    detailsBlock(),
+    checksBlock(),
   ])
     .padding(14)
     .frame({ maxWidth: "infinity", alignment: "leading" });

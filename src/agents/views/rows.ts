@@ -1,23 +1,22 @@
-// Rows for the Running and Pull requests panels.
+// Rows for the Working, Idle and Pull requests panels.
 
 import type { Last } from "../../shared/list.ts";
 import { readable } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
 import {
-  type AgentEntry,
-  ageSince,
   idleOpen,
   type PrEntry,
   prChipText,
+  type RosterEntry,
   type RosterRow,
+  rosterAge,
   setIdleOpen,
-  statusLine,
 } from "../model.ts";
 import { chipColors, T } from "../theme.ts";
-import { emptyRow, glyph, idleRing, jump, meta, openIfUrl, ring, ruled, statusDot } from "./parts.ts";
+import { glyph, idleRing, jump, meta, openIfUrl, ring, ruled, statusDot } from "./parts.ts";
 
-function runningRow(e: () => Last<AgentEntry>): View {
+function runningRow(e: () => Last<RosterEntry>): View {
   const w = () => e().ws;
   const a = () => e().a;
   const row = HStack({ spacing: 10, alignment: "top" }, [
@@ -32,7 +31,7 @@ function runningRow(e: () => Last<AgentEntry>): View {
           .truncation("middle")
           .layoutPriority(1),
         Spacer({ minLength: 4 }),
-        meta(() => ageSince(a().sinceEpoch)),
+        meta(() => rosterAge(e())),
       ]).frame({ maxWidth: "infinity" }),
       when(
         "progress",
@@ -65,7 +64,7 @@ function runningRow(e: () => Last<AgentEntry>): View {
   return ruled(row, () => e().last);
 }
 
-function idleRow(e: () => Last<AgentEntry>): View {
+function idleRow(e: () => Last<RosterEntry>): View {
   const w = () => e().ws;
   const a = () => e().a;
   const row = HStack({ spacing: 10 }, [
@@ -78,7 +77,7 @@ function idleRow(e: () => Last<AgentEntry>): View {
       .truncation("middle")
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
-    meta(() => statusLine(a())),
+    meta(() => rosterAge(e())),
     glyph(e().project),
   ])
     .paddingHorizontal(12)
@@ -87,19 +86,6 @@ function idleRow(e: () => Last<AgentEntry>): View {
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => jump(w().id, a().surfaceId));
   return ruled(row, () => e().last);
-}
-
-// Sits between the running rows (or "Nothing running") and the idle ones,
-// so a dimmed idle row never reads as contradicting "Nothing running".
-function idleHeadingRow(): View {
-  return Text("Idle")
-    .font(10.5)
-    .weight("semibold")
-    .color(T.tertiary)
-    .paddingHorizontal(12)
-    .paddingTop(8)
-    .paddingBottom(2)
-    .frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
 function toggleRow(count: () => number, isLast: () => boolean): View {
@@ -122,17 +108,9 @@ function toggleRow(count: () => number, isLast: () => boolean): View {
   return ruled(row, isLast);
 }
 
-/** One Running-panel row; a row's kind is fixed by its key. */
+/** One Working or Idle row; a row's kind is fixed by its key. */
 export function rosterRow(e: () => Last<RosterRow>): View {
   const kind = e().kind;
-  if (kind === "run" || kind === "idle") {
-    const entry = (): Last<AgentEntry> => {
-      const r = e();
-      if (r.kind !== "run" && r.kind !== "idle") throw new Error("roster row changed kind under key " + r.key);
-      return r;
-    };
-    return kind === "run" ? runningRow(entry) : idleRow(entry);
-  }
   if (kind === "toggle") {
     const count = () => {
       const r = e();
@@ -140,8 +118,12 @@ export function rosterRow(e: () => Last<RosterRow>): View {
     };
     return toggleRow(count, () => e().last);
   }
-  if (kind === "idle-heading") return idleHeadingRow();
-  return ruled(emptyRow("Nothing running"), () => e().last);
+  const entry = (): Last<RosterEntry> => {
+    const r = e();
+    if (r.kind === "toggle") throw new Error("roster row changed kind under key " + r.key);
+    return r;
+  };
+  return kind === "run" ? runningRow(entry) : idleRow(entry);
 }
 
 export function prRow(e: () => Last<PrEntry>): View {

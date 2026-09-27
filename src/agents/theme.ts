@@ -25,6 +25,8 @@ export const T = {
   grey: "#A09E95",
   red: "#C0453A",
   hover: "#7f7f7f0F",
+  /** The faint face behind the agent's latest message on the card. */
+  quote: "#1414130A",
 } as const;
 
 export const STATUS_DOT: Record<AgentStatus, string> = {

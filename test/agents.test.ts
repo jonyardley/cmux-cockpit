@@ -66,73 +66,141 @@ describe("roster leaves out the selected workspace", () => {
   });
 });
 
-describe("runningRows", () => {
+describe("workingRows and idleRows", () => {
   const idleWorkspaces = (n: number) =>
     Array.from({ length: n }, (_, i) => ws("i" + i, { agents: [agent("idle", { lastActivityAt: i })] }));
 
-  it("shows Nothing running, an Idle heading, three idle inline, then a toggle for the rest", () => {
+  it("puts working and idle in their own lists, with no heading or empty rows", () => {
+    r.data.workspaces = [ws("r", { agents: [agent("working")] }), ...idleWorkspaces(1)];
+    assert.deepEqual(
+      m.workingRows().map((e) => [e.kind, e.last]),
+      [["run", true]],
+    );
+    assert.deepEqual(
+      m.idleRows().map((e) => [e.kind, e.last]),
+      [["idle", true]],
+    );
+  });
+
+  it("is empty on both sides when nothing is there, so each section shows only its heading", () => {
+    assert.deepEqual(m.workingRows(), []);
+    assert.deepEqual(m.idleRows(), []);
+  });
+
+  it("shows three idle inline, then a toggle for the rest", () => {
     r.data.workspaces = idleWorkspaces(5);
-    const kinds = m.runningRows().map((e) => e.kind);
-    assert.deepEqual(kinds, ["empty", "idle-heading", "idle", "idle", "idle", "toggle"]);
-    const toggle = m.runningRows().at(-1);
+    assert.deepEqual(
+      m.idleRows().map((e) => e.kind),
+      ["idle", "idle", "idle", "toggle"],
+    );
+    const toggle = m.idleRows().at(-1);
     assert.equal(toggle?.kind === "toggle" && toggle.count, 2);
   });
 
   it("expands to every idle agent", () => {
     r.data.workspaces = idleWorkspaces(5);
     m.setIdleOpen(true);
-    assert.equal(m.runningRows().filter((e) => e.kind === "idle").length, 5);
+    assert.equal(m.idleRows().filter((e) => e.kind === "idle").length, 5);
   });
 
-  it("stands in an empty row when nothing runs, and it reads last", () => {
+  it("flags only each list's final row as last", () => {
+    r.data.workspaces = [ws("r1", { agents: [agent("working")] }), ws("r2", { agents: [agent("working")] })];
     assert.deepEqual(
-      m.runningRows().map((e) => [e.kind, e.last]),
-      [["empty", true]],
+      m.workingRows().map((e) => e.last),
+      [false, true],
     );
   });
 
-  it("gives the empty row a hairline when idle rows follow it", () => {
-    r.data.workspaces = idleWorkspaces(1);
+  it("leaves Working empty when the only worker is the selected workspace", () => {
+    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("working")] })];
+    assert.deepEqual(m.workingRows(), []);
+  });
+});
+
+describe("sinceAge", () => {
+  it("writes working and idle rows in one format", () => {
+    assert.equal(m.sinceAge(agent("working", { sinceEpoch: 10_000 - 30 })), "<1m");
+    assert.equal(m.sinceAge(agent("idle", { sinceEpoch: 1, lastActivityAt: 10_000 - 46 })), "<1m");
+    assert.equal(m.sinceAge(agent("working", { sinceEpoch: 10_000 - 720 })), "12m");
+    assert.equal(m.sinceAge(agent("idle", { lastActivityAt: 10_000 - 7200 })), "2h");
+  });
+
+  it("is blank without an agent or a timestamp", () => {
+    assert.equal(m.sinceAge(null), "");
+    assert.equal(m.sinceAge(agent("idle")), "");
+  });
+});
+
+describe("rosterAge", () => {
+  it("counts a working row from its start only, and an idle row from its last activity", () => {
+    const run = (a: Agent) => ({ key: "r", kind: "run" as const, ws: ws("w"), a, project: m.cur().project });
+    const idle = (a: Agent) => ({ key: "i", kind: "idle" as const, ws: ws("w"), a, project: m.cur().project });
+    assert.equal(m.rosterAge(run(agent("working", { sinceEpoch: 10_000 - 720 }))), "12m");
+    // No start: blank, never the last activity, which resets while it works.
+    assert.equal(m.rosterAge(run(agent("working", { lastActivityAt: 10_000 - 5 }))), "");
+    assert.equal(m.rosterAge(idle(agent("idle", { sinceEpoch: 1, lastActivityAt: 10_000 - 46 }))), "<1m");
+  });
+});
+
+describe("headStatus", () => {
+  it("says the status in words beside its age", () => {
+    assert.equal(m.headStatus(agent("working", { sinceEpoch: 10_000 - 840 })), "Working 14m");
+    assert.equal(m.headStatus(agent("needs_input", { sinceEpoch: 10_000 - 5 })), "Needs you <1m");
+    assert.equal(m.headStatus(agent("idle", { lastActivityAt: 10_000 - 120 })), "Idle 2m");
+    assert.equal(m.headStatus(agent("ended", { lastActivityAt: 10_000 - 180 })), "Ended 3m ago");
+  });
+
+  it("says the word alone without a time, and No agent without an agent", () => {
+    assert.equal(m.headStatus(agent("ended")), "Ended");
+    assert.equal(m.headStatus(null), "No agent");
+  });
+});
+
+describe("the card's details", () => {
+  it("shows the details block only while a line has something to say", () => {
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.equal(m.hasDetails(), false);
+    r.data.workspaces = [ws("sel", { selected: true, ports: [3000] })];
+    assert.equal(m.hasDetails(), true);
+    r.data.workspaces = [ws("sel", { selected: true, dirty: true })];
+    assert.equal(m.hasDetails(), true);
+    r.data.workspaces = [ws("sel", { selected: true, pr: { number: 1, url: "u/1", status: "open" } })];
+    assert.equal(m.hasDetails(), true);
+  });
+
+  it("says the branch and uncommitted changes when dirty, never a file count", () => {
+    r.data.workspaces = [ws("sel", { selected: true, branch: "main", dirty: true })];
+    assert.equal(m.branchDetail(), "main · uncommitted changes");
+  });
+
+  it("says the branch alone when clean, changes alone with no branch, and nothing with neither", () => {
+    r.data.workspaces = [ws("sel", { selected: true, branch: "main" })];
+    assert.equal(m.branchDetail(), "main");
+    r.data.workspaces = [ws("sel", { selected: true, dirty: true })];
+    assert.equal(m.branchDetail(), "uncommitted changes");
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.equal(m.branchDetail(), "");
+  });
+
+  it("lists at most three ports, each with its local address", () => {
+    r.data.workspaces = [ws("sel", { selected: true, ports: [5173, 3000, 8080, 9000] })];
     assert.deepEqual(
-      m.runningRows().map((e) => [e.kind, e.last]),
+      m.portChips().map((p) => [p.label, p.url]),
       [
-        ["empty", false],
-        ["idle-heading", false],
-        ["idle", true],
+        [":5173", "http://localhost:5173"],
+        [":3000", "http://localhost:3000"],
+        [":8080", "http://localhost:8080"],
       ],
     );
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.deepEqual(m.portChips(), []);
   });
 
-  it("drops the empty row once something is working, but keeps the Idle heading", () => {
-    r.data.workspaces = [ws("r", { agents: [agent("working")] }), ...idleWorkspaces(1)];
-    assert.deepEqual(
-      m.runningRows().map((e) => e.kind),
-      ["run", "idle-heading", "idle"],
-    );
-  });
-
-  it("leaves out the Idle heading when nothing is idle", () => {
-    r.data.workspaces = [ws("r", { agents: [agent("working")] })];
-    assert.deepEqual(
-      m.runningRows().map((e) => e.kind),
-      ["run"],
-    );
-  });
-
-  it("flags only the final row as last", () => {
-    r.data.workspaces = idleWorkspaces(2);
-    assert.deepEqual(
-      m.runningRows().map((e) => e.last),
-      [false, false, false, true],
-    );
-  });
-
-  it("shows Nothing running when the only worker is the selected workspace", () => {
-    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("working")] })];
-    assert.deepEqual(
-      m.runningRows().map((e) => e.kind),
-      ["empty"],
-    );
+  it("gives the PR with its state", () => {
+    r.data.workspaces = [ws("sel", { selected: true, pr: { number: 12, url: "u/12", status: "open", draft: true } })];
+    assert.equal(m.currentPr()?.text, "#12 · draft");
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.equal(m.currentPr(), undefined);
   });
 });
 
@@ -272,21 +340,9 @@ describe("cardLine", () => {
 });
 
 describe("status words", () => {
-  it("counts working from its start and idle from its last activity", () => {
-    assert.equal(m.statusPhrase(agent("working", { sinceEpoch: 10_000 - 720 })), "Working for 12m");
-    assert.equal(m.statusPhrase(agent("idle", { sinceEpoch: 1, lastActivityAt: 10_000 - 60 })), "Idle for 1m");
-    assert.equal(m.statusPhrase(agent("ended", { lastActivityAt: 10_000 - 180 })), "Ended 3m ago");
-    assert.equal(m.statusPhrase(agent("ended")), "Ended");
-    assert.equal(m.statusPhrase(null), "No agent");
-  });
-
-  it("rows use the coarse age, the card sentence the finer one", () => {
-    const a = agent("needs_input", { sinceEpoch: 10_000 - 5 });
-    assert.equal(m.statusLine(a), "needs you <1m");
-    assert.equal(m.statusPhrase(a), "Needs you for 5s");
-    const long = agent("working", { sinceEpoch: 10_000 - (3 * 3600 + 5 * 60) });
-    assert.equal(m.statusLine(long), "working 3h");
-    assert.equal(m.statusPhrase(long), "Working for 3h 5m");
+  it("rows in the card say the status with the coarse age", () => {
+    assert.equal(m.statusLine(agent("needs_input", { sinceEpoch: 10_000 - 5 })), "needs you <1m");
+    assert.equal(m.statusLine(agent("working", { sinceEpoch: 10_000 - (3 * 3600 + 5 * 60) })), "working 3h");
     assert.equal(m.statusLine(agent("idle", { lastActivityAt: 10_000 - 46 })), "idle <1m");
     assert.equal(m.statusLine(agent("idle")), "idle");
     assert.equal(m.statusLine(null), "");
@@ -400,13 +456,15 @@ describe("subagents", () => {
     assert.deepEqual(ids(), ["early", "late", "new-done", "no-end", "old-done"]);
   });
 
-  it("figures coarse elapsed while running, running with no start, and done once settled", () => {
+  it("figures coarse elapsed while running, running with no start, and when it finished once settled", () => {
     sel([
       agent("working", {
         children: [
           run("a", { label: "Edge-case review", running: true, startedEpoch: 10_000 - 240 }),
           run("b", { label: "No start yet", running: true }),
-          run("c", { label: "Write builder tests", running: false, startedEpoch: 100, endedEpoch: 9_000 }),
+          run("c", { label: "Write builder tests", running: false, startedEpoch: 100, endedEpoch: 10_000 - 180 }),
+          run("d", { label: "No end sent", running: false, startedEpoch: 50 }),
+          run("e", { label: "Just now", running: false, startedEpoch: 60, endedEpoch: 10_000 - 20 }),
         ],
       }),
     ]);
@@ -415,7 +473,9 @@ describe("subagents", () => {
       [
         ["No start yet", "running"],
         ["Edge-case review", "4m"],
-        ["Write builder tests", "done"],
+        ["Just now", "finished just now"],
+        ["Write builder tests", "finished 3m ago"],
+        ["No end sent", "finished"],
       ],
     );
   });
@@ -428,6 +488,8 @@ describe("subagents", () => {
     assert.equal(m.subagentHalo(live), T.blueHalo);
     assert.equal(m.subagentDot(done), STATUS_DOT.ended);
     assert.equal(m.subagentHalo(done), "clear");
+    assert.equal(m.subagentLabelColor(live), T.text);
+    assert.equal(m.subagentLabelColor(done), T.tertiary);
   });
 
   it("settles every run under an ended session, whatever the run says", () => {
