@@ -225,7 +225,7 @@ describe("handleMove", () => {
   it("ignores a drag on the hidden lanes under Projects, so no zone or drop lane lights", () => {
     state.setMode("projects");
     drop.handleDragChange({ id: "a@main", index: 4 });
-    assert.equal(drop.dragging(), false);
+    assert.equal(state.drag(), null);
     assert.equal(drop.dropLane(), null);
   });
 
@@ -459,9 +459,8 @@ describe("empty lanes", () => {
     const rest = ids();
     state.setDrag({ id: "a@main", index: 1 });
     assert.deepEqual(ids(), rest);
-    assert.ok(drop.dragging());
     state.setDrag(null);
-    assert.ok(!drop.dragging());
+    assert.deepEqual(ids(), rest);
   });
 
   it("keep their zone after a drop empties a lane, with no drag running", () => {
@@ -470,9 +469,11 @@ describe("empty lanes", () => {
         .filter((id) => id !== "c@review")
         .indexOf("z:bg") + 1;
     drop.handleMove("c@review", slot);
-    assert.ok(!drop.dragging());
-    assert.ok(ids().includes("z:review"));
-    assert.ok(!ids().some((id) => id.startsWith("f:")));
+    assert.equal(model.laneOf(byId("c") ?? ws("?")), "bg");
+    assert.deepEqual(
+      ids().filter((id) => id.startsWith("z:") || id.startsWith("h:")),
+      ["h:main", "z:review", "h:bg", "h:parked", "h:unsorted"],
+    );
   });
 
   it("resolves a drop just under a zone to that zone's lane, and lights it", () => {
@@ -498,6 +499,7 @@ describe("empty lanes", () => {
   it("files a drop below the last row into the last lane", () => {
     const rows = ids().filter((id) => id !== "a@main");
     assert.equal(drop.resolveDrop("a@main", rows.length).laneKey, "unsorted");
+    assert.equal(drop.resolveDrop("a@main", rows.length + 1).laneKey, "unsorted");
   });
 });
 

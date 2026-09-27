@@ -9,7 +9,6 @@ import {
   flatEntries,
   groupForLane,
   groups,
-  type LaneEntry,
   laneAnchorIds,
   laneOf,
   moveToLane,
@@ -26,20 +25,17 @@ export interface DropTarget {
   prevRef: string | null;
 }
 
-// The lane of the row above the slot, or the first lane above every row.
-function laneAbove(entries: LaneEntry[], index: number): LaneKey {
-  return entries[index - 1]?.lane ?? FIRST_LANE;
-}
-
 // `index` is the dragged row's slot in the flat list with the row removed.
 // The lane is whatever the row above the slot belongs to (a header or an
 // empty lane's zone counts, so dropping just under one files the card
-// there).
+// there). Above every row it is the first lane; an index past the end is
+// clamped, so the bottom slot always files into the last row's lane.
 export function resolveDrop(key: string, index: number): DropTarget {
   const entries = flatEntries().filter((e) => e.id !== key);
-  const prev = index > 0 ? entries[index - 1] : undefined;
-  const laneKey = laneAbove(entries, index);
-  const next = entries[index];
+  const at = Math.min(Math.max(index, 0), entries.length);
+  const prev = entries[at - 1];
+  const laneKey = prev?.lane ?? FIRST_LANE;
+  const next = entries[at];
   const nextRef = next?.kind === "ws" && next.lane === laneKey ? next.wsId : null;
   const prevRef = prev?.kind === "ws" ? prev.wsId : null;
   return { laneKey, nextRef, prevRef };
@@ -109,12 +105,12 @@ export function handleDragChange(d: DragState | null): void {
   setDrag(mode() === "all" ? d : null);
 }
 
-/** True while a card is being dragged: empty lanes open as zones. */
-export const dragging = (): boolean => drag() !== null;
-
-/** The lane the current drag would drop into, for a header's "Drop here" and a lit zone. */
-export const dropLane = (): LaneKey | null => {
+/**
+ * The lane the current drag would drop into, for a header's "Drop here" and a
+ * lit zone. Computed once per drag move, however many rows read it.
+ */
+export const dropLane = computed((): LaneKey | null => {
   const d = drag();
   if (!d?.id) return null;
   return resolveDrop(d.id, d.index).laneKey;
-};
+});

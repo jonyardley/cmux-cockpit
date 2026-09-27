@@ -110,8 +110,7 @@ function dropHint(target: () => boolean): View {
     .lineLimit(1);
 }
 
-// A header sits SECTION_GAP below the section above, the same as
-// quietLine. The gap goes on a wrapper outside the hover and drop
+// A header sits SECTION_GAP below the section above. The gap goes on a wrapper outside the hover and drop
 // shading, so the grey hugs the row; the tap stays on the wrapper, as on
 // cards, so the gap still folds the header.
 const SECTION_GAP = 14;
