@@ -118,15 +118,6 @@ export function chip(label: () => string, colors: () => ChipColors): View {
   );
 }
 
-export function emptyRow(text: string): View {
-  return Text(text)
-    .font(12)
-    .color(T.tertiary)
-    .paddingHorizontal(12)
-    .paddingVertical(10)
-    .frame({ maxWidth: "infinity", alignment: "leading" });
-}
-
 /** Selects the workspace, then focuses the agent's surface when it has one. */
 export function jump(wsId: string, surfaceId: string | undefined): void {
   cmux("workspace.select", { workspace_id: wsId });

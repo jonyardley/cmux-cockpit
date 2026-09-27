@@ -1,15 +1,16 @@
-// The agents panel's data: the selected workspace (and its question, when
-// its agent needs you), who is running, and every PR. Pure reads of `data`, so each is testable alone.
+// The agents panel's data: the selected workspace in detail (and its
+// question, when its agent needs you), who is working and who is idle, and
+// every PR. Pure reads of `data`, so each is testable alone.
 
 import type { CheckState } from "../../scripts/state-config.ts";
 import { byActivity, sinceOrActivity } from "../shared/activity.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
-import { checksOf, prsOf, savedOwnPrs } from "../shared/prs.ts";
+import { checksOf, type PrSummary, prSummary, prsOf, savedOwnPrs } from "../shared/prs.ts";
 import { type SavedRun, savedRuns } from "../shared/subagents.ts";
 import { cardMessage, readable } from "../shared/text.ts";
-import { fmtAge, fmtElapsed, nowEpoch } from "../shared/time.ts";
+import { fmtAge, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
 import { CHECK_DOT, STATUS_DOT, T } from "./theme.ts";
@@ -21,15 +22,11 @@ export interface AgentEntry {
   project: Project;
 }
 
-// ---- Running --------------------------------------------------------------
+// ---- Working and Idle --------------------------------------------------------------
 
 export const [idleOpen, setIdleOpen] = signal(false);
 
-export type RosterRow =
-  | (AgentEntry & { kind: "run" | "idle" })
-  | { key: "toggle"; kind: "toggle"; count: number }
-  | { key: "idle-heading"; kind: "idle-heading" }
-  | { key: "empty"; kind: "empty" };
+export type RosterRow = (AgentEntry & { kind: "run" | "idle" }) | { key: "toggle"; kind: "toggle"; count: number };
 
 // One row per workspace, from its most active agent, so a stale idle session
 // beside a working one never lists the workspace as idle. The selected
@@ -53,16 +50,15 @@ export const roster = computed(() => {
 
 const INLINE_IDLE = 3;
 
-// Panel rows: running (or a "Nothing running" row when nothing is working),
-// then an "Idle" subheading and the idle rows (else "Nothing running" reads
-// as a contradiction sat right above them), all of them when expanded, then
-// the idle toggle.
-export const runningRows = computed(() => {
-  const { run, idle } = roster();
-  const out: RosterRow[] = run.length ? [...run] : [{ key: "empty", kind: "empty" }];
-  const shown = idleOpen() ? idle : idle.slice(0, INLINE_IDLE);
-  if (shown.length) out.push({ key: "idle-heading", kind: "idle-heading" });
-  out.push(...shown);
+/** The Working section's rows; empty when nothing works, so the section is
+ * its heading and count alone. */
+export const workingRows = computed((): Last<RosterRow>[] => markLast<RosterRow>([...roster().run]));
+
+/** The Idle section's rows: three inline, all of them when expanded, then
+ * the toggle; empty when nothing is idle. */
+export const idleRows = computed((): Last<RosterRow>[] => {
+  const { idle } = roster();
+  const out: RosterRow[] = idleOpen() ? [...idle] : idle.slice(0, INLINE_IDLE);
   const more = idle.length - INLINE_IDLE;
   if (more > 0) out.push({ key: "toggle", kind: "toggle", count: more });
   return markLast(out);
@@ -177,15 +173,32 @@ export function statusLine(a: Agent | null): string {
   return (STATUS_WORD[a.status] ?? a.status) + (age ? " " + age : "");
 }
 
-/** Sentence form for the card, with the finer elapsed time: "Working for 12m", "Ended 3m ago". */
-export function statusPhrase(a: Agent | null): string {
-  if (!a) return "No agent";
-  const since = statusSince(a);
-  const age = since ? fmtElapsed(nowEpoch() - since) : "";
-  if (a.status === "ended") return age ? "Ended " + age + " ago" : "Ended";
-  const word = { needs_input: "Needs you", working: "Working", idle: "Idle" }[a.status] ?? a.status;
-  return age ? word + " for " + age : word;
+/** The one age the roster rows and the card's head show: "<1m", "12m",
+ * counted as statusLine counts it; "" without an agent or a timestamp. */
+export const sinceAge = (a: Agent | null): string => (a ? ageSince(statusSince(a)) : "");
+
+// ---- The card's details ------------------------------------------------------
+
+/** The Branch detail: the branch, then "uncommitted changes" when dirty.
+ * cmux sends no file count, so it never says how many. */
+export const branchDetail = computed((): string => {
+  const w = cur().ws;
+  return [w.branch, w.dirty ? "uncommitted changes" : ""].filter(Boolean).join(" · ");
+});
+
+export interface PortChip {
+  key: string;
+  label: string;
+  url: string;
 }
+
+/** The workspace's open ports, at most three, each opening its local page. */
+export const portChips = computed((): PortChip[] =>
+  (cur().ws.ports ?? []).slice(0, 3).map((n) => ({ key: "p" + n, label: ":" + n, url: "http://localhost:" + n })),
+);
+
+/** The workspace's PR with its state, as the chip shows it. */
+export const currentPr = computed((): PrSummary | undefined => prSummary(cur().ws));
 
 // ---- This workspace's agent list -------------------------------------------
 
@@ -236,6 +249,7 @@ export interface SubagentRow {
   label: string;
   running: boolean;
   startedEpoch: number | undefined;
+  endedEpoch: number | undefined;
 }
 
 // Upstream always sends `running`; without it, a run with no end is live. A
@@ -261,7 +275,7 @@ function byRun(x: Ranked, y: Ranked): number {
 }
 
 function toRow(r: Ranked): SubagentRow {
-  return { key: r.key, label: r.label, running: r.running, startedEpoch: r.startedEpoch };
+  return { key: r.key, label: r.label, running: r.running, startedEpoch: r.startedEpoch, endedEpoch: r.endedEpoch };
 }
 
 // cmux's own children, ranked; empty when every agent has none, so a
@@ -320,10 +334,16 @@ export const subagents = computed((): SubagentRow[] => {
 });
 
 /** Board 1's right-hand figure: coarse elapsed while running ("running"
- * without a start or clock), "done" once settled. */
+ * without a start or clock), "finished 3m ago" once settled ("finished"
+ * without an end or clock). */
 export function subagentFigure(s: SubagentRow): string {
-  return s.running ? ageSince(s.startedEpoch) || "running" : "done";
+  if (s.running) return ageSince(s.startedEpoch) || "running";
+  const age = ageSince(s.endedEpoch);
+  return age ? "finished " + age + " ago" : "finished";
 }
+
+/** A finished run's label dims, so the live ones stand out. */
+export const subagentLabelColor = (s: SubagentRow): string => (s.running ? T.text : T.tertiary);
 
 // A running run reads as a working agent, a settled one as ended.
 const runStatus = (s: SubagentRow): AgentStatus => (s.running ? "working" : "ended");
