@@ -1,5 +1,5 @@
-// "This workspace": the selected workspace's card. Checks and todo are not
-// in the sidebar data (issue #7), so they are left out.
+// "This workspace": the selected workspace's card. Todo is not in the
+// sidebar data (issue #7), so it is left out; checks come from the PR poller.
 
 import { glyphColor } from "../../shared/contrast.ts";
 import { type Last, markLast } from "../../shared/list.ts";
@@ -8,6 +8,11 @@ import { cardMessage, readable, tracked } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
 import {
+  type CheckRow,
+  checkDot,
+  checks,
+  checksFigure,
+  checkWord,
   cur,
   haloFor,
   hollowDot,
@@ -81,6 +86,52 @@ function subagentsBlock(): View {
       VStack({ spacing: 0, alignment: "leading" }, [
         Text(tracked("SUBAGENTS")).font(10).weight("semibold").color(T.tertiary).lineLimit(1).paddingBottom(2),
         ForEach({ items: () => subagents(), key: (e) => e.key }, (e) => subagentLine(e)),
+      ])
+        .frame({ maxWidth: "infinity", alignment: "leading" })
+        .paddingTop(12),
+  );
+}
+
+function checkLine(e: () => CheckRow): View {
+  return HStack({ spacing: 9 }, [
+    agentDot(
+      () => checkDot(e()),
+      () => "clear",
+      () => false,
+    ),
+    Text(() => e().name)
+      .font(12)
+      .color(T.text)
+      .lineLimit(1)
+      .truncation("tail")
+      .layoutPriority(1),
+    Spacer({ minLength: 4 }),
+    Text(() => checkWord(e()))
+      .font(11)
+      .color(T.secondary)
+      .lineLimit(1),
+  ])
+    .paddingVertical(5)
+    .frame({ maxWidth: "infinity", alignment: "leading" });
+}
+
+// Board 1's Checks block: "CHECKS 3 / 5" over one line per check. Hidden
+// while the PR has none, or the workspace has no saved PR.
+function checksBlock(): View {
+  return when(
+    "cur-checks",
+    () => checks().length > 0,
+    () =>
+      VStack({ spacing: 0, alignment: "leading" }, [
+        HStack({ spacing: 6 }, [
+          Text(tracked("CHECKS")).font(10).weight("semibold").color(T.tertiary).lineLimit(1),
+          Text(() => checksFigure(checks()))
+            .font(10)
+            .monospaced()
+            .color(T.tertiary)
+            .lineLimit(1),
+        ]).paddingBottom(2),
+        ForEach({ items: () => checks(), key: (e) => e.key }, (e) => checkLine(e)),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
         .paddingTop(12),
@@ -206,6 +257,7 @@ function currentHead(): View {
           Spacer(),
         ]).paddingTop(10),
     ),
+    checksBlock(),
     subagentsBlock(),
   ])
     .padding(14)

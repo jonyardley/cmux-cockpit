@@ -7,7 +7,15 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
-import { branchFromGit, findPrs, type Lookups, parseWindowIds, parseWorkspaces, pickPr } from "../scripts/pr-poll.ts";
+import {
+  branchFromGit,
+  checksFrom,
+  findPrs,
+  type Lookups,
+  parseWindowIds,
+  parseWorkspaces,
+  pickPr,
+} from "../scripts/pr-poll.ts";
 import { applySet, emptyState, type SavedPr, validateState } from "../scripts/state-config.ts";
 import { writePrs } from "../scripts/state-url.ts";
 
@@ -70,6 +78,83 @@ describe("pickPr", () => {
 
   it("returns undefined when gh's output cannot be read", () => {
     assert.equal(pickPr("oops", "feat"), undefined);
+  });
+});
+
+const run = (
+  name: string,
+  status: string,
+  conclusion: string,
+  startedAt = "2026-09-27T09:00:00Z",
+  workflowName = "CI",
+) => ({
+  __typename: "CheckRun",
+  name,
+  status,
+  conclusion,
+  startedAt,
+  workflowName,
+});
+
+describe("checksFrom", () => {
+  it("reads check runs in three states, sorted by name", () => {
+    const rollup = [
+      run("test", "IN_PROGRESS", ""),
+      run("lint", "COMPLETED", "FAILURE"),
+      run("build", "COMPLETED", "SUCCESS"),
+      run("docs", "COMPLETED", "SKIPPED"),
+      run("e2e", "COMPLETED", "CANCELLED"),
+      run("deploy", "QUEUED", ""),
+    ];
+    assert.deepEqual(checksFrom(rollup), [
+      { name: "build", state: "pass" },
+      { name: "deploy", state: "pending" },
+      { name: "docs", state: "pass" },
+      { name: "e2e", state: "fail" },
+      { name: "lint", state: "fail" },
+      { name: "test", state: "pending" },
+    ]);
+  });
+
+  it("reads commit statuses by their context", () => {
+    const status = (context: string, state: string) => ({ __typename: "StatusContext", context, state });
+    assert.deepEqual(
+      checksFrom([status("a", "SUCCESS"), status("b", "PENDING"), status("c", "EXPECTED"), status("d", "ERROR")]),
+      [
+        { name: "a", state: "pass" },
+        { name: "b", state: "pending" },
+        { name: "c", state: "pending" },
+        { name: "d", state: "fail" },
+      ],
+    );
+  });
+
+  it("keeps only the latest run of a rerun check", () => {
+    const rollup = [
+      run("pr-body", "COMPLETED", "FAILURE", "2026-09-27T09:05:10Z", "PR description"),
+      run("pr-body", "COMPLETED", "SUCCESS", "2026-09-27T09:05:45Z", "PR description"),
+      run("pr-body", "IN_PROGRESS", "", "2026-09-27T09:05:12Z", "Other"),
+    ];
+    assert.deepEqual(checksFrom(rollup), [
+      { name: "pr-body", state: "pass" },
+      { name: "pr-body", state: "pending" },
+    ]);
+  });
+
+  it("skips malformed entries, caps the list and ignores a missing rollup", () => {
+    assert.deepEqual(checksFrom([null, { name: "  " }, { __typename: "CheckRun" }, 3]), []);
+    assert.deepEqual(checksFrom(undefined), []);
+    const many = Array.from({ length: 30 }, (_, i) => run(`c${String(i).padStart(2, "0")}`, "COMPLETED", "SUCCESS"));
+    assert.equal(checksFrom(many).length, 20);
+  });
+});
+
+describe("pickPr with checks", () => {
+  it("saves the chosen PR's checks, and none when it has none", () => {
+    const rollup = [run("check", "COMPLETED", "SUCCESS")];
+    const text = gh([{ ...ghPr(1, "OPEN", "2026-09-01"), statusCheckRollup: rollup }]);
+    assert.deepEqual(pickPr(text, "feat"), pr(1, { checks: [{ name: "check", state: "pass" }] }));
+    assert.deepEqual(pickPr(gh([{ ...ghPr(1, "OPEN", "2026-09-01"), statusCheckRollup: [] }]), "feat"), pr(1));
   });
 });
 
@@ -150,6 +235,22 @@ describe("the prs map in state.json", () => {
     assert.deepEqual(validateState(raw).prs, { ok: pr(1) });
   });
 
+  it("keeps valid checks, drops bad ones, and leaves out an empty list", () => {
+    const checks = [
+      { name: "ok", state: "pass" },
+      { name: "odd", state: "skipped" },
+      { name: " padded", state: "fail" },
+      { name: "x".repeat(65), state: "fail" },
+      "bad",
+    ];
+    assert.deepEqual(
+      validateState({ prs: { a: { ...pr(1), checks } } }).prs.a,
+      pr(1, { checks: [{ name: "ok", state: "pass" }] }),
+    );
+    assert.deepEqual(validateState({ prs: { a: { ...pr(1), checks: [] } } }).prs.a, pr(1));
+    assert.deepEqual(validateState({ prs: { a: { ...pr(1), checks: "x" } } }).prs.a, pr(1));
+  });
+
   it("cannot be set by a URL", () => {
     const set = applySet(emptyState(), "prs.w1", JSON.stringify(pr(1)));
     assert.deepEqual(set, { ok: false, error: "unknown map prs" });
@@ -165,6 +266,14 @@ describe("the prs map in state.json", () => {
     assert.deepEqual(written, { ...emptyState(), prs: { a: pr(1) } });
     assert.deepEqual(writePrs(path, { a: pr(1) }), { ok: true, changed: false });
     assert.deepEqual(writePrs(path, {}), { ok: true, changed: true });
+  });
+
+  it("is a change only when a check's state changes", () => {
+    const path = join(dir, "state-checks.json");
+    const withCheck = (state: "pass" | "pending") => ({ a: pr(1, { checks: [{ name: "ci", state }] }) });
+    assert.deepEqual(writePrs(path, withCheck("pending")), { ok: true, changed: true });
+    assert.deepEqual(writePrs(path, withCheck("pending")), { ok: true, changed: false });
+    assert.deepEqual(writePrs(path, withCheck("pass")), { ok: true, changed: true });
   });
 
   it("is order-insensitive: the same entries in a different key order are not a change", () => {

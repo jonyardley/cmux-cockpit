@@ -1,16 +1,17 @@
 // The agents panel's data: who is waiting, who is running, the selected
 // workspace, and every PR. Pure reads of `data`, so each is testable alone.
 
+import type { CheckState } from "../../scripts/state-config.ts";
 import { byActivity, sinceOrActivity } from "../shared/activity.ts";
 import { markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
-import { prsOf } from "../shared/prs.ts";
+import { checksOf, prsOf } from "../shared/prs.ts";
 import { cardMessage, readable } from "../shared/text.ts";
 import { fmtAge, fmtElapsed, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
-import { STATUS_DOT, T } from "./theme.ts";
+import { CHECK_DOT, STATUS_DOT, T } from "./theme.ts";
 
 export interface AgentEntry {
   key: string;
@@ -213,6 +214,31 @@ const runStatus = (s: SubagentRow): AgentStatus => (s.running ? "working" : "end
 export const subagentDot = (s: SubagentRow): string => STATUS_DOT[runStatus(s)];
 
 export const subagentHalo = (s: SubagentRow): string => haloColor(runStatus(s), HALO_COLOR);
+
+// ---- Checks -------------------------------------------------------------------
+
+export interface CheckRow {
+  key: string;
+  name: string;
+  state: CheckState;
+}
+
+/** The selected workspace's CI checks, as the poller last saved them. */
+export const checks = computed((): CheckRow[] =>
+  // The list is sorted by name, so the index keeps two same-named checks apart.
+  checksOf(cur().ws).map((c, i) => ({ key: "c:" + i + ":" + c.name, name: c.name, state: c.state })),
+);
+
+/** Board 1's "3 / 5": passed over total. */
+export function checksFigure(rows: readonly CheckRow[]): string {
+  return rows.filter((c) => c.state === "pass").length + " / " + rows.length;
+}
+
+const CHECK_WORD: Record<CheckState, string> = { pass: "passed", fail: "failed", pending: "running" };
+
+export const checkWord = (c: CheckRow): string => CHECK_WORD[c.state];
+
+export const checkDot = (c: CheckRow): string => CHECK_DOT[c.state];
 
 // ---- Pull requests ----------------------------------------------------------
 

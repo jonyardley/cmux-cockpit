@@ -36,7 +36,23 @@ export interface SavedPr {
   url: string;
   status: "open" | "merged" | "closed";
   branch: string;
+  /** Its CI checks, sorted by name; left out when it has none. */
+  checks?: SavedCheck[];
 }
+
+/**
+ * One CI check, cut down to three states so only a real change of state
+ * (never a timestamp or a rerun's id) rewrites the file and rebuilds.
+ */
+export interface SavedCheck {
+  name: string;
+  state: CheckState;
+}
+
+export type CheckState = "pass" | "fail" | "pending";
+
+/** Checks kept per PR, so one PR with a huge matrix cannot bloat the file. */
+export const MAX_CHECKS = 20;
 
 export const emptyState = (): State => ({ dismissed: {}, projectOverride: {}, projects: {}, prs: {} });
 
@@ -98,12 +114,21 @@ const isPrUrl = (v: unknown): v is string =>
 const PR_STATUSES: readonly unknown[] = ["open", "merged", "closed"];
 const isPrStatus = (v: unknown): v is SavedPr["status"] => PR_STATUSES.includes(v);
 
+const CHECK_STATES: readonly unknown[] = ["pass", "fail", "pending"];
+const isCheckState = (v: unknown): v is CheckState => CHECK_STATES.includes(v);
+
+function savedCheck(v: unknown): SavedCheck[] {
+  return isRecord(v) && isName(v.name) && isCheckState(v.state) ? [{ name: v.name, state: v.state }] : [];
+}
+
 function savedPr(v: unknown): SavedPr | null {
   if (!isRecord(v) || !isPrUrl(v.url) || !isPrStatus(v.status)) return null;
   const { number, branch } = v;
   if (typeof number !== "number" || !Number.isSafeInteger(number) || number < 1) return null;
   if (typeof branch !== "string" || branch.length === 0 || branch.length > 256) return null;
-  return { number, url: v.url, status: v.status, branch };
+  const pr: SavedPr = { number, url: v.url, status: v.status, branch };
+  const checks = Array.isArray(v.checks) ? v.checks.flatMap(savedCheck).slice(0, MAX_CHECKS) : [];
+  return checks.length ? { ...pr, checks } : pr;
 }
 
 // Keeps the last MAX_ENTRIES valid entries, in insertion order.

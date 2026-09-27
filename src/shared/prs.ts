@@ -3,20 +3,35 @@
 // sidebars no PR data today, so the saved copy is what shows; both sidebars
 // read PRs through here so the day cmux does send them, its data wins.
 
+import type { SavedCheck, SavedPr } from "../../scripts/state-config.ts";
 import { SAVED_STATE } from "./persist.ts";
 
+// The saved PR, while the workspace's branch is not yet known (cmux has not
+// reported it) or still matches the branch it was found for.
+function savedFor(w: Workspace): SavedPr | undefined {
+  const saved = Object.hasOwn(SAVED_STATE.prs, w.id) ? SAVED_STATE.prs[w.id] : undefined;
+  return saved && (!w.branch || saved.branch === w.branch) ? saved : undefined;
+}
+
 /**
- * The app's list, else its single PR, else the saved one. A saved PR shows
- * while the workspace's branch is not yet known (cmux has not reported it)
- * or still matches the branch it was found for; a branch switch to a
- * different branch hides it until the next poll.
+ * The app's list, else its single PR, else the saved one. A branch switch
+ * to a different branch hides the saved one until the next poll.
  */
 export function prsOf(w: Workspace): PullRequest[] {
   if (w.prs?.length) return w.prs;
   if (w.pr) return [w.pr];
-  const saved = Object.hasOwn(SAVED_STATE.prs, w.id) ? SAVED_STATE.prs[w.id] : undefined;
-  return saved && (!w.branch || saved.branch === w.branch) ? [saved] : [];
+  const saved = savedFor(w);
+  return saved ? [saved] : [];
 }
 
 /** The workspace's first PR, if any. */
 export const prOf = (w: Workspace | undefined): PullRequest | undefined => (w ? prsOf(w)[0] : undefined);
+
+/**
+ * The CI checks of the PR that shows, sorted by name. Only the poller
+ * saves checks, so a PR cmux sent has none here.
+ */
+export function checksOf(w: Workspace): SavedCheck[] {
+  const saved = savedFor(w);
+  return saved && prOf(w) === saved ? (saved.checks ?? []) : [];
+}
