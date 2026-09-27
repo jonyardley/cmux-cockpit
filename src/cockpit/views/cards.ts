@@ -5,9 +5,9 @@ import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
-import { chipsFor, isSelected, selectWorkspace } from "../model.ts";
-import { drag } from "../state.ts";
-import { ageOf, cardDetail, helperText, progressFraction, prTextColor } from "../status.ts";
+import { hasChipsRow } from "../model.ts";
+import { drag, isSelected, selectWorkspace } from "../state.ts";
+import { ageOf, cardDetail, helperText, progressFraction, prTextColor, readyPrText } from "../status.ts";
 import { C } from "../theme.ts";
 import {
   cardChrome,
@@ -19,6 +19,7 @@ import {
   statusDot,
   statusLabel,
   titleRow,
+  toReviewAction,
   unreadBadge,
   type WsAccessor,
 } from "./parts.ts";
@@ -49,6 +50,21 @@ function helpers(w: WsAccessor, size: number): View {
   ).layoutPriority(2);
 }
 
+// A Ready card's PR after "Finished 6m ago" ("· PR #45 is green"), in the
+// PR's health colour. Behind a when(), so it takes no slot otherwise.
+function readyPr(w: WsAccessor, size: number): View {
+  const text = computed(() => readyPrText(w()));
+  return when(
+    "ready-pr",
+    () => !!text(),
+    () =>
+      Text(text)
+        .font(size)
+        .color(() => prTextColor(prSummary(w()), C.tertiary))
+        .lineLimit(1),
+  ).layoutPriority(2);
+}
+
 function fullCard(w: WsAccessor, key: string): View {
   // Read by the when() and its Text, so the message is worked out once per change.
   const detail = computed(() => cardDetail(w()));
@@ -56,7 +72,7 @@ function fullCard(w: WsAccessor, key: string): View {
     glyph(w, 26, 8, 12),
     VStack({ alignment: "leading", spacing: 4 }, [
       titleRow(w, 13.5),
-      HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12)])
+      HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12), readyPr(w, 12)])
         // Left-aligned by the frame, not a Spacer, as the chips row is.
         .frame({ maxWidth: "infinity", alignment: "leading" }),
       when(
@@ -105,6 +121,9 @@ export function compactCard(w: WsAccessor, key: string): View {
           .layoutPriority(2),
         // Left-aligned by the frame, not a Spacer, as on the full card.
       ]).frame({ maxWidth: "infinity", alignment: "leading" }),
+      // Compact cards have no chips row, so a Ready one in Background takes
+      // the action on a line of its own.
+      toReviewAction(w),
       progressBar(w, "compact-progress"),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
@@ -181,7 +200,7 @@ export function projectRow(w: WsAccessor, key: string): View {
     HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), Spacer({ minLength: 0 })])
       .frame({ maxWidth: "infinity" })
       .paddingTop(2),
-    chipsRow(w, true).paddingTop(() => (chipsFor(w(), true).length ? 3 : 0)),
+    chipsRow(w, true).paddingTop(() => (hasChipsRow(w(), true) ? 3 : 0)),
   ])
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .paddingHorizontal(10)
