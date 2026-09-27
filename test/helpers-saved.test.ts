@@ -20,6 +20,9 @@ const run = (id: string, extra: Record<string, unknown> = {}) => ({
   projects: {},
   prs: {},
   ownPrs: {},
+  // The built state always carries ui (validateState); status.ts reads
+  // selection from state.ts, which reads the saved folds at import.
+  ui: {},
   subagents: {
     w1: [run("a", { endedEpoch: 200 }), run("b"), run("c")],
     matched: [run("m", { session: "owner" })],

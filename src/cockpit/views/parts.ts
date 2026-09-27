@@ -20,7 +20,6 @@ import {
   fileForReview,
   hasProjectOverride,
   inAppProjectName,
-  isSelected,
   laneOf,
   moveToLane,
   moveToProject,
@@ -28,9 +27,8 @@ import {
   newSessionLabel,
   projectKey,
   removeProject,
-  selectWorkspace,
 } from "../model.ts";
-import { drag } from "../state.ts";
+import { drag, isSelected, selectWorkspace } from "../state.ts";
 import { ageOf, badgeCount, isReady, statusInfo, statusLine } from "../status.ts";
 import { C } from "../theme.ts";
 
@@ -71,11 +69,13 @@ export function ring(
 // Working and needs dots sit on board 1's soft halo; the rest keep the same
 // frame so a lane's rows line up.
 export function statusDot(w: WsAccessor, size: number): View {
+  // One status per change, read by the fill, the stroke and the halo.
+  const info = computed(() => statusInfo(w()));
   const dot = Circle({ size })
-    .fill(() => statusInfo(w()).dot ?? "clear")
-    .stroke(() => (statusInfo(w()).dot ? "clear" : C.grey))
+    .fill(() => info().dot ?? "clear")
+    .stroke(() => (info().dot ? "clear" : C.grey))
     .strokeWidth(1.5);
-  return haloDot(dot, () => statusInfo(w()).halo, size);
+  return haloDot(dot, () => info().halo, size);
 }
 
 export function glyph(w: WsAccessor, size: number, radius: number, font: number): View {
@@ -208,7 +208,7 @@ function chipById(chips: readonly Chip[], id: ChipId): Chip {
 
 // "To review →" on a Ready card: files it into For review (issue #53). A
 // quiet chip with its own onTap, so the tap never also selects the card.
-function toReviewAction(w: WsAccessor): View {
+export function toReviewAction(w: WsAccessor): View {
   const body = Text("To review →")
     .font(11)
     .weight("medium")

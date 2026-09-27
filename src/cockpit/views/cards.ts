@@ -5,8 +5,8 @@ import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
-import { hasChipsRow, isSelected, selectWorkspace } from "../model.ts";
-import { drag } from "../state.ts";
+import { hasChipsRow } from "../model.ts";
+import { drag, isSelected, selectWorkspace } from "../state.ts";
 import { ageOf, cardDetail, helperText, progressFraction, prTextColor, readyPrText } from "../status.ts";
 import { C } from "../theme.ts";
 import {
@@ -19,6 +19,7 @@ import {
   statusDot,
   statusLabel,
   titleRow,
+  toReviewAction,
   unreadBadge,
   type WsAccessor,
 } from "./parts.ts";
@@ -52,11 +53,12 @@ function helpers(w: WsAccessor, size: number): View {
 // A Ready card's PR after "Finished 6m ago" ("· PR #45 is green"), in the
 // PR's health colour. Behind a when(), so it takes no slot otherwise.
 function readyPr(w: WsAccessor, size: number): View {
+  const text = computed(() => readyPrText(w()));
   return when(
     "ready-pr",
-    () => !!readyPrText(w()),
+    () => !!text(),
     () =>
-      Text(() => readyPrText(w()))
+      Text(text)
         .font(size)
         .color(() => prTextColor(prSummary(w()), C.tertiary))
         .lineLimit(1),
@@ -119,6 +121,9 @@ export function compactCard(w: WsAccessor, key: string): View {
           .layoutPriority(2),
         // Left-aligned by the frame, not a Spacer, as on the full card.
       ]).frame({ maxWidth: "infinity", alignment: "leading" }),
+      // Compact cards have no chips row, so a Ready one in Background takes
+      // the action on a line of its own.
+      toReviewAction(w),
       progressBar(w, "compact-progress"),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })

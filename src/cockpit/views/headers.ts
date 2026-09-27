@@ -9,17 +9,15 @@ import {
   emptyLaneNames,
   isCollapsed,
   isProjectCollapsed,
-  isSelected,
   laneCount,
   openProjectWorkspace,
   projectByKey,
   projectCount,
-  selectWorkspace,
   toggleLane,
   toggleProject,
   wsById,
 } from "../model.ts";
-import { mode, projectsMode } from "../state.ts";
+import { isSelected, mode, projectsMode, selectWorkspace } from "../state.ts";
 import { C } from "../theme.ts";
 import { glyphButton, ring, statusDot, unreadBadge } from "./parts.ts";
 

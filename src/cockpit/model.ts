@@ -241,27 +241,6 @@ export function cardWorkspaces(): Workspace[] {
 
 export const wsById = (id: string): Workspace | undefined => (data.workspaces() ?? []).find((w) => w.id === id);
 
-// --- selection -----------------------------------------------------------------------
-
-let selectOverride: string | null = null;
-
-export function isSelected(w: Workspace | undefined): boolean {
-  tick();
-  if (!w) return false;
-  if (selectOverride) {
-    if (data.selectedId() === selectOverride) selectOverride = null;
-    else return w.id === selectOverride;
-  }
-  return !!w.selected;
-}
-
-export function selectWorkspace(id: string | undefined): void {
-  if (!id) return;
-  selectOverride = id;
-  bump();
-  cmux("workspace.select", { workspace_id: id });
-}
-
 // --- lane collapse -------------------------------------------------------------------
 
 const collapseOverride = new Map<string, boolean>(); // groupId -> collapsed
@@ -631,9 +610,13 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
 
 // Ready cards (issue #53).
 
-/** A Ready card offers "To review", unless it is already in For review (or is a lane's anchor, which never moves). */
+/**
+ * A Ready card offers "To review", unless it is already in For review or
+ * anchors a group: a generated lane anchor is its group, and a real
+ * workspace anchoring one cannot leave it (drop.ts pins those too).
+ */
 export function canFileForReview(w: Workspace | undefined): boolean {
-  return !!w && isReady(w) && laneOf(w) !== "review" && !laneAnchorIds().has(w.id);
+  return !!w && isReady(w) && laneOf(w) !== "review" && !groups().some((g) => g.anchorId === w.id);
 }
 
 /** Files a Ready card into For review. */

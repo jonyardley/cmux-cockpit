@@ -8,6 +8,7 @@ import { emptyState } from "../scripts/state-config.ts";
 
 const saved = { url: "https://github.com/o/r/pull/45", status: "open", branch: "feat" } as const;
 const pass = [{ name: "build", state: "pass" }] as const;
+// The cast holds because the renderer support reads __STATE__ off globalThis by name.
 (globalThis as Record<string, unknown>).__STATE__ = {
   ...emptyState(),
   prs: {
@@ -23,6 +24,7 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, group, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
+const state = await import("../src/cockpit/state.ts");
 const model = await import("../src/cockpit/model.ts");
 const needs = await import("../src/shared/needs.ts");
 
@@ -57,6 +59,24 @@ describe("isReady", () => {
 
   it("clears while the workspace is open", () => {
     assert.equal(status.isReady(readyWs("w", { selected: true })), false);
+  });
+
+  it("clears the moment Jon taps the card, before cmux publishes the selection", () => {
+    const w = readyWs("tapped");
+    state.selectWorkspace("tapped");
+    assert.equal(status.isReady(w), false);
+    assert.equal(status.isReady(readyWs("other")), true);
+    // Once cmux agrees, the workspace's own flag takes over again.
+    r.data.selectedId = "tapped";
+    assert.equal(status.isReady(readyWs("tapped", { selected: true })), false);
+    assert.equal(status.isReady(readyWs("tapped")), true);
+  });
+
+  it("reports an ended agent that worked, beside a fresh idle session that never did", () => {
+    const fresh = agent("idle", { sinceEpoch: now() - 30 });
+    const w = readyWs("pair", { agents: [finished("ended", 600), fresh] });
+    assert.equal(status.isReady(w), true);
+    assert.equal(status.statusLine(w), "Finished 10m ago");
   });
 
   it("needs the agent to have worked: no recorded activity is not a finished run", () => {
@@ -128,12 +148,12 @@ describe("readyPrText", () => {
     assert.equal(status.readyPrText(withPr("green")), "· PR #45 is green");
   });
 
-  it("says what else a PR is doing", () => {
-    assert.equal(status.readyPrText(withPr("failing")), "· PR #46 is failing");
-    assert.equal(status.readyPrText(withPr("running")), "· PR #47 checks running");
-    assert.equal(status.readyPrText(withPr("draft")), "· PR #48 is a draft");
-    assert.equal(status.readyPrText(withPr("open")), "· PR #49 is open");
-    assert.equal(status.readyPrText(readyWs("m", { pr: { number: 50, status: "merged" } })), "· PR #50 merged");
+  it("says anything else in the chip's own words", () => {
+    assert.equal(status.readyPrText(withPr("failing")), "· PR #46 · 1 failing");
+    assert.equal(status.readyPrText(withPr("running")), "· PR #47 · running");
+    assert.equal(status.readyPrText(withPr("draft")), "· PR #48 · draft");
+    assert.equal(status.readyPrText(withPr("open")), "· PR #49");
+    assert.equal(status.readyPrText(readyWs("m", { pr: { number: 50, status: "merged" } })), "· PR #50 · merged");
   });
 
   it("is empty without a PR or off a Ready card", () => {
@@ -169,6 +189,14 @@ describe("To review", () => {
     assert.equal(model.canFileForReview(read), false);
     assert.equal(model.hasChipsRow(read, true), false);
     assert.equal(model.canFileForReview(undefined), false);
+  });
+
+  it("is not offered on a real workspace anchoring a group, which cannot leave it", () => {
+    r.data.groups = [...lanes(), group("g-proj", "Some project", { anchorId: "real" })];
+    const real = readyWs("real", { title: "Status update", group: "g-proj" });
+    r.data.workspaces = [real];
+    assert.equal(status.isReady(real), true);
+    assert.equal(model.canFileForReview(real), false);
   });
 
   it("is not offered on a lane's generated anchor", () => {

@@ -9,6 +9,7 @@ import { liveRunCount } from "../shared/subagents.ts";
 import { cardMessage, clip, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
+import { isSelected } from "./state.ts";
 import { C } from "./theme.ts";
 
 export type Status = AgentStatus | "none";
@@ -59,17 +60,33 @@ const STATUS: Record<Status, StatusStyle> = {
 const FINISHED: ReadonlySet<Status> = new Set<Status>(["idle", "ended"]);
 
 /**
- * The agent finished while Jon was elsewhere: its status settled on idle or
- * ended (a Claude idle nudge counts, since agentsOf reads it as idle), it had
- * worked (cmux recorded activity), and the workspace holds output he has not
- * read. Opening the workspace clears it: cmux marks it read, and a selected
- * workspace is being looked at anyway. A real ask is never Ready, even one
- * dismissed from Needs you: the agent stopped to ask, it did not finish.
+ * The agent whose finish a Ready card reports: of the agents that settled on
+ * idle or ended after working (cmux recorded activity), the latest. Not
+ * simply the most active one, which ranks a fresh idle session that never
+ * worked above an ended one that did.
+ */
+function finishedAgent(w: Workspace): Agent | null {
+  let best: Agent | null = null;
+  for (const a of agentsOf(w)) {
+    if (!FINISHED.has(a.status) || !((a.lastActivityAt ?? 0) > 0)) continue;
+    if (!best || (a.lastActivityAt ?? 0) > (best.lastActivityAt ?? 0)) best = a;
+  }
+  return best;
+}
+
+/**
+ * The agent finished while Jon was elsewhere: no agent is working or asking,
+ * one settled on idle or ended after working (a Claude idle nudge counts,
+ * since agentsOf reads it as idle), and the workspace holds output he has
+ * not read. Opening the workspace clears it: cmux marks it read, and a
+ * selected workspace (a tap shows at once) is being looked at anyway. A
+ * real ask is never Ready, even one dismissed from Needs you: the agent
+ * stopped to ask, it did not finish. The unread check comes first, so the
+ * many cards with nothing unread cost one field read.
  */
 export function isReady(w: Workspace | undefined): boolean {
-  if (!w || !((w.unread ?? 0) > 0) || w.selected || hasRealAsk(w)) return false;
-  const a = agentOf(w);
-  return !!a && FINISHED.has(a.status) && (a.lastActivityAt ?? 0) > 0;
+  if (!w || !((w.unread ?? 0) > 0) || isSelected(w) || hasRealAsk(w)) return false;
+  return FINISHED.has(statusOf(w)) && finishedAgent(w) !== null;
 }
 
 // The done green: Ready adds no hue of its own.
@@ -81,15 +98,10 @@ export const statusInfo = (w: Workspace | undefined): StatusStyle =>
 /** The unread count a card's badge shows: none while the Ready pill stands in for it. */
 export const badgeCount = (w: Workspace | undefined): number => (isReady(w) ? 0 : (w?.unread ?? 0));
 
-// What a Ready card's second line says about the PR, after "Finished 6m ago".
-function prWords(pr: PrSummary): string {
-  const tag = "PR " + pr.tag;
-  if (pr.status && pr.status !== "open") return tag + " " + pr.status;
-  if (pr.health === "ready") return tag + " is green";
-  if (pr.health === "failing") return tag + " is failing";
-  if (pr.health === "running") return tag + " checks running";
-  return tag + (pr.draft ? " is a draft" : " is open");
-}
+// What a Ready card's second line says about the PR, after "Finished 6m
+// ago": a green PR says so, anything else in the chip's own words, so the
+// two never disagree ("PR #48 · draft · 1 failing").
+const prWords = (pr: PrSummary): string => "PR " + (pr.health === "ready" ? pr.tag + " is green" : pr.text);
 
 /** "· PR #45 is green" on a Ready card with a PR, else "". */
 export function readyPrText(w: Workspace | undefined): string {
@@ -113,11 +125,12 @@ export function prTextColor(pr: PrSummary | undefined, quiet: string): string {
  * the time is left off. */
 export function statusLine(w: Workspace | undefined): string {
   const label = statusInfo(w).label;
-  const since = agentOf(w)?.sinceEpoch;
+  const ready = !!w && isReady(w);
+  // A Ready card says when its finished agent finished: "Finished 6m ago".
+  const since = (ready ? finishedAgent(w) : agentOf(w))?.sinceEpoch;
   const age = since ? fmtAge(nowEpoch() - since) : "";
   if (!age) return label;
-  // A Ready card says when it finished: "Finished 6m ago".
-  return isReady(w) ? label + " " + age + " ago" : label + " " + age;
+  return ready ? label + " " + age + " ago" : label + " " + age;
 }
 
 /** "· 3 helpers" while subagent runs are live, else "". */
