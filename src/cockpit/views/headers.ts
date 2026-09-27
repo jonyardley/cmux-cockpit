@@ -110,13 +110,17 @@ function dropHint(target: () => boolean): View {
     .lineLimit(1);
 }
 
+// The gap above a header sits outside its hover and drop shading, so the
+// grey hugs the row instead of hanging a band of empty space over it.
+const headerGap = (row: View): View => VStack({ spacing: 0 }, [row]).paddingTop(9).frame({ maxWidth: "infinity" });
+
 const laneMarker = (color: string): View =>
   RoundedRectangle({ cornerRadius: 3 }).fill(color).frame({ width: 9, height: 9 });
 
 export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
   const lane = laneByKey(laneKey);
   const target = () => dropLane() === laneKey;
-  return HStack({ spacing: 8 }, [
+  const row = HStack({ spacing: 8 }, [
     chevron(() => isCollapsed(lane)),
     laneMarker(lane.color),
     headerName(lane.name, laneKey === "parked" ? C.faint : C.heading),
@@ -126,14 +130,13 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
     dropHint(target),
   ])
     .paddingHorizontal(8)
-    .paddingTop(14)
-    .paddingBottom(5)
+    .paddingVertical(5)
     .cornerRadius(8)
     .background(() => (target() ? C.dropTarget : "clear"))
     .hoverBackground(() => (target() ? C.dropTarget : C.hover))
     .frame({ maxWidth: "infinity" })
-    .fixed()
     .onTap(() => toggleLane(lane));
+  return headerGap(row).fixed();
 }
 
 // An empty lane (issue #50): a zone row that only opens while a card is
@@ -231,7 +234,7 @@ export function quietLine(): View {
 
 export function projectHeader(k: string): View {
   const p = projectByKey(k);
-  return HStack({ spacing: 8 }, [
+  const row = HStack({ spacing: 8 }, [
     chevron(() => isProjectCollapsed(k)),
     badge(k, 18, 10),
     headerName(p.name, C.heading),
@@ -240,10 +243,10 @@ export function projectHeader(k: string): View {
     ...(canOpenProject(k) ? [glyphButton("plus", 20, 11, C.secondary, () => openProjectWorkspace(k))] : []),
   ])
     .paddingHorizontal(8)
-    .paddingTop(14)
-    .paddingBottom(5)
+    .paddingVertical(5)
     .cornerRadius(8)
     .hoverBackground(C.hover)
     .frame({ maxWidth: "infinity" })
     .onTap(() => toggleProject(k));
+  return headerGap(row);
 }
