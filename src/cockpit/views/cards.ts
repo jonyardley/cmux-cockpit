@@ -1,13 +1,14 @@
 // Workspace cards at the three lane densities (full, compact, row), plus the
 // one row shape the Projects view uses.
 
-import { prOf } from "../../shared/prs.ts";
+import { prSummary } from "../../shared/prs.ts";
 import { oneLine } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
+import { when } from "../../shared/ui.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import { isSelected, selectWorkspace } from "../model.ts";
 import { drag } from "../state.ts";
-import { ageOf } from "../status.ts";
+import { ageOf, prTextColor } from "../status.ts";
 import { C } from "../theme.ts";
 import {
   cardChrome,
@@ -23,8 +24,6 @@ import {
   unreadBadge,
   type WsAccessor,
 } from "./parts.ts";
-
-const prNumberOf = (w: Workspace | undefined): number | undefined => prOf(w)?.number;
 
 function fullCard(w: WsAccessor, key: string): View {
   const detail = () => {
@@ -55,9 +54,10 @@ function fullCard(w: WsAccessor, key: string): View {
 
 // Options board "Compact": the PR rides in the status line as text.
 export function compactCard(w: WsAccessor, key: string): View {
+  const pr = computed(() => prSummary(w()));
   const prText = () => {
-    const n = prNumberOf(w());
-    return n ? "· #" + n : "";
+    const t = pr()?.text;
+    return t ? "· " + t : "";
   };
   const body = HStack({ spacing: 9 }, [
     glyph(w, 22, 7, 11),
@@ -66,7 +66,11 @@ export function compactCard(w: WsAccessor, key: string): View {
       HStack({ spacing: 6 }, [
         statusDot(w, 6),
         statusLabel(w, 11.5, "regular"),
-        Text(prText).font(11.5).color(C.secondary).lineLimit(1).layoutPriority(2),
+        Text(prText)
+          .font(11.5)
+          .color(() => prTextColor(pr(), C.secondary))
+          .lineLimit(1)
+          .layoutPriority(2),
         Spacer({ minLength: 0 }),
       ]).frame({ maxWidth: "infinity" }),
     ])
@@ -79,13 +83,10 @@ export function compactCard(w: WsAccessor, key: string): View {
 }
 
 // "Row" density (Options board, .plain): dot, title, meta; selection is the
-// white hairline pill, a drag lifts it in clay.
+// white hairline pill, a drag lifts it in ink.
 function denseRow(w: WsAccessor, key: string): View {
-  const trailing = () => {
-    const x = w();
-    const n = prNumberOf(x);
-    return (n ? "#" + n + "  " : "") + ageOf(x);
-  };
+  // The number alone, so a row never widens; the words live on the cards.
+  const pr = computed(() => prSummary(w()));
   const body = HStack({ spacing: 6 }, [
     statusDot(w, 7),
     Text(() => displayTitle(w()))
@@ -97,7 +98,16 @@ function denseRow(w: WsAccessor, key: string): View {
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
     unreadBadge(w),
-    meta(trailing, C.metaText),
+    when(
+      "row-pr",
+      () => !!pr(),
+      () =>
+        meta(
+          () => pr()?.tag ?? "",
+          () => prTextColor(pr(), C.metaText),
+        ),
+    ),
+    meta(() => ageOf(w()), C.metaText),
   ])
     .paddingLeading(25)
     .paddingTrailing(12)
@@ -108,7 +118,7 @@ function denseRow(w: WsAccessor, key: string): View {
   return ring(
     body,
     () => (on() ? C.card : "clear"),
-    () => (dragged() ? C.clay : on() ? C.cardEdge : "clear"),
+    () => (dragged() ? C.select : on() ? C.cardEdge : "clear"),
     () => (dragged() ? 1.5 : 1),
     9,
   )
@@ -128,7 +138,7 @@ export function cardFor(w: WsAccessor, entry: { id: string; lane: LaneKey }): Vi
 // Projects view (board 2, #11): one row shape for every session. No glyph,
 // since the project header carries it; title and age, status dot and label
 // without the message, then the branch and PR chips. Selection is the card's
-// clay ring.
+// ink ring.
 export function projectRow(w: WsAccessor, key: string): View {
   // Spacing lives on the rows, so a row with no chips has no gap below it.
   const body = VStack({ alignment: "leading", spacing: 0 }, [

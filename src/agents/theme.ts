@@ -1,6 +1,7 @@
 // Agents panel colour tokens and status styling.
 
 import type { CheckState } from "../../scripts/state-config.ts";
+import { type ChipColors, prChipColors } from "../shared/pr-colors.ts";
 
 export const T = {
   ground: "#F6F4EC",
@@ -48,14 +49,7 @@ export const CHECK_DOT: Record<CheckState, string> = {
   pending: T.blue,
 };
 
-export interface ChipColors {
-  bg: string;
-  fg: string;
-  edge: string;
-}
-
+/** A quiet chip: a PR by its status (shared/pr-colors.ts), a port neutral. */
 export function chipColors(status: PrStatus | "port" | undefined): ChipColors {
-  if (status === "open") return { bg: "#EAF1E4", fg: "#3F5A2C", edge: "#D6E4CB" };
-  if (status === "merged") return { bg: "#EFEAF7", fg: "#5B3E91", edge: "#DED4EF" };
-  return { bg: "#F4F2EA", fg: "#4A4945", edge: "#E8E5DA" };
+  return prChipColors("quiet", status === "port" ? undefined : status);
 }

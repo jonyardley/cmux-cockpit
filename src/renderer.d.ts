@@ -141,6 +141,10 @@ interface PullRequest {
   url?: string;
   number?: number;
   status?: PrStatus;
+  /** Only the saved PR carries it (scripts/pr-poll.ts); cmux sends none. */
+  draft?: boolean;
+  /** GitHub's own merge verdict ("CLEAN"); only the saved PR carries it. */
+  mergeable?: boolean;
   label?: string;
   branch?: string;
   stale?: boolean;

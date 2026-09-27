@@ -411,9 +411,38 @@ describe("chips", () => {
     );
     assert.deepEqual(
       chips.map((c) => c.text),
-      ["#7 open", "feat •"],
+      ["#7", "feat •"],
     );
     assert.equal(chipsFor(ws("y", { branch: "feat" }), false).length, 0);
+  });
+});
+
+describe("prTextColor", () => {
+  const pr = (health: "failing" | "running" | "ready" | "quiet", s: PrStatus = "open") => ({
+    number: 1,
+    status: s,
+    url: undefined,
+    health,
+    tag: "#1",
+    text: "#1",
+  });
+
+  it("keeps the density's colour while the PR is quiet or absent", () => {
+    assert.equal(status.prTextColor(undefined, "#111111"), "#111111");
+    assert.equal(status.prTextColor(pr("quiet"), "#111111"), "#111111");
+    assert.equal(status.prTextColor(pr("quiet", "merged"), "#111111"), "#111111");
+  });
+
+  it("takes the health's chip colour otherwise, running in blue", () => {
+    assert.equal(status.prTextColor(pr("failing"), "#111111"), "#9E2F27");
+    assert.equal(status.prTextColor(pr("running"), "#111111"), "#2F5690");
+    assert.equal(status.prTextColor(pr("ready"), "#111111"), "#2F4A1C");
+  });
+});
+
+describe("lane markers", () => {
+  it("are all distinct", () => {
+    assert.equal(new Set(LANES.map((l) => l.color)).size, LANES.length);
   });
 });
 
