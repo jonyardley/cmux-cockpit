@@ -21,6 +21,12 @@ export interface State {
    */
   prs: Record<string, SavedPr>;
   /**
+   * url -> one of Jon's own open pull requests in a repo some workspace sits
+   * in, found by scripts/pr-poll.ts, so a PR still shows once its workspace
+   * is closed. Written only by the poller, never by a URL.
+   */
+  ownPrs: Record<string, SavedOwnPr>;
+  /**
    * wsId -> the workspace's subagent runs, oldest first, recorded by
    * scripts/hooks/report-subagent.ts because cmux sends custom sidebars none
    * (issue #6). Written only by the hook, never by a URL.
@@ -65,6 +71,11 @@ export interface SavedPr {
   mergeable?: true;
   /** Its CI checks, failing first (pr-poll.ts's checksFrom); left out when it has none. */
   checks?: SavedCheck[];
+}
+
+/** One of Jon's own open PRs: a saved PR plus its title, since no workspace names it. */
+export interface SavedOwnPr extends SavedPr {
+  title: string;
 }
 
 /**
@@ -114,6 +125,7 @@ export const emptyState = (): State => ({
   projectOverride: {},
   projects: {},
   prs: {},
+  ownPrs: {},
   subagents: {},
   ui: {},
 });
@@ -238,6 +250,15 @@ const UI_KEYS: readonly string[] = ["mode", "collapsed"];
 
 const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
 
+/** Whether a character is one a label keeps (no control characters). */
+export const isLabelChar = isCleanChar;
+
+function savedOwnPr(v: unknown): SavedOwnPr | null {
+  const pr = savedPr(v);
+  if (!pr || !isRecord(v) || !isLabel(v.title)) return null;
+  return { ...pr, title: v.title };
+}
+
 const isOptionalId = (v: unknown): boolean => v === undefined || (typeof v === "string" && isId(v));
 
 function savedSubagent(v: unknown): SavedSubagent[] {
@@ -276,6 +297,7 @@ export function validateState(raw: unknown): State {
     projectOverride: cleanMap(v.projectOverride, projectKey),
     projects: cleanMap(v.projects, projectSpec, isMatchKey),
     prs: cleanMap(v.prs, savedPr),
+    ownPrs: cleanMap(v.ownPrs, savedOwnPr, isPrUrl),
     subagents: cleanMap(v.subagents, savedSubagents),
     ui: uiState(v.ui),
   };

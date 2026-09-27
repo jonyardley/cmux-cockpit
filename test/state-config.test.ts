@@ -23,6 +23,15 @@ test("validateState reads a good file unchanged", () => {
       },
     },
     prs: { w3: { number: 7, url: "https://github.com/o/r/pull/7", status: "open", branch: "feat" } },
+    ownPrs: {
+      "https://github.com/o/r/pull/8": {
+        number: 8,
+        url: "https://github.com/o/r/pull/8",
+        status: "open",
+        branch: "mine",
+        title: "Mine",
+      },
+    },
     subagents: {
       w4: [
         { id: "toolu_1", session: "s1", agentId: "a1", label: "Review the diff", startedEpoch: 100, endedEpoch: 160 },
@@ -49,6 +58,7 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     projectOverride: { w6: "ok" },
     projects: {},
     prs: {},
+    ownPrs: {},
     subagents: {},
     ui: {},
   });
@@ -129,7 +139,7 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
   const set = applySet(start, "projectOverride.w1", '"alpha"');
   assert.deepEqual(set, {
     ok: true,
-    state: { dismissed: {}, projectOverride: { w1: "alpha" }, projects: {}, prs: {}, subagents: {}, ui: {} },
+    state: { dismissed: {}, projectOverride: { w1: "alpha" }, projects: {}, prs: {}, ownPrs: {}, subagents: {}, ui: {} },
   });
   assert.deepEqual(start, emptyState());
   if (!set.ok) return;

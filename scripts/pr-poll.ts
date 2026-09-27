@@ -19,15 +19,18 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   type CheckState,
+  isLabelChar,
   isRecord,
   MAX_CHECKS,
+  MAX_LABEL,
   type SavedCheck,
+  type SavedOwnPr,
   type SavedPr,
   type State,
   validateState,
 } from "./state-config.ts";
 import { logLine } from "./state-log.ts";
-import { writePrs, writeSubagents } from "./state-url.ts";
+import { writeOwnPrs, writePrs, writeSubagents } from "./state-url.ts";
 import { prune } from "./subagent-runs.ts";
 
 const TIMEOUT_MS = 15_000;
@@ -141,41 +144,95 @@ export function checksFrom(rollup: unknown): SavedCheck[] {
     .slice(0, MAX_CHECKS);
 }
 
+// A PR from gh's list as the poller reads it, before it is cut down to a SavedPr.
+interface Listed extends SavedPr {
+  title: string;
+  updatedAt: string;
+  rollup: unknown;
+}
+
+// One entry of `gh pr list --json <PR_FIELDS>`, or nothing when it is
+// malformed or a fork's PR (isCrossRepository), since the sidebar cannot
+// open a fork's PR the way it opens one of ours.
+function listed(p: unknown): Listed[] {
+  if (!isRecord(p) || p.isCrossRepository === true) return [];
+  const { number, url, headRefName: branch } = p;
+  const status = typeof p.state === "string" ? STATUS[p.state] : undefined;
+  if (!status || typeof number !== "number" || typeof url !== "string") return [];
+  if (typeof branch !== "string" || !branch) return [];
+  const pr: Listed = {
+    number,
+    url,
+    status,
+    branch,
+    title: typeof p.title === "string" ? p.title : "",
+    updatedAt: typeof p.updatedAt === "string" ? p.updatedAt : "",
+    rollup: p.statusCheckRollup,
+  };
+  if (p.isDraft === true) pr.draft = true;
+  if (p.mergeStateStatus === "CLEAN") pr.mergeable = true;
+  return [pr];
+}
+
+// The SavedPr a listed PR is saved as, with its checks.
+function saved(p: Listed): SavedPr {
+  const pr: SavedPr = { number: p.number, url: p.url, status: p.status, branch: p.branch };
+  if (p.draft) pr.draft = true;
+  if (p.mergeable) pr.mergeable = true;
+  const checks = checksFrom(p.rollup);
+  return checks.length ? { ...pr, checks } : pr;
+}
+
 /**
  * The branch's PR from `gh pr list --json <PR_FIELDS>`, with its checks:
- * an open one first, else the most recently updated. A fork's PR
- * (isCrossRepository) is never picked, since the sidebar cannot open it the
- * way it opens one of ours. Null when there is none; undefined when the
- * output cannot be read, so the caller keeps what it had.
+ * an open one first, else the most recently updated. Null when there is
+ * none; undefined when the output cannot be read, so the caller keeps what
+ * it had.
  */
 export function pickPr(text: string, branch: string): SavedPr | null | undefined {
   const v = parseJson(text);
   if (!Array.isArray(v)) return undefined;
-  const prs = v.flatMap((p): (SavedPr & { updatedAt: string; rollup: unknown })[] => {
-    if (!isRecord(p) || p.headRefName !== branch || p.isCrossRepository === true) return [];
-    const status = typeof p.state === "string" ? STATUS[p.state] : undefined;
-    if (!status || typeof p.number !== "number" || typeof p.url !== "string") return [];
-    const updatedAt = typeof p.updatedAt === "string" ? p.updatedAt : "";
-    const draft = p.isDraft === true ? { draft: true as const } : {};
-    const mergeable = p.mergeStateStatus === "CLEAN" ? { mergeable: true as const } : {};
-    return [
-      { number: p.number, url: p.url, status, branch, ...draft, ...mergeable, updatedAt, rollup: p.statusCheckRollup },
-    ];
-  });
+  const prs = v.flatMap(listed).filter((p) => p.branch === branch);
   prs.sort(
     (a, b) => Number(b.status === "open") - Number(a.status === "open") || b.updatedAt.localeCompare(a.updatedAt),
   );
   const top = prs[0];
-  if (!top) return null;
-  const pr: SavedPr = { number: top.number, url: top.url, status: top.status, branch: top.branch };
-  if (top.draft) pr.draft = true;
-  if (top.mergeable) pr.mergeable = true;
-  const checks = checksFrom(top.rollup);
-  return checks.length ? { ...pr, checks } : pr;
+  return top ? saved(top) : null;
+}
+
+/**
+ * A PR title as a label: control characters and runs of space become one
+ * space, trimmed and cut to MAX_LABEL, so it passes state-config's isLabel.
+ * Empty when nothing readable is left.
+ */
+export function cleanTitle(title: string): string {
+  const spaced = [...title].map((c) => (isLabelChar(c) ? c : " ")).join("");
+  return spaced.replace(/\s+/g, " ").trim().slice(0, MAX_LABEL).trim();
+}
+
+/**
+ * Jon's own open PRs from `gh pr list --author @me --json <OWN_FIELDS>`,
+ * keyed by url. A PR with no readable title is titled by its branch.
+ * Undefined when the output cannot be read, so the caller keeps what it had.
+ */
+export function ownPrsFrom(text: string): State["ownPrs"] | undefined {
+  const v = parseJson(text);
+  if (!Array.isArray(v)) return undefined;
+  const out: State["ownPrs"] = {};
+  for (const p of v.flatMap(listed)) {
+    if (p.status !== "open") continue;
+    const pr: SavedOwnPr = { ...saved(p), title: cleanTitle(p.title) || cleanTitle(p.branch) };
+    if (pr.title) out[p.url] = pr;
+  }
+  return out;
 }
 
 // The fields pickPr reads.
 const PR_FIELDS = "number,state,url,headRefName,updatedAt,isCrossRepository,isDraft,mergeStateStatus,statusCheckRollup";
+// The fields ownPrsFrom reads: pickPr's, plus the title.
+const OWN_FIELDS = `${PR_FIELDS},title`;
+// Jon's open PRs asked for per repo; more than this is not a sidebar list.
+const OWN_LIMIT = "30";
 
 export interface Lookups {
   /**
@@ -237,6 +294,41 @@ export function findPrs(workspaces: WorkspaceDir[], previous: State["prs"], look
   return out;
 }
 
+export interface OwnLookups {
+  /**
+   * The repo a directory belongs to (git's common dir, so every worktree of
+   * one repo shares it). Null when the directory is not a repo; undefined
+   * when git failed or the run is past its deadline.
+   */
+  repoOf: (directory: string) => string | null | undefined;
+  /** Jon's open PRs in the directory's repo; undefined when gh failed or was skipped. */
+  ownPrs: (directory: string) => State["ownPrs"] | undefined;
+}
+
+/**
+ * The new `ownPrs` map: Jon's open PRs across every repo a workspace sits
+ * in, each repo asked once however many workspaces share it. If any repo's
+ * lookup failed, the previous entries are kept under the new ones, since
+ * which repo a saved PR came from is not recorded; the next clean poll
+ * drops whatever has since merged or closed.
+ */
+export function findOwnPrs(workspaces: WorkspaceDir[], previous: State["ownPrs"], look: OwnLookups): State["ownPrs"] {
+  const repos = new Map<string, string>();
+  let failed = false;
+  for (const w of workspaces) {
+    const repo = look.repoOf(w.directory);
+    if (repo === undefined) failed = true;
+    else if (repo !== null && !repos.has(repo)) repos.set(repo, w.directory);
+  }
+  const out: State["ownPrs"] = {};
+  for (const dir of repos.values()) {
+    const found = look.ownPrs(dir);
+    if (found === undefined) failed = true;
+    else Object.assign(out, found);
+  }
+  return failed ? { ...previous, ...out } : out;
+}
+
 // The real lookups, run as subprocesses.
 
 // stdout of a finished command, or null on any failure.
@@ -260,6 +352,16 @@ export function branchFromGit(r: { status: number | null; stdout: string; stderr
   if (r.status === null) return undefined;
   if (r.status !== 0) return r.stderr.includes("not a git repository") ? null : undefined;
   return r.stdout.trim() || null;
+}
+
+// git's common dir, absolute, so every worktree of a repo gives the same one.
+function gitRepo(git: string, dir: string): string | null | undefined {
+  const r = spawnSync(git, ["-C", dir, "rev-parse", "--path-format=absolute", "--git-common-dir"], {
+    cwd: dir,
+    encoding: "utf8",
+    timeout: TIMEOUT_MS,
+  });
+  return branchFromGit({ status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" });
 }
 
 function gitBranch(git: string, dir: string): string | null | undefined {
@@ -310,23 +412,26 @@ function acquireLock(lockFile: string): boolean {
 }
 
 /**
- * Writes the new `prs` map and, in the same pass, prunes the `subagents`
- * map (scripts/subagent-runs.ts): the pr-poll rules already run this on
- * every agent turn end and workspace select, so pruning here too means a
- * done row or a crashed run clears without waiting on a new subagent event
- * to trigger its own rebuild. `changed` is true when either write changed
+ * Writes the new `prs` and `ownPrs` maps and, in the same pass, prunes the
+ * `subagents` map (scripts/subagent-runs.ts): the pr-poll rules already run
+ * this on every agent turn end and workspace select, so pruning here too
+ * means a done row or a crashed run clears without waiting on a new subagent
+ * event to trigger its own rebuild. `changed` is true when any write changed
  * the file, so the caller knows whether a rebuild is owed.
  */
 export function writePollState(
   stateFile: string,
   prs: State["prs"],
+  ownPrs: State["ownPrs"],
   now: number,
 ): { ok: true; changed: boolean } | { ok: false; error: string } {
   const prsResult = writePrs(stateFile, prs);
   if (!prsResult.ok) return prsResult;
+  const ownResult = writeOwnPrs(stateFile, ownPrs);
+  if (!ownResult.ok) return ownResult;
   const subagentsResult = writeSubagents(stateFile, (subagents) => prune(subagents, now));
   if (!subagentsResult.ok) return subagentsResult;
-  return { ok: true, changed: prsResult.changed || subagentsResult.changed };
+  return { ok: true, changed: prsResult.changed || ownResult.changed || subagentsResult.changed };
 }
 
 function poll(root: string): number {
@@ -343,6 +448,7 @@ function poll(root: string): number {
   const stateFile = join(root, "config", "state.json");
   const before = validateState(existsSync(stateFile) ? parseJson(readFileSync(stateFile, "utf8")) : undefined);
   const previous = before.prs;
+  const previousOwn = before.ownPrs;
   const previousSubagents = before.subagents;
 
   const deadline = Date.now() + DEADLINE_MS;
@@ -355,17 +461,27 @@ function poll(root: string): number {
       return out === null ? undefined : pickPr(out, branch);
     },
   });
+  const ownPrs = findOwnPrs(workspaces, previousOwn, {
+    repoOf: (dir) => (pastDeadline() ? undefined : gitRepo(git, dir)),
+    ownPrs: (dir) => {
+      if (pastDeadline()) return undefined;
+      const args = ["pr", "list", "--author", "@me", "--state", "open", "--limit", OWN_LIMIT, "--json", OWN_FIELDS];
+      const out = run(gh, args, dir);
+      return out === null ? undefined : ownPrsFrom(out);
+    },
+  });
+  const counts = `${Object.keys(prs).length} PRs, ${Object.keys(ownPrs).length} own`;
 
   let applied: ReturnType<typeof writePollState>;
   try {
-    applied = writePollState(stateFile, prs, Math.floor(Date.now() / 1000));
+    applied = writePollState(stateFile, prs, ownPrs, Math.floor(Date.now() / 1000));
   } catch (err) {
     log(`error: write failed (${err instanceof Error ? err.message : String(err)})`);
     return 0;
   }
   if (!applied.ok) return 0;
   if (!applied.changed) {
-    log(`ok, unchanged (${Object.keys(prs).length} PRs)`);
+    log(`ok, unchanged (${counts})`);
     return 0;
   }
 
@@ -375,7 +491,7 @@ function poll(root: string): number {
     timeout: BUILD_TIMEOUT_MS,
   });
   if (build.status === 0) {
-    log(`ok, ${Object.keys(prs).length} PRs`);
+    log(`ok, ${counts}`);
     return 0;
   }
 
@@ -385,6 +501,7 @@ function poll(root: string): number {
   log("error: build failed, reverted");
   try {
     writePrs(stateFile, previous);
+    writeOwnPrs(stateFile, previousOwn);
     writeSubagents(stateFile, () => previousSubagents);
   } catch (err) {
     log(`error: revert failed (${err instanceof Error ? err.message : String(err)})`);

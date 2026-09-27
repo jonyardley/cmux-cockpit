@@ -35,6 +35,17 @@ const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open",
     merged: { ...saved, number: 11, status: "merged", checks },
     bare: { number: 12, url: "https://github.com/o/r/pull/12", status: "open", branch: "feat" },
   },
+  ownPrs: {
+    // Also w1's PR, so the list shows it once, under the workspace's title.
+    [saved.url]: { ...saved, title: "Own copy of 7" },
+    "https://github.com/o/r/pull/42": {
+      number: 42,
+      url: "https://github.com/o/r/pull/42",
+      status: "open",
+      branch: "closed-ws",
+      title: "Fix the hook",
+    },
+  },
 };
 
 const { installRenderer } = await import("./support/renderer.ts");
@@ -70,13 +81,24 @@ describe("prsOf", () => {
 });
 
 describe("the agents panel's Pull requests list", () => {
-  it("lists the saved PR", () => {
-    r.data.workspaces = [ws("w1", { branch: "feat" })];
+  it("lists the saved PR, then Jon's own open PRs no workspace holds, once each", () => {
+    r.data.workspaces = [ws("w1", { title: "Workspace", branch: "feat" })];
     r.data.epoch++;
     assert.deepEqual(
-      agents.prs().map((e) => e.pr.number),
-      [7],
+      agents.prs().map((e) => [e.pr.number, e.title]),
+      [
+        [42, "Fix the hook"],
+        [7, "Workspace"],
+      ],
     );
+  });
+
+  it("keeps an own PR's title off the PR itself, so the row reads like any other", () => {
+    r.data.workspaces = [];
+    r.data.epoch++;
+    const own = agents.prs().find((e) => e.pr.number === 42);
+    assert.equal(own?.title, "Fix the hook");
+    assert.equal(own !== undefined && "title" in own.pr, false);
   });
 });
 

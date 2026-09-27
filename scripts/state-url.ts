@@ -108,6 +108,12 @@ export function writePrs(path: string, prs: State["prs"]): ApplyResult {
   return readUpdateWrite(path, (before) => ({ ok: true, state: validateState({ ...before, prs: sorted }) }));
 }
 
+/** Replaces the whole `ownPrs` map (scripts/pr-poll.ts), keys sorted, as writePrs does. */
+export function writeOwnPrs(path: string, ownPrs: State["ownPrs"]): ApplyResult {
+  const sorted = sortedByKey(ownPrs);
+  return readUpdateWrite(path, (before) => ({ ok: true, state: validateState({ ...before, ownPrs: sorted }) }));
+}
+
 /**
  * Folds `update` over the whole `subagents` map (scripts/hooks/report-subagent.ts),
  * the same locked read-modify-write step writePrs uses for its map. `update`

@@ -75,6 +75,7 @@ describe("readApplyWrite", () => {
       projectOverride: { w1: "alpha" },
       projects: {},
       prs: {},
+      ownPrs: {},
       subagents: {},
       ui: {},
     });

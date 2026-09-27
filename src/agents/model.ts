@@ -6,7 +6,7 @@ import { byActivity, sinceOrActivity } from "../shared/activity.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
-import { checksOf, prsOf } from "../shared/prs.ts";
+import { checksOf, prsOf, savedOwnPrs } from "../shared/prs.ts";
 import { type SavedRun, savedRuns } from "../shared/subagents.ts";
 import { cardMessage, readable } from "../shared/text.ts";
 import { fmtAge, fmtElapsed, nowEpoch } from "../shared/time.ts";
@@ -384,8 +384,9 @@ function prTitle(w: Workspace, pr: PullRequest): string {
   return displayTitle(w) || (/^pr$/i.test(label) ? "" : label) || pr.branch || "";
 }
 
-// Every PR across workspaces, de-duplicated by url, open first then merged
-// then closed, newest first within each.
+// Every PR across workspaces, then Jon's own open PRs no workspace holds,
+// de-duplicated by url, open first then merged then closed, newest first
+// within each.
 export const prs = computed(() => {
   const seen = new Set<string>();
   const out: PrEntry[] = [];
@@ -395,6 +396,11 @@ export const prs = computed(() => {
       seen.add(pr.url);
       out.push({ key: pr.url, pr, title: prTitle(w, pr) });
     }
+  }
+  for (const { title, ...pr } of savedOwnPrs()) {
+    if (seen.has(pr.url)) continue;
+    seen.add(pr.url);
+    out.push({ key: pr.url, pr, title });
   }
   out.sort((x, y) => prRank(x.pr) - prRank(y.pr) || (y.pr.number ?? 0) - (x.pr.number ?? 0));
   return markLast(out.slice(0, 30));

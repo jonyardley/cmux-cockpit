@@ -10,10 +10,14 @@ import { after, describe, it } from "node:test";
 import {
   branchFromGit,
   checksFrom,
+  cleanTitle,
   delayFrom,
+  findOwnPrs,
   findPrs,
   type Lookups,
   lockWithin,
+  type OwnLookups,
+  ownPrsFrom,
   parseWindowIds,
   parseWorkspaces,
   pickPr,
@@ -264,6 +268,110 @@ describe("findPrs", () => {
   });
 });
 
+describe("ownPrsFrom", () => {
+  const own = (n: number, extra: Record<string, unknown> = {}) => ({
+    ...ghPr(n, "OPEN", "t"),
+    title: "PR " + n,
+    ...extra,
+  });
+
+  it("keeps open PRs keyed by url, with title, draft, verdict and checks", () => {
+    const rollup = [{ __typename: "CheckRun", name: "ci", status: "COMPLETED", conclusion: "SUCCESS" }];
+    const text = gh([own(1, { isDraft: true }), own(2, { mergeStateStatus: "CLEAN", statusCheckRollup: rollup })]);
+    assert.deepEqual(ownPrsFrom(text), {
+      [url(1)]: { ...pr(1, { draft: true }), title: "PR 1" },
+      [url(2)]: { ...pr(2, { mergeable: true, checks: [{ name: "ci", state: "pass" }] }), title: "PR 2" },
+    });
+  });
+
+  it("drops closed, merged, fork and malformed entries", () => {
+    const text = gh([own(1, { state: "MERGED" }), own(2, { isCrossRepository: true }), { number: 3 }, "x", own(4)]);
+    assert.deepEqual(Object.keys(ownPrsFrom(text) ?? {}), [url(4)]);
+  });
+
+  it("titles a PR with no readable title by its branch", () => {
+    assert.equal(ownPrsFrom(gh([own(1, { title: " \n " })]))?.[url(1)]?.title, "feat");
+    assert.equal(ownPrsFrom(gh([own(1, { title: 5 })]))?.[url(1)]?.title, "feat");
+  });
+
+  it("is undefined when gh's output cannot be read", () => {
+    assert.equal(ownPrsFrom("not json"), undefined);
+    assert.equal(ownPrsFrom("{}"), undefined);
+  });
+});
+
+describe("cleanTitle", () => {
+  it("turns control characters and runs of space into one space, trimmed", () => {
+    assert.equal(cleanTitle("  Fix\tthe\n\nhook\u007f "), "Fix the hook");
+  });
+
+  it("cuts to the label length", () => {
+    assert.equal(cleanTitle("x".repeat(500)).length, 120);
+  });
+});
+
+describe("findOwnPrs", () => {
+  const ws = (id: string, directory: string) => ({ id, directory });
+  const own = (n: number) => ({ ...pr(n), title: "PR " + n });
+
+  it("asks once per repo, however many workspaces or worktrees share it", () => {
+    const asked: string[] = [];
+    const look: OwnLookups = {
+      repoOf: (d) => (d.startsWith("/a") ? "/a/.git" : "/b/.git"),
+      ownPrs: (d) => {
+        asked.push(d);
+        return d.startsWith("/a") ? { [url(1)]: own(1) } : { [url(2)]: own(2) };
+      },
+    };
+    const found = findOwnPrs([ws("1", "/a"), ws("2", "/a-wt"), ws("3", "/b")], { [url(9)]: own(9) }, look);
+    assert.deepEqual(found, { [url(1)]: own(1), [url(2)]: own(2) });
+    assert.deepEqual(asked, ["/a", "/b"]);
+  });
+
+  it("skips a directory that is not a repo", () => {
+    const look: OwnLookups = { repoOf: () => null, ownPrs: () => ({ [url(1)]: own(1) }) };
+    assert.deepEqual(findOwnPrs([ws("1", "/x")], { [url(9)]: own(9) }, look), {});
+  });
+
+  it("keeps the previous entries under the new ones when gh or git failed", () => {
+    const previous = { [url(1)]: own(1), [url(9)]: own(9) };
+    const fresh = { ...own(1), title: "New" };
+    const ghFails: OwnLookups = {
+      repoOf: (d) => d,
+      ownPrs: (d) => (d === "/a" ? { [url(1)]: fresh } : undefined),
+    };
+    assert.deepEqual(findOwnPrs([ws("1", "/a"), ws("2", "/b")], previous, ghFails), {
+      [url(1)]: fresh,
+      [url(9)]: own(9),
+    });
+    const gitFails: OwnLookups = { repoOf: () => undefined, ownPrs: () => ({}) };
+    assert.deepEqual(findOwnPrs([ws("1", "/a")], previous, gitFails), previous);
+  });
+});
+
+describe("the ownPrs map in state.json", () => {
+  const own = (n: number) => ({ ...pr(n), title: "PR " + n });
+
+  it("keeps a valid entry keyed by its url, and drops bad keys, titles and PRs", () => {
+    const raw = {
+      ownPrs: {
+        [url(1)]: own(1),
+        notAUrl: own(2),
+        [url(3)]: { ...own(3), title: "" },
+        [url(4)]: { ...own(4), title: "a\nb" },
+        [url(5)]: { ...own(5), status: "draft" },
+        [url(6)]: pr(6),
+      },
+    };
+    assert.deepEqual(validateState(raw).ownPrs, { [url(1)]: own(1) });
+  });
+
+  it("cannot be set by a URL", () => {
+    const set = applySet(emptyState(), "ownPrs." + url(1), JSON.stringify(own(1)));
+    assert.equal(set.ok, false);
+  });
+});
+
 describe("the prs map in state.json", () => {
   it("keeps a valid PR and drops bad urls, statuses, numbers and branches", () => {
     const raw = {
@@ -336,7 +444,7 @@ describe("writePollState", () => {
     const path = join(dir, "state.json");
     // A stale, unpaired run, seeded directly rather than through the hook.
     writeSubagents(path, () => ({ w1: [{ id: "toolu_1", session: "s1", label: "Old", startedEpoch: 0 }] }));
-    const result = writePollState(path, {}, 20 * 60);
+    const result = writePollState(path, {}, {}, 20 * 60);
     assert.deepEqual(result, { ok: true, changed: true });
     const written = JSON.parse(readFileSync(path, "utf8"));
     assert.deepEqual(written.subagents, {});
@@ -344,15 +452,15 @@ describe("writePollState", () => {
 
   it("says unchanged when there is nothing to prune and the prs are the same", () => {
     const path = join(dir, "state-stable.json");
-    writePollState(path, { a: pr(1) }, 100);
-    assert.deepEqual(writePollState(path, { a: pr(1) }, 100), { ok: true, changed: false });
+    writePollState(path, { a: pr(1) }, {}, 100);
+    assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100), { ok: true, changed: false });
   });
 
   it("is a change when only the subagent prune drops something, even with the same prs", () => {
     const path = join(dir, "state-prune-only.json");
     writeSubagents(path, () => ({ w1: [{ id: "toolu_1", session: "s1", label: "Old", startedEpoch: 0 }] }));
-    writePollState(path, { a: pr(1) }, 100);
-    assert.deepEqual(writePollState(path, { a: pr(1) }, 100 + 20 * 60), { ok: true, changed: true });
+    writePollState(path, { a: pr(1) }, {}, 100);
+    assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100 + 20 * 60), { ok: true, changed: true });
   });
 });
 
