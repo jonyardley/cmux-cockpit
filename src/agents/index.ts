@@ -4,8 +4,10 @@
 //                    Answer (select + focus surface) and Dismiss (local to
 //                    this panel, src/shared/needs.ts). No Allow/Deny: that
 //                    needs the real diff/tool-call payload, which this data
-//                    context does not carry, so it is not faked. The list of
-//                    every waiting workspace is the cockpit's Needs you strip.
+//                    context does not carry, so it is not faked. Other
+//                    workspaces that need you do not appear in this panel at
+//                    all, by design: the cockpit's Needs you strip is their
+//                    one home.
 //   Running        - working agents in other workspaces, longest-running
 //                    first, then idle agents dimmed and collapsed behind
 //                    "N more idle".

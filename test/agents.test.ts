@@ -179,7 +179,46 @@ describe("currentAsk", () => {
   it("carries the agent's words when the selected workspace needs you", () => {
     const a = agent("needs_input", { sinceEpoch: 900, surfaceId: "s1" });
     r.data.workspaces = [selected(a, { latestMessage: "Shall I push?", latestPrompt: "Fix it" })];
-    assert.deepEqual(m.currentAsk(), { a, text: "Shall I push?" });
+    assert.deepEqual(m.currentAsk(), { a, text: "Shall I push?", count: 1, canAnswer: true, dismissLabel: "Dismiss" });
+  });
+
+  it("offers Answer only when the asker has a terminal to focus", () => {
+    r.data.workspaces = [selected(agent("needs_input"), { latestMessage: "Shall I push?" })];
+    assert.equal(m.currentAsk()?.canAnswer, false);
+    assert.equal(m.currentAsk()?.dismissLabel, "Dismiss");
+  });
+
+  it("shows the workspace message only when the asker is the one live agent", () => {
+    const asker = agent("needs_input", { surfaceId: "s1" });
+    r.data.workspaces = [
+      ws("sel", { selected: true, agents: [asker, agent("ended")], latestMessage: "Shall I push?" }),
+    ];
+    assert.equal(m.currentAsk()?.text, "Shall I push?");
+    r.data.workspaces = [ws("sel", { selected: true, agents: [asker, agent("working")], latestMessage: "Built it" })];
+    assert.equal(m.currentAsk()?.text, "");
+    assert.equal(m.currentAsk()?.count, 1);
+  });
+
+  it("counts several askers and says Dismiss all", () => {
+    r.data.workspaces = [
+      ws("sel", {
+        selected: true,
+        agents: [agent("needs_input"), agent("needs_input"), agent("idle")],
+        latestMessage: "Shall I push?",
+      }),
+    ];
+    const ask = m.currentAsk();
+    assert.equal(ask?.count, 2);
+    assert.equal(ask?.text, "2 agents are asking");
+    assert.equal(ask?.dismissLabel, "Dismiss all");
+  });
+
+  it("picks the asker with the latest activity", () => {
+    const older = agent("needs_input", { lastActivityAt: 100, surfaceId: "old" });
+    const newer = agent("needs_input", { lastActivityAt: 500, surfaceId: "new" });
+    r.data.workspaces = [ws("sel", { selected: true, agents: [older, newer] })];
+    assert.equal(m.currentAsk()?.a.id, newer.id);
+    assert.equal(m.currentAsk()?.a.surfaceId, "new");
   });
 
   it("has no text when there is only the generic fallback", () => {

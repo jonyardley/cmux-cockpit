@@ -93,12 +93,30 @@ export const current = computed((): Current | null => {
 export const cur = (): Current =>
   current() ?? { ws: { id: "" }, a: null, agents: [], inOrder: [], project: projectOf("") };
 
-/** The selected workspace's open question. `text` is the agent's words, or
- * "" when there are none beyond the generic "waiting for your reply", so the
- * card shows just the Answer button. */
+/** The selected workspace's open question. */
 export interface Ask {
+  /** The most active asking agent: Answer focuses its terminal. */
   a: Agent;
+  /** The line over the buttons: "2 agents are asking" when several ask,
+   * else the agent's words, or "" when there are none beyond the generic
+   * "waiting for your reply", or when they may be another agent's. */
   text: string;
+  /** How many agents in the workspace are asking. */
+  count: number;
+  /** Answer shows only with a terminal to focus: without one it would only
+   * select the workspace, which is already selected. */
+  canAnswer: boolean;
+  /** Dismiss clears every ask in the workspace, so it says so when there are several. */
+  dismissLabel: string;
+}
+
+// The workspace's latestMessage is workspace-wide (Agent carries no message
+// of its own), so it is the asker's words only when no other live agent
+// could have written it.
+function askText(c: Current, count: number): string {
+  if (count > 1) return `${count} agents are asking`;
+  const live = c.agents.filter((a) => a.status !== "ended").length;
+  return live === 1 ? cardMessage(c.ws) : "";
 }
 
 /** Whether the selected workspace needs you, by the Needs you strip's rule:
@@ -107,7 +125,14 @@ export interface Ask {
 export const currentAsk = computed((): Ask | null => {
   const c = current();
   if (c?.a?.status !== "needs_input") return null;
-  return { a: c.a, text: cardMessage(c.ws) };
+  const count = c.agents.filter((a) => a.status === "needs_input").length;
+  return {
+    a: c.a,
+    text: askText(c, count),
+    count,
+    canAnswer: !!c.a.surfaceId,
+    dismissLabel: count > 1 ? "Dismiss all" : "Dismiss",
+  };
 });
 
 /** The card's quiet message line; empty while the question block shows the words. */

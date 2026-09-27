@@ -30,7 +30,7 @@ import {
   subagents,
 } from "../model.ts";
 import { chipColors, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
-import { agentDot, chip, jump, meta, openIfUrl, panel, ring, ruled } from "./parts.ts";
+import { agentDot, chip, jump, meta, openIfUrl, panel, ruled } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
   const a = () => e().a;
@@ -143,33 +143,25 @@ function checksBlock(): View {
   );
 }
 
-// Selects the workspace and focuses the asking agent's terminal.
+// Selects the workspace and focuses the asking agent's terminal. One face,
+// no ring: a ring's rim would show round the hover colour.
 function answerButton(): View {
-  return (
-    ring(
-      Text("Answer")
-        .font(12)
-        .weight("semibold")
-        .color(T.clayButtonText)
-        .lineLimit(1)
-        .paddingHorizontal(12)
-        .paddingVertical(4)
-        .hoverBackground(T.clayButtonHover),
-      T.clayButton,
-      T.clayButton,
-      1,
-      8,
-      true,
-    )
-      // Priority on the ring, the HStack's child, so the label never wraps.
-      .layoutPriority(2)
-      .onTap(() => jump(cur().ws.id, currentAsk()?.a.surfaceId))
-  );
+  return Text("Answer")
+    .font(12)
+    .weight("semibold")
+    .color(T.onClay)
+    .lineLimit(1)
+    .paddingHorizontal(12)
+    .paddingVertical(4)
+    .background(T.clayButton)
+    .hoverBackground(T.clayButtonHover)
+    .cornerRadius(8)
+    .onTap(() => jump(cur().ws.id, currentAsk()?.a.surfaceId));
 }
 
 // Local to this panel: the cockpit's dismissals are not visible here (issue #3).
 function dismissButton(): View {
-  return Text("Dismiss")
+  return Text(() => currentAsk()?.dismissLabel ?? "Dismiss")
     .font(12)
     .color(T.secondary)
     .lineLimit(1)
@@ -182,8 +174,9 @@ function dismissButton(): View {
 }
 
 // The question, when the agent needs you: its words (none when there is only
-// the generic fallback), then Answer and Dismiss. The title is not repeated:
-// the card's head already shows it.
+// the generic fallback or they may be another agent's), or how many agents
+// ask, then Answer (only with a terminal to focus) and Dismiss. The title is
+// not repeated: the card's head already shows it.
 function askBlock(): View {
   return when(
     "cur-ask",
@@ -201,7 +194,14 @@ function askBlock(): View {
               .truncation("tail")
               .frame({ maxWidth: "infinity", alignment: "leading" }),
         ),
-        HStack({ spacing: 6 }, [answerButton(), dismissButton(), Spacer()]).frame({ maxWidth: "infinity" }),
+        HStack({ spacing: 6 }, [
+          when("cur-ask-answer", () => !!currentAsk()?.canAnswer, answerButton)
+            // Priority on the when() result, the HStack's child, so the label
+            // never wraps; a priority inside it does not reach this HStack.
+            .layoutPriority(2),
+          dismissButton(),
+          Spacer(),
+        ]).frame({ maxWidth: "infinity" }),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
         .paddingTop(8),
@@ -248,7 +248,7 @@ function currentHead(): View {
           Text(() => String(unread()))
             .font(10)
             .bold()
-            .color("white")
+            .color(T.onClay)
             .paddingHorizontal(5)
             .paddingVertical(1)
             .background(T.clayButton)
