@@ -4,8 +4,21 @@
 // Optimistic overrides flip locally the same frame, then clear once the data
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
+import type { ProjectSpec } from "../../scripts/state-config.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
-import { isProjectKey, PROJECTS, type Project, projectId, projectOf } from "../shared/projects.ts";
+import {
+  inAppSpec,
+  isInAppKey,
+  isProjectKey,
+  newProject,
+  nextIn,
+  PROJECT_COLORS,
+  PROJECT_ICONS,
+  PROJECTS,
+  type Project,
+  projectId,
+  projectOf,
+} from "../shared/projects.ts";
 import { nowEpoch } from "../shared/time.ts";
 import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
@@ -246,6 +259,64 @@ export function clearProjectOverride(w: Workspace | undefined): void {
   if (!w || !projectOverride.delete(w.id)) return;
   bump();
   persistSet(`projectOverride.${w.id}`, null);
+}
+
+// --- Projects made in the sidebar (issue #9) ------------------------------------------
+// Each save rebuilds and reloads the sidebar, but until that lands a second
+// tap must step on from the first, so the last spec sent is held here
+// (null once removed). Not reactive on its own: bump() after each write.
+const sentSpecs = new Map<string, ProjectSpec | null>();
+
+const specOf = (k: string): ProjectSpec | undefined =>
+  sentSpecs.has(k) ? (sentSpecs.get(k) ?? undefined) : inAppSpec(k);
+
+/** The card's project key when that project was made in the sidebar and not removed since. */
+function inAppKeyOf(w: Workspace | undefined): string | null {
+  if (!w) return null;
+  const k = projectKey(w);
+  return isInAppKey(k) && specOf(k) ? k : null;
+}
+
+/** True when the card's folder matches no project, so it can become one. */
+export const canCreateProject = (w: Workspace | undefined): boolean =>
+  !!w && !PROJECTS.includes(projectOf(w.directory)) && newProject(w.directory, PROJECTS) !== null;
+
+/** The name of the card's sidebar-made project, or null when it is in a file project or none. */
+export const inAppProjectName = (w: Workspace | undefined): string | null => {
+  tick();
+  const k = inAppKeyOf(w);
+  return k ? (specOf(k)?.name ?? null) : null;
+};
+
+function sendSpec(k: string, spec: ProjectSpec | null): void {
+  sentSpecs.set(k, spec);
+  bump();
+  persistSet(`projects.${k}`, spec);
+}
+
+/** Makes the card's folder a project, named after the folder. */
+export function createProjectFrom(w: Workspace | undefined): void {
+  if (!w || !canCreateProject(w)) return;
+  const made = newProject(w.directory, PROJECTS);
+  if (made) sendSpec(made.key, made.spec);
+}
+
+function restyle(w: Workspace | undefined, change: (s: ProjectSpec) => ProjectSpec): void {
+  const k = inAppKeyOf(w);
+  const spec = k ? specOf(k) : undefined;
+  if (k && spec) sendSpec(k, change(spec));
+}
+
+export const cycleProjectColor = (w: Workspace | undefined): void =>
+  restyle(w, (s) => ({ ...s, color: nextIn(PROJECT_COLORS, s.color) }));
+
+export const cycleProjectIcon = (w: Workspace | undefined): void =>
+  restyle(w, (s) => ({ ...s, icon: nextIn(PROJECT_ICONS, s.icon) }));
+
+/** Deletes the card's sidebar-made project; its workspaces fall back to path matching. */
+export function removeProject(w: Workspace | undefined): void {
+  const k = inAppKeyOf(w);
+  if (k) sendSpec(k, null);
 }
 
 export const hasProjectOverride = (w: Workspace | undefined): boolean => {

@@ -1,6 +1,8 @@
 // Validates the project table before the build injects it (see build.ts).
 // Kept apart from build.ts so the rules can be tested without running a build.
 
+import type { ProjectSpec } from "./state-config.ts";
+
 export interface Project {
   match: string | string[];
   name: string;
@@ -69,4 +71,30 @@ export function validateProjects(parsed: unknown): ProjectsResult {
     return { ok: false, error: `two projects are named "${name}"; give one project several matches instead` };
   }
   return { ok: true, projects };
+}
+
+export interface Merged {
+  projects: readonly Project[];
+  /** The sidebar-made projects that made it in, so the sidebar knows which it may edit. */
+  kept: Record<string, ProjectSpec>;
+}
+
+/**
+ * Appends the sidebar-made projects (issue #9) to the file's table. The file
+ * wins: an in-app project whose match or name is already taken is dropped, so
+ * the merged table always passes validateProjects.
+ */
+export function mergeProjects(file: readonly Project[], inApp: Record<string, ProjectSpec>): Merged {
+  const matches = new Set(file.flatMap((p) => (typeof p.match === "string" ? [p.match] : p.match)));
+  const names = new Set(file.map((p) => p.name));
+  const projects: Project[] = [...file];
+  const kept: Record<string, ProjectSpec> = {};
+  for (const [match, spec] of Object.entries(inApp)) {
+    if (matches.has(match) || names.has(spec.name)) continue;
+    matches.add(match);
+    names.add(spec.name);
+    projects.push({ match, ...spec });
+    kept[match] = spec;
+  }
+  return { projects, kept };
 }

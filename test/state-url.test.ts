@@ -70,7 +70,11 @@ describe("readApplyWrite", () => {
     const path = tempFile();
     const result = readApplyWrite(path, "projectOverride.w1", '"alpha"');
     assert.deepEqual(result, { ok: true, changed: true });
-    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), { dismissed: {}, projectOverride: { w1: "alpha" } });
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), {
+      dismissed: {},
+      projectOverride: { w1: "alpha" },
+      projects: {},
+    });
   });
 
   it("treats a corrupt file as empty state", () => {

@@ -18,15 +18,19 @@ sidebars/*.js with __STATE__ baked in ──▶ cmux hot-reloads the sidebar
 ## The URL
 
 ```
-cmux-cockpit://set?key=<map>.<wsId>&value=<url-encoded JSON>
-cmux-cockpit://set?key=<map>.<wsId>            (no value: delete the entry)
+cmux-cockpit://set?key=<map>.<id>&value=<url-encoded JSON>
+cmux-cockpit://set?key=<map>.<id>            (no value: delete the entry)
 ```
 
 | map               | value                          | issue |
 | ----------------- | ------------------------------ | ----- |
 | `dismissed`       | `{"<agentId>": <epoch>, ...}`  | #5    |
 | `projectOverride` | `"<project key>"`, its first match path, e.g. `"/dev/alpha"` | #8    |
+| `projects`        | `{"name", "color": "#rrggbb", "icon": "<SF Symbol>", "root"?}` | #9    |
 
+The id is a workspace id, except for `projects`, where it is the project's
+match: an absolute, lowercase directory. Only the first dot splits the key,
+so a dotted path stays whole.
 Any other host, path or map is refused. `scripts/state-config.ts` holds the
 rules (`applySet`, `validateState`) and their tests.
 
@@ -34,12 +38,19 @@ rules (`applySet`, `validateState`) and their tests.
 
 ```json
 { "dismissed": { "<wsId>": { "<agentId>": 1790416690 } },
-  "projectOverride": { "<wsId>": "/dev/alpha" } }
+  "projectOverride": { "<wsId>": "/dev/alpha" },
+  "projects": { "/users/jon/dev/scratch": { "name": "Scratch", "color": "#6A9BCC",
+                "icon": "folder.fill", "root": "/Users/jon/dev/scratch" } } }
 ```
 
 A missing or malformed file reads as empty state; bad entries are dropped,
 never fatal, so a bad write cannot break the build. Each map keeps its newest
 256 entries.
+
+The build merges `projects` over `config/projects.json`, and the file wins:
+an in-app project whose match or name is already taken is left out, and so
+is dropped from the `__STATE__` the sidebar sees, so the menu never offers
+to edit it. Projects in the file are never written by the loop.
 
 ## Cost of a save
 

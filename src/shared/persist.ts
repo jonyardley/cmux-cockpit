@@ -5,7 +5,7 @@
 
 // State's shape is scripts/state-config.ts's contract; imported as a type
 // only, so esbuild erases it and a sidebar never bundles the script itself.
-import type { State } from "../../scripts/state-config.ts";
+import type { ProjectSpec, State } from "../../scripts/state-config.ts";
 
 declare const __STATE__: State;
 
@@ -14,11 +14,11 @@ export const SAVED_STATE: State = __STATE__;
 
 /**
  * Tells the (separately installed) URL handler to set or delete one entry.
- * `key` is `<map>.<wsId>`, matching scripts/state-config.ts's applySet; a
+ * `key` is `<map>.<id>`, matching scripts/state-config.ts's applySet; a
  * null value asks for a delete instead of a set. With no handler installed,
  * openURL to the unclaimed cmux-cockpit:// scheme does nothing.
  */
-export function persistSet(key: string, value: string | Record<string, number> | null): void {
+export function persistSet(key: string, value: string | Record<string, number> | ProjectSpec | null): void {
   const q = value === null ? "" : `&value=${encodeURIComponent(JSON.stringify(value))}`;
   openURL(`cmux-cockpit://set?key=${encodeURIComponent(key)}${q}`);
 }

@@ -434,3 +434,38 @@ describe("card menu", () => {
     model.clearProjectOverride(byId("a"));
   });
 });
+
+describe("new project from a card (issue #9)", () => {
+  beforeEach(setup);
+
+  it("offers it on a card whose folder matches no project, and sends the new project", () => {
+    const loose = ws("loose", { group: "g-main", directory: "/Users/jon/dev/scratch" });
+    r.data.workspaces = [...r.data.workspaces, loose];
+    r.menu.length = 0;
+    cardMenu(() => loose);
+    assert.ok(r.menu.includes("button:New project from this folder"));
+    assert.ok(r.menu.includes("button:Next colour (sidebar-made projects only)"));
+    r.opened.length = 0;
+    model.createProjectFrom(loose);
+    const url = new URL(r.opened[0] ?? "");
+    assert.equal(url.searchParams.get("key"), "projects./users/jon/dev/scratch");
+    assert.equal(JSON.parse(url.searchParams.get("value") ?? "").name, "Scratch");
+  });
+
+  it("does nothing for a card already in a project, or with no folder", () => {
+    const first = projects.PROJECTS[0];
+    assert.ok(first);
+    const matched = ws("matched", { directory: "/Users/jon" + projects.projectId(first) });
+    r.opened.length = 0;
+    for (const w of [matched, ws("nofolder"), undefined]) {
+      assert.equal(model.canCreateProject(w), false);
+      model.createProjectFrom(w);
+      model.cycleProjectColor(w);
+      model.removeProject(w);
+    }
+    assert.deepEqual(r.opened, []);
+    r.menu.length = 0;
+    cardMenu(() => matched);
+    assert.ok(r.menu.includes("button:New project (folder has one, or none)"));
+  });
+});

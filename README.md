@@ -40,7 +40,10 @@ and needs nothing installed or linked. Back up any existing
   `config/projects.json` is your real, gitignored table; never commit it.
   Each entry is `match`, `name`, `color`, `icon`, plus an optional `root`
   (an absolute path, `~` allowed) that puts a "+" on the project's header
-  in the Projects view, opening a new workspace there.
+  in the Projects view, opening a new workspace there. A card's menu can
+  also make its folder a project ("New project from this folder"), then
+  step its colour and icon or remove it; those live in `config/state.json`
+  and are merged after the file's projects at build.
 
 ## Setup
 
@@ -92,8 +95,8 @@ the main checkout only; in a worktree `npm run validate` skips with a note.
 
 ## State loop
 
-A sidebar cannot save anything, so dismissals and "Move to project" choices
-go out through a small URL handler app that writes `config/state.json` and
+A sidebar cannot save anything, so dismissals, "Move to project" choices
+and projects made from a card go out through a small URL handler app that writes `config/state.json` and
 rebuilds the sidebars ([docs/state-loop.md](docs/state-loop.md)). Once per
 machine, from the main checkout:
 

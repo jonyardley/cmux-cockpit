@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { validateProjects } from "../scripts/projects-config.ts";
+import { mergeProjects, type Project, validateProjects } from "../scripts/projects-config.ts";
 
 const p = (match: unknown, name = "A") => ({ match, name, color: "#000000", icon: "x" });
 const error = (parsed: unknown): string => {
@@ -42,5 +42,36 @@ describe("project table validation", () => {
     // build.ts's expandRoot only expands a bare "~" or a "~/..." prefix, so a
     // "~name/..." form (no slash right after ~) would reach the sidebar unexpanded.
     assert.match(error([{ ...p("/a"), root: "~jon/dev/app" }]), /absolute path/);
+  });
+});
+
+describe("mergeProjects (issue #9)", () => {
+  const file: Project[] = [
+    { match: "/dev/a", name: "A", color: "#000000", icon: "x" },
+    { match: ["/dev/b", "/dev/b2"], name: "B", color: "#000000", icon: "x" },
+  ];
+  const spec = (name: string) => ({ name, color: "#6A9BCC", icon: "folder.fill" });
+
+  it("appends sidebar-made projects after the file's, keeping what it kept", () => {
+    const merged = mergeProjects(file, { "/dev/c": spec("C") });
+    assert.deepEqual(
+      merged.projects.map((x) => x.name),
+      ["A", "B", "C"],
+    );
+    assert.deepEqual(merged.projects[2], { match: "/dev/c", ...spec("C") });
+    assert.deepEqual(merged.kept, { "/dev/c": spec("C") });
+    assert.ok(validateProjects(merged.projects).ok);
+  });
+
+  it("lets the file win on a shared match, any of a project's matches, or a shared name", () => {
+    const merged = mergeProjects(file, { "/dev/a": spec("X"), "/dev/b2": spec("Y"), "/dev/z": spec("A") });
+    assert.equal(merged.projects.length, 2);
+    assert.deepEqual(merged.kept, {});
+  });
+
+  it("drops the second of two sidebar-made projects with the same name", () => {
+    const merged = mergeProjects(file, { "/dev/c": spec("C"), "/dev/d": spec("C") });
+    assert.deepEqual(Object.keys(merged.kept), ["/dev/c"]);
+    assert.ok(validateProjects(merged.projects).ok);
   });
 });

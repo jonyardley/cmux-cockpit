@@ -8,13 +8,14 @@
 //
 // config/state.json (gitignored, written by the URL handler) is read the
 // same way and injected as __STATE__, so a sidebar starts from whatever was
-// saved last (docs/state-loop.md).
+// saved last (docs/state-loop.md). Its `projects` map, projects made in the
+// sidebar (issue #9), is merged over the file's table first.
 //   node scripts/build.ts    build once
 
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { build } from "esbuild";
-import { type Project, validateProjects } from "./projects-config.ts";
+import { mergeProjects, type Project, validateProjects } from "./projects-config.ts";
 import { emptyState, type State, validateState } from "./state-config.ts";
 
 const ENTRIES = ["agents", "cockpit"] as const;
@@ -66,8 +67,12 @@ function loadState(): State {
   }
 }
 
-const projects = withExpandedRoots(loadProjects());
-const state = loadState();
+const saved = loadState();
+const merged = mergeProjects(loadProjects(), saved.projects);
+const projects = withExpandedRoots(merged.projects);
+// Only the in-app projects that survived the merge, so the sidebar never
+// offers to edit one the file overrode.
+const state: State = { ...saved, projects: merged.kept };
 
 for (const name of ENTRIES) {
   const outfile = `sidebars/${name}.js`;
