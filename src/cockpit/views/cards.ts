@@ -106,7 +106,8 @@ function denseRow(w: WsAccessor, key: string): View {
           () => pr()?.tag ?? "",
           () => prTextColor(pr(), C.metaText),
         ),
-    ),
+      // On the when() result: the priority inside meta() does not reach this HStack.
+    ).layoutPriority(2),
     meta(() => ageOf(w()), C.metaText),
   ])
     .paddingLeading(25)

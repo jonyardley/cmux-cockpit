@@ -193,11 +193,14 @@ function chip(c: () => Chip): View {
   );
 }
 
+// No Spacer beside the ForEach: both are flexible, so the HStack would split
+// the free width between them and cut the chips at half the row. The frame
+// left-aligns instead, and the priority on the ForEach itself reaches the
+// HStack, which the priorities on each chip inside it do not.
 export function chipsRow(w: WsAccessor, withBranch: boolean): View {
   return HStack({ spacing: 5 }, [
-    ForEach({ items: () => chipsFor(w(), withBranch), key: (c) => c.id }, (c) => chip(c)),
-    Spacer({ minLength: 0 }),
-  ]);
+    ForEach({ items: () => chipsFor(w(), withBranch), key: (c) => c.id }, (c) => chip(c)).layoutPriority(1),
+  ]).frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
 // --- card chrome and menu ------------------------------------------------------------
