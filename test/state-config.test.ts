@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   applySet,
+  cleanLabel,
   emptyState,
+  labelFrom,
   MAX_ENTRIES,
   MAX_LABEL,
   MAX_SUBAGENTS,
@@ -39,6 +41,15 @@ test("validateState reads a good file unchanged", () => {
         { id: "toolu_2", session: "s1", label: "Probe the hook", startedEpoch: 150 },
       ],
     },
+    published: {
+      "https://claude.ai/code/artifact/0b3c-9e2a": {
+        url: "https://claude.ai/code/artifact/0b3c-9e2a",
+        title: "Lane board",
+        kind: "page",
+        workspace: "w5",
+        epoch: 200,
+      },
+    },
     ui: { mode: "projects", collapsed: { "lane:parked": 0, "project:/dev/a": 1 } },
   };
   assert.deepEqual(validateState(raw), raw);
@@ -61,6 +72,7 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     prs: {},
     ownPrs: {},
     subagents: {},
+    published: {},
     ui: {},
   });
 });
@@ -89,6 +101,39 @@ test("validateState keeps good subagent runs, drops bad ones and keeps the newes
     subagents.w1?.map((r) => r.id),
     good.slice(2).map((r) => r.id),
   );
+});
+
+test("validateState keeps good published links and drops bad ones", () => {
+  const good = { url: "https://claude.ai/artifact/abc", title: "Plan", kind: "doc", workspace: "w1", epoch: 5 };
+  const bad = [
+    { ...good, url: "https://evil.example/artifact/abc" },
+    { ...good, url: "https://claude.ai/artifact/abc?x=1" },
+    { ...good, title: " padded " },
+    { ...good, title: "" },
+    { ...good, kind: "deck" },
+    { ...good, workspace: "" },
+    { ...good, workspace: 7 },
+    { ...good, epoch: -1 },
+    "not an entry",
+  ];
+  const raw = Object.fromEntries([[good.url, good], ...bad.map((b, i) => [`https://claude.ai/artifact/b${i}`, b])]);
+  assert.deepEqual(validateState({ published: raw }).published, { [good.url]: good });
+  const badKey = validateState({ published: { "https://example.com/x": good } }).published;
+  assert.deepEqual(badKey, {});
+});
+
+test("applySet refuses to set published links from a URL", () => {
+  const value = JSON.stringify({
+    url: "https://claude.ai/artifact/a",
+    title: "T",
+    kind: "page",
+    workspace: "w",
+    epoch: 1,
+  });
+  assert.deepEqual(applySet(emptyState(), "published.https://claude.ai/artifact/a", value), {
+    ok: false,
+    error: "unknown map published",
+  });
 });
 
 test("applySet refuses to set subagents from a URL", () => {
@@ -147,6 +192,7 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
       prs: {},
       ownPrs: {},
       subagents: {},
+      published: {},
       ui: {},
     },
   });
@@ -312,4 +358,21 @@ test("rebuildsOn skips the build for the cockpit's own view and folds only", () 
   assert.equal(rebuildsOn("ui.collapsed"), false);
   for (const key of ["dismissed.w1", "projectOverride.w1", "projects./dev/a/"])
     assert.equal(rebuildsOn(key), true, key);
+});
+
+test("cleanLabel cuts by the length isLabel measures, so an astral title still validates", () => {
+  // 119 units then a two-unit emoji: the emoji would make 121, so it goes whole.
+  const title = cleanLabel("\u{1F3B9}" + "x".repeat(117) + "\u{1F3B9}x") ?? "";
+  assert.equal(title.length, MAX_LABEL - 1);
+  assert.ok(title.startsWith("\u{1F3B9}x") && title.endsWith("x"));
+  const entry = { url: "https://claude.ai/artifact/a", title, kind: "page", workspace: "w", epoch: 1 };
+  assert.deepEqual(validateState({ published: { [entry.url]: entry } }).published, { [entry.url]: entry });
+  assert.equal(cleanLabel("a\u0000\u007f\tb"), "a b");
+  assert.equal(cleanLabel(" \n "), null);
+  assert.equal(cleanLabel(5), null);
+});
+
+test("labelFrom takes the first usable candidate, else the fallback", () => {
+  assert.equal(labelFrom("none", undefined, "  ", "Second"), "Second");
+  assert.equal(labelFrom("none"), "none");
 });

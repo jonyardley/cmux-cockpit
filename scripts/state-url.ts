@@ -144,6 +144,22 @@ export function writeSubagents(
   });
 }
 
+/**
+ * Folds `update` over the whole `published` map
+ * (scripts/hooks/report-published.ts), under the same lock. Keys are not
+ * sorted: the map is kept oldest first, so validateState's cap drops the
+ * oldest entries rather than whichever URLs sort first.
+ */
+export function writePublished(
+  path: string,
+  update: (published: State["published"]) => State["published"],
+): ApplyResult {
+  return readUpdateWrite(path, (before) => ({
+    ok: true,
+    state: validateState({ ...before, published: update(before.published) }),
+  }));
+}
+
 function readUpdateWrite(path: string, update: (before: State) => SetResult): ApplyResult {
   mkdirSync(dirname(path), { recursive: true });
   return withLock(path, () => {

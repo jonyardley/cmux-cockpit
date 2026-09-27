@@ -27,24 +27,13 @@
 // window still pairs to the denied call's row first, since nothing here
 // can tell the two apart beyond session and type.
 //
-// Rebuilding both sidebars costs a full esbuild pass, so two events close
-// together (SubagentStart fires ~25ms after the PreToolUse that starts the
-// same run, and independent subagents can start together) should not each
-// spawn their own build. This coalesces them with a lockfile in config/:
-// the first event to see no build in flight takes the lock and spawns a
-// detached run of itself with --coalesce-build, which sleeps briefly (so a
-// near-simultaneous second write lands before the build reads the file),
-// runs scripts/build.ts, and only then drops the lock; every other event in
-// that window sees the lock held and does nothing, trusting the build that
-// holds it to pick up its write once it runs. A lock older than
-// BUILD_LOCK_STALE_MS is a crashed build's and is retaken.
+// A visible change schedules a rebuild through scripts/hook-build.ts, which
+// coalesces events that land close together into one build.
 
-import { spawn, spawnSync } from "node:child_process";
-import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { setTimeout as sleep } from "node:timers/promises";
-import { MAX_LABEL, type SavedSubagent, type State, validateState } from "../state-config.ts";
-import { LOG_PATH } from "../state-log.ts";
+import { scheduleBuild } from "../hook-build.ts";
+import { labelFrom, type SavedSubagent, type State, validateState } from "../state-config.ts";
 import { writeSubagents } from "../state-url.ts";
 import { prune } from "../subagent-runs.ts";
 
@@ -56,35 +45,6 @@ type SubagentMap = State["subagents"];
 
 function field(obj: unknown, key: string): unknown {
   return typeof obj === "object" && obj !== null && key in obj ? Reflect.get(obj, key) : undefined;
-}
-
-// Control characters are turned to spaces by code point rather than a regex
-// literal (Biome disallows one; state-config.ts's isName does the same).
-function dropControl(raw: string): string {
-  return [...raw].map((c) => (c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127 ? " " : c)).join("");
-}
-
-/**
- * Collapses whitespace and control characters, cuts to MAX_LABEL code
- * points (Array.from, so a surrogate pair is never split in two), and only
- * then trims: trimming first and slicing after can cut a label right after
- * a space, leaving a trailing space that isLabel then refuses and
- * validateState drops the whole run over. Null for anything unusable.
- */
-function cleanLabel(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  const collapsed = dropControl(raw).replaceAll(/\s+/g, " ");
-  const cleaned = Array.from(collapsed).slice(0, MAX_LABEL).join("").trim();
-  return cleaned.length ? cleaned : null;
-}
-
-/** The first candidate that cleans up to something, else "subagent". */
-function labelFrom(...candidates: unknown[]): string {
-  for (const candidate of candidates) {
-    const cleaned = cleanLabel(candidate);
-    if (cleaned) return cleaned;
-  }
-  return "subagent";
 }
 
 // A run's type, kept only when it is a non-empty string: cleanLabel's rules
@@ -107,7 +67,7 @@ function onPreToolUse(runs: SavedSubagent[], event: unknown, now: number): Saved
   if (runs.some((r) => r.id === toolUseId)) return runs;
   const input = field(event, "tool_input");
   const subagentType = field(input, "subagent_type");
-  const label = labelFrom(field(input, "description"), subagentType);
+  const label = labelFrom("subagent", field(input, "description"), subagentType);
   const type = typeOf(subagentType);
   return [...runs, { id: toolUseId, session, label, startedEpoch: now, ...(type ? { type } : {}) }];
 }
@@ -129,7 +89,7 @@ function onSubagentStart(runs: SavedSubagent[], event: unknown, now: number): Sa
   const byType = type ? runs.findIndex((r) => unpaired(r) && r.type === type) : -1;
   const index = byType !== -1 ? byType : runs.findIndex(unpaired);
   if (index === -1) {
-    const label = labelFrom(agentType);
+    const label = labelFrom("subagent", agentType);
     return [...runs, { id: agentId, session, agentId, label, startedEpoch: now, ...(type ? { type } : {}) }];
   }
   return runs.map((r, i) => (i === index ? { ...r, agentId } : r));
@@ -179,117 +139,6 @@ export function visibleChange(before: SubagentMap, after: SubagentMap): boolean 
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const STATE_PATH = join(ROOT, "config", "state.json");
-const BUILD_LOCK = join(ROOT, "config", "subagent-build.lock");
-// Exported so a test can check the stale threshold sits comfortably above
-// this delay plus the timeout, without duplicating the figures.
-export const COALESCE_MS = 300;
-export const BUILD_TIMEOUT_MS = 60_000;
-// Comfortably above the coalesce delay plus how long a build may run (2x
-// the timeout), so a build that is genuinely still going, including a
-// second pass buildUntilStable takes for a write that landed mid-build, is
-// never mistaken for a crashed one's and retaken out from under it.
-export const BUILD_LOCK_STALE_MS = 2 * BUILD_TIMEOUT_MS;
-
-function logFd(): number | "ignore" {
-  try {
-    return openSync(LOG_PATH, "a");
-  } catch {
-    return "ignore";
-  }
-}
-
-// Exclusive lockfile, the same shape as pr-poll.ts's and state-url.ts's: a
-// stale one (older than a build could plausibly take) is a crashed build's.
-function tryTakeBuildLock(): boolean {
-  mkdirSync(join(ROOT, "config"), { recursive: true });
-  try {
-    closeSync(openSync(BUILD_LOCK, "wx"));
-    return true;
-  } catch {
-    const age = Date.now() - (statSync(BUILD_LOCK, { throwIfNoEntry: false })?.mtimeMs ?? Date.now());
-    if (age <= BUILD_LOCK_STALE_MS) return false;
-    try {
-      rmSync(BUILD_LOCK, { force: true });
-      closeSync(openSync(BUILD_LOCK, "wx"));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-}
-
-/**
- * Runs `build` at least once, and again each time `snapshot` reads
- * differently from what it was before the previous run: a write that
- * lands while a build is going (the lock is held, so its own event skips
- * scheduling one) is otherwise never built at all, since nothing else
- * schedules a build for it. Stops once a build fails, since retrying an
- * unchanged, already-failing build would not help; stops once two
- * successive snapshots agree, since nothing has changed since that build
- * started. Exported for testing with fakes instead of a real spawn and file.
- */
-export function buildUntilStable(build: () => boolean, snapshot: () => string | null): void {
-  let before = snapshot();
-  for (;;) {
-    if (!build()) return;
-    const after = snapshot();
-    if (after === before) return;
-    before = after;
-  }
-}
-
-function stateSnapshot(): string | null {
-  try {
-    return readFileSync(STATE_PATH, "utf8");
-  } catch {
-    return null;
-  }
-}
-
-function runBuild(): boolean {
-  const build = spawnSync(process.execPath, ["scripts/build.ts"], {
-    cwd: ROOT,
-    stdio: "ignore",
-    timeout: BUILD_TIMEOUT_MS,
-  });
-  if (build.status === 0) return true;
-  console.error("report-subagent: build failed");
-  return false;
-}
-
-// The detached side of the coalesce: sleeps so a near-simultaneous write
-// lands first, then builds until the state file stops changing under it,
-// then drops the lock so the next visible change can schedule its own
-// build.
-async function coalesceBuild(): Promise<void> {
-  await sleep(COALESCE_MS);
-  buildUntilStable(runBuild, stateSnapshot);
-  rmSync(BUILD_LOCK, { force: true });
-}
-
-// Spawns the coalescing build detached and unreferenced, so the hook returns
-// at once; skips spawning when one is already in flight.
-function scheduleBuild(): void {
-  if (!tryTakeBuildLock()) return;
-  const log = logFd();
-  try {
-    const child = spawn(process.execPath, [import.meta.filename, "--coalesce-build"], {
-      cwd: ROOT,
-      detached: true,
-      stdio: ["ignore", "ignore", log],
-    });
-    child.on("error", (err) => {
-      console.error(`report-subagent: build: ${err.message}`);
-      rmSync(BUILD_LOCK, { force: true });
-    });
-    child.unref();
-  } catch (err) {
-    console.error(`report-subagent: build: ${err instanceof Error ? err.message : String(err)}`);
-    rmSync(BUILD_LOCK, { force: true });
-  } finally {
-    if (log !== "ignore") closeSync(log);
-  }
-}
 
 /**
  * Applies one event and prunes, then validates both the before and after
@@ -333,10 +182,7 @@ async function main(): Promise<void> {
     return;
   }
   if (!result.ok) return console.error(`report-subagent: ${result.error}`);
-  if (changed) scheduleBuild();
+  if (changed) scheduleBuild("report-subagent");
 }
 
-if (import.meta.main) {
-  if (process.argv[2] === "--coalesce-build") await coalesceBuild();
-  else await main();
-}
+if (import.meta.main) await main();

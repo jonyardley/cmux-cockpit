@@ -5,16 +5,8 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import {
-  applyEvent,
-  BUILD_LOCK_STALE_MS,
-  BUILD_TIMEOUT_MS,
-  buildUntilStable,
-  COALESCE_MS,
-  processEvent,
-  prune,
-  visibleChange,
-} from "../scripts/hooks/report-subagent.ts";
+import { BUILD_LOCK_STALE_MS, BUILD_TIMEOUT_MS, buildUntilStable, COALESCE_MS } from "../scripts/hook-build.ts";
+import { applyEvent, processEvent, prune, visibleChange } from "../scripts/hooks/report-subagent.ts";
 import { MAX_LABEL, type State } from "../scripts/state-config.ts";
 
 type SubagentMap = State["subagents"];

@@ -3,8 +3,9 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
+import { applyPublished } from "../scripts/hooks/report-published.ts";
 import { emptyState, type State } from "../scripts/state-config.ts";
-import { parseSetUrl, readApplyWrite, writeSubagents } from "../scripts/state-url.ts";
+import { parseSetUrl, readApplyWrite, writePublished, writeSubagents } from "../scripts/state-url.ts";
 
 describe("parseSetUrl", () => {
   it("parses a set with a value", () => {
@@ -77,6 +78,7 @@ describe("readApplyWrite", () => {
       prs: {},
       ownPrs: {},
       subagents: {},
+      published: {},
       ui: {},
     });
   });
@@ -168,6 +170,51 @@ describe("writeSubagents", () => {
     const result = writeSubagents(path, () => bad);
     assert.deepEqual(result, { ok: true, changed: true });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).subagents, {});
+  });
+});
+
+describe("writePublished", () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+  function tempFile(): string {
+    const dir = mkdtempSync(join(tmpdir(), "state-url-published-"));
+    dirs.push(dir);
+    return join(dir, "state.json");
+  }
+
+  const link = (id: string, epoch: number, title = "T"): State["published"][string] => ({
+    url: "https://claude.ai/artifact/" + id,
+    title,
+    kind: "page",
+    workspace: "w1",
+    epoch,
+  });
+
+  it("adds, then updates a republished link in place, leaving the rest of the state alone", () => {
+    const path = tempFile();
+    readApplyWrite(path, "projectOverride.w1", '"alpha"');
+    const [a, b] = [link("a", 100), link("b", 200)];
+    writePublished(path, (m) => applyPublished(m, a, 100));
+    writePublished(path, (m) => applyPublished(m, b, 200));
+    const result = writePublished(path, (m) => applyPublished(m, link("a", 300, "New"), 300));
+    assert.deepEqual(result, { ok: true, changed: true });
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    assert.deepEqual(Object.keys(saved.published), [b.url, a.url]);
+    assert.equal(saved.published[a.url].title, "New");
+    assert.deepEqual(saved.projectOverride, { w1: "alpha" });
+  });
+
+  it("sees no change when nothing differs, and drops a malformed entry on the way out", () => {
+    const path = tempFile();
+    writePublished(path, () => ({ [link("a", 1).url]: link("a", 1) }));
+    assert.deepEqual(
+      writePublished(path, (m) => m),
+      { ok: true, changed: false },
+    );
+    writePublished(path, () => ({ [link("a", 1).url]: link("a", 1, "") }));
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).published, {});
   });
 });
 
