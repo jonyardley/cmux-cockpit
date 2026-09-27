@@ -113,7 +113,7 @@ type PrStatus = "open" | "merged" | "closed";
  * cmux prunes settled runs after a short retention. */
 interface SubagentRun {
   /** Stable for the run's lifetime. */
-  id: string;
+  id?: string;
   label?: string;
   running?: boolean;
   /** Epoch seconds the run started. */

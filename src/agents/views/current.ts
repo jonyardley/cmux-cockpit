@@ -3,10 +3,21 @@
 
 import { glyphColor } from "../../shared/contrast.ts";
 import { type Last, markLast } from "../../shared/list.ts";
-import { cardMessage, readable } from "../../shared/text.ts";
+import { cardMessage, readable, tracked } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
-import { cur, haloFor, hollowDot, type SubagentRow, statusLine, statusPhrase, subagents } from "../model.ts";
+import {
+  cur,
+  haloFor,
+  hollowDot,
+  type SubagentRow,
+  statusLine,
+  statusPhrase,
+  subagentDot,
+  subagentFigure,
+  subagentHalo,
+  subagents,
+} from "../model.ts";
 import { chipColors, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
 import { agentDot, chip, jump, meta, openIfUrl, panel, ruled } from "./parts.ts";
 
@@ -34,12 +45,11 @@ function agentLine(e: () => Last<{ key: string; a: Agent }>): View {
     .onTap(() => jump(cur().ws.id, a().surfaceId));
 }
 
-function subagentLine(e: () => Last<SubagentRow>): View {
-  const running = () => e().running;
+function subagentLine(e: () => SubagentRow): View {
   return HStack({ spacing: 9 }, [
     agentDot(
-      () => (running() ? STATUS_DOT.working : STATUS_DOT.ended),
-      () => (running() ? T.blueHalo : "clear"),
+      () => subagentDot(e()),
+      () => subagentHalo(e()),
       () => false,
     ),
     Text(() => e().label)
@@ -49,7 +59,7 @@ function subagentLine(e: () => Last<SubagentRow>): View {
       .truncation("tail")
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
-    Text(() => e().figure)
+    Text(() => subagentFigure(e()))
       .font(11)
       .monospaced()
       .color(T.secondary)
@@ -68,7 +78,7 @@ function subagentsBlock(): View {
     () => subagents().length > 0,
     () =>
       VStack({ spacing: 0, alignment: "leading" }, [
-        Text("SUBAGENTS").font(10).weight("semibold").color(T.tertiary).paddingBottom(2),
+        Text(tracked("SUBAGENTS")).font(10).weight("semibold").color(T.tertiary).lineLimit(1).paddingBottom(2),
         ForEach({ items: () => subagents(), key: (e) => e.key }, (e) => subagentLine(e)),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })

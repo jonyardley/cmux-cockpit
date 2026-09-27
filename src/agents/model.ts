@@ -2,14 +2,14 @@
 // workspace, and every PR. Pure reads of `data`, so each is testable alone.
 
 import { byActivity, sinceOrActivity } from "../shared/activity.ts";
-import { type Last, markLast } from "../shared/list.ts";
+import { markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
 import { cardMessage, readable } from "../shared/text.ts";
 import { fmtAge, fmtElapsed, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
-import { T } from "./theme.ts";
+import { STATUS_DOT, T } from "./theme.ts";
 
 export interface AgentEntry {
   key: string;
@@ -158,38 +158,60 @@ export interface SubagentRow {
   key: string;
   label: string;
   running: boolean;
-  /** Board 1's right-hand figure: coarse elapsed while running, "done" after. */
-  figure: string;
+  startedEpoch: number | undefined;
 }
 
-// Upstream always sends `running`; without it, a run with no end is live.
-const isRunning = (c: SubagentRun): boolean => c.running ?? !c.endedEpoch;
+// Upstream always sends `running`; without it, a run with no end is live. A
+// run under an ended session is over whatever it says, so an interrupted
+// subagent never ticks on as running.
+const isRunning = (c: SubagentRun, owner: Agent): boolean => owner.status !== "ended" && (c.running ?? !c.endedEpoch);
 
-// Running runs first, oldest start first; then settled ones, newest end first.
-function bySubagent(a: SubagentRun, b: SubagentRun): number {
-  const ra = isRunning(a);
-  const rb = isRunning(b);
-  if (ra !== rb) return ra ? -1 : 1;
-  return ra ? (a.startedEpoch ?? 0) - (b.startedEpoch ?? 0) : (b.endedEpoch ?? 0) - (a.endedEpoch ?? 0);
+interface Run {
+  owner: Agent;
+  c: SubagentRun;
+  i: number;
+  running: boolean;
+}
+
+// Running runs first, oldest start first; then settled ones, newest end
+// first, falling back on their start when cmux sends no end.
+function byRun(x: Run, y: Run): number {
+  if (x.running !== y.running) return x.running ? -1 : 1;
+  if (x.running) return (x.c.startedEpoch ?? 0) - (y.c.startedEpoch ?? 0);
+  return (y.c.endedEpoch ?? y.c.startedEpoch ?? 0) - (x.c.endedEpoch ?? x.c.startedEpoch ?? 0);
 }
 
 /** The selected workspace's subagent runs across all its agents, at most 5.
- * Settled runs stay until cmux prunes them. */
-export const subagents = computed((): Last<SubagentRow>[] => {
-  const runs = cur().agents.flatMap((a) => (a.children ?? []).map((c) => ({ owner: a.id, c })));
-  runs.sort((x, y) => bySubagent(x.c, y.c));
-  return markLast(
-    runs.slice(0, 5).map(({ owner, c }) => {
-      const running = isRunning(c);
-      return {
-        key: "s:" + owner + ":" + c.id,
-        label: readable(c.label) || "subagent",
-        running,
-        figure: running ? ageSince(c.startedEpoch) : "done",
-      };
-    }),
+ * Settled runs stay until cmux prunes them. No clock read, so it only
+ * rebuilds when the data changes; the figure is subagentFigure's. */
+export const subagents = computed((): SubagentRow[] => {
+  const runs = cur().agents.flatMap((owner) =>
+    (owner.children ?? []).flatMap((c, i) => (c ? [{ owner, c, i, running: isRunning(c, owner) }] : [])),
   );
+  return runs
+    .sort(byRun)
+    .slice(0, 5)
+    .map(({ owner, c, i, running }) => ({
+      // The index stands in for a missing id; cmux keeps children oldest first.
+      key: "s:" + owner.id + ":" + (c.id ?? "#" + i),
+      label: readable(c.label) || "subagent",
+      running,
+      startedEpoch: c.startedEpoch,
+    }));
 });
+
+/** Board 1's right-hand figure: coarse elapsed while running ("running"
+ * without a start or clock), "done" once settled. */
+export function subagentFigure(s: SubagentRow): string {
+  return s.running ? ageSince(s.startedEpoch) || "running" : "done";
+}
+
+// A running run reads as a working agent, a settled one as ended.
+const runStatus = (s: SubagentRow): AgentStatus => (s.running ? "working" : "ended");
+
+export const subagentDot = (s: SubagentRow): string => STATUS_DOT[runStatus(s)];
+
+export const subagentHalo = (s: SubagentRow): string => haloColor(runStatus(s), HALO_COLOR);
 
 // ---- Pull requests ----------------------------------------------------------
 

@@ -6,6 +6,7 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
 const { cardMessage } = await import("../src/shared/text.ts");
+const { STATUS_DOT, T } = await import("../src/agents/theme.ts");
 
 beforeEach(() => {
   r.data.epoch = 10_000;
@@ -297,6 +298,7 @@ describe("subagents", () => {
       ws("sel", { selected: true, agents }),
     ];
   };
+  const ids = () => m.subagents().map((e) => e.key.split(":")[2]);
 
   it("is empty with no selection, no agents, or no children", () => {
     assert.deepEqual(m.subagents(), []);
@@ -314,45 +316,65 @@ describe("subagents", () => {
           run("late", { running: true, startedEpoch: 900 }),
           run("new-done", { running: false, startedEpoch: 100, endedEpoch: 800 }),
           run("early", { running: true, startedEpoch: 300 }),
+          run("no-end", { running: false, startedEpoch: 500 }),
         ],
       }),
     ]);
-    const rows = m.subagents();
-    assert.deepEqual(
-      rows.map((e) => e.key.split(":")[2]),
-      ["early", "late", "new-done", "old-done"],
-    );
-    assert.deepEqual(
-      rows.map((e) => e.last),
-      [false, false, false, true],
-    );
+    assert.deepEqual(ids(), ["early", "late", "new-done", "no-end", "old-done"]);
   });
 
-  it("shows coarse elapsed while running and done once settled", () => {
+  it("figures coarse elapsed while running, running with no start, and done once settled", () => {
     sel([
       agent("working", {
         children: [
           run("a", { label: "Edge-case review", running: true, startedEpoch: 10_000 - 240 }),
-          run("b", { label: "Write builder tests", running: false, startedEpoch: 100, endedEpoch: 9_000 }),
+          run("b", { label: "No start yet", running: true }),
+          run("c", { label: "Write builder tests", running: false, startedEpoch: 100, endedEpoch: 9_000 }),
         ],
       }),
     ]);
     assert.deepEqual(
-      m.subagents().map((e) => [e.label, e.running, e.figure]),
+      m.subagents().map((e) => [e.label, m.subagentFigure(e)]),
       [
-        ["Edge-case review", true, "4m"],
-        ["Write builder tests", false, "done"],
+        ["No start yet", "running"],
+        ["Edge-case review", "4m"],
+        ["Write builder tests", "done"],
       ],
     );
   });
 
-  it("falls back on a label and on running when cmux leaves them out", () => {
-    sel([agent("working", { children: [run("live", { startedEpoch: 9_990 }), run("gone", { endedEpoch: 9_000 })] })]);
+  it("dots a running run as working with its halo, a settled one as ended with none", () => {
+    sel([agent("working", { children: [run("a", { running: true }), run("b", { running: false })] })]);
+    const [live, done] = m.subagents();
+    assert.ok(live && done);
+    assert.equal(m.subagentDot(live), STATUS_DOT.working);
+    assert.equal(m.subagentHalo(live), T.blueHalo);
+    assert.equal(m.subagentDot(done), STATUS_DOT.ended);
+    assert.equal(m.subagentHalo(done), "clear");
+  });
+
+  it("settles every run under an ended session, whatever the run says", () => {
+    sel([agent("ended", { children: [run("stuck", { running: true, startedEpoch: 100 })] })]);
     assert.deepEqual(
-      m.subagents().map((e) => [e.label, e.running]),
+      m.subagents().map((e) => e.running),
+      [false],
+    );
+  });
+
+  it("falls back on a label, on running, and on the index for an id, and skips holes", () => {
+    const children = [
+      run("live", { startedEpoch: 9_990 }),
+      run("gone", { endedEpoch: 9_000 }),
+      { startedEpoch: 9_995 },
+      null,
+    ] as SubagentRun[]; // cmux has sent holes in agent lists; the model must survive one here too.
+    sel([agent("working", { children })]);
+    assert.deepEqual(
+      m.subagents().map((e) => [e.key.split(":")[2], e.label, e.running]),
       [
-        ["subagent", true],
-        ["subagent", false],
+        ["live", "subagent", true],
+        ["#2", "subagent", true],
+        ["gone", "subagent", false],
       ],
     );
   });
