@@ -38,6 +38,11 @@ export interface SavedPr {
   branch: string;
   /** Set only while the PR is a draft, so a ready PR's entry is unchanged. */
   draft?: true;
+  /**
+   * Set only while GitHub says the PR can merge as it stands
+   * (mergeStateStatus "CLEAN": no conflicts, no blocking review or check).
+   */
+  mergeable?: true;
   /** Its CI checks, failing first (pr-poll.ts's checksFrom); left out when it has none. */
   checks?: SavedCheck[];
 }
@@ -128,7 +133,14 @@ function savedPr(v: unknown): SavedPr | null {
   const { number, branch } = v;
   if (typeof number !== "number" || !Number.isSafeInteger(number) || number < 1) return null;
   if (typeof branch !== "string" || branch.length === 0 || branch.length > 256) return null;
-  const pr: SavedPr = { number, url: v.url, status: v.status, branch, ...(v.draft === true ? { draft: true } : {}) };
+  const pr: SavedPr = {
+    number,
+    url: v.url,
+    status: v.status,
+    branch,
+    ...(v.draft === true ? { draft: true } : {}),
+    ...(v.mergeable === true ? { mergeable: true } : {}),
+  };
   const checks = Array.isArray(v.checks) ? v.checks.flatMap(savedCheck).slice(0, MAX_CHECKS) : [];
   return checks.length ? { ...pr, checks } : pr;
 }

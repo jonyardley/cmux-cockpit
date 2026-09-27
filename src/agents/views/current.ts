@@ -2,7 +2,8 @@
 // sidebar data (issue #7), so it is left out; checks come from the PR poller.
 
 import { glyphColor } from "../../shared/contrast.ts";
-import { prChipText, prHealth, prOf } from "../../shared/prs.ts";
+import { prChipColors } from "../../shared/pr-colors.ts";
+import { prSummary } from "../../shared/prs.ts";
 import { cardMessage, tracked } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
@@ -25,7 +26,7 @@ import {
   subagentHalo,
   subagents,
 } from "../model.ts";
-import { chipColors, prChipColors, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
+import { chipColors, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
 import { agentDot, chip, jump, meta, openIfUrl, panel, ruled } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
@@ -144,6 +145,7 @@ function currentHead(): View {
   const a = () => cur().a;
   const status = () => a()?.status;
   const unread = () => w().unread ?? 0;
+  const pr = computed(() => prSummary(w()));
   return VStack({ spacing: 0, alignment: "leading" }, [
     HStack({ spacing: 10 }, [
       ZStack({}, [
@@ -206,15 +208,15 @@ function currentHead(): View {
       Spacer({ minLength: 4 }),
       when(
         "cur-pr",
-        () => !!prOf(w()),
+        () => !!pr(),
         () =>
           // Priority over the status phrase, so the chip is never the one cut.
           chip(
-            () => prChipText(w()),
-            () => prChipColors(prHealth(w()), prOf(w())?.status),
+            () => pr()?.text ?? "",
+            () => prChipColors(pr()?.health ?? "quiet", pr()?.status),
           )
             .layoutPriority(2)
-            .onTap(() => openIfUrl(prOf(w())?.url)),
+            .onTap(() => openIfUrl(pr()?.url)),
       ),
     ])
       .frame({ maxWidth: "infinity" })

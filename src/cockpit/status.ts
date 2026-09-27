@@ -3,6 +3,8 @@
 
 import { mostActive } from "../shared/activity.ts";
 import { agentsOf } from "../shared/needs.ts";
+import { prChipColors } from "../shared/pr-colors.ts";
+import type { PrSummary } from "../shared/prs.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
 import { C } from "./theme.ts";
@@ -51,3 +53,11 @@ const STATUS: Record<Status, StatusStyle> = {
 };
 
 export const statusInfo = (w: Workspace | undefined): StatusStyle => STATUS[statusOf(w)] ?? STATUS.none;
+
+/**
+ * A PR written as text (compact and row densities): its health's colour
+ * when it has something to say, else the density's own quiet colour.
+ */
+export function prTextColor(pr: PrSummary | undefined, quiet: string): string {
+  return !pr || pr.health === "quiet" ? quiet : prChipColors(pr.health, pr.status).fg;
+}

@@ -417,6 +417,35 @@ describe("chips", () => {
   });
 });
 
+describe("prTextColor", () => {
+  const pr = (health: "failing" | "running" | "ready" | "quiet", s: PrStatus = "open") => ({
+    number: 1,
+    status: s,
+    url: undefined,
+    health,
+    tag: "#1",
+    text: "#1",
+  });
+
+  it("keeps the density's colour while the PR is quiet or absent", () => {
+    assert.equal(status.prTextColor(undefined, "#111111"), "#111111");
+    assert.equal(status.prTextColor(pr("quiet"), "#111111"), "#111111");
+    assert.equal(status.prTextColor(pr("quiet", "merged"), "#111111"), "#111111");
+  });
+
+  it("takes the health's chip colour otherwise, running in blue", () => {
+    assert.equal(status.prTextColor(pr("failing"), "#111111"), "#9E2F27");
+    assert.equal(status.prTextColor(pr("running"), "#111111"), "#2F5690");
+    assert.equal(status.prTextColor(pr("ready"), "#111111"), "#2F4A1C");
+  });
+});
+
+describe("lane markers", () => {
+  it("are all distinct", () => {
+    assert.equal(new Set(LANES.map((l) => l.color)).size, LANES.length);
+  });
+});
+
 // cmux drops submenus from a context menu, so every item must sit at the
 // top level (issue #8's "Move to project" never showed). renderer.d.ts no
 // longer declares Menu(), so the compiler refuses a submenu anywhere.

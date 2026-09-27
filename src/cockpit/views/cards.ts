@@ -1,14 +1,15 @@
 // Workspace cards at the three lane densities (full, compact, row), plus the
 // one row shape the Projects view uses.
 
-import { prChipText, prHealth, prOf } from "../../shared/prs.ts";
+import { prSummary } from "../../shared/prs.ts";
 import { oneLine } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
+import { when } from "../../shared/ui.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import { isSelected, selectWorkspace } from "../model.ts";
 import { drag } from "../state.ts";
-import { ageOf } from "../status.ts";
-import { C, prChipStyle } from "../theme.ts";
+import { ageOf, prTextColor } from "../status.ts";
+import { C } from "../theme.ts";
 import {
   cardChrome,
   cardMenu,
@@ -23,13 +24,6 @@ import {
   unreadBadge,
   type WsAccessor,
 } from "./parts.ts";
-
-// A PR in text (compact and row densities) takes its health's colour when it
-// has something to say, else the density's own quiet colour.
-const prTextColor = (w: Workspace | undefined, quiet: string): string => {
-  const health = prHealth(w);
-  return health === "quiet" ? quiet : prChipStyle(health, prOf(w)?.status).fg;
-};
 
 function fullCard(w: WsAccessor, key: string): View {
   const detail = () => {
@@ -60,8 +54,9 @@ function fullCard(w: WsAccessor, key: string): View {
 
 // Options board "Compact": the PR rides in the status line as text.
 export function compactCard(w: WsAccessor, key: string): View {
+  const pr = computed(() => prSummary(w()));
   const prText = () => {
-    const t = prChipText(w());
+    const t = pr()?.text;
     return t ? "· " + t : "";
   };
   const body = HStack({ spacing: 9 }, [
@@ -73,7 +68,7 @@ export function compactCard(w: WsAccessor, key: string): View {
         statusLabel(w, 11.5, "regular"),
         Text(prText)
           .font(11.5)
-          .color(() => prTextColor(w(), C.secondary))
+          .color(() => prTextColor(pr(), C.secondary))
           .lineLimit(1)
           .layoutPriority(2),
         Spacer({ minLength: 0 }),
@@ -90,10 +85,8 @@ export function compactCard(w: WsAccessor, key: string): View {
 // "Row" density (Options board, .plain): dot, title, meta; selection is the
 // white hairline pill, a drag lifts it in ink.
 function denseRow(w: WsAccessor, key: string): View {
-  const prPart = () => {
-    const t = prChipText(w());
-    return t ? t + "  " : "";
-  };
+  // The number alone, so a row never widens; the words live on the cards.
+  const pr = computed(() => prSummary(w()));
   const body = HStack({ spacing: 6 }, [
     statusDot(w, 7),
     Text(() => displayTitle(w()))
@@ -105,7 +98,15 @@ function denseRow(w: WsAccessor, key: string): View {
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
     unreadBadge(w),
-    meta(prPart, () => prTextColor(w(), C.metaText)),
+    when(
+      "row-pr",
+      () => !!pr(),
+      () =>
+        meta(
+          () => pr()?.tag ?? "",
+          () => prTextColor(pr(), C.metaText),
+        ),
+    ),
     meta(() => ageOf(w()), C.metaText),
   ])
     .paddingLeading(25)

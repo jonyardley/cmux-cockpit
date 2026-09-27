@@ -6,6 +6,7 @@ const r = installRenderer();
 const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/activity.ts");
 const { glyphColor } = await import("../src/shared/contrast.ts");
 const { markLast } = await import("../src/shared/list.ts");
+const { prChipColors } = await import("../src/shared/pr-colors.ts");
 const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, nextIn, projectId, projectOf } = await import(
   "../src/shared/projects.ts"
 );
@@ -240,5 +241,20 @@ describe("nextIn", () => {
   it("matches colours case-insensitively and starts over from an unknown value", () => {
     assert.equal(nextIn(PROJECT_COLORS, PROJECT_COLORS[0].toLowerCase()), PROJECT_COLORS[1]);
     assert.equal(nextIn(PROJECT_COLORS, "#000000"), PROJECT_COLORS[0]);
+  });
+});
+
+describe("prChipColors", () => {
+  it("shows the health when there is one, whatever the status", () => {
+    assert.equal(prChipColors("failing", "open").fg, "#9E2F27");
+    assert.equal(prChipColors("running", "open").fg, "#2F5690");
+    assert.equal(prChipColors("ready", "open").fg, "#2F4A1C");
+  });
+
+  it("keeps the status colour while quiet, and is neutral with no status", () => {
+    assert.equal(prChipColors("quiet", "open").fg, "#3F5A2C");
+    assert.equal(prChipColors("quiet", "merged").fg, "#5B3E91");
+    assert.deepEqual(prChipColors("quiet", undefined), prChipColors("quiet", "closed"));
+    assert.deepEqual(prChipColors("quiet", undefined), { bg: "#F4F2EA", fg: "#4A4945", edge: "#E8E5DA" });
   });
 });

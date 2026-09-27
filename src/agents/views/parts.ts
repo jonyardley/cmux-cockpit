@@ -1,9 +1,10 @@
 // Small pieces shared by the agents panel's sections.
 
 import { glyphColor } from "../../shared/contrast.ts";
+import type { ChipColors } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
 import { haloDot } from "../../shared/ui.ts";
-import { type ChipColors, T } from "../theme.ts";
+import { T } from "../theme.ts";
 
 // Edge as a filled ring: the edge colour fills an outer rounded box and the
 // face sits inset by the edge width. A borderWidth stroke is clipped by the

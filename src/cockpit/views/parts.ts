@@ -2,8 +2,9 @@
 
 import { glyphColor } from "../../shared/contrast.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
+import { prChipColors } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
-import { type PrHealth, prChipText, prHealth, prOf } from "../../shared/prs.ts";
+import { type PrHealth, prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot } from "../../shared/ui.ts";
 import { LANES } from "../lanes.ts";
@@ -27,7 +28,7 @@ import {
 } from "../model.ts";
 import { drag } from "../state.ts";
 import { ageOf, statusInfo } from "../status.ts";
-import { C, prChipStyle } from "../theme.ts";
+import { C } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;
 
@@ -145,9 +146,9 @@ export interface Chip {
 export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] {
   const out: Chip[] = [];
   if (!w) return out;
-  const pr = prOf(w);
-  if (pr?.number) {
-    const c: Chip = { id: "pr", kind: "pr", text: prChipText(w), health: prHealth(w) };
+  const pr = prSummary(w);
+  if (pr) {
+    const c: Chip = { id: "pr", kind: "pr", text: pr.text, health: pr.health };
     if (pr.url) c.url = pr.url;
     if (pr.status) c.status = pr.status;
     out.push(c);
@@ -157,7 +158,7 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
 }
 
 function chip(c: () => Chip): View {
-  const st = () => prChipStyle(c().health ?? "quiet", c().status);
+  const st = () => prChipColors(c().health ?? "quiet", c().status);
   const isPr = () => c().kind === "pr";
   const body = HStack({ spacing: 4 }, [
     Image(() => (isPr() ? "arrow.triangle.pull" : "arrow.branch"))
