@@ -26,14 +26,9 @@ export interface DropTarget {
   prevRef: string | null;
 }
 
-// The lane of the nearest row above the slot that belongs to one (the
-// folded line holds several lanes, so it is skipped).
+// The lane of the row above the slot, or the first lane above every row.
 function laneAbove(entries: LaneEntry[], index: number): LaneKey {
-  for (let i = index - 1; i >= 0; i--) {
-    const e = entries[i];
-    if (e && e.kind !== "fold") return e.lane;
-  }
-  return FIRST_LANE;
+  return entries[index - 1]?.lane ?? FIRST_LANE;
 }
 
 // `index` is the dragged row's slot in the flat list with the row removed.
@@ -116,9 +111,6 @@ export function handleDragChange(d: DragState | null): void {
 
 /** True while a card is being dragged: empty lanes open as zones. */
 export const dragging = (): boolean => drag() !== null;
-
-/** An empty lane's zone height cap: unbounded mid-drag, else 0, so it takes no room at rest. */
-export const zoneMaxHeight = (): number | "infinity" => (dragging() ? "infinity" : 0);
 
 /** The lane the current drag would drop into, for a header's "Drop here" and a lit zone. */
 export const dropLane = (): LaneKey | null => {

@@ -72,7 +72,6 @@ describe("lanes", () => {
       "h:parked",
       "h:unsorted",
       "u@unsorted",
-      "f:empty",
     ]);
   });
 
@@ -409,7 +408,8 @@ describe("a lane's generated anchor", () => {
     r.data.workspaces = r.data.workspaces.filter((w) => w.id !== "c");
     anchor().agents = [agent("needs_input", { sinceEpoch: 1 })];
     assert.ok(ids().includes("h:review:anchor-review"));
-    assert.deepEqual(model.emptyLaneNames(), ["Background"]);
+    assert.ok(!ids().includes("z:review"));
+    assert.ok(ids().includes("z:bg"));
   });
 
   it("shows on the header for unread messages alone, once the agent has gone", () => {
@@ -432,29 +432,27 @@ describe("a lane's generated anchor", () => {
   });
 });
 
-// Issue #50: empty lanes fold into one line at rest and open as drop zones
-// while a card is being dragged.
+// Issue #50: an empty lane is a drop box in its own place, whether or not a
+// card is being dragged.
 describe("empty lanes", () => {
   beforeEach(setup);
 
   const dropEmpty = () => (r.data.workspaces = r.data.workspaces.filter((w) => w.id !== "c"));
 
-  it("lose their headers for a zone each and one folded line after the lanes, in lane order", () => {
+  it("lose their headers for a zone each, in lane order and in the lane's own place", () => {
     dropEmpty();
-    assert.deepEqual(model.emptyLaneNames(), ["For review", "Background"]);
     assert.ok(!ids().includes("h:review"));
     assert.ok(!ids().includes("h:bg"));
     assert.deepEqual(
-      ids().filter((id) => id.startsWith("z:")),
-      ["z:review", "z:bg"],
+      ids().filter((id) => id.startsWith("z:") || id.startsWith("h:")),
+      ["h:main", "z:review", "z:bg", "h:parked", "h:unsorted"],
     );
-    assert.equal(ids().at(-1), "f:empty");
   });
 
-  it("leaves out the folded line when no lane is empty", () => {
+  it("have no zone once every lane has a card, and no Empty line at all", () => {
     r.data.workspaces.push(ws("d", { group: "g-bg" }));
     r.data.groups.push(group("g-bg", "Background", { anchorId: "anchor-bg" }));
-    assert.ok(!ids().includes("f:empty"));
+    assert.ok(!ids().some((id) => id.startsWith("z:") || id.startsWith("f:")));
   });
 
   it("keep the same rows as a drag starts and ends, so the drop index never shifts", () => {
@@ -466,12 +464,15 @@ describe("empty lanes", () => {
     assert.ok(!drop.dragging());
   });
 
-  it("caps a zone's height at 0 at rest and lifts the cap mid-drag", () => {
-    assert.equal(drop.zoneMaxHeight(), 0);
-    state.setDrag({ id: "a@main", index: 1 });
-    assert.equal(drop.zoneMaxHeight(), "infinity");
-    state.setDrag(null);
-    assert.equal(drop.zoneMaxHeight(), 0);
+  it("keep their zone after a drop empties a lane, with no drag running", () => {
+    const slot =
+      ids()
+        .filter((id) => id !== "c@review")
+        .indexOf("z:bg") + 1;
+    drop.handleMove("c@review", slot);
+    assert.ok(!drop.dragging());
+    assert.ok(ids().includes("z:review"));
+    assert.ok(!ids().some((id) => id.startsWith("f:")));
   });
 
   it("resolves a drop just under a zone to that zone's lane, and lights it", () => {
@@ -494,7 +495,7 @@ describe("empty lanes", () => {
     assert.equal(model.laneOf(byId("a") ?? ws("?")), "review");
   });
 
-  it("skips the folded line when finding the lane above a slot", () => {
+  it("files a drop below the last row into the last lane", () => {
     const rows = ids().filter((id) => id !== "a@main");
     assert.equal(drop.resolveDrop("a@main", rows.length).laneKey, "unsorted");
   });

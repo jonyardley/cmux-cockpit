@@ -313,12 +313,10 @@ export const panelMaxHeight = (m: ViewMode) => (): number | "infinity" => (isMod
 // --- All mode: one flat list of lane headers and cards --------------------------------
 
 // A header's key carries the anchor it shows (issue #49), and an empty lane
-// is a zone or part of the folded line (issue #50), since a row's kind is
-// fixed by its key.
+// is a zone (issue #50), since a row's kind is fixed by its key.
 export type LaneEntry =
   | { kind: "header"; id: string; lane: LaneKey; anchorId: string | null }
   | { kind: "zone"; id: string; lane: LaneKey }
-  | { kind: "fold"; id: string }
   | { kind: "ws"; id: string; wsId: string; lane: LaneKey };
 
 /** A lane's generated anchor when it has an agent or unread messages, so its header shows them. */
@@ -358,29 +356,13 @@ function sectionEntries(s: LaneSection): LaneEntry[] {
   return [header, ...s.rows.map((w): LaneEntry => ({ kind: "ws", id: w.id + "@" + key, wsId: w.id, lane: key }))];
 }
 
-// An empty lane is always a zone row in its own place, and the folded line
-// follows the lanes; views/headers.ts shows one or the other by drag(). The
-// rows never change as a drag starts or ends, so the renderer's drop index
-// always counts the same rows resolveDrop does.
-const laneEntries = computed(() => {
-  const entries: LaneEntry[] = [];
-  let folded = false;
-  for (const s of laneSections()) {
-    if (!isEmpty(s)) entries.push(...sectionEntries(s));
-    else {
-      entries.push({ kind: "zone", id: "z:" + s.lane.key, lane: s.lane.key });
-      folded = true;
-    }
-  }
-  if (folded) entries.push({ kind: "fold", id: "f:empty" });
-  return entries;
-});
-
-/** The empty lanes' names, in lane order, for the folded line. */
-export const emptyLaneNames = (): string[] =>
-  laneSections()
-    .filter(isEmpty)
-    .map((s) => s.lane.name);
+// An empty lane is a zone row in its own place, at rest and mid-drag alike,
+// so the renderer's drop index always counts the same rows resolveDrop does.
+const laneEntries = computed(() =>
+  laneSections().flatMap((s): LaneEntry[] =>
+    isEmpty(s) ? [{ kind: "zone", id: "z:" + s.lane.key, lane: s.lane.key }] : sectionEntries(s),
+  ),
+);
 
 // Built in both modes: the lanes panel stays mounted under Projects, hidden
 // (panelOpacity). drop.ts ignores a drag or move outside All instead.
