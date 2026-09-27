@@ -16,6 +16,8 @@ interface FrameOptions {
   maxWidth?: Reactive<number | "infinity">;
   minHeight?: Reactive<number>;
   maxHeight?: Reactive<number | "infinity">;
+  /** Honoured with maxWidth, but a fixed width centres its content regardless:
+   * nest a maxWidth frame inside to place it. */
   alignment?: Alignment;
 }
 

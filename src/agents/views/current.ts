@@ -320,7 +320,14 @@ function progressBlock(): View {
 function detailLine(key: string, label: string, show: () => boolean, value: () => View): View {
   return when(key, show, () =>
     HStack({ spacing: 8 }, [
-      Text(label).font(11.5).color(T.tertiary).lineLimit(1).frame({ width: 48, alignment: "leading" }),
+      // A fixed-width frame centres its content whatever the alignment, so the
+      // label first fills the column with the maxWidth frame that does honour it.
+      Text(label)
+        .font(11.5)
+        .color(T.tertiary)
+        .lineLimit(1)
+        .frame({ maxWidth: "infinity", alignment: "leading" })
+        .frame({ width: 48 }),
       value(),
     ])
       .paddingVertical(3)
