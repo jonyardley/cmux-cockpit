@@ -5,7 +5,6 @@
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
-import { chunk } from "../shared/list.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import {
   inAppSpec,
@@ -28,9 +27,11 @@ import {
   collapsedProjects,
   isMode,
   mode,
+  quietCollapsed,
   savedFolds,
   setCollapsedProjects,
   setMode,
+  setQuietCollapsed,
   setUnsortedCollapsed,
   tick,
   unsortedCollapsed,
@@ -281,12 +282,13 @@ export function toggleLane(lane: Lane): void {
 
 // Sends every fold at once, so the saved copy never lags a quick second tap.
 // cmux holds a lane group's own fold; its flag marks it as touched, and only
-// Unsorted's value is read back. Folds on projects that are gone are dropped,
+// Unsorted's value is read back. The Quiet header saves only while folded. Folds on projects that are gone are dropped,
 // and keys are sorted so the same folds always write the same file.
 function saveFolds(): void {
   const folds: [string, number][] = [];
   for (const lane of LANES) if (touchedLanes.has(lane.key)) folds.push([`lane:${lane.key}`, isCollapsed(lane) ? 1 : 0]);
   for (const k of collapsedProjects()) if (isProjectKey(k) || k === projectId(OTHER)) folds.push([`project:${k}`, 1]);
+  if (quietCollapsed()) folds.push(["quiet", 1]);
   folds.sort(([a], [b]) => (a < b ? -1 : 1));
   persistSet("ui.collapsed", folds.length ? Object.fromEntries(folds) : null);
 }
@@ -535,14 +537,15 @@ export function newSessionFor(w: Workspace | undefined): void {
   if (w) openProjectWorkspace(projectKey(w));
 }
 
-/** The quiet line's label for one project: what a tap does, or why it does nothing. */
+/** A quiet row's menu label: what a tap does, or why it does nothing. */
 export const quietLabel = (k: string): string =>
   canOpenProject(k) ? openLabel(k) : `${projectByKey(k).name} has no folder to open`;
 
 export type ProjectEntry =
   | { kind: "header"; id: string; project: string }
   | { kind: "ws"; id: string; wsId: string }
-  | { kind: "quiet"; id: string };
+  | { kind: "quietHeader"; id: string }
+  | { kind: "quietRow"; id: string; project: string };
 
 /** The cards grouped by project key, in one pass over the cards. */
 const cardsByProject = computed(() => {
@@ -557,21 +560,19 @@ const cardsByProject = computed(() => {
 });
 
 /**
- * Configured projects with no sessions, in table order (issue #54). They fold
- * into one "Quiet" line of icons rather than a header each.
+ * Configured projects with no sessions, in table order (issue #54). They sit
+ * under one "Quiet" header as a short row each rather than a full header.
  */
 export const quietProjects = computed(() => {
   const groups = cardsByProject();
   return PROJECTS.map(projectId).filter((k) => !groups.has(k));
 });
 
-/** Icons per quiet line row: the renderer cannot wrap, so the model does. */
-const QUIET_PER_ROW = 7;
-
-/** The quiet icons split into rows that fit the sidebar, keyed by position. */
-export const quietRows = computed(() =>
-  chunk(quietProjects(), QUIET_PER_ROW).map((keys, i) => ({ id: "q" + i, keys })),
-);
+/** Folds or unfolds the Quiet rows, kept across a reload. */
+export function toggleQuiet(): void {
+  setQuietCollapsed(!quietCollapsed());
+  saveFolds();
+}
 
 function pushGroup(entries: ProjectEntry[], k: string, rows: readonly Workspace[]): void {
   entries.push({ kind: "header", id: "p:" + k, project: k });
@@ -583,13 +584,17 @@ function pushGroup(entries: ProjectEntry[], k: string, rows: readonly Workspace[
 export const projectEntries = computed(() => {
   const groups = cardsByProject();
   const entries: ProjectEntry[] = [];
-  // A project with sessions gets a header; the quiet ones share one line at
-  // the bottom. Other only shows once something actually falls into it.
+  // A project with sessions gets a header; the quiet ones share one header at
+  // the bottom, a short row each. Other only shows once something falls into it.
   for (const k of [...PROJECTS.map(projectId), projectId(OTHER)]) {
     const rows = groups.get(k);
     if (rows) pushGroup(entries, k, rows);
   }
-  if (quietProjects().length) entries.push({ kind: "quiet", id: "p:quiet" });
+  const quiet = quietProjects();
+  if (!quiet.length) return entries;
+  // Ids outside the "p:" space, so a project matching "quiet" cannot clash.
+  entries.push({ kind: "quietHeader", id: "quiet" });
+  if (!quietCollapsed()) for (const k of quiet) entries.push({ kind: "quietRow", id: "q:" + k, project: k });
   return entries;
 });
 

@@ -14,12 +14,13 @@ import {
   projectByKey,
   projectCount,
   quietLabel,
-  quietRows,
+  quietProjects,
   toggleLane,
   toggleProject,
+  toggleQuiet,
   wsById,
 } from "../model.ts";
-import { isMode, isSelected, projectsMode, selectWorkspace } from "../state.ts";
+import { isMode, isSelected, projectsMode, quietCollapsed, selectWorkspace } from "../state.ts";
 import { C } from "../theme.ts";
 import { glyphButton, ring, statusDot, unreadBadge } from "./parts.ts";
 
@@ -74,8 +75,8 @@ function countPill(count: () => number): View {
 
 // The name wins the row's width and truncates rather than wrapping; the pill
 // and hint stay on one line too, so no child of the header can wrap.
-function headerName(name: string, color: string): View {
-  return Text(name).font(12.5).weight("semibold").color(color).lineLimit(1).truncation("tail").layoutPriority(1);
+function headerName(name: string, color: string, weight: Weight = "semibold"): View {
+  return Text(name).font(12.5).weight(weight).color(color).lineLimit(1).truncation("tail").layoutPriority(1);
 }
 
 function chevron(collapsed: () => boolean): View {
@@ -193,40 +194,44 @@ const badge = (k: string, size: number, font: number): View => {
   return projectBadge(() => p, size, font, C.text, "semibold");
 };
 
-// One icon in the quiet line. The renderer has no hover tooltip, so the
-// context menu carries the name. A project with no folder has no tap and
-// sits dimmed, so it does not read as a button; its menu item only says why.
-function quietIcon(k: string): View {
-  const menu = [Button(quietLabel(k), () => openProjectWorkspace(k))];
-  const slot = ZStack({}, [badge(k, 20, 10.5)])
-    .padding(2)
-    .cornerRadius(7);
-  if (!canOpenProject(k)) return slot.opacity(0.55).contextMenu(menu);
-  return slot
-    .hoverBackground(C.hover)
-    .onTap(() => openProjectWorkspace(k))
-    .contextMenu(menu);
-}
-
-// A row's keys change as projects come and go, so the icons are their own
-// ForEach, each keyed by project.
-function quietRow(row: () => { keys: string[] }): View {
-  return HStack({ spacing: 2 }, [ForEach({ items: () => row().keys, key: (k) => k }, (k) => quietIcon(k()))]);
-}
-
-// Projects with no sessions (issue #54): one line of icons at the bottom
-// instead of a header each, so the busy projects stand out. The model splits
-// a long table into rows, since the renderer cannot wrap.
-export function quietLine(): View {
-  return HStack({ spacing: 6, alignment: "top" }, [
-    Text("Quiet").font(11.5).color(C.faint).lineLimit(1).frame({ height: 24 }),
-    VStack({ spacing: 2, alignment: "leading" }, [ForEach({ items: quietRows, key: (r) => r.id }, quietRow)]),
+// Projects with no sessions (issue #54): a muted header that folds, then a
+// short row each, so the busy projects stand out and the quiet ones still
+// have names. The renderer has no hover-only views, so the row's plus is a
+// faint glyph at rest and the whole row is the button.
+export function quietHeader(): View {
+  const row = HStack({ spacing: 8 }, [
+    chevron(quietCollapsed),
+    Text("Quiet").font(11.5).weight("medium").color(C.faint).lineLimit(1),
+    countPill(() => quietProjects().length),
     Spacer({ minLength: 0 }),
   ])
     .paddingHorizontal(8)
-    .paddingTop(14)
-    .paddingBottom(5)
-    .frame({ maxWidth: "infinity", alignment: "leading" });
+    .paddingVertical(4)
+    .cornerRadius(8)
+    .hoverBackground(C.hover)
+    .frame({ maxWidth: "infinity" })
+    .onTap(toggleQuiet);
+  // The gap above sits on a wrapper, so the hover shade and tap stop at the row.
+  return VStack({ spacing: 0 }, [row]).paddingTop(10);
+}
+
+// One quiet project. A project with no folder has no tap and sits dimmed, so
+// it does not read as a button; its menu item only says why.
+export function quietRow(k: string): View {
+  const open = canOpenProject(k);
+  const row = HStack({ spacing: 8 }, [
+    badge(k, 16, 9),
+    headerName(projectByKey(k).name, C.secondary, "regular"),
+    Spacer({ minLength: 4 }),
+    ...(open ? [Image("plus").font(10).weight("semibold").color(C.faint)] : []),
+  ])
+    .paddingHorizontal(8)
+    .paddingVertical(3)
+    .cornerRadius(7)
+    .frame({ maxWidth: "infinity" })
+    .contextMenu([Button(quietLabel(k), () => openProjectWorkspace(k))]);
+  if (!open) return row.opacity(0.55);
+  return row.hoverBackground(C.hover).onTap(() => openProjectWorkspace(k));
 }
 
 export function projectHeader(k: string): View {

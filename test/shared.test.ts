@@ -5,7 +5,7 @@ import { installRenderer } from "./support/renderer.ts";
 const r = installRenderer();
 const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/activity.ts");
 const { glyphColor } = await import("../src/shared/contrast.ts");
-const { chunk, markLast } = await import("../src/shared/list.ts");
+const { markLast } = await import("../src/shared/list.ts");
 const { prChipColors } = await import("../src/shared/pr-colors.ts");
 const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, nextIn, projectId, projectOf } = await import(
   "../src/shared/projects.ts"
@@ -151,18 +151,6 @@ describe("markLast", () => {
       [false, true],
     );
     assert.deepEqual(markLast([]), []);
-  });
-});
-
-describe("chunk", () => {
-  it("splits a list into runs of at most the size, in order", () => {
-    assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
-    assert.deepEqual(chunk([1, 2], 7), [[1, 2]]);
-    assert.deepEqual(chunk([], 3), []);
-  });
-
-  it("treats a size below one as one, so it never loops forever", () => {
-    assert.deepEqual(chunk([1, 2], 0), [[1], [2]]);
   });
 });
 

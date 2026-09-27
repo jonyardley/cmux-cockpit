@@ -4,7 +4,7 @@
 import type { ViewMode } from "../../scripts/state-config.ts";
 import { SAVED_STATE } from "../shared/persist.ts";
 
-/** Saved fold flags: "lane:<key>" or "project:<key>" -> 1 folded, 0 unfolded. */
+/** Saved fold flags: "lane:<key>", "project:<key>" or "quiet" -> 1 folded, 0 unfolded. */
 export const savedFolds: Readonly<Record<string, number>> = SAVED_STATE.ui.collapsed ?? {};
 
 const PROJECT_FOLD = "project:";
@@ -16,6 +16,7 @@ export const isMode = (m: ViewMode) => (): boolean => mode() === m;
 export const projectsMode = isMode("projects");
 
 export const [unsortedCollapsed, setUnsortedCollapsed] = signal(savedFolds["lane:unsorted"] === 1);
+export const [quietCollapsed, setQuietCollapsed] = signal(savedFolds.quiet === 1);
 export const [collapsedProjects, setCollapsedProjects] = signal<string[]>(
   Object.entries(savedFolds)
     .filter(([k, flag]) => k.startsWith(PROJECT_FOLD) && flag === 1)
