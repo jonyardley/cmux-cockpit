@@ -521,7 +521,7 @@ describe("needs you", () => {
 describe("projects mode", () => {
   beforeEach(setup);
 
-  it("groups by project in PROJECTS order, then Other, with an empty project's header still showing", () => {
+  it("groups by project in PROJECTS order, then Other, with the quiet line last", () => {
     const a = byId("a");
     const c = byId("c");
     if (!a || !c) throw new Error("fixture");
@@ -535,13 +535,12 @@ describe("projects mode", () => {
         "c@p",
         "p:/dev/app-two",
         "a@p",
-        // app-three has no sessions: header stands, one empty row, no Other mixed in.
-        "p:/dev/app-three",
-        "p:/dev/app-three:empty",
+        // app-three has no sessions: no header, it waits in the quiet line.
         "p:other",
         "b@p",
         "p@p",
         "u@p",
+        "p:quiet",
       ],
     );
   });
@@ -573,15 +572,73 @@ describe("projects mode", () => {
     const ids = model.projectEntries().map((e) => e.id);
     assert.equal(ids.includes("a@p"), false);
     assert.equal(ids.includes("b@p"), false);
-    assert.equal(ids[ids.indexOf("p:/dev/app-two") + 1], "p:/dev/app-three");
+    assert.equal(ids[ids.indexOf("p:/dev/app-two") + 1], "p:other");
   });
 
-  it("shows a project with no sessions as a header plus one empty row", () => {
+  it("folds projects with no sessions into one quiet line, in table order (issue #54)", () => {
     state.setMode("projects");
+    // No fixture directory matches a project, so all three are quiet.
+    assert.deepEqual(model.quietProjects(), ["/dev/app-one", "/dev/app-two", "/dev/app-three"]);
     const entries = model.projectEntries();
-    const at = entries.findIndex((e) => e.kind === "header" && e.project === "/dev/app-three");
-    assert.notEqual(at, -1);
-    assert.deepEqual(entries[at + 1], { kind: "empty", id: "p:/dev/app-three:empty" });
+    assert.equal(
+      entries.some((e) => e.kind === "header" && e.project !== "other"),
+      false,
+    );
+    assert.deepEqual(entries.at(-1), { kind: "quiet", id: "p:quiet" });
+    assert.equal(entries.filter((e) => e.kind === "quiet").length, 1);
+  });
+
+  it("drops the quiet line once every project has a session", () => {
+    const [a, b, c] = [byId("a"), byId("b"), byId("c")];
+    if (!a || !b || !c) throw new Error("fixture");
+    a.directory = "/Users/coder/dev/app-one";
+    b.directory = "/Users/coder/dev/app-two";
+    c.directory = "/Users/coder/dev/app-three";
+    state.setMode("projects");
+    assert.deepEqual(model.quietProjects(), []);
+    assert.equal(
+      model.projectEntries().some((e) => e.kind === "quiet"),
+      false,
+    );
+  });
+
+  it("keeps a folded project with no sessions in the quiet line, not as a header", () => {
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    a.directory = "/Users/coder/dev/app-one";
+    state.setMode("projects");
+    model.toggleProject("/dev/app-three");
+    const ids = model.projectEntries().map((e) => e.id);
+    assert.equal(ids.includes("p:/dev/app-three"), false);
+    assert.deepEqual(model.quietProjects(), ["/dev/app-two", "/dev/app-three"]);
+  });
+
+  it("labels a quiet icon by what a tap does, or why it does nothing", () => {
+    // The example table gives App One a root; App Two has none.
+    assert.equal(model.quietLabel("/dev/app-one"), "New session in App One");
+    assert.equal(model.quietLabel("/dev/app-two"), "App Two has no folder to open");
+    model.openProjectWorkspace("/dev/app-two");
+    assert.deepEqual(r.calls, []);
+    model.openProjectWorkspace("/dev/app-one");
+    assert.deepEqual(r.calls, [{ method: "workspace.create", params: { cwd: "~/dev/app-one", focus: true } }]);
+  });
+
+  it("unfolds a folded quiet project when a session opens there, so the new card shows", () => {
+    state.setMode("projects");
+    model.toggleProject("/dev/app-one");
+    assert.equal(model.isProjectCollapsed("/dev/app-one"), true);
+    model.openProjectWorkspace("/dev/app-one");
+    assert.equal(model.isProjectCollapsed("/dev/app-one"), false);
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    a.directory = "/Users/coder/dev/app-one";
+    const ids = model.projectEntries().map((e) => e.id);
+    assert.equal(ids[ids.indexOf("p:/dev/app-one") + 1], "a@p");
+  });
+
+  it("splits the quiet icons into rows, since the renderer cannot wrap", () => {
+    state.setMode("projects");
+    assert.deepEqual(model.quietRows(), [{ id: "q0", keys: ["/dev/app-one", "/dev/app-two", "/dev/app-three"] }]);
   });
 
   it("never shows Other as a header when nothing falls into it", () => {
@@ -654,8 +711,9 @@ describe("Move to project override (issue #8)", () => {
     state.setMode("projects");
     const ids = model.projectEntries().map((e) => e.id);
     assert.equal(ids[ids.indexOf("p:/dev/app-two") + 1], "a@p");
-    // app-one's header still shows (every project does), but a moved out of it.
-    assert.equal(ids[ids.indexOf("p:/dev/app-one") + 1], "p:/dev/app-one:empty");
+    // a moved out of app-one, so app-one has no header and joins the quiet line.
+    assert.equal(ids.includes("p:/dev/app-one"), false);
+    assert.ok(model.quietProjects().includes("/dev/app-one"));
   });
 
   it("offers + only for a project with a root, and opens a workspace there", () => {

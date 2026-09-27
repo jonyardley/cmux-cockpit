@@ -1,6 +1,6 @@
 // The segmented mode control and the lane and project section headers.
 
-import { glyphColor } from "../../shared/contrast.ts";
+import { projectBadge } from "../../shared/ui.ts";
 import { dragging, dropLane } from "../drop.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
@@ -9,17 +9,17 @@ import {
   emptyLaneNames,
   isCollapsed,
   isProjectCollapsed,
-  isSelected,
   laneCount,
   openProjectWorkspace,
   projectByKey,
   projectCount,
-  selectWorkspace,
+  quietLabel,
+  quietRows,
   toggleLane,
   toggleProject,
   wsById,
 } from "../model.ts";
-import { isMode, projectsMode } from "../state.ts";
+import { isMode, isSelected, projectsMode, selectWorkspace } from "../state.ts";
 import { C } from "../theme.ts";
 import { glyphButton, ring, statusDot, unreadBadge } from "./parts.ts";
 
@@ -188,14 +188,52 @@ export function emptyFold(): View {
     .fixed();
 }
 
+const badge = (k: string, size: number, font: number): View => {
+  const p = projectByKey(k);
+  return projectBadge(() => p, size, font, C.text, "semibold");
+};
+
+// One icon in the quiet line. The renderer has no hover tooltip, so the
+// context menu carries the name. A project with no folder has no tap and
+// sits dimmed, so it does not read as a button; its menu item only says why.
+function quietIcon(k: string): View {
+  const menu = [Button(quietLabel(k), () => openProjectWorkspace(k))];
+  const slot = ZStack({}, [badge(k, 20, 10.5)])
+    .padding(2)
+    .cornerRadius(7);
+  if (!canOpenProject(k)) return slot.opacity(0.55).contextMenu(menu);
+  return slot
+    .hoverBackground(C.hover)
+    .onTap(() => openProjectWorkspace(k))
+    .contextMenu(menu);
+}
+
+// A row's keys change as projects come and go, so the icons are their own
+// ForEach, each keyed by project.
+function quietRow(row: () => { keys: string[] }): View {
+  return HStack({ spacing: 2 }, [ForEach({ items: () => row().keys, key: (k) => k }, (k) => quietIcon(k()))]);
+}
+
+// Projects with no sessions (issue #54): one line of icons at the bottom
+// instead of a header each, so the busy projects stand out. The model splits
+// a long table into rows, since the renderer cannot wrap.
+export function quietLine(): View {
+  return HStack({ spacing: 6, alignment: "top" }, [
+    Text("Quiet").font(11.5).color(C.faint).lineLimit(1).frame({ height: 24 }),
+    VStack({ spacing: 2, alignment: "leading" }, [ForEach({ items: quietRows, key: (r) => r.id }, quietRow)]),
+    Spacer({ minLength: 0 }),
+  ])
+    .paddingHorizontal(8)
+    .paddingTop(14)
+    .paddingBottom(5)
+    .frame({ maxWidth: "infinity", alignment: "leading" });
+}
+
 export function projectHeader(k: string): View {
   const p = projectByKey(k);
   return HStack({ spacing: 8 }, [
     chevron(() => isProjectCollapsed(k)),
-    ZStack({}, [
-      RoundedRectangle({ cornerRadius: 5 }).fill(p.color),
-      Image(p.icon).font(10).weight("semibold").color(glyphColor(p.color, C.text)),
-    ]).frame({ width: 18, height: 18 }),
+    badge(k, 18, 10),
     headerName(p.name, C.heading),
     countPill(() => projectCount(k)),
     Spacer({ minLength: 4 }),

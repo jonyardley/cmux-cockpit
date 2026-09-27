@@ -11,14 +11,15 @@ import {
   type Chip,
   type ChipId,
   canCreateProject,
+  canFileForReview,
   chipsFor,
   clearProjectOverride,
   createProjectFrom,
   cycleProjectColor,
   cycleProjectIcon,
+  fileForReview,
   hasProjectOverride,
   inAppProjectName,
-  isSelected,
   laneOf,
   moveToLane,
   moveToProject,
@@ -26,10 +27,9 @@ import {
   newSessionLabel,
   projectKey,
   removeProject,
-  selectWorkspace,
 } from "../model.ts";
-import { drag } from "../state.ts";
-import { ageOf, statusInfo, statusLine } from "../status.ts";
+import { drag, isSelected, selectWorkspace } from "../state.ts";
+import { ageOf, badgeCount, isReady, statusInfo, statusLine } from "../status.ts";
 import { C } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;
@@ -69,11 +69,13 @@ export function ring(
 // Working and needs dots sit on board 1's soft halo; the rest keep the same
 // frame so a lane's rows line up.
 export function statusDot(w: WsAccessor, size: number): View {
+  // One status per change, read by the fill, the stroke and the halo.
+  const info = computed(() => statusInfo(w()));
   const dot = Circle({ size })
-    .fill(() => statusInfo(w()).dot ?? "clear")
-    .stroke(() => (statusInfo(w()).dot ? "clear" : C.grey))
+    .fill(() => info().dot ?? "clear")
+    .stroke(() => (info().dot ? "clear" : C.grey))
     .strokeWidth(1.5);
-  return haloDot(dot, () => statusInfo(w()).halo, size);
+  return haloDot(dot, () => info().halo, size);
 }
 
 export function glyph(w: WsAccessor, size: number, radius: number, font: number): View {
@@ -89,8 +91,7 @@ export function glyph(w: WsAccessor, size: number, radius: number, font: number)
   ]).frame({ width: size, height: size });
 }
 
-export function unreadBadge(w: WsAccessor): View {
-  const n = () => w()?.unread ?? 0;
+export function unreadBadge(w: WsAccessor, n: () => number = () => w()?.unread ?? 0): View {
   const has = () => n() > 0;
   return Text(() => (has() ? String(n()) : ""))
     .font(10)
@@ -108,8 +109,28 @@ export function meta(fn: () => string, color: Reactive<string> = C.tertiary): Vi
   return Text(fn).font(11).monospaced().color(color).lineLimit(1).layoutPriority(2);
 }
 
-// Title row shared by the card densities: title takes the slack, badge and
-// age hold their width on the right.
+// The green "Ready" pill (issue #53): the agent finished while Jon was
+// elsewhere. It stands in for the unread badge, and clears once he opens
+// the workspace. Behind a when(), so it takes no slot otherwise.
+function readyPill(w: WsAccessor): View {
+  return when(
+    "ready",
+    () => isReady(w()),
+    () =>
+      Text("Ready")
+        .font(10.5)
+        .weight("medium")
+        .color(C.greenText)
+        .lineLimit(1)
+        .paddingHorizontal(7)
+        .paddingVertical(1)
+        .background(C.readyBg)
+        .cornerRadius(8),
+  ).layoutPriority(2);
+}
+
+// Title row shared by the card densities: title takes the slack, pill or
+// badge and age hold their width on the right.
 export function titleRow(w: WsAccessor, size: number): View {
   return HStack({ spacing: 6 }, [
     Text(() => displayTitle(w()))
@@ -120,7 +141,8 @@ export function titleRow(w: WsAccessor, size: number): View {
       .truncation("middle")
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
-    unreadBadge(w),
+    readyPill(w),
+    unreadBadge(w, () => badgeCount(w())),
     meta(() => ageOf(w())),
   ]).frame({ maxWidth: "infinity" });
 }
@@ -184,6 +206,23 @@ function chipById(chips: readonly Chip[], id: ChipId): Chip {
   return chips.find((c) => c.id === id) ?? { id, text: "" };
 }
 
+// "To review →" on a Ready card: files it into For review (issue #53). A
+// quiet chip with its own onTap, so the tap never also selects the card.
+export function toReviewAction(w: WsAccessor): View {
+  const body = Text("To review →")
+    .font(11)
+    .weight("medium")
+    .color(C.secondary)
+    .lineLimit(1)
+    .paddingHorizontal(7)
+    .paddingVertical(1);
+  return when(
+    "to-review",
+    () => canFileForReview(w()),
+    () => ring(body, C.card, C.chipEdge, 1, 6, true).onTap(() => fileForReview(w())),
+  ).layoutPriority(2);
+}
+
 // One when() per chip, so each has a fixed key and its own place in the
 // HStack. The PR and ports chips are short and say the most, so they hold
 // their width and the branch chip gives way, cut at its end. The priority
@@ -199,7 +238,12 @@ export function chipsRow(w: WsAccessor, withBranch: boolean): View {
       () => chips().some((c) => c.id === id),
       () => chip(id, () => chipById(chips(), id)),
     );
-  return HStack({ spacing: 5 }, [one("pr").layoutPriority(2), one("br"), one("port").layoutPriority(2)]).frame({
+  return HStack({ spacing: 5 }, [
+    one("pr").layoutPriority(2),
+    one("br"),
+    one("port").layoutPriority(2),
+    toReviewAction(w),
+  ]).frame({
     maxWidth: "infinity",
     alignment: "leading",
   });
@@ -281,17 +325,6 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
       () => (isNeedsDismissed(w()) ? restoreNeeds(w()) : dismissNeeds(w())),
     ),
   ];
-}
-
-// A project with no open sessions still shows its header (issue #8); this is
-// its one row. No tap: opening a workspace from here is a separate decision.
-export function emptyRow(text: string): View {
-  return Text(text)
-    .font(12)
-    .color(C.tertiary)
-    .paddingHorizontal(12)
-    .paddingVertical(10)
-    .frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
 // White card, hairline edge, ink outline when selected or dragged.

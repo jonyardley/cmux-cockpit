@@ -27,3 +27,25 @@ export const [drag, setDrag] = signal<DragState | null>(null);
 // and code that writes them calls bump(), so dependents recompute.
 export const [tick, setTick] = signal(0);
 export const bump = () => setTick(tick() + 1);
+
+// Selection, applied at once: a tapped card reads as selected (and loses
+// its Ready state) the same frame, before cmux publishes the change. Lives
+// here, not in model.ts, so status.ts can read it without an import cycle.
+let selectOverride: string | null = null;
+
+export function isSelected(w: Workspace | undefined): boolean {
+  tick();
+  if (!w) return false;
+  if (selectOverride) {
+    if (data.selectedId() === selectOverride) selectOverride = null;
+    else return w.id === selectOverride;
+  }
+  return !!w.selected;
+}
+
+export function selectWorkspace(id: string | undefined): void {
+  if (!id) return;
+  selectOverride = id;
+  bump();
+  cmux("workspace.select", { workspace_id: id });
+}
