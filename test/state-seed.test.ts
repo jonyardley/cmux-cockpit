@@ -12,6 +12,7 @@ import { describe, it } from "node:test";
   // w3 is not a project in config/projects.example.json: seeding must drop it.
   projectOverride: { w2: "/dev/app-one", w3: "not-a-project" },
   projects: {},
+  prs: {},
 };
 
 const { installRenderer } = await import("./support/renderer.ts");

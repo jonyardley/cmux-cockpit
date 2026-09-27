@@ -11,6 +11,30 @@
           "timeout_seconds": 20
         }
       ]
+    },
+    {
+      "id": "pr-poll-turn",
+      "when": { "event": "agent.turn.completed" },
+      "rate_limit": { "interval_seconds": 30, "maximum": 1 },
+      "then": [
+        {
+          "action": "run",
+          "command": "\"$HOME/.config/cmux/scripts/pr-poll.sh\"",
+          "timeout_seconds": 300
+        }
+      ]
+    },
+    {
+      "id": "pr-poll-select",
+      "when": { "event": "workspace.selected" },
+      "rate_limit": { "interval_seconds": 30, "maximum": 1 },
+      "then": [
+        {
+          "action": "run",
+          "command": "\"$HOME/.config/cmux/scripts/pr-poll.sh\"",
+          "timeout_seconds": 300
+        }
+      ]
     }
   ]
 }

@@ -14,6 +14,12 @@ export interface State {
   projectOverride: Record<string, string>;
   /** match path -> a project made in the sidebar, merged over projects.json at build (issue #9). */
   projects: Record<string, ProjectSpec>;
+  /**
+   * wsId -> the pull request for the workspace's branch, found by
+   * scripts/pr-poll.ts because cmux sends custom sidebars none (issue #7).
+   * Written only by the poller, never by a URL: a URL could plant a link.
+   */
+  prs: Record<string, SavedPr>;
 }
 
 /** A project made in the sidebar. Its match is the key it is stored under. */
@@ -24,7 +30,15 @@ export interface ProjectSpec {
   root?: string;
 }
 
-export const emptyState = (): State => ({ dismissed: {}, projectOverride: {}, projects: {} });
+/** A pull request as the poller saves it, shaped like renderer.d.ts's PullRequest. */
+export interface SavedPr {
+  number: number;
+  url: string;
+  status: "open" | "merged" | "closed";
+  branch: string;
+}
+
+export const emptyState = (): State => ({ dismissed: {}, projectOverride: {}, projects: {}, prs: {} });
 
 // renderer.d.ts puts no shape on workspace or agent ids, and a project key is
 // its first match path ("/dev/app"), so only length is bounded. Object
@@ -37,7 +51,8 @@ const MAX_PROJECT_KEY = 512;
 /** Entries kept per map, so a flood of URLs cannot grow the file without bound. */
 export const MAX_ENTRIES = 256;
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+export const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
 
 const isEpoch = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
 
@@ -77,6 +92,20 @@ function projectSpec(v: unknown): ProjectSpec | null {
   return typeof root === "string" && root.startsWith("/") && root.length <= MAX_PROJECT_KEY ? { ...spec, root } : null;
 }
 
+// Only a GitHub pull request page, since the sidebar opens it on a tap.
+const isPrUrl = (v: unknown): v is string =>
+  typeof v === "string" && v.length <= 512 && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(v);
+const PR_STATUSES: readonly unknown[] = ["open", "merged", "closed"];
+const isPrStatus = (v: unknown): v is SavedPr["status"] => PR_STATUSES.includes(v);
+
+function savedPr(v: unknown): SavedPr | null {
+  if (!isRecord(v) || !isPrUrl(v.url) || !isPrStatus(v.status)) return null;
+  const { number, branch } = v;
+  if (typeof number !== "number" || !Number.isSafeInteger(number) || number < 1) return null;
+  if (typeof branch !== "string" || branch.length === 0 || branch.length > 256) return null;
+  return { number, url: v.url, status: v.status, branch };
+}
+
 // Keeps the last MAX_ENTRIES valid entries, in insertion order.
 function cleanMap<T>(v: unknown, clean: (value: unknown) => T | null, validId = isId): Record<string, T> {
   if (!isRecord(v)) return {};
@@ -94,12 +123,14 @@ export function validateState(raw: unknown): State {
     dismissed: cleanMap(v.dismissed, agentStarts),
     projectOverride: cleanMap(v.projectOverride, projectKey),
     projects: cleanMap(v.projects, projectSpec, isMatchKey),
+    prs: cleanMap(v.prs, savedPr),
   };
 }
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-type MapName = keyof State;
+// The maps a URL may set. `prs` is left out on purpose (see State).
+type MapName = "dismissed" | "projectOverride" | "projects";
 const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects"];
 const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
 

@@ -8,7 +8,7 @@
 
 import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { applySet, validateState } from "./state-config.ts";
+import { applySet, type SetResult, type State, validateState } from "./state-config.ts";
 
 export type ParsedSet = { ok: true; key: string; value: string | null } | { ok: false; error: string };
 
@@ -82,10 +82,28 @@ const serialise = (state: unknown): string => `${JSON.stringify(state, null, 2)}
  * caller can skip a rebuild. Throws only on a filesystem failure.
  */
 export function readApplyWrite(path: string, key: string, value: string | null): ApplyResult {
+  return readUpdateWrite(path, (before) => applySet(before, key, value));
+}
+
+/**
+ * Replaces the whole `prs` map (scripts/pr-poll.ts), the same way
+ * readApplyWrite applies one set. Keys are sorted before writing, so a
+ * reorder of workspaces or windows between polls is not seen as a change.
+ */
+export function writePrs(path: string, prs: State["prs"]): ApplyResult {
+  const sorted = Object.fromEntries(
+    Object.keys(prs)
+      .sort()
+      .map((id) => [id, prs[id]]),
+  );
+  return readUpdateWrite(path, (before) => ({ ok: true, state: validateState({ ...before, prs: sorted }) }));
+}
+
+function readUpdateWrite(path: string, update: (before: State) => SetResult): ApplyResult {
   mkdirSync(dirname(path), { recursive: true });
   return withLock(path, () => {
     const before = validateState(readState(path));
-    const result = applySet(before, key, value);
+    const result = update(before);
     if (!result.ok) return result;
     const text = serialise(result.state);
     if (text === serialise(before)) return { ok: true, changed: false };

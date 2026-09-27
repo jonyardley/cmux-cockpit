@@ -5,6 +5,7 @@ import { byActivity, sinceOrActivity } from "../shared/activity.ts";
 import { markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
+import { prsOf } from "../shared/prs.ts";
 import { cardMessage, readable } from "../shared/text.ts";
 import { fmtAge, fmtElapsed, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
@@ -223,9 +224,6 @@ export interface PrEntry {
 
 const PR_RANK: Record<PrStatus, number> = { open: 0, merged: 1, closed: 2 };
 const prRank = (pr: PullRequest): number => (pr.status ? PR_RANK[pr.status] : 3);
-
-// A workspace's PRs: the list when the app sends one, else the single PR.
-const prsOf = (w: Workspace): PullRequest[] => (w.prs?.length ? w.prs : w.pr ? [w.pr] : []);
 
 // The workspace's title, else a real label (it is often just "PR"), else the branch.
 function prTitle(w: Workspace, pr: PullRequest): string {

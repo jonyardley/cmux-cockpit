@@ -85,6 +85,10 @@ ln -s ~/.config/cmux/automations.json ~/.cmuxterm/automations.json
 cmux automation reload
 ```
 
+The same file's `pr-poll-turn` and `pr-poll-select` rules run
+`scripts/pr-poll.sh`, which fills the PR chips cmux leaves empty (#7,
+[docs/state-loop.md](docs/state-loop.md)).
+
 `cmux automation enable` or `disable` may rewrite the file, through the
 link into the repo or over the link with a plain copy; edit the repo file
 instead. If the panel is still gone after a restart, `npm run agents`

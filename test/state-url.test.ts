@@ -74,6 +74,7 @@ describe("readApplyWrite", () => {
       dismissed: {},
       projectOverride: { w1: "alpha" },
       projects: {},
+      prs: {},
     });
   });
 

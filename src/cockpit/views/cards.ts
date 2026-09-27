@@ -1,6 +1,7 @@
 // Workspace cards at the three lane densities (full, compact, row), plus the
 // one row shape the Projects view uses.
 
+import { prOf } from "../../shared/prs.ts";
 import { oneLine } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
@@ -23,7 +24,7 @@ import {
   type WsAccessor,
 } from "./parts.ts";
 
-const prNumberOf = (w: Workspace | undefined): number | undefined => w?.pr?.number;
+const prNumberOf = (w: Workspace | undefined): number | undefined => prOf(w)?.number;
 
 function fullCard(w: WsAccessor, key: string): View {
   const detail = () => {

@@ -13,6 +13,7 @@ sidebars/cockpit.js
 sidebars/focus.js
 config/projects.json
 config/state.json
+config/pr-poll.lock
 
 # Claude Code worktrees live under .claude/; only settings.json is shared.
 .claude/*

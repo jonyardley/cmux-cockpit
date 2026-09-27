@@ -14,6 +14,7 @@ test("validateState reads a good file unchanged", () => {
         root: "/Users/jon/dev/scratch",
       },
     },
+    prs: { w3: { number: 7, url: "https://github.com/o/r/pull/7", status: "open", branch: "feat" } },
   };
   assert.deepEqual(validateState(raw), raw);
 });
@@ -28,7 +29,12 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     projectOverride: { w4: 5, w5: "", w6: "ok" },
     extra: true,
   };
-  assert.deepEqual(validateState(raw), { dismissed: { w1: { a4: 9 } }, projectOverride: { w6: "ok" }, projects: {} });
+  assert.deepEqual(validateState(raw), {
+    dismissed: { w1: { a4: 9 } },
+    projectOverride: { w6: "ok" },
+    projects: {},
+    prs: {},
+  });
 });
 
 test("validateState keeps only the newest MAX_ENTRIES per map", () => {
@@ -41,7 +47,10 @@ test("validateState keeps only the newest MAX_ENTRIES per map", () => {
 test("applySet sets, replaces and deletes an entry without changing its input", () => {
   const start = emptyState();
   const set = applySet(start, "projectOverride.w1", '"alpha"');
-  assert.deepEqual(set, { ok: true, state: { dismissed: {}, projectOverride: { w1: "alpha" }, projects: {} } });
+  assert.deepEqual(set, {
+    ok: true,
+    state: { dismissed: {}, projectOverride: { w1: "alpha" }, projects: {}, prs: {} },
+  });
   assert.deepEqual(start, emptyState());
   if (!set.ok) return;
 

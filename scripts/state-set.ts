@@ -8,21 +8,9 @@
 // newline in it cannot forge a line, and never the value.
 
 import { spawnSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { logLine as log } from "./state-log.ts";
 import { parseSetUrl, readApplyWrite } from "./state-url.ts";
-
-const LOG_PATH = join(homedir(), "Library", "Logs", "cmux-cockpit-state.log");
-
-// Logging is best-effort: a missing Logs directory should not fail the handler.
-function log(line: string): void {
-  try {
-    appendFileSync(LOG_PATH, `${new Date().toISOString()} ${line}\n`);
-  } catch {
-    // ignored
-  }
-}
 
 function main(): number {
   const raw = process.argv[2];
