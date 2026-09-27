@@ -5,6 +5,8 @@ import { mostActive } from "../shared/activity.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { prChipColors } from "../shared/pr-colors.ts";
 import type { PrSummary } from "../shared/prs.ts";
+import { liveRunCount } from "../shared/subagents.ts";
+import { cardMessage, clip, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
 import { C } from "./theme.ts";
@@ -60,4 +62,39 @@ export const statusInfo = (w: Workspace | undefined): StatusStyle => STATUS[stat
  */
 export function prTextColor(pr: PrSummary | undefined, quiet: string): string {
   return !pr || pr.health === "quiet" ? quiet : prChipColors(pr.health, pr.status).fg;
+}
+
+// --- the card's second line (issue #47) ----------------------------------------------
+
+/** The status and how long it has held ("Working 14m"). Only the agent's
+ * sinceEpoch says when the status began; sinceOf's fallbacks (last activity,
+ * the workspace's latestAt) do not, so without it the time is left off. */
+export function statusLine(w: Workspace | undefined): string {
+  const label = statusInfo(w).label;
+  const since = agentOf(w)?.sinceEpoch;
+  const age = since ? fmtAge(nowEpoch() - since) : "";
+  return age ? label + " " + age : label;
+}
+
+/** "· 3 helpers" while subagent runs are live, else "". */
+export function helperText(w: Workspace | undefined): string {
+  const n = liveRunCount(w);
+  if (!n) return "";
+  return "· " + n + (n === 1 ? " helper" : " helpers");
+}
+
+/** About two lines of card text at the full card's width. */
+export const DETAIL_MAX = 140;
+
+/** The agent's latest message (never a prompt echo), else the description. */
+export function cardDetail(w: Workspace | undefined): string {
+  // cardMessage is already readable(), so only the description needs it.
+  return clip(cardMessage(w) || readable(w?.description), DETAIL_MAX);
+}
+
+/** The progress bar's fraction, held to 0 to 1; null when no value is sent. */
+export function progressFraction(w: Workspace | undefined): number | null {
+  const v = w?.progress?.value;
+  if (typeof v !== "number" || !Number.isFinite(v)) return null;
+  return Math.max(0, Math.min(1, v));
 }

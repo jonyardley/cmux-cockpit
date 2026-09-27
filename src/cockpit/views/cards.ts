@@ -2,18 +2,16 @@
 // one row shape the Projects view uses.
 
 import { prSummary } from "../../shared/prs.ts";
-import { oneLine } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
-import { isSelected, selectWorkspace } from "../model.ts";
+import { chipsFor, isSelected, selectWorkspace } from "../model.ts";
 import { drag } from "../state.ts";
-import { ageOf, prTextColor } from "../status.ts";
+import { ageOf, cardDetail, helperText, progressFraction, prTextColor } from "../status.ts";
 import { C } from "../theme.ts";
 import {
   cardChrome,
   cardMenu,
-  chipsFor,
   chipsRow,
   glyph,
   meta,
@@ -25,24 +23,55 @@ import {
   type WsAccessor,
 } from "./parts.ts";
 
+// Along the bottom while the workspace sends a progress value (issue #47).
+function progressBar(w: WsAccessor, key: string): View {
+  return when(
+    key,
+    () => progressFraction(w()) !== null,
+    () =>
+      ProgressView()
+        .value(() => progressFraction(w()) ?? 0)
+        .frame({ maxWidth: "infinity" }),
+  );
+}
+
+// The live helper count after the status, in a quiet colour. Behind a
+// when(), so with no helpers it takes no slot in the status line's spacing.
+function helpers(w: WsAccessor, size: number): View {
+  return when(
+    "helpers",
+    () => !!helperText(w()),
+    () =>
+      Text(() => helperText(w()))
+        .font(size)
+        .color(C.tertiary)
+        .lineLimit(1),
+  ).layoutPriority(2);
+}
+
 function fullCard(w: WsAccessor, key: string): View {
-  const detail = () => {
-    const x = w();
-    const m = oneLine(x?.latestMessage, 90) || oneLine(x?.latestPrompt, 90) || oneLine(x?.description, 90);
-    return m ? "· " + m : "";
-  };
+  // Read by the when() and its Text, so the message is worked out once per change.
+  const detail = computed(() => cardDetail(w()));
   const body = HStack({ spacing: 10, alignment: "top" }, [
     glyph(w, 26, 8, 12),
     VStack({ alignment: "leading", spacing: 4 }, [
       titleRow(w, 13.5),
-      HStack({ spacing: 6 }, [
-        statusDot(w, 7),
-        statusLabel(w, 12, "medium"),
-        Text(detail).font(12).color(C.secondary).lineLimit(1).truncation("tail"),
-        // Left-aligned by the frame, not a Spacer, which would split the free
-        // width with the detail text and cut it at half the row.
-      ]).frame({ maxWidth: "infinity", alignment: "leading" }),
+      HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12)])
+        // Left-aligned by the frame, not a Spacer, as the chips row is.
+        .frame({ maxWidth: "infinity", alignment: "leading" }),
+      when(
+        "detail",
+        () => !!detail(),
+        () =>
+          Text(detail)
+            .font(12)
+            .color(C.secondary)
+            .lineLimit(2)
+            .truncation("tail")
+            .frame({ maxWidth: "infinity", alignment: "leading" }),
+      ),
       chipsRow(w, true),
+      progressBar(w, "full-progress"),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
@@ -53,7 +82,8 @@ function fullCard(w: WsAccessor, key: string): View {
   return cardChrome(body, w, key, 12);
 }
 
-// Options board "Compact": the PR rides in the status line as text.
+// Options board "Compact": the PR rides in the status line as text, and the
+// message stays on the full card.
 export function compactCard(w: WsAccessor, key: string): View {
   const pr = computed(() => prSummary(w()));
   const prText = () => {
@@ -67,6 +97,7 @@ export function compactCard(w: WsAccessor, key: string): View {
       HStack({ spacing: 6 }, [
         statusDot(w, 6),
         statusLabel(w, 11.5, "regular"),
+        helpers(w, 11.5),
         Text(prText)
           .font(11.5)
           .color(() => prTextColor(pr(), C.secondary))
@@ -74,6 +105,7 @@ export function compactCard(w: WsAccessor, key: string): View {
           .layoutPriority(2),
         // Left-aligned by the frame, not a Spacer, as on the full card.
       ]).frame({ maxWidth: "infinity", alignment: "leading" }),
+      progressBar(w, "compact-progress"),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),

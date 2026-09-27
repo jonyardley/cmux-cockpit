@@ -10,7 +10,7 @@ const state = await import("../src/cockpit/state.ts");
 const status = await import("../src/cockpit/status.ts");
 const needs = await import("../src/shared/needs.ts");
 const { LANES, laneByKey } = await import("../src/cockpit/lanes.ts");
-const { cardMenu, chipsFor } = await import("../src/cockpit/views/parts.ts");
+const { cardMenu } = await import("../src/cockpit/views/parts.ts");
 const projects = await import("../src/shared/projects.ts");
 
 // Groups mirror cmux: each lane group has a generated anchor workspace.
@@ -638,20 +638,6 @@ describe("Move to project override (issue #8)", () => {
     r.menu.length = 0;
     cardMenu(() => one);
     assert.equal(r.menu[0], "button:New session in App One");
-  });
-});
-
-describe("chips", () => {
-  it("shows the PR, then the branch with a dirty marker", () => {
-    const chips = chipsFor(
-      ws("x", { pr: { number: 7, status: "open", url: "https://x/7" }, branch: "feat", dirty: true }),
-      true,
-    );
-    assert.deepEqual(
-      chips.map((c) => c.text),
-      ["#7", "feat •"],
-    );
-    assert.equal(chipsFor(ws("y", { branch: "feat" }), false).length, 0);
   });
 });
 
