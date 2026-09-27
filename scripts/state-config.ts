@@ -36,7 +36,7 @@ export interface SavedPr {
   url: string;
   status: "open" | "merged" | "closed";
   branch: string;
-  /** Its CI checks, sorted by name; left out when it has none. */
+  /** Its CI checks, failing first (pr-poll.ts's checksFrom); left out when it has none. */
   checks?: SavedCheck[];
 }
 

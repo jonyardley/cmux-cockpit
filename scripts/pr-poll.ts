@@ -100,21 +100,29 @@ function rolledCheck(c: unknown): RolledCheck[] {
   return [{ id: `${workflow}\n${name}`, name: name.trim().slice(0, 64).trim(), state: checkState(c), startedAt }];
 }
 
+// A queued run has no start yet (gh sends "" or its zero time), and is
+// the newest run of its check, so it sorts after any real start.
+const startKey = (at: string): string => (!at || at.startsWith("0001-") ? "\uffff" : at);
+
+// Failing first, then running, so the cap never drops a red check.
+const STATE_RANK: Record<CheckState, number> = { fail: 0, pending: 1, pass: 2 };
+
 /**
- * The checks from gh's statusCheckRollup, sorted by name. A workflow run
- * again (an edited PR body reruns its check) appears once per run, so only
- * the latest started run of each workflow and name is kept.
+ * The checks from gh's statusCheckRollup, failing first, then running,
+ * then passed, by name within each. A workflow run again (an edited PR
+ * body reruns its check) appears once per run, so only the latest started
+ * run of each workflow and name is kept.
  */
 export function checksFrom(rollup: unknown): SavedCheck[] {
   if (!Array.isArray(rollup)) return [];
   const latest = new Map<string, RolledCheck>();
   for (const c of rollup.flatMap(rolledCheck)) {
     const seen = latest.get(c.id);
-    if (!seen || c.startedAt >= seen.startedAt) latest.set(c.id, c);
+    if (!seen || startKey(c.startedAt) >= startKey(seen.startedAt)) latest.set(c.id, c);
   }
   return [...latest.values()]
     .map(({ name, state }) => ({ name, state }))
-    .sort((a, b) => a.name.localeCompare(b.name) || a.state.localeCompare(b.state))
+    .sort((a, b) => STATE_RANK[a.state] - STATE_RANK[b.state] || a.name.localeCompare(b.name))
     .slice(0, MAX_CHECKS);
 }
 

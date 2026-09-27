@@ -28,10 +28,10 @@ export function prsOf(w: Workspace): PullRequest[] {
 export const prOf = (w: Workspace | undefined): PullRequest | undefined => (w ? prsOf(w)[0] : undefined);
 
 /**
- * The CI checks of the PR that shows, sorted by name. Only the poller
- * saves checks, so a PR cmux sent has none here.
+ * The CI checks of the saved PR, in checksFrom's order. Only the poller
+ * saves checks, so while cmux sends a PR of its own there are none.
  */
 export function checksOf(w: Workspace): SavedCheck[] {
-  const saved = savedFor(w);
-  return saved && prOf(w) === saved ? (saved.checks ?? []) : [];
+  if (w.prs?.length || w.pr) return [];
+  return savedFor(w)?.checks ?? [];
 }

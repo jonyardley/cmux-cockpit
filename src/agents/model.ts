@@ -215,7 +215,7 @@ export const subagentDot = (s: SubagentRow): string => STATUS_DOT[runStatus(s)];
 
 export const subagentHalo = (s: SubagentRow): string => haloColor(runStatus(s), HALO_COLOR);
 
-// ---- Checks -------------------------------------------------------------------
+// Checks
 
 export interface CheckRow {
   key: string;
@@ -225,7 +225,7 @@ export interface CheckRow {
 
 /** The selected workspace's CI checks, as the poller last saved them. */
 export const checks = computed((): CheckRow[] =>
-  // The list is sorted by name, so the index keeps two same-named checks apart.
+  // Two checks can share a name (one per workflow), so the index keeps them apart.
   checksOf(cur().ws).map((c, i) => ({ key: "c:" + i + ":" + c.name, name: c.name, state: c.state })),
 );
 

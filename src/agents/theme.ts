@@ -17,6 +17,7 @@ export const T = {
   blueHalo: "#3B6FB62E",
   clayHalo: "#D9775738",
   grey: "#A09E95",
+  red: "#C0453A",
   hover: "#7f7f7f0F",
 } as const;
 
@@ -37,9 +38,9 @@ export const STATUS_TEXT: Record<AgentStatus, string> = {
 
 // A CI check's dot on the card: board 1's green pass, red fail, blue running.
 export const CHECK_DOT: Record<CheckState, string> = {
-  pass: "#788C5D",
-  fail: "#C0453A",
-  pending: "#3B6FB6",
+  pass: STATUS_DOT.ended,
+  fail: T.red,
+  pending: T.blue,
 };
 
 export interface ChipColors {

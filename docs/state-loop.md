@@ -90,23 +90,27 @@ to a different branch.
 
 The same `gh pr list` call asks for `statusCheckRollup`, and the PR's
 entry keeps `checks`: up to 20 `{"name", "state": "pass|fail|pending"}`,
-sorted by name, left out when there are none. A finished run passes on
-success, neutral or skipped and fails on anything else; a commit status
-passes on success and is pending while pending or expected. A rerun check
-appears once per run, so only the latest started run of each workflow and
-name is kept. The agents panel's This workspace card shows them as
+failing first, then running, then passed, by name within each, so the cap
+never drops a red check; left out when there are none. A finished run
+passes on success, neutral or skipped and fails on anything else; a commit
+status passes on success and is pending while pending or expected. A rerun
+check appears once per run, so only the latest started run of each
+workflow and name is kept, and a queued run with no start yet counts as the
+latest. The agents panel's This workspace card shows them as
 "CHECKS 3 / 5" with one line per check, and hides the block when there are
-none; `src/shared/prs.ts`'s `checksOf` gives them only while the saved PR is
-the one showing.
+none; `src/shared/prs.ts`'s `checksOf` gives them only while no PR from
+cmux itself is showing.
 
 Only the three states are saved, never a time or a run id, so a rebuild
 (and so a reload of both sidebars) happens only when a check changes state.
-A run of n checks makes at most n + 1 changes (each queued, then each
+A run of n checks makes at most 2n changes (each appearing, then each
 settling), and polls coalesce them: at most one rebuild per poll, and each
-poll rule fires at most once every 30 seconds, so about two reloads a
-minute at worst while agents are finishing turns. Polls are event-driven,
-so while nothing ends a turn or changes selection the card keeps its last
-states, and a pending check can read "running" after CI has finished.
+of the two poll rules fires at most once every 30 seconds, so at worst
+about four reloads a minute while CI runs, agents finish turns and
+workspaces change. Polls are event-driven, so while nothing ends a turn or
+changes selection the card keeps its last states: the usual case is an
+agent pushing, its turn ending, and the checks showing "running" until the
+next turn or workspace switch.
 
 `applySet` refuses `prs`, so no URL can plant a link the sidebar would open,
 and `validateState` keeps only `https://github.com/<owner>/<repo>/pull/<n>`

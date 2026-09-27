@@ -7,9 +7,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 const checks = [
-  { name: "build", state: "pass" },
   { name: "lint", state: "fail" },
   { name: "test", state: "pending" },
+  { name: "build", state: "pass" },
 ];
 const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open", branch: "feat", checks };
 (globalThis as Record<string, unknown>).__STATE__ = {
@@ -83,9 +83,9 @@ describe("the agents panel's Checks block", () => {
     assert.deepEqual(
       rows.map((c) => [c.name, agents.checkWord(c), agents.checkDot(c)]),
       [
-        ["build", "passed", "#788C5D"],
         ["lint", "failed", "#C0453A"],
         ["test", "running", "#3B6FB6"],
+        ["build", "passed", "#788C5D"],
       ],
     );
     assert.equal(agents.checksFigure(rows), "1 / 3");

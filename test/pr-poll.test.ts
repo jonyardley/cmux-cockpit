@@ -107,12 +107,12 @@ describe("checksFrom", () => {
       run("deploy", "QUEUED", ""),
     ];
     assert.deepEqual(checksFrom(rollup), [
-      { name: "build", state: "pass" },
-      { name: "deploy", state: "pending" },
-      { name: "docs", state: "pass" },
       { name: "e2e", state: "fail" },
       { name: "lint", state: "fail" },
+      { name: "deploy", state: "pending" },
       { name: "test", state: "pending" },
+      { name: "build", state: "pass" },
+      { name: "docs", state: "pass" },
     ]);
   });
 
@@ -121,10 +121,10 @@ describe("checksFrom", () => {
     assert.deepEqual(
       checksFrom([status("a", "SUCCESS"), status("b", "PENDING"), status("c", "EXPECTED"), status("d", "ERROR")]),
       [
-        { name: "a", state: "pass" },
+        { name: "d", state: "fail" },
         { name: "b", state: "pending" },
         { name: "c", state: "pending" },
-        { name: "d", state: "fail" },
+        { name: "a", state: "pass" },
       ],
     );
   });
@@ -136,9 +136,19 @@ describe("checksFrom", () => {
       run("pr-body", "IN_PROGRESS", "", "2026-09-27T09:05:12Z", "Other"),
     ];
     assert.deepEqual(checksFrom(rollup), [
-      { name: "pr-body", state: "pass" },
       { name: "pr-body", state: "pending" },
+      { name: "pr-body", state: "pass" },
     ]);
+  });
+
+  it("counts a queued rerun with no start as the latest run", () => {
+    for (const startedAt of ["", "0001-01-01T00:00:00Z"]) {
+      const rollup = [
+        run("build", "COMPLETED", "FAILURE", "2026-09-27T09:00:00Z"),
+        run("build", "QUEUED", "", startedAt),
+      ];
+      assert.deepEqual(checksFrom(rollup), [{ name: "build", state: "pending" }]);
+    }
   });
 
   it("skips malformed entries, caps the list and ignores a missing rollup", () => {
@@ -146,6 +156,8 @@ describe("checksFrom", () => {
     assert.deepEqual(checksFrom(undefined), []);
     const many = Array.from({ length: 30 }, (_, i) => run(`c${String(i).padStart(2, "0")}`, "COMPLETED", "SUCCESS"));
     assert.equal(checksFrom(many).length, 20);
+    const lateRed = [...many, run("zz-lint", "COMPLETED", "FAILURE")];
+    assert.deepEqual(checksFrom(lateRed)[0], { name: "zz-lint", state: "fail" });
   });
 });
 
