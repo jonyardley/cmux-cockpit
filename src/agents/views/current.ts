@@ -320,9 +320,11 @@ function progressBlock(): View {
 function detailLine(key: string, label: string, show: () => boolean, value: () => View): View {
   return when(key, show, () =>
     HStack({ spacing: 8 }, [
-      // The renderer centres a Text in a fixed frame whatever the alignment,
-      // so a Spacer pins each label to the left edge of its column.
-      HStack({ spacing: 0 }, [Text(label).font(11.5).color(T.tertiary).lineLimit(1), Spacer()]).frame({ width: 48 }),
+      // A Text in a fixed-width frame showed centred despite alignment "leading",
+      // so a zero-minimum Spacer pins each label to the left of its column.
+      HStack({ spacing: 0 }, [Text(label).font(11.5).color(T.tertiary).lineLimit(1), Spacer({ minLength: 0 })]).frame({
+        width: 48,
+      }),
       value(),
     ])
       .paddingVertical(3)
