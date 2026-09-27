@@ -1,7 +1,6 @@
-// Rows for the Waiting, Running and Pull requests panels.
+// Rows for the Running and Pull requests panels.
 
 import type { Last } from "../../shared/list.ts";
-import { dismissNeeds } from "../../shared/needs.ts";
 import { readable } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
@@ -13,63 +12,9 @@ import {
   type RosterRow,
   setIdleOpen,
   statusLine,
-  waitingText,
 } from "../model.ts";
 import { chipColors, T } from "../theme.ts";
 import { emptyRow, glyph, idleRing, jump, meta, openIfUrl, ring, ruled, statusDot } from "./parts.ts";
-
-export function waitingRow(e: () => Last<AgentEntry>): View {
-  const w = () => e().ws;
-  const a = () => e().a;
-  const row = VStack({ spacing: 6, alignment: "leading" }, [
-    HStack({ spacing: 8 }, [
-      glyph(e().project),
-      Text(() => displayTitle(w()) || "untitled")
-        .font(11.5)
-        .color(T.metaText)
-        .lineLimit(1)
-        .truncation("middle")
-        .layoutPriority(1),
-      Spacer({ minLength: 4 }),
-      meta(() => ageSince(a().sinceEpoch)),
-    ]).frame({ maxWidth: "infinity" }),
-    Text(() => waitingText(w()))
-      .font(13)
-      .color(T.text)
-      .lineLimit(3)
-      .truncation("tail")
-      .frame({ maxWidth: "infinity", alignment: "leading" }),
-    HStack({ spacing: 6 }, [
-      ring(
-        Text("Jump to answer")
-          .font(12)
-          .weight("medium")
-          .color(T.buttonText)
-          .paddingHorizontal(10)
-          .paddingVertical(4)
-          .hoverBackground(T.buttonHover),
-        T.panel,
-        T.buttonEdge,
-        1,
-        8,
-        true,
-      ).onTap(() => jump(w().id, a().surfaceId)),
-      // Local to this panel: the cockpit's dismissals are not visible here (issue #3).
-      Text("Dismiss")
-        .font(12)
-        .color(T.secondary)
-        .paddingHorizontal(8)
-        .paddingVertical(4)
-        .hoverBackground(T.hover)
-        .cornerRadius(8)
-        .onTap(() => dismissNeeds(w())),
-      Spacer(),
-    ]),
-  ])
-    .padding(12)
-    .frame({ maxWidth: "infinity", alignment: "leading" });
-  return ruled(row, () => e().last);
-}
 
 function runningRow(e: () => Last<AgentEntry>): View {
   const w = () => e().ws;

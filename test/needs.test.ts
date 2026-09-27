@@ -173,23 +173,25 @@ describe("dismissals", () => {
 });
 
 describe("both sidebars apply the rule", () => {
-  it("the agents panel lists a nudge as idle, not waiting", () => {
-    r.data.workspaces = [ws("n", { agents: [claude(1000, 1060)] }), ws("real", { agents: [claude(1000, 1001)] })];
-    assert.deepEqual(
-      agents.waiting().map((e) => e.ws.id),
-      ["real"],
-    );
+  it("the agents panel lists a nudge as idle and asks nothing", () => {
+    r.data.workspaces = [
+      ws("n", { selected: true, agents: [claude(1000, 1060)] }),
+      ws("i", { agents: [claude(1000, 1060)] }),
+    ];
+    assert.equal(agents.currentAsk(), null);
     assert.deepEqual(
       agents.roster().idle.map((e) => e.ws.id),
-      ["n"],
+      ["i"],
     );
+    r.data.workspaces = [ws("real", { selected: true, agents: [claude(1000, 1001)] })];
+    assert.equal(agents.currentAsk()?.a.status, "needs_input");
   });
 
-  it("the agents panel drops a dismissed ask from Waiting on you", () => {
-    const w = ws("x", { agents: [agent("needs_input", { sinceEpoch: 700 })] });
+  it("the agents panel drops a dismissed ask from This workspace", () => {
+    const w = ws("x", { selected: true, agents: [agent("needs_input", { sinceEpoch: 700 })] });
     r.data.workspaces = [w];
     needs.dismissNeeds(w);
-    assert.deepEqual(agents.waiting(), []);
+    assert.equal(agents.currentAsk(), null);
   });
 
   it("the cockpit ranks a working agent over a nudge beside it", () => {

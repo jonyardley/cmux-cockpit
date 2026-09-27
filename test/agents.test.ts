@@ -6,36 +6,13 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
 const { cardMessage } = await import("../src/shared/text.ts");
+const { dismissNeeds } = await import("../src/shared/needs.ts");
 const { STATUS_DOT, T } = await import("../src/agents/theme.ts");
 
 beforeEach(() => {
   r.data.epoch = 10_000;
   r.data.workspaces = [];
   m.setIdleOpen(false);
-});
-
-describe("waiting", () => {
-  it("lists needs_input workspaces, longest-waiting first, last row flagged", () => {
-    r.data.workspaces = [
-      ws("new", { agents: [agent("needs_input", { sinceEpoch: 900 })] }),
-      ws("busy", { agents: [agent("working")] }),
-      ws("old", { agents: [agent("needs_input", { sinceEpoch: 100 })] }),
-    ];
-    const rows = m.waiting();
-    assert.deepEqual(
-      rows.map((e) => e.ws.id),
-      ["old", "new"],
-    );
-    assert.deepEqual(
-      rows.map((e) => e.last),
-      [false, true],
-    );
-  });
-
-  it("caps at 20", () => {
-    r.data.workspaces = Array.from({ length: 25 }, (_, i) => ws("w" + i, { agents: [agent("needs_input")] }));
-    assert.equal(m.waiting().length, 20);
-  });
 });
 
 describe("roster", () => {
@@ -196,15 +173,101 @@ describe("cardMessage (shared/text)", () => {
   });
 });
 
-describe("waitingText", () => {
-  it("falls back when the message only echoes the prompt", () => {
-    const w = ws("a", { latestMessage: "Please fix it\n", latestPrompt: "Please  fix it" });
-    assert.equal(m.waitingText(w), "Waiting for your reply");
+describe("currentAsk", () => {
+  const selected = (a: Agent, extra: Partial<Workspace> = {}) => ws("sel", { selected: true, agents: [a], ...extra });
+
+  it("carries the agent's words when the selected workspace needs you", () => {
+    const a = agent("needs_input", { sinceEpoch: 900, surfaceId: "s1" });
+    r.data.workspaces = [selected(a, { latestMessage: "Shall I push?", latestPrompt: "Fix it" })];
+    assert.deepEqual(m.currentAsk(), { a, text: "Shall I push?", count: 1, canAnswer: true, dismissLabel: "Dismiss" });
   });
 
-  it("falls back with no readable message, else shows it", () => {
-    assert.equal(m.waitingText(ws("a", { latestMessage: "/private/tmp/out.txt" })), "Waiting for your reply");
-    assert.equal(m.waitingText(ws("a", { latestMessage: "Shall I push?", latestPrompt: "Fix it" })), "Shall I push?");
+  it("offers Answer only when the asker has a terminal to focus", () => {
+    r.data.workspaces = [selected(agent("needs_input"), { latestMessage: "Shall I push?" })];
+    assert.equal(m.currentAsk()?.canAnswer, false);
+    assert.equal(m.currentAsk()?.dismissLabel, "Dismiss");
+  });
+
+  it("shows the workspace message only when the asker is the one live agent", () => {
+    const asker = agent("needs_input", { surfaceId: "s1" });
+    r.data.workspaces = [
+      ws("sel", { selected: true, agents: [asker, agent("ended")], latestMessage: "Shall I push?" }),
+    ];
+    assert.equal(m.currentAsk()?.text, "Shall I push?");
+    r.data.workspaces = [ws("sel", { selected: true, agents: [asker, agent("working")], latestMessage: "Built it" })];
+    assert.equal(m.currentAsk()?.text, "");
+    assert.equal(m.currentAsk()?.count, 1);
+  });
+
+  it("counts several askers and says Dismiss all", () => {
+    r.data.workspaces = [
+      ws("sel", {
+        selected: true,
+        agents: [agent("needs_input"), agent("needs_input"), agent("idle")],
+        latestMessage: "Shall I push?",
+      }),
+    ];
+    const ask = m.currentAsk();
+    assert.equal(ask?.count, 2);
+    assert.equal(ask?.text, "2 agents are asking");
+    assert.equal(ask?.dismissLabel, "Dismiss all");
+  });
+
+  it("picks the asker with the latest activity", () => {
+    const older = agent("needs_input", { lastActivityAt: 100, surfaceId: "old" });
+    const newer = agent("needs_input", { lastActivityAt: 500, surfaceId: "new" });
+    r.data.workspaces = [ws("sel", { selected: true, agents: [older, newer] })];
+    assert.equal(m.currentAsk()?.a.id, newer.id);
+    assert.equal(m.currentAsk()?.a.surfaceId, "new");
+  });
+
+  it("has no text when there is only the generic fallback", () => {
+    r.data.workspaces = [
+      selected(agent("needs_input"), { latestMessage: "Please fix it\n", latestPrompt: "Please  fix it" }),
+    ];
+    assert.equal(m.currentAsk()?.text, "");
+    r.data.workspaces = [selected(agent("needs_input"), { latestMessage: "/private/tmp/out.txt" })];
+    assert.equal(m.currentAsk()?.text, "");
+  });
+
+  it("is null when the agent does not need you, or nothing is selected", () => {
+    r.data.workspaces = [selected(agent("working"), { latestMessage: "Building" })];
+    assert.equal(m.currentAsk(), null);
+    r.data.workspaces = [ws("other", { agents: [agent("needs_input")] })];
+    assert.equal(m.currentAsk(), null);
+  });
+
+  it("follows the most active agent, as the Needs you strip does", () => {
+    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("idle"), agent("needs_input")] })];
+    assert.equal(m.currentAsk()?.a.status, "needs_input");
+  });
+
+  it("is null for the idle nudge and for a dismissed ask", () => {
+    const nudge = agent("needs_input", { kind: "claude", lastActivityAt: 1000, sinceEpoch: 1060 });
+    r.data.workspaces = [selected(nudge)];
+    assert.equal(m.currentAsk(), null);
+    const w = selected(agent("needs_input", { sinceEpoch: 700 }), { id: "dis" });
+    r.data.workspaces = [w];
+    dismissNeeds(w);
+    assert.equal(m.currentAsk(), null);
+  });
+});
+
+describe("cardLine", () => {
+  it("shows the message while nothing is asked", () => {
+    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("working")], latestMessage: "Building" })];
+    assert.equal(m.cardLine(), "Building");
+  });
+
+  it("is empty while the question block carries the words", () => {
+    r.data.workspaces = [
+      ws("sel", {
+        selected: true,
+        agents: [agent("needs_input", { sinceEpoch: 900 })],
+        latestMessage: "Shall I push?",
+      }),
+    ];
+    assert.equal(m.cardLine(), "");
   });
 });
 
