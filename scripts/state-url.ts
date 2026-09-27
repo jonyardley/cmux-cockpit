@@ -85,9 +85,18 @@ export function readApplyWrite(path: string, key: string, value: string | null):
   return readUpdateWrite(path, (before) => applySet(before, key, value));
 }
 
-/** Replaces the whole `prs` map (scripts/pr-poll.ts), the same way readApplyWrite applies one set. */
+/**
+ * Replaces the whole `prs` map (scripts/pr-poll.ts), the same way
+ * readApplyWrite applies one set. Keys are sorted before writing, so a
+ * reorder of workspaces or windows between polls is not seen as a change.
+ */
 export function writePrs(path: string, prs: State["prs"]): ApplyResult {
-  return readUpdateWrite(path, (before) => ({ ok: true, state: validateState({ ...before, prs }) }));
+  const sorted = Object.fromEntries(
+    Object.keys(prs)
+      .sort()
+      .map((id) => [id, prs[id]]),
+  );
+  return readUpdateWrite(path, (before) => ({ ok: true, state: validateState({ ...before, prs: sorted }) }));
 }
 
 function readUpdateWrite(path: string, update: (before: State) => SetResult): ApplyResult {

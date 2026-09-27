@@ -28,7 +28,10 @@ describe("prsOf", () => {
 
   it("hides it once the workspace has moved to another branch", () => {
     assert.deepEqual(prsOf(ws("w1", { branch: "main" })), []);
-    assert.deepEqual(prsOf(ws("w1")), []);
+  });
+
+  it("shows it while the workspace's branch is not yet known", () => {
+    assert.deepEqual(prsOf(ws("w1")), [saved]);
   });
 
   it("prefers cmux's own PRs, list first", () => {

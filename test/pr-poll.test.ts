@@ -7,7 +7,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
-import { findPrs, type Lookups, parseWindowIds, parseWorkspaces, pickPr } from "../scripts/pr-poll.ts";
+import { branchFromGit, findPrs, type Lookups, parseWindowIds, parseWorkspaces, pickPr } from "../scripts/pr-poll.ts";
 import { applySet, emptyState, type SavedPr, validateState } from "../scripts/state-config.ts";
 import { writePrs } from "../scripts/state-url.ts";
 
@@ -63,8 +63,35 @@ describe("pickPr", () => {
     assert.equal(pickPr(text, "feat"), null);
   });
 
+  it("ignores a fork's PR (isCrossRepository)", () => {
+    const text = gh([{ ...ghPr(1, "OPEN", "2026-09-01"), isCrossRepository: true }, ghPr(2, "OPEN", "2026-09-01")]);
+    assert.deepEqual(pickPr(text, "feat"), pr(2));
+  });
+
   it("returns undefined when gh's output cannot be read", () => {
     assert.equal(pickPr("oops", "feat"), undefined);
+  });
+});
+
+describe("branchFromGit", () => {
+  it("reads the branch from a clean exit", () => {
+    assert.equal(branchFromGit({ status: 0, stdout: "feat\n", stderr: "" }), "feat");
+  });
+
+  it("is null for a detached HEAD (clean exit, empty stdout)", () => {
+    assert.equal(branchFromGit({ status: 0, stdout: "\n", stderr: "" }), null);
+  });
+
+  it("is null when the directory is not a repo", () => {
+    assert.equal(branchFromGit({ status: 128, stdout: "", stderr: "fatal: not a git repository\n" }), null);
+  });
+
+  it("is undefined when git failed for another reason", () => {
+    assert.equal(branchFromGit({ status: 128, stdout: "", stderr: "fatal: something else\n" }), undefined);
+  });
+
+  it("is undefined when git was killed (a timeout has status null)", () => {
+    assert.equal(branchFromGit({ status: null, stdout: "", stderr: "" }), undefined);
   });
 });
 
@@ -93,6 +120,17 @@ describe("findPrs", () => {
     const look: Lookups = { branchOf: (d) => (d === "/d/app" ? "feat" : "main"), prFor: () => undefined };
     const previous = { a: pr(1), b: pr(2) };
     assert.deepEqual(findPrs([ws("a"), ws("b", "/d/other"), ws("gone")], previous, look), { a: pr(1) });
+  });
+
+  it("keeps the previous PR as-is when git itself failed, regardless of branch", () => {
+    const look: Lookups = { branchOf: () => undefined, prFor: () => pr(9) };
+    const previous = { a: pr(1, { branch: "other" }) };
+    assert.deepEqual(findPrs([ws("a")], previous, look), { a: pr(1, { branch: "other" }) });
+  });
+
+  it("drops the workspace when the directory is not a repo (branchOf null)", () => {
+    const look: Lookups = { branchOf: () => null, prFor: () => pr(9) };
+    assert.deepEqual(findPrs([ws("a")], { a: pr(1) }, look), {});
   });
 });
 
@@ -127,5 +165,11 @@ describe("the prs map in state.json", () => {
     assert.deepEqual(written, { ...emptyState(), prs: { a: pr(1) } });
     assert.deepEqual(writePrs(path, { a: pr(1) }), { ok: true, changed: false });
     assert.deepEqual(writePrs(path, {}), { ok: true, changed: true });
+  });
+
+  it("is order-insensitive: the same entries in a different key order are not a change", () => {
+    const path = join(dir, "state-order.json");
+    assert.deepEqual(writePrs(path, { b: pr(2, { branch: "b" }), a: pr(1) }), { ok: true, changed: true });
+    assert.deepEqual(writePrs(path, { a: pr(1), b: pr(2, { branch: "b" }) }), { ok: true, changed: false });
   });
 });

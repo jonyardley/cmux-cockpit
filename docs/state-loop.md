@@ -59,14 +59,32 @@ instead and keeps it in a fourth map, `prs`: workspace id to
 `{"number", "url", "status": "open|merged|closed", "branch"}`. For every
 workspace in every window it reads the directory's git branch and asks
 `gh pr list --head <branch> --state all` for that branch's PR, preferring an
-open one. It replaces the whole map under the same lock, and rebuilds only
-when a PR changed. A workspace whose `gh` call failed keeps its last entry.
+open one, and ignoring a fork's PR (`isCrossRepository`), since the sidebar
+cannot open one of those the way it opens ours. It replaces the whole map
+under the same file lock as a URL's write, sorting its keys first so a
+reorder of workspaces or windows between polls is never seen as a change,
+and rebuilds only when a PR changed. If the rebuild fails, it writes the
+previous map straight back, so the file matches the screen and the next
+poll sees a change again and retries.
+
+A workspace whose git or gh lookup failed keeps its last entry: git failing
+outright (a timeout, or any error that is not "not a git repository") keeps
+it as-is regardless of branch; gh failing keeps it only while the workspace
+is still on the branch it was found for. Two polls never overlap: a
+`config/pr-poll.lock` file makes a second run exit straight away while one
+is already going (a lock older than five minutes is a crashed run's, and is
+cleared and retaken). Every run logs a line, whether it changed anything,
+found nothing new, was skipped, or hit an error.
 
 The `pr-poll-turn` and `pr-poll-select` rules in `automations.json` run it
 (through `scripts/pr-poll.sh`, which finds node) when an agent's turn ends
-and when a workspace is selected, each at most once every 30 seconds.
-`src/shared/prs.ts` reads it back: cmux's own `pr`/`prs` win when present,
-and a saved PR shows only while the workspace is still on its branch.
+and when a workspace is selected, each at most once every 30 seconds, with a
+five-minute timeout; the poller itself gives up on new lookups after four
+minutes, so a slow directory cannot starve the rest.
+`src/shared/prs.ts` reads it back: cmux's own `pr`/`prs` win when present. A
+saved PR shows while the workspace's branch is not yet known, or still
+matches the branch it was found for, and hides once the workspace has moved
+to a different branch.
 
 `applySet` refuses `prs`, so no URL can plant a link the sidebar would open,
 and `validateState` keeps only `https://github.com/<owner>/<repo>/pull/<n>`

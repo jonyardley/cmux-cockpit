@@ -20,7 +20,7 @@
         {
           "action": "run",
           "command": "\"$HOME/.config/cmux/scripts/pr-poll.sh\"",
-          "timeout_seconds": 120
+          "timeout_seconds": 300
         }
       ]
     },
@@ -32,7 +32,7 @@
         {
           "action": "run",
           "command": "\"$HOME/.config/cmux/scripts/pr-poll.sh\"",
-          "timeout_seconds": 120
+          "timeout_seconds": 300
         }
       ]
     }

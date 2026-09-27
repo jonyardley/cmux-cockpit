@@ -51,7 +51,8 @@ const MAX_PROJECT_KEY = 512;
 /** Entries kept per map, so a flood of URLs cannot grow the file without bound. */
 export const MAX_ENTRIES = 256;
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
+export const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
 
 const isEpoch = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
 
