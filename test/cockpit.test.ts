@@ -204,7 +204,10 @@ describe("missing lane groups", () => {
   it("creates the lane's group, then files the card once it appears", () => {
     model.moveToLane(byId("u"), "bg");
     assert.deepEqual(r.calls, [
-      { method: "workspace.group.create", params: { name: "Background", idempotency_key: "cockpit-lane-bg" } },
+      {
+        method: "workspace.group.create",
+        params: { name: "Background", idempotency_key: `cockpit-lane-bg-${r.data.epoch}` },
+      },
     ]);
     // Optimistic while cmux makes the group: the card and count move now.
     assert.equal(model.laneOf(byId("u") ?? ws("?")), "bg");
@@ -214,10 +217,14 @@ describe("missing lane groups", () => {
     r.data.groups = [...r.data.groups, bgGroup()];
     r.data.workspaces = [...r.data.workspaces, ws("anchor-bg", { title: "Background", group: "g-bg" })];
     model.cardWorkspaces();
-    assert.deepEqual(r.calls, [{ method: "workspace.group.add", params: { group_id: "g-bg", workspace_id: "u" } }]);
+    // Position first: just after the new anchor, the last tab once u is left out.
+    assert.deepEqual(r.calls, [
+      { method: "workspace.reorder", params: { workspace_id: "u", index: 8 } },
+      { method: "workspace.group.add", params: { group_id: "g-bg", workspace_id: "u" } },
+    ]);
     // Sent once, not on every read.
     model.cardWorkspaces();
-    assert.equal(r.calls.length, 1);
+    assert.equal(r.calls.length, 2);
   });
 
   it("asks for the group once while it is on its way", () => {
@@ -228,9 +235,38 @@ describe("missing lane groups", () => {
     r.data.groups = [...r.data.groups, bgGroup()];
     model.cardWorkspaces();
     assert.deepEqual(
-      r.calls.map((c) => c.params.workspace_id),
+      r.calls.filter((c) => c.method === "workspace.group.add").map((c) => c.params.workspace_id),
       ["u", "a"],
     );
+  });
+
+  it("asks again with a fresh key once an earlier wait has run out", () => {
+    model.moveToLane(byId("u"), "bg");
+    r.data.epoch += 60;
+    model.moveToLane(byId("a"), "bg");
+    const keys = r.calls.filter((c) => c.method === "workspace.group.create").map((c) => c.params.idempotency_key);
+    assert.equal(keys.length, 2);
+    assert.notEqual(keys[0], keys[1]);
+  });
+
+  it("cancels the wait when the card is dragged back to Unsorted", () => {
+    model.moveToLane(byId("u"), "bg");
+    const slot =
+      ids()
+        .filter((id) => id !== "u@bg")
+        .indexOf("h:unsorted") + 1;
+    drop.handleMove("u@bg", slot);
+    assert.equal(model.laneOf(byId("u") ?? ws("?")), "unsorted");
+    r.calls.length = 0;
+    r.data.groups = [...r.data.groups, bgGroup()];
+    model.cardWorkspaces();
+    assert.deepEqual(r.calls, []);
+  });
+
+  it("hides the new anchor if it arrives before its group", () => {
+    model.moveToLane(byId("u"), "bg");
+    r.data.workspaces = [...r.data.workspaces, ws("anchor-bg", { title: "Background" })];
+    assert.ok(!model.cardWorkspaces().some((w) => w.id === "anchor-bg"));
   });
 
   it("keeps the card in its new lane past the usual wait while the group is made", () => {

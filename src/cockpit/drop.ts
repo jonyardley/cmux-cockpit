@@ -6,11 +6,11 @@
 
 import { FIRST_LANE, type LaneKey, laneByKey } from "./lanes.ts";
 import {
-  actualLaneOf,
   flatEntries,
   groupForLane,
   groups,
   laneAnchorIds,
+  laneOf,
   moveToLane,
   overrideOrder,
   wsById,
@@ -66,7 +66,9 @@ export function handleMove(key: string, index: number): void {
   const w = wsById(entry.wsId);
   if (!w) return;
   const target = resolveDrop(key, index);
-  const changesLane = actualLaneOf(w) !== target.laneKey;
+  // Against the lane on screen, so dragging a card back out of a lane it is
+  // still waiting to join cancels that move.
+  const changesLane = laneOf(w) !== target.laneKey;
   const all = data.workspaces() ?? [];
   const others = all.map((x) => x.id).filter((id) => id !== w.id);
   const at = targetIndex(w, all, others, target, changesLane);

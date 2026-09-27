@@ -66,8 +66,19 @@ export function laneAnchorIds(): Set<string> {
   for (const lane of LANES) {
     const g = groupForLane(lane);
     if (g?.anchorId && isGeneratedAnchor(g, wsById(g.anchorId))) out.add(g.anchorId);
+    else if (!g && awaitingLane(lane.key)) hideNewAnchor(lane, out);
   }
   return out;
+}
+
+// cmux can publish a new group's anchor a frame before the group itself, so
+// while a lane's group is on its way, an ungrouped workspace that looks like
+// its anchor is hidden rather than shown in Unsorted.
+function hideNewAnchor(lane: Lane, out: Set<string>): void {
+  const name = lane.name.trim().toLowerCase();
+  for (const w of data.workspaces() ?? []) {
+    if (!w.group && (w.agents ?? []).length === 0 && (w.title ?? "").trim().toLowerCase() === name) out.add(w.id);
+  }
 }
 
 export function actualLaneOf(w: Workspace | undefined): LaneKey {
@@ -79,68 +90,94 @@ export function actualLaneOf(w: Workspace | undefined): LaneKey {
   return "unsorted";
 }
 
-const laneOverride = new Map<string, { lane: LaneKey; at: number }>(); // wsId -> pending move
-
 // A lane with no cmux group yet (a fresh window has only the ones made by
 // hand) gets one on its first move. cmux() returns nothing, so the new
-// group's id arrives in a later frame: the move waits here until then, and
-// the card holds its new lane for up to CREATE_SECS instead of OVERRIDE_SECS.
+// group's id arrives in a later frame: the move is marked `awaiting` until
+// then, and holds its lane for up to CREATE_SECS instead of OVERRIDE_SECS.
 const CREATE_SECS = 30;
-const awaitingGroup = new Map<string, { lane: LaneKey; at: number }>(); // wsId -> lane being made
+interface LaneMove {
+  lane: LaneKey;
+  at: number;
+  awaiting?: boolean;
+}
+const laneOverride = new Map<string, LaneMove>(); // wsId -> pending move
+
+const expired = (o: LaneMove): boolean => nowEpoch() - o.at > (o.awaiting ? CREATE_SECS : OVERRIDE_SECS);
+
+const awaitingLane = (key: LaneKey): boolean =>
+  [...laneOverride.values()].some((o) => o.awaiting && o.lane === key && !expired(o));
 
 export function laneOf(w: Workspace): LaneKey {
   tick();
   const actual = actualLaneOf(w);
   const o = laneOverride.get(w.id);
   if (o) {
-    const wait = awaitingGroup.has(w.id) ? CREATE_SECS : OVERRIDE_SECS;
-    if (o.lane === actual || nowEpoch() - o.at > wait) laneOverride.delete(w.id);
+    if (o.lane === actual || expired(o)) laneOverride.delete(w.id);
     else return o.lane;
   }
   return actual;
 }
 
 // Move a workspace into a lane (no reorder). Used by the context menu and drops.
+// Moving a card back to where cmux still has it cancels the pending move, so
+// a group that arrives later never files it against the last choice.
 export function moveToLane(w: Workspace | undefined, laneKey: LaneKey): void {
-  if (!w || actualLaneOf(w) === laneKey) return;
-  awaitingGroup.delete(w.id);
-  if (laneKey === "unsorted") {
-    cmux("workspace.group.remove", { workspace_id: w.id });
-  } else {
-    const lane = laneByKey(laneKey);
-    const g = groupForLane(lane);
-    if (g) cmux("workspace.group.add", { group_id: g.id, workspace_id: w.id });
-    else requestLaneGroup(w.id, lane);
+  if (!w) return;
+  if (actualLaneOf(w) === laneKey) {
+    if (laneOverride.delete(w.id)) bump();
+    return;
   }
-  laneOverride.set(w.id, { lane: laneKey, at: nowEpoch() });
+  const lane = laneByKey(laneKey);
+  const g = groupForLane(lane);
+  if (laneKey === "unsorted") cmux("workspace.group.remove", { workspace_id: w.id });
+  else if (g) cmux("workspace.group.add", { group_id: g.id, workspace_id: w.id });
+  else requestLaneGroup(lane);
+  laneOverride.set(w.id, { lane: laneKey, at: nowEpoch(), awaiting: laneKey !== "unsorted" && !g });
   bump();
 }
 
 // No --from, so cmux makes a generated anchor and the card stays draggable
-// (a real anchor is pinned, see drop.ts). The idempotency key makes a second
-// drop before the group arrives return the same group, not a second one.
-function requestLaneGroup(wsId: string, lane: Lane): void {
-  const inFlight = [...awaitingGroup.values()].some((p) => p.lane === lane.key);
-  awaitingGroup.set(wsId, { lane: lane.key, at: nowEpoch() });
-  if (!inFlight) cmux("workspace.group.create", { name: lane.name, idempotency_key: `cockpit-lane-${lane.key}` });
+// (a real anchor is pinned, see drop.ts). One request per wait: a second card
+// dropped before the group arrives waits on the same one. The key is fresh
+// each time, since a fixed one would keep returning a group Jon has since
+// ungrouped.
+function requestLaneGroup(lane: Lane): void {
+  if (awaitingLane(lane.key)) return;
+  cmux("workspace.group.create", { name: lane.name, idempotency_key: `cockpit-lane-${lane.key}-${nowEpoch()}` });
 }
 
-// Runs on every frame's read of the workspaces, since the renderer has no
-// effect hook: files each waiting card once its lane's group shows up, and
-// drops a wait that has outlived CREATE_SECS, so a late group never pulls
+// The renderer has no effect hook, so this runs from allWorkspaces(), the
+// read every frame starts with. It is idempotent: an entry is filed or
+// dropped once, whichever read reaches it first. Each waiting card whose
+// group has shown up moves to just after the group's run of tabs, then joins
+// it (position first, as handleMove does, or cmux can file it into the group
+// above). A wait past CREATE_SECS is dropped, so a late group never pulls
 // back a card that already fell back.
 function fileAwaitingCards(): void {
-  for (const [wsId, p] of awaitingGroup) {
-    if (nowEpoch() - p.at > CREATE_SECS) {
-      awaitingGroup.delete(wsId);
+  let changed = false;
+  for (const [wsId, o] of laneOverride) {
+    if (!o.awaiting) continue;
+    if (expired(o)) {
+      laneOverride.delete(wsId);
+      changed = true;
       continue;
     }
-    const g = groupForLane(laneByKey(p.lane));
+    const g = groupForLane(laneByKey(o.lane));
     if (!g) continue;
-    awaitingGroup.delete(wsId);
+    const at = indexAfterGroup(wsId, g);
+    if (at >= 0) cmux("workspace.reorder", { workspace_id: wsId, index: at });
     cmux("workspace.group.add", { group_id: g.id, workspace_id: wsId });
-    laneOverride.set(wsId, { lane: p.lane, at: nowEpoch() });
+    laneOverride.set(wsId, { lane: o.lane, at: nowEpoch() });
+    changed = true;
   }
+  if (changed) bump();
+}
+
+// The tab index, among the other tabs, just after the group's last member.
+function indexAfterGroup(wsId: string, g: WorkspaceGroup): number {
+  const others = (data.workspaces() ?? []).filter((x) => x.id !== wsId);
+  const last = others.filter((x) => x.group === g.id || x.id === g.anchorId).at(-1);
+  return last ? others.indexOf(last) + 1 : -1;
 }
 
 // "Move to project" override (issue #8): no cmux field holds project
