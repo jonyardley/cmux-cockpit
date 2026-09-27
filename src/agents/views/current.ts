@@ -210,14 +210,15 @@ function currentHead(): View {
         "cur-pr",
         () => !!pr(),
         () =>
-          // Priority over the status phrase, so the chip is never the one cut.
           chip(
             () => pr()?.text ?? "",
             () => prChipColors(pr()?.health ?? "quiet", pr()?.status),
-          )
-            .layoutPriority(2)
-            .onTap(() => openIfUrl(pr()?.url)),
-      ),
+          ).onTap(() => openIfUrl(pr()?.url)),
+      )
+        // Priority over the status phrase, so the chip is never the one cut.
+        // It sits on the when() result because a priority inside it does not
+        // reach this HStack.
+        .layoutPriority(2),
     ])
       .frame({ maxWidth: "infinity" })
       .paddingTop(14),
@@ -260,8 +261,11 @@ function currentHead(): View {
                 () => chipColors("port"),
               ).onTap(() => openURL("http://localhost:" + x().n)),
           ),
-          Spacer(),
-        ]).paddingTop(10),
+          // Left-aligned by the frame, not a Spacer, which would take half the
+          // row from the port chips.
+        ])
+          .frame({ maxWidth: "infinity", alignment: "leading" })
+          .paddingTop(10),
     ),
     checksBlock(),
     subagentsBlock(),
