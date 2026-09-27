@@ -13,6 +13,7 @@ import {
   payload,
   SETTLE_DELAY_SECONDS,
   settledPr,
+  stepFor,
 } from "../scripts/hooks/report-pr.ts";
 
 const URL = "https://github.com/o/r/pull/21";
@@ -112,6 +113,13 @@ describe("settledPr", () => {
     assert.equal(settledPr(bash("cd /x && rtk gh pr merge 68 --squash")), true);
     assert.equal(settledPr(bash("GH_REPO=o/r gh -R o/r pr ready")), true);
     assert.equal(settledPr(bash("npm run check && gh pr ready")), true);
+    assert.equal(settledPr(bash("gh pr close 68")), true);
+    assert.equal(settledPr(bash("gh pr reopen 68")), true);
+  });
+
+  it("leaves a backgrounded call to the turn-end poll, since the hook fires before gh runs", () => {
+    const event = bash("npm run check && gh pr ready 70");
+    assert.equal(settledPr({ ...event, tool_input: { ...event.tool_input, run_in_background: true } }), false);
   });
 
   it("ignores mentions, other gh pr commands, other tools and junk", () => {
@@ -121,6 +129,19 @@ describe("settledPr", () => {
     assert.equal(settledPr(bash("gh pr merge-foo")), false);
     assert.equal(settledPr({ ...bash("gh pr ready"), tool_name: "Edit" }), false);
     assert.equal(settledPr(null), false);
+  });
+});
+
+describe("stepFor", () => {
+  it("reports a create, polls after a settle, and does nothing otherwise", () => {
+    assert.deepEqual(stepFor(bash("gh pr create --fill")), { kind: "report", url: URL });
+    assert.deepEqual(stepFor(bash("gh pr merge 21 --squash", "")), { kind: "poll" });
+    assert.equal(stepFor(bash("gh pr view 21")), null);
+    assert.equal(stepFor(null), null);
+  });
+
+  it("does nothing for a create that printed no URL", () => {
+    assert.equal(stepFor(bash("gh pr create", "")), null);
   });
 });
 
