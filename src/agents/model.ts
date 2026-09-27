@@ -490,29 +490,35 @@ const MADE_HERE_OWN = 5;
 /** Other workspaces' entries shown at most, the latest few. */
 const MADE_ELSEWHERE = 3;
 
-function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, selected: string | undefined): MadeEntry {
+function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, here: boolean): MadeEntry {
   return {
     key: "m:" + e.url,
     url: e.url,
-    title: readable(e.title) || "Untitled",
+    // Not readable(): that is for agent chat, and would blank a title with
+    // no Latin letters. The hook already checked it (isLabel).
+    title: e.title.trim() || "Untitled",
     kind: e.kind,
     project: projectOf(dirs.get(e.workspace)),
-    here: e.workspace === selected,
+    here,
     epoch: e.epoch,
   };
 }
 
 /** The Made here rows: the selected workspace's own pages and docs first,
  * newest first, then the latest few from other workspaces. Anything past
- * seven days drops off (shared/published-age.ts). */
+ * seven days drops off (shared/published-age.ts); nothing shows before the
+ * clock's first tick, when every entry would otherwise read as fresh. */
 export const madeHere = computed((): Last<MadeEntry>[] => {
+  const now = nowEpoch();
+  if (!now) return [];
   const workspaces = data.workspaces() ?? [];
-  const dirs = new Map(workspaces.map((w) => [w.id, w.directory]));
   const selected = workspaces.find((w) => w.selected)?.id;
-  const all = savedPublished(nowEpoch()).map((e) => madeEntry(e, dirs, selected));
-  const own = all.filter((e) => e.here).slice(0, MADE_HERE_OWN);
-  const others = all.filter((e) => !e.here).slice(0, MADE_ELSEWHERE);
-  return markLast([...own, ...others]);
+  const fresh = savedPublished(now);
+  // Cut to the rows shown before the project lookups, which scan every project.
+  const own = fresh.filter((e) => e.workspace === selected).slice(0, MADE_HERE_OWN);
+  const others = fresh.filter((e) => e.workspace !== selected).slice(0, MADE_ELSEWHERE);
+  const dirs = new Map(workspaces.map((w) => [w.id, w.directory]));
+  return markLast([...own.map((e) => madeEntry(e, dirs, true)), ...others.map((e) => madeEntry(e, dirs, false))]);
 });
 
 const MADE_ICON: Record<PublishedKind, string> = { page: "macwindow", doc: "doc.text" };

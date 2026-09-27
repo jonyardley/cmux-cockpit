@@ -15,6 +15,8 @@ const entry = (id: string, workspace: string, epoch: number, kind = "page") => (
 
 const NOW = 1_000_000;
 
+// globalThis has no __STATE__ property in its type; the build defines it,
+// and the renderer fake reads it from here, so a plain record is enough.
 (globalThis as Record<string, unknown>).__STATE__ = {
   dismissed: {},
   projectOverride: {},
@@ -26,6 +28,7 @@ const NOW = 1_000_000;
     [
       entry("here-old", "sel", NOW - 500),
       entry("here-new", "sel", NOW - 100, "doc"),
+      { ...entry("jp", "sel", NOW - 1000), title: " 日本語メモ " },
       entry("o1", "other", NOW - 50),
       entry("o2", "other", NOW - 60),
       entry("o3", "gone", NOW - 70),
@@ -55,13 +58,13 @@ beforeEach(() => {
 
 describe("madeHere", () => {
   it("puts the selected workspace's own first, newest first, then the latest three from others", () => {
-    assert.deepEqual(ids(), ["here-new", "here-old", "o1", "o2", "o3"]);
+    assert.deepEqual(ids(), ["here-new", "here-old", "jp", "o1", "o2", "o3"]);
   });
 
   it("marks only the final row last", () => {
     assert.deepEqual(
       m.madeHere().map((e) => e.last),
-      [false, false, false, false, true],
+      [false, false, false, false, false, true],
     );
   });
 
@@ -80,6 +83,15 @@ describe("madeHere", () => {
     r.data.workspaces = [ws("other", { directory: "/Users/jon/dev/app-two" })];
     assert.deepEqual(ids(), ["o1", "o2", "o3"]);
     assert.ok(m.madeHere().every((e) => !e.here));
+  });
+
+  it("keeps a title with no Latin letters, trimmed", () => {
+    assert.ok(m.madeHere().some((e) => e.title === "日本語メモ"));
+  });
+
+  it("lists nothing before the clock's first tick, when every entry would read as fresh", () => {
+    r.data.epoch = 0;
+    assert.deepEqual(m.madeHere(), []);
   });
 
   it("drops an entry once it passes seven days on the clock", () => {

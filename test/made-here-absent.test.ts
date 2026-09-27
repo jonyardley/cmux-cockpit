@@ -5,6 +5,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+// globalThis has no __STATE__ property in its type; the build defines it,
+// and the renderer fake reads it from here, so a plain record is enough.
 (globalThis as Record<string, unknown>).__STATE__ = {
   dismissed: {},
   projectOverride: {},

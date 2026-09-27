@@ -94,10 +94,14 @@ export function idleRing(): View {
   );
 }
 
-export function glyph(p: Project): View {
+// Reactive, so a row whose key outlives its project (a Made here row, keyed
+// by link, whose workspace loads late or closes) still follows it.
+export function glyph(p: () => Project): View {
   return ZStack({}, [
-    RoundedRectangle({ cornerRadius: 5 }).fill(p.color),
-    Image(p.icon).font(9).color(glyphColor(p.color, T.text)),
+    RoundedRectangle({ cornerRadius: 5 }).fill(() => p().color),
+    Image(() => p().icon)
+      .font(9)
+      .color(() => glyphColor(p().color, T.text)),
   ]).frame({ width: 18, height: 18 });
 }
 

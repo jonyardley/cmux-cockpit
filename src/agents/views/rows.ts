@@ -58,7 +58,7 @@ function runningRow(e: () => Last<RosterEntry>): View {
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
-    glyph(e().project),
+    glyph(() => e().project),
   ])
     .paddingHorizontal(12)
     .paddingVertical(10)
@@ -82,7 +82,7 @@ function idleRow(e: () => Last<RosterEntry>): View {
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
     meta(() => rosterAge(e())),
-    glyph(e().project),
+    glyph(() => e().project),
   ])
     .paddingHorizontal(12)
     .paddingVertical(10)
@@ -187,7 +187,7 @@ export function madeRow(e: () => Last<MadeEntry>): View {
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
     meta(() => madeAge(e())),
-    glyph(e().project),
+    glyph(() => e().project),
   ])
     .paddingHorizontal(12)
     .paddingVertical(10)
