@@ -89,7 +89,10 @@ export function laneHeader(laneKey: LaneKey): View {
     Text(lane.name)
       .font(12.5)
       .weight("semibold")
-      .color(laneKey === "parked" ? C.faint : C.heading),
+      .color(laneKey === "parked" ? C.faint : C.heading)
+      .lineLimit(1)
+      .truncation("tail")
+      .layoutPriority(1),
     countPill(() => laneCount(laneKey)),
     Spacer(),
     Text(() => (target() ? "Drop here" : ""))
@@ -116,7 +119,7 @@ export function projectHeader(k: string): View {
       RoundedRectangle({ cornerRadius: 5 }).fill(p.color),
       Image(p.icon).font(10).weight("semibold").color(glyphColor(p.color, C.text)),
     ]).frame({ width: 18, height: 18 }),
-    Text(p.name).font(12.5).weight("semibold").color(C.heading),
+    Text(p.name).font(12.5).weight("semibold").color(C.heading).lineLimit(1).truncation("tail").layoutPriority(1),
     countPill(() => projectCount(k)),
     Spacer(),
     ...(canOpenProject(k) ? [glyphButton("plus", 20, 11, C.secondary, () => openProjectWorkspace(k))] : []),
