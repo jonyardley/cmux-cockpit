@@ -7,7 +7,7 @@ test("validateState reads a good file unchanged", () => {
     dismissed: { w1: { a1: 100 } },
     projectOverride: { w2: "alpha" },
     projects: {
-      "/users/jon/dev/scratch": {
+      "/users/jon/dev/scratch/": {
         name: "Scratch",
         color: "#D97757",
         icon: "music.note",
@@ -90,45 +90,58 @@ const spec = { name: "Scratch", color: "#6A9BCC", icon: "folder.fill", root: "/U
 const specJson = JSON.stringify(spec);
 
 test("applySet sets and deletes a sidebar-made project under its match", () => {
-  const set = applySet(emptyState(), "projects./users/jon/dev/scratch", specJson);
-  assert.deepEqual(set.ok && set.state.projects, { "/users/jon/dev/scratch": spec });
+  const set = applySet(emptyState(), "projects./users/jon/dev/scratch/", specJson);
+  assert.deepEqual(set.ok && set.state.projects, { "/users/jon/dev/scratch/": spec });
   if (!set.ok) return;
-  const del = applySet(set.state, "projects./users/jon/dev/scratch", null);
+  const del = applySet(set.state, "projects./users/jon/dev/scratch/", null);
   assert.deepEqual(del.ok && del.state.projects, {});
 });
 
 test("applySet keeps a dotted match whole, since only the first dot splits the key", () => {
-  const set = applySet(emptyState(), "projects./users/jon/.config/app.v2", specJson);
-  assert.deepEqual(set.ok && Object.keys(set.state.projects), ["/users/jon/.config/app.v2"]);
+  const set = applySet(emptyState(), "projects./users/jon/.config/app.v2/", specJson);
+  assert.deepEqual(set.ok && Object.keys(set.state.projects), ["/users/jon/.config/app.v2/"]);
 });
 
 test("applySet refuses a project with a bad match or spec", () => {
   const bad: [string, unknown][] = [
-    ["projects.dev/scratch", spec],
-    ["projects./Users/jon/dev/scratch", spec],
-    [`projects./${"x".repeat(512)}`, spec],
-    ["projects./dev/s", { ...spec, name: "" }],
-    ["projects./dev/s", { ...spec, name: " padded" }],
-    ["projects./dev/s", { ...spec, name: "a\u0007b" }],
-    ["projects./dev/s", { ...spec, name: "x".repeat(65) }],
-    ["projects./dev/s", { ...spec, color: "red" }],
-    ["projects./dev/s", { ...spec, color: "#abc" }],
-    ["projects./dev/s", { ...spec, icon: "Music Note" }],
-    ["projects./dev/s", { ...spec, icon: "a..b" }],
-    ["projects./dev/s", { ...spec, root: "~/dev/s" }],
-    ["projects./dev/s", { ...spec, root: 5 }],
-    ["projects./dev/s", "Scratch"],
+    ["projects.dev/scratch/", spec],
+    // "/" or one segment would match nearly every folder; no trailing "/" would match siblings.
+    ["projects./", spec],
+    ["projects./dev/", spec],
+    ["projects./dev/s", spec],
+    ["projects./Users/jon/dev/scratch/", spec],
+    [`projects./a/${"x".repeat(512)}/`, spec],
+    ["projects./dev/s/", { ...spec, name: "" }],
+    ["projects./dev/s/", { ...spec, name: " padded" }],
+    ["projects./dev/s/", { ...spec, name: "a\u0007b" }],
+    ["projects./dev/s/", { ...spec, name: "x".repeat(65) }],
+    ["projects./dev/s/", { ...spec, color: "red" }],
+    ["projects./dev/s/", { ...spec, color: "#abc" }],
+    ["projects./dev/s/", { ...spec, icon: "Music Note" }],
+    ["projects./dev/s/", { ...spec, icon: "a..b" }],
+    ["projects./dev/s/", { ...spec, root: "~/dev/s" }],
+    ["projects./dev/s/", { ...spec, root: "dev/s" }],
+    ["projects./dev/s/", { ...spec, root: 5 }],
+    ["projects./dev/s/", "Scratch"],
   ];
   for (const [key, value] of bad) assert.equal(applySet(emptyState(), key, JSON.stringify(value)).ok, false, key);
 });
 
 test("applySet accepts a project with no root", () => {
   const { root: _, ...rootless } = spec;
-  const set = applySet(emptyState(), "projects./dev/s", JSON.stringify(rootless));
-  assert.deepEqual(set.ok && set.state.projects, { "/dev/s": rootless });
+  const set = applySet(emptyState(), "projects./dev/s/", JSON.stringify(rootless));
+  assert.deepEqual(set.ok && set.state.projects, { "/dev/s/": rootless });
 });
 
 test("validateState drops bad projects and keeps good ones", () => {
-  const raw = { projects: { "/dev/good": spec, "/dev/bad": { ...spec, color: 1 }, relative: spec, "/dev/X": spec } };
-  assert.deepEqual(validateState(raw).projects, { "/dev/good": spec });
+  const raw = {
+    projects: {
+      "/dev/good/": spec,
+      "/dev/bad/": { ...spec, color: 1 },
+      relative: spec,
+      "/dev/X/": spec,
+      "/dev/nodash": spec,
+    },
+  };
+  assert.deepEqual(validateState(raw).projects, { "/dev/good/": spec });
 });

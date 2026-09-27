@@ -277,9 +277,20 @@ function inAppKeyOf(w: Workspace | undefined): string | null {
   return isInAppKey(k) && specOf(k) ? k : null;
 }
 
-/** True when the card's folder matches no project, so it can become one. */
-export const canCreateProject = (w: Workspace | undefined): boolean =>
-  !!w && !PROJECTS.includes(projectOf(w.directory)) && newProject(w.directory, PROJECTS) !== null;
+// Every project, plus those sent but not built yet, so two quick creates
+// never pick the same name or colour.
+function knownProjects(): Project[] {
+  const sent = [...sentSpecs].flatMap(([match, s]) => (s ? [{ match, ...s }] : []));
+  return [...PROJECTS, ...sent];
+}
+
+/** True when the card sits in Other (no path match, no override), so its folder can become a project. */
+export function canCreateProject(w: Workspace | undefined): boolean {
+  if (!w || projectKey(w) !== projectId(OTHER)) return false;
+  const made = newProject(w.directory, knownProjects());
+  // Already sent and waiting on the rebuild: a second tap would only rename it.
+  return made !== null && !sentSpecs.get(made.key);
+}
 
 /** The name of the card's sidebar-made project, or null when it is in a file project or none. */
 export const inAppProjectName = (w: Workspace | undefined): string | null => {
@@ -296,8 +307,7 @@ function sendSpec(k: string, spec: ProjectSpec | null): void {
 
 /** Makes the card's folder a project, named after the folder. */
 export function createProjectFrom(w: Workspace | undefined): void {
-  if (!w || !canCreateProject(w)) return;
-  const made = newProject(w.directory, PROJECTS);
+  const made = w && canCreateProject(w) ? newProject(w.directory, knownProjects()) : null;
   if (made) sendSpec(made.key, made.spec);
 }
 
@@ -313,10 +323,19 @@ export const cycleProjectColor = (w: Workspace | undefined): void =>
 export const cycleProjectIcon = (w: Workspace | undefined): void =>
   restyle(w, (s) => ({ ...s, icon: nextIn(PROJECT_ICONS, s.icon) }));
 
-/** Deletes the card's sidebar-made project; its workspaces fall back to path matching. */
+/**
+ * Deletes the card's sidebar-made project and every override pointing at it,
+ * so remaking the same folder later does not pull those workspaces back in.
+ */
 export function removeProject(w: Workspace | undefined): void {
   const k = inAppKeyOf(w);
-  if (k) sendSpec(k, null);
+  if (!k) return;
+  for (const [id, key] of [...projectOverride]) {
+    if (key !== k) continue;
+    projectOverride.delete(id);
+    persistSet(`projectOverride.${id}`, null);
+  }
+  sendSpec(k, null);
 }
 
 export const hasProjectOverride = (w: Workspace | undefined): boolean => {

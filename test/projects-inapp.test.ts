@@ -8,10 +8,10 @@ import { readFileSync } from "node:fs";
 import { beforeEach, describe, it } from "node:test";
 
 const spec = { name: "Scratch", color: "#6A9BCC", icon: "folder.fill", root: "/Users/jon/dev/scratch" };
-const key = "/users/jon/dev/scratch";
+const key = "/users/jon/dev/scratch/";
 const g = globalThis as Record<string, unknown>;
 g.__PROJECTS__ = [...JSON.parse(readFileSync("config/projects.example.json", "utf8")), { match: key, ...spec }];
-g.__STATE__ = { dismissed: {}, projectOverride: {}, projects: { [key]: spec } };
+g.__STATE__ = { dismissed: {}, projectOverride: { w2: key, w3: "/dev/app-one" }, projects: { [key]: spec } };
 
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
@@ -48,12 +48,16 @@ describe("a sidebar-made project on the card menu", () => {
     assert.deepEqual(i1, { ...spec, color: PROJECT_COLORS[3], icon: PROJECT_ICONS[1] });
   });
 
-  it("removes it with a delete, then offers nothing more for it", () => {
+  it("removes it and the overrides pointing at it, then offers nothing more for it", () => {
     model.removeProject(card);
-    assert.deepEqual(r.opened, [`cmux-cockpit://set?key=${encodeURIComponent("projects." + key)}`]);
+    assert.deepEqual(r.opened, [
+      "cmux-cockpit://set?key=projectOverride.w2",
+      `cmux-cockpit://set?key=${encodeURIComponent("projects." + key)}`,
+    ]);
+    assert.equal(model.hasProjectOverride(ws("w3")), true);
     assert.equal(model.inAppProjectName(card), null);
     model.cycleProjectColor(card);
     model.removeProject(card);
-    assert.equal(r.opened.length, 1);
+    assert.equal(r.opened.length, 2);
   });
 });

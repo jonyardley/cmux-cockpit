@@ -52,9 +52,11 @@ const projectKey = (v: unknown): string | null =>
   typeof v === "string" && v.length > 0 && v.length <= MAX_PROJECT_KEY ? v : null;
 
 // A sidebar-made project is keyed by its match: an absolute, lowercase
-// directory, since directories are lowercased before matching.
+// directory ending in "/", so it matches that folder and no sibling that
+// shares its prefix (projectOf adds the same "/" to the directory). At least
+// two segments deep, so no URL can plant a "/" that swallows every folder.
 const isMatchKey = (v: string): boolean =>
-  v.startsWith("/") && v.length <= MAX_PROJECT_KEY && v === v.toLowerCase() && !RESERVED.has(v);
+  /^(\/[^/]+){2,}\/$/.test(v) && v.length <= MAX_PROJECT_KEY && v === v.toLowerCase();
 
 const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
 // SF Symbol names are dotted lowercase words, e.g. "music.note".
@@ -71,7 +73,8 @@ function projectSpec(v: unknown): ProjectSpec | null {
   if (!isRecord(v) || !isName(v.name) || !isHex(v.color) || !isSymbol(v.icon)) return null;
   const spec: ProjectSpec = { name: v.name, color: v.color, icon: v.icon };
   if (v.root === undefined) return spec;
-  return typeof v.root === "string" && isMatchKey(v.root.toLowerCase()) ? { ...spec, root: v.root } : null;
+  const root = v.root;
+  return typeof root === "string" && root.startsWith("/") && root.length <= MAX_PROJECT_KEY ? { ...spec, root } : null;
 }
 
 // Keeps the last MAX_ENTRIES valid entries, in insertion order.

@@ -53,25 +53,33 @@ describe("mergeProjects (issue #9)", () => {
   const spec = (name: string) => ({ name, color: "#6A9BCC", icon: "folder.fill" });
 
   it("appends sidebar-made projects after the file's, keeping what it kept", () => {
-    const merged = mergeProjects(file, { "/dev/c": spec("C") });
+    const merged = mergeProjects(file, { "/dev/c/": spec("C") });
     assert.deepEqual(
       merged.projects.map((x) => x.name),
       ["A", "B", "C"],
     );
-    assert.deepEqual(merged.projects[2], { match: "/dev/c", ...spec("C") });
-    assert.deepEqual(merged.kept, { "/dev/c": spec("C") });
+    assert.deepEqual(merged.projects[2], { match: "/dev/c/", ...spec("C") });
+    assert.deepEqual(merged.kept, { "/dev/c/": spec("C") });
     assert.ok(validateProjects(merged.projects).ok);
   });
 
-  it("lets the file win on a shared match, any of a project's matches, or a shared name", () => {
-    const merged = mergeProjects(file, { "/dev/a": spec("X"), "/dev/b2": spec("Y"), "/dev/z": spec("A") });
+  it("lets the file win on a shared match, a folder a file match claims, or a shared name", () => {
+    const merged = mergeProjects(file, { "/dev/a": spec("X"), "/dev/b2/sub/": spec("Y"), "/dev/z/": spec("A") });
     assert.equal(merged.projects.length, 2);
     assert.deepEqual(merged.kept, {});
   });
 
-  it("drops the second of two sidebar-made projects with the same name", () => {
-    const merged = mergeProjects(file, { "/dev/c": spec("C"), "/dev/d": spec("C") });
-    assert.deepEqual(Object.keys(merged.kept), ["/dev/c"]);
+  it("puts a deeper folder first, so a folder inside another stays reachable", () => {
+    const merged = mergeProjects(file, { "/dev/c/": spec("C"), "/dev/c/sub/": spec("Sub") });
+    assert.deepEqual(
+      merged.projects.map((x) => x.name),
+      ["A", "B", "Sub", "C"],
+    );
+  });
+
+  it("drops the second of two sidebar-made projects with the same name, deeper first", () => {
+    const merged = mergeProjects(file, { "/dev/cc/": spec("C"), "/dev/d/": spec("C") });
+    assert.deepEqual(Object.keys(merged.kept), ["/dev/cc/"]);
     assert.ok(validateProjects(merged.projects).ok);
   });
 });

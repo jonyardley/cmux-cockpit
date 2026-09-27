@@ -448,8 +448,35 @@ describe("new project from a card (issue #9)", () => {
     r.opened.length = 0;
     model.createProjectFrom(loose);
     const url = new URL(r.opened[0] ?? "");
-    assert.equal(url.searchParams.get("key"), "projects./users/jon/dev/scratch");
+    assert.equal(url.searchParams.get("key"), "projects./users/jon/dev/scratch/");
+    // Waiting on the rebuild: a second tap must not resend it under "Scratch 2".
+    assert.equal(model.canCreateProject(loose), false);
+    model.createProjectFrom(loose);
+    assert.equal(r.opened.length, 1);
     assert.equal(JSON.parse(url.searchParams.get("value") ?? "").name, "Scratch");
+  });
+
+  it("counts a project sent but not built yet, so a second folder gets a fresh name and colour", () => {
+    const one = ws("one", { directory: "/a/app" });
+    const two = ws("two", { directory: "/b/app" });
+    r.opened.length = 0;
+    model.createProjectFrom(one);
+    model.createProjectFrom(two);
+    const [a, b] = r.opened.map((u) => JSON.parse(new URL(u).searchParams.get("value") ?? ""));
+    assert.equal(a.name, "App");
+    assert.equal(b.name, "App 2");
+    assert.notEqual(a.color, b.color);
+  });
+
+  it("is not offered to a card moved into a project by hand", () => {
+    const first = projects.PROJECTS[0];
+    assert.ok(first);
+    const moved = ws("moved", { directory: "/Users/jon/dev/elsewhere" });
+    r.data.workspaces = [...r.data.workspaces, moved];
+    model.moveToProject(moved, projects.projectId(first));
+    assert.equal(model.canCreateProject(moved), false);
+    model.clearProjectOverride(moved);
+    assert.equal(model.canCreateProject(moved), true);
   });
 
   it("does nothing for a card already in a project, or with no folder", () => {

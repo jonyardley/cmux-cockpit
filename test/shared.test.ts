@@ -198,9 +198,16 @@ describe("newProject (issue #9)", () => {
 
   it("matches and roots at the folder, named after its last segment", () => {
     assert.deepEqual(newProject("/Users/jon/dev/scratch/", []), {
-      key: "/users/jon/dev/scratch",
+      key: "/users/jon/dev/scratch/",
       spec: { name: "Scratch", color: PROJECT_COLORS[0], icon: PROJECT_ICONS[0], root: "/Users/jon/dev/scratch" },
     });
+  });
+
+  it("cleans a folder name the state contract would refuse", () => {
+    assert.equal(newProject("/dev/ my\u0007 notes ", [])?.spec.name, "My notes");
+    const long = newProject("/dev/" + "x".repeat(80), [])?.spec.name ?? "";
+    assert.equal(long.length, 60);
+    assert.equal(newProject("/dev/   ", []), null);
   });
 
   it("numbers a name that is taken", () => {
@@ -218,8 +225,9 @@ describe("newProject (issue #9)", () => {
     assert.equal(newProject("/dev/s", [...all, taken("Q", "#000000")])?.spec.color, PROJECT_COLORS[1]);
   });
 
-  it("is null without an absolute folder", () => {
-    for (const d of [undefined, null, "", "/", "~/dev/s", "dev/s"]) assert.equal(newProject(d, []), null, String(d));
+  it("is null without an absolute folder two segments deep", () => {
+    for (const d of [undefined, null, "", "/", "/dev", "/dev/", "~/dev/s", "dev/s"])
+      assert.equal(newProject(d, []), null, String(d));
   });
 });
 

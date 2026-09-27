@@ -37,7 +37,8 @@ export const isProjectKey = (key: string): boolean => PROJECTS.some((p) => proje
 
 /** The matching project, or NO_PROJECT (a fresh copy) when none matches. */
 export function projectOf(directory: string | null | undefined): Project {
-  const d = String(directory ?? "").toLowerCase();
+  // The trailing "/" lets a folder match ("/dev/app/") skip "/dev/app-old".
+  const d = String(directory ?? "").toLowerCase() + "/";
   for (const p of PROJECTS) if (matchesOf(p).some((m) => d.includes(m))) return p;
   return { ...NO_PROJECT };
 }
@@ -87,19 +88,33 @@ export const isInAppKey = (key: string): boolean => Object.hasOwn(SAVED_STATE.pr
 export const inAppSpec = (key: string): ProjectSpec | undefined =>
   isInAppKey(key) ? SAVED_STATE.projects[key] : undefined;
 
+const MAX_NAME = 64;
+
+// The folder's last segment as a name the state contract accepts: control
+// characters out, trimmed, capitalised, and short enough to take a number.
+function nameFrom(segment: string): string {
+  const clean = [...segment]
+    .filter((c) => c.charCodeAt(0) >= 32)
+    .join("")
+    .trim()
+    .slice(0, MAX_NAME - 4)
+    .trim();
+  return clean.charAt(0).toUpperCase() + clean.slice(1);
+}
+
 /**
  * A new project for `directory`: matched and rooted there, named after its
  * last segment (capitalised, numbered if the name is taken), in the first
- * colour no project uses yet. Null for anything but an absolute path.
+ * colour no project uses yet. `existing` should include projects sent but
+ * not yet built. Null without an absolute folder at least two segments deep.
  */
 export function newProject(
   directory: string | null | undefined,
   existing: readonly Project[],
 ): { key: string; spec: ProjectSpec } | null {
   const dir = String(directory ?? "").replace(/\/+$/, "");
-  const last = dir.slice(dir.lastIndexOf("/") + 1);
-  if (!dir.startsWith("/") || !last) return null;
-  const base = last.charAt(0).toUpperCase() + last.slice(1);
+  const base = nameFrom(dir.slice(dir.lastIndexOf("/") + 1));
+  if (!/^(\/[^/]+){2,}$/.test(dir) || !base) return null;
   const taken = new Set(existing.map((p) => p.name));
   let name = base;
   for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
@@ -108,5 +123,5 @@ export function newProject(
     PROJECT_COLORS.find((c) => !used.has(c.toLowerCase())) ??
     PROJECT_COLORS[existing.length % PROJECT_COLORS.length] ??
     PROJECT_COLORS[0];
-  return { key: dir.toLowerCase(), spec: { name, color, icon: PROJECT_ICONS[0], root: dir } };
+  return { key: dir.toLowerCase() + "/", spec: { name, color, icon: PROJECT_ICONS[0], root: dir } };
 }

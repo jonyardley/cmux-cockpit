@@ -43,6 +43,8 @@ function isProject(value: unknown): value is Project {
   return v.root === undefined || isRoot(v.root);
 }
 
+const matchList = (p: Project): string[] => (typeof p.match === "string" ? [p.match] : p.match);
+
 /** The first value seen twice, if any. */
 function firstDuplicate(values: readonly string[]): string | undefined {
   const seen = new Set<string>();
@@ -64,7 +66,7 @@ export function validateProjects(parsed: unknown): ProjectsResult {
     };
   }
   const projects: readonly Project[] = parsed;
-  const id = firstDuplicate(projects.map((p) => (typeof p.match === "string" ? p.match : (p.match[0] ?? ""))));
+  const id = firstDuplicate(projects.map((p) => matchList(p)[0] ?? ""));
   if (id !== undefined) return { ok: false, error: `two projects share the first match "${id}"` };
   const name = firstDuplicate(projects.map((p) => p.name));
   if (name !== undefined) {
@@ -81,16 +83,20 @@ export interface Merged {
 
 /**
  * Appends the sidebar-made projects (issue #9) to the file's table. The file
- * wins: an in-app project whose match or name is already taken is dropped, so
- * the merged table always passes validateProjects.
+ * wins: an in-app project whose folder a file match already claims, or whose
+ * name is taken, is dropped, so it can never sit as an empty header nobody
+ * can reach, and the merged table always passes validateProjects. Deeper
+ * folders go first, since projectOf takes the first match.
  */
 export function mergeProjects(file: readonly Project[], inApp: Record<string, ProjectSpec>): Merged {
-  const matches = new Set(file.flatMap((p) => (typeof p.match === "string" ? [p.match] : p.match)));
+  const fileMatches = file.flatMap(matchList);
+  const matches = new Set(fileMatches);
   const names = new Set(file.map((p) => p.name));
   const projects: Project[] = [...file];
   const kept: Record<string, ProjectSpec> = {};
-  for (const [match, spec] of Object.entries(inApp)) {
-    if (matches.has(match) || names.has(spec.name)) continue;
+  const deepestFirst = Object.entries(inApp).sort(([a], [b]) => b.length - a.length);
+  for (const [match, spec] of deepestFirst) {
+    if (matches.has(match) || names.has(spec.name) || fileMatches.some((m) => match.includes(m))) continue;
     matches.add(match);
     names.add(spec.name);
     projects.push({ match, ...spec });
