@@ -3,7 +3,7 @@
 // sidebars no PR data today, so the saved copy is what shows; both sidebars
 // read PRs through here so the day cmux does send them, its data wins.
 
-import type { SavedCheck, SavedPr } from "../../scripts/state-config.ts";
+import type { SavedCheck, SavedOwnPr, SavedPr } from "../../scripts/state-config.ts";
 import { SAVED_STATE } from "./persist.ts";
 
 // The saved PR, while the workspace's branch is not yet known (cmux has not
@@ -22,6 +22,14 @@ export function prsOf(w: Workspace): PullRequest[] {
   if (w.pr) return [w.pr];
   const saved = savedFor(w);
   return saved ? [saved] : [];
+}
+
+/**
+ * Jon's own open PRs the poller found across the repos his workspaces sit in
+ * (State.ownPrs), so a PR still shows once its workspace is closed.
+ */
+export function savedOwnPrs(): SavedOwnPr[] {
+  return Object.values(SAVED_STATE.ownPrs);
 }
 
 /** The workspace's first PR, if any. */

@@ -19,6 +19,7 @@ const run = (id: string, extra: Record<string, unknown> = {}) => ({
   projectOverride: {},
   projects: {},
   prs: {},
+  ownPrs: {},
   subagents: {
     w1: [run("a", { startedEpoch: 100, endedEpoch: 200 }), run("b", { startedEpoch: 300 })],
     matched: [run("m", { session: "owner", startedEpoch: 100 })],

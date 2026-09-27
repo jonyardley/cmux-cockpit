@@ -125,9 +125,26 @@ changes selection the card keeps its last states: the usual case is an
 agent pushing, its turn ending, and the checks showing "running" until the
 next turn or workspace switch.
 
-`applySet` refuses `prs`, so no URL can plant a link the sidebar would open,
-and `validateState` keeps only `https://github.com/<owner>/<repo>/pull/<n>`
-urls.
+### Your own open PRs
+
+A PR is found through a workspace's branch, so closing the workspace hid a
+PR still waiting on review. Each poll therefore also asks, once per repo any
+workspace sits in (git's common dir, so every worktree of a repo counts
+once), for `gh pr list --author @me --state open`, and saves the result in
+`ownPrs`: PR url to its number, url, branch, draft flag, `title` (control
+characters become spaces, cut to 120 characters, the branch when there is
+none) and `repo`, the common dir it was found in. Checks and the merge
+verdict are left out, so CI on a PR no workspace holds never rewrites the
+file or rebuilds. A fork's PR counts here, unlike for a workspace's branch.
+The agents panel's Pull requests list shows these after the workspaces'
+own PRs, skipping any a workspace already shows. A repo whose lookup fails
+keeps its previous entries, and only its own; a repo no workspace sits in
+any more drops out. The poll writes `prs`, `ownPrs` and the subagent prune
+in one locked pass.
+
+`applySet` refuses `prs` and `ownPrs`, so no URL can plant a link the
+sidebar would open, and `validateState` keeps only
+`https://github.com/<owner>/<repo>/pull/<n>` urls.
 
 ## Cost of a save
 

@@ -109,6 +109,24 @@ export function writePrs(path: string, prs: State["prs"]): ApplyResult {
 }
 
 /**
+ * One poll's whole write (scripts/pr-poll.ts) in a single locked pass:
+ * replaces the `prs` and `ownPrs` maps, keys sorted as writePrs does, and
+ * folds `subagents` over the `subagents` map, so the file is never left
+ * half updated.
+ */
+export function writePollMaps(
+  path: string,
+  prs: State["prs"],
+  ownPrs: State["ownPrs"],
+  subagents: (runs: State["subagents"]) => State["subagents"],
+): ApplyResult {
+  return readUpdateWrite(path, (before) => {
+    const next = { ...before, prs: sortedByKey(prs), ownPrs: sortedByKey(ownPrs) };
+    return { ok: true, state: validateState({ ...next, subagents: sortedByKey(subagents(before.subagents)) }) };
+  });
+}
+
+/**
  * Folds `update` over the whole `subagents` map (scripts/hooks/report-subagent.ts),
  * the same locked read-modify-write step writePrs uses for its map. `update`
  * gets the current map and returns the next one; keys are sorted before
