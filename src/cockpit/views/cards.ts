@@ -97,7 +97,7 @@ function denseRow(w: WsAccessor, key: string): View {
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
     unreadBadge(w),
-    meta(trailing, "#6B6A64"),
+    meta(trailing, C.metaText),
   ])
     .paddingLeading(25)
     .paddingTrailing(12)

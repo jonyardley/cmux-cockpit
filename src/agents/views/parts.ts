@@ -54,10 +54,10 @@ export function sectionHeader(label: string, count?: () => string, dot?: string)
     Text(n)
       .font(10.5)
       .weight("medium")
-      .color("#6B6A64")
+      .color(T.metaText)
       .paddingHorizontal(() => (n() ? 7 : 0))
       .paddingVertical(1)
-      .background(() => (n() ? "#E5E2D6" : "clear"))
+      .background(() => (n() ? T.countBg : "clear"))
       .cornerRadius(10),
     Spacer(),
   ])

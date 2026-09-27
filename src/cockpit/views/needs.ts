@@ -33,7 +33,7 @@ function needsRow(w: WsAccessor): View {
   ])
     .paddingHorizontal(10)
     .paddingVertical(9)
-    .hoverBackground("#FFFDFB");
+    .hoverBackground(C.needsHover);
   // One selection ring: the card below carries it, so the row keeps its edge.
   return ring(row, C.card, C.needsRowEdge, 1, 9)
     .frame({ maxWidth: "infinity" })

@@ -27,7 +27,7 @@ import {
 } from "../model.ts";
 import { drag } from "../state.ts";
 import { ageOf, statusInfo } from "../status.ts";
-import { C } from "../theme.ts";
+import { C, PR_STYLE } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;
 
@@ -133,18 +133,6 @@ export function statusLabel(w: WsAccessor, size: number, weight: Weight): View {
 
 // --- chips ---------------------------------------------------------------------------
 
-interface ChipStyle {
-  bg: string;
-  fg: string;
-  edge: string;
-}
-
-const PR_STYLE: Record<PrStatus, ChipStyle> = {
-  open: { bg: "#EAF1E4", fg: "#3F5A2C", edge: "#D6E4CB" },
-  merged: { bg: "#EFEAF7", fg: "#5B3E91", edge: "#DED4EF" },
-  closed: { bg: "#F4F2EA", fg: "#6B6A64", edge: "#E8E5DA" },
-};
-
 export interface Chip {
   id: string;
   kind: "pr" | "branch";
@@ -176,20 +164,20 @@ function chip(c: () => Chip): View {
   const body = HStack({ spacing: 4 }, [
     Image(() => (isPr() ? "arrow.triangle.pull" : "arrow.branch"))
       .font(9)
-      .color(() => (isPr() ? st().fg : "#4A4945")),
+      .color(() => (isPr() ? st().fg : C.chipText)),
     Text(() => c().text)
       .font(11)
       .weight("medium")
       .lineLimit(1)
       .truncation("middle")
-      .color(() => (isPr() ? st().fg : "#4A4945")),
+      .color(() => (isPr() ? st().fg : C.chipText)),
   ])
     .paddingHorizontal(6)
     .paddingVertical(1);
   return ring(
     body,
     () => (isPr() ? st().bg : C.ground),
-    () => (isPr() ? st().edge : "#E8E5DA"),
+    () => (isPr() ? st().edge : C.chipEdge),
     1,
     6,
     true,

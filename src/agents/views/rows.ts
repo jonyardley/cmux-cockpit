@@ -26,7 +26,7 @@ export function waitingRow(e: () => Last<AgentEntry>): View {
       glyph(e().project),
       Text(() => displayTitle(w()) || "untitled")
         .font(11.5)
-        .color("#6B6A64")
+        .color(T.metaText)
         .lineLimit(1)
         .truncation("middle")
         .layoutPriority(1),
@@ -44,12 +44,12 @@ export function waitingRow(e: () => Last<AgentEntry>): View {
         Text("Jump to answer")
           .font(12)
           .weight("medium")
-          .color("#3D3D3A")
+          .color(T.buttonText)
           .paddingHorizontal(10)
           .paddingVertical(4)
-          .hoverBackground("#F4F2EA"),
+          .hoverBackground(T.buttonHover),
         T.panel,
-        "#E2DFD3",
+        T.buttonEdge,
         1,
         8,
         true,
