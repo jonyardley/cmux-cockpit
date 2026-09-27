@@ -52,13 +52,33 @@ an in-app project whose match or name is already taken is left out, and so
 is dropped from the `__STATE__` the sidebar sees, so the menu never offers
 to edit it. Projects in the file are never written by the loop.
 
+## Pull requests: the one map no URL writes
+
+cmux sends custom sidebars no PR data (#7), so `scripts/pr-poll.ts` finds it
+instead and keeps it in a fourth map, `prs`: workspace id to
+`{"number", "url", "status": "open|merged|closed", "branch"}`. For every
+workspace in every window it reads the directory's git branch and asks
+`gh pr list --head <branch> --state all` for that branch's PR, preferring an
+open one. It replaces the whole map under the same lock, and rebuilds only
+when a PR changed. A workspace whose `gh` call failed keeps its last entry.
+
+The `pr-poll-turn` and `pr-poll-select` rules in `automations.json` run it
+(through `scripts/pr-poll.sh`, which finds node) when an agent's turn ends
+and when a workspace is selected, each at most once every 30 seconds.
+`src/shared/prs.ts` reads it back: cmux's own `pr`/`prs` win when present,
+and a saved PR shows only while the workspace is still on its branch.
+
+`applySet` refuses `prs`, so no URL can plant a link the sidebar would open,
+and `validateState` keeps only `https://github.com/<owner>/<repo>/pull/<n>`
+urls.
+
 ## Cost of a save
 
 Every save rebuilds both bundles and cmux reloads both sidebars. Anything
 held only for the session goes with it: a card just dragged to a lane can
 snap back until cmux reports the move, and the agents panel reloads for a
-change it does not use. Saves are rare (a dismissal, a project move), so this
-is accepted until cmux's own store lands (#20).
+change it does not use. Saves are rare (a dismissal, a project move, a PR
+opened or merged), so this is accepted until cmux's own store lands (#20).
 
 ## Trust
 

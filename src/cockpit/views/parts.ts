@@ -3,6 +3,7 @@
 import { glyphColor } from "../../shared/contrast.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
+import { prOf } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot } from "../../shared/ui.ts";
 import { LANES } from "../lanes.ts";
@@ -153,7 +154,7 @@ export interface Chip {
 export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] {
   const out: Chip[] = [];
   if (!w) return out;
-  const pr = w.pr;
+  const pr = prOf(w);
   if (pr?.number) {
     const c: Chip = { id: "pr", kind: "pr", text: "#" + pr.number + " " + (pr.status || "") };
     if (pr.url) c.url = pr.url;

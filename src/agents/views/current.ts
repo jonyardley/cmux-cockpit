@@ -3,6 +3,7 @@
 
 import { glyphColor } from "../../shared/contrast.ts";
 import { type Last, markLast } from "../../shared/list.ts";
+import { prOf } from "../../shared/prs.ts";
 import { cardMessage, readable, tracked } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
@@ -153,12 +154,12 @@ function currentHead(): View {
       Spacer({ minLength: 4 }),
       when(
         "cur-pr",
-        () => !!w().pr,
+        () => !!prOf(w()),
         () =>
           chip(
-            () => "#" + (w().pr?.number ?? "") + " " + (w().pr?.status ?? ""),
-            () => chipColors(w().pr?.status),
-          ).onTap(() => openIfUrl(w().pr?.url)),
+            () => "#" + (prOf(w())?.number ?? "") + " " + (prOf(w())?.status ?? ""),
+            () => chipColors(prOf(w())?.status),
+          ).onTap(() => openIfUrl(prOf(w())?.url)),
       ),
     ])
       .frame({ maxWidth: "infinity" })
