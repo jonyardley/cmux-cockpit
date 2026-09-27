@@ -4,12 +4,14 @@ import { glyphColor } from "../../shared/contrast.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
 import { prChipColors } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
-import { type PrHealth, prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot, when } from "../../shared/ui.ts";
 import { LANES } from "../lanes.ts";
 import {
+  type Chip,
+  type ChipId,
   canCreateProject,
+  chipsFor,
   clearProjectOverride,
   createProjectFrom,
   cycleProjectColor,
@@ -27,7 +29,7 @@ import {
   selectWorkspace,
 } from "../model.ts";
 import { drag } from "../state.ts";
-import { ageOf, statusInfo } from "../status.ts";
+import { ageOf, statusInfo, statusLine } from "../status.ts";
 import { C } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;
@@ -123,8 +125,9 @@ export function titleRow(w: WsAccessor, size: number): View {
   ]).frame({ maxWidth: "infinity" });
 }
 
+// The status and how long it has held ("Working 14m", issue #47).
 export function statusLabel(w: WsAccessor, size: number, weight: Weight): View {
-  return Text(() => statusInfo(w()).label)
+  return Text(() => statusLine(w()))
     .font(size)
     .weight(weight)
     .color(() => statusInfo(w()).text)
@@ -134,50 +137,42 @@ export function statusLabel(w: WsAccessor, size: number, weight: Weight): View {
 
 // --- chips ---------------------------------------------------------------------------
 
-export interface Chip {
-  id: string;
-  kind: "pr" | "branch";
-  text: string;
-  url?: string;
-  status?: PrStatus;
-  health?: PrHealth;
-  draft?: boolean;
-}
-
-export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] {
-  const out: Chip[] = [];
-  if (!w) return out;
-  const pr = prSummary(w);
-  if (pr) {
-    const c: Chip = { id: "pr", kind: "pr", text: pr.text, health: pr.health, draft: pr.draft };
-    if (pr.url) c.url = pr.url;
-    if (pr.status) c.status = pr.status;
-    out.push(c);
-  }
-  if (withBranch && w.branch) out.push({ id: "br", kind: "branch", text: w.branch + (w.dirty ? " •" : "") });
-  return out;
-}
-
-function chip(c: () => Chip): View {
+// A chip's kind is fixed by its key (one when() per id), so the kind picks
+// the pieces once; only the text and colours are reactive. The PR chip takes
+// its health's colours; the branch and ports chips stay quiet.
+function chip(id: ChipId, c: () => Chip): View {
+  const isPr = id === "pr";
   const st = () => prChipColors(c().health ?? "quiet", c().status, c().draft);
-  const isPr = () => c().kind === "pr";
-  const body = HStack({ spacing: 4 }, [
-    Image(() => (isPr() ? "arrow.triangle.pull" : "arrow.branch"))
-      .font(9)
-      .color(() => (isPr() ? st().fg : C.chipText)),
-    Text(() => c().text)
-      .font(11)
-      .weight("medium")
-      .lineLimit(1)
-      .truncation("tail")
-      .color(() => (isPr() ? st().fg : C.chipText)),
-  ])
-    .paddingHorizontal(6)
-    .paddingVertical(1);
+  const fg = () => (isPr ? st().fg : C.chipText);
+  const text = Text(() => c().text)
+    .font(11)
+    .weight("medium")
+    .lineLimit(1)
+    .truncation("tail")
+    .color(fg);
+  const parts: View[] =
+    id === "port"
+      ? [text.monospaced()]
+      : [
+          Image(isPr ? "arrow.triangle.pull" : "arrow.branch")
+            .font(9)
+            .color(fg),
+          text,
+        ];
+  // The uncommitted-changes dot trails the branch name (issue #48).
+  if (id === "br")
+    parts.push(
+      when(
+        "dirty",
+        () => !!c().dirty,
+        () => Circle({ size: 5 }).fill(C.clay),
+      ),
+    );
+  const body = HStack({ spacing: 4 }, parts).paddingHorizontal(6).paddingVertical(1);
   return ring(
     body,
-    () => (isPr() ? st().bg : C.ground),
-    () => (isPr() ? st().edge : C.chipEdge),
+    () => (isPr ? st().bg : C.ground),
+    () => (isPr ? st().edge : C.chipEdge),
     1,
     6,
     true,
@@ -187,23 +182,28 @@ function chip(c: () => Chip): View {
   });
 }
 
-/** The chip with `id` from `chipsFor`, or an empty one of that kind while it is absent. */
-function chipById(w: Workspace | undefined, withBranch: boolean, id: "pr" | "br"): Chip {
-  return chipsFor(w, withBranch).find((c) => c.id === id) ?? { id, kind: id === "pr" ? "pr" : "branch", text: "" };
+/** The chip with `id` from `chipsFor`, or an empty one while it is absent. */
+function chipById(w: Workspace | undefined, withBranch: boolean, id: ChipId): Chip {
+  return chipsFor(w, withBranch).find((c) => c.id === id) ?? { id, text: "" };
 }
 
 // One when() per chip, so each has a fixed key and its own place in the
-// HStack. The PR chip is short and says the most, so it holds its width and
-// the branch chip gives way, cut at its end. The priority sits on the when()
-// result because a priority inside it does not reach the HStack. No Spacer:
-// it is flexible too and would split the free width with the branch chip, so
-// the frame left-aligns instead.
+// HStack. The PR and ports chips are short and say the most, so they hold
+// their width and the branch chip gives way, cut at its end. The priority
+// sits on the when() result because a priority inside it does not reach the
+// HStack. No Spacer: it is flexible too and would split the free width with
+// the branch chip, so the frame left-aligns instead.
 export function chipsRow(w: WsAccessor, withBranch: boolean): View {
-  const has = (id: "pr" | "br") => () => chipsFor(w(), withBranch).some((c) => c.id === id);
-  return HStack({ spacing: 5 }, [
-    when("pr", has("pr"), () => chip(() => chipById(w(), withBranch, "pr"))).layoutPriority(2),
-    when("br", has("br"), () => chip(() => chipById(w(), withBranch, "br"))),
-  ]).frame({ maxWidth: "infinity", alignment: "leading" });
+  const one = (id: ChipId) =>
+    when(
+      id,
+      () => chipsFor(w(), withBranch).some((c) => c.id === id),
+      () => chip(id, () => chipById(w(), withBranch, id)),
+    );
+  return HStack({ spacing: 5 }, [one("pr").layoutPriority(2), one("br"), one("port").layoutPriority(2)]).frame({
+    maxWidth: "infinity",
+    alignment: "leading",
+  });
 }
 
 // --- card chrome and menu ------------------------------------------------------------

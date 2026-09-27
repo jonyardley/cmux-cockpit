@@ -19,6 +19,7 @@ import {
   projectId,
   projectOf,
 } from "../shared/projects.ts";
+import { type PrHealth, prSummary } from "../shared/prs.ts";
 import { nowEpoch } from "../shared/time.ts";
 import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
@@ -518,3 +519,45 @@ export const needsList = computed(() =>
     .filter((w) => statusOf(w) === "needs_input")
     .sort((a, b) => sinceOf(a) - sinceOf(b)),
 );
+
+// --- Card chips (issue #48) ------------------------------------------------------------
+
+export type ChipId = "pr" | "br" | "port";
+
+export interface Chip {
+  id: ChipId;
+  text: string;
+  url?: string;
+  status?: PrStatus;
+  health?: PrHealth;
+  draft?: boolean;
+  /** The branch chip's uncommitted-changes dot. */
+  dirty?: boolean;
+}
+
+const isPort = (p: number): boolean => Number.isInteger(p) && p > 0 && p < 65536;
+
+function portChip(ports: readonly number[] | undefined): Chip | null {
+  const list = [...new Set((ports ?? []).filter(isPort))];
+  const [first] = list;
+  if (first === undefined) return null;
+  const more = list.length > 1 ? " +" + (list.length - 1) : "";
+  return { id: "port", text: ":" + first + more + " ↗", url: "http://localhost:" + first };
+}
+
+/** A card's chips, in order: the PR, the branch (when asked for), the ports. */
+export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] {
+  const out: Chip[] = [];
+  if (!w) return out;
+  const pr = prSummary(w);
+  if (pr) {
+    const c: Chip = { id: "pr", text: pr.text, health: pr.health, draft: pr.draft };
+    if (pr.url) c.url = pr.url;
+    if (pr.status) c.status = pr.status;
+    out.push(c);
+  }
+  if (withBranch && w.branch) out.push({ id: "br", text: w.branch, dirty: !!w.dirty });
+  const port = portChip(w.ports);
+  if (port) out.push(port);
+  return out;
+}
