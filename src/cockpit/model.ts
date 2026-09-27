@@ -25,8 +25,8 @@ import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
   bump,
   collapsedProjects,
+  isMode,
   mode,
-  projectsMode,
   quietCollapsed,
   savedFolds,
   setCollapsedProjects,
@@ -36,7 +36,7 @@ import {
   tick,
   unsortedCollapsed,
 } from "./state.ts";
-import { sinceOf, statusOf } from "./status.ts";
+import { isReady, sinceOf, statusOf } from "./status.ts";
 
 const OVERRIDE_SECS = 4;
 
@@ -243,27 +243,6 @@ export function cardWorkspaces(): Workspace[] {
 
 export const wsById = (id: string): Workspace | undefined => (data.workspaces() ?? []).find((w) => w.id === id);
 
-// --- selection -----------------------------------------------------------------------
-
-let selectOverride: string | null = null;
-
-export function isSelected(w: Workspace | undefined): boolean {
-  tick();
-  if (!w) return false;
-  if (selectOverride) {
-    if (data.selectedId() === selectOverride) selectOverride = null;
-    else return w.id === selectOverride;
-  }
-  return !!w.selected;
-}
-
-export function selectWorkspace(id: string | undefined): void {
-  if (!id) return;
-  selectOverride = id;
-  bump();
-  cmux("workspace.select", { workspace_id: id });
-}
-
 // --- lane collapse -------------------------------------------------------------------
 
 const collapseOverride = new Map<string, boolean>(); // groupId -> collapsed
@@ -320,6 +299,16 @@ export function chooseMode(m: ViewMode): void {
   setMode(m);
   persistSet("ui.mode", m);
 }
+
+// Both panels stay built; switching tabs only flips these two live values,
+// so neither list is torn down and rebuilt (the flicker). The hidden panel
+// is transparent AND zero height, so it neither leaves blank space nor
+// relies on the app ignoring taps on a transparent view. A slide between
+// the panels would add an offset here, once the renderer can animate one.
+/** 1 while `m` is the chosen mode, else 0: a live value for `.opacity()`. */
+export const panelOpacity = (m: ViewMode) => (): number => (isMode(m)() ? 1 : 0);
+/** Unbounded while `m` is the chosen mode, else 0: for `.frame({ maxHeight })`. */
+export const panelMaxHeight = (m: ViewMode) => (): number | "infinity" => (isMode(m)() ? "infinity" : 0);
 
 // --- All mode: one flat list of lane headers and cards --------------------------------
 
@@ -393,9 +382,9 @@ export const emptyLaneNames = (): string[] =>
     .filter(isEmpty)
     .map((s) => s.lane.name);
 
-// The lanes' Reorderable goes empty in Projects mode, so a drag there can
-// never resolve to a lane move.
-export const flatEntries = (): LaneEntry[] => (mode() === "all" ? laneEntries() : []);
+// Built in both modes: the lanes panel stays mounted under Projects, hidden
+// (panelOpacity). drop.ts ignores a drag or move outside All instead.
+export const flatEntries: () => LaneEntry[] = laneEntries;
 
 export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => laneOf(w) === laneKey).length;
 
@@ -593,7 +582,6 @@ function pushGroup(entries: ProjectEntry[], k: string, rows: readonly Workspace[
 }
 
 export const projectEntries = computed(() => {
-  if (!projectsMode()) return [];
   const groups = cardsByProject();
   const entries: ProjectEntry[] = [];
   // A project with sessions gets a header; the quiet ones share one header at
@@ -663,3 +651,21 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
   if (port) out.push(port);
   return out;
 }
+
+// Ready cards (issue #53).
+
+/**
+ * A Ready card offers "To review", unless it is already in For review or
+ * anchors a group: a generated lane anchor is its group, and a real
+ * workspace anchoring one cannot leave it (drop.ts pins those too).
+ */
+export function canFileForReview(w: Workspace | undefined): boolean {
+  return !!w && isReady(w) && laneOf(w) !== "review" && !groups().some((g) => g.anchorId === w.id);
+}
+
+/** Files a Ready card into For review. */
+export const fileForReview = (w: Workspace | undefined): void => moveToLane(w, "review");
+
+/** True when a card's chips row has anything to show: a chip, or the To review action. */
+export const hasChipsRow = (w: Workspace | undefined, withBranch: boolean): boolean =>
+  chipsFor(w, withBranch).length > 0 || canFileForReview(w);

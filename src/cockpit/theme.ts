@@ -14,6 +14,9 @@ export const C = {
   blueHalo: "#3B6FB62E",
   clayHalo: "#D9775738",
   green: "#788C5D",
+  greenText: "#5E7A40",
+  // The Ready pill's face: the done green, faint (issue #53).
+  readyBg: "#788C5D1F",
   grey: "#A09E95",
   segTrack: "#E5E2D6",
   needsBg: "#FBECE4",

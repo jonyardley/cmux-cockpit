@@ -409,6 +409,13 @@ describe("prs", () => {
   });
 });
 
+describe("madeHere", () => {
+  it("is empty while nothing has been published", () => {
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.deepEqual(m.madeHere(), []);
+  });
+});
+
 describe("prChipText", () => {
   it("says draft for an open draft, else the status", () => {
     assert.equal(m.prChipText({ status: "open", draft: true }), "draft");

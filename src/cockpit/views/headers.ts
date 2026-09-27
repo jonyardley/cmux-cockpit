@@ -9,20 +9,18 @@ import {
   emptyLaneNames,
   isCollapsed,
   isProjectCollapsed,
-  isSelected,
   laneCount,
   openProjectWorkspace,
   projectByKey,
   projectCount,
   quietLabel,
   quietProjects,
-  selectWorkspace,
   toggleLane,
   toggleProject,
   toggleQuiet,
   wsById,
 } from "../model.ts";
-import { mode, projectsMode, quietCollapsed } from "../state.ts";
+import { isMode, isSelected, projectsMode, quietCollapsed, selectWorkspace } from "../state.ts";
 import { C } from "../theme.ts";
 import { glyphButton, ring, statusDot, unreadBadge } from "./parts.ts";
 
@@ -54,12 +52,7 @@ function segButton(label: string, icon: string | null, on: () => boolean, set: (
 // background under every padding, so the track swallowed the margin.
 export function segmented(): View {
   const track = HStack({ spacing: 0 }, [
-    segButton(
-      "All",
-      null,
-      () => mode() === "all",
-      () => chooseMode("all"),
-    ),
+    segButton("All", null, isMode("all"), () => chooseMode("all")),
     segButton("Projects", null, projectsMode, () => chooseMode("projects")),
   ]).padding(3);
   return VStack({ spacing: 0 }, [ring(track, C.segTrack, C.hairline, 1, 10).frame({ maxWidth: "infinity" })])
@@ -196,8 +189,10 @@ export function emptyFold(): View {
     .fixed();
 }
 
-const badge = (k: string, size: number, font: number): View =>
-  projectBadge(projectByKey(k), size, font, C.text, "semibold");
+const badge = (k: string, size: number, font: number): View => {
+  const p = projectByKey(k);
+  return projectBadge(() => p, size, font, C.text, "semibold");
+};
 
 // Projects with no sessions (issue #54): a muted header that folds, then a
 // short row each, so the busy projects stand out and the quiet ones still

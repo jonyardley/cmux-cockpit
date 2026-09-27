@@ -16,7 +16,7 @@ import {
   overrideOrder,
   wsById,
 } from "./model.ts";
-import { drag, setDrag } from "./state.ts";
+import { drag, mode, setDrag } from "./state.ts";
 
 export interface DropTarget {
   laneKey: LaneKey;
@@ -73,6 +73,8 @@ function targetIndex(w: Workspace, all: Workspace[], others: string[], drop: Dro
 /** Reorderable's onMove: reorders the tab, then files it into its new lane. */
 export function handleMove(key: string, index: number): void {
   setDrag(null);
+  // The lanes stay mounted, hidden, under Projects: never move from there.
+  if (mode() !== "all") return;
   const entry = flatEntries().find((e) => e.id === key);
   if (entry?.kind !== "ws") return;
   const w = wsById(entry.wsId);
@@ -105,6 +107,11 @@ export function handleMove(key: string, index: number): void {
 export function isForeignAnchor(wsId: string): boolean {
   const lanes = laneAnchorIds();
   return groups().some((g) => g.anchorId === wsId && !lanes.has(wsId));
+}
+
+/** Reorderable's onDragChange: a drag only counts in All, where the lanes show. */
+export function handleDragChange(d: DragState | null): void {
+  setDrag(mode() === "all" ? d : null);
 }
 
 /** True while a card is being dragged: empty lanes open as zones. */
