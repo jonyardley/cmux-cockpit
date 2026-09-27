@@ -76,6 +76,9 @@ export interface SavedSubagent {
   session: string;
   /** Claude Code's agent_id, set when the run starts; SubagentStop names it. */
   agentId?: string;
+  /** The Agent call's tool_input.subagent_type, so a SubagentStart with
+   * several unpaired calls in the same session pairs to the right one. */
+  type?: string;
   /** The Agent call's description, at most MAX_LABEL characters. */
   label: string;
   /** Epoch seconds the Agent tool was called. */
@@ -131,12 +134,22 @@ const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{
 // SF Symbol names are dotted lowercase words, e.g. "music.note".
 const isSymbol = (v: unknown): v is string =>
   typeof v === "string" && /^[a-z0-9]+(\.[a-z0-9]+)*$/.test(v) && v.length <= 64;
-const isName = (v: unknown): v is string =>
-  typeof v === "string" &&
-  v.trim() === v &&
-  v.length > 0 &&
-  v.length <= 64 &&
-  [...v].every((c) => c.charCodeAt(0) >= 32);
+
+// A control character, 0-31 or 127 (DEL): the same rule the hook's own
+// dropControl uses (scripts/hooks/report-subagent.ts), so a label that
+// reads as clean there reads as clean here too.
+const isCleanChar = (c: string): boolean => {
+  const code = c.charCodeAt(0);
+  return code >= 32 && code !== 127;
+};
+
+// Plain, single-line text with no leading, trailing or control characters,
+// up to `max` long. Shared by isName and isLabel so both keep one rule.
+function isText(v: unknown, max: number): v is string {
+  return typeof v === "string" && v.trim() === v && v.length > 0 && v.length <= max && [...v].every(isCleanChar);
+}
+
+const isName = (v: unknown): v is string => isText(v, 64);
 
 function projectSpec(v: unknown): ProjectSpec | null {
   if (!isRecord(v) || !isName(v.name) || !isHex(v.color) || !isSymbol(v.icon)) return null;
@@ -176,22 +189,19 @@ function savedPr(v: unknown): SavedPr | null {
   return checks.length ? { ...pr, checks } : pr;
 }
 
-const isLabel = (v: unknown): v is string =>
-  typeof v === "string" &&
-  v.trim() === v &&
-  v.length > 0 &&
-  v.length <= MAX_LABEL &&
-  [...v].every((c) => c.charCodeAt(0) >= 32);
+const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
 
 const isOptionalId = (v: unknown): boolean => v === undefined || (typeof v === "string" && isId(v));
 
 function savedSubagent(v: unknown): SavedSubagent[] {
   if (!isRecord(v) || !isLabel(v.label) || !isEpoch(v.startedEpoch)) return [];
-  const { id, session, agentId, endedEpoch } = v;
+  const { id, session, agentId, type, endedEpoch } = v;
   if (typeof id !== "string" || !isId(id) || typeof session !== "string" || !isId(session)) return [];
-  if (!isOptionalId(agentId) || (endedEpoch !== undefined && !isEpoch(endedEpoch))) return [];
+  if (!isOptionalId(agentId) || !isOptionalId(type)) return [];
+  if (endedEpoch !== undefined && !isEpoch(endedEpoch)) return [];
   const run: SavedSubagent = { id, session, label: v.label, startedEpoch: v.startedEpoch };
   if (typeof agentId === "string") run.agentId = agentId;
+  if (typeof type === "string") run.type = type;
   if (isEpoch(endedEpoch)) run.endedEpoch = endedEpoch;
   return [run];
 }

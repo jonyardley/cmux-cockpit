@@ -75,6 +75,19 @@ function readState(path: string): unknown {
 const serialise = (state: unknown): string => `${JSON.stringify(state, null, 2)}\n`;
 
 /**
+ * A map with its keys sorted, so replacing it with the same entries in a
+ * different order (a reorder of workspaces or windows between polls, say)
+ * is never seen as a change. Shared by writePrs and writeSubagents.
+ */
+function sortedByKey<T>(map: Record<string, T>): Record<string, T> {
+  return Object.fromEntries(
+    Object.keys(map)
+      .sort()
+      .map((id) => [id, map[id] as T]),
+  );
+}
+
+/**
  * Reads the state file, applies one set, and writes it back atomically
  * (a unique temp file then rename), under a lock. A missing or unparseable
  * file reads as empty state, per the contract; a refused set leaves the file
@@ -91,11 +104,7 @@ export function readApplyWrite(path: string, key: string, value: string | null):
  * reorder of workspaces or windows between polls is not seen as a change.
  */
 export function writePrs(path: string, prs: State["prs"]): ApplyResult {
-  const sorted = Object.fromEntries(
-    Object.keys(prs)
-      .sort()
-      .map((id) => [id, prs[id]]),
-  );
+  const sorted = sortedByKey(prs);
   return readUpdateWrite(path, (before) => ({ ok: true, state: validateState({ ...before, prs: sorted }) }));
 }
 
@@ -112,11 +121,7 @@ export function writeSubagents(
 ): ApplyResult {
   return readUpdateWrite(path, (before) => {
     const next = update(before.subagents);
-    const sorted = Object.fromEntries(
-      Object.keys(next)
-        .sort()
-        .map((id) => [id, next[id]]),
-    );
+    const sorted = sortedByKey(next);
     return { ok: true, state: validateState({ ...before, subagents: sorted }) };
   });
 }

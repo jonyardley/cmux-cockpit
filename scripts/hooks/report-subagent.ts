@@ -13,10 +13,19 @@
 //
 // A run is keyed by the Agent tool call (PreToolUse's tool_use_id) so it
 // exists before Claude Code has an agent id for it; SubagentStart pairs it
-// up by giving the oldest unpaired run in that session an agentId, and
-// SubagentStop finds it by that agentId. Nothing here is fatal if an event
-// is missed: SubagentStart falls back to appending a fresh run, and a run
-// that never gets a Stop is pruned once it has run for too long.
+// up by giving the oldest unpaired run in that session, whose saved `type`
+// matches the event's agent_type, an agentId (falling back to the oldest
+// unpaired run in the session when none matches, since that is still the
+// best guess), and SubagentStop finds it by that agentId. Nothing here is
+// fatal if an event is missed: SubagentStart falls back to appending a
+// fresh run, and a run that never gets a Stop is pruned once it has run
+// for too long (scripts/subagent-runs.ts).
+//
+// Residual case (docs/state-loop.md): a denied or failed Agent call is
+// never followed by a SubagentStart, so its row sits unpaired until it is
+// pruned. A second call of the same subagent_type approved within that
+// window still pairs to the denied call's row first, since nothing here
+// can tell the two apart beyond session and type.
 //
 // Rebuilding both sidebars costs a full esbuild pass, so two events close
 // together (SubagentStart fires ~25ms after the PreToolUse that starts the
@@ -34,9 +43,14 @@ import { spawn, spawnSync } from "node:child_process";
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { MAX_LABEL, type SavedSubagent, type State } from "../state-config.ts";
+import { MAX_LABEL, type SavedSubagent, type State, validateState } from "../state-config.ts";
 import { LOG_PATH } from "../state-log.ts";
 import { writeSubagents } from "../state-url.ts";
+import { prune } from "../subagent-runs.ts";
+
+// Re-exported so this hook stays the one place both its own tests and
+// pr-poll.ts's need to reach the retention policy from.
+export { prune };
 
 type SubagentMap = State["subagents"];
 
@@ -50,11 +64,18 @@ function dropControl(raw: string): string {
   return [...raw].map((c) => (c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127 ? " " : c)).join("");
 }
 
-/** Collapses whitespace and control characters and cuts to MAX_LABEL, or null for anything unusable. */
+/**
+ * Collapses whitespace and control characters, cuts to MAX_LABEL code
+ * points (Array.from, so a surrogate pair is never split in two), and only
+ * then trims: trimming first and slicing after can cut a label right after
+ * a space, leaving a trailing space that isLabel then refuses and
+ * validateState drops the whole run over. Null for anything unusable.
+ */
 function cleanLabel(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
-  const cleaned = dropControl(raw).replaceAll(/\s+/g, " ").trim();
-  return cleaned.length ? cleaned.slice(0, MAX_LABEL) : null;
+  const collapsed = dropControl(raw).replaceAll(/\s+/g, " ");
+  const cleaned = Array.from(collapsed).slice(0, MAX_LABEL).join("").trim();
+  return cleaned.length ? cleaned : null;
 }
 
 /** The first candidate that cleans up to something, else "subagent". */
@@ -66,8 +87,16 @@ function labelFrom(...candidates: unknown[]): string {
   return "subagent";
 }
 
+// A run's type, kept only when it is a non-empty string: cleanLabel's rules
+// do not apply here, since this is compared for equality, not shown.
+function typeOf(raw: unknown): string | undefined {
+  return typeof raw === "string" && raw ? raw : undefined;
+}
+
 // PreToolUse on the Agent tool: a new run, keyed by the call, not yet paired
-// to an agent id.
+// to an agent id. A duplicate delivery of the same call (the hook can be
+// registered twice, or an event can be redelivered) is a no-op: a run with
+// that tool_use_id already exists.
 // A run this function leaves unchanged returns the same array reference,
 // so applyEvent can tell a no-op from a real change without a deep compare.
 function onPreToolUse(runs: SavedSubagent[], event: unknown, now: number): SavedSubagent[] {
@@ -75,33 +104,47 @@ function onPreToolUse(runs: SavedSubagent[], event: unknown, now: number): Saved
   const toolUseId = field(event, "tool_use_id");
   const session = field(event, "session_id");
   if (typeof toolUseId !== "string" || typeof session !== "string") return runs;
+  if (runs.some((r) => r.id === toolUseId)) return runs;
   const input = field(event, "tool_input");
-  const label = labelFrom(field(input, "description"), field(input, "subagent_type"));
-  return [...runs, { id: toolUseId, session, label, startedEpoch: now }];
+  const subagentType = field(input, "subagent_type");
+  const label = labelFrom(field(input, "description"), subagentType);
+  const type = typeOf(subagentType);
+  return [...runs, { id: toolUseId, session, label, startedEpoch: now, ...(type ? { type } : {}) }];
 }
 
-// SubagentStart: gives the oldest run in that session with no agentId the
-// agent id Claude Code just gave it. When PreToolUse was missed (no such
-// run), it appends one instead, labelled from agent_type since there is no
-// description to prefer.
+// SubagentStart: gives the oldest run in that session with no agentId yet,
+// and whose saved `type` matches this event's agent_type, the agent id
+// Claude Code just gave it; when nothing matches by type (or no run in the
+// session carries one, e.g. PreToolUse missed it), it falls back to the
+// oldest unpaired run in the session, the best guess left. When PreToolUse
+// was missed for every call in the session, it appends a run instead,
+// labelled from agent_type since there is no description to prefer.
 function onSubagentStart(runs: SavedSubagent[], event: unknown, now: number): SavedSubagent[] {
   const agentId = field(event, "agent_id");
   const session = field(event, "session_id");
+  const agentType = field(event, "agent_type");
   if (typeof agentId !== "string" || typeof session !== "string") return runs;
-  const index = runs.findIndex((r) => r.session === session && r.agentId === undefined);
+  const type = typeOf(agentType);
+  const unpaired = (r: SavedSubagent): boolean => r.session === session && r.agentId === undefined;
+  const byType = type ? runs.findIndex((r) => unpaired(r) && r.type === type) : -1;
+  const index = byType !== -1 ? byType : runs.findIndex(unpaired);
   if (index === -1) {
-    const label = labelFrom(field(event, "agent_type"));
-    return [...runs, { id: agentId, session, agentId, label, startedEpoch: now }];
+    const label = labelFrom(agentType);
+    return [...runs, { id: agentId, session, agentId, label, startedEpoch: now, ...(type ? { type } : {}) }];
   }
   return runs.map((r, i) => (i === index ? { ...r, agentId } : r));
 }
 
 // SubagentStop: the run with that agentId, wherever it is, ends now. A miss
-// (no run has it) returns runs unchanged rather than an equal-looking copy.
+// (no run has it), or one that already has an endedEpoch (a duplicate
+// delivery of the same Stop), returns runs unchanged rather than an
+// equal-looking copy or a bumped endedEpoch.
 function onSubagentStop(runs: SavedSubagent[], event: unknown, now: number): SavedSubagent[] {
   const agentId = field(event, "agent_id");
-  if (typeof agentId !== "string" || !runs.some((r) => r.agentId === agentId)) return runs;
-  return runs.map((r) => (r.agentId === agentId ? { ...r, endedEpoch: now } : r));
+  if (typeof agentId !== "string") return runs;
+  const index = runs.findIndex((r) => r.agentId === agentId);
+  if (index === -1 || runs[index]?.endedEpoch !== undefined) return runs;
+  return runs.map((r, i) => (i === index ? { ...r, endedEpoch: now } : r));
 }
 
 /** Folds one hook event into a workspace's runs. An event this hook does not know is a no-op. */
@@ -117,24 +160,6 @@ export function applyEvent(map: SubagentMap, wsId: string, event: unknown, now: 
           ? onSubagentStop(runs, event, now)
           : runs;
   return next === runs ? map : { ...map, [wsId]: next };
-}
-
-// A crashed agent never sends SubagentStop, so a running run is dropped once
-// it is plainly stale rather than kept forever; a settled one is dropped
-// once the sidebar has had a good while to show it.
-const RUNNING_MAX_AGE_S = 2 * 60 * 60;
-const ENDED_MAX_AGE_S = 10 * 60;
-
-/** Drops stale runs across every workspace, and any workspace left with none. */
-export function prune(map: SubagentMap, now: number): SubagentMap {
-  const out: SubagentMap = {};
-  for (const [wsId, runs] of Object.entries(map)) {
-    const kept = runs.filter((r) =>
-      r.endedEpoch === undefined ? now - r.startedEpoch <= RUNNING_MAX_AGE_S : now - r.endedEpoch <= ENDED_MAX_AGE_S,
-    );
-    if (kept.length) out[wsId] = kept;
-  }
-  return out;
 }
 
 // agentId is bookkeeping for pairing a Start to its PreToolUse row; the
@@ -155,9 +180,15 @@ export function visibleChange(before: SubagentMap, after: SubagentMap): boolean 
 const ROOT = join(import.meta.dirname, "..", "..");
 const STATE_PATH = join(ROOT, "config", "state.json");
 const BUILD_LOCK = join(ROOT, "config", "subagent-build.lock");
-const COALESCE_MS = 300;
-const BUILD_LOCK_STALE_MS = 60_000;
-const BUILD_TIMEOUT_MS = 60_000;
+// Exported so a test can check the stale threshold sits comfortably above
+// this delay plus the timeout, without duplicating the figures.
+export const COALESCE_MS = 300;
+export const BUILD_TIMEOUT_MS = 60_000;
+// Comfortably above the coalesce delay plus how long a build may run (2x
+// the timeout), so a build that is genuinely still going, including a
+// second pass buildUntilStable takes for a write that landed mid-build, is
+// never mistaken for a crashed one's and retaken out from under it.
+export const BUILD_LOCK_STALE_MS = 2 * BUILD_TIMEOUT_MS;
 
 function logFd(): number | "ignore" {
   try {
@@ -187,17 +218,52 @@ function tryTakeBuildLock(): boolean {
   }
 }
 
-// The detached side of the coalesce: sleeps so a near-simultaneous write
-// lands first, builds, then drops the lock so the next visible change can
-// schedule its own build.
-async function coalesceBuild(): Promise<void> {
-  await sleep(COALESCE_MS);
+/**
+ * Runs `build` at least once, and again each time `snapshot` reads
+ * differently from what it was before the previous run: a write that
+ * lands while a build is going (the lock is held, so its own event skips
+ * scheduling one) is otherwise never built at all, since nothing else
+ * schedules a build for it. Stops once a build fails, since retrying an
+ * unchanged, already-failing build would not help; stops once two
+ * successive snapshots agree, since nothing has changed since that build
+ * started. Exported for testing with fakes instead of a real spawn and file.
+ */
+export function buildUntilStable(build: () => boolean, snapshot: () => string | null): void {
+  let before = snapshot();
+  for (;;) {
+    if (!build()) return;
+    const after = snapshot();
+    if (after === before) return;
+    before = after;
+  }
+}
+
+function stateSnapshot(): string | null {
+  try {
+    return readFileSync(STATE_PATH, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function runBuild(): boolean {
   const build = spawnSync(process.execPath, ["scripts/build.ts"], {
     cwd: ROOT,
     stdio: "ignore",
     timeout: BUILD_TIMEOUT_MS,
   });
-  if (build.status !== 0) console.error("report-subagent: build failed");
+  if (build.status === 0) return true;
+  console.error("report-subagent: build failed");
+  return false;
+}
+
+// The detached side of the coalesce: sleeps so a near-simultaneous write
+// lands first, then builds until the state file stops changing under it,
+// then drops the lock so the next visible change can schedule its own
+// build.
+async function coalesceBuild(): Promise<void> {
+  await sleep(COALESCE_MS);
+  buildUntilStable(runBuild, stateSnapshot);
   rmSync(BUILD_LOCK, { force: true });
 }
 
@@ -225,6 +291,25 @@ function scheduleBuild(): void {
   }
 }
 
+/**
+ * Applies one event and prunes, then validates both the before and after
+ * maps the same way the write does (State validation and MAX_SUBAGENTS,
+ * not only applyEvent's own rules) before comparing them: an entry that
+ * the write's own validateState would reshape or drop must never be
+ * counted as a visible change against a raw map that never reflects that.
+ * Exported for testing.
+ */
+export function processEvent(
+  subagents: SubagentMap,
+  wsId: string,
+  event: unknown,
+  now: number,
+): { before: SubagentMap; after: SubagentMap; changed: boolean } {
+  const before = validateState({ subagents }).subagents;
+  const after = validateState({ subagents: prune(applyEvent(subagents, wsId, event, now), now) }).subagents;
+  return { before, after, changed: visibleChange(before, after) };
+}
+
 async function main(): Promise<void> {
   const wsId = process.env.CMUX_WORKSPACE_ID;
   if (!wsId) return;
@@ -235,21 +320,20 @@ async function main(): Promise<void> {
     return;
   }
   const now = Math.floor(Date.now() / 1000);
-  let before: SubagentMap = {};
-  let after: SubagentMap = {};
+  let changed = false;
   let result: ReturnType<typeof writeSubagents>;
   try {
     result = writeSubagents(STATE_PATH, (subagents) => {
-      before = subagents;
-      after = prune(applyEvent(subagents, wsId, event, now), now);
-      return after;
+      const applied = processEvent(subagents, wsId, event, now);
+      changed = applied.changed;
+      return applied.after;
     });
   } catch (err) {
     console.error(`report-subagent: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }
   if (!result.ok) return console.error(`report-subagent: ${result.error}`);
-  if (visibleChange(before, after)) scheduleBuild();
+  if (changed) scheduleBuild();
 }
 
 if (import.meta.main) {

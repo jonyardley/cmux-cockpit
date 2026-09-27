@@ -55,6 +55,16 @@ describe("saved subagent runs", () => {
     assert.deepEqual(ids(), ["c"]);
   });
 
+  it("falls back to saved runs when cmux sends only holes, no truthy child", () => {
+    // cmux has sent holes in agent lists before (test/agents.test.ts); an
+    // all-holes children array must not be read as "cmux has its own data".
+    // The cast holds because the model only ever reads a hole through the
+    // same falsy check childRanked already survives.
+    const holesOnly: SubagentRun[] = [null as unknown as SubagentRun];
+    r.data.workspaces = [ws("w1", { selected: true, agents: [agent("working", { children: holesOnly })] })];
+    assert.deepEqual(ids(), ["b", "a"]);
+  });
+
   it("reads a saved run with no end as running while a workspace agent is still live", () => {
     r.data.workspaces = [ws("w1", { selected: true, agents: [agent("working")] })];
     const [live, done] = m.subagents();

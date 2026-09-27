@@ -24,7 +24,9 @@ export function savedRuns(wsId: string): SavedRun[] {
     session: s.session,
     label: s.label,
     startedEpoch: s.startedEpoch,
-    running: s.endedEpoch === undefined,
+    // `running` is left unset: model.ts's savedRanked works it out itself
+    // from the run's session and its owning agent's status, so a stale
+    // value here would only ever be ignored, never shown.
     // Left out rather than set to undefined: exactOptionalPropertyTypes.
     ...(s.endedEpoch === undefined ? {} : { endedEpoch: s.endedEpoch }),
   }));

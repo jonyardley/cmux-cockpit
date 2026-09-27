@@ -17,9 +17,10 @@ import {
   parseWindowIds,
   parseWorkspaces,
   pickPr,
+  writePollState,
 } from "../scripts/pr-poll.ts";
 import { applySet, emptyState, type SavedPr, validateState } from "../scripts/state-config.ts";
-import { writePrs } from "../scripts/state-url.ts";
+import { writePrs, writeSubagents } from "../scripts/state-url.ts";
 
 const url = (n: number) => `https://github.com/o/r/pull/${n}`;
 const pr = (n: number, extra: Partial<SavedPr> = {}): SavedPr => ({
@@ -324,6 +325,34 @@ describe("the prs map in state.json", () => {
     const path = join(dir, "state-order.json");
     assert.deepEqual(writePrs(path, { b: pr(2, { branch: "b" }), a: pr(1) }), { ok: true, changed: true });
     assert.deepEqual(writePrs(path, { a: pr(1), b: pr(2, { branch: "b" }) }), { ok: true, changed: false });
+  });
+});
+
+describe("writePollState", () => {
+  const dir = mkdtempSync(join(tmpdir(), "pr-poll-state-"));
+  after(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("prunes subagent runs on every write, not only when a hook fires", () => {
+    const path = join(dir, "state.json");
+    // A stale, unpaired run, seeded directly rather than through the hook.
+    writeSubagents(path, () => ({ w1: [{ id: "toolu_1", session: "s1", label: "Old", startedEpoch: 0 }] }));
+    const result = writePollState(path, {}, 20 * 60);
+    assert.deepEqual(result, { ok: true, changed: true });
+    const written = JSON.parse(readFileSync(path, "utf8"));
+    assert.deepEqual(written.subagents, {});
+  });
+
+  it("says unchanged when there is nothing to prune and the prs are the same", () => {
+    const path = join(dir, "state-stable.json");
+    writePollState(path, { a: pr(1) }, 100);
+    assert.deepEqual(writePollState(path, { a: pr(1) }, 100), { ok: true, changed: false });
+  });
+
+  it("is a change when only the subagent prune drops something, even with the same prs", () => {
+    const path = join(dir, "state-prune-only.json");
+    writeSubagents(path, () => ({ w1: [{ id: "toolu_1", session: "s1", label: "Old", startedEpoch: 0 }] }));
+    writePollState(path, { a: pr(1) }, 100);
+    assert.deepEqual(writePollState(path, { a: pr(1) }, 100 + 20 * 60), { ok: true, changed: true });
   });
 });
 

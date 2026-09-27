@@ -74,6 +74,39 @@ test("applySet refuses to set subagents from a URL", () => {
   assert.deepEqual(applySet(emptyState(), "subagents.w1", "[]"), { ok: false, error: "unknown map subagents" });
 });
 
+test("validateState keeps a good subagent type, bounded like an id, and drops a bad one", () => {
+  const run = (extra: Record<string, unknown> = {}) => ({
+    id: "t1",
+    session: "s1",
+    label: "Run",
+    startedEpoch: 1,
+    ...extra,
+  });
+  const { subagents } = validateState({
+    subagents: {
+      w1: [run({ type: "code-reviewer" })],
+      w2: [run({ type: "" })],
+      w3: [run({ type: "x".repeat(129) })],
+      w4: [run({ type: 5 })],
+      w5: [run()],
+    },
+  });
+  assert.equal(subagents.w1?.[0]?.type, "code-reviewer");
+  assert.equal(subagents.w2?.[0]?.type, undefined);
+  assert.equal(subagents.w3, undefined);
+  assert.equal(subagents.w4, undefined);
+  assert.equal(subagents.w5?.[0]?.type, undefined);
+});
+
+test("isName and isLabel reject code 127 (DEL), the same control character the hook's dropControl turns to a space", () => {
+  const run = { id: "t1", session: "s1", startedEpoch: 1, label: `a\u007fb` };
+  assert.deepEqual(validateState({ subagents: { w1: [run] } }).subagents, {});
+  assert.deepEqual(
+    validateState({ projects: { "/dev/s/": { name: "a\u007fb", color: "#6A9BCC", icon: "folder.fill" } } }).projects,
+    {},
+  );
+});
+
 test("validateState keeps only the newest MAX_ENTRIES per map", () => {
   const many = Object.fromEntries(Array.from({ length: MAX_ENTRIES + 5 }, (_, i) => [`w${i}`, "p"]));
   const kept = Object.keys(validateState({ projectOverride: many }).projectOverride);

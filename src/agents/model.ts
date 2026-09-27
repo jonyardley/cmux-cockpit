@@ -310,7 +310,10 @@ function savedRanked(run: SavedRun, agents: Agent[]): Ranked {
  * subagentFigure's. */
 export const subagents = computed((): SubagentRow[] => {
   const { ws, agents } = cur();
-  const ranked = agents.some((a) => (a.children ?? []).length > 0)
+  // cmux can send a children array full of holes (agentRows survives the
+  // same); only a real, truthy child should count as cmux having its own
+  // data, else an all-holes array would show nothing rather than fall back.
+  const ranked = agents.some((a) => (a.children ?? []).some((c) => c))
     ? childRanked(agents)
     : savedRuns(ws.id).map((r) => savedRanked(r, agents));
   return ranked.sort(byRun).slice(0, 5).map(toRow);
