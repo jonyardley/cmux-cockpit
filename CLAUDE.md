@@ -64,6 +64,10 @@ overrides between tests.
 ## Workflow
 
 Work on a branch in a worktree and open a PR; main is protected by habit.
+Create it with `wt switch -c <branch>` (worktrunk): it lands in
+`~/.config/cmux-worktrees/<branch>` and opens its own cmux workspace.
+Never `git worktree add`, `.claude/worktrees/` or `just worktree-new`; those
+are the old setup and the guard blocks them.
 
 Review before hand-off, in this order:
 
@@ -76,6 +80,17 @@ Review before hand-off, in this order:
    hold real text.
 4. Every check green on the last commit, after the fixes. Then Jon reviews
    and merges. Agents never merge.
+5. After Jon merges, close out in one hand-off: a single command in its
+   own fenced block, starting with `!` so it runs when pasted here. It
+   pulls, rebuilds, reloads, and removes every merged worktree this
+   session made. Never a bare `cmux sidebar reload` (on stale main it
+   loads the old build), and never leave a worktree for Jon to find:
+   `! git -C ~/.config/cmux pull --ff-only && npm --prefix ~/.config/cmux run build && cmux automation reload && cmux sidebar reload && wt remove <branch>`
+   `wt remove` deletes the branch once merged and closes its cmux
+   workspace. The main-checkout guard blocks it for agents, so it goes in
+   the hand-off, not a retry. On "prune" or "cleanup for exit", check
+   `wt list`: chain every merged worktree, and name any unmerged one for
+   Jon instead of removing it.
 
 `npm run hooks` once per clone installs the pre-commit check.
 `.claude/settings.json` hooks block edits to the Never-list files and run
