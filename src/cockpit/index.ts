@@ -17,7 +17,7 @@ import type { ViewMode } from "../../scripts/state-config.ts";
 import { handleDragChange, handleMove, isForeignAnchor } from "./drop.ts";
 import { flatEntries, panelMaxHeight, panelOpacity, projectEntries, wsById } from "./model.ts";
 import { cardFor, projectRow } from "./views/cards.ts";
-import { dropZone, emptyFold, laneHeader, projectHeader, quietLine, segmented } from "./views/headers.ts";
+import { dropZone, emptyFold, laneHeader, projectHeader, quietHeader, quietRow, segmented } from "./views/headers.ts";
 import { needsStrip } from "./views/needs.ts";
 
 sidebar(() =>
@@ -62,7 +62,8 @@ function projectsPanel(): View {
     ForEach({ items: projectEntries, key: (e) => e.id }, (e) => {
       const entry = e();
       if (entry.kind === "header") return projectHeader(entry.project);
-      if (entry.kind === "quiet") return quietLine();
+      if (entry.kind === "quietHeader") return quietHeader();
+      if (entry.kind === "quietRow") return quietRow(entry.project);
       return projectRow(() => wsById(entry.wsId), entry.id);
     }),
   ]).paddingHorizontal(10);
