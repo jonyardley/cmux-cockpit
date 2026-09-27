@@ -6,6 +6,7 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
 const { cardMessage } = await import("../src/shared/text.ts");
+const { STATUS_DOT, T } = await import("../src/agents/theme.ts");
 
 beforeEach(() => {
   r.data.epoch = 10_000;
@@ -286,5 +287,106 @@ describe("prs", () => {
       m.prs().map((e) => e.title),
       ["Tidy", "Fix bug", "feat/x"],
     );
+  });
+});
+
+describe("subagents", () => {
+  const run = (id: string, extra: Partial<SubagentRun> = {}): SubagentRun => ({ id, ...extra });
+  const sel = (agents: Agent[]) => {
+    r.data.workspaces = [
+      ws("other", { agents: [agent("working", { children: [run("x", { running: true })] })] }),
+      ws("sel", { selected: true, agents }),
+    ];
+  };
+  const ids = () => m.subagents().map((e) => e.key.split(":")[2]);
+
+  it("is empty with no selection, no agents, or no children", () => {
+    assert.deepEqual(m.subagents(), []);
+    sel([]);
+    assert.deepEqual(m.subagents(), []);
+    sel([agent("working")]);
+    assert.deepEqual(m.subagents(), []);
+  });
+
+  it("puts running runs first, oldest start first, then settled ones newest end first", () => {
+    sel([
+      agent("working", {
+        children: [
+          run("old-done", { running: false, startedEpoch: 100, endedEpoch: 200 }),
+          run("late", { running: true, startedEpoch: 900 }),
+          run("new-done", { running: false, startedEpoch: 100, endedEpoch: 800 }),
+          run("early", { running: true, startedEpoch: 300 }),
+          run("no-end", { running: false, startedEpoch: 500 }),
+        ],
+      }),
+    ]);
+    assert.deepEqual(ids(), ["early", "late", "new-done", "no-end", "old-done"]);
+  });
+
+  it("figures coarse elapsed while running, running with no start, and done once settled", () => {
+    sel([
+      agent("working", {
+        children: [
+          run("a", { label: "Edge-case review", running: true, startedEpoch: 10_000 - 240 }),
+          run("b", { label: "No start yet", running: true }),
+          run("c", { label: "Write builder tests", running: false, startedEpoch: 100, endedEpoch: 9_000 }),
+        ],
+      }),
+    ]);
+    assert.deepEqual(
+      m.subagents().map((e) => [e.label, m.subagentFigure(e)]),
+      [
+        ["No start yet", "running"],
+        ["Edge-case review", "4m"],
+        ["Write builder tests", "done"],
+      ],
+    );
+  });
+
+  it("dots a running run as working with its halo, a settled one as ended with none", () => {
+    sel([agent("working", { children: [run("a", { running: true }), run("b", { running: false })] })]);
+    const [live, done] = m.subagents();
+    assert.ok(live && done);
+    assert.equal(m.subagentDot(live), STATUS_DOT.working);
+    assert.equal(m.subagentHalo(live), T.blueHalo);
+    assert.equal(m.subagentDot(done), STATUS_DOT.ended);
+    assert.equal(m.subagentHalo(done), "clear");
+  });
+
+  it("settles every run under an ended session, whatever the run says", () => {
+    sel([agent("ended", { children: [run("stuck", { running: true, startedEpoch: 100 })] })]);
+    assert.deepEqual(
+      m.subagents().map((e) => e.running),
+      [false],
+    );
+  });
+
+  it("falls back on a label, on running, and on the index for an id, and skips holes", () => {
+    const children = [
+      run("live", { startedEpoch: 9_990 }),
+      run("gone", { endedEpoch: 9_000 }),
+      { startedEpoch: 9_995 },
+      null,
+    ] as SubagentRun[]; // cmux has sent holes in agent lists; the model must survive one here too.
+    sel([agent("working", { children })]);
+    assert.deepEqual(
+      m.subagents().map((e) => [e.key.split(":")[2], e.label, e.running]),
+      [
+        ["live", "subagent", true],
+        ["#2", "subagent", true],
+        ["gone", "subagent", false],
+      ],
+    );
+  });
+
+  it("gathers runs across the workspace's agents with distinct keys, at most 5", () => {
+    const three = (p: string) => [0, 1, 2].map((i) => run(p + i, { running: true, startedEpoch: 100 + i }));
+    const a1 = agent("working", { children: three("s") });
+    const a2 = agent("idle", { children: three("s") });
+    sel([a1, a2]);
+    const keys = m.subagents().map((e) => e.key);
+    assert.equal(keys.length, 5);
+    assert.equal(new Set(keys).size, 5);
+    assert.ok(keys.some((k) => k.startsWith("s:" + a2.id + ":")));
   });
 });

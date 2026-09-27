@@ -1,12 +1,23 @@
-// "This workspace": the selected workspace's card. Checks, subagents and
-// todo are not in the sidebar data (issue #7), so they are left out.
+// "This workspace": the selected workspace's card. Checks and todo are not
+// in the sidebar data (issue #7), so they are left out.
 
 import { glyphColor } from "../../shared/contrast.ts";
 import { type Last, markLast } from "../../shared/list.ts";
-import { cardMessage, readable } from "../../shared/text.ts";
+import { cardMessage, readable, tracked } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
-import { cur, haloFor, hollowDot, statusLine, statusPhrase } from "../model.ts";
+import {
+  cur,
+  haloFor,
+  hollowDot,
+  type SubagentRow,
+  statusLine,
+  statusPhrase,
+  subagentDot,
+  subagentFigure,
+  subagentHalo,
+  subagents,
+} from "../model.ts";
 import { chipColors, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
 import { agentDot, chip, jump, meta, openIfUrl, panel, ruled } from "./parts.ts";
 
@@ -32,6 +43,47 @@ function agentLine(e: () => Last<{ key: string; a: Agent }>): View {
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => jump(cur().ws.id, a().surfaceId));
+}
+
+function subagentLine(e: () => SubagentRow): View {
+  return HStack({ spacing: 9 }, [
+    agentDot(
+      () => subagentDot(e()),
+      () => subagentHalo(e()),
+      () => false,
+    ),
+    Text(() => e().label)
+      .font(12)
+      .color(T.text)
+      .lineLimit(1)
+      .truncation("tail")
+      .layoutPriority(1),
+    Spacer({ minLength: 4 }),
+    Text(() => subagentFigure(e()))
+      .font(11)
+      .monospaced()
+      .color(T.secondary)
+      .lineLimit(1),
+  ])
+    .paddingVertical(5)
+    .frame({ maxWidth: "infinity", alignment: "leading" });
+}
+
+// Board 1's Subagents block: a small caps heading over one line per run.
+// Hidden while the workspace has none, which is also what an install that
+// never sends `children` looks like.
+function subagentsBlock(): View {
+  return when(
+    "cur-subs",
+    () => subagents().length > 0,
+    () =>
+      VStack({ spacing: 0, alignment: "leading" }, [
+        Text(tracked("SUBAGENTS")).font(10).weight("semibold").color(T.tertiary).lineLimit(1).paddingBottom(2),
+        ForEach({ items: () => subagents(), key: (e) => e.key }, (e) => subagentLine(e)),
+      ])
+        .frame({ maxWidth: "infinity", alignment: "leading" })
+        .paddingTop(12),
+  );
 }
 
 function currentHead(): View {
@@ -153,6 +205,7 @@ function currentHead(): View {
           Spacer(),
         ]).paddingTop(10),
     ),
+    subagentsBlock(),
   ])
     .padding(14)
     .frame({ maxWidth: "infinity", alignment: "leading" });
