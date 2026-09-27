@@ -26,18 +26,6 @@ export interface DropTarget {
   prevRef: string | null;
 }
 
-// The rows the current drag sees, taken on each drag change. The empty
-// lanes' zones only exist mid-drag, so if the renderer ends the drag before
-// it calls onMove, the move still resolves against the rows it was dropped
-// among rather than the folded ones.
-let dragRows: { id: string; entries: LaneEntry[] } | null = null;
-
-/** Reorderable's onDragChange. */
-export function handleDragChange(d: DragState | null): void {
-  setDrag(d);
-  if (d) dragRows = { id: d.id, entries: flatEntries() };
-}
-
 // The lane of the nearest row above the slot that belongs to one (the
 // folded line holds several lanes, so it is skipped).
 function laneAbove(entries: LaneEntry[], index: number): LaneKey {
@@ -52,8 +40,8 @@ function laneAbove(entries: LaneEntry[], index: number): LaneKey {
 // The lane is whatever the row above the slot belongs to (a header or an
 // empty lane's zone counts, so dropping just under one files the card
 // there).
-export function resolveDrop(key: string, index: number, rows: LaneEntry[] = flatEntries()): DropTarget {
-  const entries = rows.filter((e) => e.id !== key);
+export function resolveDrop(key: string, index: number): DropTarget {
+  const entries = flatEntries().filter((e) => e.id !== key);
   const prev = index > 0 ? entries[index - 1] : undefined;
   const laneKey = laneAbove(entries, index);
   const next = entries[index];
@@ -84,14 +72,12 @@ function targetIndex(w: Workspace, all: Workspace[], others: string[], drop: Dro
 
 /** Reorderable's onMove: reorders the tab, then files it into its new lane. */
 export function handleMove(key: string, index: number): void {
-  const rows = dragRows?.id === key ? dragRows.entries : flatEntries();
-  dragRows = null;
   setDrag(null);
-  const entry = rows.find((e) => e.id === key);
+  const entry = flatEntries().find((e) => e.id === key);
   if (entry?.kind !== "ws") return;
   const w = wsById(entry.wsId);
   if (!w) return;
-  const target = resolveDrop(key, index, rows);
+  const target = resolveDrop(key, index);
   // Against the lane on screen, so dragging a card back out of a lane it is
   // still waiting to join cancels that move.
   const changesLane = laneOf(w) !== target.laneKey;
@@ -120,6 +106,9 @@ export function isForeignAnchor(wsId: string): boolean {
   const lanes = laneAnchorIds();
   return groups().some((g) => g.anchorId === wsId && !lanes.has(wsId));
 }
+
+/** True while a card is being dragged: empty lanes open as zones. */
+export const dragging = (): boolean => drag() !== null;
 
 /** The lane the current drag would drop into, for a header's "Drop here" and a lit zone. */
 export const dropLane = (): LaneKey | null => {

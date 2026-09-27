@@ -39,6 +39,8 @@ export const C = {
   // ink edge under the pointer (opaque, since ring() fills behind the face).
   zoneEdge: "#D3CFC1",
   zoneLit: "#E7E4D9",
+  // A lane anchor's header status while that workspace is selected.
+  anchorSelected: "#1414131F",
   needsHover: "#FFFDFB",
   chipText: "#4A4945",
   chipEdge: "#E8E5DA",

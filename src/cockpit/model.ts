@@ -24,7 +24,6 @@ import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
   bump,
   collapsedProjects,
-  drag,
   mode,
   projectsMode,
   savedFolds,
@@ -67,11 +66,18 @@ function isGeneratedAnchor(g: WorkspaceGroup, w: Workspace | undefined): boolean
 export function laneAnchorIds(): Set<string> {
   const out = new Set<string>();
   for (const lane of LANES) {
-    const g = groupForLane(lane);
-    if (g?.anchorId && isGeneratedAnchor(g, wsById(g.anchorId))) out.add(g.anchorId);
-    else if (!g && awaitingLane(lane.key)) hideNewAnchor(lane, out);
+    const id = generatedAnchorId(lane);
+    if (id) out.add(id);
+    else if (!groupForLane(lane) && awaitingLane(lane.key)) hideNewAnchor(lane, out);
   }
   return out;
+}
+
+// The lane group's generated anchor, if it has one. A workspace not in the
+// data yet counts, so it never flashes up as a card when it arrives.
+function generatedAnchorId(lane: Lane): string | null {
+  const g = groupForLane(lane);
+  return g?.anchorId && isGeneratedAnchor(g, wsById(g.anchorId)) ? g.anchorId : null;
 }
 
 // cmux can publish a new group's anchor a frame before the group itself, so
@@ -124,8 +130,10 @@ export function laneOf(w: Workspace): LaneKey {
 // Move a workspace into a lane (no reorder). Used by the context menu and drops.
 // Moving a card back to where cmux still has it cancels the pending move, so
 // a group that arrives later never files it against the last choice.
+// A lane's generated anchor IS its group, so it never moves (Needs you still
+// lists one, with the card menu).
 export function moveToLane(w: Workspace | undefined, laneKey: LaneKey): void {
-  if (!w) return;
+  if (!w || laneAnchorIds().has(w.id)) return;
   if (actualLaneOf(w) === laneKey) {
     if (laneOverride.delete(w.id)) bump();
     return;
@@ -320,12 +328,11 @@ export type LaneEntry =
   | { kind: "fold"; id: string }
   | { kind: "ws"; id: string; wsId: string; lane: LaneKey };
 
-/** A lane's generated anchor when an agent runs in it, so its header shows that status. */
+/** A lane's generated anchor when it has an agent or unread messages, so its header shows them. */
 function headerAnchorId(lane: Lane): string | null {
-  const g = groupForLane(lane);
-  if (!g?.anchorId) return null;
-  const w = wsById(g.anchorId);
-  return w && isGeneratedAnchor(g, w) && (w.agents ?? []).length > 0 ? w.id : null;
+  const id = generatedAnchorId(lane);
+  const w = id ? wsById(id) : undefined;
+  return w && ((w.agents ?? []).length > 0 || (w.unread ?? 0) > 0) ? w.id : null;
 }
 
 interface LaneSection {
@@ -358,16 +365,19 @@ function sectionEntries(s: LaneSection): LaneEntry[] {
   return [header, ...s.rows.map((w): LaneEntry => ({ kind: "ws", id: w.id + "@" + key, wsId: w.id, lane: key }))];
 }
 
-// At rest the empty lanes fold into one line after the rest; while a card
-// is dragged each opens in its own place as a drop zone.
+// An empty lane is always a zone row in its own place, and the folded line
+// follows the lanes; views/headers.ts shows one or the other by drag(). The
+// rows never change as a drag starts or ends, so the renderer's drop index
+// always counts the same rows resolveDrop does.
 const laneEntries = computed(() => {
-  const dragging = drag() !== null;
   const entries: LaneEntry[] = [];
   let folded = false;
   for (const s of laneSections()) {
     if (!isEmpty(s)) entries.push(...sectionEntries(s));
-    else if (dragging) entries.push({ kind: "zone", id: "z:" + s.lane.key, lane: s.lane.key });
-    else folded = true;
+    else {
+      entries.push({ kind: "zone", id: "z:" + s.lane.key, lane: s.lane.key });
+      folded = true;
+    }
   }
   if (folded) entries.push({ kind: "fold", id: "f:empty" });
   return entries;

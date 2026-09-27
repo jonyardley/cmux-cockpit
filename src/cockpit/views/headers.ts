@@ -1,7 +1,7 @@
 // The segmented mode control and the lane and project section headers.
 
 import { glyphColor } from "../../shared/contrast.ts";
-import { dropLane } from "../drop.ts";
+import { dragging, dropLane } from "../drop.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
@@ -9,6 +9,7 @@ import {
   emptyLaneNames,
   isCollapsed,
   isProjectCollapsed,
+  isSelected,
   laneCount,
   openProjectWorkspace,
   projectByKey,
@@ -91,15 +92,17 @@ function chevron(collapsed: () => boolean): View {
     .frame({ width: 12, height: 16 });
 }
 
-// A lane's generated anchor with an agent in it (issue #49): its dot and
-// unread count sit on the header, and a tap there selects it rather than
-// folding the lane.
+// A lane's generated anchor with an agent or unread messages (issue #49): its
+// dot and unread count sit on the header, shaded while it is selected, since
+// it has no card to carry the selection. Its own onTap selects it rather
+// than folding the lane, as the project header's "+" does.
 function anchorStatus(anchorId: string): View {
   const w = () => wsById(anchorId);
   return HStack({ spacing: 5 }, [statusDot(w, 7), unreadBadge(w)])
     .paddingHorizontal(4)
     .frame({ height: 16 })
     .cornerRadius(6)
+    .background(() => (isSelected(w()) ? C.anchorSelected : "clear"))
     .hoverBackground(C.hover)
     .onTap(() => selectWorkspace(anchorId));
 }
@@ -138,41 +141,54 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
     .onTap(() => toggleLane(lane));
 }
 
-// An empty lane mid-drag (issue #50). The renderer has no dashed stroke, so
-// the zone is a quiet ring that turns solid ink under the pointer.
+// An empty lane (issue #50): a zone row that only opens while a card is
+// dragged, and folds to nothing at rest (the row stays, so the drop index
+// never shifts). The renderer has no dashed stroke, so the open zone is a
+// quiet ring that turns solid ink under the pointer.
 export function dropZone(laneKey: LaneKey): View {
   const lane = laneByKey(laneKey);
   const target = () => dropLane() === laneKey;
+  const open = (v: number) => () => (dragging() ? v : 0);
   const row = HStack({ spacing: 8 }, [
-    laneMarker(lane.color),
-    headerName(lane.name, C.faint),
-    Spacer({ minLength: 4 }),
+    RoundedRectangle({ cornerRadius: 3 })
+      .fill(() => (dragging() ? lane.color : "clear"))
+      .frame({ width: open(9), height: open(9) }),
+    Text(() => (dragging() ? lane.name : ""))
+      .font(12.5)
+      .weight("semibold")
+      .color(C.faint)
+      .lineLimit(1)
+      .truncation("tail")
+      .layoutPriority(1),
+    Spacer({ minLength: 0 }),
     dropHint(target),
   ])
-    .paddingHorizontal(10)
-    .paddingVertical(8);
+    .paddingHorizontal(open(10))
+    .paddingVertical(open(8));
   const zone = ring(
     row,
-    () => (target() ? C.zoneLit : C.ground),
-    () => (target() ? C.heading : C.zoneEdge),
-    1,
+    () => (target() ? C.zoneLit : dragging() ? C.ground : "clear"),
+    () => (target() ? C.heading : dragging() ? C.zoneEdge : "clear"),
+    open(1),
     8,
   );
   return VStack({ spacing: 0 }, [zone.frame({ maxWidth: "infinity" })])
-    .paddingTop(8)
+    .paddingTop(open(8))
     .fixed();
 }
 
-// The empty lanes at rest (issue #50): one quiet line, no tap.
+// The empty lanes at rest (issue #50): one quiet line, no tap. It folds to
+// nothing while a card is dragged, when the zones open instead.
 export function emptyFold(): View {
-  return Text(() => "Empty: " + emptyLaneNames().join(" · "))
+  const rest = (v: number) => () => (dragging() ? 0 : v);
+  return Text(() => (dragging() ? "" : "Empty: " + emptyLaneNames().join(" · ")))
     .font(11.5)
     .color(C.faint)
     .lineLimit(1)
     .truncation("tail")
     .paddingHorizontal(8)
-    .paddingTop(14)
-    .paddingBottom(5)
+    .paddingTop(rest(14))
+    .paddingBottom(rest(5))
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .fixed();
 }

@@ -10,8 +10,9 @@
 // The lanes are ONE flat Reorderable of fixed headers plus card rows, so a
 // card can be dragged between lanes in one gesture (see drop.ts).
 
-import { handleDragChange, handleMove, isForeignAnchor } from "./drop.ts";
+import { handleMove, isForeignAnchor } from "./drop.ts";
 import { flatEntries, projectEntries, wsById } from "./model.ts";
+import { setDrag } from "./state.ts";
 import { cardFor, projectRow } from "./views/cards.ts";
 import { dropZone, emptyFold, laneHeader, projectHeader, segmented } from "./views/headers.ts";
 import { needsStrip } from "./views/needs.ts";
@@ -28,7 +29,7 @@ sidebar(() =>
           key: (e) => e.id,
           spacing: 2,
           onMove: handleMove,
-          onDragChange: handleDragChange,
+          onDragChange: setDrag,
         },
         (e) => {
           const entry = e(); // kind, lane, anchorId and wsId are fixed per key

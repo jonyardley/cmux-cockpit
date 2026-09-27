@@ -68,6 +68,7 @@ describe("lanes", () => {
       "b@main",
       "h:review",
       "c@review",
+      "z:bg",
       "h:parked",
       "h:unsorted",
       "u@unsorted",
@@ -252,8 +253,7 @@ describe("missing lane groups", () => {
 
   it("cancels the wait when the card is dragged back to Unsorted", () => {
     model.moveToLane(byId("u"), "bg");
-    // Unsorted is empty now, so it only shows as a drop zone mid-drag.
-    drop.handleDragChange({ id: "u@bg", index: 0 });
+    // Unsorted is empty now, so it is a drop zone.
     const slot =
       ids()
         .filter((id) => id !== "u@bg")
@@ -289,7 +289,6 @@ describe("missing lane groups", () => {
   });
 
   it("files a dropped card into a lane that has no group yet", () => {
-    drop.handleDragChange({ id: "u@unsorted", index: 0 });
     const slot =
       ids()
         .filter((id) => id !== "u@unsorted")
@@ -364,6 +363,17 @@ describe("a lane's generated anchor", () => {
     assert.deepEqual(model.emptyLaneNames(), ["Background"]);
   });
 
+  it("shows on the header for unread messages alone, once the agent has gone", () => {
+    anchor().unread = 3;
+    assert.equal(header("review")?.id, "h:review:anchor-review");
+  });
+
+  it("never moves out of the group it anchors, even from the card menu", () => {
+    model.moveToLane(anchor(), "parked");
+    assert.deepEqual(r.calls, []);
+    assert.equal(model.laneOf(anchor()), "review");
+  });
+
   it("still lists a waiting anchor in Needs you", () => {
     anchor().agents = [agent("needs_input", { sinceEpoch: 1 })];
     assert.deepEqual(
@@ -380,11 +390,15 @@ describe("empty lanes", () => {
 
   const dropEmpty = () => (r.data.workspaces = r.data.workspaces.filter((w) => w.id !== "c"));
 
-  it("fold into one line after the lanes at rest, in lane order", () => {
+  it("lose their headers for a zone each and one folded line after the lanes, in lane order", () => {
     dropEmpty();
     assert.deepEqual(model.emptyLaneNames(), ["For review", "Background"]);
     assert.ok(!ids().includes("h:review"));
     assert.ok(!ids().includes("h:bg"));
+    assert.deepEqual(
+      ids().filter((id) => id.startsWith("z:")),
+      ["z:review", "z:bg"],
+    );
     assert.equal(ids().at(-1), "f:empty");
   });
 
@@ -394,19 +408,13 @@ describe("empty lanes", () => {
     assert.ok(!ids().includes("f:empty"));
   });
 
-  it("open as drop zones in their lane's place while a card is dragged", () => {
+  it("keep the same rows as a drag starts and ends, so the drop index never shifts", () => {
+    const rest = ids();
     state.setDrag({ id: "a@main", index: 1 });
-    assert.deepEqual(ids(), [
-      "h:main",
-      "a@main",
-      "b@main",
-      "h:review",
-      "c@review",
-      "z:bg",
-      "h:parked",
-      "h:unsorted",
-      "u@unsorted",
-    ]);
+    assert.deepEqual(ids(), rest);
+    assert.ok(drop.dragging());
+    state.setDrag(null);
+    assert.ok(!drop.dragging());
   });
 
   it("resolves a drop just under a zone to that zone's lane, and lights it", () => {
@@ -420,7 +428,6 @@ describe("empty lanes", () => {
 
   it("files a card dropped on a zone into a lane that already has a group", () => {
     dropEmpty();
-    drop.handleDragChange({ id: "a@main", index: 0 });
     const slot =
       ids()
         .filter((id) => id !== "a@main")
@@ -428,19 +435,6 @@ describe("empty lanes", () => {
     drop.handleMove("a@main", slot);
     assert.ok(r.calls.some((c) => c.method === "workspace.group.add" && c.params.group_id === "g-review"));
     assert.equal(model.laneOf(byId("a") ?? ws("?")), "review");
-  });
-
-  it("resolves the drop against the drag's rows even when the drag ends first", () => {
-    drop.handleDragChange({ id: "u@unsorted", index: 0 });
-    const slot =
-      ids()
-        .filter((id) => id !== "u@unsorted")
-        .indexOf("z:bg") + 1;
-    drop.handleDragChange(null);
-    assert.ok(ids().includes("f:empty"));
-    drop.handleMove("u@unsorted", slot);
-    assert.ok(r.calls.some((c) => c.method === "workspace.group.create" && c.params.name === "Background"));
-    assert.equal(state.drag(), null);
   });
 
   it("skips the folded line when finding the lane above a slot", () => {
