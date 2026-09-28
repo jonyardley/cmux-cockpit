@@ -60,7 +60,6 @@ test("validateState reads a good file unchanged", () => {
         surface: "s5",
         session: "sess",
         epoch: 200,
-        mention: { text: "Opened #5: the lane board.", message: "m5", epoch: 210 },
       },
     },
     asking: { w6: { reason: "allow git push?", epoch: 300, session: "s1" }, w7: { reason: "a question", epoch: 301 } },

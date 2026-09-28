@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
-import { wanted } from "../scripts/setup/claude-settings.ts";
+import { retired, wanted } from "../scripts/setup/claude-settings.ts";
 import { setup, uninstall } from "../scripts/setup/commands.ts";
 import {
   exitCode,
@@ -165,6 +165,23 @@ describe("setup", () => {
     assert.equal(JSON.parse(readFileSync(p.claudeSettings, "utf8")).model, "opus");
   });
 
+  it("takes out a retired hook, keeping the person's own hooks for that event", async () => {
+    const w = where();
+    built(w.repo);
+    const p = pathsFor(w.home, w.repo);
+    const own = { hooks: [{ type: "command", command: "say done" }] };
+    const old = { hooks: [{ type: "command", command: "node ~/.config/cmux/scripts/hooks/report-mention.ts" }] };
+    mkdirSync(p.claudeDir, { recursive: true });
+    writeFileSync(p.claudeSettings, JSON.stringify({ hooks: { Stop: [own, old] } }));
+    const f = fakeEnv(w, cmuxWith(w.home));
+    await setup(f.env, ["--hooks"]);
+    const settings = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
+    assert.deepEqual(settings.hooks.Stop, [own]);
+    assert.deepEqual(missingEntries(settings, wanted(), w.home), []);
+    assert.ok(f.out.some((l) => l.includes("Stop: node $HOME/.config/cmux/scripts/hooks/report-mention.ts")));
+    assert.ok(f.out.some((l) => l.includes("removed 1 retired")));
+  });
+
   it("refuses to touch settings that are not valid JSON", async () => {
     const w = where();
     built(w.repo);
@@ -308,6 +325,19 @@ describe("doctor", () => {
     assert.equal(again?.ok, false, "an edited projects.json needs a rebuild too");
   });
 
+  it("flags a retired hook left in the settings, with setup as the fix", async () => {
+    const w = where();
+    built(w.repo);
+    await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--hooks"]);
+    const p = pathsFor(w.home, w.repo);
+    const settings = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
+    settings.hooks.Stop = [{ hooks: [retired()[0]?.hook] }];
+    writeFileSync(p.claudeSettings, JSON.stringify(settings));
+    const check = runChecks(fakeEnv(w).env).find((c) => c.label === "Claude Code hooks");
+    assert.equal(check?.ok, false);
+    assert.match(check?.detail ?? "", /1 retired hook left/);
+  });
+
   it("reads a broken cmux.json, projects.json and settings as crosses, not crashes", () => {
     const w = where();
     const p = pathsFor(w.home, w.repo);
@@ -358,7 +388,19 @@ describe("uninstall", () => {
     await uninstall(fakeEnv(w).env, ["--yes", "--hooks"]);
     assert.ok(existsSync(p.helperApp));
     assert.ok(lstatSync(p.automationsLink).isSymbolicLink());
-    assert.equal(missingEntries(JSON.parse(readFileSync(p.claudeSettings, "utf8")), wanted(), w.home).length, 9);
+    assert.equal(missingEntries(JSON.parse(readFileSync(p.claudeSettings, "utf8")), wanted(), w.home).length, 8);
+  });
+
+  it("takes out a retired hook along with the current ones", async () => {
+    const w = where();
+    built(w.repo);
+    await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--hooks"]);
+    const p = pathsFor(w.home, w.repo);
+    const settings = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
+    settings.hooks.Stop = [{ hooks: [retired()[0]?.hook] }];
+    writeFileSync(p.claudeSettings, JSON.stringify(settings));
+    await uninstall(fakeEnv(w).env, ["--yes", "--hooks"]);
+    assert.deepEqual(JSON.parse(readFileSync(p.claudeSettings, "utf8")).hooks ?? {}, {});
   });
 
   it("takes out what setup added, restoring the old automations file, and keeps the clone", async () => {

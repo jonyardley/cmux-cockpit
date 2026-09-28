@@ -257,9 +257,6 @@ replacing it, or your existing hooks stop running:
       { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-pr.ts" }] },
       { "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }] }
     ],
-    "Stop": [
-      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" }] }
-    ],
     "SubagentStart": [
       { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
     ],
@@ -284,8 +281,11 @@ What each script turns on:
 - `report-pr.ts`: a chip as soon as an agent runs `gh pr create`, instead
   of at the next poll.
 - `report-published.ts`: the "Made here" list of published pages and docs.
-- `report-mention.ts`: records the paragraph where the chat that opened a
-  PR first told you about it. Nothing shows it yet.
+
+An older list had a `Stop` hook running `report-mention.ts`. The script
+is gone, so that entry would fail at the end of every turn: run
+`npm run setup -- --hooks` to take it out (doctor flags it), or delete it
+by hand if you added the hooks that way.
 
 ## The dock
 
