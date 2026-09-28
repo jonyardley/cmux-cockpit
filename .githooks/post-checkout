@@ -1,7 +1,9 @@
 #!/bin/sh
 # Installed by `npm run hooks`. Rebuilds sidebars/*.js after switching
 # branches, since those files are no longer committed. Quiet no-op before
-# `npm ci` has run.
+# `npm ci` has run. `npm run build` takes the build lock
+# (scripts/hook-build.ts --locked), so this never races a tap's or a
+# poll's build, and a build already in flight rebuilds for the new source.
 if [ ! -d node_modules ]; then
   exit 0
 fi

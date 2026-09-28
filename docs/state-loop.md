@@ -329,6 +329,25 @@ the lock back and builds again, so a write that found the lock held is
 never left unbuilt. The holder touches the lock before each build pass, so
 a long run of passes is never mistaken for a crashed build's.
 
+`npm run build` takes the same lock (`scripts/hook-build.ts --locked`), so
+the git hooks' rebuild after a pull or a branch switch, the close-out's and
+`npm run check`'s can never race a tap's or a poll's either. It waits for
+the lock as long as a live build could hold it (just over two minutes,
+retaking a crashed build's on the way), builds with `build.ts`'s output
+shown, and exits with its status, so a failed build still fails the check.
+Whatever holds the lock spawns `scripts/build.ts` directly, never
+`npm run build`, so nothing waits on its own lock. `npm run dev`'s watch
+build does not take it: it runs for as long as you leave it, and is only
+for working on the sidebars by hand.
+
+"Changed since that build" means the build's inputs, not only the state
+file: the holder compares the state file's text plus the size and
+modification time of `config/projects.json` and of every file under `src/`
+(`buildInputs`). A pull or a branch switch whose files land while a tap's
+build is going then gets another pass from that holder, so the last bundle
+written is built from the newest source, even in a clone without the git
+hooks installed.
+
 ## Published pages and docs
 
 cmux knows nothing about the pages and docs agents publish on claude.ai
