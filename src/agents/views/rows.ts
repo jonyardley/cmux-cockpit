@@ -2,8 +2,7 @@
 // A capped list ends in a quiet "+N more" row (issue #80) that opens it (#109).
 
 import type { Last } from "../../shared/list.ts";
-import { dimmedColors, prChipColors } from "../../shared/pr-colors.ts";
-import { chip, meta, openIfUrl, when } from "../../shared/ui.ts";
+import { meta, openIfUrl, when } from "../../shared/ui.ts";
 import {
   isPeeking,
   type MadeEntry,
@@ -11,14 +10,11 @@ import {
   madeIcon,
   madeTitleColor,
   type PrEntry,
-  prChipHealth,
-  prChipText,
-  prDim,
   prFromText,
   togglePeek,
 } from "../model.ts";
-import { STALE_OPACITY, T } from "../theme.ts";
-import { glyph, ruled } from "./parts.ts";
+import { T } from "../theme.ts";
+import { glyph, prChip, ruled } from "./parts.ts";
 import { peekCard } from "./peek.ts";
 
 /** The quiet row a capped list ends in: "+12 more", or "Show less" once
@@ -48,13 +44,8 @@ function githubArrow(url: () => string | undefined): View {
 
 /** A PR row: tap opens its peek card under it; the arrow opens GitHub. */
 export function prRow(e: () => Last<PrEntry>): View {
-  const p = () => e().pr;
-  const colors = () => {
-    const h = prChipHealth(e());
-    return dimmedColors(prChipColors(h.health, p().status, h.draft), prDim(e()));
-  };
   const top = HStack({ spacing: 10 }, [
-    Text(() => "#" + (p().number ?? ""))
+    Text(() => "#" + (e().pr.number ?? ""))
       .font(12)
       .monospaced()
       .color(T.secondary)
@@ -69,12 +60,11 @@ export function prRow(e: () => Last<PrEntry>): View {
     Spacer({ minLength: 4 }),
     // Stale rides inside the chip: an empty sibling Text would still cost
     // its HStack spacing and squeeze the title.
-    chip(() => prChipText(e()), colors)
-      .opacity(() => (prDim(e()) ? STALE_OPACITY : 1))
-      .layoutPriority(2),
-    githubArrow(() => p().url).layoutPriority(2),
+    prChip(e).layoutPriority(2),
   ]);
-  const row = VStack({ spacing: 2, alignment: "leading" }, [
+  // The tappable part stops short of the arrow, so a tap on the arrow can
+  // only open GitHub and never also toggle the peek card.
+  const tappable = VStack({ spacing: 2, alignment: "leading" }, [
     top,
     when(
       "pr-from",
@@ -85,12 +75,20 @@ export function prRow(e: () => Last<PrEntry>): View {
           .truncation("middle"),
     ),
   ])
-    .paddingHorizontal(12)
+    .paddingLeading(12)
+    .paddingTrailing(4)
     .paddingVertical(10)
-    .background(() => (isPeeking(e()) ? T.hover : "clear"))
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => togglePeek(e()));
+  // Top-aligned and padded down to the first line, so the arrow stays
+  // beside the chip when the from line shows under it.
+  const arrow = VStack({ spacing: 0 }, [githubArrow(() => e().pr.url)])
+    .paddingTop(10)
+    .paddingTrailing(8);
+  const row = HStack({ spacing: 6, alignment: "top" }, [tappable, arrow])
+    .background(() => (isPeeking(e()) ? T.hover : "clear"))
+    .frame({ maxWidth: "infinity", alignment: "leading" });
   const withPeek = VStack({ spacing: 0, alignment: "leading" }, [
     row,
     when(

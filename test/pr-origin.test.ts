@@ -15,9 +15,10 @@ import {
   paragraphWith,
   pendingFor,
   replyFrom,
+  tailLines,
 } from "../scripts/hooks/report-mention.ts";
 import { addOrigin, ORIGIN_MAX_AGE_S, originFrom } from "../scripts/hooks/report-pr.ts";
-import { MAX_MENTION, type SavedPrOrigin, validateState } from "../scripts/state-config.ts";
+import { cleanMention, MAX_MENTION, type SavedPrOrigin, validateState } from "../scripts/state-config.ts";
 import { writePrOrigins } from "../scripts/state-url.ts";
 
 const URL = "https://github.com/o/r/pull/21";
@@ -74,6 +75,13 @@ describe("addOrigin", () => {
     const next = addOrigin({ [URL]: origin({ epoch: NOW - 10, mention }) }, origin(), NOW);
     assert.deepEqual(next[URL], origin({ mention }));
   });
+
+  it("drops the earlier mention when a different chat records the PR", () => {
+    const mention = { text: "Opened #21.", message: "m1", epoch: NOW - 5 };
+    const earlier = origin({ session: "other", epoch: NOW - 10, mention });
+    const next = addOrigin({ [URL]: earlier }, origin(), NOW);
+    assert.deepEqual(next[URL], origin());
+  });
 });
 
 describe("mentionPattern", () => {
@@ -102,6 +110,37 @@ describe("paragraphWith", () => {
     const out = paragraphWith(`#21 ${"word ".repeat(200)}`, re) ?? "";
     assert.ok(out.length <= MAX_MENTION);
     assert.ok(out.endsWith("…"));
+  });
+
+  it("cuts by UTF-16 length, so an emoji paragraph still ends in an ellipsis and fits", () => {
+    const out = paragraphWith(`#21 ${"😀".repeat(400)}`, re) ?? "";
+    assert.ok(out.length <= MAX_MENTION, String(out.length));
+    assert.ok(out.endsWith("…"));
+    assert.ok(!/[\ud800-\udbff]…$/.test(out), "no half emoji before the ellipsis");
+  });
+});
+
+describe("cleanMention", () => {
+  it("keeps a paragraph that fits as it is, and a paragraph one over gets the ellipsis", () => {
+    assert.equal(cleanMention("x".repeat(MAX_MENTION)), "x".repeat(MAX_MENTION));
+    assert.equal(cleanMention("x".repeat(MAX_MENTION + 1)), `${"x".repeat(MAX_MENTION - 1)}…`);
+  });
+
+  it("drops the space before the ellipsis, and is null for nothing usable", () => {
+    const out = cleanMention(`${"x".repeat(MAX_MENTION - 2)} tail`) ?? "";
+    assert.equal(out, `${"x".repeat(MAX_MENTION - 2)}…`);
+    assert.equal(cleanMention("  \n "), null);
+    assert.equal(cleanMention(5), null);
+  });
+});
+
+describe("tailLines", () => {
+  it("keeps every line of a whole file", () => {
+    assert.deepEqual(tailLines("a\nb\n", false), ["a", "b", ""]);
+  });
+
+  it("drops the partial first line of a read that began mid-file", () => {
+    assert.deepEqual(tailLines('ial"}\n{"a":1}\n', true), ['{"a":1}', ""]);
   });
 });
 
@@ -193,6 +232,18 @@ describe("prOrigins in the state file", () => {
     assert.deepEqual(Object.keys(state.prOrigins), [URL, badMention.url]);
     assert.deepEqual(state.prOrigins[URL], good);
     assert.equal(state.prOrigins[badMention.url]?.mention, undefined);
+  });
+
+  it("drops an origin whose number disagrees with its link, or whose link is not its key", () => {
+    const other = "https://github.com/o/r/pull/22";
+    const state = validateState({
+      prOrigins: {
+        [URL]: origin({ number: 22 }),
+        [other]: origin(),
+        "https://github.com/o/r/pull/23": origin({ url: "https://github.com/o/r/pull/23", number: 23 }),
+      },
+    });
+    assert.deepEqual(Object.keys(state.prOrigins), ["https://github.com/o/r/pull/23"]);
   });
 
   it("is written under the lock, and a no-op write is not a change", () => {

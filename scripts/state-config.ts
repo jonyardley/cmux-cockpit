@@ -309,8 +309,16 @@ function cleanText(raw: unknown, max: number): string | null {
   return cleaned.length ? cleaned : null;
 }
 
-/** cleanLabel for a first-mention paragraph: the same rule, cut to MAX_MENTION. */
-export const cleanMention = (raw: unknown): string | null => cleanText(raw, MAX_MENTION);
+/**
+ * cleanLabel for a first-mention paragraph: the same rule, but a paragraph
+ * over MAX_MENTION is cut to leave room for an ellipsis and ends in one, so
+ * the card shows it was cut. Both lengths are the UTF-16 one isText measures.
+ */
+export function cleanMention(raw: unknown): string | null {
+  const whole = cleanText(raw, Number.POSITIVE_INFINITY);
+  if (whole === null || whole.length <= MAX_MENTION) return whole;
+  return `${cutTo(whole, MAX_MENTION - 1).trimEnd()}…`;
+}
 
 /**
  * Turns hook input into a label isLabel accepts: control characters and
@@ -478,9 +486,13 @@ function savedMention(v: unknown): SavedMention | null {
   return { text: v.text, message: v.message, epoch: v.epoch };
 }
 
+// The number a PR link ends in, so a saved number can be held to its link.
+const prNumberOf = (url: string): number => Number(/\/pull\/(\d+)$/.exec(url)?.[1]);
+
 // A bad mention is dropped on its own, so the origin still says which chat.
 function savedPrOrigin(v: unknown): SavedPrOrigin | null {
   if (!isRecord(v) || !isPrUrl(v.url) || !isPrNumber(v.number) || !isEpoch(v.epoch)) return null;
+  if (prNumberOf(v.url) !== v.number) return null;
   const { workspace, surface, session } = v;
   if (!isIdText(workspace) || !isIdText(session) || !isOptionalId(surface)) return null;
   const origin: SavedPrOrigin = { url: v.url, number: v.number, workspace, session, epoch: v.epoch };
@@ -489,6 +501,12 @@ function savedPrOrigin(v: unknown): SavedPrOrigin | null {
   if (mention) origin.mention = mention;
   return origin;
 }
+
+// An origin kept only under its own link: the map key is what the rows look it up by.
+const originAt = (v: unknown, url: string): SavedPrOrigin | null => {
+  const o = savedPrOrigin(v);
+  return o?.url === url ? o : null;
+};
 
 function savedAsk(v: unknown): SavedAsk | null {
   if (!isRecord(v) || !isLabel(v.reason) || !isEpoch(v.epoch)) return null;
@@ -502,11 +520,12 @@ function savedSubagents(v: unknown): SavedSubagent[] | null {
   return runs.length ? runs : null;
 }
 
-// Keeps the last MAX_ENTRIES valid entries, in insertion order.
-function cleanMap<T>(v: unknown, clean: (value: unknown) => T | null, validId = isId): Record<string, T> {
+// Keeps the last MAX_ENTRIES valid entries, in insertion order. `clean` is
+// handed the key too, for a map whose value must agree with it.
+function cleanMap<T>(v: unknown, clean: (value: unknown, id: string) => T | null, validId = isId): Record<string, T> {
   if (!isRecord(v)) return {};
   const kept = Object.entries(v).flatMap(([id, value]): [string, T][] => {
-    const c = validId(id) ? clean(value) : null;
+    const c = validId(id) ? clean(value, id) : null;
     return c === null ? [] : [[id, c]];
   });
   return Object.fromEntries(kept.slice(-MAX_ENTRIES));
@@ -524,7 +543,7 @@ export function validateState(raw: unknown): State {
     ownPrs: cleanMap(v.ownPrs, savedOwnPr, isPrUrl),
     subagents: cleanMap(v.subagents, savedSubagents),
     published: cleanMap(v.published, savedPublished, isPublishedUrl),
-    prOrigins: cleanMap(v.prOrigins, savedPrOrigin, isPrUrl),
+    prOrigins: cleanMap(v.prOrigins, originAt, isPrUrl),
     asking: cleanMap(v.asking, savedAsk),
     ui: uiState(v.ui),
     ...(poll ? { poll } : {}),

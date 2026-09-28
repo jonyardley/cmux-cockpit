@@ -6,18 +6,20 @@
 // that session's origins that have no mention yet and reads the session's
 // transcript for the first reply, from the create on, that names the PR by
 // its link, `#N` or "PR N". The paragraph holding it is saved on one line,
-// cut to MAX_MENTION, with the message's uuid. A saved mention never
+// cut to MAX_MENTION, with the message's uuid. Only the transcript's last
+// TAIL_BYTES are read, and when none of the pending PRs is named yet it is
+// read once more after RETRY_MS, since Stop can fire before the final reply
+// reaches the file. A saved mention never
 // changes. With nothing pending for the session the transcript is not read,
 // so an ordinary turn costs one small file read. It never fails the hook:
 // every problem is a note on stderr and exit 0.
 
-import { existsSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, openSync, readFileSync, readSync } from "node:fs";
 import { join } from "node:path";
 import { scheduleBuild } from "../hook-build.ts";
 import {
   cleanMention,
   isId,
-  MAX_MENTION,
   type SavedMention,
   type SavedPrOrigin,
   type State,
@@ -51,20 +53,10 @@ function plain(paragraph: string): string {
     .replaceAll(/\*\*|__|`/g, "");
 }
 
-// Cut to MAX_MENTION by whole code points, ending in an ellipsis when cut.
-function cut(text: string): string {
-  const chars = [...text.replaceAll(/\s+/g, " ").trim()];
-  if (chars.length <= MAX_MENTION) return chars.join("");
-  return `${chars
-    .slice(0, MAX_MENTION - 1)
-    .join("")
-    .trimEnd()}…`;
-}
-
 /** The first paragraph of `text` that `re` matches, as the card shows it; null when none does. */
 export function paragraphWith(text: string, re: RegExp): string | null {
   const hit = text.split(/\n\s*\n/).find((p) => re.test(p));
-  return hit === undefined ? null : cleanMention(cut(plain(hit)));
+  return hit === undefined ? null : cleanMention(plain(hit));
 }
 
 interface Reply {
@@ -136,6 +128,50 @@ export function applyMentions(map: State["prOrigins"], found: ReadonlyMap<string
 
 const STATE_PATH = join(import.meta.dirname, "..", "..", "config", "state.json");
 
+/** The most of a transcript read: its last 16 MB, which holds the turn that opened a PR. */
+export const TAIL_BYTES = 16 * 1024 * 1024;
+// How long to wait for the final reply to be flushed before the one reread.
+const RETRY_MS = 1500;
+
+/** A tail's lines, dropping the first when the read began mid-file and so mid-line. */
+export function tailLines(text: string, midFile: boolean): string[] {
+  const lines = text.split("\n");
+  return midFile ? lines.slice(1) : lines;
+}
+
+// The last TAIL_BYTES of the file, as lines.
+function readTail(path: string): string[] {
+  const fd = openSync(path, "r");
+  try {
+    const size = fstatSync(fd).size;
+    const start = Math.max(0, size - TAIL_BYTES);
+    const buf = Buffer.alloc(size - start);
+    let got = 0;
+    while (got < buf.length) {
+      const n = readSync(fd, buf, got, buf.length - got, start + got);
+      if (n === 0) break;
+      got += n;
+    }
+    return tailLines(buf.subarray(0, got).toString("utf8"), start > 0);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+// A hook runs as its own short process, so blocking it is harmless.
+const sleep = (ms: number): void => {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+};
+
+// The pending origins' mentions, reading once more after a pause when the
+// first read finds none: the final reply may not be flushed yet.
+function mentionsIn(transcript: string, pending: readonly SavedPrOrigin[]): Map<string, SavedMention> {
+  const found = findMentions(readTail(transcript), pending);
+  if (found.size > 0) return found;
+  sleep(RETRY_MS);
+  return findMentions(readTail(transcript), pending);
+}
+
 function readJson(path: string | number): unknown {
   try {
     return JSON.parse(readFileSync(path, "utf8"));
@@ -153,13 +189,12 @@ function record(event: unknown): string | null {
   const now = Math.floor(Date.now() / 1000);
   const pending = existsSync(STATE_PATH) ? pendingFor(validateState(readJson(STATE_PATH)).prOrigins, session, now) : [];
   if (pending.length === 0) return null;
-  let lines: string[];
+  let found: Map<string, SavedMention>;
   try {
-    lines = readFileSync(transcript, "utf8").split("\n");
+    found = mentionsIn(transcript, pending);
   } catch (err) {
     return `transcript: ${err instanceof Error ? err.message : String(err)}`;
   }
-  const found = findMentions(lines, pending);
   if (found.size === 0) return null;
   const result = writePrOrigins(STATE_PATH, (map) => applyMentions(map, found));
   if (!result.ok) return result.error;

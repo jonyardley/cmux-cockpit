@@ -144,13 +144,14 @@ export function originFrom(url: string, event: unknown, env: OriginEnv, now: num
 
 /**
  * Adds one origin, moved last as the newest, keeping the mention an earlier
- * record of the same PR already found, and drops every origin older than
- * ORIGIN_MAX_AGE_S. The input is not changed.
+ * record of the same PR already found when that record is the same chat's,
+ * and drops every origin older than ORIGIN_MAX_AGE_S. The input is not
+ * changed.
  */
 export function addOrigin(map: State["prOrigins"], origin: SavedPrOrigin, now: number): State["prOrigins"] {
   const before = Object.hasOwn(map, origin.url) ? map[origin.url] : undefined;
   const kept = Object.entries(map).filter(([url, o]) => url !== origin.url && now - o.epoch <= ORIGIN_MAX_AGE_S);
-  const next = before?.mention ? { ...origin, mention: before.mention } : origin;
+  const next = before?.mention && before.session === origin.session ? { ...origin, mention: before.mention } : origin;
   return Object.fromEntries([...kept, [origin.url, next]]);
 }
 

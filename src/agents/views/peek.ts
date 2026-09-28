@@ -2,8 +2,7 @@
 // that opened it, the paragraph where that chat first told Jon about it, its
 // checks, and buttons to go back to the chat or out to GitHub.
 
-import { dimmedColors, prChipColors } from "../../shared/pr-colors.ts";
-import { chip, openIfUrl, ring, when } from "../../shared/ui.ts";
+import { openIfUrl, ring, when } from "../../shared/ui.ts";
 import {
   canShowInChat,
   type PrEntry,
@@ -11,13 +10,11 @@ import {
   peekQuote,
   peekTitle,
   peekWaiting,
-  prChipHealth,
-  prChipText,
-  prDim,
   prSource,
   showInChat,
 } from "../model.ts";
 import { T } from "../theme.ts";
+import { prChip } from "./parts.ts";
 
 function button(label: string, face: string, hover: string, fg: string, onTap: () => void): View {
   return Text(label)
@@ -53,10 +50,6 @@ function quote(e: () => PrEntry): View {
 const faint = (text: () => string): View => Text(text).font(11).color(T.secondary).lineLimit(2);
 
 export function peekCard(e: () => PrEntry): View {
-  const colors = () => {
-    const h = prChipHealth(e());
-    return dimmedColors(prChipColors(h.health, e().pr.status, h.draft), prDim(e()));
-  };
   const body = VStack({ spacing: 8, alignment: "leading" }, [
     HStack({ spacing: 8, alignment: "top" }, [
       Text(() => peekTitle(e()))
@@ -66,7 +59,7 @@ export function peekCard(e: () => PrEntry): View {
         .lineLimit(3)
         .layoutPriority(1),
       Spacer({ minLength: 4 }),
-      chip(() => prChipText(e()), colors),
+      prChip(e),
     ]),
     when(
       "peek-source",
