@@ -34,8 +34,7 @@ export function savedOwnPrs(): SavedOwnPr[] {
 }
 
 /**
- * Which chat opened the PR at `url` (State.prOrigins, from report-pr.ts;
- * report-mention.ts adds what it first said, which nothing shows yet);
+ * Which chat opened the PR at `url` (State.prOrigins, from report-pr.ts);
  * undefined for a PR no agent opened through the hook.
  */
 export function originOf(url: string | undefined): SavedPrOrigin | undefined {

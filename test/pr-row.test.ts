@@ -37,7 +37,6 @@ const checks = [
       surface: "s-here",
       session: "sess1",
       epoch: NOW - 180,
-      mention: { text: "Opened #1: the flaky test.", message: "m1", epoch: NOW - 170 },
     },
     [pr(2)]: { url: pr(2), number: 2, workspace: "other", session: "sess2", epoch: NOW - 60 },
     [pr(3)]: { url: pr(3), number: 3, workspace: "gone", session: "sess3", epoch: NOW - 60 },

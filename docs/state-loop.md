@@ -399,23 +399,16 @@ under the other form adds a second entry. And an update that names its
 
 The agents panel's Pull requests rows say which chat opened each PR, and a
 tap goes back to that chat; the state pill opens GitHub. Neither cmux nor
-GitHub knows which chat opened a PR, or what it first said about it, so
-two hooks record them in the `prOrigins` map: PR link to `{"url",
-"number", "workspace", "surface", "session", "epoch", "mention"}`, oldest
-first. The sidebar does not show the `mention` since the peek card went.
+GitHub knows which chat opened a PR, so a hook records it in the
+`prOrigins` map: PR link to `{"url", "number", "workspace", "surface",
+"session", "epoch"}`, oldest first.
 
 - `scripts/hooks/report-pr.ts`, after a `gh pr create`, records the
   Claude Code `session_id`, `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID`,
   with the number taken from the link, so it needs no gh call. A second
-  create of the same link keeps the mention already found. Every write
-  drops origins older than 30 days.
-- `scripts/hooks/report-mention.ts`, a Stop hook, takes the session's
-  origins with no `mention` from the last day and reads the transcript at
-  `transcript_path` for the first main-chat reply, from the create on,
-  naming the PR by its link, `#N` or "PR N". The paragraph holding it,
-  markdown markers dropped and cut to `MAX_MENTION` on one line, is saved
-  with the message's uuid and never changes. With nothing pending the
-  transcript is not read.
+  create of the same link replaces the first. Every write drops origins
+  older than 30 days. A `mention` saved by the old report-mention.ts hook
+  is dropped on the next write.
 
 No URL can set the map. A PR opened by hand, or before the hooks were
 installed, has no origin: its row has no "from" line and a tap opens
