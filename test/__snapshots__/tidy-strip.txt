@@ -104,8 +104,8 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
           Image checkmark.circle.fill .font(10) .color(tidyText|mergedChip.fg)
           Text "3 M\u200aE\u200aR\u200aG\u200aE\u200aD\u200a, R\u200aE\u200aA\u200aD\u200aY T\u200aO T\u200aI\u200aD\u200aY" .font(10.5) .weight(semibold) .color(tidyText|mergedChip.fg) .lineLimit(1)
           Spacer
-          VStack spacing: 0, alignment: leading .padding(1) .background(tidyEdge|mergedChip.edge) .cornerRadius(6) .hoverBackground(#9791A2) .onTap()
-            Text "Tidy" .font(11) .weight(semibold) .color(tidyText|mergedChip.fg) .paddingHorizontal(9) .paddingVertical(2) .background(onBadge|card|readyChip.fg) .cornerRadius(5) .hoverBackground(#EFEFEE)
+          VStack spacing: 0, alignment: leading .padding(1) .background(tidyEdge|mergedChip.edge) .cornerRadius(6) .hoverBackground(#9791A2) .onTap() .layoutPriority(2)
+            Text "Tidy" .font(11) .weight(semibold) .color(tidyText|mergedChip.fg) .lineLimit(1) .paddingHorizontal(9) .paddingVertical(2) .background(onBadge|card|readyChip.fg) .cornerRadius(5) .hoverBackground(#EFEFEE)
         Text "strip · feat-a · feat-b" .font(11.5) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail)
 
 Colours
