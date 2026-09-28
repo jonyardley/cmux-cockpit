@@ -22,6 +22,8 @@ export interface RunOptions {
   cwd?: string;
   /** Show the command's own output instead of capturing it. */
   inherit?: boolean;
+  /** The whole environment for the command, in place of this process's. */
+  env?: Record<string, string>;
 }
 
 /** Runs one command with an argument array, never through a shell. */
@@ -47,7 +49,7 @@ export const realRun: Runner = (cmd, args, opts = {}) => {
     encoding: "utf8",
     stdio: opts.inherit ? "inherit" : "pipe",
     timeout: 120_000,
-    env: { ...process.env, CMUX_QUIET: "1" },
+    env: opts.env ?? { ...process.env, CMUX_QUIET: "1" },
   });
   const missing = r.error !== undefined && "code" in r.error && r.error.code === "ENOENT";
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", missing };

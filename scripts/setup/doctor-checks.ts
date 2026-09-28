@@ -178,11 +178,21 @@ export const tokenCheck: Probe = (_env, paths) =>
     ? pass("Link token", "config/url-token present")
     : fail("Link token", "config/url-token missing, so the helper refuses every tap", "npm run build");
 
+/** The PATH AppleScript's do shell script gives the helper at tap time, whatever the shell running doctor has. */
+export const HELPER_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
+
+// Run as the helper runs it: that PATH and home only, none of this shell's
+// fnm or nvm variables, so the line names the node a tap would really use.
 export const findNodeCheck: Probe = (env, paths) => {
-  const r = env.run("/bin/sh", [paths.findNode]);
+  const label = "Node for the helper";
+  const r = env.run("/bin/sh", [paths.findNode], { env: { HOME: env.home, PATH: HELPER_PATH } });
   const found = r.stdout.trim();
-  if (r.status === 0 && found !== "") return pass("Node for the helper", found);
-  return fail("Node for the helper", "find-node.sh found no node", "install Node where find-node.sh looks");
+  if (r.status === 0 && found !== "") return pass(label, found);
+  return fail(
+    label,
+    "find-node.sh finds no node with the helper's PATH, so taps do nothing",
+    "install Node with fnm, nvm, volta, asdf, mise or Homebrew (see scripts/find-node.sh)",
+  );
 };
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;

@@ -18,8 +18,15 @@ import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { wanted } from "../scripts/setup/claude-settings.ts";
 import { setup, uninstall } from "../scripts/setup/commands.ts";
-import { exitCode, problemLines, report, runChecks } from "../scripts/setup/doctor-checks.ts";
-import { pathsFor } from "../scripts/setup/env.ts";
+import {
+  exitCode,
+  findNodeCheck,
+  HELPER_PATH,
+  problemLines,
+  report,
+  runChecks,
+} from "../scripts/setup/doctor-checks.ts";
+import { pathsFor, type Runner, realRun } from "../scripts/setup/env.ts";
 import { missingEntries } from "../scripts/setup/hooks-merge.ts";
 import { type Answers, failed, fakeEnv, notFound, ok, tempHome } from "./support/setup-env.ts";
 
@@ -400,5 +407,46 @@ describe("uninstall", () => {
     assert.equal(f.asked.length, 3);
     assert.ok(existsSync(p.helperApp));
     assert.ok(lstatSync(p.automationsLink).isSymbolicLink());
+  });
+});
+
+describe("doctor's Node for the helper", () => {
+  // The real find-node.sh through the real runner, in a temp home, with the
+  // Homebrew fallbacks pointed at nothing so the runner's own node cannot answer.
+  const noFixed: Runner = (cmd, args, opts = {}) =>
+    realRun(cmd, args, { ...opts, env: { ...(opts.env ?? {}), CMUX_COCKPIT_FIXED_NODES: "/nonexistent/node" } });
+  const repo = join(import.meta.dirname, "..");
+
+  it("looks only where the helper looks, not on this shell's PATH, which has node", () => {
+    const w = where();
+    // With this shell's PATH the same home does find a node, so the cross is the PATH's doing.
+    const onPath = realRun("/bin/sh", [join(repo, "scripts", "find-node.sh")], {
+      env: { HOME: w.home, PATH: process.env.PATH ?? "", CMUX_COCKPIT_FIXED_NODES: "/nonexistent/node" },
+    });
+    assert.equal(onPath.status, 0);
+    const check = findNodeCheck({ ...fakeEnv(w).env, repo, run: noFixed }, pathsFor(w.home, repo));
+    assert.equal(check.ok, false, check.detail);
+    assert.match(check.detail, /helper's PATH/);
+  });
+
+  it("names the node the helper would use, such as volta's under that home", () => {
+    const w = where();
+    const volta = join(w.home, ".volta", "bin");
+    mkdirSync(volta, { recursive: true });
+    writeFileSync(join(volta, "node"), "#!/bin/sh\n", { mode: 0o755 });
+    const check = findNodeCheck({ ...fakeEnv(w).env, repo, run: noFixed }, pathsFor(w.home, repo));
+    assert.equal(check.ok, true, check.detail);
+    assert.equal(check.detail, join(volta, "node"));
+  });
+
+  it("hands find-node.sh only HOME and the helper's PATH", () => {
+    const w = where();
+    const seen: (Record<string, string> | undefined)[] = [];
+    const run: Runner = (_c, _a, opts = {}) => {
+      seen.push(opts.env);
+      return ok("/usr/bin/node");
+    };
+    findNodeCheck({ ...fakeEnv(w).env, run }, pathsFor(w.home, w.repo));
+    assert.deepEqual(seen, [{ HOME: w.home, PATH: HELPER_PATH }]);
   });
 });
