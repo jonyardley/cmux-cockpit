@@ -8,6 +8,7 @@ const model = await import("../src/cockpit/model.ts");
 const drop = await import("../src/cockpit/drop.ts");
 const state = await import("../src/cockpit/state.ts");
 const status = await import("../src/cockpit/status.ts");
+const { READY_INK } = await import("../src/shared/pr-colors.ts");
 const needs = await import("../src/shared/needs.ts");
 const { LANES, laneByKey } = await import("../src/cockpit/lanes.ts");
 const { cardMenu } = await import("../src/cockpit/views/parts.ts");
@@ -816,7 +817,7 @@ describe("prTextColor", () => {
   it("takes the health's chip colour otherwise, running in blue", () => {
     assert.equal(status.prTextColor(pr("failing"), "#111111"), "#9E2F27");
     assert.equal(status.prTextColor(pr("running"), "#111111"), "#2F5690");
-    assert.equal(status.prTextColor(pr("ready"), "#111111"), "#4D6B35");
+    assert.equal(status.prTextColor(pr("ready"), "#111111"), READY_INK);
   });
 });
 

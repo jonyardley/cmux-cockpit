@@ -36,6 +36,19 @@ const model = await import("../src/cockpit/model.ts");
 const { C } = await import("../src/cockpit/theme.ts");
 const { READY_INK } = await import("../src/shared/pr-colors.ts");
 
+// WCAG relative luminance of a #RRGGBB colour, and the contrast ratio of two.
+const luminance = (hex: string): number => {
+  const [r, g, b] = [1, 3, 5].map((i) => {
+    const c = Number.parseInt(hex.slice(i, i + 2), 16) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (b ?? 0);
+};
+const contrast = (a: string, b: string): number => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
+};
+
 function setup(): void {
   r.data.epoch += 100;
   r.data.groups = [
@@ -105,7 +118,9 @@ describe("headerHint", () => {
     const hint = model.headerHint("review", false);
     assert.equal(hint.text, "2 ready to merge");
     assert.equal(hint.color, READY_INK);
-    assert.notEqual(hint.color, C.greenText);
+    // Different hex is not enough: the two share a hue, so hold a real
+    // lightness gap (a contrast ratio between them) or they read as one.
+    assert.ok(contrast(hint.color, C.greenText) >= 1.5);
   });
 
   it("keeps Parked's merge line faint", () => {

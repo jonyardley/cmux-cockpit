@@ -3,11 +3,12 @@
 // (the chip's word tells the two apart), blue running (the Checks block's
 // pending dot and the working dot are blue too), and ready to merge in
 // solid deep sage with white words: still the loudest chip, but in the
-// sidebar's own palette, a step darker than the agent's Finished green.
+// sidebar's own palette, well darker than the agent's Finished green.
 // Only ready is green (issue #82): a plain open PR with no verdict is
 // neutral. A quiet merged PR stays purple, an open draft slate, and
 // anything else neutral.
 
+import { P } from "./palette.ts";
 import type { PrHealth, PrSummary } from "./prs.ts";
 
 export interface ChipColors {
@@ -24,9 +25,9 @@ export const MERGED_CHIP: ChipColors = { bg: "#EFEAF7", fg: "#5B3E91", edge: "#D
 const FAILING_CHIP: ChipColors = { bg: "#F8E4E2", fg: "#9E2F27", edge: "#EDC9C5" };
 
 /** Ready's green as words on a card, where the chip's white would vanish. */
-export const READY_INK = "#4D6B35";
+export const READY_INK = P.greenDeep;
 
-const READY_CHIP: ChipColors = { bg: READY_INK, fg: "#FFFFFF", edge: "#3F5A2B" };
+const READY_CHIP: ChipColors = { bg: READY_INK, fg: "#FFFFFF", edge: P.greenDeepEdge };
 
 const HEALTH_CHIP: Record<Exclude<PrHealth, "quiet">, ChipColors> = {
   failing: FAILING_CHIP,

@@ -32,6 +32,14 @@ export const P = {
   green: "#788C5D",
   /** The finished green in words: "Finished 3m", the Ready pill. */
   greenText: "#5E7A40",
+  /**
+   * Ready to merge: the ready chip's fill and its words. The same olive as
+   * finished, kept well darker so a mergeable PR does not read as a
+   * finished agent (test/merge-ready.test.ts holds the gap).
+   */
+  greenDeep: "#3F5A2B",
+  /** The ready chip's edge, a step below its fill. */
+  greenDeepEdge: "#33491F",
   red: "#C0453A",
   /** The unread badge: grey on both sides, so clay only ever means needs you. */
   badge: ink.secondary,
