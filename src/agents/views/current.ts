@@ -2,12 +2,10 @@
 // left has no room for. Todo is not in the sidebar data (issue #7), so it is
 // left out; checks come from the PR poller.
 
-import { glyphColor } from "../../shared/contrast.ts";
 import { dismissNeeds } from "../../shared/needs.ts";
-import { prChipColors } from "../../shared/pr-colors.ts";
-import { tracked } from "../../shared/text.ts";
+import { NEUTRAL_CHIP, summaryColors } from "../../shared/pr-colors.ts";
 import { displayTitle } from "../../shared/titles.ts";
-import { when } from "../../shared/ui.ts";
+import { branchText, chip, META_FONT, meta, projectBadge, sectionTitle, unreadBadge, when } from "../../shared/ui.ts";
 import {
   type AgentRow,
   agentRows,
@@ -38,8 +36,8 @@ import {
   subagentLabelColor,
   subagents,
 } from "../model.ts";
-import { PORT_CHIP, STALE_OPACITY, T } from "../theme.ts";
-import { agentDot, chip, jump, meta, openIfUrl, panel, ruled } from "./parts.ts";
+import { STALE_OPACITY, T } from "../theme.ts";
+import { agentDot, jump, openIfUrl, panel, ruled } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
   const a = () => e().a;
@@ -100,7 +98,7 @@ function subagentsBlock(): View {
     () => subagents().length > 0,
     () =>
       VStack({ spacing: 0, alignment: "leading" }, [
-        Text(tracked("SUBAGENTS")).font(10).weight("semibold").color(T.tertiary).lineLimit(1).paddingBottom(2),
+        sectionTitle("SUBAGENTS", T.secondary).paddingBottom(2),
         ForEach({ items: () => subagents(), key: (e) => e.key }, (e) => subagentLine(e)),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
@@ -140,9 +138,9 @@ function checksBlock(): View {
     () =>
       VStack({ spacing: 0, alignment: "leading" }, [
         HStack({ spacing: 6 }, [
-          Text(tracked("CHECKS")).font(10).weight("semibold").color(T.tertiary).lineLimit(1),
+          sectionTitle("CHECKS", T.secondary),
           Text(() => checksFigure(checks()))
-            .font(10)
+            .font(10.5)
             .monospaced()
             .color(T.tertiary)
             .lineLimit(1),
@@ -223,14 +221,9 @@ function askBlock(): View {
 // badge. No status here, so the title has the line to itself (Board 1).
 function currentTitle(): View {
   const w = () => cur().ws;
-  const unread = () => w().unread ?? 0;
   return HStack({ spacing: 10 }, [
-    ZStack({}, [
-      RoundedRectangle({ cornerRadius: 8 }).fill(() => cur().project.color),
-      Image(() => cur().project.icon)
-        .font(12)
-        .color(() => glyphColor(cur().project.color, T.text)),
-    ]).frame({ width: 26, height: 26 }),
+    // The full card's badge size on the left, so the project reads the same.
+    projectBadge(() => cur().project, 26, 12, 8),
     VStack({ spacing: 1, alignment: "leading" }, [
       Text(() => displayTitle(w()) || "untitled")
         .font(14)
@@ -246,19 +239,7 @@ function currentTitle(): View {
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
-    when(
-      "cur-unread",
-      () => unread() > 0,
-      () =>
-        Text(() => String(unread()))
-          .font(10)
-          .bold()
-          .color(T.onClay)
-          .paddingHorizontal(5)
-          .paddingVertical(1)
-          .background(T.clayButton)
-          .cornerRadius(7),
-    ),
+    unreadBadge(() => w().unread ?? 0),
   ]).frame({ maxWidth: "infinity" });
 }
 
@@ -288,7 +269,7 @@ function statusRow(): View {
       () =>
         chip(
           () => currentPr()?.state ?? "",
-          () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
+          () => summaryColors(currentPr()),
         ).onTap(() => openIfUrl(currentPr()?.url)),
     )
       .opacity(() => (currentPrDim() ? STALE_OPACITY : 1))
@@ -365,7 +346,7 @@ function detailLine(key: string, label: string, show: () => boolean, value: () =
       // A fixed-width frame centres its content whatever the alignment, so the
       // label first fills the column with the maxWidth frame that does honour it.
       Text(label)
-        .font(11.5)
+        .font(META_FONT)
         .color(T.tertiary)
         .lineLimit(1)
         .frame({ maxWidth: "infinity", alignment: "leading" })
@@ -382,18 +363,13 @@ function detailLine(key: string, label: string, show: () => boolean, value: () =
 function prDetail(): View {
   return (
     HStack({ spacing: 6 }, [
-      Text(() => currentPr()?.tag ?? "")
-        .font(11.5)
-        .monospaced()
-        .color(T.secondary)
-        .lineLimit(1)
-        .layoutPriority(2),
+      meta(() => currentPr()?.tag ?? "", T.secondary),
       when(
         "cur-pr-title",
         () => !!currentPr()?.title,
         () =>
           Text(() => currentPr()?.title ?? "")
-            .font(11.5)
+            .font(META_FONT)
             .color(T.secondary)
             .lineLimit(1)
             .truncation("tail"),
@@ -415,13 +391,7 @@ function detailsBlock(): View {
           "cur-branch",
           "Branch",
           () => !!branchDetail(),
-          () =>
-            Text(() => branchDetail())
-              .font(11.5)
-              .color(T.secondary)
-              .lineLimit(1)
-              .truncation("middle")
-              .layoutPriority(1),
+          () => branchText(() => branchDetail(), T.secondary).layoutPriority(1),
         ),
         detailLine(
           "cur-ports",
@@ -432,7 +402,8 @@ function detailsBlock(): View {
               ForEach({ items: () => portChips(), key: (x) => x.key }, (x) =>
                 chip(
                   () => x().label,
-                  () => PORT_CHIP,
+                  () => NEUTRAL_CHIP,
+                  true,
                 ).onTap(() => openURL(x().url)),
               ),
             ]),

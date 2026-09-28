@@ -6,6 +6,7 @@
 
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
 import { agentsOf } from "../shared/needs.ts";
+import { P } from "../shared/palette.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import {
   inAppSpec,
@@ -411,7 +412,7 @@ export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => la
 // not by match, so a project with several paths is one group. Collapse is
 // local only: projects are not cmux groups.
 
-const OTHER: Project = { match: "other", name: "Other", color: "#A09E95", icon: "terminal" };
+const OTHER: Project = { match: "other", name: "Other", color: P.grey, icon: "terminal" };
 
 export const projectKey = (w: Workspace): string => {
   tick();

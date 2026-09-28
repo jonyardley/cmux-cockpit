@@ -1,12 +1,22 @@
 // Small pieces shared by the cockpit's cards and rows.
 
-import { glyphColor } from "../../shared/contrast.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
-import { prChipColors } from "../../shared/pr-colors.ts";
+import { NEUTRAL_CHIP, prChipColors, summaryColors } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
-import { haloDot, when } from "../../shared/ui.ts";
+import {
+  branchText,
+  chipFrame,
+  chipText,
+  haloDot,
+  meta,
+  chip as pill,
+  projectBadge,
+  ring,
+  unreadBadge,
+  when,
+} from "../../shared/ui.ts";
 import { showsChipsRow } from "../chips.ts";
 import { LANES } from "../lanes.ts";
 import {
@@ -48,26 +58,6 @@ export function glyphButton(icon: string, size: number, fontSize: number, color:
     .onTap(onTap);
 }
 
-// Edge as a filled ring: the edge colour fills an outer rounded box and the
-// face sits inset by the edge width. A borderWidth stroke is clipped by the
-// corner radius and thins out round every corner. `hug` keeps the face at its
-// content width (chips) instead of filling the row.
-export function ring(
-  view: View,
-  face: Reactive<string>,
-  edge: Reactive<string>,
-  width: Reactive<number>,
-  radius: number,
-  hug = false,
-): View {
-  const wv = typeof width === "function" ? width : () => width;
-  const inner = view.background(face).cornerRadius(() => radius - wv());
-  return VStack({ spacing: 0 }, [hug ? inner : inner.frame({ maxWidth: "infinity" })])
-    .padding(wv)
-    .background(edge)
-    .cornerRadius(radius);
-}
-
 // Working and needs dots sit on board 1's soft halo; the rest keep the same
 // frame so a lane's rows line up.
 export function statusDot(w: WsAccessor, size: number): View {
@@ -83,33 +73,16 @@ export function statusDot(w: WsAccessor, size: number): View {
 export function glyph(w: WsAccessor, size: number, radius: number, font: number): View {
   // computed(), not a plain thunk: fill, icon and glyph colour all read it,
   // so the directory is looked up once per change, not once per reader.
-  const project = computed(() => projectOf(w()?.directory));
-  return ZStack({}, [
-    RoundedRectangle({ cornerRadius: radius }).fill(() => project().color),
-    Image(() => project().icon)
-      .font(font)
-      .weight("semibold")
-      .color(() => glyphColor(project().color, C.text)),
-  ]).frame({ width: size, height: size });
+  return projectBadge(
+    computed(() => projectOf(w()?.directory)),
+    size,
+    font,
+    radius,
+  );
 }
 
-export function unreadBadge(w: WsAccessor, n: () => number = () => w()?.unread ?? 0): View {
-  const has = () => n() > 0;
-  return Text(() => (has() ? String(n()) : ""))
-    .font(10)
-    .bold()
-    .color("white")
-    .paddingHorizontal(() => (has() ? 5 : 0))
-    .paddingVertical(() => (has() ? 1 : 0))
-    .background(() => (has() ? C.unreadBg : "clear"))
-    .cornerRadius(7);
-}
-
-// Trailing metadata (PR number, age) never wraps: it keeps its width and the
-// title truncates instead.
-export function meta(fn: () => string, color: Reactive<string> = C.tertiary): View {
-  return Text(fn).font(11).monospaced().color(color).lineLimit(1).layoutPriority(2);
-}
+/** A card's unread count (shared/ui.ts); the default is the workspace's own. */
+export const cardUnread = (w: WsAccessor, n: () => number = () => w()?.unread ?? 0): View => unreadBadge(n);
 
 // The green "Ready" pill (issue #53): the agent finished while Jon was
 // elsewhere. It stands in for the unread badge, and clears once he opens
@@ -144,7 +117,7 @@ export function titleRow(w: WsAccessor, size: number): View {
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
     readyPill(w),
-    unreadBadge(w, () => badgeCount(w())),
+    cardUnread(w, () => badgeCount(w())),
     meta(() => ageOf(w())),
   ]).frame({ maxWidth: "infinity" });
 }
@@ -163,14 +136,12 @@ export function statusLabel(w: WsAccessor, size: number, weight: Weight): View {
 
 // A chip's kind is fixed by its key (one when() per id), so the kind picks
 // the pieces once; only the text and colours are reactive. The PR chip takes
-// its health's colours; the branch and ports chips stay quiet.
+// its health's colours; the branch and ports chips stay neutral.
 function chip(id: ChipId, c: () => Chip): View {
   const isPr = id === "pr";
-  const st = () => prChipColors(c().health ?? "quiet", c().status, c().draft);
-  const fg = () => (isPr ? st().fg : C.chipText);
-  // Monospaced straight after the font, as meta() does, so port digits hold still.
-  const sized = Text(() => c().text).font(11);
-  const text = (id === "port" ? sized.monospaced() : sized).weight("medium").lineLimit(1).truncation("tail").color(fg);
+  const colors = () => (isPr ? prChipColors(c().health ?? "quiet", c().status, c().draft) : NEUTRAL_CHIP);
+  const fg = () => colors().fg;
+  const text = id === "br" ? branchText(() => c().text, fg, "medium") : chipText(() => c().text, fg, id === "port");
   const parts: View[] =
     id === "port"
       ? [text]
@@ -189,15 +160,7 @@ function chip(id: ChipId, c: () => Chip): View {
         () => Circle({ size: 5 }).fill(C.clay),
       ),
     );
-  const body = HStack({ spacing: 4 }, parts).paddingHorizontal(6).paddingVertical(1);
-  return ring(
-    body,
-    () => (isPr ? st().bg : C.ground),
-    () => (isPr ? st().edge : C.chipEdge),
-    1,
-    6,
-    true,
-  ).onTap(() => {
+  return chipFrame(HStack({ spacing: 4 }, parts), colors).onTap(() => {
     const url = c().url;
     if (url) openURL(url);
   });
@@ -213,14 +176,6 @@ function chipById(chips: readonly Chip[], id: ChipId): Chip {
 // worst state (issue #72). Behind a when(), so a card with no PR has no line.
 export function prLine(w: WsAccessor, size: number): View {
   const pr = computed(() => prSummary(w()));
-  const colors = () => prChipColors(pr()?.health ?? "quiet", pr()?.status, pr()?.draft);
-  const chipText = Text(() => pr()?.state ?? "")
-    .font(11)
-    .weight("medium")
-    .lineLimit(1)
-    .paddingHorizontal(6)
-    .paddingVertical(1)
-    .color(() => colors().fg);
   const line = () =>
     HStack({ spacing: 6 }, [
       meta(() => pr()?.tag ?? "", C.secondary),
@@ -239,13 +194,9 @@ export function prLine(w: WsAccessor, size: number): View {
         "pr-state",
         () => !!pr()?.state,
         () =>
-          ring(
-            chipText,
-            () => colors().bg,
-            () => colors().edge,
-            1,
-            6,
-            true,
+          pill(
+            () => pr()?.state ?? "",
+            () => summaryColors(pr()),
           ),
       ).layoutPriority(2),
     ])
@@ -272,7 +223,7 @@ export function toReviewAction(w: WsAccessor): View {
   return when(
     "to-review",
     () => canFileForReview(w()),
-    () => ring(body, C.card, C.chipEdge, 1, 6, true).onTap(() => fileForReview(w())),
+    () => ring(body, C.card, NEUTRAL_CHIP.edge, 1, 6, true).onTap(() => fileForReview(w())),
   ).layoutPriority(2);
 }
 

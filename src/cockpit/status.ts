@@ -3,12 +3,14 @@
 
 import { mostActive } from "../shared/activity.ts";
 import { agentsOf, askReason, hasRealAsk } from "../shared/needs.ts";
+import { STATUS_TEXT } from "../shared/palette.ts";
 import { prChipColors } from "../shared/pr-colors.ts";
 import type { PrSummary } from "../shared/prs.ts";
 import { liveRunCount } from "../shared/subagents.ts";
 import { cardMessage, clip, oneLine, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
+import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } from "../shared/words.ts";
 import { isSelected } from "./state.ts";
 import { C } from "./theme.ts";
 
@@ -47,12 +49,21 @@ export interface StatusStyle {
 // other status reads "clear" (haloColor falls back to it via haloStatus).
 const HALO_COLOR: Record<HaloStatus, string> = { working: C.blueHalo, needs_input: C.clayHalo };
 
+// Words from shared/words.ts and text colours from shared/palette.ts, so a
+// status reads the same in the agents panel.
+const style = (s: AgentStatus, dot: string | null): StatusStyle => ({
+  label: STATUS_WORD[s],
+  dot,
+  halo: haloColor(s, HALO_COLOR),
+  text: STATUS_TEXT[s],
+});
+
 const STATUS: Record<Status, StatusStyle> = {
-  working: { label: "Working", dot: C.blue, halo: haloColor("working", HALO_COLOR), text: "#2F5690" },
-  needs_input: { label: "Your turn", dot: C.clay, halo: haloColor("needs_input", HALO_COLOR), text: C.clayText },
-  idle: { label: "Idle", dot: null, halo: haloColor("idle", HALO_COLOR), text: "#6B6A64" },
-  ended: { label: "Done", dot: C.green, halo: haloColor("ended", HALO_COLOR), text: C.greenText },
-  none: { label: "No agent", dot: null, halo: haloColor("none", HALO_COLOR), text: "#8A8880" },
+  working: style("working", C.blue),
+  needs_input: style("needs_input", C.clay),
+  idle: style("idle", null),
+  ended: style("ended", C.green),
+  none: { label: NO_AGENT_WORD, dot: null, halo: haloColor("none", HALO_COLOR), text: C.faint },
 };
 
 // Ready: finished and not yet looked at (issue #53).
@@ -89,12 +100,12 @@ export function isReady(w: Workspace | undefined): boolean {
   return FINISHED.has(statusOf(w)) && finishedAgent(w) !== null;
 }
 
-// The done green: Ready adds no hue of its own.
-const READY: StatusStyle = { label: "Finished", dot: C.green, halo: "clear", text: C.greenText };
+// The finished green and word: Ready adds no hue or word of its own.
+const READY: StatusStyle = { ...STATUS.ended, halo: "clear" };
 
 // Asking (issue #81): needs_input because the agent stopped on a
 // permission or a question, not because its turn ended.
-const ASKING: StatusStyle = { label: "Asking", dot: C.amber, halo: C.amberHalo, text: C.amberText };
+const ASKING: StatusStyle = { label: ASKING_WORD, dot: C.amber, halo: C.amberHalo, text: C.amberText };
 
 /** Why the workspace's agent is asking ("allow git push?"), or null when it is not (shared/needs.ts). */
 export const askOf = (w: Workspace | undefined): string | null => askReason(agentOf(w), w);
@@ -138,18 +149,15 @@ export function prTextColor(pr: Pick<PrSummary, "health" | "status"> | undefined
 
 // --- the card's second line (issue #47) ----------------------------------------------
 
-/** The status and how long it has held ("Working 14m", "Finished 6m ago").
+/** The status and how long it has held ("Working 14m", "Finished 6m").
  * Only the agent's sinceEpoch says when the status began; sinceOf's
  * fallbacks (last activity, the workspace's latestAt) do not, so without it
  * the time is left off. */
 export function statusLine(w: Workspace | undefined): string {
   const label = statusInfo(w).label;
-  const ready = !!w && isReady(w);
-  // A Ready card says when its finished agent finished: "Finished 6m ago".
-  const since = (ready ? finishedAgent(w) : agentOf(w))?.sinceEpoch;
-  const age = since ? fmtAge(nowEpoch() - since) : "";
-  if (!age) return label;
-  return ready ? label + " " + age + " ago" : label + " " + age;
+  // A Ready card says when its finished agent finished: "Finished 6m".
+  const since = (w && isReady(w) ? finishedAgent(w) : agentOf(w))?.sinceEpoch;
+  return withAge(label, since ? fmtAge(nowEpoch() - since) : "");
 }
 
 /** "· 3 helpers" while subagent runs are live, else "". */

@@ -3,6 +3,7 @@
 // config/projects.json (or the example table) as this define.
 
 import type { ProjectSpec } from "../../scripts/state-config.ts";
+import { P } from "./palette.ts";
 import { SAVED_STATE } from "./persist.ts";
 
 declare const __PROJECTS__: readonly Project[];
@@ -20,7 +21,7 @@ export interface Project {
 
 export const PROJECTS: readonly Project[] = __PROJECTS__;
 
-const NO_PROJECT: Project = { match: "", name: "", color: "#A09E95", icon: "terminal" };
+const NO_PROJECT: Project = { match: "", name: "", color: P.grey, icon: "terminal" };
 
 /** Every path fragment the project matches, one or many. */
 export function matchesOf(p: Project): readonly string[] {

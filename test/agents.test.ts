@@ -148,11 +148,13 @@ describe("headStatus", () => {
     assert.equal(m.headStatus(agent("working", { sinceEpoch: 10_000 - 840 })), "Working 14m");
     assert.equal(m.headStatus(agent("needs_input", { sinceEpoch: 10_000 - 5 })), "Your turn <1m");
     assert.equal(m.headStatus(agent("idle", { lastActivityAt: 10_000 - 120 })), "Idle 2m");
-    assert.equal(m.headStatus(agent("ended", { lastActivityAt: 10_000 - 180 })), "Ended 3m ago");
+    assert.equal(m.headStatus(agent("ended", { lastActivityAt: 10_000 - 180 })), "Finished 3m");
   });
 
   it("says the word alone without a time, and No agent without an agent", () => {
-    assert.equal(m.headStatus(agent("ended")), "Ended");
+    assert.equal(m.headStatus(agent("ended")), "Finished");
+    // A row says the same words in lower case, as the cockpit's card does.
+    assert.equal(m.statusLine(agent("ended", { lastActivityAt: 10_000 - 180 })), "finished 3m");
     assert.equal(m.headStatus(null), "No agent");
   });
 });

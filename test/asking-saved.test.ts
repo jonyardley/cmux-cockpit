@@ -153,7 +153,7 @@ describe("agents panel", () => {
   it("colours agents that are not asking by their status, and no agent grey", () => {
     r.data.workspaces = [ws("sel", { selected: true, agents: [agent("working")] })];
     assert.equal(m.dotFor(agent("working")), T.blue);
-    assert.equal(m.statusColor(agent("idle")), T.secondary);
+    assert.equal(m.statusColor(agent("idle")), T.metaText);
     assert.equal(m.dotFor(null), T.grey);
     assert.equal(m.statusColor(null), T.secondary);
     assert.equal(m.haloFor(null), "clear");
