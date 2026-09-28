@@ -3,7 +3,7 @@
 
 import type { Last } from "../../shared/list.ts";
 import { prChipColors } from "../../shared/pr-colors.ts";
-import { chip, meta } from "../../shared/ui.ts";
+import { chip, meta, openIfUrl } from "../../shared/ui.ts";
 import {
   type MadeEntry,
   madeAge,
@@ -15,7 +15,7 @@ import {
   prDim,
 } from "../model.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
-import { glyph, openIfUrl, ruled } from "./parts.ts";
+import { glyph, ruled } from "./parts.ts";
 
 /** The quiet row a capped list ends in: "+12 more", or "Show less" once
  * open. Tapping it opens or folds the card. */

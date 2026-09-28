@@ -62,7 +62,3 @@ export function jump(wsId: string, surfaceId: string | undefined): void {
   cmux("workspace.select", { workspace_id: wsId });
   if (surfaceId) cmux("surface.focus", { surface_id: surfaceId, workspace_id: wsId });
 }
-
-export function openIfUrl(url: string | undefined): void {
-  if (url) openURL(url);
-}

@@ -76,8 +76,7 @@ export function ring(
   edge: Reactive<string>,
   width: Reactive<number>,
   radius: number,
-  hug = false,
-  hover?: Hover,
+  { hug = false, hover }: RingOptions = {},
 ): View {
   const wv = typeof width === "function" ? width : () => width;
   const sized = hug ? view : view.frame({ maxWidth: "infinity", alignment: "leading" });
@@ -87,6 +86,11 @@ export function ring(
     .background(edge)
     .cornerRadius(radius);
   return hover?.edge ? outer.hoverBackground(hover.edge) : outer;
+}
+
+interface RingOptions {
+  hug?: boolean;
+  hover?: Hover;
 }
 
 /**
@@ -104,32 +108,62 @@ export interface Hover {
 const FACE_STEP = 0.07;
 const EDGE_STEP = 0.35;
 
-/** A chip's hover: its own face and edge, each a step darker, so a PR's state colour survives. */
-export function chipHover(colors: () => ChipColors): Hover {
-  return { face: () => shade(colors().bg, FACE_STEP), edge: () => shade(colors().edge, EDGE_STEP) };
+/**
+ * A chip's hover: its own face and edge, each a step darker, so a PR's
+ * state colour survives. Worked out once per colour change. With `live`
+ * false (nothing to open) the chip keeps its resting look.
+ */
+export function chipHover(colors: () => ChipColors, live: () => boolean = () => true): Hover {
+  const lit = computed(() => {
+    const c = colors();
+    return live() ? { face: shade(c.bg, FACE_STEP), edge: shade(c.edge, EDGE_STEP) } : { face: c.bg, edge: c.edge };
+  });
+  return { face: () => lit().face, edge: () => lit().edge };
+}
+
+/** Opens `url` in the browser, when there is one. */
+export function openIfUrl(url: string | undefined): void {
+  if (url) openURL(url);
 }
 
 /**
  * The "opens in the browser" mark: shown only while its nearest ancestor
- * with a hoverBackground is under the pointer. The renderer hides it by
- * opacity, so it keeps its slot at rest: give it a place where that blank
- * slot is already free space, or swap it for a glyph with hideOnHover.
+ * with a hoverBackground is under the pointer, and never while `live` is
+ * false. The renderer hides it by opacity, so it keeps its slot at rest:
+ * give it a place where that blank slot is already free space, or swap it
+ * for a glyph with hideOnHover.
  */
-export function outMark(color: Reactive<string>): View {
-  return Text("↗").font(9).weight("semibold").color(color).lineLimit(1).layoutPriority(2).showOnHover();
+export function outMark(color: Reactive<string>, live: () => boolean = () => true): View {
+  return Text("↗")
+    .font(9)
+    .weight("semibold")
+    .color(color)
+    .lineLimit(1)
+    .layoutPriority(2)
+    .opacity(() => (live() ? 1 : 0))
+    .showOnHover();
 }
 
+// A link box's inset: its 1pt edge plus the chip's 6pt padding.
+const LINK_INSET = 7;
+
 /**
- * A line of text that opens a page, inside a card: at rest it looks like
- * the text around it; under the pointer it takes a chip's box (`hover`, a
- * face over the card's hover face and an edge) and shows ↗ after it. The
- * padding matches a chip's, so its box lines up with the chips below.
+ * A line of text that opens `url`, inside a card: at rest it looks like
+ * the text around it; under the pointer it takes a chip's box and shows ↗
+ * after it. The box's padding matches a chip's, and a negative stack
+ * spacing pulls it back by that inset, so at rest the text starts where
+ * the lines above it do. With no url it keeps its resting look.
  */
-export function linkBox(children: View[], hover: Hover, color: Reactive<string>, onTap: () => void): View {
-  const body = HStack({ spacing: 6 }, [...children, outMark(color)])
-    .paddingHorizontal(6)
-    .paddingVertical(1);
-  return ring(body, "clear", "clear", 1, 6, true, hover).onTap(onTap);
+export function linkBox(children: View[], color: Reactive<string>, url: () => string | undefined): View {
+  const live = () => !!url();
+  const body = HStack({ spacing: 6 }, [...children, outMark(color, live)]).paddingHorizontal(LINK_INSET - 1);
+  const hover = {
+    face: () => (live() ? P.linkHover : "clear"),
+    edge: () => (live() ? P.linkEdge : "clear"),
+  };
+  const box = ring(body, "clear", "clear", 1, 6, { hug: true, hover }).onTap(() => openIfUrl(url()));
+  // A zero-width lead: the negative spacing after it puts the box LINK_INSET left of the column.
+  return HStack({ spacing: -LINK_INSET }, [Rectangle().fill("clear").frame({ width: 0, height: 0 }), box]);
 }
 
 /** The size of the small text both sides trail a row with: times, branches, ports, chips. */
@@ -156,8 +190,7 @@ export function chipFrame(body: View, colors: () => ChipColors, hover?: Hover): 
     () => colors().edge,
     1,
     6,
-    true,
-    hover,
+    { hug: true, ...(hover ? { hover } : {}) },
   );
 }
 
@@ -176,13 +209,18 @@ export function chip(label: () => string, colors: () => ChipColors, mono = false
   );
 }
 
-/** A chip that opens something: under the pointer its face and edge each step darker (chipHover). */
-export function tapChip(label: () => string, colors: () => ChipColors, onTap: () => void, mono = false): View {
+/** A chip that opens `url`: under the pointer its face and edge each step darker (chipHover). */
+export function tapChip(
+  label: () => string,
+  colors: () => ChipColors,
+  url: () => string | undefined,
+  mono = false,
+): View {
   return chipFrame(
     chipText(label, () => colors().fg, mono),
     colors,
-    chipHover(colors),
-  ).onTap(onTap);
+    chipHover(colors, () => !!url()),
+  ).onTap(() => openIfUrl(url()));
 }
 
 /** The badge's figure: the count, or nothing at zero (or a bad count), so no empty pill shows. */

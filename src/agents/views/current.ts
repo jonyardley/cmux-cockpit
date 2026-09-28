@@ -37,7 +37,7 @@ import {
   statusLine,
 } from "../model.ts";
 import { STALE_OPACITY, STATUS_DOT, T } from "../theme.ts";
-import { agentDot, jump, openIfUrl, panel, ruled } from "./parts.ts";
+import { agentDot, jump, panel, ruled } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
   const a = () => e().a;
@@ -283,7 +283,7 @@ function statusWords(): View {
         tapChip(
           () => currentPr()?.state ?? "",
           () => summaryColors(currentPr()),
-          () => openIfUrl(currentPr()?.url),
+          () => currentPr()?.url,
         ),
     )
       .opacity(() => (currentPrDim() ? STALE_OPACITY : 1))
@@ -406,9 +406,8 @@ function prDetail(): View {
                 .truncation("tail"),
           ),
         ],
-        { face: T.linkHover, edge: T.linkEdge },
         T.secondary,
-        () => openIfUrl(currentPr()?.url),
+        () => currentPr()?.url,
       ),
     ]).frame({ maxWidth: "infinity", alignment: "leading" })
   );
@@ -431,7 +430,7 @@ function detailsBlock(): View {
                 tapChip(
                   () => x().label,
                   () => NEUTRAL_CHIP,
-                  () => openURL(x().url),
+                  () => x().url,
                   true,
                 ),
               ),

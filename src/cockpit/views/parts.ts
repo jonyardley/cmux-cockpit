@@ -13,6 +13,7 @@ import {
   haloDot,
   linkBox,
   meta,
+  openIfUrl,
   outMark,
   chip as pill,
   projectBadge,
@@ -146,7 +147,10 @@ function chip(id: ChipId, c: () => Chip): View {
   // The PR chip's glyph turns into ↗ under the pointer, in the same slot,
   // so the chip keeps its width. The port chip's words already end in ↗.
   const icon = (name: string): View => Image(name).font(9).color(fg);
-  const lead = isPr ? ZStack({}, [icon("arrow.triangle.pull").hideOnHover(), outMark(fg)]) : icon("arrow.branch");
+  const live = () => !!c().url;
+  const lead = isPr
+    ? ZStack({}, [icon("arrow.triangle.pull").hideOnHover(live), outMark(fg, live)])
+    : icon("arrow.branch");
   const parts: View[] = id === "port" ? [text] : [lead, text];
   // The uncommitted-changes dot trails the branch name (issue #48).
   if (id === "br")
@@ -161,10 +165,7 @@ function chip(id: ChipId, c: () => Chip): View {
   // The branch chip opens nothing, so it has no hover and no tap of its
   // own: a click on it selects the card, as the card's free space does.
   if (id === "br") return chipFrame(body, colors);
-  return chipFrame(body, colors, chipHover(colors)).onTap(() => {
-    const url = c().url;
-    if (url) openURL(url);
-  });
+  return chipFrame(body, colors, chipHover(colors, live)).onTap(() => openIfUrl(c().url));
 }
 
 /** The chip with `id` from a `chipsFor` list, or an empty one while it is absent. */
@@ -177,10 +178,7 @@ function chipById(chips: readonly Chip[], id: ChipId): Chip {
 // worst state (issue #72). Behind a when(), so a card with no PR has no line.
 export function prLine(w: WsAccessor, size: number): View {
   const pr = computed(() => prSummary(w()));
-  const open = () => {
-    const url = pr()?.url;
-    if (url) openURL(url);
-  };
+
   // The frame goes on a wrapper: on the link's own node it would stretch
   // the tap and hover across the free width, which should select the card.
   const line = () =>
@@ -209,9 +207,8 @@ export function prLine(w: WsAccessor, size: number): View {
               ),
           ).layoutPriority(2),
         ],
-        { face: C.linkHover, edge: C.linkEdge },
         C.secondary,
-        open,
+        () => pr()?.url,
       ),
     ]).frame({ maxWidth: "infinity", alignment: "leading" });
   return when("pr-line", () => !!pr(), line);
@@ -234,15 +231,9 @@ export function toReviewAction(w: WsAccessor): View {
     "to-review",
     () => canFileForReview(w()),
     () =>
-      ring(
-        body,
-        C.card,
-        NEUTRAL_CHIP.edge,
-        1,
-        6,
-        true,
-        chipHover(() => REVIEW_CHIP),
-      ).onTap(() => fileForReview(w())),
+      ring(body, REVIEW_CHIP.bg, REVIEW_CHIP.edge, 1, 6, { hug: true, hover: chipHover(() => REVIEW_CHIP) }).onTap(() =>
+        fileForReview(w()),
+      ),
   ).layoutPriority(2);
 }
 
@@ -364,8 +355,7 @@ export function cardChrome(view: View, w: WsAccessor, key: string, radius: numbe
     () => (lit() ? C.select : C.cardEdge),
     () => (lit() ? 1.5 : 1),
     radius,
-    false,
-    { face: C.cardHover },
+    { hover: { face: C.cardHover } },
   ).frame({ maxWidth: "infinity" });
   // Cards keep a 6pt gap; the list spacing is 2pt so rows sit tight.
   return VStack({ spacing: 0 }, [face])

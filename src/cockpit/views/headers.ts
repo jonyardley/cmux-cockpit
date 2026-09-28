@@ -45,7 +45,10 @@ function segButton(label: string, icon: string | null, on: () => boolean, set: (
       ]),
     ])
       .frame({ maxWidth: "infinity", height: 26 })
-      // Behind the face, so only the segment that is not chosen lights.
+      // Behind the face, so only the segment that is not chosen lights. The
+      // clear background makes the renderer round its fill instead of
+      // clipping the node, which would cut the chosen face's stroke.
+      .background("clear")
       .hoverBackground(C.hover)
       .cornerRadius(7)
       .onTap(set)

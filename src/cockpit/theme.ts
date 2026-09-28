@@ -20,10 +20,6 @@ export const C = {
   // A card's face under the pointer. Opaque, since hoverBackground replaces
   // the white face rather than washing over it.
   cardHover: "#F7F6F2",
-  // A link inside a card (the full card's PR line) under the pointer: a
-  // chip-strength face over cardHover, and an edge round it.
-  linkHover: "#ECEAE3",
-  linkEdge: "#14141347",
   // Lanes and selection stay neutral so hue only ever means state: clay is
   // needs you (amber when it is asking), blue working, green finished. Lane
   // markers step down in lightness from Main to Unsorted instead, each a

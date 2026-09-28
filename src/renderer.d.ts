@@ -54,8 +54,8 @@ interface View {
    * Visible only while the nearest ancestor with a hoverBackground is under
    * the pointer (hideOnHover the reverse). By opacity: the slot stays.
    */
-  showOnHover(): View;
-  hideOnHover(): View;
+  showOnHover(on?: Reactive<boolean>): View;
+  hideOnHover(on?: Reactive<boolean>): View;
   // No tooltip and no pointer cursor: the runtime passes `help` through,
   // but cmux's SceneNodeView never draws it, and sets no cursor on a tap.
   onTap(action: () => void): View;
