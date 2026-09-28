@@ -86,6 +86,25 @@ describe("madeHere", () => {
     assert.equal(m.madeMore(), 1);
   });
 
+  it("shows every fresh entry once the card is open, and folds back to the caps (#109)", () => {
+    assert.equal(m.madeFoot(), "+1 more");
+    m.toggleExpanded("made");
+    assert.deepEqual(ids(), ["here-new", "here-old", "jp", "o1", "o2", "o3", "o4"]);
+    assert.equal(m.madeMore(), 0);
+    assert.equal(m.madeFoot(), "Show less");
+    assert.ok(m.madeHere().every((e) => !e.last));
+    m.toggleExpanded("made");
+    assert.equal(m.madeHere().length, 6);
+    assert.equal(m.madeFoot(), "+1 more");
+  });
+
+  it("opening one card leaves the other folded", () => {
+    m.toggleExpanded("prs");
+    assert.equal(m.isExpanded("made"), false);
+    assert.equal(m.madeFoot(), "+1 more");
+    m.toggleExpanded("prs");
+  });
+
   it("counts nothing before the clock's first tick", () => {
     r.data.epoch = 0;
     assert.equal(m.madeCount(), 0);

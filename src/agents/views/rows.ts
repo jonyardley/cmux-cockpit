@@ -1,5 +1,5 @@
 // Rows for the Pull requests and Made here panels.
-// A capped list ends in a quiet "+N more" row (issue #80).
+// A capped list ends in a quiet "+N more" row (issue #80) that opens it (#109).
 
 import type { Last } from "../../shared/list.ts";
 import { prChipColors } from "../../shared/pr-colors.ts";
@@ -17,20 +17,15 @@ import {
 import { STALE_OPACITY, T } from "../theme.ts";
 import { glyph, openIfUrl, ruled } from "./parts.ts";
 
-/** The quiet row a capped list ends in: "+12 more". Not tappable: the rows
- * past the cap are not listed anywhere else in this panel. */
-export function moreRow(count: () => number, isLast: () => boolean): View {
-  const row = HStack({ spacing: 6 }, [
-    Text(() => "+" + count() + " more")
-      .font(11.5)
-      .color(T.tertiary)
-      .lineLimit(1),
-    Spacer(),
-  ])
+/** The quiet row a capped list ends in: "+12 more", or "Show less" once
+ * open. Tapping it opens or folds the card. */
+export function footRow(text: () => string, onTap: () => void): View {
+  const row = HStack({ spacing: 6 }, [Text(text).font(11.5).color(T.tertiary).lineLimit(1), Spacer()])
     .paddingHorizontal(12)
     .paddingVertical(8)
-    .frame({ maxWidth: "infinity", alignment: "leading" });
-  return ruled(row, isLast);
+    .frame({ maxWidth: "infinity", alignment: "leading" })
+    .onTap(onTap);
+  return ruled(row, () => true);
 }
 
 export function prRow(e: () => Last<PrEntry>): View {

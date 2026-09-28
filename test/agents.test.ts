@@ -613,6 +613,40 @@ describe("honest counts and +N more (#80)", () => {
     );
   });
 
+  it("opens the PR card past its cap on a tap, and folds it back (#109)", () => {
+    r.data.workspaces = Array.from({ length: 33 }, (_, i) =>
+      ws("p" + i, { pr: { url: "u/" + i, number: i + 1, status: "open" } }),
+    );
+    assert.equal(m.prFoot(), "+3 more");
+    m.toggleExpanded("prs");
+    assert.equal(m.prs().length, 33);
+    assert.equal(m.prMore(), 0);
+    assert.equal(m.prFoot(), "Show less");
+    // The Show less line follows, so the final row keeps its rule.
+    assert.ok(m.prs().every((e) => !e.last));
+    m.toggleExpanded("prs");
+    assert.equal(m.prs().length, 30);
+    assert.equal(m.prFoot(), "+3 more");
+  });
+
+  it("has no closing line for an open PR card that fits its cap", () => {
+    r.data.workspaces = [ws("p", { pr: { url: "u/1", number: 1, status: "open" } })];
+    m.toggleExpanded("prs");
+    assert.equal(m.prFoot(), "");
+    assert.deepEqual(
+      m.prs().map((e) => e.last),
+      [true],
+    );
+    m.toggleExpanded("prs");
+  });
+
+  it("footText reads +N more while cut, Show less while open, nothing when it fits", () => {
+    assert.equal(m.footText(2, false), "+2 more");
+    assert.equal(m.footText(2, true), "Show less");
+    assert.equal(m.footText(0, false), "");
+    assert.equal(m.footText(0, true), "");
+  });
+
   it("moreThan is never negative", () => {
     assert.equal(m.moreThan(3, 5), 0);
     assert.equal(m.moreThan(7, 5), 2);
