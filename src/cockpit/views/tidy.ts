@@ -16,9 +16,11 @@ const label = (): string => {
   return n + " merged, ready to tidy";
 };
 
-// Its own onTap on a hugging chip, like "To review →". One line and a
-// higher layout priority, as that chip has: without them the HStack squeezed
-// it to a sliver and "Tidy" wrapped a letter a line, stretching the strip.
+// Its own onTap on a hugging chip, like "To review →". One line and layout
+// priority 2, so the heading gives way instead: without them the HStack
+// squeezed it to a sliver and "Tidy" wrapped a letter a line, stretching the
+// strip. The priority sits on the chip because it is the HStack's own child;
+// wrapped in a when(), it would have to move to the when() result.
 function tidyButton(): View {
   const body = Text("Tidy")
     .font(11)
