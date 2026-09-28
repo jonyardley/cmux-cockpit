@@ -2,11 +2,11 @@
 // "needs you" dismissals applied (src/shared/needs.ts).
 
 import { mostActive } from "../shared/activity.ts";
-import { agentsOf, hasRealAsk } from "../shared/needs.ts";
+import { agentsOf, askReason, hasRealAsk } from "../shared/needs.ts";
 import { prChipColors } from "../shared/pr-colors.ts";
 import type { PrSummary } from "../shared/prs.ts";
 import { liveRunCount } from "../shared/subagents.ts";
-import { cardMessage, clip, readable } from "../shared/text.ts";
+import { cardMessage, clip, oneLine, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
 import { isSelected } from "./state.ts";
@@ -49,7 +49,7 @@ const HALO_COLOR: Record<HaloStatus, string> = { working: C.blueHalo, needs_inpu
 
 const STATUS: Record<Status, StatusStyle> = {
   working: { label: "Working", dot: C.blue, halo: haloColor("working", HALO_COLOR), text: "#2F5690" },
-  needs_input: { label: "Needs you", dot: C.clay, halo: haloColor("needs_input", HALO_COLOR), text: C.clayText },
+  needs_input: { label: "Your turn", dot: C.clay, halo: haloColor("needs_input", HALO_COLOR), text: C.clayText },
   idle: { label: "Idle", dot: null, halo: haloColor("idle", HALO_COLOR), text: "#6B6A64" },
   ended: { label: "Done", dot: C.green, halo: haloColor("ended", HALO_COLOR), text: C.greenText },
   none: { label: "No agent", dot: null, halo: haloColor("none", HALO_COLOR), text: "#8A8880" },
@@ -92,8 +92,27 @@ export function isReady(w: Workspace | undefined): boolean {
 // The done green: Ready adds no hue of its own.
 const READY: StatusStyle = { label: "Finished", dot: C.green, halo: "clear", text: C.greenText };
 
-export const statusInfo = (w: Workspace | undefined): StatusStyle =>
-  isReady(w) ? READY : (STATUS[statusOf(w)] ?? STATUS.none);
+// Asking (issue #81): needs_input because the agent stopped on a
+// permission or a question, not because its turn ended.
+const ASKING: StatusStyle = { label: "Asking", dot: C.amber, halo: C.amberHalo, text: C.amberText };
+
+/** Why the workspace's agent is asking ("allow git push?"), or null when it is not (shared/needs.ts). */
+export const askOf = (w: Workspace | undefined): string | null => askReason(agentOf(w), w);
+
+export function statusInfo(w: Workspace | undefined): StatusStyle {
+  if (isReady(w)) return READY;
+  // The agent is worked out once, for both the ask and the status.
+  const a = agentOf(w);
+  if (askReason(a, w)) return ASKING;
+  return STATUS[a?.status ?? "none"] ?? STATUS.none;
+}
+
+/** A Needs you row's second line: why the agent asks, else its latest message. */
+export const needsDetail = (w: Workspace | undefined): string =>
+  askOf(w) ?? (oneLine(cardMessage(w), 80) || "Waiting for your reply");
+
+/** A Needs you row's edge: amber while its agent asks, else clay, so each hue keeps one meaning. */
+export const needsRowEdge = (w: Workspace | undefined): string => (askOf(w) ? C.amberRowEdge : C.needsRowEdge);
 
 /** The unread count a card's badge shows: none while the Ready pill stands in for it. */
 export const badgeCount = (w: Workspace | undefined): number => (isReady(w) ? 0 : (w?.unread ?? 0));

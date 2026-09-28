@@ -10,7 +10,7 @@
 
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
-import { rebuildsOn } from "./state-config.ts";
+import { rebuildsOn, urlMaySet } from "./state-config.ts";
 import { logLine as log } from "./state-log.ts";
 import { parseSetUrl, readApplyWrite } from "./state-url.ts";
 
@@ -23,6 +23,12 @@ function main(): number {
   const parsed = parseSetUrl(raw);
   if (!parsed.ok) {
     log(`refused: ${parsed.error}`);
+    return 1;
+  }
+
+  // A hook-only map (an agent's ask, issue #81) is never set from a URL.
+  if (!urlMaySet(parsed.key)) {
+    log(`refused: not settable by URL key=${JSON.stringify(parsed.key)}`);
     return 1;
   }
 

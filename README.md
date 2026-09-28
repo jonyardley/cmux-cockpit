@@ -22,7 +22,10 @@ and needs nothing installed or linked. Back up any existing
 
 - `src/cockpit/`: the left sidebar. All | Projects segments, a
   "Needs you" strip (with dismiss), and workspace cards in lanes (cmux groups
-  matched by name) or grouped by project.
+  matched by name) or grouped by project. An agent stopped on a permission
+  or a question shows amber, "Asking", with the reason; one that finished
+  its turn shows clay, "Your turn" (needs the notification hook in
+  [docs/state-loop.md](docs/state-loop.md#asking-or-your-turn)).
 - `src/agents/`: the agents panel, shown in the right sidebar.
 - `src/shared/`: helpers the sidebars share (text clean-up, projects, agent
   ranking, time, and the "needs you" rules both sidebars apply: Claude

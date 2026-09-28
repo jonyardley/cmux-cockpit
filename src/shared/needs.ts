@@ -3,6 +3,7 @@
 // when Jon has dismissed it. The sidebars run in separate contexts, so each
 // holds its own dismissals, and a reload forgets them (issues #3 and #5).
 
+import type { SavedAsk } from "../../scripts/state-config.ts";
 import { sinceOrActivity } from "./activity.ts";
 import { persistSet, SAVED_STATE } from "./persist.ts";
 
@@ -20,6 +21,9 @@ export const NUDGE_GAP = 45;
 // idle. Upstream docs give kind as claude, codex or the raw source.
 export function isIdleNudge(a: Agent, w?: Workspace): boolean {
   if (a.status !== "needs_input" || a.kind !== "claude" || !a.sinceEpoch) return false;
+  // A fresh saved ask proves a real one, however long the agent was quiet
+  // before it (a long build, say): the nudge itself is never hooked.
+  if (freshAsk(a, w)) return false;
   const before = Math.max(a.lastActivityAt ?? 0, w?.latestAt ?? 0);
   return before > 0 && a.sinceEpoch - before >= NUDGE_GAP;
 }
@@ -67,6 +71,53 @@ export function effectiveAgent(a: Agent, w?: Workspace): Agent {
   // A nudge's idle spell began when the turn ended, not when the nudge landed.
   if (isIdleNudge(a, w) && a.lastActivityAt) return { ...a, status: "idle", sinceEpoch: a.lastActivityAt };
   return isIdleNudge(a, w) || isDismissed(w, a) ? { ...a, status: "idle" } : a;
+}
+
+// --- Asking or your turn (issue #81) -----------------------------------------------------
+
+/**
+ * Seconds an ask may be heard before the needs_input spell it caused is
+ * stamped. The hook and cmux's own hook fire on the same event, so they
+ * land within a second or so of each other either way. Small on purpose:
+ * an ask from before the agent went back to work must never colour the
+ * turn end that follows it, and that takes at least an approval, the tool
+ * run and a reply.
+ */
+export const ASK_SLACK = 3;
+
+// wsId -> the last ask its agent made, fixed at build. A test can seed
+// __STATE__ from before this map existed, so it may be missing at runtime.
+function savedAskFor(wsId: string): SavedAsk | undefined {
+  const map: Record<string, SavedAsk> | undefined = SAVED_STATE.asking;
+  return map && Object.hasOwn(map, wsId) ? map[wsId] : undefined;
+}
+
+/**
+ * Why the agent is asking ("allow git push?"), or null when its needs_input
+ * is only its turn: it finished and waits for the next prompt. Pass the agent
+ * as the sidebars show it (agentsOf), so a nudge or a dismissal is never an
+ * ask. An ask counts only while the saved one is at least as new as the
+ * spell (ASK_SLACK aside): once the agent works again and stops, that spell
+ * starts after the ask and reads as its turn. Without a start time there is
+ * no telling, so it reads as its turn.
+ */
+export function askReason(a: Agent | null | undefined, w: Workspace | undefined): string | null {
+  return a ? (freshAsk(a, w)?.reason ?? null) : null;
+}
+
+// The saved ask that explains `a`'s current needs_input spell, if any. The
+// ask is saved per workspace with the Claude session that made it; when one
+// of the workspace's agents carries that session as its id (unconfirmed
+// whether cmux agent ids are session ids, as for saved subagent runs), only
+// that agent is asking, so another agent's turn end never borrows its
+// reason. Otherwise the ask belongs to the workspace as a whole.
+function freshAsk(a: Agent, w: Workspace | undefined): SavedAsk | null {
+  if (!w || a.status !== "needs_input" || !a.sinceEpoch) return null;
+  const saved = savedAskFor(w.id);
+  if (!saved || saved.epoch < a.sinceEpoch - ASK_SLACK) return null;
+  const { session } = saved;
+  const owned = session !== undefined && (w.agents ?? []).some((x) => x?.id === session);
+  return owned && a.id !== session ? null : saved;
 }
 
 /** A workspace's agents with nudges and dismissals applied, in the app's order. */

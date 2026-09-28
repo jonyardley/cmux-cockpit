@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  ASK_MAX_AGE_S,
   applySet,
   cleanLabel,
   emptyState,
@@ -9,6 +10,7 @@ import {
   MAX_LABEL,
   MAX_SUBAGENTS,
   rebuildsOn,
+  urlMaySet,
   validateState,
 } from "../scripts/state-config.ts";
 
@@ -50,6 +52,7 @@ test("validateState reads a good file unchanged", () => {
         epoch: 200,
       },
     },
+    asking: { w6: { reason: "allow git push?", epoch: 300, session: "s1" }, w7: { reason: "a question", epoch: 301 } },
     ui: { mode: "projects", collapsed: { "lane:parked": 0, "project:/dev/a": 1 } },
   };
   assert.deepEqual(validateState(raw), raw);
@@ -73,6 +76,7 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     ownPrs: {},
     subagents: {},
     published: {},
+    asking: {},
     ui: {},
   });
 });
@@ -193,6 +197,7 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
       ownPrs: {},
       subagents: {},
       published: {},
+      asking: {},
       ui: {},
     },
   });
@@ -398,4 +403,62 @@ test("validateState leaves poll out when nothing usable is saved", () => {
 
 test("applySet refuses poll, so no URL can say gh is down", () => {
   assert.equal(applySet(emptyState(), "poll.error", '"unavailable"').ok, false);
+});
+
+// --- asking (issue #81) ---
+
+test("urlMaySet refuses the hook-only asking map and allows the rest", () => {
+  assert.equal(urlMaySet("asking.w1"), false);
+  assert.equal(urlMaySet("asking"), false);
+  for (const key of ["dismissed.w1", "projectOverride.w1", "projects./a/b/", "ui.mode", "nodot"])
+    assert.equal(urlMaySet(key), true, key);
+});
+
+test("applySet saves an ask, replaces it and deletes it", () => {
+  const ask = { reason: "allow git push?", epoch: 1000, session: "s1" };
+  const set = applySet(emptyState(), "asking.w1", JSON.stringify(ask));
+  assert.equal(set.ok, true);
+  if (!set.ok) return;
+  assert.deepEqual(set.state.asking, { w1: ask });
+  assert.equal(rebuildsOn("asking.w1"), true);
+  const next = applySet(set.state, "asking.w1", JSON.stringify({ reason: "Which layout?", epoch: 1100 }));
+  assert.deepEqual(next.ok && next.state.asking, { w1: { reason: "Which layout?", epoch: 1100 } });
+  const gone = applySet(set.state, "asking.w1", null);
+  assert.deepEqual(gone.ok && gone.state.asking, {});
+});
+
+test("applySet refuses an ask with no reason, a bad epoch, a bad session or a bad key", () => {
+  for (const value of [
+    { epoch: 1 },
+    { reason: "", epoch: 1 },
+    { reason: " padded ", epoch: 1 },
+    { reason: "r", epoch: -1 },
+    { reason: "r", epoch: 1, session: 5 },
+    { reason: "r", epoch: 1, session: "__proto__" },
+    "r",
+  ]) {
+    const set = applySet(emptyState(), "asking.w1", JSON.stringify(value));
+    assert.deepEqual(set, { ok: false, error: "asking wants {reason, epoch, session?}" }, JSON.stringify(value));
+  }
+  assert.equal(applySet(emptyState(), "asking.__proto__", '{"reason":"r","epoch":1}').ok, false);
+});
+
+test("applySet drops asks a day older than the new one, keeping the rest", () => {
+  const old = { reason: "old", epoch: 1000 };
+  const edge = { reason: "edge", epoch: 1000 + 1 };
+  const start = { ...emptyState(), asking: { gone: old, kept: edge } };
+  const set = applySet(start, "asking.w1", JSON.stringify({ reason: "new", epoch: 1001 + ASK_MAX_AGE_S }));
+  assert.deepEqual(set.ok && Object.keys(set.state.asking), ["kept", "w1"]);
+});
+
+test("validateState keeps good asks and drops bad ones", () => {
+  const state = validateState({
+    asking: {
+      w1: { reason: "allow git push?", epoch: 5, session: "s1", extra: true },
+      w2: { reason: "no epoch" },
+      w3: { reason: "bad session", epoch: 5, session: "" },
+      w4: "nope",
+    },
+  });
+  assert.deepEqual(state.asking, { w1: { reason: "allow git push?", epoch: 5, session: "s1" } });
 });

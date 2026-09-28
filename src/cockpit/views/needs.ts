@@ -1,19 +1,26 @@
 // The "Needs you" strip: every workspace whose agent is waiting on input.
+// A row is amber while its agent is asking (a permission or a question,
+// with the reason under the title) and clay while it is only its turn.
 
 import { dismissNeeds } from "../../shared/needs.ts";
-import { cardMessage, oneLine } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot, when } from "../../shared/ui.ts";
 import { jumpNext, needsList, needsMore, needsShown, nextStep } from "../model.ts";
 import { selectWorkspace } from "../state.ts";
-import { ageOf } from "../status.ts";
+import { ageOf, needsDetail, needsRowEdge, statusInfo } from "../status.ts";
 import { C } from "../theme.ts";
 import { cardMenu, glyphButton, meta, ring, type WsAccessor } from "./parts.ts";
 
 function needsRow(w: WsAccessor): View {
+  // One status per change, read by the dot and its halo.
+  const info = computed(() => statusInfo(w()));
   const row = HStack({ spacing: 10, alignment: "top" }, [
     // 13pt halo frame: top 2 keeps the dot centred on the title line.
-    haloDot(Circle({ size: 7 }).fill(C.clay), C.clayHalo, 7).paddingTop(2),
+    haloDot(
+      Circle({ size: 7 }).fill(() => info().dot ?? C.clay),
+      () => info().halo,
+      7,
+    ).paddingTop(2),
     VStack({ alignment: "leading", spacing: 1 }, [
       Text(() => displayTitle(w()))
         .font(12.5)
@@ -21,7 +28,7 @@ function needsRow(w: WsAccessor): View {
         .color(C.text)
         .lineLimit(1)
         .truncation("middle"),
-      Text(() => oneLine(cardMessage(w()), 80) || "Waiting for your reply")
+      Text(() => needsDetail(w()))
         .font(12)
         .color(C.secondary)
         .lineLimit(1)
@@ -36,7 +43,7 @@ function needsRow(w: WsAccessor): View {
     .paddingVertical(9)
     .hoverBackground(C.needsHover);
   // One selection ring: the card below carries it, so the row keeps its edge.
-  return ring(row, C.card, C.needsRowEdge, 1, 9)
+  return ring(row, C.card, () => needsRowEdge(w()), 1, 9)
     .frame({ maxWidth: "infinity" })
     .onTap(() => selectWorkspace(w()?.id))
     .contextMenu(cardMenu(w));

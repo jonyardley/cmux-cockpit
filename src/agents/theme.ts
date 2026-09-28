@@ -22,6 +22,10 @@ export const T = {
   blue: "#3B6FB6",
   blueHalo: "#3B6FB62E",
   clayHalo: "#D9775738",
+  /** Asking (issue #81): stopped on a permission or a question. Clay stays "your turn". */
+  amber: "#D9A03F",
+  amberText: "#8A5A0B",
+  amberHalo: "#D9A03F38",
   grey: "#A09E95",
   red: "#C0453A",
   hover: "#7f7f7f0F",

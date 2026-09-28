@@ -19,6 +19,7 @@ describe("SAVED_STATE", () => {
       ownPrs: {},
       subagents: {},
       published: {},
+      asking: {},
       ui: {},
     });
   });
