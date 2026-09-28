@@ -59,11 +59,11 @@ export function nextButton(): View {
       // (issue #89); a frame on the HStack left the face hugging the text.
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
-    // Set like a card's age, so it lines up with the ages below it.
+    // In a card age's face and colour, so the two read as one kind of text.
     meta(() => {
       const s = step();
       return s ? s.position + " of " + s.total : "";
-    }, C.faint),
+    }, C.metaText),
   ])
     .paddingHorizontal(8)
     .paddingVertical(5)
@@ -72,7 +72,7 @@ export function nextButton(): View {
     "next",
     () => step() !== null,
     () =>
-      VStack({ spacing: 0 }, [ring(row, C.card, C.needsEdge, 1, 7).onTap(jumpNext)])
+      VStack({ spacing: 0 }, [ring(row, C.card, C.needsEdge, 1, 7).frame({ maxWidth: "infinity" }).onTap(jumpNext)])
         .paddingHorizontal(10)
         .paddingTop(6),
   );
