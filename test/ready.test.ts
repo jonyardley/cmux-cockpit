@@ -138,12 +138,16 @@ describe("a Ready card", () => {
     assert.equal(status.statusLine(readyWs("w", { unread: 0, agents: [a] })), "Idle 6m");
   });
 
-  it("reports the agent that finished last, by the same rule", () => {
-    const early = agent("ended", { sinceEpoch: now() - 900, lastActivityAt: now() - 60 });
-    const late = agent("idle", { sinceEpoch: now() - 300, lastActivityAt: now() - 240 });
-    const w = readyWs("w", { agents: [early, late] });
-    assert.equal(status.readySince(w), now() - 300);
-    assert.equal(status.readySince(ws("none")), 0);
+  it("reports the agent the rest of the card reports, so its two ages agree", () => {
+    const a = agent("idle", { sinceEpoch: now() - 900, lastActivityAt: now() - 60 });
+    const b = agent("idle", { sinceEpoch: now() - 300, lastActivityAt: now() - 240 });
+    const w = readyWs("w", { agents: [a, b] });
+    assert.equal(status.readyAgent(w), a);
+    assert.equal(status.statusLine(w), "Finished 15m");
+    assert.equal(status.ageOf(w), "15m");
+    // Once read, the card still reports the same agent and age.
+    assert.equal(status.statusLine(readyWs("w", { unread: 0, agents: [a, b] })), "Idle 15m");
+    assert.equal(status.readyAgent(ws("none")), null);
   });
 
   it("keeps the plain labels once read", () => {

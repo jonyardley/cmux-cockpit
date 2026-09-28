@@ -22,7 +22,7 @@ import {
 import { savedPublished } from "../shared/published.ts";
 import { childRunning, pairLive, type SavedRun, savedRunning, savedRuns } from "../shared/subagents.ts";
 import { cardMessage, readable } from "../shared/text.ts";
-import { finishedAt, fmtAge, nowEpoch } from "../shared/time.ts";
+import { ageSince, finishedAt, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
 import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } from "../shared/words.ts";
@@ -215,13 +215,6 @@ export function dotFor(a: Agent | null, w: Workspace = cur().ws): string {
 export function statusColor(a: Agent | null, w: Workspace = cur().ws): string {
   if (!a) return T.secondary;
   return isAsking(a, w) ? T.amberText : (STATUS_TEXT[a.status] ?? T.secondary);
-}
-
-/** Coarse age for rows, "12m" since `at`; "" without a timestamp or clock. A
- * timestamp ahead of the clock reads as "<1m", never blank. */
-export function ageSince(at: number | undefined): string {
-  const now = nowEpoch();
-  return at && now ? fmtAge(Math.max(0, now - at)) : "";
 }
 
 // Idle and ended agents count from when they finished (issue #98), as the

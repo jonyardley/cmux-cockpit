@@ -5,6 +5,7 @@ import { installRenderer } from "./support/renderer.ts";
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
+const { ageSince } = await import("../src/shared/time.ts");
 const { cardMessage } = await import("../src/shared/text.ts");
 const { dismissNeeds } = await import("../src/shared/needs.ts");
 const { summaryOf } = await import("../src/shared/prs.ts");
@@ -369,16 +370,17 @@ describe("status words", () => {
     assert.equal(m.statusLine(null), "");
   });
 
+  // ageSince now lives in src/shared/time.ts, one copy for both sidebars (issue #98).
   it("ageSince is coarse and blank without a timestamp", () => {
-    assert.equal(m.ageSince(10_000 - 720), "12m");
-    assert.equal(m.ageSince(10_000 - 5), "<1m");
-    assert.equal(m.ageSince(undefined), "");
+    assert.equal(ageSince(10_000 - 720), "12m");
+    assert.equal(ageSince(10_000 - 5), "<1m");
+    assert.equal(ageSince(undefined), "");
   });
 
   it("ageSince clamps a timestamp ahead of the clock, and is blank before the first tick", () => {
-    assert.equal(m.ageSince(10_000 + 30), "<1m");
+    assert.equal(ageSince(10_000 + 30), "<1m");
     r.data.epoch = 0;
-    assert.equal(m.ageSince(500), "");
+    assert.equal(ageSince(500), "");
   });
 
   it("hollowDot for idle and no agent only", () => {

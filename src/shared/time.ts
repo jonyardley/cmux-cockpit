@@ -5,6 +5,13 @@ export function nowEpoch(): number {
   return data.clock()?.epoch || 0;
 }
 
+/** Coarse age, "12m" since `at`, for both sidebars; "" without a timestamp
+ * or clock. A timestamp ahead of the clock reads as "<1m", never blank. */
+export function ageSince(at: number | undefined): string {
+  const now = nowEpoch();
+  return at && now ? fmtAge(Math.max(0, now - at)) : "";
+}
+
 /** Coarse age for cards: "<1m", "12m", "3h", "2d"; "" for a bad input. */
 export function fmtAge(secs: number): string {
   if (!(secs >= 0)) return "";
