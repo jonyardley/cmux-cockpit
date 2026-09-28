@@ -16,10 +16,22 @@ const label = (): string => {
   return n + " merged, ready to tidy";
 };
 
-// Its own onTap on a hugging chip, like "To review →".
+// Its own onTap on a hugging chip, like "To review →". One line and layout
+// priority 2, so the heading gives way instead: without them the HStack
+// squeezed it to a sliver and "Tidy" wrapped a letter a line, stretching the
+// strip. The priority sits on the chip because it is the HStack's own child;
+// wrapped in a when(), it would have to move to the when() result.
 function tidyButton(): View {
-  const body = Text("Tidy").font(11).weight("semibold").color(C.tidyText).paddingHorizontal(9).paddingVertical(2);
-  return ring(body, TIDY_CHIP.bg, TIDY_CHIP.edge, 1, 6, { hug: true, hover: chipHover(() => TIDY_CHIP) }).onTap(tidy);
+  const body = Text("Tidy")
+    .font(11)
+    .weight("semibold")
+    .color(C.tidyText)
+    .lineLimit(1)
+    .paddingHorizontal(9)
+    .paddingVertical(2);
+  return ring(body, TIDY_CHIP.bg, TIDY_CHIP.edge, 1, 6, { hug: true, hover: chipHover(() => TIDY_CHIP) })
+    .onTap(tidy)
+    .layoutPriority(2);
 }
 
 export function tidyStrip(): View {

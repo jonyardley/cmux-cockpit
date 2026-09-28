@@ -3,7 +3,7 @@
 // sidebars no PR data today, so the saved copy is what shows; both sidebars
 // read PRs through here so the day cmux does send them, its data wins.
 
-import type { SavedCheck, SavedOwnPr, SavedPr } from "../../scripts/state-config.ts";
+import type { SavedCheck, SavedOwnPr, SavedPr, SavedPrOrigin } from "../../scripts/state-config.ts";
 import { SAVED_STATE } from "./persist.ts";
 import { cleanTitle } from "./text.ts";
 
@@ -31,6 +31,18 @@ export function prsOf(w: Workspace): PullRequest[] {
  */
 export function savedOwnPrs(): SavedOwnPr[] {
   return Object.values(SAVED_STATE.ownPrs);
+}
+
+/**
+ * Which chat opened the PR at `url` and what it first said about it
+ * (State.prOrigins, from report-pr.ts and report-mention.ts); undefined for
+ * a PR no agent opened through the hook.
+ */
+export function originOf(url: string | undefined): SavedPrOrigin | undefined {
+  // A test can seed __STATE__ from before this map existed, so it may be
+  // missing at runtime even though State says it is not.
+  const map: Record<string, SavedPrOrigin> | undefined = SAVED_STATE.prOrigins;
+  return url && map && Object.hasOwn(map, url) ? map[url] : undefined;
 }
 
 /** The workspace's first PR, if any. */

@@ -395,6 +395,33 @@ under the other form adds a second entry. And an update that names its
 `url` is recorded without reading the result, so a refused republish
 (which returns the live version rather than failing) still counts.
 
+## Where a PR came from
+
+The agents panel's Pull requests rows say which chat opened each PR, and a
+tap opens a peek card quoting what that chat first said about it. Neither
+cmux nor GitHub knows either, so two hooks record them in the `prOrigins`
+map: PR link to `{"url", "number", "workspace", "surface", "session",
+"epoch", "mention"}`, oldest first.
+
+- `scripts/hooks/report-pr.ts`, after a `gh pr create`, records the
+  Claude Code `session_id`, `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID`,
+  with the number taken from the link, so it needs no gh call. A second
+  create of the same link keeps the mention already found. Every write
+  drops origins older than 30 days.
+- `scripts/hooks/report-mention.ts`, a Stop hook, takes the session's
+  origins with no `mention` from the last day and reads the transcript at
+  `transcript_path` for the first main-chat reply, from the create on,
+  naming the PR by its link, `#N` or "PR N". The paragraph holding it,
+  markdown markers dropped and cut to `MAX_MENTION` on one line, is saved
+  with the message's uuid and never changes. With nothing pending the
+  transcript is not read.
+
+No URL can set the map. A PR opened by hand, or before the hooks were
+installed, has no origin: its row has no "from" line and its card no quote.
+"Show in chat" selects the workspace, focuses the terminal and flashes it;
+cmux has no call that scrolls a terminal to a line, so it cannot land on
+the message itself.
+
 ## Asking or your turn
 
 cmux marks an agent needs_input both when it stops to ask (a permission

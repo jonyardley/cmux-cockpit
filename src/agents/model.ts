@@ -3,7 +3,13 @@
 // Who is working and who is idle lives on the cockpit's cards, not here.
 // Pure reads of `data`, so each is testable alone.
 
-import type { CheckState, PublishedKind, SavedPublished } from "../../scripts/state-config.ts";
+import type {
+  CheckState,
+  PublishedKind,
+  SavedCheck,
+  SavedPrOrigin,
+  SavedPublished,
+} from "../../scripts/state-config.ts";
 import { byActivity } from "../shared/activity.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
@@ -13,6 +19,7 @@ import { type Project, projectOf } from "../shared/projects.ts";
 import {
   checksOf,
   fromPoller,
+  originOf,
   type PrHealth,
   type PrSummary,
   prSummary,
@@ -449,6 +456,10 @@ export interface PrEntry {
   summary: PrSummary | undefined;
   /** The poller's saved copy rather than cmux's own, so it can go stale. */
   saved: boolean;
+  /** Which chat opened it, and what it first said; undefined when no agent opened it through the hook. */
+  origin: SavedPrOrigin | undefined;
+  /** Its saved CI checks, failing first; none for cmux's own PR or one no workspace holds. */
+  checks: readonly SavedCheck[];
 }
 
 /**
@@ -492,9 +503,11 @@ const allPrs = computed((): PrEntry[] => {
     for (const pr of prsOf(w)) {
       if (!pr?.url || seen.has(pr.url)) continue;
       seen.add(pr.url);
-      const summary = summaryOf(pr, checksOf(w));
+      const checks = checksOf(w);
+      const summary = summaryOf(pr, checks);
       // The PR's own title when the poller saved one, as an own PR's row has.
-      out.push({ key: pr.url, pr, title: summary?.title || prTitle(w, pr), summary, saved: fromPoller(w) });
+      const title = summary?.title || prTitle(w, pr);
+      out.push({ key: pr.url, pr, title, summary, saved: fromPoller(w), origin: originOf(pr.url), checks });
     }
   }
   out.sort(byRankThenNewest);
@@ -504,7 +517,15 @@ const allPrs = computed((): PrEntry[] => {
     seen.add(o.url);
     const pr: PullRequest = { number: o.number, url: o.url, status: o.status, branch: o.branch };
     if (o.draft) pr.draft = true;
-    own.push({ key: o.url, pr, title: o.title, summary: summaryOf(pr, []), saved: true });
+    own.push({
+      key: o.url,
+      pr,
+      title: o.title,
+      summary: summaryOf(pr, []),
+      saved: true,
+      origin: originOf(o.url),
+      checks: [],
+    });
   }
   own.sort(byRankThenNewest);
   out.push(...own);
@@ -536,6 +557,91 @@ export const prNote = computed((): string => freshness().line);
 
 /** A PR row's chip dims while it is the poller's copy and that copy is stale. */
 export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale();
+
+// ---- Where a PR came from, and its peek card --------------------------------
+// A row says which chat opened its PR (report-pr.ts), and a tap opens a
+// card under it quoting what that chat first said (report-mention.ts).
+
+/** "this chat · 3m ago" for the selected workspace, else that workspace's
+ * name; "a closed chat" once it has gone; "" with no origin. */
+export function prSource(e: Pick<PrEntry, "origin">): string {
+  const o = e.origin;
+  if (!o) return "";
+  if (o.workspace === selectedId()) {
+    const age = ageSince(o.epoch);
+    return age ? "this chat · " + age + " ago" : "this chat";
+  }
+  const w = (data.workspaces() ?? []).find((x) => x.id === o.workspace);
+  return w ? displayTitle(w) || "another chat" : "a closed chat";
+}
+
+/** The row's second line, "from this chat · 3m ago"; "" with no origin. */
+export function prFromText(e: Pick<PrEntry, "origin">): string {
+  const source = prSource(e);
+  return source ? "from " + source : "";
+}
+
+// The PR whose card is open, by link; "" for none. Not saved: a reload closes it.
+const [peekUrl, setPeekUrl] = signal("");
+
+/** Whether this row's card is open. */
+export const isPeeking = (e: Pick<PrEntry, "key">): boolean => peekUrl() === e.key;
+
+/** Opens this row's card, closing any other, or closes it when open. */
+export function togglePeek(e: Pick<PrEntry, "key">): void {
+  setPeekUrl(isPeeking(e) ? "" : e.key);
+}
+
+/** The card's heading, "#2160 · Make the largest-text exercise pass alone". */
+export function peekTitle(e: Pick<PrEntry, "pr" | "title">): string {
+  return ["#" + (e.pr.number ?? ""), e.title].filter((x) => x && x !== "#").join(" · ");
+}
+
+/** The card's quote: the chat's first paragraph about the PR; "" until it
+ * names it, or with no origin. */
+export const peekQuote = (e: Pick<PrEntry, "origin">): string => e.origin?.mention?.text ?? "";
+
+/** The faint line in the quote's place while the chat has not named the PR in a reply yet. */
+export const peekWaiting = (e: Pick<PrEntry, "origin">): string =>
+  e.origin && !e.origin.mention ? "The chat has not named it in a reply yet." : "";
+
+/** The card's checks line, "1 failing · 2 running · 11 passed"; "" with none saved. */
+export function peekChecks(e: Pick<PrEntry, "checks">): string {
+  const n = (state: CheckState) => e.checks.filter((c) => c.state === state).length;
+  const parts: [number, string][] = [
+    [n("fail"), " failing"],
+    [n("pending"), " running"],
+    [n("pass"), " passed"],
+  ];
+  return parts
+    .filter(([count]) => count > 0)
+    .map(([count, word]) => count + word)
+    .join(" · ");
+}
+
+// The workspace the PR came from, while it is still open.
+function originWorkspace(e: Pick<PrEntry, "origin">): Workspace | undefined {
+  const id = e.origin?.workspace;
+  return id ? (data.workspaces() ?? []).find((w) => w.id === id) : undefined;
+}
+
+/** Whether "Show in chat" has somewhere to go: the chat's workspace is still open. */
+export const canShowInChat = (e: Pick<PrEntry, "origin">): boolean => !!originWorkspace(e);
+
+/**
+ * Switches to the chat that opened the PR, focuses its terminal and flashes
+ * it. cmux has no call that scrolls a terminal to a line, so the card's
+ * quote is what says where in the chat it was.
+ */
+export function showInChat(e: Pick<PrEntry, "origin">): void {
+  const w = originWorkspace(e);
+  if (!w) return;
+  cmux("workspace.select", { workspace_id: w.id });
+  const surface = e.origin?.surface;
+  if (!surface) return;
+  cmux("surface.focus", { surface_id: surface, workspace_id: w.id });
+  cmux("surface.trigger_flash", { surface_id: surface, workspace_id: w.id });
+}
 
 // ---- Made here ------------------------------------------------------------------
 // Pages and docs agents published (#52), from the saved state the published

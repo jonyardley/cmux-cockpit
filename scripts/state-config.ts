@@ -40,6 +40,13 @@ export interface State {
    */
   published: Record<string, SavedPublished>;
   /**
+   * url -> the chat that opened a pull request and the first thing it said
+   * about it, recorded by scripts/hooks/report-pr.ts and
+   * scripts/hooks/report-mention.ts, oldest first. Written only by the
+   * hooks, never by a URL: a URL could plant a link or a quote.
+   */
+  prOrigins: Record<string, SavedPrOrigin>;
+  /**
    * wsId -> why its agent last stopped to ask (issue #81): a permission
    * prompt, a question or an MCP form, recorded by
    * scripts/hooks/report-notification.ts because cmux says only that an
@@ -178,6 +185,33 @@ export interface SavedPublished {
   epoch: number;
 }
 
+/** The paragraph where a chat first named a PR it opened. */
+export interface SavedMention {
+  /** The paragraph on one line, at most MAX_MENTION characters. */
+  text: string;
+  /** The transcript message it came from (its uuid). */
+  message: string;
+  /** Epoch seconds of that message. */
+  epoch: number;
+}
+
+/** Which chat opened a PR, as the PR hook saves it. */
+export interface SavedPrOrigin {
+  /** Its GitHub link, the map key too. */
+  url: string;
+  number: number;
+  /** The cmux workspace the agent ran in (CMUX_WORKSPACE_ID). */
+  workspace: string;
+  /** The terminal it ran in (CMUX_SURFACE_ID), for focusing it; absent when cmux gave none. */
+  surface?: string;
+  /** The Claude Code session that opened it. */
+  session: string;
+  /** Epoch seconds it was opened. */
+  epoch: number;
+  /** Absent until the chat names the PR in a reply (report-mention.ts). */
+  mention?: SavedMention;
+}
+
 /** Why an agent stopped to ask, as the notification hook saves it. */
 export interface SavedAsk {
   /** A short reason, e.g. "allow git push?", at most MAX_LABEL characters. */
@@ -192,6 +226,8 @@ export interface SavedAsk {
 export const MAX_SUBAGENTS = 10;
 /** The longest label kept; the hook cuts a description to this. */
 export const MAX_LABEL = 120;
+/** The longest first-mention paragraph kept; the hook cuts one to this. */
+export const MAX_MENTION = 320;
 
 /** Checks kept per PR, so one PR with a huge matrix cannot bloat the file. */
 export const MAX_CHECKS = 20;
@@ -204,6 +240,7 @@ export const emptyState = (): State => ({
   ownPrs: {},
   subagents: {},
   published: {},
+  prOrigins: {},
   asking: {},
   ui: {},
 });
@@ -254,14 +291,33 @@ const isCleanChar = (c: string): boolean => {
 };
 
 // Keeps whole code points (so a surrogate pair is never split in two) while
-// the UTF-16 length, the one isLabel measures, stays within MAX_LABEL.
-function cutToLabel(text: string): string {
+// the UTF-16 length, the one isLabel measures, stays within `max`.
+function cutTo(text: string, max: number): string {
   let out = "";
   for (const c of text) {
-    if (out.length + c.length > MAX_LABEL) break;
+    if (out.length + c.length > max) break;
     out += c;
   }
   return out;
+}
+
+// cleanLabel's rule at any length.
+function cleanText(raw: unknown, max: number): string | null {
+  if (typeof raw !== "string") return null;
+  const spaced = [...raw].map((c) => (isCleanChar(c) ? c : " ")).join("");
+  const cleaned = cutTo(spaced.replaceAll(/\s+/g, " "), max).trim();
+  return cleaned.length ? cleaned : null;
+}
+
+/**
+ * cleanLabel for a first-mention paragraph: the same rule, but a paragraph
+ * over MAX_MENTION is cut to leave room for an ellipsis and ends in one, so
+ * the card shows it was cut. Both lengths are the UTF-16 one isText measures.
+ */
+export function cleanMention(raw: unknown): string | null {
+  const whole = cleanText(raw, Number.POSITIVE_INFINITY);
+  if (whole === null || whole.length <= MAX_MENTION) return whole;
+  return `${cutTo(whole, MAX_MENTION - 1).trimEnd()}…`;
 }
 
 /**
@@ -272,10 +328,7 @@ function cutToLabel(text: string): string {
  * for anything unusable. Shared by the subagent and published hooks.
  */
 export function cleanLabel(raw: unknown): string | null {
-  if (typeof raw !== "string") return null;
-  const spaced = [...raw].map((c) => (isCleanChar(c) ? c : " ")).join("");
-  const cleaned = cutToLabel(spaced.replaceAll(/\s+/g, " ")).trim();
-  return cleaned.length ? cleaned : null;
+  return cleanText(raw, MAX_LABEL);
 }
 
 /** The first candidate that cleans up to a label, else `fallback`. */
@@ -425,6 +478,36 @@ function savedPublished(v: unknown): SavedPublished | null {
   return { url: v.url, title: v.title, kind: v.kind, workspace, epoch: v.epoch };
 }
 
+const isPrNumber = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 1;
+const isIdText = (v: unknown): v is string => typeof v === "string" && isId(v);
+
+function savedMention(v: unknown): SavedMention | null {
+  if (!isRecord(v) || !isText(v.text, MAX_MENTION) || !isIdText(v.message) || !isEpoch(v.epoch)) return null;
+  return { text: v.text, message: v.message, epoch: v.epoch };
+}
+
+// The number a PR link ends in, so a saved number can be held to its link.
+const prNumberOf = (url: string): number => Number(/\/pull\/(\d+)$/.exec(url)?.[1]);
+
+// A bad mention is dropped on its own, so the origin still says which chat.
+function savedPrOrigin(v: unknown): SavedPrOrigin | null {
+  if (!isRecord(v) || !isPrUrl(v.url) || !isPrNumber(v.number) || !isEpoch(v.epoch)) return null;
+  if (prNumberOf(v.url) !== v.number) return null;
+  const { workspace, surface, session } = v;
+  if (!isIdText(workspace) || !isIdText(session) || !isOptionalId(surface)) return null;
+  const origin: SavedPrOrigin = { url: v.url, number: v.number, workspace, session, epoch: v.epoch };
+  if (typeof surface === "string") origin.surface = surface;
+  const mention = savedMention(v.mention);
+  if (mention) origin.mention = mention;
+  return origin;
+}
+
+// An origin kept only under its own link: the map key is what the rows look it up by.
+const originAt = (v: unknown, url: string): SavedPrOrigin | null => {
+  const o = savedPrOrigin(v);
+  return o?.url === url ? o : null;
+};
+
 function savedAsk(v: unknown): SavedAsk | null {
   if (!isRecord(v) || !isLabel(v.reason) || !isEpoch(v.epoch)) return null;
   const { session } = v;
@@ -437,11 +520,12 @@ function savedSubagents(v: unknown): SavedSubagent[] | null {
   return runs.length ? runs : null;
 }
 
-// Keeps the last MAX_ENTRIES valid entries, in insertion order.
-function cleanMap<T>(v: unknown, clean: (value: unknown) => T | null, validId = isId): Record<string, T> {
+// Keeps the last MAX_ENTRIES valid entries, in insertion order. `clean` is
+// handed the key too, for a map whose value must agree with it.
+function cleanMap<T>(v: unknown, clean: (value: unknown, id: string) => T | null, validId = isId): Record<string, T> {
   if (!isRecord(v)) return {};
   const kept = Object.entries(v).flatMap(([id, value]): [string, T][] => {
-    const c = validId(id) ? clean(value) : null;
+    const c = validId(id) ? clean(value, id) : null;
     return c === null ? [] : [[id, c]];
   });
   return Object.fromEntries(kept.slice(-MAX_ENTRIES));
@@ -459,6 +543,7 @@ export function validateState(raw: unknown): State {
     ownPrs: cleanMap(v.ownPrs, savedOwnPr, isPrUrl),
     subagents: cleanMap(v.subagents, savedSubagents),
     published: cleanMap(v.published, savedPublished, isPublishedUrl),
+    prOrigins: cleanMap(v.prOrigins, originAt, isPrUrl),
     asking: cleanMap(v.asking, savedAsk),
     ui: uiState(v.ui),
     ...(poll ? { poll } : {}),
@@ -467,7 +552,7 @@ export function validateState(raw: unknown): State {
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `published` and `poll` are left out on purpose (see State).
+// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS. `asking` is set only by
 // its hook: the URL handler refuses it (urlMaySet).
 type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking";
