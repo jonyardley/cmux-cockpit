@@ -65,9 +65,10 @@ overrides between tests.
 
 Work on a branch and open a PR; main is protected by habit.
 `npm run hooks` once per clone installs the git hooks, including the
-pre-commit check. Before a PR is ready for review, `npm run check` passes
-on the last commit and its description's `## Look at after reload` and
-`## Review` sections hold real text: what to check on screen after reload,
+pre-commit check. Before a PR is ready for review, every CI check is green
+on the last commit (`npm run check` locally covers most of them) and its
+description's `## Look at after reload` and `## Review` sections hold real
+text, not empty or a placeholder: what to check on screen after reload,
 and who reviewed, what they found and what happened to each finding. The
 `PR description` check enforces both (it skips drafts), and
 `npm run pr-body` runs it on the live description. The maintainer reviews
@@ -75,8 +76,10 @@ and merges. Agents never merge.
 
 `.claude/settings.json` hooks block edits to the Never-list files, run
 Biome after each edit, and refuse `gh pr ready` while either section is
-empty; the scripts are in `scripts/hooks/`. CI also runs `npm audit`, and
-gitleaks scans each PR's commits and, weekly, the full history.
+empty or a placeholder; the scripts are in `scripts/hooks/`. That hook
+only sees `gh pr ready` in Bash: going ready any other way, run
+`npm run pr-body` first. CI also runs `npm audit`, and gitleaks scans each
+PR's commits and, weekly, the full history.
 
 A gitignored `CLAUDE.local.md`, where present, holds the maintainer's own
 workflow on top of these rules.
