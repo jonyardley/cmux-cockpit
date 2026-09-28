@@ -3,8 +3,9 @@
 
 import type { Last } from "../../shared/list.ts";
 import { dimmedColors, prChipColors } from "../../shared/pr-colors.ts";
-import { chip, meta, openIfUrl } from "../../shared/ui.ts";
+import { chip, meta, openIfUrl, when } from "../../shared/ui.ts";
 import {
+  isPeeking,
   type MadeEntry,
   madeAge,
   madeIcon,
@@ -13,9 +14,12 @@ import {
   prChipHealth,
   prChipText,
   prDim,
+  prFromText,
+  togglePeek,
 } from "../model.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
 import { glyph, ruled } from "./parts.ts";
+import { peekCard } from "./peek.ts";
 
 /** The quiet row a capped list ends in: "+12 more", or "Show less" once
  * open. Tapping it opens or folds the card. */
@@ -29,13 +33,27 @@ export function footRow(text: () => string, onTap: () => void): View {
   return ruled(row, () => true);
 }
 
+// The row's quiet way out to GitHub, its own tap target beside the chip.
+function githubArrow(url: () => string | undefined): View {
+  return Text("↗")
+    .font(11)
+    .weight("semibold")
+    .color(T.tertiary)
+    .paddingHorizontal(4)
+    .paddingVertical(2)
+    .hoverBackground(T.hover)
+    .cornerRadius(4)
+    .onTap(() => openIfUrl(url()));
+}
+
+/** A PR row: tap opens its peek card under it; the arrow opens GitHub. */
 export function prRow(e: () => Last<PrEntry>): View {
   const p = () => e().pr;
   const colors = () => {
     const h = prChipHealth(e());
     return dimmedColors(prChipColors(h.health, p().status, h.draft), prDim(e()));
   };
-  const row = HStack({ spacing: 10 }, [
+  const top = HStack({ spacing: 10 }, [
     Text(() => "#" + (p().number ?? ""))
       .font(12)
       .monospaced()
@@ -54,13 +72,34 @@ export function prRow(e: () => Last<PrEntry>): View {
     chip(() => prChipText(e()), colors)
       .opacity(() => (prDim(e()) ? STALE_OPACITY : 1))
       .layoutPriority(2),
+    githubArrow(() => p().url).layoutPriority(2),
+  ]);
+  const row = VStack({ spacing: 2, alignment: "leading" }, [
+    top,
+    when(
+      "pr-from",
+      () => !!prFromText(e()),
+      () =>
+        meta(() => prFromText(e()))
+          .lineLimit(1)
+          .truncation("middle"),
+    ),
   ])
     .paddingHorizontal(12)
     .paddingVertical(10)
+    .background(() => (isPeeking(e()) ? T.hover : "clear"))
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
-    .onTap(() => openIfUrl(p().url));
-  return ruled(row, () => e().last);
+    .onTap(() => togglePeek(e()));
+  const withPeek = VStack({ spacing: 0, alignment: "leading" }, [
+    row,
+    when(
+      "pr-peek",
+      () => isPeeking(e()),
+      () => peekCard(e),
+    ),
+  ]).frame({ maxWidth: "infinity", alignment: "leading" });
+  return ruled(withPeek, () => e().last);
 }
 
 /** One page or doc an agent published: tap opens it on claude.ai. */

@@ -89,6 +89,7 @@ describe("readApplyWrite", () => {
       ownPrs: {},
       subagents: {},
       published: {},
+      prOrigins: {},
       asking: {},
       ui: {},
     });

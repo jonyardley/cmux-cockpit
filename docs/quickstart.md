@@ -257,6 +257,9 @@ replacing it, or your existing hooks stop running:
       { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-pr.ts" }] },
       { "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }] }
     ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" }] }
+    ],
     "SubagentStart": [
       { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
     ],
@@ -281,6 +284,8 @@ What each script turns on:
 - `report-pr.ts`: a chip as soon as an agent runs `gh pr create`, instead
   of at the next poll.
 - `report-published.ts`: the "Made here" list of published pages and docs.
+- `report-mention.ts`: the quote on a PR's peek card, the paragraph where
+  the chat that opened it first told you about it.
 
 ## The dock
 
