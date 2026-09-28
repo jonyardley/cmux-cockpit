@@ -358,7 +358,7 @@ describe("uninstall", () => {
     await uninstall(fakeEnv(w).env, ["--yes", "--hooks"]);
     assert.ok(existsSync(p.helperApp));
     assert.ok(lstatSync(p.automationsLink).isSymbolicLink());
-    assert.equal(missingEntries(JSON.parse(readFileSync(p.claudeSettings, "utf8")), wanted(), w.home).length, 9);
+    assert.equal(missingEntries(JSON.parse(readFileSync(p.claudeSettings, "utf8")), wanted(), w.home).length, 10);
   });
 
   it("takes out what setup added, restoring the old automations file, and keeps the clone", async () => {

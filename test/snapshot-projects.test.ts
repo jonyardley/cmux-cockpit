@@ -1,11 +1,16 @@
 // Scene: the Projects view, with cards grouped under two projects, one card
-// outside any project, and the third project folded into the quiet list.
+// outside any project, one card quoting its saved move, and the third project folded into the quiet list.
 // Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
 import { ago, seed, snapshotScene } from "./support/snapshot.ts";
 
-const r = seed({ state: { ui: { mode: "projects" } } });
+const r = seed({
+  state: {
+    ui: { mode: "projects" },
+    moves: { "one-b": { text: "Read the draft in #142 and say go.", epoch: ago(90) } },
+  },
+});
 const { agent, ws } = await import("./support/fixtures.ts");
 await import("../src/cockpit/index.ts");
 const { C } = await import("../src/cockpit/theme.ts");

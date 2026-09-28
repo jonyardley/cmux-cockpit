@@ -258,7 +258,10 @@ replacing it, or your existing hooks stop running:
       { "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }] }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" }] }
+      { "hooks": [
+        { "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" },
+        { "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-move.ts" }
+      ] }
     ],
     "SubagentStart": [
       { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
@@ -286,6 +289,8 @@ What each script turns on:
 - `report-published.ts`: the "Made here" list of published pages and docs.
 - `report-mention.ts`: the quote on a PR's peek card, the paragraph where
   the chat that opened it first told you about it.
+- `report-move.ts`: what a waiting chat wants from you ("Run /clear now.")
+  on its card, with a chip saying how big a job it is.
 
 ## The dock
 

@@ -54,6 +54,13 @@ export interface State {
    * a URL (urlMaySet): a URL could plant a question.
    */
   asking: Record<string, SavedAsk>;
+  /**
+   * wsId -> the "Your move" line its chat last ended a turn on, recorded by
+   * scripts/hooks/report-move.ts, since cmux keeps only the start of a
+   * message and the line is always at its end. Hook-only, like `asking`:
+   * a URL could plant words the card shows as the chat's own.
+   */
+  moves: Record<string, SavedMove>;
   /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
   ui: UiState;
   /**
@@ -222,6 +229,25 @@ export interface SavedAsk {
   session?: string;
 }
 
+/** What a chat last asked of Jon, as the Stop hook saves it. */
+export interface SavedMove {
+  /** The line after "Your move:", at most MAX_MOVE characters. */
+  text: string;
+  /** Epoch seconds the hook saw the turn end. */
+  epoch: number;
+  /** The Claude Code session whose turn it was. */
+  session?: string;
+  /** How many numbered decisions the reply laid out, when it laid any out. */
+  decisions?: number;
+  /** The reply's recommended answers in Jon's shorthand ("1b 2a"), when it marked any. */
+  leans?: string;
+}
+
+/** The longest "Your move" line kept; the hook cuts one to this. */
+export const MAX_MOVE = 200;
+/** The most decisions one reply is counted as laying out. */
+export const MAX_DECISIONS = 9;
+
 /** Runs kept per workspace, newest kept, so a busy agent cannot bloat the file. */
 export const MAX_SUBAGENTS = 10;
 /** The longest label kept; the hook cuts a description to this. */
@@ -242,6 +268,7 @@ export const emptyState = (): State => ({
   published: {},
   prOrigins: {},
   asking: {},
+  moves: {},
   ui: {},
 });
 
@@ -318,6 +345,13 @@ export function cleanMention(raw: unknown): string | null {
   const whole = cleanText(raw, Number.POSITIVE_INFINITY);
   if (whole === null || whole.length <= MAX_MENTION) return whole;
   return `${cutTo(whole, MAX_MENTION - 1).trimEnd()}…`;
+}
+
+/** cleanMention's rule for a "Your move" line, at MAX_MOVE. */
+export function cleanMove(raw: unknown): string | null {
+  const whole = cleanText(raw, Number.POSITIVE_INFINITY);
+  if (whole === null || whole.length <= MAX_MOVE) return whole;
+  return `${cutTo(whole, MAX_MOVE - 1).trimEnd()}…`;
 }
 
 /**
@@ -515,6 +549,27 @@ function savedAsk(v: unknown): SavedAsk | null {
   return { reason: v.reason, epoch: v.epoch, ...(typeof session === "string" ? { session } : {}) };
 }
 
+// Jon's shorthand for answers: a decision number and a letter, space apart.
+const isLeans = (v: unknown): v is string =>
+  typeof v === "string" && v.length <= 40 && /^[1-9][a-z](?: [1-9][a-z])*$/.test(v);
+const isDecisions = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_DECISIONS;
+
+function savedMove(v: unknown): SavedMove | null {
+  if (!isRecord(v) || !isText(v.text, MAX_MOVE) || !isEpoch(v.epoch)) return null;
+  const { session, decisions, leans } = v;
+  if (session !== undefined && (typeof session !== "string" || !isId(session))) return null;
+  if (decisions !== undefined && !isDecisions(decisions)) return null;
+  if (leans !== undefined && !isLeans(leans)) return null;
+  return {
+    text: v.text,
+    epoch: v.epoch,
+    ...(typeof session === "string" ? { session } : {}),
+    ...(isDecisions(decisions) ? { decisions } : {}),
+    ...(isLeans(leans) ? { leans } : {}),
+  };
+}
+
 function savedSubagents(v: unknown): SavedSubagent[] | null {
   const runs = Array.isArray(v) ? v.flatMap(savedSubagent).slice(-MAX_SUBAGENTS) : [];
   return runs.length ? runs : null;
@@ -545,6 +600,7 @@ export function validateState(raw: unknown): State {
     published: cleanMap(v.published, savedPublished, isPublishedUrl),
     prOrigins: cleanMap(v.prOrigins, originAt, isPrUrl),
     asking: cleanMap(v.asking, savedAsk),
+    moves: cleanMap(v.moves, savedMove),
     ui: uiState(v.ui),
     ...(poll ? { poll } : {}),
   };
@@ -553,14 +609,14 @@ export function validateState(raw: unknown): State {
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
 // The maps applySet takes. `prs`, `ownPrs`, `subagents`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
-// `ui` is not keyed by id: its only keys are UI_KEYS. `asking` is set only by
-// its hook: the URL handler refuses it (urlMaySet).
-type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking";
-const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui", "asking"];
+// `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
+// set only by their hooks: the URL handler refuses them (urlMaySet).
+type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves";
+const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui", "asking", "moves"];
 const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
 
 // Maps applySet takes from a hook but never from a URL.
-const HOOK_ONLY: readonly string[] = ["asking"];
+const HOOK_ONLY: readonly string[] = ["asking", "moves"];
 
 /**
  * Whether a cmux-cockpit:// URL may make this set (scripts/state-set.ts
@@ -589,6 +645,8 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       return { ...state, projects: without(state.projects, id) };
     case "asking":
       return { ...state, asking: without(state.asking, id) };
+    case "moves":
+      return { ...state, moves: without(state.moves, id) };
     case "ui": {
       const { mode, collapsed } = state.ui;
       return { ...state, ui: id === "mode" ? (collapsed ? { collapsed } : {}) : mode ? { mode } : {} };
@@ -621,6 +679,8 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
       return uiEntry(state, id, parsed);
     case "asking":
       return askEntry(state, id, parsed);
+    case "moves":
+      return moveEntry(state, id, parsed);
   }
 }
 
@@ -631,6 +691,14 @@ function askEntry(state: State, id: string, parsed: unknown): State | string {
   if (!ask) return "asking wants {reason, epoch, session?}";
   const kept = Object.entries(state.asking).filter(([, a]) => a.epoch >= ask.epoch - ASK_MAX_AGE_S);
   return { ...state, asking: { ...Object.fromEntries(kept), [id]: ask } };
+}
+
+// As askEntry: the move goes last, and moves a day older than it are dropped.
+function moveEntry(state: State, id: string, parsed: unknown): State | string {
+  const move = savedMove(parsed);
+  if (!move) return "moves wants {text, epoch, session?, decisions?, leans?}";
+  const kept = Object.entries(state.moves).filter(([, m]) => m.epoch >= move.epoch - ASK_MAX_AGE_S);
+  return { ...state, moves: { ...Object.fromEntries(kept), [id]: move } };
 }
 
 function uiEntry(state: State, id: string, parsed: unknown): State | string {

@@ -21,7 +21,12 @@
       }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" }] }
+      {
+        "hooks": [
+          { "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" },
+          { "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-move.ts" }
+        ]
+      }
     ],
     "SubagentStart": [
       { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }

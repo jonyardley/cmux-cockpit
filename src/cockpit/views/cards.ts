@@ -14,6 +14,7 @@ import {
   detailColor,
   helperText,
   leftOffText,
+  moveOf,
   progressFraction,
   prTextColor,
 } from "../status.ts";
@@ -244,9 +245,28 @@ export function cardFor(w: WsAccessor, key: string): View {
   ]).frame({ maxWidth: "infinity" });
 }
 
+// What a waiting chat wants ("Run /clear now."), on the Projects row, which
+// otherwise shows no message. Behind a when(), so a row with no move has no
+// line and no gap for it.
+function moveLine(w: WsAccessor): View {
+  const text = computed(() => moveOf(w())?.text ?? "");
+  return when(
+    "project-move",
+    () => !!text(),
+    () =>
+      Text(text)
+        .font(12)
+        .color(() => detailColor(isSelected(w())))
+        .lineLimit(2)
+        .truncation("tail")
+        .paddingTop(3)
+        .frame({ maxWidth: "infinity", alignment: "leading" }),
+  );
+}
+
 // Projects view (board 2, #11): one row shape for every session. No glyph,
 // since the project header carries it; title and age, status dot and label
-// without the message, then the branch and PR chips. Selection is the card's
+// without the message (a waiting chat's move aside), then the branch and PR chips. Selection is the card's
 // ink ring.
 export function projectRow(w: WsAccessor, key: string): View {
   // Spacing lives on the rows, so a row with no chips has no gap below it.
@@ -255,6 +275,7 @@ export function projectRow(w: WsAccessor, key: string): View {
     HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), Spacer({ minLength: 0 })])
       .frame({ maxWidth: "infinity" })
       .paddingTop(2),
+    moveLine(w),
     chipsRow(w, true).paddingTop(() => (hasChipsRow(w(), true) ? 3 : 0)),
   ])
     .frame({ maxWidth: "infinity", alignment: "leading" })

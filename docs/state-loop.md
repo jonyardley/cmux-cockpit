@@ -484,3 +484,29 @@ so a card turns amber a second or two after the prompt appears. A
 workspace holds one saved ask, so where cmux agent ids are not session
 ids, two agents waiting at once in one workspace both read the latest
 ask's reason.
+
+## What the chat wants
+
+A chat that ends its turn says what it needs from Jon on a last line that
+starts "Your move:" (his global rules ask for it). cmux keeps only the
+first 240 characters of a message, so the sidebar never sees that line.
+`scripts/hooks/report-move.ts`, a Stop hook, takes the turn's final reply
+(the event's `last_assistant_message`, else the last main-chat reply in the
+transcript's tail, read once more after a pause when it has no move line
+yet) and saves the line per workspace in the `moves` map: workspace id to
+`{"text", "epoch", "session"?, "decisions"?, "leans"?}`. `decisions`
+counts the reply's bold numbered headings and `leans` holds the option it
+marked "Lean" or "Recommended" under each, in Jon's shorthand (`1b 2a`).
+A turn with no move line drops the workspace's saved one. Like `asking`,
+the map goes through `applySet` and is refused from a URL, a new move
+drops any other older than a day, and `MAX_ENTRIES` caps it.
+
+`src/shared/move.ts` reads it back with the asking rule: a needs_input
+agent that is not asking shows the move when it was saved no earlier than
+the start of its needs_input spell, give or take `ASK_SLACK`, so a move
+from an earlier turn never shows once the chat has worked again. The
+cockpit quotes it in place of the message on every card and on the Needs
+you row, adds it under the status on the Projects row, and leads the chips
+with a size: Decide (with the count past one) when the reply laid out
+decisions, Review when the line points at something to read, Quick for a
+word or a paste. A line that gives no clue gets no chip.
