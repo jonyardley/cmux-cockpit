@@ -40,10 +40,9 @@ export interface State {
    */
   published: Record<string, SavedPublished>;
   /**
-   * url -> the chat that opened a pull request and the first thing it said
-   * about it, recorded by scripts/hooks/report-pr.ts and
-   * scripts/hooks/report-mention.ts, oldest first. Written only by the
-   * hooks, never by a URL: a URL could plant a link or a quote.
+   * url -> the chat that opened a pull request, recorded by
+   * scripts/hooks/report-pr.ts, oldest first. Written only by the hook,
+   * never by a URL: a URL could plant a link.
    */
   prOrigins: Record<string, SavedPrOrigin>;
   /**
@@ -185,16 +184,6 @@ export interface SavedPublished {
   epoch: number;
 }
 
-/** The paragraph where a chat first named a PR it opened. */
-export interface SavedMention {
-  /** The paragraph on one line, at most MAX_MENTION characters. */
-  text: string;
-  /** The transcript message it came from (its uuid). */
-  message: string;
-  /** Epoch seconds of that message. */
-  epoch: number;
-}
-
 /** Which chat opened a PR, as the PR hook saves it. */
 export interface SavedPrOrigin {
   /** Its GitHub link, the map key too. */
@@ -208,8 +197,6 @@ export interface SavedPrOrigin {
   session: string;
   /** Epoch seconds it was opened. */
   epoch: number;
-  /** Absent until the chat names the PR in a reply (report-mention.ts). */
-  mention?: SavedMention;
 }
 
 /** Why an agent stopped to ask, as the notification hook saves it. */
@@ -226,8 +213,6 @@ export interface SavedAsk {
 export const MAX_SUBAGENTS = 10;
 /** The longest label kept; the hook cuts a description to this. */
 export const MAX_LABEL = 120;
-/** The longest first-mention paragraph kept; the hook cuts one to this. */
-export const MAX_MENTION = 320;
 
 /** Checks kept per PR, so one PR with a huge matrix cannot bloat the file. */
 export const MAX_CHECKS = 20;
@@ -301,25 +286,6 @@ function cutTo(text: string, max: number): string {
   return out;
 }
 
-// cleanLabel's rule at any length.
-function cleanText(raw: unknown, max: number): string | null {
-  if (typeof raw !== "string") return null;
-  const spaced = [...raw].map((c) => (isCleanChar(c) ? c : " ")).join("");
-  const cleaned = cutTo(spaced.replaceAll(/\s+/g, " "), max).trim();
-  return cleaned.length ? cleaned : null;
-}
-
-/**
- * cleanLabel for a first-mention paragraph: the same rule, but a paragraph
- * over MAX_MENTION is cut to leave room for an ellipsis and ends in one, so
- * the card shows it was cut. Both lengths are the UTF-16 one isText measures.
- */
-export function cleanMention(raw: unknown): string | null {
-  const whole = cleanText(raw, Number.POSITIVE_INFINITY);
-  if (whole === null || whole.length <= MAX_MENTION) return whole;
-  return `${cutTo(whole, MAX_MENTION - 1).trimEnd()}…`;
-}
-
 /**
  * Turns hook input into a label isLabel accepts: control characters and
  * whitespace runs become one space, it is cut to MAX_LABEL, and only then
@@ -328,7 +294,10 @@ export function cleanMention(raw: unknown): string | null {
  * for anything unusable. Shared by the subagent and published hooks.
  */
 export function cleanLabel(raw: unknown): string | null {
-  return cleanText(raw, MAX_LABEL);
+  if (typeof raw !== "string") return null;
+  const spaced = [...raw].map((c) => (isCleanChar(c) ? c : " ")).join("");
+  const cleaned = cutTo(spaced.replaceAll(/\s+/g, " "), MAX_LABEL).trim();
+  return cleaned.length ? cleaned : null;
 }
 
 /** The first candidate that cleans up to a label, else `fallback`. */
@@ -481,15 +450,10 @@ function savedPublished(v: unknown): SavedPublished | null {
 const isPrNumber = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 1;
 const isIdText = (v: unknown): v is string => typeof v === "string" && isId(v);
 
-function savedMention(v: unknown): SavedMention | null {
-  if (!isRecord(v) || !isText(v.text, MAX_MENTION) || !isIdText(v.message) || !isEpoch(v.epoch)) return null;
-  return { text: v.text, message: v.message, epoch: v.epoch };
-}
-
 // The number a PR link ends in, so a saved number can be held to its link.
 const prNumberOf = (url: string): number => Number(/\/pull\/(\d+)$/.exec(url)?.[1]);
 
-// A bad mention is dropped on its own, so the origin still says which chat.
+// A field it no longer keeps (the old `mention`) is dropped on the next write.
 function savedPrOrigin(v: unknown): SavedPrOrigin | null {
   if (!isRecord(v) || !isPrUrl(v.url) || !isPrNumber(v.number) || !isEpoch(v.epoch)) return null;
   if (prNumberOf(v.url) !== v.number) return null;
@@ -497,8 +461,6 @@ function savedPrOrigin(v: unknown): SavedPrOrigin | null {
   if (!isIdText(workspace) || !isIdText(session) || !isOptionalId(surface)) return null;
   const origin: SavedPrOrigin = { url: v.url, number: v.number, workspace, session, epoch: v.epoch };
   if (typeof surface === "string") origin.surface = surface;
-  const mention = savedMention(v.mention);
-  if (mention) origin.mention = mention;
   return origin;
 }
 

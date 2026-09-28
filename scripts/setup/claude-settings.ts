@@ -13,6 +13,15 @@ export const HOOKS_SOURCE = join(import.meta.dirname, "claude-hooks.json");
 /** The hooks setup adds, from the one committed list. */
 export const wanted = (): Entry[] => wantedEntries(JSON.parse(readFileSync(HOOKS_SOURCE, "utf8")));
 
+// Hooks setup once added whose scripts have since gone. Left in place they
+// fail at the end of every turn, so setup and uninstall take them out and
+// doctor flags them.
+const RETIRED = [{ event: "Stop", command: "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" }];
+
+/** The retired hooks, as entries removeEntries can take out. */
+export const retired = (): Entry[] =>
+  RETIRED.map(({ event, command }) => ({ event, matcher: null, command, hook: { type: "command", command } }));
+
 export type Loaded =
   | { ok: true; settings: Record<string, unknown>; existed: boolean; text: string }
   | { ok: false; error: string };

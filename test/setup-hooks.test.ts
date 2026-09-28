@@ -45,13 +45,12 @@ describe("the committed hook list", () => {
   it("names every report-*.ts hook, each with a command", () => {
     const scripts = new Set(WANTED.map((e) => /report-[a-z]+\.ts/.exec(e.command)?.[0]));
     assert.deepEqual([...scripts].sort(), [
-      "report-mention.ts",
       "report-notification.ts",
       "report-pr.ts",
       "report-published.ts",
       "report-subagent.ts",
     ]);
-    assert.equal(WANTED.length, 9);
+    assert.equal(WANTED.length, 8);
   });
 
   it("refuses a source that is not the settings shape", () => {
@@ -97,9 +96,8 @@ describe("adding the hooks", () => {
     assert.deepEqual(next.permissions, theirs.permissions);
     const hooks = next.hooks as Record<string, unknown[]>; // addEntries keeps hooks an object of lists
     assert.deepEqual(hooks.PreToolUse?.[0], theirs.hooks.PreToolUse[0]);
-    // Their Stop hook stays first; the cockpit's is appended after it.
-    assert.deepEqual(hooks.Stop?.[0], theirs.hooks.Stop[0]);
-    assert.equal(hooks.Stop?.length, 2);
+    // Their Stop hook stays as it was: the cockpit adds none there.
+    assert.deepEqual(hooks.Stop, theirs.hooks.Stop);
     assert.equal(hooks.PreToolUse?.length, 3);
     assert.deepEqual(Object.keys(next), ["model", "permissions", "hooks"]);
     // The input is not changed.
@@ -132,7 +130,7 @@ describe("adding the hooks", () => {
     assert.ok(missing.some((m) => m.startsWith("PreToolUse [Agent]")));
     // A missing matcher and "" both mean every tool.
     assert.ok(!missing.some((m) => m.startsWith("PermissionRequest")));
-    assert.equal(missing.length, 7);
+    assert.equal(missing.length, 6);
   });
 
   it("spells each home form the same way", () => {
@@ -153,7 +151,7 @@ describe("removing the hooks", () => {
   it("takes out only the cockpit's, leaving the rest as it was", () => {
     const added = addEntries(theirs, missingEntries(theirs, WANTED, HOME));
     const { settings, removed } = removeEntries(added, WANTED, HOME);
-    assert.equal(removed, 9);
+    assert.equal(removed, 8);
     assert.deepEqual(settings, theirs);
   });
 

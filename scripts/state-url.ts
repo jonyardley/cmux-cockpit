@@ -259,8 +259,8 @@ export function writePublished(
 }
 
 /**
- * Folds `update` over the whole `prOrigins` map (scripts/hooks/report-pr.ts
- * and report-mention.ts), under the same lock, kept oldest first as
+ * Folds `update` over the whole `prOrigins` map (scripts/hooks/report-pr.ts),
+ * under the same lock, kept oldest first as
  * writePublished keeps its map.
  */
 export function writePrOrigins(path: string, update: (origins: State["prOrigins"]) => State["prOrigins"]): ApplyResult {

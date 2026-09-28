@@ -8,9 +8,9 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { validateProjects } from "../projects-config.ts";
 import { linkState } from "./automations.ts";
-import { claudeDirNotes, loadSettings, wanted } from "./claude-settings.ts";
+import { claudeDirNotes, loadSettings, retired, wanted } from "./claude-settings.ts";
 import { type Env, type Paths, pathsFor } from "./env.ts";
-import { missingEntries } from "./hooks-merge.ts";
+import { missingEntries, removeEntries } from "./hooks-merge.ts";
 import { atLeast, CMUX_DRAG, CMUX_MIN, NODE_MIN, parseVersion, show } from "./versions.ts";
 
 export interface Check {
@@ -170,6 +170,8 @@ function hooksFound(env: Env, paths: Paths): Check {
   const loaded = loadSettings(paths);
   if (!loaded.ok) return fail(label, `${paths.claudeSettingsShown} is ${loaded.error}`, "fix the file by hand");
   if (!loaded.existed) return fail(label, `no ${paths.claudeSettingsShown}`, "npm run setup -- --hooks");
+  const stale = removeEntries(loaded.settings, retired(), env.home).removed;
+  if (stale > 0) return fail(label, `${stale} retired hook left, failing on every turn`, "npm run setup -- --hooks");
   const missing = missingEntries(loaded.settings, wanted(), env.home);
   if (missing.length === 0) return pass(label, `all present in ${paths.claudeSettingsShown}`);
   return fail(label, `${missing.length} missing`, "npm run setup -- --hooks");
