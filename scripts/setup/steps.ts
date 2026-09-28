@@ -3,33 +3,29 @@
 // overwrites one, and says what it found. Every command goes through
 // env.run, so the tests run the lot against a temp home with fakes.
 
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, realpathSync, writeFileSync } from "node:fs";
 import { validateProjects } from "../projects-config.ts";
+import { cmuxCheck, cmuxJsonCheck, nodeCheck } from "./doctor-checks.ts";
 import type { Env, Paths } from "./env.ts";
 import { projectsJson, seedProjects, workspaceDirs } from "./projects-seed.ts";
-import { atLeast, CMUX_DRAG, CMUX_MIN, NODE_MIN, parseVersion, show } from "./versions.ts";
 
-/** Null when setup can go on, else why it stopped. */
+// The same file, symbolic links resolved, so a ~/.config that is itself a link still counts.
+function samePlace(a: string, b: string): boolean {
+  try {
+    return realpathSync(a) === realpathSync(b);
+  } catch {
+    return a === b;
+  }
+}
+
+/** Null when setup can go on, else why it stopped. The Node and cmux checks are the doctor's own. */
 export function preflight(env: Env, paths: Paths): string | null {
-  const node = parseVersion(env.nodeVersion);
-  if (!node || !atLeast(node, NODE_MIN))
-    return `Node ${env.nodeVersion} is too old: install ${show(NODE_MIN)} or later.`;
-  env.print(`✓ Node ${env.nodeVersion}`);
-
-  const cmux = env.run("cmux", ["--version"]);
-  if (cmux.missing || cmux.status !== 0) {
-    return "cmux is not on PATH. Install cmux, then turn on its command line tool in cmux's settings.";
+  for (const check of [nodeCheck(env, paths), cmuxCheck(env, paths)]) {
+    if (check.ok) env.print(`✓ ${check.label} ${check.detail}`);
+    else if (check.required) return `${check.label}: ${check.detail}. Fix: ${check.fix}.`;
+    else env.print(`! ${check.label}: ${check.detail}`);
   }
-  const v = parseVersion(cmux.stdout);
-  if (!v || !atLeast(v, CMUX_MIN)) {
-    env.print(`! cmux ${v ? show(v) : "(version unknown)"} is older than ${show(CMUX_MIN)}, the tested version.`);
-  } else {
-    env.print(
-      `✓ cmux ${show(v)}${atLeast(v, CMUX_DRAG) ? "" : ` (lane highlight while dragging needs ${show(CMUX_DRAG)})`}`,
-    );
-  }
-
-  if (env.repo !== paths.mainCheckout) {
+  if (!samePlace(env.repo, paths.mainCheckout)) {
     return `This checkout is at ${env.repo}, but cmux reads sidebars only from ${paths.mainCheckout}. Clone it there.`;
   }
   if (!existsSync(paths.nodeModules)) return "node_modules is missing: run npm ci first.";
@@ -41,21 +37,12 @@ export function cmuxConfig(env: Env, paths: Paths): void {
   if (!existsSync(paths.cmuxJson)) {
     copyFileSync(paths.cmuxExample, paths.cmuxJson);
     env.print("✓ cmux.json: copied from cmux.example.json");
-  } else if (hasCustomSidebars(readFileSync(paths.cmuxJson, "utf8"))) {
-    env.print("✓ cmux.json: already there, with custom sidebars on");
   } else {
-    env.print("! cmux.json has no customSidebars block. Copy it from cmux.example.json; setup leaves your file alone.");
+    const check = cmuxJsonCheck(env, paths);
+    if (check.ok) env.print(`✓ cmux.json: already there, ${check.detail}`);
+    else env.print(`! cmux.json ${check.detail}; setup leaves your file alone. Fix: ${check.fix}.`);
   }
   env.run("cmux", ["reload-config"]);
-}
-
-function hasCustomSidebars(text: string): boolean {
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return typeof parsed === "object" && parsed !== null && "customSidebars" in parsed;
-  } catch {
-    return false;
-  }
 }
 
 // Each open workspace's repo, as git's top level, in the order cmux lists them.

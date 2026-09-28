@@ -3,9 +3,9 @@
 // already answered (args.ts's choose).
 
 import { existsSync, rmSync } from "node:fs";
-import { type Choice, choose, type Extra, type Flags } from "./args.ts";
+import { type Choice, choose, type Extra, type Flags, offered } from "./args.ts";
 import { applyLink, linkState, planLink, removeLink, repoRuleIds } from "./automations.ts";
-import { backupSettings, loadSettings, wanted, writeSettings } from "./claude-settings.ts";
+import { backupSettings, loadSettings, unchanged, wanted, writeSettings } from "./claude-settings.ts";
 import type { Env, Paths } from "./env.ts";
 import { addEntries, describe, missingEntries, removeEntries } from "./hooks-merge.ts";
 
@@ -68,11 +68,17 @@ async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
     env.print("  ✓ all the hooks are already in ~/.claude/settings.json");
     return;
   }
-  env.print(`  These go into ${paths.claudeSettings}; nothing already there is changed:`);
+  env.print(
+    `  These go into ${paths.claudeSettings}, rewritten with two-space indents; nothing there is removed or reordered:`,
+  );
   for (const e of add) env.print(`    ${describe(e)}`);
   const confirmed = flags.yes || flags.picked.includes("hooks") || (await env.ask("  Write them?"));
   if (!confirmed) {
     env.print("  skipped, nothing written");
+    return;
+  }
+  if (!unchanged(paths, loaded)) {
+    env.print("  ✗ ~/.claude/settings.json changed while setup waited, so nothing was written. Run setup again.");
     return;
   }
   if (loaded.existed) env.print(`  ✓ backed up to ${backupSettings(paths, env.now())}`);
@@ -81,21 +87,25 @@ async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
 }
 
 /** Uninstall's steps, each confirmed: the helper, our automations link, and our hooks. */
-export async function removeExtras(env: Env, paths: Paths, yes: boolean): Promise<void> {
-  const confirm = async (q: string): Promise<boolean> => yes || (env.interactive && (await env.ask(q)));
+export async function removeExtras(env: Env, paths: Paths, flags: Flags): Promise<void> {
+  const confirm = async (q: string): Promise<boolean> => flags.yes || (env.interactive && (await env.ask(q)));
 
-  if (existsSync(paths.helperApp) && (await confirm(`Remove ${paths.helperApp}?`))) {
+  if (offered("helper", flags) && existsSync(paths.helperApp) && (await confirm(`Remove ${paths.helperApp}?`))) {
     env.run(LSREGISTER, ["-u", paths.helperApp]);
     rmSync(paths.helperApp, { recursive: true, force: true });
     env.print(`✓ removed ${paths.helperApp}`);
   }
 
-  if (linkState(paths).kind === "ours" && (await confirm("Remove the automations link?"))) {
+  if (
+    offered("automations", flags) &&
+    linkState(paths).kind === "ours" &&
+    (await confirm("Remove the automations link?"))
+  ) {
     for (const line of removeLink(paths)) env.print(`✓ ${line}`);
     env.run("cmux", ["automation", "reload"]);
   }
 
-  await removeHooks(env, paths, confirm);
+  if (offered("hooks", flags)) await removeHooks(env, paths, confirm);
 }
 
 async function removeHooks(env: Env, paths: Paths, confirm: (q: string) => Promise<boolean>): Promise<void> {
@@ -108,6 +118,10 @@ async function removeHooks(env: Env, paths: Paths, confirm: (q: string) => Promi
   const next = removeEntries(loaded.settings, wanted(), env.home);
   if (next.removed === 0) return;
   if (!(await confirm(`Remove the ${next.removed} cockpit hooks from ~/.claude/settings.json?`))) return;
+  if (!unchanged(paths, loaded)) {
+    env.print("✗ ~/.claude/settings.json changed while uninstall waited, so nothing was written. Run it again.");
+    return;
+  }
   env.print(`✓ backed up to ${backupSettings(paths, env.now())}`);
   writeSettings(paths, next.settings);
   env.print(`✓ removed ${next.removed} hooks`);

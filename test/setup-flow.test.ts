@@ -17,11 +17,10 @@ import {
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
 import { wanted } from "../scripts/setup/claude-settings.ts";
+import { setup, uninstall } from "../scripts/setup/commands.ts";
 import { exitCode, problemLines, report, runChecks } from "../scripts/setup/doctor-checks.ts";
 import { pathsFor } from "../scripts/setup/env.ts";
 import { missingEntries } from "../scripts/setup/hooks-merge.ts";
-import { setup } from "../scripts/setup.ts";
-import { uninstall } from "../scripts/uninstall.ts";
 import { type Answers, failed, fakeEnv, notFound, ok, tempHome } from "./support/setup-env.ts";
 
 const homes: string[] = [];
@@ -111,8 +110,8 @@ describe("setup", () => {
       assert.match(env.out.at(-1) ?? "", why);
       assert.equal(existsSync(p.cmuxJson), false);
     };
-    await stops(fakeEnv(w, {}, { node: "22.1.0" }), /Node 22\.1\.0 is too old/);
-    await stops(fakeEnv(w, { "cmux --version": notFound }), /cmux is not on PATH/);
+    await stops(fakeEnv(w, {}, { node: "22.1.0" }), /Node: 22\.1\.0 is older than 24\.2\.0/);
+    await stops(fakeEnv(w, { "cmux --version": notFound }), /cmux: not found on PATH/);
     await stops(fakeEnv({ home: w.home, repo: join(w.home, "elsewhere") }), /cmux reads sidebars only from/);
     rmSync(p.nodeModules, { recursive: true });
     await stops(fakeEnv(w), /run npm ci first/);
@@ -188,6 +187,51 @@ describe("setup", () => {
     assert.equal(readlinkSync(p.automationsLink), p.repoAutomations);
     assert.match(readFileSync(p.automationsBackup, "utf8"), /pr-poll-turn/);
   });
+
+  it("backs up a link to another file, and uninstall puts that link back", async () => {
+    const w = where();
+    built(w.repo);
+    const p = pathsFor(w.home, w.repo);
+    mkdirSync(p.cmuxterm, { recursive: true });
+    const theirs = join(w.home, "dotfiles.json");
+    writeFileSync(theirs, JSON.stringify({ rules: [{ id: "pr-poll-turn" }] }));
+    symlinkSync(theirs, p.automationsLink);
+    await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--automations"]);
+    assert.equal(readlinkSync(p.automationsLink), p.repoAutomations);
+    assert.equal(readlinkSync(p.automationsBackup), theirs);
+    await uninstall(fakeEnv(w).env, ["--yes", "--automations"]);
+    assert.equal(readlinkSync(p.automationsLink), theirs);
+  });
+
+  it("writes through a settings.json that is a link, keeping the link", async () => {
+    const w = where();
+    built(w.repo);
+    const p = pathsFor(w.home, w.repo);
+    mkdirSync(p.claudeDir, { recursive: true });
+    const real = join(w.home, "real-settings.json");
+    writeFileSync(real, "{}");
+    symlinkSync(real, p.claudeSettings);
+    await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--hooks"]);
+    assert.ok(lstatSync(p.claudeSettings).isSymbolicLink());
+    assert.deepEqual(missingEntries(JSON.parse(readFileSync(real, "utf8")), wanted(), w.home), []);
+  });
+
+  it("writes nothing when settings.json changed while it waited on the question", async () => {
+    const w = where();
+    built(w.repo);
+    const p = pathsFor(w.home, w.repo);
+    mkdirSync(p.claudeDir, { recursive: true });
+    writeFileSync(p.claudeSettings, "{}");
+    const f = fakeEnv(w, cmuxWith(w.home), { interactive: true, reply: true });
+    const ask = f.env.ask;
+    f.env.ask = async (q) => {
+      if (q.includes("Write them")) writeFileSync(p.claudeSettings, '{ "permissions": {} }');
+      return ask(q);
+    };
+    await setup(f.env, []);
+    assert.equal(readFileSync(p.claudeSettings, "utf8"), '{ "permissions": {} }');
+    assert.ok(f.out.some((l) => l.includes("changed while setup waited")));
+  });
 });
 
 describe("doctor", () => {
@@ -203,6 +247,7 @@ describe("doctor", () => {
     const w = where();
     built(w.repo);
     await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--yes"]);
+    built(w.repo); // the fake npm run build writes nothing, and setup wrote projects.json since
     const p = pathsFor(w.home, w.repo);
     mkdirSync(p.helperApp, { recursive: true });
     writeFileSync(p.urlToken, "t");
@@ -249,6 +294,11 @@ describe("doctor", () => {
     assert.equal(byLabel.get("Node")?.ok, false);
     assert.equal(byLabel.get("cmux")?.required, true);
     assert.match(byLabel.get("Build")?.detail ?? "", /older than src/);
+    utimesSync(src, new Date(0), new Date(0));
+    writeFileSync(pathsFor(w.home, w.repo).projects, "[]");
+    utimesSync(pathsFor(w.home, w.repo).projects, later, later);
+    const again = runChecks(fakeEnv(w).env).find((c) => c.label === "Build");
+    assert.equal(again?.ok, false, "an edited projects.json needs a rebuild too");
   });
 
   it("reads a broken cmux.json, projects.json and settings as crosses, not crashes", () => {
@@ -292,6 +342,18 @@ describe("doctor", () => {
 });
 
 describe("uninstall", () => {
+  it("takes out only the named extra", async () => {
+    const w = where();
+    built(w.repo);
+    await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--yes"]);
+    const p = pathsFor(w.home, w.repo);
+    mkdirSync(p.helperApp, { recursive: true });
+    await uninstall(fakeEnv(w).env, ["--yes", "--hooks"]);
+    assert.ok(existsSync(p.helperApp));
+    assert.ok(lstatSync(p.automationsLink).isSymbolicLink());
+    assert.equal(missingEntries(JSON.parse(readFileSync(p.claudeSettings, "utf8")), wanted(), w.home).length, 8);
+  });
+
   it("takes out what setup added, restoring the old automations file, and keeps the clone", async () => {
     const w = where();
     built(w.repo);

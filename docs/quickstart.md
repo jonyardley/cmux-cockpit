@@ -113,8 +113,9 @@ Setup asks about each of these. Each works without the others.
 
 ## When something does not work
 
-Run the doctor. It changes nothing, and prints a tick or a cross for each
-part with the one line that fixes a cross:
+Run the doctor. It only reads (the one write is the log line
+`find-node.sh` adds when it finds no Node), and prints a tick or a cross
+for each part with the one line that fixes a cross:
 
 ```sh
 npm run doctor

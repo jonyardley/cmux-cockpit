@@ -5,10 +5,6 @@
 import { exitCode, report, runChecks } from "./setup/doctor-checks.ts";
 import { realEnv } from "./setup/env.ts";
 
-function main(): number {
-  const checks = runChecks(realEnv());
-  for (const line of report(checks)) console.log(line);
-  return exitCode(checks);
-}
-
-if (import.meta.main) process.exit(main());
+const checks = runChecks(realEnv());
+for (const line of report(checks)) console.log(line);
+process.exit(exitCode(checks));

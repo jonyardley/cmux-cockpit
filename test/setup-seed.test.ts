@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { validateProjects } from "../scripts/projects-config.ts";
-import { choose, parseFlags } from "../scripts/setup/args.ts";
+import { choose, offered, parseFlags } from "../scripts/setup/args.ts";
 import { planLink, ruleIds } from "../scripts/setup/automations.ts";
 import { projectsJson, seedProjects, titleFrom, workspaceDirs } from "../scripts/setup/projects-seed.ts";
 import { atLeast, parseVersion } from "../scripts/setup/versions.ts";
@@ -100,8 +100,8 @@ describe("workspaceDirs", () => {
 });
 
 describe("setup's flags", () => {
-  const flags = (argv: string[], env = {}) => {
-    const f = parseFlags(argv, env);
+  const flags = (argv: string[]) => {
+    const f = parseFlags(argv);
     if (typeof f === "string") throw new Error(f);
     return f;
   };
@@ -120,10 +120,11 @@ describe("setup's flags", () => {
     assert.equal(choose("helper", picked, true), "no");
   });
 
-  it("reads npm's copies when the flags come without --", () => {
-    assert.equal(flags([], { npm_config_yes: "true" }).yes, true);
-    assert.equal(flags([], { npm_config_extras: "false" }).noExtras, true);
-    assert.deepEqual(flags([], { npm_config_automations: "true" }).picked, ["automations"]);
+  it("narrows uninstall's steps the same way", () => {
+    assert.ok(offered("helper", flags([])));
+    assert.ok(!offered("helper", flags(["--hooks"])));
+    assert.ok(offered("hooks", flags(["--hooks"])));
+    assert.ok(!offered("hooks", flags(["--no-extras"])));
   });
 
   it("refuses an unknown flag", () => {
@@ -146,24 +147,28 @@ describe("the automations link plan", () => {
   const repo = ["restore-agents-panel", "pr-poll-turn", "pr-poll-select"];
 
   it("links when nothing is there, and leaves our own link alone", () => {
-    assert.deepEqual(planLink({ kind: "missing" }, repo), { do: "link", replacing: null });
+    assert.deepEqual(planLink({ kind: "missing" }, repo), { do: "link" });
     assert.equal(planLink({ kind: "ours" }, repo).do, "nothing");
   });
 
-  it("swaps a link that points elsewhere, saying where", () => {
-    assert.deepEqual(planLink({ kind: "other-link", target: "/x.json" }, repo), { do: "link", replacing: "/x.json" });
+  it("backs up a link that points elsewhere, and skips one whose file has rules of its own", () => {
+    assert.deepEqual(planLink({ kind: "file", ruleIds: [], target: "/x.json" }, repo), {
+      do: "backup-and-link",
+      target: "/x.json",
+    });
+    assert.equal(planLink({ kind: "file", ruleIds: ["mine"], target: "/x.json" }, repo).do, "skip");
   });
 
   it("backs up a plain file holding only the repo's rules, such as one cmux copied over the link", () => {
-    assert.equal(planLink({ kind: "file", ruleIds: ["pr-poll-turn"] }, repo).do, "backup-and-link");
-    assert.equal(planLink({ kind: "file", ruleIds: [] }, repo).do, "backup-and-link");
+    assert.equal(planLink({ kind: "file", ruleIds: ["pr-poll-turn"], target: null }, repo).do, "backup-and-link");
+    assert.equal(planLink({ kind: "file", ruleIds: [], target: null }, repo).do, "backup-and-link");
   });
 
   it("skips a file with rules of its own, naming them, and one it cannot read", () => {
-    const plan = planLink({ kind: "file", ruleIds: ["mine", "pr-poll-turn"] }, repo);
+    const plan = planLink({ kind: "file", ruleIds: ["mine", "pr-poll-turn"], target: null }, repo);
     assert.equal(plan.do, "skip");
     assert.match(plan.do === "skip" ? plan.why : "", /rules the repo's does not: mine\. Copy them/);
-    assert.equal(planLink({ kind: "file", ruleIds: null }, repo).do, "skip");
+    assert.equal(planLink({ kind: "file", ruleIds: null, target: null }, repo).do, "skip");
   });
 
   it("reads rule ids, naming unnamed rules by position", () => {

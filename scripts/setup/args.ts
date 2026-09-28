@@ -1,6 +1,7 @@
-// Flags for npm run setup and npm run uninstall. npm keeps flags it knows
-// for itself unless they follow "--", so `npm run setup --yes` reaches the
-// script only as npm_config_yes; the env fallbacks catch that spelling too.
+// Flags for npm run setup and npm run uninstall. They go after "--"
+// (`npm run setup -- --yes`): without it npm keeps them for itself. npm's
+// npm_config_yes is not read, since a yes=true line in .npmrc sets it too
+// and would answer every question unasked.
 
 export const EXTRAS = ["helper", "automations", "hooks"] as const;
 export type Extra = (typeof EXTRAS)[number];
@@ -10,19 +11,15 @@ export interface Flags {
   yes: boolean;
   /** No extras at all. */
   noExtras: boolean;
-  /** Extras named on the command line; the rest are skipped without asking. */
+  /** Extras named on the command line; the rest are left alone without asking. */
   picked: Extra[];
 }
 
 const isExtra = (s: string): s is Extra => (EXTRAS as readonly string[]).includes(s);
 
-/** The flags in `argv` (and npm's env copies of them), or an error naming the one it does not know. */
-export function parseFlags(argv: readonly string[], env: Record<string, string | undefined> = {}): Flags | string {
-  const flags: Flags = {
-    yes: env.npm_config_yes === "true",
-    noExtras: env.npm_config_extras === "false",
-    picked: EXTRAS.filter((e) => env[`npm_config_${e}`] === "true"),
-  };
+/** The flags in `argv`, or an error naming the one it does not know. */
+export function parseFlags(argv: readonly string[]): Flags | string {
+  const flags: Flags = { yes: false, noExtras: false, picked: [] };
   for (const arg of argv) {
     const name = arg.replace(/^--/, "");
     if (arg === "--yes" || arg === "-y") flags.yes = true;
@@ -44,3 +41,7 @@ export function choose(extra: Extra, flags: Flags, interactive: boolean): Choice
   if (flags.picked.length > 0) return "no";
   return interactive ? "ask" : "no";
 }
+
+/** Uninstall: whether to offer to remove one extra. The flags narrow it as they do for setup. */
+export const offered = (extra: Extra, flags: Flags): boolean =>
+  !flags.noExtras && (flags.picked.length === 0 || flags.picked.includes(extra));

@@ -60,6 +60,7 @@ function groupsOf(settings: Obj): Record<string, Obj[]> {
   return isObj(settings.hooks) ? (settings.hooks as Record<string, Obj[]>) : {};
 }
 
+// A group's hooks: hooksShapeError checked each is an object.
 const hooksOf = (group: Obj): Obj[] => (Array.isArray(group.hooks) ? (group.hooks as Obj[]) : []);
 
 // Missing and "" both match everything in Claude Code, so they are the same here.
@@ -121,6 +122,7 @@ export function addEntries(settings: Obj, add: readonly Entry[]): Obj {
     if (!group) {
       group = e.matcher === null ? { hooks: [] } : { matcher: e.matcher, hooks: [] };
       made.set(key, group);
+      // Checked as a list by parseSettings; the cast only widens it to append.
       const list = Array.isArray(hooks[e.event]) ? (hooks[e.event] as unknown[]) : [];
       hooks[e.event] = [...list, group];
     }

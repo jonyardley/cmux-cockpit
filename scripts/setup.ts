@@ -8,34 +8,10 @@
 //   npm run setup -- --yes                 # every extra, no questions
 //   npm run setup -- --helper --hooks      # just these extras, no questions
 
-import { parseFlags } from "./setup/args.ts";
-import { exitCode, report, runChecks } from "./setup/doctor-checks.ts";
-import { type Env, pathsFor, realEnv } from "./setup/env.ts";
-import { addExtras } from "./setup/extras.ts";
-import { buildAndShow, cmuxConfig, preflight, projects } from "./setup/steps.ts";
+// No import.meta.main guard: on a Node too old to have it the script would
+// silently do nothing, where this way the preflight says Node is too old.
 
-/** Runs setup against `env`; returns the exit code. */
-export async function setup(env: Env, argv: readonly string[], npmEnv: Record<string, string | undefined> = {}) {
-  const flags = parseFlags(argv, npmEnv);
-  if (typeof flags === "string") {
-    env.print(`setup: ${flags}`);
-    return 1;
-  }
-  const paths = pathsFor(env.home, env.repo);
-  const stop = preflight(env, paths);
-  if (stop) {
-    env.print(`✗ ${stop}`);
-    return 1;
-  }
-  cmuxConfig(env, paths);
-  projects(env, paths);
-  if (!buildAndShow(env)) return 1;
-  await addExtras(env, paths, flags);
-  env.print("");
-  env.print("npm run doctor:");
-  const checks = runChecks(env);
-  for (const line of report(checks)) env.print(line);
-  return exitCode(checks);
-}
+import { setup } from "./setup/commands.ts";
+import { realEnv } from "./setup/env.ts";
 
-if (import.meta.main) process.exit(await setup(realEnv(), process.argv.slice(2), process.env));
+process.exit(await setup(realEnv(), process.argv.slice(2)));

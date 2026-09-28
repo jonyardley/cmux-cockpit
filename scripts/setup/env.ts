@@ -64,6 +64,8 @@ export function pathsFor(home: string, repo: string) {
     cmuxExample: join(repo, "cmux.example.json"),
     projects: join(repo, "config", "projects.json"),
     projectsExample: join(repo, "config", "projects.example.json"),
+    state: join(repo, "config", "state.json"),
+    scripts: join(repo, "scripts"),
     urlToken: join(repo, "config", "url-token"),
     nodeModules: join(repo, "node_modules"),
     sidebars: join(repo, "sidebars"),

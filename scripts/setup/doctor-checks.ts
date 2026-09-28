@@ -104,14 +104,27 @@ export const projectsCheck: Probe = (_env, paths) => {
     : fail(label, `config/projects.json ${r.error}`, "fix config/projects.json, then npm run build");
 };
 
-// The newest modification time of any .ts file under src/.
-function newestSource(src: string): number {
-  let newest = 0;
-  for (const f of readdirSync(src, { recursive: true, encoding: "utf8" })) {
-    if (f.endsWith(".ts")) newest = Math.max(newest, statSync(join(src, f)).mtimeMs);
-  }
-  return newest;
+// The .ts files under `dir`, every depth when `deep`, as full paths.
+function tsUnder(dir: string, deep: boolean): string[] {
+  return readdirSync(dir, { recursive: deep, encoding: "utf8" })
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => join(dir, f));
 }
+
+/** What a build reads, as hook-build.ts's buildInputs lists it: src/, the build's scripts, the project table and saved state. */
+function buildInputs(paths: Paths): string[] {
+  return [
+    ...tsUnder(paths.src, true),
+    ...tsUnder(paths.scripts, false),
+    paths.projects,
+    paths.projectsExample,
+    paths.state,
+  ];
+}
+
+// The newest modification time among `files`; missing ones are skipped.
+const newest = (files: readonly string[]): number =>
+  Math.max(0, ...files.map((f) => statSync(f, { throwIfNoEntry: false })?.mtimeMs ?? 0));
 
 export const buildCheck: Probe = (_env, paths) => {
   const label = "Build";
@@ -119,8 +132,10 @@ export const buildCheck: Probe = (_env, paths) => {
   const missing = built.filter((f) => !existsSync(f));
   if (missing.length > 0) return fail(label, "the sidebars are not built", "npm run build", true);
   const oldest = Math.min(...built.map((f) => statSync(f).mtimeMs));
-  if (oldest < newestSource(paths.src)) return fail(label, "older than src/", "npm run build", true);
-  return pass(label, "sidebars/ is newer than src/", true);
+  if (oldest < newest(buildInputs(paths))) {
+    return fail(label, "older than src/, the scripts or config/", "npm run build", true);
+  }
+  return pass(label, "sidebars/ is newer than what it is built from", true);
 };
 
 export const helperCheck: Probe = (env, paths) => {
@@ -144,8 +159,7 @@ export const automationsCheck: Probe = (_env, paths) => {
   const label = "Automations";
   const state = linkState(paths);
   if (state.kind === "ours") return pass(label, "~/.cmuxterm/automations.json links to this repo");
-  const found =
-    state.kind === "missing" ? "not linked" : state.kind === "file" ? "a plain file, not a link" : "links elsewhere";
+  const found = state.kind === "missing" ? "not linked" : state.target ? "links elsewhere" : "a plain file, not a link";
   return fail(label, `${found}; pull request chips wait for a poll`, "npm run setup -- --automations");
 };
 
@@ -215,7 +229,7 @@ function safely(probe: Probe, env: Env, paths: Paths): Check {
     return probe(env, paths);
   } catch (err) {
     const why = err instanceof Error ? err.message : String(err);
-    return fail(probe.name || "Check", `could not check: ${why}`, "see the message");
+    return fail("A check", `could not finish: ${why}`, "see the message; the path in it is usually the cause");
   }
 }
 
