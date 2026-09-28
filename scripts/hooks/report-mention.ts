@@ -139,12 +139,12 @@ export function tailLines(text: string, midFile: boolean): string[] {
   return midFile ? lines.slice(1) : lines;
 }
 
-// The last TAIL_BYTES of the file, as lines.
-function readTail(path: string): string[] {
+/** The last `maxBytes` of the file (TAIL_BYTES unless given), as lines. */
+export function readTail(path: string, maxBytes = TAIL_BYTES): string[] {
   const fd = openSync(path, "r");
   try {
     const size = fstatSync(fd).size;
-    const start = Math.max(0, size - TAIL_BYTES);
+    const start = Math.max(0, size - maxBytes);
     const buf = Buffer.alloc(size - start);
     let got = 0;
     while (got < buf.length) {
@@ -158,8 +158,8 @@ function readTail(path: string): string[] {
   }
 }
 
-// A hook runs as its own short process, so blocking it is harmless.
-const sleep = (ms: number): void => {
+/** Blocks for `ms`: a hook runs as its own short process, so that is harmless. */
+export const sleep = (ms: number): void => {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 };
 

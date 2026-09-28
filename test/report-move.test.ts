@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decisionsIn, lastReply, moveFrom, moveLine } from "../scripts/hooks/report-move.ts";
-import { applySet, emptyState, MAX_MOVE, urlMaySet } from "../scripts/state-config.ts";
+import { applySet, emptyState, MAX_MOVE, MOVE_MAX_AGE_S, urlMaySet } from "../scripts/state-config.ts";
 
 const DECISIONS = [
   "Jon, two calls.",
@@ -49,6 +49,19 @@ describe("moveLine", () => {
     const long = moveLine("Your move: " + "word ".repeat(80));
     assert.ok(long && long.length === MAX_MOVE && long.endsWith("…"));
   });
+
+  it("skips a Your move line inside a code fence", () => {
+    const text = [
+      "Your move: paste the opener below into a new session.",
+      "",
+      "```",
+      "Fix the card. Your move: none",
+      "Your move: this is the other session's",
+      "```",
+    ].join("\n");
+    assert.equal(moveLine(text), "paste the opener below into a new session.");
+    assert.equal(moveLine("```\nYour move: go\n```"), null);
+  });
 });
 
 describe("decisionsIn", () => {
@@ -57,8 +70,39 @@ describe("decisionsIn", () => {
   });
 
   it("keeps the first lean per decision and ignores options before any heading", () => {
-    const text = "a) stray (lean)\n**1. One**\na) x Lean\nb) y lean too";
+    const text = "a) stray (lean)\n**1. One**\na) x **Lean.**\nb) y (lean) too";
     assert.deepEqual(decisionsIn(text), { count: 1, leans: "1a" });
+  });
+
+  it("reads a bold option letter and each lean marker", () => {
+    const text = [
+      "**1. One**",
+      "> **a)** x",
+      "> **b)** y **Lean**",
+      "**2. Two**",
+      "> a) x (recommended)",
+      "**3. Three**",
+      "> a) x",
+      "> b) y **Recommended**",
+    ].join("\n");
+    assert.deepEqual(decisionsIn(text), { count: 3, leans: "1b 2a 3b" });
+  });
+
+  it("takes the word lean in prose as no lean", () => {
+    const text = "**1. One**\n> a) keep the card lean\n> b) a leaner card, recommended by nobody";
+    assert.deepEqual(decisionsIn(text), { count: 1, leans: "" });
+  });
+
+  it("counts a heading only when an option follows it before the next", () => {
+    const text = "**1. Just a bold numbered point**\nProse.\n**2. Real**\n> a) x\n> b) y";
+    assert.deepEqual(decisionsIn(text), { count: 1, leans: "" });
+  });
+
+  it("ends a decision's options at a rule or a heading", () => {
+    const rule = "**1. One**\n> a) x\n\n---\n\na) a list after the rule (lean)";
+    assert.deepEqual(decisionsIn(rule), { count: 1, leans: "" });
+    const heading = "**1. One**\n> a) x\n## Notes\nb) not an option (lean)";
+    assert.deepEqual(decisionsIn(heading), { count: 1, leans: "" });
   });
 
   it("is empty for a reply with no decisions", () => {
@@ -93,14 +137,33 @@ describe("lastReply", () => {
       ...extra,
     });
 
-  it("is the last main-chat reply's text, skipping a helper's and a prompt", () => {
+  const toolResult = JSON.stringify({
+    type: "user",
+    message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] },
+  });
+
+  it("is the reply that ends the lines, skipping a helper's and a meta line", () => {
     const lines = [
+      line("user", "prompt"),
       line("assistant", "first"),
       line("assistant", "second"),
       line("assistant", "helper", { isSidechain: true }),
-      line("user", "prompt"),
+      line("user", "helper's prompt", { isSidechain: true }),
+      line("user", "caveat", { isMeta: true }),
     ];
     assert.equal(lastReply(lines), "second");
+  });
+
+  it("never returns a reply from before the latest prompt: that one is not flushed yet", () => {
+    const lines = [line("assistant", "Your move: an old turn's"), line("user", "prompt")];
+    assert.equal(lastReply(lines), "");
+    const plain = [line("assistant", "old"), JSON.stringify({ type: "user", message: { content: "prompt" } })];
+    assert.equal(lastReply(plain), "");
+  });
+
+  it("reads past a tool result to the final reply, but not a reply that a tool result follows", () => {
+    assert.equal(lastReply([line("user", "prompt"), toolResult, line("assistant", "final")]), "final");
+    assert.equal(lastReply([line("user", "prompt"), line("assistant", "Let me look."), toolResult]), "");
   });
 
   it("is empty with no reply", () => {
@@ -127,10 +190,13 @@ describe("the moves map", () => {
     assert.equal(set({ text: "x".repeat(MAX_MOVE + 1), epoch: 10 }).ok, false);
   });
 
-  it("clears on null, drops moves a day older than the new one, and refuses a URL", () => {
+  it("clears on null, drops moves a week older than the new one, and refuses a URL", () => {
     const first = applySet(emptyState(), "moves.old", JSON.stringify({ text: "old", epoch: 0 }));
     assert.ok(first.ok);
-    const next = first.ok ? applySet(first.state, "moves.new", JSON.stringify({ text: "new", epoch: 90_000 })) : first;
+    const days = first.ok ? applySet(first.state, "moves.new", JSON.stringify({ text: "new", epoch: 90_000 })) : first;
+    assert.deepEqual(days.ok && Object.keys(days.state.moves), ["old", "new"], "a chat waits more than a day");
+    const epoch = MOVE_MAX_AGE_S + 1;
+    const next = first.ok ? applySet(first.state, "moves.new", JSON.stringify({ text: "new", epoch })) : first;
     assert.deepEqual(next.ok && Object.keys(next.state.moves), ["new"]);
     const cleared = next.ok ? applySet(next.state, "moves.new", null) : next;
     assert.deepEqual(cleared.ok && cleared.state.moves, {});

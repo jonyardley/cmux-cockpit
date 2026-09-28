@@ -105,19 +105,31 @@ export function askReason(a: Agent | null | undefined, w: Workspace | undefined)
   return a ? (freshAsk(a, w)?.reason ?? null) : null;
 }
 
-// The saved ask that explains `a`'s current needs_input spell, if any. The
-// ask is saved per workspace with the Claude session that made it; when one
-// of the workspace's agents carries that session as its id (unconfirmed
-// whether cmux agent ids are session ids, as for saved subagent runs), only
-// that agent is asking, so another agent's turn end never borrows its
-// reason. Otherwise the ask belongs to the workspace as a whole.
-function freshAsk(a: Agent, w: Workspace | undefined): SavedAsk | null {
-  if (!w || a.status !== "needs_input" || !a.sinceEpoch) return null;
-  const saved = savedAskFor(w.id);
-  if (!saved || saved.epoch < a.sinceEpoch - ASK_SLACK) return null;
+/**
+ * A hook's saved entry (an ask, a move) when it explains `a` from `since` on:
+ * saved no earlier than `since`, ASK_SLACK aside, and `a`'s own. The entry is
+ * saved per workspace with the Claude session that made it; when one of the
+ * workspace's agents carries that session as its id (unconfirmed whether
+ * cmux agent ids are session ids, as for saved subagent runs), only that
+ * agent owns it, so another agent's turn end never borrows it. Otherwise it
+ * belongs to the workspace as a whole.
+ */
+export function savedFor<T extends { epoch: number; session?: string }>(
+  saved: T | undefined,
+  a: Agent,
+  w: Workspace,
+  since: number,
+): T | null {
+  if (!saved || saved.epoch < since - ASK_SLACK) return null;
   const { session } = saved;
   const owned = session !== undefined && (w.agents ?? []).some((x) => x?.id === session);
   return owned && a.id !== session ? null : saved;
+}
+
+// The saved ask that explains `a`'s current needs_input spell, if any.
+function freshAsk(a: Agent, w: Workspace | undefined): SavedAsk | null {
+  if (!w || a.status !== "needs_input" || !a.sinceEpoch) return null;
+  return savedFor(savedAskFor(w.id), a, w, a.sinceEpoch);
 }
 
 /** A workspace's agents with nudges and dismissals applied, in the app's order. */

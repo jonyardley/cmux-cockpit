@@ -4,7 +4,7 @@
 // through the saved state, never through the message itself.
 
 import type { SavedMove } from "../../scripts/state-config.ts";
-import { ASK_SLACK } from "./needs.ts";
+import { isIdleNudge, savedFor } from "./needs.ts";
 import { SAVED_STATE } from "./persist.ts";
 
 // wsId -> the move its chat last ended a turn on, fixed at build. A test can
@@ -14,38 +14,55 @@ function savedMoveFor(wsId: string): SavedMove | undefined {
   return map && Object.hasOwn(map, wsId) ? map[wsId] : undefined;
 }
 
+// When the agent last worked, as far as cmux says: the earlier of its last
+// activity and the start of its current spell, 0 when neither is known. The
+// earlier, because either can move without work: cmux may restart the spell
+// when Claude Code's idle nudge lands (unconfirmed, issue #4), and whether
+// it stamps activity on that nudge is unconfirmed too (isIdleNudge assumes
+// it does not). Real work moves both, so a move older than both is stale.
+function lastWorked(a: Agent): number {
+  const known = [a.lastActivityAt ?? 0, a.sinceEpoch ?? 0].filter((t) => t > 0);
+  return known.length ? Math.min(...known) : 0;
+}
+
 /**
- * The move `a` is waiting on, or null. Only a turn end counts: the agent is
- * needs_input and not asking (pass `asking` from askReason), and the move
- * was saved at the start of this needs_input spell (ASK_SLACK aside, since
- * the hook and cmux's own hook fire on the same Stop). A move from an
- * earlier turn is older than the spell, so it never shows once the chat has
- * worked again. As with asks, when one of the workspace's agents carries
- * the move's session as its id, only that agent's turn end borrows it.
+ * The move `a` is waiting on, or null. Pass `a` as the sidebars show it
+ * (agentsOf) and `asking` from askReason. Only a turn end counts: cmux says
+ * needs_input and it is not an ask, and it reads as needs_input still or as
+ * idle only because of the idle nudge (a dismissal hides the move with the
+ * flag). The move is current while the agent has not worked since it was
+ * saved (lastWorked, ASK_SLACK aside, since the hook and cmux's own hook
+ * fire on the same Stop): a move from an earlier turn never shows once the
+ * chat has worked again, and the nudge about 60s on does not hide it. As
+ * with asks, when one of the workspace's agents carries the move's session
+ * as its id, only that agent's turn end borrows it.
  */
 export function waitingMove(a: Agent | null | undefined, w: Workspace | undefined, asking: boolean): SavedMove | null {
-  if (!a || !w || asking || a.status !== "needs_input" || !a.sinceEpoch) return null;
-  const saved = savedMoveFor(w.id);
-  if (!saved || saved.epoch < a.sinceEpoch - ASK_SLACK) return null;
-  const { session } = saved;
-  const owned = session !== undefined && (w.agents ?? []).some((x) => x?.id === session);
-  return owned && a.id !== session ? null : saved;
+  if (!a || !w || asking) return null;
+  const raw = (w.agents ?? []).find((x) => x?.id === a.id) ?? a;
+  if (raw.status !== "needs_input" || (a.status !== "needs_input" && !isIdleNudge(raw, w))) return null;
+  const since = lastWorked(raw);
+  return since ? savedFor(savedMoveFor(w.id), a, w, since) : null;
 }
 
 /**
  * How big answering a move is: "decide" when the reply laid out numbered
- * decisions, "review" when Jon reads something first (a PR, a link, "read",
- * "review"), "quick" when it is a word or a paste ("go", "/clear", a `!`
- * command). null when the line gives no clue: the card then shows the line
+ * decisions, "review" when Jon reads something first (a link, "read",
+ * "review", "look at"), "quick" when it is a word or a paste ("go", "/clear", a `!`
+ * command). null when nothing waits on Jon, or the line gives no clue: the card then shows the line
  * with no chip, since a wrong chip is worse than none.
  */
 export type MoveSize = "quick" | "decide" | "review";
 
-const REVIEW = /#\d+\b|https?:\/\/|claude\.ai\/|\b(?:read|review|look at|check)\b/i;
+// A bare "#N" is only a reference ("see #2044"), so it is no clue.
+const REVIEW = /https?:\/\/|claude\.ai\/|\b(?:read|review|look at)\b/i;
 const QUICK = /\/clear\b|\bgo\b|(?:^|\s)!\s?\w|\bpaste\b|nothing follows|under (?:a|one|two) minutes?/i;
+// Nothing to answer, so no size. "Nothing follows" is different: it ends in /clear.
+const NOTHING_WAITS = /nothing (?:else )?waits on you/i;
 
 export function moveSize(m: Pick<SavedMove, "text" | "decisions">): MoveSize | null {
   if ((m.decisions ?? 0) > 0) return "decide";
+  if (NOTHING_WAITS.test(m.text)) return null;
   if (REVIEW.test(m.text)) return "review";
   if (QUICK.test(m.text)) return "quick";
   return null;

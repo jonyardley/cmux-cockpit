@@ -4,33 +4,38 @@
 // sidebar never sees it without this hook.
 //
 // Run as a Claude Code Stop hook, once per turn. It takes the turn's final
-// reply from the event's last_assistant_message, or else the last main-chat
-// reply in the transcript's tail, read once more after RETRY_MS when that
-// reply has no move line yet (Stop can fire before it is flushed). The line
+// reply from the event's last_assistant_message, or else the main-chat
+// reply that ends the transcript's tail, read once more after RETRY_MS when
+// no reply ends it yet (Stop can fire before the reply is flushed). The line
 // is saved per workspace in config/state.json's `moves` map with the count
 // of numbered decisions the reply laid out and the options it leaned to.
 // A turn with no move line drops the workspace's saved one. The sidebar
-// shows a move only while the agent's needs_input spell is no older than
-// it (src/shared/move.ts), so nothing here has to clear a stale one. It
+// shows a move only while the agent has not worked since it was saved
+// (src/shared/move.ts), so nothing here has to clear a stale one. It
 // never fails the hook: every problem is a note on stderr and exit 0.
 
-import { closeSync, fstatSync, openSync, readFileSync, readSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scheduleBuild } from "../hook-build.ts";
 import { cleanMove, isId, MAX_DECISIONS, type SavedMove, validateState } from "../state-config.ts";
 import { readApplyWrite } from "../state-url.ts";
 import { field } from "./gh-command.ts";
-import { replyFrom, tailLines } from "./report-mention.ts";
+import { readTail, replyFrom, sleep } from "./report-mention.ts";
 
 // The line's label as Jon's rules write it, after any markdown the terminal
 // would not show (a quote, bold, a list marker).
 const MOVE_LINE = /^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)?your move(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(.+)$/i;
 // A decision's heading: "**1. Where the card gets the line**".
 const DECISION = /^\s*\*\*([1-9])[.)]\s/;
-// An option under it: "> a) ...", "a) ...", "    a) ...".
-const OPTION = /^\s*(?:>\s*)?([a-z])[.)]\s/;
-// The option the reply recommends: "Lean", "(lean)", "Recommended".
-const LEAN = /\blean\b|\brecommended\b/i;
+// An option under it: "> a) ...", "a) ...", "    a) ...", "> **a)** ...".
+const OPTION = /^\s*(?:>\s*)?(?:\*\*|__)?([a-z])[.)](?:\*\*|__)?\s/;
+// The marker on the option the reply recommends: "**Lean.**", "(lean)",
+// "**Recommended**". Only a marker: "keep the card lean" is prose.
+const LEAN = /(?:\*\*|__)(?:lean|recommended)[.:]?(?:\*\*|__)|\((?:lean|recommended)\)/i;
+// What ends a decision's options: a rule or a markdown heading.
+const BREAK = /^\s*(?:-{3,}|\*{3,}|_{3,}|#{1,6}\s)/;
+// A code fence's opening or closing line, in a quote or not.
+const FENCE = /^\s*(?:>\s*)?(?:```|~~~)/;
 
 const unmark = (s: string): string =>
   s
@@ -38,9 +43,20 @@ const unmark = (s: string): string =>
     .replaceAll(/\*\*|__|`/g, "")
     .trim();
 
-/** The last "Your move" line in `text`, cleaned, or null when there is none. */
+// The reply's lines outside code fences: a fenced handoff opener can hold a
+// "Your move" line or a decision of its own that is not this reply's.
+function unfenced(text: string): string[] {
+  let inFence = false;
+  return text.split("\n").filter((line) => {
+    if (FENCE.test(line)) inFence = !inFence;
+    else if (!inFence) return true;
+    return false;
+  });
+}
+
+/** The last "Your move" line in `text` outside a code fence, cleaned, or null when there is none. */
 export function moveLine(text: string): string | null {
-  const lines = text.split("\n");
+  const lines = unfenced(text);
   for (let i = lines.length - 1; i >= 0; i--) {
     const hit = MOVE_LINE.exec(lines[i] ?? "");
     if (hit?.[1]) return cleanMove(unmark(hit[1]));
@@ -48,20 +64,25 @@ export function moveLine(text: string): string | null {
   return null;
 }
 
-/** How many decisions a reply lays out, and the letter it leans to under each ("1b 2a"). */
+/**
+ * How many decisions a reply lays out, and the letter it leans to under each
+ * ("1b 2a"). A heading counts only once a lettered option follows it, and a
+ * rule or a markdown heading ends its options.
+ */
 export function decisionsIn(text: string): { count: number; leans: string } {
   const seen = new Set<string>();
   const leans: string[] = [];
   let current = "";
-  for (const line of text.split("\n")) {
+  for (const line of unfenced(text)) {
     const d = DECISION.exec(line)?.[1];
-    if (d) {
-      current = d;
-      seen.add(d);
+    if (d || BREAK.test(line)) {
+      current = d ?? "";
       continue;
     }
     const o = OPTION.exec(line)?.[1];
-    if (current && o && LEAN.test(line) && !leans.some((l) => l.startsWith(current))) leans.push(current + o);
+    if (!current || !o) continue;
+    seen.add(current);
+    if (LEAN.test(line) && !leans.some((l) => l.startsWith(current))) leans.push(current + o);
   }
   return { count: Math.min(seen.size, MAX_DECISIONS), leans: leans.join(" ") };
 }
@@ -80,11 +101,32 @@ export function moveFrom(text: string, now: number, session?: string): SavedMove
   };
 }
 
-/** The last main-chat reply's text in a transcript's lines, or "" when there is none. */
+// A main-chat user line: Jon's prompt (string content or a text block) or a
+// tool's result (an array of tool_result blocks). A helper's lines and the
+// meta lines Claude Code adds on its own are neither.
+function isUserTurn(line: string): boolean {
+  if (!line.includes('"user"')) return false;
+  let v: unknown;
+  try {
+    v = JSON.parse(line);
+  } catch {
+    return false;
+  }
+  return field(v, "type") === "user" && field(v, "isSidechain") !== true && field(v, "isMeta") !== true;
+}
+
+/**
+ * The reply that ends a transcript's lines, or "" when none ends it yet. A
+ * turn ends on a reply with no tool call, so when a prompt or a tool result
+ * comes after the last main-chat reply, that reply belongs to an earlier
+ * turn or is text before a tool call: the final reply is not flushed yet.
+ */
 export function lastReply(lines: readonly string[]): string {
   for (let i = lines.length - 1; i >= 0; i--) {
-    const reply = replyFrom(lines[i] ?? "");
+    const line = lines[i] ?? "";
+    const reply = replyFrom(line);
     if (reply) return reply.text;
+    if (isUserTurn(line)) return "";
   }
   return "";
 }
@@ -95,35 +137,18 @@ const TAIL_BYTES = 2 * 1024 * 1024;
 // How long to wait for the final reply to be flushed before the one reread.
 const RETRY_MS = 1500;
 
-function readTail(path: string): string[] {
-  const fd = openSync(path, "r");
-  try {
-    const size = fstatSync(fd).size;
-    const start = Math.max(0, size - TAIL_BYTES);
-    const buf = Buffer.alloc(size - start);
-    const got = readSync(fd, buf, 0, buf.length, start);
-    return tailLines(buf.subarray(0, got).toString("utf8"), start > 0);
-  } finally {
-    closeSync(fd);
-  }
-}
-
-// A hook runs as its own short process, so blocking it is harmless.
-const sleep = (ms: number): void => {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-};
-
 // The turn's final reply: the event's own copy when Claude Code sends one,
-// else the transcript's, read again once if it has no move line yet.
+// else the transcript's, read again once if no reply ends it yet. A reply
+// that is there but has no move line is final: there is nothing to wait for.
 function finalReply(event: unknown): string {
   const given = field(event, "last_assistant_message");
   if (typeof given === "string" && given) return given;
   const transcript = field(event, "transcript_path");
   if (typeof transcript !== "string") return "";
-  const first = lastReply(readTail(transcript));
-  if (moveLine(first)) return first;
+  const first = lastReply(readTail(transcript, TAIL_BYTES));
+  if (first) return first;
   sleep(RETRY_MS);
-  return lastReply(readTail(transcript));
+  return lastReply(readTail(transcript, TAIL_BYTES));
 }
 
 // Read without the lock: it only saves a write when there is nothing to drop.

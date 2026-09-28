@@ -341,17 +341,16 @@ function cleanText(raw: unknown, max: number): string | null {
  * over MAX_MENTION is cut to leave room for an ellipsis and ends in one, so
  * the card shows it was cut. Both lengths are the UTF-16 one isText measures.
  */
-export function cleanMention(raw: unknown): string | null {
-  const whole = cleanText(raw, Number.POSITIVE_INFINITY);
-  if (whole === null || whole.length <= MAX_MENTION) return whole;
-  return `${cutTo(whole, MAX_MENTION - 1).trimEnd()}…`;
-}
+export const cleanMention = (raw: unknown): string | null => cleanCut(raw, MAX_MENTION);
 
 /** cleanMention's rule for a "Your move" line, at MAX_MOVE. */
-export function cleanMove(raw: unknown): string | null {
+export const cleanMove = (raw: unknown): string | null => cleanCut(raw, MAX_MOVE);
+
+// cleanLabel's rule, with text over `max` cut to end in an ellipsis.
+function cleanCut(raw: unknown, max: number): string | null {
   const whole = cleanText(raw, Number.POSITIVE_INFINITY);
-  if (whole === null || whole.length <= MAX_MOVE) return whole;
-  return `${cutTo(whole, MAX_MOVE - 1).trimEnd()}…`;
+  if (whole === null || whole.length <= max) return whole;
+  return `${cutTo(whole, max - 1).trimEnd()}…`;
 }
 
 /**
@@ -693,11 +692,18 @@ function askEntry(state: State, id: string, parsed: unknown): State | string {
   return { ...state, asking: { ...Object.fromEntries(kept), [id]: ask } };
 }
 
-// As askEntry: the move goes last, and moves a day older than it are dropped.
+/**
+ * Another workspace's move older than this, next to a new one, is dropped: a
+ * week, not ASK_MAX_AGE_S's day, since a chat can wait on Jon over a weekend.
+ * MAX_ENTRIES still caps the map.
+ */
+export const MOVE_MAX_AGE_S = 7 * 24 * 60 * 60;
+
+// As askEntry: the move goes last, and moves a week older than it are dropped.
 function moveEntry(state: State, id: string, parsed: unknown): State | string {
   const move = savedMove(parsed);
   if (!move) return "moves wants {text, epoch, session?, decisions?, leans?}";
-  const kept = Object.entries(state.moves).filter(([, m]) => m.epoch >= move.epoch - ASK_MAX_AGE_S);
+  const kept = Object.entries(state.moves).filter(([, m]) => m.epoch >= move.epoch - MOVE_MAX_AGE_S);
   return { ...state, moves: { ...Object.fromEntries(kept), [id]: move } };
 }
 

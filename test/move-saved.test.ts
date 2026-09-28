@@ -47,11 +47,19 @@ describe("moveSize", () => {
     assert.equal(move.moveSize({ text: "Read the draft in #142 and say go." }), "review");
     assert.equal(move.moveSize({ text: "open https://claude.ai/artifact/x" }), "review");
     assert.equal(move.moveSize({ text: "Run /clear now." }), "quick");
+    assert.equal(move.moveSize({ text: "Run /clear now (see #2044)." }), "quick", "a bare #N is no clue");
+    assert.equal(move.moveSize({ text: "look at the card after reload." }), "review");
     assert.equal(move.moveSize({ text: "paste this: ! gcloud auth login" }), "quick");
     assert.equal(move.moveSize({ text: "say go" }), "quick");
     assert.equal(move.moveSize({ text: "the work is finished and nothing follows." }), "quick");
     assert.equal(move.moveSize({ text: "tell me which one you meant." }), null);
     assert.equal(move.moveSize({ text: "the algorithm is good" }), null, "go only as a word");
+    assert.equal(move.moveSize({ text: "check the build passes." }), null, "check is too common to mean review");
+  });
+
+  it("gives no size when nothing waits on Jon", () => {
+    assert.equal(move.moveSize({ text: "PR #130 is merged; nothing waits on you." }), null);
+    assert.equal(move.moveSize({ text: "done, nothing else waits on you. Read the notes if curious." }), null);
   });
 
   it("words the chip", () => {
@@ -77,6 +85,23 @@ describe("moveOf", () => {
     assert.equal(status.moveOf(ws("asks", { agents: [waiting(1000)] })), null);
     assert.equal(status.moveOf(ws("none", { agents: [waiting(1000)] })), null);
     assert.equal(status.moveOf(ws("quick", { agents: [agent("needs_input")] })), null, "no start time");
+  });
+
+  it("still shows after the idle nudge turns the agent idle and restarts its spell", () => {
+    // The nudge lands 60s on: cmux says needs_input from then, with no new activity.
+    const nudged = agent("needs_input", { kind: "claude", sinceEpoch: 1060, lastActivityAt: 1000 });
+    const w = ws("quick", { agents: [nudged] });
+    assert.equal(status.agentOf(w)?.status, "idle", "the nudge reads as idle");
+    assert.equal(status.moveOf(w)?.text, "the work is finished. Run /clear now.");
+    assert.equal(status.cardDetail(w), "the work is finished. Run /clear now.");
+  });
+
+  it("is gone once the agent works again, even when its latest spell reads as a nudge", () => {
+    const working = agent("working", { kind: "claude", sinceEpoch: 1100, lastActivityAt: 1100 });
+    assert.equal(status.moveOf(ws("quick", { agents: [working] })), null);
+    // Worked at 1100 with no Stop (an interrupted turn), then nudged at 1160.
+    const later = agent("needs_input", { kind: "claude", sinceEpoch: 1160, lastActivityAt: 1100 });
+    assert.equal(status.moveOf(ws("quick", { agents: [later] })), null);
   });
 
   it("goes only to the agent whose id is the move's session, when one has it", () => {

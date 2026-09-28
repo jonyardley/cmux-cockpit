@@ -491,22 +491,35 @@ A chat that ends its turn says what it needs from Jon on a last line that
 starts "Your move:" (his global rules ask for it). cmux keeps only the
 first 240 characters of a message, so the sidebar never sees that line.
 `scripts/hooks/report-move.ts`, a Stop hook, takes the turn's final reply
-(the event's `last_assistant_message`, else the last main-chat reply in the
-transcript's tail, read once more after a pause when it has no move line
-yet) and saves the line per workspace in the `moves` map: workspace id to
-`{"text", "epoch", "session"?, "decisions"?, "leans"?}`. `decisions`
-counts the reply's bold numbered headings and `leans` holds the option it
-marked "Lean" or "Recommended" under each, in Jon's shorthand (`1b 2a`).
-A turn with no move line drops the workspace's saved one. Like `asking`,
-the map goes through `applySet` and is refused from a URL, a new move
-drops any other older than a day, and `MAX_ENTRIES` caps it.
+(the event's `last_assistant_message`, else the main-chat reply that ends
+the transcript's tail, read once more after a pause when a prompt or a tool
+result still comes after the last reply, since that reply is not the final
+one) and saves the line per workspace in the `moves` map: workspace id to
+`{"text", "epoch", "session"?, "decisions"?, "leans"?}`. A "Your move"
+line inside a code fence (a handoff opener) is not the reply's. `decisions`
+counts the reply's bold numbered headings with at least one lettered
+option under them, and `leans` holds the option marked **Lean** or
+(recommended) under each, in Jon's shorthand (`1b 2a`); a rule or a
+markdown heading ends a decision's options. A turn with no move line
+drops the workspace's saved one. Like `asking`, the map goes through
+`applySet` and is refused from a URL, but a new move drops any other more
+than a week older (`MOVE_MAX_AGE_S`, since a chat can wait over a weekend),
+and `MAX_ENTRIES` caps it.
 
-`src/shared/move.ts` reads it back with the asking rule: a needs_input
-agent that is not asking shows the move when it was saved no earlier than
-the start of its needs_input spell, give or take `ASK_SLACK`, so a move
-from an earlier turn never shows once the chat has worked again. The
+`src/shared/move.ts` shows the move while the agent has not worked since it
+was saved. cmux must say needs_input and it must not be an ask; it may read
+as idle only because of Claude Code's idle nudge (a dismissal hides it).
+The move counts when it was saved no earlier than the agent last worked,
+give or take `ASK_SLACK`, taking the earlier of its `lastActivityAt` and
+`sinceEpoch`: cmux may restart the spell when the nudge lands about 60s
+after the turn ends (unconfirmed, issue #4), and the nudge must not hide the
+move. Real work moves both, so a move from an earlier turn never shows once
+the chat has worked again. The session rule is the one asks use
+(`savedFor` in `src/shared/needs.ts`). The
 cockpit quotes it in place of the message on every card and on the Needs
 you row, adds it under the status on the Projects row, and leads the chips
 with a size: Decide (with the count past one) when the reply laid out
-decisions, Review when the line points at something to read, Quick for a
-word or a paste. A line that gives no clue gets no chip.
+decisions, Review when the line points at something to read (a link,
+"read", "review", "look at"; a bare `#N` is only a reference), Quick for a
+word or a paste. A line that says nothing waits on Jon, or gives no clue,
+gets no chip.
