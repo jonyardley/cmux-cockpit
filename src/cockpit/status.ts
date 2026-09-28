@@ -4,7 +4,7 @@
 import { mostActive } from "../shared/activity.ts";
 import { agentsOf, hasRealAsk } from "../shared/needs.ts";
 import { prChipColors } from "../shared/pr-colors.ts";
-import { type PrSummary, prSummary } from "../shared/prs.ts";
+import type { PrSummary } from "../shared/prs.ts";
 import { liveRunCount } from "../shared/subagents.ts";
 import { cardMessage, clip, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
@@ -104,8 +104,8 @@ export const badgeCount = (w: Workspace | undefined): number => (isReady(w) ? 0 
  * not. The full card says nothing about the PR in its status row: the PR
  * line under it carries the verdict (issue #79).
  */
-export function compactPrText(w: Workspace | undefined): string {
-  const t = prSummary(w)?.text;
+export function compactPrText(pr: Pick<PrSummary, "text"> | undefined): string {
+  const t = pr?.text;
   return t ? "· " + t : "";
 }
 

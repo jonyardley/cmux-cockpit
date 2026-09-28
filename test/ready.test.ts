@@ -28,6 +28,7 @@ const state = await import("../src/cockpit/state.ts");
 const model = await import("../src/cockpit/model.ts");
 const { showsChipsRow } = await import("../src/cockpit/chips.ts");
 const needs = await import("../src/shared/needs.ts");
+const prs = await import("../src/shared/prs.ts");
 
 const now = () => r.data.epoch;
 
@@ -151,17 +152,19 @@ describe("a Ready card's PR words (issue #79)", () => {
   });
 
   it("keeps the PR on a compact card, in the chip's own words", () => {
-    assert.equal(status.compactPrText(withPr("green")), "· #45 · ready");
-    assert.equal(status.compactPrText(withPr("failing")), "· #46 · 1 failing");
-    assert.equal(status.compactPrText(withPr("running")), "· #47 · running");
-    assert.equal(status.compactPrText(withPr("draft")), "· #48 · draft");
-    assert.equal(status.compactPrText(withPr("open")), "· #49");
-    assert.equal(status.compactPrText(readyWs("m", { pr: { number: 50, status: "merged" } })), "· #50 · merged");
+    const text = (w: Workspace) => status.compactPrText(prs.prSummary(w));
+    assert.equal(text(withPr("green")), "· #45 · ready");
+    assert.equal(text(withPr("failing")), "· #46 · 1 failing");
+    assert.equal(text(withPr("running")), "· #47 · running");
+    assert.equal(text(withPr("draft")), "· #48 · draft");
+    assert.equal(text(withPr("open")), "· #49");
+    assert.equal(text(readyWs("m", { pr: { number: 50, status: "merged" } })), "· #50 · merged");
   });
 
   it("is empty without a PR", () => {
-    assert.equal(status.compactPrText(readyWs("none")), "");
+    assert.equal(status.compactPrText(prs.prSummary(readyWs("none"))), "");
     assert.equal(status.compactPrText(undefined), "");
+    assert.equal(status.compactPrText({ text: "" }), "");
   });
 });
 
@@ -175,7 +178,7 @@ describe("To review", () => {
     assert.equal(model.canFileForReview(w), true);
     assert.equal(model.hasChipsRow(w, true), true);
     // The action alone keeps the full card's row, with no chip at all.
-    assert.equal(showsChipsRow(w, true, false), true);
+    assert.equal(showsChipsRow(model.chipsFor(w, true), w, false), true);
     model.fileForReview(w);
     assert.deepEqual(r.calls.at(-1), {
       method: "workspace.group.add",

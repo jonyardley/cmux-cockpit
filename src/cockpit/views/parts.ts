@@ -7,6 +7,7 @@ import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot, when } from "../../shared/ui.ts";
+import { showsChipsRow } from "../chips.ts";
 import { LANES } from "../lanes.ts";
 import {
   type Chip,
@@ -291,15 +292,19 @@ export function chipsRow(w: WsAccessor, withBranch: boolean, withPr = true): Vie
       () => chip(id, () => chipById(chips(), id)),
     );
   // The full card puts its PR on a line of its own (prLine), so it leaves the chip out.
-  return HStack({ spacing: 5 }, [
-    ...(withPr ? [one("pr").layoutPriority(2)] : []),
-    one("br"),
-    one("port").layoutPriority(2),
-    toReviewAction(w),
-  ]).frame({
-    maxWidth: "infinity",
-    alignment: "leading",
-  });
+  const row = () =>
+    HStack({ spacing: 5 }, [
+      ...(withPr ? [one("pr").layoutPriority(2)] : []),
+      one("br"),
+      one("port").layoutPriority(2),
+      toReviewAction(w),
+    ]).frame({
+      maxWidth: "infinity",
+      alignment: "leading",
+    });
+  // Behind a when(), so a card with nothing to show has no empty row and no
+  // gap above it (issue #79).
+  return when("chips-row", () => showsChipsRow(chips(), w(), withPr), row);
 }
 
 // --- card chrome and menu ------------------------------------------------------------

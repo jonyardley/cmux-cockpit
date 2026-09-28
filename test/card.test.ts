@@ -169,24 +169,33 @@ describe("chipsFor", () => {
 });
 
 describe("showsChipsRow (issue #79)", () => {
+  const shows = (w: Workspace | undefined, withBranch: boolean, withPr: boolean) =>
+    showsChipsRow(model.chipsFor(w, withBranch), w, withPr);
+
   it("has no row with no chips", () => {
-    assert.equal(showsChipsRow(ws("x"), true, true), false);
-    assert.equal(showsChipsRow(ws("x"), true, false), false);
-    assert.equal(showsChipsRow(undefined, true, false), false);
+    assert.equal(shows(ws("x"), true, true), false);
+    assert.equal(shows(ws("x"), true, false), false);
+    assert.equal(shows(undefined, true, false), false);
   });
 
   it("drops the row on a full card whose only chip is the PR, which has a line of its own", () => {
     const w = ws("x", { pr: { number: 7, status: "open" } });
-    assert.equal(showsChipsRow(w, true, true), true);
-    assert.equal(showsChipsRow(w, true, false), false);
+    assert.equal(shows(w, true, true), true);
+    assert.equal(shows(w, true, false), false);
   });
 
   it("keeps the row for a branch or ports chip", () => {
-    assert.equal(showsChipsRow(ws("x", { pr: { number: 7 }, branch: "feat" }), true, false), true);
-    assert.equal(showsChipsRow(ws("x", { ports: [5173] }), true, false), true);
+    assert.equal(shows(ws("x", { pr: { number: 7 }, branch: "feat" }), true, false), true);
+    assert.equal(shows(ws("x", { ports: [5173] }), true, false), true);
   });
 
   it("leaves the branch out when the card does", () => {
-    assert.equal(showsChipsRow(ws("x", { branch: "feat" }), false, false), false);
+    assert.equal(shows(ws("x", { branch: "feat" }), false, false), false);
+  });
+
+  it("agrees with hasChipsRow when the PR chip is in the row", () => {
+    for (const w of [ws("a"), ws("b", { pr: { number: 7 } }), ws("c", { branch: "feat" }), ws("d", { ports: [80] })]) {
+      assert.equal(shows(w, true, true), model.hasChipsRow(w, true));
+    }
   });
 });

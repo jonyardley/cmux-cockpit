@@ -4,7 +4,6 @@
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
-import { showsChipsRow } from "../chips.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import { hasChipsRow } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
@@ -75,12 +74,7 @@ function fullCard(w: WsAccessor, key: string): View {
             .truncation("tail")
             .frame({ maxWidth: "infinity", alignment: "leading" }),
       ),
-      // Behind a when(), so a card with no chips has no empty row and no gap above it.
-      when(
-        "chips-row",
-        () => showsChipsRow(w(), true, false),
-        () => chipsRow(w, true, false),
-      ),
+      chipsRow(w, true, false),
       progressBar(w, "full-progress"),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
@@ -106,11 +100,17 @@ export function compactCard(w: WsAccessor, key: string): View {
         helpers(w, 11.5),
         // The one part that gives way: the status and helpers hold priority
         // 2, so on a narrow card the PR text is cut and the status and time show.
-        Text(() => compactPrText(w()))
-          .font(11.5)
-          .color(() => prTextColor(pr(), C.secondary))
-          .lineLimit(1)
-          .truncation("tail"),
+        // Behind a when(), so a card with no PR has no slot and no gap after the status.
+        when(
+          "compact-pr",
+          () => !!pr(),
+          () =>
+            Text(() => compactPrText(pr()))
+              .font(11.5)
+              .color(() => prTextColor(pr(), C.secondary))
+              .lineLimit(1)
+              .truncation("tail"),
+        ),
         // Left-aligned by the frame, not a Spacer, as on the full card.
       ]).frame({ maxWidth: "infinity", alignment: "leading" }),
       // Compact cards have no chips row, so a Ready one in Background takes
