@@ -1,10 +1,10 @@
 // The PR chip's palette, one copy for both sidebars so a PR reads the same
-// in each. Hue on the chip says what the PR needs: red failing or in
-// conflict (the chip's word tells the two apart), blue running
-// (the Checks block's pending dot and the working dot are blue too), green
-// ready, and only ready (issue #82): a plain open PR with no verdict is
-// neutral, so green never claims a PR is ready when it is not. A quiet
-// merged PR stays purple, an open draft slate, and anything else neutral.
+// in each. A filled hue says what the PR needs: red failing or in conflict
+// (the chip's word tells the two apart), blue running (the Checks block's
+// pending dot and the working dot are blue too), and ready to merge in
+// solid GitHub green with white words, the loudest chip. Only ready is green
+// (issue #82): a plain open PR with no verdict is neutral. A quiet merged PR stays purple, an open draft slate,
+// and anything else neutral.
 
 import type { PrHealth, PrSummary } from "./prs.ts";
 
@@ -21,11 +21,16 @@ export const MERGED_CHIP: ChipColors = { bg: "#EFEAF7", fg: "#5B3E91", edge: "#D
 
 const FAILING_CHIP: ChipColors = { bg: "#F8E4E2", fg: "#9E2F27", edge: "#EDC9C5" };
 
+/** Ready's green as words on a card, where the chip's white would vanish. */
+export const READY_INK = "#1A7F37";
+
+const READY_CHIP: ChipColors = { bg: "#1F883D", fg: "#FFFFFF", edge: READY_INK };
+
 const HEALTH_CHIP: Record<Exclude<PrHealth, "quiet">, ChipColors> = {
   failing: FAILING_CHIP,
   conflicts: FAILING_CHIP,
   running: { bg: "#E6EEF8", fg: "#2F5690", edge: "#CCDBEF" },
-  ready: { bg: "#DCEBCF", fg: "#2F4A1C", edge: "#BFD9A9" },
+  ready: READY_CHIP,
 };
 
 const DRAFT_CHIP: ChipColors = { bg: "#ECEFF3", fg: "#4A5566", edge: "#D9DEE6" };
@@ -41,6 +46,20 @@ export function prChipColors(health: PrHealth, status: PrStatus | undefined, dra
   if (status === "open" && draft) return DRAFT_CHIP;
   return status === "merged" ? MERGED_CHIP : NEUTRAL_CHIP;
 }
+
+/**
+ * A PR's health as words outside a chip: the chip's own ink, bar ready,
+ * whose chip ink is white on its fill.
+ */
+export const prInk = (health: PrHealth, status: PrStatus | undefined): string =>
+  health === "ready" ? READY_INK : prChipColors(health, status).fg;
+
+/**
+ * A chip's colours while its data may be stale and the chip is dimmed: the
+ * solid ready chip drops to neutral, since white on a half-faded green
+ * cannot be read, and a stale verdict should not shout.
+ */
+export const dimmedColors = (c: ChipColors, dim: boolean): ChipColors => (dim && c === READY_CHIP ? NEUTRAL_CHIP : c);
 
 /** The colours for a PR as a view shows it (shared/prs.ts, or a chip carrying its fields); neutral without one. */
 export const summaryColors = (pr: Pick<PrSummary, "health" | "status" | "draft"> | undefined): ChipColors =>

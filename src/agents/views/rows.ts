@@ -2,7 +2,7 @@
 // A capped list ends in a quiet "+N more" row (issue #80) that opens it (#109).
 
 import type { Last } from "../../shared/list.ts";
-import { prChipColors } from "../../shared/pr-colors.ts";
+import { dimmedColors, prChipColors } from "../../shared/pr-colors.ts";
 import { chip, meta, openIfUrl } from "../../shared/ui.ts";
 import {
   type MadeEntry,
@@ -33,7 +33,7 @@ export function prRow(e: () => Last<PrEntry>): View {
   const p = () => e().pr;
   const colors = () => {
     const h = prChipHealth(e());
-    return prChipColors(h.health, p().status, h.draft);
+    return dimmedColors(prChipColors(h.health, p().status, h.draft), prDim(e()));
   };
   const row = HStack({ spacing: 10 }, [
     Text(() => "#" + (p().number ?? ""))

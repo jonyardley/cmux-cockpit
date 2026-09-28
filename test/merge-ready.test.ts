@@ -34,7 +34,7 @@ const r = installRenderer();
 const { group, ws } = await import("./support/fixtures.ts");
 const model = await import("../src/cockpit/model.ts");
 const { C } = await import("../src/cockpit/theme.ts");
-const { prChipColors } = await import("../src/shared/pr-colors.ts");
+const { READY_INK } = await import("../src/shared/pr-colors.ts");
 
 function setup(): void {
   r.data.epoch += 100;
@@ -101,10 +101,10 @@ describe("headerHint", () => {
     assert.deepEqual(model.headerHint("review", true), { text: "Drop here", color: C.heading });
   });
 
-  it("gives the merge line in the ready PR chip's green, not the agent's Ready green", () => {
+  it("gives the merge line in ready's green, not the agent's Ready green", () => {
     const hint = model.headerHint("review", false);
     assert.equal(hint.text, "2 ready to merge");
-    assert.equal(hint.color, prChipColors("ready", "open").fg);
+    assert.equal(hint.color, READY_INK);
     assert.notEqual(hint.color, C.greenText);
   });
 

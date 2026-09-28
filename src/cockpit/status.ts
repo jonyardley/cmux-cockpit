@@ -4,7 +4,7 @@
 import { mostActive } from "../shared/activity.ts";
 import { agentsOf, askReason, hasRealAsk } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
-import { prChipColors } from "../shared/pr-colors.ts";
+import { prInk } from "../shared/pr-colors.ts";
 import type { PrSummary } from "../shared/prs.ts";
 import { quietSince, quietSuffix } from "../shared/quiet.ts";
 import { liveRunCount } from "../shared/subagents.ts";
@@ -157,7 +157,7 @@ export function compactPrText(pr: Pick<PrSummary, "text"> | undefined): string {
  * when it has something to say, else the density's own quiet colour.
  */
 export function prTextColor(pr: Pick<PrSummary, "health" | "status"> | undefined, quiet: string): string {
-  return !pr || pr.health === "quiet" ? quiet : prChipColors(pr.health, pr.status).fg;
+  return !pr || pr.health === "quiet" ? quiet : prInk(pr.health, pr.status);
 }
 
 // --- the card's second line (issue #47) ----------------------------------------------
