@@ -4,10 +4,11 @@
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
+import { showsChipsRow } from "../chips.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import { hasChipsRow } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
-import { ageOf, cardDetail, helperText, progressFraction, prTextColor, readyPrText } from "../status.ts";
+import { ageOf, cardDetail, compactPrText, helperText, progressFraction, prTextColor } from "../status.ts";
 import { C } from "../theme.ts";
 import {
   cardChrome,
@@ -51,21 +52,6 @@ function helpers(w: WsAccessor, size: number): View {
   ).layoutPriority(2);
 }
 
-// A Ready card's PR after "Finished 6m ago" ("· PR #45 is green"), in the
-// PR's health colour. Behind a when(), so it takes no slot otherwise.
-function readyPr(w: WsAccessor, size: number): View {
-  const text = computed(() => readyPrText(w()));
-  return when(
-    "ready-pr",
-    () => !!text(),
-    () =>
-      Text(text)
-        .font(size)
-        .color(() => prTextColor(prSummary(w()), C.tertiary))
-        .lineLimit(1),
-  ).layoutPriority(2);
-}
-
 function fullCard(w: WsAccessor, key: string): View {
   // Read by the when() and its Text, so the message is worked out once per change.
   const detail = computed(() => cardDetail(w()));
@@ -73,7 +59,8 @@ function fullCard(w: WsAccessor, key: string): View {
     glyph(w, 26, 8, 12),
     VStack({ alignment: "leading", spacing: 4 }, [
       titleRow(w, 13.5),
-      HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12), readyPr(w, 12)])
+      // No PR words here, Ready or not: the PR line below carries them (issue #79).
+      HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12)])
         // Left-aligned by the frame, not a Spacer, as the chips row is.
         .frame({ maxWidth: "infinity", alignment: "leading" }),
       prLine(w, 11.5),
@@ -88,7 +75,12 @@ function fullCard(w: WsAccessor, key: string): View {
             .truncation("tail")
             .frame({ maxWidth: "infinity", alignment: "leading" }),
       ),
-      chipsRow(w, true, false),
+      // Behind a when(), so a card with no chips has no empty row and no gap above it.
+      when(
+        "chips-row",
+        () => showsChipsRow(w(), true, false),
+        () => chipsRow(w, true, false),
+      ),
       progressBar(w, "full-progress"),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
@@ -104,10 +96,6 @@ function fullCard(w: WsAccessor, key: string): View {
 // message stays on the full card.
 export function compactCard(w: WsAccessor, key: string): View {
   const pr = computed(() => prSummary(w()));
-  const prText = () => {
-    const t = pr()?.text;
-    return t ? "· " + t : "";
-  };
   const body = HStack({ spacing: 9 }, [
     glyph(w, 22, 7, 11),
     VStack({ alignment: "leading", spacing: 3 }, [
@@ -116,11 +104,13 @@ export function compactCard(w: WsAccessor, key: string): View {
         statusDot(w, 6),
         statusLabel(w, 11.5, "regular"),
         helpers(w, 11.5),
-        Text(prText)
+        // The one part that gives way: the status and helpers hold priority
+        // 2, so on a narrow card the PR text is cut and the status and time show.
+        Text(() => compactPrText(w()))
           .font(11.5)
           .color(() => prTextColor(pr(), C.secondary))
           .lineLimit(1)
-          .layoutPriority(2),
+          .truncation("tail"),
         // Left-aligned by the frame, not a Spacer, as on the full card.
       ]).frame({ maxWidth: "infinity", alignment: "leading" }),
       // Compact cards have no chips row, so a Ready one in Background takes

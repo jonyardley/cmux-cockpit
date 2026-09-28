@@ -26,6 +26,7 @@ const { agent, group, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
 const state = await import("../src/cockpit/state.ts");
 const model = await import("../src/cockpit/model.ts");
+const { showsChipsRow } = await import("../src/cockpit/chips.ts");
 const needs = await import("../src/shared/needs.ts");
 
 const now = () => r.data.epoch;
@@ -141,24 +142,26 @@ describe("a Ready card", () => {
   });
 });
 
-describe("readyPrText", () => {
+describe("a Ready card's PR words (issue #79)", () => {
   const withPr = (id: string) => readyWs(id, { branch: "feat" });
 
-  it("says a green PR is green", () => {
-    assert.equal(status.readyPrText(withPr("green")), "· PR #45 is green");
+  it("leaves the PR out of the status line, since the PR line carries it", () => {
+    assert.equal(status.statusLine(withPr("green")), "Finished 6m ago");
+    assert.equal(status.statusLine(withPr("failing")), "Finished 6m ago");
   });
 
-  it("says anything else in the chip's own words", () => {
-    assert.equal(status.readyPrText(withPr("failing")), "· PR #46 · 1 failing");
-    assert.equal(status.readyPrText(withPr("running")), "· PR #47 · running");
-    assert.equal(status.readyPrText(withPr("draft")), "· PR #48 · draft");
-    assert.equal(status.readyPrText(withPr("open")), "· PR #49");
-    assert.equal(status.readyPrText(readyWs("m", { pr: { number: 50, status: "merged" } })), "· PR #50 · merged");
+  it("keeps the PR on a compact card, in the chip's own words", () => {
+    assert.equal(status.compactPrText(withPr("green")), "· #45 · ready");
+    assert.equal(status.compactPrText(withPr("failing")), "· #46 · 1 failing");
+    assert.equal(status.compactPrText(withPr("running")), "· #47 · running");
+    assert.equal(status.compactPrText(withPr("draft")), "· #48 · draft");
+    assert.equal(status.compactPrText(withPr("open")), "· #49");
+    assert.equal(status.compactPrText(readyWs("m", { pr: { number: 50, status: "merged" } })), "· #50 · merged");
   });
 
-  it("is empty without a PR or off a Ready card", () => {
-    assert.equal(status.readyPrText(readyWs("none")), "");
-    assert.equal(status.readyPrText(ws("green", { branch: "feat", unread: 0, agents: [finished("idle")] })), "");
+  it("is empty without a PR", () => {
+    assert.equal(status.compactPrText(readyWs("none")), "");
+    assert.equal(status.compactPrText(undefined), "");
   });
 });
 
@@ -171,6 +174,8 @@ describe("To review", () => {
     r.data.workspaces = [w];
     assert.equal(model.canFileForReview(w), true);
     assert.equal(model.hasChipsRow(w, true), true);
+    // The action alone keeps the full card's row, with no chip at all.
+    assert.equal(showsChipsRow(w, true, false), true);
     model.fileForReview(w);
     assert.deepEqual(r.calls.at(-1), {
       method: "workspace.group.add",
