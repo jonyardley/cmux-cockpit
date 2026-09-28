@@ -6,12 +6,14 @@ const r = installRenderer();
 const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/activity.ts");
 const { glyphColor } = await import("../src/shared/contrast.ts");
 const { markLast } = await import("../src/shared/list.ts");
-const { prChipColors } = await import("../src/shared/pr-colors.ts");
+const { NEUTRAL_CHIP, prChipColors, summaryColors } = await import("../src/shared/pr-colors.ts");
 const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, nextIn, projectId, projectOf } = await import(
   "../src/shared/projects.ts"
 );
 const { cleanTitle, oneLine, readable, tracked } = await import("../src/shared/text.ts");
 const { fmtAge, fmtElapsed, nowEpoch } = await import("../src/shared/time.ts");
+const { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } = await import("../src/shared/words.ts");
+const { P, STATUS_TEXT } = await import("../src/shared/palette.ts");
 const { agent } = await import("./support/fixtures.ts");
 
 describe("cleanTitle", () => {
@@ -251,8 +253,18 @@ describe("prChipColors", () => {
     assert.equal(prChipColors("ready", "open").fg, "#2F4A1C");
   });
 
-  it("keeps the status colour while quiet, and is neutral with no status", () => {
-    assert.equal(prChipColors("quiet", "open").fg, "#3F5A2C");
+  it("is green only when genuinely ready: a plain open PR stays neutral (issue #82)", () => {
+    const ready = prChipColors("ready", "open");
+    assert.notDeepEqual(prChipColors("quiet", "open"), ready);
+    assert.deepEqual(prChipColors("quiet", "open"), prChipColors("quiet", "closed"));
+    assert.deepEqual(prChipColors("quiet", "open"), NEUTRAL_CHIP);
+    // Only a ready health turns a chip green, whatever else the PR says.
+    for (const h of ["failing", "conflicts", "running", "quiet"] as const)
+      for (const st of ["open", "merged", "closed", undefined] as const)
+        assert.notDeepEqual(prChipColors(h, st), ready, h + " " + String(st));
+  });
+
+  it("keeps merged purple while quiet, and is neutral with no status", () => {
     assert.equal(prChipColors("quiet", "merged").fg, "#5B3E91");
     assert.deepEqual(prChipColors("quiet", undefined), prChipColors("quiet", "closed"));
     assert.deepEqual(prChipColors("quiet", undefined), { bg: "#F4F2EA", fg: "#4A4945", edge: "#E8E5DA" });
@@ -265,5 +277,40 @@ describe("prChipColors", () => {
     assert.notDeepEqual(draft, prChipColors("quiet", "closed"));
     assert.deepEqual(prChipColors("quiet", "merged", true), prChipColors("quiet", "merged"));
     assert.deepEqual(prChipColors("failing", "open", true), prChipColors("failing", "open"));
+  });
+});
+
+describe("summaryColors", () => {
+  it("reads a summary's health, status and draft, and is neutral without one", () => {
+    assert.deepEqual(summaryColors(undefined), NEUTRAL_CHIP);
+    const base = { number: 1, url: undefined, tag: "#1", text: "#1", state: "open", title: "" };
+    assert.deepEqual(
+      summaryColors({ ...base, status: "open", health: "ready", draft: false }),
+      prChipColors("ready", "open"),
+    );
+    assert.deepEqual(
+      summaryColors({ ...base, status: "open", health: "quiet", draft: true }),
+      prChipColors("quiet", "open", true),
+    );
+  });
+});
+
+describe("status words (issue #82)", () => {
+  it("says Finished for an ended agent, never Done or Ended", () => {
+    assert.equal(STATUS_WORD.ended, "Finished");
+    assert.deepEqual(Object.values(STATUS_WORD), ["Your turn", "Working", "Idle", "Finished"]);
+    assert.equal(ASKING_WORD, "Asking");
+    assert.equal(NO_AGENT_WORD, "No agent");
+  });
+
+  it("puts the age after the word, and leaves the word alone without one", () => {
+    assert.equal(withAge("Finished", "3m"), "Finished 3m");
+    assert.equal(withAge("Finished", ""), "Finished");
+  });
+
+  it("gives each status one text colour, the finished green for ended", () => {
+    assert.equal(STATUS_TEXT.ended, P.greenText);
+    assert.equal(STATUS_TEXT.working, P.blueText);
+    assert.equal(STATUS_TEXT.needs_input, P.clayText);
   });
 });

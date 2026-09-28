@@ -1,33 +1,21 @@
-// Agents panel colour tokens and status styling.
+// Agents panel colour tokens and status styling. The ink, state hues and
+// unread badge come from shared/palette.ts, so they read the same in the
+// cockpit.
 
 import type { CheckState } from "../../scripts/state-config.ts";
-import { type ChipColors, prChipColors } from "../shared/pr-colors.ts";
+import { P } from "../shared/palette.ts";
 
 export const T = {
+  ...P,
   ground: "#F6F4EC",
   panel: "#FFFFFF",
   panelEdge: "#1414131A",
   rule: "#F0EEE6",
-  text: "#141413",
-  secondary: "#5E5D59",
-  tertiary: "#73726C",
-  metaText: "#6B6A64",
   countBg: "#E5E2D6",
-  clay: "#D97757",
-  clayText: "#A34A2A",
   clayButton: "#B5532F",
   clayButtonHover: "#9E4727",
-  /** Text and figures on a clay face: the Answer button and the unread badge. */
+  /** Text on a clay face: the Answer button. */
   onClay: "#FFFFFF",
-  blue: "#3B6FB6",
-  blueHalo: "#3B6FB62E",
-  clayHalo: "#D9775738",
-  /** Asking (issue #81): stopped on a permission or a question. Clay stays "your turn". */
-  amber: "#D9A03F",
-  amberText: "#8A5A0B",
-  amberHalo: "#D9A03F38",
-  grey: "#A09E95",
-  red: "#C0453A",
   hover: "#7f7f7f0F",
   /** The faint face behind the agent's latest message on the card. */
   quote: "#1414130A",
@@ -40,23 +28,12 @@ export const STATUS_DOT: Record<AgentStatus, string> = {
   needs_input: T.clay,
   working: T.blue,
   idle: T.grey,
-  ended: "#788C5D",
-};
-
-// Status in words for the card, board 2's "Working for 12m".
-export const STATUS_TEXT: Record<AgentStatus, string> = {
-  needs_input: T.clayText,
-  working: "#2F5690",
-  idle: T.secondary,
-  ended: "#4E6A3A",
+  ended: T.green,
 };
 
 // A CI check's dot on the card: board 1's green pass, red fail, blue running.
 export const CHECK_DOT: Record<CheckState, string> = {
-  pass: STATUS_DOT.ended,
+  pass: T.green,
   fail: T.red,
   pending: T.blue,
 };
-
-/** A port chip: the neutral chip colours (shared/pr-colors.ts's quiet closed). */
-export const PORT_CHIP: ChipColors = prChipColors("quiet", undefined);

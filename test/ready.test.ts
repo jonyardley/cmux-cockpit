@@ -78,7 +78,7 @@ describe("isReady", () => {
     const fresh = agent("idle", { sinceEpoch: now() - 30 });
     const w = readyWs("pair", { agents: [finished("ended", 600), fresh] });
     assert.equal(status.isReady(w), true);
-    assert.equal(status.statusLine(w), "Finished 10m ago");
+    assert.equal(status.statusLine(w), "Finished 10m");
   });
 
   it("needs the agent to have worked: no recorded activity is not a finished run", () => {
@@ -107,7 +107,7 @@ describe("isReady", () => {
     assert.equal(needs.hasRealAsk(w), false);
     assert.equal(status.isReady(w), true);
     // The idle spell began when the turn ended, not when the nudge landed.
-    assert.equal(status.statusLine(w), "Finished 6m ago");
+    assert.equal(status.statusLine(w), "Finished 6m");
   });
 
   it("is false with no workspace or no agent", () => {
@@ -117,9 +117,9 @@ describe("isReady", () => {
 });
 
 describe("a Ready card", () => {
-  it("says when it finished, in the done green", () => {
+  it("says when it finished, in the finished green", () => {
     const w = readyWs();
-    assert.equal(status.statusLine(w), "Finished 6m ago");
+    assert.equal(status.statusLine(w), "Finished 6m");
     const info = status.statusInfo(w);
     assert.equal(info.label, "Finished");
     assert.equal(info.dot, "#788C5D");
@@ -133,7 +133,7 @@ describe("a Ready card", () => {
 
   it("keeps the plain labels once read", () => {
     assert.equal(status.statusLine(readyWs("w", { unread: 0 })), "Idle 6m");
-    assert.equal(status.statusLine(readyWs("w", { unread: 0, agents: [finished("ended")] })), "Done 6m");
+    assert.equal(status.statusLine(readyWs("w", { unread: 0, agents: [finished("ended")] })), "Finished 6m");
   });
 
   it("hides the unread badge behind the pill, and shows it otherwise", () => {
@@ -147,8 +147,8 @@ describe("a Ready card's PR words (issue #79)", () => {
   const withPr = (id: string) => readyWs(id, { branch: "feat" });
 
   it("leaves the PR out of the status line, since the PR line carries it", () => {
-    assert.equal(status.statusLine(withPr("green")), "Finished 6m ago");
-    assert.equal(status.statusLine(withPr("failing")), "Finished 6m ago");
+    assert.equal(status.statusLine(withPr("green")), "Finished 6m");
+    assert.equal(status.statusLine(withPr("failing")), "Finished 6m");
   });
 
   it("keeps the PR on a compact card, in the chip's own words", () => {

@@ -4,12 +4,12 @@
 
 import { dismissNeeds } from "../../shared/needs.ts";
 import { displayTitle } from "../../shared/titles.ts";
-import { haloDot, when } from "../../shared/ui.ts";
+import { haloDot, meta, ring, sectionTitle, when } from "../../shared/ui.ts";
 import { jumpNext, needsList, needsMore, needsShown, nextStep } from "../model.ts";
 import { selectWorkspace } from "../state.ts";
 import { ageOf, needsDetail, needsRowEdge, statusInfo } from "../status.ts";
 import { C } from "../theme.ts";
-import { cardMenu, glyphButton, meta, ring, type WsAccessor } from "./parts.ts";
+import { cardMenu, glyphButton, type WsAccessor } from "./parts.ts";
 
 function needsRow(w: WsAccessor): View {
   // One status per change, read by the dot and its halo.
@@ -115,7 +115,7 @@ export function needsStrip(): View {
           VStack({ alignment: "leading", spacing: 6 }, [
             HStack({ spacing: 7 }, [
               Image("bell.fill").font(10).color(C.clayText),
-              Text("NEEDS YOU").font(10.5).weight("semibold").color(C.clayText),
+              sectionTitle("NEEDS YOU", C.clayText),
               Spacer(),
               Text(() => String(needsList().length))
                 .font(10.5)

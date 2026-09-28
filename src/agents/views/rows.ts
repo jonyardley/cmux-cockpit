@@ -5,7 +5,7 @@ import type { Last } from "../../shared/list.ts";
 import { prChipColors } from "../../shared/pr-colors.ts";
 import { readable } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
-import { when } from "../../shared/ui.ts";
+import { chip, meta, when } from "../../shared/ui.ts";
 import {
   idleOpen,
   type MadeEntry,
@@ -22,7 +22,7 @@ import {
   setIdleOpen,
 } from "../model.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
-import { glyph, idleRing, jump, meta, openIfUrl, ring, ruled, statusDot } from "./parts.ts";
+import { glyph, idleRing, jump, openIfUrl, ruled, statusDot } from "./parts.ts";
 
 function runningRow(e: () => Last<RosterEntry>): View {
   const w = () => e().ws;
@@ -172,20 +172,7 @@ export function prRow(e: () => Last<PrEntry>): View {
     Spacer({ minLength: 4 }),
     // Stale rides inside the chip: an empty sibling Text would still cost
     // its HStack spacing and squeeze the title.
-    ring(
-      Text(() => prChipText(e()))
-        .font(11)
-        .weight("medium")
-        .lineLimit(1)
-        .paddingHorizontal(6)
-        .paddingVertical(1)
-        .color(() => colors().fg),
-      () => colors().bg,
-      () => colors().edge,
-      1,
-      6,
-      true,
-    )
+    chip(() => prChipText(e()), colors)
       .opacity(() => (prDim(e()) ? STALE_OPACITY : 1))
       .layoutPriority(2),
   ])

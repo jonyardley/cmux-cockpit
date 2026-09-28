@@ -7,6 +7,7 @@ import { byActivity, sinceOrActivity } from "../shared/activity.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
+import { STATUS_TEXT } from "../shared/palette.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
 import {
   checksOf,
@@ -24,7 +25,8 @@ import { cardMessage, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
-import { CHECK_DOT, STATUS_DOT, STATUS_TEXT, T } from "./theme.ts";
+import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } from "../shared/words.ts";
+import { CHECK_DOT, STATUS_DOT, T } from "./theme.ts";
 
 export interface AgentEntry {
   key: string;
@@ -227,19 +229,9 @@ function statusSince(a: Agent): number | undefined {
   return a.status === "idle" || a.status === "ended" ? a.lastActivityAt : (a.sinceEpoch ?? a.lastActivityAt);
 }
 
-const STATUS_WORD: Record<AgentStatus, string> = {
-  needs_input: "your turn",
-  working: "working",
-  idle: "idle",
-  ended: "ended",
-};
-
-/** Short form for agent rows, with the rows' coarse age: "working 12m", "asking 2m". */
+/** Short form for agent rows, the card head's words in lower case: "working 12m", "finished 3m". */
 export function statusLine(a: Agent | null, w: Workspace = cur().ws): string {
-  if (!a) return "";
-  const age = sinceAge(a);
-  const word = isAsking(a, w) ? "asking" : (STATUS_WORD[a.status] ?? a.status);
-  return word + (age ? " " + age : "");
+  return a ? withAge(statusWord(a, w).toLowerCase(), sinceAge(a)) : "";
 }
 
 /** The one age format the card shows: "<1m", "12m", counted from the
@@ -256,21 +248,14 @@ export function rosterAge(e: RosterEntry): string {
   return e.kind === "run" ? ageSince(e.a.sinceEpoch) : ageSince(e.a.lastActivityAt);
 }
 
-const HEAD_WORD: Record<AgentStatus, string> = {
-  needs_input: "Your turn",
-  working: "Working",
-  idle: "Idle",
-  ended: "Ended",
-};
-
-/** The card head's status: "Working 14m", "Asking 2m", "Ended 3m ago", "No agent". */
+/** The card head's status, in the words the cockpit uses: "Working 14m", "Asking 2m", "Finished 3m", "No agent". */
 export function headStatus(a: Agent | null, w: Workspace = cur().ws): string {
-  if (!a) return "No agent";
-  const word = isAsking(a, w) ? "Asking" : (HEAD_WORD[a.status] ?? a.status);
-  const age = sinceAge(a);
-  if (!age) return word;
-  return a.status === "ended" ? word + " " + age + " ago" : word + " " + age;
+  return a ? withAge(statusWord(a, w), sinceAge(a)) : NO_AGENT_WORD;
 }
+
+// The shared word for the agent's status, Asking while it asks.
+const statusWord = (a: Agent, w: Workspace): string =>
+  isAsking(a, w) ? ASKING_WORD : (STATUS_WORD[a.status] ?? a.status);
 
 // The card's details
 
