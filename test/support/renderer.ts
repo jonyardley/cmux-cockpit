@@ -59,10 +59,18 @@ function evaluate(arg: unknown): void {
   }
 }
 
+/**
+ * Every modifier called on any view, in call order. A test that cares about
+ * the order of modifiers (a frame before a background) empties it, builds,
+ * then reads it.
+ */
+export const modifiers: string[] = [];
+
 function view(): View {
   const node: View = new Proxy(() => undefined, {
     get: (_target, prop) => {
       return (...args: unknown[]) => {
+        modifiers.push(String(prop));
         if (!HANDLERS.has(String(prop))) for (const a of args) evaluate(a);
         return node;
       };
