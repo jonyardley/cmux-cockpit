@@ -132,8 +132,8 @@ const lastAsked = new Map<string, string>();
  * message (issue #80); "" when there is none worth reading. */
 export const askedLine = computed((): string => {
   const w = cur().ws;
+  if (isHarnessTurn(w.latestPrompt)) return lastAsked.get(w.id) ?? "";
   const t = readable(w.latestPrompt);
-  if (isHarnessTurn(t)) return lastAsked.get(w.id) ?? "";
   if (t) lastAsked.set(w.id, t);
   return t;
 });

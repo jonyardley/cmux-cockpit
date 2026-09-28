@@ -140,9 +140,10 @@ describe("cardMessage (shared/text)", () => {
     assert.equal(cardMessage(ws("a", { latestMessage: "Fix the build", latestPrompt: " Fix  the build " })), "");
   });
 
-  it("never counts a harness turn as the prompt it echoes (#103)", () => {
-    const frame = "[Subagent hand-back] done two";
-    assert.equal(cardMessage(ws("a", { latestMessage: frame, latestPrompt: frame })), frame);
+  it("hides a harness turn, open or cut short (#103)", () => {
+    const open = '<agent-message from="a1"> [Subagent hand-back] The text below is the final report…';
+    assert.equal(cardMessage(ws("a", { latestMessage: open, latestPrompt: open })), "");
+    assert.equal(cardMessage(ws("a", { latestMessage: open, latestPrompt: "spawn" })), "");
   });
 
   it("keeps a message that differs from the prompt, or has no prompt", () => {
@@ -715,6 +716,25 @@ describe("askedLine (#80)", () => {
       }),
     ];
     assert.equal(m.askedLine(), "");
+  });
+
+  it("keeps Jon's prompt through the tagged turns cmux cuts to 240 characters", () => {
+    r.data.workspaces = [ws("cut", { selected: true, latestPrompt: "spawn" })];
+    assert.equal(m.askedLine(), "spawn");
+    r.data.workspaces = [
+      ws("cut", {
+        selected: true,
+        latestPrompt: '<agent-message from="a1"> [Subagent hand-back] The text below is the final report…',
+      }),
+    ];
+    assert.equal(m.askedLine(), "spawn");
+    r.data.workspaces = [
+      ws("cut", {
+        selected: true,
+        latestPrompt: "<task-notification> <task-id>a1</task-id> <output-file>/private/tmp/tasks/a1.output…",
+      }),
+    ];
+    assert.equal(m.askedLine(), "spawn");
   });
 
   it("treats an interrupt or an artifact comment as a harness turn", () => {
