@@ -56,7 +56,9 @@ export const prFreshness = (now: number): PrFreshness => freshnessOf(SAVED_STATE
 
 /** The line a sidebar shows in place of looking empty when the saved state could not be read; "" otherwise. */
 export function stateNoticeFor(unreadable: boolean): string {
-  return unreadable ? "Saved state could not be read: dismissals, projects and PRs are missing" : "";
+  return unreadable
+    ? "Saved state could not be read and was reset. The old file is config/state.json.unreadable.bak"
+    : "";
 }
 
 /** stateNoticeFor this build's state file. */

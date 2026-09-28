@@ -702,9 +702,22 @@ describe("the PR rows' source", () => {
 });
 
 describe("emptyNote (#80)", () => {
-  it("names both when the selected workspace has no subagents and nothing was published", () => {
-    r.data.workspaces = [ws("sel", { selected: true })];
+  it("names both when the selected workspace's agent has no subagents and nothing was published", () => {
+    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("working")] })];
     assert.equal(m.emptyNote(), "No subagents or published links yet");
+  });
+
+  it("claims no subagents only while the selected workspace has a live agent", () => {
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.equal(m.emptyNote(), "No published links yet");
+    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("ended")] })];
+    assert.equal(m.emptyNote(), "No published links yet");
+  });
+
+  it("claims nothing about published links before the clock's first tick", () => {
+    r.data.epoch = 0;
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.equal(m.emptyNote(), "");
   });
 
   it("names only published links when no workspace is selected", () => {

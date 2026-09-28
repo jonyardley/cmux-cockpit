@@ -19,7 +19,7 @@ globals.__STATE__ = {
   subagents: {},
   published: {},
   ui: {},
-  poll: { okEpoch: NOW - 2 * HOUR, error: "unavailable", errorEpoch: NOW - HOUR },
+  poll: { okEpoch: NOW - 2 * HOUR, error: "unavailable" },
 };
 globals.__STATE_UNREADABLE__ = true;
 
@@ -109,7 +109,10 @@ describe("the saved poll status", () => {
 
 describe("stateNotice", () => {
   it("says the saved state could not be read when the build flagged it", () => {
-    assert.equal(stateNotice(), "Saved state could not be read: dismissals, projects and PRs are missing");
+    assert.equal(
+      stateNotice(),
+      "Saved state could not be read and was reset. The old file is config/state.json.unreadable.bak",
+    );
   });
 
   it("says nothing when the state read fine", () => {

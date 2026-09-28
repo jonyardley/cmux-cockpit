@@ -261,8 +261,10 @@ function currentTitle(): View {
 }
 
 // The status on its own line under the title (Board 1): the dot and its
-// word and age ("Working 14m") in the status colour, then the PR chip on
-// the right when there is one; tapping the chip opens the PR.
+// word and age ("Working 14m") in the status colour, then the PR's state
+// chip ("1 failing", "ready") on the right when there is one, as the card
+// on the left shows it; tapping it opens the PR. A PR with no status has
+// no words, so no empty pill.
 function statusRow(): View {
   const a = () => cur().a;
   const status = () => a()?.status;
@@ -290,7 +292,7 @@ function statusRow(): View {
       () => !!currentPr()?.state,
       () =>
         chip(
-          () => currentPr()?.text ?? "",
+          () => currentPr()?.state ?? "",
           () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
         ).onTap(() => openIfUrl(currentPr()?.url)),
     )
@@ -380,8 +382,8 @@ function detailLine(key: string, label: string, show: () => boolean, value: () =
   );
 }
 
-// The PR line's value: its number, its own title (the part that gives way),
-// then the chip with its worst state, as the card on the left shows it.
+// The PR line's value: its number, then its own title (the part that gives
+// way). The state chip sits on the status line above, so it shows once.
 function prDetail(): View {
   return (
     HStack({ spacing: 6 }, [
@@ -401,18 +403,6 @@ function prDetail(): View {
             .lineLimit(1)
             .truncation("tail"),
       ),
-      // A PR with no status has no words, so no empty pill.
-      when(
-        "cur-pr-state",
-        () => !!currentPr()?.state,
-        () =>
-          chip(
-            () => currentPr()?.state ?? "",
-            () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
-          ),
-      )
-        .opacity(() => (currentPrDim() ? STALE_OPACITY : 1))
-        .layoutPriority(2),
     ])
       // Inside the frame, so only the line's own content opens the PR.
       .onTap(() => openIfUrl(currentPr()?.url))

@@ -59,8 +59,6 @@ export interface SavedPoll {
   okEpoch?: number;
   /** Why the latest run could not reach gh; absent once a run gets through. */
   error?: PollError;
-  /** Epoch seconds that error began, kept while it repeats so a failing poll does not rewrite the file. */
-  errorEpoch?: number;
 }
 
 export type ViewMode = "all" | "projects";
@@ -348,17 +346,13 @@ const UI_KEYS: readonly string[] = ["mode", "collapsed"];
 const POLL_ERRORS: readonly unknown[] = ["unavailable", "signed-out", "missing"];
 const isPollError = (v: unknown): v is PollError => POLL_ERRORS.includes(v);
 
-// Each field stands alone: a bad one is dropped, the others kept. An error
-// time without an error means nothing, so it goes with it. Null when
+// Each field stands alone: a bad one is dropped, the other kept. Null when
 // nothing usable is left, so the key is left out.
 function savedPoll(v: unknown): SavedPoll | null {
   if (!isRecord(v)) return null;
   const poll: SavedPoll = {};
   if (isEpoch(v.okEpoch)) poll.okEpoch = v.okEpoch;
-  if (isPollError(v.error)) {
-    poll.error = v.error;
-    if (isEpoch(v.errorEpoch)) poll.errorEpoch = v.errorEpoch;
-  }
+  if (isPollError(v.error)) poll.error = v.error;
   return Object.keys(poll).length ? poll : null;
 }
 

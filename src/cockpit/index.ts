@@ -20,7 +20,7 @@
 
 import type { ViewMode } from "../../scripts/state-config.ts";
 import { stateNotice } from "../shared/freshness.ts";
-import { when } from "../shared/ui.ts";
+import { faintLine } from "../shared/notice.ts";
 import { handleDragChange, handleMove, isForeignAnchor } from "./drop.ts";
 import { flatEntries, panelMaxHeight, panelOpacity, projectEntries, wsById } from "./model.ts";
 import { C } from "./theme.ts";
@@ -41,20 +41,7 @@ sidebar(() =>
 );
 
 // The unreadable-state line, gone entirely while the state read fine.
-function stateLine(): View {
-  return when(
-    "state-notice",
-    () => !!stateNotice(),
-    () =>
-      Text(stateNotice)
-        .font(11)
-        .color(C.clayText)
-        .lineLimit(2)
-        .paddingHorizontal(14)
-        .paddingVertical(6)
-        .frame({ maxWidth: "infinity", alignment: "leading" }),
-  );
-}
+const stateLine = (): View => faintLine("state-notice", stateNotice, C.clayText, 14).paddingVertical(6);
 
 // Top-aligned, so a zero-height panel's rows overflow downward, unseen.
 function panel(m: ViewMode, content: View): View {

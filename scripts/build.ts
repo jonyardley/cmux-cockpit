@@ -9,11 +9,11 @@
 // config/state.json (gitignored, written by the URL handler) is read the
 // same way and injected as __STATE__, so a sidebar starts from whatever was
 // saved last (docs/state-loop.md), with __STATE_UNREADABLE__ true when the
-// file is there but cannot be read. Its `projects` map, projects made in the
+// file cannot be read, or an unreadable one was kept aside and is still there. Its `projects` map, projects made in the
 // sidebar (issue #9), is merged over the file's table first.
 //   node scripts/build.ts    build once
 
-import { existsSync, readFileSync } from "node:fs";
+import { constants, copyFileSync, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { build } from "esbuild";
 import { mergeProjects, type Project, validateProjects } from "./projects-config.ts";
@@ -57,24 +57,40 @@ function withExpandedRoots(projects: readonly Project[]): readonly Project[] {
 // dismissals and project overrides, not something CI or a clean clone has.
 // A missing file is a clean start; one that is there but cannot be read or
 // is not a JSON object is flagged, so the sidebars say so rather than look
-// empty (issue #78).
+// empty (issue #78). The next write (a poll, a hook, a tap) would replace
+// it with near-empty state and the flag would go with it, so the broken
+// file is first copied aside, never over an earlier copy, and the flag
+// holds while that copy is there: the saved state was lost, and the line
+// stays until Jon has looked at the copy and removed it.
+const STATE_PATH = "config/state.json";
+const BROKEN_COPY = "config/state.json.unreadable.bak";
+
+function keepBrokenCopy(): void {
+  try {
+    copyFileSync(STATE_PATH, BROKEN_COPY, constants.COPYFILE_EXCL);
+    console.warn(`build: kept the unreadable file as ${BROKEN_COPY}`);
+  } catch {
+    // Already kept from an earlier build, or the copy failed: the flag still shows.
+  }
+}
+
+function unreadableState(why: string): { state: State; unreadable: boolean } {
+  console.warn(`build: ${STATE_PATH} ${why}, starting from empty state`);
+  keepBrokenCopy();
+  return { state: emptyState(), unreadable: true };
+}
+
 function loadState(): { state: State; unreadable: boolean } {
-  const path = "config/state.json";
-  if (!existsSync(path)) return { state: emptyState(), unreadable: false };
+  const kept = existsSync(BROKEN_COPY);
+  if (!existsSync(STATE_PATH)) return { state: emptyState(), unreadable: kept };
   let raw: unknown;
   try {
-    raw = JSON.parse(readFileSync(path, "utf8"));
+    raw = JSON.parse(readFileSync(STATE_PATH, "utf8"));
   } catch (err) {
-    console.warn(
-      `build: cannot read or parse ${path}, starting from empty state: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    return { state: emptyState(), unreadable: true };
+    return unreadableState(`cannot be read or parsed (${err instanceof Error ? err.message : String(err)})`);
   }
-  if (!isRecord(raw)) {
-    console.warn(`build: ${path} is not a JSON object, starting from empty state`);
-    return { state: emptyState(), unreadable: true };
-  }
-  return { state: validateState(raw), unreadable: false };
+  if (!isRecord(raw)) return unreadableState("is not a JSON object");
+  return { state: validateState(raw), unreadable: kept };
 }
 
 const { state: saved, unreadable } = loadState();

@@ -51,9 +51,12 @@ rules (`applySet`, `validateState`) and their tests.
 A missing or malformed file reads as empty state; bad entries are dropped,
 never fatal, so a bad write cannot break the build. Each map keeps its newest
 256 entries. A file that is there but cannot be read or parsed, or is not a
-JSON object, is also built as empty state, but the build bakes in
-`__STATE_UNREADABLE__` as well, and both sidebars then show one line saying
-so, so a broken file never passes for nothing saved (#78).
+JSON object, is also built as empty state, but the build copies it to
+`config/state.json.unreadable.bak` (never over an earlier copy) and bakes in
+`__STATE_UNREADABLE__`, and both sidebars then show one line saying so, so
+a broken file never passes for nothing saved (#78). The next write replaces
+the broken file, so the line stays while the copy is there: delete the copy
+once you have looked at it.
 
 The build merges `projects` over `config/projects.json`, and the file wins:
 an in-app project whose match or name is already taken is left out, and so
@@ -163,14 +166,23 @@ sidebar would open, and `validateState` keeps only
 
 `poll` records how the poller's runs went (#78): `okEpoch`, when a run's gh
 lookups last answered, and `error` (`unavailable`, `signed-out` or
-`missing`) with `errorEpoch`, when it began, while gh cannot be reached.
+`missing`) while gh cannot be reached.
 `validateState` keeps each field only when it is well formed, and
 `applySet` refuses `poll` like the PR maps. `src/shared/freshness.ts` reads
 it against the clock: an error, or a last success more than 15 minutes old,
 puts a faint line under the agents panel's Pull requests heading ("gh
 unavailable · last checked 2h ago") and dims the chips of the poller's PRs.
-With no `poll` saved it claims nothing. The poller does not write `poll`
-yet: that needs `writePollMaps` to carry it, which is still to do.
+With no `poll` saved it claims nothing.
+
+`poll` is baked in at build, and a write that changes nothing is skipped,
+so the writer must not stamp `okEpoch` on every run (each run would then
+rebuild and reload both sidebars) nor only on a change of PRs (a quiet
+15 minutes with gh working would then read as stale). It should refresh
+`okEpoch` when the saved one is more than 5 minutes old, and write `error`
+only when it starts or ends. Polls run on agent turn ends and workspace
+selects, so after 15 minutes with neither the line is true: the data is
+that old. The poller does not write `poll` yet: that needs
+`writePollMaps` to carry it, which is still to do.
 
 ## Cost of a save
 

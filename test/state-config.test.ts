@@ -378,19 +378,19 @@ test("labelFrom takes the first usable candidate, else the fallback", () => {
 });
 
 test("validateState keeps a good poll status and drops bad fields one by one (#78)", () => {
-  const good = { okEpoch: 100, error: "unavailable", errorEpoch: 200 };
+  const good = { okEpoch: 100, error: "unavailable" };
   assert.deepEqual(validateState({ poll: good }).poll, good);
   assert.deepEqual(validateState({ poll: { okEpoch: 100 } }).poll, { okEpoch: 100 });
-  // A bad error goes, and its time with it; a good success stays.
-  assert.deepEqual(validateState({ poll: { okEpoch: 100, error: "down", errorEpoch: 200 } }).poll, { okEpoch: 100 });
-  assert.deepEqual(validateState({ poll: { okEpoch: -1, error: "signed-out", errorEpoch: "x" } }).poll, {
+  // A bad error goes and a good success stays, and the other way round.
+  assert.deepEqual(validateState({ poll: { okEpoch: 100, error: "down" } }).poll, { okEpoch: 100 });
+  assert.deepEqual(validateState({ poll: { okEpoch: -1, error: "signed-out", extra: 1 } }).poll, {
     error: "signed-out",
   });
   assert.deepEqual(validateState({ poll: { error: "missing" } }).poll, { error: "missing" });
 });
 
 test("validateState leaves poll out when nothing usable is saved", () => {
-  for (const poll of [undefined, null, [], "x", {}, { okEpoch: "1" }, { errorEpoch: 5 }]) {
+  for (const poll of [undefined, null, [], "x", {}, { okEpoch: "1" }, { error: "down" }]) {
     assert.equal("poll" in validateState({ poll }), false, JSON.stringify(poll));
   }
   assert.equal("poll" in emptyState(), false);

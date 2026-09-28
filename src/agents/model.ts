@@ -273,8 +273,11 @@ export const portChips = computed((): PortChip[] =>
 /** The workspace's PR with its state, as the chip shows it. */
 export const currentPr = computed((): PrSummary | undefined => prSummary(cur().ws));
 
-/** The saved PR data is stale (shared/freshness.ts), read against the clock. */
-const prStale = (): boolean => prFreshness(nowEpoch()).stale;
+/** The saved PR data's freshness (shared/freshness.ts) at the clock, worked
+ * out once a tick for every row, the card chip and the heading's line. */
+const freshness = computed(() => prFreshness(nowEpoch()));
+
+const prStale = (): boolean => freshness().stale;
 
 /** The workspace's PR chip dims while it is the poller's copy and that copy is stale. */
 export const currentPrDim = computed((): boolean => !!currentPr() && fromPoller(cur().ws) && prStale());
@@ -544,7 +547,7 @@ export const prs = computed((): Last<PrEntry>[] => markLastBefore(allPrs().slice
 
 /** The faint line under the Pull requests heading when the saved data is old
  * or gh is down, "gh unavailable · last checked 2h ago"; "" when fresh. */
-export const prNote = computed((): string => prFreshness(nowEpoch()).line);
+export const prNote = computed((): string => freshness().line);
 
 /** A PR row's chip dims while it is the poller's copy and that copy is stale. */
 export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale();
@@ -588,12 +591,13 @@ function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, her
 // The saved pages and docs still fresh, the selected workspace's id with
 // them; none before the clock's first tick, when every entry would
 // otherwise read as fresh.
-function freshMade(): { fresh: SavedPublished[]; workspaces: Workspace[]; selected: string | undefined } {
+// One computed, so the rows and the count read the same list, filtered once.
+const freshMade = computed((): { fresh: SavedPublished[]; workspaces: Workspace[]; selected: string | undefined } => {
   const now = nowEpoch();
   const workspaces = data.workspaces() ?? [];
   const selected = workspaces.find((w) => w.selected)?.id;
   return { fresh: now ? savedPublished(now) : [], workspaces, selected };
-}
+});
 
 /** The Made here rows: the selected workspace's own pages and docs first,
  * newest first, then the latest few from other workspaces. Anything past
@@ -619,11 +623,14 @@ export const madeMore = computed((): number => moreThan(madeCount(), madeHere().
  * The one faint line at the bottom that stands in for empty sections
  * (issue #80): the selected workspace's Subagents, and Made here. Worded
  * for what is actually empty; "" when neither is. Subagents only counts
- * while a workspace is selected, since the block lives on its card.
+ * while the selected workspace has a live agent, since the block lives on
+ * its card and a plain shell has none to run; Made here only once the
+ * clock has ticked, since before that no entry counts as fresh.
  */
 export const emptyNote = computed((): string => {
-  const noSubs = !!current() && subagents().length === 0;
-  const noMade = madeCount() === 0;
+  const live = cur().agents.some((a) => a.status !== "ended");
+  const noSubs = live && subagents().length === 0;
+  const noMade = nowEpoch() > 0 && madeCount() === 0;
   if (noSubs && noMade) return "No subagents or published links yet";
   if (noSubs) return "No subagents yet";
   return noMade ? "No published links yet" : "";

@@ -27,6 +27,7 @@
 //   cmux right-sidebar set custom agents
 
 import { stateNotice } from "../shared/freshness.ts";
+import { faintLine } from "../shared/notice.ts";
 import { when } from "../shared/ui.ts";
 import {
   current,
@@ -55,20 +56,8 @@ function currentSection(): View {
   );
 }
 
-// A faint line of its own, shown only while `text()` has something to say.
-function faintLine(key: string, text: () => string, color: string = T.tertiary): View {
-  return when(
-    key,
-    () => !!text(),
-    () =>
-      Text(text)
-        .font(11)
-        .color(color)
-        .lineLimit(2)
-        .paddingHorizontal(4)
-        .frame({ maxWidth: "infinity", alignment: "leading" }),
-  );
-}
+// A faint note in the panel's quiet colour, lined up with the headings.
+const faintNote = (key: string, text: () => string, color: string = T.tertiary): View => faintLine(key, text, color, 4);
 
 interface ListSection<T extends { key: string; last: boolean }> {
   label: string;
@@ -88,7 +77,7 @@ function listSection<T extends { key: string; last: boolean }>(s: ListSection<T>
   const more = s.more ?? (() => 0);
   return VStack({ spacing: 8, alignment: "leading" }, [
     sectionHeader(s.label, () => String(s.count())),
-    ...(s.note ? [faintLine(s.key + "-note", s.note)] : []),
+    ...(s.note ? [faintNote(s.key + "-note", s.note)] : []),
     when(
       s.key,
       () => s.rows().length > 0,
@@ -108,7 +97,7 @@ function listSection<T extends { key: string; last: boolean }>(s: ListSection<T>
 sidebar(
   () =>
     VStack({ spacing: 18, alignment: "leading" }, [
-      faintLine("state-notice", stateNotice, T.clayText),
+      faintNote("state-notice", stateNotice, T.clayText),
       currentSection(),
       listSection({
         label: "WORKING",
@@ -140,7 +129,7 @@ sidebar(
             more: madeMore,
           }),
       ),
-      faintLine("empty-note", emptyNote),
+      faintNote("empty-note", emptyNote),
       Spacer(),
     ])
       .paddingHorizontal(14)
