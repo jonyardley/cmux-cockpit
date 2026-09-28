@@ -1,5 +1,5 @@
-// Finds the paragraph where a chat first told Jon about a PR it opened, so
-// the agents panel's peek card can quote it.
+// Finds the paragraph where a chat first told Jon about a PR it opened. The
+// peek card that quoted it has gone; nothing in the sidebar reads it yet.
 //
 // Run as a Claude Code Stop hook, once per turn. report-pr.ts records which
 // session opened each PR (config/state.json's `prOrigins`); this hook takes

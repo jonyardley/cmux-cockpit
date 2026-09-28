@@ -398,7 +398,8 @@ under the other form adds a second entry. And an update that names its
 ## Where a PR came from
 
 The agents panel's Pull requests rows say which chat opened each PR, and a
-tap opens a peek card quoting what that chat first said about it. Neither
+tap goes back to that chat; the state pill opens GitHub. The sidebar no
+longer shows the saved `mention` since the peek card went. Neither
 cmux nor GitHub knows either, so two hooks record them in the `prOrigins`
 map: PR link to `{"url", "number", "workspace", "surface", "session",
 "epoch", "mention"}`, oldest first.
@@ -417,10 +418,11 @@ map: PR link to `{"url", "number", "workspace", "surface", "session",
   transcript is not read.
 
 No URL can set the map. A PR opened by hand, or before the hooks were
-installed, has no origin: its row has no "from" line and its card no quote.
-"Show in chat" selects the workspace, focuses the terminal and flashes it;
-cmux has no call that scrolls a terminal to a line, so it cannot land on
-the message itself.
+installed, has no origin: its row has no "from" line and a tap opens
+GitHub, as it does once the chat's workspace has closed. Going back to the
+chat selects the workspace, focuses the terminal and flashes it; cmux has
+no call that scrolls a terminal to a line, so it cannot land on the
+message itself.
 
 ## Asking or your turn
 

@@ -1,5 +1,5 @@
-// The Pull requests rows' "from" line and peek card: which chat opened each
-// PR and what it first said, from the saved prOrigins map. __STATE__ is set
+// The Pull requests rows' "from" line and tap: which chat opened each PR,
+// from the saved prOrigins map, and going back to it. __STATE__ is set
 // before the renderer import, as in made-here.test.ts.
 
 import assert from "node:assert/strict";
@@ -60,6 +60,7 @@ const entry = (n: number) => {
 beforeEach(() => {
   r.data.epoch = NOW;
   r.calls.length = 0;
+  r.opened.length = 0;
   r.data.workspaces = [
     ws("here", { selected: true, title: "This one" }),
     ws("other", { title: "Socket contract" }),
@@ -89,44 +90,16 @@ describe("the row's from line", () => {
   });
 });
 
-describe("the peek card", () => {
-  it("opens under one row at a time, and closes on a second tap", () => {
-    m.togglePeek(entry(1));
-    assert.ok(m.isPeeking(entry(1)));
-    m.togglePeek(entry(2));
-    assert.ok(!m.isPeeking(entry(1)));
-    assert.ok(m.isPeeking(entry(2)));
-    m.togglePeek(entry(2));
-    assert.ok(!m.isPeeking(entry(2)));
-  });
-
-  it("titles itself with the number and title", () => {
-    assert.equal(m.peekTitle(entry(1)), "#1 · Here's PR");
-    assert.equal(m.peekTitle({ pr: {}, title: "No number" }), "No number");
-  });
-
-  it("quotes the first mention, or says the chat has not named it yet", () => {
-    assert.equal(m.peekQuote(entry(1)), "Opened #1: the flaky test.");
-    assert.equal(m.peekWaiting(entry(1)), "");
-    assert.equal(m.peekQuote(entry(2)), "");
-    assert.match(m.peekWaiting(entry(2)), /not named it/);
-    assert.equal(m.peekWaiting(entry(4)), "");
-  });
-
-  it("counts the checks, worst first, and says nothing with none saved", () => {
-    assert.equal(m.peekChecks(entry(1)), "1 failing · 1 running · 2 passed");
-    assert.equal(m.peekChecks(entry(4)), "");
-  });
-
-  it("offers Show in chat only while the chat's workspace is open", () => {
+describe("a tap on the row", () => {
+  it("has a chat to go to only while the chat's workspace is open", () => {
     assert.ok(m.canShowInChat(entry(1)));
     assert.ok(m.canShowInChat(entry(2)));
     assert.ok(!m.canShowInChat(entry(3)));
     assert.ok(!m.canShowInChat(entry(4)));
   });
 
-  it("Show in chat selects the workspace, then focuses and flashes its terminal", () => {
-    m.showInChat(entry(1));
+  it("selects the chat's workspace, then focuses and flashes its terminal", () => {
+    m.goToPr(entry(1));
     assert.deepEqual(
       r.calls.map((c) => [c.method, c.params]),
       [
@@ -135,24 +108,25 @@ describe("the peek card", () => {
         ["surface.trigger_flash", { surface_id: "s-here", workspace_id: "here" }],
       ],
     );
+    assert.deepEqual(r.opened, []);
   });
 
-  it("Show in chat only selects when no terminal was saved, and does nothing once the chat has gone", () => {
-    m.showInChat(entry(2));
-    m.showInChat(entry(3));
+  it("only selects when no terminal was saved", () => {
+    m.goToPr(entry(2));
     assert.deepEqual(
       r.calls.map((c) => c.method),
       ["workspace.select"],
     );
   });
 
-  it("renders a row with its card open", () => {
-    const e = { ...entry(1), last: true };
-    m.togglePeek(e);
-    try {
-      assert.doesNotThrow(() => prRow(() => e));
-    } finally {
-      m.togglePeek(e);
-    }
+  it("opens GitHub once the chat has gone, or with no origin", () => {
+    m.goToPr(entry(3));
+    m.goToPr(entry(4));
+    assert.deepEqual(r.calls, []);
+    assert.deepEqual(r.opened, [pr(3), pr(4)]);
+  });
+
+  it("renders a row", () => {
+    assert.doesNotThrow(() => prRow(() => ({ ...entry(1), last: true })));
   });
 });
