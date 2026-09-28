@@ -1,27 +1,64 @@
-// Reading, backing up and writing ~/.claude/settings.json for the hooks
-// extra, around the pure merge in hooks-merge.ts. The wanted list comes
-// from claude-hooks.json, next to this file.
+// Reading, backing up and writing Claude Code's settings.json (in
+// CLAUDE_CONFIG_DIR when set, else ~/.claude) for the hooks extra, around
+// the pure merge in hooks-merge.ts. The wanted list comes from
+// claude-hooks.json, next to this file.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Paths, stamp } from "./env.ts";
-import { type Entry, parseSettings, wantedEntries } from "./hooks-merge.ts";
+import { type Entry, missingEntries, parseSettings, wantedEntries } from "./hooks-merge.ts";
 
 export const HOOKS_SOURCE = join(import.meta.dirname, "claude-hooks.json");
 
 /** The hooks setup adds, from the one committed list. */
 export const wanted = (): Entry[] => wantedEntries(JSON.parse(readFileSync(HOOKS_SOURCE, "utf8")));
 
+// Hooks setup once added whose scripts have since gone. Left in place they
+// fail at the end of every turn, so setup and uninstall take them out and
+// doctor flags them.
+const RETIRED = [{ event: "Stop", command: "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" }];
+
+/** The retired hooks, as entries removeEntries can take out. */
+export const retired = (): Entry[] =>
+  RETIRED.map(({ event, command }) => ({ event, matcher: null, command, hook: { type: "command", command } }));
+
 export type Loaded =
   | { ok: true; settings: Record<string, unknown>; existed: boolean; text: string }
   | { ok: false; error: string };
 
-/** The settings file, parsed; a missing one reads as empty. */
-export function loadSettings(paths: Paths): Loaded {
-  if (!existsSync(paths.claudeSettings)) return { ok: true, settings: {}, existed: false, text: "" };
-  const text = readFileSync(paths.claudeSettings, "utf8");
+function loadFile(file: string): Loaded {
+  if (!existsSync(file)) return { ok: true, settings: {}, existed: false, text: "" };
+  const text = readFileSync(file, "utf8");
   const parsed = parseSettings(text);
   return parsed.ok ? { ok: true, settings: parsed.settings, existed: true, text } : parsed;
+}
+
+/** The settings file, parsed; a missing one reads as empty. */
+export const loadSettings = (paths: Paths): Loaded => loadFile(paths.claudeSettings);
+
+/**
+ * One line each for what setup and the doctor should say about where the
+ * hooks go: a CLAUDE_CONFIG_DIR that was ignored, and cockpit hooks left in
+ * ~/.claude/settings.json while CLAUDE_CONFIG_DIR points elsewhere. Those
+ * are never removed here: ~/.claude may be a Claude profile kept on purpose.
+ */
+export function claudeDirNotes(paths: Paths, home: string): string[] {
+  const notes: string[] = [];
+  if (paths.claudeConfigIgnored !== undefined) {
+    notes.push(
+      `CLAUDE_CONFIG_DIR is "${paths.claudeConfigIgnored}", not an absolute path, so it is ignored and ~/.claude is used`,
+    );
+  }
+  if (paths.otherClaudeSettings !== undefined) {
+    const other = loadFile(paths.otherClaudeSettings);
+    const held = other.ok ? wanted().length - missingEntries(other.settings, wanted(), home).length : 0;
+    if (held > 0) {
+      notes.push(
+        `~/.claude/settings.json also holds ${held} cockpit hooks; they are left alone, so take them out by hand if nothing starts Claude Code without CLAUDE_CONFIG_DIR`,
+      );
+    }
+  }
+  return notes;
 }
 
 /** True when the file still holds what `loaded` read, so a write cannot lose one Claude Code made meanwhile. */

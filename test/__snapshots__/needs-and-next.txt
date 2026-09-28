@@ -117,7 +117,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
           Text "Unsorted" .font(12.5) .weight(semibold) .color(laneMain|select|heading) .lineLimit(1) .truncation(tail) .layoutPriority(1)
           Text "7" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10)
           Spacer minLength: 4
-          Text "" .font(11) .weight(regular) .color(readyInk|readyChip.edge) .lineLimit(1)
+          Text "" .font(11) .weight(regular) .color(greenDeep|readyInk|readyChip.bg) .lineLimit(1)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
         VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
           VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
@@ -214,6 +214,7 @@ clayHalo #D9775738
 clayText #A34A2A
 faint|laneBackground #8A8880
 green #788C5D
+greenDeep|readyInk|readyChip.bg #3F5A2B
 hairline #E2DFD3
 hover #7F7F7F14
 laneMain|select|heading #3D3D3A
@@ -225,7 +226,6 @@ needsEdge #F0D2C3
 needsHover #FBF1EB
 needsRowEdge #A34A2A29
 onBadge|card|readyChip.fg #FFFFFF
-readyInk|readyChip.edge #1A7F37
 secondary|badge|laneReview #5E5D59
 segTrack #E5E2D6
 tertiary #73726C

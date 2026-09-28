@@ -1,4 +1,4 @@
-// Adding the cockpit's Claude Code hooks to ~/.claude/settings.json, and
+// Adding the cockpit's Claude Code hooks to Claude Code's settings.json, and
 // taking them out again, as pure functions over parsed JSON. The list itself
 // lives in claude-hooks.json, the one copy the quickstart's by-hand block is
 // tested against. Adding never removes, reorders or rewrites anything: a

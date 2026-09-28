@@ -46,6 +46,9 @@ const r = seed({
         epoch: ago(7200),
       },
     },
+    prOrigins: {
+      [url(9)]: { url: url(9), number: 9, workspace: "other", session: "s2", epoch: ago(600) },
+    },
     poll: { okEpoch: ago(60) },
   },
 });

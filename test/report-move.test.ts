@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decisionsIn, lastReply, moveFrom, moveLine } from "../scripts/hooks/report-move.ts";
-import { applySet, emptyState, MAX_MOVE, MOVE_MAX_AGE_S, urlMaySet } from "../scripts/state-config.ts";
+import { applySet, cleanMove, emptyState, MAX_MOVE, MOVE_MAX_AGE_S, urlMaySet } from "../scripts/state-config.ts";
 
 const DECISIONS = [
   "Jon, two calls.",
@@ -61,6 +61,26 @@ describe("moveLine", () => {
     ].join("\n");
     assert.equal(moveLine(text), "paste the opener below into a new session.");
     assert.equal(moveLine("```\nYour move: go\n```"), null);
+  });
+});
+
+describe("cleanMove", () => {
+  it("keeps a line that fits as it is, and a line one over gets the ellipsis", () => {
+    assert.equal(cleanMove("x".repeat(MAX_MOVE)), "x".repeat(MAX_MOVE));
+    assert.equal(cleanMove("x".repeat(MAX_MOVE + 1)), `${"x".repeat(MAX_MOVE - 1)}…`);
+  });
+
+  it("drops the space before the ellipsis, and is null for nothing usable", () => {
+    assert.equal(cleanMove(`${"x".repeat(MAX_MOVE - 2)} tail`), `${"x".repeat(MAX_MOVE - 2)}…`);
+    assert.equal(cleanMove("  \n "), null);
+    assert.equal(cleanMove(5), null);
+  });
+
+  it("cuts by UTF-16 length, so an emoji line still ends in an ellipsis and fits", () => {
+    const out = cleanMove("😀".repeat(400)) ?? "";
+    assert.ok(out.length <= MAX_MOVE, String(out.length));
+    assert.ok(out.endsWith("…"));
+    assert.ok(!/[\ud800-\udbff]…$/.test(out), "no half emoji before the ellipsis");
   });
 });
 

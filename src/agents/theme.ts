@@ -19,16 +19,6 @@ export const T = {
   hover: "#7f7f7f0F",
   /** The faint face behind the agent's latest message on the card. */
   quote: "#1414130A",
-  /** A PR's peek card: its edge, and the bar beside the chat's quote. */
-  peekEdge: `${P.blue}59`,
-  quoteBar: P.amber,
-  /** The peek card's main button, "Show in chat": an ink face. */
-  inkButton: P.text,
-  inkButtonHover: "#2E2D2A",
-  onInk: "#FFFFFF",
-  /** The card's quiet button, "Open on GitHub". */
-  quietButton: "#F3F1EB",
-  quietButtonHover: "#E8E5DC",
 } as const;
 
 /** A stale PR chip's opacity: dimmed while the poller's data is old or gh is down (issue #78). */

@@ -28,7 +28,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
           Text "For review" .font(12.5) .weight(semibold) .color(laneMain|select|heading) .lineLimit(1) .truncation(tail) .layoutPriority(1)
           Text "8" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10)
           Spacer minLength: 4
-          Text "1 ready to merge" .font(11) .weight(regular) .color(readyInk|readyChip.edge) .lineLimit(1)
+          Text "1 ready to merge" .font(11) .weight(regular) .color(greenDeep|readyInk|readyChip.bg) .lineLimit(1)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
         VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
           VStack spacing: 0, alignment: leading .padding(1) .background(cardEdge|dropTarget|anchorSelected) .cornerRadius(11) .frame(maxWidth: infinity)
@@ -47,7 +47,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                     Circle size: 12 .fill(clear)
                     Circle size: 6 .fill(clear) .stroke(grey) .strokeWidth(1.5)
                   Text "No agent" .font(11.5) .weight(regular) .color(faint|laneBackground) .lineLimit(1) .layoutPriority(2)
-                  Text "· #1 · ready" .font(11.5) .color(readyInk|readyChip.edge) .lineLimit(1) .truncation(tail)
+                  Text "· #1 · ready" .font(11.5) .color(greenDeep|readyInk|readyChip.bg) .lineLimit(1) .truncation(tail)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
         VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
           VStack spacing: 0, alignment: leading .padding(1) .background(cardEdge|dropTarget|anchorSelected) .cornerRadius(11) .frame(maxWidth: infinity)
@@ -217,6 +217,7 @@ cardEdge|dropTarget|anchorSelected #1414131F
 cardHover #F7F6F2
 failingChip.fg #9E2F27
 faint|laneBackground #8A8880
+greenDeep|readyInk|readyChip.bg #3F5A2B
 grey #A09E95
 hairline #E2DFD3
 hover #7F7F7F14
@@ -225,7 +226,6 @@ laneParked #B0AEA5
 laneUnsorted #C9C6BB
 metaText #6B6A64
 onBadge|card|readyChip.fg #FFFFFF
-readyInk|readyChip.edge #1A7F37
 secondary|badge|laneReview #5E5D59
 segTrack #E5E2D6
 tertiary #73726C

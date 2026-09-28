@@ -20,7 +20,7 @@ import { scheduleBuild } from "../hook-build.ts";
 import { cleanMove, isId, MAX_DECISIONS, type SavedMove, validateState } from "../state-config.ts";
 import { readApplyWrite } from "../state-url.ts";
 import { field } from "./gh-command.ts";
-import { readTail, replyFrom, sleep } from "./report-mention.ts";
+import { readTail, replyFrom, sleep } from "./transcript.ts";
 
 // The line's label as Jon's rules write it, after any markdown the terminal
 // would not show (a quote, bold, a list marker).

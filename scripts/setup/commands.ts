@@ -15,7 +15,7 @@ export async function setup(env: Env, argv: readonly string[]) {
     env.print(`setup: ${flags}`);
     return 1;
   }
-  const paths = pathsFor(env.home, env.repo);
+  const paths = pathsFor(env.home, env.repo, env.claudeConfigDir);
   const stop = preflight(env, paths);
   if (stop) {
     env.print(`✗ ${stop}`);
@@ -51,7 +51,7 @@ export async function uninstall(env: Env, argv: readonly string[]) {
     env.print("uninstall: not on a terminal, so nothing was removed. Pass --yes to remove without asking.");
     return 1;
   }
-  await removeExtras(env, pathsFor(env.home, env.repo), flags);
+  await removeExtras(env, pathsFor(env.home, env.repo, env.claudeConfigDir), flags);
   env.print("");
   env.print("The clone is still there. To remove it, keeping your own files in ~/cmux-cockpit-keep:");
   for (const line of REMOVE_CLONE) env.print(`  ${line}`);

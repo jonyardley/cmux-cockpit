@@ -15,8 +15,7 @@
 //
 // A create is also recorded in config/state.json's `prOrigins` map, with
 // the session, workspace and terminal that ran it, so the agents panel can
-// say which chat opened each PR and switch back to it. report-mention.ts
-// fills in the first paragraph that named it once the turn ends.
+// say which chat opened each PR and switch back to it.
 
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, openSync, readFileSync } from "node:fs";
@@ -143,16 +142,12 @@ export function originFrom(url: string, event: unknown, env: OriginEnv, now: num
 }
 
 /**
- * Adds one origin, moved last as the newest, keeping the mention an earlier
- * record of the same PR already found when that record is the same chat's,
- * and drops every origin older than ORIGIN_MAX_AGE_S. The input is not
- * changed.
+ * Adds one origin, moved last as the newest, and drops every origin older
+ * than ORIGIN_MAX_AGE_S. The input is not changed.
  */
 export function addOrigin(map: State["prOrigins"], origin: SavedPrOrigin, now: number): State["prOrigins"] {
-  const before = Object.hasOwn(map, origin.url) ? map[origin.url] : undefined;
   const kept = Object.entries(map).filter(([url, o]) => url !== origin.url && now - o.epoch <= ORIGIN_MAX_AGE_S);
-  const next = before?.mention && before.session === origin.session ? { ...origin, mention: before.mention } : origin;
-  return Object.fromEntries([...kept, [origin.url, next]]);
+  return Object.fromEntries([...kept, [origin.url, origin]]);
 }
 
 const STATE_PATH = join(import.meta.dirname, "..", "..", "config", "state.json");

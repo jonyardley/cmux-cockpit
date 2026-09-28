@@ -34,9 +34,8 @@ export function savedOwnPrs(): SavedOwnPr[] {
 }
 
 /**
- * Which chat opened the PR at `url` and what it first said about it
- * (State.prOrigins, from report-pr.ts and report-mention.ts); undefined for
- * a PR no agent opened through the hook.
+ * Which chat opened the PR at `url` (State.prOrigins, from report-pr.ts);
+ * undefined for a PR no agent opened through the hook.
  */
 export function originOf(url: string | undefined): SavedPrOrigin | undefined {
   // A test can seed __STATE__ from before this map existed, so it may be

@@ -296,7 +296,8 @@ only when a subagent event rebuilds: the `pr-poll-turn` and
 select, so a done row or a crashed run clears on the next poll even when
 nothing reports a new subagent event in between.
 
-It is fed by three hooks in `~/.claude/settings.json`, on `PreToolUse`
+It is fed by three hooks in `~/.claude/settings.json` (or
+`$CLAUDE_CONFIG_DIR/settings.json` when that is set), on `PreToolUse`
 (`Agent`), `SubagentStart` and `SubagentStop`.
 
 The registration is in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
@@ -398,29 +399,25 @@ under the other form adds a second entry. And an update that names its
 ## Where a PR came from
 
 The agents panel's Pull requests rows say which chat opened each PR, and a
-tap opens a peek card quoting what that chat first said about it. Neither
-cmux nor GitHub knows either, so two hooks record them in the `prOrigins`
-map: PR link to `{"url", "number", "workspace", "surface", "session",
-"epoch", "mention"}`, oldest first.
+tap goes back to that chat; the state pill opens GitHub. Neither cmux nor
+GitHub knows which chat opened a PR, so a hook records it in the
+`prOrigins` map: PR link to `{"url", "number", "workspace", "surface",
+"session", "epoch"}`, oldest first.
 
 - `scripts/hooks/report-pr.ts`, after a `gh pr create`, records the
   Claude Code `session_id`, `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID`,
   with the number taken from the link, so it needs no gh call. A second
-  create of the same link keeps the mention already found. Every write
-  drops origins older than 30 days.
-- `scripts/hooks/report-mention.ts`, a Stop hook, takes the session's
-  origins with no `mention` from the last day and reads the transcript at
-  `transcript_path` for the first main-chat reply, from the create on,
-  naming the PR by its link, `#N` or "PR N". The paragraph holding it,
-  markdown markers dropped and cut to `MAX_MENTION` on one line, is saved
-  with the message's uuid and never changes. With nothing pending the
-  transcript is not read.
+  create of the same link replaces the first. Every write drops origins
+  older than 30 days. A `mention` saved by the old report-mention.ts hook
+  is dropped on the next write.
 
 No URL can set the map. A PR opened by hand, or before the hooks were
-installed, has no origin: its row has no "from" line and its card no quote.
-"Show in chat" selects the workspace, focuses the terminal and flashes it;
-cmux has no call that scrolls a terminal to a line, so it cannot land on
-the message itself.
+installed, has no origin: its row has no "from" line and a tap opens
+GitHub, as it does once the chat's workspace has closed, or when it is the
+workspace already selected with no terminal saved to flash. Going back to the
+chat selects the workspace, focuses the terminal and flashes it; cmux has
+no call that scrolls a terminal to a line, so it cannot land on the
+message itself.
 
 ## Asking or your turn
 

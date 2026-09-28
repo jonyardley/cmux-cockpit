@@ -3,19 +3,9 @@
 
 import type { Last } from "../../shared/list.ts";
 import { meta, openIfUrl, when } from "../../shared/ui.ts";
-import {
-  isPeeking,
-  type MadeEntry,
-  madeAge,
-  madeIcon,
-  madeTitleColor,
-  type PrEntry,
-  prFromText,
-  togglePeek,
-} from "../model.ts";
+import { goToPr, type MadeEntry, madeAge, madeIcon, madeTitleColor, type PrEntry, prFromText } from "../model.ts";
 import { T } from "../theme.ts";
 import { glyph, prChip, ruled } from "./parts.ts";
-import { peekCard } from "./peek.ts";
 
 /** The quiet row a capped list ends in: "+12 more", or "Show less" once
  * open. Tapping it opens or folds the card. */
@@ -29,20 +19,8 @@ export function footRow(text: () => string, onTap: () => void): View {
   return ruled(row, () => true);
 }
 
-// The row's quiet way out to GitHub, its own tap target beside the chip.
-function githubArrow(url: () => string | undefined): View {
-  return Text("↗")
-    .font(11)
-    .weight("semibold")
-    .color(T.tertiary)
-    .paddingHorizontal(4)
-    .paddingVertical(2)
-    .hoverBackground(T.hover)
-    .cornerRadius(4)
-    .onTap(() => openIfUrl(url()));
-}
-
-/** A PR row: tap opens its peek card under it; the arrow opens GitHub. */
+/** A PR row: tap goes back to the chat that opened it (GitHub once that
+ * chat has gone); the state pill opens GitHub. */
 export function prRow(e: () => Last<PrEntry>): View {
   const top = HStack({ spacing: 10 }, [
     Text(() => "#" + (e().pr.number ?? ""))
@@ -58,12 +36,9 @@ export function prRow(e: () => Last<PrEntry>): View {
       .truncation("tail")
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
-    // Stale rides inside the chip: an empty sibling Text would still cost
-    // its HStack spacing and squeeze the title.
-    prChip(e).layoutPriority(2),
   ]);
-  // The tappable part stops short of the arrow, so a tap on the arrow can
-  // only open GitHub and never also toggle the peek card.
+  // The tappable part stops short of the pill, so a tap on the pill can
+  // only open GitHub and never also jump to the chat.
   const tappable = VStack({ spacing: 2, alignment: "leading" }, [
     top,
     when(
@@ -76,28 +51,22 @@ export function prRow(e: () => Last<PrEntry>): View {
     ),
   ])
     .paddingLeading(12)
-    .paddingTrailing(4)
     .paddingVertical(10)
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
-    .onTap(() => togglePeek(e()));
-  // Top-aligned and padded down to the first line, so the arrow stays
-  // beside the chip when the from line shows under it.
-  const arrow = VStack({ spacing: 0 }, [githubArrow(() => e().pr.url)])
-    .paddingTop(10)
-    .paddingTrailing(8);
-  const row = HStack({ spacing: 6, alignment: "top" }, [tappable, arrow])
-    .background(() => (isPeeking(e()) ? T.hover : "clear"))
-    .frame({ maxWidth: "infinity", alignment: "leading" });
-  const withPeek = VStack({ spacing: 0, alignment: "leading" }, [
-    row,
-    when(
-      "pr-peek",
-      () => isPeeking(e()),
-      () => peekCard(e),
-    ),
-  ]).frame({ maxWidth: "infinity", alignment: "leading" });
-  return ruled(withPeek, () => e().last);
+    .onTap(() => goToPr(e()));
+  // Top-aligned and padded down to the first line, so the pill stays
+  // beside the title when the from line shows under it. Stale rides
+  // inside the chip: an empty sibling Text would still cost spacing.
+  const pill = VStack({ spacing: 0 }, [prChip(e)])
+    .paddingTop(9)
+    .paddingTrailing(10)
+    .layoutPriority(2);
+  const row = HStack({ spacing: 6, alignment: "top" }, [tappable, pill]).frame({
+    maxWidth: "infinity",
+    alignment: "leading",
+  });
+  return ruled(row, () => e().last);
 }
 
 /** One page or doc an agent published: tap opens it on claude.ai. */
