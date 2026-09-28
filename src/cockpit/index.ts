@@ -49,10 +49,12 @@ function lanesPanel(): View {
         onDragChange: handleDragChange,
       },
       (e) => {
-        const entry = e(); // kind, lane, anchorId and wsId are fixed per key
+        // Kind, anchorId and wsId are fixed per key, and so is a header's or
+        // zone's lane. A card's lane is not: its key is its session alone.
+        const entry = e();
         if (entry.kind === "header") return laneHeader(entry.lane, entry.anchorId);
         if (entry.kind === "zone") return dropZone(entry.lane);
-        const row = cardFor(() => wsById(entry.wsId), entry);
+        const row = cardFor(() => wsById(entry.wsId), e);
         return isForeignAnchor(entry.wsId) ? row.fixed() : row;
       },
     ),

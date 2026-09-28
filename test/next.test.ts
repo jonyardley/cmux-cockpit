@@ -180,7 +180,7 @@ describe("cards sorted by state inside a lane", () => {
     model
       .flatEntries()
       .filter((e) => e.kind === "ws")
-      .map((e) => e.id.split("@")[0]);
+      .map((e) => e.id);
 
   beforeEach(() =>
     setup([
@@ -210,9 +210,9 @@ describe("cards sorted by state inside a lane", () => {
   // h:main, n1, r1, w1, i1, i2, h:unsorted.
   it("anchors a drop before the nearest card below in the same state", () => {
     // Slot 4 sits between w1 (working) and i1 (idle): i3 is idle, so it goes before i1.
-    assert.deepEqual(drop.resolveDrop("i3@main", 4), { laneKey: "main", nextRef: "i1", prevRef: null });
+    assert.deepEqual(drop.resolveDrop("i3", 4), { laneKey: "main", nextRef: "i1", prevRef: null });
     // Dragging i1 up leaves h:main, n1, r1, w1, i2, i3; slot 5 is between i2 and i3.
-    assert.deepEqual(drop.resolveDrop("i1@main", 5), { laneKey: "main", nextRef: "i3", prevRef: null });
+    assert.deepEqual(drop.resolveDrop("i1", 5), { laneKey: "main", nextRef: "i3", prevRef: null });
   });
 
   it("files a drop after its peer above when the card below is in another state", () => {
@@ -220,30 +220,30 @@ describe("cards sorted by state inside a lane", () => {
     byId("r1").agents = working();
     byId("r1").unread = 0;
     // Tab order puts r1 after w1, so "before i1" would sit w1 above r1. After r1 is right.
-    assert.deepEqual(drop.resolveDrop("w1@main", 3), { laneKey: "main", nextRef: null, prevRef: "r1" });
-    drop.handleMove("w1@main", 3);
+    assert.deepEqual(drop.resolveDrop("w1", 3), { laneKey: "main", nextRef: null, prevRef: "r1" });
+    drop.handleMove("w1", 3);
     assert.deepEqual(lane(), ["n1", "r1", "w1", "i1", "i2", "i3"]);
   });
 
   it("lands a card among its peers where it was let go", () => {
     // Drag i3 to just under i1 (slot 5, between i1 and i2 once i3 is lifted).
-    drop.handleMove("i3@main", 5);
+    drop.handleMove("i3", 5);
     assert.deepEqual(lane(), ["n1", "r1", "w1", "i1", "i3", "i2"]);
   });
 
   it("lands a card let go inside another state's run first among its peers below", () => {
     // i1 dropped at the very top, under h:main: before i2, the first idle card below.
-    assert.deepEqual(drop.resolveDrop("i1@main", 1), { laneKey: "main", nextRef: "i2", prevRef: null });
-    drop.handleMove("i1@main", 1);
+    assert.deepEqual(drop.resolveDrop("i1", 1), { laneKey: "main", nextRef: "i2", prevRef: null });
+    drop.handleMove("i1", 1);
     assert.deepEqual(lane(), ["n1", "r1", "w1", "i1", "i2", "i3"]);
     // i3 to the top: now first of the idle cards.
-    drop.handleMove("i3@main", 1);
+    drop.handleMove("i3", 1);
     assert.deepEqual(lane(), ["n1", "r1", "w1", "i3", "i1", "i2"]);
   });
 
   it("lands a card let go below every peer last among them", () => {
     // i1 to the bottom of the lane, under i3.
-    drop.handleMove("i1@main", 6);
+    drop.handleMove("i1", 6);
     assert.deepEqual(lane(), ["n1", "r1", "w1", "i2", "i3", "i1"]);
   });
 

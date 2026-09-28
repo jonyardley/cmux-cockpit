@@ -316,7 +316,8 @@ export const panelMaxHeight = (m: ViewMode) => (): number | "infinity" => (isMod
 // --- All mode: one flat list of lane headers and cards --------------------------------
 
 // A header's key carries the anchor it shows (issue #49), and an empty lane
-// is a zone (issue #50), since a row's kind is fixed by its key.
+// is a zone (issue #50), since a row's kind is fixed by its key. A card's key
+// is its session alone, so a lane move keeps its row (cards.ts's cardFor).
 export type LaneEntry =
   | { kind: "header"; id: string; lane: LaneKey; anchorId: string | null }
   | { kind: "zone"; id: string; lane: LaneKey }
@@ -389,7 +390,7 @@ function sectionEntries(s: LaneSection): LaneEntry[] {
     anchorId: s.anchorId,
   };
   if (isCollapsed(s.lane)) return [header];
-  return [header, ...s.rows.map((w): LaneEntry => ({ kind: "ws", id: w.id + "@" + key, wsId: w.id, lane: key }))];
+  return [header, ...s.rows.map((w): LaneEntry => ({ kind: "ws", id: w.id, wsId: w.id, lane: key }))];
 }
 
 // An empty lane is a zone row in its own place, at rest and mid-drag alike,

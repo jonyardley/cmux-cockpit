@@ -198,12 +198,23 @@ function denseRow(w: WsAccessor, key: string): View {
     .contextMenu(cardMenu(w));
 }
 
-/** The card at the density its lane uses (All view). */
-export function cardFor(w: WsAccessor, entry: { id: string; lane: LaneKey }): View {
-  const density = laneByKey(entry.lane).density;
-  if (density === "full") return fullCard(w, entry.id);
-  if (density === "compact") return compactCard(w, entry.id);
-  return denseRow(w, entry.id);
+/**
+ * The card at the density its lane uses (All view). A card keeps its row
+ * when it changes lane, and only the inside is rebuilt, and only when the
+ * density changes: cmux 0.64.25 keeps drawing a dropped row that is swapped
+ * for a new one, so a card rebuilt on the drop left its parts on screen.
+ */
+export function cardFor(w: WsAccessor, entry: () => { id: string; lane: LaneKey }): View {
+  const key = entry().id; // fixed per row
+  const density = () => laneByKey(entry().lane).density;
+  return VStack({ spacing: 0 }, [
+    ForEach({ items: () => [{ id: density() }], key: (d) => d.id }, (d) => {
+      const at = d().id; // fixed by the key
+      if (at === "full") return fullCard(w, key);
+      if (at === "compact") return compactCard(w, key);
+      return denseRow(w, key);
+    }),
+  ]).frame({ maxWidth: "infinity" });
 }
 
 // Projects view (board 2, #11): one row shape for every session. No glyph,
