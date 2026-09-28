@@ -13,19 +13,39 @@
 //   Working        - working agents in other workspaces, longest-running first.
 //   Idle           - idle agents in other workspaces, most recent first,
 //                    collapsed behind "N more idle".
-//   Pull requests  - every PR across workspaces, tap opens the url.
+//   Pull requests  - every PR across workspaces, tap opens the url. A faint
+//                    line under the heading says when the saved PR data is
+//                    old or gh is down, and those chips dim (#78).
 //   Made here      - pages and docs agents published (#52): this workspace's
 //                    first, then the latest few from others; tap opens it.
-//                    Empty until the published hook is installed.
-// An empty section is its heading and count alone, with no empty card.
+// Counts are the real totals, and a capped list ends in "+N more" (#80).
+// Working, Idle and Pull requests show their heading and count when empty;
+// Made here, and the card's Subagents, fold into one faint line at the
+// bottom instead. When config/state.json could not be read at build, a line
+// at the top says so rather than the panel just looking empty (#78).
 //
 //   cmux right-sidebar set custom agents
 
+import { stateNotice } from "../shared/freshness.ts";
 import { when } from "../shared/ui.ts";
-import { current, idleRows, madeHere, prs, roster, workingRows } from "./model.ts";
+import {
+  current,
+  emptyNote,
+  idleRows,
+  madeCount,
+  madeHere,
+  madeMore,
+  prCount,
+  prMore,
+  prNote,
+  prs,
+  roster,
+  workingRows,
+} from "./model.ts";
+import { T } from "./theme.ts";
 import { currentPanel } from "./views/current.ts";
 import { panel, sectionHeader } from "./views/parts.ts";
-import { madeRow, prRow, rosterRow } from "./views/rows.ts";
+import { madeRow, moreRow, prRow, rosterRow } from "./views/rows.ts";
 
 function currentSection(): View {
   return when(
@@ -35,20 +55,52 @@ function currentSection(): View {
   );
 }
 
-// A heading with its count, over a card of rows only while there are some.
-function listSection<T extends { key: string }>(
-  label: string,
-  key: string,
-  count: () => number,
-  rows: () => T[],
-  row: (e: () => T) => View,
-): View {
+// A faint line of its own, shown only while `text()` has something to say.
+function faintLine(key: string, text: () => string, color: string = T.tertiary): View {
+  return when(
+    key,
+    () => !!text(),
+    () =>
+      Text(text)
+        .font(11)
+        .color(color)
+        .lineLimit(2)
+        .paddingHorizontal(4)
+        .frame({ maxWidth: "infinity", alignment: "leading" }),
+  );
+}
+
+interface ListSection<T extends { key: string; last: boolean }> {
+  label: string;
+  key: string;
+  count: () => number;
+  rows: () => T[];
+  row: (e: () => T) => View;
+  /** Rows the cap left out, for a closing "+N more"; none by default. */
+  more?: () => number;
+  /** A faint line under the heading; none by default. */
+  note?: () => string;
+}
+
+// A heading with its count, over a card of rows only while there are some,
+// the card ending in "+N more" when the list was cut.
+function listSection<T extends { key: string; last: boolean }>(s: ListSection<T>): View {
+  const more = s.more ?? (() => 0);
   return VStack({ spacing: 8, alignment: "leading" }, [
-    sectionHeader(label, () => String(count())),
+    sectionHeader(s.label, () => String(s.count())),
+    ...(s.note ? [faintLine(s.key + "-note", s.note)] : []),
     when(
-      key,
-      () => rows().length > 0,
-      () => panel([ForEach({ items: rows, key: (e) => e.key }, row)]),
+      s.key,
+      () => s.rows().length > 0,
+      () =>
+        panel([
+          ForEach({ items: s.rows, key: (e) => e.key }, (e) => s.row(e)),
+          when(
+            s.key + "-more",
+            () => more() > 0,
+            () => moreRow(more, () => true),
+          ),
+        ]),
     ),
   ]);
 }
@@ -56,11 +108,39 @@ function listSection<T extends { key: string }>(
 sidebar(
   () =>
     VStack({ spacing: 18, alignment: "leading" }, [
+      faintLine("state-notice", stateNotice, T.clayText),
       currentSection(),
-      listSection("WORKING", "working", () => roster().run.length, workingRows, rosterRow),
-      listSection("IDLE", "idle", () => roster().idle.length, idleRows, rosterRow),
-      listSection("PULL REQUESTS", "prs", () => prs().length, prs, prRow),
-      listSection("MADE HERE", "made", () => madeHere().length, madeHere, madeRow),
+      listSection({
+        label: "WORKING",
+        key: "working",
+        count: () => roster().run.length,
+        rows: workingRows,
+        row: rosterRow,
+      }),
+      listSection({ label: "IDLE", key: "idle", count: () => roster().idle.length, rows: idleRows, row: rosterRow }),
+      listSection({
+        label: "PULL REQUESTS",
+        key: "prs",
+        count: prCount,
+        rows: prs,
+        row: prRow,
+        more: prMore,
+        note: prNote,
+      }),
+      when(
+        "made-section",
+        () => madeCount() > 0,
+        () =>
+          listSection({
+            label: "MADE HERE",
+            key: "made",
+            count: madeCount,
+            rows: madeHere,
+            row: madeRow,
+            more: madeMore,
+          }),
+      ),
+      faintLine("empty-note", emptyNote),
       Spacer(),
     ])
       .paddingHorizontal(14)

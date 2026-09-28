@@ -1,6 +1,8 @@
 // Cockpit: Jon's lane-based workspace sidebar.
 //
 // Layout, top to bottom:
+//   0. Only when config/state.json could not be read at build: one line
+//      saying so, so the board does not just look empty (issue #78).
 //   1. All | Projects segmented control (author state).
 //   2. Next: opens what needs you, then what is Ready, one press at a time.
 //   3. "Needs you" strip: the workspaces whose agent is waiting on input, the
@@ -17,14 +19,18 @@
 // and panelMaxHeight), so a switch never rebuilds a list.
 
 import type { ViewMode } from "../../scripts/state-config.ts";
+import { stateNotice } from "../shared/freshness.ts";
+import { when } from "../shared/ui.ts";
 import { handleDragChange, handleMove, isForeignAnchor } from "./drop.ts";
 import { flatEntries, panelMaxHeight, panelOpacity, projectEntries, wsById } from "./model.ts";
+import { C } from "./theme.ts";
 import { cardFor, projectRow } from "./views/cards.ts";
 import { dropZone, laneHeader, projectHeader, quietHeader, quietRow, segmented } from "./views/headers.ts";
 import { needsStrip, nextButton } from "./views/needs.ts";
 
 sidebar(() =>
   VStack({ spacing: 0, alignment: "leading" }, [
+    stateLine(),
     segmented(),
     nextButton(),
     needsStrip(),
@@ -33,6 +39,22 @@ sidebar(() =>
     Spacer(),
   ]).paddingBottom(12),
 );
+
+// The unreadable-state line, gone entirely while the state read fine.
+function stateLine(): View {
+  return when(
+    "state-notice",
+    () => !!stateNotice(),
+    () =>
+      Text(stateNotice)
+        .font(11)
+        .color(C.clayText)
+        .lineLimit(2)
+        .paddingHorizontal(14)
+        .paddingVertical(6)
+        .frame({ maxWidth: "infinity", alignment: "leading" }),
+  );
+}
 
 // Top-aligned, so a zero-height panel's rows overflow downward, unseen.
 function panel(m: ViewMode, content: View): View {

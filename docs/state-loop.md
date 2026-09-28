@@ -50,7 +50,10 @@ rules (`applySet`, `validateState`) and their tests.
 
 A missing or malformed file reads as empty state; bad entries are dropped,
 never fatal, so a bad write cannot break the build. Each map keeps its newest
-256 entries.
+256 entries. A file that is there but cannot be read or parsed, or is not a
+JSON object, is also built as empty state, but the build bakes in
+`__STATE_UNREADABLE__` as well, and both sidebars then show one line saying
+so, so a broken file never passes for nothing saved (#78).
 
 The build merges `projects` over `config/projects.json`, and the file wins:
 an in-app project whose match or name is already taken is left out, and so
@@ -155,6 +158,19 @@ in one locked pass.
 `applySet` refuses `prs` and `ownPrs`, so no URL can plant a link the
 sidebar would open, and `validateState` keeps only
 `https://github.com/<owner>/<repo>/pull/<n>` urls.
+
+### How fresh the PR data is
+
+`poll` records how the poller's runs went (#78): `okEpoch`, when a run's gh
+lookups last answered, and `error` (`unavailable`, `signed-out` or
+`missing`) with `errorEpoch`, when it began, while gh cannot be reached.
+`validateState` keeps each field only when it is well formed, and
+`applySet` refuses `poll` like the PR maps. `src/shared/freshness.ts` reads
+it against the clock: an error, or a last success more than 15 minutes old,
+puts a faint line under the agents panel's Pull requests heading ("gh
+unavailable · last checked 2h ago") and dims the chips of the poller's PRs.
+With no `poll` saved it claims nothing. The poller does not write `poll`
+yet: that needs `writePollMaps` to carry it, which is still to do.
 
 ## Cost of a save
 

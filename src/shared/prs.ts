@@ -37,11 +37,17 @@ export function savedOwnPrs(): SavedOwnPr[] {
 export const prOf = (w: Workspace | undefined): PullRequest | undefined => (w ? prsOf(w)[0] : undefined);
 
 /**
+ * Whether the workspace's PRs are the poller's saved copy rather than
+ * cmux's own, so they age with the poller's data (issue #78).
+ */
+export const fromPoller = (w: Workspace): boolean => !(w.prs?.length || w.pr);
+
+/**
  * The CI checks of the saved PR, in checksFrom's order. Only the poller
  * saves checks, so while cmux sends a PR of its own there are none.
  */
 export function checksOf(w: Workspace): SavedCheck[] {
-  if (w.prs?.length || w.pr) return [];
+  if (!fromPoller(w)) return [];
   return savedFor(w)?.checks ?? [];
 }
 

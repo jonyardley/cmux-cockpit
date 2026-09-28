@@ -41,6 +41,26 @@ export interface State {
   published: Record<string, SavedPublished>;
   /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
   ui: UiState;
+  /**
+   * How the PR poller's last runs went (issue #78), so the sidebars can say
+   * when PR data is old or gh is down. Written only by scripts/pr-poll.ts,
+   * never by a URL. Left out while nothing is saved, so a file from before
+   * it existed reads the same.
+   */
+  poll?: SavedPoll;
+}
+
+/** Why a poll could not reach gh: it failed, it is signed out, or it is not installed. */
+export type PollError = "unavailable" | "signed-out" | "missing";
+
+/** The PR poller's last success and its current error, as it saves them. */
+export interface SavedPoll {
+  /** Epoch seconds of the last run whose gh lookups answered. */
+  okEpoch?: number;
+  /** Why the latest run could not reach gh; absent once a run gets through. */
+  error?: PollError;
+  /** Epoch seconds that error began, kept while it repeats so a failing poll does not rewrite the file. */
+  errorEpoch?: number;
 }
 
 export type ViewMode = "all" | "projects";
@@ -325,6 +345,23 @@ function uiState(v: unknown): UiState {
 
 const UI_KEYS: readonly string[] = ["mode", "collapsed"];
 
+const POLL_ERRORS: readonly unknown[] = ["unavailable", "signed-out", "missing"];
+const isPollError = (v: unknown): v is PollError => POLL_ERRORS.includes(v);
+
+// Each field stands alone: a bad one is dropped, the others kept. An error
+// time without an error means nothing, so it goes with it. Null when
+// nothing usable is left, so the key is left out.
+function savedPoll(v: unknown): SavedPoll | null {
+  if (!isRecord(v)) return null;
+  const poll: SavedPoll = {};
+  if (isEpoch(v.okEpoch)) poll.okEpoch = v.okEpoch;
+  if (isPollError(v.error)) {
+    poll.error = v.error;
+    if (isEpoch(v.errorEpoch)) poll.errorEpoch = v.errorEpoch;
+  }
+  return Object.keys(poll).length ? poll : null;
+}
+
 const isRepoDir = (v: unknown): v is string =>
   typeof v === "string" && v.startsWith("/") && v.length <= MAX_PROJECT_KEY;
 
@@ -392,6 +429,7 @@ function cleanMap<T>(v: unknown, clean: (value: unknown) => T | null, validId = 
 /** Reads whatever is in the file into a State, dropping anything malformed. */
 export function validateState(raw: unknown): State {
   const v = isRecord(raw) ? raw : {};
+  const poll = savedPoll(v.poll);
   return {
     dismissed: cleanMap(v.dismissed, agentStarts),
     projectOverride: cleanMap(v.projectOverride, projectKey),
@@ -401,12 +439,13 @@ export function validateState(raw: unknown): State {
     subagents: cleanMap(v.subagents, savedSubagents),
     published: cleanMap(v.published, savedPublished, isPublishedUrl),
     ui: uiState(v.ui),
+    ...(poll ? { poll } : {}),
   };
 }
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-// The maps a URL may set. `prs`, `ownPrs`, `subagents` and `published` are left out on purpose (see State).
+// The maps a URL may set. `prs`, `ownPrs`, `subagents`, `published` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS.
 type MapName = "dismissed" | "projectOverride" | "projects" | "ui";
 const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui"];

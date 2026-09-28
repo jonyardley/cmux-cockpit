@@ -376,3 +376,26 @@ test("labelFrom takes the first usable candidate, else the fallback", () => {
   assert.equal(labelFrom("none", undefined, "  ", "Second"), "Second");
   assert.equal(labelFrom("none"), "none");
 });
+
+test("validateState keeps a good poll status and drops bad fields one by one (#78)", () => {
+  const good = { okEpoch: 100, error: "unavailable", errorEpoch: 200 };
+  assert.deepEqual(validateState({ poll: good }).poll, good);
+  assert.deepEqual(validateState({ poll: { okEpoch: 100 } }).poll, { okEpoch: 100 });
+  // A bad error goes, and its time with it; a good success stays.
+  assert.deepEqual(validateState({ poll: { okEpoch: 100, error: "down", errorEpoch: 200 } }).poll, { okEpoch: 100 });
+  assert.deepEqual(validateState({ poll: { okEpoch: -1, error: "signed-out", errorEpoch: "x" } }).poll, {
+    error: "signed-out",
+  });
+  assert.deepEqual(validateState({ poll: { error: "missing" } }).poll, { error: "missing" });
+});
+
+test("validateState leaves poll out when nothing usable is saved", () => {
+  for (const poll of [undefined, null, [], "x", {}, { okEpoch: "1" }, { errorEpoch: 5 }]) {
+    assert.equal("poll" in validateState({ poll }), false, JSON.stringify(poll));
+  }
+  assert.equal("poll" in emptyState(), false);
+});
+
+test("applySet refuses poll, so no URL can say gh is down", () => {
+  assert.equal(applySet(emptyState(), "poll.error", '"unavailable"').ok, false);
+});
