@@ -279,7 +279,7 @@ describe("prChipColors", () => {
   it("shows the health when there is one, whatever the status", () => {
     assert.equal(prChipColors("failing", "open").fg, "#9E2F27");
     assert.equal(prChipColors("running", "open").fg, "#2F5690");
-    assert.deepEqual(prChipColors("ready", "open"), { bg: "#1F883D", fg: "#FFFFFF", edge: "#1A7F37" });
+    assert.deepEqual(prChipColors("ready", "open"), { bg: "#4D6B35", fg: "#FFFFFF", edge: "#3F5A2B" });
   });
 
   it("is green only when genuinely ready: a plain open PR stays neutral (issue #82)", () => {
