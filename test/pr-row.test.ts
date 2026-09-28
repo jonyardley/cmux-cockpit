@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
+import type { ViewNode } from "./support/renderer.ts";
 
 const NOW = 1_000_000;
 const pr = (n: number) => "https://github.com/o/r/pull/" + n;
@@ -45,7 +46,7 @@ const checks = [
   ui: {},
 };
 
-const { installRenderer } = await import("./support/renderer.ts");
+const { installRenderer, nodeOf } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
@@ -98,6 +99,14 @@ describe("a tap on the row", () => {
     assert.ok(!m.canShowInChat(entry(4)));
   });
 
+  it("opens GitHub for this chat's PR when there is no terminal to flash", () => {
+    const origin = { url: pr(5), number: 5, workspace: "here", session: "s", epoch: NOW };
+    assert.ok(!m.canShowInChat({ origin }));
+    m.goToPr({ origin, pr: { url: pr(5) } });
+    assert.deepEqual(r.calls, []);
+    assert.deepEqual(r.opened, [pr(5)]);
+  });
+
   it("selects the chat's workspace, then focuses and flashes its terminal", () => {
     m.goToPr(entry(1));
     assert.deepEqual(
@@ -126,7 +135,15 @@ describe("a tap on the row", () => {
     assert.deepEqual(r.opened, [pr(3), pr(4)]);
   });
 
-  it("renders a row", () => {
-    assert.doesNotThrow(() => prRow(() => ({ ...entry(1), last: true })));
+  it("keeps the pill's tap apart from the row's, so a pill tap never also jumps", () => {
+    const root = nodeOf(prRow(() => ({ ...entry(1), last: true })));
+    assert.ok(root);
+    const taps = (n: ViewNode): ViewNode[] => [
+      ...(n.mods.some((x) => x.name === "onTap") ? [n] : []),
+      ...n.children.flatMap(taps),
+    ];
+    const tappable = taps(root);
+    assert.equal(tappable.length, 2);
+    for (const n of tappable) assert.deepEqual(taps(n), [n]);
   });
 });

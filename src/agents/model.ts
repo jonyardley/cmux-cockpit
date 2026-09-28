@@ -3,13 +3,7 @@
 // Who is working and who is idle lives on the cockpit's cards, not here.
 // Pure reads of `data`, so each is testable alone.
 
-import type {
-  CheckState,
-  PublishedKind,
-  SavedCheck,
-  SavedPrOrigin,
-  SavedPublished,
-} from "../../scripts/state-config.ts";
+import type { CheckState, PublishedKind, SavedPrOrigin, SavedPublished } from "../../scripts/state-config.ts";
 import { byActivity } from "../shared/activity.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
@@ -456,10 +450,8 @@ export interface PrEntry {
   summary: PrSummary | undefined;
   /** The poller's saved copy rather than cmux's own, so it can go stale. */
   saved: boolean;
-  /** Which chat opened it, and what it first said; undefined when no agent opened it through the hook. */
+  /** Which chat opened it; undefined when no agent opened it through the hook. */
   origin: SavedPrOrigin | undefined;
-  /** Its saved CI checks, failing first; none for cmux's own PR or one no workspace holds. */
-  checks: readonly SavedCheck[];
 }
 
 /**
@@ -507,7 +499,7 @@ const allPrs = computed((): PrEntry[] => {
       const summary = summaryOf(pr, checks);
       // The PR's own title when the poller saved one, as an own PR's row has.
       const title = summary?.title || prTitle(w, pr);
-      out.push({ key: pr.url, pr, title, summary, saved: fromPoller(w), origin: originOf(pr.url), checks });
+      out.push({ key: pr.url, pr, title, summary, saved: fromPoller(w), origin: originOf(pr.url) });
     }
   }
   out.sort(byRankThenNewest);
@@ -524,7 +516,6 @@ const allPrs = computed((): PrEntry[] => {
       summary: summaryOf(pr, []),
       saved: true,
       origin: originOf(o.url),
-      checks: [],
     });
   }
   own.sort(byRankThenNewest);
@@ -587,8 +578,13 @@ function originWorkspace(e: Pick<PrEntry, "origin">): Workspace | undefined {
   return id ? (data.workspaces() ?? []).find((w) => w.id === id) : undefined;
 }
 
-/** Whether a tap on the row has a chat to go to: its workspace is still open. */
-export const canShowInChat = (e: Pick<PrEntry, "origin">): boolean => !!originWorkspace(e);
+/** Whether a tap on the row has a chat to go to: its workspace is still
+ * open, and it is somewhere else or has a terminal to flash. Going to the
+ * workspace Jon is already in with nothing to flash would show nothing. */
+export function canShowInChat(e: Pick<PrEntry, "origin">): boolean {
+  const w = originWorkspace(e);
+  return !!w && (w.id !== selectedId() || !!e.origin?.surface);
+}
 
 /**
  * Switches to the chat that opened the PR, focuses its terminal and flashes
