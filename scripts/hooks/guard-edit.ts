@@ -17,7 +17,7 @@ const RULES: readonly { pattern: RegExp; reason: string }[] = [
   },
   {
     pattern: /^config\/projects\.json$/i,
-    reason: "config/projects.json is the private project table: edit config/projects.example.json instead.",
+    reason: "config/projects.json is the user's private project table: ask them to edit it by hand.",
   },
 ];
 

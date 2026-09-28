@@ -45,7 +45,9 @@ Tested on cmux 0.64.25.
 - `sidebars/*.js`: local build output, built from `src/`. Never committed,
   never edited by hand.
 - `sidebars/*.parked`: retired Swift sidebar experiments cmux does not
-  load. Rename one to `.swift` to load it again.
+  load. Rename one to `.swift` to load it again. `probe.swift.parked`
+  probes what the Swift renderer supports; on cmux 0.64.25 a `let` derived
+  from `data` renders empty, so filters go inline in the view.
 - `cmux.example.json`: the minimum app settings, which switch on custom
   sidebars. Copy it to `cmux.json` (ignored by git) and add your own.
 - `dock.example.json`: a sample dock control. Copy it to `dock.json`

@@ -10,8 +10,9 @@ the helper app in `helper/`, the git hooks in `.githooks/`,
 
 ## What runs on your machine
 
-Only the build runs unless you opt in. Each extra below is off until you
-install it.
+Installing runs `npm ci`, which runs dependency install scripts (esbuild
+fetches its binary this way), and then the build. Everything else below is
+off until you install it.
 
 - **The sidebars** run inside cmux with the renderer's permissions. They
   make no network requests.
@@ -30,9 +31,11 @@ install it.
   `config/state.json`.
 - **The Claude Code hooks** you add to `~/.claude/settings.json` run
   `scripts/hooks/report-*.ts` with Node on the events listed in the
-  [quickstart](docs/quickstart.md#claude-code-hooks). They write only to
-  `config/state.json`, except `report-pr.ts`, which runs `gh pr view`,
-  sends cmux the result and starts a poll.
+  [quickstart](docs/quickstart.md#claude-code-hooks). They write
+  `config/state.json` and start a background rebuild of the sidebars;
+  `report-pr.ts` instead runs `gh pr view`, sends cmux the result and
+  starts a poll. Problems are logged to
+  `~/Library/Logs/cmux-cockpit-state.log`.
 - **The git hooks** (`npm run hooks`): pre-commit runs `npm run check`.
   After a branch switch, a pull or a rebase they rebuild the sidebars and
   run `cmux right-sidebar set custom agents`; after a pull that changes

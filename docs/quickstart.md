@@ -22,10 +22,11 @@ richer signals, and each one says what it adds.
 ## 1. Back up your cmux config
 
 cmux reads its config and sidebars only from `~/.config/cmux`, so the repo
-has to live there. If you already have that folder, move it aside:
+has to live there. If you already have that folder, move it aside (the
+command does nothing if a backup already exists, so it is safe to rerun):
 
 ```sh
-[ -e ~/.config/cmux ] && mv ~/.config/cmux ~/.config/cmux.backup
+[ -e ~/.config/cmux ] && [ ! -e ~/.config/cmux.backup ] && mv ~/.config/cmux ~/.config/cmux.backup
 ```
 
 ## 2. Clone and install
@@ -40,6 +41,7 @@ npm ci
 
 ```sh
 cp cmux.example.json cmux.json
+cmux reload-config
 ```
 
 That file only turns on the custom sidebars beta. If you had your own
@@ -144,8 +146,8 @@ rules you already have into `~/.config/cmux/automations.json` first:
 
 ```sh
 mkdir -p ~/.cmuxterm
-[ -e ~/.cmuxterm/automations.json ] && mv ~/.cmuxterm/automations.json ~/.cmuxterm/automations.json.backup
-ln -s ~/.config/cmux/automations.json ~/.cmuxterm/automations.json
+[ -f ~/.cmuxterm/automations.json ] && [ ! -L ~/.cmuxterm/automations.json ] && mv ~/.cmuxterm/automations.json ~/.cmuxterm/automations.json.backup
+ln -sfn ~/.config/cmux/automations.json ~/.cmuxterm/automations.json
 cmux automation reload
 ```
 
@@ -157,6 +159,10 @@ What each rule runs:
   select a workspace (at most every 30 seconds): run `gh pr list` in each
   workspace's repo, using your `gh` sign-in, and fill in the chips. That
   includes any client repos you have open.
+
+The poller runs outside your shell, so it looks for Node on cmux's PATH,
+then fnm's default, then Homebrew. With nvm, volta, asdf or mise it may
+find none and quietly do nothing; support for those is on the way.
 
 ### Claude Code hooks
 
@@ -202,6 +208,11 @@ What each script turns on:
   of at the next poll.
 - `report-published.ts`: the "Made here" list of published pages and docs.
 
+### When something does not work
+
+The helper, the poller and the hooks never interrupt you: each problem is a
+line in `~/Library/Logs/cmux-cockpit-state.log`. Start there.
+
 ### The dock
 
 `dock.example.json` holds one sample dock control, an Inbox that shows
@@ -212,21 +223,30 @@ What each script turns on:
 ```sh
 cd ~/.config/cmux
 git pull
+[ -e cmux.json ] || { cp cmux.example.json cmux.json && cmux reload-config; }
 npm ci
 npm run build
 cmux sidebar reload
 ```
 
+Clones from before `cmux.json` became a local file lose it on that pull;
+the third line puts the minimum back. Your old settings are in git
+history:
+`git show "$(git log -1 --format=%h --diff-filter=D -- cmux.json)^:cmux.json"`.
+
 ## Removing it
 
+This keeps a copy of your own files (`cmux.json`, your project table and
+saved state) in `~/cmux-cockpit-keep` before deleting the clone:
+
 ```sh
+mkdir -p ~/cmux-cockpit-keep
+cp ~/.config/cmux/cmux.json ~/.config/cmux/config/projects.json ~/.config/cmux/config/state.json ~/cmux-cockpit-keep/ 2>/dev/null
 rm -rf ~/.config/cmux
 [ -e ~/.config/cmux.backup ] && mv ~/.config/cmux.backup ~/.config/cmux
 ```
 
-This also deletes your `cmux.json` and `config/projects.json`, so copy
-them somewhere first if you might come back. Then remove the extras you
-added:
+Then remove the extras you added:
 
 - the helper: `~/Applications/CmuxCockpit.app`
 - the automations link: `~/.cmuxterm/automations.json` (and restore

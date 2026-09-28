@@ -274,24 +274,11 @@ only when a subagent event rebuilds: the `pr-poll-turn` and
 select, so a done row or a crashed run clears on the next poll even when
 nothing reports a new subagent event in between.
 
-Add these three hooks to `~/.claude/settings.json` to feed it (the
-[quickstart](quickstart.md#claude-code-hooks) has every hook in one block):
+It is fed by three hooks in `~/.claude/settings.json`, on `PreToolUse`
+(`Agent`), `SubagentStart` and `SubagentStop`.
 
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      { "matcher": "Agent", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
-    ],
-    "SubagentStart": [
-      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
-    ],
-    "SubagentStop": [
-      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
-    ]
-  }
-}
-```
+The registration is in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
+the one copy of it.
 
 Each run gets the event as JSON on stdin and reads the workspace from
 `CMUX_WORKSPACE_ID`; a missing workspace id, unparseable JSON, or an event
@@ -329,20 +316,10 @@ reads it back, newest first, for the agents panel's Made here section
 seven days itself (`src/shared/published-age.ts`), since the hook prunes
 only when it writes.
 
-It runs as a PostToolUse hook:
+It runs as a PostToolUse hook on `Artifact` and the Claude Docs `batch` tool.
 
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch",
-        "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }]
-      }
-    ]
-  }
-}
-```
+The registration is in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
+the one copy of it.
 
 An Artifact call counts only as a page publish (no `action`, or
 `publish`, and not an `asset` upload); a Claude Docs `batch` counts only
@@ -417,24 +394,8 @@ What each event saves:
   bypassPermissions these two fire no `PermissionRequest`, and cmux flags
   them from `PreToolUse` instead.
 
-```json
-{
-  "hooks": {
-    "PermissionRequest": [
-      { "matcher": "", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-notification.ts" }] }
-    ],
-    "Notification": [
-      {
-        "matcher": "permission_prompt|elicitation_dialog|elicitation_url_dialog",
-        "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-notification.ts" }]
-      }
-    ],
-    "PreToolUse": [
-      { "matcher": "AskUserQuestion|ExitPlanMode", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-notification.ts" }] }
-    ]
-  }
-}
-```
+The registration is in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
+the one copy of it.
 
 The hook prints nothing to stdout, so it can never answer a permission
 prompt, and every problem is a line on stderr and exit 0. Each ask costs a
