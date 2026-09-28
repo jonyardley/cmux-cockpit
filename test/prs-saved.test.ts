@@ -137,6 +137,12 @@ describe("the Pull requests list's chips", () => {
     assert.deepEqual(chipOf("bare"), [12, "open", { health: "quiet", draft: false }]);
   });
 
+  it("title a workspace's PR by its own title when the poller saved one", () => {
+    r.data.workspaces = [ws("titled", { title: "Claude Code", branch: "feat" })];
+    r.data.epoch++;
+    assert.equal(agents.prs()[0]?.title, "Show the PR title");
+  });
+
   it("keep an own PR's draft, with no checks to judge it by", () => {
     assert.deepEqual(chipOf(""), [42, "draft", { health: "quiet", draft: true }]);
     const own = agents.prs().find((e) => e.pr.number === 7);

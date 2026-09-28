@@ -20,10 +20,9 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import {
   type CheckState,
-  isLabelChar,
+  cleanLabel,
   isRecord,
   MAX_CHECKS,
-  MAX_LABEL,
   type SavedCheck,
   type SavedOwnPr,
   type SavedPr,
@@ -207,22 +206,21 @@ export function pickPr(text: string, branch: string): SavedPr | null | undefined
   return top ? saved(top) : null;
 }
 
-// A C1 control character (U+0080 to U+009F), which isLabelChar lets through.
+// A C1 control character (U+0080 to U+009F), which cleanLabel lets through.
 const isC1 = (c: string): boolean => {
   const code = c.charCodeAt(0);
   return code >= 0x80 && code <= 0x9f;
 };
 
 /**
- * A PR title as a label: control characters become spaces, runs of space
- * one space, trimmed and cut to MAX_LABEL characters (whole code points, so
- * no emoji is split), so it passes state-config's isLabel. Empty when
- * nothing readable is left.
+ * A PR title as a label: control characters, C1 ones too, become spaces,
+ * then state-config's cleanLabel makes runs of space one space and cuts it
+ * to MAX_LABEL UTF-16 units in whole code points (so no emoji is split),
+ * the length isLabel measures, so a long title with emoji still passes
+ * validation. Empty when nothing readable is left.
  */
 export function cleanTitle(title: string): string {
-  const spaced = [...title].map((c) => (isLabelChar(c) && !isC1(c) ? c : " ")).join("");
-  const words = spaced.replace(/\s+/g, " ").trim();
-  return [...words].slice(0, MAX_LABEL).join("").trim();
+  return cleanLabel([...title].map((c) => (isC1(c) ? " " : c)).join("")) ?? "";
 }
 
 /**

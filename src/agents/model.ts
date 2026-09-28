@@ -462,7 +462,9 @@ export const prs = computed(() => {
     for (const pr of prsOf(w)) {
       if (!pr?.url || seen.has(pr.url)) continue;
       seen.add(pr.url);
-      out.push({ key: pr.url, pr, title: prTitle(w, pr), summary: summaryOf(pr, checksOf(w)) });
+      const summary = summaryOf(pr, checksOf(w));
+      // The PR's own title when the poller saved one, as an own PR's row has.
+      out.push({ key: pr.url, pr, title: summary?.title || prTitle(w, pr), summary });
     }
   }
   out.sort(byRankThenNewest);

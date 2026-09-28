@@ -325,9 +325,6 @@ function uiState(v: unknown): UiState {
 
 const UI_KEYS: readonly string[] = ["mode", "collapsed"];
 
-/** Whether a character is one a label keeps (no control characters). */
-export const isLabelChar = isCleanChar;
-
 const isRepoDir = (v: unknown): v is string =>
   typeof v === "string" && v.startsWith("/") && v.length <= MAX_PROJECT_KEY;
 

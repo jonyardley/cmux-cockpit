@@ -357,8 +357,16 @@ describe("cleanTitle", () => {
 
   it("cuts to the label length in whole characters, never half an emoji", () => {
     assert.equal(cleanTitle("x".repeat(500)).length, 120);
-    const cut = cleanTitle("x".repeat(119) + "😀tail");
-    assert.equal(cut, "x".repeat(119) + "😀");
+    // The emoji is two UTF-16 units, the length isLabel measures, so it
+    // no longer fits after 119 characters and goes whole.
+    assert.equal(cleanTitle("x".repeat(119) + "😀tail"), "x".repeat(119));
+    assert.equal(cleanTitle("x".repeat(118) + "😀tail"), "x".repeat(118) + "😀");
+  });
+
+  it("always gives a title the saved state keeps", () => {
+    const title = cleanTitle("😀".repeat(100));
+    const kept = validateState({ prs: { w1: { ...pr(1), title } } }).prs.w1;
+    assert.equal(kept?.title, title);
   });
 });
 

@@ -233,20 +233,28 @@ export function prLine(w: WsAccessor, size: number): View {
             .lineLimit(1)
             .truncation("tail"),
       ),
-      ring(
-        chipText,
-        () => colors().bg,
-        () => colors().edge,
-        1,
-        6,
-        true,
+      // A PR with no status has no words, so no empty pill.
+      when(
+        "pr-state",
+        () => !!pr()?.state,
+        () =>
+          ring(
+            chipText,
+            () => colors().bg,
+            () => colors().edge,
+            1,
+            6,
+            true,
+          ),
       ).layoutPriority(2),
     ])
-      .frame({ maxWidth: "infinity", alignment: "leading" })
+      // The tap sits inside the frame, so the free width after the chip
+      // still selects the card rather than opening the PR.
       .onTap(() => {
         const url = pr()?.url;
         if (url) openURL(url);
-      });
+      })
+      .frame({ maxWidth: "infinity", alignment: "leading" });
   return when("pr-line", () => !!pr(), line);
 }
 

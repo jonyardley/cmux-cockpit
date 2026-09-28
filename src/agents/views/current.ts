@@ -34,7 +34,7 @@ import {
   subagentLabelColor,
   subagents,
 } from "../model.ts";
-import { chipColors, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
+import { PORT_CHIP, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
 import { agentDot, chip, jump, meta, openIfUrl, panel, ruled } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
@@ -338,30 +338,39 @@ function detailLine(key: string, label: string, show: () => boolean, value: () =
 // The PR line's value: its number, its own title (the part that gives way),
 // then the chip with its worst state, as the card on the left shows it.
 function prDetail(): View {
-  return HStack({ spacing: 6 }, [
-    Text(() => currentPr()?.tag ?? "")
-      .font(11.5)
-      .monospaced()
-      .color(T.secondary)
-      .lineLimit(1)
-      .layoutPriority(2),
-    when(
-      "cur-pr-title",
-      () => !!currentPr()?.title,
-      () =>
-        Text(() => currentPr()?.title ?? "")
-          .font(11.5)
-          .color(T.secondary)
-          .lineLimit(1)
-          .truncation("tail"),
-    ),
-    chip(
-      () => currentPr()?.state ?? "",
-      () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
-    ).layoutPriority(2),
-  ])
-    .frame({ maxWidth: "infinity", alignment: "leading" })
-    .onTap(() => openIfUrl(currentPr()?.url));
+  return (
+    HStack({ spacing: 6 }, [
+      Text(() => currentPr()?.tag ?? "")
+        .font(11.5)
+        .monospaced()
+        .color(T.secondary)
+        .lineLimit(1)
+        .layoutPriority(2),
+      when(
+        "cur-pr-title",
+        () => !!currentPr()?.title,
+        () =>
+          Text(() => currentPr()?.title ?? "")
+            .font(11.5)
+            .color(T.secondary)
+            .lineLimit(1)
+            .truncation("tail"),
+      ),
+      // A PR with no status has no words, so no empty pill.
+      when(
+        "cur-pr-state",
+        () => !!currentPr()?.state,
+        () =>
+          chip(
+            () => currentPr()?.state ?? "",
+            () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
+          ),
+      ).layoutPriority(2),
+    ])
+      // Inside the frame, so only the line's own content opens the PR.
+      .onTap(() => openIfUrl(currentPr()?.url))
+      .frame({ maxWidth: "infinity", alignment: "leading" })
+  );
 }
 
 function detailsBlock(): View {
@@ -391,7 +400,7 @@ function detailsBlock(): View {
               ForEach({ items: () => portChips(), key: (x) => x.key }, (x) =>
                 chip(
                   () => x().label,
-                  () => chipColors("port"),
+                  () => PORT_CHIP,
                 ).onTap(() => openURL(x().url)),
               ),
             ]),
