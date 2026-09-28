@@ -1,12 +1,13 @@
 # Quickstart
 
-Get both sidebars running on your own projects in about 15 minutes. The
+Get both sidebars running on your own projects in about 10 minutes. The
 cockpit (left) sorts your cmux workspaces into lanes and flags the agents
 waiting on you. The agents panel (right) details the selected workspace,
 your open pull requests and the pages your agents published.
 
-Steps 1 to 6 are all you need. The optional extras after them turn on the
-richer signals, and each one says what it adds.
+Four steps: back up, clone, install, `npm run setup`. Setup does the rest
+and asks before each optional extra. Everything it does is also written
+out in [Doing it by hand](#doing-it-by-hand), if you would rather.
 
 ## Before you start
 
@@ -29,66 +30,42 @@ command does nothing if a backup already exists, so it is safe to rerun):
 [ -e ~/.config/cmux ] && [ ! -e ~/.config/cmux.backup ] && mv ~/.config/cmux ~/.config/cmux.backup
 ```
 
-## 2. Clone and install
+## 2. Clone
 
 ```sh
 git clone https://github.com/jonyardley/cmux-cockpit ~/.config/cmux
 cd ~/.config/cmux
+```
+
+## 3. Install
+
+```sh
 npm ci
 ```
 
-## 3. Switch on custom sidebars
+## 4. Set up
 
 ```sh
-cp cmux.example.json cmux.json
-cmux reload-config
+npm run setup
 ```
 
-That file only turns on the custom sidebars beta. If you had your own
-`cmux.json`, copy its settings back from `~/.config/cmux.backup/cmux.json`
-into this one and keep the `customSidebars` block. `cmux.json` is ignored by
-git, so your settings stay yours.
+Setup checks Node and cmux, then:
 
-## 4. Add your projects
+- copies `cmux.example.json` to `cmux.json` if you have none, which turns
+  on custom sidebars, and reloads cmux's config;
+- writes `config/projects.json` if you have none, with one project for each
+  git repo open in cmux (or the example table when none are), which you can
+  edit later;
+- builds the sidebars and shows them, the cockpit on the left and the
+  agents panel on the right;
+- asks about each [optional extra](#the-optional-extras), saying what it
+  adds;
+- ends with `npm run doctor`'s report.
 
-```sh
-cp config/projects.example.json config/projects.json
-```
-
-Edit `config/projects.json`. Each entry puts matching workspaces under one
-project in the cockpit's Projects view:
-
-- `match`: part of a folder path, in lower case, such as `"/dev/my-app"`,
-  or a list of them. The first entry that matches wins.
-- `name`: what the header shows.
-- `color`: a hex colour such as `"#6A9BCC"`.
-- `icon`: an [SF Symbols](https://developer.apple.com/sf-symbols/) name,
-  such as `"star.fill"`.
-- `root` (optional): a folder, `~` allowed. It adds a "+" to the project's
-  header that opens a new workspace there.
-
-This file is ignored by git too. You can also make a project from any
-card's menu later ("New project from this folder").
-
-## 5. Build
-
-```sh
-npm run build
-```
-
-This writes `sidebars/cockpit.js` and `sidebars/agents.js`, the files cmux
-loads. Run it again after every change to `config/projects.json`.
-
-## 6. Show the sidebars
-
-```sh
-cmux sidebar select cockpit
-npm run agents
-```
-
-The first puts the cockpit in the left sidebar. The second puts the agents
-panel in the right sidebar (it wraps `cmux right-sidebar set custom
-agents`).
+It never overwrites a file you already have and backs up anything it
+replaces, so it is safe to run again. Off a terminal it asks nothing:
+`npm run setup -- --yes` adds every extra, `-- --no-extras` adds none, and
+`-- --helper`, `-- --automations` or `-- --hooks` add just those.
 
 You should now see your workspaces as cards on the left, and the selected
 workspace's agents on the right:
@@ -115,7 +92,97 @@ latest message, an Answer button when one is waiting, ports and checks.
 Under it are your open pull requests and "Made here", the pages and docs
 your agents published.
 
-## Optional extras
+## The optional extras
+
+Setup asks about each of these. Each works without the others.
+
+- **Helper app**: keeps dismissals and project changes when cmux reloads
+  the sidebar. It builds `~/Applications/CmuxCockpit.app`
+  ([by hand](#remember-dismissals-and-project-changes)).
+- **Automations**: fills in the pull request chips for PRs an agent opened,
+  and keeps the right sidebar on the agents panel. It links
+  `~/.cmuxterm/automations.json` to the repo's rules. If that file already
+  has rules of your own, setup leaves it and tells you to merge them into
+  `~/.config/cmux/automations.json` first
+  ([by hand](#pull-request-chips-and-keeping-the-agents-panel)).
+- **Claude Code hooks**: amber "Asking" with the question, a row per
+  subagent, a chip as soon as an agent opens a PR, and the "Made here"
+  list. Setup lists the entries it will add to `~/.claude/settings.json`
+  and asks before writing; it only ever adds, and keeps a copy of the old
+  file as `settings.json.cmux-cockpit.bak` ([by hand](#claude-code-hooks)).
+
+## When something does not work
+
+Run the doctor. It changes nothing, and prints a tick or a cross for each
+part with the one line that fixes a cross:
+
+```sh
+npm run doctor
+```
+
+The helper, the poller and the hooks never interrupt you: each problem is a
+line in `~/Library/Logs/cmux-cockpit-state.log`, and the doctor shows the
+latest ones.
+
+## Doing it by hand
+
+These are the steps setup runs, after steps 1 to 3 above.
+
+### Switch on custom sidebars
+
+```sh
+cp cmux.example.json cmux.json
+cmux reload-config
+```
+
+That file only turns on the custom sidebars beta. If you had your own
+`cmux.json`, copy its settings back from `~/.config/cmux.backup/cmux.json`
+into this one and keep the `customSidebars` block. `cmux.json` is ignored by
+git, so your settings stay yours.
+
+### Add your projects
+
+```sh
+cp config/projects.example.json config/projects.json
+```
+
+Edit `config/projects.json`. Each entry puts matching workspaces under one
+project in the cockpit's Projects view:
+
+- `match`: part of a folder path, in lower case, such as `"/dev/my-app"`,
+  or a list of them. The first entry that matches wins.
+- `name`: what the header shows.
+- `color`: a hex colour such as `"#6A9BCC"`.
+- `icon`: an [SF Symbols](https://developer.apple.com/sf-symbols/) name,
+  such as `"star.fill"`.
+- `root` (optional): a folder, `~` allowed. It adds a "+" to the project's
+  header that opens a new workspace there.
+
+Setup writes a first one from the git repos you have open in cmux. This
+file is ignored by git too. You can also make a project from any card's
+menu later ("New project from this folder").
+
+### Build
+
+```sh
+npm run build
+```
+
+This writes `sidebars/cockpit.js` and `sidebars/agents.js`, the files cmux
+loads. Run it again after every change to `config/projects.json`.
+
+### Show the sidebars
+
+```sh
+cmux sidebar select cockpit
+npm run agents
+```
+
+The first puts the cockpit in the left sidebar. The second puts the agents
+panel in the right sidebar (it wraps `cmux right-sidebar set custom
+agents`).
+
+The optional extras follow, each with what it adds.
 
 ### Remember dismissals and project changes
 
@@ -171,7 +238,9 @@ none it does nothing and logs a line saying so.
 ### Claude Code hooks
 
 These hooks tell the sidebars what cmux cannot see. Each one runs only
-inside a cmux terminal and quietly does nothing elsewhere. Add these to
+inside a cmux terminal and quietly does nothing elsewhere. The list lives
+in `scripts/setup/claude-hooks.json`, which setup merges in; a test keeps
+this block the same as that file. Add these to
 the `hooks` object of `~/.claude/settings.json`. Where you already have an
 array for an event (say `PreToolUse`), add these entries to it rather than
 replacing it, or your existing hooks stop running:
@@ -212,12 +281,7 @@ What each script turns on:
   of at the next poll.
 - `report-published.ts`: the "Made here" list of published pages and docs.
 
-### When something does not work
-
-The helper, the poller and the hooks never interrupt you: each problem is a
-line in `~/Library/Logs/cmux-cockpit-state.log`. Start there.
-
-### The dock
+## The dock
 
 `dock.example.json` holds one sample dock control, an Inbox that shows
 `gh status` every five minutes. Copy it to `dock.json` if you want it.
@@ -240,8 +304,21 @@ history:
 
 ## Removing it
 
-This keeps a copy of your own files (`cmux.json`, your project table and
-saved state) in `~/cmux-cockpit-keep` before deleting the clone:
+Take the extras out first, while the clone is still there:
+
+```sh
+cd ~/.config/cmux
+npm run uninstall
+```
+
+It asks before each step. It removes the helper app, removes the
+automations link only if it points at this repo (putting back
+`automations.json.backup` if you had one), and takes only the cockpit's
+own hooks out of `~/.claude/settings.json`, backing it up first. It never
+deletes the clone; it prints the commands below for that.
+
+Then this keeps a copy of your own files (`cmux.json`, your project table
+and saved state) in `~/cmux-cockpit-keep` before deleting the clone:
 
 ```sh
 mkdir -p ~/cmux-cockpit-keep
@@ -250,7 +327,7 @@ rm -rf ~/.config/cmux
 [ -e ~/.config/cmux.backup ] && mv ~/.config/cmux.backup ~/.config/cmux
 ```
 
-Then remove the extras you added:
+To take the extras out by hand instead:
 
 - the helper: `~/Applications/CmuxCockpit.app`
 - the automations link: `~/.cmuxterm/automations.json` (and restore
