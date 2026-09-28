@@ -77,6 +77,12 @@ export function isHarnessTurn(raw: string | undefined, t: string = readable(raw)
   return HARNESS_FRAMES.some((f) => t.startsWith(f));
 }
 
+/** The last prompt Jon typed, readable; "" for none or a harness turn (issue #103). */
+export function promptText(w: Workspace | undefined): string {
+  const t = readable(w?.latestPrompt);
+  return isHarnessTurn(w?.latestPrompt, t) ? "" : t;
+}
+
 /** A card's message line: latestMessage, unless it only echoes the prompt. */
 export function cardMessage(w: Workspace | undefined): string {
   const msg = readable(w?.latestMessage);

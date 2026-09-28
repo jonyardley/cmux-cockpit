@@ -69,7 +69,7 @@ export function statusDot(w: WsAccessor, size: number): View {
   const info = computed(() => statusInfo(w()));
   const dot = Circle({ size })
     .fill(() => info().dot ?? "clear")
-    .stroke(() => (info().dot ? "clear" : C.grey))
+    .stroke(() => (info().dot ? "clear" : (info().ring ?? C.grey)))
     .strokeWidth(1.5);
   return haloDot(dot, () => info().halo, size);
 }

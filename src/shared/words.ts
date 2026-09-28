@@ -14,5 +14,11 @@ export const ASKING_WORD = "Asking";
 
 export const NO_AGENT_WORD = "No agent";
 
+/** A working agent with no activity for a while: "Working 42m · quiet 17m". */
+export const QUIET_WORD = "quiet";
+
+/** Your last prompt, on a card that shows where you left off: "You: tighten slides 9 to 12". */
+export const YOU_WORD = "You";
+
 /** The word and how long it has held, "Finished 3m"; the word alone without an age. */
 export const withAge = (word: string, age: string): string => (age ? word + " " + age : word);
