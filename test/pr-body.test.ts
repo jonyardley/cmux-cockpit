@@ -3,8 +3,9 @@
 // stand-in such as "Pending.".
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { check, missingSections } from "../scripts/pr-body.ts";
+import { bodyMessage, check, missingSections } from "../scripts/pr-body.ts";
 
 const FOOTER = "🤖 Generated with [Claude Code](https://claude.com/claude-code)";
 
@@ -132,5 +133,27 @@ describe("check", () => {
       check({ pull_request: { body } }),
       `pr-body: fill in the PR description's "## Look at after reload" section.`,
     );
+  });
+});
+
+describe("bodyMessage", () => {
+  it("passes a filled body and names each missing section otherwise", () => {
+    assert.equal(bodyMessage(filled), null);
+    assert.equal(
+      bodyMessage(filled.replace("/code-review high: two findings, both fixed.", "Pending.")),
+      'pr-body: fill in the PR description\'s "## Review" section.',
+    );
+  });
+});
+
+describe("the workflow", () => {
+  const yml = readFileSync(".github/workflows/pr-body.yml", "utf8");
+
+  it("skips drafts, so a new PR is not red while its review is to come", () => {
+    assert.match(yml, /!github\.event\.pull_request\.draft &&/);
+  });
+
+  it("runs when a PR leaves draft", () => {
+    assert.match(yml, /types: \[[^\]]*\bready_for_review\b[^\]]*\]/);
   });
 });

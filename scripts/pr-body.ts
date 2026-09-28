@@ -5,6 +5,7 @@
 // attribution footer, or a placeholder such as "Pending." standing in for the
 // real text. Headings inside code fences do not end a section.
 
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 export const REQUIRED = ["Look at after reload", "Review"] as const;
@@ -54,25 +55,51 @@ export function missingSections(body: string): string[] {
   });
 }
 
-// The message to fail with, or null to pass. Takes the parsed event as
-// unknown and narrows it, so a null or odd payload fails cleanly.
-export function check(event: unknown): string | null {
-  const pr = typeof event === "object" && event !== null && "pull_request" in event ? event.pull_request : null;
-  const body = typeof pr === "object" && pr !== null && "body" in pr ? pr.body : null;
-  const missing = missingSections(typeof body === "string" ? body : "");
+// The message to fail with, or null to pass.
+export function bodyMessage(body: string): string | null {
+  const missing = missingSections(body);
   if (missing.length === 0) return null;
   const names = missing.map((m) => `"## ${m}"`).join(" and ");
   return `pr-body: fill in the PR description's ${names} ${missing.length === 1 ? "section" : "sections"}.`;
 }
 
+// The same for a pull_request event. Takes the parsed event as unknown and
+// narrows it, so a null or odd payload fails cleanly.
+export function check(event: unknown): string | null {
+  const pr = typeof event === "object" && event !== null && "pull_request" in event ? event.pull_request : null;
+  const body = typeof pr === "object" && pr !== null && "body" in pr ? pr.body : null;
+  return bodyMessage(typeof body === "string" ? body : "");
+}
+
+// The PR's live description from GitHub, via gh, or an Error saying why not.
+// `pr` is anything `gh pr view` takes (number, URL, branch), or null for the
+// current branch's PR in `cwd`.
+export function fetchBody(pr: string | null, cwd?: string): string | Error {
+  const args = ["pr", "view", ...(pr ? [pr] : []), "--json", "body", "--jq", ".body"];
+  const r = spawnSync("gh", args, { cwd, encoding: "utf8" });
+  if (r.error) return r.error;
+  if (r.status !== 0) return new Error(r.stderr.trim() || `gh exited ${String(r.status)}`);
+  return r.stdout;
+}
+
+// In CI it reads the event GitHub hands the job. Run by hand
+// (`npm run pr-body [-- <pr>]`) it checks the PR's live description, so an
+// unfinished one shows up before CI or `gh pr ready` does.
 function main(): number {
   const path = process.env.GITHUB_EVENT_PATH;
-  if (!path) {
-    console.error("pr-body: GITHUB_EVENT_PATH is not set");
-    return 1;
+  let message: string | null;
+  if (path) {
+    message = check(JSON.parse(readFileSync(path, "utf8")));
+  } else {
+    const body = fetchBody(process.argv[2] ?? null);
+    if (body instanceof Error) {
+      console.error(`pr-body: could not read the PR description. ${body.message}`);
+      return 1;
+    }
+    message = bodyMessage(body);
   }
-  const message = check(JSON.parse(readFileSync(path, "utf8")));
   if (message) console.error(message);
+  else if (!path) console.log("pr-body: both required sections are filled in.");
   return message ? 1 : 0;
 }
 

@@ -72,15 +72,18 @@ this line is the rule.
 
 Review before hand-off, in this order:
 
-1. Open the PR and let CI run. The `PR description` check stays red
-   until step 3; that is the gate, not a failure to chase.
+1. Open the PR as a draft and let CI run. The `PR description` check
+   skips drafts, so it shows grey, not red, until step 4 takes it out of
+   draft. `npm run pr-body` runs the same check on the live description.
 2. Run `/code-review high` on the PR diff. Fix each finding, or say in the
    PR why not.
 3. Fill the PR's `## Review` section with the level, the findings and what
    happened to each. The check needs it and `## Look at after reload` to
    hold real text.
-4. Every check green on the last commit, after the fixes. Then Jon reviews
-   and merges. Agents never merge.
+4. Every check green on the last commit, after the fixes. Then
+   `gh pr ready`: the guard-ready hook refuses it while either section
+   is empty or a placeholder, and the check then runs for real. Jon
+   reviews and merges. Agents never merge.
 5. After Jon merges, close out in one hand-off: a single command in its
    own fenced block, starting with `!`, for Jon to paste in a session
    running in the main checkout (pasted inside the worktree, it closes its
