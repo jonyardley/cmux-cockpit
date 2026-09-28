@@ -5,9 +5,9 @@
 import { existsSync, rmSync } from "node:fs";
 import { type Choice, choose, type Extra, type Flags, offered } from "./args.ts";
 import { applyLink, linkState, planLink, removeLink, repoRuleIds } from "./automations.ts";
-import { backupSettings, loadSettings, unchanged, wanted, writeSettings } from "./claude-settings.ts";
+import { backupSettings, loadSettings, retired, unchanged, wanted, writeSettings } from "./claude-settings.ts";
 import type { Env, Paths } from "./env.ts";
-import { addEntries, describe, missingEntries, removeEntries } from "./hooks-merge.ts";
+import { addEntries, describe, type Entry, missingEntries, removeEntries } from "./hooks-merge.ts";
 
 const LSREGISTER =
   "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
@@ -64,14 +64,12 @@ async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
     return;
   }
   const add = missingEntries(loaded.settings, wanted(), env.home);
-  if (add.length === 0) {
+  const cleared = removeEntries(loaded.settings, retired(), env.home);
+  if (add.length === 0 && cleared.removed === 0) {
     env.print("  ✓ all the hooks are already in ~/.claude/settings.json");
     return;
   }
-  env.print(
-    `  These go into ${paths.claudeSettings}, rewritten with two-space indents; nothing there is removed or reordered:`,
-  );
-  for (const e of add) env.print(`    ${describe(e)}`);
+  listChanges(env, paths, add, cleared.removed);
   const confirmed = flags.yes || flags.picked.includes("hooks") || (await env.ask("  Write them?"));
   if (!confirmed) {
     env.print("  skipped, nothing written");
@@ -82,8 +80,22 @@ async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
     return;
   }
   if (loaded.existed) env.print(`  ✓ backed up to ${backupSettings(paths, env.now())}`);
-  writeSettings(paths, addEntries(loaded.settings, add));
-  env.print(`  ✓ added ${add.length} hooks`);
+  writeSettings(paths, addEntries(cleared.settings, add));
+  env.print(`  ✓ added ${add.length} hooks${cleared.removed ? `, removed ${cleared.removed} retired` : ""}`);
+}
+
+// What addHooks will write: the hooks it adds, and any retired ones it takes out.
+function listChanges(env: Env, paths: Paths, add: readonly Entry[], retiredCount: number): void {
+  if (add.length > 0) {
+    env.print(
+      `  These go into ${paths.claudeSettings}, rewritten with two-space indents; nothing else there is removed or reordered:`,
+    );
+    for (const e of add) env.print(`    ${describe(e)}`);
+  }
+  if (retiredCount > 0) {
+    env.print("  These come out, since their scripts have gone and they would fail on every turn:");
+    for (const e of retired()) env.print(`    ${describe(e)}`);
+  }
 }
 
 /** Uninstall's steps, each confirmed: the helper, our automations link, and our hooks. */
@@ -115,7 +127,7 @@ async function removeHooks(env: Env, paths: Paths, confirm: (q: string) => Promi
     env.print(`✗ ~/.claude/settings.json is ${loaded.error}; its hooks are left alone.`);
     return;
   }
-  const next = removeEntries(loaded.settings, wanted(), env.home);
+  const next = removeEntries(loaded.settings, [...wanted(), ...retired()], env.home);
   if (next.removed === 0) return;
   if (!(await confirm(`Remove the ${next.removed} cockpit hooks from ~/.claude/settings.json?`))) return;
   if (!unchanged(paths, loaded)) {

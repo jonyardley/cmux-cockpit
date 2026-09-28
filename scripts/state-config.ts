@@ -286,14 +286,6 @@ function cutTo(text: string, max: number): string {
   return out;
 }
 
-// cleanLabel's rule at any length.
-function cleanText(raw: unknown, max: number): string | null {
-  if (typeof raw !== "string") return null;
-  const spaced = [...raw].map((c) => (isCleanChar(c) ? c : " ")).join("");
-  const cleaned = cutTo(spaced.replaceAll(/\s+/g, " "), max).trim();
-  return cleaned.length ? cleaned : null;
-}
-
 /**
  * Turns hook input into a label isLabel accepts: control characters and
  * whitespace runs become one space, it is cut to MAX_LABEL, and only then
@@ -302,7 +294,10 @@ function cleanText(raw: unknown, max: number): string | null {
  * for anything unusable. Shared by the subagent and published hooks.
  */
 export function cleanLabel(raw: unknown): string | null {
-  return cleanText(raw, MAX_LABEL);
+  if (typeof raw !== "string") return null;
+  const spaced = [...raw].map((c) => (isCleanChar(c) ? c : " ")).join("");
+  const cleaned = cutTo(spaced.replaceAll(/\s+/g, " "), MAX_LABEL).trim();
+  return cleaned.length ? cleaned : null;
 }
 
 /** The first candidate that cleans up to a label, else `fallback`. */

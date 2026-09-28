@@ -60,7 +60,10 @@ describe("addOrigin", () => {
 describe("prOrigins in the state file", () => {
   it("keeps a good origin, drops a bad one, and drops an old saved mention", () => {
     const good = origin();
-    const old = { ...origin({ url: "https://github.com/o/r/pull/22", number: 22 }), mention: { text: "Opened #22." } };
+    const old = {
+      ...origin({ url: "https://github.com/o/r/pull/22", number: 22 }),
+      mention: { text: "Opened #22.", message: "m22", epoch: NOW },
+    };
     const state = validateState({
       prOrigins: {
         [URL]: good,

@@ -282,8 +282,10 @@ What each script turns on:
   of at the next poll.
 - `report-published.ts`: the "Made here" list of published pages and docs.
 
-If you added `report-mention.ts` as a `Stop` hook before, remove that
-entry: the script is gone, so the hook would fail at the end of every turn.
+An older list had a `Stop` hook running `report-mention.ts`. The script
+is gone, so that entry would fail at the end of every turn: run
+`npm run setup -- --hooks` to take it out (doctor flags it), or delete it
+by hand if you added the hooks that way.
 
 ## The dock
 
