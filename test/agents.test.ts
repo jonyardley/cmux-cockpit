@@ -146,7 +146,7 @@ describe("rosterAge", () => {
 describe("headStatus", () => {
   it("says the status in words beside its age", () => {
     assert.equal(m.headStatus(agent("working", { sinceEpoch: 10_000 - 840 })), "Working 14m");
-    assert.equal(m.headStatus(agent("needs_input", { sinceEpoch: 10_000 - 5 })), "Needs you <1m");
+    assert.equal(m.headStatus(agent("needs_input", { sinceEpoch: 10_000 - 5 })), "Your turn <1m");
     assert.equal(m.headStatus(agent("idle", { lastActivityAt: 10_000 - 120 })), "Idle 2m");
     assert.equal(m.headStatus(agent("ended", { lastActivityAt: 10_000 - 180 })), "Ended 3m ago");
   });
@@ -278,7 +278,7 @@ describe("currentAsk", () => {
     ];
     const ask = m.currentAsk();
     assert.equal(ask?.count, 2);
-    assert.equal(ask?.text, "2 agents are asking");
+    assert.equal(ask?.text, "2 agents need you");
     assert.equal(ask?.dismissLabel, "Dismiss all");
   });
 
@@ -342,7 +342,7 @@ describe("cardLine", () => {
 
 describe("status words", () => {
   it("rows in the card say the status with the coarse age", () => {
-    assert.equal(m.statusLine(agent("needs_input", { sinceEpoch: 10_000 - 5 })), "needs you <1m");
+    assert.equal(m.statusLine(agent("needs_input", { sinceEpoch: 10_000 - 5 })), "your turn <1m");
     assert.equal(m.statusLine(agent("working", { sinceEpoch: 10_000 - (3 * 3600 + 5 * 60) })), "working 3h");
     assert.equal(m.statusLine(agent("idle", { lastActivityAt: 10_000 - 46 })), "idle <1m");
     assert.equal(m.statusLine(agent("idle")), "idle");

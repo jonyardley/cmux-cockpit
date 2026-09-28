@@ -79,6 +79,7 @@ describe("readApplyWrite", () => {
       ownPrs: {},
       subagents: {},
       published: {},
+      asking: {},
       ui: {},
     });
   });

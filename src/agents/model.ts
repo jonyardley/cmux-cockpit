@@ -6,7 +6,7 @@ import type { CheckState, PublishedKind, SavedPublished } from "../../scripts/st
 import { byActivity, sinceOrActivity } from "../shared/activity.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
-import { agentsOf } from "../shared/needs.ts";
+import { agentsOf, askReason } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
 import {
   checksOf,
@@ -24,7 +24,7 @@ import { cardMessage, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
-import { CHECK_DOT, STATUS_DOT, T } from "./theme.ts";
+import { CHECK_DOT, STATUS_DOT, STATUS_TEXT, T } from "./theme.ts";
 
 export interface AgentEntry {
   key: string;
@@ -137,9 +137,10 @@ export const cur = (): Current =>
 export interface Ask {
   /** The most active asking agent: Answer focuses its terminal. */
   a: Agent;
-  /** The line over the buttons: "2 agents are asking" when several ask,
-   * else the agent's words, or "" when there are none beyond the generic
-   * "waiting for your reply", or when they may be another agent's. */
+  /** The line over the buttons: "2 agents need you" when several do,
+   * else why it is asking ("allow git push?"), else the agent's words, or
+   * "" when there are none beyond the generic "waiting for your reply", or
+   * when they may be another agent's. */
   text: string;
   /** How many agents in the workspace are asking. */
   count: number;
@@ -154,7 +155,9 @@ export interface Ask {
 // of its own), so it is the asker's words only when no other live agent
 // could have written it.
 function askText(c: Current, count: number): string {
-  if (count > 1) return `${count} agents are asking`;
+  if (count > 1) return `${count} agents need you`;
+  const reason = askReason(c.a, c.ws);
+  if (reason) return reason;
   const live = c.agents.filter((a) => a.status !== "ended").length;
   return live === 1 ? cardMessage(c.ws) : "";
 }
@@ -190,8 +193,26 @@ export const hollowDot = (a: Agent | null): boolean => !a || a.status === "idle"
 // matching the left sidebar's status.ts.
 const HALO_COLOR: Record<HaloStatus, string> = { working: T.blueHalo, needs_input: T.clayHalo };
 
-/** Board 1's soft halo round a live dot: working and needs only, as the left sidebar rings them. */
-export const haloFor = (a: Agent | null): string => haloColor(a?.status, HALO_COLOR);
+// Whether `a`, one of `w`'s agents (the selected workspace's by default),
+// is asking rather than waiting for its turn (issue #81).
+const isAsking = (a: Agent | null, w: Workspace): boolean => askReason(a, w) !== null;
+
+/** Board 1's soft halo round a live dot: working and needs only, as the left
+ * sidebar rings them, amber while the agent is asking. */
+export const haloFor = (a: Agent | null, w: Workspace = cur().ws): string =>
+  isAsking(a, w) ? T.amberHalo : haloColor(a?.status, HALO_COLOR);
+
+/** An agent's dot: its status colour, amber while asking, grey without one. */
+export function dotFor(a: Agent | null, w: Workspace = cur().ws): string {
+  if (!a) return T.grey;
+  return isAsking(a, w) ? T.amber : (STATUS_DOT[a.status] ?? T.grey);
+}
+
+/** The card head's status colour, amber while asking. */
+export function statusColor(a: Agent | null, w: Workspace = cur().ws): string {
+  if (!a) return T.secondary;
+  return isAsking(a, w) ? T.amberText : (STATUS_TEXT[a.status] ?? T.secondary);
+}
 
 /** Coarse age for rows, "12m" since `at`; "" without a timestamp or clock. A
  * timestamp ahead of the clock reads as "<1m", never blank. */
@@ -207,17 +228,18 @@ function statusSince(a: Agent): number | undefined {
 }
 
 const STATUS_WORD: Record<AgentStatus, string> = {
-  needs_input: "needs you",
+  needs_input: "your turn",
   working: "working",
   idle: "idle",
   ended: "ended",
 };
 
-/** Short form for agent rows, with the rows' coarse age: "working 12m". */
-export function statusLine(a: Agent | null): string {
+/** Short form for agent rows, with the rows' coarse age: "working 12m", "asking 2m". */
+export function statusLine(a: Agent | null, w: Workspace = cur().ws): string {
   if (!a) return "";
   const age = sinceAge(a);
-  return (STATUS_WORD[a.status] ?? a.status) + (age ? " " + age : "");
+  const word = isAsking(a, w) ? "asking" : (STATUS_WORD[a.status] ?? a.status);
+  return word + (age ? " " + age : "");
 }
 
 /** The one age format the card shows: "<1m", "12m", counted from the
@@ -235,16 +257,16 @@ export function rosterAge(e: RosterEntry): string {
 }
 
 const HEAD_WORD: Record<AgentStatus, string> = {
-  needs_input: "Needs you",
+  needs_input: "Your turn",
   working: "Working",
   idle: "Idle",
   ended: "Ended",
 };
 
-/** The card head's status: "Working 14m", "Ended 3m ago", "No agent". */
-export function headStatus(a: Agent | null): string {
+/** The card head's status: "Working 14m", "Asking 2m", "Ended 3m ago", "No agent". */
+export function headStatus(a: Agent | null, w: Workspace = cur().ws): string {
   if (!a) return "No agent";
-  const word = HEAD_WORD[a.status] ?? a.status;
+  const word = isAsking(a, w) ? "Asking" : (HEAD_WORD[a.status] ?? a.status);
   const age = sinceAge(a);
   if (!age) return word;
   return a.status === "ended" ? word + " " + age + " ago" : word + " " + age;

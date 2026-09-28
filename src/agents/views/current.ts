@@ -23,12 +23,14 @@ import {
   currentAsk,
   currentPr,
   currentPrDim,
+  dotFor,
   haloFor,
   hasDetails,
   headStatus,
   hollowDot,
   portChips,
   type SubagentRow,
+  statusColor,
   statusLine,
   subagentDot,
   subagentFigure,
@@ -36,14 +38,14 @@ import {
   subagentLabelColor,
   subagents,
 } from "../model.ts";
-import { PORT_CHIP, STALE_OPACITY, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
+import { PORT_CHIP, STALE_OPACITY, T } from "../theme.ts";
 import { agentDot, chip, jump, meta, openIfUrl, panel, ruled } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
   const a = () => e().a;
   return HStack({ spacing: 8 }, [
     agentDot(
-      () => STATUS_DOT[a().status] ?? T.grey,
+      () => dotFor(a()),
       () => haloFor(a()),
       () => hollowDot(a()),
     ),
@@ -267,23 +269,16 @@ function currentTitle(): View {
 // no words, so no empty pill.
 function statusRow(): View {
   const a = () => cur().a;
-  const status = () => a()?.status;
   return HStack({ spacing: 6 }, [
     agentDot(
-      () => {
-        const s = status();
-        return s ? STATUS_DOT[s] : T.grey;
-      },
+      () => dotFor(a()),
       () => haloFor(a()),
       () => hollowDot(a()),
     ),
     Text(() => headStatus(a()))
       .font(12.5)
       .weight("medium")
-      .color(() => {
-        const s = status();
-        return s ? STATUS_TEXT[s] : T.secondary;
-      })
+      .color(() => statusColor(a()))
       .lineLimit(1)
       .layoutPriority(1),
     Spacer({ minLength: 4 }),

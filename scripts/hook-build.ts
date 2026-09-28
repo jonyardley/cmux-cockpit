@@ -1,8 +1,8 @@
 // The coalesced rebuild the state hooks share (docs/state-loop.md):
-// scripts/hooks/report-subagent.ts and report-published.ts each write
-// config/state.json, and the sidebars only see a write once scripts/build.ts
-// bakes it in. Moved here from report-subagent.ts (#52) so both hooks use
-// one lock and one build.
+// scripts/hooks/report-subagent.ts, report-published.ts and
+// report-notification.ts (#81) each write config/state.json, and the
+// sidebars only see a write once scripts/build.ts bakes it in. Moved here
+// from report-subagent.ts (#52) so every hook uses one lock and one build.
 //
 // Rebuilding both sidebars costs a full esbuild pass, so two events close
 // together (SubagentStart fires ~25ms after the PreToolUse that starts the

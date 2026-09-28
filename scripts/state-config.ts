@@ -39,6 +39,14 @@ export interface State {
    * by a URL: a URL could plant a link.
    */
   published: Record<string, SavedPublished>;
+  /**
+   * wsId -> why its agent last stopped to ask (issue #81): a permission
+   * prompt, a question or an MCP form, recorded by
+   * scripts/hooks/report-notification.ts because cmux says only that an
+   * agent needs you, never why. Written through applySet, but refused from
+   * a URL (urlMaySet): a URL could plant a question.
+   */
+  asking: Record<string, SavedAsk>;
   /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
   ui: UiState;
   /**
@@ -169,6 +177,16 @@ export interface SavedPublished {
   epoch: number;
 }
 
+/** Why an agent stopped to ask, as the notification hook saves it. */
+export interface SavedAsk {
+  /** A short reason, e.g. "allow git push?", at most MAX_LABEL characters. */
+  reason: string;
+  /** Epoch seconds the hook heard the ask. */
+  epoch: number;
+  /** The Claude Code session that asked, so a later event can tell it is the same ask. */
+  session?: string;
+}
+
 /** Runs kept per workspace, newest kept, so a busy agent cannot bloat the file. */
 export const MAX_SUBAGENTS = 10;
 /** The longest label kept; the hook cuts a description to this. */
@@ -185,6 +203,7 @@ export const emptyState = (): State => ({
   ownPrs: {},
   subagents: {},
   published: {},
+  asking: {},
   ui: {},
 });
 
@@ -194,7 +213,7 @@ export const emptyState = (): State => ({
 // Numeric-looking ids would sort first in Object.entries and so be evicted
 // first; cmux ids are UUIDs, so that is accepted rather than worked round.
 const RESERVED = new Set(["__proto__", "constructor", "prototype"]);
-const isId = (v: string): boolean => v.length > 0 && v.length <= 128 && !RESERVED.has(v);
+export const isId = (v: string): boolean => v.length > 0 && v.length <= 128 && !RESERVED.has(v);
 const MAX_PROJECT_KEY = 512;
 /** Entries kept per map, so a flood of URLs cannot grow the file without bound. */
 export const MAX_ENTRIES = 256;
@@ -405,6 +424,13 @@ function savedPublished(v: unknown): SavedPublished | null {
   return { url: v.url, title: v.title, kind: v.kind, workspace, epoch: v.epoch };
 }
 
+function savedAsk(v: unknown): SavedAsk | null {
+  if (!isRecord(v) || !isLabel(v.reason) || !isEpoch(v.epoch)) return null;
+  const { session } = v;
+  if (session !== undefined && (typeof session !== "string" || !isId(session))) return null;
+  return { reason: v.reason, epoch: v.epoch, ...(typeof session === "string" ? { session } : {}) };
+}
+
 function savedSubagents(v: unknown): SavedSubagent[] | null {
   const runs = Array.isArray(v) ? v.flatMap(savedSubagent).slice(-MAX_SUBAGENTS) : [];
   return runs.length ? runs : null;
@@ -432,6 +458,7 @@ export function validateState(raw: unknown): State {
     ownPrs: cleanMap(v.ownPrs, savedOwnPr, isPrUrl),
     subagents: cleanMap(v.subagents, savedSubagents),
     published: cleanMap(v.published, savedPublished, isPublishedUrl),
+    asking: cleanMap(v.asking, savedAsk),
     ui: uiState(v.ui),
     ...(poll ? { poll } : {}),
   };
@@ -439,11 +466,25 @@ export function validateState(raw: unknown): State {
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-// The maps a URL may set. `prs`, `ownPrs`, `subagents`, `published` and `poll` are left out on purpose (see State).
-// `ui` is not keyed by id: its only keys are UI_KEYS.
-type MapName = "dismissed" | "projectOverride" | "projects" | "ui";
-const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui"];
+// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `published` and `poll` are left out on purpose (see State).
+// `ui` is not keyed by id: its only keys are UI_KEYS. `asking` is set only by
+// its hook: the URL handler refuses it (urlMaySet).
+type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking";
+const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui", "asking"];
 const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
+
+// Maps applySet takes from a hook but never from a URL.
+const HOOK_ONLY: readonly string[] = ["asking"];
+
+/**
+ * Whether a cmux-cockpit:// URL may make this set (scripts/state-set.ts
+ * checks it first). Any web page can open one, and an `asking` entry is
+ * text the sidebars show as the agent's own question.
+ */
+export const urlMaySet = (key: string): boolean => !HOOK_ONLY.includes(key.split(".", 1)[0] ?? "");
+
+/** An ask older than this beside a newer one is dropped, so closed workspaces do not linger. */
+export const ASK_MAX_AGE_S = 24 * 60 * 60;
 
 function without<T>(entries: Record<string, T>, id: string): Record<string, T> {
   const next = { ...entries };
@@ -460,6 +501,8 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       return { ...state, projectOverride: without(state.projectOverride, id) };
     case "projects":
       return { ...state, projects: without(state.projects, id) };
+    case "asking":
+      return { ...state, asking: without(state.asking, id) };
     case "ui": {
       const { mode, collapsed } = state.ui;
       return { ...state, ui: id === "mode" ? (collapsed ? { collapsed } : {}) : mode ? { mode } : {} };
@@ -490,7 +533,18 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
     }
     case "ui":
       return uiEntry(state, id, parsed);
+    case "asking":
+      return askEntry(state, id, parsed);
   }
+}
+
+// Adds the ask last, as the newest, and drops every other ask a day older
+// than it, since nothing else ever clears one for a closed workspace.
+function askEntry(state: State, id: string, parsed: unknown): State | string {
+  const ask = savedAsk(parsed);
+  if (!ask) return "asking wants {reason, epoch, session?}";
+  const kept = Object.entries(state.asking).filter(([, a]) => a.epoch >= ask.epoch - ASK_MAX_AGE_S);
+  return { ...state, asking: { ...Object.fromEntries(kept), [id]: ask } };
 }
 
 function uiEntry(state: State, id: string, parsed: unknown): State | string {

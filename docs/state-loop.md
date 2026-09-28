@@ -353,3 +353,75 @@ different ids and no local way to map one to the other, so republishing
 under the other form adds a second entry. And an update that names its
 `url` is recorded without reading the result, so a refused republish
 (which returns the live version rather than failing) still counts.
+
+## Asking or your turn
+
+cmux marks an agent needs_input both when it stops to ask (a permission
+prompt, a question, an MCP form) and when it simply finished its turn, and
+says nothing about which (issue #81). Claude Code's hooks do, so
+`scripts/hooks/report-notification.ts` saves the latest ask per workspace
+in a seventh map, `asking`: workspace id to `{"reason", "epoch",
+"session"?}`, where `reason` is a short line such as `allow git push?`.
+It goes through `applySet` and `readApplyWrite` like a URL's set, but
+`state-set.ts` refuses the map from a URL (`urlMaySet`), since a planted
+entry would read as the agent's own question. A new ask drops any other
+older than a day, and `MAX_ENTRIES` caps the map.
+
+The sidebars read it back through `src/shared/needs.ts`'s `askReason`: a
+needs_input agent is asking when the workspace's saved ask is at least as
+new as the start of its current needs_input spell (`sinceEpoch`), give or
+take `ASK_SLACK` (3 seconds, since this hook and cmux's own fire on the
+same event). The cockpit then shows the card and its Needs you row amber,
+"Asking", with the reason under the title; the agents panel heads the
+workspace "Asking" in amber and puts the reason over Answer. Any other
+needs_input is "Your turn" in clay, and red stays for failing checks. No
+write clears an ask: once the agent works again and stops, its new spell
+starts after the ask, so it reads as its turn. Without the hook, or for an
+agent cmux sends no `sinceEpoch` for, everything reads as "Your turn".
+
+What each event saves:
+
+- `PermissionRequest` (every tool): fires the moment Claude Code is about
+  to ask, alongside cmux's own `PermissionRequest` hook, which is what
+  marks the agent needs_input. The reason names the command's first two
+  words (past a `cd`, env assignments and `rtk`), the file an edit or
+  write touches, the host a fetch reaches, or the tool; `AskUserQuestion`
+  uses the first question's words and `ExitPlanMode` reads
+  `approve the plan?`.
+- `Notification` (`permission_prompt`, `elicitation_dialog`,
+  `elicitation_url_dialog`, `agent_needs_input`): the asks with no
+  `PermissionRequest` (an MCP form, a sandboxed network request) and a
+  re-stamp of one still waiting. Its `message` is used as the reason
+  ("Claude needs your permission to use Bash" reads `allow Bash?`), except
+  that a `permission_prompt` from the session that saved the last ask, in
+  the last two minutes, keeps that ask's richer reason. `idle_prompt` is
+  the turn-end nudge, not an ask, so it is not hooked.
+- `PreToolUse` (`AskUserQuestion`, `ExitPlanMode`): under
+  bypassPermissions these two fire no `PermissionRequest`, and cmux flags
+  them from `PreToolUse` instead.
+
+```json
+{
+  "hooks": {
+    "PermissionRequest": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-notification.ts" }] }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input",
+        "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-notification.ts" }]
+      }
+    ],
+    "PreToolUse": [
+      { "matcher": "AskUserQuestion|ExitPlanMode", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-notification.ts" }] }
+    ]
+  }
+}
+```
+
+The hook prints nothing to stdout, so it can never answer a permission
+prompt, and every problem is a line on stderr and exit 0. Each ask costs a
+rebuild through `scripts/hook-build.ts`, coalesced with the other hooks',
+so a card turns amber a second or two after the prompt appears. A
+workspace holds one saved ask, so in a workspace with two agents waiting
+at once both read the latest ask's reason.

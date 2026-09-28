@@ -13,6 +13,11 @@ export const C = {
   blue: "#3B6FB6",
   blueHalo: "#3B6FB62E",
   clayHalo: "#D9775738",
+  // Asking (issue #81): an agent stopped on a permission or a question.
+  // Clay stays "your turn", red stays failing checks.
+  amber: "#D9A03F",
+  amberText: "#8A5A0B",
+  amberHalo: "#D9A03F38",
   green: "#788C5D",
   greenText: "#5E7A40",
   // The Ready pill's face: the done green, faint (issue #53).
@@ -24,7 +29,7 @@ export const C = {
   needsRowEdge: "#A34A2A29",
   hover: "#7f7f7f14",
   // Lanes and selection stay neutral so hue only ever means state: clay is
-  // needs you, blue working, green done. Lane markers step down in lightness
+  // needs you (amber when it is asking), blue working, green done. Lane markers step down in lightness
   // from Main to Unsorted instead, each a clear step from the next.
   laneMain: "#3D3D3A",
   laneReview: "#5E5D59",
