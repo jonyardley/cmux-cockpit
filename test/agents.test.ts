@@ -140,9 +140,15 @@ describe("cardMessage (shared/text)", () => {
     assert.equal(cardMessage(ws("a", { latestMessage: "Fix the build", latestPrompt: " Fix  the build " })), "");
   });
 
-  it("never counts a harness turn as the prompt it echoes (#103)", () => {
-    const frame = "[Subagent hand-back] done two";
-    assert.equal(cardMessage(ws("a", { latestMessage: frame, latestPrompt: frame })), frame);
+  it("hides a harness turn, open or cut short (#103)", () => {
+    const open = '<agent-message from="a1"> [Subagent hand-back] The text below is the final report…';
+    assert.equal(cardMessage(ws("a", { latestMessage: open, latestPrompt: open })), "");
+    assert.equal(cardMessage(ws("a", { latestMessage: open, latestPrompt: "spawn" })), "");
+  });
+
+  it("keeps an agent message that follows a closed context block", () => {
+    const msg = "<system-reminder>ctx</system-reminder> Build passed, 3 files changed";
+    assert.equal(cardMessage(ws("a", { latestMessage: msg, latestPrompt: "go" })), "Build passed, 3 files changed");
   });
 
   it("keeps a message that differs from the prompt, or has no prompt", () => {
@@ -715,6 +721,36 @@ describe("askedLine (#80)", () => {
       }),
     ];
     assert.equal(m.askedLine(), "");
+  });
+
+  it("keeps Jon's prompt through the tagged turns cmux cuts to 240 characters", () => {
+    r.data.workspaces = [ws("cut", { selected: true, latestPrompt: "spawn" })];
+    assert.equal(m.askedLine(), "spawn");
+    r.data.workspaces = [
+      ws("cut", {
+        selected: true,
+        latestPrompt: '<agent-message from="a1"> [Subagent hand-back] The text below is the final report…',
+      }),
+    ];
+    assert.equal(m.askedLine(), "spawn");
+    r.data.workspaces = [
+      ws("cut", {
+        selected: true,
+        latestPrompt: "<task-notification> <task-id>a1</task-id> <output-file>/private/tmp/tasks/a1.output…",
+      }),
+    ];
+    assert.equal(m.askedLine(), "spawn");
+  });
+
+  it("shows a typed prompt behind a closed context block, and skips local command output", () => {
+    r.data.workspaces = [
+      ws("ctx", { selected: true, latestPrompt: "<system-reminder>ctx</system-reminder>\nRun the tests" }),
+    ];
+    assert.equal(m.askedLine(), "Run the tests");
+    r.data.workspaces = [
+      ws("ctx", { selected: true, latestPrompt: "<local-command-stdout>Reloaded</local-command-stdout>" }),
+    ];
+    assert.equal(m.askedLine(), "Run the tests");
   });
 
   it("treats an interrupt or an artifact comment as a harness turn", () => {

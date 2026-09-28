@@ -123,7 +123,8 @@ export const currentAsk = computed((): Ask | null => {
 export const cardLine = computed((): string => (currentAsk() ? "" : cardMessage(cur().ws)));
 
 // The last prompt Jon typed in each workspace, so a harness turn (a
-// subagent's hand-back, issue #103) keeps it on screen. Written during render
+// subagent's hand-back or finished notice, local command output, issue #103)
+// keeps it on screen. Written during render
 // with no bump(): what shows is the value just read, and a sidebar reload
 // only forgets it, so the line hides until he next types.
 const lastAsked = new Map<string, string>();
@@ -133,7 +134,7 @@ const lastAsked = new Map<string, string>();
 export const askedLine = computed((): string => {
   const w = cur().ws;
   const t = readable(w.latestPrompt);
-  if (isHarnessTurn(t)) return lastAsked.get(w.id) ?? "";
+  if (isHarnessTurn(w.latestPrompt, t)) return lastAsked.get(w.id) ?? "";
   if (t) lastAsked.set(w.id, t);
   return t;
 });
