@@ -171,11 +171,15 @@ describe("time", () => {
     assert.equal(fmtAge(-1), "");
     assert.equal(fmtAge(Number.NaN), "");
   });
-  it("finishedAt counts from the move to finished, else the last activity (issue #98)", () => {
+  it("finishedAt counts an idle agent from its move to idle, else the last activity (issue #98)", () => {
     assert.equal(finishedAt(agent("idle", { sinceEpoch: 300, lastActivityAt: 500 })), 300);
-    assert.equal(finishedAt(agent("ended", { sinceEpoch: 300, lastActivityAt: 100 })), 300);
     assert.equal(finishedAt(agent("idle", { lastActivityAt: 500 })), 500);
     assert.equal(finishedAt(agent("idle", { sinceEpoch: 0, lastActivityAt: 500 })), 500);
+    assert.equal(finishedAt(agent("idle")), 0);
+  });
+  it("finishedAt counts an ended agent from its last activity, not when the session closed", () => {
+    assert.equal(finishedAt(agent("ended", { sinceEpoch: 900, lastActivityAt: 100 })), 100);
+    assert.equal(finishedAt(agent("ended", { sinceEpoch: 900 })), 900);
     assert.equal(finishedAt(agent("ended")), 0);
   });
   it("fmtElapsed shows seconds and hours with minutes", () => {

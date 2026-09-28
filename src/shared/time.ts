@@ -33,13 +33,14 @@ export function fmtElapsed(secs: number): string {
 }
 
 /**
- * When a finished (idle or ended) agent finished, in epoch seconds: the start
- * of its current status, which is its move to idle or ended, else its last
- * activity; 0 when neither is known. One rule for both sidebars (issue #98),
- * so the agents panel's Idle rows and the cockpit's Ready card give the same
- * agent the same age. The last activity is only the fallback: it says when
- * the agent last did something, not when it finished.
+ * When a finished (idle or ended) agent finished, in epoch seconds; 0 when
+ * nothing says. One rule for both sidebars (issue #98), so the agents panel's
+ * Idle rows and the cockpit's Ready card give the same agent the same age.
+ * An idle agent counts from its move to idle, else its last activity. An
+ * ended agent counts from its last activity, else its move to ended: that
+ * move is when the session closed, which can be hours after the work did.
  */
 export function finishedAt(a: Agent): number {
+  if (a.status === "ended") return a.lastActivityAt || a.sinceEpoch || 0;
   return a.sinceEpoch || a.lastActivityAt || 0;
 }

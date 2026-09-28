@@ -138,6 +138,11 @@ describe("a Ready card", () => {
     assert.equal(status.statusLine(readyWs("w", { unread: 0, agents: [a] })), "Idle 6m");
   });
 
+  it("dates an ended agent by its work, not by when its terminal closed", () => {
+    const closed = agent("ended", { sinceEpoch: now() - 5, lastActivityAt: now() - 10_800 });
+    assert.equal(status.statusLine(readyWs("w", { agents: [closed] })), "Finished 3h");
+  });
+
   it("reports the agent the rest of the card reports, so its two ages agree", () => {
     const a = agent("idle", { sinceEpoch: now() - 900, lastActivityAt: now() - 60 });
     const b = agent("idle", { sinceEpoch: now() - 300, lastActivityAt: now() - 240 });

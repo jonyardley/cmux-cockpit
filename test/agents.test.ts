@@ -163,10 +163,13 @@ describe("headStatus", () => {
     assert.equal(m.headStatus(agent("needs_input", { sinceEpoch: 10_000 - 5 })), "Your turn <1m");
     assert.equal(m.headStatus(agent("idle", { lastActivityAt: 10_000 - 120 })), "Idle 2m");
     assert.equal(m.headStatus(agent("ended", { lastActivityAt: 10_000 - 180 })), "Finished 3m");
-    // Issue #98: from when it finished, as the cockpit card counts, not its last activity.
+    // Issue #98: an idle agent counts from its move to idle, as the cockpit card does.
+    assert.equal(m.headStatus(agent("idle", { sinceEpoch: 10_000 - 360, lastActivityAt: 10_000 - 180 })), "Idle 6m");
+    // An ended agent counts from its last activity, not the session closing: a
+    // terminal closed hours after the work never reads "Finished <1m".
     assert.equal(
-      m.headStatus(agent("ended", { sinceEpoch: 10_000 - 360, lastActivityAt: 10_000 - 180 })),
-      "Finished 6m",
+      m.headStatus(agent("ended", { sinceEpoch: 10_000 - 5, lastActivityAt: 10_000 - 10_800 })),
+      "Finished 3h",
     );
   });
 
