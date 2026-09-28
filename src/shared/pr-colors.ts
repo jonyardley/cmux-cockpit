@@ -2,8 +2,8 @@
 // in each. A filled hue says what the PR needs: red failing or in conflict
 // (the chip's word tells the two apart), blue running (the Checks block's
 // pending dot and the working dot are blue too), and ready to merge in
-// solid deep sage with white words: still the loudest chip, but in the
-// sidebar's own palette, well darker than the agent's Finished green.
+// bright leaf green with dark words and a soft glow round it: the loudest
+// chip, and the only one that glows.
 // Only ready is green (issue #82): a plain open PR with no verdict is
 // neutral. A quiet merged PR stays purple, an open draft slate, and
 // anything else neutral.
@@ -15,6 +15,8 @@ export interface ChipColors {
   bg: string;
   fg: string;
   edge: string;
+  /** A glow round the chip; only ready has one. */
+  halo?: string;
 }
 
 /** The quiet chip: a plain open or closed PR, the branch and the ports. */
@@ -24,10 +26,10 @@ export const MERGED_CHIP: ChipColors = { bg: "#EFEAF7", fg: "#5B3E91", edge: "#D
 
 const FAILING_CHIP: ChipColors = { bg: "#F8E4E2", fg: "#9E2F27", edge: "#EDC9C5" };
 
-/** Ready's green as words on a card, where the chip's white would vanish. */
+/** Ready's green as words on a card, where the chip's bright leaf would be too pale to read. */
 export const READY_INK = P.greenDeep;
 
-const READY_CHIP: ChipColors = { bg: READY_INK, fg: "#FFFFFF", edge: P.greenDeepEdge };
+const READY_CHIP: ChipColors = { bg: P.readyFace, fg: P.readyWords, edge: P.readyEdge, halo: P.readyHalo };
 
 const HEALTH_CHIP: Record<Exclude<PrHealth, "quiet">, ChipColors> = {
   failing: FAILING_CHIP,
@@ -52,15 +54,15 @@ export function prChipColors(health: PrHealth, status: PrStatus | undefined, dra
 
 /**
  * A PR's health as words outside a chip: the chip's own ink, bar ready,
- * whose chip ink is white on its fill.
+ * which takes READY_INK so it stays green rather than near black.
  */
 export const prInk = (health: PrHealth, status: PrStatus | undefined): string =>
   health === "ready" ? READY_INK : prChipColors(health, status).fg;
 
 /**
  * A chip's colours while its data may be stale and the chip is dimmed: the
- * solid ready chip drops to neutral, since white on a half-faded green
- * cannot be read, and a stale verdict should not shout.
+ * ready chip drops to neutral, glow and all, since a stale verdict should
+ * not shout.
  */
 export const dimmedColors = (c: ChipColors, dim: boolean): ChipColors => (dim && c === READY_CHIP ? NEUTRAL_CHIP : c);
 

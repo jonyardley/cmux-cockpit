@@ -51,6 +51,17 @@ describe("the shared builders read what they are handed", () => {
     ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 6, { hug: true });
   });
 
+  it("ring reads a reactive radius", () => {
+    const radius = spy(9);
+    ui.ring(Text("x"), "#FFFFFF", "#000000", 3, radius.get, { hug: true });
+    assert.ok(radius.reads() > 0);
+  });
+
+  it("chipGlow rings a chip in its halo, and a chip with none in nothing", () => {
+    assert.deepEqual(ui.chipGlow(NEUTRAL_CHIP), { color: "clear", width: 0 });
+    assert.deepEqual(ui.chipGlow({ ...NEUTRAL_CHIP, halo: "#9BD67A66" }), { color: "#9BD67A66", width: 3 });
+  });
+
   it("ring frames the full width before painting the face, unless it hugs (issue #93)", () => {
     const orderOf = (hug: boolean): string[] =>
       recordModifiers(() => ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 6, { hug })).filter(
