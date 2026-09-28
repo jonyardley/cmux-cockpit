@@ -40,6 +40,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pauseSync, tryTakeLock, waitForLock } from "./lockfile.ts";
 import { LOG_PATH } from "./state-log.ts";
+import { unreadableCopyOf } from "./state-url.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const BUILD_LOCK = join(ROOT, "config", "hook-build.lock");
@@ -94,10 +95,7 @@ const BUILD_WAIT_MS = 10_000;
  * started. Returns whether the last build succeeded, and the snapshot it
  * built. Exported for testing with fakes instead of a real spawn and file.
  */
-export function buildUntilStable(
-  build: () => boolean,
-  snapshot: () => string | null,
-): { ok: boolean; built: string | null } {
+export function buildUntilStable(build: () => boolean, snapshot: () => string): { ok: boolean; built: string } {
   let before = snapshot();
   for (;;) {
     if (!build()) return { ok: false, built: before };
@@ -107,46 +105,65 @@ export function buildUntilStable(
   }
 }
 
+// The one marker for a file that is not there, so its absence still reads
+// the same each time and its arrival reads differently.
+const MISSING = "(missing)";
+
 function readOrMissing(path: string): string {
   try {
     return readFileSync(path, "utf8");
   } catch {
-    return "(missing)";
+    return MISSING;
   }
 }
 
-// A file's size and modification time, or a marker when it is missing.
+// A file's size and modification time, or MISSING.
 function stamp(path: string): string {
   const s = statSync(path, { throwIfNoEntry: false });
-  return s ? `${s.size}:${s.mtimeMs}` : "(missing)";
+  return s ? `${s.size}:${s.mtimeMs}` : MISSING;
+}
+
+// The .ts files under `dir` (every depth when `deep`), relative and sorted.
+// Only .ts, so an editor's swap file, an atomic save's temp file or a
+// .DS_Store never reads as a change and costs a build pass.
+function tsFiles(dir: string, deep: boolean): string[] {
+  try {
+    return readdirSync(dir, { recursive: deep, encoding: "utf8" })
+      .filter((f) => f.endsWith(".ts"))
+      .sort();
+  } catch {
+    return [];
+  }
 }
 
 /**
  * What a build reads, cheaply: the state file's text, plus the size and
- * modification time of config/projects.json and of every file under src/.
- * A tap or a hook changes the first; a pull or a branch switch changes the
- * others, so a source change landing mid-build reads differently here and
- * gets another pass. Stats rather than hashes, since this runs after every
- * build pass. Exported for testing against a temp tree.
+ * modification time of everything else build.ts reads: the project table
+ * and its committed fallback, the state file's unreadable copy, every .ts
+ * file under src/ and the scripts (build.ts and the modules it imports) in
+ * scripts/. A tap or a hook changes the first; a pull or a branch switch
+ * changes the others, so a source change landing mid-build reads
+ * differently here and gets another pass. Stats rather than hashes, since
+ * this runs after every build pass. Exported for testing against a temp
+ * tree.
  */
 export function buildInputs(root: string = ROOT): string {
-  const src = join(root, "src");
-  let files: string[];
-  try {
-    files = readdirSync(src, { recursive: true, encoding: "utf8" }).sort();
-  } catch {
-    files = [];
-  }
-  const stamps = files.map((f) => `${f} ${stamp(join(src, f))}`);
-  const projects = `projects ${stamp(join(root, "config", "projects.json"))}`;
-  return [readOrMissing(join(root, "config", "state.json")), projects, ...stamps].join("\n");
+  const state = join(root, "config", "state.json");
+  const files = [
+    join(root, "config", "projects.json"),
+    join(root, "config", "projects.example.json"),
+    unreadableCopyOf(state),
+    ...tsFiles(join(root, "src"), true).map((f) => join(root, "src", f)),
+    ...tsFiles(join(root, "scripts"), false).map((f) => join(root, "scripts", f)),
+  ];
+  return [readOrMissing(state), ...files.map((f) => `${f} ${stamp(f)}`)].join("\n");
 }
 
 // Only ever called with BUILD_LOCK held: from buildThenRelease, whose lock
 // scheduleBuild, buildNow or lockedBuild took first. Spawns scripts/build.ts
 // itself, never `npm run build`, which would wait on this same lock.
-// Returns build.ts's exit status, or 1 when it had none (killed on the
-// timeout, or never started).
+// Returns build.ts's exit status, or 1 when it had none, saying why: killed
+// on the timeout or by a signal, or never started.
 function spawnBuild(stdio: "ignore" | "inherit"): number {
   touchBuildLock();
   const build = spawnSync(process.execPath, ["scripts/build.ts"], {
@@ -154,7 +171,13 @@ function spawnBuild(stdio: "ignore" | "inherit"): number {
     stdio,
     timeout: BUILD_TIMEOUT_MS,
   });
-  return build.status ?? 1;
+  if (build.status !== null) return build.status;
+  if (build.error) console.error(`build: could not run scripts/build.ts: ${build.error.message}`);
+  else
+    console.error(
+      `build: scripts/build.ts stopped by ${build.signal ?? "a signal"} (the timeout is ${BUILD_TIMEOUT_MS / 1000}s)`,
+    );
+  return 1;
 }
 
 function runBuild(): boolean {
@@ -168,7 +191,7 @@ export interface BuildDeps {
   take: () => boolean;
   release: () => void;
   build: () => boolean;
-  snapshot: () => string | null;
+  snapshot: () => string;
   pause: (ms: number) => void;
   maxWaitMs: number;
 }
@@ -192,7 +215,7 @@ const REAL_DEPS: BuildDeps = {
  */
 export function buildThenRelease(d: Pick<BuildDeps, "take" | "release" | "build" | "snapshot">): boolean {
   for (;;) {
-    let result: { ok: boolean; built: string | null };
+    let result: { ok: boolean; built: string };
     try {
       result = buildUntilStable(d.build, d.snapshot);
     } finally {
@@ -263,8 +286,37 @@ export interface LockedBuildDeps extends Omit<BuildDeps, "build"> {
 // a crashed build has gone stale and been retaken on the way.
 const LOCKED_WAIT_MS = BUILD_LOCK_STALE_MS + LOCK_POLL_MS;
 
+// Once `npm run build` holds the lock, a Ctrl-C or a kill must not end it
+// before buildThenRelease's `finally` drops the lock: a lock left behind
+// looks live for two minutes, and every tap in that time skips its build,
+// trusting a holder that is gone. With a listener, node no longer dies on
+// the signal mid-build: a Ctrl-C also stops the build child (same process
+// group), so that pass fails, the lock is dropped and the run exits 1; a
+// signal to this process alone lets the pass finish first. The listener
+// exits with the usual status if the event loop gets to it, which a run
+// this short usually does not. Only once the lock is taken, since the wait
+// for it is a synchronous pause no listener could interrupt, and dying
+// there leaves nothing held. A SIGKILL still leaves the lock, to go stale
+// as before.
+function exitOnSignalOnceHeld(): void {
+  for (const [signal, code] of [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const) {
+    process.once(signal, () => process.exit(code));
+  }
+}
+
+function takeForLockedBuild(): boolean {
+  if (!tryTakeBuildLock()) return false;
+  exitOnSignalOnceHeld();
+  return true;
+}
+
 const LOCKED_DEPS: LockedBuildDeps = {
   ...REAL_DEPS,
+  take: takeForLockedBuild,
   build: () => spawnBuild("inherit"),
   maxWaitMs: LOCKED_WAIT_MS,
 };
@@ -278,7 +330,16 @@ const LOCKED_DEPS: LockedBuildDeps = {
  */
 export function lockedBuild(deps: Partial<LockedBuildDeps> = {}): number {
   const d: LockedBuildDeps = { ...LOCKED_DEPS, ...deps };
-  if (!waitForLock(d.take, d.maxWaitMs, d.pause, LOCK_POLL_MS)) {
+  let said = false;
+  // Says once why it is waiting, so a git hook's `npm run --silent build`
+  // held up by a build in flight never reads as a hang.
+  const take = (): boolean => {
+    if (d.take()) return true;
+    if (!said) console.error("build: waiting for the build in flight (config/hook-build.lock)");
+    said = true;
+    return false;
+  };
+  if (!waitForLock(take, d.maxWaitMs, d.pause, LOCK_POLL_MS)) {
     console.error("build: the build lock (config/hook-build.lock) stayed held; try again");
     return 1;
   }

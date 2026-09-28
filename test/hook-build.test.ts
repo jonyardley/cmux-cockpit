@@ -104,7 +104,7 @@ describe("buildNow", () => {
           events.push("build");
           return overrides.build ? overrides.build() : true;
         },
-        snapshot: () => snapshots[Math.min(i++, snapshots.length - 1)] ?? null,
+        snapshot: () => snapshots[Math.min(i++, snapshots.length - 1)] ?? "v0",
         pause: () => events.push("pause"),
         maxWaitMs: 500,
       },
@@ -196,6 +196,8 @@ function tempTree(): string {
   const root = mkdtempSync(join(tmpdir(), "hook-build-inputs-"));
   mkdirSync(join(root, "src", "shared"), { recursive: true });
   mkdirSync(join(root, "config"));
+  mkdirSync(join(root, "scripts"));
+  writeFileSync(join(root, "scripts", "build.ts"), "// build\n");
   writeFileSync(join(root, "src", "shared", "a.ts"), "export const a = 1;\n");
   writeFileSync(join(root, "config", "state.json"), "{}");
   return root;
@@ -242,6 +244,31 @@ describe("buildInputs", () => {
     const before = buildInputs(root);
     writeFileSync(join(root, "config", "projects.json"), "[]");
     assert.notEqual(buildInputs(root), before);
+  });
+
+  it("changes with the build script and the committed fallback table", () => {
+    const root = tree();
+    const before = buildInputs(root);
+    writeFileSync(join(root, "scripts", "build.ts"), "// changed\n");
+    const script = buildInputs(root);
+    assert.notEqual(script, before);
+    writeFileSync(join(root, "config", "projects.example.json"), "[]");
+    assert.notEqual(buildInputs(root), script);
+  });
+
+  it("changes when the state file's unreadable copy appears", () => {
+    const root = tree();
+    const before = buildInputs(root);
+    writeFileSync(join(root, "config", "state.json.unreadable.bak"), "{");
+    assert.notEqual(buildInputs(root), before);
+  });
+
+  it("ignores files that are not TypeScript, such as an editor's swap file", () => {
+    const root = tree();
+    const before = buildInputs(root);
+    writeFileSync(join(root, "src", "shared", ".a.ts.swp"), "x");
+    writeFileSync(join(root, "src", ".DS_Store"), "x");
+    assert.equal(buildInputs(root), before);
   });
 
   it("still reads, the same each time, with no src or state at all", () => {
