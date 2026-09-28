@@ -150,7 +150,7 @@ export function laneTitle(name: string, color: string, weight: Weight = "semibol
   return Text(name).font(12.5).weight(weight).color(color).lineLimit(1).truncation("tail").layoutPriority(1);
 }
 
-/** A section heading in tracked capitals: "NEEDS YOU", "WORKING", "CHECKS". One line, since each hair space could break it. */
+/** A section heading in tracked capitals: "NEEDS YOU", "HELPERS", "CHECKS". One line, since each hair space could break it. */
 export function sectionTitle(label: Reactive<string>, color: string): View {
   const text = typeof label === "function" ? () => tracked(label()) : tracked(label);
   return Text(text).font(10.5).weight("semibold").color(color).lineLimit(1);

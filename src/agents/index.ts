@@ -6,14 +6,14 @@
 //                    card on the left. What that card has no room for: its
 //                    agent's latest message, running helpers, ports, the PR
 //                    and its checks, and a faint branch footer. When its
-//                    agent needs you,
-//                    the card carries the question, Answer (select + focus
-//                    surface) and Dismiss (local to this panel,
-//                    src/shared/needs.ts). No Allow/Deny: that needs the real
-//                    diff/tool-call payload, which this data context does not
-//                    carry, so it is not faked. Other workspaces that need you
-//                    do not appear in this panel at all, by design: the
-//                    cockpit's Needs you strip is their one home.
+//                    agent needs you, the card carries the question, Answer
+//                    (select + focus surface) and Dismiss (local to this
+//                    panel, src/shared/needs.ts). No Allow/Deny: that needs
+//                    the real diff/tool-call payload, which this data
+//                    context does not carry, so it is not faked. Other
+//                    workspaces that need you do not appear in this panel at
+//                    all, by design: the cockpit's Needs you strip is their
+//                    one home.
 //   Pull requests  - every PR across workspaces, tap opens the url. A faint
 //                    line under the heading says when the saved PR data is
 //                    old or gh is down, and those chips dim (#78).
@@ -21,8 +21,9 @@
 //                    first, then the latest few from others; tap opens it.
 // Counts are the real totals, and a capped list ends in "+N more" (#80).
 // Pull requests shows its heading and count when empty; Made here, and the
-// card's Helpers, fold into one faint line at the bottom instead. When config/state.json could not be read at build, a line
-// at the top says so rather than the panel just looking empty (#78).
+// card's Helpers, fold into one faint line at the bottom instead. When
+// config/state.json could not be read at build, a line at the top says so
+// rather than the panel just looking empty (#78).
 //
 //   cmux right-sidebar set custom agents
 

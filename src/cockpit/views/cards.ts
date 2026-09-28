@@ -7,7 +7,7 @@ import { meta, ring, unreadBadge, when } from "../../shared/ui.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import { hasChipsRow } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
-import { ageOf, compactPrText, helperText, progressFraction, prTextColor, shownDetail } from "../status.ts";
+import { ageOf, cardDetail, compactPrText, detailColor, helperText, progressFraction, prTextColor } from "../status.ts";
 import { C } from "../theme.ts";
 import {
   cardChrome,
@@ -48,19 +48,19 @@ function helpers(w: WsAccessor, size: number): View {
   ).layoutPriority(2);
 }
 
-// The latest message under the status, in the full card's detail size and
-// colour, over `lines` lines, `indent` in from the card's edge; none on the
-// selected card (shownDetail).
+// The latest message under the status, in the full card's detail size, over
+// `lines` lines, `indent` in from the card's edge; faded on the selected
+// card (detailColor), never hidden, so a tap never changes a card's height.
 function detailLine(w: WsAccessor, key: string, lines: number, indent = 0): View {
   // Read by the when() and its Text, so the message is worked out once per change.
-  const detail = computed(() => shownDetail(w(), isSelected(w())));
+  const detail = computed(() => cardDetail(w()));
   return when(
     key,
     () => !!detail(),
     () =>
       Text(detail)
         .font(12)
-        .color(C.secondary)
+        .color(() => detailColor(isSelected(w())))
         .lineLimit(lines)
         .truncation("tail")
         .paddingLeading(indent)

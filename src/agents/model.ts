@@ -1,6 +1,7 @@
 // The agents panel's data: the selected workspace in detail (and its
 // question, when its agent needs you), every PR, and what agents published.
-// Who is working and who is idle lives on the cockpit's cards, not here. Pure reads of `data`, so each is testable alone.
+// Who is working and who is idle lives on the cockpit's cards, not here.
+// Pure reads of `data`, so each is testable alone.
 
 import type { CheckState, PublishedKind, SavedPublished } from "../../scripts/state-config.ts";
 import { byActivity } from "../shared/activity.ts";
@@ -183,13 +184,14 @@ const statusWord = (a: Agent, w: Workspace): string =>
 
 // The card's details
 
-/** The card's faint footer: the branch, then "clean" or "uncommitted
- * changes" ("main · clean"); the changes alone with no branch, and "" with
- * neither. cmux sends no file count, so it never says how many. */
+/** The card's faint footer: the branch, then "uncommitted changes" when
+ * dirty, or "clean" only when cmux says it is ("main · clean"); the branch
+ * alone when cmux does not say, the changes alone with no branch, and ""
+ * with neither. cmux sends no file count, so it never says how many. */
 export const branchFooter = computed((): string => {
   const w = cur().ws;
-  if (!w.branch) return w.dirty ? "uncommitted changes" : "";
-  return w.branch + " · " + (w.dirty ? "uncommitted changes" : "clean");
+  const state = w.dirty ? "uncommitted changes" : w.dirty === false ? "clean" : "";
+  return [w.branch, state].filter(Boolean).join(" · ");
 });
 
 export interface PortChip {
@@ -268,16 +270,13 @@ export interface SubagentRow {
   running: boolean;
   startedEpoch: number | undefined;
   endedEpoch: number | undefined;
+  /** The session it ran under is still open, so a settled run counts as
+   * finished earlier in this work rather than in a closed session. */
+  liveSession: boolean;
 }
 
 // A run ranked for sorting and display, whichever source it came from.
-interface Ranked {
-  key: string;
-  label: string;
-  running: boolean;
-  startedEpoch: number | undefined;
-  endedEpoch: number | undefined;
-}
+type Ranked = SubagentRow;
 
 // Running runs first, oldest start first; then settled ones, newest end
 // first, falling back on their start when cmux sends no end.
@@ -285,10 +284,6 @@ function byRun(x: Ranked, y: Ranked): number {
   if (x.running !== y.running) return x.running ? -1 : 1;
   if (x.running) return (x.startedEpoch ?? 0) - (y.startedEpoch ?? 0);
   return (y.endedEpoch ?? y.startedEpoch ?? 0) - (x.endedEpoch ?? x.startedEpoch ?? 0);
-}
-
-function toRow(r: Ranked): SubagentRow {
-  return { key: r.key, label: r.label, running: r.running, startedEpoch: r.startedEpoch, endedEpoch: r.endedEpoch };
 }
 
 // cmux's own children, ranked; empty when every agent has none, so a
@@ -309,6 +304,7 @@ function childRanked(agents: Agent[], vouched: Set<SubagentRun>): Ranked[] {
           running: running || vouch,
           startedEpoch: c.startedEpoch,
           endedEpoch: vouch ? undefined : c.endedEpoch,
+          liveSession: owner.status !== "ended",
         },
       ];
     }),
@@ -317,8 +313,9 @@ function childRanked(agents: Agent[], vouched: Set<SubagentRun>): Ranked[] {
 
 // A saved run's owner is the workspace agent whose id matches its session,
 // when there is one (unconfirmed whether cmux agent ids are Claude session
-// ids); otherwise the run belongs to the workspace as a whole. savedRunning
-// says whether it is live, so a closed session never ticks on.
+// ids); otherwise the run belongs to the workspace as a whole, whose session
+// is live while any agent is. savedRunning says whether it is live, so a
+// closed session never ticks on.
 function savedRanked(run: SavedRun, agents: Agent[]): Ranked {
   const owner = agents.find((a) => a.id === run.session);
   return {
@@ -327,6 +324,7 @@ function savedRanked(run: SavedRun, agents: Agent[]): Ranked {
     running: savedRunning(run, agents),
     startedEpoch: run.startedEpoch,
     endedEpoch: run.endedEpoch,
+    liveSession: owner ? owner.status !== "ended" : agents.some((a) => a.status !== "ended"),
   };
 }
 
@@ -340,7 +338,7 @@ function withSaved(wsId: string, agents: Agent[]): Ranked[] {
  * `children` while any agent carries some, corrected by the saved runs still
  * live (pairLive, #83), else the saved runs from config/state.json (issue
  * #6). Settled runs stay until their source drops them. No clock read, so it
- * only rebuilds when the data changes; the figure is subagentFigure's. */
+ * only rebuilds when the data changes; the figure is helperAge's. */
 export const subagents = computed((): SubagentRow[] => {
   const { ws, agents } = cur();
   // cmux can send a children array full of holes (agentRows survives the
@@ -349,44 +347,37 @@ export const subagents = computed((): SubagentRow[] => {
   const ranked = agents.some((a) => (a.children ?? []).some((c) => c))
     ? withSaved(ws.id, agents)
     : savedRuns(ws.id).map((r) => savedRanked(r, agents));
-  return ranked.sort(byRun).map(toRow);
+  return ranked.sort(byRun);
 });
 
 /** Helper lines shown at most. */
 const MAX_HELPERS = 5;
 
-/** The card's Helpers lines: the running runs alone, oldest start first, at
- * most MAX_HELPERS. Settled ones fold into finishedLine. */
-export const helpers = computed((): SubagentRow[] =>
-  subagents()
-    .filter((s) => s.running)
-    .slice(0, MAX_HELPERS),
-);
+const runningRuns = computed((): SubagentRow[] => subagents().filter((s) => s.running));
 
-/** The faint line under the helpers for the settled runs, "1 finished
- * earlier" or "3 finished earlier"; "" when none have. */
+/** The card's Helpers lines: the running runs alone, oldest start first, at
+ * most MAX_HELPERS, then helperMore. Settled ones fold into finishedLine. */
+export const helpers = computed((): SubagentRow[] => runningRuns().slice(0, MAX_HELPERS));
+
+/** How many running runs the cap leaves out, for a closing "+N more", so
+ * the lines add up to the left card's helper count (#80). */
+export const helperMore = computed((): number => moreThan(runningRuns().length, MAX_HELPERS));
+
+/** Whether the card shows its HELPERS heading and lines: only while a run
+ * is running. With only settled runs, finishedLine stands alone. */
+export const hasHelpers = computed((): boolean => runningRuns().length > 0);
+
+/** The faint line for the settled runs of sessions still open, "1 finished
+ * earlier" or "3 finished earlier"; "" when none have. A closed session's
+ * runs are not counted: they belong to work that is over. */
 export const finishedLine = computed((): string => {
-  const n = subagents().filter((s) => !s.running).length;
+  const n = subagents().filter((s) => !s.running && s.liveSession).length;
   return n ? n + " finished earlier" : "";
 });
 
-/** Whether the card shows its Helpers block: a running run or a settled one. */
-export const hasHelpers = computed((): boolean => subagents().length > 0);
-
-/** Board 1's right-hand figure, kept short so the run's name is not the
- * one cut: coarse elapsed while running ("4m"; "running" without a start
- * or clock), "done" once settled. */
-export function subagentFigure(s: SubagentRow): string {
-  if (s.running) return ageSince(s.startedEpoch) || "running";
-  return "done";
-}
-
-// A running run reads as a working agent, a settled one as ended.
-const runStatus = (s: SubagentRow): AgentStatus => (s.running ? "working" : "ended");
-
-export const subagentDot = (s: SubagentRow): string => STATUS_DOT[runStatus(s)];
-
-export const subagentHalo = (s: SubagentRow): string => haloColor(runStatus(s), HALO_COLOR);
+/** A helper line's right-hand figure, kept short so the run's name is not
+ * the one cut: coarse elapsed ("4m"), or "running" without a start or clock. */
+export const helperAge = (s: SubagentRow): string => ageSince(s.startedEpoch) || "running";
 
 // Checks
 

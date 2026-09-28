@@ -9,7 +9,7 @@ const { ageSince } = await import("../src/shared/time.ts");
 const { cardMessage } = await import("../src/shared/text.ts");
 const { dismissNeeds } = await import("../src/shared/needs.ts");
 const { summaryOf } = await import("../src/shared/prs.ts");
-const { STATUS_DOT, T } = await import("../src/agents/theme.ts");
+const { liveRunCount } = await import("../src/shared/subagents.ts");
 
 beforeEach(() => {
   r.data.epoch = 10_000;
@@ -86,9 +86,12 @@ describe("the card's details", () => {
     assert.equal(m.branchFooter(), "main · uncommitted changes");
   });
 
-  it("says the branch is clean when it is, changes alone with no branch, and nothing with neither", () => {
-    r.data.workspaces = [ws("sel", { selected: true, branch: "main" })];
+  it("says clean only when cmux says so, changes alone with no branch, and nothing with neither", () => {
+    r.data.workspaces = [ws("sel", { selected: true, branch: "main", dirty: false })];
     assert.equal(m.branchFooter(), "main · clean");
+    // No dirty flag sent: the branch alone, never a claim it is clean.
+    r.data.workspaces = [ws("sel", { selected: true, branch: "main" })];
+    assert.equal(m.branchFooter(), "main");
     r.data.workspaces = [ws("sel", { selected: true, dirty: true })];
     assert.equal(m.branchFooter(), "uncommitted changes");
     r.data.workspaces = [ws("sel", { selected: true })];
@@ -388,7 +391,7 @@ describe("subagents", () => {
     assert.deepEqual(ids(), ["early", "late", "new-done", "no-end", "old-done"]);
   });
 
-  it("figures coarse elapsed while running, running with no start, and a short done once settled", () => {
+  it("figures a helper's coarse elapsed, or running with no start", () => {
     sel([
       agent("working", {
         children: [
@@ -401,25 +404,13 @@ describe("subagents", () => {
       }),
     ]);
     assert.deepEqual(
-      m.subagents().map((e) => [e.label, m.subagentFigure(e)]),
+      m.helpers().map((e) => [e.label, m.helperAge(e)]),
       [
         ["No start yet", "running"],
         ["Edge-case review", "4m"],
-        ["Just now", "done"],
-        ["Write builder tests", "done"],
-        ["No end sent", "done"],
       ],
     );
-  });
-
-  it("dots a running run as working with its halo, a settled one as ended with none", () => {
-    sel([agent("working", { children: [run("a", { running: true }), run("b", { running: false })] })]);
-    const [live, done] = m.subagents();
-    assert.ok(live && done);
-    assert.equal(m.subagentDot(live), STATUS_DOT.working);
-    assert.equal(m.subagentHalo(live), T.blueHalo);
-    assert.equal(m.subagentDot(done), STATUS_DOT.ended);
-    assert.equal(m.subagentHalo(done), "clear");
+    assert.equal(m.finishedLine(), "3 finished earlier");
   });
 
   it("settles every run under an ended session, whatever the run says", () => {
@@ -458,6 +449,7 @@ describe("subagents", () => {
     assert.equal(new Set(keys).size, 6);
     assert.ok(keys.some((k) => k.startsWith("s:" + a2.id + ":")));
     assert.equal(m.helpers().length, 5);
+    assert.equal(m.helperMore(), 1);
   });
 });
 
@@ -481,15 +473,39 @@ describe("helpers and finishedLine", () => {
     assert.equal(m.hasHelpers(), true);
   });
 
-  it("counts every settled run in one line", () => {
+  it("with only settled runs, shows no Helpers heading, just the one finished line", () => {
     sel([
       run("a", { running: false, endedEpoch: 200 }),
       run("b", { running: false, endedEpoch: 300 }),
       run("c", { running: false, endedEpoch: 400 }),
     ]);
     assert.deepEqual(m.helpers(), []);
+    assert.equal(m.hasHelpers(), false);
     assert.equal(m.finishedLine(), "3 finished earlier");
-    assert.equal(m.hasHelpers(), true);
+  });
+
+  it("counts only the settled runs of sessions still open", () => {
+    r.data.workspaces = [
+      ws("sel", {
+        selected: true,
+        agents: [
+          agent("ended", { children: [run("old1", { running: false }), run("old2", { running: false })] }),
+          agent("working", { children: [run("now", { running: false, endedEpoch: 300 })] }),
+        ],
+      }),
+    ];
+    assert.equal(m.finishedLine(), "1 finished earlier");
+    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("ended", { children: [run("old")] })] })];
+    assert.equal(m.finishedLine(), "");
+  });
+
+  it("ends the lines in +N more past five running, so they add up to the left card's count", () => {
+    sel(Array.from({ length: 8 }, (_, i) => run("r" + i, { running: true, startedEpoch: 100 + i })));
+    assert.equal(m.helpers().length, 5);
+    assert.equal(m.helperMore(), 3);
+    assert.equal(m.helpers().length + m.helperMore(), liveRunCount(m.cur().ws));
+    sel([run("a", { running: true })]);
+    assert.equal(m.helperMore(), 0);
   });
 
   it("says nothing finished when none has, and hides the block with no runs", () => {

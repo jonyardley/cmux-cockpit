@@ -190,15 +190,12 @@ export function cardDetail(w: Workspace | undefined): string {
 }
 
 /**
- * The message a card shows under its status, or "" for none. The selected
- * workspace's card shows none at any density: the agents panel on the right
- * shows that workspace in full, so the fact lives in one place. Every other
- * card shows cardDetail's message, a full card over two lines, a compact
- * card or a row over one.
+ * The ink for a card's message line. The selected workspace's card keeps
+ * its line, faded, since the agents panel on the right shows that message in
+ * full: the line stays so the card keeps its height and nothing moves on a
+ * tap. Every other card reads it in the secondary ink.
  */
-export function shownDetail(w: Workspace | undefined, selected: boolean): string {
-  return selected ? "" : cardDetail(w);
-}
+export const detailColor = (selected: boolean): string => (selected ? C.faint : C.secondary);
 
 /** The progress bar's fraction, held to 0 to 1; null when no value is sent. */
 export function progressFraction(w: Workspace | undefined): number | null {

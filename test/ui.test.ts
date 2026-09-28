@@ -84,7 +84,7 @@ describe("the shared builders read what they are handed", () => {
 
   it("builds both heading styles", () => {
     assert.ok(ui.laneTitle("Main", "#000000"));
-    assert.ok(ui.sectionTitle("WORKING", "#000000"));
+    assert.ok(ui.sectionTitle("PULL REQUESTS", "#000000"));
   });
 
   it("reads a section heading's label live when given a function", () => {

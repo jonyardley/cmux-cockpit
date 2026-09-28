@@ -27,17 +27,16 @@ import {
   hasDetails,
   hasHelpers,
   headStatus,
+  helperAge,
+  helperMore,
   helpers,
   hollowDot,
   portChips,
   type SubagentRow,
   statusColor,
   statusLine,
-  subagentDot,
-  subagentFigure,
-  subagentHalo,
 } from "../model.ts";
-import { STALE_OPACITY, T } from "../theme.ts";
+import { STALE_OPACITY, STATUS_DOT, T } from "../theme.ts";
 import { agentDot, jump, openIfUrl, panel, ruled } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
@@ -66,9 +65,10 @@ function agentLine(e: () => AgentRow): View {
 
 function subagentLine(e: () => SubagentRow): View {
   return HStack({ spacing: 9 }, [
+    // Every line is a running run, so every dot reads as a working agent.
     agentDot(
-      () => subagentDot(e()),
-      () => subagentHalo(e()),
+      () => STATUS_DOT.working,
+      () => T.blueHalo,
       () => false,
     ),
     Text(() => e().label)
@@ -78,40 +78,50 @@ function subagentLine(e: () => SubagentRow): View {
       .truncation("tail")
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
-    Text(() => subagentFigure(e()))
+    Text(() => helperAge(e()))
       .font(11)
       .monospaced()
       .color(T.secondary)
       .lineLimit(1)
-      // Over the label's priority, so the figure ("4m", "done") is never the one cut.
+      // Over the label's priority, so the figure ("4m", "running") is never the one cut.
       .layoutPriority(2),
   ])
     .paddingVertical(5)
     .frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
-// The Helpers block, as the left card counts them: a small caps heading
-// over one line per running run, then one faint line for the settled ones.
-// Hidden while the workspace has none, which is also what an install that
-// never sends `children` looks like.
+// A faint line in the helper lines' rhythm: "+2 more", "3 finished earlier".
+function faintHelperLine(key: string, text: () => string): View {
+  return when(
+    key,
+    () => !!text(),
+    () => Text(text).font(11).color(T.tertiary).lineLimit(1).paddingVertical(5),
+  );
+}
+
+// The Helpers block, as the left card counts them: while any run is
+// running, a small caps heading over one line per running run, ending in
+// "+N more" past the cap; then one faint line for the settled ones. With
+// only settled runs, that faint line stands alone, with no heading over an
+// empty list. Hidden with neither, which is also what an install that never
+// sends \`children\` looks like.
 function helpersBlock(): View {
   return when(
     "cur-subs",
-    () => hasHelpers(),
+    () => hasHelpers() || !!finishedLine(),
     () =>
       VStack({ spacing: 0, alignment: "leading" }, [
-        sectionTitle("HELPERS", T.secondary).paddingBottom(2),
-        ForEach({ items: () => helpers(), key: (e) => e.key }, (e) => subagentLine(e)),
         when(
-          "cur-subs-done",
-          () => !!finishedLine(),
+          "cur-subs-live",
+          () => hasHelpers(),
           () =>
-            Text(() => finishedLine())
-              .font(11)
-              .color(T.tertiary)
-              .lineLimit(1)
-              .paddingVertical(5),
+            VStack({ spacing: 0, alignment: "leading" }, [
+              sectionTitle("HELPERS", T.secondary).paddingBottom(2),
+              ForEach({ items: () => helpers(), key: (e) => e.key }, (e) => subagentLine(e)),
+              faintHelperLine("cur-subs-more", () => (helperMore() > 0 ? "+" + helperMore() + " more" : "")),
+            ]).frame({ maxWidth: "infinity", alignment: "leading" }),
         ),
+        faintHelperLine("cur-subs-done", finishedLine),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
         .paddingTop(12),
