@@ -6,10 +6,10 @@ import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
   chooseMode,
+  headerHint,
   isCollapsed,
   isProjectCollapsed,
   laneCount,
-  mergeReadyText,
   openProjectWorkspace,
   projectByKey,
   projectCount,
@@ -115,12 +115,15 @@ function dropHint(target: () => boolean): View {
     .lineLimit(1);
 }
 
-// How many of the lane's PRs are ready to merge, in the finished green; it
-// gives way to the drop hint while a drag is over the lane.
-function mergeReady(laneKey: LaneKey, target: () => boolean): View {
-  return Text(() => (target() ? "" : mergeReadyText(laneKey)))
+// A lane header's trailing words: "Drop here" under a drag, else how many
+// of its PRs are ready to merge (model.ts's headerHint). One Text, so an
+// empty one leaves no spacing slot and both sit flush right.
+function laneHint(laneKey: LaneKey, target: () => boolean): View {
+  const hint = computed(() => headerHint(laneKey, target()));
+  return Text(() => hint().text)
     .font(11)
-    .color(C.greenText)
+    .weight(() => (target() ? "medium" : "regular"))
+    .color(() => hint().color)
     .lineLimit(1);
 }
 
@@ -149,8 +152,7 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
     ...(anchorId ? [anchorStatus(anchorId)] : []),
     countPill(() => laneCount(laneKey)),
     Spacer({ minLength: 4 }),
-    mergeReady(laneKey, target),
-    dropHint(target),
+    laneHint(laneKey, target),
   ])
     .paddingHorizontal(8)
     .paddingVertical(HEADER_PAD)
@@ -181,7 +183,6 @@ export function dropZone(laneKey: LaneKey): View {
     laneTitle(lane.name, C.faint, "medium"),
     countPill(() => 0).opacity(EMPTY_FADE),
     Spacer({ minLength: 4 }),
-    mergeReady(laneKey, target),
     dropHint(target),
   ])
     .paddingHorizontal(8 - ZONE_EDGE)

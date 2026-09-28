@@ -7,6 +7,7 @@
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
 import { P } from "../shared/palette.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
+import { prChipColors } from "../shared/pr-colors.ts";
 import {
   inAppSpec,
   isInAppKey,
@@ -20,7 +21,7 @@ import {
   projectId,
   projectOf,
 } from "../shared/projects.ts";
-import { type PrHealth, prSummary } from "../shared/prs.ts";
+import { type PrHealth, prHealth, prSummary } from "../shared/prs.ts";
 import { finishedAt, nowEpoch } from "../shared/time.ts";
 import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
@@ -40,6 +41,7 @@ import {
   unsortedCollapsed,
 } from "./state.ts";
 import { isReady, readyAgent, sinceOf, statusOf } from "./status.ts";
+import { C } from "./theme.ts";
 
 const OVERRIDE_SECS = 4;
 
@@ -420,11 +422,36 @@ export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => la
 
 /**
  * A lane header's merge line: "2 ready to merge" when that many of its
- * cards hold a PR GitHub would merge now (prs.ts's ready health), else "".
+ * workspaces hold a PR GitHub would merge now (prs.ts's ready health), else
+ * "". The lane's generated anchor counts too: it has no card, and its
+ * status already sits on the header.
  */
 export function mergeReadyText(laneKey: LaneKey): string {
-  const n = cardWorkspaces().filter((w) => laneOf(w) === laneKey && prSummary(w)?.health === "ready").length;
+  const s = laneSections().find((x) => x.lane.key === laneKey);
+  const anchor = s ? generatedAnchorId(s.lane) : null;
+  const ws = [...(s?.rows ?? []), ...(anchor ? [wsById(anchor)] : [])];
+  const n = ws.filter((w) => prHealth(w) === "ready").length;
   return n ? n + " ready to merge" : "";
+}
+
+// The ready PR chip's own green (pr-colors.ts), so the count reads as the
+// PR verdict, not the agent's Ready pill.
+const MERGE_READY_INK = prChipColors("ready", "open").fg;
+
+/** The words at a lane header's trailing edge, and their ink. */
+export interface HeaderHint {
+  text: string;
+  color: string;
+}
+
+/**
+ * "Drop here" while a drag is over the lane, else its merge line. Parked
+ * keeps its merge line faint, as it does its title: set-aside work should
+ * not call out in green.
+ */
+export function headerHint(laneKey: LaneKey, dropping: boolean): HeaderHint {
+  if (dropping) return { text: "Drop here", color: C.heading };
+  return { text: mergeReadyText(laneKey), color: laneKey === "parked" ? C.faint : MERGE_READY_INK };
 }
 
 // --- Projects mode ---------------------------------------------------------------------
