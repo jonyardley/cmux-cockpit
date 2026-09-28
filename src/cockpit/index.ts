@@ -50,12 +50,12 @@ function lanesPanel(): View {
       },
       (e) => {
         // Kind, anchorId and wsId are fixed per key, and so is a header's or
-        // zone's lane. A card's lane is not: its key is its session alone.
+        // zone's lane. A card's lane is not: its key leaves the lane out.
         const entry = e();
         if (entry.kind === "header") return laneHeader(entry.lane, entry.anchorId);
         if (entry.kind === "zone") return dropZone(entry.lane);
-        const row = cardFor(() => wsById(entry.wsId), e);
-        return isForeignAnchor(entry.wsId) ? row.fixed() : row;
+        // Reactive, since a card keeps its row when its group changes.
+        return cardFor(() => wsById(entry.wsId), entry.id).fixed(() => isForeignAnchor(entry.wsId));
       },
     ),
   ]).paddingHorizontal(10);

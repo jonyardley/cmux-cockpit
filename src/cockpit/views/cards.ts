@@ -4,8 +4,8 @@
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { meta, ring, unreadBadge, when } from "../../shared/ui.ts";
-import { type LaneKey, laneByKey } from "../lanes.ts";
-import { hasChipsRow } from "../model.ts";
+import type { Lane } from "../lanes.ts";
+import { cardDensity, hasChipsRow } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
 import { ageOf, cardDetail, compactPrText, detailColor, helperText, progressFraction, prTextColor } from "../status.ts";
 import { C } from "../theme.ts";
@@ -200,20 +200,16 @@ function denseRow(w: WsAccessor, key: string): View {
 
 /**
  * The card at the density its lane uses (All view). A card keeps its row
- * when it changes lane, and only the inside is rebuilt, and only when the
- * density changes: cmux 0.64.25 keeps drawing a dropped row that is swapped
- * for a new one, so a card rebuilt on the drop left its parts on screen.
+ * when it changes lane, and only the inside is rebuilt, when cardDensity
+ * changes: cmux 0.64.25 keeps drawing a dropped row that is swapped for a
+ * new one, so a card rebuilt on the drop left its parts on screen.
  */
-export function cardFor(w: WsAccessor, entry: () => { id: string; lane: LaneKey }): View {
-  const key = entry().id; // fixed per row
-  const density = () => laneByKey(entry().lane).density;
+export function cardFor(w: WsAccessor, key: string): View {
+  const at = (d: Lane["density"]) => () => cardDensity(w()) === d;
   return VStack({ spacing: 0 }, [
-    ForEach({ items: () => [{ id: density() }], key: (d) => d.id }, (d) => {
-      const at = d().id; // fixed by the key
-      if (at === "full") return fullCard(w, key);
-      if (at === "compact") return compactCard(w, key);
-      return denseRow(w, key);
-    }),
+    when("card-full", at("full"), () => fullCard(w, key)),
+    when("card-compact", at("compact"), () => compactCard(w, key)),
+    when("card-row", at("row"), () => denseRow(w, key)),
   ]).frame({ maxWidth: "infinity" });
 }
 
