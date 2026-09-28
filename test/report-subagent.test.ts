@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { BUILD_LOCK_STALE_MS, BUILD_TIMEOUT_MS, buildUntilStable, COALESCE_MS } from "../scripts/hook-build.ts";
-import { applyEvent, processEvent, prune, visibleChange } from "../scripts/hooks/report-subagent.ts";
+import { applyEvent, processEvent, prune, RESUME_MIN_GAP_S, visibleChange } from "../scripts/hooks/report-subagent.ts";
 import { MAX_LABEL, type State } from "../scripts/state-config.ts";
 
 type SubagentMap = State["subagents"];
@@ -162,6 +162,79 @@ test("SubagentStop leaves a run that already has an endedEpoch unchanged", () =>
   map = applyEvent(map, "w1", subagentStop("agent_1"), 200);
   assert.deepEqual(map.w1, stopped);
   assert.equal(map.w1?.[0]?.endedEpoch, 150);
+});
+
+test("a Start for an agent already saved reopens its row, and the next Stop ends it", () => {
+  let map = applyEvent(EMPTY, "w1", preToolUse("s1", "toolu_1", "Wave 4 lane 1"), 100);
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 101);
+  map = applyEvent(map, "w1", subagentStop("agent_1"), 150);
+  // A SendMessage resumes the finished agent under the same id.
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 300);
+  assert.deepEqual(
+    map.w1?.map((r) => [r.id, r.label, r.startedEpoch, r.endedEpoch]),
+    [["toolu_1", "Wave 4 lane 1", 300, undefined]],
+  );
+  map = applyEvent(map, "w1", subagentStop("agent_1"), 400);
+  assert.deepEqual(
+    map.w1?.map((r) => r.endedEpoch),
+    [400],
+  );
+});
+
+test("a repeated Start while the agent's row is live is a no-op", () => {
+  let map = applyEvent(EMPTY, "w1", preToolUse("s1", "toolu_1", "First"), 100);
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 101);
+  assert.equal(applyEvent(map, "w1", subagentStart("s1", "agent_1"), 200), map);
+});
+
+test("a Start with no PreToolUse, then its duplicate, keeps one row, which the Stop ends", () => {
+  let map = applyEvent(EMPTY, "w1", subagentStart("s1", "agent_1", "general-purpose"), 100);
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1", "general-purpose"), 200);
+  assert.equal(map.w1?.length, 1);
+  map = applyEvent(map, "w1", subagentStop("agent_1"), 300);
+  assert.deepEqual(
+    map.w1?.map((r) => r.endedEpoch),
+    [300],
+  );
+});
+
+test("a resumed row moves to the end and takes the resuming session", () => {
+  let map = applyEvent(EMPTY, "w1", preToolUse("s1", "toolu_1", "First"), 100);
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 101);
+  map = applyEvent(map, "w1", preToolUse("s1", "toolu_2", "Second"), 110);
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_2"), 111);
+  map = applyEvent(map, "w1", subagentStop("agent_1"), 150);
+  map = applyEvent(map, "w1", subagentStart("s2", "agent_1"), 300);
+  assert.deepEqual(
+    map.w1?.map((r) => [r.id, r.session]),
+    [
+      ["toolu_2", "s1"],
+      ["toolu_1", "s2"],
+    ],
+  );
+});
+
+test("a Start just after the agent's Stop is a late duplicate, not a resume", () => {
+  let map = applyEvent(EMPTY, "w1", preToolUse("s1", "toolu_1", "First"), 100);
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 101);
+  map = applyEvent(map, "w1", subagentStop("agent_1"), 150);
+  assert.equal(applyEvent(map, "w1", subagentStart("s1", "agent_1"), 150 + RESUME_MIN_GAP_S - 1), map);
+});
+
+test("SubagentStop ends every open row for that agent, so older duplicates close too", () => {
+  // Two open rows for one agent, as a resume saved them before the fix.
+  const map: SubagentMap = {
+    w1: [
+      { id: "agent_1", session: "s1", agentId: "agent_1", label: "general-purpose", startedEpoch: 100 },
+      { id: "agent_1", session: "s1", agentId: "agent_1", label: "general-purpose", startedEpoch: 200 },
+      { id: "toolu_2", session: "s1", agentId: "agent_2", label: "Other", startedEpoch: 150 },
+    ],
+  };
+  const next = applyEvent(map, "w1", subagentStop("agent_1"), 300);
+  assert.deepEqual(
+    next.w1?.map((r) => r.endedEpoch),
+    [300, 300, undefined],
+  );
 });
 
 test("bad or unrecognised input is a no-op, never a throw", () => {

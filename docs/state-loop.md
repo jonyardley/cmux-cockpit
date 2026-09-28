@@ -237,9 +237,20 @@ no description, so it gives the oldest run in that session with no
 to the oldest unpaired run in the session when none matches (there is
 nothing better in `SubagentStart` to go on); when there is no unpaired run
 at all (the `PreToolUse` was missed), it appends one instead, labelled from
-`agent_type`. `SubagentStop` finds the run by `agentId` and sets
-`endedEpoch`, unless it already has one (a duplicate delivery of the same
-Stop).
+`agent_type`. A `SubagentStart` for an `agent_id` already saved is a
+resume (a `SendMessage` to a finished background agent starts it again under
+the same id): the newest row for that agent reopens from now, keeping its
+label, takes the resuming session and moves to the end of the list, unless a
+row for it is still open or it ended under `RESUME_MIN_GAP_S` ago (both a
+duplicate delivery). `SubagentStop` sets `endedEpoch` on every open row with
+that `agentId`, and does nothing when none is open (a duplicate delivery of
+the same Stop).
+
+**Residual cases for resumes:** once a finished row is pruned (ten minutes
+after its Stop, below), a later resume looks like a first start and pairs
+like one, so it can take an unrelated unpaired row's label. A Stop
+redelivered after a resume ends the resumed run early. Neither has been
+seen; the hooks are registered once each.
 
 **Residual case:** a denied or failed Agent call never gets a
 `SubagentStart`, so its row sits unpaired. If a second call of the same
