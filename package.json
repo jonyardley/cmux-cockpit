@@ -1,7 +1,7 @@
 {
   "name": "cmux-cockpit",
   "private": true,
-  "description": "Jon's cmux sidebars and app config",
+  "description": "Two custom sidebars for cmux: a workspace cockpit and an agents panel",
   "type": "module",
   "engines": {
     "node": ">=24.2"

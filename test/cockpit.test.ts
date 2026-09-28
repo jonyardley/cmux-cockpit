@@ -125,7 +125,7 @@ describe("a real workspace anchoring a single-member group", () => {
       group("g-parked", "Parked", { anchorId: "real-parked" }),
     ];
     r.data.workspaces = [
-      ws("gen-main", { title: "Main activity", directory: "/Users/jonyardley/Dev", group: "g-main" }),
+      ws("gen-main", { title: "Main activity", directory: "/Users/coder/Dev", group: "g-main" }),
       ws("real-parked", {
         title: "PR #155 wireless spike measurement",
         directory: "/Users/coder/dev/app-three",
