@@ -44,6 +44,7 @@ The git hooks, once installed:
 | `lint`, `fix` | Biome check, or apply its fixes |
 | `typecheck`, `knip`, `test`, `coverage` | The parts of `check` one at a time |
 | `validate` | `cmux sidebar validate`, main checkout only |
+| `snapshots` | Re-records the text snapshots in `test/__snapshots__/` |
 | `pr-body` | Checks an open PR's description (needs `gh`) |
 | `hooks` | Installs the git hooks |
 | `helper` | Installs the URL handler app that saves state |
