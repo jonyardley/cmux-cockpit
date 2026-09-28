@@ -5,7 +5,6 @@
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
-import { agentsOf } from "../shared/needs.ts";
 import { P } from "../shared/palette.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import {
@@ -40,7 +39,7 @@ import {
   tick,
   unsortedCollapsed,
 } from "./state.ts";
-import { isReady, sinceOf, statusOf } from "./status.ts";
+import { isReady, readySince, sinceOf, statusOf } from "./status.ts";
 
 const OVERRIDE_SECS = 4;
 
@@ -625,16 +624,6 @@ export const projectEntries = computed(() => {
  */
 const oldestFirst = (a: Workspace, b: Workspace): number => sinceOf(a) - sinceOf(b);
 
-// When a Ready workspace finished: its latest idle or ended agent's last
-// activity, not the most active agent's time (a fresh idle session would
-// date an hour-old finish as a minute old).
-function finishedAt(w: Workspace): number {
-  let at = 0;
-  for (const a of agentsOf(w))
-    if (a.status === "idle" || a.status === "ended") at = Math.max(at, a.lastActivityAt ?? 0);
-  return at;
-}
-
 export const needsList = computed(() =>
   allWorkspaces()
     .filter((w) => statusOf(w) === "needs_input")
@@ -657,7 +646,8 @@ export const nextQueue = computed((): Workspace[] => [
   ...needsList(),
   ...allWorkspaces()
     .filter((w) => isReady(w))
-    .sort((a, b) => finishedAt(a) - finishedAt(b)),
+    // Longest-finished first, dated as the Ready card dates it (issue #98).
+    .sort((a, b) => readySince(a) - readySince(b)),
 ]);
 
 // The last workspace Next opened, and the one after it then. Opening a

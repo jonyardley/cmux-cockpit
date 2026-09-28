@@ -30,6 +30,8 @@ describe("roster", () => {
       ws("r-old", { agents: [agent("working", { sinceEpoch: 100 })] }),
       ws("i-old", { agents: [agent("idle", { lastActivityAt: 100 })] }),
       ws("i-new", { agents: [agent("idle", { lastActivityAt: 500 })] }),
+      // Finished first, active since: sorted by its finish, as its age reads.
+      ws("i-mid", { agents: [agent("idle", { sinceEpoch: 300, lastActivityAt: 900 })] }),
     ];
     const { run, idle } = m.roster();
     assert.deepEqual(
@@ -38,7 +40,7 @@ describe("roster", () => {
     );
     assert.deepEqual(
       idle.map((e) => e.ws.id),
-      ["i-new", "i-old"],
+      ["i-new", "i-mid", "i-old"],
     );
   });
 });
@@ -121,7 +123,7 @@ describe("workingRows and idleRows", () => {
 describe("sinceAge", () => {
   it("writes working and idle rows in one format", () => {
     assert.equal(m.sinceAge(agent("working", { sinceEpoch: 10_000 - 30 })), "<1m");
-    assert.equal(m.sinceAge(agent("idle", { sinceEpoch: 1, lastActivityAt: 10_000 - 46 })), "<1m");
+    assert.equal(m.sinceAge(agent("idle", { sinceEpoch: 10_000 - 46, lastActivityAt: 10_000 - 7200 })), "<1m");
     assert.equal(m.sinceAge(agent("working", { sinceEpoch: 10_000 - 720 })), "12m");
     assert.equal(m.sinceAge(agent("idle", { lastActivityAt: 10_000 - 7200 })), "2h");
   });
@@ -133,13 +135,24 @@ describe("sinceAge", () => {
 });
 
 describe("rosterAge", () => {
-  it("counts a working row from its start only, and an idle row from its last activity", () => {
+  it("counts a working row from its start only, and an idle row from when it finished", () => {
     const run = (a: Agent) => ({ key: "r", kind: "run" as const, ws: ws("w"), a, project: m.cur().project });
     const idle = (a: Agent) => ({ key: "i", kind: "idle" as const, ws: ws("w"), a, project: m.cur().project });
     assert.equal(m.rosterAge(run(agent("working", { sinceEpoch: 10_000 - 720 }))), "12m");
     // No start: blank, never the last activity, which resets while it works.
     assert.equal(m.rosterAge(run(agent("working", { lastActivityAt: 10_000 - 5 }))), "");
-    assert.equal(m.rosterAge(idle(agent("idle", { sinceEpoch: 1, lastActivityAt: 10_000 - 46 }))), "<1m");
+    // Issue #98: the move to idle, not a later last activity.
+    assert.equal(m.rosterAge(idle(agent("idle", { sinceEpoch: 10_000 - 360, lastActivityAt: 10_000 - 180 }))), "6m");
+    // No move recorded: the last activity stands in.
+    assert.equal(m.rosterAge(idle(agent("idle", { lastActivityAt: 10_000 - 46 }))), "<1m");
+    assert.equal(m.rosterAge(idle(agent("idle"))), "");
+  });
+
+  it("gives an idle row the age the card head gives the same agent", () => {
+    const a = agent("idle", { sinceEpoch: 10_000 - 360, lastActivityAt: 10_000 - 180 });
+    const row = { key: "i", kind: "idle" as const, ws: ws("w"), a, project: m.cur().project };
+    assert.equal(m.rosterAge(row), "6m");
+    assert.equal(m.headStatus(a), "Idle 6m");
   });
 });
 
@@ -149,6 +162,11 @@ describe("headStatus", () => {
     assert.equal(m.headStatus(agent("needs_input", { sinceEpoch: 10_000 - 5 })), "Your turn <1m");
     assert.equal(m.headStatus(agent("idle", { lastActivityAt: 10_000 - 120 })), "Idle 2m");
     assert.equal(m.headStatus(agent("ended", { lastActivityAt: 10_000 - 180 })), "Finished 3m");
+    // Issue #98: from when it finished, as the cockpit card counts, not its last activity.
+    assert.equal(
+      m.headStatus(agent("ended", { sinceEpoch: 10_000 - 360, lastActivityAt: 10_000 - 180 })),
+      "Finished 6m",
+    );
   });
 
   it("says the word alone without a time, and No agent without an agent", () => {

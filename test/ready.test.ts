@@ -127,8 +127,23 @@ describe("a Ready card", () => {
     assert.equal(info.halo, "clear");
   });
 
-  it("leaves the time off when nothing says when the status began", () => {
-    assert.equal(status.statusLine(ws("w", { unread: 1, agents: [agent("idle", { lastActivityAt: 5 })] })), "Finished");
+  it("falls back to the last activity when nothing says when it finished", () => {
+    const w = ws("w", { unread: 1, agents: [agent("idle", { lastActivityAt: now() - 180 })] });
+    assert.equal(status.statusLine(w), "Finished 3m");
+  });
+
+  it("counts from the finish, not a later last activity, as the agents panel does (issue #98)", () => {
+    const a = agent("idle", { sinceEpoch: now() - 360, lastActivityAt: now() - 180 });
+    assert.equal(status.statusLine(readyWs("w", { agents: [a] })), "Finished 6m");
+    assert.equal(status.statusLine(readyWs("w", { unread: 0, agents: [a] })), "Idle 6m");
+  });
+
+  it("reports the agent that finished last, by the same rule", () => {
+    const early = agent("ended", { sinceEpoch: now() - 900, lastActivityAt: now() - 60 });
+    const late = agent("idle", { sinceEpoch: now() - 300, lastActivityAt: now() - 240 });
+    const w = readyWs("w", { agents: [early, late] });
+    assert.equal(status.readySince(w), now() - 300);
+    assert.equal(status.readySince(ws("none")), 0);
   });
 
   it("keeps the plain labels once read", () => {

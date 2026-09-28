@@ -11,7 +11,7 @@ const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, nextIn, 
   "../src/shared/projects.ts"
 );
 const { cleanTitle, oneLine, readable, tracked } = await import("../src/shared/text.ts");
-const { fmtAge, fmtElapsed, nowEpoch } = await import("../src/shared/time.ts");
+const { finishedAt, fmtAge, fmtElapsed, nowEpoch } = await import("../src/shared/time.ts");
 const { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } = await import("../src/shared/words.ts");
 const { P, STATUS_TEXT } = await import("../src/shared/palette.ts");
 const { agent } = await import("./support/fixtures.ts");
@@ -170,6 +170,13 @@ describe("time", () => {
     assert.equal(fmtAge(86400 * 3), "3d");
     assert.equal(fmtAge(-1), "");
     assert.equal(fmtAge(Number.NaN), "");
+  });
+  it("finishedAt counts from the move to finished, else the last activity (issue #98)", () => {
+    assert.equal(finishedAt(agent("idle", { sinceEpoch: 300, lastActivityAt: 500 })), 300);
+    assert.equal(finishedAt(agent("ended", { sinceEpoch: 300, lastActivityAt: 100 })), 300);
+    assert.equal(finishedAt(agent("idle", { lastActivityAt: 500 })), 500);
+    assert.equal(finishedAt(agent("idle", { sinceEpoch: 0, lastActivityAt: 500 })), 500);
+    assert.equal(finishedAt(agent("ended")), 0);
   });
   it("fmtElapsed shows seconds and hours with minutes", () => {
     assert.equal(fmtElapsed(-5), "0s");
