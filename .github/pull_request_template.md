@@ -2,6 +2,12 @@
 
 <!-- The outcome, in a sentence or two. -->
 
+## What changed on screen
+
+<!-- From the diff of test/__snapshots__/ after `npm run snapshots`: which
+scenes moved and what a reader would see differently, in words. Write
+"no snapshot changes" when none moved. -->
+
 ## Look at after reload
 
 <!-- Required. Validate and the renderer only run on main, so name what to
