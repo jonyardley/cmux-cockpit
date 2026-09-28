@@ -690,6 +690,18 @@ describe("askedLine (#80)", () => {
     assert.equal(m.askedLine(), "");
   });
 
+  it("is empty when the prompt is a subagent's hand-back (#103)", () => {
+    r.data.workspaces = [
+      ws("sel", {
+        selected: true,
+        latestPrompt: "[Subagent hand-back] The text below is the final report of a subagent.\n  done two",
+      }),
+    ];
+    assert.equal(m.askedLine(), "");
+    r.data.workspaces = [ws("sel", { selected: true, latestPrompt: "Explain the [Subagent hand-back] frame" })];
+    assert.equal(m.askedLine(), "Explain the [Subagent hand-back] frame");
+  });
+
   it("still shows the prompt when the message only echoes it", () => {
     r.data.workspaces = [ws("sel", { selected: true, latestPrompt: "Run the tests", latestMessage: "Run the tests" })];
     assert.equal(m.askedLine(), "Run the tests");

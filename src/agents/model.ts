@@ -122,9 +122,16 @@ export const currentAsk = computed((): Ask | null => {
 /** The card's quiet message line; empty while the question block shows the words. */
 export const cardLine = computed((): string => (currentAsk() ? "" : cardMessage(cur().ws)));
 
+// A background subagent's report reaches cmux as the session's latest
+// prompt (issue #103). Jon did not ask it, so it never fills the Asked line.
+const HAND_BACK = /^\[Subagent hand-back\]/;
+
 /** The card's Asked line: the last prompt Jon gave, above the agent's last
  * message (issue #80); "" when there is none worth reading. */
-export const askedLine = computed((): string => readable(cur().ws.latestPrompt));
+export const askedLine = computed((): string => {
+  const t = readable(cur().ws.latestPrompt);
+  return HAND_BACK.test(t) ? "" : t;
+});
 
 /** Idle and no agent draw a hollow ring, as the left sidebar does. */
 export const hollowDot = (a: Agent | null): boolean => !a || a.status === "idle";
