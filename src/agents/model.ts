@@ -34,8 +34,9 @@ import { CHECK_DOT, STATUS_DOT, T } from "./theme.ts";
 /** How many of `total` rows a cap of `max` leaves out; 0 when none are. */
 export const moreThan = (total: number, max: number): number => Math.max(0, total - max);
 
-/** markLast, except that with `more` rows left out no row is last: a "+N
- * more" line follows, so the final row keeps its rule above it. */
+/** markLast, except that while the list overflows its cap (`more` > 0) no
+ * row is last: a closing "+N more" or, once open, "Show less" line follows,
+ * so the final row keeps its rule above it. */
 export function markLastBefore<T>(rows: T[], more: number): Last<T>[] {
   return more > 0 ? rows.map((e) => ({ ...e, last: false })) : markLast(rows);
 }
@@ -43,16 +44,25 @@ export function markLastBefore<T>(rows: T[], more: number): Last<T>[] {
 /** The cards whose "+N more" line can be tapped open (#109). */
 export type ListKey = "prs" | "made";
 
-// Which cards are open past their cap. Not saved: a reload folds them.
-const [openLists, setOpenLists] = signal<ReadonlySet<ListKey>>(new Set());
+// Which cards are open past their cap, each with what it was opened for:
+// Made here with the selected workspace, since its rows depend on it, so
+// selecting another workspace shows that one folded. Not saved: a reload
+// folds them.
+const [openLists, setOpenLists] = signal<ReadonlyMap<ListKey, string>>(new Map());
 
-export const isExpanded = (k: ListKey): boolean => openLists().has(k);
+const selectedId = (): string => (data.workspaces() ?? []).find((w) => w.selected)?.id ?? "";
+const openFor = (k: ListKey): string => (k === "made" ? selectedId() : "");
+
+export const isExpanded = (k: ListKey): boolean => {
+  const at = openLists().get(k);
+  return at !== undefined && at === openFor(k);
+};
 
 /** Opens a card past its cap, or folds it back. */
 export function toggleExpanded(k: ListKey): void {
-  const next = new Set(openLists());
-  if (next.has(k)) next.delete(k);
-  else next.add(k);
+  const next = new Map(openLists());
+  if (isExpanded(k)) next.delete(k);
+  else next.set(k, openFor(k));
   setOpenLists(next);
 }
 
@@ -522,9 +532,6 @@ export const prCount = computed((): number => allPrs().length);
 // How many PRs the cap leaves out while the card is folded.
 const prOver = computed((): number => moreThan(prCount(), MAX_PRS));
 
-/** How many PRs the cap leaves out, for the "+N more" line; 0 while open. */
-export const prMore = computed((): number => (isExpanded("prs") ? 0 : prOver()));
-
 /** The Pull requests card's closing line, from footText. */
 export const prFoot = computed((): string => footText(prOver(), isExpanded("prs")));
 
@@ -582,20 +589,23 @@ function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, her
 // them; none before the clock's first tick, when every entry would
 // otherwise read as fresh.
 // One computed, so the rows and the count read the same list, filtered once.
-const freshMade = computed((): { fresh: SavedPublished[]; workspaces: Workspace[]; selected: string | undefined } => {
+// Split once into the selected workspace's own and the rest, with the caps
+// each part is cut to while the card is folded, so the rows and the count
+// left out read the same cut.
+const freshMade = computed(() => {
   const now = nowEpoch();
   const workspaces = data.workspaces() ?? [];
   const selected = workspaces.find((w) => w.selected)?.id;
-  return { fresh: now ? savedPublished(now) : [], workspaces, selected };
+  const fresh: SavedPublished[] = now ? savedPublished(now) : [];
+  const own: SavedPublished[] = [];
+  const others: SavedPublished[] = [];
+  for (const e of fresh) (e.workspace === selected ? own : others).push(e);
+  const shown = Math.min(own.length, MADE_HERE_OWN) + Math.min(others.length, MADE_ELSEWHERE);
+  return { count: fresh.length, own, others, over: fresh.length - shown, workspaces };
 });
 
 // How many fresh pages and docs the caps leave out while the card is folded.
-const madeOver = computed((): number => {
-  const { fresh, selected } = freshMade();
-  const own = fresh.filter((e) => e.workspace === selected).length;
-  const shown = Math.min(own, MADE_HERE_OWN) + Math.min(fresh.length - own, MADE_ELSEWHERE);
-  return fresh.length - shown;
-});
+const madeOver = (): number => freshMade().over;
 
 /** The Made here rows: the selected workspace's own pages and docs first,
  * newest first, then the latest few from other workspaces, or all of them
@@ -603,21 +613,18 @@ const madeOver = computed((): number => {
  * seven days drops off (shared/published-age.ts); nothing shows before the
  * clock's first tick, when every entry would otherwise read as fresh. */
 export const madeHere = computed((): Last<MadeEntry>[] => {
-  const { fresh, workspaces, selected } = freshMade();
+  const f = freshMade();
   // Cut to the rows shown before the project lookups, which scan every project.
   const open = isExpanded("made");
-  const own = fresh.filter((e) => e.workspace === selected).slice(0, open ? undefined : MADE_HERE_OWN);
-  const others = fresh.filter((e) => e.workspace !== selected).slice(0, open ? undefined : MADE_ELSEWHERE);
-  const dirs = new Map(workspaces.map((w) => [w.id, w.directory]));
+  const own = open ? f.own : f.own.slice(0, MADE_HERE_OWN);
+  const others = open ? f.others : f.others.slice(0, MADE_ELSEWHERE);
+  const dirs = new Map(f.workspaces.map((w) => [w.id, w.directory]));
   const rows = [...own.map((e) => madeEntry(e, dirs, true)), ...others.map((e) => madeEntry(e, dirs, false))];
   return markLastBefore(rows, madeOver());
 });
 
 /** Every fresh page and doc, before the caps, for the heading's count. */
-export const madeCount = computed((): number => freshMade().fresh.length);
-
-/** How many fresh pages and docs the caps leave out, for the "+N more" line; 0 while open. */
-export const madeMore = computed((): number => (isExpanded("made") ? 0 : madeOver()));
+export const madeCount = computed((): number => freshMade().count);
 
 /** The Made here card's closing line, from footText. */
 export const madeFoot = computed((): string => footText(madeOver(), isExpanded("made")));

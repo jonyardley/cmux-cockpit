@@ -65,10 +65,9 @@ interface ListSection<T extends { key: string; last: boolean }> {
   count: () => number;
   rows: () => T[];
   row: (e: () => T) => View;
-  /** The closing "+N more" or "Show less" line, "" for none; none by default. */
-  foot?: () => string;
-  /** Opens or folds the card when its closing line is tapped. */
-  toggle?: () => void;
+  /** The closing "+N more" or "Show less" line ("" for none) and what a tap
+   * on it does; no line by default. One field, so a line always has its tap. */
+  foot?: { text: () => string; toggle: () => void };
   /** A faint line under the heading; none by default. */
   note?: () => string;
 }
@@ -76,8 +75,7 @@ interface ListSection<T extends { key: string; last: boolean }> {
 // A heading with its count, over a card of rows only while there are some,
 // the card ending in "+N more" when the list was cut, "Show less" once open.
 function listSection<T extends { key: string; last: boolean }>(s: ListSection<T>): View {
-  const foot = s.foot ?? (() => "");
-  const toggle = s.toggle ?? (() => {});
+  const foot = s.foot;
   return VStack({ spacing: 8, alignment: "leading" }, [
     sectionHeader(s.label, () => String(s.count())),
     ...(s.note ? [faintNote(s.key + "-note", s.note)] : []),
@@ -87,11 +85,15 @@ function listSection<T extends { key: string; last: boolean }>(s: ListSection<T>
       () =>
         panel([
           ForEach({ items: s.rows, key: (e) => e.key }, (e) => s.row(e)),
-          when(
-            s.key + "-more",
-            () => foot() !== "",
-            () => footRow(foot, toggle),
-          ),
+          ...(foot
+            ? [
+                when(
+                  s.key + "-more",
+                  () => foot.text() !== "",
+                  () => footRow(foot.text, foot.toggle),
+                ),
+              ]
+            : []),
         ]),
     ),
   ]);
@@ -108,8 +110,7 @@ sidebar(
         count: prCount,
         rows: prs,
         row: prRow,
-        foot: prFoot,
-        toggle: () => toggleExpanded("prs"),
+        foot: { text: prFoot, toggle: () => toggleExpanded("prs") },
         note: prNote,
       }),
       when(
@@ -122,8 +123,7 @@ sidebar(
             count: madeCount,
             rows: madeHere,
             row: madeRow,
-            foot: madeFoot,
-            toggle: () => toggleExpanded("made"),
+            foot: { text: madeFoot, toggle: () => toggleExpanded("made") },
           }),
       ),
       faintNote("empty-note", emptyNote),

@@ -23,6 +23,7 @@ export function footRow(text: () => string, onTap: () => void): View {
   const row = HStack({ spacing: 6 }, [Text(text).font(11.5).color(T.tertiary).lineLimit(1), Spacer()])
     .paddingHorizontal(12)
     .paddingVertical(8)
+    .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(onTap);
   return ruled(row, () => true);
