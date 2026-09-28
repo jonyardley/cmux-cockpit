@@ -6,6 +6,7 @@ import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
   chooseMode,
+  headerHint,
   isCollapsed,
   isProjectCollapsed,
   laneCount,
@@ -114,6 +115,18 @@ function dropHint(target: () => boolean): View {
     .lineLimit(1);
 }
 
+// A lane header's trailing words: "Drop here" under a drag, else how many
+// of its PRs are ready to merge (model.ts's headerHint). One Text, so an
+// empty one leaves no spacing slot and both sit flush right.
+function laneHint(laneKey: LaneKey, target: () => boolean): View {
+  const hint = computed(() => headerHint(laneKey, target()));
+  return Text(() => hint().text)
+    .font(11)
+    .weight(() => (target() ? "medium" : "regular"))
+    .color(() => hint().color)
+    .lineLimit(1);
+}
+
 // A header sits SECTION_GAP below the section above. The gap goes on a wrapper outside the hover and drop
 // shading, so the grey hugs the row; the tap stays on the wrapper, as on
 // cards, so the gap still folds the header.
@@ -139,7 +152,7 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
     ...(anchorId ? [anchorStatus(anchorId)] : []),
     countPill(() => laneCount(laneKey)),
     Spacer({ minLength: 4 }),
-    dropHint(target),
+    laneHint(laneKey, target),
   ])
     .paddingHorizontal(8)
     .paddingVertical(HEADER_PAD)
