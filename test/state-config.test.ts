@@ -52,6 +52,17 @@ test("validateState reads a good file unchanged", () => {
         epoch: 200,
       },
     },
+    prOrigins: {
+      "https://github.com/o/r/pull/5": {
+        url: "https://github.com/o/r/pull/5",
+        number: 5,
+        workspace: "w5",
+        surface: "s5",
+        session: "sess",
+        epoch: 200,
+        mention: { text: "Opened #5: the lane board.", message: "m5", epoch: 210 },
+      },
+    },
     asking: { w6: { reason: "allow git push?", epoch: 300, session: "s1" }, w7: { reason: "a question", epoch: 301 } },
     ui: { mode: "projects", collapsed: { "lane:parked": 0, "project:/dev/a": 1 } },
   };
@@ -76,6 +87,7 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     ownPrs: {},
     subagents: {},
     published: {},
+    prOrigins: {},
     asking: {},
     ui: {},
   });
@@ -197,6 +209,7 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
       ownPrs: {},
       subagents: {},
       published: {},
+      prOrigins: {},
       asking: {},
       ui: {},
     },

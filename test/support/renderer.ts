@@ -43,20 +43,41 @@ export interface Renderer {
   opened: string[];
   /** Every menu item built, as "button:<label>" or "divider". */
   menu: string[];
-  roots: (() => unknown)[];
+  roots: (() => View)[];
   globals: Record<string, unknown>;
 }
 
 const HANDLERS = new Set(["onTap"]);
 
-function evaluate(arg: unknown): void {
-  if (typeof arg === "function") {
-    if (arg.length === 0) arg();
-    return;
-  }
+/**
+ * One node of a built view tree, as test/support/snapshot.ts prints it: the
+ * builder, its own arguments (a Text's words, a stack's spacing) and its
+ * modifiers in call order, each with its reactive values read once.
+ */
+export interface ViewNode {
+  kind: string;
+  args: unknown[];
+  mods: { name: string; values: unknown[] }[];
+  children: ViewNode[];
+}
+
+// Each fake view's node, keyed by the proxy the sidebar code holds.
+const nodes = new WeakMap<object, ViewNode>();
+
+/** The node behind a view the fake renderer built, or undefined for anything else. */
+export const nodeOf = (v: unknown): ViewNode | undefined => (typeof v === "function" ? nodes.get(v) : undefined);
+
+// A reactive argument's current value: a zero-argument function is called
+// (so view closures run against the fixture data), an options object has
+// each field read the same way, and handlers ("on...") are left unread.
+function resolve(arg: unknown): unknown {
+  if (typeof arg === "function") return arg.length === 0 ? arg() : undefined;
   if (arg && typeof arg === "object" && !Array.isArray(arg)) {
-    for (const [k, v] of Object.entries(arg)) if (!k.startsWith("on")) evaluate(v);
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(arg)) if (!k.startsWith("on")) out[k] = resolve(v);
+    return out;
   }
+  return arg;
 }
 
 // The modifier log while recordModifiers() runs, and null the rest of the time.
@@ -78,30 +99,52 @@ export function recordModifiers(build: () => void): string[] {
   return log;
 }
 
-function view(): View {
-  const node: View = new Proxy(() => undefined, {
+function view(kind: string, args: unknown[] = [], children: readonly unknown[] = []): View {
+  const node: ViewNode = { kind, args, mods: [], children: children.flatMap((c) => nodeOf(c) ?? []) };
+  const proxy: View = new Proxy(() => undefined, {
     get: (_target, prop) => {
-      return (...args: unknown[]) => {
-        modifierLog?.push(String(prop));
-        if (!HANDLERS.has(String(prop))) for (const a of args) evaluate(a);
-        return node;
+      return (...margs: unknown[]) => {
+        const name = String(prop);
+        modifierLog?.push(name);
+        // A context menu is recorded by its length: its items are opaque.
+        let values: unknown[] = [];
+        if (name === "contextMenu") values = [Array.isArray(margs[0]) ? margs[0].length : 0];
+        else if (!HANDLERS.has(name)) values = margs.map(resolve);
+        node.mods.push({ name, values });
+        return proxy;
       };
     },
     // Every property is a chainable modifier, so the proxy satisfies View.
   }) as unknown as View;
-  return node;
+  nodes.set(proxy, node);
+  return proxy;
 }
 
 // MenuItem is an opaque brand: the renderer never reads it back.
 const menuItem = () => ({}) as MenuItem;
 
-function list<T>(options: ForEachOptions<T>, render: (item: () => T) => View): View {
-  for (const item of options.items()) {
-    options.key(item);
-    render(() => item);
-  }
-  return view();
-}
+const list =
+  (kind: string) =>
+  <T>(options: ForEachOptions<T>, render: (item: () => T) => View): View => {
+    const rows: View[] = [];
+    for (const item of options.items()) {
+      options.key(item);
+      rows.push(render(() => item));
+    }
+    // A Reorderable's row spacing is on screen; its keys and handlers are not.
+    const spacing = "spacing" in options ? options.spacing : undefined;
+    return view(kind, spacing === undefined ? [] : [{ spacing }], rows);
+  };
+
+// A leaf's arguments are its content or options; a stack's array argument
+// is its children, which become the node's children instead.
+const builder =
+  (kind: string) =>
+  (...args: unknown[]): View => {
+    const own = args.filter((a) => !Array.isArray(a)).map(resolve);
+    const children: unknown = args.find(Array.isArray);
+    return view(kind, own, Array.isArray(children) ? children : []);
+  };
 
 export function createRenderer(): Renderer {
   const r: Renderer = {
@@ -112,23 +155,19 @@ export function createRenderer(): Renderer {
     roots: [],
     globals: {},
   };
-  const builder = (...args: unknown[]) => {
-    for (const a of args) if (!Array.isArray(a)) evaluate(a);
-    return view();
-  };
   r.globals = {
-    VStack: builder,
-    HStack: builder,
-    ZStack: builder,
-    Text: builder,
-    Image: builder,
-    Spacer: builder,
-    Circle: builder,
-    Rectangle: builder,
-    RoundedRectangle: builder,
-    ProgressView: builder,
-    ForEach: list,
-    Reorderable: list,
+    VStack: builder("VStack"),
+    HStack: builder("HStack"),
+    ZStack: builder("ZStack"),
+    Text: builder("Text"),
+    Image: builder("Image"),
+    Spacer: builder("Spacer"),
+    Circle: builder("Circle"),
+    Rectangle: builder("Rectangle"),
+    RoundedRectangle: builder("RoundedRectangle"),
+    ProgressView: builder("ProgressView"),
+    ForEach: list("ForEach"),
+    Reorderable: list("Reorderable"),
     Button: (label: Reactive<string>) => {
       r.menu.push("button:" + (typeof label === "function" ? label() : label));
       return menuItem();
@@ -151,7 +190,7 @@ export function createRenderer(): Renderer {
     // cmux builds the root as soon as it is registered, before the rest of
     // the script has run, so a view helper declared further down fails
     // here too, as it does in the app.
-    sidebar: (root: () => unknown) => {
+    sidebar: (root: () => View) => {
       root();
       r.roots.push(root);
     },

@@ -258,6 +258,18 @@ export function writePublished(
   }));
 }
 
+/**
+ * Folds `update` over the whole `prOrigins` map (scripts/hooks/report-pr.ts
+ * and report-mention.ts), under the same lock, kept oldest first as
+ * writePublished keeps its map.
+ */
+export function writePrOrigins(path: string, update: (origins: State["prOrigins"]) => State["prOrigins"]): ApplyResult {
+  return readUpdateWrite(path, (before) => ({
+    ok: true,
+    state: validateState({ ...before, prOrigins: update(before.prOrigins) }),
+  }));
+}
+
 function readUpdateWrite(path: string, update: (before: State) => SetResult): ApplyResult {
   mkdirSync(dirname(path), { recursive: true });
   return withLock(path, () => {
