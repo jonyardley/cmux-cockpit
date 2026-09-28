@@ -4,6 +4,7 @@ import { glyphColor } from "./contrast.ts";
 import { P } from "./palette.ts";
 import type { ChipColors } from "./pr-colors.ts";
 import type { Project } from "./projects.ts";
+import { shade } from "./shade.ts";
 import { tracked } from "./text.ts";
 
 /**
@@ -76,11 +77,59 @@ export function ring(
   width: Reactive<number>,
   radius: number,
   hug = false,
+  hover?: Hover,
 ): View {
   const wv = typeof width === "function" ? width : () => width;
   const sized = hug ? view : view.frame({ maxWidth: "infinity", alignment: "leading" });
   const inner = sized.background(face).cornerRadius(() => radius - wv());
-  return VStack({ spacing: 0, alignment: "leading" }, [inner]).padding(wv).background(edge).cornerRadius(radius);
+  const outer = VStack({ spacing: 0, alignment: "leading" }, [hover ? inner.hoverBackground(hover.face) : inner])
+    .padding(wv)
+    .background(edge)
+    .cornerRadius(radius);
+  return hover?.edge ? outer.hoverBackground(hover.edge) : outer;
+}
+
+/**
+ * A ring's look under the pointer. cmux's hoverBackground replaces the
+ * node's background instead of washing over it, so a face over an opaque
+ * one is a whole colour (shade.ts). `edge` darkens the ring as well: the
+ * outer box is the edge, so its hover colour only shows round the face.
+ */
+export interface Hover {
+  face: Reactive<string>;
+  edge?: Reactive<string>;
+}
+
+// How far a tap target inside a card steps toward ink under the pointer.
+const FACE_STEP = 0.07;
+const EDGE_STEP = 0.35;
+
+/** A chip's hover: its own face and edge, each a step darker, so a PR's state colour survives. */
+export function chipHover(colors: () => ChipColors): Hover {
+  return { face: () => shade(colors().bg, FACE_STEP), edge: () => shade(colors().edge, EDGE_STEP) };
+}
+
+/**
+ * The "opens in the browser" mark: shown only while its nearest ancestor
+ * with a hoverBackground is under the pointer. The renderer hides it by
+ * opacity, so it keeps its slot at rest: give it a place where that blank
+ * slot is already free space, or swap it for a glyph with hideOnHover.
+ */
+export function outMark(color: Reactive<string>): View {
+  return Text("↗").font(9).weight("semibold").color(color).lineLimit(1).layoutPriority(2).showOnHover();
+}
+
+/**
+ * A line of text that opens a page, inside a card: at rest it looks like
+ * the text around it; under the pointer it takes a chip's box (`hover`, a
+ * face over the card's hover face and an edge) and shows ↗ after it. The
+ * padding matches a chip's, so its box lines up with the chips below.
+ */
+export function linkBox(children: View[], hover: Hover, color: Reactive<string>, onTap: () => void): View {
+  const body = HStack({ spacing: 6 }, [...children, outMark(color)])
+    .paddingHorizontal(6)
+    .paddingVertical(1);
+  return ring(body, "clear", "clear", 1, 6, true, hover).onTap(onTap);
 }
 
 /** The size of the small text both sides trail a row with: times, branches, ports, chips. */
@@ -100,7 +149,7 @@ export function branchText(fn: () => string, color: Reactive<string>, weight: We
 }
 
 /** A chip's frame round `body`: its face and edge, hugging the content. */
-export function chipFrame(body: View, colors: () => ChipColors): View {
+export function chipFrame(body: View, colors: () => ChipColors, hover?: Hover): View {
   return ring(
     body.paddingHorizontal(6).paddingVertical(1),
     () => colors().bg,
@@ -108,6 +157,7 @@ export function chipFrame(body: View, colors: () => ChipColors): View {
     1,
     6,
     true,
+    hover,
   );
 }
 
@@ -124,6 +174,15 @@ export function chip(label: () => string, colors: () => ChipColors, mono = false
     chipText(label, () => colors().fg, mono),
     colors,
   );
+}
+
+/** A chip that opens something: under the pointer its face and edge each step darker (chipHover). */
+export function tapChip(label: () => string, colors: () => ChipColors, onTap: () => void, mono = false): View {
+  return chipFrame(
+    chipText(label, () => colors().fg, mono),
+    colors,
+    chipHover(colors),
+  ).onTap(onTap);
 }
 
 /** The badge's figure: the count, or nothing at zero (or a bad count), so no empty pill shows. */

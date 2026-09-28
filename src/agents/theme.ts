@@ -17,6 +17,10 @@ export const T = {
   /** Text on a clay face: the Answer button. */
   onClay: "#FFFFFF",
   hover: "#7f7f7f0F",
+  // The PR line on the card under the pointer: a chip-strength face over
+  // the white panel, and an edge round it (shared/ui.ts linkBox).
+  linkHover: "#EEECE5",
+  linkEdge: "#14141347",
   /** The faint face behind the agent's latest message on the card. */
   quote: "#1414130A",
 } as const;

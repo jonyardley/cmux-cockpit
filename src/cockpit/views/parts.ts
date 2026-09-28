@@ -8,9 +8,12 @@ import { displayTitle } from "../../shared/titles.ts";
 import {
   branchText,
   chipFrame,
+  chipHover,
   chipText,
   haloDot,
+  linkBox,
   meta,
+  outMark,
   chip as pill,
   projectBadge,
   ring,
@@ -140,15 +143,11 @@ function chip(id: ChipId, c: () => Chip): View {
     isPr ? summaryColors({ health: c().health ?? "quiet", status: c().status, draft: !!c().draft }) : NEUTRAL_CHIP;
   const fg = () => colors().fg;
   const text = id === "br" ? branchText(() => c().text, fg, "medium") : chipText(() => c().text, fg, id === "port");
-  const parts: View[] =
-    id === "port"
-      ? [text]
-      : [
-          Image(isPr ? "arrow.triangle.pull" : "arrow.branch")
-            .font(9)
-            .color(fg),
-          text,
-        ];
+  // The PR chip's glyph turns into ↗ under the pointer, in the same slot,
+  // so the chip keeps its width. The port chip's words already end in ↗.
+  const icon = (name: string): View => Image(name).font(9).color(fg);
+  const lead = isPr ? ZStack({}, [icon("arrow.triangle.pull").hideOnHover(), outMark(fg)]) : icon("arrow.branch");
+  const parts: View[] = id === "port" ? [text] : [lead, text];
   // The uncommitted-changes dot trails the branch name (issue #48).
   if (id === "br")
     parts.push(
@@ -158,7 +157,11 @@ function chip(id: ChipId, c: () => Chip): View {
         () => Circle({ size: 5 }).fill(C.secondary),
       ),
     );
-  return chipFrame(HStack({ spacing: 4 }, parts), colors).onTap(() => {
+  const body = HStack({ spacing: 4 }, parts);
+  // The branch chip opens nothing, so it has no hover and no tap of its
+  // own: a click on it selects the card, as the card's free space does.
+  if (id === "br") return chipFrame(body, colors);
+  return chipFrame(body, colors, chipHover(colors)).onTap(() => {
     const url = c().url;
     if (url) openURL(url);
   });
@@ -174,39 +177,48 @@ function chipById(chips: readonly Chip[], id: ChipId): Chip {
 // worst state (issue #72). Behind a when(), so a card with no PR has no line.
 export function prLine(w: WsAccessor, size: number): View {
   const pr = computed(() => prSummary(w()));
+  const open = () => {
+    const url = pr()?.url;
+    if (url) openURL(url);
+  };
+  // The frame goes on a wrapper: on the link's own node it would stretch
+  // the tap and hover across the free width, which should select the card.
   const line = () =>
-    HStack({ spacing: 6 }, [
-      meta(() => pr()?.tag ?? "", C.secondary),
-      when(
-        "pr-title",
-        () => !!pr()?.title,
-        () =>
-          Text(() => pr()?.title ?? "")
-            .font(size)
-            .color(C.secondary)
-            .lineLimit(1)
-            .truncation("tail"),
-      ),
-      // A PR with no status has no words, so no empty pill.
-      when(
-        "pr-state",
-        () => !!pr()?.state,
-        () =>
-          pill(
-            () => pr()?.state ?? "",
-            () => summaryColors(pr()),
+    VStack({ spacing: 0 }, [
+      linkBox(
+        [
+          meta(() => pr()?.tag ?? "", C.secondary),
+          when(
+            "pr-title",
+            () => !!pr()?.title,
+            () =>
+              Text(() => pr()?.title ?? "")
+                .font(size)
+                .color(C.secondary)
+                .lineLimit(1)
+                .truncation("tail"),
           ),
-      ).layoutPriority(2),
-    ])
-      // The tap sits inside the frame, so the free width after the chip
-      // still selects the card rather than opening the PR.
-      .onTap(() => {
-        const url = pr()?.url;
-        if (url) openURL(url);
-      })
-      .frame({ maxWidth: "infinity", alignment: "leading" });
+          // A PR with no status has no words, so no empty pill.
+          when(
+            "pr-state",
+            () => !!pr()?.state,
+            () =>
+              pill(
+                () => pr()?.state ?? "",
+                () => summaryColors(pr()),
+              ),
+          ).layoutPriority(2),
+        ],
+        { face: C.linkHover, edge: C.linkEdge },
+        C.secondary,
+        open,
+      ),
+    ]).frame({ maxWidth: "infinity", alignment: "leading" });
   return when("pr-line", () => !!pr(), line);
 }
+
+// "To review →" is a white chip with the quiet chip's edge.
+const REVIEW_CHIP = { ...NEUTRAL_CHIP, bg: C.card };
 
 // "To review →" on a Ready card: files it into For review (issue #53). A
 // quiet chip with its own onTap, so the tap never also selects the card.
@@ -221,7 +233,16 @@ export function toReviewAction(w: WsAccessor): View {
   return when(
     "to-review",
     () => canFileForReview(w()),
-    () => ring(body, C.card, NEUTRAL_CHIP.edge, 1, 6, true).onTap(() => fileForReview(w())),
+    () =>
+      ring(
+        body,
+        C.card,
+        NEUTRAL_CHIP.edge,
+        1,
+        6,
+        true,
+        chipHover(() => REVIEW_CHIP),
+      ).onTap(() => fileForReview(w())),
   ).layoutPriority(2);
 }
 
@@ -343,6 +364,8 @@ export function cardChrome(view: View, w: WsAccessor, key: string, radius: numbe
     () => (lit() ? C.select : C.cardEdge),
     () => (lit() ? 1.5 : 1),
     radius,
+    false,
+    { face: C.cardHover },
   ).frame({ maxWidth: "infinity" });
   // Cards keep a 6pt gap; the list spacing is 2pt so rows sit tight.
   return VStack({ spacing: 0 }, [face])
