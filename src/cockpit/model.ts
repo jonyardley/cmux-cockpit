@@ -440,9 +440,8 @@ export function mergeReadyText(laneKey: LaneKey): string {
   return n ? n + " ready to merge" : "";
 }
 
-// The ready PR chip's own green (pr-colors.ts), so the count reads as the
-// PR verdict, not the agent's Ready pill.
-const MERGE_READY_INK = READY_INK;
+// Ready's green (pr-colors.ts), so the count reads as the PR verdict, not
+// the agent's Ready pill.
 
 /** The words at a lane header's trailing edge, and their ink. */
 export interface HeaderHint {
@@ -457,7 +456,7 @@ export interface HeaderHint {
  */
 export function headerHint(laneKey: LaneKey, dropping: boolean): HeaderHint {
   if (dropping) return { text: "Drop here", color: C.heading };
-  return { text: mergeReadyText(laneKey), color: laneKey === "parked" ? C.faint : MERGE_READY_INK };
+  return { text: mergeReadyText(laneKey), color: laneKey === "parked" ? C.faint : READY_INK };
 }
 
 // --- Projects mode ---------------------------------------------------------------------

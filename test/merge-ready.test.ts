@@ -101,7 +101,7 @@ describe("headerHint", () => {
     assert.deepEqual(model.headerHint("review", true), { text: "Drop here", color: C.heading });
   });
 
-  it("gives the merge line in the ready PR chip's green, not the agent's Ready green", () => {
+  it("gives the merge line in ready's green, not the agent's Ready green", () => {
     const hint = model.headerHint("review", false);
     assert.equal(hint.text, "2 ready to merge");
     assert.equal(hint.color, READY_INK);

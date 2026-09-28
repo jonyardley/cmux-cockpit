@@ -4,7 +4,7 @@
 // checks come from the PR poller.
 
 import { dismissNeeds } from "../../shared/needs.ts";
-import { NEUTRAL_CHIP, summaryColors } from "../../shared/pr-colors.ts";
+import { dimmedColors, NEUTRAL_CHIP, summaryColors } from "../../shared/pr-colors.ts";
 import { branchText, linkBox, META_FONT, meta, sectionTitle, tapChip, when } from "../../shared/ui.ts";
 import {
   type AgentRow,
@@ -282,7 +282,7 @@ function statusWords(): View {
       () =>
         tapChip(
           () => currentPr()?.state ?? "",
-          () => summaryColors(currentPr()),
+          () => dimmedColors(summaryColors(currentPr()), currentPrDim()),
           () => currentPr()?.url,
         ),
     )
