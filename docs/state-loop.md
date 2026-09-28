@@ -18,9 +18,12 @@ sidebars/*.js with __STATE__ baked in ──▶ cmux hot-reloads the sidebar
 ## The URL
 
 ```
-cmux-cockpit://set?key=<map>.<id>&value=<url-encoded JSON>
-cmux-cockpit://set?key=<map>.<id>            (no value: delete the entry)
+cmux-cockpit://set?key=<map>.<id>&value=<url-encoded JSON>&token=<token>
+cmux-cockpit://set?key=<map>.<id>&token=<token>   (no value: delete the entry)
 ```
+
+`token` is this install's `config/url-token` (see Trust below), which the
+sidebars send on every set.
 
 | map               | value                          | issue |
 | ----------------- | ------------------------------ | ----- |
@@ -54,9 +57,12 @@ never fatal, so a bad write cannot break the build. Each map keeps its newest
 JSON object, is also built as empty state, but the build copies it to
 `config/state.json.unreadable.bak` (never over an earlier copy) and bakes in
 `__STATE_UNREADABLE__`, and both sidebars then show one line saying so, so
-a broken file never passes for nothing saved (#78). The next write replaces
-the broken file, so the line stays while the copy is there: delete the copy
-once you have looked at it.
+a broken file never passes for nothing saved (#78). The next write (a tap,
+a poll or a hook) replaces the broken file, but copies it aside to the same
+name first when no build has yet, so a write that beats the build loses
+nothing; if an earlier copy is still there and differs, the write keeps a
+second one beside it, named `config/state.json.unreadable.<ms>.bak`. The line stays while the copy is there: delete the copy once you
+have looked at it.
 
 The build merges `projects` over `config/projects.json`, and the file wins:
 an in-app project whose match or name is already taken is left out, and so
@@ -78,7 +84,11 @@ open one, and ignoring a fork's PR (`isCrossRepository`), since the sidebar
 cannot open one of those the way it opens ours. It replaces the whole map
 under the same file lock as a URL's write, sorting its keys first so a
 reorder of workspaces or windows between polls is never seen as a change,
-and rebuilds only when a PR changed. If the rebuild fails, it writes the
+and rebuilds only when a PR changed, through the same build lock as the
+hooks (`buildNow` in `scripts/hook-build.ts`, which waits up to ten
+seconds for a build in flight rather than racing it; if that build is
+still going, it builds this write before it lets go, so the poll leaves it
+there). If the rebuild fails, it writes the
 previous map straight back, so the file matches the screen and the next
 poll sees a change again and retries.
 
@@ -92,7 +102,8 @@ cleared and retaken). Every run logs a line, whether it changed anything,
 found nothing new, was skipped, or hit an error.
 
 The `pr-poll-turn` and `pr-poll-select` rules in `automations.json` run it
-(through `scripts/pr-poll.sh`, which finds node) when an agent's turn ends
+(through `scripts/pr-poll.sh`, which finds node with `scripts/find-node.sh`,
+the same lookup the helper app uses) when an agent's turn ends
 (cmux's `agent.hook.Stop` event: `agent.turn.completed` only ever arrives
 inside a notification event's payload, so a rule on it never fires) and
 when a workspace is selected, each at most once every 30 seconds, with a
@@ -209,9 +220,20 @@ working or workspaces are being switched.
 
 ## Trust
 
-Any web page can open a `cmux-cockpit://` URL. The worst it can do is write a
-bounded, validated entry and trigger a rebuild. The handler never passes URL
-content to a shell.
+Any web page can open a `cmux-cockpit://` URL, so the first build makes a
+per-install token, `config/url-token` (32 random bytes as hex, gitignored,
+readable by you only), and bakes it into both sidebars as `__URL_TOKEN__`.
+`persistSet` sends it as the `token` param, and `scripts/state-set.ts`
+refuses any set whose token is missing or does not match the file (compared
+in constant time), logging "refused: bad token" and never the token. A web
+page cannot read the file, so it cannot forge a set. Even with the token,
+the worst a URL can do is write a bounded, validated entry and trigger a
+rebuild. The handler never passes URL content to a shell.
+
+The helper app does not bake in a node path: it runs `scripts/find-node.sh`
+at every tap, which tries node on PATH, then fnm, nvm, volta, asdf, mise
+and Homebrew, and logs a line when it finds none, so a Node upgrade does not
+break taps silently.
 
 ## Subagent runs: the map no URL writes either
 
@@ -298,7 +320,14 @@ short-sleeping build of its own; every other event in that window finds
 the lock held and does nothing, trusting the build already running to pick
 up its write once it runs. A lock older than two minutes is a crashed
 build's and is retaken. The coalescing lives in `scripts/hook-build.ts`,
-shared with the published-links hook below, so the two never build at once.
+shared with the published-links hook below and with a tap
+(`scripts/state-set.ts`), and the poller's synchronous `buildNow` takes the
+same lock, so no two builds ever run at once and an older bundle can never
+land after a newer one. Whoever holds the lock looks at the state file once
+more after dropping it and, if a write landed after its last build, takes
+the lock back and builds again, so a write that found the lock held is
+never left unbuilt. The holder touches the lock before each build pass, so
+a long run of passes is never mistaken for a crashed build's.
 
 ## Published pages and docs
 

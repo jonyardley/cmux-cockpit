@@ -11,13 +11,19 @@
 // saved last (docs/state-loop.md), with __STATE_UNREADABLE__ true when the
 // file cannot be read, or an unreadable one was kept aside and is still there. Its `projects` map, projects made in the
 // sidebar (issue #9), is merged over the file's table first.
+//
+// config/url-token (gitignored, this user only) is made here on the first
+// build and baked in as __URL_TOKEN__, so the sidebars' cmux-cockpit://
+// links carry it and state-set.ts can refuse any link that does not
+// (docs/state-loop.md).
 //   node scripts/build.ts    build once
 
-import { constants, copyFileSync, existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { build } from "esbuild";
 import { mergeProjects, type Project, validateProjects } from "./projects-config.ts";
 import { emptyState, isRecord, type State, validateState } from "./state-config.ts";
+import { ensureUrlToken, keepUnreadableCopy, unreadableCopyOf } from "./state-url.ts";
 
 const ENTRIES = ["agents", "cockpit"] as const;
 
@@ -59,18 +65,18 @@ function withExpandedRoots(projects: readonly Project[]): readonly Project[] {
 // is not a JSON object is flagged, so the sidebars say so rather than look
 // empty (issue #78). The next write (a poll, a hook, a tap) would replace
 // it with near-empty state and the flag would go with it, so the broken
-// file is first copied aside, never over an earlier copy, and the flag
-// holds while that copy is there: the saved state was lost, and the line
-// stays until Jon has looked at the copy and removed it.
+// file is first copied aside, never over an earlier copy (the writes in
+// state-url.ts do the same before replacing it), and the flag holds while
+// that copy is there: the saved state was lost, and the line stays until
+// Jon has looked at the copy and removed it.
 const STATE_PATH = "config/state.json";
-const BROKEN_COPY = "config/state.json.unreadable.bak";
+const BROKEN_COPY = unreadableCopyOf(STATE_PATH);
 
 function keepBrokenCopy(): void {
   try {
-    copyFileSync(STATE_PATH, BROKEN_COPY, constants.COPYFILE_EXCL);
-    console.warn(`build: kept the unreadable file as ${BROKEN_COPY}`);
+    if (keepUnreadableCopy(STATE_PATH)) console.warn(`build: kept the unreadable file as ${BROKEN_COPY}`);
   } catch {
-    // Already kept from an earlier build, or the copy failed: the flag still shows.
+    // The copy failed: the flag still shows.
   }
 }
 
@@ -93,6 +99,18 @@ function loadState(): { state: State; unreadable: boolean } {
   return { state: validateState(raw), unreadable: kept };
 }
 
+// Unlike the state file, a token that cannot be made is fatal: a bundle
+// without one sends links the handler refuses, so every save would fail.
+function loadUrlToken(): string {
+  try {
+    return ensureUrlToken("config/url-token");
+  } catch (err) {
+    console.error(`build: cannot make or read config/url-token: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+}
+
+const urlToken = loadUrlToken();
 const { state: saved, unreadable } = loadState();
 const merged = mergeProjects(loadProjects(), saved.projects);
 const projects = withExpandedRoots(merged.projects);
@@ -117,6 +135,7 @@ for (const name of ENTRIES) {
       __PROJECTS__: JSON.stringify(projects),
       __STATE__: JSON.stringify(state),
       __STATE_UNREADABLE__: JSON.stringify(unreadable),
+      __URL_TOKEN__: JSON.stringify(urlToken),
     },
     logLevel: "warning",
   });

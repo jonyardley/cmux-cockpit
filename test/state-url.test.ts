@@ -1,11 +1,21 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { after, describe, it } from "node:test";
 import { applyPublished } from "../scripts/hooks/report-published.ts";
 import { emptyState, type State } from "../scripts/state-config.ts";
-import { parseSetUrl, readApplyWrite, writePollMaps, writePublished, writeSubagents } from "../scripts/state-url.ts";
+import {
+  ensureUrlToken,
+  parseSetUrl,
+  readApplyWrite,
+  readUrlToken,
+  tokenMatches,
+  unreadableCopyOf,
+  writePollMaps,
+  writePublished,
+  writeSubagents,
+} from "../scripts/state-url.ts";
 
 describe("parseSetUrl", () => {
   it("parses a set with a value", () => {
@@ -265,5 +275,115 @@ describe("readApplyWrite locking", () => {
     writeFileSync(`${path}.lock`, "");
     assert.throws(() => readApplyWrite(path, "projectOverride.w1", '"alpha"'), /locked/);
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("the URL token", () => {
+  const token = "a".repeat(64);
+
+  it("parses a token param and leaves it out when there is none", () => {
+    const parsed = parseSetUrl(`cmux-cockpit://set?key=projectOverride.w1&token=${token}`);
+    assert.deepEqual(parsed, { ok: true, key: "projectOverride.w1", value: null, token });
+    const bare = parseSetUrl("cmux-cockpit://set?key=projectOverride.w1");
+    assert.equal(bare.ok && "token" in bare, false);
+  });
+
+  it("refuses a missing token", () => {
+    assert.equal(tokenMatches(undefined, token), false);
+    assert.equal(tokenMatches("", token), false);
+  });
+
+  it("refuses a wrong token, of the same length or not", () => {
+    assert.equal(tokenMatches("b".repeat(64), token), false);
+    assert.equal(tokenMatches("a".repeat(63), token), false);
+    assert.equal(tokenMatches(`${token}a`, token), false);
+  });
+
+  it("refuses every token when the install has none", () => {
+    assert.equal(tokenMatches(token, null), false);
+    assert.equal(tokenMatches("", ""), false);
+  });
+
+  it("accepts the right token", () => {
+    assert.equal(tokenMatches(token, token), true);
+  });
+
+  it("makes a 64-character hex token readable by this user only, and keeps it", () => {
+    const dir = mkdtempSync(join(tmpdir(), "state-url-token-"));
+    try {
+      const path = join(dir, "config", "url-token");
+      assert.equal(readUrlToken(path), null);
+      const made = ensureUrlToken(path);
+      assert.match(made, /^[0-9a-f]{64}$/);
+      assert.equal(statSync(path).mode & 0o777, 0o600);
+      assert.equal(ensureUrlToken(path), made);
+      assert.equal(readUrlToken(path), made);
+      // An empty file, from a first build cut off mid-write, gets a fresh token.
+      writeFileSync(path, "");
+      const remade = ensureUrlToken(path);
+      assert.match(remade, /^[0-9a-f]{64}$/);
+      assert.equal(statSync(path).mode & 0o777, 0o600);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("an unreadable state file is kept aside before a write replaces it", () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+  function tempFile(): string {
+    const dir = mkdtempSync(join(tmpdir(), "state-url-broken-"));
+    dirs.push(dir);
+    return join(dir, "state.json");
+  }
+
+  it("uses the name build.ts looks for", () => {
+    assert.equal(unreadableCopyOf("config/state.json"), "config/state.json.unreadable.bak");
+  });
+
+  it("copies a corrupt file byte for byte, then writes the replacement", () => {
+    const path = tempFile();
+    const broken = Buffer.from('{ "dismissed": { half a file \u00e9\n');
+    writeFileSync(path, broken);
+    assert.deepEqual(readApplyWrite(path, "projectOverride.w1", '"alpha"'), { ok: true, changed: true });
+    assert.deepEqual(readFileSync(unreadableCopyOf(path)), broken);
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).projectOverride, { w1: "alpha" });
+  });
+
+  it("keeps a file that parses but is not an object too", () => {
+    const path = tempFile();
+    writeFileSync(path, "[1, 2]");
+    readApplyWrite(path, "projectOverride.w1", '"alpha"');
+    assert.equal(readFileSync(unreadableCopyOf(path), "utf8"), "[1, 2]");
+  });
+
+  it("never copies over an earlier backup, keeping a second breakage beside it", () => {
+    const path = tempFile();
+    writeFileSync(path, "first broken");
+    readApplyWrite(path, "projectOverride.w1", '"alpha"');
+    writeFileSync(path, "second broken");
+    assert.deepEqual(readApplyWrite(path, "projectOverride.w2", '"beta"'), { ok: true, changed: true });
+    assert.equal(readFileSync(unreadableCopyOf(path), "utf8"), "first broken");
+    const extra = readdirSync(dirname(path)).filter((f) => /^state\.json\.unreadable\.\d+\.bak$/.test(f));
+    assert.equal(extra.length, 1);
+    assert.equal(readFileSync(join(dirname(path), extra[0] ?? ""), "utf8"), "second broken");
+  });
+
+  it("makes no second copy when the broken file matches the one already kept", () => {
+    const path = tempFile();
+    writeFileSync(path, "same broken");
+    writeFileSync(unreadableCopyOf(path), "same broken");
+    readApplyWrite(path, "projectOverride.w1", '"alpha"');
+    assert.deepEqual(readdirSync(dirname(path)).sort(), ["state.json", "state.json.unreadable.bak"]);
+  });
+
+  it("makes no backup of a missing file or a good one", () => {
+    const path = tempFile();
+    readApplyWrite(path, "projectOverride.w1", '"alpha"');
+    readApplyWrite(path, "projectOverride.w2", '"beta"');
+    assert.equal(existsSync(unreadableCopyOf(path)), false);
   });
 });

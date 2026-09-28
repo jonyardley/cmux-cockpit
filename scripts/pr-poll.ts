@@ -15,9 +15,11 @@
 // deadline stops one slow run blocking every workspace behind it.
 
 import { spawnSync } from "node:child_process";
-import { closeSync, existsSync, openSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { buildNow } from "./hook-build.ts";
+import { tryTakeLock } from "./lockfile.ts";
 import {
   type CheckState,
   cleanLabel,
@@ -48,10 +50,6 @@ const LOCK_STALE_MS = 5 * 60_000;
 const MAX_DELAY_SECONDS = 60;
 const LOCK_RETRY_MS = 2_000;
 const LOCK_RETRIES = LOCK_STALE_MS / LOCK_RETRY_MS;
-// The rebuild after a change. Without a limit a hung build would hold the
-// lock with nothing to kill it, as the hook's detached run has no outer
-// timeout the way the automation runs do.
-const BUILD_TIMEOUT_MS = 60_000;
 const CMUX_FALLBACK = "/Applications/cmux.app/Contents/Resources/bin/cmux";
 
 function log(line: string): void {
@@ -502,22 +500,7 @@ function listWorkspaces(cmux: string): WorkspaceDir[] | null {
 // An exclusive lockfile, so two polls can never overlap and race to write
 // config/state.json. A lock older than LOCK_STALE_MS is a crashed run's, so
 // it is cleared and retaken rather than honoured forever.
-function acquireLock(lockFile: string): boolean {
-  try {
-    closeSync(openSync(lockFile, "wx"));
-    return true;
-  } catch {
-    const age = Date.now() - (statSync(lockFile, { throwIfNoEntry: false })?.mtimeMs ?? Date.now());
-    if (age <= LOCK_STALE_MS) return false;
-    rmSync(lockFile, { force: true });
-    try {
-      closeSync(openSync(lockFile, "wx"));
-      return true;
-    } catch {
-      return false;
-    }
-  }
-}
+const acquireLock = (lockFile: string): boolean => tryTakeLock(lockFile, LOCK_STALE_MS);
 
 /**
  * Writes the new `prs` and `ownPrs` maps and, in the same pass, prunes the
@@ -598,13 +581,19 @@ function poll(root: string): number {
     return 0;
   }
 
-  const build = spawnSync(process.execPath, ["scripts/build.ts"], {
-    cwd: root,
-    stdio: "ignore",
-    timeout: BUILD_TIMEOUT_MS,
-  });
-  if (build.status === 0) {
+  // Through hook-build.ts's lock, so this build never races a hook's and
+  // lands an older bundle last. It waits briefly for a build in flight,
+  // since this caller needs the result to roll back on failure; each build
+  // is limited to a minute there, since this run has no outer timeout when
+  // the report-pr hook starts it. Still busy after the wait, the build in
+  // flight builds this write before it lets go, so nothing is rolled back.
+  const built = buildNow();
+  if (built === "built") {
     log(`ok, ${counts}`);
+    return 0;
+  }
+  if (built === "busy") {
+    log(`ok, ${counts}, built by the build in flight`);
     return 0;
   }
 

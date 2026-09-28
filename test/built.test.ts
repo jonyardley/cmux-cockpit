@@ -45,6 +45,14 @@ function busyRenderer() {
 
 describe("built sidebars", () => {
   for (const file of SIDEBARS) {
+    it(`${file} carries this install's URL token for its cmux-cockpit:// links`, () => {
+      // build.ts made config/url-token if there was none, and baked it in.
+      // Read inside the test, so a missing build fails here, not on load.
+      const token = readFileSync("config/url-token", "utf8").trim();
+      assert.match(token, /^[0-9a-f]{64}$/);
+      assert.ok(readFileSync(file, "utf8").includes(JSON.stringify(token)));
+    });
+
     it(`${file} is a flat script with no import or export`, () => {
       const src = readFileSync(file, "utf8");
       assert.doesNotMatch(src, /^\s*(import|export)\b/m);

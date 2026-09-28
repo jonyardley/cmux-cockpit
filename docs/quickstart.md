@@ -128,12 +128,15 @@ npm run helper
 
 This builds `~/Applications/CmuxCockpit.app` and registers the
 `cmux-cockpit://` link type. Without it, dismissals and project moves last
-only until cmux reloads the sidebar. The app bakes in your current Node
-path, so run it again after upgrading Node.
+only until cmux reloads the sidebar. The app looks for Node each time it
+runs, the same way the poller does (below), so a Node upgrade needs no
+reinstall.
 
 Any web page could open a `cmux-cockpit://` link; your browser asks
-before it hands one over. The worst such a link can do is change what the
-sidebars show. See [SECURITY.md](../SECURITY.md). To remove the helper,
+before it hands one over. The helper only accepts links carrying a token
+the first build made for your install (`config/url-token`), which a web
+page cannot read, and even then the worst a link can do is change what
+the sidebars show. See [SECURITY.md](../SECURITY.md). To remove the helper,
 delete `~/Applications/CmuxCockpit.app`.
 
 ### Pull request chips and keeping the agents panel
@@ -161,8 +164,9 @@ What each rule runs:
   includes any client repos you have open.
 
 The poller runs outside your shell, so it looks for Node on cmux's PATH,
-then fnm's default, then Homebrew. With nvm, volta, asdf or mise it may
-find none and quietly do nothing; support for those is on the way.
+then fnm's default, nvm (its default alias, else the newest installed),
+volta, asdf and mise (the newest installed), then Homebrew. If it finds
+none it does nothing and logs a line saying so.
 
 ### Claude Code hooks
 

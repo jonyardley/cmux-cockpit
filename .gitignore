@@ -7,7 +7,8 @@ conductor-backup-*/
 # Tooling
 node_modules/
 
-# Local build output, your app settings and the real project table: never
+# Local build output, your app settings, the real project table, this
+# install's link token and the state loop's lock and temp files: never
 # commit these. cmux.example.json and dock.example.json are the samples.
 cmux.json
 dock.json
@@ -16,9 +17,9 @@ sidebars/cockpit.js
 sidebars/focus.js
 config/projects.json
 config/state.json
-config/pr-poll.lock
-config/hook-build.lock
-config/subagent-build.lock
+config/url-token
+config/*.lock
+config/*.tmp
 
 # Claude Code worktrees live under .claude/; only settings.json is shared.
 .claude/*
