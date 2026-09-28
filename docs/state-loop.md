@@ -181,8 +181,16 @@ rebuild and reload both sidebars) nor only on a change of PRs (a quiet
 `okEpoch` when the saved one is more than 5 minutes old, and write `error`
 only when it starts or ends. Polls run on agent turn ends and workspace
 selects, so after 15 minutes with neither the line is true: the data is
-that old. The poller does not write `poll` yet: that needs
-`writePollMaps` to carry it, which is still to do.
+that old.
+
+`pr-poll.ts` tallies every gh call in a run (`ghOutcome`, `nextPoll`) and
+saves the result through `writePollMaps` in the same locked pass as the
+PR maps. A run where gh calls failed and none answered keeps the last
+`okEpoch` and records why: `missing` when gh is not installed,
+`signed-out` when gh asks for `gh auth login`, else `unavailable`. A
+directory that is not a GitHub repo says nothing about gh either way.
+Any other run is a success, including one that needed no gh call. If the
+rebuild after a write fails, the old status goes back with the old maps.
 
 ## Cost of a save
 
