@@ -21,6 +21,9 @@ config/url-token
 config/*.lock
 config/*.tmp
 
+# The maintainer's own agent workflow, loaded next to CLAUDE.md.
+CLAUDE.local.md
+
 # Claude Code worktrees live under .claude/; only settings.json is shared.
 .claude/*
 !.claude/settings.json
