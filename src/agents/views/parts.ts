@@ -1,8 +1,10 @@
 // Small pieces shared by the agents panel's sections.
 
+import { dimmedColors, prChipColors } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
-import { haloDot, projectBadge, ring, sectionTitle } from "../../shared/ui.ts";
-import { T } from "../theme.ts";
+import { chip, haloDot, projectBadge, ring, sectionTitle } from "../../shared/ui.ts";
+import { type PrEntry, prChipHealth, prChipText, prDim } from "../model.ts";
+import { STALE_OPACITY, T } from "../theme.ts";
 
 // White panel with a hairline edge: the runtime has no shadows, so depth is
 // the edge against the tinted ground.
@@ -61,4 +63,13 @@ export const glyph = (p: () => Project): View => projectBadge(p, 18, 9);
 export function jump(wsId: string, surfaceId: string | undefined): void {
   cmux("workspace.select", { workspace_id: wsId });
   if (surfaceId) cmux("surface.focus", { surface_id: surfaceId, workspace_id: wsId });
+}
+
+/** A PR's state chip, as its row and its peek card show it: dimmed while stale. */
+export function prChip(e: () => PrEntry): View {
+  const colors = () => {
+    const h = prChipHealth(e());
+    return dimmedColors(prChipColors(h.health, e().pr.status, h.draft), prDim(e()));
+  };
+  return chip(() => prChipText(e()), colors).opacity(() => (prDim(e()) ? STALE_OPACITY : 1));
 }

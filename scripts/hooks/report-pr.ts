@@ -12,12 +12,20 @@
 // `gh pr ready` or `gh pr merge` it starts a poll too, so the chip catches
 // up without waiting for the next turn end or workspace switch. It never
 // fails the hook: every problem is a note on stderr and exit 0.
+//
+// A create is also recorded in config/state.json's `prOrigins` map, with
+// the session, workspace and terminal that ran it, so the agents panel can
+// say which chat opened each PR and switch back to it. report-mention.ts
+// fills in the first paragraph that named it once the turn ends.
 
 import { spawn, spawnSync } from "node:child_process";
 import { closeSync, openSync, readFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { join } from "node:path";
+import { scheduleBuild } from "../hook-build.ts";
+import { isId, type SavedPrOrigin, type State } from "../state-config.ts";
 import { LOG_PATH } from "../state-log.ts";
+import { writePrOrigins } from "../state-url.ts";
 import { field, ghPr, SEGMENTS } from "./gh-command.ts";
 
 export interface Pr {
@@ -110,6 +118,62 @@ export function payload(pr: Pr, env: CmuxEnv): string | null {
   return cap && TOKEN.test(cap) ? `_cmux_capability_v1 ${cap} ${line}` : line;
 }
 
+// The cmux ids the hook inherits, for saying where a PR was opened.
+interface OriginEnv {
+  CMUX_WORKSPACE_ID?: string | undefined;
+  CMUX_SURFACE_ID?: string | undefined;
+}
+
+/** Origins older than this are dropped on every write: 30 days. */
+export const ORIGIN_MAX_AGE_S = 30 * 24 * 60 * 60;
+
+/**
+ * Where a PR the agent just created came from, or null without a session
+ * or workspace to name. The number comes from the URL, so this needs no gh.
+ */
+export function originFrom(url: string, event: unknown, env: OriginEnv, now: number): SavedPrOrigin | null {
+  const number = Number(/\/pull\/(\d+)$/.exec(url)?.[1]);
+  const session = field(event, "session_id");
+  const { CMUX_WORKSPACE_ID: workspace, CMUX_SURFACE_ID: surface } = env;
+  if (!Number.isSafeInteger(number) || number < 1) return null;
+  if (typeof session !== "string" || !isId(session) || !workspace || !isId(workspace)) return null;
+  const origin: SavedPrOrigin = { url, number, workspace, session, epoch: now };
+  if (surface && isId(surface)) origin.surface = surface;
+  return origin;
+}
+
+/**
+ * Adds one origin, moved last as the newest, keeping the mention an earlier
+ * record of the same PR already found when that record is the same chat's,
+ * and drops every origin older than ORIGIN_MAX_AGE_S. The input is not
+ * changed.
+ */
+export function addOrigin(map: State["prOrigins"], origin: SavedPrOrigin, now: number): State["prOrigins"] {
+  const before = Object.hasOwn(map, origin.url) ? map[origin.url] : undefined;
+  const kept = Object.entries(map).filter(([url, o]) => url !== origin.url && now - o.epoch <= ORIGIN_MAX_AGE_S);
+  const next = before?.mention && before.session === origin.session ? { ...origin, mention: before.mention } : origin;
+  return Object.fromEntries([...kept, [origin.url, next]]);
+}
+
+const STATE_PATH = join(import.meta.dirname, "..", "..", "config", "state.json");
+
+// Saves where the PR came from; a failure is a note, never a failed hook.
+function recordOrigin(url: string, event: unknown): void {
+  const now = Math.floor(Date.now() / 1000);
+  const origin = originFrom(url, event, process.env, now);
+  if (!origin) {
+    console.error("report-pr: origin skipped, no session or cmux workspace");
+    return;
+  }
+  try {
+    const result = writePrOrigins(STATE_PATH, (map) => addOrigin(map, origin, now));
+    if (!result.ok) console.error(`report-pr: origin: ${result.error}`);
+    else if (result.changed) scheduleBuild("report-pr");
+  } catch (err) {
+    console.error(`report-pr: origin: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 // Long enough for gh to list a PR it has just created: a poll a second after
 // the create found none (docs/state-loop.md).
 const POLL_DELAY_SECONDS = 10;
@@ -185,6 +249,7 @@ async function main(): Promise<void> {
   if (!socket) return console.error("report-pr: skipped, not in a cmux terminal");
   if (step.kind === "poll") return startPoll(SETTLE_DELAY_SECONDS);
   const { url } = step;
+  recordOrigin(url, event);
   startPoll();
   const gh = spawnSync("gh", ["pr", "view", url, "--json", "number,url,state,headRefName"], {
     encoding: "utf8",
