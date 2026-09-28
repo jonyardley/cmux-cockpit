@@ -8,7 +8,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { validateProjects } from "../projects-config.ts";
 import { linkState } from "./automations.ts";
-import { loadSettings, retired, wanted } from "./claude-settings.ts";
+import { claudeDirNotes, loadSettings, retired, wanted } from "./claude-settings.ts";
 import { type Env, type Paths, pathsFor } from "./env.ts";
 import { missingEntries, removeEntries } from "./hooks-merge.ts";
 import { atLeast, CMUX_DRAG, CMUX_MIN, NODE_MIN, parseVersion, show } from "./versions.ts";
@@ -21,6 +21,8 @@ export interface Check {
   detail: string;
   /** One line that fixes a failure. */
   fix: string;
+  /** Warnings shown under the check whether it passed or not. */
+  notes?: readonly string[];
 }
 
 type Probe = (env: Env, paths: Paths) => Check;
@@ -163,16 +165,22 @@ export const automationsCheck: Probe = (_env, paths) => {
   return fail(label, `${found}; pull request chips wait for a poll`, "npm run setup -- --automations");
 };
 
-export const hooksCheck: Probe = (env, paths) => {
+function hooksFound(env: Env, paths: Paths): Check {
   const label = "Claude Code hooks";
   const loaded = loadSettings(paths);
-  if (!loaded.ok) return fail(label, `~/.claude/settings.json is ${loaded.error}`, "fix the file by hand");
-  if (!loaded.existed) return fail(label, "no ~/.claude/settings.json", "npm run setup -- --hooks");
+  if (!loaded.ok) return fail(label, `${paths.claudeSettingsShown} is ${loaded.error}`, "fix the file by hand");
+  if (!loaded.existed) return fail(label, `no ${paths.claudeSettingsShown}`, "npm run setup -- --hooks");
   const stale = removeEntries(loaded.settings, retired(), env.home).removed;
   if (stale > 0) return fail(label, `${stale} retired hook left, failing on every turn`, "npm run setup -- --hooks");
   const missing = missingEntries(loaded.settings, wanted(), env.home);
-  if (missing.length === 0) return pass(label, "all present");
+  if (missing.length === 0) return pass(label, `all present in ${paths.claudeSettingsShown}`);
   return fail(label, `${missing.length} missing`, "npm run setup -- --hooks");
+}
+
+export const hooksCheck: Probe = (env, paths) => {
+  const check = hooksFound(env, paths);
+  const notes = claudeDirNotes(paths, env.home);
+  return notes.length === 0 ? check : { ...check, notes };
 };
 
 export const tokenCheck: Probe = (_env, paths) =>
@@ -247,15 +255,16 @@ function safely(probe: Probe, env: Env, paths: Paths): Check {
 
 /** Runs every check. */
 export const runChecks = (env: Env): Check[] => {
-  const paths = pathsFor(env.home, env.repo);
+  const paths = pathsFor(env.home, env.repo, env.claudeConfigDir);
   return CHECKS.map((c) => safely(c, env, paths));
 };
 
 /** One line per check, a tick or a cross, with the fix under each cross. */
 export function report(checks: readonly Check[]): string[] {
-  return checks.flatMap((c) =>
-    c.ok ? [`✓ ${c.label}: ${c.detail}`] : [`✗ ${c.label}: ${c.detail}`, `    fix: ${c.fix}`],
-  );
+  return checks.flatMap((c) => [
+    ...(c.ok ? [`✓ ${c.label}: ${c.detail}`] : [`✗ ${c.label}: ${c.detail}`, `    fix: ${c.fix}`]),
+    ...(c.notes ?? []).map((n) => `    ! ${n}`),
+  ]);
 }
 
 /** 1 when a required check failed, else 0. */

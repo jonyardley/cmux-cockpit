@@ -5,7 +5,15 @@
 import { existsSync, rmSync } from "node:fs";
 import { type Choice, choose, type Extra, type Flags, offered } from "./args.ts";
 import { applyLink, linkState, planLink, removeLink, repoRuleIds } from "./automations.ts";
-import { backupSettings, loadSettings, retired, unchanged, wanted, writeSettings } from "./claude-settings.ts";
+import {
+  backupSettings,
+  claudeDirNotes,
+  loadSettings,
+  retired,
+  unchanged,
+  wanted,
+  writeSettings,
+} from "./claude-settings.ts";
 import type { Env, Paths } from "./env.ts";
 import { addEntries, describe, type Entry, missingEntries, removeEntries } from "./hooks-merge.ts";
 
@@ -58,15 +66,16 @@ function addAutomations(env: Env, paths: Paths): void {
 }
 
 async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
+  for (const note of claudeDirNotes(paths, env.home)) env.print(`  ! ${note}`);
   const loaded = loadSettings(paths);
   if (!loaded.ok) {
-    env.print(`  ✗ ~/.claude/settings.json is ${loaded.error}. Nothing changed; fix it and run setup again.`);
+    env.print(`  ✗ ${paths.claudeSettingsShown} is ${loaded.error}. Nothing changed; fix it and run setup again.`);
     return;
   }
   const add = missingEntries(loaded.settings, wanted(), env.home);
   const cleared = removeEntries(loaded.settings, retired(), env.home);
   if (add.length === 0 && cleared.removed === 0) {
-    env.print("  ✓ all the hooks are already in ~/.claude/settings.json");
+    env.print(`  ✓ all the hooks are already in ${paths.claudeSettingsShown}`);
     return;
   }
   listChanges(env, paths, add, cleared.removed);
@@ -76,7 +85,7 @@ async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
     return;
   }
   if (!unchanged(paths, loaded)) {
-    env.print("  ✗ ~/.claude/settings.json changed while setup waited, so nothing was written. Run setup again.");
+    env.print(`  ✗ ${paths.claudeSettingsShown} changed while setup waited, so nothing was written. Run setup again.`);
     return;
   }
   if (loaded.existed) env.print(`  ✓ backed up to ${backupSettings(paths, env.now())}`);
@@ -88,7 +97,7 @@ async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
 function listChanges(env: Env, paths: Paths, add: readonly Entry[], retiredCount: number): void {
   if (add.length > 0) {
     env.print(
-      `  These go into ${paths.claudeSettings}, rewritten with two-space indents; nothing else there is removed or reordered:`,
+      `  These go into ${paths.claudeSettingsShown}, rewritten with two-space indents; nothing else there is removed or reordered:`,
     );
     for (const e of add) env.print(`    ${describe(e)}`);
   }
@@ -124,14 +133,14 @@ async function removeHooks(env: Env, paths: Paths, confirm: (q: string) => Promi
   if (!existsSync(paths.claudeSettings)) return;
   const loaded = loadSettings(paths);
   if (!loaded.ok) {
-    env.print(`✗ ~/.claude/settings.json is ${loaded.error}; its hooks are left alone.`);
+    env.print(`✗ ${paths.claudeSettingsShown} is ${loaded.error}; its hooks are left alone.`);
     return;
   }
   const next = removeEntries(loaded.settings, [...wanted(), ...retired()], env.home);
   if (next.removed === 0) return;
-  if (!(await confirm(`Remove the ${next.removed} cockpit hooks from ~/.claude/settings.json?`))) return;
+  if (!(await confirm(`Remove the ${next.removed} cockpit hooks from ${paths.claudeSettingsShown}?`))) return;
   if (!unchanged(paths, loaded)) {
-    env.print("✗ ~/.claude/settings.json changed while uninstall waited, so nothing was written. Run it again.");
+    env.print(`✗ ${paths.claudeSettingsShown} changed while uninstall waited, so nothing was written. Run it again.`);
     return;
   }
   env.print(`✓ backed up to ${backupSettings(paths, env.now())}`);

@@ -65,7 +65,7 @@ describe("setup", () => {
     const w = where();
     const f = fakeEnv(w, cmuxWith(w.home));
     assert.equal(await setup(f.env, ["--no-extras"]), 1); // exits 1: the fake npm run build writes nothing
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     assert.deepEqual(JSON.parse(readFileSync(p.cmuxJson, "utf8")), JSON.parse(readFileSync(p.cmuxExample, "utf8")));
     const projects = JSON.parse(readFileSync(p.projects, "utf8"));
     assert.deepEqual(
@@ -86,7 +86,7 @@ describe("setup", () => {
 
   it("is safe to rerun: it keeps an existing cmux.json and projects.json, and says so", async () => {
     const w = where();
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     writeFileSync(p.cmuxJson, '{ "mine": true }');
     writeFileSync(p.projects, "[]");
     built(w.repo);
@@ -103,7 +103,7 @@ describe("setup", () => {
     const w = where();
     const f = fakeEnv(w, { "cmux --version": ok("cmux 0.64.25"), "cmux --json list-workspaces": failed() });
     await setup(f.env, ["--no-extras"]);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     assert.equal(readFileSync(p.projects, "utf8"), readFileSync(p.projectsExample, "utf8"));
     assert.ok(f.out.some((l) => l.includes("copied the example")));
     assert.ok(f.out.some((l) => l.includes("lane highlight while dragging needs 0.65.0")));
@@ -111,7 +111,7 @@ describe("setup", () => {
 
   it("stops before touching anything on old Node, no cmux, the wrong folder or no node_modules", async () => {
     const w = where();
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     const stops = async (env: ReturnType<typeof fakeEnv>, why: RegExp) => {
       assert.equal(await setup(env.env, []), 1);
       assert.match(env.out.at(-1) ?? "", why);
@@ -128,7 +128,7 @@ describe("setup", () => {
   it("adds every extra with --yes: helper, automations link and hooks", async () => {
     const w = where();
     built(w.repo);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     const f = fakeEnv(w, cmuxWith(w.home));
     await setup(f.env, ["--yes"]);
     assert.ok(f.calls.some((c) => c.endsWith("scripts/install-helper.ts")));
@@ -146,13 +146,13 @@ describe("setup", () => {
     const f = fakeEnv(w, cmuxWith(w.home), { interactive: true, reply: false });
     await setup(f.env, []);
     assert.deepEqual(f.asked, ["Add the helper?", "Add the automations?", "Add the hooks?"]);
-    assert.equal(existsSync(pathsFor(w.home, w.repo).automationsLink), false);
+    assert.equal(existsSync(pathsFor(w.home, w.repo, undefined).automationsLink), false);
   });
 
   it("lists the hooks it will add and asks again before writing, backing up first", async () => {
     const w = where();
     built(w.repo);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.claudeDir, { recursive: true });
     writeFileSync(p.claudeSettings, JSON.stringify({ model: "opus" }));
     writeFileSync(p.claudeBackup, "an older backup");
@@ -168,7 +168,7 @@ describe("setup", () => {
   it("takes out a retired hook, keeping the person's own hooks for that event", async () => {
     const w = where();
     built(w.repo);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     const own = { hooks: [{ type: "command", command: "say done" }] };
     const old = { hooks: [{ type: "command", command: "node ~/.config/cmux/scripts/hooks/report-mention.ts" }] };
     mkdirSync(p.claudeDir, { recursive: true });
@@ -185,7 +185,7 @@ describe("setup", () => {
   it("refuses to touch settings that are not valid JSON", async () => {
     const w = where();
     built(w.repo);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.claudeDir, { recursive: true });
     writeFileSync(p.claudeSettings, "{ broken");
     const f = fakeEnv(w, cmuxWith(w.home));
@@ -198,7 +198,7 @@ describe("setup", () => {
   it("backs up a plain automations file of the repo's rules, but skips one with rules of its own", async () => {
     const w = where();
     built(w.repo);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.cmuxterm, { recursive: true });
     writeFileSync(p.automationsLink, JSON.stringify({ rules: [{ id: "mine" }] }));
     const f = fakeEnv(w, cmuxWith(w.home));
@@ -215,7 +215,7 @@ describe("setup", () => {
   it("backs up a link to another file, and uninstall puts that link back", async () => {
     const w = where();
     built(w.repo);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.cmuxterm, { recursive: true });
     const theirs = join(w.home, "dotfiles.json");
     writeFileSync(theirs, JSON.stringify({ rules: [{ id: "pr-poll-turn" }] }));
@@ -230,7 +230,7 @@ describe("setup", () => {
   it("writes through a settings.json that is a link, keeping the link", async () => {
     const w = where();
     built(w.repo);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.claudeDir, { recursive: true });
     const real = join(w.home, "real-settings.json");
     writeFileSync(real, "{}");
@@ -243,7 +243,7 @@ describe("setup", () => {
   it("writes nothing when settings.json changed while it waited on the question", async () => {
     const w = where();
     built(w.repo);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.claudeDir, { recursive: true });
     writeFileSync(p.claudeSettings, "{}");
     const f = fakeEnv(w, cmuxWith(w.home), { interactive: true, reply: true });
@@ -272,7 +272,7 @@ describe("doctor", () => {
     built(w.repo);
     await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--yes"]);
     built(w.repo); // the fake npm run build writes nothing, and setup wrote projects.json since
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.helperApp, { recursive: true });
     writeFileSync(p.urlToken, "t");
     const checks = runChecks(fakeEnv(w, fullAnswers(w.home)).env);
@@ -319,8 +319,8 @@ describe("doctor", () => {
     assert.equal(byLabel.get("cmux")?.required, true);
     assert.match(byLabel.get("Build")?.detail ?? "", /older than src/);
     utimesSync(src, new Date(0), new Date(0));
-    writeFileSync(pathsFor(w.home, w.repo).projects, "[]");
-    utimesSync(pathsFor(w.home, w.repo).projects, later, later);
+    writeFileSync(pathsFor(w.home, w.repo, undefined).projects, "[]");
+    utimesSync(pathsFor(w.home, w.repo, undefined).projects, later, later);
     const again = runChecks(fakeEnv(w).env).find((c) => c.label === "Build");
     assert.equal(again?.ok, false, "an edited projects.json needs a rebuild too");
   });
@@ -329,7 +329,7 @@ describe("doctor", () => {
     const w = where();
     built(w.repo);
     await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--hooks"]);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     const settings = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
     settings.hooks.Stop = [{ hooks: [retired()[0]?.hook] }];
     writeFileSync(p.claudeSettings, JSON.stringify(settings));
@@ -340,7 +340,7 @@ describe("doctor", () => {
 
   it("reads a broken cmux.json, projects.json and settings as crosses, not crashes", () => {
     const w = where();
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     writeFileSync(p.cmuxJson, "{");
     writeFileSync(p.projects, '[{ "match": "/A" }]');
     mkdirSync(p.claudeDir, { recursive: true });
@@ -368,7 +368,7 @@ describe("doctor", () => {
     assert.deepEqual(problemLines(log, new Date("2026-10-28T12:00:00.000Z")), []);
 
     const w = where();
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(join(w.home, "Library", "Logs"), { recursive: true });
     writeFileSync(p.stateLog, log);
     const check = runChecks(fakeEnv(w).env).find((c) => c.label === "State log");
@@ -383,7 +383,7 @@ describe("uninstall", () => {
     const w = where();
     built(w.repo);
     await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--yes"]);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.helperApp, { recursive: true });
     await uninstall(fakeEnv(w).env, ["--yes", "--hooks"]);
     assert.ok(existsSync(p.helperApp));
@@ -395,7 +395,7 @@ describe("uninstall", () => {
     const w = where();
     built(w.repo);
     await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--hooks"]);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     const settings = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
     settings.hooks.Stop = [{ hooks: [retired()[0]?.hook] }];
     writeFileSync(p.claudeSettings, JSON.stringify(settings));
@@ -406,7 +406,7 @@ describe("uninstall", () => {
   it("takes out what setup added, restoring the old automations file, and keeps the clone", async () => {
     const w = where();
     built(w.repo);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.cmuxterm, { recursive: true });
     writeFileSync(p.automationsLink, JSON.stringify({ rules: [] }));
     mkdirSync(p.claudeDir, { recursive: true });
@@ -427,7 +427,7 @@ describe("uninstall", () => {
 
   it("leaves a link that points elsewhere, and does nothing off a terminal without --yes", async () => {
     const w = where();
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.cmuxterm, { recursive: true });
     writeFileSync(join(w.home, "other.json"), "{}");
     symlinkSync(join(w.home, "other.json"), p.automationsLink);
@@ -442,13 +442,120 @@ describe("uninstall", () => {
     const w = where();
     built(w.repo);
     await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--yes"]);
-    const p = pathsFor(w.home, w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.helperApp, { recursive: true });
     const f = fakeEnv(w, {}, { interactive: true, reply: false });
     await uninstall(f.env, []);
     assert.equal(f.asked.length, 3);
     assert.ok(existsSync(p.helperApp));
     assert.ok(lstatSync(p.automationsLink).isSymbolicLink());
+  });
+});
+
+describe("Claude Code's config folder", () => {
+  it("is CLAUDE_CONFIG_DIR when that is an absolute path, else ~/.claude", () => {
+    const home = "/Users/me";
+    const set = pathsFor(home, "/r", "/Users/me/.claude-personal");
+    assert.equal(set.claudeDir, "/Users/me/.claude-personal");
+    assert.equal(set.claudeSettings, "/Users/me/.claude-personal/settings.json");
+    assert.equal(set.claudeBackup, "/Users/me/.claude-personal/settings.json.cmux-cockpit.bak");
+    assert.equal(set.claudeSettingsShown, "~/.claude-personal/settings.json");
+    assert.equal(pathsFor(home, "/r", "/etc/claude").claudeSettingsShown, "/etc/claude/settings.json");
+    for (const ignored of [undefined, "", "relative/claude"]) {
+      const p = pathsFor(home, "/r", ignored);
+      assert.equal(p.claudeSettings, "/Users/me/.claude/settings.json");
+      assert.equal(p.claudeBackup, "/Users/me/.claude/settings.json.cmux-cockpit.bak");
+      assert.equal(p.claudeSettingsShown, "~/.claude/settings.json");
+    }
+  });
+
+  it("expands a leading ~ against home, and names a value it still ignores", () => {
+    const home = "/Users/me";
+    assert.equal(pathsFor(home, "/r", "~/.claude-personal").claudeSettings, "/Users/me/.claude-personal/settings.json");
+    assert.equal(pathsFor(home, "/r", "~").claudeDir, "/Users/me");
+    assert.equal(pathsFor(home, "/r", "~/.claude-personal").claudeConfigIgnored, undefined);
+    for (const ignored of ["relative/claude", "~other/claude"]) {
+      const p = pathsFor(home, "/r", ignored);
+      assert.equal(p.claudeSettings, "/Users/me/.claude/settings.json");
+      assert.equal(p.claudeConfigIgnored, ignored);
+    }
+    assert.equal(pathsFor(home, "/r", undefined).claudeConfigIgnored, undefined);
+    assert.equal(pathsFor(home, "/r", "").claudeConfigIgnored, undefined);
+  });
+
+  it("shortens to ~ only under the real home, with no doubled slash", () => {
+    assert.equal(pathsFor("/Users/me/", "/r", undefined).claudeSettingsShown, "~/.claude/settings.json");
+    assert.equal(pathsFor("/Users/me/", "/r", "/Users/me/p").claudeSettingsShown, "~/p/settings.json");
+    assert.equal(pathsFor("/", "/r", undefined).claudeSettingsShown, "/.claude/settings.json");
+    assert.equal(pathsFor("/", "/r", "/etc/claude").claudeSettingsShown, "/etc/claude/settings.json");
+    assert.equal(pathsFor("/Users/me", "/r", "/Users/meg/c").claudeSettingsShown, "/Users/meg/c/settings.json");
+  });
+
+  it("only looks at ~/.claude/settings.json as the other file when the variable moves away from it", () => {
+    const home = "/Users/me";
+    assert.equal(pathsFor(home, "/r", undefined).otherClaudeSettings, undefined);
+    assert.equal(pathsFor(home, "/r", "/Users/me/.claude/").otherClaudeSettings, undefined);
+    assert.equal(pathsFor(home, "/r", "~/.claude").otherClaudeSettings, undefined);
+    assert.equal(
+      pathsFor(home, "/r", "/Users/me/.claude-personal").otherClaudeSettings,
+      "/Users/me/.claude/settings.json",
+    );
+  });
+
+  it("has setup and the doctor name an ignored CLAUDE_CONFIG_DIR", async () => {
+    const w = where();
+    built(w.repo);
+    const line = 'CLAUDE_CONFIG_DIR is "relative/claude", not an absolute path, so it is ignored and ~/.claude is used';
+    const f = fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: "relative/claude" });
+    await setup(f.env, ["--hooks"]);
+    assert.ok(f.out.includes(`  ! ${line}`), f.out.join("\n"));
+    assert.ok(existsSync(pathsFor(w.home, w.repo, undefined).claudeSettings));
+    const doctor = report(runChecks(fakeEnv(w, {}, { claudeConfigDir: "relative/claude" }).env));
+    assert.ok(doctor.includes(`    ! ${line}`), doctor.join("\n"));
+    assert.ok(!report(runChecks(fakeEnv(w).env)).some((l) => l.includes("CLAUDE_CONFIG_DIR")));
+  });
+
+  it("warns of cockpit hooks left in ~/.claude/settings.json, and leaves them there", async () => {
+    const w = where();
+    built(w.repo);
+    await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--hooks"]);
+    const old = pathsFor(w.home, w.repo, undefined).claudeSettings;
+    const before = readFileSync(old, "utf8");
+    const dir = join(w.home, ".claude-personal");
+    const line = `~/.claude/settings.json also holds ${wanted().length} cockpit hooks`;
+
+    const f = fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir });
+    await setup(f.env, ["--hooks"]);
+    assert.equal(f.out.filter((l) => l.startsWith(`  ! ${line}`)).length, 1, f.out.join("\n"));
+    assert.equal(readFileSync(old, "utf8"), before);
+
+    const hooks = runChecks(fakeEnv(w, {}, { claudeConfigDir: dir }).env).find((c) => c.label === "Claude Code hooks");
+    assert.equal(hooks?.ok, true);
+    assert.ok(hooks?.notes?.some((n) => n.startsWith(line)));
+    assert.equal(runChecks(fakeEnv(w).env).find((c) => c.label === "Claude Code hooks")?.notes, undefined);
+  });
+
+  it("is where setup --hooks writes and the doctor and uninstall look", async () => {
+    const w = where();
+    built(w.repo);
+    const dir = join(w.home, ".claude-personal");
+    const p = pathsFor(w.home, w.repo, dir);
+    const f = fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir });
+    await setup(f.env, ["--hooks"]);
+    assert.deepEqual(missingEntries(JSON.parse(readFileSync(p.claudeSettings, "utf8")), wanted(), w.home), []);
+    assert.equal(existsSync(pathsFor(w.home, w.repo, undefined).claudeSettings), false); // ~/.claude untouched
+    assert.ok(f.out.some((l) => l.includes("These go into ~/.claude-personal/settings.json,")));
+
+    const hooks = (env: ReturnType<typeof fakeEnv>) => runChecks(env.env).find((c) => c.label === "Claude Code hooks");
+    assert.equal(
+      hooks(fakeEnv(w, {}, { claudeConfigDir: dir }))?.detail,
+      "all present in ~/.claude-personal/settings.json",
+    );
+    assert.equal(hooks(fakeEnv(w))?.detail, "no ~/.claude/settings.json"); // without the variable, the other file
+
+    await uninstall(fakeEnv(w, {}, { claudeConfigDir: dir }).env, ["--yes", "--hooks"]);
+    const left = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
+    assert.equal(missingEntries(left, wanted(), w.home).length, wanted().length);
   });
 });
 
@@ -466,7 +573,7 @@ describe("doctor's Node for the helper", () => {
       env: { HOME: w.home, PATH: process.env.PATH ?? "", CMUX_COCKPIT_FIXED_NODES: "/nonexistent/node" },
     });
     assert.equal(onPath.status, 0);
-    const check = findNodeCheck({ ...fakeEnv(w).env, repo, run: noFixed }, pathsFor(w.home, repo));
+    const check = findNodeCheck({ ...fakeEnv(w).env, repo, run: noFixed }, pathsFor(w.home, repo, undefined));
     assert.equal(check.ok, false, check.detail);
     assert.match(check.detail, /helper's PATH/);
   });
@@ -476,7 +583,7 @@ describe("doctor's Node for the helper", () => {
     const volta = join(w.home, ".volta", "bin");
     mkdirSync(volta, { recursive: true });
     writeFileSync(join(volta, "node"), "#!/bin/sh\n", { mode: 0o755 });
-    const check = findNodeCheck({ ...fakeEnv(w).env, repo, run: noFixed }, pathsFor(w.home, repo));
+    const check = findNodeCheck({ ...fakeEnv(w).env, repo, run: noFixed }, pathsFor(w.home, repo, undefined));
     assert.equal(check.ok, true, check.detail);
     assert.equal(check.detail, join(volta, "node"));
   });
@@ -488,7 +595,7 @@ describe("doctor's Node for the helper", () => {
       seen.push(opts.env);
       return ok("/usr/bin/node");
     };
-    findNodeCheck({ ...fakeEnv(w).env, run }, pathsFor(w.home, w.repo));
+    findNodeCheck({ ...fakeEnv(w).env, run }, pathsFor(w.home, w.repo, undefined));
     assert.deepEqual(seen, [{ HOME: w.home, PATH: HELPER_PATH }]);
   });
 });

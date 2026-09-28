@@ -296,7 +296,8 @@ only when a subagent event rebuilds: the `pr-poll-turn` and
 select, so a done row or a crashed run clears on the next poll even when
 nothing reports a new subagent event in between.
 
-It is fed by three hooks in `~/.claude/settings.json`, on `PreToolUse`
+It is fed by three hooks in `~/.claude/settings.json` (or
+`$CLAUDE_CONFIG_DIR/settings.json` when that is set), on `PreToolUse`
 (`Agent`), `SubagentStart` and `SubagentStop`.
 
 The registration is in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
