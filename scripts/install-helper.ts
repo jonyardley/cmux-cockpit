@@ -1,7 +1,9 @@
 // Builds the cmux-cockpit:// URL handler helper app (docs/state-loop.md):
-// fills helper/CmuxCockpit.applescript with this machine's node path and
-// repo root, compiles it with osacompile, tags it as the URL handler, and
-// registers it with Launch Services.
+// fills helper/CmuxCockpit.applescript with the repo root and the scripts
+// it runs, compiles it with osacompile, tags it as the URL handler, and
+// registers it with Launch Services. Node is not baked in: the app finds
+// it at tap time with scripts/find-node.sh, so a Node upgrade needs no
+// reinstall.
 //
 //   npm run helper                                    # ~/Applications, registers
 //   npm run helper -- --out <dir>                      # a different install dir
@@ -15,7 +17,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, w
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-const BUNDLE_ID = "com.jonyardley.cmux-cockpit";
+const BUNDLE_ID = "io.github.cmux-cockpit";
 const SCHEME = "cmux-cockpit";
 const LSREGISTER =
   "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
@@ -57,11 +59,12 @@ const MAIN_CHECKOUT = join(homedir(), ".config", "cmux");
 // The paths land inside AppleScript string literals, so escape what would end one.
 const asLiteral = (s: string): string => s.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
 
-function filledScript(root: string): string {
+/** The helper's AppleScript with this checkout's paths filled in. Exported for testing. */
+export function filledScript(root: string): string {
   const template = readFileSync(join(root, "helper", "CmuxCockpit.applescript"), "utf8");
   return template
-    .replaceAll("__NODE__", asLiteral(process.execPath))
     .replaceAll("__ROOT__", asLiteral(root))
+    .replaceAll("__FINDER__", "scripts/find-node.sh")
     .replaceAll("__SCRIPT__", "scripts/state-set.ts");
 }
 
@@ -118,4 +121,4 @@ function main(): number {
   return 0;
 }
 
-process.exit(main());
+if (import.meta.main) process.exit(main());

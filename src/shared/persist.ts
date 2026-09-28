@@ -11,6 +11,11 @@ declare const __STATE__: State;
 // Baked in beside __STATE__ (issue #78). Read through typeof, so a bundle or
 // test that never defines it reads false rather than throwing.
 declare const __STATE_UNREADABLE__: boolean | undefined;
+// This install's config/url-token, baked in by build.ts so the handler
+// can tell our links from a web page's. Read the same guarded way, so a
+// test that never defines it sends no token param.
+declare const __URL_TOKEN__: string | undefined;
+const URL_TOKEN: string = typeof __URL_TOKEN__ === "string" ? __URL_TOKEN__ : "";
 
 /** Whatever config/state.json held at the last build; empty if there was none. */
 export const SAVED_STATE: State = __STATE__;
@@ -25,10 +30,12 @@ export const STATE_UNREADABLE: boolean = typeof __STATE_UNREADABLE__ === "boolea
 /**
  * Tells the (separately installed) URL handler to set or delete one entry.
  * `key` is `<map>.<id>`, matching scripts/state-config.ts's applySet; a
- * null value asks for a delete instead of a set. With no handler installed,
+ * null value asks for a delete instead of a set. The install's token goes
+ * last, so the handler accepts the link. With no handler installed,
  * openURL to the unclaimed cmux-cockpit:// scheme does nothing.
  */
 export function persistSet(key: string, value: string | Record<string, number> | ProjectSpec | null): void {
   const q = value === null ? "" : `&value=${encodeURIComponent(JSON.stringify(value))}`;
-  openURL(`cmux-cockpit://set?key=${encodeURIComponent(key)}${q}`);
+  const t = URL_TOKEN === "" ? "" : `&token=${encodeURIComponent(URL_TOKEN)}`;
+  openURL(`cmux-cockpit://set?key=${encodeURIComponent(key)}${q}${t}`);
 }

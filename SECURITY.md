@@ -19,10 +19,11 @@ off until you install it.
 - **The helper app** (`npm run helper`) installs
   `~/Applications/CmuxCockpit.app` and registers the `cmux-cockpit://`
   link type. Opening such a link writes `config/state.json` and rebuilds
-  the sidebars. Any web page can try to open one; your browser asks first.
-  A link can only change what the sidebars show (dismissals, project
-  choices and projects made from a card), never run a command. Delete the
-  app to remove it.
+  the sidebars. Any web page can try to open one; your browser asks first,
+  and the helper refuses any link without the per-install token the build
+  keeps in `config/url-token` (readable by you only). A link can only
+  change what the sidebars show (dismissals, project choices and projects
+  made from a card), never run a command. Delete the app to remove it.
 - **The automations** (`automations.json`, once linked into
   `~/.cmuxterm/`) run `scripts/restore-agents.sh` when cmux opens a
   window, and `scripts/pr-poll.sh` when an agent ends a turn or you select
