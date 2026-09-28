@@ -28,20 +28,7 @@ import { cardFor, projectRow } from "./views/cards.ts";
 import { dropZone, laneHeader, projectHeader, quietHeader, quietRow, segmented } from "./views/headers.ts";
 import { needsStrip, nextButton } from "./views/needs.ts";
 
-sidebar(() =>
-  VStack({ spacing: 0, alignment: "leading" }, [
-    stateLine(),
-    segmented(),
-    nextButton(),
-    needsStrip(),
-    panel("all", lanesPanel()),
-    panel("projects", projectsPanel()),
-    Spacer(),
-  ]).paddingBottom(12),
-);
-
-// The unreadable-state line, gone entirely while the state read fine. A
-// declaration, not a const: cmux builds the root above before this line runs.
+// The unreadable-state line, gone entirely while the state read fine.
 function stateLine(): View {
   return faintLine("state-notice", stateNotice, C.clayText, 14).paddingVertical(6);
 }
@@ -83,3 +70,17 @@ function projectsPanel(): View {
     }),
   ]).paddingHorizontal(10);
 }
+
+// Last, since cmux builds the root as soon as it is registered: every
+// helper above must already exist.
+sidebar(() =>
+  VStack({ spacing: 0, alignment: "leading" }, [
+    stateLine(),
+    segmented(),
+    nextButton(),
+    needsStrip(),
+    panel("all", lanesPanel()),
+    panel("projects", projectsPanel()),
+    Spacer(),
+  ]).paddingBottom(12),
+);

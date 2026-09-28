@@ -50,13 +50,14 @@ describe("built sidebars", () => {
       assert.doesNotMatch(src, /^\s*(import|export)\b/m);
     });
 
-    it(`${file} registers one root that renders busy and empty data`, () => {
+    it(`${file} builds its root on registration, as cmux does, then renders busy and empty data`, () => {
       const r = busyRenderer();
+      // Builds the root against the busy data inside sidebar(), so a helper
+      // used before it is declared throws here (#87).
       runBuilt(file, r);
       assert.equal(r.roots.length, 1);
       const root = r.roots[0];
       assert.ok(root);
-      root();
       r.data.workspaces = [];
       r.data.groups = [];
       root();
