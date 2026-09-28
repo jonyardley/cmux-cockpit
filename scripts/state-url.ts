@@ -8,7 +8,7 @@
 
 import { closeSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { applySet, type SetResult, type State, validateState } from "./state-config.ts";
+import { applySet, type SavedPoll, type SetResult, type State, validateState } from "./state-config.ts";
 
 export type ParsedSet = { ok: true; key: string; value: string | null } | { ok: false; error: string };
 
@@ -112,16 +112,19 @@ export function writePrs(path: string, prs: State["prs"]): ApplyResult {
  * One poll's whole write (scripts/pr-poll.ts) in a single locked pass:
  * replaces the `prs` and `ownPrs` maps, keys sorted as writePrs does, and
  * folds `subagents` over the `subagents` map, so the file is never left
- * half updated.
+ * half updated. `poll` (#78) is the saved poll status in the same pass:
+ * replaced when given, removed when null, kept as it was when left out.
  */
 export function writePollMaps(
   path: string,
   prs: State["prs"],
   ownPrs: State["ownPrs"],
   subagents: (runs: State["subagents"]) => State["subagents"],
+  poll?: SavedPoll | null,
 ): ApplyResult {
   return readUpdateWrite(path, (before) => {
-    const next = { ...before, prs: sortedByKey(prs), ownPrs: sortedByKey(ownPrs) };
+    const next: State = { ...before, prs: sortedByKey(prs), ownPrs: sortedByKey(ownPrs), ...(poll ? { poll } : {}) };
+    if (poll === null) delete next.poll;
     return { ok: true, state: validateState({ ...next, subagents: sortedByKey(subagents(before.subagents)) }) };
   });
 }

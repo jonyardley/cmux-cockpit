@@ -23,8 +23,10 @@ import {
   cleanLabel,
   isRecord,
   MAX_CHECKS,
+  type PollError,
   type SavedCheck,
   type SavedOwnPr,
+  type SavedPoll,
   type SavedPr,
   type State,
   validateState,
@@ -357,15 +359,95 @@ export function findOwnPrs(workspaces: WorkspaceDir[], previous: State["ownPrs"]
 
 // The real lookups, run as subprocesses.
 
-// stdout of a finished command, or null on any failure.
-function run(cmd: string, args: string[], cwd?: string): string | null {
-  const r = spawnSync(cmd, args, {
+// One finished (or failed to start) command, with the options every
+// lookup shares.
+function spawn(cmd: string, args: string[], cwd?: string) {
+  return spawnSync(cmd, args, {
     cwd,
     encoding: "utf8",
     timeout: TIMEOUT_MS,
     env: { ...process.env, CMUX_QUIET: "1", GH_PROMPT_DISABLED: "1" },
   });
+}
+
+// stdout of a finished command, or null on any failure.
+function run(cmd: string, args: string[], cwd?: string): string | null {
+  const r = spawn(cmd, args, cwd);
   return r.status === 0 ? r.stdout : null;
+}
+
+/**
+ * What one gh call says about reaching GitHub (#78): "ok" when it answered;
+ * "skip" when the failure is about the directory's repo rather than gh (not
+ * a repo, no GitHub remote, no default remote set, a repo the host does not
+ * know), which says nothing either way; else why gh could not be reached. A
+ * missing binary is "missing", a signed-out gh is "signed-out", and
+ * anything else (a timeout, the network, GitHub itself) is "unavailable".
+ */
+export function ghOutcome(r: { status: number | null; stderr: string; missing: boolean }): "ok" | "skip" | PollError {
+  if (r.missing) return "missing";
+  if (r.status === 0) return "ok";
+  if (/auth login|not logged in/i.test(r.stderr)) return "signed-out";
+  if (/not a git repository|no git remotes|none of the git remotes|set-default|HTTP 404/i.test(r.stderr)) return "skip";
+  return "unavailable";
+}
+
+/**
+ * One run's lookups: how many gh calls answered, how many lookups were
+ * skipped (past the deadline, or git could not say), and the worst reason a
+ * gh call could not reach gh.
+ */
+export interface GhTally {
+  answered: number;
+  skipped: number;
+  error?: PollError;
+}
+
+// Worst first, so a run with mixed failures always records the same one,
+// whatever order the workspaces are in.
+const ERROR_RANK: Record<PollError, number> = { missing: 3, "signed-out": 2, unavailable: 1 };
+
+/** Records one gh call's outcome in the tally. */
+export function tallyOutcome(tally: GhTally, outcome: "ok" | "skip" | PollError): void {
+  if (outcome === "ok") tally.answered++;
+  else if (outcome !== "skip" && (!tally.error || ERROR_RANK[outcome] > ERROR_RANK[tally.error])) tally.error = outcome;
+}
+
+// A saved success is refreshed only once it is this old, so a quiet run
+// with gh working is not a write and a rebuild (docs/state-loop.md).
+const RESTAMP_S = 5 * 60;
+
+/**
+ * The poll status to save after a run (#78), or undefined to keep the saved
+ * one. A run where gh calls failed and none answered keeps the last success
+ * and records why. A run where no call answered because lookups were
+ * skipped refreshed nothing, so it keeps the saved status. Any other run is
+ * a success, including one that needed no gh call at all: the error clears,
+ * and okEpoch is refreshed once the saved one is RESTAMP_S old.
+ */
+export function nextPoll(before: SavedPoll | undefined, tally: GhTally, now: number): SavedPoll | undefined {
+  const kept = before?.okEpoch;
+  if (tally.answered === 0 && tally.error)
+    return { ...(kept === undefined ? {} : { okEpoch: kept }), error: tally.error };
+  if (tally.answered === 0 && tally.skipped > 0) return undefined;
+  return { okEpoch: kept !== undefined && now - kept < RESTAMP_S ? kept : now };
+}
+
+// A gh call's stdout, or null on any failure, as run gives, tallying what
+// the call says about reaching gh.
+function ghRun(gh: string, args: string[], cwd: string, tally: GhTally): string | null {
+  const r = spawn(gh, args, cwd);
+  const missing = r.error !== undefined && "code" in r.error && r.error.code === "ENOENT";
+  tallyOutcome(tally, ghOutcome({ status: r.status, stderr: r.stderr ?? "", missing }));
+  return r.status === 0 ? r.stdout : null;
+}
+
+// A git lookup, or undefined (counted as skipped) past the deadline or when
+// git could not say.
+function counted<T>(tally: GhTally, pastDeadline: () => boolean, lookup: () => T | undefined): T | undefined {
+  const out = pastDeadline() ? undefined : lookup();
+  if (out === undefined) tally.skipped++;
+  return out;
 }
 
 /**
@@ -443,15 +525,17 @@ function acquireLock(lockFile: string): boolean {
  * this on every agent turn end and workspace select, so pruning here too
  * means a done row or a crashed run clears without waiting on a new subagent
  * event to trigger its own rebuild. `changed` is true when any write changed
- * the file, so the caller knows whether a rebuild is owed.
+ * the file, so the caller knows whether a rebuild is owed. `poll` is
+ * writePollMaps's: saved in the same pass when given, removed when null.
  */
 export function writePollState(
   stateFile: string,
   prs: State["prs"],
   ownPrs: State["ownPrs"],
   now: number,
+  poll?: SavedPoll | null,
 ): { ok: true; changed: boolean } | { ok: false; error: string } {
-  return writePollMaps(stateFile, prs, ownPrs, (subagents) => prune(subagents, now));
+  return writePollMaps(stateFile, prs, ownPrs, (subagents) => prune(subagents, now), poll);
 }
 
 function poll(root: string): number {
@@ -469,32 +553,41 @@ function poll(root: string): number {
   const before = validateState(existsSync(stateFile) ? parseJson(readFileSync(stateFile, "utf8")) : undefined);
   const previous = before.prs;
   const previousOwn = before.ownPrs;
-  const previousSubagents = before.subagents;
 
+  const tally: GhTally = { answered: 0, skipped: 0 };
   const deadline = Date.now() + DEADLINE_MS;
   const pastDeadline = () => Date.now() > deadline;
   const prs = findPrs(workspaces, previous, {
-    branchOf: (dir) => (pastDeadline() ? undefined : gitBranch(git, dir)),
+    branchOf: (dir) => counted(tally, pastDeadline, () => gitBranch(git, dir)),
     prFor: (dir, branch) => {
-      if (pastDeadline()) return undefined;
-      const out = run(gh, ["pr", "list", "--head", branch, "--state", "all", "--limit", "5", "--json", PR_FIELDS], dir);
+      if (pastDeadline()) {
+        tally.skipped++;
+        return undefined;
+      }
+      const args = ["pr", "list", "--head", branch, "--state", "all", "--limit", "5", "--json", PR_FIELDS];
+      const out = ghRun(gh, args, dir, tally);
       return out === null ? undefined : pickPr(out, branch);
     },
   });
   const ownPrs = findOwnPrs(workspaces, previousOwn, {
-    repoOf: (dir) => (pastDeadline() ? undefined : gitRepo(git, dir)),
+    repoOf: (dir) => counted(tally, pastDeadline, () => gitRepo(git, dir)),
     ownPrs: (dir, repo) => {
-      if (pastDeadline()) return undefined;
+      if (pastDeadline()) {
+        tally.skipped++;
+        return undefined;
+      }
       const args = ["pr", "list", "--author", "@me", "--state", "open", "--limit", OWN_LIMIT, "--json", OWN_FIELDS];
-      const out = run(gh, args, dir);
+      const out = ghRun(gh, args, dir, tally);
       return out === null ? undefined : ownPrsFrom(out, repo);
     },
   });
-  const counts = `${Object.keys(prs).length} PRs, ${Object.keys(ownPrs).length} own`;
+  const now = Math.floor(Date.now() / 1000);
+  const status = nextPoll(before.poll, tally, now);
+  const counts = `${Object.keys(prs).length} PRs, ${Object.keys(ownPrs).length} own${status?.error ? ", gh " + status.error : ""}`;
 
   let applied: ReturnType<typeof writePollState>;
   try {
-    applied = writePollState(stateFile, prs, ownPrs, Math.floor(Date.now() / 1000));
+    applied = writePollState(stateFile, prs, ownPrs, now, status);
   } catch (err) {
     log(`error: write failed (${err instanceof Error ? err.message : String(err)})`);
     return 0;
@@ -515,12 +608,14 @@ function poll(root: string): number {
     return 0;
   }
 
-  // The build failed with the new maps in place: write the old ones back so
-  // the file matches what actually shows, and so the next poll sees a
-  // change again and retries the build instead of staying silent.
+  // The build failed with the new maps in place: write the old ones and the
+  // old poll status (none, if there was none) back so the file matches what
+  // actually shows, and so the next poll sees a change again and retries
+  // the build instead of staying silent. Subagent runs are left as they
+  // are: a hook may have recorded one while this poll ran.
   log("error: build failed, reverted");
   try {
-    writePollMaps(stateFile, previous, previousOwn, () => previousSubagents);
+    writePollMaps(stateFile, previous, previousOwn, (runs) => runs, before.poll ?? null);
   } catch (err) {
     log(`error: revert failed (${err instanceof Error ? err.message : String(err)})`);
   }

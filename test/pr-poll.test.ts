@@ -14,13 +14,17 @@ import {
   delayFrom,
   findOwnPrs,
   findPrs,
+  type GhTally,
+  ghOutcome,
   type Lookups,
   lockWithin,
+  nextPoll,
   type OwnLookups,
   ownPrsFrom,
   parseWindowIds,
   parseWorkspaces,
   pickPr,
+  tallyOutcome,
   writePollState,
 } from "../scripts/pr-poll.ts";
 import { applySet, emptyState, type SavedOwnPr, type SavedPr, validateState } from "../scripts/state-config.ts";
@@ -537,11 +541,134 @@ describe("writePollState", () => {
     assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100), { ok: true, changed: false });
   });
 
+  it("saves the poll status it is given alongside the maps", () => {
+    const path = join(dir, "state-poll.json");
+    writePollState(path, { a: pr(1) }, {}, 100, { okEpoch: 100 });
+    assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100, { okEpoch: 100 }), { ok: true, changed: false });
+    assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100, { okEpoch: 100, error: "unavailable" }), {
+      ok: true,
+      changed: true,
+    });
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).poll, { okEpoch: 100, error: "unavailable" });
+  });
+
   it("is a change when only the subagent prune drops something, even with the same prs", () => {
     const path = join(dir, "state-prune-only.json");
     writeSubagents(path, () => ({ w1: [{ id: "toolu_1", session: "s1", label: "Old", startedEpoch: 0 }] }));
     writePollState(path, { a: pr(1) }, {}, 100);
     assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100 + 20 * 60), { ok: true, changed: true });
+  });
+});
+
+describe("ghOutcome", () => {
+  const r = (status: number | null, stderr = "", missing = false) => ({ status, stderr, missing });
+
+  it("is ok when gh answered", () => {
+    assert.equal(ghOutcome(r(0)), "ok");
+  });
+
+  it("is missing when the gh binary is not there, whatever else it says", () => {
+    assert.equal(ghOutcome(r(null, "", true)), "missing");
+  });
+
+  it("is signed-out when gh asks for a login", () => {
+    assert.equal(ghOutcome(r(4, "To get started with GitHub CLI, please run:  gh auth login")), "signed-out");
+    assert.equal(ghOutcome(r(1, "You are not logged into any GitHub hosts.")), "signed-out");
+  });
+
+  it("is skip when the directory is not a GitHub repo, since that says nothing about gh", () => {
+    assert.equal(ghOutcome(r(1, "failed to run git: fatal: not a git repository")), "skip");
+    assert.equal(ghOutcome(r(1, "no git remotes found")), "skip");
+    assert.equal(
+      ghOutcome(r(1, "none of the git remotes configured for this repository point to a known GitHub host")),
+      "skip",
+    );
+  });
+
+  it("is skip when gh cannot pick the repo or the host does not know it", () => {
+    assert.equal(ghOutcome(r(1, "No default remote repository has been set. Run gh repo set-default")), "skip");
+    assert.equal(ghOutcome(r(1, "HTTP 404: Not Found")), "skip");
+  });
+
+  it("is unavailable for anything else, a timeout included", () => {
+    assert.equal(ghOutcome(r(1, "error connecting to api.github.com")), "unavailable");
+    assert.equal(ghOutcome(r(null)), "unavailable");
+  });
+});
+
+describe("nextPoll", () => {
+  it("stamps the first success", () => {
+    assert.deepEqual(nextPoll(undefined, { answered: 2, skipped: 0 }, 1000), { okEpoch: 1000 });
+  });
+
+  it("keeps a success under five minutes old, so a quiet run is no write", () => {
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1, skipped: 0 }, 1000 + 299), { okEpoch: 1000 });
+  });
+
+  it("refreshes a success once it is five minutes old", () => {
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1, skipped: 0 }, 1000 + 300), { okEpoch: 1300 });
+  });
+
+  it("records why when every gh call failed, keeping the last success", () => {
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 0, skipped: 0, error: "signed-out" }, 9000), {
+      okEpoch: 1000,
+      error: "signed-out",
+    });
+  });
+
+  it("records an error with no last success to keep", () => {
+    assert.deepEqual(nextPoll(undefined, { answered: 0, skipped: 0, error: "missing" }, 9000), { error: "missing" });
+  });
+
+  it("clears the error and stamps once a call answers again", () => {
+    assert.deepEqual(nextPoll({ okEpoch: 1000, error: "unavailable" }, { answered: 1, skipped: 0 }, 1100), {
+      okEpoch: 1000,
+    });
+    assert.deepEqual(nextPoll({ okEpoch: 1000, error: "unavailable" }, { answered: 1, skipped: 0 }, 9000), {
+      okEpoch: 9000,
+    });
+  });
+
+  it("is a success when some calls answered and others failed", () => {
+    assert.deepEqual(nextPoll(undefined, { answered: 1, skipped: 0, error: "unavailable" }, 1000), { okEpoch: 1000 });
+  });
+
+  it("keeps the saved status when lookups were skipped and nothing answered", () => {
+    assert.equal(nextPoll({ okEpoch: 1000 }, { answered: 0, skipped: 3 }, 9000), undefined);
+  });
+
+  it("is a success when some lookups were skipped but a call answered", () => {
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1, skipped: 3 }, 9000), { okEpoch: 9000 });
+  });
+
+  it("is a success when the run needed no gh call at all", () => {
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 0, skipped: 0 }, 9000), { okEpoch: 9000 });
+  });
+});
+
+describe("tallyOutcome", () => {
+  it("counts answers and ignores skips", () => {
+    const t: GhTally = { answered: 0, skipped: 0 };
+    tallyOutcome(t, "ok");
+    tallyOutcome(t, "skip");
+    tallyOutcome(t, "ok");
+    assert.deepEqual(t, { answered: 2, skipped: 0 });
+  });
+
+  it("keeps the worst error whatever order the calls came in", () => {
+    for (const order of [
+      ["unavailable", "signed-out", "missing"],
+      ["missing", "unavailable", "signed-out"],
+      ["signed-out", "missing", "unavailable"],
+    ] as const) {
+      const t: GhTally = { answered: 0, skipped: 0 };
+      for (const e of order) tallyOutcome(t, e);
+      assert.equal(t.error, "missing");
+    }
+    const t: GhTally = { answered: 0, skipped: 0 };
+    tallyOutcome(t, "signed-out");
+    tallyOutcome(t, "unavailable");
+    assert.equal(t.error, "signed-out");
   });
 });
 

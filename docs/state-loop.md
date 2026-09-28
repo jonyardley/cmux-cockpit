@@ -181,8 +181,20 @@ rebuild and reload both sidebars) nor only on a change of PRs (a quiet
 `okEpoch` when the saved one is more than 5 minutes old, and write `error`
 only when it starts or ends. Polls run on agent turn ends and workspace
 selects, so after 15 minutes with neither the line is true: the data is
-that old. The poller does not write `poll` yet: that needs
-`writePollMaps` to carry it, which is still to do.
+that old.
+
+`pr-poll.ts` tallies every gh call in a run (`ghOutcome`, `nextPoll`) and
+saves the result through `writePollMaps` in the same locked pass as the
+PR maps. A run where gh calls failed and none answered keeps the last
+`okEpoch` and records why: `missing` when gh is not installed,
+`signed-out` when gh asks for `gh auth login`, else `unavailable`. A
+directory that is not a GitHub repo says nothing about gh either way.
+A run where nothing answered because lookups were skipped (past the
+deadline, or git could not say) refreshed nothing, so it keeps the saved
+status. Any other run is a success, including one that needed no gh call.
+With several failures the worst is kept (`missing`, then `signed-out`,
+then `unavailable`), so workspace order never flips it. If the rebuild
+after a write fails, the old status (or none) goes back with the old maps.
 
 ## Cost of a save
 
@@ -191,6 +203,9 @@ held only for the session goes with it: a card just dragged to a lane can
 snap back until cmux reports the move, and the agents panel reloads for a
 change it does not use. Saves are rare (a dismissal, a project move, a PR
 opened or merged), so this is accepted until cmux's own store lands (#20).
+The one routine save is the poller refreshing `okEpoch` (#78): at most
+once every 5 minutes, and only while polls run, so while agents are
+working or workspaces are being switched.
 
 ## Trust
 

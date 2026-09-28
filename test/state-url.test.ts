@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { after, describe, it } from "node:test";
 import { applyPublished } from "../scripts/hooks/report-published.ts";
 import { emptyState, type State } from "../scripts/state-config.ts";
-import { parseSetUrl, readApplyWrite, writePublished, writeSubagents } from "../scripts/state-url.ts";
+import { parseSetUrl, readApplyWrite, writePollMaps, writePublished, writeSubagents } from "../scripts/state-url.ts";
 
 describe("parseSetUrl", () => {
   it("parses a set with a value", () => {
@@ -106,6 +106,45 @@ describe("readApplyWrite", () => {
     const result = readApplyWrite(path, "projectOverride.w1", "not json");
     assert.equal(result.ok, false);
     assert.equal(readFileSync(path, "utf8"), before);
+  });
+});
+
+describe("writePollMaps and the poll status", () => {
+  const dir = mkdtempSync(join(tmpdir(), "state-url-poll-"));
+  after(() => rmSync(dir, { recursive: true, force: true }));
+  const keep = (runs: State["subagents"]) => runs;
+
+  it("saves the poll status in the same pass as the PR maps", () => {
+    const path = join(dir, "saves.json");
+    assert.deepEqual(writePollMaps(path, {}, {}, keep, { okEpoch: 100 }), { ok: true, changed: true });
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).poll, { okEpoch: 100 });
+  });
+
+  it("keeps the saved status when none is given", () => {
+    const path = join(dir, "keeps.json");
+    writePollMaps(path, {}, {}, keep, { okEpoch: 100, error: "signed-out" });
+    assert.deepEqual(writePollMaps(path, {}, {}, keep), { ok: true, changed: false });
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).poll, { okEpoch: 100, error: "signed-out" });
+  });
+
+  it("replaces the saved status whole, so a cleared error is gone", () => {
+    const path = join(dir, "replaces.json");
+    writePollMaps(path, {}, {}, keep, { okEpoch: 100, error: "unavailable" });
+    assert.deepEqual(writePollMaps(path, {}, {}, keep, { okEpoch: 400 }), { ok: true, changed: true });
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).poll, { okEpoch: 400 });
+  });
+
+  it("removes the saved status when given null", () => {
+    const path = join(dir, "removes.json");
+    writePollMaps(path, {}, {}, keep, { okEpoch: 100 });
+    assert.deepEqual(writePollMaps(path, {}, {}, keep, null), { ok: true, changed: true });
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).poll, undefined);
+  });
+
+  it("is no change when the status is the same", () => {
+    const path = join(dir, "same.json");
+    writePollMaps(path, {}, {}, keep, { okEpoch: 100 });
+    assert.deepEqual(writePollMaps(path, {}, {}, keep, { okEpoch: 100 }), { ok: true, changed: false });
   });
 });
 
