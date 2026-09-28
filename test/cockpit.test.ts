@@ -41,7 +41,9 @@ function setup(): void {
   state.setDrag(null);
 }
 
-const ids = () => model.flatEntries().map((e) => e.id);
+// A card's key leaves its lane out, so it survives a lane move; the lists
+// show its lane as well, so the assertions still say where each card sits.
+const ids = () => model.flatEntries().map((e) => (e.kind === "ws" ? `${e.wsId}@${e.lane}` : e.id));
 const byId = (id: string) => r.data.workspaces.find((w) => w.id === id);
 
 describe("lanes", () => {
@@ -163,16 +165,16 @@ describe("resolveDrop", () => {
 
   it("takes the lane of the row above the slot", () => {
     // Without a@main: [h:main, b@main, h:review, c@review, ...]; slot 3 is under h:review.
-    assert.deepEqual(drop.resolveDrop("a@main", 3), { laneKey: "review", nextRef: "c", prevRef: null });
+    assert.deepEqual(drop.resolveDrop("w:a", 3), { laneKey: "review", nextRef: "c", prevRef: null });
   });
 
   it("files a drop at the very top into the first lane", () => {
-    assert.deepEqual(drop.resolveDrop("c@review", 0), { laneKey: "main", nextRef: null, prevRef: null });
+    assert.deepEqual(drop.resolveDrop("w:c", 0), { laneKey: "main", nextRef: null, prevRef: null });
   });
 
   it("ignores a next card that belongs to another lane", () => {
     // Without c@review: slot 4 sits after h:review, before h:bg.
-    const t = drop.resolveDrop("c@review", 4);
+    const t = drop.resolveDrop("w:c", 4);
     assert.equal(t.laneKey, "review");
     assert.equal(t.nextRef, null);
   });
@@ -182,7 +184,7 @@ describe("handleMove", () => {
   beforeEach(setup);
 
   it("reorders before joining the new group", () => {
-    drop.handleMove("a@main", 4); // after c@review
+    drop.handleMove("w:a", 4); // after c@review
     assert.deepEqual(
       r.calls.map((c) => c.method),
       ["workspace.reorder", "workspace.group.add"],
@@ -192,17 +194,33 @@ describe("handleMove", () => {
     assert.equal(model.laneOf(byId("a") ?? ws("?")), "review");
   });
 
+  it("keeps the card's key across a lane move, so its row is not rebuilt on the drop", () => {
+    const card = () => model.flatEntries().find((e) => e.kind === "ws" && e.wsId === "a");
+    assert.deepEqual(card(), { kind: "ws", id: "w:a", wsId: "a", lane: "main" });
+    drop.handleMove("w:a", 4);
+    assert.deepEqual(card(), { kind: "ws", id: "w:a", wsId: "a", lane: "review" });
+  });
+
+  it("changes a dropped card's size only once cmux's data has it in the new lane", () => {
+    assert.equal(model.cardDensity(byId("a")), "full");
+    drop.handleMove("w:a", 4);
+    assert.equal(model.cardDensity(byId("a")), "full");
+    const a = byId("a");
+    if (a) a.group = "g-review";
+    assert.equal(model.cardDensity(byId("a")), "compact");
+  });
+
   it("removes from the group when dropped into Unsorted", () => {
     const slot =
       ids()
         .filter((id) => id !== "b@main")
         .indexOf("h:unsorted") + 1;
-    drop.handleMove("b@main", slot);
+    drop.handleMove("w:b", slot);
     assert.ok(r.calls.some((c) => c.method === "workspace.group.remove" && c.params.workspace_id === "b"));
   });
 
   it("only reorders within the same lane", () => {
-    drop.handleMove("b@main", 1); // above a
+    drop.handleMove("w:b", 1); // above a
     assert.deepEqual(
       r.calls.map((c) => c.method),
       ["workspace.reorder"],
@@ -212,34 +230,34 @@ describe("handleMove", () => {
 
   it("ignores headers and unknown keys", () => {
     drop.handleMove("h:main", 2);
-    drop.handleMove("nope", 2);
+    drop.handleMove("w:nope", 2);
     assert.deepEqual(r.calls, []);
   });
 
   it("clears the drag state", () => {
-    state.setDrag({ id: "a@main", index: 1 });
-    drop.handleMove("a@main", 1);
+    state.setDrag({ id: "w:a", index: 1 });
+    drop.handleMove("w:a", 1);
     assert.equal(state.drag(), null);
   });
 
   it("ignores a drag on the hidden lanes under Projects, so no zone or drop lane lights", () => {
     state.setMode("projects");
-    drop.handleDragChange({ id: "a@main", index: 4 });
+    drop.handleDragChange({ id: "w:a", index: 4 });
     assert.equal(state.drag(), null);
     assert.equal(drop.dropLane(), null);
   });
 
   it("tracks a drag in All", () => {
-    drop.handleDragChange({ id: "a@main", index: 4 });
-    assert.deepEqual(state.drag(), { id: "a@main", index: 4 });
+    drop.handleDragChange({ id: "w:a", index: 4 });
+    assert.deepEqual(state.drag(), { id: "w:a", index: 4 });
     drop.handleDragChange(null);
     assert.equal(state.drag(), null);
   });
 
   it("ignores a move from the hidden lanes under Projects", () => {
     state.setMode("projects");
-    state.setDrag({ id: "a@main", index: 1 });
-    drop.handleMove("a@main", 4);
+    state.setDrag({ id: "w:a", index: 1 });
+    drop.handleMove("w:a", 4);
     assert.deepEqual(r.calls, []);
     assert.equal(state.drag(), null);
   });
@@ -306,7 +324,7 @@ describe("missing lane groups", () => {
       ids()
         .filter((id) => id !== "u@bg")
         .indexOf("z:unsorted") + 1;
-    drop.handleMove("u@bg", slot);
+    drop.handleMove("w:u", slot);
     assert.equal(model.laneOf(byId("u") ?? ws("?")), "unsorted");
     r.calls.length = 0;
     r.data.groups = [...r.data.groups, bgGroup()];
@@ -341,7 +359,7 @@ describe("missing lane groups", () => {
       ids()
         .filter((id) => id !== "u@unsorted")
         .indexOf("z:bg") + 1;
-    drop.handleMove("u@unsorted", slot);
+    drop.handleMove("w:u", slot);
     assert.ok(r.calls.some((c) => c.method === "workspace.group.create"));
     assert.equal(model.laneOf(byId("u") ?? ws("?")), "bg");
   });
@@ -457,7 +475,7 @@ describe("empty lanes", () => {
 
   it("keep the same rows as a drag starts and ends, so the drop index never shifts", () => {
     const rest = ids();
-    state.setDrag({ id: "a@main", index: 1 });
+    state.setDrag({ id: "w:a", index: 1 });
     assert.deepEqual(ids(), rest);
     state.setDrag(null);
     assert.deepEqual(ids(), rest);
@@ -468,7 +486,7 @@ describe("empty lanes", () => {
       ids()
         .filter((id) => id !== "c@review")
         .indexOf("z:bg") + 1;
-    drop.handleMove("c@review", slot);
+    drop.handleMove("w:c", slot);
     assert.equal(model.laneOf(byId("c") ?? ws("?")), "bg");
     assert.deepEqual(
       ids().filter((id) => id.startsWith("z:") || id.startsWith("h:")),
@@ -477,11 +495,11 @@ describe("empty lanes", () => {
   });
 
   it("resolves a drop just under a zone to that zone's lane, and lights it", () => {
-    state.setDrag({ id: "a@main", index: 0 });
+    state.setDrag({ id: "w:a", index: 0 });
     // Without a@main: [h:main, b@main, h:review, c@review, z:bg, ...].
     const slot = 5;
-    assert.deepEqual(drop.resolveDrop("a@main", slot), { laneKey: "bg", nextRef: null, prevRef: null });
-    state.setDrag({ id: "a@main", index: slot });
+    assert.deepEqual(drop.resolveDrop("w:a", slot), { laneKey: "bg", nextRef: null, prevRef: null });
+    state.setDrag({ id: "w:a", index: slot });
     assert.equal(drop.dropLane(), "bg");
   });
 
@@ -491,15 +509,15 @@ describe("empty lanes", () => {
       ids()
         .filter((id) => id !== "a@main")
         .indexOf("z:review") + 1;
-    drop.handleMove("a@main", slot);
+    drop.handleMove("w:a", slot);
     assert.ok(r.calls.some((c) => c.method === "workspace.group.add" && c.params.group_id === "g-review"));
     assert.equal(model.laneOf(byId("a") ?? ws("?")), "review");
   });
 
   it("files a drop below the last row into the last lane", () => {
     const rows = ids().filter((id) => id !== "a@main");
-    assert.equal(drop.resolveDrop("a@main", rows.length).laneKey, "unsorted");
-    assert.equal(drop.resolveDrop("a@main", rows.length + 1).laneKey, "unsorted");
+    assert.equal(drop.resolveDrop("w:a", rows.length).laneKey, "unsorted");
+    assert.equal(drop.resolveDrop("w:a", rows.length + 1).laneKey, "unsorted");
   });
 });
 

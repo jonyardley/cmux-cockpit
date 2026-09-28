@@ -48,8 +48,8 @@ interface View {
   rotation(degrees: Reactive<number>): View;
   opacity(value: Reactive<number>): View;
   value(fraction: Reactive<number>): View;
-  /** Pins a row in a Reorderable so it cannot be dragged. */
-  fixed(): View;
+  /** Pins a row in a Reorderable so it cannot be dragged; bare means pinned. */
+  fixed(on?: Reactive<boolean>): View;
   /**
    * Visible only while the nearest ancestor with a hoverBackground is under
    * the pointer (hideOnHover the reverse). By opacity: the slot stays.

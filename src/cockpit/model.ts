@@ -105,6 +105,16 @@ export function actualLaneOf(w: Workspace | undefined): LaneKey {
   return "unsorted";
 }
 
+/**
+ * How big a card draws: by its lane in cmux's own data, not the lane a drop
+ * shows it in at once. So a drop moves the card straight away but changes
+ * its size only when cmux's data catches up, after the drag has ended:
+ * cmux 0.64.25 keeps drawing views swapped out while it finishes a drag.
+ */
+export function cardDensity(w: Workspace | undefined): Lane["density"] {
+  return laneByKey(actualLaneOf(w)).density;
+}
+
 // A lane with no cmux group yet (a fresh window has only the ones made by
 // hand) gets one on its first move. cmux() returns nothing, so the new
 // group's id arrives in a later frame: the move is marked `awaiting` until
@@ -316,7 +326,9 @@ export const panelMaxHeight = (m: ViewMode) => (): number | "infinity" => (isMod
 // --- All mode: one flat list of lane headers and cards --------------------------------
 
 // A header's key carries the anchor it shows (issue #49), and an empty lane
-// is a zone (issue #50), since a row's kind is fixed by its key.
+// is a zone (issue #50), since a row's kind is fixed by its key. A card's key
+// is "w:" and its session, without its lane, so a lane move keeps its row
+// (cards.ts's cardFor).
 export type LaneEntry =
   | { kind: "header"; id: string; lane: LaneKey; anchorId: string | null }
   | { kind: "zone"; id: string; lane: LaneKey }
@@ -389,7 +401,7 @@ function sectionEntries(s: LaneSection): LaneEntry[] {
     anchorId: s.anchorId,
   };
   if (isCollapsed(s.lane)) return [header];
-  return [header, ...s.rows.map((w): LaneEntry => ({ kind: "ws", id: w.id + "@" + key, wsId: w.id, lane: key }))];
+  return [header, ...s.rows.map((w): LaneEntry => ({ kind: "ws", id: "w:" + w.id, wsId: w.id, lane: key }))];
 }
 
 // An empty lane is a zone row in its own place, at rest and mid-drag alike,
