@@ -213,17 +213,30 @@ function askBlock(): View {
         ]).frame({ maxWidth: "infinity" }),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
-        .paddingTop(8),
+        .paddingTop(LINE_GAP),
   );
 }
+
+// The card's two columns (issue #94). The head's icon column, with the title
+// and the status word on one x after it; and the labelled rows' label column,
+// with every value on one x after it. Labels start at the card's padding, as
+// the icon does. The label column is wider than the icon's, since "Branch"
+// does not fit in 26pt.
+const ICON = 26;
+const ICON_GAP = 10;
+const LABEL = 48;
+const LABEL_GAP = 8;
+// One gap above every line under the title, labelled rows included, the same
+// 10pt the subagent and check lines keep between them.
+const LINE_GAP = 10;
 
 // Project icon, then the title over the project name, then the unread
 // badge. No status here, so the title has the line to itself (Board 1).
 function currentTitle(): View {
   const w = () => cur().ws;
-  return HStack({ spacing: 10 }, [
+  return HStack({ spacing: ICON_GAP }, [
     // The full card's badge size on the left, so the project reads the same.
-    projectBadge(() => cur().project, 26, 12, 8),
+    projectBadge(() => cur().project, ICON, 12, 8),
     VStack({ spacing: 1, alignment: "leading" }, [
       Text(() => displayTitle(w()) || "untitled")
         .font(14)
@@ -252,15 +265,29 @@ function currentTitle(): View {
 // word and age ("Working 14m") in the status colour, then the PR's state
 // chip ("1 failing", "ready") on the right when there is one, as the card
 // on the left shows it; tapping it opens the PR. A PR with no status has
-// no words, so no empty pill.
+// no words, so no empty pill. The dot is centred under the project icon and
+// the word starts on the title's x (issue #94).
 function statusRow(): View {
   const a = () => cur().a;
-  return HStack({ spacing: 6 }, [
+  // The head's own two columns, so the word cannot drift off the title's x.
+  return HStack({ spacing: ICON_GAP }, [
     agentDot(
       () => dotFor(a()),
       () => haloFor(a()),
       () => hollowDot(a()),
-    ),
+    )
+      // A fixed width centres its content, which is what puts the dot under the icon.
+      .frame({ width: ICON }),
+    statusWords(),
+  ])
+    .frame({ maxWidth: "infinity", alignment: "leading" })
+    .paddingTop(LINE_GAP);
+}
+
+// The status row's text column: the word and age, then the PR chip on the right.
+function statusWords(): View {
+  const a = () => cur().a;
+  return HStack({ spacing: 6 }, [
     Text(() => headStatus(a()))
       .font(12.5)
       .weight("medium")
@@ -281,28 +308,56 @@ function statusRow(): View {
       .layoutPriority(2),
   ])
     .frame({ maxWidth: "infinity", alignment: "leading" })
-    .paddingTop(10);
+    .layoutPriority(1);
 }
 
-// The last prompt, over the agent's reply to it: a quiet "Asked" label
-// column, then the words (issue #80).
+// A labelled row: a quiet label in the one label column, then the value.
+// Asked, Branch, Ports and PR all use it, so their labels share a left edge,
+// their values share another, and each row keeps the same gap above it.
+// Align "top" to pin the label to the value's first line, for a value that
+// wraps; label and value share one size, so their first lines line up. A
+// single-line row stays centred, which keeps the label level with a chip's
+// words rather than its edge.
+function labelled(
+  key: string,
+  label: string,
+  show: () => boolean,
+  value: () => View,
+  alignment: Alignment = "center",
+): View {
+  return when(key, show, () =>
+    HStack({ spacing: LABEL_GAP, alignment }, [
+      // A fixed-width frame centres its content whatever the alignment, so the
+      // label first fills the column with the maxWidth frame that does honour it.
+      Text(label)
+        .font(META_FONT)
+        .color(T.tertiary)
+        .lineLimit(1)
+        .frame({ maxWidth: "infinity", alignment: "leading" })
+        .frame({ width: LABEL }),
+      value(),
+    ])
+      .frame({ maxWidth: "infinity", alignment: "leading" })
+      .paddingTop(LINE_GAP),
+  );
+}
+
+// The last prompt, over the agent's reply to it (issue #80), in the same
+// label column and value size as the rows below (issue #94).
 function askedBlock(): View {
-  return when(
+  return labelled(
     "cur-asked",
+    "Asked",
     () => !!askedLine(),
     () =>
-      HStack({ spacing: 8, alignment: "top" }, [
-        Text("Asked").font(11.5).color(T.tertiary).lineLimit(1).layoutPriority(2),
-        Text(() => askedLine())
-          .font(12)
-          .color(T.secondary)
-          .lineLimit(2)
-          .truncation("tail")
-          .frame({ maxWidth: "infinity", alignment: "leading" })
-          .layoutPriority(1),
-      ])
+      Text(() => askedLine())
+        .font(META_FONT)
+        .color(T.secondary)
+        .lineLimit(2)
+        .truncation("tail")
         .frame({ maxWidth: "infinity", alignment: "leading" })
-        .paddingTop(10),
+        .layoutPriority(1),
+    "top",
   );
 }
 
@@ -312,17 +367,21 @@ function messageBlock(): View {
     "cur-msg",
     () => !!cardLine(),
     () =>
-      Text(() => cardLine())
-        .font(12)
-        .color(T.secondary)
-        .lineLimit(4)
-        .truncation("tail")
-        .paddingHorizontal(8)
-        .paddingVertical(6)
+      // The gap on a wrapper: on the face's own node the quote colour would fill it.
+      VStack({ spacing: 0, alignment: "leading" }, [
+        Text(() => cardLine())
+          .font(12)
+          .color(T.secondary)
+          .lineLimit(4)
+          .truncation("tail")
+          .paddingHorizontal(8)
+          .paddingVertical(6)
+          .frame({ maxWidth: "infinity", alignment: "leading" })
+          .background(T.quote)
+          .cornerRadius(6),
+      ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
-        .background(T.quote)
-        .cornerRadius(6)
-        .paddingTop(10),
+        .paddingTop(LINE_GAP),
   );
 }
 
@@ -340,26 +399,7 @@ function progressBlock(): View {
           .font(11)
           .color(T.secondary)
           .lineLimit(1),
-      ]).paddingTop(10),
-  );
-}
-
-// One "Branch", "Ports" or "PR" line: a quiet label column, then the value.
-function detailLine(key: string, label: string, show: () => boolean, value: () => View): View {
-  return when(key, show, () =>
-    HStack({ spacing: 8 }, [
-      // A fixed-width frame centres its content whatever the alignment, so the
-      // label first fills the column with the maxWidth frame that does honour it.
-      Text(label)
-        .font(META_FONT)
-        .color(T.tertiary)
-        .lineLimit(1)
-        .frame({ maxWidth: "infinity", alignment: "leading" })
-        .frame({ width: 48 }),
-      value(),
-    ])
-      .paddingVertical(3)
-      .frame({ maxWidth: "infinity", alignment: "leading" }),
+      ]).paddingTop(LINE_GAP),
   );
 }
 
@@ -391,14 +431,15 @@ function detailsBlock(): View {
     "cur-details",
     () => hasDetails(),
     () =>
+      // No gap of its own: each labelled row carries the one above it.
       VStack({ spacing: 0, alignment: "leading" }, [
-        detailLine(
+        labelled(
           "cur-branch",
           "Branch",
           () => !!branchDetail(),
           () => branchText(() => branchDetail(), T.secondary).layoutPriority(1),
         ),
-        detailLine(
+        labelled(
           "cur-ports",
           "Ports",
           () => portChips().length > 0,
@@ -413,15 +454,13 @@ function detailsBlock(): View {
               ),
             ]),
         ),
-        detailLine(
+        labelled(
           "cur-pr",
           "PR",
           () => !!currentPr(),
           () => prDetail(),
         ),
-      ])
-        .frame({ maxWidth: "infinity", alignment: "leading" })
-        .paddingTop(10),
+      ]).frame({ maxWidth: "infinity", alignment: "leading" }),
   );
 }
 

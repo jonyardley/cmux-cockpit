@@ -61,9 +61,9 @@ export function nextButton(): View {
       .color(C.clayText)
       .lineLimit(1)
       .truncation("middle")
-      // Filling the width here, as the strip rows' title stack does, is what
-      // carries the white face edge to edge and pushes the count right
-      // (issue #89); a frame on the HStack left the face hugging the text.
+      // Filling the width here, as the strip rows' title stack does, pushes
+      // the count right and carries the hover face across the row. The ring
+      // face fills on its own since issue #93.
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
     // In a card age's face and colour, so the two read as one kind of text.

@@ -65,7 +65,9 @@ export function projectBadge(p: () => Project, size: number, font: number, radiu
  * Edge as a filled ring: the edge colour fills an outer rounded box and the
  * face sits inset by the edge width. A borderWidth stroke is clipped by the
  * corner radius and thins out round every corner. `hug` keeps the face at
- * its content width (chips, buttons) instead of filling the row.
+ * its content width (chips, buttons) instead of filling the row. Without
+ * it the full-width frame comes before the face, so the face reaches the
+ * edge whether or not the content fills its own width (issue #93).
  */
 export function ring(
   view: View,
@@ -76,13 +78,9 @@ export function ring(
   hug = false,
 ): View {
   const wv = typeof width === "function" ? width : () => width;
-  const inner = view.background(face).cornerRadius(() => radius - wv());
-  return VStack({ spacing: 0, alignment: "leading" }, [
-    hug ? inner : inner.frame({ maxWidth: "infinity", alignment: "leading" }),
-  ])
-    .padding(wv)
-    .background(edge)
-    .cornerRadius(radius);
+  const sized = hug ? view : view.frame({ maxWidth: "infinity", alignment: "leading" });
+  const inner = sized.background(face).cornerRadius(() => radius - wv());
+  return VStack({ spacing: 0, alignment: "leading" }, [inner]).padding(wv).background(edge).cornerRadius(radius);
 }
 
 /** The size of the small text both sides trail a row with: times, branches, ports, chips. */

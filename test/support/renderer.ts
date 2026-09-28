@@ -59,10 +59,30 @@ function evaluate(arg: unknown): void {
   }
 }
 
+// The modifier log while recordModifiers() runs, and null the rest of the time.
+let modifierLog: string[] | null = null;
+
+/**
+ * Every modifier called on any view while `build` runs, in call order, for a
+ * test that cares about their order (a frame before a background). Nothing
+ * is recorded outside it.
+ */
+export function recordModifiers(build: () => void): string[] {
+  const log: string[] = [];
+  modifierLog = log;
+  try {
+    build();
+  } finally {
+    modifierLog = null;
+  }
+  return log;
+}
+
 function view(): View {
   const node: View = new Proxy(() => undefined, {
     get: (_target, prop) => {
       return (...args: unknown[]) => {
+        modifierLog?.push(String(prop));
         if (!HANDLERS.has(String(prop))) for (const a of args) evaluate(a);
         return node;
       };
