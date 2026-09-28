@@ -371,7 +371,11 @@ The sidebars read it back through `src/shared/needs.ts`'s `askReason`: a
 needs_input agent is asking when the workspace's saved ask is at least as
 new as the start of its current needs_input spell (`sinceEpoch`), give or
 take `ASK_SLACK` (3 seconds, since this hook and cmux's own fire on the
-same event). The cockpit then shows the card and its Needs you row amber,
+same event). When one of the workspace's agents carries the asking
+session as its id (unconfirmed whether cmux agent ids are session ids, as
+for saved subagent runs), only that agent is asking; otherwise the ask
+belongs to the workspace. A fresh ask also overrides the idle-nudge rule
+(issue #4), so an ask after a long quiet build is not read as idle. The cockpit then shows the card and its Needs you row amber,
 "Asking", with the reason under the title; the agents panel heads the
 workspace "Asking" in amber and puts the reason over Answer. Any other
 needs_input is "Your turn" in clay, and red stays for failing checks. No
@@ -389,13 +393,15 @@ What each event saves:
   uses the first question's words and `ExitPlanMode` reads
   `approve the plan?`.
 - `Notification` (`permission_prompt`, `elicitation_dialog`,
-  `elicitation_url_dialog`, `agent_needs_input`): the asks with no
-  `PermissionRequest` (an MCP form, a sandboxed network request) and a
-  re-stamp of one still waiting. Its `message` is used as the reason
-  ("Claude needs your permission to use Bash" reads `allow Bash?`), except
-  that a `permission_prompt` from the session that saved the last ask, in
-  the last two minutes, keeps that ask's richer reason. `idle_prompt` is
-  the turn-end nudge, not an ask, so it is not hooked.
+  `elicitation_url_dialog`): the asks with no `PermissionRequest` (an MCP
+  form, a sandboxed network request). Its `message` is used as the reason
+  ("Claude needs your permission to use Bash" reads `allow Bash?`). A
+  `permission_prompt` within 30 seconds of the same session's saved ask is
+  that prompt still waiting, so it writes nothing: rewriting would restamp
+  the ask, and a quick approval and turn end straight after would read as
+  asking. `idle_prompt` is the turn-end nudge, not an ask, and
+  `agent_needs_input` (background sessions and teammates) is not
+  documented as never firing on a turn end, so neither is hooked.
 - `PreToolUse` (`AskUserQuestion`, `ExitPlanMode`): under
   bypassPermissions these two fire no `PermissionRequest`, and cmux flags
   them from `PreToolUse` instead.
@@ -408,7 +414,7 @@ What each event saves:
     ],
     "Notification": [
       {
-        "matcher": "permission_prompt|elicitation_dialog|elicitation_url_dialog|agent_needs_input",
+        "matcher": "permission_prompt|elicitation_dialog|elicitation_url_dialog",
         "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-notification.ts" }]
       }
     ],
@@ -423,5 +429,6 @@ The hook prints nothing to stdout, so it can never answer a permission
 prompt, and every problem is a line on stderr and exit 0. Each ask costs a
 rebuild through `scripts/hook-build.ts`, coalesced with the other hooks',
 so a card turns amber a second or two after the prompt appears. A
-workspace holds one saved ask, so in a workspace with two agents waiting
-at once both read the latest ask's reason.
+workspace holds one saved ask, so where cmux agent ids are not session
+ids, two agents waiting at once in one workspace both read the latest
+ask's reason.

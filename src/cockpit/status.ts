@@ -101,12 +101,18 @@ export const askOf = (w: Workspace | undefined): string | null => askReason(agen
 
 export function statusInfo(w: Workspace | undefined): StatusStyle {
   if (isReady(w)) return READY;
-  return askOf(w) ? ASKING : (STATUS[statusOf(w)] ?? STATUS.none);
+  // The agent is worked out once, for both the ask and the status.
+  const a = agentOf(w);
+  if (askReason(a, w)) return ASKING;
+  return STATUS[a?.status ?? "none"] ?? STATUS.none;
 }
 
 /** A Needs you row's second line: why the agent asks, else its latest message. */
 export const needsDetail = (w: Workspace | undefined): string =>
   askOf(w) ?? (oneLine(cardMessage(w), 80) || "Waiting for your reply");
+
+/** A Needs you row's edge: amber while its agent asks, else clay, so each hue keeps one meaning. */
+export const needsRowEdge = (w: Workspace | undefined): string => (askOf(w) ? C.amberRowEdge : C.needsRowEdge);
 
 /** The unread count a card's badge shows: none while the Ready pill stands in for it. */
 export const badgeCount = (w: Workspace | undefined): number => (isReady(w) ? 0 : (w?.unread ?? 0));

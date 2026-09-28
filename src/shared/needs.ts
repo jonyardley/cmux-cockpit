@@ -21,6 +21,9 @@ export const NUDGE_GAP = 45;
 // idle. Upstream docs give kind as claude, codex or the raw source.
 export function isIdleNudge(a: Agent, w?: Workspace): boolean {
   if (a.status !== "needs_input" || a.kind !== "claude" || !a.sinceEpoch) return false;
+  // A fresh saved ask proves a real one, however long the agent was quiet
+  // before it (a long build, say): the nudge itself is never hooked.
+  if (freshAsk(a, w)) return false;
   const before = Math.max(a.lastActivityAt ?? 0, w?.latestAt ?? 0);
   return before > 0 && a.sinceEpoch - before >= NUDGE_GAP;
 }
@@ -99,9 +102,22 @@ function savedAskFor(wsId: string): SavedAsk | undefined {
  * no telling, so it reads as its turn.
  */
 export function askReason(a: Agent | null | undefined, w: Workspace | undefined): string | null {
-  if (!a || !w || a.status !== "needs_input" || !a.sinceEpoch) return null;
+  return a ? (freshAsk(a, w)?.reason ?? null) : null;
+}
+
+// The saved ask that explains `a`'s current needs_input spell, if any. The
+// ask is saved per workspace with the Claude session that made it; when one
+// of the workspace's agents carries that session as its id (unconfirmed
+// whether cmux agent ids are session ids, as for saved subagent runs), only
+// that agent is asking, so another agent's turn end never borrows its
+// reason. Otherwise the ask belongs to the workspace as a whole.
+function freshAsk(a: Agent, w: Workspace | undefined): SavedAsk | null {
+  if (!w || a.status !== "needs_input" || !a.sinceEpoch) return null;
   const saved = savedAskFor(w.id);
-  return saved && saved.epoch >= a.sinceEpoch - ASK_SLACK ? saved.reason : null;
+  if (!saved || saved.epoch < a.sinceEpoch - ASK_SLACK) return null;
+  const { session } = saved;
+  const owned = session !== undefined && (w.agents ?? []).some((x) => x?.id === session);
+  return owned && a.id !== session ? null : saved;
 }
 
 /** A workspace's agents with nudges and dismissals applied, in the app's order. */

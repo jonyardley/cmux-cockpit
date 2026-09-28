@@ -18,6 +18,7 @@ export const C = {
   amber: "#D9A03F",
   amberText: "#8A5A0B",
   amberHalo: "#D9A03F38",
+  amberRowEdge: "#8A5A0B29",
   green: "#788C5D",
   greenText: "#5E7A40",
   // The Ready pill's face: the done green, faint (issue #53).

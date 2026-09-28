@@ -18,6 +18,7 @@ import { beforeEach, describe, it } from "node:test";
   asking: {
     wA: { reason: "allow git push?", epoch: 1000, session: "s1" },
     sel: { reason: "Which layout?", epoch: 1000 },
+    owned: { reason: "allow npm publish?", epoch: 1500, session: "sessA" },
   },
   ui: {},
 };
@@ -61,8 +62,26 @@ describe("askReason", () => {
     assert.equal(needs.askReason(waiting(1000), undefined), null);
   });
 
+  it("gives the ask only to the agent whose id is the asking session, when one has it", () => {
+    const asker = agent("needs_input", { id: "sessA", sinceEpoch: 1500 });
+    const finished = agent("needs_input", { id: "sessB", sinceEpoch: 1000 });
+    const w = ws("owned", { agents: [asker, finished] });
+    assert.equal(needs.askReason(asker, w), "allow npm publish?");
+    assert.equal(needs.askReason(finished, w), null, "another agent's turn end never borrows the reason");
+    // No agent carries the session as its id: the ask is the workspace's.
+    const loose = agent("needs_input", { id: "other", sinceEpoch: 1500 });
+    assert.equal(needs.askReason(loose, ws("owned", { agents: [loose] })), "allow npm publish?");
+  });
+
+  it("reads a fresh ask as an ask even after a long quiet spell, and an older one as the nudge", () => {
+    const quiet = agent("needs_input", { kind: "claude", lastActivityAt: 900, sinceEpoch: 1000 });
+    const w = ws("wA", { agents: [quiet] });
+    assert.equal(needs.isIdleNudge(quiet, w), false);
+    assert.equal(needs.askReason(needs.agentsOf(w)[0], w), "allow git push?");
+  });
+
   it("never reads a nudge or a dismissal as an ask, once the agent is as the sidebars show it", () => {
-    const nudge = agent("needs_input", { kind: "claude", lastActivityAt: 900, sinceEpoch: 1000 });
+    const nudge = agent("needs_input", { kind: "claude", lastActivityAt: 1000, sinceEpoch: 1100 });
     const w = ws("wA", { agents: [nudge] });
     assert.equal(needs.askReason(needs.agentsOf(w)[0], w), null);
     const asker = waiting(1000);
@@ -86,6 +105,7 @@ describe("cockpit", () => {
     });
     assert.equal(status.statusLine(asking), "Asking 1m");
     assert.equal(status.needsDetail(asking), "allow git push?");
+    assert.equal(status.needsRowEdge(asking), C.amberRowEdge);
 
     const turn = ws("wA", { agents: [waiting(1100)], latestMessage: "Pushed it." });
     r.data.epoch = 1160;
@@ -93,6 +113,7 @@ describe("cockpit", () => {
     assert.equal(status.statusInfo(turn).label, "Your turn");
     assert.equal(status.statusInfo(turn).dot, C.clay);
     assert.equal(status.needsDetail(turn), "Pushed it.");
+    assert.equal(status.needsRowEdge(turn), C.needsRowEdge);
     assert.equal(status.needsDetail(ws("x", { agents: [waiting(1100)] })), "Waiting for your reply");
   });
 

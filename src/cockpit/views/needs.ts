@@ -7,7 +7,7 @@ import { displayTitle } from "../../shared/titles.ts";
 import { haloDot, when } from "../../shared/ui.ts";
 import { jumpNext, needsList, needsMore, needsShown, nextStep } from "../model.ts";
 import { selectWorkspace } from "../state.ts";
-import { ageOf, needsDetail, statusInfo } from "../status.ts";
+import { ageOf, needsDetail, needsRowEdge, statusInfo } from "../status.ts";
 import { C } from "../theme.ts";
 import { cardMenu, glyphButton, meta, ring, type WsAccessor } from "./parts.ts";
 
@@ -43,7 +43,7 @@ function needsRow(w: WsAccessor): View {
     .paddingVertical(9)
     .hoverBackground(C.needsHover);
   // One selection ring: the card below carries it, so the row keeps its edge.
-  return ring(row, C.card, C.needsRowEdge, 1, 9)
+  return ring(row, C.card, () => needsRowEdge(w()), 1, 9)
     .frame({ maxWidth: "infinity" })
     .onTap(() => selectWorkspace(w()?.id))
     .contextMenu(cardMenu(w));

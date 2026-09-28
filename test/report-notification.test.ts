@@ -40,7 +40,15 @@ describe("commandWords", () => {
 
   it("skips env assignments and wrapper words", () => {
     assert.equal(commandWords("GH_REPO=o/r rtk gh pr merge 3"), "gh pr");
-    assert.equal(commandWords("sudo rm -rf /tmp/x"), "rm -rf");
+    assert.equal(commandWords("sudo rm -rf /tmp/x"), "rm");
+  });
+
+  it("skips flags, a flag's path value, quoted text and subshell brackets", () => {
+    assert.equal(commandWords("git -C /Users/jon/repo push"), "git push");
+    assert.equal(commandWords("npm --prefix ~/.config/cmux run build"), "npm run");
+    assert.equal(commandWords('grep "a|b" f'), "grep f");
+    assert.equal(commandWords("echo 'x; y' | wc"), "echo");
+    assert.equal(commandWords("(cd x && make)"), "make");
   });
 
   it("is null when nothing is left to name", () => {
@@ -112,7 +120,16 @@ describe("notificationReason", () => {
       notificationReason(notification("elicitation_url_dialog"), "elicitation_url_dialog"),
       "a link to open",
     );
-    assert.equal(notificationReason(notification("agent_needs_input"), "agent_needs_input"), "needs your input");
+    assert.equal(
+      notificationReason(
+        notification(
+          "permission_prompt",
+          "Claude needs your permission to use mcp__claude_ai_Slack__slack_send_message",
+        ),
+        "permission_prompt",
+      ),
+      "allow slack_send_message?",
+    );
     assert.equal(notificationReason(notification("permission_prompt"), "permission_prompt"), "needs permission");
     assert.equal(notificationReason(notification("x"), "x"), "needs you");
   });
@@ -140,18 +157,20 @@ describe("askFrom", () => {
   });
 
   it("records the notification kinds that ask, never the turn-end nudge or others", () => {
-    for (const type of ["permission_prompt", "elicitation_dialog", "elicitation_url_dialog", "agent_needs_input"])
+    for (const type of ["permission_prompt", "elicitation_dialog", "elicitation_url_dialog"])
       assert.notEqual(askFrom(notification(type, "m"), 1000), null, type);
-    for (const type of ["idle_prompt", "auth_success", "agent_completed", "__proto__"])
+    for (const type of ["idle_prompt", "agent_needs_input", "auth_success", "agent_completed", "__proto__"])
       assert.equal(askFrom(notification(type, "m"), 1000), null, type);
     assert.equal(askFrom({ hook_event_name: "Notification", message: "m" }, 1000), null);
   });
 
-  it("keeps a PermissionRequest's reason when the same session's permission_prompt follows", () => {
+  it("writes nothing for the same session's permission_prompt that follows its PermissionRequest", () => {
+    // Rewriting would restamp the ask and cost a second rebuild; the saved
+    // ask keeps its reason and its own time.
     const saved = { reason: "allow git push?", epoch: 1000, session: "s1" };
     const prompt = notification("permission_prompt", "Claude needs your permission to use Bash");
-    assert.deepEqual(askFrom(prompt, 1006, saved), { reason: "allow git push?", epoch: 1006, session: "s1" });
-    assert.equal(askFrom(prompt, 1000 + REUSE_S, saved)?.reason, "allow git push?");
+    assert.equal(askFrom(prompt, 1006, saved), null);
+    assert.equal(askFrom(prompt, 1000 + REUSE_S, saved), null);
   });
 
   it("uses the notification's own reason for another session, an old ask or another kind", () => {
@@ -186,7 +205,7 @@ describe("askFrom", () => {
   it("always makes an entry the state file accepts", () => {
     const events = [
       permission("AskUserQuestion", { questions: [{ question: `\u0007${"x".repeat(300)}` }] }),
-      notification("agent_needs_input", "  "),
+      notification("elicitation_dialog", "  "),
       permission("Bash", { command: "cd a && git push" }, "sess-1"),
     ];
     for (const event of events) {
