@@ -164,6 +164,56 @@ test("SubagentStop leaves a run that already has an endedEpoch unchanged", () =>
   assert.equal(map.w1?.[0]?.endedEpoch, 150);
 });
 
+test("a Start for an agent already saved reopens its row, and the next Stop ends it", () => {
+  let map = applyEvent(EMPTY, "w1", preToolUse("s1", "toolu_1", "Wave 4 lane 1"), 100);
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 101);
+  map = applyEvent(map, "w1", subagentStop("agent_1"), 150);
+  // A SendMessage resumes the finished agent under the same id.
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 300);
+  assert.deepEqual(
+    map.w1?.map((r) => [r.id, r.label, r.startedEpoch, r.endedEpoch]),
+    [["toolu_1", "Wave 4 lane 1", 300, undefined]],
+  );
+  map = applyEvent(map, "w1", subagentStop("agent_1"), 400);
+  assert.deepEqual(
+    map.w1?.map((r) => r.endedEpoch),
+    [400],
+  );
+});
+
+test("a repeated Start while the agent's row is live is a no-op", () => {
+  let map = applyEvent(EMPTY, "w1", preToolUse("s1", "toolu_1", "First"), 100);
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 101);
+  assert.equal(applyEvent(map, "w1", subagentStart("s1", "agent_1"), 200), map);
+});
+
+test("a resume after the first row was pruned appends one row, which the Stop ends", () => {
+  let map = applyEvent(EMPTY, "w1", subagentStart("s1", "agent_1", "general-purpose"), 100);
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1", "general-purpose"), 200);
+  assert.equal(map.w1?.length, 1);
+  map = applyEvent(map, "w1", subagentStop("agent_1"), 300);
+  assert.deepEqual(
+    map.w1?.map((r) => r.endedEpoch),
+    [300],
+  );
+});
+
+test("SubagentStop ends every open row for that agent, so older duplicates close too", () => {
+  // Two open rows for one agent, as a resume saved them before the fix.
+  const map: SubagentMap = {
+    w1: [
+      { id: "agent_1", session: "s1", agentId: "agent_1", label: "general-purpose", startedEpoch: 100 },
+      { id: "agent_1", session: "s1", agentId: "agent_1", label: "general-purpose", startedEpoch: 200 },
+      { id: "toolu_2", session: "s1", agentId: "agent_2", label: "Other", startedEpoch: 150 },
+    ],
+  };
+  const next = applyEvent(map, "w1", subagentStop("agent_1"), 300);
+  assert.deepEqual(
+    next.w1?.map((r) => r.endedEpoch),
+    [300, 300, undefined],
+  );
+});
+
 test("bad or unrecognised input is a no-op, never a throw", () => {
   for (const event of [null, undefined, "x", 3, {}, { hook_event_name: "PostToolUse" }]) {
     assert.deepEqual(applyEvent(EMPTY, "w1", event, 100), EMPTY);

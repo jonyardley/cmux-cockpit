@@ -18,7 +18,8 @@
 // unpaired run in the session when none matches, since that is still the
 // best guess), and SubagentStop finds it by that agentId. Nothing here is
 // fatal if an event is missed: SubagentStart falls back to appending a
-// fresh run, and a run that never gets a Stop is pruned once it has run
+// fresh run, a Start for an agent already saved reopens its row (a resume),
+// and a run that never gets a Stop is pruned once it has run
 // for too long (scripts/subagent-runs.ts).
 //
 // Residual case (docs/state-loop.md): a denied or failed Agent call is
@@ -84,6 +85,7 @@ function onSubagentStart(runs: SavedSubagent[], event: unknown, now: number): Sa
   const session = field(event, "session_id");
   const agentType = field(event, "agent_type");
   if (typeof agentId !== "string" || typeof session !== "string") return runs;
+  if (runs.some((r) => r.agentId === agentId)) return onResume(runs, agentId, now);
   const type = typeOf(agentType);
   const unpaired = (r: SavedSubagent): boolean => r.session === session && r.agentId === undefined;
   const byType = type ? runs.findIndex((r) => unpaired(r) && r.type === type) : -1;
@@ -95,16 +97,34 @@ function onSubagentStart(runs: SavedSubagent[], event: unknown, now: number): Sa
   return runs.map((r, i) => (i === index ? { ...r, agentId } : r));
 }
 
-// SubagentStop: the run with that agentId, wherever it is, ends now. A miss
-// (no run has it), or one that already has an endedEpoch (a duplicate
-// delivery of the same Stop), returns runs unchanged rather than an
-// equal-looking copy or a bumped endedEpoch.
+// A second SubagentStart for an agent id already saved is a resume: a
+// SendMessage to a finished background agent starts it again under the same
+// id. The newest row for that agent runs again from now, keeping its label,
+// rather than a fresh row being added beside it; before this, the Stop that
+// followed found the first, already ended row, so the fresh one never ended
+// and a helper counted as live for two hours. A Start while a row for that
+// agent is still live is a duplicate delivery, a no-op.
+function onResume(runs: SavedSubagent[], agentId: string, now: number): SavedSubagent[] {
+  const mine = (r: SavedSubagent): boolean => r.agentId === agentId;
+  if (runs.some((r) => mine(r) && r.endedEpoch === undefined)) return runs;
+  const index = runs.findLastIndex(mine);
+  return runs.map((r, i) => {
+    if (i !== index) return r;
+    const { endedEpoch, ...open } = r;
+    return { ...open, startedEpoch: now };
+  });
+}
+
+// SubagentStop: every run with that agentId still open, wherever it is, ends
+// now, so rows a resume added before onResume existed close too. A miss (no
+// open run has it, as with a duplicate delivery of the same Stop) returns
+// runs unchanged rather than an equal-looking copy or a bumped endedEpoch.
 function onSubagentStop(runs: SavedSubagent[], event: unknown, now: number): SavedSubagent[] {
   const agentId = field(event, "agent_id");
   if (typeof agentId !== "string") return runs;
-  const index = runs.findIndex((r) => r.agentId === agentId);
-  if (index === -1 || runs[index]?.endedEpoch !== undefined) return runs;
-  return runs.map((r, i) => (i === index ? { ...r, endedEpoch: now } : r));
+  const open = (r: SavedSubagent): boolean => r.agentId === agentId && r.endedEpoch === undefined;
+  if (!runs.some(open)) return runs;
+  return runs.map((r) => (open(r) ? { ...r, endedEpoch: now } : r));
 }
 
 /** Folds one hook event into a workspace's runs. An event this hook does not know is a no-op. */
