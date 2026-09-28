@@ -1,11 +1,10 @@
 // The PR chip's palette, one copy for both sidebars so a PR reads the same
-// in each. Hue on the chip says what the PR needs: red failing or in
-// conflict (the chip's word tells the two apart), blue running
-// (the Checks block's pending dot and the working dot are blue too), green
-// ready. A plain open PR is GitHub's green as an outline, light fill and
-// green words, so it reads as live without claiming the filled ready chip
-// (issue #82). A quiet merged PR stays purple, an open draft slate, and
-// anything else neutral.
+// in each. A filled hue says what the PR needs: red failing or in conflict
+// (the chip's word tells the two apart), blue running (the Checks block's
+// pending dot and the working dot are blue too), olive green ready. A plain
+// open PR is GitHub's green as an outline, pale fill and green words, so it
+// reads as live without claiming the filled ready chip (issue #82). A quiet
+// merged PR stays purple, an open draft slate, and anything else neutral.
 
 import type { PrHealth, PrSummary } from "./prs.ts";
 
@@ -15,7 +14,7 @@ export interface ChipColors {
   edge: string;
 }
 
-/** The quiet chip: a plain open or closed PR, the branch and the ports. */
+/** The quiet chip: a closed PR, the branch and the ports. */
 export const NEUTRAL_CHIP: ChipColors = { bg: "#F4F2EA", fg: "#4A4945", edge: "#E8E5DA" };
 
 const MERGED_CHIP: ChipColors = { bg: "#EFEAF7", fg: "#5B3E91", edge: "#DED4EF" };
@@ -36,8 +35,8 @@ const DRAFT_CHIP: ChipColors = { bg: "#ECEFF3", fg: "#4A5566", edge: "#D9DEE6" }
 /**
  * A PR chip's colours: its health when it has one, else slate for an open
  * draft, green outline for a plain open PR, purple for a merged PR, and
- * neutral for the rest. Only the saved PR carries draft (renderer.d.ts), so cmux's own
- * PR data never takes the draft colour.
+ * neutral for the rest. Only the saved PR carries draft (renderer.d.ts),
+ * so cmux's own PR data never takes the draft colour.
  */
 export function prChipColors(health: PrHealth, status: PrStatus | undefined, draft = false): ChipColors {
   if (health !== "quiet") return HEALTH_CHIP[health];
