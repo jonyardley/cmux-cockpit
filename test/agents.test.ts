@@ -140,6 +140,11 @@ describe("cardMessage (shared/text)", () => {
     assert.equal(cardMessage(ws("a", { latestMessage: "Fix the build", latestPrompt: " Fix  the build " })), "");
   });
 
+  it("never counts a harness turn as the prompt it echoes (#103)", () => {
+    const frame = "[Subagent hand-back] done two";
+    assert.equal(cardMessage(ws("a", { latestMessage: frame, latestPrompt: frame })), frame);
+  });
+
   it("keeps a message that differs from the prompt, or has no prompt", () => {
     assert.equal(
       cardMessage(ws("a", { latestMessage: "Done, tests pass", latestPrompt: "Fix it" })),
@@ -688,6 +693,40 @@ describe("askedLine (#80)", () => {
     assert.equal(m.askedLine(), "");
     r.data.workspaces = [ws("sel", { selected: true, latestPrompt: "/private/tmp/x.txt" })];
     assert.equal(m.askedLine(), "");
+  });
+
+  it("keeps Jon's last prompt when a subagent's hand-back arrives (#103)", () => {
+    r.data.workspaces = [ws("sel", { selected: true, latestPrompt: "spawn" })];
+    assert.equal(m.askedLine(), "spawn");
+    r.data.workspaces = [
+      ws("sel", {
+        selected: true,
+        latestPrompt: "[Subagent hand-back] The text below is the final report of a subagent.\n  done two",
+      }),
+    ];
+    assert.equal(m.askedLine(), "spawn");
+  });
+
+  it("finds the frame behind stripped markup, and hides it with no earlier prompt", () => {
+    r.data.workspaces = [
+      ws("fresh", {
+        selected: true,
+        latestPrompt: "<system-reminder>x</system-reminder>\n[Subagent hand-back] The text below is a report.",
+      }),
+    ];
+    assert.equal(m.askedLine(), "");
+  });
+
+  it("treats an interrupt or an artifact comment as a harness turn", () => {
+    r.data.workspaces = [ws("other", { selected: true, latestPrompt: "[Request interrupted by user]" })];
+    assert.equal(m.askedLine(), "");
+    r.data.workspaces = [ws("other", { selected: true, latestPrompt: "[Artifact comment sent to Claude] Fix this" })];
+    assert.equal(m.askedLine(), "");
+  });
+
+  it("shows a prompt that only mentions the frame mid-sentence", () => {
+    r.data.workspaces = [ws("sel", { selected: true, latestPrompt: "Explain the [Subagent hand-back] frame" })];
+    assert.equal(m.askedLine(), "Explain the [Subagent hand-back] frame");
   });
 
   it("still shows the prompt when the message only echoes it", () => {

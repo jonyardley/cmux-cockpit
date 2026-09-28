@@ -59,8 +59,24 @@ export function tracked(s: string): string {
   return out;
 }
 
+// Turns the harness writes into a session, which cmux reports as the latest
+// prompt just like one Jon typed (issue #103). Matched on the readable text,
+// since tag blocks ahead of the frame are stripped first.
+const HARNESS_FRAMES = ["[Subagent hand-back]", "[Artifact comment sent to Claude]", "[Request interrupted by user"];
+
+/** Whether readable prompt text is a harness turn rather than Jon's words. */
+export function isHarnessTurn(t: string): boolean {
+  return HARNESS_FRAMES.some((f) => t.startsWith(f));
+}
+
+/** The latest prompt when Jon typed it; "" for a harness turn or nothing readable. */
+function promptText(w: Workspace | undefined): string {
+  const t = readable(w?.latestPrompt);
+  return isHarnessTurn(t) ? "" : t;
+}
+
 /** A card's message line: latestMessage, unless it only echoes the prompt. */
 export function cardMessage(w: Workspace | undefined): string {
   const msg = readable(w?.latestMessage);
-  return msg && msg === readable(w?.latestPrompt) ? "" : msg;
+  return msg && msg === promptText(w) ? "" : msg;
 }
