@@ -146,6 +146,11 @@ describe("cardMessage (shared/text)", () => {
     assert.equal(cardMessage(ws("a", { latestMessage: open, latestPrompt: "spawn" })), "");
   });
 
+  it("keeps an agent message that follows a closed context block", () => {
+    const msg = "<system-reminder>ctx</system-reminder> Build passed, 3 files changed";
+    assert.equal(cardMessage(ws("a", { latestMessage: msg, latestPrompt: "go" })), "Build passed, 3 files changed");
+  });
+
   it("keeps a message that differs from the prompt, or has no prompt", () => {
     assert.equal(
       cardMessage(ws("a", { latestMessage: "Done, tests pass", latestPrompt: "Fix it" })),
@@ -735,6 +740,17 @@ describe("askedLine (#80)", () => {
       }),
     ];
     assert.equal(m.askedLine(), "spawn");
+  });
+
+  it("shows a typed prompt behind a closed context block, and skips local command output", () => {
+    r.data.workspaces = [
+      ws("ctx", { selected: true, latestPrompt: "<system-reminder>ctx</system-reminder>\nRun the tests" }),
+    ];
+    assert.equal(m.askedLine(), "Run the tests");
+    r.data.workspaces = [
+      ws("ctx", { selected: true, latestPrompt: "<local-command-stdout>Reloaded</local-command-stdout>" }),
+    ];
+    assert.equal(m.askedLine(), "Run the tests");
   });
 
   it("treats an interrupt or an artifact comment as a harness turn", () => {

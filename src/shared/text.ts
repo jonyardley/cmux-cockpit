@@ -61,22 +61,25 @@ export function tracked(s: string): string {
 
 // Turns the harness writes into a session, which cmux reports as the latest
 // prompt and message just like one Jon typed (issue #103). cmux cuts both to
-// 240 characters, so a tag block may arrive closed (a finished-subagent
-// notice, stripped to nothing) or open (a hand-back, whose frame then leads
-// the readable text): check the raw opening tag and the readable frame.
-const HARNESS_TAG = /^\s*<(?:agent-message|task-notification|system-reminder)\b/;
+// 240 characters, so a turn that opens with a tag is the harness's when the
+// block is left open (a hand-back cut short) or nothing readable is left (a
+// finished-subagent notice, local command output). A closed block ahead of
+// real words is only context, so those words still count.
+const OPENING_TAG = /^\s*<([A-Za-z][\w:-]*)/;
 const HARNESS_FRAMES = ["[Subagent hand-back]", "[Artifact comment sent to Claude]", "[Request interrupted by user"];
 
-/** Whether a raw prompt or message is a harness turn rather than Jon's words. */
-export function isHarnessTurn(raw: string | undefined): boolean {
-  if (HARNESS_TAG.test(raw ?? "")) return true;
-  const t = readable(raw);
+/** Whether a raw prompt or message is a harness turn rather than Jon's or
+ * the agent's words. `t` is its readable() text, when the caller has it. */
+export function isHarnessTurn(raw: string | undefined, t: string = readable(raw)): boolean {
+  const s = raw ?? "";
+  const tag = OPENING_TAG.exec(s)?.[1];
+  if (tag && (!t || !s.includes("</" + tag))) return true;
   return HARNESS_FRAMES.some((f) => t.startsWith(f));
 }
 
 /** A card's message line: latestMessage, unless it only echoes the prompt. */
 export function cardMessage(w: Workspace | undefined): string {
   const msg = readable(w?.latestMessage);
-  if (isHarnessTurn(w?.latestMessage)) return "";
+  if (isHarnessTurn(w?.latestMessage, msg)) return "";
   return msg && msg === readable(w?.latestPrompt) ? "" : msg;
 }
