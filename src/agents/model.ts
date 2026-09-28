@@ -19,7 +19,7 @@ import {
   summaryOf,
 } from "../shared/prs.ts";
 import { savedPublished } from "../shared/published.ts";
-import { type SavedRun, savedRuns } from "../shared/subagents.ts";
+import { pairLive, type SavedRun, savedRuns } from "../shared/subagents.ts";
 import { cardMessage, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
@@ -364,23 +364,26 @@ function toRow(r: Ranked): SubagentRow {
 }
 
 // cmux's own children, ranked; empty when every agent has none, so a
-// workspace with no live cmux data falls through to the saved runs.
-function childRanked(agents: Agent[]): Ranked[] {
+// workspace with no live cmux data falls through to the saved runs. A child
+// a live saved run vouches for is running whatever cmux says, and drops the
+// end cmux gave it (#83).
+function childRanked(agents: Agent[], vouched: Set<SubagentRun>): Ranked[] {
   return agents.flatMap((owner) =>
-    (owner.children ?? []).flatMap((c, i) =>
-      c
-        ? [
-            {
-              // The index stands in for a missing id; cmux keeps children oldest first.
-              key: "s:" + owner.id + ":" + (c.id ?? "#" + i),
-              label: readable(c.label) || "subagent",
-              running: isRunning(c, owner),
-              startedEpoch: c.startedEpoch,
-              endedEpoch: c.endedEpoch,
-            },
-          ]
-        : [],
-    ),
+    (owner.children ?? []).flatMap((c, i) => {
+      if (!c) return [];
+      const running = isRunning(c, owner);
+      const vouch = !running && vouched.has(c);
+      return [
+        {
+          // The index stands in for a missing id; cmux keeps children oldest first.
+          key: "s:" + owner.id + ":" + (c.id ?? "#" + i),
+          label: readable(c.label) || "subagent",
+          running: running || vouch,
+          startedEpoch: c.startedEpoch,
+          endedEpoch: vouch ? undefined : c.endedEpoch,
+        },
+      ];
+    }),
   );
 }
 
@@ -402,9 +405,15 @@ function savedRanked(run: SavedRun, agents: Agent[]): Ranked {
   };
 }
 
+// cmux's children, plus the live saved runs cmux has already pruned.
+function withSaved(wsId: string, agents: Agent[]): Ranked[] {
+  const { vouched, unclaimed } = pairLive(wsId, agents);
+  return [...childRanked(agents, vouched), ...unclaimed.map((r) => savedRanked(r, agents))];
+}
+
 /** The selected workspace's subagent runs, at most 5: cmux's own `children`
- * while any agent carries some, else the saved runs from config/state.json
- * (issue #6). Settled runs stay until their source drops them. No clock
+ * while any agent carries some, corrected by the saved runs still live
+ * (pairLive, #83), else the saved runs from config/state.json (issue #6). Settled runs stay until their source drops them. No clock
  * read, so it only rebuilds when the data changes; the figure is
  * subagentFigure's. */
 export const subagents = computed((): SubagentRow[] => {
@@ -413,7 +422,7 @@ export const subagents = computed((): SubagentRow[] => {
   // same); only a real, truthy child should count as cmux having its own
   // data, else an all-holes array would show nothing rather than fall back.
   const ranked = agents.some((a) => (a.children ?? []).some((c) => c))
-    ? childRanked(agents)
+    ? withSaved(ws.id, agents)
     : savedRuns(ws.id).map((r) => savedRanked(r, agents));
   return ranked.sort(byRun).slice(0, 5).map(toRow);
 });

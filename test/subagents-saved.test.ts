@@ -46,14 +46,16 @@ describe("saved subagent runs", () => {
     assert.deepEqual(ids(), ["b", "a"]);
   });
 
-  it("lets cmux's own children win once any agent carries some", () => {
+  it("lets cmux's own children win once any agent carries some, adding only saved runs still live (#83)", () => {
+    // "b" has no end, so it shows even though cmux no longer sends it; "a"
+    // ended, so only cmux's children would have kept it.
     r.data.workspaces = [
       ws("w1", {
         selected: true,
         agents: [agent("working", { children: [{ id: "c", running: true, startedEpoch: 900 }] })],
       }),
     ];
-    assert.deepEqual(ids(), ["c"]);
+    assert.deepEqual(ids(), ["b", "c"]);
   });
 
   it("falls back to saved runs when cmux sends only holes, no truthy child", () => {

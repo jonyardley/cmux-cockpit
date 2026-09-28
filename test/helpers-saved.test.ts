@@ -51,9 +51,13 @@ describe("saved helper count", () => {
     assert.equal(liveRunCount(ws("matched", { agents: [owner, agent("working")] })), 0);
   });
 
-  it("lets cmux's own children win once any agent carries some", () => {
+  it("counts cmux's own children once any agent carries some, with the saved runs still live (#83)", () => {
+    // cmux settled "c", but its saved run has no end, so it still counts;
+    // "b" is live and cmux no longer sends it; "a" ended, so it does not.
     const w = ws("w1", { agents: [agent("working", { children: [{ id: "c", running: false, endedEpoch: 5 }] })] });
-    assert.equal(liveRunCount(w), 0);
+    assert.equal(liveRunCount(w), 2);
+    const ended = ws("w1", { agents: [agent("working", { children: [{ id: "a", running: false, endedEpoch: 5 }] })] });
+    assert.equal(liveRunCount(ended), 2);
   });
 
   it("counts nothing for a workspace with no saved runs", () => {
