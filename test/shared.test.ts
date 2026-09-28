@@ -5,6 +5,7 @@ import { installRenderer } from "./support/renderer.ts";
 const r = installRenderer();
 const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/activity.ts");
 const { glyphColor } = await import("../src/shared/contrast.ts");
+const { shade } = await import("../src/shared/shade.ts");
 const { markLast } = await import("../src/shared/list.ts");
 const { NEUTRAL_CHIP, prChipColors, summaryColors } = await import("../src/shared/pr-colors.ts");
 const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, nextIn, projectId, projectOf } = await import(
@@ -81,6 +82,21 @@ describe("projectOf", () => {
     assert.equal(p.icon, "terminal");
     assert.ok(!PROJECTS.includes(p));
     assert.notEqual(projectOf(undefined), projectOf(undefined));
+  });
+});
+
+describe("shade", () => {
+  it("steps a colour toward ink by the amount given", () => {
+    assert.equal(shade("#FFFFFF", 0), "#FFFFFF");
+    assert.equal(shade("#FFFFFF", 1), "#141413");
+    assert.equal(shade("#FFFFFF", 0.5), "#8A8A89");
+  });
+  it("reads lower case and keeps an alpha pair", () => {
+    assert.equal(shade("#ffffff", 0.5), "#8A8A89");
+    assert.equal(shade("#FFFFFF1F", 0.5), "#8A8A891F");
+  });
+  it("hands back anything that is not a 6- or 8-digit hex unchanged", () => {
+    for (const odd of ["clear", "#FFF", "#GGGGGG", "FFFFFF"]) assert.equal(shade(odd, 0.5), odd);
   });
 });
 

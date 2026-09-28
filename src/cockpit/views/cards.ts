@@ -181,8 +181,7 @@ function denseRow(w: WsAccessor, key: string): View {
   ])
     .paddingLeading(25)
     .paddingTrailing(12)
-    .paddingVertical(5)
-    .hoverBackground(C.hover);
+    .paddingVertical(5);
   const dragged = () => drag()?.id === key;
   const on = () => dragged() || isSelected(w());
   return ring(
@@ -191,6 +190,8 @@ function denseRow(w: WsAccessor, key: string): View {
     () => (dragged() ? C.select : on() ? C.cardEdge : "clear"),
     () => (dragged() ? 1.5 : 1),
     9,
+    // The hover replaces the face: the wash on a clear row, a whole face on a lit one.
+    { hover: { face: () => (on() ? C.cardHover : C.hover) } },
   )
     .frame({ maxWidth: "infinity" })
     .onTap(() => selectWorkspace(w()?.id))

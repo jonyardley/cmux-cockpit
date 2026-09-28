@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { installRenderer, recordModifiers } from "./support/renderer.ts";
 
-installRenderer();
+const r = installRenderer();
 const ui = await import("../src/shared/ui.ts");
 const { NEUTRAL_CHIP } = await import("../src/shared/pr-colors.ts");
 const { PROJECTS } = await import("../src/shared/projects.ts");
@@ -48,17 +48,69 @@ describe("the shared builders read what they are handed", () => {
     const edge = spy("#000000");
     ui.ring(Text("x"), face.get, edge.get, width.get, 9);
     assert.ok(width.reads() > 0 && face.reads() > 0 && edge.reads() > 0);
-    ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 6, true);
+    ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 6, { hug: true });
   });
 
   it("ring frames the full width before painting the face, unless it hugs (issue #93)", () => {
     const orderOf = (hug: boolean): string[] =>
-      recordModifiers(() => ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 6, hug)).filter(
+      recordModifiers(() => ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 6, { hug })).filter(
         (m) => m === "frame" || m === "background",
       );
     // The face, then the edge: filling the row means a frame comes first.
     assert.deepEqual(orderOf(false), ["frame", "background", "background"]);
     assert.deepEqual(orderOf(true), ["background", "background"]);
+  });
+
+  it("ring puts a hover on the face, and on the edge only when given one", () => {
+    const hovers = (hover?: { face: string; edge?: string }): number =>
+      recordModifiers(() =>
+        ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 6, { hug: true, ...(hover ? { hover } : {}) }),
+      ).filter((m) => m === "hoverBackground").length;
+    assert.equal(hovers(), 0);
+    assert.equal(hovers({ face: "#EEEEEE" }), 1);
+    assert.equal(hovers({ face: "#EEEEEE", edge: "#999999" }), 2);
+  });
+
+  it("chipHover darkens the chip's own face and edge, so a state colour survives", () => {
+    const hover = ui.chipHover(() => NEUTRAL_CHIP);
+    const face = typeof hover.face === "function" ? hover.face() : hover.face;
+    const edge = typeof hover.edge === "function" ? hover.edge() : hover.edge;
+    assert.notEqual(face, NEUTRAL_CHIP.bg);
+    assert.notEqual(edge, NEUTRAL_CHIP.edge);
+    assert.match(face, /^#[0-9A-F]{6}$/);
+  });
+
+  it("chipHover keeps a chip's resting colours while it has nothing to open", () => {
+    const read = (v: Reactive<string> | undefined): string | undefined => (typeof v === "function" ? v() : v);
+    const hover = ui.chipHover(
+      () => NEUTRAL_CHIP,
+      () => false,
+    );
+    assert.equal(read(hover.face), NEUTRAL_CHIP.bg);
+    assert.equal(read(hover.edge), NEUTRAL_CHIP.edge);
+  });
+
+  it("openIfUrl opens a url and ignores a missing one", () => {
+    const before = r.opened.length;
+    ui.openIfUrl(undefined);
+    ui.openIfUrl("");
+    ui.openIfUrl("https://example.com");
+    assert.deepEqual(r.opened.slice(before), ["https://example.com"]);
+  });
+
+  it("tapChip and linkBox hover, tap, and show the browser mark only on hover", () => {
+    const label = spy("open");
+    const chipMods = recordModifiers(() =>
+      ui.tapChip(
+        label.get,
+        () => NEUTRAL_CHIP,
+        () => undefined,
+      ),
+    );
+    assert.ok(label.reads() > 0);
+    assert.ok(chipMods.includes("hoverBackground") && chipMods.includes("onTap"));
+    const linkMods = recordModifiers(() => ui.linkBox([Text("#12")], "#000000", () => "https://example.com/pr/12"));
+    assert.ok(linkMods.includes("showOnHover") && linkMods.includes("onTap"));
   });
 
   it("chip reads its label and colours, monospaced or not", () => {

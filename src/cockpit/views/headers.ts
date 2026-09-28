@@ -24,27 +24,35 @@ import { C } from "../theme.ts";
 import { glyphButton, statusDot } from "./parts.ts";
 
 function segButton(label: string, icon: string | null, on: () => boolean, set: () => void): View {
-  return ZStack({}, [
-    RoundedRectangle({ cornerRadius: 7 })
-      .fill(() => (on() ? C.card : "clear"))
-      .stroke(() => (on() ? C.cardEdge : "clear"))
-      .strokeWidth(1),
-    HStack({ spacing: 6 }, [
-      ...(icon
-        ? [
-            Image(icon)
-              .font(11)
-              .color(() => (on() ? C.text : C.secondary)),
-          ]
-        : []),
-      Text(label)
-        .font(12)
-        .weight("medium")
-        .color(() => (on() ? C.text : C.secondary)),
-    ]),
-  ])
-    .frame({ maxWidth: "infinity", height: 26 })
-    .onTap(set);
+  return (
+    ZStack({}, [
+      RoundedRectangle({ cornerRadius: 7 })
+        .fill(() => (on() ? C.card : "clear"))
+        .stroke(() => (on() ? C.cardEdge : "clear"))
+        .strokeWidth(1),
+      HStack({ spacing: 6 }, [
+        ...(icon
+          ? [
+              Image(icon)
+                .font(11)
+                .color(() => (on() ? C.text : C.secondary)),
+            ]
+          : []),
+        Text(label)
+          .font(12)
+          .weight("medium")
+          .color(() => (on() ? C.text : C.secondary)),
+      ]),
+    ])
+      .frame({ maxWidth: "infinity", height: 26 })
+      // Behind the face, so only the segment that is not chosen lights. The
+      // clear background makes the renderer round its fill instead of
+      // clipping the node, which would cut the chosen face's stroke.
+      .background("clear")
+      .hoverBackground(C.hover)
+      .cornerRadius(7)
+      .onTap(set)
+  );
 }
 
 // The outer inset lives on a wrapper: on the same node the runtime draws the

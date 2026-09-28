@@ -35,6 +35,10 @@ export const P = {
   red: "#C0453A",
   /** The unread badge: grey on both sides, so clay only ever means needs you. */
   badge: ink.secondary,
+  // A link inside a card or panel under the pointer (ui.ts linkBox): a
+  // chip-strength face and an edge round it.
+  linkHover: "#ECEAE3",
+  linkEdge: "#14141347",
   onBadge: "#FFFFFF",
 } as const;
 

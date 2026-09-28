@@ -17,6 +17,9 @@ export const C = {
   needsEdge: "#F0D2C3",
   needsRowEdge: `${P.clayText}29`,
   hover: "#7f7f7f14",
+  // A card's face under the pointer. Opaque, since hoverBackground replaces
+  // the white face rather than washing over it.
+  cardHover: "#F7F6F2",
   // Lanes and selection stay neutral so hue only ever means state: clay is
   // needs you (amber when it is asking), blue working, green finished. Lane
   // markers step down in lightness from Main to Unsorted instead, each a
@@ -35,5 +38,7 @@ export const C = {
   zoneLit: "#E7E4D9",
   // A lane anchor's header status while that workspace is selected.
   anchorSelected: "#1414131F",
-  needsHover: "#FFFDFB",
+  // A needs-you row under the pointer: a clear step down from its white
+  // face, still in the strip's clay family.
+  needsHover: "#FBF1EB",
 } as const;

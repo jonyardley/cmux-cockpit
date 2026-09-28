@@ -5,7 +5,7 @@
 
 import { dismissNeeds } from "../../shared/needs.ts";
 import { NEUTRAL_CHIP, summaryColors } from "../../shared/pr-colors.ts";
-import { branchText, chip, META_FONT, meta, sectionTitle, when } from "../../shared/ui.ts";
+import { branchText, linkBox, META_FONT, meta, sectionTitle, tapChip, when } from "../../shared/ui.ts";
 import {
   type AgentRow,
   agentRows,
@@ -37,7 +37,7 @@ import {
   statusLine,
 } from "../model.ts";
 import { STALE_OPACITY, STATUS_DOT, T } from "../theme.ts";
-import { agentDot, jump, openIfUrl, panel, ruled } from "./parts.ts";
+import { agentDot, jump, panel, ruled } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
   const a = () => e().a;
@@ -280,10 +280,11 @@ function statusWords(): View {
       "cur-status-pr",
       () => !!currentPr()?.state,
       () =>
-        chip(
+        tapChip(
           () => currentPr()?.state ?? "",
           () => summaryColors(currentPr()),
-        ).onTap(() => openIfUrl(currentPr()?.url)),
+          () => currentPr()?.url,
+        ),
     )
       .opacity(() => (currentPrDim() ? STALE_OPACITY : 1))
       .layoutPriority(2),
@@ -388,22 +389,27 @@ function progressBlock(): View {
 // way). The state chip sits on the status line above, so it shows once.
 function prDetail(): View {
   return (
-    HStack({ spacing: 6 }, [
-      meta(() => currentPr()?.tag ?? "", T.secondary),
-      when(
-        "cur-pr-title",
-        () => !!currentPr()?.title,
-        () =>
-          Text(() => currentPr()?.title ?? "")
-            .font(META_FONT)
-            .color(T.secondary)
-            .lineLimit(1)
-            .truncation("tail"),
+    // On a wrapper, so only the line's own content opens the PR: the
+    // frame on the link's own node would stretch its tap and hover.
+    VStack({ spacing: 0, alignment: "leading" }, [
+      linkBox(
+        [
+          meta(() => currentPr()?.tag ?? "", T.secondary),
+          when(
+            "cur-pr-title",
+            () => !!currentPr()?.title,
+            () =>
+              Text(() => currentPr()?.title ?? "")
+                .font(META_FONT)
+                .color(T.secondary)
+                .lineLimit(1)
+                .truncation("tail"),
+          ),
+        ],
+        T.secondary,
+        () => currentPr()?.url,
       ),
-    ])
-      // Inside the frame, so only the line's own content opens the PR.
-      .onTap(() => openIfUrl(currentPr()?.url))
-      .frame({ maxWidth: "infinity", alignment: "leading" })
+    ]).frame({ maxWidth: "infinity", alignment: "leading" })
   );
 }
 
@@ -421,11 +427,12 @@ function detailsBlock(): View {
           () =>
             HStack({ spacing: 6 }, [
               ForEach({ items: () => portChips(), key: (x) => x.key }, (x) =>
-                chip(
+                tapChip(
                   () => x().label,
                   () => NEUTRAL_CHIP,
+                  () => x().url,
                   true,
-                ).onTap(() => openURL(x().url)),
+                ),
               ),
             ]),
         ),
