@@ -20,7 +20,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
       VStack alignment: leading, spacing: 6 .padding(9) .frame(maxWidth: infinity, alignment: leading) .background(needsBg) .cornerRadius(12)
         HStack spacing: 7 .paddingHorizontal(2)
           Image bell.fill .font(10) .color(clayText)
-          Text "N E E D S Y O U" .font(10.5) .weight(semibold) .color(clayText) .lineLimit(1)
+          Text "N\u200aE\u200aE\u200aD\u200aS Y\u200aO\u200aU" .font(10.5) .weight(semibold) .color(clayText) .lineLimit(1)
           Spacer
           Text "5" .font(10.5) .weight(semibold) .color(clayText)
         VStack spacing: 0, alignment: leading .padding(1) .background(needsRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
@@ -73,129 +73,159 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
               Image xmark .font(8.5) .weight(semibold) .color(tertiary)
         Text "+1 more" .font(11.5) .color(clayText) .lineLimit(1) .paddingLeading(34) .frame(maxWidth: infinity, alignment: leading)
   VStack spacing: 0 .paddingHorizontal(10) .opacity(1) .frame(maxHeight: infinity, alignment: top)
-    VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .fixed()
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(8)
-        HStack spacing: 8 .paddingHorizontal(7) .paddingVertical(4) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(7)
-          Spacer minLength: 0 .frame(width: 12, height: 16)
-          RoundedRectangle cornerRadius: 3 .fill(laneMain|select|heading) .frame(width: 9, height: 9) .opacity(0.55)
-          Text "Main activity" .font(12.5) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-          Text "0" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10) .opacity(0.55)
+    Reorderable spacing: 2
+      VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .fixed()
+        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(8)
+          HStack spacing: 8 .paddingHorizontal(7) .paddingVertical(4) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(7)
+            Spacer minLength: 0 .frame(width: 12, height: 16)
+            RoundedRectangle cornerRadius: 3 .fill(laneMain|select|heading) .frame(width: 9, height: 9) .opacity(0.55)
+            Text "Main activity" .font(12.5) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+            Text "0" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10) .opacity(0.55)
+            Spacer minLength: 4
+            Text "" .font(11) .weight(medium) .color(laneMain|select|heading) .lineLimit(1)
+      VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .fixed()
+        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(8)
+          HStack spacing: 8 .paddingHorizontal(7) .paddingVertical(4) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(7)
+            Spacer minLength: 0 .frame(width: 12, height: 16)
+            RoundedRectangle cornerRadius: 3 .fill(secondary|badge|laneReview) .frame(width: 9, height: 9) .opacity(0.55)
+            Text "For review" .font(12.5) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+            Text "0" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10) .opacity(0.55)
+            Spacer minLength: 4
+            Text "" .font(11) .weight(medium) .color(laneMain|select|heading) .lineLimit(1)
+      VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .fixed()
+        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(8)
+          HStack spacing: 8 .paddingHorizontal(7) .paddingVertical(4) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(7)
+            Spacer minLength: 0 .frame(width: 12, height: 16)
+            RoundedRectangle cornerRadius: 3 .fill(faint|laneBackground) .frame(width: 9, height: 9) .opacity(0.55)
+            Text "Background" .font(12.5) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+            Text "0" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10) .opacity(0.55)
+            Spacer minLength: 4
+            Text "" .font(11) .weight(medium) .color(laneMain|select|heading) .lineLimit(1)
+      VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .fixed()
+        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(8)
+          HStack spacing: 8 .paddingHorizontal(7) .paddingVertical(4) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(7)
+            Spacer minLength: 0 .frame(width: 12, height: 16)
+            RoundedRectangle cornerRadius: 3 .fill(laneParked) .frame(width: 9, height: 9) .opacity(0.55)
+            Text "Parked" .font(12.5) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+            Text "0" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10) .opacity(0.55)
+            Spacer minLength: 4
+            Text "" .font(11) .weight(medium) .color(laneMain|select|heading) .lineLimit(1)
+      VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .onTap() .fixed()
+        HStack spacing: 8 .paddingHorizontal(8) .paddingVertical(5) .cornerRadius(8) .background(clear) .hoverBackground(hover) .frame(maxWidth: infinity)
+          Image chevron.right .font(10) .weight(semibold) .color(faint|laneBackground) .rotation(90) .frame(width: 12, height: 16)
+          RoundedRectangle cornerRadius: 3 .fill(laneUnsorted) .frame(width: 9, height: 9)
+          Text "Unsorted" .font(12.5) .weight(semibold) .color(laneMain|select|heading) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+          Text "7" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10)
           Spacer minLength: 4
-          Text "" .font(11) .weight(medium) .color(laneMain|select|heading) .lineLimit(1)
-    VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .fixed()
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(8)
-        HStack spacing: 8 .paddingHorizontal(7) .paddingVertical(4) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(7)
-          Spacer minLength: 0 .frame(width: 12, height: 16)
-          RoundedRectangle cornerRadius: 3 .fill(secondary|badge|laneReview) .frame(width: 9, height: 9) .opacity(0.55)
-          Text "For review" .font(12.5) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-          Text "0" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10) .opacity(0.55)
-          Spacer minLength: 4
-          Text "" .font(11) .weight(medium) .color(laneMain|select|heading) .lineLimit(1)
-    VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .fixed()
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(8)
-        HStack spacing: 8 .paddingHorizontal(7) .paddingVertical(4) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(7)
-          Spacer minLength: 0 .frame(width: 12, height: 16)
-          RoundedRectangle cornerRadius: 3 .fill(faint|laneBackground) .frame(width: 9, height: 9) .opacity(0.55)
-          Text "Background" .font(12.5) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-          Text "0" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10) .opacity(0.55)
-          Spacer minLength: 4
-          Text "" .font(11) .weight(medium) .color(laneMain|select|heading) .lineLimit(1)
-    VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .fixed()
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(8)
-        HStack spacing: 8 .paddingHorizontal(7) .paddingVertical(4) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(7)
-          Spacer minLength: 0 .frame(width: 12, height: 16)
-          RoundedRectangle cornerRadius: 3 .fill(laneParked) .frame(width: 9, height: 9) .opacity(0.55)
-          Text "Parked" .font(12.5) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-          Text "0" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10) .opacity(0.55)
-          Spacer minLength: 4
-          Text "" .font(11) .weight(medium) .color(laneMain|select|heading) .lineLimit(1)
-    VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .onTap() .fixed()
-      HStack spacing: 8 .paddingHorizontal(8) .paddingVertical(5) .cornerRadius(8) .background(clear) .hoverBackground(hover) .frame(maxWidth: infinity)
-        Image chevron.right .font(10) .weight(semibold) .color(faint|laneBackground) .rotation(90) .frame(width: 12, height: 16)
-        RoundedRectangle cornerRadius: 3 .fill(laneUnsorted) .frame(width: 9, height: 9)
-        Text "Unsorted" .font(12.5) .weight(semibold) .color(laneMain|select|heading) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-        Text "7" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10)
-        Spacer minLength: 4
-        Text "" .font(11) .weight(regular) .color(readyInk|readyChip.edge) .lineLimit(1)
-    VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
-        VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
-          HStack spacing: 6
-            ZStack .frame(width: 13, height: 13)
-              Circle size: 13 .fill(clayHalo)
-              Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
-            Text "Oldest question" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
-            Spacer minLength: 4
-            Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
-            Text "30m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
-          Text "Should the strip cap at four?" .font(12) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail) .paddingLeading(13) .frame(maxWidth: infinity, alignment: leading)
-    VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
-        VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
-          HStack spacing: 6
-            ZStack .frame(width: 13, height: 13)
-              Circle size: 13 .fill(amberHalo)
-              Circle size: 7 .fill(amber) .stroke(clear) .strokeWidth(1.5)
-            Text "Publish" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
-            Spacer minLength: 4
-            Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
-            Text "1m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
-    VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
-        VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
-          HStack spacing: 6
-            ZStack .frame(width: 13, height: 13)
-              Circle size: 13 .fill(clayHalo)
-              Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
-            Text "Second" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
-            Spacer minLength: 4
-            Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
-            Text "15m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
-          Text "Tests pass. Merge now?" .font(12) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail) .paddingLeading(13) .frame(maxWidth: infinity, alignment: leading)
-    VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
-        VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
-          HStack spacing: 6
-            ZStack .frame(width: 13, height: 13)
-              Circle size: 13 .fill(clayHalo)
-              Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
-            Text "Third" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
-            Spacer minLength: 4
-            Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
-            Text "10m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
-    VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
-        VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
-          HStack spacing: 6
-            ZStack .frame(width: 13, height: 13)
-              Circle size: 13 .fill(clayHalo)
-              Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
-            Text "Fifth, past the cap" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
-            Spacer minLength: 4
-            Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
-            Text "<1m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
-          Text "One more thing" .font(12) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail) .paddingLeading(13) .frame(maxWidth: infinity, alignment: leading)
-    VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
-        VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
-          HStack spacing: 6
-            ZStack .frame(width: 13, height: 13)
-              Circle size: 13 .fill(clear)
-              Circle size: 7 .fill(green) .stroke(clear) .strokeWidth(1.5)
-            Text "Finished while away" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
-            Spacer minLength: 4
-            Text "3" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(5) .paddingVertical(1) .background(secondary|badge|laneReview) .cornerRadius(7)
-            Text "4m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
-    VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
-        VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
-          HStack spacing: 6
-            ZStack .frame(width: 13, height: 13)
-              Circle size: 13 .fill(blueHalo)
-              Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
-            Text "Busy" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
-            Spacer minLength: 4
-            Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
-            Text "1m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
+          Text "" .font(11) .weight(regular) .color(readyInk|readyChip.edge) .lineLimit(1)
+      VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
+        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
+          VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
+            HStack spacing: 6
+              ZStack .frame(width: 13, height: 13)
+                Circle size: 13 .fill(clayHalo)
+                Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
+              Text "Oldest question" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
+              Spacer minLength: 4
+              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "30m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
+            Text "Should the strip cap at four?" .font(12) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail) .paddingLeading(13) .frame(maxWidth: infinity, alignment: leading)
+      VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
+        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
+          VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
+            HStack spacing: 6
+              ZStack .frame(width: 13, height: 13)
+                Circle size: 13 .fill(amberHalo)
+                Circle size: 7 .fill(amber) .stroke(clear) .strokeWidth(1.5)
+              Text "Publish" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
+              Spacer minLength: 4
+              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "1m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
+      VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
+        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
+          VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
+            HStack spacing: 6
+              ZStack .frame(width: 13, height: 13)
+                Circle size: 13 .fill(clayHalo)
+                Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
+              Text "Second" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
+              Spacer minLength: 4
+              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "15m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
+            Text "Tests pass. Merge now?" .font(12) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail) .paddingLeading(13) .frame(maxWidth: infinity, alignment: leading)
+      VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
+        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
+          VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
+            HStack spacing: 6
+              ZStack .frame(width: 13, height: 13)
+                Circle size: 13 .fill(clayHalo)
+                Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
+              Text "Third" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
+              Spacer minLength: 4
+              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "10m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
+      VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
+        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
+          VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
+            HStack spacing: 6
+              ZStack .frame(width: 13, height: 13)
+                Circle size: 13 .fill(clayHalo)
+                Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
+              Text "Fifth, past the cap" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
+              Spacer minLength: 4
+              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "<1m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
+            Text "One more thing" .font(12) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail) .paddingLeading(13) .frame(maxWidth: infinity, alignment: leading)
+      VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
+        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
+          VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
+            HStack spacing: 6
+              ZStack .frame(width: 13, height: 13)
+                Circle size: 13 .fill(clear)
+                Circle size: 7 .fill(green) .stroke(clear) .strokeWidth(1.5)
+              Text "Finished while away" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
+              Spacer minLength: 4
+              Text "3" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(5) .paddingVertical(1) .background(secondary|badge|laneReview) .cornerRadius(7)
+              Text "4m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
+      VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
+        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
+          VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
+            HStack spacing: 6
+              ZStack .frame(width: 13, height: 13)
+                Circle size: 13 .fill(blueHalo)
+                Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
+              Text "Busy" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
+              Spacer minLength: 4
+              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "1m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
   VStack spacing: 2 .paddingHorizontal(10) .opacity(0) .frame(maxHeight: 0, alignment: top) [hidden]
   Spacer
+
+Colours
+amber #D9A03F
+amberHalo #D9A03F38
+amberRowEdge #8A5A0B29
+blue #3B6FB6
+blueHalo #3B6FB62E
+cardEdge|dropTarget|anchorSelected #1414131F
+clay #D97757
+clayHalo #D9775738
+clayText #A34A2A
+faint|laneBackground #8A8880
+green #788C5D
+hairline #E2DFD3
+hover #7F7F7F14
+laneMain|select|heading #3D3D3A
+laneParked #B0AEA5
+laneUnsorted #C9C6BB
+metaText #6B6A64
+needsBg #FBECE4
+needsEdge #F0D2C3
+needsHover #FBF1EB
+needsRowEdge #A34A2A29
+onBadge|card|readyChip.fg #FFFFFF
+readyInk|readyChip.edge #1A7F37
+secondary|badge|laneReview #5E5D59
+segTrack #E5E2D6
+tertiary #73726C
+text #141413

@@ -131,7 +131,9 @@ const list =
       options.key(item);
       rows.push(render(() => item));
     }
-    return view(kind, [], rows);
+    // A Reorderable's row spacing is on screen; its keys and handlers are not.
+    const spacing = "spacing" in options ? options.spacing : undefined;
+    return view(kind, spacing === undefined ? [] : [{ spacing }], rows);
   };
 
 // A leaf's arguments are its content or options; a stack's array argument

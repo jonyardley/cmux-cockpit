@@ -2,7 +2,7 @@
 // own density. Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
-import { EPOCH, seed, snapshotScene } from "./support/snapshot.ts";
+import { ago, EPOCH, seed, snapshotScene } from "./support/snapshot.ts";
 
 const r = seed({
   state: {
@@ -13,8 +13,6 @@ const r = seed({
 const { agent, group, ws } = await import("./support/fixtures.ts");
 await import("../src/cockpit/index.ts");
 const { C } = await import("../src/cockpit/theme.ts");
-
-const ago = (s: number): number => EPOCH - s;
 
 it("lanes: every card state", () => {
   r.data.groups = [

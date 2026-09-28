@@ -2,14 +2,12 @@
 // "+N more", one of them asking. Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
-import { EPOCH, seed, snapshotScene } from "./support/snapshot.ts";
+import { ago, EPOCH, seed, snapshotScene } from "./support/snapshot.ts";
 
 const r = seed({ state: { asking: { ask: { reason: "allow npm publish?", epoch: EPOCH - 60 } } } });
 const { agent, ws } = await import("./support/fixtures.ts");
 await import("../src/cockpit/index.ts");
 const { C } = await import("../src/cockpit/theme.ts");
-
-const ago = (s: number): number => EPOCH - s;
 const waiting = (id: string, title: string, secs: number, latestMessage?: string): Workspace =>
   ws(id, {
     title,

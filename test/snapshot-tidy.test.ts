@@ -5,6 +5,7 @@ import { it } from "node:test";
 import type { SavedPr } from "../scripts/state-config.ts";
 import { seed, snapshotScene } from "./support/snapshot.ts";
 
+// The build defines __COCKPIT_ROOT__ as a global; tidy.ts reads it at load.
 (globalThis as Record<string, unknown>).__COCKPIT_ROOT__ = "/Users/jon/.config/cockpit";
 const merged = (branch: string): SavedPr => ({
   url: "https://github.com/o/r/pull/1",

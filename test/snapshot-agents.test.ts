@@ -3,9 +3,8 @@
 // data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
-import { EPOCH, seed, snapshotScene } from "./support/snapshot.ts";
+import { ago, seed, snapshotScene } from "./support/snapshot.ts";
 
-const ago = (s: number): number => EPOCH - s;
 const url = (n: number): string => `https://github.com/o/r/pull/${n}`;
 
 const r = seed({

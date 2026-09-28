@@ -1,7 +1,7 @@
 VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(14)
   VStack spacing: 8, alignment: leading
     HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
-      Text "T H I S W O R K S P A C E · A p p O n e" .font(10.5) .weight(semibold) .color(secondary|badge) .lineLimit(1)
+      Text "T\u200aH\u200aI\u200aS W\u200aO\u200aR\u200aK\u200aS\u200aP\u200aA\u200aC\u200aE · A\u200ap\u200ap O\u200an\u200ae" .font(10.5) .weight(semibold) .color(secondary|badge) .lineLimit(1)
       Text "" .font(10.5) .weight(medium) .color(metaText) .paddingHorizontal(0) .paddingVertical(1) .background(clear) .cornerRadius(10)
       Spacer
     VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
@@ -22,7 +22,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
               Text "Recorded six scenes; the lanes one is the longest." .font(12) .color(secondary|badge) .lineLimit(4) .truncation(tail) .paddingHorizontal(8) .paddingVertical(6) .frame(maxWidth: infinity, alignment: leading) .background(quote) .cornerRadius(6)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(12)
               VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
-                Text "H E L P E R S" .font(10.5) .weight(semibold) .color(secondary|badge) .lineLimit(1) .paddingBottom(2)
+                Text "H\u200aE\u200aL\u200aP\u200aE\u200aR\u200aS" .font(10.5) .weight(semibold) .color(secondary|badge) .lineLimit(1) .paddingBottom(2)
                 HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading)
                   ZStack .frame(width: 13, height: 13)
                     Circle size: 13 .fill(blueHalo)
@@ -48,7 +48,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                         Text "↗" .font(9) .weight(semibold) .color(secondary|badge) .lineLimit(1) .layoutPriority(2) .opacity(1) .showOnHover()
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(12)
               HStack spacing: 6 .paddingBottom(2)
-                Text "C H E C K S" .font(10.5) .weight(semibold) .color(secondary|badge) .lineLimit(1)
+                Text "C\u200aH\u200aE\u200aC\u200aK\u200aS" .font(10.5) .weight(semibold) .color(secondary|badge) .lineLimit(1)
                 Text "1 / 3" .font(10.5) .monospaced() .color(tertiary) .lineLimit(1)
               HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading)
                 ZStack .frame(width: 13, height: 13)
@@ -75,7 +75,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
           Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
   VStack spacing: 8, alignment: leading
     HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
-      Text "P U L L R E Q U E S T S" .font(10.5) .weight(semibold) .color(secondary|badge) .lineLimit(1)
+      Text "P\u200aU\u200aL\u200aL R\u200aE\u200aQ\u200aU\u200aE\u200aS\u200aT\u200aS" .font(10.5) .weight(semibold) .color(secondary|badge) .lineLimit(1)
       Text "3" .font(10.5) .weight(medium) .color(metaText) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
       Spacer
     VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
@@ -106,7 +106,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
           Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
   VStack spacing: 8, alignment: leading
     HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
-      Text "M A D E H E R E" .font(10.5) .weight(semibold) .color(secondary|badge) .lineLimit(1)
+      Text "M\u200aA\u200aD\u200aE H\u200aE\u200aR\u200aE" .font(10.5) .weight(semibold) .color(secondary|badge) .lineLimit(1)
       Text "2" .font(10.5) .weight(medium) .color(metaText) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
       Spacer
     VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
@@ -132,3 +132,30 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
               Image terminal .font(9) .weight(semibold) .color(text)
           Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
   Spacer
+
+Colours
+blue #3B6FB6
+blueHalo #3B6FB62E
+blueText|runningChip.fg #2F5690
+clay #D97757
+countBg #E5E2D6
+failingChip.bg #F8E4E2
+failingChip.edge #EDC9C5
+failingChip.fg #9E2F27
+green #788C5D
+grey #A09E95
+hover #7F7F7F0F
+linkEdge #14141347
+linkHover #ECEAE3
+metaText #6B6A64
+neutralChip.bg #F4F2EA
+neutralChip.edge #E8E5DA
+neutralChip.fg #4A4945
+onBadge|panel|onClay|readyChip.fg #FFFFFF
+panelEdge #1414131A
+quote #1414130A
+red #C0453A
+rule #F0EEE6
+secondary|badge #5E5D59
+tertiary #73726C
+text #141413

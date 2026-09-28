@@ -3,14 +3,12 @@
 // Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
-import { EPOCH, seed, snapshotScene } from "./support/snapshot.ts";
+import { ago, seed, snapshotScene } from "./support/snapshot.ts";
 
 const r = seed({ state: { ui: { mode: "projects" } } });
 const { agent, ws } = await import("./support/fixtures.ts");
 await import("../src/cockpit/index.ts");
 const { C } = await import("../src/cockpit/theme.ts");
-
-const ago = (s: number): number => EPOCH - s;
 
 it("the projects view", () => {
   r.data.workspaces = [
