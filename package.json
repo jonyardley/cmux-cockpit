@@ -7,7 +7,7 @@
     "node": ">=24.2"
   },
   "scripts": {
-    "build": "node scripts/build.ts",
+    "build": "node scripts/hook-build.ts --locked",
     "dev": "node --watch-path=src scripts/build.ts",
     "lint": "biome ci --error-on-warnings .",
     "fix": "biome check --write .",

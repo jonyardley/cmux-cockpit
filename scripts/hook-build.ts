@@ -22,18 +22,27 @@
 // hooks and scripts/state-set.ts); buildNow is the synchronous one for a
 // caller that needs the result (scripts/pr-poll.ts, which rolls its write
 // back when the build fails): it waits briefly for the lock instead of
-// skipping. Whoever holds the lock looks at the state file again after
-// dropping it, so a write that skipped its own build is never left unbuilt.
+// skipping. Whoever holds the lock looks at the build's inputs (the state
+// file, config/projects.json and every file under src/) again after
+// dropping it, so neither a write that skipped its own build nor a source
+// change that landed mid-build is left unbuilt.
+//
+// `npm run build` runs this file with --locked (lockedBuild): it waits for
+// the same lock, for as long as a live build could hold it, then builds
+// with the output shown, so a git hook's rebuild, the close-out's and the
+// check's never race a tap's or a poll's either. Everything that holds the
+// lock spawns scripts/build.ts directly, never `npm run build`, so nothing
+// waits on a lock it holds itself.
 
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, openSync, readFileSync, rmSync, utimesSync } from "node:fs";
+import { closeSync, openSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pauseSync, tryTakeLock, waitForLock } from "./lockfile.ts";
 import { LOG_PATH } from "./state-log.ts";
+import { unreadableCopyOf } from "./state-url.ts";
 
 const ROOT = join(import.meta.dirname, "..");
-const STATE_PATH = join(ROOT, "config", "state.json");
 const BUILD_LOCK = join(ROOT, "config", "hook-build.lock");
 // Exported so a test can check the stale threshold sits comfortably above
 // this delay plus the timeout, without duplicating the figures.
@@ -86,10 +95,7 @@ const BUILD_WAIT_MS = 10_000;
  * started. Returns whether the last build succeeded, and the snapshot it
  * built. Exported for testing with fakes instead of a real spawn and file.
  */
-export function buildUntilStable(
-  build: () => boolean,
-  snapshot: () => string | null,
-): { ok: boolean; built: string | null } {
+export function buildUntilStable(build: () => boolean, snapshot: () => string): { ok: boolean; built: string } {
   let before = snapshot();
   for (;;) {
     if (!build()) return { ok: false, built: before };
@@ -99,24 +105,83 @@ export function buildUntilStable(
   }
 }
 
-function stateSnapshot(): string | null {
+// The one marker for a file that is not there, so its absence still reads
+// the same each time and its arrival reads differently.
+const MISSING = "(missing)";
+
+function readOrMissing(path: string): string {
   try {
-    return readFileSync(STATE_PATH, "utf8");
+    return readFileSync(path, "utf8");
   } catch {
-    return null;
+    return MISSING;
   }
 }
 
+// A file's size and modification time, or MISSING.
+function stamp(path: string): string {
+  const s = statSync(path, { throwIfNoEntry: false });
+  return s ? `${s.size}:${s.mtimeMs}` : MISSING;
+}
+
+// The .ts files under `dir` (every depth when `deep`), relative and sorted.
+// Only .ts, so an editor's swap file, an atomic save's temp file or a
+// .DS_Store never reads as a change and costs a build pass.
+function tsFiles(dir: string, deep: boolean): string[] {
+  try {
+    return readdirSync(dir, { recursive: deep, encoding: "utf8" })
+      .filter((f) => f.endsWith(".ts"))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * What a build reads, cheaply: the state file's text, plus the size and
+ * modification time of everything else build.ts reads: the project table
+ * and its committed fallback, the state file's unreadable copy, every .ts
+ * file under src/ and the scripts (build.ts and the modules it imports) in
+ * scripts/. A tap or a hook changes the first; a pull or a branch switch
+ * changes the others, so a source change landing mid-build reads
+ * differently here and gets another pass. Stats rather than hashes, since
+ * this runs after every build pass. Exported for testing against a temp
+ * tree.
+ */
+export function buildInputs(root: string = ROOT): string {
+  const state = join(root, "config", "state.json");
+  const files = [
+    join(root, "config", "projects.json"),
+    join(root, "config", "projects.example.json"),
+    unreadableCopyOf(state),
+    ...tsFiles(join(root, "src"), true).map((f) => join(root, "src", f)),
+    ...tsFiles(join(root, "scripts"), false).map((f) => join(root, "scripts", f)),
+  ];
+  return [readOrMissing(state), ...files.map((f) => `${f} ${stamp(f)}`)].join("\n");
+}
+
 // Only ever called with BUILD_LOCK held: from buildThenRelease, whose lock
-// scheduleBuild or buildNow took first.
-function runBuild(): boolean {
+// scheduleBuild, buildNow or lockedBuild took first. Spawns scripts/build.ts
+// itself, never `npm run build`, which would wait on this same lock.
+// Returns build.ts's exit status, or 1 when it had none, saying why: killed
+// on the timeout or by a signal, or never started.
+function spawnBuild(stdio: "ignore" | "inherit"): number {
   touchBuildLock();
   const build = spawnSync(process.execPath, ["scripts/build.ts"], {
     cwd: ROOT,
-    stdio: "ignore",
+    stdio,
     timeout: BUILD_TIMEOUT_MS,
   });
-  if (build.status === 0) return true;
+  if (build.status !== null) return build.status;
+  if (build.error) console.error(`build: could not run scripts/build.ts: ${build.error.message}`);
+  else
+    console.error(
+      `build: scripts/build.ts stopped by ${build.signal ?? "a signal"} (the timeout is ${BUILD_TIMEOUT_MS / 1000}s)`,
+    );
+  return 1;
+}
+
+function runBuild(): boolean {
+  if (spawnBuild("ignore") === 0) return true;
   console.error("hook-build: build failed");
   return false;
 }
@@ -126,7 +191,7 @@ export interface BuildDeps {
   take: () => boolean;
   release: () => void;
   build: () => boolean;
-  snapshot: () => string | null;
+  snapshot: () => string;
   pause: (ms: number) => void;
   maxWaitMs: number;
 }
@@ -135,14 +200,14 @@ const REAL_DEPS: BuildDeps = {
   take: tryTakeBuildLock,
   release: releaseBuildLock,
   build: runBuild,
-  snapshot: stateSnapshot,
+  snapshot: buildInputs,
   pause: pauseSync,
   maxWaitMs: BUILD_WAIT_MS,
 };
 
 /**
  * With the lock held: builds until stable, drops the lock, then looks at
- * the state file once more. A write that found the lock held skipped its
+ * the build's inputs once more. A write that found the lock held skipped its
  * own build, trusting this one; if it landed after this build's last look,
  * the lock is retaken and built again, so no write is left unbuilt. When
  * another caller has taken the lock by then, that caller builds it.
@@ -150,7 +215,7 @@ const REAL_DEPS: BuildDeps = {
  */
 export function buildThenRelease(d: Pick<BuildDeps, "take" | "release" | "build" | "snapshot">): boolean {
   for (;;) {
-    let result: { ok: boolean; built: string | null };
+    let result: { ok: boolean; built: string };
     try {
       result = buildUntilStable(d.build, d.snapshot);
     } finally {
@@ -162,7 +227,7 @@ export function buildThenRelease(d: Pick<BuildDeps, "take" | "release" | "build"
 }
 
 // The detached side of the coalesce: sleeps so a near-simultaneous write
-// lands first, then builds until the state file stops changing under it,
+// lands first, then builds until its inputs stop changing under it,
 // dropping the lock once it has.
 async function coalesceBuild(): Promise<void> {
   await sleep(COALESCE_MS);
@@ -172,7 +237,7 @@ async function coalesceBuild(): Promise<void> {
 /**
  * Builds now, synchronously, under the same lock scheduleBuild uses:
  * waits a short while for a build in flight rather than racing it, then
- * builds until the state file stops changing under it and drops the lock.
+ * builds until its inputs stop changing under it and drops the lock.
  * "built" and "failed" say how the build went, so the caller can roll its
  * write back on a failure. "busy" means the lock stayed held: the build
  * holding it builds this write before it lets go (buildThenRelease), so
@@ -211,4 +276,83 @@ export function scheduleBuild(tag: string): void {
   }
 }
 
+/** What `npm run build` runs against: the build returns build.ts's exit status. */
+export interface LockedBuildDeps extends Omit<BuildDeps, "build"> {
+  build: () => number;
+}
+
+// One poll past the stale threshold: a lock that is still held by then is
+// a live build's (a holder touches it before every pass), and one left by
+// a crashed build has gone stale and been retaken on the way.
+const LOCKED_WAIT_MS = BUILD_LOCK_STALE_MS + LOCK_POLL_MS;
+
+// Once `npm run build` holds the lock, a Ctrl-C or a kill must not end it
+// before buildThenRelease's `finally` drops the lock: a lock left behind
+// looks live for two minutes, and every tap in that time skips its build,
+// trusting a holder that is gone. With a listener, node no longer dies on
+// the signal mid-build: a Ctrl-C also stops the build child (same process
+// group), so that pass fails, the lock is dropped and the run exits 1; a
+// signal to this process alone lets the pass finish first. The listener
+// exits with the usual status if the event loop gets to it, which a run
+// this short usually does not. Only once the lock is taken, since the wait
+// for it is a synchronous pause no listener could interrupt, and dying
+// there leaves nothing held. A SIGKILL still leaves the lock, to go stale
+// as before.
+function exitOnSignalOnceHeld(): void {
+  for (const [signal, code] of [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+    ["SIGHUP", 129],
+  ] as const) {
+    process.once(signal, () => process.exit(code));
+  }
+}
+
+function takeForLockedBuild(): boolean {
+  if (!tryTakeBuildLock()) return false;
+  exitOnSignalOnceHeld();
+  return true;
+}
+
+const LOCKED_DEPS: LockedBuildDeps = {
+  ...REAL_DEPS,
+  take: takeForLockedBuild,
+  build: () => spawnBuild("inherit"),
+  maxWaitMs: LOCKED_WAIT_MS,
+};
+
+/**
+ * `npm run build`: waits for the build lock however long a live build
+ * could hold it, then builds with build.ts's output shown, until the
+ * inputs stop changing, and drops the lock. Returns build.ts's exit status
+ * from the last pass, so a failure still fails a git hook or the check, or
+ * 1 when the lock never came free.
+ */
+export function lockedBuild(deps: Partial<LockedBuildDeps> = {}): number {
+  const d: LockedBuildDeps = { ...LOCKED_DEPS, ...deps };
+  let said = false;
+  // Says once why it is waiting, so a git hook's `npm run --silent build`
+  // held up by a build in flight never reads as a hang.
+  const take = (): boolean => {
+    if (d.take()) return true;
+    if (!said) console.error("build: waiting for the build in flight (config/hook-build.lock)");
+    said = true;
+    return false;
+  };
+  if (!waitForLock(take, d.maxWaitMs, d.pause, LOCK_POLL_MS)) {
+    console.error("build: the build lock (config/hook-build.lock) stayed held; try again");
+    return 1;
+  }
+  let status = 0;
+  buildThenRelease({
+    ...d,
+    build: () => {
+      status = d.build();
+      return status === 0;
+    },
+  });
+  return status;
+}
+
 if (import.meta.main && process.argv[2] === "--coalesce-build") await coalesceBuild();
+if (import.meta.main && process.argv[2] === "--locked") process.exitCode = lockedBuild();

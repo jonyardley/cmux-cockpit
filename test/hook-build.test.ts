@@ -1,15 +1,16 @@
-// The build lock every state write's rebuild goes through
-// (scripts/hook-build.ts, on scripts/lockfile.ts): waiting for it, retaking
-// a crashed build's, and buildNow, the synchronous locked build pr-poll.ts
-// uses. The lock tests
-// use a temp file and the build ones fakes, so nothing here spawns a build.
+// The build lock every rebuild goes through (scripts/hook-build.ts, on
+// scripts/lockfile.ts): waiting for it, retaking a crashed build's, buildNow,
+// the synchronous locked build pr-poll.ts uses, lockedBuild, what
+// `npm run build` runs, and buildInputs, the snapshot that says whether
+// anything changed mid-build. The lock tests and buildInputs use temp
+// files and the build ones fakes, so nothing here spawns a build.
 
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
-import { BUILD_LOCK_STALE_MS, buildNow, buildThenRelease } from "../scripts/hook-build.ts";
+import { BUILD_LOCK_STALE_MS, buildInputs, buildNow, buildThenRelease, lockedBuild } from "../scripts/hook-build.ts";
 import { tryTakeLock, waitForLock } from "../scripts/lockfile.ts";
 
 describe("tryTakeLock", () => {
@@ -103,7 +104,7 @@ describe("buildNow", () => {
           events.push("build");
           return overrides.build ? overrides.build() : true;
         },
-        snapshot: () => snapshots[Math.min(i++, snapshots.length - 1)] ?? null,
+        snapshot: () => snapshots[Math.min(i++, snapshots.length - 1)] ?? "v0",
         pause: () => events.push("pause"),
         maxWaitMs: 500,
       },
@@ -187,5 +188,196 @@ describe("buildThenRelease", () => {
       snapshot: () => snapshots[i++] ?? "v1",
     });
     assert.deepEqual(events, ["build", "release", "busy"]);
+  });
+});
+
+// A temp checkout with the files a build reads, for buildInputs.
+function tempTree(): string {
+  const root = mkdtempSync(join(tmpdir(), "hook-build-inputs-"));
+  mkdirSync(join(root, "src", "shared"), { recursive: true });
+  mkdirSync(join(root, "config"));
+  mkdirSync(join(root, "scripts"));
+  writeFileSync(join(root, "scripts", "build.ts"), "// build\n");
+  writeFileSync(join(root, "src", "shared", "a.ts"), "export const a = 1;\n");
+  writeFileSync(join(root, "config", "state.json"), "{}");
+  return root;
+}
+
+describe("buildInputs", () => {
+  const roots: string[] = [];
+  after(() => {
+    for (const root of roots) rmSync(root, { recursive: true, force: true });
+  });
+  const tree = (): string => {
+    const root = tempTree();
+    roots.push(root);
+    return root;
+  };
+
+  it("reads the same while nothing changes", () => {
+    const root = tree();
+    assert.equal(buildInputs(root), buildInputs(root));
+  });
+
+  it("changes with the state file", () => {
+    const root = tree();
+    const before = buildInputs(root);
+    writeFileSync(join(root, "config", "state.json"), '{"dismissed":{}}');
+    assert.notEqual(buildInputs(root), before);
+  });
+
+  it("changes when a source file changes, is added or goes", () => {
+    const root = tree();
+    const first = buildInputs(root);
+    writeFileSync(join(root, "src", "shared", "a.ts"), "export const a = 22;\n");
+    const edited = buildInputs(root);
+    assert.notEqual(edited, first);
+    writeFileSync(join(root, "src", "shared", "b.ts"), "export const b = 2;\n");
+    const added = buildInputs(root);
+    assert.notEqual(added, edited);
+    rmSync(join(root, "src", "shared", "b.ts"));
+    assert.notEqual(buildInputs(root), added);
+  });
+
+  it("changes when the project table appears", () => {
+    const root = tree();
+    const before = buildInputs(root);
+    writeFileSync(join(root, "config", "projects.json"), "[]");
+    assert.notEqual(buildInputs(root), before);
+  });
+
+  it("changes with the build script and the committed fallback table", () => {
+    const root = tree();
+    const before = buildInputs(root);
+    writeFileSync(join(root, "scripts", "build.ts"), "// changed\n");
+    const script = buildInputs(root);
+    assert.notEqual(script, before);
+    writeFileSync(join(root, "config", "projects.example.json"), "[]");
+    assert.notEqual(buildInputs(root), script);
+  });
+
+  it("changes when the state file's unreadable copy appears", () => {
+    const root = tree();
+    const before = buildInputs(root);
+    writeFileSync(join(root, "config", "state.json.unreadable.bak"), "{");
+    assert.notEqual(buildInputs(root), before);
+  });
+
+  it("ignores files that are not TypeScript, such as an editor's swap file", () => {
+    const root = tree();
+    const before = buildInputs(root);
+    writeFileSync(join(root, "src", "shared", ".a.ts.swp"), "x");
+    writeFileSync(join(root, "src", ".DS_Store"), "x");
+    assert.equal(buildInputs(root), before);
+  });
+
+  it("still reads, the same each time, with no src or state at all", () => {
+    const root = mkdtempSync(join(tmpdir(), "hook-build-empty-"));
+    roots.push(root);
+    assert.equal(buildInputs(root), buildInputs(root));
+  });
+});
+
+describe("lockedBuild", () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+
+  // Fakes like buildNow's, but the build returns an exit status.
+  function fakes(overrides: { take?: () => boolean; build?: () => number; snapshot?: () => string } = {}) {
+    const events: string[] = [];
+    return {
+      events,
+      deps: {
+        take: () => {
+          const took = overrides.take ? overrides.take() : true;
+          events.push(took ? "take" : "busy");
+          return took;
+        },
+        release: () => events.push("release"),
+        build: () => {
+          events.push("build");
+          return overrides.build ? overrides.build() : 0;
+        },
+        snapshot: overrides.snapshot ?? (() => "v0"),
+        pause: () => events.push("pause"),
+        maxWaitMs: 500,
+      },
+    };
+  }
+
+  it("waits on a held lock, then builds once and drops it", () => {
+    let tries = 0;
+    const { events, deps } = fakes({ take: () => ++tries > 2 });
+    assert.equal(lockedBuild(deps), 0);
+    assert.deepEqual(events, ["busy", "pause", "busy", "pause", "take", "build", "release"]);
+  });
+
+  it("waits as long as a live build could hold the lock by default", () => {
+    // A lock that never frees: count the pauses the default wait allows,
+    // without any real sleeping.
+    let paused = 0;
+    const status = lockedBuild({
+      take: () => false,
+      pause: (ms: number) => {
+        paused += ms;
+      },
+    });
+    assert.equal(status, 1);
+    assert.ok(paused >= BUILD_LOCK_STALE_MS, `waited ${paused}ms`);
+  });
+
+  it("retakes a crashed build's stale lock and builds", () => {
+    const dir = mkdtempSync(join(tmpdir(), "hook-build-locked-"));
+    dirs.push(dir);
+    const lock = join(dir, "hook-build.lock");
+    writeFileSync(lock, "");
+    const old = (Date.now() - BUILD_LOCK_STALE_MS - 1000) / 1000;
+    utimesSync(lock, old, old);
+    const { events, deps } = fakes({ take: () => tryTakeLock(lock, BUILD_LOCK_STALE_MS) });
+    assert.equal(lockedBuild({ ...deps, release: () => rmSync(lock, { force: true }) }), 0);
+    assert.deepEqual(events, ["take", "build"]);
+    assert.equal(existsSync(lock), false);
+  });
+
+  it("builds again when a source change lands mid-build", () => {
+    const root = tempTree();
+    dirs.push(root);
+    let builds = 0;
+    const { events, deps } = fakes({
+      snapshot: () => buildInputs(root),
+      build: () => {
+        // A pull landing during the first pass only.
+        if (++builds === 1) writeFileSync(join(root, "src", "shared", "a.ts"), "export const a = 333;\n");
+        return 0;
+      },
+    });
+    assert.equal(lockedBuild(deps), 0);
+    assert.deepEqual(events, ["take", "build", "build", "release"]);
+  });
+
+  it("passes a failed build's exit status through, still dropping the lock", () => {
+    const { events, deps } = fakes({ build: () => 2 });
+    assert.equal(lockedBuild(deps), 2);
+    assert.deepEqual(events, ["take", "build", "release"]);
+  });
+
+  it("reports the last pass's status when a rebuild fails", () => {
+    let pass = 0;
+    const snapshots = ["v0", "v1"];
+    const { deps } = fakes({
+      build: () => (++pass === 1 ? 0 : 1),
+      snapshot: () => snapshots[Math.min(pass, 1)] ?? "v1",
+    });
+    assert.equal(lockedBuild(deps), 1);
+    assert.equal(pass, 2);
+  });
+
+  it("fails without building when the lock stays held", () => {
+    const { events, deps } = fakes({ take: () => false });
+    assert.equal(lockedBuild({ ...deps, maxWaitMs: 200 }), 1);
+    assert.equal(events.includes("build"), false);
+    assert.equal(events.includes("release"), false);
   });
 });
