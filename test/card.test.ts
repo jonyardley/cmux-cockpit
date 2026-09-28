@@ -10,6 +10,7 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
 const model = await import("../src/cockpit/model.ts");
+const { showsChipsRow } = await import("../src/cockpit/chips.ts");
 const { liveRunCount } = await import("../src/shared/subagents.ts");
 
 beforeEach(() => {
@@ -164,5 +165,37 @@ describe("chipsFor", () => {
       model.chipsFor(w, true).map((c) => c.id),
       ["pr", "br", "port"],
     );
+  });
+});
+
+describe("showsChipsRow (issue #79)", () => {
+  const shows = (w: Workspace | undefined, withBranch: boolean, withPr: boolean) =>
+    showsChipsRow(model.chipsFor(w, withBranch), w, withPr);
+
+  it("has no row with no chips", () => {
+    assert.equal(shows(ws("x"), true, true), false);
+    assert.equal(shows(ws("x"), true, false), false);
+    assert.equal(shows(undefined, true, false), false);
+  });
+
+  it("drops the row on a full card whose only chip is the PR, which has a line of its own", () => {
+    const w = ws("x", { pr: { number: 7, status: "open" } });
+    assert.equal(shows(w, true, true), true);
+    assert.equal(shows(w, true, false), false);
+  });
+
+  it("keeps the row for a branch or ports chip", () => {
+    assert.equal(shows(ws("x", { pr: { number: 7 }, branch: "feat" }), true, false), true);
+    assert.equal(shows(ws("x", { ports: [5173] }), true, false), true);
+  });
+
+  it("leaves the branch out when the card does", () => {
+    assert.equal(shows(ws("x", { branch: "feat" }), false, false), false);
+  });
+
+  it("agrees with hasChipsRow when the PR chip is in the row", () => {
+    for (const w of [ws("a"), ws("b", { pr: { number: 7 } }), ws("c", { branch: "feat" }), ws("d", { ports: [80] })]) {
+      assert.equal(shows(w, true, true), model.hasChipsRow(w, true));
+    }
   });
 });

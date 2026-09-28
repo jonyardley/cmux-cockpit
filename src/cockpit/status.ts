@@ -4,7 +4,7 @@
 import { mostActive } from "../shared/activity.ts";
 import { agentsOf, hasRealAsk } from "../shared/needs.ts";
 import { prChipColors } from "../shared/pr-colors.ts";
-import { type PrSummary, prSummary } from "../shared/prs.ts";
+import type { PrSummary } from "../shared/prs.ts";
 import { liveRunCount } from "../shared/subagents.ts";
 import { cardMessage, clip, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
@@ -98,15 +98,15 @@ export const statusInfo = (w: Workspace | undefined): StatusStyle =>
 /** The unread count a card's badge shows: none while the Ready pill stands in for it. */
 export const badgeCount = (w: Workspace | undefined): number => (isReady(w) ? 0 : (w?.unread ?? 0));
 
-// What a Ready card's second line says about the PR, after "Finished 6m
-// ago": a green PR says so, anything else in the chip's own words, so the
-// two never disagree ("PR #48 · draft · 1 failing").
-const prWords = (pr: PrSummary): string => "PR " + (pr.health === "ready" ? pr.tag + " is green" : pr.text);
-
-/** "· PR #45 is green" on a Ready card with a PR, else "". */
-export function readyPrText(w: Workspace | undefined): string {
-  const pr = isReady(w) ? prSummary(w) : undefined;
-  return pr ? "· " + prWords(pr) : "";
+/**
+ * The PR as text in a compact card's status line ("· #45 · 1 failing"), else
+ * "". Compact cards have no chips, so this is where their PR shows, Ready or
+ * not. The full card says nothing about the PR in its status row: the PR
+ * line under it carries the verdict (issue #79).
+ */
+export function compactPrText(pr: Pick<PrSummary, "text"> | undefined): string {
+  const t = pr?.text;
+  return t ? "· " + t : "";
 }
 
 /**
