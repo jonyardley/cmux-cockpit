@@ -1,7 +1,7 @@
 // Small pieces shared by the cockpit's cards and rows.
 
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
-import { NEUTRAL_CHIP, prChipColors, summaryColors } from "../../shared/pr-colors.ts";
+import { NEUTRAL_CHIP, summaryColors } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
@@ -81,9 +81,6 @@ export function glyph(w: WsAccessor, size: number, radius: number, font: number)
   );
 }
 
-/** A card's unread count (shared/ui.ts); the default is the workspace's own. */
-export const cardUnread = (w: WsAccessor, n: () => number = () => w()?.unread ?? 0): View => unreadBadge(n);
-
 // The green "Ready" pill (issue #53): the agent finished while Jon was
 // elsewhere. It stands in for the unread badge, and clears once he opens
 // the workspace. Behind a when(), so it takes no slot otherwise.
@@ -117,7 +114,7 @@ export function titleRow(w: WsAccessor, size: number): View {
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
     readyPill(w),
-    cardUnread(w, () => badgeCount(w())),
+    unreadBadge(() => badgeCount(w())),
     meta(() => ageOf(w())),
   ]).frame({ maxWidth: "infinity" });
 }
@@ -139,7 +136,8 @@ export function statusLabel(w: WsAccessor, size: number, weight: Weight): View {
 // its health's colours; the branch and ports chips stay neutral.
 function chip(id: ChipId, c: () => Chip): View {
   const isPr = id === "pr";
-  const colors = () => (isPr ? prChipColors(c().health ?? "quiet", c().status, c().draft) : NEUTRAL_CHIP);
+  const colors = () =>
+    isPr ? summaryColors({ health: c().health ?? "quiet", status: c().status, draft: !!c().draft }) : NEUTRAL_CHIP;
   const fg = () => colors().fg;
   const text = id === "br" ? branchText(() => c().text, fg, "medium") : chipText(() => c().text, fg, id === "port");
   const parts: View[] =
@@ -157,7 +155,7 @@ function chip(id: ChipId, c: () => Chip): View {
       when(
         "dirty",
         () => !!c().dirty,
-        () => Circle({ size: 5 }).fill(C.clay),
+        () => Circle({ size: 5 }).fill(C.secondary),
       ),
     );
   return chipFrame(HStack({ spacing: 4 }, parts), colors).onTap(() => {

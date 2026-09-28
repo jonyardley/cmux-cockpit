@@ -9,13 +9,13 @@ export const C = {
   card: "#FFFFFF",
   hairline: "#E2DFD3",
   cardEdge: "#1414131F",
-  amberRowEdge: "#8A5A0B29",
+  amberRowEdge: `${P.amberText}29`,
   // The Ready pill's face: the finished green, faint (issue #53).
-  readyBg: "#788C5D1F",
+  readyBg: `${P.green}1F`,
   segTrack: "#E5E2D6",
   needsBg: "#FBECE4",
   needsEdge: "#F0D2C3",
-  needsRowEdge: "#A34A2A29",
+  needsRowEdge: `${P.clayText}29`,
   hover: "#7f7f7f14",
   // Lanes and selection stay neutral so hue only ever means state: clay is
   // needs you (amber when it is asking), blue working, green finished. Lane

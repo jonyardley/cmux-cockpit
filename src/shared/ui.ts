@@ -128,10 +128,13 @@ export function chip(label: () => string, colors: () => ChipColors, mono = false
   );
 }
 
+/** The badge's figure: the count, or nothing at zero (or a bad count), so no empty pill shows. */
+export const badgeLabel = (n: number): string => (n > 0 ? String(n) : "");
+
 /** The unread count, grey on both sides so clay only ever means needs you; nothing at zero. */
 export function unreadBadge(n: () => number): View {
   const has = () => n() > 0;
-  return Text(() => (has() ? String(n()) : ""))
+  return Text(() => badgeLabel(n()))
     .font(10)
     .bold()
     .color(P.onBadge)

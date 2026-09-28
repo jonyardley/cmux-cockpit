@@ -2,11 +2,17 @@
 // unread badge. Each sidebar's theme.ts spreads these into its own tokens,
 // so a state reads the same on both sides and each hex lives once. Hue only
 // ever means state: clay is your turn, amber asking, blue working, green
-// finished; the unread badge stays grey so clay keeps one meaning.
+// finished; the unread badge stays grey so clay keeps one meaning. A faint
+// variant is its hue plus an alpha pair (`${P.green}1F`), so it follows
+// the hue.
 
-export const P = {
+const ink = {
   text: "#141413",
   secondary: "#5E5D59",
+} as const;
+
+export const P = {
+  ...ink,
   tertiary: "#73726C",
   metaText: "#6B6A64",
   faint: "#8A8880",
@@ -28,7 +34,7 @@ export const P = {
   greenText: "#5E7A40",
   red: "#C0453A",
   /** The unread badge: grey on both sides, so clay only ever means needs you. */
-  badge: "#5E5D59",
+  badge: ink.secondary,
   onBadge: "#FFFFFF",
 } as const;
 

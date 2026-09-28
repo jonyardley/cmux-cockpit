@@ -231,7 +231,7 @@ function statusSince(a: Agent): number | undefined {
 
 /** Short form for agent rows, the card head's words in lower case: "working 12m", "finished 3m". */
 export function statusLine(a: Agent | null, w: Workspace = cur().ws): string {
-  return a ? headStatus(a, w).toLowerCase() : "";
+  return a ? withAge(statusWord(a, w).toLowerCase(), sinceAge(a)) : "";
 }
 
 /** The one age format the card shows: "<1m", "12m", counted from the
@@ -250,10 +250,12 @@ export function rosterAge(e: RosterEntry): string {
 
 /** The card head's status, in the words the cockpit uses: "Working 14m", "Asking 2m", "Finished 3m", "No agent". */
 export function headStatus(a: Agent | null, w: Workspace = cur().ws): string {
-  if (!a) return NO_AGENT_WORD;
-  const word = isAsking(a, w) ? ASKING_WORD : (STATUS_WORD[a.status] ?? a.status);
-  return withAge(word, sinceAge(a));
+  return a ? withAge(statusWord(a, w), sinceAge(a)) : NO_AGENT_WORD;
 }
+
+// The shared word for the agent's status, Asking while it asks.
+const statusWord = (a: Agent, w: Workspace): string =>
+  isAsking(a, w) ? ASKING_WORD : (STATUS_WORD[a.status] ?? a.status);
 
 // The card's details
 

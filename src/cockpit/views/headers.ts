@@ -1,6 +1,6 @@
 // The segmented mode control and the lane and project section headers.
 
-import { laneTitle, projectBadge, ring } from "../../shared/ui.ts";
+import { laneTitle, projectBadge, ring, unreadBadge } from "../../shared/ui.ts";
 import { dropLane } from "../drop.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
@@ -21,7 +21,7 @@ import {
 } from "../model.ts";
 import { isMode, isSelected, projectsMode, quietCollapsed, selectWorkspace } from "../state.ts";
 import { C } from "../theme.ts";
-import { cardUnread, glyphButton, statusDot } from "./parts.ts";
+import { glyphButton, statusDot } from "./parts.ts";
 
 function segButton(label: string, icon: string | null, on: () => boolean, set: () => void): View {
   return ZStack({}, [
@@ -72,11 +72,6 @@ function countPill(count: () => number): View {
     .cornerRadius(10);
 }
 
-// The name (shared/ui.ts's laneTitle) wins the row's width and truncates
-// rather than wrapping; the pill and hint stay on one line too, so no child
-// of the header can wrap.
-const headerName = laneTitle;
-
 const CHEVRON_SLOT = { width: 12, height: 16 } as const;
 
 function chevron(collapsed: () => boolean): View {
@@ -94,7 +89,7 @@ function chevron(collapsed: () => boolean): View {
 // than folding the lane, as the project header's "+" does.
 function anchorStatus(anchorId: string): View {
   const w = () => wsById(anchorId);
-  return HStack({ spacing: 5 }, [statusDot(w, 7), cardUnread(w)])
+  return HStack({ spacing: 5 }, [statusDot(w, 7), unreadBadge(() => w()?.unread ?? 0)])
     .paddingHorizontal(4)
     .frame({ height: 16 })
     .cornerRadius(6)
@@ -132,7 +127,7 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
   const row = HStack({ spacing: 8 }, [
     chevron(() => isCollapsed(lane)),
     laneMarker(lane.color),
-    headerName(lane.name, laneKey === "parked" ? C.faint : C.heading),
+    laneTitle(lane.name, laneKey === "parked" ? C.faint : C.heading),
     ...(anchorId ? [anchorStatus(anchorId)] : []),
     countPill(() => laneCount(laneKey)),
     Spacer({ minLength: 4 }),
@@ -164,7 +159,7 @@ export function dropZone(laneKey: LaneKey): View {
   const row = HStack({ spacing: 8 }, [
     Spacer({ minLength: 0 }).frame(CHEVRON_SLOT),
     laneMarker(lane.color).opacity(EMPTY_FADE),
-    headerName(lane.name, C.faint, "medium"),
+    laneTitle(lane.name, C.faint, "medium"),
     countPill(() => 0).opacity(EMPTY_FADE),
     Spacer({ minLength: 4 }),
     dropHint(target),
@@ -193,7 +188,7 @@ const badge = (k: string, size: number, font: number): View => {
 export function quietHeader(): View {
   const row = HStack({ spacing: 8 }, [
     chevron(quietCollapsed),
-    headerName("Quiet", C.faint, "medium"),
+    laneTitle("Quiet", C.faint, "medium"),
     countPill(() => quietProjects().length),
     Spacer({ minLength: 0 }),
   ])
@@ -213,7 +208,7 @@ export function quietRow(k: string): View {
   const open = canOpenProject(k);
   const row = HStack({ spacing: 8 }, [
     badge(k, 16, 9),
-    headerName(projectByKey(k).name, C.secondary, "regular"),
+    laneTitle(projectByKey(k).name, C.secondary, "regular"),
     Spacer({ minLength: 4 }),
     ...(open ? [Image("plus").font(10).weight("semibold").color(C.faint)] : []),
   ])
@@ -231,7 +226,7 @@ export function projectHeader(k: string): View {
   const row = HStack({ spacing: 8 }, [
     chevron(() => isProjectCollapsed(k)),
     badge(k, 18, 10),
-    headerName(p.name, C.heading),
+    laneTitle(p.name, C.heading),
     countPill(() => projectCount(k)),
     Spacer({ minLength: 4 }),
     ...(canOpenProject(k) ? [glyphButton("plus", 20, 11, C.secondary, () => openProjectWorkspace(k))] : []),

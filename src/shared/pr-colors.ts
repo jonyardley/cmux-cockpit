@@ -42,6 +42,6 @@ export function prChipColors(health: PrHealth, status: PrStatus | undefined, dra
   return status === "merged" ? MERGED_CHIP : NEUTRAL_CHIP;
 }
 
-/** The colours for a PR as a view shows it (shared/prs.ts); neutral without one. */
-export const summaryColors = (pr: PrSummary | undefined): ChipColors =>
+/** The colours for a PR as a view shows it (shared/prs.ts, or a chip carrying its fields); neutral without one. */
+export const summaryColors = (pr: Pick<PrSummary, "health" | "status" | "draft"> | undefined): ChipColors =>
   prChipColors(pr?.health ?? "quiet", pr?.status, pr?.draft);

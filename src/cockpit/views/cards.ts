@@ -3,7 +3,7 @@
 
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
-import { meta, ring, when } from "../../shared/ui.ts";
+import { meta, ring, unreadBadge, when } from "../../shared/ui.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import { hasChipsRow } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
@@ -12,7 +12,6 @@ import { C } from "../theme.ts";
 import {
   cardChrome,
   cardMenu,
-  cardUnread,
   chipsRow,
   glyph,
   prLine,
@@ -151,7 +150,7 @@ function denseRow(w: WsAccessor, key: string): View {
           .truncation("tail"),
     ),
     Spacer({ minLength: 4 }),
-    cardUnread(w),
+    unreadBadge(() => w()?.unread ?? 0),
     when(
       "row-pr",
       () => !!pr(),

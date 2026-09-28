@@ -239,7 +239,12 @@ function currentTitle(): View {
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
-    unreadBadge(() => w().unread ?? 0),
+    // Behind a when(), so with nothing unread the title keeps the row's full width.
+    when(
+      "cur-unread",
+      () => (w().unread ?? 0) > 0,
+      () => unreadBadge(() => w().unread ?? 0),
+    ),
   ]).frame({ maxWidth: "infinity" });
 }
 
