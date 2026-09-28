@@ -135,7 +135,7 @@ export function realEnv(): Env {
   return {
     home: homedir(),
     repo: join(import.meta.dirname, "..", ".."),
-    claudeConfigDir: process.env["CLAUDE_CONFIG_DIR"],
+    claudeConfigDir: process.env.CLAUDE_CONFIG_DIR,
     run: realRun,
     print: (line) => console.log(line),
     ask: askTerminal,
