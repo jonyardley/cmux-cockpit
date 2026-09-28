@@ -127,7 +127,11 @@ export function createRenderer(): Renderer {
       fn();
       return fn;
     },
+    // cmux builds the root as soon as it is registered, before the rest of
+    // the script has run, so a view helper declared further down fails
+    // here too, as it does in the app.
     sidebar: (root: () => unknown) => {
+      root();
       r.roots.push(root);
     },
     cmux: (method: string, params: Record<string, unknown>) => {

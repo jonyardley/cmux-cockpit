@@ -40,8 +40,11 @@ sidebar(() =>
   ]).paddingBottom(12),
 );
 
-// The unreadable-state line, gone entirely while the state read fine.
-const stateLine = (): View => faintLine("state-notice", stateNotice, C.clayText, 14).paddingVertical(6);
+// The unreadable-state line, gone entirely while the state read fine. A
+// declaration, not a const: cmux builds the root above before this line runs.
+function stateLine(): View {
+  return faintLine("state-notice", stateNotice, C.clayText, 14).paddingVertical(6);
+}
 
 // Top-aligned, so a zero-height panel's rows overflow downward, unseen.
 function panel(m: ViewMode, content: View): View {
