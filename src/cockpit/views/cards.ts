@@ -5,9 +5,18 @@ import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { meta, ring, unreadBadge, when } from "../../shared/ui.ts";
 import type { Lane } from "../lanes.ts";
-import { cardDensity, hasChipsRow } from "../model.ts";
+import { cardDensity, hasChipsRow, showsLeftOff } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
-import { ageOf, cardDetail, compactPrText, detailColor, helperText, progressFraction, prTextColor } from "../status.ts";
+import {
+  ageOf,
+  cardDetail,
+  compactPrText,
+  detailColor,
+  helperText,
+  leftOffText,
+  progressFraction,
+  prTextColor,
+} from "../status.ts";
 import { C } from "../theme.ts";
 import {
   cardChrome,
@@ -68,6 +77,26 @@ function detailLine(w: WsAccessor, key: string, lines: number, indent = 0): View
   );
 }
 
+// Your last prompt, above the agent's latest message, on cards in lanes
+// you come back to after a while (model.ts's showsLeftOff). Tertiary ink,
+// so the agent's words stay the stronger line, and faint on the selected
+// card, as its message is, since the agents panel shows both in full.
+function leftOffLine(w: WsAccessor, key: string, indent = 0): View {
+  const text = computed(() => (showsLeftOff(w()) ? leftOffText(w()) : ""));
+  return when(
+    key,
+    () => !!text(),
+    () =>
+      Text(text)
+        .font(12)
+        .color(() => (isSelected(w()) ? C.faint : C.tertiary))
+        .lineLimit(1)
+        .truncation("tail")
+        .paddingLeading(indent)
+        .frame({ maxWidth: "infinity", alignment: "leading" }),
+  );
+}
+
 function fullCard(w: WsAccessor, key: string): View {
   const body = HStack({ spacing: 10, alignment: "top" }, [
     glyph(w, 26, 8, 12),
@@ -118,6 +147,7 @@ export function compactCard(w: WsAccessor, key: string): View {
         ),
         // Left-aligned by the frame, not a Spacer, as on the full card.
       ]).frame({ maxWidth: "infinity", alignment: "leading" }),
+      leftOffLine(w, "compact-left-off"),
       detailLine(w, "compact-detail", 1),
       // Compact cards have no chips row, so a Ready one in Background takes
       // the action on a line of its own.
@@ -177,6 +207,7 @@ function denseRow(w: WsAccessor, key: string): View {
   const body = VStack({ alignment: "leading", spacing: 2 }, [
     head,
     // Under the title: past the 7pt dot and the 6pt gap after it.
+    leftOffLine(w, "row-left-off", 13),
     detailLine(w, "row-detail", 1, 13),
   ])
     .paddingLeading(25)

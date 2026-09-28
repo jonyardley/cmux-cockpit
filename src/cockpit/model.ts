@@ -418,6 +418,12 @@ const laneEntries = computed(() =>
 // (panelOpacity). drop.ts ignores a drag or move outside All instead.
 export const flatEntries: () => LaneEntry[] = laneEntries;
 
+// Lanes you come back to after a while, where a card also says what you last asked.
+const LEFT_OFF_LANES: ReadonlySet<LaneKey> = new Set<LaneKey>(["bg", "parked"]);
+
+/** Whether the card shows your last prompt: in Background and Parked, by cmux's own data as cardDensity is. */
+export const showsLeftOff = (w: Workspace | undefined): boolean => LEFT_OFF_LANES.has(actualLaneOf(w));
+
 export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => laneOf(w) === laneKey).length;
 
 /**

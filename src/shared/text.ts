@@ -77,6 +77,22 @@ export function isHarnessTurn(raw: string | undefined, t: string = readable(raw)
   return HARNESS_FRAMES.some((f) => t.startsWith(f));
 }
 
+// The last prompt Jon typed in each workspace, so a harness turn (a
+// subagent's hand-back or finished notice, local command output, issue #103)
+// keeps it on screen. Written during render with no bump(): what shows is
+// the value just read, and a sidebar reload only forgets it, so the line
+// hides until he next types.
+const lastPrompt = new Map<string, string>();
+
+/** The last prompt Jon typed, readable, kept through a harness turn; "" when there is none. */
+export function promptText(w: Workspace | undefined): string {
+  if (!w) return "";
+  const t = readable(w.latestPrompt);
+  if (isHarnessTurn(w.latestPrompt, t)) return lastPrompt.get(w.id) ?? "";
+  if (t) lastPrompt.set(w.id, t);
+  return t;
+}
+
 /** A card's message line: latestMessage, unless it only echoes the prompt. */
 export function cardMessage(w: Workspace | undefined): string {
   const msg = readable(w?.latestMessage);
