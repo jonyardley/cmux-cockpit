@@ -7,7 +7,7 @@
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
 import { P } from "../shared/palette.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
-import { prChipColors } from "../shared/pr-colors.ts";
+import { READY_INK } from "../shared/pr-colors.ts";
 import {
   inAppSpec,
   isInAppKey,
@@ -442,7 +442,7 @@ export function mergeReadyText(laneKey: LaneKey): string {
 
 // The ready PR chip's own green (pr-colors.ts), so the count reads as the
 // PR verdict, not the agent's Ready pill.
-const MERGE_READY_INK = prChipColors("ready", "open").fg;
+const MERGE_READY_INK = READY_INK;
 
 /** The words at a lane header's trailing edge, and their ink. */
 export interface HeaderHint {

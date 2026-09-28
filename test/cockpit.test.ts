@@ -816,7 +816,7 @@ describe("prTextColor", () => {
   it("takes the health's chip colour otherwise, running in blue", () => {
     assert.equal(status.prTextColor(pr("failing"), "#111111"), "#9E2F27");
     assert.equal(status.prTextColor(pr("running"), "#111111"), "#2F5690");
-    assert.equal(status.prTextColor(pr("ready"), "#111111"), "#2F4A1C");
+    assert.equal(status.prTextColor(pr("ready"), "#111111"), "#1A7F37");
   });
 });
 
