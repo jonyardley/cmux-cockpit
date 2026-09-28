@@ -30,7 +30,10 @@ Tested on cmux 0.64.25.
 - `src/cockpit/`: the left sidebar. All and Projects views, a "Needs you"
   strip (with dismiss), and workspace cards in lanes or grouped by
   project. Lanes are cmux workspace groups named "Main activity",
-  "For review", "Background" and "Parked"; everything else is Unsorted. An
+  "For review", "Background" and "Parked"; everything else is Unsorted. Once
+  a worktree's PR merges, a strip at the foot says "N merged, ready to
+  tidy"; its Tidy button opens a workspace in the main checkout with the
+  close-out typed on the prompt, not run. An
   agent stopped on a permission or a question shows amber, "Asking", with
   the reason; one that finished its turn shows clay, "Your turn" (the
   first needs the notification hook in the
