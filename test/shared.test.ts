@@ -280,12 +280,14 @@ describe("prChipColors", () => {
     assert.equal(prChipColors("ready", "open").fg, "#2F4A1C");
   });
 
-  it("is green only when genuinely ready: a plain open PR stays neutral (issue #82)", () => {
+  it("gives a plain open PR its own green outline, apart from ready and closed (issue #82)", () => {
     const ready = prChipColors("ready", "open");
-    assert.notDeepEqual(prChipColors("quiet", "open"), ready);
-    assert.deepEqual(prChipColors("quiet", "open"), prChipColors("quiet", "closed"));
-    assert.deepEqual(prChipColors("quiet", "open"), NEUTRAL_CHIP);
-    // Only a ready health turns a chip green, whatever else the PR says.
+    const open = prChipColors("quiet", "open");
+    assert.equal(open.fg, "#1A7F37");
+    assert.notDeepEqual(open, ready);
+    assert.notDeepEqual(open, NEUTRAL_CHIP);
+    assert.deepEqual(prChipColors("quiet", "closed"), NEUTRAL_CHIP);
+    // Only a ready health takes the filled green, whatever else the PR says.
     for (const h of ["failing", "conflicts", "running", "quiet"] as const)
       for (const st of ["open", "merged", "closed", undefined] as const)
         assert.notDeepEqual(prChipColors(h, st), ready, h + " " + String(st));
