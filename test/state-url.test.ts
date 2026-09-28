@@ -134,6 +134,13 @@ describe("writePollMaps and the poll status", () => {
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).poll, { okEpoch: 400 });
   });
 
+  it("removes the saved status when given null", () => {
+    const path = join(dir, "removes.json");
+    writePollMaps(path, {}, {}, keep, { okEpoch: 100 });
+    assert.deepEqual(writePollMaps(path, {}, {}, keep, null), { ok: true, changed: true });
+    assert.equal(JSON.parse(readFileSync(path, "utf8")).poll, undefined);
+  });
+
   it("is no change when the status is the same", () => {
     const path = join(dir, "same.json");
     writePollMaps(path, {}, {}, keep, { okEpoch: 100 });

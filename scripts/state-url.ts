@@ -112,18 +112,19 @@ export function writePrs(path: string, prs: State["prs"]): ApplyResult {
  * One poll's whole write (scripts/pr-poll.ts) in a single locked pass:
  * replaces the `prs` and `ownPrs` maps, keys sorted as writePrs does, and
  * folds `subagents` over the `subagents` map, so the file is never left
- * half updated. `poll` (#78), when given, replaces the saved poll status in
- * the same pass; without it the saved one is kept as it was.
+ * half updated. `poll` (#78) is the saved poll status in the same pass:
+ * replaced when given, removed when null, kept as it was when left out.
  */
 export function writePollMaps(
   path: string,
   prs: State["prs"],
   ownPrs: State["ownPrs"],
   subagents: (runs: State["subagents"]) => State["subagents"],
-  poll?: SavedPoll,
+  poll?: SavedPoll | null,
 ): ApplyResult {
   return readUpdateWrite(path, (before) => {
-    const next = { ...before, prs: sortedByKey(prs), ownPrs: sortedByKey(ownPrs), ...(poll ? { poll } : {}) };
+    const next: State = { ...before, prs: sortedByKey(prs), ownPrs: sortedByKey(ownPrs), ...(poll ? { poll } : {}) };
+    if (poll === null) delete next.poll;
     return { ok: true, state: validateState({ ...next, subagents: sortedByKey(subagents(before.subagents)) }) };
   });
 }

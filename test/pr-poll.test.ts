@@ -14,6 +14,7 @@ import {
   delayFrom,
   findOwnPrs,
   findPrs,
+  type GhTally,
   ghOutcome,
   type Lookups,
   lockWithin,
@@ -23,6 +24,7 @@ import {
   parseWindowIds,
   parseWorkspaces,
   pickPr,
+  tallyOutcome,
   writePollState,
 } from "../scripts/pr-poll.ts";
 import { applySet, emptyState, type SavedOwnPr, type SavedPr, validateState } from "../scripts/state-config.ts";
@@ -583,6 +585,11 @@ describe("ghOutcome", () => {
     );
   });
 
+  it("is skip when gh cannot pick the repo or the host does not know it", () => {
+    assert.equal(ghOutcome(r(1, "No default remote repository has been set. Run gh repo set-default")), "skip");
+    assert.equal(ghOutcome(r(1, "HTTP 404: Not Found")), "skip");
+  });
+
   it("is unavailable for anything else, a timeout included", () => {
     assert.equal(ghOutcome(r(1, "error connecting to api.github.com")), "unavailable");
     assert.equal(ghOutcome(r(null)), "unavailable");
@@ -591,39 +598,77 @@ describe("ghOutcome", () => {
 
 describe("nextPoll", () => {
   it("stamps the first success", () => {
-    assert.deepEqual(nextPoll(undefined, { answered: 2 }, 1000), { okEpoch: 1000 });
+    assert.deepEqual(nextPoll(undefined, { answered: 2, skipped: 0 }, 1000), { okEpoch: 1000 });
   });
 
   it("keeps a success under five minutes old, so a quiet run is no write", () => {
-    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1 }, 1000 + 299), { okEpoch: 1000 });
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1, skipped: 0 }, 1000 + 299), { okEpoch: 1000 });
   });
 
   it("refreshes a success once it is five minutes old", () => {
-    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1 }, 1000 + 300), { okEpoch: 1300 });
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1, skipped: 0 }, 1000 + 300), { okEpoch: 1300 });
   });
 
   it("records why when every gh call failed, keeping the last success", () => {
-    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 0, error: "signed-out" }, 9000), {
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 0, skipped: 0, error: "signed-out" }, 9000), {
       okEpoch: 1000,
       error: "signed-out",
     });
   });
 
   it("records an error with no last success to keep", () => {
-    assert.deepEqual(nextPoll(undefined, { answered: 0, error: "missing" }, 9000), { error: "missing" });
+    assert.deepEqual(nextPoll(undefined, { answered: 0, skipped: 0, error: "missing" }, 9000), { error: "missing" });
   });
 
   it("clears the error and stamps once a call answers again", () => {
-    assert.deepEqual(nextPoll({ okEpoch: 1000, error: "unavailable" }, { answered: 1 }, 1100), { okEpoch: 1000 });
-    assert.deepEqual(nextPoll({ okEpoch: 1000, error: "unavailable" }, { answered: 1 }, 9000), { okEpoch: 9000 });
+    assert.deepEqual(nextPoll({ okEpoch: 1000, error: "unavailable" }, { answered: 1, skipped: 0 }, 1100), {
+      okEpoch: 1000,
+    });
+    assert.deepEqual(nextPoll({ okEpoch: 1000, error: "unavailable" }, { answered: 1, skipped: 0 }, 9000), {
+      okEpoch: 9000,
+    });
   });
 
   it("is a success when some calls answered and others failed", () => {
-    assert.deepEqual(nextPoll(undefined, { answered: 1, error: "unavailable" }, 1000), { okEpoch: 1000 });
+    assert.deepEqual(nextPoll(undefined, { answered: 1, skipped: 0, error: "unavailable" }, 1000), { okEpoch: 1000 });
+  });
+
+  it("keeps the saved status when lookups were skipped and nothing answered", () => {
+    assert.equal(nextPoll({ okEpoch: 1000 }, { answered: 0, skipped: 3 }, 9000), undefined);
+  });
+
+  it("is a success when some lookups were skipped but a call answered", () => {
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1, skipped: 3 }, 9000), { okEpoch: 9000 });
   });
 
   it("is a success when the run needed no gh call at all", () => {
-    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 0 }, 9000), { okEpoch: 9000 });
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 0, skipped: 0 }, 9000), { okEpoch: 9000 });
+  });
+});
+
+describe("tallyOutcome", () => {
+  it("counts answers and ignores skips", () => {
+    const t: GhTally = { answered: 0, skipped: 0 };
+    tallyOutcome(t, "ok");
+    tallyOutcome(t, "skip");
+    tallyOutcome(t, "ok");
+    assert.deepEqual(t, { answered: 2, skipped: 0 });
+  });
+
+  it("keeps the worst error whatever order the calls came in", () => {
+    for (const order of [
+      ["unavailable", "signed-out", "missing"],
+      ["missing", "unavailable", "signed-out"],
+      ["signed-out", "missing", "unavailable"],
+    ] as const) {
+      const t: GhTally = { answered: 0, skipped: 0 };
+      for (const e of order) tallyOutcome(t, e);
+      assert.equal(t.error, "missing");
+    }
+    const t: GhTally = { answered: 0, skipped: 0 };
+    tallyOutcome(t, "signed-out");
+    tallyOutcome(t, "unavailable");
+    assert.equal(t.error, "signed-out");
   });
 });
 

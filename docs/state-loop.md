@@ -189,8 +189,12 @@ PR maps. A run where gh calls failed and none answered keeps the last
 `okEpoch` and records why: `missing` when gh is not installed,
 `signed-out` when gh asks for `gh auth login`, else `unavailable`. A
 directory that is not a GitHub repo says nothing about gh either way.
-Any other run is a success, including one that needed no gh call. If the
-rebuild after a write fails, the old status goes back with the old maps.
+A run where nothing answered because lookups were skipped (past the
+deadline, or git could not say) refreshed nothing, so it keeps the saved
+status. Any other run is a success, including one that needed no gh call.
+With several failures the worst is kept (`missing`, then `signed-out`,
+then `unavailable`), so workspace order never flips it. If the rebuild
+after a write fails, the old status (or none) goes back with the old maps.
 
 ## Cost of a save
 
@@ -199,6 +203,9 @@ held only for the session goes with it: a card just dragged to a lane can
 snap back until cmux reports the move, and the agents panel reloads for a
 change it does not use. Saves are rare (a dismissal, a project move, a PR
 opened or merged), so this is accepted until cmux's own store lands (#20).
+The one routine save is the poller refreshing `okEpoch` (#78): at most
+once every 5 minutes, and only while polls run, so while agents are
+working or workspaces are being switched.
 
 ## Trust
 
