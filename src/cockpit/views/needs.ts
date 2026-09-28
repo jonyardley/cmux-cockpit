@@ -61,25 +61,25 @@ export function nextButton(): View {
       .color(C.clayText)
       .lineLimit(1)
       .truncation("middle")
+      // Filling the width here, as the strip rows' title stack does, is what
+      // carries the white face edge to edge and pushes the count right
+      // (issue #89); a frame on the HStack left the face hugging the text.
+      .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
-    Text(() => {
+    // In a card age's face and colour, so the two read as one kind of text.
+    meta(() => {
       const s = step();
       return s ? s.position + " of " + s.total : "";
-    })
-      .font(10)
-      .monospaced()
-      .color(C.faint)
-      .lineLimit(1),
+    }, C.metaText),
   ])
     .paddingHorizontal(8)
     .paddingVertical(5)
-    .frame({ maxWidth: "infinity" })
     .hoverBackground(C.needsHover);
   return when(
     "next",
     () => step() !== null,
     () =>
-      VStack({ spacing: 0 }, [ring(row, C.card, C.needsEdge, 1, 7).onTap(jumpNext)])
+      VStack({ spacing: 0 }, [ring(row, C.card, C.needsEdge, 1, 7).frame({ maxWidth: "infinity" }).onTap(jumpNext)])
         .paddingHorizontal(10)
         .paddingTop(6),
   );
