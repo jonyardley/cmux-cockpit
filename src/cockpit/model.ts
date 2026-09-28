@@ -418,6 +418,15 @@ export const flatEntries: () => LaneEntry[] = laneEntries;
 
 export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => laneOf(w) === laneKey).length;
 
+/**
+ * A lane header's merge line: "2 ready to merge" when that many of its
+ * cards hold a PR GitHub would merge now (prs.ts's ready health), else "".
+ */
+export function mergeReadyText(laneKey: LaneKey): string {
+  const n = cardWorkspaces().filter((w) => laneOf(w) === laneKey && prSummary(w)?.health === "ready").length;
+  return n ? n + " ready to merge" : "";
+}
+
 // --- Projects mode ---------------------------------------------------------------------
 // PROJECTS order, then Other; empty projects are skipped. Grouped by project,
 // not by match, so a project with several paths is one group. Collapse is

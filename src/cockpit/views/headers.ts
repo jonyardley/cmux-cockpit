@@ -9,6 +9,7 @@ import {
   isCollapsed,
   isProjectCollapsed,
   laneCount,
+  mergeReadyText,
   openProjectWorkspace,
   projectByKey,
   projectCount,
@@ -114,6 +115,15 @@ function dropHint(target: () => boolean): View {
     .lineLimit(1);
 }
 
+// How many of the lane's PRs are ready to merge, in the finished green; it
+// gives way to the drop hint while a drag is over the lane.
+function mergeReady(laneKey: LaneKey, target: () => boolean): View {
+  return Text(() => (target() ? "" : mergeReadyText(laneKey)))
+    .font(11)
+    .color(C.greenText)
+    .lineLimit(1);
+}
+
 // A header sits SECTION_GAP below the section above. The gap goes on a wrapper outside the hover and drop
 // shading, so the grey hugs the row; the tap stays on the wrapper, as on
 // cards, so the gap still folds the header.
@@ -139,6 +149,7 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
     ...(anchorId ? [anchorStatus(anchorId)] : []),
     countPill(() => laneCount(laneKey)),
     Spacer({ minLength: 4 }),
+    mergeReady(laneKey, target),
     dropHint(target),
   ])
     .paddingHorizontal(8)
@@ -170,6 +181,7 @@ export function dropZone(laneKey: LaneKey): View {
     laneTitle(lane.name, C.faint, "medium"),
     countPill(() => 0).opacity(EMPTY_FADE),
     Spacer({ minLength: 4 }),
+    mergeReady(laneKey, target),
     dropHint(target),
   ])
     .paddingHorizontal(8 - ZONE_EDGE)
