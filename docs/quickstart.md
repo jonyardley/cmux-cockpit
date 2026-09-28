@@ -89,7 +89,9 @@ panel in the right sidebar (it wraps `cmux right-sidebar set custom
 agents`).
 
 You should now see your workspaces as cards on the left, and the selected
-workspace's agents on the right.
+workspace's agents on the right:
+
+![The cockpit on the left and the agents panel on the right](images/sidebars.png)
 
 ## What you are looking at
 

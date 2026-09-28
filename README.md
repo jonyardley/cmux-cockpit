@@ -7,6 +7,8 @@ agent that is asking a question apart from one that has finished its turn.
 The agents panel, on the right, details the selected workspace, your open
 pull requests and the pages your agents published.
 
+![The cockpit on the left, with one workspace in the Main activity lane, and the agents panel on the right, showing that workspace's helper, pull request and checks](docs/images/sidebars.png)
+
 **To install, follow the [quickstart](docs/quickstart.md)** (about 15
 minutes).
 
