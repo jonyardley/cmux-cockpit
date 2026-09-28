@@ -166,7 +166,7 @@ export function dropZone(laneKey: LaneKey): View {
     Spacer({ minLength: 0 }).frame(CHEVRON_SLOT),
     laneMarker(lane.color).opacity(EMPTY_FADE),
     headerName(lane.name, C.faint, "medium"),
-    countPill(() => laneCount(laneKey)).opacity(EMPTY_FADE),
+    countPill(() => 0).opacity(EMPTY_FADE),
     Spacer({ minLength: 4 }),
     dropHint(target),
   ])

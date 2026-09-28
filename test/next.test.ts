@@ -111,6 +111,39 @@ describe("the Next queue", () => {
     assert.deepEqual(step(), ["needs-old", 1, 3]);
   });
 
+  it("goes to the one after an opened Ready workspace even when one ahead leaves", () => {
+    press();
+    press();
+    press(); // ready-old, now off the queue; ready-new followed it
+    byId("needs-old").agents = [agent("working")];
+    assert.deepEqual(queue(), ["needs-new", "ready-new"]);
+    assert.deepEqual(step(), ["ready-new", 2, 2]);
+  });
+
+  it("forgets the last jump once Jon leaves it, so coming back later starts at the top", () => {
+    press();
+    press();
+    press(); // ready-old
+    r.data.selectedId = "busy";
+    for (const w of r.data.workspaces) w.selected = w.id === "busy";
+    assert.deepEqual(step(), ["needs-old", 1, 3]);
+    r.data.selectedId = "ready-old";
+    for (const w of r.data.workspaces) w.selected = w.id === "ready-old";
+    assert.deepEqual(step(), ["needs-old", 1, 3]);
+  });
+
+  it("dates a Ready workspace by its finished agent, not a fresh idle session beside it", () => {
+    byId("ready-old").agents = [...finished(600), agent("idle", { sinceEpoch: now() - 5 })];
+    assert.deepEqual(queue(), ["needs-old", "needs-new", "ready-old", "ready-new"]);
+  });
+
+  it("hides when the only one waiting is the one Jon is on", () => {
+    setup([ws("n", { group: "g-main", agents: asking(60) }), ws("busy", { group: "g-main", agents: working() })]);
+    assert.deepEqual(step(), ["n", 1, 1]);
+    press();
+    assert.equal(model.nextStep(), null);
+  });
+
   it("is hidden when nothing needs Jon or is Ready", () => {
     setup([ws("idle", { group: "g-main" }), ws("busy", { group: "g-main", agents: working() })]);
     assert.equal(model.nextStep(), null);
@@ -170,11 +203,11 @@ describe("cards sorted by state inside a lane", () => {
 
   // Rows: h:main, n1, r1, w1, i1, i2, i3, h:unsorted. Dragging i3 leaves
   // h:main, n1, r1, w1, i1, i2, h:unsorted.
-  it("anchors a drop below the last card of its state to that card, not the next one", () => {
+  it("anchors a drop before the nearest card below in the same state", () => {
     // Slot 4 sits between w1 (working) and i1 (idle): i3 is idle, so it goes before i1.
-    assert.deepEqual(drop.resolveDrop("i3@main", 4), { laneKey: "main", nextRef: "i1", prevRef: "w1" });
+    assert.deepEqual(drop.resolveDrop("i3@main", 4), { laneKey: "main", nextRef: "i1", prevRef: null });
     // Dragging i1 up leaves h:main, n1, r1, w1, i2, i3; slot 5 is between i2 and i3.
-    assert.deepEqual(drop.resolveDrop("i1@main", 5), { laneKey: "main", nextRef: "i3", prevRef: "i2" });
+    assert.deepEqual(drop.resolveDrop("i1@main", 5), { laneKey: "main", nextRef: "i3", prevRef: null });
   });
 
   it("files a drop after its peer above when the card below is in another state", () => {
@@ -193,8 +226,31 @@ describe("cards sorted by state inside a lane", () => {
     assert.deepEqual(lane(), ["n1", "r1", "w1", "i1", "i3", "i2"]);
   });
 
-  it("keeps the old rule for a card with no neighbours in its state", () => {
-    // i1 dropped at the very top, under h:main: before n1, then sorted into the idle run.
-    assert.deepEqual(drop.resolveDrop("i1@main", 1), { laneKey: "main", nextRef: "n1", prevRef: null });
+  it("lands a card let go inside another state's run first among its peers below", () => {
+    // i1 dropped at the very top, under h:main: before i2, the first idle card below.
+    assert.deepEqual(drop.resolveDrop("i1@main", 1), { laneKey: "main", nextRef: "i2", prevRef: null });
+    drop.handleMove("i1@main", 1);
+    assert.deepEqual(lane(), ["n1", "r1", "w1", "i1", "i2", "i3"]);
+    // i3 to the top: now first of the idle cards.
+    drop.handleMove("i3@main", 1);
+    assert.deepEqual(lane(), ["n1", "r1", "w1", "i3", "i1", "i2"]);
+  });
+
+  it("lands a card let go below every peer last among them", () => {
+    // i1 to the bottom of the lane, under i3.
+    drop.handleMove("i1@main", 6);
+    assert.deepEqual(lane(), ["n1", "r1", "w1", "i2", "i3", "i1"]);
+  });
+
+  it("keeps a card it has just opened in place while it is selected", () => {
+    r.data.selectedId = "r1";
+    byId("r1").selected = true;
+    byId("r1").unread = 0;
+    assert.deepEqual(lane(), ["n1", "r1", "w1", "i1", "i2", "i3"]);
+    // Once Jon moves on, it settles among the idle cards.
+    r.data.selectedId = "i1";
+    byId("r1").selected = false;
+    byId("i1").selected = true;
+    assert.deepEqual(lane(), ["n1", "w1", "i1", "i2", "r1", "i3"]);
   });
 });
