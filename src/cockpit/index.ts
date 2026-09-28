@@ -11,6 +11,8 @@
 //      review, Background, Parked, then Unsorted (anything not in a lane).
 //      Cards sort by state inside a lane. An empty lane is a faint header
 //      with a "0" count, still a drop target.
+//   5. Only when a worktree's PR has merged: "N merged, ready to tidy",
+//      pinned to the foot, with a Tidy tap that types the close-out.
 //
 // The lanes are ONE flat Reorderable of fixed headers plus card rows, so a
 // card can be dragged between lanes in one gesture (see drop.ts).
@@ -27,6 +29,7 @@ import { C } from "./theme.ts";
 import { cardFor, projectRow } from "./views/cards.ts";
 import { dropZone, laneHeader, projectHeader, quietHeader, quietRow, segmented } from "./views/headers.ts";
 import { needsStrip, nextButton } from "./views/needs.ts";
+import { tidyStrip } from "./views/tidy.ts";
 
 // The unreadable-state line, gone entirely while the state read fine.
 function stateLine(): View {
@@ -84,5 +87,6 @@ sidebar(() =>
     panel("all", lanesPanel()),
     panel("projects", projectsPanel()),
     Spacer(),
+    tidyStrip(),
   ]).paddingBottom(12),
 );
