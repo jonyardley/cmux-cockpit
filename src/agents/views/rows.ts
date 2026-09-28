@@ -1,4 +1,5 @@
 // Rows for the Working, Idle, Pull requests and Made here panels.
+// A capped list ends in a quiet "+N more" row (issue #80).
 
 import type { Last } from "../../shared/list.ts";
 import { prChipColors } from "../../shared/pr-colors.ts";
@@ -14,12 +15,13 @@ import {
   type PrEntry,
   prChipHealth,
   prChipText,
+  prDim,
   type RosterEntry,
   type RosterRow,
   rosterAge,
   setIdleOpen,
 } from "../model.ts";
-import { T } from "../theme.ts";
+import { STALE_OPACITY, T } from "../theme.ts";
 import { glyph, idleRing, jump, meta, openIfUrl, ring, ruled, statusDot } from "./parts.ts";
 
 function runningRow(e: () => Last<RosterEntry>): View {
@@ -114,19 +116,35 @@ function toggleRow(count: () => number, isLast: () => boolean): View {
   return ruled(row, isLast);
 }
 
+/** The quiet row a capped list ends in: "+12 more". Not tappable: the rows
+ * past the cap are not listed anywhere else in this panel. */
+export function moreRow(count: () => number, isLast: () => boolean): View {
+  const row = HStack({ spacing: 6 }, [
+    Text(() => "+" + count() + " more")
+      .font(11.5)
+      .color(T.tertiary)
+      .lineLimit(1),
+    Spacer(),
+  ])
+    .paddingHorizontal(12)
+    .paddingVertical(8)
+    .frame({ maxWidth: "infinity", alignment: "leading" });
+  return ruled(row, isLast);
+}
+
 /** One Working or Idle row; a row's kind is fixed by its key. */
 export function rosterRow(e: () => Last<RosterRow>): View {
   const kind = e().kind;
-  if (kind === "toggle") {
+  if (kind === "toggle" || kind === "more") {
     const count = () => {
       const r = e();
-      return r.kind === "toggle" ? r.count : 0;
+      return r.kind === "toggle" || r.kind === "more" ? r.count : 0;
     };
-    return toggleRow(count, () => e().last);
+    return kind === "toggle" ? toggleRow(count, () => e().last) : moreRow(count, () => e().last);
   }
   const entry = (): Last<RosterEntry> => {
     const r = e();
-    if (r.kind === "toggle") throw new Error("roster row changed kind under key " + r.key);
+    if (r.kind === "toggle" || r.kind === "more") throw new Error("roster row changed kind under key " + r.key);
     return r;
   };
   return kind === "run" ? runningRow(entry) : idleRow(entry);
@@ -167,7 +185,9 @@ export function prRow(e: () => Last<PrEntry>): View {
       1,
       6,
       true,
-    ).layoutPriority(2),
+    )
+      .opacity(() => (prDim(e()) ? STALE_OPACITY : 1))
+      .layoutPriority(2),
   ])
     .paddingHorizontal(12)
     .paddingVertical(10)

@@ -8,9 +8,19 @@
 import type { ProjectSpec, State } from "../../scripts/state-config.ts";
 
 declare const __STATE__: State;
+// Baked in beside __STATE__ (issue #78). Read through typeof, so a bundle or
+// test that never defines it reads false rather than throwing.
+declare const __STATE_UNREADABLE__: boolean | undefined;
 
 /** Whatever config/state.json held at the last build; empty if there was none. */
 export const SAVED_STATE: State = __STATE__;
+
+/**
+ * True when config/state.json was there at the last build but could not be
+ * read, so SAVED_STATE is empty for that reason rather than because nothing
+ * was saved.
+ */
+export const STATE_UNREADABLE: boolean = typeof __STATE_UNREADABLE__ === "boolean" && __STATE_UNREADABLE__;
 
 /**
  * Tells the (separately installed) URL handler to set or delete one entry.

@@ -61,11 +61,35 @@ describe("madeHere", () => {
     assert.deepEqual(ids(), ["here-new", "here-old", "jp", "o1", "o2", "o3"]);
   });
 
-  it("marks only the final row last", () => {
+  it("marks no row last while a +N more line follows, so the final row keeps its rule", () => {
+    // Seven fresh entries, six shown: o4 is the one left out.
     assert.deepEqual(
       m.madeHere().map((e) => e.last),
-      [false, false, false, false, false, true],
+      [false, false, false, false, false, false],
     );
+  });
+
+  it("marks only the final row last when nothing is left out", () => {
+    r.data.workspaces = [ws("other", { directory: "/Users/jon/dev/app-two" }), ws("sel", { selected: true })];
+    r.data.epoch = NOW - 65 + 7 * 24 * 60 * 60;
+    // Only o1 (NOW - 50) and o2 (NOW - 60) are still inside the seven days.
+    assert.deepEqual(ids(), ["o1", "o2"]);
+    assert.deepEqual(
+      m.madeHere().map((e) => e.last),
+      [false, true],
+    );
+    assert.equal(m.madeMore(), 0);
+  });
+
+  it("counts every fresh entry before the caps, and how many the caps leave out", () => {
+    assert.equal(m.madeCount(), 7);
+    assert.equal(m.madeMore(), 1);
+  });
+
+  it("counts nothing before the clock's first tick", () => {
+    r.data.epoch = 0;
+    assert.equal(m.madeCount(), 0);
+    assert.equal(m.madeMore(), 0);
   });
 
   it("keys each row by its link, so a row keeps its one kind", () => {

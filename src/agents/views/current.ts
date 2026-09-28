@@ -11,6 +11,7 @@ import { when } from "../../shared/ui.ts";
 import {
   type AgentRow,
   agentRows,
+  askedLine,
   branchDetail,
   type CheckRow,
   cardLine,
@@ -21,6 +22,7 @@ import {
   cur,
   currentAsk,
   currentPr,
+  currentPrDim,
   haloFor,
   hasDetails,
   headStatus,
@@ -34,7 +36,7 @@ import {
   subagentLabelColor,
   subagents,
 } from "../model.ts";
-import { PORT_CHIP, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
+import { PORT_CHIP, STALE_OPACITY, STATUS_DOT, STATUS_TEXT, T } from "../theme.ts";
 import { agentDot, chip, jump, meta, openIfUrl, panel, ruled } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
@@ -80,7 +82,7 @@ function subagentLine(e: () => SubagentRow): View {
       .monospaced()
       .color(T.secondary)
       .lineLimit(1)
-      // Over the label's priority, so "finished 12m ago" is never the one cut.
+      // Over the label's priority, so the figure ("4m", "done") is never the one cut.
       .layoutPriority(2),
   ])
     .paddingVertical(5)
@@ -215,12 +217,10 @@ function askBlock(): View {
   );
 }
 
-// Title and project (the branch is in the details below), then the status
-// dot with its word and age ("Working 14m"), then the unread badge.
+// Project icon, then the title over the project name, then the unread
+// badge. No status here, so the title has the line to itself (Board 1).
 function currentTitle(): View {
   const w = () => cur().ws;
-  const a = () => cur().a;
-  const status = () => a()?.status;
   const unread = () => w().unread ?? 0;
   return HStack({ spacing: 10 }, [
     ZStack({}, [
@@ -244,24 +244,6 @@ function currentTitle(): View {
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
-    HStack({ spacing: 6 }, [
-      agentDot(
-        () => {
-          const s = status();
-          return s ? STATUS_DOT[s] : T.grey;
-        },
-        () => haloFor(a()),
-        () => hollowDot(a()),
-      ),
-      Text(() => headStatus(a()))
-        .font(12)
-        .weight("medium")
-        .color(() => {
-          const s = status();
-          return s ? STATUS_TEXT[s] : T.secondary;
-        })
-        .lineLimit(1),
-    ]).layoutPriority(2),
     when(
       "cur-unread",
       () => unread() > 0,
@@ -276,6 +258,71 @@ function currentTitle(): View {
           .cornerRadius(7),
     ),
   ]).frame({ maxWidth: "infinity" });
+}
+
+// The status on its own line under the title (Board 1): the dot and its
+// word and age ("Working 14m") in the status colour, then the PR's state
+// chip ("1 failing", "ready") on the right when there is one, as the card
+// on the left shows it; tapping it opens the PR. A PR with no status has
+// no words, so no empty pill.
+function statusRow(): View {
+  const a = () => cur().a;
+  const status = () => a()?.status;
+  return HStack({ spacing: 6 }, [
+    agentDot(
+      () => {
+        const s = status();
+        return s ? STATUS_DOT[s] : T.grey;
+      },
+      () => haloFor(a()),
+      () => hollowDot(a()),
+    ),
+    Text(() => headStatus(a()))
+      .font(12.5)
+      .weight("medium")
+      .color(() => {
+        const s = status();
+        return s ? STATUS_TEXT[s] : T.secondary;
+      })
+      .lineLimit(1)
+      .layoutPriority(1),
+    Spacer({ minLength: 4 }),
+    when(
+      "cur-status-pr",
+      () => !!currentPr()?.state,
+      () =>
+        chip(
+          () => currentPr()?.state ?? "",
+          () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
+        ).onTap(() => openIfUrl(currentPr()?.url)),
+    )
+      .opacity(() => (currentPrDim() ? STALE_OPACITY : 1))
+      .layoutPriority(2),
+  ])
+    .frame({ maxWidth: "infinity", alignment: "leading" })
+    .paddingTop(10);
+}
+
+// The last prompt, over the agent's reply to it: a quiet "Asked" label
+// column, then the words (issue #80).
+function askedBlock(): View {
+  return when(
+    "cur-asked",
+    () => !!askedLine(),
+    () =>
+      HStack({ spacing: 8, alignment: "top" }, [
+        Text("Asked").font(11.5).color(T.tertiary).lineLimit(1).layoutPriority(2),
+        Text(() => askedLine())
+          .font(12)
+          .color(T.secondary)
+          .lineLimit(2)
+          .truncation("tail")
+          .frame({ maxWidth: "infinity", alignment: "leading" })
+          .layoutPriority(1),
+      ])
+        .frame({ maxWidth: "infinity", alignment: "leading" })
+        .paddingTop(10),
+  );
 }
 
 // The agent's latest message, set apart on a faint face.
@@ -335,8 +382,8 @@ function detailLine(key: string, label: string, show: () => boolean, value: () =
   );
 }
 
-// The PR line's value: its number, its own title (the part that gives way),
-// then the chip with its worst state, as the card on the left shows it.
+// The PR line's value: its number, then its own title (the part that gives
+// way). The state chip sits on the status line above, so it shows once.
 function prDetail(): View {
   return (
     HStack({ spacing: 6 }, [
@@ -356,16 +403,6 @@ function prDetail(): View {
             .lineLimit(1)
             .truncation("tail"),
       ),
-      // A PR with no status has no words, so no empty pill.
-      when(
-        "cur-pr-state",
-        () => !!currentPr()?.state,
-        () =>
-          chip(
-            () => currentPr()?.state ?? "",
-            () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
-          ),
-      ).layoutPriority(2),
     ])
       // Inside the frame, so only the line's own content opens the PR.
       .onTap(() => openIfUrl(currentPr()?.url))
@@ -420,7 +457,9 @@ function detailsBlock(): View {
 function currentHead(): View {
   return VStack({ spacing: 0, alignment: "leading" }, [
     currentTitle(),
+    statusRow(),
     askBlock(),
+    askedBlock(),
     messageBlock(),
     progressBlock(),
     subagentsBlock(),

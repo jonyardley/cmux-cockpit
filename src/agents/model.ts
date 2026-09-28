@@ -4,10 +4,20 @@
 
 import type { CheckState, PublishedKind, SavedPublished } from "../../scripts/state-config.ts";
 import { byActivity, sinceOrActivity } from "../shared/activity.ts";
+import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
-import { checksOf, type PrHealth, type PrSummary, prSummary, prsOf, savedOwnPrs, summaryOf } from "../shared/prs.ts";
+import {
+  checksOf,
+  fromPoller,
+  type PrHealth,
+  type PrSummary,
+  prSummary,
+  prsOf,
+  savedOwnPrs,
+  summaryOf,
+} from "../shared/prs.ts";
 import { savedPublished } from "../shared/published.ts";
 import { type SavedRun, savedRuns } from "../shared/subagents.ts";
 import { cardMessage, readable } from "../shared/text.ts";
@@ -30,11 +40,19 @@ export const [idleOpen, setIdleOpen] = signal(false);
 /** A Working or Idle row's workspace and agent. */
 export type RosterEntry = AgentEntry & { kind: "run" | "idle" };
 
-export type RosterRow = RosterEntry | { key: "toggle"; kind: "toggle"; count: number };
+/** The row a capped list ends in: "+N more", for the rows past the cap (issue #80). */
+export interface MoreRow {
+  key: "more";
+  kind: "more";
+  count: number;
+}
+
+export type RosterRow = RosterEntry | { key: "toggle"; kind: "toggle"; count: number } | MoreRow;
 
 // One row per workspace, from its most active agent, so a stale idle session
 // beside a working one never lists the workspace as idle. The selected
-// workspace is left out: This workspace already shows it.
+// workspace is left out: This workspace already shows it. Nothing is cut
+// here, so the section counts are the real totals; the rows below cap.
 export const roster = computed(() => {
   const run: (AgentEntry & { kind: "run" })[] = [];
   const idle: (AgentEntry & { kind: "idle" })[] = [];
@@ -49,20 +67,41 @@ export const roster = computed(() => {
   // Longest-running first: oldest sinceEpoch first.
   run.sort((x, y) => sinceOrActivity(x.a) - sinceOrActivity(y.a));
   idle.sort((x, y) => (y.a.lastActivityAt ?? 0) - (x.a.lastActivityAt ?? 0));
-  return { run: run.slice(0, 20), idle: idle.slice(0, 30) };
+  return { run, idle };
 });
 
 const INLINE_IDLE = 3;
+/** Working rows shown at most. */
+const MAX_WORKING = 20;
+/** Idle rows shown at most, expanded. */
+const MAX_IDLE = 30;
 
-/** The Working section's rows; empty when nothing works, so the section is
- * its heading and count alone. */
-export const workingRows = computed((): Last<RosterRow>[] => markLast<RosterRow>([...roster().run]));
+/** How many of `total` rows a cap of `max` leaves out; 0 when none are. */
+export const moreThan = (total: number, max: number): number => Math.max(0, total - max);
 
-/** The Idle section's rows: three inline, all of them when expanded, then
- * the toggle; empty when nothing is idle. */
+/** markLast, except that with `more` rows left out no row is last: a "+N
+ * more" line follows, so the final row keeps its rule above it. */
+export function markLastBefore<T>(rows: T[], more: number): Last<T>[] {
+  return more > 0 ? rows.map((e) => ({ ...e, last: false })) : markLast(rows);
+}
+
+// `rows` cut to `max`, ending in a "+N more" row when any were left out.
+function capped<T>(rows: readonly T[], max: number): (T | MoreRow)[] {
+  const more = moreThan(rows.length, max);
+  const out: (T | MoreRow)[] = rows.slice(0, max);
+  if (more > 0) out.push({ key: "more", kind: "more", count: more });
+  return out;
+}
+
+/** The Working section's rows, at most MAX_WORKING then "+N more"; empty
+ * when nothing works, so the section is its heading and count alone. */
+export const workingRows = computed((): Last<RosterRow>[] => markLast(capped<RosterRow>(roster().run, MAX_WORKING)));
+
+/** The Idle section's rows: three inline, or when expanded up to MAX_IDLE
+ * then "+N more", then the toggle; empty when nothing is idle. */
 export const idleRows = computed((): Last<RosterRow>[] => {
   const { idle } = roster();
-  const out: RosterRow[] = idleOpen() ? [...idle] : idle.slice(0, INLINE_IDLE);
+  const out: RosterRow[] = idleOpen() ? capped<RosterRow>(idle, MAX_IDLE) : idle.slice(0, INLINE_IDLE);
   const more = idle.length - INLINE_IDLE;
   if (more > 0) out.push({ key: "toggle", kind: "toggle", count: more });
   return markLast(out);
@@ -138,6 +177,10 @@ export const currentAsk = computed((): Ask | null => {
 
 /** The card's quiet message line; empty while the question block shows the words. */
 export const cardLine = computed((): string => (currentAsk() ? "" : cardMessage(cur().ws)));
+
+/** The card's Asked line: the last prompt Jon gave, above the agent's last
+ * message (issue #80); "" when there is none worth reading. */
+export const askedLine = computed((): string => readable(cur().ws.latestPrompt));
 
 /** Idle and no agent draw a hollow ring, as the Running rows and the left sidebar do. */
 export const hollowDot = (a: Agent | null): boolean => !a || a.status === "idle";
@@ -229,6 +272,15 @@ export const portChips = computed((): PortChip[] =>
 
 /** The workspace's PR with its state, as the chip shows it. */
 export const currentPr = computed((): PrSummary | undefined => prSummary(cur().ws));
+
+/** The saved PR data's freshness (shared/freshness.ts) at the clock, worked
+ * out once a tick for every row, the card chip and the heading's line. */
+const freshness = computed(() => prFreshness(nowEpoch()));
+
+const prStale = (): boolean => freshness().stale;
+
+/** The workspace's PR chip dims while it is the poller's copy and that copy is stale. */
+export const currentPrDim = computed((): boolean => !!currentPr() && fromPoller(cur().ws) && prStale());
 
 /** Whether any of Branch, Ports or PR shows, so an empty block costs no gap. */
 export const hasDetails = computed((): boolean => !!branchDetail() || portChips().length > 0 || !!currentPr());
@@ -366,14 +418,12 @@ export const subagents = computed((): SubagentRow[] => {
   return ranked.sort(byRun).slice(0, 5).map(toRow);
 });
 
-/** Board 1's right-hand figure: coarse elapsed while running ("running"
- * without a start or clock), "finished 3m ago" once settled ("finished
- * just now" inside a minute, "finished" without an end or clock). */
+/** Board 1's right-hand figure, kept short so the run's name is not the
+ * one cut: coarse elapsed while running ("4m"; "running" without a start
+ * or clock), "done" once settled. */
 export function subagentFigure(s: SubagentRow): string {
   if (s.running) return ageSince(s.startedEpoch) || "running";
-  const age = ageSince(s.endedEpoch);
-  if (age === "<1m") return "finished just now";
-  return age ? "finished " + age + " ago" : "finished";
+  return "done";
 }
 
 /** A finished run's label dims, so the live ones stand out. */
@@ -419,6 +469,8 @@ export interface PrEntry {
   title: string;
   /** The PR as the cards read it (shared/prs.ts), so the chip says the same on both sides. */
   summary: PrSummary | undefined;
+  /** The poller's saved copy rather than cmux's own, so it can go stale. */
+  saved: boolean;
 }
 
 /**
@@ -454,8 +506,8 @@ function prTitle(w: Workspace, pr: PullRequest): string {
 // Every PR across workspaces, open first then merged then closed, newest
 // first within each; then Jon's own open PRs no workspace holds, newest
 // first. Workspace PRs rank first, so a long list of his own PRs in a busy
-// repo can never push one out of the cut to 30.
-export const prs = computed(() => {
+// repo can never push one out of the cut to MAX_PRS.
+const allPrs = computed((): PrEntry[] => {
   const seen = new Set<string>();
   const out: PrEntry[] = [];
   for (const w of data.workspaces() ?? []) {
@@ -464,7 +516,7 @@ export const prs = computed(() => {
       seen.add(pr.url);
       const summary = summaryOf(pr, checksOf(w));
       // The PR's own title when the poller saved one, as an own PR's row has.
-      out.push({ key: pr.url, pr, title: summary?.title || prTitle(w, pr), summary });
+      out.push({ key: pr.url, pr, title: summary?.title || prTitle(w, pr), summary, saved: fromPoller(w) });
     }
   }
   out.sort(byRankThenNewest);
@@ -474,17 +526,36 @@ export const prs = computed(() => {
     seen.add(o.url);
     const pr: PullRequest = { number: o.number, url: o.url, status: o.status, branch: o.branch };
     if (o.draft) pr.draft = true;
-    own.push({ key: o.url, pr, title: o.title, summary: summaryOf(pr, []) });
+    own.push({ key: o.url, pr, title: o.title, summary: summaryOf(pr, []), saved: true });
   }
   own.sort(byRankThenNewest);
   out.push(...own);
-  return markLast(out.slice(0, 30));
+  return out;
 });
+
+/** PR rows shown at most. */
+const MAX_PRS = 30;
+
+/** Every PR, before the cap, for the heading's count. */
+export const prCount = computed((): number => allPrs().length);
+
+/** How many PRs the cap leaves out, for the "+N more" line. */
+export const prMore = computed((): number => moreThan(prCount(), MAX_PRS));
+
+/** The Pull requests rows, at most MAX_PRS. */
+export const prs = computed((): Last<PrEntry>[] => markLastBefore(allPrs().slice(0, MAX_PRS), prMore()));
+
+/** The faint line under the Pull requests heading when the saved data is old
+ * or gh is down, "gh unavailable · last checked 2h ago"; "" when fresh. */
+export const prNote = computed((): string => freshness().line);
+
+/** A PR row's chip dims while it is the poller's copy and that copy is stale. */
+export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale();
 
 // ---- Made here ------------------------------------------------------------------
 // Pages and docs agents published (#52), from the saved state the published
 // hook writes (src/shared/published.ts). Empty without the hook: the
-// section is then its heading and count alone.
+// section then folds into emptyNote's line at the bottom.
 
 export interface MadeEntry {
   key: string;
@@ -517,21 +588,52 @@ function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, her
   };
 }
 
+// The saved pages and docs still fresh, the selected workspace's id with
+// them; none before the clock's first tick, when every entry would
+// otherwise read as fresh.
+// One computed, so the rows and the count read the same list, filtered once.
+const freshMade = computed((): { fresh: SavedPublished[]; workspaces: Workspace[]; selected: string | undefined } => {
+  const now = nowEpoch();
+  const workspaces = data.workspaces() ?? [];
+  const selected = workspaces.find((w) => w.selected)?.id;
+  return { fresh: now ? savedPublished(now) : [], workspaces, selected };
+});
+
 /** The Made here rows: the selected workspace's own pages and docs first,
  * newest first, then the latest few from other workspaces. Anything past
  * seven days drops off (shared/published-age.ts); nothing shows before the
  * clock's first tick, when every entry would otherwise read as fresh. */
 export const madeHere = computed((): Last<MadeEntry>[] => {
-  const now = nowEpoch();
-  if (!now) return [];
-  const workspaces = data.workspaces() ?? [];
-  const selected = workspaces.find((w) => w.selected)?.id;
-  const fresh = savedPublished(now);
+  const { fresh, workspaces, selected } = freshMade();
   // Cut to the rows shown before the project lookups, which scan every project.
   const own = fresh.filter((e) => e.workspace === selected).slice(0, MADE_HERE_OWN);
   const others = fresh.filter((e) => e.workspace !== selected).slice(0, MADE_ELSEWHERE);
   const dirs = new Map(workspaces.map((w) => [w.id, w.directory]));
-  return markLast([...own.map((e) => madeEntry(e, dirs, true)), ...others.map((e) => madeEntry(e, dirs, false))]);
+  const rows = [...own.map((e) => madeEntry(e, dirs, true)), ...others.map((e) => madeEntry(e, dirs, false))];
+  return markLastBefore(rows, moreThan(fresh.length, rows.length));
+});
+
+/** Every fresh page and doc, before the caps, for the heading's count. */
+export const madeCount = computed((): number => freshMade().fresh.length);
+
+/** How many fresh pages and docs the caps leave out, for the "+N more" line. */
+export const madeMore = computed((): number => moreThan(madeCount(), madeHere().length));
+
+/**
+ * The one faint line at the bottom that stands in for empty sections
+ * (issue #80): the selected workspace's Subagents, and Made here. Worded
+ * for what is actually empty; "" when neither is. Subagents only counts
+ * while the selected workspace has a live agent, since the block lives on
+ * its card and a plain shell has none to run; Made here only once the
+ * clock has ticked, since before that no entry counts as fresh.
+ */
+export const emptyNote = computed((): string => {
+  const live = cur().agents.some((a) => a.status !== "ended");
+  const noSubs = live && subagents().length === 0;
+  const noMade = nowEpoch() > 0 && madeCount() === 0;
+  if (noSubs && noMade) return "No subagents or published links yet";
+  if (noSubs) return "No subagents yet";
+  return noMade ? "No published links yet" : "";
 });
 
 const MADE_ICON: Record<PublishedKind, string> = { page: "macwindow", doc: "doc.text" };

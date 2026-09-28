@@ -29,6 +29,9 @@ export const T = {
   quote: "#1414130A",
 } as const;
 
+/** A stale PR chip's opacity: dimmed while the poller's data is old or gh is down (issue #78). */
+export const STALE_OPACITY = 0.5;
+
 export const STATUS_DOT: Record<AgentStatus, string> = {
   needs_input: T.clay,
   working: T.blue,

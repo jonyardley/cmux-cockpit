@@ -475,7 +475,7 @@ describe("subagents", () => {
     assert.deepEqual(ids(), ["early", "late", "new-done", "no-end", "old-done"]);
   });
 
-  it("figures coarse elapsed while running, running with no start, and when it finished once settled", () => {
+  it("figures coarse elapsed while running, running with no start, and a short done once settled", () => {
     sel([
       agent("working", {
         children: [
@@ -492,9 +492,9 @@ describe("subagents", () => {
       [
         ["No start yet", "running"],
         ["Edge-case review", "4m"],
-        ["Just now", "finished just now"],
-        ["Write builder tests", "finished 3m ago"],
-        ["No end sent", "finished"],
+        ["Just now", "done"],
+        ["Write builder tests", "done"],
+        ["No end sent", "done"],
       ],
     );
   });
@@ -610,5 +610,162 @@ describe("agentRows", () => {
     const rows = m.agentRows();
     assert.equal(rows.length, 6);
     assert.equal(rows[0]?.label, "agent 1");
+  });
+});
+
+describe("honest counts and +N more (#80)", () => {
+  const working = (n: number) =>
+    Array.from({ length: n }, (_, i) => ws("r" + i, { agents: [agent("working", { sinceEpoch: i })] }));
+  const idle = (n: number) =>
+    Array.from({ length: n }, (_, i) => ws("i" + i, { agents: [agent("idle", { lastActivityAt: i })] }));
+  const kinds = (rows: readonly { kind: string }[]) => rows.map((e) => e.kind);
+
+  it("counts every worker, and ends a capped Working list in +N more", () => {
+    r.data.workspaces = working(23);
+    assert.equal(m.roster().run.length, 23);
+    const rows = m.workingRows();
+    assert.equal(rows.length, 21);
+    const last = rows.at(-1);
+    assert.deepEqual(last && [last.kind, last.kind === "more" && last.count, last.last], ["more", 3, true]);
+    assert.ok(rows.slice(0, -1).every((e) => !e.last));
+  });
+
+  it("has no +N more at or under the cap", () => {
+    r.data.workspaces = working(20);
+    assert.ok(!kinds(m.workingRows()).includes("more"));
+  });
+
+  it("counts every idle agent, and when expanded caps at thirty, then +N more, then the toggle", () => {
+    r.data.workspaces = idle(34);
+    assert.equal(m.roster().idle.length, 34);
+    const toggle = m.idleRows().at(-1);
+    assert.equal(toggle?.kind === "toggle" && toggle.count, 31);
+    m.setIdleOpen(true);
+    const rows = m.idleRows();
+    assert.deepEqual(kinds(rows.slice(-3)), ["idle", "more", "toggle"]);
+    const more = rows.at(-2);
+    assert.equal(more?.kind === "more" && more.count, 4);
+    assert.equal(rows.filter((e) => e.kind === "idle").length, 30);
+  });
+
+  it("counts every PR before the cap and says how many the cap leaves out", () => {
+    r.data.workspaces = Array.from({ length: 33 }, (_, i) =>
+      ws("p" + i, { pr: { url: "u/" + i, number: i + 1, status: "open" } }),
+    );
+    assert.equal(m.prCount(), 33);
+    assert.equal(m.prMore(), 3);
+    assert.equal(m.prs().length, 30);
+    assert.ok(m.prs().every((e) => !e.last));
+  });
+
+  it("has nothing more to say for a short PR list", () => {
+    r.data.workspaces = [ws("p", { pr: { url: "u/1", number: 1, status: "open" } })];
+    assert.equal(m.prCount(), 1);
+    assert.equal(m.prMore(), 0);
+    assert.deepEqual(
+      m.prs().map((e) => e.last),
+      [true],
+    );
+  });
+
+  it("moreThan is never negative", () => {
+    assert.equal(m.moreThan(3, 5), 0);
+    assert.equal(m.moreThan(7, 5), 2);
+  });
+
+  it("markLastBefore leaves no row last while more follow", () => {
+    assert.deepEqual(
+      m.markLastBefore([{ k: 1 }, { k: 2 }], 1).map((e) => e.last),
+      [false, false],
+    );
+    assert.deepEqual(
+      m.markLastBefore([{ k: 1 }, { k: 2 }], 0).map((e) => e.last),
+      [false, true],
+    );
+  });
+});
+
+describe("the PR rows' source", () => {
+  it("marks cmux's own PRs as not the poller's, so they never dim", () => {
+    r.data.workspaces = [ws("p", { pr: { url: "u/1", number: 1, status: "open" } })];
+    const [row] = m.prs();
+    assert.equal(row?.saved, false);
+    assert.equal(row && m.prDim(row), false);
+  });
+
+  it("says nothing under the heading and dims nothing with no poll saved", () => {
+    assert.equal(m.prNote(), "");
+    assert.equal(m.prDim({ saved: true }), false);
+    r.data.workspaces = [ws("sel", { selected: true, pr: { url: "u/1", number: 1, status: "open" } })];
+    assert.equal(m.currentPrDim(), false);
+  });
+});
+
+describe("emptyNote (#80)", () => {
+  it("names both when the selected workspace's agent has no subagents and nothing was published", () => {
+    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("working")] })];
+    assert.equal(m.emptyNote(), "No subagents or published links yet");
+  });
+
+  it("claims no subagents only while the selected workspace has a live agent", () => {
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.equal(m.emptyNote(), "No published links yet");
+    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("ended")] })];
+    assert.equal(m.emptyNote(), "No published links yet");
+  });
+
+  it("claims nothing about published links before the clock's first tick", () => {
+    r.data.epoch = 0;
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.equal(m.emptyNote(), "");
+  });
+
+  it("names only published links when no workspace is selected", () => {
+    r.data.workspaces = [ws("other")];
+    assert.equal(m.emptyNote(), "No published links yet");
+  });
+
+  it("names only published links while the selected workspace has subagents", () => {
+    r.data.workspaces = [
+      ws("sel", {
+        selected: true,
+        agents: [agent("working", { children: [{ id: "c1", label: "Explore", running: true }] })],
+      }),
+    ];
+    assert.equal(m.emptyNote(), "No published links yet");
+  });
+});
+
+describe("askedLine (#80)", () => {
+  it("gives the selected workspace's last prompt, cleaned", () => {
+    r.data.workspaces = [
+      ws("sel", {
+        selected: true,
+        latestPrompt: "Fix the chip colours <task-notification>x</task-notification>",
+        latestMessage: "Done",
+      }),
+    ];
+    assert.equal(m.askedLine(), "Fix the chip colours");
+    assert.equal(m.cardLine(), "Done");
+  });
+
+  it("is empty with no prompt, or one with nothing to read", () => {
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.equal(m.askedLine(), "");
+    r.data.workspaces = [ws("sel", { selected: true, latestPrompt: "/private/tmp/x.txt" })];
+    assert.equal(m.askedLine(), "");
+  });
+
+  it("still shows the prompt when the message only echoes it", () => {
+    r.data.workspaces = [ws("sel", { selected: true, latestPrompt: "Run the tests", latestMessage: "Run the tests" })];
+    assert.equal(m.askedLine(), "Run the tests");
+    assert.equal(m.cardLine(), "");
+  });
+});
+
+describe("stateNotice without the build's flag", () => {
+  it("says nothing when no build or test set __STATE_UNREADABLE__", async () => {
+    const { stateNotice } = await import("../src/shared/freshness.ts");
+    assert.equal(stateNotice(), "");
   });
 });
