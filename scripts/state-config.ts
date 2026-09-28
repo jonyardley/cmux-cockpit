@@ -155,7 +155,8 @@ export interface SavedSubagent {
   type?: string;
   /** The Agent call's description, at most MAX_LABEL characters. */
   label: string;
-  /** Epoch seconds the Agent tool was called. */
+  /** Epoch seconds the Agent tool was called, or the latest resume
+   * restarted it (report-subagent.ts's onResume). */
   startedEpoch: number;
   /** Epoch seconds the run stopped; absent while it runs. */
   endedEpoch?: number;
