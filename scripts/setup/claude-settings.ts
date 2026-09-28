@@ -6,7 +6,7 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Paths, stamp } from "./env.ts";
-import { type Entry, parseSettings, wantedEntries } from "./hooks-merge.ts";
+import { type Entry, missingEntries, parseSettings, wantedEntries } from "./hooks-merge.ts";
 
 export const HOOKS_SOURCE = join(import.meta.dirname, "claude-hooks.json");
 
@@ -17,12 +17,39 @@ export type Loaded =
   | { ok: true; settings: Record<string, unknown>; existed: boolean; text: string }
   | { ok: false; error: string };
 
-/** The settings file, parsed; a missing one reads as empty. */
-export function loadSettings(paths: Paths): Loaded {
-  if (!existsSync(paths.claudeSettings)) return { ok: true, settings: {}, existed: false, text: "" };
-  const text = readFileSync(paths.claudeSettings, "utf8");
+function loadFile(file: string): Loaded {
+  if (!existsSync(file)) return { ok: true, settings: {}, existed: false, text: "" };
+  const text = readFileSync(file, "utf8");
   const parsed = parseSettings(text);
   return parsed.ok ? { ok: true, settings: parsed.settings, existed: true, text } : parsed;
+}
+
+/** The settings file, parsed; a missing one reads as empty. */
+export const loadSettings = (paths: Paths): Loaded => loadFile(paths.claudeSettings);
+
+/**
+ * One line each for what setup and the doctor should say about where the
+ * hooks go: a CLAUDE_CONFIG_DIR that was ignored, and cockpit hooks left in
+ * ~/.claude/settings.json while CLAUDE_CONFIG_DIR points elsewhere. Those
+ * are never removed here: ~/.claude may be a Claude profile kept on purpose.
+ */
+export function claudeDirNotes(paths: Paths, home: string): string[] {
+  const notes: string[] = [];
+  if (paths.claudeConfigIgnored !== undefined) {
+    notes.push(
+      `CLAUDE_CONFIG_DIR is "${paths.claudeConfigIgnored}", not an absolute path, so it is ignored and ~/.claude is used`,
+    );
+  }
+  if (paths.otherClaudeSettings !== undefined) {
+    const other = loadFile(paths.otherClaudeSettings);
+    const held = other.ok ? wanted().length - missingEntries(other.settings, wanted(), home).length : 0;
+    if (held > 0) {
+      notes.push(
+        `~/.claude/settings.json also holds ${held} cockpit hooks; they are left alone, so take them out by hand if nothing starts Claude Code without CLAUDE_CONFIG_DIR`,
+      );
+    }
+  }
+  return notes;
 }
 
 /** True when the file still holds what `loaded` read, so a write cannot lose one Claude Code made meanwhile. */

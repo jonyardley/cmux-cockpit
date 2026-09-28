@@ -30,7 +30,8 @@ off until you install it.
   a workspace. The poller runs `gh pr list` in every
   workspace's repo with your `gh` sign-in, and writes the results to
   `config/state.json`.
-- **The Claude Code hooks** you add to `~/.claude/settings.json` run
+- **The Claude Code hooks** you add to `~/.claude/settings.json` (or
+  `$CLAUDE_CONFIG_DIR/settings.json` when that is set) run
   `scripts/hooks/report-*.ts` with Node on the events listed in the
   [quickstart](docs/quickstart.md#claude-code-hooks). They write
   `config/state.json` and start a background rebuild of the sidebars;

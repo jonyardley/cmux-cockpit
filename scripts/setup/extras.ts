@@ -5,7 +5,7 @@
 import { existsSync, rmSync } from "node:fs";
 import { type Choice, choose, type Extra, type Flags, offered } from "./args.ts";
 import { applyLink, linkState, planLink, removeLink, repoRuleIds } from "./automations.ts";
-import { backupSettings, loadSettings, unchanged, wanted, writeSettings } from "./claude-settings.ts";
+import { backupSettings, claudeDirNotes, loadSettings, unchanged, wanted, writeSettings } from "./claude-settings.ts";
 import type { Env, Paths } from "./env.ts";
 import { addEntries, describe, missingEntries, removeEntries } from "./hooks-merge.ts";
 
@@ -58,6 +58,7 @@ function addAutomations(env: Env, paths: Paths): void {
 }
 
 async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
+  for (const note of claudeDirNotes(paths, env.home)) env.print(`  ! ${note}`);
   const loaded = loadSettings(paths);
   if (!loaded.ok) {
     env.print(`  ✗ ${paths.claudeSettingsShown} is ${loaded.error}. Nothing changed; fix it and run setup again.`);
@@ -69,7 +70,7 @@ async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
     return;
   }
   env.print(
-    `  These go into ${paths.claudeSettings}, rewritten with two-space indents; nothing there is removed or reordered:`,
+    `  These go into ${paths.claudeSettingsShown}, rewritten with two-space indents; nothing there is removed or reordered:`,
   );
   for (const e of add) env.print(`    ${describe(e)}`);
   const confirmed = flags.yes || flags.picked.includes("hooks") || (await env.ask("  Write them?"));

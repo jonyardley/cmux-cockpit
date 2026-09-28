@@ -108,7 +108,8 @@ Setup asks about each of these. Each works without the others.
 - **Claude Code hooks**: amber "Asking" with the question, a row per
   subagent, a chip as soon as an agent opens a PR, and the "Made here"
   list. Setup lists the entries it will add to `~/.claude/settings.json`
-  and asks before writing; it only ever adds, and keeps a copy of the old
+  (or `$CLAUDE_CONFIG_DIR/settings.json` when that is set) and asks
+  before writing; it only ever adds, and keeps a copy of the old
   file as `settings.json.cmux-cockpit.bak` ([by hand](#claude-code-hooks)).
 
 ## When something does not work
@@ -322,8 +323,9 @@ npm run uninstall
 It asks before each step. It removes the helper app, removes the
 automations link only if it points at this repo (putting back
 `automations.json.backup` if you had one), and takes only the cockpit's
-own hooks out of `~/.claude/settings.json`, backing it up first. It never
-deletes the clone; it prints the commands below for that.
+own hooks out of `~/.claude/settings.json` (or
+`$CLAUDE_CONFIG_DIR/settings.json` when that is set), backing it up
+first. It never deletes the clone; it prints the commands below for that.
 
 Then this keeps a copy of your own files (`cmux.json`, your project table
 and saved state) in `~/cmux-cockpit-keep` before deleting the clone:
@@ -340,7 +342,8 @@ To take the extras out by hand instead:
 - the helper: `~/Applications/CmuxCockpit.app`
 - the automations link: `~/.cmuxterm/automations.json` (and restore
   `automations.json.backup` if you had one)
-- the `report-*.ts` hooks in `~/.claude/settings.json`
+- the `report-*.ts` hooks in `~/.claude/settings.json`, or in
+  `$CLAUDE_CONFIG_DIR/settings.json` when that is set
 
 ## Working on it
 

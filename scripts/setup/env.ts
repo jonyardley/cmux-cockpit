@@ -1,11 +1,12 @@
 // What npm run setup, doctor and uninstall act on, all injectable: the home
 // folder, the checkout, Claude Code's config folder, the way a command runs
-// and the way a question is asked. The entry points pass the real ones; the tests pass a temp home and
-// fakes, so nothing under test touches this machine's settings or cmux.
+// and the way a question is asked. The entry points pass the real ones; the
+// tests pass a temp home and fakes, so nothing under test touches this
+// machine's settings or cmux.
 
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { logPathFor } from "../state-log.ts";
 
@@ -57,28 +58,42 @@ export const realRun: Runner = (cmd, args, opts = {}) => {
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", missing };
 };
 
+/** `value` with a leading ~/ (or a bare ~) spelled as `home`, as a shell would. */
+function expandHome(value: string, home: string): string {
+  if (value === "~") return home;
+  return value.startsWith("~/") ? join(home, value.slice(2)) : value;
+}
+
 /**
  * The folder Claude Code reads its settings.json from: CLAUDE_CONFIG_DIR when
- * it is set to a non-empty absolute path, else ~/.claude.
- * A relative value is ignored, since it would hang off whatever folder the
- * script happened to run in.
+ * it is set to a non-empty path that is absolute once a leading ~ is
+ * expanded, else ~/.claude. A relative value is ignored, since it would hang
+ * off whatever folder the script happened to run in, and handed back as
+ * `ignored` so setup and the doctor can say so.
  */
-function claudeDirFor(home: string, configured: string | undefined): string {
-  return configured !== undefined && configured !== "" && isAbsolute(configured) ? configured : join(home, ".claude");
+function claudeDirFor(home: string, configured: string | undefined): { dir: string; ignored: string | undefined } {
+  const fallback = join(home, ".claude");
+  if (configured === undefined || configured === "") return { dir: fallback, ignored: undefined };
+  const expanded = expandHome(configured, home);
+  return isAbsolute(expanded) ? { dir: expanded, ignored: undefined } : { dir: fallback, ignored: configured };
 }
 
 /** A path as a person would type it: ~/... when it is under `home`, else as it is. */
 function shown(path: string, home: string): string {
-  return path.startsWith(`${home}/`) ? `~/${path.slice(home.length + 1)}` : path;
+  const base = home.endsWith("/") ? home : `${home}/`;
+  if (base === "/") return path;
+  return path.startsWith(base) ? `~/${path.slice(base.length)}` : path;
 }
 
 /**
  * Every path the three scripts read or write, from one home, one checkout and
- * CLAUDE_CONFIG_DIR as set, if at all.
+ * CLAUDE_CONFIG_DIR as set, if at all. The last is required, undefined when
+ * unset, so a caller cannot forget it and quietly use ~/.claude.
  */
-export function pathsFor(home: string, repo: string, claudeConfigDir?: string) {
+export function pathsFor(home: string, repo: string, claudeConfigDir: string | undefined) {
   const cmuxterm = join(home, ".cmuxterm");
-  const claude = claudeDirFor(home, claudeConfigDir);
+  const { dir: claude, ignored } = claudeDirFor(home, claudeConfigDir);
+  const defaultSettings = join(home, ".claude", "settings.json");
   const app = join(home, "Applications", "CmuxCockpit.app");
   return {
     mainCheckout: join(home, ".config", "cmux"),
@@ -103,6 +118,14 @@ export function pathsFor(home: string, repo: string, claudeConfigDir?: string) {
     /** claudeSettings for messages, such as ~/.claude/settings.json. */
     claudeSettingsShown: shown(join(claude, "settings.json"), home),
     claudeBackup: join(claude, "settings.json.cmux-cockpit.bak"),
+    /** CLAUDE_CONFIG_DIR when it was set but not usable, so ~/.claude stands in. */
+    claudeConfigIgnored: ignored,
+    /**
+     * ~/.claude/settings.json when CLAUDE_CONFIG_DIR moves Claude Code
+     * elsewhere, so setup and the doctor can spot cockpit hooks left there;
+     * undefined when it is the file in use.
+     */
+    otherClaudeSettings: resolve(claude, "settings.json") === defaultSettings ? undefined : defaultSettings,
     helperApp: app,
     helperPlist: join(app, "Contents", "Info.plist"),
     stateLog: logPathFor(home),
