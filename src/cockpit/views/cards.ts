@@ -15,6 +15,7 @@ import {
   chipsRow,
   glyph,
   meta,
+  prLine,
   ring,
   statusDot,
   statusLabel,
@@ -75,6 +76,7 @@ function fullCard(w: WsAccessor, key: string): View {
       HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12), readyPr(w, 12)])
         // Left-aligned by the frame, not a Spacer, as the chips row is.
         .frame({ maxWidth: "infinity", alignment: "leading" }),
+      prLine(w, 11.5),
       when(
         "detail",
         () => !!detail(),
@@ -86,7 +88,7 @@ function fullCard(w: WsAccessor, key: string): View {
             .truncation("tail")
             .frame({ maxWidth: "infinity", alignment: "leading" }),
       ),
-      chipsRow(w, true),
+      chipsRow(w, true, false),
       progressBar(w, "full-progress"),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
@@ -148,6 +150,18 @@ function denseRow(w: WsAccessor, key: string): View {
       .lineLimit(1)
       .truncation("middle")
       .layoutPriority(1),
+    // The PR's own title after the session name, faint (issue #73). At the
+    // lowest priority, so it is what gets cut and the dot, PR and time show.
+    when(
+      "row-pr-title",
+      () => !!pr()?.title,
+      () =>
+        Text(() => "· " + (pr()?.title ?? ""))
+          .font(12.5)
+          .color(C.faint)
+          .lineLimit(1)
+          .truncation("tail"),
+    ),
     Spacer({ minLength: 4 }),
     unreadBadge(w),
     when(

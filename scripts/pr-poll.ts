@@ -173,14 +173,18 @@ function listed(p: unknown): Listed[] {
   };
   if (p.isDraft === true) pr.draft = true;
   if (p.mergeStateStatus === "CLEAN") pr.mergeable = true;
+  if (p.mergeStateStatus === "DIRTY") pr.conflicts = true;
   return [pr];
 }
 
-// The SavedPr a listed PR is saved as, with its checks.
+// The SavedPr a listed PR is saved as, with its title and checks.
 function saved(p: Listed): SavedPr {
   const pr: SavedPr = { number: p.number, url: p.url, status: p.status, branch: p.branch };
   if (p.draft) pr.draft = true;
   if (p.mergeable) pr.mergeable = true;
+  if (p.conflicts) pr.conflicts = true;
+  const title = cleanTitle(p.title);
+  if (title) pr.title = title;
   const checks = checksFrom(p.rollup);
   return checks.length ? { ...pr, checks } : pr;
 }
@@ -242,7 +246,8 @@ export function ownPrsFrom(text: string, repo: string): State["ownPrs"] | undefi
 }
 
 // The fields pickPr reads.
-const PR_FIELDS = "number,state,url,headRefName,updatedAt,isCrossRepository,isDraft,mergeStateStatus,statusCheckRollup";
+const PR_FIELDS =
+  "number,state,url,headRefName,updatedAt,isCrossRepository,isDraft,mergeStateStatus,statusCheckRollup,title";
 // The fields ownPrsFrom reads.
 const OWN_FIELDS = "number,state,url,headRefName,isCrossRepository,isDraft,title";
 // Jon's open PRs asked for per repo; more than this is not a sidebar list.

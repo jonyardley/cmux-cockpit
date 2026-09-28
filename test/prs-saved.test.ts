@@ -34,6 +34,12 @@ const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open",
     },
     merged: { ...saved, number: 11, status: "merged", checks },
     bare: { number: 12, url: "https://github.com/o/r/pull/12", status: "open", branch: "feat" },
+    // In conflict with passing checks, running ones, and failing ones.
+    conflicts: { ...saved, number: 16, conflicts: true, checks: [{ name: "build", state: "pass" }] },
+    conflictsRunning: { ...saved, number: 17, conflicts: true, checks: [{ name: "test", state: "pending" }] },
+    conflictsFailing: { ...saved, number: 18, conflicts: true },
+    conflictsMerged: { ...saved, number: 19, status: "merged", conflicts: true, checks: [] },
+    titled: { ...saved, number: 20, title: "✳ Show the PR title", checks: [] },
   },
   ownPrs: {
     // Also w1's PR, so the list shows it once, under the workspace's title.
@@ -111,6 +117,36 @@ describe("the agents panel's Pull requests list", () => {
   });
 });
 
+describe("the Pull requests list's chips", () => {
+  // The fixtures share one url and the list shows a url once, so each
+  // workspace is listed alone.
+  const chipOf = (id: string) => {
+    r.data.workspaces = id ? [ws(id, { branch: "feat" })] : [];
+    r.data.epoch++;
+    const e = agents.prs()[0];
+    return e ? [e.pr.number, agents.prChipText(e), agents.prChipHealth(e)] : undefined;
+  };
+
+  it("say what the card says: worst state first, conflicts in their own word", () => {
+    assert.deepEqual(chipOf("w1"), [7, "1 failing", { health: "failing", draft: false }]);
+    assert.deepEqual(chipOf("running"), [10, "running", { health: "running", draft: false }]);
+    assert.deepEqual(chipOf("green"), [8, "ready", { health: "ready", draft: false }]);
+    assert.deepEqual(chipOf("conflicts"), [16, "conflicts", { health: "conflicts", draft: false }]);
+    assert.deepEqual(chipOf("draftRunning"), [15, "draft · running", { health: "running", draft: true }]);
+    assert.deepEqual(chipOf("merged"), [11, "merged", { health: "quiet", draft: false }]);
+    assert.deepEqual(chipOf("bare"), [12, "open", { health: "quiet", draft: false }]);
+  });
+
+  it("keep an own PR's draft, with no checks to judge it by", () => {
+    assert.deepEqual(chipOf(""), [42, "draft", { health: "quiet", draft: true }]);
+    const own = agents.prs().find((e) => e.pr.number === 7);
+    assert.deepEqual(own && [agents.prChipText(own), agents.prChipHealth(own)], [
+      "open",
+      { health: "quiet", draft: false },
+    ]);
+  });
+});
+
 describe("checksOf", () => {
   it("gives the saved PR's checks while it shows", () => {
     assert.deepEqual(checksOf(ws("w1", { branch: "feat" })), checks);
@@ -185,6 +221,29 @@ describe("prSummary", () => {
     assert.deepEqual(said("merged"), ["quiet", "#11 · merged"]);
   });
 
+  it("says conflicts in place of running or ready, but failing still comes first", () => {
+    assert.deepEqual(said("conflicts"), ["conflicts", "#16 · conflicts"]);
+    assert.deepEqual(said("conflictsRunning"), ["conflicts", "#17 · conflicts"]);
+    assert.deepEqual(said("conflictsFailing"), ["failing", "#18 · 1 failing"]);
+    assert.deepEqual(said("conflictsMerged"), ["quiet", "#19 · merged"]);
+  });
+
+  it("gives the words without the number, a quiet open PR saying open", () => {
+    const state = (id: string) => prSummary(at(id))?.state;
+    assert.equal(state("w1"), "1 failing");
+    assert.equal(state("draftRunning"), "draft · running");
+    assert.equal(state("conflicts"), "conflicts");
+    assert.equal(state("green"), "ready");
+    assert.equal(state("bare"), "open");
+    assert.equal(state("draft"), "draft");
+    assert.equal(state("merged"), "merged");
+  });
+
+  it("carries the PR's own title, cleaned for display, and none without one", () => {
+    assert.equal(prSummary(at("titled"))?.title, "Show the PR title");
+    assert.equal(prSummary(at("bare"))?.title, "");
+  });
+
   it("carries the number alone, the status and the link", () => {
     assert.deepEqual(prSummary(at("merged")), {
       number: 11,
@@ -194,6 +253,8 @@ describe("prSummary", () => {
       draft: false,
       tag: "#11",
       text: "#11 · merged",
+      state: "merged",
+      title: "",
     });
   });
 
@@ -209,6 +270,8 @@ describe("prSummary", () => {
       draft: false,
       tag: "#3",
       text: "#3",
+      state: "",
+      title: "",
     });
   });
 });

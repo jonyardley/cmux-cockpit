@@ -335,6 +335,35 @@ function detailLine(key: string, label: string, show: () => boolean, value: () =
   );
 }
 
+// The PR line's value: its number, its own title (the part that gives way),
+// then the chip with its worst state, as the card on the left shows it.
+function prDetail(): View {
+  return HStack({ spacing: 6 }, [
+    Text(() => currentPr()?.tag ?? "")
+      .font(11.5)
+      .monospaced()
+      .color(T.secondary)
+      .lineLimit(1)
+      .layoutPriority(2),
+    when(
+      "cur-pr-title",
+      () => !!currentPr()?.title,
+      () =>
+        Text(() => currentPr()?.title ?? "")
+          .font(11.5)
+          .color(T.secondary)
+          .lineLimit(1)
+          .truncation("tail"),
+    ),
+    chip(
+      () => currentPr()?.state ?? "",
+      () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
+    ).layoutPriority(2),
+  ])
+    .frame({ maxWidth: "infinity", alignment: "leading" })
+    .onTap(() => openIfUrl(currentPr()?.url));
+}
+
 function detailsBlock(): View {
   return when(
     "cur-details",
@@ -371,11 +400,7 @@ function detailsBlock(): View {
           "cur-pr",
           "PR",
           () => !!currentPr(),
-          () =>
-            chip(
-              () => currentPr()?.text ?? "",
-              () => prChipColors(currentPr()?.health ?? "quiet", currentPr()?.status, currentPr()?.draft),
-            ).onTap(() => openIfUrl(currentPr()?.url)),
+          () => prDetail(),
         ),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })

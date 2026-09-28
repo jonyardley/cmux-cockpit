@@ -1,5 +1,6 @@
 // The PR chip's palette, one copy for both sidebars so a PR reads the same
-// in each. Hue on the chip says what the PR needs: red failing, blue running
+// in each. Hue on the chip says what the PR needs: red failing or in
+// conflict (the chip's word tells the two apart), blue running
 // (the Checks block's pending dot and the working dot are blue too), deep
 // green ready. A quiet chip keeps its status colour: open green, merged
 // purple, closed neutral, except an open draft, which is slate so it reads
@@ -19,8 +20,11 @@ const STATUS_CHIP: Record<PrStatus, ChipColors> = {
   closed: { bg: "#F4F2EA", fg: "#4A4945", edge: "#E8E5DA" },
 };
 
+const FAILING_CHIP: ChipColors = { bg: "#F8E4E2", fg: "#9E2F27", edge: "#EDC9C5" };
+
 const HEALTH_CHIP: Record<Exclude<PrHealth, "quiet">, ChipColors> = {
-  failing: { bg: "#F8E4E2", fg: "#9E2F27", edge: "#EDC9C5" },
+  failing: FAILING_CHIP,
+  conflicts: FAILING_CHIP,
   running: { bg: "#E6EEF8", fg: "#2F5690", edge: "#CCDBEF" },
   ready: { bg: "#DCEBCF", fg: "#2F4A1C", edge: "#BFD9A9" },
 };
