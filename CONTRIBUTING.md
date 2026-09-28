@@ -51,10 +51,10 @@ The git hooks, once installed:
 
 ## Working with Claude Code
 
-CLAUDE.md holds the full working rules; it is written for coding agents but
-reads fine for people. Its Workflow section is the maintainer's own setup
-(worktrunk worktrees, a self-review before hand-off); skip it if you work
-differently.
+CLAUDE.md holds the repo's working rules; it is written for coding agents
+but reads fine for people. The maintainer's own setup (worktrunk worktrees,
+a self-review before hand-off) lives in a gitignored `CLAUDE.local.md`, so
+it is not in the repo and you do not need it.
 
 `.claude/settings.json` adds three project hooks that run in Claude Code
 sessions in this repo:
