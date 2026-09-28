@@ -103,6 +103,11 @@ declare function Divider(): MenuItem;
 declare function signal<T>(initial: T): [() => T, (next: T) => void];
 declare function computed<T>(fn: () => T): () => T;
 
+/**
+ * Registers the sidebar's root and builds it straight away, before the rest
+ * of the script runs, so call it last: a helper declared below the call
+ * does not exist yet (#87).
+ */
 declare function sidebar(root: () => View, options?: { surface?: "glass" }): void;
 /** Dispatches a cmux socket command, e.g. workspace.select. */
 declare function cmux(method: string, params: Record<string, string | number | boolean>): void;

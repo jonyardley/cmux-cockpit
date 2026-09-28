@@ -4,7 +4,8 @@
 // function) is called and every ForEach renders its items, so view closures
 // run against the fixture data. Tap and move handlers are recorded, never
 // fired. Install before importing any sidebar module: modules create their
-// signals at import time.
+// signals at import time. `sidebar()` builds its root on the spot, as cmux
+// does, so a bundle that uses a helper before declaring it fails here (#87).
 
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
@@ -127,7 +128,11 @@ export function createRenderer(): Renderer {
       fn();
       return fn;
     },
+    // cmux builds the root as soon as it is registered, before the rest of
+    // the script has run, so a view helper declared further down fails
+    // here too, as it does in the app.
     sidebar: (root: () => unknown) => {
+      root();
       r.roots.push(root);
     },
     cmux: (method: string, params: Record<string, unknown>) => {
