@@ -19,7 +19,7 @@ import {
   summaryOf,
 } from "../shared/prs.ts";
 import { savedPublished } from "../shared/published.ts";
-import { pairLive, type SavedRun, savedRuns } from "../shared/subagents.ts";
+import { childRunning, pairLive, type SavedRun, savedRunning, savedRuns } from "../shared/subagents.ts";
 import { cardMessage, readable } from "../shared/text.ts";
 import { fmtAge, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
@@ -337,11 +337,6 @@ export interface SubagentRow {
   endedEpoch: number | undefined;
 }
 
-// Upstream always sends `running`; without it, a run with no end is live. A
-// run under an ended session is over whatever it says, so an interrupted
-// subagent never ticks on as running.
-const isRunning = (c: SubagentRun, owner: Agent): boolean => owner.status !== "ended" && (c.running ?? !c.endedEpoch);
-
 // A run ranked for sorting and display, whichever source it came from.
 interface Ranked {
   key: string;
@@ -371,7 +366,7 @@ function childRanked(agents: Agent[], vouched: Set<SubagentRun>): Ranked[] {
   return agents.flatMap((owner) =>
     (owner.children ?? []).flatMap((c, i) => {
       if (!c) return [];
-      const running = isRunning(c, owner);
+      const running = childRunning(c, owner);
       const vouch = !running && vouched.has(c);
       return [
         {
@@ -389,17 +384,14 @@ function childRanked(agents: Agent[], vouched: Set<SubagentRun>): Ranked[] {
 
 // A saved run's owner is the workspace agent whose id matches its session,
 // when there is one (unconfirmed whether cmux agent ids are Claude session
-// ids); otherwise the run belongs to the workspace as a whole, and only
-// counts as running while it has no end and the workspace still has a live
-// agent, so a closed session never ticks on.
+// ids); otherwise the run belongs to the workspace as a whole. savedRunning
+// says whether it is live, so a closed session never ticks on.
 function savedRanked(run: SavedRun, agents: Agent[]): Ranked {
   const owner = agents.find((a) => a.id === run.session);
-  const running =
-    run.endedEpoch === undefined && (owner ? owner.status !== "ended" : agents.some((a) => a.status !== "ended"));
   return {
     key: "s:" + (owner?.id ?? "ws") + ":" + run.id,
     label: readable(run.label) || "subagent",
-    running,
+    running: savedRunning(run, agents),
     startedEpoch: run.startedEpoch,
     endedEpoch: run.endedEpoch,
   };

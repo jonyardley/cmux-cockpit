@@ -25,6 +25,9 @@ const saved = (id: string, extra: Record<string, unknown> = {}) => ({
   subagents: {
     live: [saved("a"), saved("b")],
     ended: [saved("a", { endedEpoch: 1100 })],
+    shared: [saved("s", { label: "Review" })],
+    cross: [saved("x", { label: "Explore docs" })],
+    generic: [saved("g", { label: "subagent" })],
   },
 };
 
@@ -103,5 +106,43 @@ describe("saved runs vouching for cmux's children (#83)", () => {
     const owner = agent("working", { id: "owner", children: [settled("agent-a", "Lane a")] });
     assert.equal(liveRunCount(ws("live", { agents: [owner] })), 2);
     assert.equal(liveRunCount(ws("ended", { agents: [owner] })), 0);
+  });
+  it("pairs by id before label, so a finished run sharing a label never takes a live run's place", () => {
+    const owner = agent("working", { id: "owner", children: [settled("old", "Review"), settled("agent-s", "Review")] });
+    r.data.workspaces = [ws("shared", { selected: true, agents: [owner] })];
+    assert.deepEqual(rows(), [
+      ["s:owner:agent-s", "Review", true],
+      ["s:owner:old", "Review", false],
+    ]);
+  });
+
+  it("never vouches for a child under an ended agent, even when the saved run's owner is not matched", () => {
+    const gone = agent("ended", { id: "gone", children: [settled("agent-a", "Lane a")] });
+    const other = agent("working", { id: "other" });
+    r.data.workspaces = [ws("live", { selected: true, agents: [gone, other] })];
+    assert.deepEqual(rows(), [
+      ["s:ws:b", "Lane b", true],
+      ["s:gone:agent-a", "Lane a", false],
+    ]);
+    assert.equal(liveRunCount(ws("live", { agents: [gone, other] })), 1);
+  });
+
+  it("pairs a saved run by label only with its own session's children", () => {
+    const other = agent("working", { id: "other", children: [settled("cmux-2", "Explore docs")] });
+    const owner = agent("working", { id: "owner", children: [settled("cmux-1", "Explore docs")] });
+    r.data.workspaces = [ws("cross", { selected: true, agents: [other, owner] })];
+    assert.deepEqual(rows(), [
+      ["s:owner:cmux-1", "Explore docs", true],
+      ["s:other:cmux-2", "Explore docs", false],
+    ]);
+  });
+
+  it("never pairs on the generic subagent label", () => {
+    const owner = agent("working", { id: "owner", children: [settled("cmux-3", "subagent")] });
+    r.data.workspaces = [ws("generic", { selected: true, agents: [owner] })];
+    assert.deepEqual(rows(), [
+      ["s:owner:g", "subagent", true],
+      ["s:owner:cmux-3", "subagent", false],
+    ]);
   });
 });
