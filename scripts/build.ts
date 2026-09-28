@@ -122,7 +122,9 @@ function cockpitRoot(): string {
       encoding: "utf8",
     });
     return dirname(common.trim());
-  } catch {
+  } catch (err) {
+    // A worktree path here would cost the cockpit's tidy its pull and rebuild.
+    console.warn(`build: cannot find the main checkout, using ${process.cwd()}: ${(err as Error).message}`);
     return process.cwd();
   }
 }

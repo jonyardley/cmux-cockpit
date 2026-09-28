@@ -17,7 +17,8 @@ g.__PROJECTS__ = [
   },
   { match: "/dev/loose", name: "Loose", color: "#788C5D", icon: "leaf.fill" },
 ];
-g.__COCKPIT_ROOT__ = "/Users/jon/.config/cockpit";
+// Cased differently from the table, as git may spell it: still the cockpit.
+g.__COCKPIT_ROOT__ = "/Users/Jon/.config/cockpit/";
 
 const merged = { url: "https://github.com/o/r/pull/1", number: 1, status: "merged", checks: [] };
 g.__STATE__ = {
@@ -33,6 +34,8 @@ g.__STATE__ = {
     open: { ...merged, status: "open", branch: "still-open" },
     loose: { ...merged, branch: "no-root" },
     noBranch: { ...merged, branch: "" },
+    inMain: { ...merged, branch: "in-main" },
+    sibling: { ...merged, branch: "sibling" },
   },
   ownPrs: {},
   ui: {},
@@ -52,6 +55,17 @@ const allCards = (): Workspace[] => [
   ws("open", { directory: "/Users/jon/Dev/app-worktrees/still-open", branch: "still-open" }),
   ws("loose", { directory: "/Users/jon/Dev/loose-worktrees/x", branch: "no-root" }),
   ws("noBranch", { directory: "/Users/jon/Dev/app-worktrees/y" }),
+  ws("inMain", { directory: "/Users/jon/Dev/app/src", branch: "in-main" }),
+  ws("sibling", { directory: "/Users/jon/Dev/app-show-and-tell", branch: "sibling" }),
+  // cmux's own list: the branch merged once, then took a new open PR.
+  ws("reused", {
+    directory: "/Users/jon/Dev/app-worktrees/reused",
+    branch: "reused",
+    prs: [
+      { status: "merged", branch: "reused" },
+      { status: "open", branch: "reused" },
+    ],
+  }),
 ];
 
 beforeEach(() => {
@@ -69,9 +83,11 @@ describe("tidyRepos", () => {
     ]);
   });
 
-  it("leaves out open PRs, the main checkout, rootless projects and branchless cards", () => {
+  it("leaves out open PRs, anything outside <root>-worktrees, rootless projects and branchless cards", () => {
     const listed = tidy.tidyBranches();
-    for (const b of ["still-open", "main-feature", "no-root", ""]) assert.ok(!listed.includes(b), b);
+    for (const b of ["still-open", "main-feature", "no-root", "", "in-main", "sibling", "reused"]) {
+      assert.ok(!listed.includes(b), b);
+    }
   });
 
   it("is empty when nothing has merged", () => {
@@ -94,6 +110,7 @@ describe("tidyCommand", () => {
     assert.equal(tidy.shellQuote("feature/x-1.2"), "feature/x-1.2");
     assert.equal(tidy.shellQuote("/a b"), "'/a b'");
     assert.equal(tidy.shellQuote("$HOME"), "'$HOME'");
+    assert.equal(tidy.shellQuote("=wt"), "'=wt'");
   });
 });
 
@@ -110,8 +127,16 @@ describe("tidy", () => {
     assert.ok(!/[\r\n]/.test(input));
   });
 
+  it("ignores a second tap until the workspace it opened appears", () => {
+    tidy.tidy();
+    assert.equal(r.calls.length, 0);
+    r.data.workspaces = [...allCards(), ws("opened-1")];
+    tidy.tidy();
+    assert.equal(r.calls.length, 1);
+  });
+
   it("opens in another repo when the cockpit has nothing merged", () => {
-    r.data.workspaces = allCards().filter((w) => w.id === "appA");
+    r.data.workspaces = [...allCards().filter((w) => w.id === "appA"), ws("opened-2")];
     tidy.tidy();
     assert.equal(r.calls[0]?.params.cwd, "/Users/jon/Dev/app");
     assert.equal(r.calls[0]?.params.initial_input, "wt -C /Users/jon/Dev/app remove feat-a");

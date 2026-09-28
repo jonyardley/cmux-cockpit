@@ -10,13 +10,12 @@
 // its main checkout may sit on another branch and has nothing to rebuild.
 
 import { PROJECTS, projectOf } from "../shared/projects.ts";
-import { prOf } from "../shared/prs.ts";
+import { prsOf } from "../shared/prs.ts";
 import { cardWorkspaces } from "./model.ts";
 
 // The cockpit's main checkout, baked in by scripts/build.ts. typeof, so a
 // test that never sets it reads "" rather than throwing.
 declare const __COCKPIT_ROOT__: string | undefined;
-const COCKPIT_ROOT = typeof __COCKPIT_ROOT__ === "string" ? __COCKPIT_ROOT__ : "";
 
 /** One repo's merged worktrees, by branch. */
 export interface TidyRepo {
@@ -24,17 +23,27 @@ export interface TidyRepo {
   branches: string[];
 }
 
-const trimSlash = (p: string): string => p.replace(/(.)\/+$/, "$1");
+// One spelling per folder, so "~/x/" in the table and "/x" from git compare
+// equal: no trailing slash, and lower case since macOS paths ignore case.
+const norm = (p: string): string => p.replace(/(.)\/+$/, "$1").toLowerCase();
 
-// A merged card's repo root and branch, or null when it has no project
-// folder, no branch, or is the main checkout itself (nothing to remove).
+const COCKPIT_ROOT = norm(typeof __COCKPIT_ROOT__ === "string" ? __COCKPIT_ROOT__ : "");
+
+// Only a folder under worktrunk's `<root>-worktrees/` (the worktree-path in
+// its config) counts. That rules out the main checkout, a subfolder of it, a
+// symlinked alias, and a sibling that only shares the table's match
+// ("~/Dev/app-old" beside "~/Dev/app"), none of which `wt remove` should touch.
+const inWorktrees = (dir: string, root: string): boolean => norm(dir).startsWith(norm(root) + "-worktrees/");
+
+// A merged card's repo root and branch, or null when any of its PRs is not
+// merged (a reused branch with open work), it has no project folder or
+// branch, or it is not in the repo's worktrees folder.
 function mergedWorktree(w: Workspace): { root: string; branch: string } | null {
-  const pr = prOf(w);
-  if (pr?.status !== "merged") return null;
+  const prs = prsOf(w);
+  if (!prs.length || prs.some((pr) => pr.status !== "merged")) return null;
   const root = projectOf(w.directory).root;
-  const branch = w.branch ?? pr.branch;
-  if (!root || !branch || !w.directory) return null;
-  if (trimSlash(w.directory).toLowerCase() === trimSlash(root).toLowerCase()) return null;
+  const branch = w.branch || prs[0]?.branch;
+  if (!root || !branch || !inWorktrees(w.directory ?? "", root)) return null;
   return { root, branch };
 }
 
@@ -48,9 +57,9 @@ export function tidyRepos(): TidyRepo[] {
     set.add(m.branch);
     byRoot.set(m.root, set);
   }
-  const order = [COCKPIT_ROOT, ...PROJECTS.map((p) => p.root ?? "")];
+  const order = [COCKPIT_ROOT, ...PROJECTS.map((p) => norm(p.root ?? ""))];
   const rank = (root: string): number => {
-    const i = order.indexOf(root);
+    const i = order.indexOf(norm(root));
     return i < 0 ? order.length : i;
   };
   return [...byRoot.entries()]
@@ -63,13 +72,14 @@ export const tidyBranches = (): string[] => tidyRepos().flatMap((r) => r.branche
 
 // Quoted for zsh only when it has to be, so the usual path or branch reads plainly.
 export function shellQuote(s: string): string {
-  return /^[\w@%+=:,./-]+$/.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`;
+  // No "=": zsh expands a word that starts with one into a command's path.
+  return /^[\w@%+:,./-]+$/.test(s) ? s : `'${s.replaceAll("'", `'\\''`)}'`;
 }
 
 function repoCommand(r: TidyRepo): string {
   const root = shellQuote(r.root);
   const remove = `wt -C ${root} remove ${r.branches.map(shellQuote).join(" ")}`;
-  if (r.root !== COCKPIT_ROOT) return remove;
+  if (norm(r.root) !== COCKPIT_ROOT) return remove;
   return [
     `git -C ${root} pull --ff-only`,
     `npm --prefix ${root} run build`,
@@ -85,10 +95,19 @@ function repoCommand(r: TidyRepo): string {
  */
 export const tidyCommand = (repos: readonly TidyRepo[]): string => repos.map(repoCommand).join(" ; ");
 
+// The workspaces there were at the last tap. A second tap before a new one
+// appears is ignored, so a slow open does not make two with the same command.
+let idsAtTap: Set<string> | null = null;
+
+const newWorkspaceSince = (ids: Set<string>): boolean => (data.workspaces() ?? []).some((w) => !ids.has(w.id));
+
 /** Opens a workspace in the first repo's main checkout with the close-out typed, not run. */
 export function tidy(): void {
   const repos = tidyRepos();
   const first = repos[0];
-  if (!first) return;
+  if (!first || (idsAtTap && !newWorkspaceSince(idsAtTap))) return;
+  idsAtTap = new Set((data.workspaces() ?? []).map((w) => w.id));
+  // initial_input, not initial_command: typed into the shell, and with no
+  // Enter it waits on the prompt (renderer.d.ts).
   cmux("workspace.create", { cwd: first.root, focus: true, initial_input: tidyCommand(repos) });
 }

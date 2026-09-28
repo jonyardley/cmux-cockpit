@@ -6,10 +6,13 @@ import { chipHover, ring, sectionTitle, when } from "../../shared/ui.ts";
 import { C } from "../theme.ts";
 import { tidy, tidyBranches } from "../tidy.ts";
 
+// One scan per change, read by the check, the count and the list.
+const branches = computed(tidyBranches);
+
 const TIDY_CHIP = { bg: C.card, fg: C.tidyText, edge: C.tidyEdge };
 
 const label = (): string => {
-  const n = tidyBranches().length;
+  const n = branches().length;
   return n + " merged, ready to tidy";
 };
 
@@ -22,7 +25,7 @@ function tidyButton(): View {
 export function tidyStrip(): View {
   return when(
     "tidy",
-    () => tidyBranches().length > 0,
+    () => branches().length > 0,
     () =>
       VStack({ spacing: 0 }, [
         ring(
@@ -33,7 +36,7 @@ export function tidyStrip(): View {
               Spacer(),
               tidyButton(),
             ]),
-            Text(() => tidyBranches().join(" · "))
+            Text(() => branches().join(" · "))
               .font(11.5)
               .color(C.secondary)
               .lineLimit(1)
