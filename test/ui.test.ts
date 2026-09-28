@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { installRenderer, modifiers } from "./support/renderer.ts";
+import { installRenderer, recordModifiers } from "./support/renderer.ts";
 
 installRenderer();
 const ui = await import("../src/shared/ui.ts");
@@ -52,11 +52,10 @@ describe("the shared builders read what they are handed", () => {
   });
 
   it("ring frames the full width before painting the face, unless it hugs (issue #93)", () => {
-    const orderOf = (hug: boolean): string[] => {
-      modifiers.length = 0;
-      ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 6, hug);
-      return modifiers.filter((m) => m === "frame" || m === "background");
-    };
+    const orderOf = (hug: boolean): string[] =>
+      recordModifiers(() => ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 6, hug)).filter(
+        (m) => m === "frame" || m === "background",
+      );
     // The face, then the edge: filling the row means a frame comes first.
     assert.deepEqual(orderOf(false), ["frame", "background", "background"]);
     assert.deepEqual(orderOf(true), ["background", "background"]);

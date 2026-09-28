@@ -213,7 +213,7 @@ function askBlock(): View {
         ]).frame({ maxWidth: "infinity" }),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
-        .paddingTop(8),
+        .paddingTop(LINE_GAP),
   );
 }
 
@@ -269,16 +269,25 @@ function currentTitle(): View {
 // the word starts on the title's x (issue #94).
 function statusRow(): View {
   const a = () => cur().a;
-  const spacing = 6;
-  return HStack({ spacing }, [
+  // The head's own two columns, so the word cannot drift off the title's x.
+  return HStack({ spacing: ICON_GAP }, [
     agentDot(
       () => dotFor(a()),
       () => haloFor(a()),
       () => hollowDot(a()),
     )
       // A fixed width centres its content, which is what puts the dot under the icon.
-      .frame({ width: ICON })
-      .paddingTrailing(ICON_GAP - spacing),
+      .frame({ width: ICON }),
+    statusWords(),
+  ])
+    .frame({ maxWidth: "infinity", alignment: "leading" })
+    .paddingTop(LINE_GAP);
+}
+
+// The status row's text column: the word and age, then the PR chip on the right.
+function statusWords(): View {
+  const a = () => cur().a;
+  return HStack({ spacing: 6 }, [
     Text(() => headStatus(a()))
       .font(12.5)
       .weight("medium")
@@ -299,19 +308,25 @@ function statusRow(): View {
       .layoutPriority(2),
   ])
     .frame({ maxWidth: "infinity", alignment: "leading" })
-    .paddingTop(LINE_GAP);
+    .layoutPriority(1);
 }
 
 // A labelled row: a quiet label in the one label column, then the value.
 // Asked, Branch, Ports and PR all use it, so their labels share a left edge,
 // their values share another, and each row keeps the same gap above it.
-// `top` pins the label to the value's first line, for a value that wraps;
-// label and value share one size, so their first lines line up. A
+// Align "top" to pin the label to the value's first line, for a value that
+// wraps; label and value share one size, so their first lines line up. A
 // single-line row stays centred, which keeps the label level with a chip's
 // words rather than its edge.
-function labelled(key: string, label: string, show: () => boolean, value: () => View, top = false): View {
+function labelled(
+  key: string,
+  label: string,
+  show: () => boolean,
+  value: () => View,
+  alignment: Alignment = "center",
+): View {
   return when(key, show, () =>
-    HStack(top ? { spacing: LABEL_GAP, alignment: "top" } : { spacing: LABEL_GAP }, [
+    HStack({ spacing: LABEL_GAP, alignment }, [
       // A fixed-width frame centres its content whatever the alignment, so the
       // label first fills the column with the maxWidth frame that does honour it.
       Text(label)
@@ -342,7 +357,7 @@ function askedBlock(): View {
         .truncation("tail")
         .frame({ maxWidth: "infinity", alignment: "leading" })
         .layoutPriority(1),
-    true,
+    "top",
   );
 }
 
@@ -352,16 +367,20 @@ function messageBlock(): View {
     "cur-msg",
     () => !!cardLine(),
     () =>
-      Text(() => cardLine())
-        .font(12)
-        .color(T.secondary)
-        .lineLimit(4)
-        .truncation("tail")
-        .paddingHorizontal(8)
-        .paddingVertical(6)
+      // The gap on a wrapper: on the face's own node the quote colour would fill it.
+      VStack({ spacing: 0, alignment: "leading" }, [
+        Text(() => cardLine())
+          .font(12)
+          .color(T.secondary)
+          .lineLimit(4)
+          .truncation("tail")
+          .paddingHorizontal(8)
+          .paddingVertical(6)
+          .frame({ maxWidth: "infinity", alignment: "leading" })
+          .background(T.quote)
+          .cornerRadius(6),
+      ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
-        .background(T.quote)
-        .cornerRadius(6)
         .paddingTop(LINE_GAP),
   );
 }
