@@ -5,7 +5,6 @@
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
-import { agentsOf } from "../shared/needs.ts";
 import { P } from "../shared/palette.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import {
@@ -22,7 +21,7 @@ import {
   projectOf,
 } from "../shared/projects.ts";
 import { type PrHealth, prSummary } from "../shared/prs.ts";
-import { nowEpoch } from "../shared/time.ts";
+import { finishedAt, nowEpoch } from "../shared/time.ts";
 import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
   bump,
@@ -40,7 +39,7 @@ import {
   tick,
   unsortedCollapsed,
 } from "./state.ts";
-import { isReady, sinceOf, statusOf } from "./status.ts";
+import { isReady, readyAgent, sinceOf, statusOf } from "./status.ts";
 
 const OVERRIDE_SECS = 4;
 
@@ -625,16 +624,6 @@ export const projectEntries = computed(() => {
  */
 const oldestFirst = (a: Workspace, b: Workspace): number => sinceOf(a) - sinceOf(b);
 
-// When a Ready workspace finished: its latest idle or ended agent's last
-// activity, not the most active agent's time (a fresh idle session would
-// date an hour-old finish as a minute old).
-function finishedAt(w: Workspace): number {
-  let at = 0;
-  for (const a of agentsOf(w))
-    if (a.status === "idle" || a.status === "ended") at = Math.max(at, a.lastActivityAt ?? 0);
-  return at;
-}
-
 export const needsList = computed(() =>
   allWorkspaces()
     .filter((w) => statusOf(w) === "needs_input")
@@ -653,12 +642,18 @@ export const needsMore = (): number => Math.max(0, needsList().length - NEEDS_RO
 // Next (issue #74)
 
 /** What the Next button walks through: needs you, then Ready, each longest-waiting first. */
-export const nextQueue = computed((): Workspace[] => [
-  ...needsList(),
-  ...allWorkspaces()
-    .filter((w) => isReady(w))
-    .sort((a, b) => finishedAt(a) - finishedAt(b)),
-]);
+export const nextQueue = computed((): Workspace[] => [...needsList(), ...readyByFinish()]);
+
+// Ready workspaces, longest-finished first, dated as the Ready card dates
+// them (issue #98). Each one's finish is read once, not per comparison.
+function readyByFinish(): Workspace[] {
+  const ready: { w: Workspace; at: number }[] = [];
+  for (const w of allWorkspaces()) {
+    const a = readyAgent(w);
+    if (a) ready.push({ w, at: finishedAt(a) });
+  }
+  return ready.sort((x, y) => x.at - y.at).map((e) => e.w);
+}
 
 // The last workspace Next opened, and the one after it then. Opening a
 // Ready workspace clears its Ready state, so it drops out of the queue:

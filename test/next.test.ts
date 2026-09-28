@@ -132,6 +132,11 @@ describe("the Next queue", () => {
     assert.deepEqual(step(), ["needs-old", 1, 3]);
   });
 
+  it("dates a Ready workspace by when it finished, not a later last activity (issue #98)", () => {
+    byId("ready-new").agents = [agent("idle", { sinceEpoch: now() - 900, lastActivityAt: now() - 30 })];
+    assert.deepEqual(queue(), ["needs-old", "needs-new", "ready-new", "ready-old"]);
+  });
+
   it("dates a Ready workspace by its finished agent, not a fresh idle session beside it", () => {
     byId("ready-old").agents = [...finished(600), agent("idle", { sinceEpoch: now() - 5 })];
     assert.deepEqual(queue(), ["needs-old", "needs-new", "ready-old", "ready-new"]);

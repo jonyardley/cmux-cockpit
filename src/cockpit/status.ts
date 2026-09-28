@@ -8,7 +8,7 @@ import { prChipColors } from "../shared/pr-colors.ts";
 import type { PrSummary } from "../shared/prs.ts";
 import { liveRunCount } from "../shared/subagents.ts";
 import { cardMessage, clip, oneLine, readable } from "../shared/text.ts";
-import { fmtAge, nowEpoch } from "../shared/time.ts";
+import { ageSince, finishedAt } from "../shared/time.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
 import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } from "../shared/words.ts";
 import { isSelected } from "./state.ts";
@@ -33,8 +33,7 @@ export function sinceOf(w: Workspace | undefined): number {
 }
 
 export function ageOf(w: Workspace | undefined): string {
-  const s = sinceOf(w);
-  return s ? fmtAge(nowEpoch() - s) : "";
+  return ageSince(sinceOf(w));
 }
 
 export interface StatusStyle {
@@ -72,9 +71,10 @@ const FINISHED: ReadonlySet<Status> = new Set<Status>(["idle", "ended"]);
 
 /**
  * The agent whose finish a Ready card reports: of the agents that settled on
- * idle or ended after working (cmux recorded activity), the latest. Not
+ * idle or ended after working (cmux recorded activity), the latest active,
+ * the same tie-break both sidebars use to pick a workspace's agent. Not
  * simply the most active one, which ranks a fresh idle session that never
- * worked above an ended one that did.
+ * worked above an ended one that did. Its age counts from finishedAt.
  */
 function finishedAgent(w: Workspace): Agent | null {
   let best: Agent | null = null;
@@ -96,8 +96,13 @@ function finishedAgent(w: Workspace): Agent | null {
  * many cards with nothing unread cost one field read.
  */
 export function isReady(w: Workspace | undefined): boolean {
-  if (!w || !((w.unread ?? 0) > 0) || isSelected(w) || hasRealAsk(w)) return false;
-  return FINISHED.has(statusOf(w)) && finishedAgent(w) !== null;
+  return readyAgent(w) !== null;
+}
+
+/** The agent a Ready card reports, or null when the workspace is not Ready. */
+export function readyAgent(w: Workspace | undefined): Agent | null {
+  if (!w || !((w.unread ?? 0) > 0) || isSelected(w) || hasRealAsk(w)) return null;
+  return FINISHED.has(statusOf(w)) ? finishedAgent(w) : null;
 }
 
 // The finished green and word: Ready adds no hue or word of its own.
@@ -150,14 +155,22 @@ export function prTextColor(pr: Pick<PrSummary, "health" | "status"> | undefined
 // --- the card's second line (issue #47) ----------------------------------------------
 
 /** The status and how long it has held ("Working 14m", "Finished 6m").
- * Only the agent's sinceEpoch says when the status began; sinceOf's
- * fallbacks (last activity, the workspace's latestAt) do not, so without it
- * the time is left off. */
+ * A Ready card counts from when its finished agent finished, and an idle
+ * or ended card from when its agent finished, by the rule the agents panel
+ * uses (issue #98). Otherwise only the agent's sinceEpoch says when the
+ * status began; sinceOf's fallbacks (last activity, the workspace's
+ * latestAt) do not, so without it the time is left off. */
 export function statusLine(w: Workspace | undefined): string {
   const label = statusInfo(w).label;
-  // A Ready card says when its finished agent finished: "Finished 6m".
-  const since = (w && isReady(w) ? finishedAgent(w) : agentOf(w))?.sinceEpoch;
-  return withAge(label, since ? fmtAge(nowEpoch() - since) : "");
+  return withAge(label, cardAge(w));
+}
+
+function cardAge(w: Workspace | undefined): string {
+  const ready = readyAgent(w);
+  if (ready) return ageSince(finishedAt(ready));
+  const a = agentOf(w);
+  if (!a) return "";
+  return ageSince(FINISHED.has(a.status) ? finishedAt(a) : a.sinceEpoch);
 }
 
 /** "· 3 helpers" while subagent runs are live, else "". */

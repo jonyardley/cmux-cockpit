@@ -5,6 +5,7 @@ import { installRenderer } from "./support/renderer.ts";
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
+const { ageSince } = await import("../src/shared/time.ts");
 const { cardMessage } = await import("../src/shared/text.ts");
 const { dismissNeeds } = await import("../src/shared/needs.ts");
 const { summaryOf } = await import("../src/shared/prs.ts");
@@ -30,6 +31,8 @@ describe("roster", () => {
       ws("r-old", { agents: [agent("working", { sinceEpoch: 100 })] }),
       ws("i-old", { agents: [agent("idle", { lastActivityAt: 100 })] }),
       ws("i-new", { agents: [agent("idle", { lastActivityAt: 500 })] }),
+      // Finished first, active since: sorted by its finish, as its age reads.
+      ws("i-mid", { agents: [agent("idle", { sinceEpoch: 300, lastActivityAt: 900 })] }),
     ];
     const { run, idle } = m.roster();
     assert.deepEqual(
@@ -38,7 +41,7 @@ describe("roster", () => {
     );
     assert.deepEqual(
       idle.map((e) => e.ws.id),
-      ["i-new", "i-old"],
+      ["i-new", "i-mid", "i-old"],
     );
   });
 });
@@ -121,7 +124,7 @@ describe("workingRows and idleRows", () => {
 describe("sinceAge", () => {
   it("writes working and idle rows in one format", () => {
     assert.equal(m.sinceAge(agent("working", { sinceEpoch: 10_000 - 30 })), "<1m");
-    assert.equal(m.sinceAge(agent("idle", { sinceEpoch: 1, lastActivityAt: 10_000 - 46 })), "<1m");
+    assert.equal(m.sinceAge(agent("idle", { sinceEpoch: 10_000 - 46, lastActivityAt: 10_000 - 7200 })), "<1m");
     assert.equal(m.sinceAge(agent("working", { sinceEpoch: 10_000 - 720 })), "12m");
     assert.equal(m.sinceAge(agent("idle", { lastActivityAt: 10_000 - 7200 })), "2h");
   });
@@ -133,13 +136,24 @@ describe("sinceAge", () => {
 });
 
 describe("rosterAge", () => {
-  it("counts a working row from its start only, and an idle row from its last activity", () => {
+  it("counts a working row from its start only, and an idle row from when it finished", () => {
     const run = (a: Agent) => ({ key: "r", kind: "run" as const, ws: ws("w"), a, project: m.cur().project });
     const idle = (a: Agent) => ({ key: "i", kind: "idle" as const, ws: ws("w"), a, project: m.cur().project });
     assert.equal(m.rosterAge(run(agent("working", { sinceEpoch: 10_000 - 720 }))), "12m");
     // No start: blank, never the last activity, which resets while it works.
     assert.equal(m.rosterAge(run(agent("working", { lastActivityAt: 10_000 - 5 }))), "");
-    assert.equal(m.rosterAge(idle(agent("idle", { sinceEpoch: 1, lastActivityAt: 10_000 - 46 }))), "<1m");
+    // Issue #98: the move to idle, not a later last activity.
+    assert.equal(m.rosterAge(idle(agent("idle", { sinceEpoch: 10_000 - 360, lastActivityAt: 10_000 - 180 }))), "6m");
+    // No move recorded: the last activity stands in.
+    assert.equal(m.rosterAge(idle(agent("idle", { lastActivityAt: 10_000 - 46 }))), "<1m");
+    assert.equal(m.rosterAge(idle(agent("idle"))), "");
+  });
+
+  it("gives an idle row the age the card head gives the same agent", () => {
+    const a = agent("idle", { sinceEpoch: 10_000 - 360, lastActivityAt: 10_000 - 180 });
+    const row = { key: "i", kind: "idle" as const, ws: ws("w"), a, project: m.cur().project };
+    assert.equal(m.rosterAge(row), "6m");
+    assert.equal(m.headStatus(a), "Idle 6m");
   });
 });
 
@@ -149,6 +163,14 @@ describe("headStatus", () => {
     assert.equal(m.headStatus(agent("needs_input", { sinceEpoch: 10_000 - 5 })), "Your turn <1m");
     assert.equal(m.headStatus(agent("idle", { lastActivityAt: 10_000 - 120 })), "Idle 2m");
     assert.equal(m.headStatus(agent("ended", { lastActivityAt: 10_000 - 180 })), "Finished 3m");
+    // Issue #98: an idle agent counts from its move to idle, as the cockpit card does.
+    assert.equal(m.headStatus(agent("idle", { sinceEpoch: 10_000 - 360, lastActivityAt: 10_000 - 180 })), "Idle 6m");
+    // An ended agent counts from its last activity, not the session closing: a
+    // terminal closed hours after the work never reads "Finished <1m".
+    assert.equal(
+      m.headStatus(agent("ended", { sinceEpoch: 10_000 - 5, lastActivityAt: 10_000 - 10_800 })),
+      "Finished 3h",
+    );
   });
 
   it("says the word alone without a time, and No agent without an agent", () => {
@@ -351,16 +373,17 @@ describe("status words", () => {
     assert.equal(m.statusLine(null), "");
   });
 
+  // ageSince now lives in src/shared/time.ts, one copy for both sidebars (issue #98).
   it("ageSince is coarse and blank without a timestamp", () => {
-    assert.equal(m.ageSince(10_000 - 720), "12m");
-    assert.equal(m.ageSince(10_000 - 5), "<1m");
-    assert.equal(m.ageSince(undefined), "");
+    assert.equal(ageSince(10_000 - 720), "12m");
+    assert.equal(ageSince(10_000 - 5), "<1m");
+    assert.equal(ageSince(undefined), "");
   });
 
   it("ageSince clamps a timestamp ahead of the clock, and is blank before the first tick", () => {
-    assert.equal(m.ageSince(10_000 + 30), "<1m");
+    assert.equal(ageSince(10_000 + 30), "<1m");
     r.data.epoch = 0;
-    assert.equal(m.ageSince(500), "");
+    assert.equal(ageSince(500), "");
   });
 
   it("hollowDot for idle and no agent only", () => {

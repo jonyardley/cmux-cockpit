@@ -22,7 +22,7 @@ import {
 import { savedPublished } from "../shared/published.ts";
 import { childRunning, pairLive, type SavedRun, savedRunning, savedRuns } from "../shared/subagents.ts";
 import { cardMessage, readable } from "../shared/text.ts";
-import { fmtAge, nowEpoch } from "../shared/time.ts";
+import { ageSince, finishedAt, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
 import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } from "../shared/words.ts";
@@ -68,7 +68,8 @@ export const roster = computed(() => {
   }
   // Longest-running first: oldest sinceEpoch first.
   run.sort((x, y) => sinceOrActivity(x.a) - sinceOrActivity(y.a));
-  idle.sort((x, y) => (y.a.lastActivityAt ?? 0) - (x.a.lastActivityAt ?? 0));
+  // Most recently finished first, by the moment each row's age counts from.
+  idle.sort((x, y) => finishedAt(y.a) - finishedAt(x.a));
   return { run, idle };
 });
 
@@ -216,17 +217,10 @@ export function statusColor(a: Agent | null, w: Workspace = cur().ws): string {
   return isAsking(a, w) ? T.amberText : (STATUS_TEXT[a.status] ?? T.secondary);
 }
 
-/** Coarse age for rows, "12m" since `at`; "" without a timestamp or clock. A
- * timestamp ahead of the clock reads as "<1m", never blank. */
-export function ageSince(at: number | undefined): string {
-  const now = nowEpoch();
-  return at && now ? fmtAge(Math.max(0, now - at)) : "";
-}
-
-// Idle and ended agents count from their last activity, the rest from the
-// start of their current status.
+// Idle and ended agents count from when they finished (issue #98), as the
+// cockpit's cards do; the rest from the start of their current status.
 function statusSince(a: Agent): number | undefined {
-  return a.status === "idle" || a.status === "ended" ? a.lastActivityAt : (a.sinceEpoch ?? a.lastActivityAt);
+  return a.status === "idle" || a.status === "ended" ? finishedAt(a) : (a.sinceEpoch ?? a.lastActivityAt);
 }
 
 /** Short form for agent rows, the card head's words in lower case: "working 12m", "finished 3m". */
@@ -235,7 +229,7 @@ export function statusLine(a: Agent | null, w: Workspace = cur().ws): string {
 }
 
 /** The one age format the card shows: "<1m", "12m", counted from the
- * start of the status (idle and ended from their last activity); "" without
+ * start of the status (idle and ended from when they finished); "" without
  * an agent or a timestamp. */
 export function sinceAge(a: Agent | null): string {
   return a ? ageSince(statusSince(a)) : "";
@@ -243,9 +237,9 @@ export function sinceAge(a: Agent | null): string {
 
 /** A Working or Idle row's age, in the same format. A working row counts
  * from its start alone: its last activity resets while it works, so it
- * would read as a new run. */
+ * would read as a new run. An idle row counts from when it finished. */
 export function rosterAge(e: RosterEntry): string {
-  return e.kind === "run" ? ageSince(e.a.sinceEpoch) : ageSince(e.a.lastActivityAt);
+  return e.kind === "run" ? ageSince(e.a.sinceEpoch) : ageSince(finishedAt(e.a));
 }
 
 /** The card head's status, in the words the cockpit uses: "Working 14m", "Asking 2m", "Finished 3m", "No agent". */

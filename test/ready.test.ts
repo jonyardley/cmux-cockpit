@@ -127,8 +127,32 @@ describe("a Ready card", () => {
     assert.equal(info.halo, "clear");
   });
 
-  it("leaves the time off when nothing says when the status began", () => {
-    assert.equal(status.statusLine(ws("w", { unread: 1, agents: [agent("idle", { lastActivityAt: 5 })] })), "Finished");
+  it("falls back to the last activity when nothing says when it finished", () => {
+    const w = ws("w", { unread: 1, agents: [agent("idle", { lastActivityAt: now() - 180 })] });
+    assert.equal(status.statusLine(w), "Finished 3m");
+  });
+
+  it("counts from the finish, not a later last activity, as the agents panel does (issue #98)", () => {
+    const a = agent("idle", { sinceEpoch: now() - 360, lastActivityAt: now() - 180 });
+    assert.equal(status.statusLine(readyWs("w", { agents: [a] })), "Finished 6m");
+    assert.equal(status.statusLine(readyWs("w", { unread: 0, agents: [a] })), "Idle 6m");
+  });
+
+  it("dates an ended agent by its work, not by when its terminal closed", () => {
+    const closed = agent("ended", { sinceEpoch: now() - 5, lastActivityAt: now() - 10_800 });
+    assert.equal(status.statusLine(readyWs("w", { agents: [closed] })), "Finished 3h");
+  });
+
+  it("reports the agent the rest of the card reports, so its two ages agree", () => {
+    const a = agent("idle", { sinceEpoch: now() - 900, lastActivityAt: now() - 60 });
+    const b = agent("idle", { sinceEpoch: now() - 300, lastActivityAt: now() - 240 });
+    const w = readyWs("w", { agents: [a, b] });
+    assert.equal(status.readyAgent(w), a);
+    assert.equal(status.statusLine(w), "Finished 15m");
+    assert.equal(status.ageOf(w), "15m");
+    // Once read, the card still reports the same agent and age.
+    assert.equal(status.statusLine(readyWs("w", { unread: 0, agents: [a, b] })), "Idle 15m");
+    assert.equal(status.readyAgent(ws("none")), null);
   });
 
   it("keeps the plain labels once read", () => {
