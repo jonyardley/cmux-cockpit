@@ -3,7 +3,7 @@ name: PR description
 # Separate from CI so editing the description reruns only this check.
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
+    types: [opened, edited, synchronize, reopened, ready_for_review]
 
 permissions:
   contents: read
@@ -16,10 +16,15 @@ concurrency:
 
 jobs:
   pr-body:
-    # Dependabot writes its own descriptions; a title-only edit cannot
-    # change the result. `changes.body` is tested for truthiness: comparing
-    # an object with `!= null` coerces both to numbers and comes out false.
+    # Drafts are skipped, not failed: every PR opens with its review still
+    # to come, and a red check on each new PR taught nobody anything. Going
+    # ready runs it, and the guard-ready hook checks the same rules before
+    # an agent's `gh pr ready`. Dependabot writes its own descriptions; a
+    # title-only edit cannot change the result. `changes.body` is tested for
+    # truthiness: comparing an object with `!= null` coerces both to numbers
+    # and comes out false.
     if: >-
+      !github.event.pull_request.draft &&
       github.event.pull_request.user.login != 'dependabot[bot]' &&
       (github.event.action != 'edited' || github.event.changes.body)
     runs-on: ubuntu-latest

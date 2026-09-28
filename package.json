@@ -16,6 +16,7 @@
     "test": "node --test",
     "coverage": "node --test --experimental-test-coverage --test-coverage-include='src/**/model.ts' --test-coverage-include='src/cockpit/{status,drop,lanes,state}.ts' --test-coverage-include='src/shared/**' --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=80",
     "validate": "node scripts/validate.ts",
+    "pr-body": "node scripts/pr-body.ts",
     "check": "npm run lint && npm run typecheck && npm run knip && npm run build && npm run coverage && npm run validate",
     "hooks": "git config core.hooksPath .githooks",
     "helper": "node scripts/install-helper.ts",

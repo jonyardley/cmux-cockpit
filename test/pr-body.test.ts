@@ -3,8 +3,9 @@
 // stand-in such as "Pending.".
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { check, missingSections } from "../scripts/pr-body.ts";
+import { bodyMessage, check, missingSections } from "../scripts/pr-body.ts";
 
 const FOOTER = "🤖 Generated with [Claude Code](https://claude.com/claude-code)";
 
@@ -132,5 +133,38 @@ describe("check", () => {
       check({ pull_request: { body } }),
       `pr-body: fill in the PR description's "## Look at after reload" section.`,
     );
+  });
+});
+
+describe("bodyMessage", () => {
+  it("passes a filled body and names each missing section otherwise", () => {
+    assert.equal(bodyMessage(filled), null);
+    assert.equal(
+      bodyMessage(filled.replace("/code-review high: two findings, both fixed.", "Pending.")),
+      'pr-body: fill in the PR description\'s "## Review" section.',
+    );
+  });
+});
+
+describe("the workflow", () => {
+  // The YAML GitHub reads, with comments gone, so a condition that survives
+  // only in a comment does not pass.
+  const lines = readFileSync(".github/workflows/pr-body.yml", "utf8")
+    .split("\n")
+    .filter((l) => !l.trim().startsWith("#"));
+  const types = lines.find((l) => /^\s+types:/.test(l)) ?? "";
+  const at = lines.findIndex((l) => /^\s+if: >-$/.test(l));
+  const indent = (l: string) => l.length - l.trimStart().length;
+  const rest = lines.slice(at + 1);
+  const end = rest.findIndex((l) => indent(l) <= indent(lines[at] ?? ""));
+  const condition = (end === -1 ? rest : rest.slice(0, end)).join(" ");
+
+  it("skips drafts, so a new PR is not red while its review is to come", () => {
+    assert.ok(at !== -1, "the job has an if: >- condition");
+    assert.match(condition, /!github\.event\.pull_request\.draft &&/);
+  });
+
+  it("runs when a PR leaves draft", () => {
+    assert.match(types, /\[[^\]]*\bready_for_review\b[^\]]*\]/);
   });
 });
