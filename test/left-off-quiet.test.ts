@@ -10,6 +10,8 @@ const { agent, group, ws } = await import("./support/fixtures.ts");
 const model = await import("../src/cockpit/model.ts");
 const status = await import("../src/cockpit/status.ts");
 const { promptText } = await import("../src/shared/text.ts");
+const agents = await import("../src/agents/model.ts");
+const { QUIET_SECS } = await import("../src/shared/quiet.ts");
 const { C } = await import("../src/cockpit/theme.ts");
 
 const NOW = 1_000_000;
@@ -27,7 +29,7 @@ describe("a quiet agent", () => {
   });
 
   it("draws a hollow blue dot with no halo, and keeps the working words' colour", () => {
-    const info = status.statusInfo(working(status.QUIET_SECS));
+    const info = status.statusInfo(working(QUIET_SECS));
     assert.equal(info.dot, null);
     assert.equal(info.ring, C.blue);
     assert.equal(info.halo, "clear");
@@ -35,9 +37,21 @@ describe("a quiet agent", () => {
   });
 
   it("stays plain working just under the threshold", () => {
-    const w = working(status.QUIET_SECS - 1);
+    const w = working(QUIET_SECS - 1);
     assert.equal(status.statusLine(w), "Working 42m");
     assert.equal(status.statusInfo(w).dot, C.blue);
+  });
+
+  it("holds off while a helper is running for it", () => {
+    const w = working(17 * 60);
+    const a = w.agents?.[0];
+    if (a) a.children = [{ id: "h1", label: "explore", running: true, startedEpoch: NOW - 60 }];
+    assert.equal(status.statusLine(w), "Working 42m");
+  });
+
+  it("reads the same in the agents panel's head status", () => {
+    const w = working(17 * 60);
+    assert.equal(agents.headStatus(w.agents?.[0] ?? null, w), "Working 42m · quiet 17m");
   });
 
   it("never marks an agent that is not working, or one with no activity time", () => {
@@ -70,13 +84,20 @@ describe("where you left off", () => {
 
   it("clips a long prompt to one line's worth", () => {
     const t = status.leftOffText(ws("a", { latestPrompt: "word ".repeat(60) }));
-    assert.ok(t.length <= "You: ".length + 91, t);
+    assert.equal(t.length, "You: ".length + 90);
+    assert.ok(t.endsWith("…"), t);
   });
 
-  it("is empty with no prompt, or when the prompt is a harness turn", () => {
-    assert.equal(status.leftOffText(ws("a")), "");
+  it("is empty with no prompt, or a harness turn before any prompt", () => {
+    assert.equal(status.leftOffText(ws("none")), "");
     const handBack = "<task-notification>the helper finished";
-    assert.equal(promptText(ws("a", { latestPrompt: handBack })), "");
-    assert.equal(status.leftOffText(ws("a", { latestPrompt: handBack })), "");
+    assert.equal(promptText(ws("fresh", { latestPrompt: handBack })), "");
+    assert.equal(status.leftOffText(ws("fresh", { latestPrompt: handBack })), "");
+  });
+
+  it("keeps the last real prompt through a harness turn, as the Asked line does", () => {
+    assert.equal(status.leftOffText(ws("kept", { latestPrompt: "refactor the bridge" })), "You: refactor the bridge");
+    const handBack = ws("kept", { latestPrompt: "[Subagent hand-back] done" });
+    assert.equal(status.leftOffText(handBack), "You: refactor the bridge");
   });
 });

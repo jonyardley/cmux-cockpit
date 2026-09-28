@@ -79,7 +79,8 @@ function detailLine(w: WsAccessor, key: string, lines: number, indent = 0): View
 
 // Your last prompt, above the agent's latest message, on cards in lanes
 // you come back to after a while (model.ts's showsLeftOff). Tertiary ink,
-// so the agent's words stay the stronger line.
+// so the agent's words stay the stronger line, and faint on the selected
+// card, as its message is, since the agents panel shows both in full.
 function leftOffLine(w: WsAccessor, key: string, indent = 0): View {
   const text = computed(() => (showsLeftOff(w()) ? leftOffText(w()) : ""));
   return when(
@@ -88,7 +89,7 @@ function leftOffLine(w: WsAccessor, key: string, indent = 0): View {
     () =>
       Text(text)
         .font(12)
-        .color(C.tertiary)
+        .color(() => (isSelected(w()) ? C.faint : C.tertiary))
         .lineLimit(1)
         .truncation("tail")
         .paddingLeading(indent)

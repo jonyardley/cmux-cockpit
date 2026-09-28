@@ -6,11 +6,12 @@ import { agentsOf, askReason, hasRealAsk } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
 import { prChipColors } from "../shared/pr-colors.ts";
 import type { PrSummary } from "../shared/prs.ts";
+import { quietSince, quietSuffix } from "../shared/quiet.ts";
 import { liveRunCount } from "../shared/subagents.ts";
 import { cardMessage, clip, oneLine, promptText, readable } from "../shared/text.ts";
-import { ageSince, finishedAt, nowEpoch } from "../shared/time.ts";
+import { ageSince, finishedAt } from "../shared/time.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
-import { ASKING_WORD, NO_AGENT_WORD, QUIET_WORD, STATUS_WORD, withAge, YOU_WORD } from "../shared/words.ts";
+import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge, YOU_WORD } from "../shared/words.ts";
 import { isSelected } from "./state.ts";
 import { C } from "./theme.ts";
 
@@ -126,23 +127,8 @@ export function statusInfo(w: Workspace | undefined): StatusStyle {
   // The agent is worked out once, for both the ask and the status.
   const a = agentOf(w);
   if (askReason(a, w)) return ASKING;
-  if (quietSince(a)) return QUIET;
+  if (quietSince(a, w)) return QUIET;
   return STATUS[a?.status ?? "none"] ?? STATUS.none;
-}
-
-/**
- * How long a working agent may go without activity before its card says
- * so. Long enough for most builds and test runs; a hung command or a
- * stalled agent passes it.
- */
-export const QUIET_SECS = 10 * 60;
-
-// When a working agent last showed activity, if that was at least
-// QUIET_SECS ago; else 0.
-function quietSince(a: Agent | null): number {
-  const last = a?.status === "working" ? (a.lastActivityAt ?? 0) : 0;
-  const now = nowEpoch();
-  return last > 0 && now - last >= QUIET_SECS ? last : 0;
 }
 
 /** A Needs you row's second line: why the agent asks, else its latest message. */
@@ -183,9 +169,9 @@ export function prTextColor(pr: Pick<PrSummary, "health" | "status"> | undefined
  * status began; sinceOf's fallbacks (last activity, the workspace's
  * latestAt) do not, so without it the time is left off. */
 export function statusLine(w: Workspace | undefined): string {
-  const line = withAge(statusInfo(w).label, cardAge(w));
-  const quiet = askOf(w) ? 0 : quietSince(agentOf(w));
-  return quiet ? line + " · " + QUIET_WORD + " " + ageSince(quiet) : line;
+  const info = statusInfo(w);
+  const line = withAge(info.label, cardAge(w));
+  return info === QUIET ? line + quietSuffix(agentOf(w), w) : line;
 }
 
 function cardAge(w: Workspace | undefined): string {
