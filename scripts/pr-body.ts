@@ -73,10 +73,11 @@ export function check(event: unknown): string | null {
 
 // The PR's live description from GitHub, via gh, or an Error saying why not.
 // `pr` is anything `gh pr view` takes (number, URL, branch), or null for the
-// current branch's PR in `cwd`.
-export function fetchBody(pr: string | null, cwd?: string): string | Error {
-  const args = ["pr", "view", ...(pr ? [pr] : []), "--json", "body", "--jq", ".body"];
-  const r = spawnSync("gh", args, { cwd, encoding: "utf8" });
+// current branch's PR in `cwd`; `repo` is an owner/name for `-R`. Capped at
+// 20 seconds, so a stalled gh fails here rather than hanging the caller.
+export function fetchBody(pr: string | null, cwd?: string, repo?: string | null): string | Error {
+  const args = ["pr", "view", ...(pr ? [pr] : []), ...(repo ? ["-R", repo] : []), "--json", "body", "--jq", ".body"];
+  const r = spawnSync("gh", args, { cwd, encoding: "utf8", timeout: 20_000 });
   if (r.error) return r.error;
   if (r.status !== 0) return new Error(r.stderr.trim() || `gh exited ${String(r.status)}`);
   return r.stdout;

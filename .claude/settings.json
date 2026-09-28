@@ -16,7 +16,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/hooks/guard-ready.ts\""
+            "command": "sh \"$CLAUDE_PROJECT_DIR/scripts/hooks/guard-ready.sh\""
           }
         ]
       }

@@ -18,6 +18,7 @@ import { closeSync, openSync, readFileSync } from "node:fs";
 import { createConnection } from "node:net";
 import { join } from "node:path";
 import { LOG_PATH } from "../state-log.ts";
+import { field, ghPr, SEGMENTS } from "./gh-command.ts";
 
 export interface Pr {
   number: number;
@@ -33,23 +34,10 @@ interface CmuxEnv {
   CMUX_SOCKET_CAPABILITY?: string | undefined;
 }
 
-// `gh [global flags] pr create|new` at the start of a shell segment, so a
-// command that only mentions it (grep, a quoted body) does not count.
-// Leading env assignments (`GH_REPO=o/r gh ...`) count too, and so does an
-// `rtk` prefix: the RTK PreToolUse hook rewrites most creates to `rtk gh`,
-// this hook sees the rewritten command, and RTK leaves some forms (a heredoc
-// body, `gh -R`) as plain `gh`, so both must match.
-const ghPr = (verbs: string) =>
-  new RegExp(String.raw`^\s*(?:\w+=\S*\s+)*(?:rtk\s+)?gh\s+(?:-\S+\s+(?:[^-\s]\S*\s+)?)*pr\s+(?:${verbs})(?![\w-])`);
 const PR_CREATE = ghPr("create|new");
 // The commands that change a PR's draft, merged or closed state on GitHub.
 const PR_SETTLE = ghPr("ready|merge|close|reopen");
-const SEGMENTS = /&&|\|\||[;|\n]/;
 const PR_URL = /https:\/\/\S+\/pull\/\d+/g;
-
-function field(obj: unknown, key: string): unknown {
-  return typeof obj === "object" && obj !== null && key in obj ? Reflect.get(obj, key) : undefined;
-}
 
 // The URL `gh pr create` printed, or null when the event is not a Bash call
 // that ran it, or it failed and printed none. The URL pins the exact PR, so

@@ -82,7 +82,9 @@ Review before hand-off, in this order:
    hold real text.
 4. Every check green on the last commit, after the fixes. Then
    `gh pr ready`: the guard-ready hook refuses it while either section
-   is empty or a placeholder, and the check then runs for real. Jon
+   is empty or a placeholder, and the check then runs for real. The
+   hook only sees `gh pr ready` in Bash: going ready any other way,
+   run `npm run pr-body` first. Jon
    reviews and merges. Agents never merge.
 5. After Jon merges, close out in one hand-off: a single command in its
    own fenced block, starting with `!`, for Jon to paste in a session
