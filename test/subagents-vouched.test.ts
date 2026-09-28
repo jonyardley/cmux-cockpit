@@ -1,0 +1,148 @@
+// Issue #83: cmux's own `children` can settle a background subagent the
+// moment its Agent call returns, while the hook's saved run (paired, no end,
+// owner still working) knows it is still going. The saved run vouches for
+// the child, so it reads as running; a run the hook ended stays settled.
+// __STATE__ is set before the renderer import, as in subagents-saved.test.ts.
+
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+
+const saved = (id: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  session: "owner",
+  agentId: "agent-" + id,
+  label: "Lane " + id,
+  startedEpoch: 1000,
+  ...extra,
+});
+
+(globalThis as Record<string, unknown>).__STATE__ = {
+  dismissed: {},
+  projectOverride: {},
+  projects: {},
+  prs: {},
+  ownPrs: {},
+  subagents: {
+    live: [saved("a"), saved("b")],
+    ended: [saved("a", { endedEpoch: 1100 })],
+    shared: [saved("s", { label: "Review" })],
+    cross: [saved("x", { label: "Explore docs" })],
+    generic: [saved("g", { label: "subagent" })],
+  },
+};
+
+const { installRenderer } = await import("./support/renderer.ts");
+const r = installRenderer();
+const { agent, ws } = await import("./support/fixtures.ts");
+const m = await import("../src/agents/model.ts");
+const { liveRunCount } = await import("../src/shared/subagents.ts");
+
+// cmux's view of a background run: settled a moment after it started.
+const settled = (id: string, label: string): SubagentRun => ({
+  id,
+  label,
+  running: false,
+  startedEpoch: 1000,
+  endedEpoch: 1001,
+});
+
+const rows = () => m.subagents().map((e) => [e.key, e.label, e.running]);
+
+describe("saved runs vouching for cmux's children (#83)", () => {
+  it("reads a child cmux settled as running while its saved run has no end and its owner works", () => {
+    const owner = agent("working", {
+      id: "owner",
+      children: [settled("agent-a", "Lane a"), settled("agent-b", "Other name")],
+    });
+    r.data.workspaces = [ws("live", { selected: true, agents: [owner] })];
+    assert.deepEqual(rows(), [
+      ["s:owner:agent-a", "Lane a", true],
+      ["s:owner:agent-b", "Other name", true],
+    ]);
+    const [first] = m.subagents();
+    assert.equal(first?.endedEpoch, undefined);
+  });
+
+  it("matches a child by the Agent call's id, or by label when cmux's id is its own", () => {
+    const owner = agent("working", { id: "owner", children: [settled("a", "?"), settled("cmux-9", "Lane b")] });
+    r.data.workspaces = [ws("live", { selected: true, agents: [owner] })];
+    assert.deepEqual(
+      m.subagents().map((e) => e.running),
+      [true, true],
+    );
+  });
+
+  it("keeps a child settled when the hook ended its saved run too", () => {
+    const owner = agent("working", { id: "owner", children: [settled("agent-a", "Lane a")] });
+    r.data.workspaces = [ws("ended", { selected: true, agents: [owner] })];
+    assert.deepEqual(rows(), [["s:owner:agent-a", "Lane a", false]]);
+  });
+
+  it("keeps a child settled once its owner has ended", () => {
+    const owner = agent("ended", { id: "owner", children: [settled("agent-a", "Lane a")] });
+    r.data.workspaces = [ws("live", { selected: true, agents: [owner] })];
+    assert.deepEqual(
+      m.subagents().map((e) => e.running),
+      [false],
+    );
+  });
+
+  it("adds a live saved run cmux has already pruned, once, beside the children it still sends", () => {
+    const owner = agent("working", { id: "owner", children: [settled("agent-a", "Lane a")] });
+    r.data.workspaces = [ws("live", { selected: true, agents: [owner] })];
+    assert.deepEqual(rows(), [
+      ["s:owner:agent-a", "Lane a", true],
+      ["s:owner:b", "Lane b", true],
+    ]);
+  });
+
+  it("leaves an unmatched child cmux settled as settled", () => {
+    const owner = agent("working", { id: "owner", children: [settled("other", "Something else")] });
+    r.data.workspaces = [ws("ended", { selected: true, agents: [owner] })];
+    assert.deepEqual(rows(), [["s:owner:other", "Something else", false]]);
+  });
+
+  it("counts vouched children and unclaimed live saved runs once each on the cockpit card", () => {
+    const owner = agent("working", { id: "owner", children: [settled("agent-a", "Lane a")] });
+    assert.equal(liveRunCount(ws("live", { agents: [owner] })), 2);
+    assert.equal(liveRunCount(ws("ended", { agents: [owner] })), 0);
+  });
+  it("pairs by id before label, so a finished run sharing a label never takes a live run's place", () => {
+    const owner = agent("working", { id: "owner", children: [settled("old", "Review"), settled("agent-s", "Review")] });
+    r.data.workspaces = [ws("shared", { selected: true, agents: [owner] })];
+    assert.deepEqual(rows(), [
+      ["s:owner:agent-s", "Review", true],
+      ["s:owner:old", "Review", false],
+    ]);
+  });
+
+  it("never vouches for a child under an ended agent, even when the saved run's owner is not matched", () => {
+    const gone = agent("ended", { id: "gone", children: [settled("agent-a", "Lane a")] });
+    const other = agent("working", { id: "other" });
+    r.data.workspaces = [ws("live", { selected: true, agents: [gone, other] })];
+    assert.deepEqual(rows(), [
+      ["s:ws:b", "Lane b", true],
+      ["s:gone:agent-a", "Lane a", false],
+    ]);
+    assert.equal(liveRunCount(ws("live", { agents: [gone, other] })), 1);
+  });
+
+  it("pairs a saved run by label only with its own session's children", () => {
+    const other = agent("working", { id: "other", children: [settled("cmux-2", "Explore docs")] });
+    const owner = agent("working", { id: "owner", children: [settled("cmux-1", "Explore docs")] });
+    r.data.workspaces = [ws("cross", { selected: true, agents: [other, owner] })];
+    assert.deepEqual(rows(), [
+      ["s:owner:cmux-1", "Explore docs", true],
+      ["s:other:cmux-2", "Explore docs", false],
+    ]);
+  });
+
+  it("never pairs on the generic subagent label", () => {
+    const owner = agent("working", { id: "owner", children: [settled("cmux-3", "subagent")] });
+    r.data.workspaces = [ws("generic", { selected: true, agents: [owner] })];
+    assert.deepEqual(rows(), [
+      ["s:owner:g", "subagent", true],
+      ["s:owner:cmux-3", "subagent", false],
+    ]);
+  });
+});
