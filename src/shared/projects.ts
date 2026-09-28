@@ -5,6 +5,9 @@
 import type { ProjectSpec } from "../../scripts/state-config.ts";
 import { P } from "./palette.ts";
 import { SAVED_STATE } from "./persist.ts";
+import { PROJECT_COLORS, PROJECT_ICONS } from "./project-sets.ts";
+
+export { PROJECT_COLORS, PROJECT_ICONS };
 
 declare const __PROJECTS__: readonly Project[];
 
@@ -47,34 +50,6 @@ export function projectOf(directory: string | null | undefined): Project {
 // --- Projects made in the sidebar (issue #9) ---------------------------------------------
 // No text input and no submenus in the renderer, so a new project takes its
 // name from the folder, and colour and icon step through these sets.
-
-/** Colours a sidebar-made project steps through. glyphColor keeps its icon readable on any of them. */
-export const PROJECT_COLORS = [
-  "#D97757",
-  "#6A9BCC",
-  "#788C5D",
-  "#C2A83E",
-  "#9B6FB0",
-  "#CC6B8E",
-  "#4F9C94",
-  "#8A7F72",
-] as const;
-
-/** SF Symbols a sidebar-made project steps through; a new one starts on the first. */
-export const PROJECT_ICONS = [
-  "folder.fill",
-  "star.fill",
-  "cube.fill",
-  "leaf.fill",
-  "music.note",
-  "hammer.fill",
-  "book.fill",
-  "flame.fill",
-  "bolt.fill",
-  "globe",
-  "paintbrush.fill",
-  "gearshape.fill",
-] as const;
 
 /** The item after `current`, wrapping; the first item when `current` is not in the set. */
 export function nextIn(set: readonly [string, ...string[]], current: string): string {

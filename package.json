@@ -20,6 +20,9 @@
     "check": "npm run lint && npm run typecheck && npm run knip && npm run build && npm run coverage && npm run validate",
     "hooks": "git config core.hooksPath .githooks",
     "helper": "node scripts/install-helper.ts",
+    "setup": "node scripts/setup.ts",
+    "doctor": "node scripts/doctor.ts",
+    "uninstall": "node scripts/uninstall.ts",
     "agents": "cmux right-sidebar set custom agents"
   },
   "devDependencies": {

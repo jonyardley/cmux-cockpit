@@ -9,8 +9,9 @@ pull requests and the pages your agents published.
 
 ![The cockpit on the left, with one workspace in the Main activity lane, and the agents panel on the right, showing that workspace's helper, pull request and checks](docs/images/sidebars.png)
 
-**To install, follow the [quickstart](docs/quickstart.md)** (about 15
-minutes).
+**To install, follow the [quickstart](docs/quickstart.md)** (about 10
+minutes): back up, clone, `npm ci`, `npm run setup`. `npm run doctor`
+checks an install, and `npm run uninstall` takes the extras out again.
 
 This is a personal setup shared as is. It follows cmux's custom sidebar
 beta, which has no published schema yet, so a cmux update can break it.
