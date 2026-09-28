@@ -13,6 +13,7 @@ import {
   laneOf,
   moveToLane,
   overrideOrder,
+  stateRank,
   wsById,
 } from "./model.ts";
 import { drag, mode, setDrag } from "./state.ts";
@@ -25,19 +26,35 @@ export interface DropTarget {
   prevRef: string | null;
 }
 
+// True for a card in the same state as the dragged one.
+const isPeerOf =
+  (wsId: string | null) =>
+  (other: string | null): boolean =>
+    !!wsId && !!other && stateRank(wsById(other)) === stateRank(wsById(wsId));
+
 // `index` is the dragged row's slot in the flat list with the row removed.
 // The lane is whatever the row above the slot belongs to (a header or an
 // empty lane's zone counts, so dropping just under one files the card
 // there). Above every row it is the first lane; an index past the end is
 // clamped, so the bottom slot always files into the last row's lane.
+//
+// Cards sort by state inside a lane (model.ts's stateRank), and the drag
+// order only holds among cards in the same state. So the drop anchors to a
+// neighbour in the dragged card's own state: just after the card above when
+// that one shares it and the card below does not, else just before the card
+// below. Either way it sits among its peers where Jon let go.
 export function resolveDrop(key: string, index: number): DropTarget {
-  const entries = flatEntries().filter((e) => e.id !== key);
+  const all = flatEntries();
+  const entries = all.filter((e) => e.id !== key);
   const at = Math.min(Math.max(index, 0), entries.length);
   const prev = entries[at - 1];
   const laneKey = prev?.lane ?? FIRST_LANE;
   const next = entries[at];
-  const nextRef = next?.kind === "ws" && next.lane === laneKey ? next.wsId : null;
+  const below = next?.kind === "ws" && next.lane === laneKey ? next.wsId : null;
   const prevRef = prev?.kind === "ws" ? prev.wsId : null;
+  const dragged = all.find((e) => e.id === key);
+  const peer = isPeerOf(dragged?.kind === "ws" ? dragged.wsId : null);
+  const nextRef = below && peer(prevRef) && !peer(below) ? null : below;
   return { laneKey, nextRef, prevRef };
 }
 

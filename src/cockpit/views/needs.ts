@@ -4,7 +4,7 @@ import { dismissNeeds } from "../../shared/needs.ts";
 import { cardMessage, oneLine } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot, when } from "../../shared/ui.ts";
-import { needsList } from "../model.ts";
+import { jumpNext, needsList, needsMore, needsShown, nextStep } from "../model.ts";
 import { selectWorkspace } from "../state.ts";
 import { ageOf } from "../status.ts";
 import { C } from "../theme.ts";
@@ -42,7 +42,59 @@ function needsRow(w: WsAccessor): View {
     .contextMenu(cardMenu(w));
 }
 
-// Hidden when empty.
+// Above the strip (issue #74): opens the next workspace that needs Jon, then
+// the Ready ones, and says which and how far along the queue it is.
+// Hidden when nothing needs him or is Ready.
+export function nextButton(): View {
+  const step = () => nextStep();
+  const row = HStack({ spacing: 6 }, [
+    Text(() => "Next: " + displayTitle(step()?.target))
+      .font(11.5)
+      .weight("semibold")
+      .color(C.clayText)
+      .lineLimit(1)
+      .truncation("middle")
+      .layoutPriority(1),
+    Text(() => {
+      const s = step();
+      return s ? s.position + " of " + s.total : "";
+    })
+      .font(10)
+      .monospaced()
+      .color(C.faint)
+      .lineLimit(1),
+  ])
+    .paddingHorizontal(8)
+    .paddingVertical(5)
+    .frame({ maxWidth: "infinity" })
+    .hoverBackground(C.needsHover);
+  return when(
+    "next",
+    () => step() !== null,
+    () =>
+      VStack({ spacing: 0 }, [ring(row, C.card, C.needsEdge, 1, 7).onTap(jumpNext)])
+        .paddingHorizontal(10)
+        .paddingTop(6),
+  );
+}
+
+// "+2 more" under the capped rows, in line with the rows' titles: a row's
+// 1pt edge, 10 padding, 13pt halo and 10 spacing put its title at 34.
+function moreLine(): View {
+  return when(
+    "more",
+    () => needsMore() > 0,
+    () =>
+      Text(() => "+" + needsMore() + " more")
+        .font(11.5)
+        .color(C.clayText)
+        .lineLimit(1)
+        .paddingLeading(34)
+        .frame({ maxWidth: "infinity", alignment: "leading" }),
+  );
+}
+
+// Hidden when empty. The count says how many wait, the rows stop at four.
 export function needsStrip(): View {
   return when(
     "needs",
@@ -62,7 +114,8 @@ export function needsStrip(): View {
                 .weight("semibold")
                 .color(C.clayText),
             ]).paddingHorizontal(2),
-            ForEach({ items: needsList, key: (w) => w.id }, (w) => needsRow(w)),
+            ForEach({ items: needsShown, key: (w) => w.id }, (w) => needsRow(w)),
+            moreLine(),
           ]).padding(9),
           C.needsBg,
           C.needsEdge,
