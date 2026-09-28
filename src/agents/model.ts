@@ -1,9 +1,9 @@
 // The agents panel's data: the selected workspace in detail (and its
-// question, when its agent needs you), who is working and who is idle, and
-// every PR. Pure reads of `data`, so each is testable alone.
+// question, when its agent needs you), every PR, and what agents published.
+// Who is working and who is idle lives on the cockpit's cards, not here. Pure reads of `data`, so each is testable alone.
 
 import type { CheckState, PublishedKind, SavedPublished } from "../../scripts/state-config.ts";
-import { byActivity, sinceOrActivity } from "../shared/activity.ts";
+import { byActivity } from "../shared/activity.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
@@ -28,56 +28,7 @@ import { type HaloStatus, haloColor } from "../shared/ui.ts";
 import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } from "../shared/words.ts";
 import { CHECK_DOT, STATUS_DOT, T } from "./theme.ts";
 
-export interface AgentEntry {
-  key: string;
-  ws: Workspace;
-  a: Agent;
-  project: Project;
-}
-
-// Working and Idle
-
-export const [idleOpen, setIdleOpen] = signal(false);
-
-/** A Working or Idle row's workspace and agent. */
-export type RosterEntry = AgentEntry & { kind: "run" | "idle" };
-
-/** The row a capped list ends in: "+N more", for the rows past the cap (issue #80). */
-export interface MoreRow {
-  key: "more";
-  kind: "more";
-  count: number;
-}
-
-export type RosterRow = RosterEntry | { key: "toggle"; kind: "toggle"; count: number } | MoreRow;
-
-// One row per workspace, from its most active agent, so a stale idle session
-// beside a working one never lists the workspace as idle. The selected
-// workspace is left out: This workspace already shows it. Nothing is cut
-// here, so the section counts are the real totals; the rows below cap.
-export const roster = computed(() => {
-  const run: (AgentEntry & { kind: "run" })[] = [];
-  const idle: (AgentEntry & { kind: "idle" })[] = [];
-  for (const w of data.workspaces() ?? []) {
-    if (w.selected) continue;
-    const a = agentsOf(w).sort(byActivity)[0];
-    if (!a) continue;
-    const e = { ws: w, a, project: projectOf(w.directory) };
-    if (a.status === "working") run.push({ ...e, key: "r:" + w.id, kind: "run" });
-    else if (a.status === "idle") idle.push({ ...e, key: "i:" + w.id, kind: "idle" });
-  }
-  // Longest-running first: oldest sinceEpoch first.
-  run.sort((x, y) => sinceOrActivity(x.a) - sinceOrActivity(y.a));
-  // Most recently finished first, by the moment each row's age counts from.
-  idle.sort((x, y) => finishedAt(y.a) - finishedAt(x.a));
-  return { run, idle };
-});
-
-const INLINE_IDLE = 3;
-/** Working rows shown at most. */
-const MAX_WORKING = 20;
-/** Idle rows shown at most, expanded. */
-const MAX_IDLE = 30;
+// Capped lists
 
 /** How many of `total` rows a cap of `max` leaves out; 0 when none are. */
 export const moreThan = (total: number, max: number): number => Math.max(0, total - max);
@@ -87,28 +38,6 @@ export const moreThan = (total: number, max: number): number => Math.max(0, tota
 export function markLastBefore<T>(rows: T[], more: number): Last<T>[] {
   return more > 0 ? rows.map((e) => ({ ...e, last: false })) : markLast(rows);
 }
-
-// `rows` cut to `max`, ending in a "+N more" row when any were left out.
-function capped<T>(rows: readonly T[], max: number): (T | MoreRow)[] {
-  const more = moreThan(rows.length, max);
-  const out: (T | MoreRow)[] = rows.slice(0, max);
-  if (more > 0) out.push({ key: "more", kind: "more", count: more });
-  return out;
-}
-
-/** The Working section's rows, at most MAX_WORKING then "+N more"; empty
- * when nothing works, so the section is its heading and count alone. */
-export const workingRows = computed((): Last<RosterRow>[] => markLast(capped<RosterRow>(roster().run, MAX_WORKING)));
-
-/** The Idle section's rows: three inline, or when expanded up to MAX_IDLE
- * then "+N more", then the toggle; empty when nothing is idle. */
-export const idleRows = computed((): Last<RosterRow>[] => {
-  const { idle } = roster();
-  const out: RosterRow[] = idleOpen() ? capped<RosterRow>(idle, MAX_IDLE) : idle.slice(0, INLINE_IDLE);
-  const more = idle.length - INLINE_IDLE;
-  if (more > 0) out.push({ key: "toggle", kind: "toggle", count: more });
-  return markLast(out);
-});
 
 // ---- This workspace -------------------------------------------------------
 // This panel has no author state of its own (a sidebar cannot see another
@@ -130,6 +59,14 @@ export const current = computed((): Current | null => {
   const inOrder = agentsOf(w);
   const agents = [...inOrder].sort(byActivity);
   return { ws: w, a: agents[0] ?? null, agents, inOrder, project: projectOf(w.directory) };
+});
+
+/** The This workspace heading, with the selected workspace's project:
+ * "THIS WORKSPACE · Cockpit"; plain "THIS WORKSPACE" with no project. The
+ * workspace's own name is left to the highlighted card on the left. */
+export const currentHeading = computed((): string => {
+  const name = current()?.project.name;
+  return name ? "THIS WORKSPACE · " + name : "THIS WORKSPACE";
 });
 
 /** current(), or an empty stand-in so views never branch on null. */
@@ -188,7 +125,7 @@ export const cardLine = computed((): string => (currentAsk() ? "" : cardMessage(
  * message (issue #80); "" when there is none worth reading. */
 export const askedLine = computed((): string => readable(cur().ws.latestPrompt));
 
-/** Idle and no agent draw a hollow ring, as the Running rows and the left sidebar do. */
+/** Idle and no agent draw a hollow ring, as the left sidebar does. */
 export const hollowDot = (a: Agent | null): boolean => !a || a.status === "idle";
 
 // The halo colour for each of shared/ui.ts's two haloed statuses; every
@@ -235,13 +172,6 @@ export function sinceAge(a: Agent | null): string {
   return a ? ageSince(statusSince(a)) : "";
 }
 
-/** A Working or Idle row's age, in the same format. A working row counts
- * from its start alone: its last activity resets while it works, so it
- * would read as a new run. An idle row counts from when it finished. */
-export function rosterAge(e: RosterEntry): string {
-  return e.kind === "run" ? ageSince(e.a.sinceEpoch) : ageSince(finishedAt(e.a));
-}
-
 /** The card head's status, in the words the cockpit uses: "Working 14m", "Asking 2m", "Finished 3m", "No agent". */
 export function headStatus(a: Agent | null, w: Workspace = cur().ws): string {
   return a ? withAge(statusWord(a, w), sinceAge(a)) : NO_AGENT_WORD;
@@ -253,11 +183,13 @@ const statusWord = (a: Agent, w: Workspace): string =>
 
 // The card's details
 
-/** The Branch detail: the branch, then "uncommitted changes" when dirty.
- * cmux sends no file count, so it never says how many. */
-export const branchDetail = computed((): string => {
+/** The card's faint footer: the branch, then "clean" or "uncommitted
+ * changes" ("main · clean"); the changes alone with no branch, and "" with
+ * neither. cmux sends no file count, so it never says how many. */
+export const branchFooter = computed((): string => {
   const w = cur().ws;
-  return [w.branch, w.dirty ? "uncommitted changes" : ""].filter(Boolean).join(" · ");
+  if (!w.branch) return w.dirty ? "uncommitted changes" : "";
+  return w.branch + " · " + (w.dirty ? "uncommitted changes" : "clean");
 });
 
 export interface PortChip {
@@ -283,8 +215,8 @@ const prStale = (): boolean => freshness().stale;
 /** The workspace's PR chip dims while it is the poller's copy and that copy is stale. */
 export const currentPrDim = computed((): boolean => !!currentPr() && fromPoller(cur().ws) && prStale());
 
-/** Whether any of Branch, Ports or PR shows, so an empty block costs no gap. */
-export const hasDetails = computed((): boolean => !!branchDetail() || portChips().length > 0 || !!currentPr());
+/** Whether Ports or PR shows, so an empty block costs no gap. */
+export const hasDetails = computed((): boolean => portChips().length > 0 || !!currentPr());
 
 // ---- This workspace's agent list -------------------------------------------
 
@@ -404,11 +336,11 @@ function withSaved(wsId: string, agents: Agent[]): Ranked[] {
   return [...childRanked(agents, vouched), ...unclaimed.map((r) => savedRanked(r, agents))];
 }
 
-/** The selected workspace's subagent runs, at most 5: cmux's own `children`
- * while any agent carries some, corrected by the saved runs still live
- * (pairLive, #83), else the saved runs from config/state.json (issue #6). Settled runs stay until their source drops them. No clock
- * read, so it only rebuilds when the data changes; the figure is
- * subagentFigure's. */
+/** The selected workspace's subagent runs, running first: cmux's own
+ * `children` while any agent carries some, corrected by the saved runs still
+ * live (pairLive, #83), else the saved runs from config/state.json (issue
+ * #6). Settled runs stay until their source drops them. No clock read, so it
+ * only rebuilds when the data changes; the figure is subagentFigure's. */
 export const subagents = computed((): SubagentRow[] => {
   const { ws, agents } = cur();
   // cmux can send a children array full of holes (agentRows survives the
@@ -417,8 +349,29 @@ export const subagents = computed((): SubagentRow[] => {
   const ranked = agents.some((a) => (a.children ?? []).some((c) => c))
     ? withSaved(ws.id, agents)
     : savedRuns(ws.id).map((r) => savedRanked(r, agents));
-  return ranked.sort(byRun).slice(0, 5).map(toRow);
+  return ranked.sort(byRun).map(toRow);
 });
+
+/** Helper lines shown at most. */
+const MAX_HELPERS = 5;
+
+/** The card's Helpers lines: the running runs alone, oldest start first, at
+ * most MAX_HELPERS. Settled ones fold into finishedLine. */
+export const helpers = computed((): SubagentRow[] =>
+  subagents()
+    .filter((s) => s.running)
+    .slice(0, MAX_HELPERS),
+);
+
+/** The faint line under the helpers for the settled runs, "1 finished
+ * earlier" or "3 finished earlier"; "" when none have. */
+export const finishedLine = computed((): string => {
+  const n = subagents().filter((s) => !s.running).length;
+  return n ? n + " finished earlier" : "";
+});
+
+/** Whether the card shows its Helpers block: a running run or a settled one. */
+export const hasHelpers = computed((): boolean => subagents().length > 0);
 
 /** Board 1's right-hand figure, kept short so the run's name is not the
  * one cut: coarse elapsed while running ("4m"; "running" without a start
@@ -427,9 +380,6 @@ export function subagentFigure(s: SubagentRow): string {
   if (s.running) return ageSince(s.startedEpoch) || "running";
   return "done";
 }
-
-/** A finished run's label dims, so the live ones stand out. */
-export const subagentLabelColor = (s: SubagentRow): string => (s.running ? T.text : T.tertiary);
 
 // A running run reads as a working agent, a settled one as ended.
 const runStatus = (s: SubagentRow): AgentStatus => (s.running ? "working" : "ended");
@@ -623,8 +573,8 @@ export const madeMore = computed((): number => moreThan(madeCount(), madeHere().
 
 /**
  * The one faint line at the bottom that stands in for empty sections
- * (issue #80): the selected workspace's Subagents, and Made here. Worded
- * for what is actually empty; "" when neither is. Subagents only counts
+ * (issue #80): the selected workspace's Helpers, and Made here. Worded
+ * for what is actually empty; "" when neither is. Helpers only counts
  * while the selected workspace has a live agent, since the block lives on
  * its card and a plain shell has none to run; Made here only once the
  * clock has ticked, since before that no entry counts as fresh.
@@ -633,8 +583,8 @@ export const emptyNote = computed((): string => {
   const live = cur().agents.some((a) => a.status !== "ended");
   const noSubs = live && subagents().length === 0;
   const noMade = nowEpoch() > 0 && madeCount() === 0;
-  if (noSubs && noMade) return "No subagents or published links yet";
-  if (noSubs) return "No subagents yet";
+  if (noSubs && noMade) return "No helpers or published links yet";
+  if (noSubs) return "No helpers yet";
   return noMade ? "No published links yet" : "";
 });
 

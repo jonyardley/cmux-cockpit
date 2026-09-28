@@ -14,110 +14,19 @@ const { STATUS_DOT, T } = await import("../src/agents/theme.ts");
 beforeEach(() => {
   r.data.epoch = 10_000;
   r.data.workspaces = [];
-  m.setIdleOpen(false);
 });
 
-describe("roster", () => {
-  it("uses the most active agent, so a stale idle one never hides a working one", () => {
-    r.data.workspaces = [ws("w", { agents: [agent("idle", { lastActivityAt: 50 }), agent("working")] })];
-    const { run, idle } = m.roster();
-    assert.equal(run.length, 1);
-    assert.equal(idle.length, 0);
+describe("currentHeading", () => {
+  it("names the selected workspace's project after the heading", () => {
+    r.data.workspaces = [ws("sel", { selected: true, directory: "/Users/coder/Dev/App-One/app" })];
+    assert.equal(m.currentHeading(), "THIS WORKSPACE · App One");
   });
 
-  it("sorts running oldest first and idle most recent first", () => {
-    r.data.workspaces = [
-      ws("r-new", { agents: [agent("working", { sinceEpoch: 500 })] }),
-      ws("r-old", { agents: [agent("working", { sinceEpoch: 100 })] }),
-      ws("i-old", { agents: [agent("idle", { lastActivityAt: 100 })] }),
-      ws("i-new", { agents: [agent("idle", { lastActivityAt: 500 })] }),
-      // Finished first, active since: sorted by its finish, as its age reads.
-      ws("i-mid", { agents: [agent("idle", { sinceEpoch: 300, lastActivityAt: 900 })] }),
-    ];
-    const { run, idle } = m.roster();
-    assert.deepEqual(
-      run.map((e) => e.ws.id),
-      ["r-old", "r-new"],
-    );
-    assert.deepEqual(
-      idle.map((e) => e.ws.id),
-      ["i-new", "i-mid", "i-old"],
-    );
-  });
-});
-
-describe("roster leaves out the selected workspace", () => {
-  it("drops it from both running and idle", () => {
-    r.data.workspaces = [
-      ws("sel-run", { selected: true, agents: [agent("working")] }),
-      ws("other-run", { agents: [agent("working")] }),
-      ws("other-idle", { agents: [agent("idle")] }),
-    ];
-    const { run, idle } = m.roster();
-    assert.deepEqual(
-      run.map((e) => e.ws.id),
-      ["other-run"],
-    );
-    assert.deepEqual(
-      idle.map((e) => e.ws.id),
-      ["other-idle"],
-    );
-  });
-
-  it("drops a selected idle workspace too", () => {
-    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("idle")] })];
-    assert.equal(m.roster().idle.length, 0);
-  });
-});
-
-describe("workingRows and idleRows", () => {
-  const idleWorkspaces = (n: number) =>
-    Array.from({ length: n }, (_, i) => ws("i" + i, { agents: [agent("idle", { lastActivityAt: i })] }));
-
-  it("puts working and idle in their own lists, with no heading or empty rows", () => {
-    r.data.workspaces = [ws("r", { agents: [agent("working")] }), ...idleWorkspaces(1)];
-    assert.deepEqual(
-      m.workingRows().map((e) => [e.kind, e.last]),
-      [["run", true]],
-    );
-    assert.deepEqual(
-      m.idleRows().map((e) => [e.kind, e.last]),
-      [["idle", true]],
-    );
-  });
-
-  it("is empty on both sides when nothing is there, so each section shows only its heading", () => {
-    assert.deepEqual(m.workingRows(), []);
-    assert.deepEqual(m.idleRows(), []);
-  });
-
-  it("shows three idle inline, then a toggle for the rest", () => {
-    r.data.workspaces = idleWorkspaces(5);
-    assert.deepEqual(
-      m.idleRows().map((e) => e.kind),
-      ["idle", "idle", "idle", "toggle"],
-    );
-    const toggle = m.idleRows().at(-1);
-    assert.equal(toggle?.kind === "toggle" && toggle.count, 2);
-  });
-
-  it("expands to every idle agent", () => {
-    r.data.workspaces = idleWorkspaces(5);
-    m.setIdleOpen(true);
-    assert.equal(m.idleRows().filter((e) => e.kind === "idle").length, 5);
-  });
-
-  it("flags only each list's final row as last", () => {
-    r.data.workspaces = [ws("r1", { agents: [agent("working")] }), ws("r2", { agents: [agent("working")] })];
-    assert.deepEqual(
-      m.workingRows().map((e) => e.last),
-      [false, true],
-    );
-  });
-
-  it("leaves Working empty when the only worker is the selected workspace", () => {
-    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("working")] })];
-    assert.deepEqual(m.workingRows(), []);
+  it("says plain THIS WORKSPACE with no project", () => {
+    r.data.workspaces = [ws("sel", { selected: true })];
+    assert.equal(m.currentHeading(), "THIS WORKSPACE");
+    r.data.workspaces = [];
+    assert.equal(m.currentHeading(), "THIS WORKSPACE");
   });
 });
 
@@ -132,28 +41,6 @@ describe("sinceAge", () => {
   it("is blank without an agent or a timestamp", () => {
     assert.equal(m.sinceAge(null), "");
     assert.equal(m.sinceAge(agent("idle")), "");
-  });
-});
-
-describe("rosterAge", () => {
-  it("counts a working row from its start only, and an idle row from when it finished", () => {
-    const run = (a: Agent) => ({ key: "r", kind: "run" as const, ws: ws("w"), a, project: m.cur().project });
-    const idle = (a: Agent) => ({ key: "i", kind: "idle" as const, ws: ws("w"), a, project: m.cur().project });
-    assert.equal(m.rosterAge(run(agent("working", { sinceEpoch: 10_000 - 720 }))), "12m");
-    // No start: blank, never the last activity, which resets while it works.
-    assert.equal(m.rosterAge(run(agent("working", { lastActivityAt: 10_000 - 5 }))), "");
-    // Issue #98: the move to idle, not a later last activity.
-    assert.equal(m.rosterAge(idle(agent("idle", { sinceEpoch: 10_000 - 360, lastActivityAt: 10_000 - 180 }))), "6m");
-    // No move recorded: the last activity stands in.
-    assert.equal(m.rosterAge(idle(agent("idle", { lastActivityAt: 10_000 - 46 }))), "<1m");
-    assert.equal(m.rosterAge(idle(agent("idle"))), "");
-  });
-
-  it("gives an idle row the age the card head gives the same agent", () => {
-    const a = agent("idle", { sinceEpoch: 10_000 - 360, lastActivityAt: 10_000 - 180 });
-    const row = { key: "i", kind: "idle" as const, ws: ws("w"), a, project: m.cur().project };
-    assert.equal(m.rosterAge(row), "6m");
-    assert.equal(m.headStatus(a), "Idle 6m");
   });
 });
 
@@ -187,24 +74,25 @@ describe("the card's details", () => {
     assert.equal(m.hasDetails(), false);
     r.data.workspaces = [ws("sel", { selected: true, ports: [3000] })];
     assert.equal(m.hasDetails(), true);
-    r.data.workspaces = [ws("sel", { selected: true, dirty: true })];
-    assert.equal(m.hasDetails(), true);
+    // The branch has its own footer line, so it opens no details block.
+    r.data.workspaces = [ws("sel", { selected: true, branch: "main", dirty: true })];
+    assert.equal(m.hasDetails(), false);
     r.data.workspaces = [ws("sel", { selected: true, pr: { number: 1, url: "u/1", status: "open" } })];
     assert.equal(m.hasDetails(), true);
   });
 
   it("says the branch and uncommitted changes when dirty, never a file count", () => {
     r.data.workspaces = [ws("sel", { selected: true, branch: "main", dirty: true })];
-    assert.equal(m.branchDetail(), "main · uncommitted changes");
+    assert.equal(m.branchFooter(), "main · uncommitted changes");
   });
 
-  it("says the branch alone when clean, changes alone with no branch, and nothing with neither", () => {
+  it("says the branch is clean when it is, changes alone with no branch, and nothing with neither", () => {
     r.data.workspaces = [ws("sel", { selected: true, branch: "main" })];
-    assert.equal(m.branchDetail(), "main");
+    assert.equal(m.branchFooter(), "main · clean");
     r.data.workspaces = [ws("sel", { selected: true, dirty: true })];
-    assert.equal(m.branchDetail(), "uncommitted changes");
+    assert.equal(m.branchFooter(), "uncommitted changes");
     r.data.workspaces = [ws("sel", { selected: true })];
-    assert.equal(m.branchDetail(), "");
+    assert.equal(m.branchFooter(), "");
   });
 
   it("lists at most three ports, each with its local address", () => {
@@ -532,8 +420,6 @@ describe("subagents", () => {
     assert.equal(m.subagentHalo(live), T.blueHalo);
     assert.equal(m.subagentDot(done), STATUS_DOT.ended);
     assert.equal(m.subagentHalo(done), "clear");
-    assert.equal(m.subagentLabelColor(live), T.text);
-    assert.equal(m.subagentLabelColor(done), T.tertiary);
   });
 
   it("settles every run under an ended session, whatever the run says", () => {
@@ -562,15 +448,56 @@ describe("subagents", () => {
     );
   });
 
-  it("gathers runs across the workspace's agents with distinct keys, at most 5", () => {
+  it("gathers runs across the workspace's agents with distinct keys, and lists at most 5 helpers", () => {
     const three = (p: string) => [0, 1, 2].map((i) => run(p + i, { running: true, startedEpoch: 100 + i }));
     const a1 = agent("working", { children: three("s") });
     const a2 = agent("idle", { children: three("s") });
     sel([a1, a2]);
     const keys = m.subagents().map((e) => e.key);
-    assert.equal(keys.length, 5);
-    assert.equal(new Set(keys).size, 5);
+    assert.equal(keys.length, 6);
+    assert.equal(new Set(keys).size, 6);
     assert.ok(keys.some((k) => k.startsWith("s:" + a2.id + ":")));
+    assert.equal(m.helpers().length, 5);
+  });
+});
+
+describe("helpers and finishedLine", () => {
+  const run = (id: string, extra: Partial<SubagentRun> = {}): SubagentRun => ({ id, ...extra });
+  const sel = (children: SubagentRun[]) => {
+    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("working", { children })] })];
+  };
+
+  it("lists only the running runs, by label, oldest start first", () => {
+    sel([
+      run("a", { label: "Write builder tests", running: false, startedEpoch: 100, endedEpoch: 200 }),
+      run("b", { label: "Edge-case review", running: true, startedEpoch: 900 }),
+      run("c", { label: "Explore the bridge", running: true, startedEpoch: 300 }),
+    ]);
+    assert.deepEqual(
+      m.helpers().map((e) => e.label),
+      ["Explore the bridge", "Edge-case review"],
+    );
+    assert.equal(m.finishedLine(), "1 finished earlier");
+    assert.equal(m.hasHelpers(), true);
+  });
+
+  it("counts every settled run in one line", () => {
+    sel([
+      run("a", { running: false, endedEpoch: 200 }),
+      run("b", { running: false, endedEpoch: 300 }),
+      run("c", { running: false, endedEpoch: 400 }),
+    ]);
+    assert.deepEqual(m.helpers(), []);
+    assert.equal(m.finishedLine(), "3 finished earlier");
+    assert.equal(m.hasHelpers(), true);
+  });
+
+  it("says nothing finished when none has, and hides the block with no runs", () => {
+    sel([run("a", { running: true, startedEpoch: 100 })]);
+    assert.equal(m.finishedLine(), "");
+    sel([]);
+    assert.equal(m.finishedLine(), "");
+    assert.equal(m.hasHelpers(), false);
   });
 });
 
@@ -639,40 +566,6 @@ describe("agentRows", () => {
 });
 
 describe("honest counts and +N more (#80)", () => {
-  const working = (n: number) =>
-    Array.from({ length: n }, (_, i) => ws("r" + i, { agents: [agent("working", { sinceEpoch: i })] }));
-  const idle = (n: number) =>
-    Array.from({ length: n }, (_, i) => ws("i" + i, { agents: [agent("idle", { lastActivityAt: i })] }));
-  const kinds = (rows: readonly { kind: string }[]) => rows.map((e) => e.kind);
-
-  it("counts every worker, and ends a capped Working list in +N more", () => {
-    r.data.workspaces = working(23);
-    assert.equal(m.roster().run.length, 23);
-    const rows = m.workingRows();
-    assert.equal(rows.length, 21);
-    const last = rows.at(-1);
-    assert.deepEqual(last && [last.kind, last.kind === "more" && last.count, last.last], ["more", 3, true]);
-    assert.ok(rows.slice(0, -1).every((e) => !e.last));
-  });
-
-  it("has no +N more at or under the cap", () => {
-    r.data.workspaces = working(20);
-    assert.ok(!kinds(m.workingRows()).includes("more"));
-  });
-
-  it("counts every idle agent, and when expanded caps at thirty, then +N more, then the toggle", () => {
-    r.data.workspaces = idle(34);
-    assert.equal(m.roster().idle.length, 34);
-    const toggle = m.idleRows().at(-1);
-    assert.equal(toggle?.kind === "toggle" && toggle.count, 31);
-    m.setIdleOpen(true);
-    const rows = m.idleRows();
-    assert.deepEqual(kinds(rows.slice(-3)), ["idle", "more", "toggle"]);
-    const more = rows.at(-2);
-    assert.equal(more?.kind === "more" && more.count, 4);
-    assert.equal(rows.filter((e) => e.kind === "idle").length, 30);
-  });
-
   it("counts every PR before the cap and says how many the cap leaves out", () => {
     r.data.workspaces = Array.from({ length: 33 }, (_, i) =>
       ws("p" + i, { pr: { url: "u/" + i, number: i + 1, status: "open" } }),
@@ -727,12 +620,12 @@ describe("the PR rows' source", () => {
 });
 
 describe("emptyNote (#80)", () => {
-  it("names both when the selected workspace's agent has no subagents and nothing was published", () => {
+  it("names both when the selected workspace's agent has no helpers and nothing was published", () => {
     r.data.workspaces = [ws("sel", { selected: true, agents: [agent("working")] })];
-    assert.equal(m.emptyNote(), "No subagents or published links yet");
+    assert.equal(m.emptyNote(), "No helpers or published links yet");
   });
 
-  it("claims no subagents only while the selected workspace has a live agent", () => {
+  it("claims no helpers only while the selected workspace has a live agent", () => {
     r.data.workspaces = [ws("sel", { selected: true })];
     assert.equal(m.emptyNote(), "No published links yet");
     r.data.workspaces = [ws("sel", { selected: true, agents: [agent("ended")] })];
@@ -750,7 +643,7 @@ describe("emptyNote (#80)", () => {
     assert.equal(m.emptyNote(), "No published links yet");
   });
 
-  it("names only published links while the selected workspace has subagents", () => {
+  it("names only published links while the selected workspace has helpers", () => {
     r.data.workspaces = [
       ws("sel", {
         selected: true,

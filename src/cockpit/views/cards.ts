@@ -7,7 +7,7 @@ import { meta, ring, unreadBadge, when } from "../../shared/ui.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import { hasChipsRow } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
-import { ageOf, cardDetail, compactPrText, helperText, progressFraction, prTextColor } from "../status.ts";
+import { ageOf, compactPrText, helperText, progressFraction, prTextColor, shownDetail } from "../status.ts";
 import { C } from "../theme.ts";
 import {
   cardChrome,
@@ -48,9 +48,27 @@ function helpers(w: WsAccessor, size: number): View {
   ).layoutPriority(2);
 }
 
-function fullCard(w: WsAccessor, key: string): View {
+// The latest message under the status, in the full card's detail size and
+// colour, over `lines` lines, `indent` in from the card's edge; none on the
+// selected card (shownDetail).
+function detailLine(w: WsAccessor, key: string, lines: number, indent = 0): View {
   // Read by the when() and its Text, so the message is worked out once per change.
-  const detail = computed(() => cardDetail(w()));
+  const detail = computed(() => shownDetail(w(), isSelected(w())));
+  return when(
+    key,
+    () => !!detail(),
+    () =>
+      Text(detail)
+        .font(12)
+        .color(C.secondary)
+        .lineLimit(lines)
+        .truncation("tail")
+        .paddingLeading(indent)
+        .frame({ maxWidth: "infinity", alignment: "leading" }),
+  );
+}
+
+function fullCard(w: WsAccessor, key: string): View {
   const body = HStack({ spacing: 10, alignment: "top" }, [
     glyph(w, 26, 8, 12),
     VStack({ alignment: "leading", spacing: 4 }, [
@@ -60,17 +78,7 @@ function fullCard(w: WsAccessor, key: string): View {
         // Left-aligned by the frame, not a Spacer, as the chips row is.
         .frame({ maxWidth: "infinity", alignment: "leading" }),
       prLine(w, 11.5),
-      when(
-        "detail",
-        () => !!detail(),
-        () =>
-          Text(detail)
-            .font(12)
-            .color(C.secondary)
-            .lineLimit(2)
-            .truncation("tail")
-            .frame({ maxWidth: "infinity", alignment: "leading" }),
-      ),
+      detailLine(w, "detail", 2),
       chipsRow(w, true, false),
       progressBar(w, "full-progress"),
     ])
@@ -83,8 +91,8 @@ function fullCard(w: WsAccessor, key: string): View {
   return cardChrome(body, w, key, 12);
 }
 
-// Options board "Compact": the PR rides in the status line as text, and the
-// message stays on the full card.
+// Options board "Compact": the PR rides in the status line as text, and
+// the latest message takes one line under it.
 export function compactCard(w: WsAccessor, key: string): View {
   const pr = computed(() => prSummary(w()));
   const body = HStack({ spacing: 9 }, [
@@ -110,6 +118,7 @@ export function compactCard(w: WsAccessor, key: string): View {
         ),
         // Left-aligned by the frame, not a Spacer, as on the full card.
       ]).frame({ maxWidth: "infinity", alignment: "leading" }),
+      detailLine(w, "compact-detail", 1),
       // Compact cards have no chips row, so a Ready one in Background takes
       // the action on a line of its own.
       toReviewAction(w),
@@ -123,12 +132,13 @@ export function compactCard(w: WsAccessor, key: string): View {
   return cardChrome(body, w, key, 11);
 }
 
-// "Row" density (Options board, .plain): dot, title, meta; selection is the
-// white hairline pill, a drag lifts it in ink.
+// "Row" density (Options board, .plain): dot, title, meta, then one line of
+// the latest message under the title; selection is the white hairline pill,
+// a drag lifts it in ink.
 function denseRow(w: WsAccessor, key: string): View {
   // The number alone, so a row never widens; the words live on the cards.
   const pr = computed(() => prSummary(w()));
-  const body = HStack({ spacing: 6 }, [
+  const head = HStack({ spacing: 6 }, [
     statusDot(w, 7),
     Text(() => displayTitle(w()))
       .font(12.5)
@@ -163,6 +173,11 @@ function denseRow(w: WsAccessor, key: string): View {
       // On the when() result: the priority inside meta() does not reach this HStack.
       .layoutPriority(2),
     meta(() => ageOf(w()), C.metaText),
+  ]);
+  const body = VStack({ alignment: "leading", spacing: 2 }, [
+    head,
+    // Under the title: past the 7pt dot and the 6pt gap after it.
+    detailLine(w, "row-detail", 1, 13),
   ])
     .paddingLeading(25)
     .paddingTrailing(12)

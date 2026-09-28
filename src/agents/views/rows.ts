@@ -1,13 +1,10 @@
-// Rows for the Working, Idle, Pull requests and Made here panels.
+// Rows for the Pull requests and Made here panels.
 // A capped list ends in a quiet "+N more" row (issue #80).
 
 import type { Last } from "../../shared/list.ts";
 import { prChipColors } from "../../shared/pr-colors.ts";
-import { readable } from "../../shared/text.ts";
-import { displayTitle } from "../../shared/titles.ts";
-import { chip, meta, when } from "../../shared/ui.ts";
+import { chip, meta } from "../../shared/ui.ts";
 import {
-  idleOpen,
   type MadeEntry,
   madeAge,
   madeIcon,
@@ -16,105 +13,9 @@ import {
   prChipHealth,
   prChipText,
   prDim,
-  type RosterEntry,
-  type RosterRow,
-  rosterAge,
-  setIdleOpen,
 } from "../model.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
-import { glyph, idleRing, jump, openIfUrl, ruled, statusDot } from "./parts.ts";
-
-function runningRow(e: () => Last<RosterEntry>): View {
-  const w = () => e().ws;
-  const a = () => e().a;
-  const row = HStack({ spacing: 10, alignment: "top" }, [
-    statusDot(T.blue, T.blueHalo).paddingTop(2),
-    VStack({ spacing: 3, alignment: "leading" }, [
-      HStack({ spacing: 6 }, [
-        Text(() => displayTitle(w()) || a().name || "untitled")
-          .font(12.5)
-          .weight("semibold")
-          .color(T.text)
-          .lineLimit(1)
-          .truncation("middle")
-          .layoutPriority(1),
-        Spacer({ minLength: 4 }),
-        meta(() => rosterAge(e())),
-      ]).frame({ maxWidth: "infinity" }),
-      when(
-        "progress",
-        () => !!w().progress,
-        () =>
-          ProgressView()
-            .value(() => Math.max(0, Math.min(1, w().progress?.value ?? 0)))
-            .frame({ maxWidth: "infinity" }),
-      ),
-      when(
-        "sub",
-        () => !!(readable(w().latestMessage) || w().progress?.label),
-        () =>
-          Text(() => readable(w().latestMessage) || w().progress?.label || "")
-            .font(11.5)
-            .color(T.secondary)
-            .lineLimit(1)
-            .truncation("tail"),
-      ),
-    ])
-      .frame({ maxWidth: "infinity", alignment: "leading" })
-      .layoutPriority(1),
-    glyph(() => e().project),
-  ])
-    .paddingHorizontal(12)
-    .paddingVertical(10)
-    .hoverBackground(T.hover)
-    .frame({ maxWidth: "infinity", alignment: "leading" })
-    .onTap(() => jump(w().id, a().surfaceId));
-  return ruled(row, () => e().last);
-}
-
-function idleRow(e: () => Last<RosterEntry>): View {
-  const w = () => e().ws;
-  const a = () => e().a;
-  const row = HStack({ spacing: 10 }, [
-    idleRing(),
-    Text(() => displayTitle(w()) || a().name || "untitled")
-      .font(12.5)
-      .weight("semibold")
-      .color(T.secondary)
-      .lineLimit(1)
-      .truncation("middle")
-      .layoutPriority(1),
-    Spacer({ minLength: 4 }),
-    meta(() => rosterAge(e())),
-    glyph(() => e().project),
-  ])
-    .paddingHorizontal(12)
-    .paddingVertical(10)
-    .hoverBackground(T.hover)
-    .frame({ maxWidth: "infinity", alignment: "leading" })
-    .onTap(() => jump(w().id, a().surfaceId));
-  return ruled(row, () => e().last);
-}
-
-function toggleRow(count: () => number, isLast: () => boolean): View {
-  const row = HStack({ spacing: 6 }, [
-    Image(() => (idleOpen() ? "chevron.up" : "chevron.down"))
-      .font(9)
-      .weight("semibold")
-      .color(T.tertiary),
-    Text(() => (idleOpen() ? "Show fewer" : String(count()) + " more idle"))
-      .font(11.5)
-      .color(T.tertiary)
-      .lineLimit(1),
-    Spacer(),
-  ])
-    .paddingHorizontal(12)
-    .paddingVertical(8)
-    .hoverBackground(T.hover)
-    .frame({ maxWidth: "infinity", alignment: "leading" })
-    .onTap(() => setIdleOpen(!idleOpen()));
-  return ruled(row, isLast);
-}
+import { glyph, openIfUrl, ruled } from "./parts.ts";
 
 /** The quiet row a capped list ends in: "+12 more". Not tappable: the rows
  * past the cap are not listed anywhere else in this panel. */
@@ -130,24 +31,6 @@ export function moreRow(count: () => number, isLast: () => boolean): View {
     .paddingVertical(8)
     .frame({ maxWidth: "infinity", alignment: "leading" });
   return ruled(row, isLast);
-}
-
-/** One Working or Idle row; a row's kind is fixed by its key. */
-export function rosterRow(e: () => Last<RosterRow>): View {
-  const kind = e().kind;
-  if (kind === "toggle" || kind === "more") {
-    const count = () => {
-      const r = e();
-      return r.kind === "toggle" || r.kind === "more" ? r.count : 0;
-    };
-    return kind === "toggle" ? toggleRow(count, () => e().last) : moreRow(count, () => e().last);
-  }
-  const entry = (): Last<RosterEntry> => {
-    const r = e();
-    if (r.kind === "toggle" || r.kind === "more") throw new Error("roster row changed kind under key " + r.key);
-    return r;
-  };
-  return kind === "run" ? runningRow(entry) : idleRow(entry);
 }
 
 export function prRow(e: () => Last<PrEntry>): View {

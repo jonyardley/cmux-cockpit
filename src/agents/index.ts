@@ -1,8 +1,12 @@
-// agents: Jon's right panel. Sections over live workspace/agent data:
-//   This workspace - the selected workspace in detail (views/current.ts):
-//                    what the left card has no room for, its agent's latest
-//                    message, subagent runs, branch and uncommitted changes,
-//                    ports, the PR and its checks. When its agent needs you,
+// agents: Jon's right panel. Each fact lives in one place: the cockpit on
+// the left is the roster of every workspace, so this panel is only about the
+// selected workspace, plus what belongs to no single card. Sections:
+//   This workspace - the selected workspace in detail (views/current.ts),
+//                    headed with its project; its name is the highlighted
+//                    card on the left. What that card has no room for: its
+//                    agent's latest message, running helpers, ports, the PR
+//                    and its checks, and a faint branch footer. When its
+//                    agent needs you,
 //                    the card carries the question, Answer (select + focus
 //                    surface) and Dismiss (local to this panel,
 //                    src/shared/needs.ts). No Allow/Deny: that needs the real
@@ -10,18 +14,14 @@
 //                    carry, so it is not faked. Other workspaces that need you
 //                    do not appear in this panel at all, by design: the
 //                    cockpit's Needs you strip is their one home.
-//   Working        - working agents in other workspaces, longest-running first.
-//   Idle           - idle agents in other workspaces, most recent first,
-//                    collapsed behind "N more idle".
 //   Pull requests  - every PR across workspaces, tap opens the url. A faint
 //                    line under the heading says when the saved PR data is
 //                    old or gh is down, and those chips dim (#78).
 //   Made here      - pages and docs agents published (#52): this workspace's
 //                    first, then the latest few from others; tap opens it.
 // Counts are the real totals, and a capped list ends in "+N more" (#80).
-// Working, Idle and Pull requests show their heading and count when empty;
-// Made here, and the card's Subagents, fold into one faint line at the
-// bottom instead. When config/state.json could not be read at build, a line
+// Pull requests shows its heading and count when empty; Made here, and the
+// card's Helpers, fold into one faint line at the bottom instead. When config/state.json could not be read at build, a line
 // at the top says so rather than the panel just looking empty (#78).
 //
 //   cmux right-sidebar set custom agents
@@ -31,8 +31,8 @@ import { faintLine } from "../shared/notice.ts";
 import { when } from "../shared/ui.ts";
 import {
   current,
+  currentHeading,
   emptyNote,
-  idleRows,
   madeCount,
   madeHere,
   madeMore,
@@ -40,19 +40,17 @@ import {
   prMore,
   prNote,
   prs,
-  roster,
-  workingRows,
 } from "./model.ts";
 import { T } from "./theme.ts";
 import { currentPanel } from "./views/current.ts";
 import { panel, sectionHeader } from "./views/parts.ts";
-import { madeRow, moreRow, prRow, rosterRow } from "./views/rows.ts";
+import { madeRow, moreRow, prRow } from "./views/rows.ts";
 
 function currentSection(): View {
   return when(
     "current",
     () => !!current(),
-    () => VStack({ spacing: 8, alignment: "leading" }, [sectionHeader("THIS WORKSPACE"), currentPanel()]),
+    () => VStack({ spacing: 8, alignment: "leading" }, [sectionHeader(currentHeading), currentPanel()]),
   );
 }
 
@@ -99,14 +97,6 @@ sidebar(
     VStack({ spacing: 18, alignment: "leading" }, [
       faintNote("state-notice", stateNotice, T.clayText),
       currentSection(),
-      listSection({
-        label: "WORKING",
-        key: "working",
-        count: () => roster().run.length,
-        rows: workingRows,
-        row: rosterRow,
-      }),
-      listSection({ label: "IDLE", key: "idle", count: () => roster().idle.length, rows: idleRows, row: rosterRow }),
       listSection({
         label: "PULL REQUESTS",
         key: "prs",

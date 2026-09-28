@@ -199,3 +199,20 @@ describe("showsChipsRow (issue #79)", () => {
     }
   });
 });
+
+describe("shownDetail", () => {
+  it("shows the latest message on a card that is not selected", () => {
+    const w = ws("x", { latestMessage: "Running the recovery tests" });
+    assert.equal(status.shownDetail(w, false), "Running the recovery tests");
+  });
+
+  it("shows nothing on the selected card, since the agents panel shows it in full", () => {
+    const w = ws("x", { latestMessage: "Running the recovery tests" });
+    assert.equal(status.shownDetail(w, true), "");
+  });
+
+  it("shows nothing when there is no message", () => {
+    assert.equal(status.shownDetail(ws("x"), false), "");
+    assert.equal(status.shownDetail(undefined, false), "");
+  });
+});

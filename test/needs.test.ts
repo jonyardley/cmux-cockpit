@@ -173,16 +173,10 @@ describe("dismissals", () => {
 });
 
 describe("both sidebars apply the rule", () => {
-  it("the agents panel lists a nudge as idle and asks nothing", () => {
-    r.data.workspaces = [
-      ws("n", { selected: true, agents: [claude(1000, 1060)] }),
-      ws("i", { agents: [claude(1000, 1060)] }),
-    ];
+  it("the agents panel reads a nudge as idle and asks nothing", () => {
+    r.data.workspaces = [ws("n", { selected: true, agents: [claude(1000, 1060)] })];
     assert.equal(agents.currentAsk(), null);
-    assert.deepEqual(
-      agents.roster().idle.map((e) => e.ws.id),
-      ["i"],
-    );
+    assert.equal(agents.current()?.a?.status, "idle");
     r.data.workspaces = [ws("real", { selected: true, agents: [claude(1000, 1001)] })];
     assert.equal(agents.currentAsk()?.a.status, "needs_input");
   });

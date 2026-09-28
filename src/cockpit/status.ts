@@ -189,6 +189,17 @@ export function cardDetail(w: Workspace | undefined): string {
   return clip(cardMessage(w) || readable(w?.description), DETAIL_MAX);
 }
 
+/**
+ * The message a card shows under its status, or "" for none. The selected
+ * workspace's card shows none at any density: the agents panel on the right
+ * shows that workspace in full, so the fact lives in one place. Every other
+ * card shows cardDetail's message, a full card over two lines, a compact
+ * card or a row over one.
+ */
+export function shownDetail(w: Workspace | undefined, selected: boolean): string {
+  return selected ? "" : cardDetail(w);
+}
+
 /** The progress bar's fraction, held to 0 to 1; null when no value is sent. */
 export function progressFraction(w: Workspace | undefined): number | null {
   const v = w?.progress?.value;
