@@ -22,7 +22,7 @@ import {
 } from "../shared/prs.ts";
 import { savedPublished } from "../shared/published.ts";
 import { childRunning, pairLive, type SavedRun, savedRunning, savedRuns } from "../shared/subagents.ts";
-import { cardMessage, readable } from "../shared/text.ts";
+import { cardMessage, isHarnessTurn, readable } from "../shared/text.ts";
 import { ageSince, finishedAt, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
@@ -122,15 +122,20 @@ export const currentAsk = computed((): Ask | null => {
 /** The card's quiet message line; empty while the question block shows the words. */
 export const cardLine = computed((): string => (currentAsk() ? "" : cardMessage(cur().ws)));
 
-// A background subagent's report reaches cmux as the session's latest
-// prompt (issue #103). Jon did not ask it, so it never fills the Asked line.
-const HAND_BACK = /^\[Subagent hand-back\]/;
+// The last prompt Jon typed in each workspace, so a harness turn (a
+// subagent's hand-back, issue #103) keeps it on screen. Written during render
+// with no bump(): what shows is the value just read, and a sidebar reload
+// only forgets it, so the line hides until he next types.
+const lastAsked = new Map<string, string>();
 
 /** The card's Asked line: the last prompt Jon gave, above the agent's last
  * message (issue #80); "" when there is none worth reading. */
 export const askedLine = computed((): string => {
-  const t = readable(cur().ws.latestPrompt);
-  return HAND_BACK.test(t) ? "" : t;
+  const w = cur().ws;
+  const t = readable(w.latestPrompt);
+  if (isHarnessTurn(t)) return lastAsked.get(w.id) ?? "";
+  if (t) lastAsked.set(w.id, t);
+  return t;
 });
 
 /** Idle and no agent draw a hollow ring, as the left sidebar does. */
