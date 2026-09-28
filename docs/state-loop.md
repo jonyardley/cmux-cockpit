@@ -61,7 +61,11 @@ to edit it. Projects in the file are never written by the loop.
 
 cmux sends custom sidebars no PR data (#7), so `scripts/pr-poll.ts` finds it
 instead and keeps it in a fourth map, `prs`: workspace id to
-`{"number", "url", "status": "open|merged|closed", "branch", "checks"?}`. For every
+`{"number", "url", "status": "open|merged|closed", "branch", "title"?, "draft"?, "mergeable"?, "conflicts"?, "checks"?}`.
+`title` is the PR's own title, cleaned as an own PR's is and left out when
+nothing readable is left; `draft`, `mergeable` (gh's `mergeStateStatus`
+CLEAN) and `conflicts` (DIRTY) are saved only as `true`, so the chips can
+say a PR's worst state. For every
 workspace in every window it reads the directory's git branch and asks
 `gh pr list --head <branch> --state all` for that branch's PR, preferring an
 open one, and ignoring a fork's PR (`isCrossRepository`), since the sidebar

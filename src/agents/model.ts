@@ -7,7 +7,7 @@ import { byActivity, sinceOrActivity } from "../shared/activity.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
-import { checksOf, type PrSummary, prSummary, prsOf, savedOwnPrs } from "../shared/prs.ts";
+import { checksOf, type PrHealth, type PrSummary, prSummary, prsOf, savedOwnPrs, summaryOf } from "../shared/prs.ts";
 import { savedPublished } from "../shared/published.ts";
 import { type SavedRun, savedRuns } from "../shared/subagents.ts";
 import { cardMessage, readable } from "../shared/text.ts";
@@ -417,16 +417,27 @@ export interface PrEntry {
   key: string;
   pr: PullRequest;
   title: string;
+  /** The PR as the cards read it (shared/prs.ts), so the chip says the same on both sides. */
+  summary: PrSummary | undefined;
 }
 
 /**
- * What a PR row's chip says: "draft" for an open draft, since "open" reads as
- * ready for review, else the status; a merged or closed PR says its status
- * whatever its draft flag. Stale rides inside the chip (see prRow).
+ * What a PR row's chip says: the PR's worst state as its card says it
+ * ("1 failing", "conflicts", "draft · running", "ready", "open", "merged"),
+ * or for a PR with no number, "draft" for an open draft, else its status.
+ * Stale rides inside the chip (see prRow).
  */
-export function prChipText(pr: PullRequest): string {
-  const word = pr.status === "open" && pr.draft ? "draft" : pr.status;
+export function prChipText(e: Pick<PrEntry, "pr" | "summary">): string {
+  const { pr, summary } = e;
+  const word = summary ? summary.state : pr.status === "open" && pr.draft ? "draft" : pr.status;
   return [word, pr.stale ? "stale" : undefined].filter(Boolean).join(" · ");
+}
+
+/** A PR row chip's health and draft flag, for its colours. */
+export function prChipHealth(e: Pick<PrEntry, "pr" | "summary">): { health: PrHealth; draft: boolean } {
+  return e.summary
+    ? { health: e.summary.health, draft: e.summary.draft }
+    : { health: "quiet", draft: e.pr.status === "open" && e.pr.draft === true };
 }
 
 const PR_RANK: Record<PrStatus, number> = { open: 0, merged: 1, closed: 2 };
@@ -451,7 +462,9 @@ export const prs = computed(() => {
     for (const pr of prsOf(w)) {
       if (!pr?.url || seen.has(pr.url)) continue;
       seen.add(pr.url);
-      out.push({ key: pr.url, pr, title: prTitle(w, pr) });
+      const summary = summaryOf(pr, checksOf(w));
+      // The PR's own title when the poller saved one, as an own PR's row has.
+      out.push({ key: pr.url, pr, title: summary?.title || prTitle(w, pr), summary });
     }
   }
   out.sort(byRankThenNewest);
@@ -461,7 +474,7 @@ export const prs = computed(() => {
     seen.add(o.url);
     const pr: PullRequest = { number: o.number, url: o.url, status: o.status, branch: o.branch };
     if (o.draft) pr.draft = true;
-    own.push({ key: o.url, pr, title: o.title });
+    own.push({ key: o.url, pr, title: o.title, summary: summaryOf(pr, []) });
   }
   own.sort(byRankThenNewest);
   out.push(...own);

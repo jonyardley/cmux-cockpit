@@ -185,7 +185,22 @@ describe("pickPr with checks", () => {
     const merge = (mergeStateStatus: unknown) =>
       pickPr(gh([{ ...ghPr(1, "OPEN", "2026-09-01"), mergeStateStatus }]), "feat");
     assert.deepEqual(merge("CLEAN"), pr(1, { mergeable: true }));
-    for (const v of ["BLOCKED", "DIRTY", "UNSTABLE", "BEHIND", "UNKNOWN", undefined]) assert.deepEqual(merge(v), pr(1));
+    for (const v of ["BLOCKED", "UNSTABLE", "BEHIND", "UNKNOWN", undefined]) assert.deepEqual(merge(v), pr(1));
+  });
+
+  it("marks conflicts only on GitHub's DIRTY verdict", () => {
+    const merge = (mergeStateStatus: unknown) =>
+      pickPr(gh([{ ...ghPr(1, "OPEN", "2026-09-01"), mergeStateStatus }]), "feat");
+    assert.deepEqual(merge("DIRTY"), pr(1, { conflicts: true }));
+    for (const v of ["CLEAN", "BLOCKED", "UNSTABLE", "BEHIND", "UNKNOWN", undefined])
+      assert.equal(merge(v)?.conflicts, undefined);
+  });
+
+  it("keeps the PR's title, cleaned, and leaves it out when nothing readable is left", () => {
+    const titled = (title: unknown) => pickPr(gh([{ ...ghPr(1, "OPEN", "2026-09-01"), title }]), "feat");
+    assert.deepEqual(titled("  Show\tthe PR title\n"), pr(1, { title: "Show the PR title" }));
+    assert.equal(titled("x".repeat(500))?.title?.length, 120);
+    for (const v of [" \n ", 5, undefined]) assert.deepEqual(titled(v), pr(1));
   });
 });
 
@@ -195,6 +210,21 @@ describe("the saved draft flag", () => {
     assert.deepEqual(saved(true), pr(1, { draft: true }));
     assert.deepEqual(saved(false), pr(1));
     assert.deepEqual(saved("yes"), pr(1));
+  });
+});
+
+describe("the saved conflicts flag and title", () => {
+  it("keeps conflicts only as true", () => {
+    const saved = (conflicts: unknown) => validateState({ prs: { w1: { ...pr(1), conflicts } } }).prs.w1;
+    assert.deepEqual(saved(true), pr(1, { conflicts: true }));
+    assert.deepEqual(saved(false), pr(1));
+    assert.deepEqual(saved("DIRTY"), pr(1));
+  });
+
+  it("keeps a title only as a clean label", () => {
+    const saved = (title: unknown) => validateState({ prs: { w1: { ...pr(1), title } } }).prs.w1;
+    assert.deepEqual(saved("Fix the hook"), pr(1, { title: "Fix the hook" }));
+    for (const v of ["", " padded ", "a\nb", "x".repeat(121), 5]) assert.deepEqual(saved(v), pr(1));
   });
 });
 
@@ -327,8 +357,16 @@ describe("cleanTitle", () => {
 
   it("cuts to the label length in whole characters, never half an emoji", () => {
     assert.equal(cleanTitle("x".repeat(500)).length, 120);
-    const cut = cleanTitle("x".repeat(119) + "😀tail");
-    assert.equal(cut, "x".repeat(119) + "😀");
+    // The emoji is two UTF-16 units, the length isLabel measures, so it
+    // no longer fits after 119 characters and goes whole.
+    assert.equal(cleanTitle("x".repeat(119) + "😀tail"), "x".repeat(119));
+    assert.equal(cleanTitle("x".repeat(118) + "😀tail"), "x".repeat(118) + "😀");
+  });
+
+  it("always gives a title the saved state keeps", () => {
+    const title = cleanTitle("😀".repeat(100));
+    const kept = validateState({ prs: { w1: { ...pr(1), title } } }).prs.w1;
+    assert.equal(kept?.title, title);
   });
 });
 

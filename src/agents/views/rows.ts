@@ -1,6 +1,7 @@
 // Rows for the Working, Idle, Pull requests and Made here panels.
 
 import type { Last } from "../../shared/list.ts";
+import { prChipColors } from "../../shared/pr-colors.ts";
 import { readable } from "../../shared/text.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { when } from "../../shared/ui.ts";
@@ -11,13 +12,14 @@ import {
   madeIcon,
   madeTitleColor,
   type PrEntry,
+  prChipHealth,
   prChipText,
   type RosterEntry,
   type RosterRow,
   rosterAge,
   setIdleOpen,
 } from "../model.ts";
-import { chipColors, T } from "../theme.ts";
+import { T } from "../theme.ts";
 import { glyph, idleRing, jump, meta, openIfUrl, ring, ruled, statusDot } from "./parts.ts";
 
 function runningRow(e: () => Last<RosterEntry>): View {
@@ -132,7 +134,10 @@ export function rosterRow(e: () => Last<RosterRow>): View {
 
 export function prRow(e: () => Last<PrEntry>): View {
   const p = () => e().pr;
-  const colors = () => chipColors(p().status, p().draft === true);
+  const colors = () => {
+    const h = prChipHealth(e());
+    return prChipColors(h.health, p().status, h.draft);
+  };
   const row = HStack({ spacing: 10 }, [
     Text(() => "#" + (p().number ?? ""))
       .font(12)
@@ -150,7 +155,7 @@ export function prRow(e: () => Last<PrEntry>): View {
     // Stale rides inside the chip: an empty sibling Text would still cost
     // its HStack spacing and squeeze the title.
     ring(
-      Text(() => prChipText(p()))
+      Text(() => prChipText(e()))
         .font(11)
         .weight("medium")
         .lineLimit(1)

@@ -4,6 +4,7 @@ import { glyphColor } from "../../shared/contrast.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
 import { prChipColors } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
+import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot, when } from "../../shared/ui.ts";
 import { LANES } from "../lanes.ts";
@@ -206,6 +207,57 @@ function chipById(chips: readonly Chip[], id: ChipId): Chip {
   return chips.find((c) => c.id === id) ?? { id, text: "" };
 }
 
+// The full card's PR line under its status (issue #73): the number, the
+// PR's own title, which is the part that gives way, then a chip with its
+// worst state (issue #72). Behind a when(), so a card with no PR has no line.
+export function prLine(w: WsAccessor, size: number): View {
+  const pr = computed(() => prSummary(w()));
+  const colors = () => prChipColors(pr()?.health ?? "quiet", pr()?.status, pr()?.draft);
+  const chipText = Text(() => pr()?.state ?? "")
+    .font(11)
+    .weight("medium")
+    .lineLimit(1)
+    .paddingHorizontal(6)
+    .paddingVertical(1)
+    .color(() => colors().fg);
+  const line = () =>
+    HStack({ spacing: 6 }, [
+      meta(() => pr()?.tag ?? "", C.secondary),
+      when(
+        "pr-title",
+        () => !!pr()?.title,
+        () =>
+          Text(() => pr()?.title ?? "")
+            .font(size)
+            .color(C.secondary)
+            .lineLimit(1)
+            .truncation("tail"),
+      ),
+      // A PR with no status has no words, so no empty pill.
+      when(
+        "pr-state",
+        () => !!pr()?.state,
+        () =>
+          ring(
+            chipText,
+            () => colors().bg,
+            () => colors().edge,
+            1,
+            6,
+            true,
+          ),
+      ).layoutPriority(2),
+    ])
+      // The tap sits inside the frame, so the free width after the chip
+      // still selects the card rather than opening the PR.
+      .onTap(() => {
+        const url = pr()?.url;
+        if (url) openURL(url);
+      })
+      .frame({ maxWidth: "infinity", alignment: "leading" });
+  return when("pr-line", () => !!pr(), line);
+}
+
 // "To review →" on a Ready card: files it into For review (issue #53). A
 // quiet chip with its own onTap, so the tap never also selects the card.
 export function toReviewAction(w: WsAccessor): View {
@@ -229,7 +281,7 @@ export function toReviewAction(w: WsAccessor): View {
 // sits on the when() result because a priority inside it does not reach the
 // HStack. No Spacer: it is flexible too and would split the free width with
 // the branch chip, so the frame left-aligns instead.
-export function chipsRow(w: WsAccessor, withBranch: boolean): View {
+export function chipsRow(w: WsAccessor, withBranch: boolean, withPr = true): View {
   // One chip list per change, read by every predicate and chip below.
   const chips = computed(() => chipsFor(w(), withBranch));
   const one = (id: ChipId) =>
@@ -238,8 +290,9 @@ export function chipsRow(w: WsAccessor, withBranch: boolean): View {
       () => chips().some((c) => c.id === id),
       () => chip(id, () => chipById(chips(), id)),
     );
+  // The full card puts its PR on a line of its own (prLine), so it leaves the chip out.
   return HStack({ spacing: 5 }, [
-    one("pr").layoutPriority(2),
+    ...(withPr ? [one("pr").layoutPriority(2)] : []),
     one("br"),
     one("port").layoutPriority(2),
     toReviewAction(w),

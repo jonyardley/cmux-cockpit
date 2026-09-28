@@ -147,6 +147,10 @@ interface PullRequest {
   draft?: boolean;
   /** GitHub's own merge verdict ("CLEAN"); only the saved PR carries it. */
   mergeable?: boolean;
+  /** GitHub says it has merge conflicts ("DIRTY"); only the saved PR carries it. */
+  conflicts?: boolean;
+  /** The PR's own title; only the saved PR carries it. */
+  title?: string;
   label?: string;
   branch?: string;
   stale?: boolean;

@@ -76,6 +76,10 @@ export interface SavedPr {
    * (mergeStateStatus "CLEAN": no conflicts, no blocking review or check).
    */
   mergeable?: true;
+  /** Set only while GitHub says the PR has merge conflicts (mergeStateStatus "DIRTY"). */
+  conflicts?: true;
+  /** Its title (pr-poll.ts's cleanTitle), so a card can say what the PR does; left out when it has none. */
+  title?: string;
   /** Its CI checks, failing first (pr-poll.ts's checksFrom); left out when it has none. */
   checks?: SavedCheck[];
 }
@@ -274,6 +278,8 @@ function savedCheck(v: unknown): SavedCheck[] {
   return isRecord(v) && isName(v.name) && isCheckState(v.state) ? [{ name: v.name, state: v.state }] : [];
 }
 
+const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
+
 function savedPr(v: unknown): SavedPr | null {
   if (!isRecord(v) || !isPrUrl(v.url) || !isPrStatus(v.status)) return null;
   const { number, branch } = v;
@@ -286,6 +292,8 @@ function savedPr(v: unknown): SavedPr | null {
     branch,
     ...(v.draft === true ? { draft: true } : {}),
     ...(v.mergeable === true ? { mergeable: true } : {}),
+    ...(v.conflicts === true ? { conflicts: true } : {}),
+    ...(isLabel(v.title) ? { title: v.title } : {}),
   };
   const checks = Array.isArray(v.checks) ? v.checks.flatMap(savedCheck).slice(0, MAX_CHECKS) : [];
   return checks.length ? { ...pr, checks } : pr;
@@ -316,11 +324,6 @@ function uiState(v: unknown): UiState {
 }
 
 const UI_KEYS: readonly string[] = ["mode", "collapsed"];
-
-const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
-
-/** Whether a character is one a label keeps (no control characters). */
-export const isLabelChar = isCleanChar;
 
 const isRepoDir = (v: unknown): v is string =>
   typeof v === "string" && v.startsWith("/") && v.length <= MAX_PROJECT_KEY;

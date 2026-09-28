@@ -7,6 +7,7 @@ const { agent, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
 const { cardMessage } = await import("../src/shared/text.ts");
 const { dismissNeeds } = await import("../src/shared/needs.ts");
+const { summaryOf } = await import("../src/shared/prs.ts");
 const { STATUS_DOT, T } = await import("../src/agents/theme.ts");
 
 beforeEach(() => {
@@ -417,16 +418,27 @@ describe("madeHere", () => {
 });
 
 describe("prChipText", () => {
+  // A PR with no number has no summary, so the chip falls back on its status.
+  const said = (pr: PullRequest) => m.prChipText({ pr, summary: undefined });
+
   it("says draft for an open draft, else the status", () => {
-    assert.equal(m.prChipText({ status: "open", draft: true }), "draft");
-    assert.equal(m.prChipText({ status: "open" }), "open");
-    assert.equal(m.prChipText({ status: "merged", draft: true }), "merged");
-    assert.equal(m.prChipText({}), "");
+    assert.equal(said({ status: "open", draft: true }), "draft");
+    assert.equal(said({ status: "open" }), "open");
+    assert.equal(said({ status: "merged", draft: true }), "merged");
+    assert.equal(said({}), "");
   });
 
   it("keeps stale inside the chip, with no stray separator", () => {
-    assert.equal(m.prChipText({ status: "open", draft: true, stale: true }), "draft · stale");
-    assert.equal(m.prChipText({ stale: true }), "stale");
+    assert.equal(said({ status: "open", draft: true, stale: true }), "draft · stale");
+    assert.equal(said({ stale: true }), "stale");
+  });
+
+  it("says the summary's state for a numbered PR, stale after it", () => {
+    const pr: PullRequest = { number: 3, status: "open", draft: true, stale: true };
+    const summary = summaryOf(pr, [{ name: "test", state: "pending" }]);
+    assert.equal(m.prChipText({ pr, summary }), "draft · running · stale");
+    assert.deepEqual(m.prChipHealth({ pr, summary }), { health: "running", draft: true });
+    assert.deepEqual(m.prChipHealth({ pr, summary: undefined }), { health: "quiet", draft: true });
   });
 });
 
