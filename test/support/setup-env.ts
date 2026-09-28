@@ -44,7 +44,7 @@ export function tempHome(): { home: string; repo: string } {
 export function fakeEnv(
   where: { home: string; repo: string },
   answers: Answers = {},
-  opts: { interactive?: boolean; reply?: boolean; node?: string } = {},
+  opts: { interactive?: boolean; reply?: boolean; node?: string; claudeConfigDir?: string } = {},
 ): Fake {
   const calls: string[] = [];
   const out: string[] = [];
@@ -58,6 +58,7 @@ export function fakeEnv(
   const env: Env = {
     home: where.home,
     repo: where.repo,
+    claudeConfigDir: opts.claudeConfigDir,
     run,
     print: (line) => out.push(line),
     ask: async (q) => {

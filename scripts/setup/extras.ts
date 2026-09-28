@@ -60,12 +60,12 @@ function addAutomations(env: Env, paths: Paths): void {
 async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
   const loaded = loadSettings(paths);
   if (!loaded.ok) {
-    env.print(`  ✗ ~/.claude/settings.json is ${loaded.error}. Nothing changed; fix it and run setup again.`);
+    env.print(`  ✗ ${paths.claudeSettingsShown} is ${loaded.error}. Nothing changed; fix it and run setup again.`);
     return;
   }
   const add = missingEntries(loaded.settings, wanted(), env.home);
   if (add.length === 0) {
-    env.print("  ✓ all the hooks are already in ~/.claude/settings.json");
+    env.print(`  ✓ all the hooks are already in ${paths.claudeSettingsShown}`);
     return;
   }
   env.print(
@@ -78,7 +78,7 @@ async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
     return;
   }
   if (!unchanged(paths, loaded)) {
-    env.print("  ✗ ~/.claude/settings.json changed while setup waited, so nothing was written. Run setup again.");
+    env.print(`  ✗ ${paths.claudeSettingsShown} changed while setup waited, so nothing was written. Run setup again.`);
     return;
   }
   if (loaded.existed) env.print(`  ✓ backed up to ${backupSettings(paths, env.now())}`);
@@ -112,14 +112,14 @@ async function removeHooks(env: Env, paths: Paths, confirm: (q: string) => Promi
   if (!existsSync(paths.claudeSettings)) return;
   const loaded = loadSettings(paths);
   if (!loaded.ok) {
-    env.print(`✗ ~/.claude/settings.json is ${loaded.error}; its hooks are left alone.`);
+    env.print(`✗ ${paths.claudeSettingsShown} is ${loaded.error}; its hooks are left alone.`);
     return;
   }
   const next = removeEntries(loaded.settings, wanted(), env.home);
   if (next.removed === 0) return;
-  if (!(await confirm(`Remove the ${next.removed} cockpit hooks from ~/.claude/settings.json?`))) return;
+  if (!(await confirm(`Remove the ${next.removed} cockpit hooks from ${paths.claudeSettingsShown}?`))) return;
   if (!unchanged(paths, loaded)) {
-    env.print("✗ ~/.claude/settings.json changed while uninstall waited, so nothing was written. Run it again.");
+    env.print(`✗ ${paths.claudeSettingsShown} changed while uninstall waited, so nothing was written. Run it again.`);
     return;
   }
   env.print(`✓ backed up to ${backupSettings(paths, env.now())}`);

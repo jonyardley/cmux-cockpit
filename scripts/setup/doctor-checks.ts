@@ -166,10 +166,10 @@ export const automationsCheck: Probe = (_env, paths) => {
 export const hooksCheck: Probe = (env, paths) => {
   const label = "Claude Code hooks";
   const loaded = loadSettings(paths);
-  if (!loaded.ok) return fail(label, `~/.claude/settings.json is ${loaded.error}`, "fix the file by hand");
-  if (!loaded.existed) return fail(label, "no ~/.claude/settings.json", "npm run setup -- --hooks");
+  if (!loaded.ok) return fail(label, `${paths.claudeSettingsShown} is ${loaded.error}`, "fix the file by hand");
+  if (!loaded.existed) return fail(label, `no ${paths.claudeSettingsShown}`, "npm run setup -- --hooks");
   const missing = missingEntries(loaded.settings, wanted(), env.home);
-  if (missing.length === 0) return pass(label, "all present");
+  if (missing.length === 0) return pass(label, `all present in ${paths.claudeSettingsShown}`);
   return fail(label, `${missing.length} missing`, "npm run setup -- --hooks");
 };
 
@@ -245,7 +245,7 @@ function safely(probe: Probe, env: Env, paths: Paths): Check {
 
 /** Runs every check. */
 export const runChecks = (env: Env): Check[] => {
-  const paths = pathsFor(env.home, env.repo);
+  const paths = pathsFor(env.home, env.repo, env.claudeConfigDir);
   return CHECKS.map((c) => safely(c, env, paths));
 };
 

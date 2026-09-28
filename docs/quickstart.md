@@ -244,7 +244,9 @@ in `scripts/setup/claude-hooks.json`, which setup merges in; a test keeps
 this block the same as that file. Add these to
 the `hooks` object of `~/.claude/settings.json`. Where you already have an
 array for an event (say `PreToolUse`), add these entries to it rather than
-replacing it, or your existing hooks stop running:
+replacing it, or your existing hooks stop running. If you run Claude Code
+with `CLAUDE_CONFIG_DIR` set, setup, doctor and uninstall use
+`$CLAUDE_CONFIG_DIR/settings.json` instead, and so should you:
 
 ```json
 {

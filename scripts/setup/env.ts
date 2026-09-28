@@ -1,11 +1,11 @@
 // What npm run setup, doctor and uninstall act on, all injectable: the home
-// folder, the checkout, the way a command runs and the way a question is
-// asked. The entry points pass the real ones; the tests pass a temp home and
+// folder, the checkout, Claude Code's config folder, the way a command runs
+// and the way a question is asked. The entry points pass the real ones; the tests pass a temp home and
 // fakes, so nothing under test touches this machine's settings or cmux.
 
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { logPathFor } from "../state-log.ts";
 
@@ -33,6 +33,8 @@ export interface Env {
   home: string;
   /** The checkout the script runs from. */
   repo: string;
+  /** CLAUDE_CONFIG_DIR as set, if at all; see claudeDirFor for when it counts. */
+  claudeConfigDir: string | undefined;
   run: Runner;
   print: (line: string) => void;
   /** A yes or no question; only asked when `interactive`. */
@@ -55,10 +57,28 @@ export const realRun: Runner = (cmd, args, opts = {}) => {
   return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "", missing };
 };
 
-/** Every path the three scripts read or write, from one home and one checkout. */
-export function pathsFor(home: string, repo: string) {
+/**
+ * The folder Claude Code reads its settings.json from: CLAUDE_CONFIG_DIR when
+ * it is set to a non-empty absolute path, else ~/.claude.
+ * A relative value is ignored, since it would hang off whatever folder the
+ * script happened to run in.
+ */
+function claudeDirFor(home: string, configured: string | undefined): string {
+  return configured !== undefined && configured !== "" && isAbsolute(configured) ? configured : join(home, ".claude");
+}
+
+/** A path as a person would type it: ~/... when it is under `home`, else as it is. */
+function shown(path: string, home: string): string {
+  return path.startsWith(`${home}/`) ? `~/${path.slice(home.length + 1)}` : path;
+}
+
+/**
+ * Every path the three scripts read or write, from one home, one checkout and
+ * CLAUDE_CONFIG_DIR as set, if at all.
+ */
+export function pathsFor(home: string, repo: string, claudeConfigDir?: string) {
   const cmuxterm = join(home, ".cmuxterm");
-  const claude = join(home, ".claude");
+  const claude = claudeDirFor(home, claudeConfigDir);
   const app = join(home, "Applications", "CmuxCockpit.app");
   return {
     mainCheckout: join(home, ".config", "cmux"),
@@ -80,6 +100,8 @@ export function pathsFor(home: string, repo: string) {
     automationsBackup: join(cmuxterm, "automations.json.backup"),
     claudeDir: claude,
     claudeSettings: join(claude, "settings.json"),
+    /** claudeSettings for messages, such as ~/.claude/settings.json. */
+    claudeSettingsShown: shown(join(claude, "settings.json"), home),
     claudeBackup: join(claude, "settings.json.cmux-cockpit.bak"),
     helperApp: app,
     helperPlist: join(app, "Contents", "Info.plist"),
@@ -113,6 +135,7 @@ export function realEnv(): Env {
   return {
     home: homedir(),
     repo: join(import.meta.dirname, "..", ".."),
+    claudeConfigDir: process.env["CLAUDE_CONFIG_DIR"],
     run: realRun,
     print: (line) => console.log(line),
     ask: askTerminal,

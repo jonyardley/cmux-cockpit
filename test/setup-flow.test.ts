@@ -410,6 +410,47 @@ describe("uninstall", () => {
   });
 });
 
+describe("Claude Code's config folder", () => {
+  it("is CLAUDE_CONFIG_DIR when that is an absolute path, else ~/.claude", () => {
+    const home = "/Users/me";
+    const set = pathsFor(home, "/r", "/Users/me/.claude-personal");
+    assert.equal(set.claudeDir, "/Users/me/.claude-personal");
+    assert.equal(set.claudeSettings, "/Users/me/.claude-personal/settings.json");
+    assert.equal(set.claudeBackup, "/Users/me/.claude-personal/settings.json.cmux-cockpit.bak");
+    assert.equal(set.claudeSettingsShown, "~/.claude-personal/settings.json");
+    assert.equal(pathsFor(home, "/r", "/etc/claude").claudeSettingsShown, "/etc/claude/settings.json");
+    for (const ignored of [undefined, "", "relative/claude"]) {
+      const p = pathsFor(home, "/r", ignored);
+      assert.equal(p.claudeSettings, "/Users/me/.claude/settings.json");
+      assert.equal(p.claudeBackup, "/Users/me/.claude/settings.json.cmux-cockpit.bak");
+      assert.equal(p.claudeSettingsShown, "~/.claude/settings.json");
+    }
+  });
+
+  it("is where setup --hooks writes and the doctor and uninstall look", async () => {
+    const w = where();
+    built(w.repo);
+    const dir = join(w.home, ".claude-personal");
+    const p = pathsFor(w.home, w.repo, dir);
+    const f = fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir });
+    await setup(f.env, ["--hooks"]);
+    assert.deepEqual(missingEntries(JSON.parse(readFileSync(p.claudeSettings, "utf8")), wanted(), w.home), []);
+    assert.equal(existsSync(pathsFor(w.home, w.repo).claudeSettings), false); // ~/.claude untouched
+    assert.ok(f.out.some((l) => l.includes(`These go into ${p.claudeSettings}`)));
+
+    const hooks = (env: ReturnType<typeof fakeEnv>) => runChecks(env.env).find((c) => c.label === "Claude Code hooks");
+    assert.equal(
+      hooks(fakeEnv(w, {}, { claudeConfigDir: dir }))?.detail,
+      "all present in ~/.claude-personal/settings.json",
+    );
+    assert.equal(hooks(fakeEnv(w))?.detail, "no ~/.claude/settings.json"); // without the variable, the other file
+
+    await uninstall(fakeEnv(w, {}, { claudeConfigDir: dir }).env, ["--yes", "--hooks"]);
+    const left = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
+    assert.equal(missingEntries(left, wanted(), w.home).length, wanted().length);
+  });
+});
+
 describe("doctor's Node for the helper", () => {
   // The real find-node.sh through the real runner, in a temp home, with the
   // Homebrew fallbacks pointed at nothing so the runner's own node cannot answer.

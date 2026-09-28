@@ -1,6 +1,7 @@
-// Reading, backing up and writing ~/.claude/settings.json for the hooks
-// extra, around the pure merge in hooks-merge.ts. The wanted list comes
-// from claude-hooks.json, next to this file.
+// Reading, backing up and writing Claude Code's settings.json (in
+// CLAUDE_CONFIG_DIR when set, else ~/.claude) for the hooks extra, around
+// the pure merge in hooks-merge.ts. The wanted list comes from
+// claude-hooks.json, next to this file.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
