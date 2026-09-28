@@ -1,16 +1,16 @@
 // "This workspace": the selected workspace in detail, what its card on the
-// left has no room for. Todo is not in the sidebar data (issue #7), so it is
-// left out; checks come from the PR poller.
+// left has no room for. No title row: that card, highlighted, already
+// names it. Todo is not in the sidebar data (issue #7), so it is left out;
+// checks come from the PR poller.
 
 import { dismissNeeds } from "../../shared/needs.ts";
 import { NEUTRAL_CHIP, summaryColors } from "../../shared/pr-colors.ts";
-import { displayTitle } from "../../shared/titles.ts";
-import { branchText, chip, META_FONT, meta, projectBadge, sectionTitle, unreadBadge, when } from "../../shared/ui.ts";
+import { branchText, chip, META_FONT, meta, sectionTitle, when } from "../../shared/ui.ts";
 import {
   type AgentRow,
   agentRows,
   askedLine,
-  branchDetail,
+  branchFooter,
   type CheckRow,
   cardLine,
   checkDot,
@@ -22,21 +22,21 @@ import {
   currentPr,
   currentPrDim,
   dotFor,
+  finishedLine,
   haloFor,
   hasDetails,
+  hasHelpers,
   headStatus,
+  helperAge,
+  helperMore,
+  helpers,
   hollowDot,
   portChips,
   type SubagentRow,
   statusColor,
   statusLine,
-  subagentDot,
-  subagentFigure,
-  subagentHalo,
-  subagentLabelColor,
-  subagents,
 } from "../model.ts";
-import { STALE_OPACITY, T } from "../theme.ts";
+import { STALE_OPACITY, STATUS_DOT, T } from "../theme.ts";
 import { agentDot, jump, openIfUrl, panel, ruled } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
@@ -65,41 +65,63 @@ function agentLine(e: () => AgentRow): View {
 
 function subagentLine(e: () => SubagentRow): View {
   return HStack({ spacing: 9 }, [
+    // Every line is a running run, so every dot reads as a working agent.
     agentDot(
-      () => subagentDot(e()),
-      () => subagentHalo(e()),
+      () => STATUS_DOT.working,
+      () => T.blueHalo,
       () => false,
     ),
     Text(() => e().label)
       .font(12)
-      .color(() => subagentLabelColor(e()))
+      .color(T.text)
       .lineLimit(1)
       .truncation("tail")
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
-    Text(() => subagentFigure(e()))
+    Text(() => helperAge(e()))
       .font(11)
       .monospaced()
       .color(T.secondary)
       .lineLimit(1)
-      // Over the label's priority, so the figure ("4m", "done") is never the one cut.
+      // Over the label's priority, so the figure ("4m", "running") is never the one cut.
       .layoutPriority(2),
   ])
     .paddingVertical(5)
     .frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
-// Board 1's Subagents block: a small caps heading over one line per run.
-// Hidden while the workspace has none, which is also what an install that
-// never sends `children` looks like.
-function subagentsBlock(): View {
+// A faint line in the helper lines' rhythm: "+2 more", "3 finished earlier".
+function faintHelperLine(key: string, text: () => string): View {
+  return when(
+    key,
+    () => !!text(),
+    () => Text(text).font(11).color(T.tertiary).lineLimit(1).paddingVertical(5),
+  );
+}
+
+// The Helpers block, as the left card counts them: while any run is
+// running, a small caps heading over one line per running run, ending in
+// "+N more" past the cap; then one faint line for the settled ones. With
+// only settled runs, that faint line stands alone, with no heading over an
+// empty list. Hidden with neither, which is also what an install that never
+// sends \`children\` looks like.
+function helpersBlock(): View {
   return when(
     "cur-subs",
-    () => subagents().length > 0,
+    () => hasHelpers() || !!finishedLine(),
     () =>
       VStack({ spacing: 0, alignment: "leading" }, [
-        sectionTitle("SUBAGENTS", T.secondary).paddingBottom(2),
-        ForEach({ items: () => subagents(), key: (e) => e.key }, (e) => subagentLine(e)),
+        when(
+          "cur-subs-live",
+          () => hasHelpers(),
+          () =>
+            VStack({ spacing: 0, alignment: "leading" }, [
+              sectionTitle("HELPERS", T.secondary).paddingBottom(2),
+              ForEach({ items: () => helpers(), key: (e) => e.key }, (e) => subagentLine(e)),
+              faintHelperLine("cur-subs-more", () => (helperMore() > 0 ? "+" + helperMore() + " more" : "")),
+            ]).frame({ maxWidth: "infinity", alignment: "leading" }),
+        ),
+        faintHelperLine("cur-subs-done", finishedLine),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
         .paddingTop(12),
@@ -185,7 +207,7 @@ function dismissButton(): View {
 // The question, when the agent needs you: its words (none when there is only
 // the generic fallback or they may be another agent's), or how many agents
 // ask, then Answer (only with a terminal to focus) and Dismiss. The title is
-// not repeated: the card's head already shows it.
+// not repeated: the highlighted card on the left already shows it.
 function askBlock(): View {
   return when(
     "cur-ask",
@@ -217,71 +239,30 @@ function askBlock(): View {
   );
 }
 
-// The card's two columns (issue #94). The head's icon column, with the title
-// and the status word on one x after it; and the labelled rows' label column,
-// with every value on one x after it. Labels start at the card's padding, as
-// the icon does. The label column is wider than the icon's, since "Branch"
-// does not fit in 26pt.
-const ICON = 26;
-const ICON_GAP = 10;
+// The labelled rows' label column, with every value on one x after it.
+// Wide enough for "Asked", "Ports" and "PR".
 const LABEL = 48;
 const LABEL_GAP = 8;
-// One gap above every line under the title, labelled rows included, the same
-// 10pt the subagent and check lines keep between them.
+// One gap above every line under the status, labelled rows included, the
+// same 10pt the helper and check lines keep between them.
 const LINE_GAP = 10;
 
-// Project icon, then the title over the project name, then the unread
-// badge. No status here, so the title has the line to itself (Board 1).
-function currentTitle(): View {
-  const w = () => cur().ws;
-  return HStack({ spacing: ICON_GAP }, [
-    // The full card's badge size on the left, so the project reads the same.
-    projectBadge(() => cur().project, ICON, 12, 8),
-    VStack({ spacing: 1, alignment: "leading" }, [
-      Text(() => displayTitle(w()) || "untitled")
-        .font(14)
-        .weight("semibold")
-        .color(T.text)
-        .lineLimit(1)
-        .truncation("middle"),
-      Text(() => cur().project.name)
-        .font(11.5)
-        .color(T.metaText)
-        .lineLimit(1)
-        .truncation("tail"),
-    ])
-      .frame({ maxWidth: "infinity", alignment: "leading" })
-      .layoutPriority(1),
-    // Behind a when(), so with nothing unread the title keeps the row's full width.
-    when(
-      "cur-unread",
-      () => (w().unread ?? 0) > 0,
-      () => unreadBadge(() => w().unread ?? 0),
-    ),
-  ]).frame({ maxWidth: "infinity" });
-}
-
-// The status on its own line under the title (Board 1): the dot and its
-// word and age ("Working 14m") in the status colour, then the PR's state
-// chip ("1 failing", "ready") on the right when there is one, as the card
-// on the left shows it; tapping it opens the PR. A PR with no status has
-// no words, so no empty pill. The dot is centred under the project icon and
-// the word starts on the title's x (issue #94).
+// The card's first line, since the workspace's name and project are the
+// highlighted card on the left and the heading: the dot and its word and
+// age ("Working 14m") in the status colour, then the PR's state chip ("1
+// failing", "ready") on the right when there is one, as the card on the
+// left shows it; tapping it opens the PR. A PR with no status has no
+// words, so no empty pill.
 function statusRow(): View {
   const a = () => cur().a;
-  // The head's own two columns, so the word cannot drift off the title's x.
-  return HStack({ spacing: ICON_GAP }, [
+  return HStack({ spacing: 8 }, [
     agentDot(
       () => dotFor(a()),
       () => haloFor(a()),
       () => hollowDot(a()),
-    )
-      // A fixed width centres its content, which is what puts the dot under the icon.
-      .frame({ width: ICON }),
+    ),
     statusWords(),
-  ])
-    .frame({ maxWidth: "infinity", alignment: "leading" })
-    .paddingTop(LINE_GAP);
+  ]).frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
 // The status row's text column: the word and age, then the PR chip on the right.
@@ -312,7 +293,7 @@ function statusWords(): View {
 }
 
 // A labelled row: a quiet label in the one label column, then the value.
-// Asked, Branch, Ports and PR all use it, so their labels share a left edge,
+// Asked, Ports and PR all use it, so their labels share a left edge,
 // their values share another, and each row keeps the same gap above it.
 // Align "top" to pin the label to the value's first line, for a value that
 // wraps; label and value share one size, so their first lines line up. A
@@ -434,12 +415,6 @@ function detailsBlock(): View {
       // No gap of its own: each labelled row carries the one above it.
       VStack({ spacing: 0, alignment: "leading" }, [
         labelled(
-          "cur-branch",
-          "Branch",
-          () => !!branchDetail(),
-          () => branchText(() => branchDetail(), T.secondary).layoutPriority(1),
-        ),
-        labelled(
           "cur-ports",
           "Ports",
           () => portChips().length > 0,
@@ -464,17 +439,30 @@ function detailsBlock(): View {
   );
 }
 
+// The branch and whether it is clean, one faint line at the foot: "main ·
+// clean", "main · uncommitted changes".
+function branchBlock(): View {
+  return when(
+    "cur-branch",
+    () => !!branchFooter(),
+    () =>
+      branchText(() => branchFooter(), T.tertiary)
+        .frame({ maxWidth: "infinity", alignment: "leading" })
+        .paddingTop(LINE_GAP),
+  );
+}
+
 function currentHead(): View {
   return VStack({ spacing: 0, alignment: "leading" }, [
-    currentTitle(),
     statusRow(),
     askBlock(),
     askedBlock(),
     messageBlock(),
     progressBlock(),
-    subagentsBlock(),
+    helpersBlock(),
     detailsBlock(),
     checksBlock(),
+    branchBlock(),
   ])
     .padding(14)
     .frame({ maxWidth: "infinity", alignment: "leading" });

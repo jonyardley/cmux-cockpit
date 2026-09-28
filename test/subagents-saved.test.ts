@@ -93,12 +93,13 @@ describe("saved subagent runs", () => {
     );
   });
 
-  it("caps saved runs at 5, running first oldest-start first", () => {
+  it("keeps every saved run, and caps the helpers listed at 5, running first oldest-start first", () => {
     r.data.workspaces = [ws("many", { selected: true, agents: [agent("working")] })];
-    const rows = m.subagents();
+    assert.equal(m.subagents().length, 6);
+    const rows = m.helpers();
     assert.equal(rows.length, 5);
     assert.deepEqual(
-      ids(),
+      rows.map((e) => e.key.split(":")[2]),
       rows.map((_, i) => "r" + i),
     );
     assert.equal(new Set(rows.map((e) => e.key)).size, 5);

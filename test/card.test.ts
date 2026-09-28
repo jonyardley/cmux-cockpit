@@ -199,3 +199,12 @@ describe("showsChipsRow (issue #79)", () => {
     }
   });
 });
+
+describe("detailColor", () => {
+  it("fades the selected card's message line, and keeps the secondary ink on the rest", async () => {
+    const { C } = await import("../src/cockpit/theme.ts");
+    assert.equal(status.detailColor(true), C.faint);
+    assert.equal(status.detailColor(false), C.secondary);
+    assert.notEqual(C.faint, C.secondary);
+  });
+});

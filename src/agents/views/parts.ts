@@ -23,7 +23,7 @@ export function ruled(row: View, isLast: () => boolean): View {
   ]).frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
-export function sectionHeader(label: string, count?: () => string, dot?: string): View {
+export function sectionHeader(label: Reactive<string>, count?: () => string, dot?: string): View {
   const n = () => (count ? count() : "");
   // A zero-width dot would still cost the HStack spacing and indent the label.
   return HStack({ spacing: 7 }, [
@@ -43,11 +43,6 @@ export function sectionHeader(label: string, count?: () => string, dot?: string)
     .paddingBottom(2);
 }
 
-// Status dot over board 2's soft halo; pass "clear" for no halo.
-export function statusDot(color: Reactive<string>, halo: Reactive<string>): View {
-  return haloDot(Circle({ size: 7 }).fill(color), halo, 7);
-}
-
 // Status dot, or a hollow grey ring while `hollow()` holds (idle, no agent).
 // Both circles stay mounted so the dot can switch in place.
 export function agentDot(color: () => string, halo: () => string, hollow: () => boolean): View {
@@ -56,15 +51,6 @@ export function agentDot(color: () => string, halo: () => string, hollow: () => 
     .stroke(() => (hollow() ? T.grey : "clear"))
     .strokeWidth(1.5);
   return haloDot(dot, () => (hollow() ? "clear" : halo()), 7);
-}
-
-/** The hollow grey ring idle rows lead with. */
-export function idleRing(): View {
-  return agentDot(
-    () => T.grey,
-    () => "clear",
-    () => true,
-  );
 }
 
 // Reactive, so a row whose key outlives its project (a Made here row, keyed

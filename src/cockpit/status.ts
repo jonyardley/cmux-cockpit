@@ -189,6 +189,14 @@ export function cardDetail(w: Workspace | undefined): string {
   return clip(cardMessage(w) || readable(w?.description), DETAIL_MAX);
 }
 
+/**
+ * The ink for a card's message line. The selected workspace's card keeps
+ * its line, faded, since the agents panel on the right shows that message in
+ * full: the line stays so the card keeps its height and nothing moves on a
+ * tap. Every other card reads it in the secondary ink.
+ */
+export const detailColor = (selected: boolean): string => (selected ? C.faint : C.secondary);
+
 /** The progress bar's fraction, held to 0 to 1; null when no value is sent. */
 export function progressFraction(w: Workspace | undefined): number | null {
   const v = w?.progress?.value;
