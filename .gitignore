@@ -7,7 +7,10 @@ conductor-backup-*/
 # Tooling
 node_modules/
 
-# Local build output and the real project table: never commit these.
+# Local build output, your app settings and the real project table: never
+# commit these. cmux.example.json and dock.example.json are the samples.
+cmux.json
+dock.json
 sidebars/agents.js
 sidebars/cockpit.js
 sidebars/focus.js

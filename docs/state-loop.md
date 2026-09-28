@@ -44,8 +44,8 @@ rules (`applySet`, `validateState`) and their tests.
 ```json
 { "dismissed": { "<wsId>": { "<agentId>": 1790416690 } },
   "projectOverride": { "<wsId>": "/dev/alpha" },
-  "projects": { "/users/jon/dev/scratch": { "name": "Scratch", "color": "#6A9BCC",
-                "icon": "folder.fill", "root": "/Users/jon/dev/scratch" } } }
+  "projects": { "/users/you/dev/scratch": { "name": "Scratch", "color": "#6A9BCC",
+                "icon": "folder.fill", "root": "/Users/you/dev/scratch" } } }
 ```
 
 A missing or malformed file reads as empty state; bad entries are dropped,
@@ -274,8 +274,8 @@ only when a subagent event rebuilds: the `pr-poll-turn` and
 select, so a done row or a crashed run clears on the next poll even when
 nothing reports a new subagent event in between.
 
-Add these three hooks to `~/.claude/settings.json` to feed it (matching how
-`report-pr.ts` is registered there):
+Add these three hooks to `~/.claude/settings.json` to feed it (the
+[quickstart](quickstart.md#claude-code-hooks) has every hook in one block):
 
 ```json
 {
@@ -399,7 +399,7 @@ What each event saves:
 - `PermissionRequest` (every tool): fires the moment Claude Code is about
   to ask, alongside cmux's own `PermissionRequest` hook, which is what
   marks the agent needs_input. The reason names the command's first two
-  words (past a `cd`, env assignments and `rtk`), the file an edit or
+  words (past a `cd`, env assignments and `rtk`, a command-rewriting wrapper), the file an edit or
   write touches, the host a fetch reaches, or the tool; `AskUserQuestion`
   uses the first question's words and `ExitPlanMode` reads
   `approve the plan?`.

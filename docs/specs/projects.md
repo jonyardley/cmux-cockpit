@@ -1,5 +1,11 @@
 # Projects: assignment and creation
 
+> **Superseded.** This is the design note written before projects shipped,
+> kept for history. Much of what it calls impossible now works: the agents
+> panel reads projects, "Move to project" persists, and a card can make its
+> folder a project. For how it works today, see
+> [state-loop.md](../state-loop.md) and the [README](../../README.md).
+
 Answers issues [#8](https://github.com/jonyardley/cmux-cockpit/issues/8)
 (assign sessions to projects) and
 [#9](https://github.com/jonyardley/cmux-cockpit/issues/9) (create and
