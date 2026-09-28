@@ -56,6 +56,17 @@ beforeEach(() => {
   ];
 });
 
+// Opens a card for the body only, folding it again even when an assertion
+// fails, so the open state never leaks into later tests.
+function whileOpen(k: "prs" | "made", body: () => void): void {
+  m.toggleExpanded(k);
+  try {
+    body();
+  } finally {
+    m.toggleExpanded(k);
+  }
+}
+
 describe("madeHere", () => {
   it("puts the selected workspace's own first, newest first, then the latest three from others", () => {
     assert.deepEqual(ids(), ["here-new", "here-old", "jp", "o1", "o2", "o3"]);
@@ -78,18 +89,45 @@ describe("madeHere", () => {
       m.madeHere().map((e) => e.last),
       [false, true],
     );
-    assert.equal(m.madeMore(), 0);
+    assert.equal(m.madeFoot(), "");
   });
 
   it("counts every fresh entry before the caps, and how many the caps leave out", () => {
     assert.equal(m.madeCount(), 7);
-    assert.equal(m.madeMore(), 1);
+    assert.equal(m.madeFoot(), "+1 more");
+  });
+
+  it("shows every fresh entry once the card is open, and folds back to the caps (#109)", () => {
+    assert.equal(m.madeFoot(), "+1 more");
+    whileOpen("made", () => {
+      assert.deepEqual(ids(), ["here-new", "here-old", "jp", "o1", "o2", "o3", "o4"]);
+      assert.equal(m.madeFoot(), "Show less");
+      assert.ok(m.madeHere().every((e) => !e.last));
+    });
+    assert.equal(m.madeHere().length, 6);
+    assert.equal(m.madeFoot(), "+1 more");
+  });
+
+  it("opening one card leaves the other folded", () => {
+    whileOpen("prs", () => {
+      assert.equal(m.isExpanded("made"), false);
+      assert.equal(m.madeFoot(), "+1 more");
+    });
+  });
+
+  it("shows another workspace's card folded, and the first still open on return", () => {
+    whileOpen("made", () => {
+      r.data.workspaces = [ws("sel"), ws("other", { selected: true })];
+      assert.equal(m.isExpanded("made"), false);
+      r.data.workspaces = [ws("sel", { selected: true }), ws("other")];
+      assert.equal(m.isExpanded("made"), true);
+    });
   });
 
   it("counts nothing before the clock's first tick", () => {
     r.data.epoch = 0;
     assert.equal(m.madeCount(), 0);
-    assert.equal(m.madeMore(), 0);
+    assert.equal(m.madeFoot(), "");
   });
 
   it("keys each row by its link, so a row keeps its one kind", () => {

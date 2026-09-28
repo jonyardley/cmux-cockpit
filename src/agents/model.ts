@@ -34,10 +34,44 @@ import { CHECK_DOT, STATUS_DOT, T } from "./theme.ts";
 /** How many of `total` rows a cap of `max` leaves out; 0 when none are. */
 export const moreThan = (total: number, max: number): number => Math.max(0, total - max);
 
-/** markLast, except that with `more` rows left out no row is last: a "+N
- * more" line follows, so the final row keeps its rule above it. */
+/** markLast, except that while the list overflows its cap (`more` > 0) no
+ * row is last: a closing "+N more" or, once open, "Show less" line follows,
+ * so the final row keeps its rule above it. */
 export function markLastBefore<T>(rows: T[], more: number): Last<T>[] {
   return more > 0 ? rows.map((e) => ({ ...e, last: false })) : markLast(rows);
+}
+
+/** The cards whose "+N more" line can be tapped open (#109). */
+export type ListKey = "prs" | "made";
+
+// Which cards are open past their cap, each with what it was opened for:
+// Made here with the selected workspace, since its rows depend on it, so
+// selecting another workspace shows that one folded. Not saved: a reload
+// folds them.
+const [openLists, setOpenLists] = signal<ReadonlyMap<ListKey, string>>(new Map());
+
+const selectedId = (): string => (data.workspaces() ?? []).find((w) => w.selected)?.id ?? "";
+const openFor = (k: ListKey): string => (k === "made" ? selectedId() : "");
+
+export const isExpanded = (k: ListKey): boolean => {
+  const at = openLists().get(k);
+  return at !== undefined && at === openFor(k);
+};
+
+/** Opens a card past its cap, or folds it back. */
+export function toggleExpanded(k: ListKey): void {
+  const next = new Map(openLists());
+  if (isExpanded(k)) next.delete(k);
+  else next.set(k, openFor(k));
+  setOpenLists(next);
+}
+
+/** The line a capped card ends in: "+N more" while cut, "Show less" while
+ * open past its cap, "" when the list fits. `over` is how many rows the cap
+ * leaves out when the card is folded. */
+export function footText(over: number, expanded: boolean): string {
+  if (over <= 0) return "";
+  return expanded ? "Show less" : "+" + over + " more";
 }
 
 // ---- This workspace -------------------------------------------------------
@@ -495,11 +529,18 @@ const MAX_PRS = 30;
 /** Every PR, before the cap, for the heading's count. */
 export const prCount = computed((): number => allPrs().length);
 
-/** How many PRs the cap leaves out, for the "+N more" line. */
-export const prMore = computed((): number => moreThan(prCount(), MAX_PRS));
+// How many PRs the cap leaves out while the card is folded.
+const prOver = computed((): number => moreThan(prCount(), MAX_PRS));
 
-/** The Pull requests rows, at most MAX_PRS. */
-export const prs = computed((): Last<PrEntry>[] => markLastBefore(allPrs().slice(0, MAX_PRS), prMore()));
+/** The Pull requests card's closing line, from footText. */
+export const prFoot = computed((): string => footText(prOver(), isExpanded("prs")));
+
+/** The Pull requests rows, at most MAX_PRS unless the card is open. While
+ * the list overflows, a closing line follows, so no row is last. */
+export const prs = computed((): Last<PrEntry>[] => {
+  const all = allPrs();
+  return markLastBefore(isExpanded("prs") ? all : all.slice(0, MAX_PRS), prOver());
+});
 
 /** The faint line under the Pull requests heading when the saved data is old
  * or gh is down, "gh unavailable · last checked 2h ago"; "" when fresh. */
@@ -548,32 +589,45 @@ function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, her
 // them; none before the clock's first tick, when every entry would
 // otherwise read as fresh.
 // One computed, so the rows and the count read the same list, filtered once.
-const freshMade = computed((): { fresh: SavedPublished[]; workspaces: Workspace[]; selected: string | undefined } => {
+// Split once into the selected workspace's own and the rest, with the caps
+// each part is cut to while the card is folded, so the rows and the count
+// left out read the same cut.
+const freshMade = computed(() => {
   const now = nowEpoch();
   const workspaces = data.workspaces() ?? [];
   const selected = workspaces.find((w) => w.selected)?.id;
-  return { fresh: now ? savedPublished(now) : [], workspaces, selected };
+  const fresh: SavedPublished[] = now ? savedPublished(now) : [];
+  const own: SavedPublished[] = [];
+  const others: SavedPublished[] = [];
+  for (const e of fresh) (e.workspace === selected ? own : others).push(e);
+  const shown = Math.min(own.length, MADE_HERE_OWN) + Math.min(others.length, MADE_ELSEWHERE);
+  return { count: fresh.length, own, others, over: fresh.length - shown, workspaces };
 });
 
+// How many fresh pages and docs the caps leave out while the card is folded.
+const madeOver = (): number => freshMade().over;
+
 /** The Made here rows: the selected workspace's own pages and docs first,
- * newest first, then the latest few from other workspaces. Anything past
+ * newest first, then the latest few from other workspaces, or all of them
+ * while the card is open. Anything past
  * seven days drops off (shared/published-age.ts); nothing shows before the
  * clock's first tick, when every entry would otherwise read as fresh. */
 export const madeHere = computed((): Last<MadeEntry>[] => {
-  const { fresh, workspaces, selected } = freshMade();
+  const f = freshMade();
   // Cut to the rows shown before the project lookups, which scan every project.
-  const own = fresh.filter((e) => e.workspace === selected).slice(0, MADE_HERE_OWN);
-  const others = fresh.filter((e) => e.workspace !== selected).slice(0, MADE_ELSEWHERE);
-  const dirs = new Map(workspaces.map((w) => [w.id, w.directory]));
+  const open = isExpanded("made");
+  const own = open ? f.own : f.own.slice(0, MADE_HERE_OWN);
+  const others = open ? f.others : f.others.slice(0, MADE_ELSEWHERE);
+  const dirs = new Map(f.workspaces.map((w) => [w.id, w.directory]));
   const rows = [...own.map((e) => madeEntry(e, dirs, true)), ...others.map((e) => madeEntry(e, dirs, false))];
-  return markLastBefore(rows, moreThan(fresh.length, rows.length));
+  return markLastBefore(rows, madeOver());
 });
 
 /** Every fresh page and doc, before the caps, for the heading's count. */
-export const madeCount = computed((): number => freshMade().fresh.length);
+export const madeCount = computed((): number => freshMade().count);
 
-/** How many fresh pages and docs the caps leave out, for the "+N more" line. */
-export const madeMore = computed((): number => moreThan(madeCount(), madeHere().length));
+/** The Made here card's closing line, from footText. */
+export const madeFoot = computed((): string => footText(madeOver(), isExpanded("made")));
 
 /**
  * The one faint line at the bottom that stands in for empty sections
