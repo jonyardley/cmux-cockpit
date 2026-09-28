@@ -2,10 +2,13 @@
 //
 // Layout, top to bottom:
 //   1. All | Projects segmented control (author state).
-//   2. "Needs you" strip: every workspace whose agent is waiting on input.
-//   3. Lanes (cmux workspace groups matched by NAME): Main activity, For
+//   2. Next: opens what needs you, then what is Ready, one press at a time.
+//   3. "Needs you" strip: the workspaces whose agent is waiting on input, the
+//      first four of them, then "+N more".
+//   4. Lanes (cmux workspace groups matched by NAME): Main activity, For
 //      review, Background, Parked, then Unsorted (anything not in a lane).
-//      An empty lane is a faint drop box in its place.
+//      Cards sort by state inside a lane. An empty lane is a faint header
+//      with a "0" count, still a drop target.
 //
 // The lanes are ONE flat Reorderable of fixed headers plus card rows, so a
 // card can be dragged between lanes in one gesture (see drop.ts).
@@ -18,11 +21,12 @@ import { handleDragChange, handleMove, isForeignAnchor } from "./drop.ts";
 import { flatEntries, panelMaxHeight, panelOpacity, projectEntries, wsById } from "./model.ts";
 import { cardFor, projectRow } from "./views/cards.ts";
 import { dropZone, laneHeader, projectHeader, quietHeader, quietRow, segmented } from "./views/headers.ts";
-import { needsStrip } from "./views/needs.ts";
+import { needsStrip, nextButton } from "./views/needs.ts";
 
 sidebar(() =>
   VStack({ spacing: 0, alignment: "leading" }, [
     segmented(),
+    nextButton(),
     needsStrip(),
     panel("all", lanesPanel()),
     panel("projects", projectsPanel()),

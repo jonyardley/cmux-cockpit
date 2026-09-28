@@ -9,10 +9,12 @@ import {
   flatEntries,
   groupForLane,
   groups,
+  type LaneEntry,
   laneAnchorIds,
   laneOf,
   moveToLane,
   overrideOrder,
+  stateRank,
   wsById,
 } from "./model.ts";
 import { drag, mode, setDrag } from "./state.ts";
@@ -30,11 +32,35 @@ export interface DropTarget {
 // empty lane's zone counts, so dropping just under one files the card
 // there). Above every row it is the first lane; an index past the end is
 // clamped, so the bottom slot always files into the last row's lane.
-export function resolveDrop(key: string, index: number): DropTarget {
+function slotOf(key: string, index: number): { entries: LaneEntry[]; at: number; laneKey: LaneKey } {
   const entries = flatEntries().filter((e) => e.id !== key);
   const at = Math.min(Math.max(index, 0), entries.length);
+  return { entries, at, laneKey: entries[at - 1]?.lane ?? FIRST_LANE };
+}
+
+// The lane's cards in the dragged card's state, as they sit above and below
+// the slot.
+function peersAround(entries: LaneEntry[], at: number, laneKey: LaneKey, rank: number | null) {
+  const peer = (e: LaneEntry | undefined): e is Extract<LaneEntry, { kind: "ws" }> =>
+    e?.kind === "ws" && e.lane === laneKey && rank !== null && stateRank(wsById(e.wsId)) === rank;
+  return { above: entries.slice(0, at).filter(peer).at(-1), below: entries.slice(at).find(peer) };
+}
+
+// Cards sort by state inside a lane (model.ts's stateRank), and the drag
+// order only holds among cards in the same state. So a drop anchors to the
+// nearest card in the dragged card's own state: just before the first one
+// below the slot, else just after the last one above it. Either way it sits
+// among its peers where Jon let go. With no peer in the lane it falls back
+// to the neighbours: before the card below, else after the card above.
+export function resolveDrop(key: string, index: number): DropTarget {
+  const { entries, at, laneKey } = slotOf(key, index);
+  const dragged = flatEntries().find((e) => e.id === key);
+  // Above every row the slot is outside any lane, so it keeps the header rule below.
+  const rank = dragged?.kind === "ws" && at > 0 ? stateRank(wsById(dragged.wsId)) : null;
+  const { above, below } = peersAround(entries, at, laneKey, rank);
+  if (below) return { laneKey, nextRef: below.wsId, prevRef: null };
+  if (above) return { laneKey, nextRef: null, prevRef: above.wsId };
   const prev = entries[at - 1];
-  const laneKey = prev?.lane ?? FIRST_LANE;
   const next = entries[at];
   const nextRef = next?.kind === "ws" && next.lane === laneKey ? next.wsId : null;
   const prevRef = prev?.kind === "ws" ? prev.wsId : null;
@@ -112,5 +138,6 @@ export function handleDragChange(d: DragState | null): void {
 export const dropLane = computed((): LaneKey | null => {
   const d = drag();
   if (!d?.id) return null;
-  return resolveDrop(d.id, d.index).laneKey;
+  // The lane alone: the anchor is only worked out on the drop itself.
+  return slotOf(d.id, d.index).laneKey;
 });

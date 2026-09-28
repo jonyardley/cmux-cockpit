@@ -5,6 +5,7 @@
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
+import { agentsOf } from "../shared/needs.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import {
   inAppSpec,
@@ -26,9 +27,11 @@ import {
   bump,
   collapsedProjects,
   isMode,
+  isSelected,
   mode,
   quietCollapsed,
   savedFolds,
+  selectWorkspace,
   setCollapsedProjects,
   setMode,
   setQuietCollapsed,
@@ -335,11 +338,44 @@ interface LaneSection {
 // Nothing to show: no cards, and no anchor status on the header.
 const isEmpty = (s: LaneSection): boolean => s.rows.length === 0 && !s.anchorId;
 
+function liveRank(w: Workspace | undefined): number {
+  const s = statusOf(w);
+  if (s === "needs_input") return 0;
+  if (isReady(w)) return 1;
+  return s === "working" ? 2 : 3;
+}
+
+// The rank each card last had while not selected. Opening a Ready card
+// clears its Ready state (status.ts), and answering a card moves it on, so
+// the selected card keeps the best of that rank and its live one: it never
+// slides out from under the pointer, and it settles once Jon moves on.
+// Written during render and read only for the selected card, so no bump().
+const heldRank = new Map<string, number>();
+
+/** A card's place in its lane (issue #74): needs you, then Ready, then working, then the rest. */
+export function stateRank(w: Workspace | undefined): number {
+  const rank = liveRank(w);
+  if (!w) return rank;
+  if (!isSelected(w)) {
+    heldRank.set(w.id, rank);
+    return rank;
+  }
+  return Math.min(rank, heldRank.get(w.id) ?? rank);
+}
+
+// Array sort is stable, so cards in the same state keep the tab order Jon
+// dragged them into; drop.ts anchors a drop to a card in the same state so it
+// lands where he let go.
+function byState(rows: Workspace[]): Workspace[] {
+  const rank = new Map(rows.map((w) => [w.id, stateRank(w)]));
+  return rows.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+}
+
 const laneSections = computed((): LaneSection[] => {
   const cards = cardWorkspaces();
   return LANES.map((lane) => ({
     lane,
-    rows: cards.filter((w) => laneOf(w) === lane.key),
+    rows: byState(cards.filter((w) => laneOf(w) === lane.key)),
     anchorId: headerAnchorId(lane),
   }));
 });
@@ -586,11 +622,90 @@ export const projectEntries = computed(() => {
  * Workspaces waiting on Jon, longest-waiting first. A lane's generated
  * anchor counts too: it is off the cards, but an agent in it can still ask.
  */
+const oldestFirst = (a: Workspace, b: Workspace): number => sinceOf(a) - sinceOf(b);
+
+// When a Ready workspace finished: its latest idle or ended agent's last
+// activity, not the most active agent's time (a fresh idle session would
+// date an hour-old finish as a minute old).
+function finishedAt(w: Workspace): number {
+  let at = 0;
+  for (const a of agentsOf(w))
+    if (a.status === "idle" || a.status === "ended") at = Math.max(at, a.lastActivityAt ?? 0);
+  return at;
+}
+
 export const needsList = computed(() =>
   allWorkspaces()
     .filter((w) => statusOf(w) === "needs_input")
-    .sort((a, b) => sinceOf(a) - sinceOf(b)),
+    .sort(oldestFirst),
 );
+
+// The strip lists this many rows, then "+N more" (issue #74), so a long queue
+// never pushes the lanes off screen.
+const NEEDS_ROWS = 4;
+
+export const needsShown = computed(() => needsList().slice(0, NEEDS_ROWS));
+
+/** How many waiting workspaces the strip leaves out. */
+export const needsMore = (): number => Math.max(0, needsList().length - NEEDS_ROWS);
+
+// Next (issue #74)
+
+/** What the Next button walks through: needs you, then Ready, each longest-waiting first. */
+export const nextQueue = computed((): Workspace[] => [
+  ...needsList(),
+  ...allWorkspaces()
+    .filter((w) => isReady(w))
+    .sort((a, b) => finishedAt(a) - finishedAt(b)),
+]);
+
+// The last workspace Next opened, and the one after it then. Opening a
+// Ready workspace clears its Ready state, so it drops out of the queue:
+// while Jon is still on it, the next press goes to the one that followed
+// it, or to the same place if that one has gone too. Forgotten once he
+// moves off it. A plain let: jumpNext bumps.
+let lastJump: { id: string; index: number; afterId: string | null } | null = null;
+
+// Each press moves on from where Jon is: after the selected workspace when
+// it is in the queue; after the one Next last opened when that has dropped
+// out and he is still on it; else from the top.
+function nextIndex(queue: readonly Workspace[]): number {
+  tick();
+  const on = queue.findIndex((w) => isSelected(w));
+  if (on >= 0) return (on + 1) % queue.length;
+  if (lastJump && !isSelected(wsById(lastJump.id))) lastJump = null;
+  if (!lastJump) return 0;
+  const { afterId, index } = lastJump;
+  const after = queue.findIndex((w) => w.id === afterId);
+  return after >= 0 ? after : index % queue.length;
+}
+
+export interface NextStep {
+  target: Workspace;
+  /** 1-based, for "1 of 6". */
+  position: number;
+  total: number;
+}
+
+/** Where the next press goes, or null when nothing needs Jon or is Ready. */
+export const nextStep = computed((): NextStep | null => {
+  const queue = nextQueue();
+  if (!queue.length) return null;
+  const i = nextIndex(queue);
+  const target = queue[i];
+  // Nothing to move on to when the only one waiting is the one Jon is on.
+  if (!target || isSelected(target)) return null;
+  return { target, position: i + 1, total: queue.length };
+});
+
+/** The Next button: selects the next workspace in the queue. */
+export function jumpNext(): void {
+  const step = nextStep();
+  if (!step) return;
+  const queue = nextQueue();
+  lastJump = { id: step.target.id, index: step.position - 1, afterId: queue[step.position]?.id ?? null };
+  selectWorkspace(step.target.id);
+}
 
 // --- Card chips (issue #48) ------------------------------------------------------------
 

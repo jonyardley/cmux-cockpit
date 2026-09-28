@@ -78,13 +78,15 @@ function headerName(name: string, color: string, weight: Weight = "semibold"): V
   return Text(name).font(12.5).weight(weight).color(color).lineLimit(1).truncation("tail").layoutPriority(1);
 }
 
+const CHEVRON_SLOT = { width: 12, height: 16 } as const;
+
 function chevron(collapsed: () => boolean): View {
   return Image("chevron.right")
     .font(10)
     .weight("semibold")
     .color(C.faint)
     .rotation(() => (collapsed() ? 0 : 90))
-    .frame({ width: 12, height: 16 });
+    .frame(CHEVRON_SLOT);
 }
 
 // A lane's generated anchor with an agent or unread messages (issue #49): its
@@ -115,11 +117,12 @@ function dropHint(target: () => boolean): View {
 // cards, so the gap still folds the header.
 const SECTION_GAP = 14;
 const HEADER_PAD = 5;
-const headerGap = (row: View, tap: () => void): View =>
-  VStack({ spacing: 0 }, [row])
+const headerGap = (row: View, tap?: () => void): View => {
+  const gap = VStack({ spacing: 0 }, [row])
     .paddingTop(SECTION_GAP - HEADER_PAD)
-    .frame({ maxWidth: "infinity" })
-    .onTap(tap);
+    .frame({ maxWidth: "infinity" });
+  return tap ? gap.onTap(tap) : gap;
+};
 
 const laneMarker = (color: string): View =>
   RoundedRectangle({ cornerRadius: 3 }).fill(color).frame({ width: 9, height: 9 });
@@ -145,29 +148,38 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
   return headerGap(row, () => toggleLane(lane)).fixed();
 }
 
-// An empty lane (issue #50): a faint box in its own place, drawn the same
-// whether or not a card is dragged, so nothing opens or closes when a drag
-// starts or ends. The renderer has no dashed stroke, so the box is a quiet
-// ring that turns solid ink under the pointer.
+// An empty lane (issues #50 and #75): drawn like a lane header, with the
+// same chevron slot, name position, padding and count, only fainter, and no
+// box at rest. It has nothing to fold, so no tap. It stays a drop target.
+// Under the pointer it gets a face and an ink edge, but that waits on
+// cmux's drag events (onDragChange), which arrive in 0.65.0: on 0.64.25 it
+// never lights. The ring is always ZONE_EDGE wide, clear at rest, and the
+// row's padding gives that width back, so the name sits where a header's
+// does whether or not it is lit.
+const ZONE_EDGE = 1;
+const EMPTY_FADE = 0.55;
+
 export function dropZone(laneKey: LaneKey): View {
   const lane = laneByKey(laneKey);
   const target = () => dropLane() === laneKey;
   const row = HStack({ spacing: 8 }, [
-    laneMarker(lane.color),
-    Text(lane.name).font(12.5).weight("semibold").color(C.faint).lineLimit(1).truncation("tail").layoutPriority(1),
-    Spacer({ minLength: 0 }),
+    Spacer({ minLength: 0 }).frame(CHEVRON_SLOT),
+    laneMarker(lane.color).opacity(EMPTY_FADE),
+    headerName(lane.name, C.faint, "medium"),
+    countPill(() => 0).opacity(EMPTY_FADE),
+    Spacer({ minLength: 4 }),
     dropHint(target),
   ])
-    .paddingHorizontal(10)
-    .paddingVertical(8);
+    .paddingHorizontal(8 - ZONE_EDGE)
+    .paddingVertical(HEADER_PAD - ZONE_EDGE);
   const zone = ring(
     row,
-    () => (target() ? C.zoneLit : C.ground),
-    () => (target() ? C.heading : C.zoneEdge),
-    1,
+    () => (target() ? C.zoneLit : "clear"),
+    () => (target() ? C.heading : "clear"),
+    ZONE_EDGE,
     8,
   );
-  return VStack({ spacing: 0 }, [zone]).paddingTop(8).fixed();
+  return headerGap(zone).fixed();
 }
 
 const badge = (k: string, size: number, font: number): View => {
