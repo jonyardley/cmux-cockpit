@@ -238,6 +238,36 @@ then fnm's default, nvm (its default alias, else the newest installed),
 volta, asdf and mise (the newest installed), then Homebrew. If it finds
 none it does nothing and logs a line saying so.
 
+### Getting the agents panel back
+
+The right sidebar's Custom button only shows while the agents panel is
+showing: switch to Files, or close the sidebar, and it is gone. To get it
+back from the Command Palette, add this action to your `cmux.json` and run
+`cmux reload-config`:
+
+```json
+"actions": {
+  "cockpit.show-agents": {
+    "type": "command",
+    "title": "Show agents panel",
+    "subtitle": "Put the right sidebar back on the agents panel",
+    "keywords": ["agents", "right sidebar", "cockpit"],
+    "command": "cmux right-sidebar set custom agents --workspace \"$CMUX_WORKSPACE_ID\" --no-focus; exit",
+    "target": "newTabInCurrentPane"
+  }
+}
+```
+
+cmux runs a command action in a terminal, so the action opens a tab for
+a moment, switches the sidebar and closes the tab again. The palette
+also lists cmux's own "Sidebar: agents" row just above it; that one puts
+the agents panel in the left sidebar instead (`cmux sidebar select
+cockpit` puts the cockpit back). cmux marks actions as a nightly feature,
+though 0.64.25 has them: if your build does not know them, the
+palette shows a "cmux.json Schema Error" row and cmux ignores the file
+until you take the action out. From a terminal,
+`cmux right-sidebar set custom agents` does the same.
+
 ### Claude Code hooks
 
 These hooks tell the sidebars what cmux cannot see. Each one runs only
