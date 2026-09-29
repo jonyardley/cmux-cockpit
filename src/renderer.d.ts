@@ -117,12 +117,7 @@ declare function computed<T>(fn: () => T): () => T;
  * does not exist yet (#87).
  */
 declare function sidebar(root: () => View, options?: { surface?: "glass" }): void;
-/**
- * Dispatches a cmux socket command, e.g. workspace.select. workspace.create
- * takes `cwd`, `focus` and `initial_input`: text typed into the new shell as
- * raw keystrokes, so without a trailing "\r" it waits on the prompt unrun
- * (cmux docs/cli-contract.md). `initial_command` instead replaces the shell.
- */
+/** Dispatches a cmux socket command, e.g. workspace.select. */
 declare function cmux(method: string, params: Record<string, string | number | boolean>): void;
 declare function openURL(url: string): void;
 

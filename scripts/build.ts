@@ -16,6 +16,7 @@
 // build and baked in as __URL_TOKEN__, so the sidebars' cmux-cockpit://
 // links carry it and state-set.ts can refuse any link that does not
 // (docs/state-loop.md).
+//
 //   node scripts/build.ts    build once
 
 import { existsSync, readFileSync } from "node:fs";
