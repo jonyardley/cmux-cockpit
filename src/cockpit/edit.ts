@@ -53,19 +53,6 @@ export const setDraftIcon = (icon: string): void => setDraft({ ...draft(), icon 
 export const iconSearch = (): string => iconQuery();
 export const setIconSearch = (text: string): void => setIconQuery(text);
 
-/**
- * Return in the search: with words typed, picks the first match and keeps
- * the editor open; empty, it saves, as Return does in the other fields.
- */
-export function submitSearch(text: string): void {
-  if (!text.trim()) {
-    saveDraft();
-    return;
-  }
-  const first = iconMatches(text)[0];
-  if (first) setDraftIcon(first);
-}
-
 /** An empty folder clears it, so the header loses its "+". */
 export function setDraftFolder(text: string): void {
   const { root: _old, ...rest } = draft();
@@ -178,7 +165,8 @@ function allMatches(query: string): string[] {
 }
 
 /** The matches the picker shows: as many as two rows take. */
-export const iconMatches = (query: string): string[] => allMatches(query).slice(0, MAX_MATCHES);
+const capped = (hits: string[]): string[] => hits.slice(0, MAX_MATCHES);
+export const iconMatches = (query: string): string[] => capped(allMatches(query));
 
 // Worked out once per keystroke, for the rows and the line under them.
 const searchHits = computed(() => allMatches(iconQuery()));
@@ -186,7 +174,7 @@ const searchHits = computed(() => allMatches(iconQuery()));
 /** The picker's rows, eight to a row: the common row while the search is empty, else its matches. */
 export function iconRows(current: string, query: string = iconQuery()): string[][] {
   const hits = query === iconQuery() ? searchHits() : allMatches(query);
-  return rowsOf(query.trim() ? hits.slice(0, MAX_MATCHES) : commonIcons(current), ICONS_PER_ROW);
+  return rowsOf(query.trim() ? capped(hits) : commonIcons(current), ICONS_PER_ROW);
 }
 
 /** The line under the rows: none found, or how many more a longer word would reach; "" otherwise. */

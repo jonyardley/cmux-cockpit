@@ -108,14 +108,19 @@ interface TextFieldOptions {
   autofocus?: boolean;
   /** Every keystroke, with the whole text. */
   onEdit?: (text: string) => void;
-  /** Return. */
-  onSubmit?: (text: string) => void;
+  // No onSubmit, though the runtime takes one: cmux 0.64.25 sends submit on
+  // Return and also when the field ends editing, including a click elsewhere
+  // in the sidebar, which lands before that click's own tap. It carries only
+  // the text, so the two cannot be told apart, and a field that saved or
+  // closed on it swallowed every tap in the editor (PR #146). Leaving it
+  // undeclared makes the compiler refuse one.
   /** Escape. */
   onCancel?: () => void;
 }
 /**
  * A one-line text input. Seen drawing and taking typing and Return on cmux
  * 0.64.25 (2026-09-29). It draws no box of its own, so wrap it in ring().
+ * Return and focus loss both send submit, so it is left undeclared; see above.
  */
 declare function TextField(value: Reactive<string>, options?: TextFieldOptions): View;
 

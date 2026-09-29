@@ -29,7 +29,7 @@ g.__STATE__ = {
   ui: {},
 };
 
-const { installRenderer, nodeOf } = await import("./support/renderer.ts");
+const { installRenderer, nodeOf, taps } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
 const model = await import("../src/cockpit/model.ts");
@@ -60,6 +60,13 @@ const fail = (): never => assert.fail("the editor built no node");
 const fields = (n: ViewNode): ViewNode[] => (n.kind === "TextField" ? [n] : n.children.flatMap((c) => fields(c)));
 const images = (n: ViewNode): string[] =>
   n.kind === "Image" ? [String(n.args[0])] : n.children.flatMap((c) => images(c));
+const says = (n: ViewNode, text: string): boolean =>
+  (n.kind === "Text" && n.args[0] === text) || n.children.some((c) => says(c, text));
+const tapOf = (n: ViewNode, text: string): unknown => taps(n).find((t) => says(t, text))?.handlers.onTap;
+const filled = (n: ViewNode, color: string): boolean =>
+  (n.kind === "Circle" && n.mods.some((m) => m.name === "fill" && m.values[0] === color)) ||
+  n.children.some((c) => filled(c, color));
+const swatchTap = (n: ViewNode, color: string): unknown => taps(n).find((t) => filled(t, color))?.handlers.onTap;
 const lastCwd = (): unknown => r.calls.at(-1)?.params.cwd;
 
 describe("the card menu", () => {
@@ -225,26 +232,38 @@ describe("the editor", () => {
     assert.equal(count(node, "Rectangle"), edit.ICONS_PER_ROW - 1);
   });
 
-  it("picks the first match on Return, saves on Return when empty, and keeps the draft on Escape while searching", () => {
+  // cmux sends submit on focus loss as well as Return, so a tap on a colour
+  // dot used to submit the name field first, saving and closing the editor
+  // before the tap landed. No field takes a submit handler, so it does nothing.
+  it("gives no field a submit handler, so a tap after typing lands and Done saves both", () => {
     edit.openEditor(APP_TWO);
-    const search = fields(nodeOf(projectEditor(APP_TWO)) ?? fail())[1];
-    const { onEdit, onSubmit, onCancel } = search?.handlers ?? {};
-    assert.ok(typeof onEdit === "function" && typeof onSubmit === "function" && typeof onCancel === "function");
+    const node = nodeOf(projectEditor(APP_TWO)) ?? fail();
+    const all = fields(node);
+    assert.equal(all.length, 3);
+    for (const f of all) assert.equal(f.handlers.onSubmit, undefined);
+    const onEdit = all[0]?.handlers.onEdit;
+    const dot = swatchTap(node, PROJECT_COLORS[3]);
+    const done = tapOf(node, "Done");
+    assert.ok(typeof onEdit === "function" && typeof dot === "function" && typeof done === "function");
+    onEdit("Renamed");
+    dot();
+    assert.equal(state.editingProject(), APP_TWO);
+    assert.deepEqual(sets(), []);
+    done();
+    assert.equal(sets().at(-1)?.[1]?.name, "Renamed");
+    assert.equal(sets().at(-1)?.[1]?.color, PROJECT_COLORS[3]);
+  });
+
+  it("keeps the draft on Escape while searching", () => {
+    edit.openEditor(APP_TWO);
+    const { onEdit, onCancel } = fields(nodeOf(projectEditor(APP_TWO)) ?? fail())[1]?.handlers ?? {};
+    assert.ok(typeof onEdit === "function" && typeof onCancel === "function");
     edit.setDraftName("Renamed");
     onEdit("piano");
-    onSubmit("piano");
-    assert.equal(edit.draftSpec().icon, "pianokeys");
-    onEdit("zzz");
-    onSubmit("zzz");
-    assert.equal(edit.draftSpec().icon, "pianokeys");
     onCancel();
     assert.equal(state.editingProject(), APP_TWO);
     assert.equal(edit.draftSpec().name, "Renamed");
     assert.deepEqual(sets(), []);
-    onEdit("");
-    onSubmit("");
-    assert.equal(state.editingProject(), null);
-    assert.equal(sets().at(-1)?.[1]?.icon, "pianokeys");
   });
 
   it("closes on Escape in an empty search, and keeps the search when the open project is opened again", () => {
@@ -288,7 +307,7 @@ describe("the editor", () => {
     assert.equal(edit.draftSpec().root, "~/dev/scratch");
   });
 
-  it("types into the fields and saves on Return, as the renderer would", () => {
+  it("types into the fields and saves on Done, as the renderer would", () => {
     edit.openEditor(key);
     const node = nodeOf(projectEditor(key));
     assert.ok(node);
@@ -297,10 +316,10 @@ describe("the editor", () => {
     assert.deepEqual(search?.args, ["", { placeholder: "Search icons", autofocus: false }]);
     assert.equal(folder?.args[0], spec.root);
     const onEdit = name?.handlers.onEdit;
-    const onSubmit = folder?.handlers.onSubmit;
-    assert.ok(typeof onEdit === "function" && typeof onSubmit === "function");
+    const done = tapOf(node, "Done");
+    assert.ok(typeof onEdit === "function" && typeof done === "function");
     onEdit("Scratchpad");
-    onSubmit("");
+    done();
     assert.deepEqual(sets(), [["projects." + key, { ...spec, name: "Scratchpad" }]]);
   });
 

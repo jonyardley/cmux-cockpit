@@ -68,6 +68,11 @@ const nodes = new WeakMap<object, ViewNode>();
 
 /** The node behind a view the fake renderer built, or undefined for anything else. */
 export const nodeOf = (v: unknown): ViewNode | undefined => (typeof v === "function" ? nodes.get(v) : undefined);
+/** Every node in the tree with a tap handler, in drawing order. */
+export const taps = (n: ViewNode): ViewNode[] => [
+  ...(typeof n.handlers.onTap === "function" ? [n] : []),
+  ...n.children.flatMap(taps),
+];
 
 // A reactive argument's current value: a zero-argument function is called
 // (so view closures run against the fixture data), an options object has
@@ -173,10 +178,10 @@ export function createRenderer(): Renderer {
     Reorderable: list("Reorderable"),
     // Its handlers are kept on the node, so a test can type into it.
     TextField: (value: Reactive<string>, options: TextFieldOptions = {}) => {
-      const { onEdit, onSubmit, onCancel, ...shown } = options;
+      const { onEdit, onCancel, ...shown } = options;
       const field = view("TextField", [resolve(value), shown]);
       const node = nodeOf(field);
-      if (node) Object.assign(node.handlers, { onEdit, onSubmit, onCancel });
+      if (node) Object.assign(node.handlers, { onEdit, onCancel });
       return field;
     },
     Button: (label: Reactive<string>) => {

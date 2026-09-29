@@ -24,7 +24,6 @@ import {
   setDraftIcon,
   setDraftName,
   setIconSearch,
-  submitSearch,
 } from "../edit.ts";
 import { C } from "../theme.ts";
 
@@ -38,19 +37,20 @@ const glyph = (): string => glyphColor(draftSpec().color, C.text);
 // once, so a rebuild mid-edit keeps what was typed.
 interface FieldKeys {
   font?: number;
-  onSubmit?: (text: string) => void;
   onCancel?: () => void;
 }
 
-// Return saves and Escape closes, unless the field says what else they do.
+// Escape closes, unless the field says what else it does. No onSubmit: cmux
+// sends it when the field loses focus too, so a tap on a colour or Done
+// would land after the editor had already saved and closed. Done saves.
 function field(
   text: string,
   placeholder: string,
   autofocus: boolean,
   onEdit: (t: string) => void,
-  { font = 12.5, onSubmit = saveDraft, onCancel = closeEditor }: FieldKeys = {},
+  { font = 12.5, onCancel = closeEditor }: FieldKeys = {},
 ): View {
-  const input = TextField(text, { placeholder, autofocus, onEdit, onSubmit, onCancel })
+  const input = TextField(text, { placeholder, autofocus, onEdit, onCancel })
     .font(font)
     .paddingHorizontal(8)
     .paddingVertical(5);
@@ -159,7 +159,6 @@ export function projectEditor(k: string): View {
     VStack({ spacing: 0 }, [
       field(iconSearch(), "Search icons", false, setIconSearch, {
         font: 12,
-        onSubmit: submitSearch,
         onCancel: cancelSearch,
       }),
     ]).paddingTop(8),
