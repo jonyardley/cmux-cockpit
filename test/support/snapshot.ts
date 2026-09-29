@@ -11,7 +11,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { emptyState, type State } from "../../scripts/state-config.ts";
-import { prChipColors, READY_INK } from "../../src/shared/pr-colors.ts";
+import { NEUTRAL_CHIP, prInk, READY_INK } from "../../src/shared/pr-colors.ts";
 import { installRenderer, nodeOf, type Renderer, type ViewNode } from "./renderer.ts";
 
 const DIR = "test/__snapshots__";
@@ -117,24 +117,18 @@ function print(n: ViewNode, depth: number, tokens: Tokens, out: string[]): void 
   for (const c of n.children) print(c, depth + 1, tokens, out);
 }
 
-// The PR chips' colours, which pr-colors.ts keeps as values rather than
-// tokens, named by what each chip says: "readyChip.bg".
+// The chips' colours that pr-colors.ts keeps as values rather than
+// tokens: ready's and failing's inks (running and grey are the palette's
+// blueText and metaText), and the branch and ports chips' neutral pill
+// ("neutralChip.bg").
 function chipTokens(): Record<string, string> {
-  const chips = {
-    readyChip: prChipColors("ready", "open"),
-    failingChip: prChipColors("failing", "open"),
-    runningChip: prChipColors("running", "open"),
-    draftChip: prChipColors("quiet", "open", true),
-    mergedChip: prChipColors("quiet", "merged"),
-    neutralChip: prChipColors("quiet", "open"),
+  return {
+    readyInk: READY_INK,
+    failingInk: prInk("failing"),
+    "neutralChip.bg": NEUTRAL_CHIP.bg,
+    "neutralChip.fg": NEUTRAL_CHIP.fg,
+    "neutralChip.edge": NEUTRAL_CHIP.edge,
   };
-  const out: Record<string, string> = { readyInk: READY_INK };
-  for (const [name, c] of Object.entries(chips)) {
-    out[`${name}.bg`] = c.bg;
-    out[`${name}.fg`] = c.fg;
-    out[`${name}.edge`] = c.edge;
-  }
-  return out;
 }
 
 /** The view tree under `root` as indented text, colours named from `tables`. */

@@ -767,7 +767,6 @@ export interface Chip {
   url?: string;
   status?: PrStatus;
   health?: PrHealth;
-  draft?: boolean;
   /** The branch chip's uncommitted-changes dot. */
   dirty?: boolean;
   /** The size chip's size, which picks its ink. */
@@ -794,7 +793,7 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
   if (move && size) out.push({ id: "size", text: moveSizeText(size, move.decisions), size });
   const pr = prSummary(w);
   if (pr) {
-    const c: Chip = { id: "pr", text: pr.text, health: pr.health, draft: pr.draft };
+    const c: Chip = { id: "pr", text: pr.text, health: pr.health };
     if (pr.url) c.url = pr.url;
     if (pr.status) c.status = pr.status;
     out.push(c);

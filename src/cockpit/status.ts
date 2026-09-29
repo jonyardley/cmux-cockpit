@@ -165,7 +165,7 @@ export function compactPrText(pr: Pick<PrSummary, "text"> | undefined): string {
  * when it has something to say, else the density's own quiet colour.
  */
 export function prTextColor(pr: Pick<PrSummary, "health" | "status"> | undefined, quiet: string): string {
-  return !pr || pr.health === "quiet" ? quiet : prInk(pr.health, pr.status);
+  return !pr || pr.health === "quiet" ? quiet : prInk(pr.health);
 }
 
 // --- the card's second line (issue #47) ----------------------------------------------

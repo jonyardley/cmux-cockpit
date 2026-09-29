@@ -3,7 +3,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
     VStack spacing: 0, alignment: leading .padding(1) .background(hairline) .cornerRadius(10) .frame(maxWidth: infinity)
       HStack spacing: 0 .padding(3) .frame(maxWidth: infinity, alignment: leading) .background(segTrack) .cornerRadius(9)
         ZStack .frame(maxWidth: infinity, height: 26) .background(clear) .hoverBackground(hover) .cornerRadius(7) .onTap()
-          RoundedRectangle cornerRadius: 7 .fill(onBadge|card|readyChip.fg) .stroke(cardEdge|dropTarget|anchorSelected) .strokeWidth(1)
+          RoundedRectangle cornerRadius: 7 .fill(onBadge|card) .stroke(cardEdge|dropTarget|anchorSelected) .strokeWidth(1)
           HStack spacing: 6
             Text "All" .font(12) .weight(medium) .color(text)
         ZStack .frame(maxWidth: infinity, height: 26) .background(clear) .hoverBackground(hover) .cornerRadius(7) .onTap()
@@ -12,7 +12,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
             Text "Projects" .font(12) .weight(medium) .color(secondary|badge|laneReview)
   VStack spacing: 0 .paddingHorizontal(10) .paddingTop(6)
     VStack spacing: 0, alignment: leading .padding(1) .background(needsEdge) .cornerRadius(7) .frame(maxWidth: infinity) .onTap()
-      HStack spacing: 6 .paddingHorizontal(8) .paddingVertical(5) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card|readyChip.fg) .cornerRadius(6)
+      HStack spacing: 6 .paddingHorizontal(8) .paddingVertical(5) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(6)
         Text "Next: Oldest question" .font(11.5) .weight(semibold) .color(clayText) .lineLimit(1) .truncation(middle) .frame(maxWidth: infinity, alignment: leading) .layoutPriority(1)
         Text "1 of 6" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
   VStack spacing: 0 .paddingHorizontal(10) .paddingTop(6) .paddingBottom(8)
@@ -24,7 +24,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
           Spacer
           Text "5" .font(10.5) .weight(semibold) .color(clayText)
         VStack spacing: 0, alignment: leading .padding(1) .background(needsRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
-          HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card|readyChip.fg) .cornerRadius(8)
+          HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8)
             ZStack .frame(width: 13, height: 13) .paddingTop(2)
               Circle size: 13 .fill(clayHalo)
               Circle size: 7 .fill(clay)
@@ -36,7 +36,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
               Circle size: 16 .fill(clear)
               Image xmark .font(8.5) .weight(semibold) .color(tertiary)
         VStack spacing: 0, alignment: leading .padding(1) .background(needsRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
-          HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card|readyChip.fg) .cornerRadius(8)
+          HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8)
             ZStack .frame(width: 13, height: 13) .paddingTop(2)
               Circle size: 13 .fill(clayHalo)
               Circle size: 7 .fill(clay)
@@ -48,7 +48,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
               Circle size: 16 .fill(clear)
               Image xmark .font(8.5) .weight(semibold) .color(tertiary)
         VStack spacing: 0, alignment: leading .padding(1) .background(needsRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
-          HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card|readyChip.fg) .cornerRadius(8)
+          HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8)
             ZStack .frame(width: 13, height: 13) .paddingTop(2)
               Circle size: 13 .fill(clayHalo)
               Circle size: 7 .fill(clay)
@@ -60,7 +60,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
               Circle size: 16 .fill(clear)
               Image xmark .font(8.5) .weight(semibold) .color(tertiary)
         VStack spacing: 0, alignment: leading .padding(1) .background(amberRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
-          HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card|readyChip.fg) .cornerRadius(8)
+          HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8)
             ZStack .frame(width: 13, height: 13) .paddingTop(2)
               Circle size: 13 .fill(amberHalo)
               Circle size: 7 .fill(amber)
@@ -117,7 +117,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
           Text "Unsorted" .font(12.5) .weight(semibold) .color(laneMain|select|heading) .lineLimit(1) .truncation(tail) .layoutPriority(1)
           Text "7" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10)
           Spacer minLength: 4
-          Text "" .font(11) .weight(regular) .color(greenDeep|readyInk|readyChip.bg) .lineLimit(1)
+          Text "" .font(11) .weight(regular) .color(greenDeep|readyInk) .lineLimit(1)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
         VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
           VStack alignment: leading, spacing: 2 .paddingLeading(25) .paddingTrailing(12) .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(8) .hoverBackground(hover)
@@ -127,7 +127,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                 Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
               Text "Oldest question" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
               Spacer minLength: 4
-              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
               Text "30m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
             Text "Should the strip cap at four?" .font(12) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail) .paddingLeading(13) .frame(maxWidth: infinity, alignment: leading)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
@@ -139,7 +139,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                 Circle size: 7 .fill(amber) .stroke(clear) .strokeWidth(1.5)
               Text "Publish" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
               Spacer minLength: 4
-              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
               Text "1m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
         VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
@@ -150,7 +150,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                 Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
               Text "Second" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
               Spacer minLength: 4
-              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
               Text "15m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
             Text "reply \"1b 2a\" on the bridge and the store." .font(12) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail) .paddingLeading(13) .frame(maxWidth: infinity, alignment: leading)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
@@ -162,7 +162,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                 Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
               Text "Third" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
               Spacer minLength: 4
-              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
               Text "10m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
             Text "the work is finished. Run /clear now." .font(12) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail) .paddingLeading(13) .frame(maxWidth: infinity, alignment: leading)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
@@ -174,7 +174,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                 Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
               Text "Fifth, past the cap" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
               Spacer minLength: 4
-              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
               Text "<1m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
             Text "One more thing" .font(12) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail) .paddingLeading(13) .frame(maxWidth: infinity, alignment: leading)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
@@ -186,7 +186,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                 Circle size: 7 .fill(green) .stroke(clear) .strokeWidth(1.5)
               Text "Finished while away" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
               Spacer minLength: 4
-              Text "3" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(5) .paddingVertical(1) .background(secondary|badge|laneReview) .cornerRadius(7)
+              Text "3" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(5) .paddingVertical(1) .background(secondary|badge|laneReview) .cornerRadius(7)
               Text "4m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
         VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
@@ -197,7 +197,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                 Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
               Text "Busy" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
               Spacer minLength: 4
-              Text "" .font(10) .bold() .color(onBadge|card|readyChip.fg) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+              Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
               Text "1m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
   VStack spacing: 2 .paddingHorizontal(10) .opacity(0) .frame(maxHeight: 0, alignment: top) [hidden]
   Spacer
@@ -214,7 +214,7 @@ clayHalo #D9775738
 clayText #A34A2A
 faint|laneBackground #8A8880
 green #788C5D
-greenDeep|readyInk|readyChip.bg #3F5A2B
+greenDeep|readyInk #3F5A2B
 hairline #E2DFD3
 hover #7F7F7F14
 laneMain|select|heading #3D3D3A
@@ -225,7 +225,7 @@ needsBg #FBECE4
 needsEdge #F0D2C3
 needsHover #FBF1EB
 needsRowEdge #A34A2A29
-onBadge|card|readyChip.fg #FFFFFF
+onBadge|card #FFFFFF
 secondary|badge|laneReview #5E5D59
 segTrack #E5E2D6
 tertiary #73726C

@@ -364,8 +364,8 @@ describe("prChipText", () => {
     const pr: PullRequest = { number: 3, status: "open", draft: true, stale: true };
     const summary = summaryOf(pr, [{ name: "test", state: "pending" }]);
     assert.equal(m.prChipText({ pr, summary }), "draft · running · stale");
-    assert.deepEqual(m.prChipHealth({ pr, summary }), { health: "running", draft: true });
-    assert.deepEqual(m.prChipHealth({ pr, summary: undefined }), { health: "quiet", draft: true });
+    assert.equal(m.prChipHealth({ summary }), "running");
+    assert.equal(m.prChipHealth({ summary: undefined }), "quiet");
   });
 });
 

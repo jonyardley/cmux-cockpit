@@ -8,7 +8,8 @@ import { installRenderer, recordModifiers } from "./support/renderer.ts";
 
 const r = installRenderer();
 const ui = await import("../src/shared/ui.ts");
-const { NEUTRAL_CHIP } = await import("../src/shared/pr-colors.ts");
+const { NEUTRAL_CHIP, prChipColors } = await import("../src/shared/pr-colors.ts");
+const { P } = await import("../src/shared/palette.ts");
 const { PROJECTS } = await import("../src/shared/projects.ts");
 
 // A getter that counts its reads.
@@ -88,6 +89,19 @@ describe("the shared builders read what they are handed", () => {
     );
     assert.equal(read(hover.face), NEUTRAL_CHIP.bg);
     assert.equal(read(hover.edge), NEUTRAL_CHIP.edge);
+  });
+
+  it("chipHover gives a PR's words a link's box, since a clear face has nothing to darken", () => {
+    const read = (v: Reactive<string> | undefined): string | undefined => (typeof v === "function" ? v() : v);
+    const words = prChipColors("ready");
+    assert.equal(read(ui.chipHover(() => words).face), P.linkHover);
+    assert.equal(read(ui.chipHover(() => words).edge), P.linkEdge);
+    const idle = ui.chipHover(
+      () => words,
+      () => false,
+    );
+    assert.equal(read(idle.face), "clear");
+    assert.equal(read(idle.edge), "clear");
   });
 
   it("openIfUrl opens a url and ignores a missing one", () => {

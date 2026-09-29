@@ -137,8 +137,8 @@ export function statusLabel(w: WsAccessor, size: number, weight: Weight): View {
 // --- chips ---------------------------------------------------------------------------
 
 // A chip's kind is fixed by its key (one when() per id), so the kind picks
-// the pieces once; only the text and colours are reactive. The PR chip takes
-// its health's colours; the branch and ports chips stay neutral.
+// the pieces once; only the text and colours are reactive. The PR chip is
+// words in its health's colour; the branch and ports chips stay neutral pills.
 // The size chip (what answering the chat takes): the quiet chip's face, its
 // words in the state ink that fits, and nothing to tap, like the branch chip.
 const SIZE_INK: Record<MoveSize, string> = { quick: C.greenText, decide: C.clayText, review: C.blueText };
@@ -158,8 +158,7 @@ function sizeChip(c: () => Chip): View {
 function chip(id: ChipId, c: () => Chip): View {
   if (id === "size") return sizeChip(c);
   const isPr = id === "pr";
-  const colors = () =>
-    isPr ? summaryColors({ health: c().health ?? "quiet", status: c().status, draft: !!c().draft }) : NEUTRAL_CHIP;
+  const colors = () => (isPr ? summaryColors({ health: c().health ?? "quiet" }) : NEUTRAL_CHIP);
   const fg = () => colors().fg;
   const text = id === "br" ? branchText(() => c().text, fg, "medium") : chipText(() => c().text, fg, id === "port");
   // The PR chip's glyph turns into ↗ under the pointer, in the same slot,

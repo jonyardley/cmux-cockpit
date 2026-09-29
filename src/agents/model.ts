@@ -466,12 +466,8 @@ export function prChipText(e: Pick<PrEntry, "pr" | "summary">): string {
   return [word, pr.stale ? "stale" : undefined].filter(Boolean).join(" · ");
 }
 
-/** A PR row chip's health and draft flag, for its colours. */
-export function prChipHealth(e: Pick<PrEntry, "pr" | "summary">): { health: PrHealth; draft: boolean } {
-  return e.summary
-    ? { health: e.summary.health, draft: e.summary.draft }
-    : { health: "quiet", draft: e.pr.status === "open" && e.pr.draft === true };
-}
+/** A PR row chip's health, for its colour. */
+export const prChipHealth = (e: Pick<PrEntry, "summary">): PrHealth => e.summary?.health ?? "quiet";
 
 const PR_RANK: Record<PrStatus, number> = { open: 0, merged: 1, closed: 2 };
 const prRank = (pr: PullRequest): number => (pr.status ? PR_RANK[pr.status] : 3);
