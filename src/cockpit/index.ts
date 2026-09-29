@@ -21,6 +21,7 @@
 import type { ViewMode } from "../../scripts/state-config.ts";
 import { stateNotice } from "../shared/freshness.ts";
 import { faintLine } from "../shared/notice.ts";
+import { motionList } from "../shared/ui.ts";
 import { handleDragChange, handleMove, isForeignAnchor } from "./drop.ts";
 import { flatEntries, panelMaxHeight, panelOpacity, projectEntries, wsById } from "./model.ts";
 import { C } from "./theme.ts";
@@ -62,8 +63,8 @@ function lanesPanel(): View {
 }
 
 function projectsPanel(): View {
-  return VStack({ spacing: 2 }, [
-    ForEach({ items: projectEntries, key: (e) => e.id }, (e) => {
+  return VStack({ spacing: 0 }, [
+    motionList({ items: projectEntries, key: (e) => e.id, spacing: 2 }, (e) => {
       const entry = e();
       if (entry.kind === "header") return projectHeader(entry.project);
       if (entry.kind === "quietHeader") return quietHeader();

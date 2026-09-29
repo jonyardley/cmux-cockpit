@@ -23,7 +23,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
           Text "N\u200aE\u200aE\u200aD\u200aS Y\u200aO\u200aU" .font(10.5) .weight(semibold) .color(clayText) .lineLimit(1)
           Spacer
           Text "2" .font(10.5) .weight(semibold) .color(clayText)
-        VStack spacing: 0, alignment: leading .padding(1) .background(needsRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(22)
+        VStack spacing: 0, alignment: leading .padding(1) .background(needsRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(22) .fixed()
           HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8)
             ZStack .frame(width: 13, height: 13) .paddingTop(2)
               Circle size: 13 .fill(clayHalo)
@@ -35,7 +35,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
             ZStack .frame(width: 16, height: 16) .cornerRadius(8) .hoverBackground(hover) .onTap()
               Circle size: 16 .fill(clear)
               Image xmark .font(8.5) .weight(semibold) .color(tertiary)
-        VStack spacing: 0, alignment: leading .padding(1) .background(amberRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(22)
+        VStack spacing: 0, alignment: leading .padding(1) .background(amberRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(22) .fixed()
           HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8)
             ZStack .frame(width: 13, height: 13) .paddingTop(2)
               Circle size: 13 .fill(amberHalo)
@@ -298,7 +298,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
               Spacer minLength: 4
               Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
               Text "3m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
-  VStack spacing: 2 .paddingHorizontal(10) .opacity(0) .frame(maxHeight: 0, alignment: top) [hidden]
+  VStack spacing: 0 .paddingHorizontal(10) .opacity(0) .frame(maxHeight: 0, alignment: top) [hidden]
   Spacer
 
 Colours

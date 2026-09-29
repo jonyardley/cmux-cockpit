@@ -208,7 +208,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
             Text "0" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10) .opacity(0.55)
             Spacer minLength: 4
             Text "" .font(11) .weight(medium) .color(laneMain|select|heading) .lineLimit(1)
-  VStack spacing: 2 .paddingHorizontal(10) .opacity(0) .frame(maxHeight: 0, alignment: top) [hidden]
+  VStack spacing: 0 .paddingHorizontal(10) .opacity(0) .frame(maxHeight: 0, alignment: top) [hidden]
   Spacer
 
 Colours
