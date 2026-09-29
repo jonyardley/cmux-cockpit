@@ -24,7 +24,7 @@ const { agent, group, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
 const model = await import("../src/cockpit/model.ts");
 const { C } = await import("../src/cockpit/theme.ts");
-const { QUIET_PILL } = await import("../src/shared/ui.ts");
+const { QUIET_PILL, countTint } = await import("../src/shared/ui.ts");
 const { laneByKey } = await import("../src/cockpit/lanes.ts");
 
 // One workspace per urgency. The ask began with the saved one, so it reads amber.
@@ -92,6 +92,20 @@ describe("countColors", () => {
   it("is the grey pill with nothing urgent", () => {
     assert.deepEqual(status.countColors([idleWs()]), QUIET_PILL);
     assert.deepEqual(QUIET_PILL, { bg: C.countBg, fg: C.metaText });
+  });
+});
+
+describe("countTint, the shared rule both sides tint a count pill by", () => {
+  it("gives each urgency its hue's pill, and quiet the grey one", () => {
+    assert.deepEqual(countTint("needs"), { bg: C.clayCount, fg: C.clayText });
+    assert.deepEqual(countTint("asking"), { bg: C.amberCount, fg: C.amberText });
+    assert.deepEqual(countTint("working"), { bg: C.blueCount, fg: C.blueText });
+    assert.equal(countTint("quiet"), QUIET_PILL);
+  });
+
+  it("is where the cockpit's header tint comes from", () => {
+    assert.equal(status.countColors([workingWs()]), countTint("working"));
+    assert.equal(status.headerStatus([needsWs()], false).tint, countTint("needs"));
   });
 });
 

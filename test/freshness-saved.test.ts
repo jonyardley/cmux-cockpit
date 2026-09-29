@@ -14,7 +14,10 @@ globals.__STATE__ = {
   dismissed: {},
   projectOverride: {},
   projects: {},
-  prs: { w1: saved },
+  prs: {
+    w1: saved,
+    green: { ...saved, number: 8, branch: "green", checks: [{ name: "build", state: "pass" }] },
+  },
   ownPrs: {},
   subagents: {},
   published: {},
@@ -30,6 +33,7 @@ const { freshnessOf, prFreshness, STALE_AFTER, stateNotice, stateNoticeFor } = a
   "../src/shared/freshness.ts"
 );
 const m = await import("../src/agents/model.ts");
+const { P } = await import("../src/shared/palette.ts");
 
 beforeEach(() => {
   r.data.epoch = NOW;
@@ -104,6 +108,12 @@ describe("the saved poll status", () => {
     assert.equal(m.currentPrDim(), false);
     r.data.workspaces = [ws("none", { selected: true })];
     assert.equal(m.currentPrDim(), false);
+  });
+
+  it("greys a stale pass in the This workspace checks line", () => {
+    r.data.workspaces = [ws("green", { branch: "green", selected: true })];
+    assert.equal(m.currentPrDim(), true);
+    assert.deepEqual(m.checksLine(), { text: "1 check passed", mark: "checkmark.circle", color: P.metaText });
   });
 });
 

@@ -12,7 +12,7 @@ export const T = {
   rule: "#F0EEE6",
   clayButton: "#B5532F",
   clayButtonHover: "#9E4727",
-  /** Text on a clay face: the Answer button. */
+  /** Text on a clay face: the Open chat button. */
   onClay: "#FFFFFF",
   hover: "#7f7f7f0F",
   /** The faint face behind the agent's latest message on the card. */
