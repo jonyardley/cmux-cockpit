@@ -100,7 +100,9 @@ Setup asks about each of these. Each works without the others.
   the sidebar. It builds `~/Applications/CmuxCockpit.app`
   ([by hand](#remember-dismissals-and-project-changes)).
 - **Automations**: fills in the pull request chips for PRs an agent opened,
-  and keeps the right sidebar on the agents panel. It links
+  and keeps the right sidebar on the agents panel when a window opens
+  (to bring it back after you switch away, see
+  [Getting the agents panel back](#getting-the-agents-panel-back)). It links
   `~/.cmuxterm/automations.json` to the repo's rules. If that file already
   has rules of your own, setup leaves it and tells you to merge them into
   `~/.config/cmux/automations.json` first
@@ -242,31 +244,37 @@ none it does nothing and logs a line saying so.
 
 The right sidebar's Custom button only shows while the agents panel is
 showing: switch to Files, or close the sidebar, and it is gone. To get it
-back from the Command Palette, add this action to your `cmux.json` and run
-`cmux reload-config`:
+back from the Command Palette, add this entry to the `actions` object in
+your `cmux.json` (add `"actions": {}` first if you have none, and keep
+any entries already there), then run `cmux reload-config`:
 
 ```json
-"actions": {
-  "cockpit.show-agents": {
-    "type": "command",
-    "title": "Show agents panel",
-    "subtitle": "Put the right sidebar back on the agents panel",
-    "keywords": ["agents", "right sidebar", "cockpit"],
-    "command": "cmux right-sidebar set custom agents --workspace \"$CMUX_WORKSPACE_ID\" --no-focus; exit",
-    "target": "newTabInCurrentPane"
+{
+  "actions": {
+    "cockpit.show-agents": {
+      "type": "command",
+      "title": "Show agents panel",
+      "subtitle": "Put the right sidebar back on the agents panel",
+      "keywords": ["agents", "right sidebar", "cockpit"],
+      "command": "cmux right-sidebar set custom agents --workspace \"$CMUX_WORKSPACE_ID\" --no-focus && exit",
+      "target": "newTabInCurrentPane"
+    }
   }
 }
 ```
 
 cmux runs a command action in a terminal, so the action opens a tab for
-a moment, switches the sidebar and closes the tab again. The palette
-also lists cmux's own "Sidebar: agents" row just above it; that one puts
-the agents panel in the left sidebar instead (`cmux sidebar select
-cockpit` puts the cockpit back). cmux marks actions as a nightly feature,
-though 0.64.25 has them: if your build does not know them, the
-palette shows a "cmux.json Schema Error" row and cmux ignores the file
-until you take the action out. From a terminal,
-`cmux right-sidebar set custom agents` does the same.
+a moment, switches the sidebar and closes the tab again. If the switch
+fails, the tab stays open with the error. `--workspace` points it at the
+window you are in; without it, cmux can switch another window's sidebar.
+
+Pick "Show agents panel", not cmux's own "Sidebar: agents": that one
+puts the agents panel in the left sidebar instead (`cmux sidebar select
+cockpit` puts the cockpit back). cmux calls actions a nightly feature;
+this was tested on 0.64.25. On a build that does not know them, cmux
+rejects the whole `cmux.json`, custom sidebars included, and the palette
+shows a "cmux.json Schema Error" row: take the `actions` entry out and
+run `cmux reload-config` again.
 
 ### Claude Code hooks
 
