@@ -16,15 +16,10 @@
 // build and baked in as __URL_TOKEN__, so the sidebars' cmux-cockpit://
 // links carry it and state-set.ts can refuse any link that does not
 // (docs/state-loop.md).
-//
-// The cockpit's main checkout is baked in as __COCKPIT_ROOT__, so the tidy
-// strip (src/cockpit/tidy.ts) knows which repo gets the full close-out.
 //   node scripts/build.ts    build once
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname } from "node:path";
 import { build } from "esbuild";
 import { mergeProjects, type Project, validateProjects } from "./projects-config.ts";
 import { emptyState, isRecord, type State, validateState } from "./state-config.ts";
@@ -115,20 +110,6 @@ function loadUrlToken(): string {
   }
 }
 
-// Built from a worktree, git's common dir still sits in the main checkout.
-function cockpitRoot(): string {
-  try {
-    const common = execFileSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
-      encoding: "utf8",
-    });
-    return dirname(common.trim());
-  } catch (err) {
-    // A worktree path here would cost the cockpit's tidy its pull and rebuild.
-    console.warn(`build: cannot find the main checkout, using ${process.cwd()}: ${(err as Error).message}`);
-    return process.cwd();
-  }
-}
-
 const urlToken = loadUrlToken();
 const { state: saved, unreadable } = loadState();
 const merged = mergeProjects(loadProjects(), saved.projects);
@@ -155,7 +136,6 @@ for (const name of ENTRIES) {
       __STATE__: JSON.stringify(state),
       __STATE_UNREADABLE__: JSON.stringify(unreadable),
       __URL_TOKEN__: JSON.stringify(urlToken),
-      __COCKPIT_ROOT__: JSON.stringify(cockpitRoot()),
     },
     logLevel: "warning",
   });
