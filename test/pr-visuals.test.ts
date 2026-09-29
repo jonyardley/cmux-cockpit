@@ -50,7 +50,7 @@ describe("pngWidth", () => {
 
 describe("markdown", () => {
   it("says so when nothing changed", () => {
-    assert.equal(markdown([]), "No snapshot changes.");
+    assert.equal(markdown([]), "No visual changes in the preview scenes.");
   });
 
   it("puts each scene's pair side by side at its point width", () => {
