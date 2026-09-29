@@ -13,18 +13,23 @@ const { laneByKey } = await import("../src/cockpit/lanes.ts");
 
 const asking = () => [agent("needs_input", { sinceEpoch: r.data.epoch - 30 })];
 
+// A fresh Parked group id per test: a fold sent to cmux is held as an
+// optimistic override until the data agrees, and the fixture never does.
+let run = 0;
+
 function setup(): void {
   r.data.epoch += 100;
   r.data.selectedId = null;
+  const parked = "g-parked-" + ++run;
   r.data.groups = [
     group("g-main", "Main activity", { anchorId: "anchor-main" }),
-    group("g-parked", "Parked", { anchorId: "anchor-parked", collapsed: true }),
+    group(parked, "Parked", { anchorId: "anchor-parked", collapsed: true }),
   ];
   r.data.workspaces = [
     ws("anchor-main", { title: "Main activity", group: "g-main" }),
     ws("a", { group: "g-main" }),
-    ws("anchor-parked", { title: "Parked", group: "g-parked", agents: asking() }),
-    ws("p", { group: "g-parked", agents: asking() }),
+    ws("anchor-parked", { title: "Parked", group: parked, agents: asking() }),
+    ws("p", { group: parked, agents: asking() }),
     ws("u", { agents: asking() }),
   ];
   r.calls.length = 0;
@@ -40,6 +45,7 @@ const byId = (id: string): Workspace => {
 };
 const methods = () => r.calls.map((c) => c.method);
 const cardShown = (id: string) => model.flatEntries().some((e) => e.kind === "ws" && e.wsId === id);
+const projectCardShown = (id: string) => model.projectEntries().some((e) => e.kind === "ws" && e.wsId === id);
 
 describe("revealing a card from Needs you", () => {
   beforeEach(setup);
@@ -68,6 +74,7 @@ describe("revealing a card from Needs you", () => {
   });
 
   it("only selects a lane's generated anchor: its status is on the header, folded or not", () => {
+    assert.equal(model.isCollapsed(laneByKey("parked")), true);
     model.revealWorkspace(byId("anchor-parked"));
     assert.deepEqual(methods(), ["workspace.select"]);
   });
@@ -76,8 +83,11 @@ describe("revealing a card from Needs you", () => {
     state.setMode("projects");
     const k = model.projectKey(byId("p"));
     state.setCollapsedProjects([k]);
+    assert.equal(projectCardShown("p"), false);
+    assert.equal(model.isCollapsed(laneByKey("parked")), true);
     model.revealWorkspace(byId("p"));
     assert.equal(model.isProjectCollapsed(k), false);
+    assert.equal(projectCardShown("p"), true);
     // No workspace.group.expand: the lane stays as Jon left it.
     assert.deepEqual(methods(), ["workspace.select"]);
   });
