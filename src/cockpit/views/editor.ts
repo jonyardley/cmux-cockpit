@@ -4,24 +4,27 @@
 
 import { glyphColor } from "../../shared/contrast.ts";
 import { PROJECT_COLORS } from "../../shared/projects.ts";
-import { ring, sectionTitle, when } from "../../shared/ui.ts";
+import { projectBadge, ring, sectionTitle, when } from "../../shared/ui.ts";
 import {
+  cancelSearch,
   closeEditor,
   draftProblem,
   draftSpec,
+  ICONS_PER_ROW,
   iconRows,
   iconSearch,
   matchesLine,
-  noMatchLine,
-  pickFirstMatch,
   removeLabel,
   removeTapped,
+  rowsOf,
   saveDraft,
+  searchNote,
   setDraftColor,
   setDraftFolder,
   setDraftIcon,
   setDraftName,
   setIconSearch,
+  submitSearch,
 } from "../edit.ts";
 import { C } from "../theme.ts";
 
@@ -33,15 +36,21 @@ const glyph = (): string => glyphColor(draftSpec().color, C.text);
 
 // The field draws no box of its own, so it sits in a ring. Its text is read
 // once, so a rebuild mid-edit keeps what was typed.
-// Return saves, unless the field says what else it does.
+interface FieldKeys {
+  font?: number;
+  onSubmit?: (text: string) => void;
+  onCancel?: () => void;
+}
+
+// Return saves and Escape closes, unless the field says what else they do.
 function field(
   text: string,
   placeholder: string,
   autofocus: boolean,
   onEdit: (t: string) => void,
-  { font = 12.5, onSubmit = saveDraft }: { font?: number; onSubmit?: () => void } = {},
+  { font = 12.5, onSubmit = saveDraft, onCancel = closeEditor }: FieldKeys = {},
 ): View {
-  const input = TextField(text, { placeholder, autofocus, onEdit, onSubmit, onCancel: closeEditor })
+  const input = TextField(text, { placeholder, autofocus, onEdit, onSubmit, onCancel })
     .font(font)
     .paddingHorizontal(8)
     .paddingVertical(5);
@@ -49,15 +58,7 @@ function field(
 }
 
 // The project as it will look: its colour and icon, following the draft.
-function tile(): View {
-  return ZStack({}, [
-    RoundedRectangle({ cornerRadius: 10 }).fill(() => draftSpec().color),
-    Image(() => draftSpec().icon)
-      .font(17)
-      .weight("semibold")
-      .color(glyph),
-  ]).frame({ width: 36, height: 36 });
-}
+const tile = (): View => projectBadge(() => ({ match: "", ...draftSpec() }), 36, 17, 10);
 
 function nameRow(name: string): View {
   return HStack({ spacing: 10 }, [
@@ -78,44 +79,52 @@ function swatch(color: string): View {
   );
 }
 
-function swatches(): View[] {
-  const rows: View[] = [];
-  for (let i = 0; i < PROJECT_COLORS.length; i += SWATCHES_PER_ROW) {
-    rows.push(HStack({ spacing: 0 }, PROJECT_COLORS.slice(i, i + SWATCHES_PER_ROW).map(swatch)));
-  }
-  return rows;
-}
+const swatches = (): View[] =>
+  rowsOf(PROJECT_COLORS, SWATCHES_PER_ROW).map((row) => HStack({ spacing: 0 }, row.map(swatch)));
 
-// The chosen icon sits on the project's colour, the rest are quiet.
+// The chosen icon sits on the project's colour, the rest are quiet. The
+// tap is on the tile's shape, so the whole tile takes it, not only the glyph.
 function iconChoice(icon: string): View {
   const on = () => draftSpec().icon === icon;
   return slot(
-    Image(icon)
-      .font(13)
-      .color(() => (on() ? glyph() : C.secondary))
+    ZStack({}, [
+      RoundedRectangle({ cornerRadius: 7 }).fill(() => (on() ? draftSpec().color : C.card)),
+      Image(icon)
+        .font(13)
+        .color(() => (on() ? glyph() : C.secondary)),
+    ])
       .frame({ width: 26, height: 26 })
-      .background(() => (on() ? draftSpec().color : C.card))
-      .hoverBackground(() => (on() ? draftSpec().color : C.hover))
       .cornerRadius(7)
+      .hoverBackground(() => (on() ? draftSpec().color : C.hover))
       .onTap(() => setDraftIcon(icon)),
   );
 }
 
-// Rows follow the search as it is typed: a row is keyed by its place and its
-// icons by name, so every row and every icon keeps one kind.
+// An empty slot, so a short row keeps to the columns of a full one.
+const gap = (): View => slot(Rectangle().fill("clear").frame({ width: 26, height: 26 }));
+
+// Rows follow the search as it is typed. A row is keyed by its place, its
+// icons by name and its empty slots by place, so each keeps one kind.
 function iconPicker(): View {
   const rows = () => iconRows(draftSpec().icon, iconSearch()).map((icons, i) => ({ id: `icons-${i}`, icons }));
   return VStack({ spacing: 4, alignment: "leading" }, [
     ForEach({ items: rows, key: (r) => r.id }, (row) =>
       HStack({ spacing: 0 }, [
         ForEach({ items: () => row().icons, key: (icon) => icon }, (icon) => iconChoice(icon())),
+        ForEach(
+          {
+            items: () => Array.from({ length: ICONS_PER_ROW - row().icons.length }, (_, i) => `gap-${i}`),
+            key: (g) => g,
+          },
+          gap,
+        ),
       ]),
     ),
     when(
-      "no-icon-match",
-      () => noMatchLine(iconSearch()) !== "",
+      "icon-search-note",
+      () => searchNote(iconSearch()) !== "",
       () =>
-        Text(() => noMatchLine(iconSearch()))
+        Text(() => searchNote(iconSearch()))
           .font(11)
           .color(C.tertiary),
     ),
@@ -147,7 +156,13 @@ export function projectEditor(k: string): View {
     VStack({ spacing: 8 }, swatches()),
     label("Icon").paddingTop(14).paddingBottom(6),
     iconPicker(),
-    field(iconSearch(), "Search icons", false, setIconSearch, { font: 12, onSubmit: pickFirstMatch }).paddingTop(8),
+    VStack({ spacing: 0 }, [
+      field(iconSearch(), "Search icons", false, setIconSearch, {
+        font: 12,
+        onSubmit: submitSearch,
+        onCancel: cancelSearch,
+      }),
+    ]).paddingTop(8),
     label("Folder").paddingTop(14).paddingBottom(5),
     field(spec.root ?? "", "~/Dev/folder, for the +", false, setDraftFolder),
     Text(matchesLine(k)).font(11).color(C.tertiary).lineLimit(2).paddingTop(4),
