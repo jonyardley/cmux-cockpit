@@ -1,7 +1,7 @@
 // Whether a card's chips row has anything to show (issue #79), so a card with
 // nothing there drops the row and the gap above it.
 
-import { type Chip, canFileForReview } from "./model.ts";
+import { type Chip, canFileForReview, chipsFor } from "./model.ts";
 
 /**
  * True when the chips row shows a chip from `chips` (a chipsFor list) or the
@@ -11,3 +11,7 @@ import { type Chip, canFileForReview } from "./model.ts";
 export function showsChipsRow(chips: readonly Chip[], w: Workspace | undefined): boolean {
   return chips.length > 0 || canFileForReview(w);
 }
+
+/** showsChipsRow for a card that has no chip list to hand. */
+export const hasChipsRow = (w: Workspace | undefined, withBranch: boolean): boolean =>
+  showsChipsRow(chipsFor(w, withBranch), w);

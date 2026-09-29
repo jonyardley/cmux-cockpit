@@ -815,7 +815,3 @@ export function canFileForReview(w: Workspace | undefined): boolean {
 
 /** Files a Ready card into For review. */
 export const fileForReview = (w: Workspace | undefined): void => moveToLane(w, "review");
-
-/** True when a card's chips row has anything to show: a chip, or the To review action. */
-export const hasChipsRow = (w: Workspace | undefined, withBranch: boolean): boolean =>
-  chipsFor(w, withBranch).length > 0 || canFileForReview(w);

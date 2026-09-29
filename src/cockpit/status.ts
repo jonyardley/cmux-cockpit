@@ -153,7 +153,7 @@ export const badgeCount = (w: Workspace | undefined): number => (isReady(w) ? 0 
  * The PR as text in a compact card's status line ("· #45 · 1 failing"), else
  * "". Compact cards have no chips, so this is where their PR shows, Ready or
  * not. The full card says nothing about the PR in its status row: the PR
- * line under it carries the verdict (issue #79).
+ * words at the head of its chips row carry the verdict (issue #79).
  */
 export function compactPrText(pr: Pick<PrSummary, "text"> | undefined): string {
   const t = pr?.text;
@@ -180,6 +180,15 @@ export function statusLine(w: Workspace | undefined): string {
   const info = statusInfo(w);
   const line = withAge(info.label, cardAge(w));
   return info === QUIET ? line + quietSuffix(agentOf(w), w) : line;
+}
+
+/**
+ * The card menu's PR item. A menu item cannot hide, so with no PR, or a PR
+ * cmux gave no link for, it says so and its tap does nothing.
+ */
+export function openPrLabel(pr: Pick<PrSummary, "tag" | "url"> | undefined): string {
+  if (!pr) return "No PR to open";
+  return pr.url ? "Open PR " + pr.tag : "PR " + pr.tag + " has no link";
 }
 
 /** True when statusLine carries a time, so the full card leaves its top-right one off. */

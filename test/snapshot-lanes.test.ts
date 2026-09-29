@@ -63,6 +63,13 @@ it("lanes: every card state", () => {
       agents: [agent("idle", { sinceEpoch: ago(360), lastActivityAt: ago(360) })],
       latestMessage: "Done: the strip now groups by repo.",
     }),
+    // No time in its status line, so the full card keeps the age top right.
+    ws("untimed", {
+      title: "Untimed card",
+      group: "g-main",
+      latestAt: ago(300),
+      agents: [agent("idle")],
+    }),
     ws("selected", {
       title: "Selected card",
       group: "g-main",

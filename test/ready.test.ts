@@ -26,7 +26,7 @@ const { agent, group, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
 const state = await import("../src/cockpit/state.ts");
 const model = await import("../src/cockpit/model.ts");
-const { showsChipsRow } = await import("../src/cockpit/chips.ts");
+const { hasChipsRow, showsChipsRow } = await import("../src/cockpit/chips.ts");
 const needs = await import("../src/shared/needs.ts");
 const prs = await import("../src/shared/prs.ts");
 
@@ -170,7 +170,7 @@ describe("a Ready card", () => {
 describe("a Ready card's PR words (issue #79)", () => {
   const withPr = (id: string) => readyWs(id, { branch: "feat" });
 
-  it("leaves the PR out of the status line, since the PR line carries it", () => {
+  it("leaves the PR out of the status line, since the chips row carries it", () => {
     assert.equal(status.statusLine(withPr("green")), "Finished 6m");
     assert.equal(status.statusLine(withPr("failing")), "Finished 6m");
   });
@@ -200,9 +200,10 @@ describe("To review", () => {
     const w = readyWs("w", { group: "g-main" });
     r.data.workspaces = [w];
     assert.equal(model.canFileForReview(w), true);
-    assert.equal(model.hasChipsRow(w, true), true);
+    assert.equal(hasChipsRow(w, true), true);
     // The action alone keeps the row, with no chip at all.
-    assert.equal(showsChipsRow([], w), true);
+    assert.deepEqual(model.chipsFor(w, true), []);
+    assert.equal(showsChipsRow(model.chipsFor(w, true), w), true);
     model.fileForReview(w);
     assert.deepEqual(r.calls.at(-1), {
       method: "workspace.group.add",
@@ -219,7 +220,7 @@ describe("To review", () => {
     r.data.workspaces = [inReview, read];
     assert.equal(model.canFileForReview(inReview), false);
     assert.equal(model.canFileForReview(read), false);
-    assert.equal(model.hasChipsRow(read, true), false);
+    assert.equal(hasChipsRow(read, true), false);
     assert.equal(model.canFileForReview(undefined), false);
   });
 
@@ -240,7 +241,7 @@ describe("To review", () => {
   });
 
   it("still counts a chip as a chips row", () => {
-    assert.equal(model.hasChipsRow(ws("b", { branch: "feat" }), true), true);
-    assert.equal(model.hasChipsRow(ws("b", { branch: "feat" }), false), false);
+    assert.equal(hasChipsRow(ws("b", { branch: "feat" }), true), true);
+    assert.equal(hasChipsRow(ws("b", { branch: "feat" }), false), false);
   });
 });

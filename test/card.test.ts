@@ -10,7 +10,7 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
 const model = await import("../src/cockpit/model.ts");
-const { showsChipsRow } = await import("../src/cockpit/chips.ts");
+const { hasChipsRow, showsChipsRow } = await import("../src/cockpit/chips.ts");
 const { liveRunCount } = await import("../src/shared/subagents.ts");
 
 beforeEach(() => {
@@ -45,6 +45,20 @@ describe("statusLine", () => {
   it("gives no time for a workspace with no agent", () => {
     assert.equal(status.statusLine(ws("x", { latestAt: r.data.epoch - 600 })), "No agent");
     assert.equal(status.statusLine(undefined), "No agent");
+  });
+});
+
+describe("openPrLabel", () => {
+  it("names the PR it opens", () => {
+    assert.equal(status.openPrLabel({ tag: "#130", url: "https://x/130" }), "Open PR #130");
+  });
+
+  it("says when the PR has no link, rather than that there is no PR", () => {
+    assert.equal(status.openPrLabel({ tag: "#130", url: undefined }), "PR #130 has no link");
+  });
+
+  it("says when there is no PR", () => {
+    assert.equal(status.openPrLabel(undefined), "No PR to open");
   });
 });
 
@@ -204,7 +218,7 @@ describe("showsChipsRow (issue #79)", () => {
 
   it("agrees with hasChipsRow when the PR chip is in the row", () => {
     for (const w of [ws("a"), ws("b", { pr: { number: 7 } }), ws("c", { branch: "feat" }), ws("d", { ports: [80] })]) {
-      assert.equal(shows(w, true), model.hasChipsRow(w, true));
+      assert.equal(shows(w, true), hasChipsRow(w, true));
     }
   });
 });

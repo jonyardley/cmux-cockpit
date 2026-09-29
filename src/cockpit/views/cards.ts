@@ -4,8 +4,9 @@
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { meta, ring, unreadBadge, when } from "../../shared/ui.ts";
+import { hasChipsRow } from "../chips.ts";
 import type { Lane } from "../lanes.ts";
-import { cardDensity, hasChipsRow, showsLeftOff } from "../model.ts";
+import { cardDensity, showsLeftOff } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
 import {
   ageOf,
@@ -106,7 +107,7 @@ function fullCard(w: WsAccessor, key: string): View {
       HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12)])
         // Left-aligned by the frame, not a Spacer, as the chips row is.
         .frame({ maxWidth: "infinity", alignment: "leading" }),
-      // The PR and branch under the status, as the mock-up had them, then the message.
+      // The PR and branch under the status, then the message.
       chipsRow(w, true, "words"),
       detailLine(w, "detail", 2),
       progressBar(w, "full-progress"),

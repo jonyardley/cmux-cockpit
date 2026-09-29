@@ -44,7 +44,7 @@ import {
   removeProject,
 } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
-import { ageOf, badgeCount, isReady, statusHasAge, statusInfo, statusLine } from "../status.ts";
+import { ageOf, badgeCount, isReady, openPrLabel, statusHasAge, statusInfo, statusLine } from "../status.ts";
 import { C } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;
@@ -121,7 +121,8 @@ export function titleRow(w: WsAccessor, size: number, dropsAge = false): View {
     Spacer({ minLength: 4 }),
     readyPill(w),
     unreadBadge(() => badgeCount(w())),
-    dropsAge ? when("title-age", () => !statusHasAge(w()), age) : age(),
+    // On the when() result: the priority inside meta() does not reach this HStack.
+    dropsAge ? when("title-age", () => !statusHasAge(w()), age).layoutPriority(2) : age(),
   ]).frame({ maxWidth: "infinity" });
 }
 
@@ -209,7 +210,7 @@ function prWords(w: WsAccessor): View {
           () => pr()?.state ?? "",
           () => prInk(pr()?.health ?? "quiet"),
         ),
-    ),
+    ).layoutPriority(2),
   ]);
 }
 
@@ -341,12 +342,8 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
       () => workspaceAction(w(), w()?.pinned ? "unpin" : "pin"),
     ),
     Button("Mark read", () => workspaceAction(w(), "mark_read")),
-    // A menu item cannot hide, so with no PR it says so and does nothing.
     Button(
-      () => {
-        const pr = prSummary(w());
-        return pr?.url ? "Open PR " + pr.tag : "No PR to open";
-      },
+      () => openPrLabel(prSummary(w())),
       () => openIfUrl(prSummary(w())?.url),
     ),
     Button(
