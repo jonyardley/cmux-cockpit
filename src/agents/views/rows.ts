@@ -52,17 +52,19 @@ export function prRow(e: () => Last<PrEntry>): View {
   ])
     .paddingLeading(12)
     .paddingVertical(10)
-    .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => goToPr(e()));
   // Top-aligned and padded down to the first line, so the pill stays
-  // beside the title when the from line shows under it. Stale rides
-  // inside the chip: an empty sibling Text would still cost spacing.
+  // beside the title when the from line shows under it. 5pt centres it on
+  // the title as drawn; 9pt sat it 4pt low. Stale rides inside the chip:
+  // an empty sibling Text would still cost spacing.
   const pill = VStack({ spacing: 0 }, [prChip(e)])
-    .paddingTop(9)
+    .paddingTop(5)
     .paddingTrailing(10)
     .layoutPriority(2);
-  const row = HStack({ spacing: 6, alignment: "top" }, [tappable, pill]).frame({
+  // The hover lights the whole row, pill column included, so it never
+  // stops short of the card's edge.
+  const row = HStack({ spacing: 6, alignment: "top" }, [tappable, pill]).hoverBackground(T.hover).frame({
     maxWidth: "infinity",
     alignment: "leading",
   });
