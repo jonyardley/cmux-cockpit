@@ -423,11 +423,22 @@ export interface CheckRow {
   state: CheckState;
 }
 
+/**
+ * Rows for saved checks, keyed by name so a check keeps its row when the
+ * poller re-sorts by state. Two checks can share a name (one per workflow),
+ * so a repeat takes its count among same-named checks.
+ */
+export function checkRows(list: readonly { name: string; state: CheckState }[]): CheckRow[] {
+  const seen = new Map<string, number>();
+  return list.map((c) => {
+    const n = seen.get(c.name) ?? 0;
+    seen.set(c.name, n + 1);
+    return { key: "c:" + c.name + ":" + n, name: c.name, state: c.state };
+  });
+}
+
 /** The selected workspace's CI checks, as the poller last saved them. */
-export const checks = computed((): CheckRow[] =>
-  // Two checks can share a name (one per workflow), so the index keeps them apart.
-  checksOf(cur().ws).map((c, i) => ({ key: "c:" + i + ":" + c.name, name: c.name, state: c.state })),
-);
+export const checks = computed((): CheckRow[] => checkRows(checksOf(cur().ws)));
 
 /** Board 1's "3 / 5": passed over total. */
 export function checksFigure(rows: readonly CheckRow[]): string {

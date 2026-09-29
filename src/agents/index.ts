@@ -29,7 +29,7 @@
 
 import { stateNotice } from "../shared/freshness.ts";
 import { faintLine } from "../shared/notice.ts";
-import { when } from "../shared/ui.ts";
+import { motionList, when } from "../shared/ui.ts";
 import {
   current,
   currentHeading,
@@ -84,7 +84,7 @@ function listSection<T extends { key: string; last: boolean }>(s: ListSection<T>
       () => s.rows().length > 0,
       () =>
         panel([
-          ForEach({ items: s.rows, key: (e) => e.key }, (e) => s.row(e)),
+          motionList({ items: s.rows, key: (e) => e.key, spacing: 0 }, (e) => s.row(e)),
           ...(foot
             ? [
                 when(
