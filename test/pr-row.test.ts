@@ -1,5 +1,6 @@
-// The Pull requests rows' "from" line and tap: which chat opened each PR,
-// from the saved prOrigins map, and a tap on the row opening it. __STATE__ is set
+// The Pull requests rows' faint line and tap: the session each PR belongs to
+// (the workspace holding it, else the chat that opened it, from the saved
+// prOrigins map), its project, and a tap on the row opening it. __STATE__ is set
 // before the renderer import, as in made-here.test.ts.
 
 import assert from "node:assert/strict";
@@ -83,8 +84,9 @@ describe("the row's session and project", () => {
       ws("here", { selected: true, title: "This one", agents: [agent("working")] }),
       ws("other", { title: "Socket contract" }),
     ];
-    assert.deepEqual(entry(1).session, { name: "This chat", dot: STATUS_DOT.working });
-    assert.deepEqual(entry(2).session, { name: "Socket contract", dot: T.grey });
+    assert.deepEqual(entry(1).session, { name: "This chat", dot: STATUS_DOT.working, hollow: false });
+    // No agent: a hollow grey ring, as elsewhere in the panel.
+    assert.deepEqual(entry(2).session, { name: "Socket contract", dot: T.grey, hollow: true });
   });
 
   it("names the chat that opened an own PR while it is open, else none", () => {
@@ -92,6 +94,19 @@ describe("the row's session and project", () => {
     assert.equal(entry(4).session, undefined);
     r.data.workspaces = [...(r.data.workspaces ?? []), ws("gone", { title: "Back again" })];
     assert.equal(entry(3).session?.name, "Back again");
+  });
+
+  it("writes the number, or nothing before GitHub gives one", () => {
+    assert.equal(m.prNumberText(entry(1)), "#1");
+    assert.equal(m.prNumberText({ pr: { url: pr(9) } }), "");
+  });
+
+  it("titles a PR with no saved title by its label or branch, since the faint line names the workspace", () => {
+    r.data.workspaces = [
+      ws("w", { title: "Socket contract", pr: { url: pr(7), number: 7, status: "open", branch: "sock", label: "PR" } }),
+    ];
+    assert.equal(entry(7).title, "sock");
+    assert.equal(entry(7).session?.name, "Socket contract");
   });
 
   it("falls back when the workspace has no name", () => {

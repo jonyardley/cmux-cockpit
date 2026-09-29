@@ -98,7 +98,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
               HStack spacing: 5 .paddingLeading(26)
                 Text "#12" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
                 HStack spacing: 5
-                  Circle size: 6 .fill(blue)
+                  Circle size: 6 .fill(blue) .stroke(clear) .strokeWidth(1.5)
                   Text "This chat" .font(11) .color(tertiary) .lineLimit(1) .truncation(tail)
                 Spacer
             Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
@@ -115,7 +115,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
               HStack spacing: 5 .paddingLeading(26)
                 Text "#9" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
                 HStack spacing: 5
-                  Circle size: 6 .fill(grey)
+                  Circle size: 6 .fill(clear) .stroke(grey) .strokeWidth(1.5)
                   Text "Chip colours" .font(11) .color(tertiary) .lineLimit(1) .truncation(tail)
                 Spacer
             Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)

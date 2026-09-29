@@ -3,7 +3,7 @@
 
 import type { Last } from "../../shared/list.ts";
 import { META_FONT, meta, openIfUrl, when } from "../../shared/ui.ts";
-import { type MadeEntry, madeAge, madeTitleColor, type PrEntry } from "../model.ts";
+import { type MadeEntry, madeAge, madeTitleColor, type PrEntry, prNumberText } from "../model.ts";
 import { T } from "../theme.ts";
 import { glyph, prChip, ruled } from "./parts.ts";
 
@@ -37,14 +37,23 @@ export function prRow(e: () => Last<PrEntry>): View {
   ]);
   // The number, then the session's dot and name, the dot following the
   // number's width. Indented past the tile, so it sits under the title.
+  // Each part is left out rather than drawn empty, since an empty Text still costs spacing.
+  const hollow = () => e().session?.hollow ?? false;
   const sub = HStack({ spacing: 5 }, [
-    meta(() => (e().pr.number ? "#" + e().pr.number : "")),
+    when(
+      "pr-number",
+      () => !!prNumberText(e()),
+      () => meta(() => prNumberText(e())),
+    ),
     when(
       "pr-session",
       () => !!e().session,
       () =>
         HStack({ spacing: 5 }, [
-          Circle({ size: 6 }).fill(() => e().session?.dot ?? "clear"),
+          Circle({ size: 6 })
+            .fill(() => (hollow() ? "clear" : (e().session?.dot ?? "clear")))
+            .stroke(() => (hollow() ? T.grey : "clear"))
+            .strokeWidth(1.5),
           Text(() => e().session?.name ?? "")
             .font(META_FONT)
             .color(T.tertiary)
