@@ -638,6 +638,12 @@ describe("group placeholders", () => {
     r.data.groups = [{ id: "g", name: "For review", anchorId: "real" }];
     assert.equal(m.prCount(), 1);
   });
+
+  it("keeps the PR of a group Jon made himself, titled after it", () => {
+    r.data.workspaces = [ws("mine", { title: "my group", pr: { url: "u/1", number: 1, status: "open" } })];
+    r.data.groups = [{ id: "g", name: "my group", anchorId: "mine" }];
+    assert.equal(m.prCount(), 1);
+  });
 });
 
 describe("honest counts and +N more (#80)", () => {

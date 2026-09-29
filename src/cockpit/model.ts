@@ -51,12 +51,9 @@ export const groups = (): WorkspaceGroup[] => data.groups() ?? [];
 export const groupForLane = (lane: Lane): WorkspaceGroup | null =>
   lane.key === "unsorted" ? null : (groups().find((g) => g.name === lane.name) ?? null);
 
-// A lane group's anchor is usually a generated placeholder workspace
-// (shared/anchors.ts), but a real workspace used as an anchor belongs in its
-// lane, its count and Needs you like any other card.
-
-// Each lane group's generated anchor is not a real card; a real workspace
-// used as an anchor is.
+// Each lane group's generated anchor (shared/anchors.ts) is not a real card;
+// a real workspace used as an anchor belongs in its lane, its count and
+// Needs you like any other card.
 export function laneAnchorIds(): Set<string> {
   const out = new Set<string>();
   for (const lane of LANES) {
