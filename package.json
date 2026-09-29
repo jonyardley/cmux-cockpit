@@ -18,6 +18,7 @@
     "validate": "node scripts/validate.ts",
     "pr-body": "node scripts/pr-body.ts",
     "snapshots": "UPDATE_SNAPSHOTS=1 node --test 'test/snapshot-*.test.ts'",
+    "preview": "node scripts/preview.ts",
     "check": "npm run lint && npm run typecheck && npm run knip && npm run build && npm run coverage && npm run validate",
     "hooks": "git config core.hooksPath .githooks",
     "helper": "node scripts/install-helper.ts",

@@ -17,5 +17,5 @@ it("the project editor", () => {
   ];
   edit.openEditor("/dev/app-one");
   edit.setDraftName("");
-  snapshotScene("editor", r, C);
+  snapshotScene("editor", r, C, "cockpit");
 });

@@ -47,5 +47,5 @@ it("needs you and next", () => {
     }),
     ws("busy", { title: "Busy", agents: [agent("working", { sinceEpoch: ago(100), lastActivityAt: ago(5) })] }),
   ];
-  snapshotScene("needs-and-next", r, C);
+  snapshotScene("needs-and-next", r, C, "cockpit");
 });

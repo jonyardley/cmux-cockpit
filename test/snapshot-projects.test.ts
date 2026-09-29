@@ -36,5 +36,5 @@ it("the projects view", () => {
     }),
     ws("elsewhere", { title: "Scratch", directory: "/tmp/scratch" }),
   ];
-  snapshotScene("projects", r, C);
+  snapshotScene("projects", r, C, "cockpit");
 });

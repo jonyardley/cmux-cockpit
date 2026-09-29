@@ -74,5 +74,5 @@ it("the agents panel", () => {
       agents: [agent("idle", { sinceEpoch: ago(300), lastActivityAt: ago(300) })],
     }),
   ];
-  snapshotScene("agents", r, T);
+  snapshotScene("agents", r, T, "agents");
 });

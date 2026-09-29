@@ -12,10 +12,25 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { emptyState, type State } from "../../scripts/state-config.ts";
 import { NEUTRAL_CHIP, READY_INK } from "../../src/shared/pr-colors.ts";
+import { toPage } from "./html.ts";
 import { installRenderer, nodeOf, type Renderer, type ViewNode } from "./renderer.ts";
 
 const DIR = "test/__snapshots__";
 const UPDATE = process.env.UPDATE_SNAPSHOTS === "1";
+// Where npm run preview wants each scene's page; unset, none is written.
+const PREVIEW = process.env.PREVIEW_DIR;
+// cmux draws text about 12% wider than Chrome does at the same size, while
+// padding and frames match: measured on a Retina screenshot of the app
+// ("Waiting for your reply" at 12, "Sidebar animation demo" at 13.5
+// semibold). PREVIEW_FONT_SCALE overrides it to recalibrate.
+const FONT_SCALE = Number(process.env.PREVIEW_FONT_SCALE ?? 1.12) || 1.12;
+
+// Each sidebar's width in points, as measured off a Retina screenshot of
+// the app: the agents panel on the right is the wider one.
+const WIDTH = { cockpit: 296, agents: 382 };
+
+/** Which sidebar a scene draws, for its preview width. */
+type Sidebar = keyof typeof WIDTH;
 
 /** A fixed clock for every scene, so ages print the same on every run. */
 export const EPOCH = 1_000_000;
@@ -156,7 +171,11 @@ function lineDiff(saved: string, now: string): string {
   return [`at line ${head + 1}:`, ...gone, ...added].join("\n");
 }
 
-/** Fails on any drift from the scene's saved text; UPDATE_SNAPSHOTS=1 re-records it instead. */
+/**
+ * Fails on any drift from the scene's saved text; UPDATE_SNAPSHOTS=1
+ * re-records it instead. Under npm run preview (PREVIEW_DIR set) drift is
+ * only reported, so a changed view can be looked at before it is accepted.
+ */
 function matchSnapshot(scene: string, text: string): void {
   const file = `${DIR}/${scene}.txt`;
   if (UPDATE) {
@@ -164,8 +183,12 @@ function matchSnapshot(scene: string, text: string): void {
     writeFileSync(file, text);
     return;
   }
-  assert.ok(existsSync(file), `${file} is missing: run npm run snapshots to record it`);
-  const saved = readFileSync(file, "utf8");
+  const saved = existsSync(file) ? readFileSync(file, "utf8") : undefined;
+  if (PREVIEW && text !== saved) {
+    process.stderr.write(`${scene} differs from its saved snapshot; previewing it anyway\n`);
+    return;
+  }
+  assert.ok(saved !== undefined, `${file} is missing: run npm run snapshots to record it`);
   if (text !== saved)
     assert.fail(`${scene} changed on screen; if that is meant, run npm run snapshots\n${lineDiff(saved, text)}`);
 }
@@ -194,12 +217,24 @@ export function seed({ state = {}, projects }: Seed = {}): Renderer {
 /**
  * Builds the sidebar's root afresh against the current fixture data and
  * checks it against the scene's saved text. `theme` is the sidebar's own
- * token table (C or T), named ahead of the chip colours.
+ * token table (C or T), named ahead of the chip colours; `sidebar` sets the
+ * preview's width.
  */
-export function snapshotScene(scene: string, r: Renderer, theme: Record<string, string>): void {
+export function snapshotScene(scene: string, r: Renderer, theme: Record<string, string>, sidebar: Sidebar): void {
   const root = r.roots.at(-1);
   assert.ok(root, "no sidebar registered: import the sidebar before snapshotting it");
   const node = nodeOf(root());
   assert.ok(node, "the root is not a view the fake renderer built");
+  preview(scene, node, theme, WIDTH[sidebar]);
   matchSnapshot(scene, render(node, [theme, chipTokens()]));
+}
+
+// The scene as an HTML page (html.ts): every scene has to draw with nothing
+// unknown, and npm run preview saves the page to screenshot.
+function preview(scene: string, node: ViewNode, theme: Record<string, string>, width: number): void {
+  const page = toPage(node, scene, width, theme.ground ?? "#FFFFFF", FONT_SCALE);
+  assert.deepEqual(page.unknown, [], `${scene} has views or modifiers the preview cannot draw: add them to html.ts`);
+  if (!PREVIEW) return;
+  mkdirSync(PREVIEW, { recursive: true });
+  writeFileSync(`${PREVIEW}/${scene}.html`, page.html);
 }

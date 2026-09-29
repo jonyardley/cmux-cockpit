@@ -20,6 +20,8 @@ config/state.json
 config/url-token
 config/*.lock
 config/*.tmp
+# npm run preview's pages and screenshots.
+preview/
 
 # The maintainer's own agent workflow, loaded next to CLAUDE.md.
 CLAUDE.local.md

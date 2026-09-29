@@ -98,5 +98,5 @@ it("lanes: every card state", () => {
       agents: [agent("working", { sinceEpoch: ago(200), lastActivityAt: ago(20) })],
     }),
   ];
-  snapshotScene("lanes", r, C);
+  snapshotScene("lanes", r, C, "cockpit");
 });
