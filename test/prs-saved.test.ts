@@ -116,6 +116,21 @@ describe("the agents panel's Pull requests list", () => {
     );
   });
 
+  it("ranks Jon's own open PR above a workspace's merged or closed one", () => {
+    r.data.workspaces = [
+      ws("w1", { title: "Workspace", branch: "feat" }),
+      ws("done", { pr: { url: "https://github.com/o/r/pull/50", number: 50, status: "merged" } }),
+      ws("shut", { pr: { url: "https://github.com/o/r/pull/60", number: 60, status: "closed" } }),
+      // No status from cmux: a PR the workspace holds now, so it ranks as open.
+      ws("bare", { pr: { url: "https://github.com/o/r/pull/5", number: 5 } }),
+    ];
+    r.data.epoch++;
+    assert.deepEqual(
+      agents.prs().map((e) => e.pr.number),
+      [7, 5, 42, 50, 60],
+    );
+  });
+
   it("gives an own PR's row the PR fields alone, with its draft flag", () => {
     r.data.workspaces = [];
     r.data.epoch++;
@@ -133,11 +148,13 @@ describe("the agents panel's Pull requests list", () => {
 
 describe("the Pull requests list's chips", () => {
   // The fixtures share one url and the list shows a url once, so each
-  // workspace is listed alone.
+  // workspace is listed alone. Jon's own open #42 outranks a merged workspace
+  // PR, so with a workspace the row is the one that is not #42.
+  const ownOnly = "https://github.com/o/r/pull/42";
   const chipOf = (id: string) => {
     r.data.workspaces = id ? [ws(id, { branch: "feat" })] : [];
     r.data.epoch++;
-    const e = agents.prs()[0];
+    const e = agents.prs().find((p) => !id || p.key !== ownOnly);
     return e ? [e.pr.number, agents.prChipText(e), agents.prChipHealth(e)] : undefined;
   };
 
