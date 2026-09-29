@@ -95,7 +95,50 @@ describe("countColors", () => {
   });
 });
 
+describe("mostUrgentOf", () => {
+  it("picks the first workspace at the highest urgency, for a folded header's dot", () => {
+    const later = { ...workingWs(), id: "working-2" };
+    assert.equal(status.mostUrgentOf([idleWs(), workingWs(), later])?.id, "working");
+    assert.equal(status.mostUrgentOf([workingWs(), askWs(), needsWs()])?.id, "needs");
+  });
+
+  it("is undefined when every workspace is quiet, so a folded header shows no dot", () => {
+    assert.equal(status.mostUrgentOf([idleWs(), readyWs(), ws("none")]), undefined);
+    assert.equal(status.mostUrgentOf([]), undefined);
+  });
+});
+
+describe("headerStatus", () => {
+  it("shows the lead's dot while folded, from the same walk as the tint", () => {
+    const shown = status.headerStatus([idleWs(), workingWs(), askWs()], true);
+    assert.equal(shown.dot?.id, "ask");
+    assert.deepEqual(shown.tint, status.countColors([idleWs(), workingWs(), askWs()]));
+  });
+
+  it("shows no dot while open, and keeps the tint", () => {
+    const shown = status.headerStatus([workingWs(), needsWs()], false);
+    assert.equal(shown.dot, undefined);
+    assert.deepEqual(shown.tint, { bg: C.clayCount, fg: C.clayText });
+  });
+
+  it("shows no dot when every card is quiet, folded or not, and a grey tint", () => {
+    assert.equal(status.headerStatus([idleWs(), readyWs()], true).dot, undefined);
+    assert.equal(status.headerStatus([], true).dot, undefined);
+    assert.deepEqual(status.headerStatus([idleWs()], true).tint, QUIET_PILL);
+  });
+
+  it("tints as countColors does for every urgency", () => {
+    for (const cards of [[needsWs()], [askWs()], [workingWs()], [idleWs()], []])
+      assert.deepEqual(status.headerStatus(cards, true).tint, status.countColors(cards));
+  });
+});
+
 describe("lane and project count pills", () => {
+  // Four older asks in Unsorted fill the Needs you strip, so a later one is
+  // past its cap and keeps its card, count and tint in its lane.
+  const fullStrip = () =>
+    ["s1", "s2", "s3", "s4"].map((id) => ws(id, { agents: [agent("needs_input", { sinceEpoch: 900 })] }));
+
   function seed(): void {
     r.data.groups = [
       group("g-main", "Main activity", { anchorId: "anchor-main" }),
@@ -118,12 +161,28 @@ describe("lane and project count pills", () => {
       ["working", "idle"],
     );
     assert.deepEqual(status.countColors(model.laneWorkspaces("main")), { bg: C.blueCount, fg: C.blueText });
-    assert.deepEqual(status.countColors(model.laneWorkspaces("parked")), { bg: C.clayCount, fg: C.clayText });
     assert.deepEqual(status.countColors(model.laneWorkspaces("review")), QUIET_PILL);
+  });
+
+  it("leaves a card the Needs you strip lists out of its lane's count and tint", () => {
+    seed();
+    assert.deepEqual(model.laneWorkspaces("parked"), []);
+    assert.deepEqual(status.countColors(model.laneWorkspaces("parked")), QUIET_PILL);
+  });
+
+  it("counts and tints by a card past the strip's cap, which keeps its lane", () => {
+    seed();
+    r.data.workspaces?.push(...fullStrip());
+    assert.deepEqual(
+      model.laneWorkspaces("parked").map((w) => w.id),
+      ["needs"],
+    );
+    assert.deepEqual(status.countColors(model.laneWorkspaces("parked")), { bg: C.clayCount, fg: C.clayText });
   });
 
   it("keeps the tint while the lane is folded", () => {
     seed();
+    r.data.workspaces?.push(...fullStrip());
     const parked = laneByKey("parked");
     if (!model.isCollapsed(parked)) model.toggleLane(parked);
     assert.equal(model.isCollapsed(parked), true);
@@ -132,6 +191,7 @@ describe("lane and project count pills", () => {
 
   it("lists the same cards the project counts, and tints by them", () => {
     seed();
+    r.data.workspaces?.push(...fullStrip());
     const two = r.data.workspaces?.find((w) => w.id === "working");
     const three = r.data.workspaces?.find((w) => w.id === "needs");
     if (!two || !three) throw new Error("fixture");

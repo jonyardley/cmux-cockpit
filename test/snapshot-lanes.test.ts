@@ -1,5 +1,5 @@
 // Scene: the cockpit's lanes with a card in every state, each lane at its
-// own density. Fixture data only; see test/support/snapshot.ts.
+// own density, and a working card under the folded Parked header. Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
 import { ago, EPOCH, seed, snapshotScene } from "./support/snapshot.ts";
@@ -92,7 +92,12 @@ it("lanes: every card state", () => {
     ws("anchor-bg", { title: "Background", group: "g-bg" }),
     ws("none", { title: "No agent", group: "g-bg", branch: "main" }),
     ws("anchor-parked", { title: "Parked", group: "g-parked" }),
-    ws("parked", { title: "Parked card", group: "g-parked" }),
+    // Working under the folded Parked header, so the header shows its dot.
+    ws("parked", {
+      title: "Parked card",
+      group: "g-parked",
+      agents: [agent("working", { sinceEpoch: ago(300), lastActivityAt: ago(5) })],
+    }),
     ws("loose", {
       title: "Loose workspace",
       agents: [agent("working", { sinceEpoch: ago(200), lastActivityAt: ago(20) })],

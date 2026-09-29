@@ -120,7 +120,7 @@ describe("lanes", () => {
 // (2026-09-26): a single-member group's anchor can be a real workspace, not a
 // generated placeholder, and it must not vanish from its lane.
 describe("a real workspace anchoring a single-member group", () => {
-  it("hides the generated anchor but shows the real one, counted and in Needs you", () => {
+  it("hides the generated anchor but shows the real one, in Needs you and then counted in its lane", () => {
     r.data.epoch += 100;
     r.data.selectedId = null;
     r.data.groups = [
@@ -145,11 +145,14 @@ describe("a real workspace anchoring a single-member group", () => {
     const parked = r.data.workspaces.find((w) => w.id === "real-parked");
     if (!parked) throw new Error("fixture");
     assert.equal(model.laneOf(parked), "parked");
-    assert.equal(model.laneWorkspaces("parked").length, 1);
     assert.deepEqual(
       model.needsList().map((w) => w.id),
       ["real-parked"],
     );
+    // Waiting, it shows in Needs you alone; answered, it is back in its lane.
+    assert.equal(model.laneWorkspaces("parked").length, 0);
+    parked.agents = [agent("working", { sinceEpoch: 1 })];
+    assert.equal(model.laneWorkspaces("parked").length, 1);
   });
 
   it("still pins the real anchor's card, same as any group's anchor", () => {
@@ -535,6 +538,63 @@ describe("needs you", () => {
       model.needsList().map((w) => w.id),
       ["c", "a"],
     );
+  });
+
+  it("takes a card it lists out of its lane, and puts it back once dismissed", () => {
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    a.agents = [agent("needs_input", { sinceEpoch: 500 })];
+    assert.ok(!ids().includes("a@main"));
+    assert.deepEqual(
+      model.laneWorkspaces("main").map((w) => w.id),
+      ["b"],
+    );
+    needs.dismissNeeds(a);
+    assert.ok(ids().includes("a@main"));
+    assert.equal(model.laneWorkspaces("main").length, 2);
+  });
+
+  it("leaves a lane whose only card waits as an empty lane's zone", () => {
+    const c = byId("c");
+    if (!c) throw new Error("fixture");
+    c.agents = [agent("needs_input", { sinceEpoch: 500 })];
+    assert.ok(ids().includes("z:review"));
+    assert.ok(!ids().some((id) => id.startsWith("h:review")));
+  });
+
+  it("keeps a card being dragged in its lane when it starts asking, and takes it out once dropped", () => {
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    state.setDrag({ id: "w:a", index: 1 });
+    a.agents = [agent("needs_input", { sinceEpoch: 500 })];
+    assert.ok(model.needsShown().some((w) => w.id === "a"));
+    assert.ok(ids().includes("a@main"));
+    state.setDrag(null);
+    assert.ok(!ids().includes("a@main"));
+  });
+
+  it("takes a card it lists out of its project, and keeps the header of a project with only waiting sessions", () => {
+    const a = byId("a");
+    const c = byId("c");
+    if (!a || !c) throw new Error("fixture");
+    a.directory = "/Users/coder/dev/app-two";
+    c.directory = "/Users/coder/dev/app-one";
+    a.agents = [agent("needs_input", { sinceEpoch: 500 })];
+    state.setMode("projects");
+    const entries = () => model.projectEntries().map((e) => e.id);
+    assert.ok(!entries().includes("a@p"));
+    // Its header stays, count 0, so its "+" is still there; not quiet, as it
+    // has a session, waiting in Needs you.
+    assert.ok(entries().includes("p:/dev/app-two"));
+    assert.ok(!entries().includes("q:/dev/app-two"));
+    assert.equal(model.projectWorkspaces("/dev/app-two").length, 0);
+    // An editor open on it stays open.
+    state.setEditingProject("/dev/app-two");
+    assert.ok(entries().includes("e:/dev/app-two"));
+    state.setEditingProject(null);
+    a.agents = [agent("working", { sinceEpoch: 500 })];
+    assert.ok(entries().includes("p:/dev/app-two"));
+    assert.ok(entries().includes("a@p"));
   });
 
   it("a dismissal holds until the agent asks again", () => {

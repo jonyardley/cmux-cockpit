@@ -178,6 +178,11 @@ describe("the capped Needs you strip", () => {
 describe("cards sorted by state inside a lane", () => {
   const lane = () => model.flatEntries().flatMap((e) => (e.kind === "ws" ? [e.wsId] : []));
 
+  // Four older asks fill the Needs you strip, so n1 is past its cap and
+  // keeps its card in the lane (model.ts's listedCards); the four sit in
+  // the strip alone, so Unsorted lists none of them.
+  const fullStrip = ["q1", "q2", "q3", "q4"].map((id) => ws(id, { agents: asking(600) }));
+
   beforeEach(() =>
     setup([
       ws("i1", { group: "g-main" }),
@@ -186,6 +191,7 @@ describe("cards sorted by state inside a lane", () => {
       ws("r1", { group: "g-main", unread: 1, agents: finished(60) }),
       ws("n1", { group: "g-main", agents: asking(60) }),
       ws("i3", { group: "g-main" }),
+      ...fullStrip,
     ]),
   );
 

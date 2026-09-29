@@ -31,7 +31,7 @@ const open = { url: "https://github.com/o/r/pull/1", status: "open", branch: "fe
 
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
-const { group, ws } = await import("./support/fixtures.ts");
+const { agent, group, ws } = await import("./support/fixtures.ts");
 const model = await import("../src/cockpit/model.ts");
 const { C } = await import("../src/cockpit/theme.ts");
 const { READY_INK } = await import("../src/shared/pr-colors.ts");
@@ -98,6 +98,14 @@ describe("mergeReadyText", () => {
 
   it("counts the lane's generated anchor, which has no card of its own", () => {
     assert.equal(model.mergeReadyText("parked"), "1 ready to merge");
+  });
+
+  it("still counts a card the Needs you strip lists: a waiting session's PR is still mergeable", () => {
+    const w = r.data.workspaces.find((x) => x.id === "readyMain");
+    if (w) w.agents = [agent("needs_input", { sinceEpoch: r.data.epoch - 30 })];
+    assert.ok(model.needsShown().some((x) => x.id === "readyMain"));
+    assert.equal(model.laneWorkspaces("main").length, 0);
+    assert.equal(model.mergeReadyText("main"), "1 ready to merge");
   });
 
   it("drops a card once it has moved to another branch", () => {

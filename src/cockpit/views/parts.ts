@@ -102,12 +102,11 @@ function readyPill(w: WsAccessor): View {
   ).layoutPriority(2);
 }
 
-// Title row shared by the card densities: title takes the slack, pill or
-// badge and age hold their width on the right. With `dropsAge` (the full
-// card) the age shows only while the status line under it has no time, so
-// one card never reads two.
-export function titleRow(w: WsAccessor, size: number, dropsAge = false): View {
-  const age = () => meta(() => ageOf(w()));
+// Title row shared by the cards and the Projects row: title takes the
+// slack, pill or badge and age hold their width on the right. The age shows
+// only while the status line under it has no time, so one card never reads
+// two.
+export function titleRow(w: WsAccessor, size: number): View {
   return HStack({ spacing: 6 }, [
     Text(() => displayTitle(w()))
       .font(size)
@@ -120,7 +119,11 @@ export function titleRow(w: WsAccessor, size: number, dropsAge = false): View {
     readyPill(w),
     unreadBadge(() => badgeCount(w())),
     // On the when() result: the priority inside meta() does not reach this HStack.
-    dropsAge ? when("title-age", () => !statusHasAge(w()), age).layoutPriority(2) : age(),
+    when(
+      "title-age",
+      () => !statusHasAge(w()),
+      () => meta(() => ageOf(w())),
+    ).layoutPriority(2),
   ]).frame({ maxWidth: "infinity" });
 }
 
@@ -356,13 +359,15 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
   ];
 }
 
-// White card, hairline edge, ink outline when selected or dragged.
+// White card, hairline edge, a soft grey outline when selected and ink
+// while dragged.
 export function cardChrome(view: View, w: WsAccessor, key: string, radius: number): View {
-  const lit = () => drag()?.id === key || isSelected(w());
+  const dragged = () => drag()?.id === key;
+  const lit = () => dragged() || isSelected(w());
   const face = ring(
     view,
     C.card,
-    () => (lit() ? C.select : C.cardEdge),
+    () => (dragged() ? C.select : lit() ? C.selectEdge : C.cardEdge),
     () => (lit() ? 1.5 : 1),
     radius,
     { hover: { face: C.cardHover } },

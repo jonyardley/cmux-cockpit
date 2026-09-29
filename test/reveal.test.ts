@@ -1,5 +1,7 @@
 // Tapping a Needs you row or Next unfolds what hides the card, so the
-// selection lands somewhere Jon can see it.
+// selection lands somewhere Jon can see it. A card the strip lists shows
+// there, not in its lane, but its lane unfolds too, so the card is in view
+// when it comes back after an answer.
 
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
@@ -12,6 +14,8 @@ const state = await import("../src/cockpit/state.ts");
 const { laneByKey } = await import("../src/cockpit/lanes.ts");
 
 const asking = () => [agent("needs_input", { sinceEpoch: r.data.epoch - 30 })];
+// Finished with output Jon has not read: Ready, so Next goes to it and its card shows in its lane.
+const ready = { unread: 1, agents: [agent("idle", { lastActivityAt: 1, sinceEpoch: 1 })] };
 
 // A fresh Parked group id per test: a fold sent to cmux is held as an
 // optimistic override until the data agrees, and the fixture never does.
@@ -29,8 +33,9 @@ function setup(): void {
     ws("anchor-main", { title: "Main activity", group: "g-main" }),
     ws("a", { group: "g-main" }),
     ws("anchor-parked", { title: "Parked", group: parked, agents: asking() }),
-    ws("p", { group: parked, agents: asking() }),
-    ws("u", { agents: asking() }),
+    ws("p", { group: parked, ...ready }),
+    ws("u", ready),
+    ws("n", { group: parked, agents: asking() }),
   ];
   r.calls.length = 0;
   state.setMode("all");
@@ -47,7 +52,7 @@ const methods = () => r.calls.map((c) => c.method);
 const cardShown = (id: string) => model.flatEntries().some((e) => e.kind === "ws" && e.wsId === id);
 const projectCardShown = (id: string) => model.projectEntries().some((e) => e.kind === "ws" && e.wsId === id);
 
-describe("revealing a card from Needs you", () => {
+describe("revealing a card from Needs you or Next", () => {
   beforeEach(setup);
 
   it("unfolds a folded lane before selecting its card", () => {
@@ -66,6 +71,14 @@ describe("revealing a card from Needs you", () => {
     assert.equal(state.unsortedCollapsed(), false);
     assert.equal(cardShown("u"), true);
     assert.deepEqual(methods(), ["workspace.select"]);
+  });
+
+  it("unfolds the lane of a card the strip lists, so its card shows once answered", () => {
+    const parked = laneByKey("parked");
+    assert.equal(cardShown("n"), false);
+    model.revealWorkspace(byId("n"));
+    assert.equal(model.isCollapsed(parked), false);
+    assert.deepEqual(methods(), ["workspace.group.expand", "workspace.select"]);
   });
 
   it("leaves an open lane alone", () => {
@@ -101,9 +114,8 @@ describe("revealing a card from Needs you", () => {
   });
 
   it("does the same for Next", () => {
-    // Only the Unsorted card waits, so Next goes there.
-    byId("p").agents = [];
-    byId("anchor-parked").agents = [];
+    // Only the Unsorted card is left waiting or Ready, so Next goes there.
+    for (const id of ["p", "n", "anchor-parked"]) byId(id).agents = [];
     state.setUnsortedCollapsed(true);
     model.jumpNext();
     assert.equal(state.unsortedCollapsed(), false);

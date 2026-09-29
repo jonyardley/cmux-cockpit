@@ -4,9 +4,10 @@
 
 import { dismissNeeds } from "../../shared/needs.ts";
 import { displayTitle } from "../../shared/titles.ts";
-import { haloDot, meta, motionList, ring, sectionTitle, when } from "../../shared/ui.ts";
+import { countPill, haloDot, meta, motionList, ring, sectionTitle, when } from "../../shared/ui.ts";
 import { jumpNext, needsList, needsMore, needsShown, nextStep, revealWorkspace } from "../model.ts";
-import { ageOf, needsDetail, needsRowEdge, statusInfo } from "../status.ts";
+import { isSelected } from "../state.ts";
+import { ageOf, countColors, needsDetail, needsRowEdge, statusInfo } from "../status.ts";
 import { C } from "../theme.ts";
 import { cardMenu, glyphButton, type WsAccessor } from "./parts.ts";
 
@@ -41,8 +42,16 @@ function needsRow(w: WsAccessor): View {
     .paddingHorizontal(10)
     .paddingVertical(9)
     .hoverBackground(C.needsHover);
-  // One selection ring: the card below carries it, so the row keeps its edge.
-  return ring(row, C.card, () => needsRowEdge(w()), 1, 9)
+  // The card's selection outline: a session the strip lists has no card
+  // below to carry it.
+  const selected = () => isSelected(w());
+  return ring(
+    row,
+    C.card,
+    () => (selected() ? C.selectEdge : needsRowEdge(w())),
+    () => (selected() ? 1.5 : 1),
+    9,
+  )
     .frame({ maxWidth: "infinity" })
     .onTap(() => revealWorkspace(w()))
     .contextMenu(cardMenu(w));
@@ -112,15 +121,15 @@ export function needsStrip(): View {
       VStack({ spacing: 0 }, [
         ring(
           VStack({ alignment: "leading", spacing: 6 }, [
+            // The count in a pill after the name, tinted as a lane's is.
             HStack({ spacing: 7 }, [
-              Image("bell.fill").font(10).color(C.clayText),
               sectionTitle("NEEDS YOU", C.clayText),
-              Spacer(),
-              Text(() => String(needsList().length))
-                .font(10.5)
-                .weight("semibold")
-                .color(C.clayText),
-            ]).paddingHorizontal(2),
+              countPill(
+                () => String(needsList().length),
+                () => countColors(needsList()),
+              ),
+              Spacer({ minLength: 0 }),
+            ]).paddingHorizontal(5),
             motionList({ items: needsShown, key: (w) => w.id, spacing: 6 }, (w) => needsRow(w)),
             moreLine(),
           ]).padding(9),
