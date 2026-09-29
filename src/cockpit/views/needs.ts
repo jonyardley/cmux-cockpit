@@ -6,6 +6,7 @@ import { dismissNeeds } from "../../shared/needs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { countPill, haloDot, meta, motionList, ring, sectionTitle, when } from "../../shared/ui.ts";
 import { jumpNext, needsList, needsMore, needsShown, nextStep, revealWorkspace } from "../model.ts";
+import { isSelected } from "../state.ts";
 import { ageOf, countColors, needsDetail, needsRowEdge, statusInfo } from "../status.ts";
 import { C } from "../theme.ts";
 import { cardMenu, glyphButton, type WsAccessor } from "./parts.ts";
@@ -41,8 +42,16 @@ function needsRow(w: WsAccessor): View {
     .paddingHorizontal(10)
     .paddingVertical(9)
     .hoverBackground(C.needsHover);
-  // One selection ring: the card below carries it, so the row keeps its edge.
-  return ring(row, C.card, () => needsRowEdge(w()), 1, 9)
+  // The card's selection outline: a session the strip lists has no card
+  // below to carry it.
+  const selected = () => isSelected(w());
+  return ring(
+    row,
+    C.card,
+    () => (selected() ? C.selectEdge : needsRowEdge(w())),
+    () => (selected() ? 1.5 : 1),
+    9,
+  )
     .frame({ maxWidth: "infinity" })
     .onTap(() => revealWorkspace(w()))
     .contextMenu(cardMenu(w));

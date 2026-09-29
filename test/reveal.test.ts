@@ -1,6 +1,7 @@
-// Next unfolds what hides a Ready card, so the selection lands somewhere
-// Jon can see it. A card the Needs you strip lists shows there, not in its
-// lane, so selecting it unfolds nothing.
+// Tapping a Needs you row or Next unfolds what hides the card, so the
+// selection lands somewhere Jon can see it. A card the strip lists shows
+// there, not in its lane, but its lane unfolds too, so the card is in view
+// when it comes back after an answer.
 
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
@@ -51,7 +52,7 @@ const methods = () => r.calls.map((c) => c.method);
 const cardShown = (id: string) => model.flatEntries().some((e) => e.kind === "ws" && e.wsId === id);
 const projectCardShown = (id: string) => model.projectEntries().some((e) => e.kind === "ws" && e.wsId === id);
 
-describe("revealing a card from Next", () => {
+describe("revealing a card from Needs you or Next", () => {
   beforeEach(setup);
 
   it("unfolds a folded lane before selecting its card", () => {
@@ -72,12 +73,12 @@ describe("revealing a card from Next", () => {
     assert.deepEqual(methods(), ["workspace.select"]);
   });
 
-  it("selects a card the strip lists without unfolding its lane, where it has no card", () => {
+  it("unfolds the lane of a card the strip lists, so its card shows once answered", () => {
     const parked = laneByKey("parked");
     assert.equal(cardShown("n"), false);
     model.revealWorkspace(byId("n"));
-    assert.equal(model.isCollapsed(parked), true);
-    assert.deepEqual(methods(), ["workspace.select"]);
+    assert.equal(model.isCollapsed(parked), false);
+    assert.deepEqual(methods(), ["workspace.group.expand", "workspace.select"]);
   });
 
   it("leaves an open lane alone", () => {

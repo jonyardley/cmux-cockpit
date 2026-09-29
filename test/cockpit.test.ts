@@ -562,7 +562,18 @@ describe("needs you", () => {
     assert.ok(!ids().some((id) => id.startsWith("h:review")));
   });
 
-  it("takes a card it lists out of its project, and gives a project with only waiting sessions no header", () => {
+  it("keeps a card being dragged in its lane when it starts asking, and takes it out once dropped", () => {
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    state.setDrag({ id: "w:a", index: 1 });
+    a.agents = [agent("needs_input", { sinceEpoch: 500 })];
+    assert.ok(model.needsShown().some((w) => w.id === "a"));
+    assert.ok(ids().includes("a@main"));
+    state.setDrag(null);
+    assert.ok(!ids().includes("a@main"));
+  });
+
+  it("takes a card it lists out of its project, and keeps the header of a project with only waiting sessions", () => {
     const a = byId("a");
     const c = byId("c");
     if (!a || !c) throw new Error("fixture");
@@ -572,10 +583,15 @@ describe("needs you", () => {
     state.setMode("projects");
     const entries = () => model.projectEntries().map((e) => e.id);
     assert.ok(!entries().includes("a@p"));
-    // Not quiet either: it has a session, waiting in Needs you.
-    assert.ok(!entries().includes("p:/dev/app-two"));
+    // Its header stays, count 0, so its "+" is still there; not quiet, as it
+    // has a session, waiting in Needs you.
+    assert.ok(entries().includes("p:/dev/app-two"));
     assert.ok(!entries().includes("q:/dev/app-two"));
     assert.equal(model.projectWorkspaces("/dev/app-two").length, 0);
+    // An editor open on it stays open.
+    state.setEditingProject("/dev/app-two");
+    assert.ok(entries().includes("e:/dev/app-two"));
+    state.setEditingProject(null);
     a.agents = [agent("working", { sinceEpoch: 500 })];
     assert.ok(entries().includes("p:/dev/app-two"));
     assert.ok(entries().includes("a@p"));

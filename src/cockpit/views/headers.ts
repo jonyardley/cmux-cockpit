@@ -24,7 +24,7 @@ import {
   wsById,
 } from "../model.ts";
 import { isMode, isSelected, projectsMode, quietCollapsed, selectWorkspace } from "../state.ts";
-import { countColors, mostUrgentOf } from "../status.ts";
+import { headerStatus } from "../status.ts";
 import { C } from "../theme.ts";
 import { glyphButton, statusDot } from "./parts.ts";
 
@@ -80,19 +80,20 @@ const laneHeading = (name: string, color: string): View =>
 
 // A header's count pill over its cards, then, while it is folded, the dot of
 // its most urgent session, so a folded header still says what is live under
-// it. One filter per change, read by the count, the tint and the dot.
+// it. One filter and one status (status.ts headerStatus) per change, read by
+// the count, the tint and the dot.
 function cardsCount(cards: () => Workspace[], folded: () => boolean): View[] {
   const list = computed(cards);
-  const lead = computed(() => (folded() ? mostUrgentOf(list()) : undefined));
+  const shown = computed(() => headerStatus(list(), folded()));
   return [
     countPill(
       () => String(list().length),
-      () => countColors(list()),
+      () => shown().tint,
     ),
     when(
       "folded-dot",
-      () => lead() !== undefined,
-      () => statusDot(lead, 7),
+      () => shown().dot !== undefined,
+      () => statusDot(() => shown().dot, 7),
     ),
   ];
 }

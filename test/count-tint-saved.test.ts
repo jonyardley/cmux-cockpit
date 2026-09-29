@@ -108,6 +108,31 @@ describe("mostUrgentOf", () => {
   });
 });
 
+describe("headerStatus", () => {
+  it("shows the lead's dot while folded, from the same walk as the tint", () => {
+    const shown = status.headerStatus([idleWs(), workingWs(), askWs()], true);
+    assert.equal(shown.dot?.id, "ask");
+    assert.deepEqual(shown.tint, status.countColors([idleWs(), workingWs(), askWs()]));
+  });
+
+  it("shows no dot while open, and keeps the tint", () => {
+    const shown = status.headerStatus([workingWs(), needsWs()], false);
+    assert.equal(shown.dot, undefined);
+    assert.deepEqual(shown.tint, { bg: C.clayCount, fg: C.clayText });
+  });
+
+  it("shows no dot when every card is quiet, folded or not, and a grey tint", () => {
+    assert.equal(status.headerStatus([idleWs(), readyWs()], true).dot, undefined);
+    assert.equal(status.headerStatus([], true).dot, undefined);
+    assert.deepEqual(status.headerStatus([idleWs()], true).tint, QUIET_PILL);
+  });
+
+  it("tints as countColors does for every urgency", () => {
+    for (const cards of [[needsWs()], [askWs()], [workingWs()], [idleWs()], []])
+      assert.deepEqual(status.headerStatus(cards, true).tint, status.countColors(cards));
+  });
+});
+
 describe("lane and project count pills", () => {
   // Four older asks in Unsorted fill the Needs you strip, so a later one is
   // past its cap and keeps its card, count and tint in its lane.

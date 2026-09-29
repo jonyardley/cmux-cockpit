@@ -194,6 +194,19 @@ export const mostUrgent = (ws: readonly Workspace[]): Urgency => urgencyOf(mostU
 /** A count pill's colours for the workspaces it counts: its most urgent session's hue, else grey. */
 export const countColors = (ws: readonly Workspace[]): PillColors => COUNT_TINT[mostUrgent(ws)];
 
+/** What a lane or project header shows beside its count. */
+export interface HeaderStatus {
+  tint: PillColors;
+  /** Whose dot shows while folded: none while open or all quiet. */
+  dot: Workspace | undefined;
+}
+
+/** A header's pill tint and, folded, its lead's dot, from one walk over its cards. */
+export function headerStatus(ws: readonly Workspace[], folded: boolean): HeaderStatus {
+  const lead = mostUrgentOf(ws);
+  return { tint: COUNT_TINT[urgencyOf(lead)], dot: folded ? lead : undefined };
+}
+
 /** The "Your move" line the workspace's chat ended its turn on, while that turn is still waiting on Jon. */
 export function moveOf(w: Workspace | undefined): SavedMove | null {
   const a = agentOf(w);
