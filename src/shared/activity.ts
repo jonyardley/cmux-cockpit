@@ -3,7 +3,7 @@
 
 export const ACTIVITY: Readonly<Record<AgentStatus, number>> = { needs_input: 3, working: 2, idle: 1, ended: 0 };
 
-const rank = (a: Agent): number => ACTIVITY[a.status] ?? -1;
+const rank = (a: Agent): number => (a.status ? (ACTIVITY[a.status] ?? -1) : -1);
 
 /** Sort comparator: most active agent first. */
 export function byActivity(x: Agent, y: Agent): number {

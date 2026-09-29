@@ -50,6 +50,20 @@ export function projectOf(directory: string | null | undefined): Project {
   return { ...NO_PROJECT };
 }
 
+/**
+ * A workspace's project: the one its Move to project choice names while that
+ * is still a configured project, else its path match. Each sidebar passes its
+ * own choice, since the cockpit holds a live map and the agents sidebar only
+ * the saved state it was built with (savedProjectChoice).
+ */
+export function projectFor(directory: string | null | undefined, choice: string | undefined): Project {
+  return (choice ? PROJECTS.find((p) => projectId(p) === choice) : undefined) ?? projectOf(directory);
+}
+
+/** The Move to project choice saved for workspace `id`, if any. */
+export const savedProjectChoice = (id: string | undefined): string | undefined =>
+  id && Object.hasOwn(SAVED_STATE.projectOverride, id) ? SAVED_STATE.projectOverride[id] : undefined;
+
 // --- Projects made or edited in the sidebar (issue #9) ----------------------------------
 // A new project takes its name from the folder; the editor under a project's
 // header (src/cockpit/edit.ts) changes any project after that.

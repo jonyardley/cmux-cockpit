@@ -94,7 +94,7 @@ const FINISHED: ReadonlySet<Status> = new Set<Status>(["idle", "ended"]);
 function finishedAgent(w: Workspace): Agent | null {
   let best: Agent | null = null;
   for (const a of agentsOf(w)) {
-    if (!FINISHED.has(a.status) || !((a.lastActivityAt ?? 0) > 0)) continue;
+    if (!FINISHED.has(a.status ?? "none") || !((a.lastActivityAt ?? 0) > 0)) continue;
     if (!best || (a.lastActivityAt ?? 0) > (best.lastActivityAt ?? 0)) best = a;
   }
   return best;
@@ -262,7 +262,7 @@ function cardAge(w: Workspace | undefined): string {
   if (ready) return ageSince(finishedAt(ready));
   const a = agentOf(w);
   if (!a) return "";
-  return ageSince(FINISHED.has(a.status) ? finishedAt(a) : a.sinceEpoch);
+  return ageSince(FINISHED.has(a.status ?? "none") ? finishedAt(a) : a.sinceEpoch);
 }
 
 /** "· 3 helpers" while subagent runs are live, else "". */

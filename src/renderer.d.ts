@@ -161,7 +161,8 @@ interface SubagentRun {
 
 interface Agent {
   id: string;
-  status: AgentStatus;
+  /** Optional like every data field: there is no published schema (issue #7). */
+  status?: AgentStatus;
   name?: string;
   kind?: string;
   title?: string;
@@ -215,7 +216,7 @@ interface Workspace {
 
 interface WorkspaceGroup {
   id: string;
-  name: string;
+  name?: string;
   anchorId?: string;
   collapsed?: boolean;
 }

@@ -125,6 +125,38 @@ describe("decisionsIn", () => {
     assert.deepEqual(decisionsIn(heading), { count: 1, leans: "" });
   });
 
+  it("reads the bulleted layout: situation bullet, nested options, a rule between decisions", () => {
+    const text = [
+      "**1. Where the card gets the line**",
+      "",
+      "- The card shows the first 240 characters, so the move line is cut off.",
+      "",
+      "    - **a.** Read the transcript on every frame, which is slow.",
+      "",
+      "    - **b. Recommended.** Save the line from the Stop hook.",
+      "",
+      "---",
+      "",
+      "- **2. How long it shows**",
+      "",
+      "- Jon may never look, so a saved line can go stale.",
+      "",
+      "    - **a. Lean.** Until the next prompt.",
+      "",
+      "    - **b.** For a fixed hour.",
+      "",
+      "---",
+      "",
+      "Your move: 1b 2a.",
+    ].join("\n");
+    assert.deepEqual(decisionsIn(text), { count: 2, leans: "1b 2a" });
+  });
+
+  it("does not take a bulleted situation for an option", () => {
+    const text = "**1. One**\n- I think the card is lean enough.\n- e.g. this one";
+    assert.deepEqual(decisionsIn(text), { count: 0, leans: "" });
+  });
+
   it("is empty for a reply with no decisions", () => {
     assert.deepEqual(decisionsIn("Just prose.\n1. a plain list\n2. another"), { count: 0, leans: "" });
   });
