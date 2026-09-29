@@ -48,6 +48,19 @@ describe("statusLine", () => {
   });
 });
 
+describe("statusHasAge", () => {
+  it("is true when the status line carries a time, so the full card drops its top-right one", () => {
+    const w = ws("x", { agents: [agent("working", { sinceEpoch: r.data.epoch - 30 })] });
+    assert.equal(status.statusHasAge(w), true);
+  });
+
+  it("is false when the status line has no time, so the top-right age stays", () => {
+    assert.equal(status.statusHasAge(ws("x", { agents: [agent("idle")] })), false);
+    assert.equal(status.statusHasAge(ws("x", { latestAt: r.data.epoch - 600 })), false);
+    assert.equal(status.statusHasAge(undefined), false);
+  });
+});
+
 describe("cardDetail", () => {
   it("shows the agent's latest message", () => {
     const w = ws("x", { latestMessage: "Running the recovery tests", latestPrompt: "go" });
@@ -169,33 +182,29 @@ describe("chipsFor", () => {
 });
 
 describe("showsChipsRow (issue #79)", () => {
-  const shows = (w: Workspace | undefined, withBranch: boolean, withPr: boolean) =>
-    showsChipsRow(model.chipsFor(w, withBranch), w, withPr);
+  const shows = (w: Workspace | undefined, withBranch: boolean) => showsChipsRow(model.chipsFor(w, withBranch), w);
 
   it("has no row with no chips", () => {
-    assert.equal(shows(ws("x"), true, true), false);
-    assert.equal(shows(ws("x"), true, false), false);
-    assert.equal(shows(undefined, true, false), false);
+    assert.equal(shows(ws("x"), true), false);
+    assert.equal(shows(undefined, true), false);
   });
 
-  it("drops the row on a full card whose only chip is the PR, which has a line of its own", () => {
-    const w = ws("x", { pr: { number: 7, status: "open" } });
-    assert.equal(shows(w, true, true), true);
-    assert.equal(shows(w, true, false), false);
+  it("keeps the row for a PR alone, which sits in it on every card", () => {
+    assert.equal(shows(ws("x", { pr: { number: 7, status: "open" } }), true), true);
   });
 
   it("keeps the row for a branch or ports chip", () => {
-    assert.equal(shows(ws("x", { pr: { number: 7 }, branch: "feat" }), true, false), true);
-    assert.equal(shows(ws("x", { ports: [5173] }), true, false), true);
+    assert.equal(shows(ws("x", { branch: "feat" }), true), true);
+    assert.equal(shows(ws("x", { ports: [5173] }), true), true);
   });
 
   it("leaves the branch out when the card does", () => {
-    assert.equal(shows(ws("x", { branch: "feat" }), false, false), false);
+    assert.equal(shows(ws("x", { branch: "feat" }), false), false);
   });
 
   it("agrees with hasChipsRow when the PR chip is in the row", () => {
     for (const w of [ws("a"), ws("b", { pr: { number: 7 } }), ws("c", { branch: "feat" }), ws("d", { ports: [80] })]) {
-      assert.equal(shows(w, true, true), model.hasChipsRow(w, true));
+      assert.equal(shows(w, true), model.hasChipsRow(w, true));
     }
   });
 });

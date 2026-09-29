@@ -182,6 +182,9 @@ export function statusLine(w: Workspace | undefined): string {
   return info === QUIET ? line + quietSuffix(agentOf(w), w) : line;
 }
 
+/** True when statusLine carries a time, so the full card leaves its top-right one off. */
+export const statusHasAge = (w: Workspace | undefined): boolean => cardAge(w) !== "";
+
 function cardAge(w: Workspace | undefined): string {
   const ready = readyAgent(w);
   if (ready) return ageSince(finishedAt(ready));

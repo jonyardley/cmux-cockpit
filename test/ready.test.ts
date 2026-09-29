@@ -201,8 +201,8 @@ describe("To review", () => {
     r.data.workspaces = [w];
     assert.equal(model.canFileForReview(w), true);
     assert.equal(model.hasChipsRow(w, true), true);
-    // The action alone keeps the full card's row, with no chip at all.
-    assert.equal(showsChipsRow(model.chipsFor(w, true), w, false), true);
+    // The action alone keeps the row, with no chip at all.
+    assert.equal(showsChipsRow([], w), true);
     model.fileForReview(w);
     assert.deepEqual(r.calls.at(-1), {
       method: "workspace.group.add",

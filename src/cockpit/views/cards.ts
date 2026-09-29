@@ -24,7 +24,6 @@ import {
   cardMenu,
   chipsRow,
   glyph,
-  prLine,
   statusDot,
   statusLabel,
   titleRow,
@@ -102,14 +101,14 @@ function fullCard(w: WsAccessor, key: string): View {
   const body = HStack({ spacing: 10, alignment: "top" }, [
     glyph(w, 26, 8, 12),
     VStack({ alignment: "leading", spacing: 4 }, [
-      titleRow(w, 13.5),
-      // No PR words here, Ready or not: the PR line below carries them (issue #79).
+      titleRow(w, 13.5, true),
+      // No PR words here, Ready or not: the chips row below carries them (issue #79).
       HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12)])
         // Left-aligned by the frame, not a Spacer, as the chips row is.
         .frame({ maxWidth: "infinity", alignment: "leading" }),
-      prLine(w, 11.5),
+      // The PR and branch under the status, as the mock-up had them, then the message.
+      chipsRow(w, true, "words"),
       detailLine(w, "detail", 2),
-      chipsRow(w, true, false),
       progressBar(w, "full-progress"),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })

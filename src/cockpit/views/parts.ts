@@ -12,7 +12,6 @@ import {
   chipHover,
   chipText,
   haloDot,
-  linkBox,
   meta,
   openIfUrl,
   outMark,
@@ -45,7 +44,7 @@ import {
   removeProject,
 } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
-import { ageOf, badgeCount, isReady, statusInfo, statusLine } from "../status.ts";
+import { ageOf, badgeCount, isReady, statusHasAge, statusInfo, statusLine } from "../status.ts";
 import { C } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;
@@ -106,8 +105,11 @@ function readyPill(w: WsAccessor): View {
 }
 
 // Title row shared by the card densities: title takes the slack, pill or
-// badge and age hold their width on the right.
-export function titleRow(w: WsAccessor, size: number): View {
+// badge and age hold their width on the right. With `dropsAge` (the full
+// card) the age shows only while the status line under it has no time, so
+// one card never reads two.
+export function titleRow(w: WsAccessor, size: number, dropsAge = false): View {
+  const age = () => meta(() => ageOf(w()));
   return HStack({ spacing: 6 }, [
     Text(() => displayTitle(w()))
       .font(size)
@@ -119,7 +121,7 @@ export function titleRow(w: WsAccessor, size: number): View {
     Spacer({ minLength: 4 }),
     readyPill(w),
     unreadBadge(() => badgeCount(w())),
-    meta(() => ageOf(w())),
+    dropsAge ? when("title-age", () => !statusHasAge(w()), age) : age(),
   ]).frame({ maxWidth: "infinity" });
 }
 
@@ -189,45 +191,26 @@ function chipById(chips: readonly Chip[], id: ChipId): Chip {
   return chips.find((c) => c.id === id) ?? { id, text: "" };
 }
 
-// The full card's PR line under its status (issue #73): the number, the
-// PR's own title, which is the part that gives way, then a chip with its
-// worst state (issue #72). Behind a when(), so a card with no PR has no line.
-export function prLine(w: WsAccessor, size: number): View {
+// The full card's PR in its chips row: the number, then its worst state in
+// words (issue #72). Plain text with no tap of its own, so a click on it
+// selects the card; the card menu's Open PR opens it. No PR title: the
+// card's title already says what the work is, and at card width it was cut
+// to a few letters.
+function prWords(w: WsAccessor): View {
   const pr = computed(() => prSummary(w()));
-
-  // The frame goes on a wrapper: on the link's own node it would stretch
-  // the tap and hover across the free width, which should select the card.
-  const line = () =>
-    VStack({ spacing: 0 }, [
-      linkBox(
-        [
-          meta(() => pr()?.tag ?? "", C.secondary),
-          when(
-            "pr-title",
-            () => !!pr()?.title,
-            () =>
-              Text(() => pr()?.title ?? "")
-                .font(size)
-                .color(C.secondary)
-                .lineLimit(1)
-                .truncation("tail"),
-          ),
-          // A PR with no status has no words.
-          when(
-            "pr-state",
-            () => !!pr()?.state,
-            () =>
-              chipText(
-                () => pr()?.state ?? "",
-                () => prInk(pr()?.health ?? "quiet"),
-              ),
-          ).layoutPriority(2),
-        ],
-        C.secondary,
-        () => pr()?.url,
-      ),
-    ]).frame({ maxWidth: "infinity", alignment: "leading" });
-  return when("pr-line", () => !!pr(), line);
+  return HStack({ spacing: 5 }, [
+    meta(() => pr()?.tag ?? "", C.secondary),
+    // A PR with no status has no words.
+    when(
+      "pr-state",
+      () => !!pr()?.state,
+      () =>
+        chipText(
+          () => pr()?.state ?? "",
+          () => prInk(pr()?.health ?? "quiet"),
+        ),
+    ),
+  ]);
 }
 
 // "To review →" is a white chip with the quiet chip's edge.
@@ -259,7 +242,7 @@ export function toReviewAction(w: WsAccessor): View {
 // sits on the when() result because a priority inside it does not reach the
 // HStack. No Spacer: it is flexible too and would split the free width with
 // the branch chip, so the frame left-aligns instead.
-export function chipsRow(w: WsAccessor, withBranch: boolean, withPr = true): View {
+export function chipsRow(w: WsAccessor, withBranch: boolean, prAs: "chip" | "words" = "chip"): View {
   // One chip list per change, read by every predicate and chip below.
   const chips = computed(() => chipsFor(w(), withBranch));
   const one = (id: ChipId) =>
@@ -268,11 +251,13 @@ export function chipsRow(w: WsAccessor, withBranch: boolean, withPr = true): Vie
       () => chips().some((c) => c.id === id),
       () => chip(id, () => chipById(chips(), id)),
     );
-  // The full card puts its PR on a line of its own (prLine), so it leaves the chip out.
+  // The full card shows its PR as plain words (prWords), the other shapes as a chip that opens it.
+  const hasPr = () => chips().some((c) => c.id === "pr");
+  const pr = prAs === "chip" ? one("pr") : when("pr-words", hasPr, () => prWords(w));
   const row = () =>
     HStack({ spacing: 5 }, [
       one("size").layoutPriority(2),
-      ...(withPr ? [one("pr").layoutPriority(2)] : []),
+      pr.layoutPriority(2),
       one("br"),
       one("port").layoutPriority(2),
       toReviewAction(w),
@@ -282,7 +267,7 @@ export function chipsRow(w: WsAccessor, withBranch: boolean, withPr = true): Vie
     });
   // Behind a when(), so a card with nothing to show has no empty row and no
   // gap above it (issue #79).
-  return when("chips-row", () => showsChipsRow(chips(), w(), withPr), row);
+  return when("chips-row", () => showsChipsRow(chips(), w()), row);
 }
 
 // --- card chrome and menu ------------------------------------------------------------
@@ -356,6 +341,14 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
       () => workspaceAction(w(), w()?.pinned ? "unpin" : "pin"),
     ),
     Button("Mark read", () => workspaceAction(w(), "mark_read")),
+    // A menu item cannot hide, so with no PR it says so and does nothing.
+    Button(
+      () => {
+        const pr = prSummary(w());
+        return pr?.url ? "Open PR " + pr.tag : "No PR to open";
+      },
+      () => openIfUrl(prSummary(w())?.url),
+    ),
     Button(
       () => (isNeedsDismissed(w()) ? "Restore needs you" : "Dismiss needs you"),
       () => (isNeedsDismissed(w()) ? restoreNeeds(w()) : dismissNeeds(w())),
