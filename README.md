@@ -77,6 +77,7 @@ Tested on cmux 0.64.25.
 npm run dev                         # rebuild sidebars/*.js on every save
 npm run check                       # lint, types, dead code (knip), build fresh, tests with a coverage floor, validate
 npm run snapshots                   # re-record the text snapshots after a change on screen
+npm run preview                     # every snapshot scene as a PNG in preview/ (needs Google Chrome)
 cmux sidebar reload cockpit         # show the change
 ```
 
