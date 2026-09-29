@@ -1,6 +1,6 @@
 // Small pieces shared by the agents panel's sections.
 
-import { prChipColors } from "../../shared/pr-colors.ts";
+import { prChipColors, shownHealth } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
 import { haloDot, projectBadge, ring, sectionTitle, tapChip } from "../../shared/ui.ts";
 import { type PrEntry, prChipHealth, prChipText, prDim } from "../model.ts";
@@ -67,7 +67,7 @@ export function jump(wsId: string, surfaceId: string | undefined): void {
 
 /** A PR's state chip, "draft ↗": coloured words that open the PR on GitHub, dimmed while stale. */
 export function prChip(e: () => PrEntry): View {
-  const colors = () => prChipColors(prChipHealth(e()));
+  const colors = () => prChipColors(shownHealth(prChipHealth(e()), prDim(e())));
   return tapChip(
     () => prChipText(e()) + " ↗",
     colors,

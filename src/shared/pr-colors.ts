@@ -18,17 +18,12 @@ export interface ChipColors {
 /** The quiet chip: the branch and the ports. */
 export const NEUTRAL_CHIP: ChipColors = { bg: "#F4F2EA", fg: "#4A4945", edge: "#E8E5DA" };
 
-/** The tidy chip's purple (cockpit theme.ts), once merged PRs' colour. */
-export const MERGED_CHIP: ChipColors = { bg: "#EFEAF7", fg: "#5B3E91", edge: "#DED4EF" };
-
 /** Ready's green, as words on a card. */
 export const READY_INK = P.greenDeep;
 
-const FAILING_INK = "#9E2F27";
-
 const HEALTH_INK: Record<Exclude<PrHealth, "quiet">, string> = {
-  failing: FAILING_INK,
-  conflicts: FAILING_INK,
+  failing: P.redText,
+  conflicts: P.redText,
   running: P.blueText,
   ready: READY_INK,
 };
@@ -41,6 +36,12 @@ const wordChip = (fg: string): ChipColors => ({ bg: "clear", fg, edge: "clear" }
  * whether draft, open, merged or closed.
  */
 export const prInk = (health: PrHealth): string => (health === "quiet" ? P.metaText : HEALTH_INK[health]);
+
+/**
+ * The health a PR's words show while its data may be stale and the chip is
+ * dimmed: ready drops to grey, so a stale verdict does not shout.
+ */
+export const shownHealth = (health: PrHealth, dim: boolean): PrHealth => (dim && health === "ready" ? "quiet" : health);
 
 /** A PR chip's colours: its ink, with no face and no edge. */
 export const prChipColors = (health: PrHealth): ChipColors => wordChip(prInk(health));

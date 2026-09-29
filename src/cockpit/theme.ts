@@ -2,7 +2,6 @@
 // shared/palette.ts, so they read the same in the agents panel.
 
 import { P } from "../shared/palette.ts";
-import { MERGED_CHIP } from "../shared/pr-colors.ts";
 
 export const C = {
   ...P,
@@ -42,8 +41,8 @@ export const C = {
   // A needs-you row under the pointer: a clear step down from its white
   // face, still in the strip's clay family.
   needsHover: "#FBF1EB",
-  // The tidy strip: the merged PR chip's purple, so it reads as merged work.
-  tidyBg: MERGED_CHIP.bg,
-  tidyEdge: MERGED_CHIP.edge,
-  tidyText: MERGED_CHIP.fg,
+  // The tidy strip: purple, so it reads as merged work.
+  tidyBg: "#EFEAF7",
+  tidyEdge: "#DED4EF",
+  tidyText: "#5B3E91",
 } as const;

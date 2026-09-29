@@ -16,7 +16,6 @@ import {
   meta,
   openIfUrl,
   outMark,
-  chip as pill,
   projectBadge,
   ring,
   unreadBadge,
@@ -213,14 +212,14 @@ export function prLine(w: WsAccessor, size: number): View {
                 .lineLimit(1)
                 .truncation("tail"),
           ),
-          // A PR with no status has no words, so no empty pill.
+          // A PR with no status has no words.
           when(
             "pr-state",
             () => !!pr()?.state,
             () =>
-              pill(
+              chipText(
                 () => pr()?.state ?? "",
-                () => summaryColors(pr()),
+                () => summaryColors(pr()).fg,
               ),
           ).layoutPriority(2),
         ],

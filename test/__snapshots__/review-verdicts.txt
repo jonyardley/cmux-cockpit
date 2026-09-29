@@ -85,7 +85,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                     Circle size: 12 .fill(clear)
                     Circle size: 6 .fill(clear) .stroke(grey) .strokeWidth(1.5)
                   Text "No agent" .font(11.5) .weight(regular) .color(faint|laneBackground) .lineLimit(1) .layoutPriority(2)
-                  Text "· #3 · 1 failing" .font(11.5) .color(failingInk) .lineLimit(1) .truncation(tail)
+                  Text "· #3 · 1 failing" .font(11.5) .color(redText) .lineLimit(1) .truncation(tail)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
         VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
           VStack spacing: 0, alignment: leading .padding(1) .background(cardEdge|dropTarget|anchorSelected) .cornerRadius(11) .frame(maxWidth: infinity)
@@ -123,7 +123,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                     Circle size: 12 .fill(clear)
                     Circle size: 6 .fill(clear) .stroke(grey) .strokeWidth(1.5)
                   Text "No agent" .font(11.5) .weight(regular) .color(faint|laneBackground) .lineLimit(1) .layoutPriority(2)
-                  Text "· #5 · conflicts" .font(11.5) .color(failingInk) .lineLimit(1) .truncation(tail)
+                  Text "· #5 · conflicts" .font(11.5) .color(redText) .lineLimit(1) .truncation(tail)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
         VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(21)
           VStack spacing: 0, alignment: leading .padding(1) .background(cardEdge|dropTarget|anchorSelected) .cornerRadius(11) .frame(maxWidth: infinity)
@@ -215,7 +215,6 @@ Colours
 blueText #2F5690
 cardEdge|dropTarget|anchorSelected #1414131F
 cardHover #F7F6F2
-failingInk #9E2F27
 faint|laneBackground #8A8880
 greenDeep|readyInk #3F5A2B
 grey #A09E95
@@ -226,6 +225,7 @@ laneParked #B0AEA5
 laneUnsorted #C9C6BB
 metaText #6B6A64
 onBadge|card #FFFFFF
+redText #9E2F27
 secondary|badge|laneReview #5E5D59
 segTrack #E5E2D6
 tertiary #73726C

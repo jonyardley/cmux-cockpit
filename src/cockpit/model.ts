@@ -765,7 +765,6 @@ export interface Chip {
   id: ChipId;
   text: string;
   url?: string;
-  status?: PrStatus;
   health?: PrHealth;
   /** The branch chip's uncommitted-changes dot. */
   dirty?: boolean;
@@ -795,7 +794,6 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
   if (pr) {
     const c: Chip = { id: "pr", text: pr.text, health: pr.health };
     if (pr.url) c.url = pr.url;
-    if (pr.status) c.status = pr.status;
     out.push(c);
   }
   if (withBranch && w.branch) out.push({ id: "br", text: w.branch, dirty: !!w.dirty });

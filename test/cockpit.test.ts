@@ -803,7 +803,6 @@ describe("prTextColor", () => {
     status: s,
     url: undefined,
     health,
-    draft: false,
     tag: "#1",
     text: "#1",
   });

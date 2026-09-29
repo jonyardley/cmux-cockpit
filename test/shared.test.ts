@@ -7,7 +7,7 @@ const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/
 const { glyphColor } = await import("../src/shared/contrast.ts");
 const { shade } = await import("../src/shared/shade.ts");
 const { markLast } = await import("../src/shared/list.ts");
-const { READY_INK, prChipColors, prInk, summaryColors } = await import("../src/shared/pr-colors.ts");
+const { READY_INK, prChipColors, prInk, shownHealth, summaryColors } = await import("../src/shared/pr-colors.ts");
 const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, nextIn, projectId, projectOf } = await import(
   "../src/shared/projects.ts"
 );
@@ -276,8 +276,8 @@ describe("nextIn", () => {
 describe("prChipColors", () => {
   it("colours each state's words: green ready, red failing and conflicts, blue running", () => {
     assert.equal(prChipColors("ready").fg, READY_INK);
-    assert.equal(prChipColors("failing").fg, "#9E2F27");
-    assert.equal(prChipColors("conflicts").fg, "#9E2F27");
+    assert.equal(prChipColors("failing").fg, P.redText);
+    assert.equal(prChipColors("conflicts").fg, P.redText);
     assert.equal(prChipColors("running").fg, P.blueText);
   });
 
@@ -302,6 +302,17 @@ describe("prInk", () => {
   it("is the chip's own words colour, so a PR reads the same as a chip and as text", () => {
     for (const h of ["ready", "failing", "conflicts", "running", "quiet"] as const)
       assert.equal(prInk(h), prChipColors(h).fg, h);
+  });
+});
+
+describe("shownHealth", () => {
+  it("drops a stale ready to grey words, so an old verdict does not shout", () => {
+    assert.equal(shownHealth("ready", true), "quiet");
+    assert.equal(shownHealth("ready", false), "ready");
+  });
+
+  it("leaves every other health alone, stale or not", () => {
+    for (const h of ["failing", "conflicts", "running", "quiet"] as const) assert.equal(shownHealth(h, true), h);
   });
 });
 

@@ -11,7 +11,7 @@
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { emptyState, type State } from "../../scripts/state-config.ts";
-import { NEUTRAL_CHIP, prInk, READY_INK } from "../../src/shared/pr-colors.ts";
+import { NEUTRAL_CHIP, READY_INK } from "../../src/shared/pr-colors.ts";
 import { installRenderer, nodeOf, type Renderer, type ViewNode } from "./renderer.ts";
 
 const DIR = "test/__snapshots__";
@@ -117,14 +117,12 @@ function print(n: ViewNode, depth: number, tokens: Tokens, out: string[]): void 
   for (const c of n.children) print(c, depth + 1, tokens, out);
 }
 
-// The chips' colours that pr-colors.ts keeps as values rather than
-// tokens: ready's and failing's inks (running and grey are the palette's
-// blueText and metaText), and the branch and ports chips' neutral pill
-// ("neutralChip.bg").
+// The colours pr-colors.ts keeps as values rather than tokens: ready's ink
+// (the other PR inks are the palette's) and the branch and ports chips'
+// neutral pill ("neutralChip.bg").
 function chipTokens(): Record<string, string> {
   return {
     readyInk: READY_INK,
-    failingInk: prInk("failing"),
     "neutralChip.bg": NEUTRAL_CHIP.bg,
     "neutralChip.fg": NEUTRAL_CHIP.fg,
     "neutralChip.edge": NEUTRAL_CHIP.edge,

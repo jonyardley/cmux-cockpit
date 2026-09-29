@@ -17,7 +17,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 Spacer minLength: 4
                 ForEach .opacity(1) .layoutPriority(2)
                   VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(6) .hoverBackground(linkEdge) .onTap()
-                    Text "1 failing" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(failingInk) .paddingHorizontal(6) .paddingVertical(1) .background(clear) .cornerRadius(5) .hoverBackground(linkHover)
+                    Text "1 failing" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(redText) .paddingHorizontal(6) .paddingVertical(1) .background(clear) .cornerRadius(5) .hoverBackground(linkHover)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
               Text "Recorded six scenes; the lanes one is the longest." .font(12) .color(secondary|badge) .lineLimit(4) .truncation(tail) .paddingHorizontal(8) .paddingVertical(6) .frame(maxWidth: infinity, alignment: leading) .background(quote) .cornerRadius(6)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(12)
@@ -89,7 +89,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 Spacer minLength: 4
             VStack spacing: 0 .paddingTop(9) .paddingTrailing(10) .layoutPriority(2)
               VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(6) .hoverBackground(linkEdge) .onTap() .opacity(1)
-                Text "1 failing ↗" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(failingInk) .paddingHorizontal(6) .paddingVertical(1) .background(clear) .cornerRadius(5) .hoverBackground(linkHover)
+                Text "1 failing ↗" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(redText) .paddingHorizontal(6) .paddingVertical(1) .background(clear) .cornerRadius(5) .hoverBackground(linkHover)
           Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
           HStack spacing: 6, alignment: top .frame(maxWidth: infinity, alignment: leading)
@@ -149,7 +149,6 @@ blueHalo #3B6FB62E
 blueText #2F5690
 clay #D97757
 countBg #E5E2D6
-failingInk #9E2F27
 green #788C5D
 grey #A09E95
 hover #7F7F7F0F
@@ -163,6 +162,7 @@ onBadge|panel|onClay #FFFFFF
 panelEdge #1414131A
 quote #1414130A
 red #C0453A
+redText #9E2F27
 rule #F0EEE6
 secondary|badge #5E5D59
 tertiary #73726C
