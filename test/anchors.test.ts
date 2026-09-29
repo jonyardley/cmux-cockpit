@@ -41,7 +41,7 @@ describe("placeholderIds", () => {
     assert.deepEqual([...placeholderIds(groups, byId)], ["p"]);
   });
 
-  it("with no group list, names an idle workspace titled after a lane", () => {
+  it("with no group list, names every workspace titled after a lane, busy or not", () => {
     const workspaces = [
       ws("idle", { title: " for REVIEW ", agents: [agent("idle")] }),
       ws("none", { title: "Parked" }),
@@ -50,7 +50,14 @@ describe("placeholderIds", () => {
       ws("chat", { title: "Some chat" }),
     ];
     const byId = new Map(workspaces.map((w) => [w.id, w]));
-    assert.deepEqual([...placeholderIds([], byId)].sort(), ["idle", "none"]);
+    assert.deepEqual([...placeholderIds([], byId)].sort(), ["asking", "busy", "idle", "none"]);
+  });
+
+  it("with a group list, trusts it over titles, matching its names loosely", () => {
+    const workspaces = [ws("anchor", { title: "For review" }), ws("member", { title: "Background" })];
+    const groups = [{ id: "g", name: " for review ", anchorId: "anchor" }];
+    const byId = new Map(workspaces.map((w) => [w.id, w]));
+    assert.deepEqual([...placeholderIds(groups, byId)], ["anchor"]);
   });
 
   it("knows the same lane names the cockpit draws", () => {

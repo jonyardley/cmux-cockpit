@@ -633,9 +633,24 @@ describe("group placeholders", () => {
     assert.equal(m.prCount(), 1);
   });
 
-  it("leaves it out with no group list, by its lane title alone", () => {
-    r.data.workspaces = [ws("anchor", { title: "For review", pr: { url: "u/old", number: 2163, status: "merged" } })];
+  it("leaves it out with no group list, by its lane title alone, even with an agent asking", () => {
+    r.data.workspaces = [
+      ws("anchor", {
+        title: "For review",
+        agents: [agent("needs_input")],
+        pr: { url: "u/old", number: 2163, status: "merged" },
+      }),
+    ];
     assert.equal(m.prCount(), 0);
+  });
+
+  it("keeps a lane-titled chat's PR while the group list says it is not the anchor", () => {
+    r.data.workspaces = [
+      ws("anchor", { title: "Background" }),
+      ws("chat", { title: "Parked", pr: { url: "u/1", number: 1, status: "open" } }),
+    ];
+    r.data.groups = [{ id: "g", name: "Background", anchorId: "anchor" }];
+    assert.equal(m.prCount(), 1);
   });
 
   it("keeps the PR of a real workspace a group is anchored on", () => {
