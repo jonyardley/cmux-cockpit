@@ -164,12 +164,18 @@ describe("currentAsk", () => {
   it("carries the agent's words when the selected workspace needs you", () => {
     const a = agent("needs_input", { sinceEpoch: 900, surfaceId: "s1" });
     r.data.workspaces = [selected(a, { latestMessage: "Shall I push?", latestPrompt: "Fix it" })];
-    assert.deepEqual(m.currentAsk(), { a, text: "Shall I push?", count: 1, canAnswer: true, dismissLabel: "Dismiss" });
+    assert.deepEqual(m.currentAsk(), {
+      a,
+      text: "Shall I push?",
+      count: 1,
+      canOpenChat: true,
+      dismissLabel: "Dismiss",
+    });
   });
 
-  it("offers Answer only when the asker has a terminal to focus", () => {
+  it("offers Open chat only when the asker has a terminal to focus", () => {
     r.data.workspaces = [selected(agent("needs_input"), { latestMessage: "Shall I push?" })];
-    assert.equal(m.currentAsk()?.canAnswer, false);
+    assert.equal(m.currentAsk()?.canOpenChat, false);
     assert.equal(m.currentAsk()?.dismissLabel, "Dismiss");
   });
 
@@ -517,8 +523,10 @@ describe("helpers and finishedLine", () => {
     assert.equal(m.helperCount(), 7);
     assert.equal(m.helperCount(), m.helpers().length + m.helperMore());
     assert.equal(m.helperCount(), liveRunCount(m.cur().ws));
+    assert.equal(m.hasHelpers(), true);
     sel([]);
     assert.equal(m.helperCount(), 0);
+    assert.equal(m.hasHelpers(), false);
   });
 
   it("tints the helpers pill working blue, by the shared count tint", () => {

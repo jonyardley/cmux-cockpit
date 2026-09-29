@@ -171,7 +171,8 @@ function checkLine(e: () => CheckRow): View {
 }
 
 // The checks in one line under the PR ("All 3 checks passed", "1 failing
-// · 1 running"), its mark and words in the worst state's colour, then one
+// · 1 running"), its mark and words in the worst state's colour, faded
+// while the PR's data is stale, then one
 // line per check not passing: a passing check needs no line of its own.
 // Hidden while the PR has none, or the workspace has no saved PR.
 function checksBlock(): View {
@@ -189,7 +190,9 @@ function checksBlock(): View {
             .weight("medium")
             .color(() => checksLine().color)
             .lineLimit(1),
-        ]),
+        ])
+          // Faded while the PR's data is stale, as the status row's chip is.
+          .opacity(() => (currentPrDim() ? STALE_OPACITY : 1)),
         // Unmounted with nothing to list, so no empty Reorderable sits in the card.
         when(
           "cur-checks-open",
@@ -210,7 +213,7 @@ function checksBlock(): View {
 
 // Selects the workspace and focuses the asking agent's terminal. One face,
 // no ring: a ring's rim would show round the hover colour.
-function answerButton(): View {
+function openChatButton(): View {
   return Text("Open chat")
     .font(12)
     .weight("semibold")
@@ -260,7 +263,7 @@ function askBlock(): View {
               .frame({ maxWidth: "infinity", alignment: "leading" }),
         ),
         HStack({ spacing: 6 }, [
-          when("cur-ask-answer", () => !!currentAsk()?.canAnswer, answerButton)
+          when("cur-ask-open-chat", () => !!currentAsk()?.canOpenChat, openChatButton)
             // Priority on the when() result, the HStack's child, so the label
             // never wraps; a priority inside it does not reach this HStack.
             .layoutPriority(2),

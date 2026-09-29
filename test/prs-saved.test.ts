@@ -41,6 +41,17 @@ const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open",
     conflictsFailing: { ...saved, number: 18, conflicts: true },
     conflictsMerged: { ...saved, number: 19, status: "merged", conflicts: true, checks: [] },
     titled: { ...saved, number: 20, title: "✳ Show the PR title", checks: [] },
+    // Not in the poller's worst-first order, so a sort would show.
+    unsorted: {
+      ...saved,
+      number: 21,
+      checks: [
+        { name: "zeta", state: "pending" },
+        { name: "build", state: "pass" },
+        { name: "alpha", state: "fail" },
+        { name: "beta", state: "pending" },
+      ],
+    },
   },
   ownPrs: {
     // Also w1's PR, so the list shows it once, under the workspace's title.
@@ -249,13 +260,36 @@ describe("checksSummary", () => {
   });
 
   it("lists only the checks not passing, in the poller's order", () => {
-    r.data.workspaces = [ws("running", { branch: "feat", selected: true })];
+    r.data.workspaces = [ws("unsorted", { branch: "feat", selected: true })];
     r.data.epoch++;
     assert.deepEqual(
       agents.openChecks().map((c) => [c.name, c.state]),
-      [["test", "pending"]],
+      [
+        ["zeta", "pending"],
+        ["alpha", "fail"],
+        ["beta", "pending"],
+      ],
     );
-    assert.equal(agents.checksLine().text, "1 running");
+    assert.equal(agents.checksLine().text, "1 failing · 2 running");
+  });
+
+  it("says No checks, with no verdict, when there are none", () => {
+    assert.deepEqual(agents.checksSummary([]), { text: "No checks", mark: "minus.circle", color: P.tertiary });
+  });
+
+  it("calls it all passed only when every check passed, whatever state the rest are in", () => {
+    // A state the summary does not know yet, as a newer poller might save: the cast stands in for that data.
+    const odd = agents.checkRows([
+      { name: "a", state: "pass" },
+      { name: "b", state: "skipped" as CheckState },
+    ]);
+    assert.deepEqual(agents.checksSummary(odd), { text: "1 not passed", mark: "minus.circle", color: P.tertiary });
+  });
+
+  it("greys a stale pass, and keeps a stale failure red", () => {
+    assert.equal(agents.checksSummary(rows("pass", "pass"), true).color, P.metaText);
+    assert.equal(agents.checksSummary(rows("pass", "pass"), true).text, "All 2 checks passed");
+    assert.equal(agents.checksSummary(rows("fail"), true).color, P.redText);
   });
 });
 

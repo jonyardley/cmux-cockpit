@@ -51,7 +51,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                       Text "Text snapshots for the sidebars" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1) .truncation(tail)
                       Text "↗" .font(9) .weight(semibold) .color(secondary|badge|neutralChip.fg) .lineLimit(1) .layoutPriority(2) .opacity(1) .showOnHover()
               VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(12)
-                HStack spacing: 8
+                HStack spacing: 8 .opacity(1)
                   Image xmark.circle .font(12) .color(redText)
                   Text "1 failing · 1 running" .font(12) .weight(medium) .color(redText) .lineLimit(1)
                 VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(2)

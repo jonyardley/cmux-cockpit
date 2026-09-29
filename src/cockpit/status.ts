@@ -152,9 +152,6 @@ export function statusInfo(w: Workspace | undefined): StatusStyle {
 // A header's count pill takes the hue of its most urgent session: needs
 // you, then asking, then working. Finished, idle and no agent leave it grey.
 
-// The tint itself is shared/ui.ts's countTint, so the agents panel's pills
-// read the same.
-
 const URGENCY_RANK: readonly Urgency[] = ["needs", "asking", "working", "quiet"];
 
 /** A workspace's urgency: the one its card's status (statusInfo) carries. */
@@ -181,7 +178,9 @@ export function mostUrgentOf(ws: readonly Workspace[]): Workspace | undefined {
 /** The most urgent of the workspaces' urgencies; quiet with none. */
 export const mostUrgent = (ws: readonly Workspace[]): Urgency => urgencyOf(mostUrgentOf(ws));
 
-/** A count pill's colours for the workspaces it counts: its most urgent session's hue, else grey. */
+/** A count pill's colours for the workspaces it counts: its most urgent
+ * session's hue, else grey, by shared/ui.ts's countTint so the agents
+ * panel's pills read the same. */
 export const countColors = (ws: readonly Workspace[]): PillColors => countTint(mostUrgent(ws));
 
 /** What a lane or project header shows beside its count. */

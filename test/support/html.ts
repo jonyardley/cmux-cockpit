@@ -42,6 +42,7 @@ const SYMBOLS: Record<string, string> = {
   "checkmark.circle": "✓",
   "xmark.circle": "✕",
   clock: "◷",
+  "minus.circle": "⊖",
   "doc.text": "▤",
   macwindow: "▢",
   "bell.fill": "🔔︎",

@@ -259,8 +259,9 @@ export interface PillColors {
 export const QUIET_PILL: PillColors = { bg: P.countBg, fg: P.metaText };
 
 /**
- * How urgent a count pill's sessions are, ranked needs you, asking,
- * working (quiet or not), then quiet: finished, idle and no agent.
+ * How urgent the sessions behind a count pill are: needs you, asking,
+ * working (quiet or not), or quiet (finished, idle and no agent). Their
+ * ranking is URGENCY_RANK in cockpit/status.ts.
  */
 export type Urgency = "needs" | "asking" | "working" | "quiet";
 

@@ -9,6 +9,7 @@ import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
+import { prInk } from "../shared/pr-colors.ts";
 import { type Project, projectOf } from "../shared/projects.ts";
 import {
   checksOf,
@@ -123,7 +124,7 @@ export interface Ask {
   count: number;
   /** Open chat shows only with a terminal to focus: without one it would only
    * select the workspace, which is already selected. */
-  canAnswer: boolean;
+  canOpenChat: boolean;
   /** Dismiss clears every ask in the workspace, so it says so when there are several. */
   dismissLabel: string;
 }
@@ -150,7 +151,7 @@ export const currentAsk = computed((): Ask | null => {
     a: c.a,
     text: askText(c, count),
     count,
-    canAnswer: !!c.a.surfaceId,
+    canOpenChat: !!c.a.surfaceId,
     dismissLabel: count > 1 ? "Dismiss all" : "Dismiss",
   };
 });
@@ -396,13 +397,13 @@ export const helpers = computed((): SubagentRow[] => runningRuns().slice(0, MAX_
  * the lines add up to the left card's helper count (#80). */
 export const helperMore = computed((): number => moreThan(runningRuns().length, MAX_HELPERS));
 
-/** Whether the card shows its HELPERS heading and lines: only while a run
- * is running. With only settled runs, finishedLine stands alone. */
-export const hasHelpers = computed((): boolean => runningRuns().length > 0);
-
 /** The HELPERS heading's count: every running run, the lines plus
  * helperMore, so it matches the left card's "3 helpers". */
 export const helperCount = computed((): number => runningRuns().length);
+
+/** Whether the card shows its HELPERS heading and lines: only while a run
+ * is running. With only settled runs, finishedLine stands alone. */
+export const hasHelpers = computed((): boolean => helperCount() > 0);
 
 /** The helpers count pill's colours: every run it counts is running, so
  * the shared tint's working blue. */
@@ -453,11 +454,13 @@ export interface ChecksSummary {
   color: string;
 }
 
+type NotPassing = Exclude<CheckState, "pass">;
+
 // The states that are not passing, worst first: the summary counts them
 // in this order and takes the first one present for its colour.
-const NOT_PASSING: readonly Exclude<CheckState, "pass">[] = ["fail", "pending"];
+const NOT_PASSING: readonly NotPassing[] = ["fail", "pending"];
 
-const SUMMARY_WORD: Record<CheckState, string> = { pass: "passed", fail: "failing", pending: "running" };
+const SUMMARY_WORD: Record<NotPassing, string> = { fail: "failing", pending: "running" };
 
 const SUMMARY_MARK: Record<CheckState, string> = { pass: "checkmark.circle", fail: "xmark.circle", pending: "clock" };
 
@@ -469,21 +472,34 @@ const summaryIn = (state: CheckState, text: string): ChecksSummary => ({
   color: SUMMARY_COLOR[state],
 });
 
+// A line with no verdict: no checks, or none in a state the summary knows.
+const neutral = (text: string): ChecksSummary => ({ text, mark: "minus.circle", color: T.tertiary });
+
+function passedLine(n: number, dim: boolean): ChecksSummary {
+  const line = summaryIn("pass", n === 1 ? "1 check passed" : "All " + n + " checks passed");
+  // A stale pass drops to grey, as a stale ready chip does (shownHealth).
+  return dim ? { ...line, color: prInk("quiet") } : line;
+}
+
 /**
  * The checks in one line: "All 3 checks passed" (one alone reads "1 check
- * passed") in green, else the checks not passing, counted worst first
- * ("1 failing · 2 running"), in the worst one's colour. The card hides
- * it while there are no checks.
+ * passed") in green only when every check passed, else the checks not
+ * passing, counted worst first ("1 failing · 2 running"), in the worst
+ * one's colour. With `dim` (the PR's data is stale) a pass turns grey; the
+ * card also fades the line. "No checks", with no verdict, when there are
+ * none, though the card hides it then.
  */
-export function checksSummary(rows: readonly CheckRow[]): ChecksSummary {
+export function checksSummary(rows: readonly CheckRow[], dim = false): ChecksSummary {
+  if (rows.length === 0) return neutral("No checks");
+  if (rows.every((c) => c.state === "pass")) return passedLine(rows.length, dim);
   const counts = NOT_PASSING.map((s) => ({ s, n: rows.filter((c) => c.state === s).length })).filter((x) => x.n);
   const worst = counts[0];
-  if (!worst) return summaryIn("pass", rows.length === 1 ? "1 check passed" : "All " + rows.length + " checks passed");
+  if (!worst) return neutral(rows.filter((c) => c.state !== "pass").length + " not passed");
   return summaryIn(worst.s, counts.map((x) => x.n + " " + SUMMARY_WORD[x.s]).join(" · "));
 }
 
-/** The selected workspace's checks summary. */
-export const checksLine = computed((): ChecksSummary => checksSummary(checks()));
+/** The selected workspace's checks summary, grey on a stale pass. */
+export const checksLine = computed((): ChecksSummary => checksSummary(checks(), currentPrDim()));
 
 /** The checks listed under the summary: only those not passing, since the summary counts the rest. */
 export const openChecks = computed((): CheckRow[] => checks().filter((c) => c.state !== "pass"));
