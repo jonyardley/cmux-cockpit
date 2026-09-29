@@ -91,50 +91,7 @@ describe("the row's from line", () => {
 });
 
 describe("a tap on the row", () => {
-  it("has a chat to go to only while the chat's workspace is open", () => {
-    assert.ok(m.canShowInChat(entry(1)));
-    assert.ok(m.canShowInChat(entry(2)));
-    assert.ok(!m.canShowInChat(entry(3)));
-    assert.ok(!m.canShowInChat(entry(4)));
-  });
-
-  it("opens GitHub for this chat's PR when there is no terminal to flash", () => {
-    const origin = { url: pr(5), number: 5, workspace: "here", session: "s", epoch: NOW };
-    assert.ok(!m.canShowInChat({ origin }));
-    m.goToPr({ origin, pr: { url: pr(5) } });
-    assert.deepEqual(r.calls, []);
-    assert.deepEqual(r.opened, [pr(5)]);
-  });
-
-  it("selects the chat's workspace, then focuses and flashes its terminal", () => {
-    m.goToPr(entry(1));
-    assert.deepEqual(
-      r.calls.map((c) => [c.method, c.params]),
-      [
-        ["workspace.select", { workspace_id: "here" }],
-        ["surface.focus", { surface_id: "s-here", workspace_id: "here" }],
-        ["surface.trigger_flash", { surface_id: "s-here", workspace_id: "here" }],
-      ],
-    );
-    assert.deepEqual(r.opened, []);
-  });
-
-  it("only selects when no terminal was saved", () => {
-    m.goToPr(entry(2));
-    assert.deepEqual(
-      r.calls.map((c) => c.method),
-      ["workspace.select"],
-    );
-  });
-
-  it("opens GitHub once the chat has gone, or with no origin", () => {
-    m.goToPr(entry(3));
-    m.goToPr(entry(4));
-    assert.deepEqual(r.calls, []);
-    assert.deepEqual(r.opened, [pr(3), pr(4)]);
-  });
-
-  it("keeps the pill's tap apart from the row's, so a pill tap never also jumps", () => {
+  it("has one tap target, the whole row, so a tap anywhere opens the PR", () => {
     const root = nodeOf(prRow(() => ({ ...entry(1), last: true })));
     assert.ok(root);
     const taps = (n: ViewNode): ViewNode[] => [
@@ -142,7 +99,9 @@ describe("a tap on the row", () => {
       ...n.children.flatMap(taps),
     ];
     const tappable = taps(root);
-    assert.equal(tappable.length, 2);
-    for (const n of tappable) assert.deepEqual(taps(n), [n]);
+    assert.equal(tappable.length, 1);
+    // The row itself, the first child of the ruled wrapper.
+    assert.equal(tappable[0], root.children[0]);
+    assert.ok(tappable[0]?.mods.some((x) => x.name === "hoverBackground"));
   });
 });

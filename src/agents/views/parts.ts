@@ -2,7 +2,7 @@
 
 import { prChipColors, shownHealth } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
-import { haloDot, projectBadge, ring, sectionTitle, tapChip } from "../../shared/ui.ts";
+import { chip, haloDot, projectBadge, ring, sectionTitle } from "../../shared/ui.ts";
 import { type PrEntry, prChipHealth, prChipText, prDim } from "../model.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
 
@@ -65,12 +65,8 @@ export function jump(wsId: string, surfaceId: string | undefined): void {
   if (surfaceId) cmux("surface.focus", { surface_id: surfaceId, workspace_id: wsId });
 }
 
-/** A PR's state chip, "draft ↗": coloured words that open the PR on GitHub, dimmed while stale. */
+/** A PR's state chip, "draft ↗": coloured words, dimmed while stale. Its row opens the PR. */
 export function prChip(e: () => PrEntry): View {
   const colors = () => prChipColors(shownHealth(prChipHealth(e()), prDim(e())));
-  return tapChip(
-    () => prChipText(e()) + " ↗",
-    colors,
-    () => e().pr.url,
-  ).opacity(() => (prDim(e()) ? STALE_OPACITY : 1));
+  return chip(() => prChipText(e()) + " ↗", colors).opacity(() => (prDim(e()) ? STALE_OPACITY : 1));
 }

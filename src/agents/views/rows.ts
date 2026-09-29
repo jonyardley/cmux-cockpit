@@ -3,7 +3,7 @@
 
 import type { Last } from "../../shared/list.ts";
 import { meta, openIfUrl, when } from "../../shared/ui.ts";
-import { goToPr, type MadeEntry, madeAge, madeIcon, madeTitleColor, type PrEntry, prFromText } from "../model.ts";
+import { type MadeEntry, madeAge, madeIcon, madeTitleColor, type PrEntry, prFromText } from "../model.ts";
 import { T } from "../theme.ts";
 import { glyph, prChip, ruled } from "./parts.ts";
 
@@ -19,8 +19,7 @@ export function footRow(text: () => string, onTap: () => void): View {
   return ruled(row, () => true);
 }
 
-/** A PR row: tap goes back to the chat that opened it (GitHub once that
- * chat has gone); the state pill opens GitHub. */
+/** A PR row: a tap anywhere on it, the state words included, opens the PR on GitHub. */
 export function prRow(e: () => Last<PrEntry>): View {
   const top = HStack({ spacing: 10 }, [
     Text(() => "#" + (e().pr.number ?? ""))
@@ -37,9 +36,7 @@ export function prRow(e: () => Last<PrEntry>): View {
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
   ]);
-  // The tappable part stops short of the pill, so a tap on the pill can
-  // only open GitHub and never also jump to the chat.
-  const tappable = VStack({ spacing: 2, alignment: "leading" }, [
+  const text = VStack({ spacing: 2, alignment: "leading" }, [
     top,
     when(
       "pr-from",
@@ -52,20 +49,18 @@ export function prRow(e: () => Last<PrEntry>): View {
   ])
     .paddingLeading(12)
     .paddingVertical(10)
-    .hoverBackground(T.hover)
-    .frame({ maxWidth: "infinity", alignment: "leading" })
-    .onTap(() => goToPr(e()));
-  // Top-aligned and padded down to the first line, so the pill stays
+    .frame({ maxWidth: "infinity", alignment: "leading" });
+  // Top-aligned and padded down to the first line, so the state stays
   // beside the title when the from line shows under it. Stale rides
   // inside the chip: an empty sibling Text would still cost spacing.
-  const pill = VStack({ spacing: 0 }, [prChip(e)])
+  const state = VStack({ spacing: 0 }, [prChip(e)])
     .paddingTop(9)
     .paddingTrailing(10)
     .layoutPriority(2);
-  const row = HStack({ spacing: 6, alignment: "top" }, [tappable, pill]).frame({
-    maxWidth: "infinity",
-    alignment: "leading",
-  });
+  const row = HStack({ spacing: 6, alignment: "top" }, [text, state])
+    .hoverBackground(T.hover)
+    .frame({ maxWidth: "infinity", alignment: "leading" })
+    .onTap(() => openIfUrl(e().pr.url));
   return ruled(row, () => e().last);
 }
 
