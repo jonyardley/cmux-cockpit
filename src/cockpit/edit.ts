@@ -6,12 +6,16 @@
 import type { ProjectSpec } from "../../scripts/state-config.ts";
 import { isHex, isMatchKey, isName, isRoot, isSymbol, MAX_NAME } from "../shared/project-rules.ts";
 import { matchesOf, PROJECT_COLORS, PROJECT_ICONS, PROJECTS, projectId } from "../shared/projects.ts";
+import { SYMBOLS } from "../shared/symbols.ts";
 import { knownProjects, removeProject, saveProject, specOf } from "./model.ts";
 import { editingProject, setEditingProject } from "./state.ts";
 
 const [draft, setDraft] = signal<ProjectSpec>({ name: "", color: PROJECT_COLORS[0], icon: PROJECT_ICONS[0] });
 // Remove asks twice: a project from the file cannot come back from the sidebar.
 const [removing, setRemoving] = signal(false);
+// The icon search's words. Read only inside closures, so typing redraws the
+// picker's rows and not the whole editor.
+const [iconQuery, setIconQuery] = signal("");
 
 export const draftSpec = (): ProjectSpec => draft();
 
@@ -32,6 +36,7 @@ export function openEditor(k: string): void {
   if (!spec) return;
   setDraft({ ...spec });
   setRemoving(false);
+  setIconQuery("");
   setEditingProject(k);
 }
 
@@ -43,6 +48,8 @@ export function closeEditor(): void {
 export const setDraftName = (name: string): void => setDraft({ ...draft(), name });
 export const setDraftColor = (color: string): void => setDraft({ ...draft(), color });
 export const setDraftIcon = (icon: string): void => setDraft({ ...draft(), icon });
+export const iconSearch = (): string => iconQuery();
+export const setIconSearch = (text: string): void => setIconQuery(text);
 
 /** An empty folder clears it, so the header loses its "+". */
 export function setDraftFolder(text: string): void {
@@ -105,17 +112,41 @@ export function matchesLine(k: string): string {
   return "Sessions in " + (p ? matchesOf(p) : [k]).join(", ");
 }
 
-const ICONS_PER_ROW = 6;
+const ICONS_PER_ROW = 8;
+const MAX_MATCHES = 2 * ICONS_PER_ROW;
 
 /**
- * The icon picker's rows, at most six to a row so they fit the sidebar. A
- * project whose icon is not one of PROJECT_ICONS (set in projects.json) gets
- * it as the first choice, so it shows selected and can be picked again.
+ * The common row: PROJECT_ICONS, still one row. A project whose icon is not
+ * one of them (set in projects.json, or found by search) gets it as the
+ * first choice, so it shows selected and can be picked again.
  */
-export function iconRows(current: string): string[][] {
+export function commonIcons(current: string): string[] {
   const known: readonly string[] = PROJECT_ICONS;
-  const icons = known.includes(current) || !isSymbol(current) ? [...known] : [current, ...known];
+  if (known.includes(current) || !isSymbol(current)) return [...known];
+  return [current, ...known.slice(0, ICONS_PER_ROW - 1)];
+}
+
+/**
+ * The stored symbols holding every word typed, as many as two rows take.
+ * Words match across the dots, so "music note" finds music.note.
+ */
+export function iconMatches(query: string): string[] {
+  const words = query
+    .toLowerCase()
+    .split(/[\s.]+/)
+    .filter(Boolean);
+  if (!words.length) return [];
+  return SYMBOLS.filter((n) => words.every((w) => n.includes(w))).slice(0, MAX_MATCHES);
+}
+
+/** The picker's rows, eight to a row: the common row while the search is empty, else its matches. */
+export function iconRows(current: string, query: string = iconQuery()): string[][] {
+  const icons = query.trim() ? iconMatches(query) : commonIcons(current);
   const rows: string[][] = [];
   for (let i = 0; i < icons.length; i += ICONS_PER_ROW) rows.push(icons.slice(i, i + ICONS_PER_ROW));
   return rows;
 }
+
+/** The line under the search when it finds nothing, or "" while it finds something or is empty. */
+export const noMatchLine = (query: string = iconQuery()): string =>
+  query.trim() && !iconMatches(query).length ? `No icons match "${query.trim()}".` : "";

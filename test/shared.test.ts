@@ -15,6 +15,8 @@ const { cleanTitle, oneLine, readable, tracked } = await import("../src/shared/t
 const { finishedAt, fmtAge, fmtElapsed, nowEpoch } = await import("../src/shared/time.ts");
 const { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } = await import("../src/shared/words.ts");
 const { P, STATUS_TEXT } = await import("../src/shared/palette.ts");
+const { SYMBOLS } = await import("../src/shared/symbols.ts");
+const { isHex, isSymbol } = await import("../src/shared/project-rules.ts");
 const { agent } = await import("./support/fixtures.ts");
 
 describe("cleanTitle", () => {
@@ -57,6 +59,21 @@ describe("oneLine", () => {
   it("cuts with an ellipsis at max characters", () => {
     assert.equal(oneLine("abcdefghij words", 8), "abcdefg…");
     assert.equal(oneLine("short words", 80), "short words");
+  });
+});
+
+describe("the editor's sets", () => {
+  it("holds sixteen distinct colours, two rows of eight", () => {
+    assert.equal(PROJECT_COLORS.length, 16);
+    assert.ok(PROJECT_COLORS.every(isHex));
+    assert.equal(new Set(PROJECT_COLORS.map((c) => c.toLowerCase())).size, 16);
+  });
+
+  it("stores about two hundred distinct symbol names, the common row first", () => {
+    assert.ok(SYMBOLS.length >= 200);
+    assert.ok(SYMBOLS.every(isSymbol));
+    assert.equal(new Set(SYMBOLS).size, SYMBOLS.length);
+    assert.deepEqual(SYMBOLS.slice(0, PROJECT_ICONS.length), [...PROJECT_ICONS]);
   });
 });
 

@@ -14,20 +14,28 @@ export const PROJECT_COLORS = [
   "#CC6B8E",
   "#4F9C94",
   "#8A7F72",
+  "#B8503C",
+  "#E0934A",
+  "#98AE4E",
+  "#3E7FA8",
+  "#6C74C9",
+  "#8E4F7E",
+  "#5D8A6A",
+  "#5E6670",
 ] as const;
 
-/** SF Symbols a sidebar-made project steps through; a new one starts on the first. */
+/**
+ * The editor's common icons, one row of eight, and the SF Symbols a
+ * seeded project steps through; a new one starts on the first. The icon
+ * search finds the rest (symbols.ts).
+ */
 export const PROJECT_ICONS = [
   "folder.fill",
-  "star.fill",
-  "cube.fill",
-  "leaf.fill",
+  "chevron.left.forwardslash.chevron.right",
+  "terminal.fill",
   "music.note",
-  "hammer.fill",
-  "book.fill",
-  "flame.fill",
+  "house.fill",
+  "bag.fill",
+  "star.fill",
   "bolt.fill",
-  "globe",
-  "paintbrush.fill",
-  "gearshape.fill",
 ] as const;
