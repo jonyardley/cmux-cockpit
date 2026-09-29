@@ -10,6 +10,8 @@ const { cardMessage } = await import("../src/shared/text.ts");
 const { dismissNeeds } = await import("../src/shared/needs.ts");
 const { summaryOf } = await import("../src/shared/prs.ts");
 const { liveRunCount } = await import("../src/shared/subagents.ts");
+const { countTint } = await import("../src/shared/ui.ts");
+const { P } = await import("../src/shared/palette.ts");
 
 beforeEach(() => {
   r.data.epoch = 10_000;
@@ -69,18 +71,6 @@ describe("headStatus", () => {
 });
 
 describe("the card's details", () => {
-  it("shows the details block only while a line has something to say", () => {
-    r.data.workspaces = [ws("sel", { selected: true })];
-    assert.equal(m.hasDetails(), false);
-    r.data.workspaces = [ws("sel", { selected: true, ports: [3000] })];
-    assert.equal(m.hasDetails(), true);
-    // The branch has its own footer line, so it opens no details block.
-    r.data.workspaces = [ws("sel", { selected: true, branch: "main", dirty: true })];
-    assert.equal(m.hasDetails(), false);
-    r.data.workspaces = [ws("sel", { selected: true, pr: { number: 1, url: "u/1", status: "open" } })];
-    assert.equal(m.hasDetails(), true);
-  });
-
   it("says the branch and uncommitted changes when dirty, never a file count", () => {
     r.data.workspaces = [ws("sel", { selected: true, branch: "main", dirty: true })];
     assert.equal(m.branchFooter(), "main · uncommitted changes");
@@ -517,6 +507,23 @@ describe("helpers and finishedLine", () => {
     assert.equal(m.helpers().length + m.helperMore(), liveRunCount(m.cur().ws));
     sel([run("a", { running: true })]);
     assert.equal(m.helperMore(), 0);
+  });
+
+  it("counts every running run in the heading's pill, past the cap too, and none settled", () => {
+    sel([
+      ...Array.from({ length: 7 }, (_, i) => run("r" + i, { running: true, startedEpoch: 100 + i })),
+      run("done", { running: false, endedEpoch: 300 }),
+    ]);
+    assert.equal(m.helperCount(), 7);
+    assert.equal(m.helperCount(), m.helpers().length + m.helperMore());
+    assert.equal(m.helperCount(), liveRunCount(m.cur().ws));
+    sel([]);
+    assert.equal(m.helperCount(), 0);
+  });
+
+  it("tints the helpers pill working blue, by the shared count tint", () => {
+    assert.deepEqual(m.HELPER_PILL, { bg: P.blueCount, fg: P.blueText });
+    assert.deepEqual(m.HELPER_PILL, countTint("working"));
   });
 
   it("says nothing finished when none has, and hides the block with no runs", () => {

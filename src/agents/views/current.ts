@@ -5,7 +5,17 @@
 
 import { dismissNeeds } from "../../shared/needs.ts";
 import { NEUTRAL_CHIP, prChipColors, shownHealth } from "../../shared/pr-colors.ts";
-import { branchText, linkBox, META_FONT, meta, motionList, sectionTitle, tapChip, when } from "../../shared/ui.ts";
+import {
+  branchText,
+  countPill,
+  linkBox,
+  META_FONT,
+  meta,
+  motionList,
+  sectionTitle,
+  tapChip,
+  when,
+} from "../../shared/ui.ts";
 import {
   type AgentRow,
   agentRows,
@@ -15,7 +25,7 @@ import {
   cardLine,
   checkDot,
   checks,
-  checksFigure,
+  checksLine,
   checkWord,
   cur,
   currentAsk,
@@ -23,14 +33,16 @@ import {
   currentPrDim,
   dotFor,
   finishedLine,
+  HELPER_PILL,
   haloFor,
-  hasDetails,
   hasHelpers,
   headStatus,
   helperAge,
+  helperCount,
   helperMore,
   helpers,
   hollowDot,
+  openChecks,
   portChips,
   type SubagentRow,
   statusColor,
@@ -100,7 +112,8 @@ function faintHelperLine(key: string, text: () => string): View {
 }
 
 // The Helpers block, as the left card counts them: while any run is
-// running, a small caps heading over one line per running run, ending in
+// running, a small caps heading and its count in working blue over one
+// line per running run, ending in
 // "+N more" past the cap; then one faint line for the settled ones. With
 // only settled runs, that faint line stands alone, with no heading over an
 // empty list. Hidden with neither, which is also what an install that never
@@ -116,7 +129,13 @@ function helpersBlock(): View {
           () => hasHelpers(),
           () =>
             VStack({ spacing: 0, alignment: "leading" }, [
-              sectionTitle("HELPERS", T.secondary).paddingBottom(2),
+              HStack({ spacing: 6 }, [
+                sectionTitle("HELPERS", T.secondary),
+                countPill(
+                  () => String(helperCount()),
+                  () => HELPER_PILL,
+                ),
+              ]).paddingBottom(4),
               motionList({ items: helpers, key: (e) => e.key, spacing: 0 }, (e) => subagentLine(e)),
               faintHelperLine("cur-subs-more", () => (helperMore() > 0 ? "+" + helperMore() + " more" : "")),
             ]).frame({ maxWidth: "infinity", alignment: "leading" }),
@@ -124,7 +143,7 @@ function helpersBlock(): View {
         faintHelperLine("cur-subs-done", finishedLine),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
-        .paddingTop(12),
+        .paddingTop(18),
   );
 }
 
@@ -151,23 +170,32 @@ function checkLine(e: () => CheckRow): View {
     .frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
-// Board 1's Checks block: "CHECKS 3 / 5" over one line per check. Hidden
-// while the PR has none, or the workspace has no saved PR.
+// The checks in one line under the PR ("All 3 checks passed", "1 failing
+// · 1 running"), its mark and words in the worst state's colour, then one
+// line per check not passing: a passing check needs no line of its own.
+// Hidden while the PR has none, or the workspace has no saved PR.
 function checksBlock(): View {
   return when(
     "cur-checks",
     () => checks().length > 0,
     () =>
       VStack({ spacing: 0, alignment: "leading" }, [
-        HStack({ spacing: 6 }, [
-          sectionTitle("CHECKS", T.secondary),
-          Text(() => checksFigure(checks()))
-            .font(10.5)
-            .monospaced()
-            .color(T.tertiary)
+        HStack({ spacing: 8 }, [
+          Image(() => checksLine().mark)
+            .font(12)
+            .color(() => checksLine().color),
+          Text(() => checksLine().text)
+            .font(12)
+            .weight("medium")
+            .color(() => checksLine().color)
             .lineLimit(1),
-        ]).paddingBottom(2),
-        motionList({ items: checks, key: (e) => e.key, spacing: 0 }, (e) => checkLine(e)),
+        ]),
+        // Unmounted with nothing to list, so no empty Reorderable sits in the card.
+        when(
+          "cur-checks-open",
+          () => openChecks().length > 0,
+          () => motionList({ items: openChecks, key: (e) => e.key, spacing: 0 }, (e) => checkLine(e)).paddingTop(2),
+        ),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
         .paddingTop(12),
@@ -177,7 +205,7 @@ function checksBlock(): View {
 // Selects the workspace and focuses the asking agent's terminal. One face,
 // no ring: a ring's rim would show round the hover colour.
 function answerButton(): View {
-  return Text("Answer")
+  return Text("Open chat")
     .font(12)
     .weight("semibold")
     .color(T.onClay)
@@ -206,7 +234,7 @@ function dismissButton(): View {
 
 // The question, when the agent needs you: its words (none when there is only
 // the generic fallback or they may be another agent's), or how many agents
-// ask, then Answer (only with a terminal to focus) and Dismiss. The title is
+// ask, then Open chat (only with a terminal to focus) and Dismiss. The title is
 // not repeated: the highlighted card on the left already shows it.
 function askBlock(): View {
   return when(
@@ -240,7 +268,7 @@ function askBlock(): View {
 }
 
 // The labelled rows' label column, with every value on one x after it.
-// Wide enough for "Asked", "Ports" and "PR".
+// Wide enough for "Asked" and "Ports".
 const LABEL = 48;
 const LABEL_GAP = 8;
 // One gap above every line under the status, labelled rows included, the
@@ -294,7 +322,7 @@ function statusWords(): View {
 }
 
 // A labelled row: a quiet label in the one label column, then the value.
-// Asked, Ports and PR all use it, so their labels share a left edge,
+// Asked and Ports both use it, so their labels share a left edge,
 // their values share another, and each row keeps the same gap above it.
 // Align "top" to pin the label to the value's first line, for a value that
 // wraps; label and value share one size, so their first lines line up. A
@@ -385,7 +413,7 @@ function progressBlock(): View {
   );
 }
 
-// The PR line's value: its number, then its own title (the part that gives
+// The PR's line: its number, then its own title (the part that gives
 // way). The state chip sits on the status line above, so it shows once.
 function prDetail(): View {
   return (
@@ -413,49 +441,67 @@ function prDetail(): View {
   );
 }
 
-function detailsBlock(): View {
-  return when(
-    "cur-details",
-    () => hasDetails(),
+// The open ports, the status part's last row.
+function portsRow(): View {
+  return labelled(
+    "cur-ports",
+    "Ports",
+    () => portChips().length > 0,
     () =>
-      // No gap of its own: each labelled row carries the one above it.
+      HStack({ spacing: 6 }, [
+        ForEach({ items: () => portChips(), key: (x) => x.key }, (x) =>
+          tapChip(
+            () => x().label,
+            () => NEUTRAL_CHIP,
+            () => x().url,
+            true,
+          ),
+        ),
+      ]),
+  );
+}
+
+// The faint rule between the card's parts, full width, its gaps on a
+// wrapper so they stay clear of the rule's own colour.
+function hairline(above: number, below: number): View {
+  return VStack({ spacing: 0, alignment: "leading" }, [
+    Rectangle().fill(T.rule).frame({ maxWidth: "infinity", height: 1 }),
+  ])
+    .frame({ maxWidth: "infinity", alignment: "leading" })
+    .paddingTop(above)
+    .paddingBottom(below);
+}
+
+// The pull request part, under a rule: a small caps heading, the PR's
+// line, then its checks. Hidden with no PR.
+function prSection(): View {
+  return when(
+    "cur-pr",
+    () => !!currentPr(),
+    () =>
       VStack({ spacing: 0, alignment: "leading" }, [
-        labelled(
-          "cur-ports",
-          "Ports",
-          () => portChips().length > 0,
-          () =>
-            HStack({ spacing: 6 }, [
-              ForEach({ items: () => portChips(), key: (x) => x.key }, (x) =>
-                tapChip(
-                  () => x().label,
-                  () => NEUTRAL_CHIP,
-                  () => x().url,
-                  true,
-                ),
-              ),
-            ]),
-        ),
-        labelled(
-          "cur-pr",
-          "PR",
-          () => !!currentPr(),
-          () => prDetail(),
-        ),
+        hairline(16, 14),
+        sectionTitle("PULL REQUEST", T.secondary),
+        prDetail().paddingTop(8),
+        checksBlock(),
       ]).frame({ maxWidth: "infinity", alignment: "leading" }),
   );
 }
 
-// The branch and whether it is clean, one faint line at the foot: "main ·
-// clean", "main · uncommitted changes".
+// The branch and whether it is clean, one faint line at the foot under a
+// rule, after a branch glyph: "main · clean", "main · uncommitted changes".
 function branchBlock(): View {
   return when(
     "cur-branch",
     () => !!branchFooter(),
     () =>
-      branchText(() => branchFooter(), T.tertiary)
-        .frame({ maxWidth: "infinity", alignment: "leading" })
-        .paddingTop(LINE_GAP),
+      VStack({ spacing: 0, alignment: "leading" }, [
+        hairline(16, 12),
+        HStack({ spacing: 6 }, [
+          Image("arrow.branch").font(10).color(T.tertiary),
+          branchText(() => branchFooter(), T.tertiary),
+        ]).frame({ maxWidth: "infinity", alignment: "leading" }),
+      ]).frame({ maxWidth: "infinity", alignment: "leading" }),
   );
 }
 
@@ -467,8 +513,8 @@ function currentHead(): View {
     messageBlock(),
     progressBlock(),
     helpersBlock(),
-    detailsBlock(),
-    checksBlock(),
+    portsRow(),
+    prSection(),
     branchBlock(),
   ])
     .padding(14)

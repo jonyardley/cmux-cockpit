@@ -6,7 +6,7 @@
 //                    card on the left. What that card has no room for: its
 //                    agent's latest message, running helpers, ports, the PR
 //                    and its checks, and a faint branch footer. When its
-//                    agent needs you, the card carries the question, Answer
+//                    agent needs you, the card carries the question, Open chat
 //                    (select + focus surface) and Dismiss (local to this
 //                    panel, src/shared/needs.ts). No Allow/Deny: that needs
 //                    the real diff/tool-call payload, which this data

@@ -12,7 +12,7 @@ import { quietSince, quietSuffix } from "../shared/quiet.ts";
 import { liveRunCount } from "../shared/subagents.ts";
 import { cardMessage, clip, oneLine, promptText, readable } from "../shared/text.ts";
 import { ageSince, finishedAt } from "../shared/time.ts";
-import { type HaloStatus, haloColor, type PillColors, QUIET_PILL } from "../shared/ui.ts";
+import { countTint, type HaloStatus, haloColor, type PillColors, type Urgency } from "../shared/ui.ts";
 import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge, YOU_WORD } from "../shared/words.ts";
 import { isSelected } from "./state.ts";
 import { C } from "./theme.ts";
@@ -38,12 +38,6 @@ export function sinceOf(w: Workspace | undefined): number {
 export function ageOf(w: Workspace | undefined): string {
   return ageSince(sinceOf(w));
 }
-
-/**
- * How urgent a workspace is for its header's count pill, ranked needs you,
- * asking, working (quiet or not), then quiet: finished, idle and no agent.
- */
-export type Urgency = "needs" | "asking" | "working" | "quiet";
 
 export interface StatusStyle {
   label: string;
@@ -158,14 +152,10 @@ export function statusInfo(w: Workspace | undefined): StatusStyle {
 // A header's count pill takes the hue of its most urgent session: needs
 // you, then asking, then working. Finished, idle and no agent leave it grey.
 
-const URGENCY_RANK: readonly Urgency[] = ["needs", "asking", "working", "quiet"];
+// The tint itself is shared/ui.ts's countTint, so the agents panel's pills
+// read the same.
 
-const COUNT_TINT: Record<Urgency, PillColors> = {
-  needs: { bg: C.clayCount, fg: C.clayText },
-  asking: { bg: C.amberCount, fg: C.amberText },
-  working: { bg: C.blueCount, fg: C.blueText },
-  quiet: QUIET_PILL,
-};
+const URGENCY_RANK: readonly Urgency[] = ["needs", "asking", "working", "quiet"];
 
 /** A workspace's urgency: the one its card's status (statusInfo) carries. */
 export const urgencyOf = (w: Workspace | undefined): Urgency => statusInfo(w).urgency;
@@ -192,7 +182,7 @@ export function mostUrgentOf(ws: readonly Workspace[]): Workspace | undefined {
 export const mostUrgent = (ws: readonly Workspace[]): Urgency => urgencyOf(mostUrgentOf(ws));
 
 /** A count pill's colours for the workspaces it counts: its most urgent session's hue, else grey. */
-export const countColors = (ws: readonly Workspace[]): PillColors => COUNT_TINT[mostUrgent(ws)];
+export const countColors = (ws: readonly Workspace[]): PillColors => countTint(mostUrgent(ws));
 
 /** What a lane or project header shows beside its count. */
 export interface HeaderStatus {
@@ -204,7 +194,7 @@ export interface HeaderStatus {
 /** A header's pill tint and, folded, its lead's dot, from one walk over its cards. */
 export function headerStatus(ws: readonly Workspace[], folded: boolean): HeaderStatus {
   const lead = mostUrgentOf(ws);
-  return { tint: COUNT_TINT[urgencyOf(lead)], dot: folded ? lead : undefined };
+  return { tint: countTint(urgencyOf(lead)), dot: folded ? lead : undefined };
 }
 
 /** The "Your move" line the workspace's chat ended its turn on, while that turn is still waiting on Jon. */

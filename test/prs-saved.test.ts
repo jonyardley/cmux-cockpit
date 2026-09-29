@@ -5,6 +5,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { CheckState } from "../scripts/state-config.ts";
 
 const checks = [
   { name: "lint", state: "fail" },
@@ -62,6 +63,7 @@ const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
 const { checksOf, prOf, prSummary, prsOf } = await import("../src/shared/prs.ts");
 const agents = await import("../src/agents/model.ts");
+const { P } = await import("../src/shared/palette.ts");
 
 describe("prsOf", () => {
   it("shows the saved PR while the workspace is on its branch", () => {
@@ -164,7 +166,7 @@ describe("checksOf", () => {
 });
 
 describe("the agents panel's Checks block", () => {
-  it("lists the selected workspace's checks with passed over total", () => {
+  it("lists the selected workspace's checks, summed up worst first", () => {
     r.data.workspaces = [ws("w1", { branch: "feat", selected: true })];
     r.data.epoch++;
     const rows = agents.checks();
@@ -176,8 +178,13 @@ describe("the agents panel's Checks block", () => {
         ["build", "passed", "#788C5D"],
       ],
     );
-    assert.equal(agents.checksFigure(rows), "1 / 3");
     assert.equal(new Set(rows.map((c) => c.key)).size, 3);
+    assert.deepEqual(agents.checksLine(), { text: "1 failing · 1 running", mark: "xmark.circle", color: P.redText });
+    // The passing check drops out of the lines: the summary counts it.
+    assert.deepEqual(
+      agents.openChecks().map((c) => c.name),
+      ["lint", "test"],
+    );
   });
 
   it("keeps each check's key when a re-sort moves it, and splits same-named checks", () => {
@@ -202,7 +209,53 @@ describe("the agents panel's Checks block", () => {
     r.data.workspaces = [ws("w1", { branch: "feat" })];
     r.data.epoch++;
     assert.deepEqual(agents.checks(), []);
-    assert.equal(agents.checksFigure([]), "0 / 0");
+    assert.deepEqual(agents.openChecks(), []);
+  });
+});
+
+describe("checksSummary", () => {
+  const rows = (...states: CheckState[]) => agents.checkRows(states.map((state, i) => ({ name: "c" + i, state })));
+
+  it("says all passed in green, and one check alone without 'All'", () => {
+    assert.deepEqual(agents.checksSummary(rows("pass", "pass", "pass")), {
+      text: "All 3 checks passed",
+      mark: "checkmark.circle",
+      color: P.greenText,
+    });
+    assert.equal(agents.checksSummary(rows("pass")).text, "1 check passed");
+  });
+
+  it("counts the failing ones in red, leaving the passed out of the words", () => {
+    assert.deepEqual(agents.checksSummary(rows("pass", "fail", "fail")), {
+      text: "2 failing",
+      mark: "xmark.circle",
+      color: P.redText,
+    });
+  });
+
+  it("counts the running ones in blue while none fails", () => {
+    assert.deepEqual(agents.checksSummary(rows("pending", "pass")), {
+      text: "1 running",
+      mark: "clock",
+      color: P.blueText,
+    });
+  });
+
+  it("puts failing before running, whatever order the checks come in, coloured by the worst", () => {
+    const s = agents.checksSummary(rows("pending", "pass", "pending", "fail"));
+    assert.equal(s.text, "1 failing · 2 running");
+    assert.equal(s.color, P.redText);
+    assert.equal(s.mark, "xmark.circle");
+  });
+
+  it("lists only the checks not passing, in the poller's order", () => {
+    r.data.workspaces = [ws("running", { branch: "feat", selected: true })];
+    r.data.epoch++;
+    assert.deepEqual(
+      agents.openChecks().map((c) => [c.name, c.state]),
+      [["test", "pending"]],
+    );
+    assert.equal(agents.checksLine().text, "1 running");
   });
 });
 

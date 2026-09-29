@@ -20,9 +20,11 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                     Text "1 failing" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(redText) .paddingHorizontal(6) .paddingVertical(1) .background(redChipFace) .cornerRadius(5) .hoverBackground(#B442372E)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
               Text "Recorded six scenes; the lanes one is the longest." .font(12) .color(secondary|badge|neutralChip.fg) .lineLimit(4) .truncation(tail) .paddingHorizontal(8) .paddingVertical(6) .frame(maxWidth: infinity, alignment: leading) .background(quote) .cornerRadius(6)
-            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(12)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(18)
               VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
-                Text "H\u200aE\u200aL\u200aP\u200aE\u200aR\u200aS" .font(10.5) .weight(semibold) .color(secondary|badge|neutralChip.fg) .lineLimit(1) .paddingBottom(2)
+                HStack spacing: 6 .paddingBottom(4)
+                  Text "H\u200aE\u200aL\u200aP\u200aE\u200aR\u200aS" .font(10.5) .weight(semibold) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
+                  Text "1" .font(11) .weight(medium) .color(blueText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(blueCount) .cornerRadius(10)
                 Reorderable spacing: 0
                   HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .fixed()
                     ZStack .frame(width: 13, height: 13)
@@ -31,49 +33,48 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                     Text "Review the diff" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                     Spacer minLength: 4
                     Text "1m" .font(11) .monospaced() .color(secondary|badge|neutralChip.fg) .lineLimit(1) .layoutPriority(2)
+            HStack spacing: 8, alignment: center .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
+              Text "Ports" .font(11) .color(tertiary) .lineLimit(1) .frame(maxWidth: infinity, alignment: leading) .frame(width: 48)
+              HStack spacing: 6
+                VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|neutralChip.edge) .cornerRadius(6) .hoverBackground(#9A9890) .onTap()
+                  Text ":5173" .font(11) .monospaced() .weight(medium) .lineLimit(1) .truncation(tail) .color(secondary|badge|neutralChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(chipFace|neutralChip.bg) .cornerRadius(5) .hoverBackground(#E2E0D9)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
-              HStack spacing: 8, alignment: center .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
-                Text "Ports" .font(11) .color(tertiary) .lineLimit(1) .frame(maxWidth: infinity, alignment: leading) .frame(width: 48)
-                HStack spacing: 6
-                  VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|neutralChip.edge) .cornerRadius(6) .hoverBackground(#9A9890) .onTap()
-                    Text ":5173" .font(11) .monospaced() .weight(medium) .lineLimit(1) .truncation(tail) .color(secondary|badge|neutralChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(chipFace|neutralChip.bg) .cornerRadius(5) .hoverBackground(#E2E0D9)
-              HStack spacing: 8, alignment: center .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
-                Text "PR" .font(11) .color(tertiary) .lineLimit(1) .frame(maxWidth: infinity, alignment: leading) .frame(width: 48)
-                VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
-                  HStack spacing: -7
-                    Rectangle .fill(clear) .frame(width: 0, height: 0)
-                    VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(6) .hoverBackground(linkEdge) .onTap()
-                      HStack spacing: 6 .paddingHorizontal(6) .background(clear) .cornerRadius(5) .hoverBackground(linkHover)
-                        Text "#12" .font(11) .monospaced() .color(secondary|badge|neutralChip.fg) .lineLimit(1) .layoutPriority(2)
-                        Text "Text snapshots for the sidebars" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1) .truncation(tail)
-                        Text "↗" .font(9) .weight(semibold) .color(secondary|badge|neutralChip.fg) .lineLimit(1) .layoutPriority(2) .opacity(1) .showOnHover()
-            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(12)
-              HStack spacing: 6 .paddingBottom(2)
-                Text "C\u200aH\u200aE\u200aC\u200aK\u200aS" .font(10.5) .weight(semibold) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
-                Text "1 / 3" .font(10.5) .monospaced() .color(tertiary) .lineLimit(1)
-              Reorderable spacing: 0
-                HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .fixed()
-                  ZStack .frame(width: 13, height: 13)
-                    Circle size: 13 .fill(clear)
-                    Circle size: 7 .fill(red) .stroke(clear) .strokeWidth(1.5)
-                  Text "lint" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-                  Spacer minLength: 4
-                  Text "failed" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
-                HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .fixed()
-                  ZStack .frame(width: 13, height: 13)
-                    Circle size: 13 .fill(clear)
-                    Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
-                  Text "build" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-                  Spacer minLength: 4
-                  Text "running" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
-                HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .fixed()
-                  ZStack .frame(width: 13, height: 13)
-                    Circle size: 13 .fill(clear)
-                    Circle size: 7 .fill(green) .stroke(clear) .strokeWidth(1.5)
-                  Text "test" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-                  Spacer minLength: 4
-                  Text "passed" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
-            Text "snapshots" .font(11) .weight(regular) .color(tertiary) .lineLimit(1) .truncation(middle) .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
+              VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(16) .paddingBottom(14)
+                Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+              Text "P\u200aU\u200aL\u200aL R\u200aE\u200aQ\u200aU\u200aE\u200aS\u200aT" .font(10.5) .weight(semibold) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
+              VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(8)
+                HStack spacing: -7
+                  Rectangle .fill(clear) .frame(width: 0, height: 0)
+                  VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(6) .hoverBackground(linkEdge) .onTap()
+                    HStack spacing: 6 .paddingHorizontal(6) .background(clear) .cornerRadius(5) .hoverBackground(linkHover)
+                      Text "#12" .font(11) .monospaced() .color(secondary|badge|neutralChip.fg) .lineLimit(1) .layoutPriority(2)
+                      Text "Text snapshots for the sidebars" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1) .truncation(tail)
+                      Text "↗" .font(9) .weight(semibold) .color(secondary|badge|neutralChip.fg) .lineLimit(1) .layoutPriority(2) .opacity(1) .showOnHover()
+              VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(12)
+                HStack spacing: 8
+                  Image xmark.circle .font(12) .color(redText)
+                  Text "1 failing · 1 running" .font(12) .weight(medium) .color(redText) .lineLimit(1)
+                Reorderable spacing: 0 .paddingTop(2)
+                  HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .fixed()
+                    ZStack .frame(width: 13, height: 13)
+                      Circle size: 13 .fill(clear)
+                      Circle size: 7 .fill(red) .stroke(clear) .strokeWidth(1.5)
+                    Text "lint" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                    Spacer minLength: 4
+                    Text "failed" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
+                  HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .fixed()
+                    ZStack .frame(width: 13, height: 13)
+                      Circle size: 13 .fill(clear)
+                      Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
+                    Text "build" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                    Spacer minLength: 4
+                    Text "running" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
+              VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(16) .paddingBottom(12)
+                Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+              HStack spacing: 6 .frame(maxWidth: infinity, alignment: leading)
+                Image arrow.branch .font(10) .color(tertiary)
+                Text "snapshots" .font(11) .weight(regular) .color(tertiary) .lineLimit(1) .truncation(middle)
           Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
   VStack spacing: 8, alignment: leading
     HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
@@ -140,13 +141,13 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
 
 Colours
 blue #3B6FB6
+blueCount #3B6FB61F
 blueHalo #3B6FB62E
 blueText #2F5690
 chipEdge|neutralChip.edge #E2DFD3
 chipFace|neutralChip.bg #F1EFE8
 clay #D97757
 countBg #E5E2D6
-green #788C5D
 grey #A09E95
 hover #7F7F7F0F
 linkEdge #14141347

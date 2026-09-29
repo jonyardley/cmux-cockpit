@@ -259,6 +259,24 @@ export interface PillColors {
 export const QUIET_PILL: PillColors = { bg: P.countBg, fg: P.metaText };
 
 /**
+ * How urgent a count pill's sessions are, ranked needs you, asking,
+ * working (quiet or not), then quiet: finished, idle and no agent.
+ */
+export type Urgency = "needs" | "asking" | "working" | "quiet";
+
+// The one count tint rule both sides share: clay needs you, amber asking,
+// blue working; quiet leaves the pill grey.
+const COUNT_TINT: Record<Urgency, PillColors> = {
+  needs: { bg: P.clayCount, fg: P.clayText },
+  asking: { bg: P.amberCount, fg: P.amberText },
+  working: { bg: P.blueCount, fg: P.blueText },
+  quiet: QUIET_PILL,
+};
+
+/** A count pill's colours for the most urgent session behind its count. */
+export const countTint = (u: Urgency): PillColors => COUNT_TINT[u];
+
+/**
  * A header's count pill, one look on both sides. An empty count shows no
  * pill at all: the agents panel passes "" for a section header with no
  * count. Both sides show a 0 as a pill. `colors` tints it by the most
@@ -285,7 +303,7 @@ export function laneTitle(name: string, color: string, weight: Weight = "semibol
   return Text(name).font(12.5).weight(weight).color(color).lineLimit(1).truncation("tail").layoutPriority(1);
 }
 
-/** A section heading in tracked capitals: "NEEDS YOU", "HELPERS", "CHECKS". One line, since each hair space could break it. */
+/** A section heading in tracked capitals: "NEEDS YOU", "HELPERS", "PULL REQUEST". One line, since each hair space could break it. */
 export function sectionTitle(label: Reactive<string>, color: string): View {
   const text = typeof label === "function" ? () => tracked(label()) : tracked(label);
   return Text(text).font(10.5).weight("semibold").color(color).lineLimit(1);

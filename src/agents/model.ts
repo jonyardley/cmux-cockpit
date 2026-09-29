@@ -27,7 +27,7 @@ import { childRunning, pairLive, type SavedRun, savedRunning, savedRuns } from "
 import { cardMessage, promptText, readable } from "../shared/text.ts";
 import { ageSince, finishedAt, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
-import { type HaloStatus, haloColor } from "../shared/ui.ts";
+import { countTint, type HaloStatus, haloColor, type PillColors } from "../shared/ui.ts";
 import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } from "../shared/words.ts";
 import { CHECK_DOT, STATUS_DOT, T } from "./theme.ts";
 
@@ -112,7 +112,7 @@ export const cur = (): Current =>
 
 /** The selected workspace's open question. */
 export interface Ask {
-  /** The most active asking agent: Answer focuses its terminal. */
+  /** The most active asking agent: Open chat focuses its terminal. */
   a: Agent;
   /** The line over the buttons: "2 agents need you" when several do,
    * else why it is asking ("allow git push?"), else the agent's words, or
@@ -121,7 +121,7 @@ export interface Ask {
   text: string;
   /** How many agents in the workspace are asking. */
   count: number;
-  /** Answer shows only with a terminal to focus: without one it would only
+  /** Open chat shows only with a terminal to focus: without one it would only
    * select the workspace, which is already selected. */
   canAnswer: boolean;
   /** Dismiss clears every ask in the workspace, so it says so when there are several. */
@@ -252,9 +252,6 @@ const prStale = (): boolean => freshness().stale;
 
 /** The workspace's PR chip dims while it is the poller's copy and that copy is stale. */
 export const currentPrDim = computed((): boolean => !!currentPr() && fromPoller(cur().ws) && prStale());
-
-/** Whether Ports or PR shows, so an empty block costs no gap. */
-export const hasDetails = computed((): boolean => portChips().length > 0 || !!currentPr());
 
 // ---- This workspace's agent list -------------------------------------------
 
@@ -403,6 +400,14 @@ export const helperMore = computed((): number => moreThan(runningRuns().length, 
  * is running. With only settled runs, finishedLine stands alone. */
 export const hasHelpers = computed((): boolean => runningRuns().length > 0);
 
+/** The HELPERS heading's count: every running run, the lines plus
+ * helperMore, so it matches the left card's "3 helpers". */
+export const helperCount = computed((): number => runningRuns().length);
+
+/** The helpers count pill's colours: every run it counts is running, so
+ * the shared tint's working blue. */
+export const HELPER_PILL: PillColors = countTint("working");
+
 /** The faint line for the settled runs of sessions still open, "1 finished
  * earlier" or "3 finished earlier"; "" when none have. A closed session's
  * runs are not counted: they belong to work that is over. */
@@ -440,10 +445,48 @@ export function checkRows(list: readonly { name: string; state: CheckState }[]):
 /** The selected workspace's CI checks, as the poller last saved them. */
 export const checks = computed((): CheckRow[] => checkRows(checksOf(cur().ws)));
 
-/** Board 1's "3 / 5": passed over total. */
-export function checksFigure(rows: readonly CheckRow[]): string {
-  return rows.filter((c) => c.state === "pass").length + " / " + rows.length;
+/** The checks' summary line under the PR: its words, mark and colour. */
+export interface ChecksSummary {
+  text: string;
+  /** An SF Symbol, in the same colour as the words. */
+  mark: string;
+  color: string;
 }
+
+// The states that are not passing, worst first: the summary counts them
+// in this order and takes the first one present for its colour.
+const NOT_PASSING: readonly Exclude<CheckState, "pass">[] = ["fail", "pending"];
+
+const SUMMARY_WORD: Record<CheckState, string> = { pass: "passed", fail: "failing", pending: "running" };
+
+const SUMMARY_MARK: Record<CheckState, string> = { pass: "checkmark.circle", fail: "xmark.circle", pending: "clock" };
+
+const SUMMARY_COLOR: Record<CheckState, string> = { pass: T.greenText, fail: T.redText, pending: T.blueText };
+
+const summaryIn = (state: CheckState, text: string): ChecksSummary => ({
+  text,
+  mark: SUMMARY_MARK[state],
+  color: SUMMARY_COLOR[state],
+});
+
+/**
+ * The checks in one line: "All 3 checks passed" (one alone reads "1 check
+ * passed") in green, else the checks not passing, counted worst first
+ * ("1 failing · 2 running"), in the worst one's colour. The card hides
+ * it while there are no checks.
+ */
+export function checksSummary(rows: readonly CheckRow[]): ChecksSummary {
+  const counts = NOT_PASSING.map((s) => ({ s, n: rows.filter((c) => c.state === s).length })).filter((x) => x.n);
+  const worst = counts[0];
+  if (!worst) return summaryIn("pass", rows.length === 1 ? "1 check passed" : "All " + rows.length + " checks passed");
+  return summaryIn(worst.s, counts.map((x) => x.n + " " + SUMMARY_WORD[x.s]).join(" · "));
+}
+
+/** The selected workspace's checks summary. */
+export const checksLine = computed((): ChecksSummary => checksSummary(checks()));
+
+/** The checks listed under the summary: only those not passing, since the summary counts the rest. */
+export const openChecks = computed((): CheckRow[] => checks().filter((c) => c.state !== "pass"));
 
 const CHECK_WORD: Record<CheckState, string> = { pass: "passed", fail: "failed", pending: "running" };
 
