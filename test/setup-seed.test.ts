@@ -46,7 +46,10 @@ describe("seedProjects", () => {
   });
 
   it("cycles colours and icons from the sidebar's own sets", () => {
-    const tops = Array.from({ length: PROJECT_ICONS.length + 1 }, (_, i) => `${HOME}/dev/app-${i}`);
+    const tops = Array.from(
+      { length: Math.max(PROJECT_COLORS.length, PROJECT_ICONS.length) + 1 },
+      (_, i) => `${HOME}/dev/app-${i}`,
+    );
     const got = seedProjects(tops, HOME, SKIP);
     assert.equal(got[1]?.color, PROJECT_COLORS[1]);
     assert.equal(got[PROJECT_COLORS.length]?.color, PROJECT_COLORS[0]);

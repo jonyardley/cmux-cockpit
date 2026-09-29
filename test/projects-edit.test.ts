@@ -54,6 +54,9 @@ const menuOf = (build: () => void): string[] => {
   build();
   return [...r.menu];
 };
+const count = (n: ViewNode, kind: string): number =>
+  (n.kind === kind ? 1 : 0) + n.children.reduce((sum, c) => sum + count(c, kind), 0);
+const fail = (): never => assert.fail("the editor built no node");
 const fields = (n: ViewNode): ViewNode[] => (n.kind === "TextField" ? [n] : n.children.flatMap((c) => fields(c)));
 const images = (n: ViewNode): string[] =>
   n.kind === "Image" ? [String(n.args[0])] : n.children.flatMap((c) => images(c));
@@ -168,15 +171,95 @@ describe("the editor", () => {
     assert.equal(edit.draftProblem(), null);
   });
 
-  it("offers a project's own icon first when the picker does not list it", () => {
-    assert.deepEqual(edit.iconRows(PROJECT_ICONS[0]), [PROJECT_ICONS.slice(0, 6), PROJECT_ICONS.slice(6)]);
-    const rows = edit.iconRows("pianokeys");
-    assert.deepEqual(rows.flat(), ["pianokeys", ...PROJECT_ICONS]);
-    assert.ok(rows.every((row) => row.length <= 6));
+  it("offers a project's own icon first when the common row does not list it, still one row", () => {
+    assert.deepEqual(edit.iconRows(PROJECT_ICONS[0], ""), [[...PROJECT_ICONS]]);
+    assert.deepEqual(edit.iconRows("pianokeys", ""), [["pianokeys", ...PROJECT_ICONS.slice(0, 7)]]);
+    assert.deepEqual(edit.iconRows("Not An Icon", ""), [[...PROJECT_ICONS]]);
     edit.openEditor("/dev/app-four");
     const node = nodeOf(projectEditor("/dev/app-four"));
     assert.ok(node);
-    assert.deepEqual(images(node), ["pianokeys", ...PROJECT_ICONS]);
+    assert.deepEqual(images(node).slice(1), ["pianokeys", ...PROJECT_ICONS.slice(0, 7)]);
+  });
+
+  it("searches the stored symbols by every word typed, across the dots, two rows at most", () => {
+    assert.deepEqual(edit.iconMatches("  "), []);
+    assert.deepEqual(edit.iconMatches("Music Note"), ["music.note", "music.note.list", "music.quarternote.3"]);
+    assert.deepEqual(edit.iconMatches("cloud.bolt"), ["cloud.bolt.fill"]);
+    assert.equal(edit.iconMatches("fill").length, 16);
+    assert.deepEqual(
+      edit.iconRows("folder.fill", "fill").map((row) => row.length),
+      [8, 8],
+    );
+    assert.deepEqual(edit.iconRows("folder.fill", "zzz"), []);
+  });
+
+  it("puts names whose parts start with the words first", () => {
+    assert.deepEqual(edit.iconMatches("cat"), ["cat.fill", "location.fill"]);
+    // Unranked, list order would put books.vertical.fill and star.fill first.
+    assert.deepEqual(edit.iconMatches("cal").slice(0, 2), ["calendar", "calendar.badge.clock"]);
+    assert.equal(edit.iconMatches("tar")[0], "target");
+  });
+
+  it("says when nothing matches, or how many more a longer word would reach", () => {
+    assert.equal(edit.searchNote("zzz "), 'No icons match "zzz".');
+    assert.match(edit.searchNote("fill"), /^\d+ more: type more of the name\.$/);
+    assert.equal(edit.searchNote("music"), "");
+    assert.equal(edit.searchNote(""), "");
+  });
+
+  it("cuts a list into rows, the last one short", () => {
+    assert.deepEqual(edit.rowsOf([1, 2, 3], 2), [[1, 2], [3]]);
+    assert.deepEqual(edit.rowsOf([], 8), []);
+  });
+
+  it("draws the matches as the search is typed, keeping short rows to the columns", () => {
+    edit.openEditor(APP_TWO);
+    const onEdit = fields(nodeOf(projectEditor(APP_TWO)) ?? fail())[1]?.handlers.onEdit;
+    assert.ok(typeof onEdit === "function");
+    onEdit("piano");
+    assert.equal(edit.iconSearch(), "piano");
+    const node = nodeOf(projectEditor(APP_TWO)) ?? fail();
+    const drawn = images(node);
+    assert.ok(drawn.includes("pianokeys"));
+    assert.ok(!drawn.includes("folder.fill"));
+    assert.equal(count(node, "Rectangle"), edit.ICONS_PER_ROW - 1);
+  });
+
+  it("picks the first match on Return, saves on Return when empty, and keeps the draft on Escape while searching", () => {
+    edit.openEditor(APP_TWO);
+    const search = fields(nodeOf(projectEditor(APP_TWO)) ?? fail())[1];
+    const { onEdit, onSubmit, onCancel } = search?.handlers ?? {};
+    assert.ok(typeof onEdit === "function" && typeof onSubmit === "function" && typeof onCancel === "function");
+    edit.setDraftName("Renamed");
+    onEdit("piano");
+    onSubmit("piano");
+    assert.equal(edit.draftSpec().icon, "pianokeys");
+    onEdit("zzz");
+    onSubmit("zzz");
+    assert.equal(edit.draftSpec().icon, "pianokeys");
+    onCancel();
+    assert.equal(state.editingProject(), APP_TWO);
+    assert.equal(edit.draftSpec().name, "Renamed");
+    assert.deepEqual(sets(), []);
+    onEdit("");
+    onSubmit("");
+    assert.equal(state.editingProject(), null);
+    assert.equal(sets().at(-1)?.[1]?.icon, "pianokeys");
+  });
+
+  it("closes on Escape in an empty search, and keeps the search when the open project is opened again", () => {
+    edit.openEditor(APP_TWO);
+    edit.setIconSearch("piano");
+    edit.openEditor(APP_TWO);
+    assert.equal(edit.iconSearch(), "piano");
+    edit.cancelSearch();
+    assert.equal(state.editingProject(), APP_TWO);
+    edit.setIconSearch("");
+    edit.cancelSearch();
+    assert.equal(state.editingProject(), null);
+    edit.setIconSearch("piano");
+    edit.openEditor(key);
+    assert.equal(edit.iconSearch(), "");
   });
 
   it("opens + in the folder just saved, before the rebuild, once it is a full path", () => {
@@ -209,8 +292,9 @@ describe("the editor", () => {
     edit.openEditor(key);
     const node = nodeOf(projectEditor(key));
     assert.ok(node);
-    const [name, folder] = fields(node);
+    const [name, search, folder] = fields(node);
     assert.deepEqual(name?.args, [spec.name, { placeholder: "Project name", autofocus: true }]);
+    assert.deepEqual(search?.args, ["", { placeholder: "Search icons", autofocus: false }]);
     assert.equal(folder?.args[0], spec.root);
     const onEdit = name?.handlers.onEdit;
     const onSubmit = folder?.handlers.onSubmit;

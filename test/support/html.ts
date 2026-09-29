@@ -60,6 +60,10 @@ const SYMBOLS: Record<string, string> = {
   "music.note": "♪",
   "paintbrush.fill": "✎",
   airplane: "✈︎",
+  "chevron.left.forwardslash.chevron.right": "‹/›",
+  "terminal.fill": "▬",
+  "house.fill": "⌂",
+  "bag.fill": "◘",
 };
 
 const ALIGN: Record<string, string> = {

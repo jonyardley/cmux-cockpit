@@ -6,12 +6,16 @@
 import type { ProjectSpec } from "../../scripts/state-config.ts";
 import { isHex, isMatchKey, isName, isRoot, isSymbol, MAX_NAME } from "../shared/project-rules.ts";
 import { matchesOf, PROJECT_COLORS, PROJECT_ICONS, PROJECTS, projectId } from "../shared/projects.ts";
+import { SYMBOLS } from "../shared/symbols.ts";
 import { knownProjects, removeProject, saveProject, specOf } from "./model.ts";
 import { editingProject, setEditingProject } from "./state.ts";
 
 const [draft, setDraft] = signal<ProjectSpec>({ name: "", color: PROJECT_COLORS[0], icon: PROJECT_ICONS[0] });
 // Remove asks twice: a project from the file cannot come back from the sidebar.
 const [removing, setRemoving] = signal(false);
+// The icon search's words. Read only inside closures, so typing redraws the
+// picker's rows and not the whole editor.
+const [iconQuery, setIconQuery] = signal("");
 
 export const draftSpec = (): ProjectSpec => draft();
 
@@ -32,6 +36,9 @@ export function openEditor(k: string): void {
   if (!spec) return;
   setDraft({ ...spec });
   setRemoving(false);
+  // Opening the open project again keeps its rows, and with them the
+  // search box's text, so the search stays to match.
+  if (editingProject() !== k) setIconQuery("");
   setEditingProject(k);
 }
 
@@ -43,12 +50,32 @@ export function closeEditor(): void {
 export const setDraftName = (name: string): void => setDraft({ ...draft(), name });
 export const setDraftColor = (color: string): void => setDraft({ ...draft(), color });
 export const setDraftIcon = (icon: string): void => setDraft({ ...draft(), icon });
+export const iconSearch = (): string => iconQuery();
+export const setIconSearch = (text: string): void => setIconQuery(text);
+
+/**
+ * Return in the search: with words typed, picks the first match and keeps
+ * the editor open; empty, it saves, as Return does in the other fields.
+ */
+export function submitSearch(text: string): void {
+  if (!text.trim()) {
+    saveDraft();
+    return;
+  }
+  const first = iconMatches(text)[0];
+  if (first) setDraftIcon(first);
+}
 
 /** An empty folder clears it, so the header loses its "+". */
 export function setDraftFolder(text: string): void {
   const { root: _old, ...rest } = draft();
   const root = text.trim();
   setDraft(root ? { ...rest, root } : rest);
+}
+
+/** Escape in the search: with words typed it does nothing, so the draft is not lost; empty, it closes as Cancel does. */
+export function cancelSearch(): void {
+  if (!iconQuery().trim()) closeEditor();
 }
 
 // The name is trimmed first, so the state file's rule fails it only on
@@ -105,17 +132,67 @@ export function matchesLine(k: string): string {
   return "Sessions in " + (p ? matchesOf(p) : [k]).join(", ");
 }
 
-const ICONS_PER_ROW = 6;
+export const ICONS_PER_ROW = 8;
+const MAX_MATCHES = 2 * ICONS_PER_ROW;
+
+/** `list` cut into rows of `n`, the last one short. */
+export function rowsOf<T>(list: readonly T[], n: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < list.length; i += n) rows.push(list.slice(i, i + n));
+  return rows;
+}
 
 /**
- * The icon picker's rows, at most six to a row so they fit the sidebar. A
- * project whose icon is not one of PROJECT_ICONS (set in projects.json) gets
- * it as the first choice, so it shows selected and can be picked again.
+ * The common row: PROJECT_ICONS, always one row. A project whose icon is
+ * not one of them (set in projects.json, or found by search) gets it as the
+ * first choice, so it shows selected and can be picked again; the last
+ * common icon gives up its place.
  */
-export function iconRows(current: string): string[][] {
+export function commonIcons(current: string): string[] {
   const known: readonly string[] = PROJECT_ICONS;
-  const icons = known.includes(current) || !isSymbol(current) ? [...known] : [current, ...known];
-  const rows: string[][] = [];
-  for (let i = 0; i < icons.length; i += ICONS_PER_ROW) rows.push(icons.slice(i, i + ICONS_PER_ROW));
-  return rows;
+  if (known.includes(current) || !isSymbol(current)) return [...known];
+  return [current, ...known.slice(0, ICONS_PER_ROW - 1)];
+}
+
+const wordsOf = (query: string): string[] =>
+  query
+    .toLowerCase()
+    .split(/[\s.]+/)
+    .filter(Boolean);
+
+// Every word starts one of the name's dotted parts: "cat" is cat.fill, not location.fill.
+const startsParts = (name: string, words: string[]): boolean => {
+  const parts = name.split(".");
+  return words.every((w) => parts.some((p) => p.startsWith(w)));
+};
+
+/**
+ * Every stored symbol holding each word typed, across the dots, so "music
+ * note" finds music.note. Names whose parts start with the words come first.
+ */
+function allMatches(query: string): string[] {
+  const words = wordsOf(query);
+  if (!words.length) return [];
+  const hits = SYMBOLS.filter((n) => words.every((w) => n.includes(w)));
+  return [...hits.filter((n) => startsParts(n, words)), ...hits.filter((n) => !startsParts(n, words))];
+}
+
+/** The matches the picker shows: as many as two rows take. */
+export const iconMatches = (query: string): string[] => allMatches(query).slice(0, MAX_MATCHES);
+
+// Worked out once per keystroke, for the rows and the line under them.
+const searchHits = computed(() => allMatches(iconQuery()));
+
+/** The picker's rows, eight to a row: the common row while the search is empty, else its matches. */
+export function iconRows(current: string, query: string = iconQuery()): string[][] {
+  const hits = query === iconQuery() ? searchHits() : allMatches(query);
+  return rowsOf(query.trim() ? hits.slice(0, MAX_MATCHES) : commonIcons(current), ICONS_PER_ROW);
+}
+
+/** The line under the rows: none found, or how many more a longer word would reach; "" otherwise. */
+export function searchNote(query: string = iconQuery()): string {
+  if (!query.trim()) return "";
+  const n = (query === iconQuery() ? searchHits() : allMatches(query)).length;
+  if (!n) return `No icons match "${query.trim()}".`;
+  return n > MAX_MATCHES ? `${n - MAX_MATCHES} more: type more of the name.` : "";
 }
