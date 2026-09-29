@@ -108,7 +108,12 @@ interface TextFieldOptions {
   autofocus?: boolean;
   /** Every keystroke, with the whole text. */
   onEdit?: (text: string) => void;
-  /** Return. */
+  /**
+   * Return, and also focus loss: cmux 0.64.25 sends it when the field ends
+   * editing, including a click elsewhere in the sidebar, which fires before
+   * that click's own tap. The text is all it carries, so the two cannot be
+   * told apart: never save, close or change state from it.
+   */
   onSubmit?: (text: string) => void;
   /** Escape. */
   onCancel?: () => void;
@@ -116,6 +121,7 @@ interface TextFieldOptions {
 /**
  * A one-line text input. Seen drawing and taking typing and Return on cmux
  * 0.64.25 (2026-09-29). It draws no box of its own, so wrap it in ring().
+ * Submit also fires on focus loss; see onSubmit.
  */
 declare function TextField(value: Reactive<string>, options?: TextFieldOptions): View;
 

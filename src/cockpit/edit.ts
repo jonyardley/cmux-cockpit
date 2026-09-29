@@ -53,19 +53,6 @@ export const setDraftIcon = (icon: string): void => setDraft({ ...draft(), icon 
 export const iconSearch = (): string => iconQuery();
 export const setIconSearch = (text: string): void => setIconQuery(text);
 
-/**
- * Return in the search: with words typed, picks the first match and keeps
- * the editor open; empty, it saves, as Return does in the other fields.
- */
-export function submitSearch(text: string): void {
-  if (!text.trim()) {
-    saveDraft();
-    return;
-  }
-  const first = iconMatches(text)[0];
-  if (first) setDraftIcon(first);
-}
-
 /** An empty folder clears it, so the header loses its "+". */
 export function setDraftFolder(text: string): void {
   const { root: _old, ...rest } = draft();

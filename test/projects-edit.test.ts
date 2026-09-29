@@ -60,6 +60,12 @@ const fail = (): never => assert.fail("the editor built no node");
 const fields = (n: ViewNode): ViewNode[] => (n.kind === "TextField" ? [n] : n.children.flatMap((c) => fields(c)));
 const images = (n: ViewNode): string[] =>
   n.kind === "Image" ? [String(n.args[0])] : n.children.flatMap((c) => images(c));
+const says = (n: ViewNode, text: string): boolean =>
+  (n.kind === "Text" && n.args[0] === text) || n.children.some((c) => says(c, text));
+const tapOf = (n: ViewNode, text: string): unknown =>
+  typeof n.handlers.onTap === "function" && says(n, text)
+    ? n.handlers.onTap
+    : n.children.map((c) => tapOf(c, text)).find((t) => t !== undefined);
 const lastCwd = (): unknown => r.calls.at(-1)?.params.cwd;
 
 describe("the card menu", () => {
@@ -225,26 +231,36 @@ describe("the editor", () => {
     assert.equal(count(node, "Rectangle"), edit.ICONS_PER_ROW - 1);
   });
 
-  it("picks the first match on Return, saves on Return when empty, and keeps the draft on Escape while searching", () => {
+  // cmux sends submit when a field loses focus as well as on Return, so a
+  // tap on a colour dot submits the name field first: submit must do nothing.
+  it("stays open with the draft unchanged when any field submits, as it does on focus loss", () => {
     edit.openEditor(APP_TWO);
-    const search = fields(nodeOf(projectEditor(APP_TWO)) ?? fail())[1];
-    const { onEdit, onSubmit, onCancel } = search?.handlers ?? {};
-    assert.ok(typeof onEdit === "function" && typeof onSubmit === "function" && typeof onCancel === "function");
+    edit.setDraftName("Renamed");
+    edit.setIconSearch("piano");
+    const before = edit.draftSpec();
+    const all = fields(nodeOf(projectEditor(APP_TWO)) ?? fail());
+    assert.equal(all.length, 3);
+    for (const f of all) {
+      const submit = f.handlers.onSubmit;
+      if (typeof submit === "function") submit("piano");
+      if (typeof submit === "function") submit("");
+    }
+    assert.equal(state.editingProject(), APP_TWO);
+    assert.deepEqual(edit.draftSpec(), before);
+    assert.equal(edit.iconSearch(), "piano");
+    assert.deepEqual(sets(), []);
+  });
+
+  it("keeps the draft on Escape while searching", () => {
+    edit.openEditor(APP_TWO);
+    const { onEdit, onCancel } = fields(nodeOf(projectEditor(APP_TWO)) ?? fail())[1]?.handlers ?? {};
+    assert.ok(typeof onEdit === "function" && typeof onCancel === "function");
     edit.setDraftName("Renamed");
     onEdit("piano");
-    onSubmit("piano");
-    assert.equal(edit.draftSpec().icon, "pianokeys");
-    onEdit("zzz");
-    onSubmit("zzz");
-    assert.equal(edit.draftSpec().icon, "pianokeys");
     onCancel();
     assert.equal(state.editingProject(), APP_TWO);
     assert.equal(edit.draftSpec().name, "Renamed");
     assert.deepEqual(sets(), []);
-    onEdit("");
-    onSubmit("");
-    assert.equal(state.editingProject(), null);
-    assert.equal(sets().at(-1)?.[1]?.icon, "pianokeys");
   });
 
   it("closes on Escape in an empty search, and keeps the search when the open project is opened again", () => {
@@ -288,7 +304,7 @@ describe("the editor", () => {
     assert.equal(edit.draftSpec().root, "~/dev/scratch");
   });
 
-  it("types into the fields and saves on Return, as the renderer would", () => {
+  it("types into the fields and saves on Done, as the renderer would", () => {
     edit.openEditor(key);
     const node = nodeOf(projectEditor(key));
     assert.ok(node);
@@ -297,10 +313,10 @@ describe("the editor", () => {
     assert.deepEqual(search?.args, ["", { placeholder: "Search icons", autofocus: false }]);
     assert.equal(folder?.args[0], spec.root);
     const onEdit = name?.handlers.onEdit;
-    const onSubmit = folder?.handlers.onSubmit;
-    assert.ok(typeof onEdit === "function" && typeof onSubmit === "function");
+    const done = tapOf(node, "Done");
+    assert.ok(typeof onEdit === "function" && typeof done === "function");
     onEdit("Scratchpad");
-    onSubmit("");
+    done();
     assert.deepEqual(sets(), [["projects." + key, { ...spec, name: "Scratchpad" }]]);
   });
 
