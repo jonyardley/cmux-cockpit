@@ -1,7 +1,8 @@
 // Validates the project table before the build injects it (see build.ts).
 // Kept apart from build.ts so the rules can be tested without running a build.
 
-import type { ProjectSpec } from "./state-config.ts";
+import { isRemoved } from "../src/shared/project-rules.ts";
+import type { ProjectSpec, SavedProject } from "./state-config.ts";
 
 export interface Project {
   match: string | string[];
@@ -10,6 +11,8 @@ export interface Project {
   icon: string;
   /** Absolute path (`~` allowed) to open a new workspace in. Optional. */
   root?: string;
+  /** Set by mergeProjects on a project that came from the file, so removing it saves a removal. */
+  seeded?: true;
 }
 
 export type ProjectsResult = { ok: true; projects: readonly Project[] } | { ok: false; error: string };
@@ -77,25 +80,64 @@ export function validateProjects(parsed: unknown): ProjectsResult {
 
 export interface Merged {
   projects: readonly Project[];
-  /** The sidebar-made projects that made it in, so the sidebar knows which it may edit. */
-  kept: Record<string, ProjectSpec>;
+  /** The saved entries that made it in, removals included, so the sidebar edits from what it saved. */
+  kept: Record<string, SavedProject>;
+}
+
+const idOf = (p: Project): string => matchList(p)[0] ?? "";
+
+// A file project with its saved edit laid over. Its matches stay: a fragment
+// such as "/.config/cmux" also catches that folder's worktrees, and a saved
+// key could not say so.
+function edited(p: Project, spec: ProjectSpec): Project {
+  const { root: _root, ...rest } = p;
+  return { ...rest, name: spec.name, color: spec.color, icon: spec.icon, ...(spec.root ? { root: spec.root } : {}) };
+}
+
+function withEdits(file: readonly Project[], edits: ReadonlyMap<string, SavedProject>): Project[] {
+  return file.flatMap((p) => {
+    const edit = edits.get(idOf(p));
+    if (edit && isRemoved(edit)) return [];
+    return [{ ...(edit ? edited(p, edit) : p), seeded: true as const }];
+  });
+}
+
+// The edited file projects whose name another project also has.
+function clashing(projects: readonly Project[], edits: ReadonlyMap<string, SavedProject>): string[] {
+  const count = new Map<string, number>();
+  for (const p of projects) count.set(p.name, (count.get(p.name) ?? 0) + 1);
+  return projects.filter((p) => (count.get(p.name) ?? 0) > 1 && edits.has(idOf(p))).map(idOf);
 }
 
 /**
- * Appends the sidebar-made projects (issue #9) to the file's table. The file
- * wins: an in-app project whose folder a file match already claims, or whose
- * name is taken, is dropped, so it can never sit as an empty header nobody
- * can reach, and the merged table always passes validateProjects. Deeper
- * folders go first, since projectOf takes the first match.
+ * The file's table with the saved projects (issue #9) laid over it. A saved
+ * entry under a file project's first match edits or removes that project, so
+ * every project can be changed in the sidebar and the file is only the seed.
+ * An edit that would give two projects one name is dropped, the file's entry
+ * kept. The rest are sidebar-made projects, appended; one whose folder a
+ * standing file project's match claims, or whose name is taken, is dropped
+ * (a removed file project claims neither), so it can never
+ * sit as an empty header nobody can reach. Deeper folders go first, since
+ * projectOf takes the first match. The result always passes validateProjects.
  */
-export function mergeProjects(file: readonly Project[], inApp: Record<string, ProjectSpec>): Merged {
-  const fileMatches = file.flatMap(matchList);
+export function mergeProjects(file: readonly Project[], saved: Record<string, SavedProject>): Merged {
+  const ids = new Set(file.map(idOf));
+  const edits = new Map(Object.entries(saved).filter(([id]) => ids.has(id)));
+  let projects = withEdits(file, edits);
+  for (let clash = clashing(projects, edits); clash.length; clash = clashing(projects, edits)) {
+    for (const id of clash) edits.delete(id);
+    projects = withEdits(file, edits);
+  }
+  const kept: Record<string, SavedProject> = Object.fromEntries(edits);
+  // Only the file projects still standing claim folders: a removed one's
+  // matches must not block a sidebar-made project in its old folder.
+  const fileMatches = projects.flatMap(matchList);
   const matches = new Set(fileMatches);
-  const names = new Set(file.map((p) => p.name));
-  const projects: Project[] = [...file];
-  const kept: Record<string, ProjectSpec> = {};
-  const deepestFirst = Object.entries(inApp).sort(([a], [b]) => b.length - a.length);
+  const names = new Set(projects.map((p) => p.name));
+  const deepestFirst = Object.entries(saved).sort(([a], [b]) => b.length - a.length);
   for (const [match, spec] of deepestFirst) {
+    // A key with no trailing "/" is only ever a file project's; with that project gone, it is dropped.
+    if (ids.has(match) || isRemoved(spec) || !match.endsWith("/")) continue;
     if (matches.has(match) || names.has(spec.name) || fileMatches.some((m) => match.includes(m))) continue;
     matches.add(match);
     names.add(spec.name);

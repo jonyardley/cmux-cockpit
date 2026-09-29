@@ -1,0 +1,146 @@
+VStack spacing: 0, alignment: leading .paddingBottom(12)
+  VStack spacing: 0 .paddingHorizontal(14) .paddingTop(10) .paddingBottom(8)
+    VStack spacing: 0, alignment: leading .padding(1) .background(hairline) .cornerRadius(10) .frame(maxWidth: infinity)
+      HStack spacing: 0 .padding(3) .frame(maxWidth: infinity, alignment: leading) .background(segTrack) .cornerRadius(9)
+        ZStack .frame(maxWidth: infinity, height: 26) .background(clear) .hoverBackground(hover) .cornerRadius(7) .onTap()
+          RoundedRectangle cornerRadius: 7 .fill(clear) .stroke(clear) .strokeWidth(1)
+          HStack spacing: 6
+            Text "All" .font(12) .weight(medium) .color(secondary|badge|laneReview)
+        ZStack .frame(maxWidth: infinity, height: 26) .background(clear) .hoverBackground(hover) .cornerRadius(7) .onTap()
+          RoundedRectangle cornerRadius: 7 .fill(onBadge|card) .stroke(cardEdge|dropTarget|anchorSelected) .strokeWidth(1)
+          HStack spacing: 6
+            Text "Projects" .font(12) .weight(medium) .color(text)
+  VStack spacing: 0 .paddingHorizontal(10) .opacity(0) .frame(maxHeight: 0, alignment: top) [hidden]
+  VStack spacing: 2 .paddingHorizontal(10) .opacity(1) .frame(maxHeight: infinity, alignment: top)
+    VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .onTap()
+      HStack spacing: 8 .paddingHorizontal(8) .paddingVertical(5) .cornerRadius(8) .hoverBackground(hover) .frame(maxWidth: infinity) .contextMenu(3)
+        Image chevron.right .font(10) .weight(semibold) .color(faint|laneBackground) .rotation(90) .frame(width: 12, height: 16)
+        ZStack .frame(width: 18, height: 18)
+          RoundedRectangle cornerRadius: 5 .fill(clay)
+          Image star.fill .font(10) .weight(semibold) .color(text)
+        Text "App One" .font(12.5) .weight(semibold) .color(laneMain|select|heading) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+        Text "1" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10)
+        Spacer minLength: 4
+        ZStack .frame(width: 20, height: 20) .cornerRadius(10) .hoverBackground(hover) .onTap()
+          Circle size: 20 .fill(clear)
+          Image plus .font(11) .weight(semibold) .color(secondary|badge|laneReview)
+    VStack spacing: 0 .paddingBottom(6)
+      VStack spacing: 0, alignment: leading .padding(1.5) .background(laneMain|select|heading) .cornerRadius(10)
+        VStack spacing: 6, alignment: leading .padding(10) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8.5)
+          Text "NAME" .font(10) .weight(medium) .color(faint|laneBackground)
+          VStack spacing: 0, alignment: leading .padding(1) .background(fieldEdge) .cornerRadius(6)
+            TextField "" placeholder: "Project name", autofocus: true .font(12) .paddingHorizontal(7) .paddingVertical(4) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(5)
+          Text "COLOUR" .font(10) .weight(medium) .color(faint|laneBackground)
+          HStack spacing: 3
+            VStack spacing: 0, alignment: leading .padding(2) .background(laneMain|select|heading) .cornerRadius(10) .onTap()
+              Circle size: 14 .fill(clay) .background(onBadge|card) .cornerRadius(8)
+            VStack spacing: 0, alignment: leading .padding(2) .background(onBadge|card) .cornerRadius(10) .onTap()
+              Circle size: 14 .fill(#6A9BCC) .background(onBadge|card) .cornerRadius(8)
+            VStack spacing: 0, alignment: leading .padding(2) .background(onBadge|card) .cornerRadius(10) .onTap()
+              Circle size: 14 .fill(green) .background(onBadge|card) .cornerRadius(8)
+            VStack spacing: 0, alignment: leading .padding(2) .background(onBadge|card) .cornerRadius(10) .onTap()
+              Circle size: 14 .fill(#C2A83E) .background(onBadge|card) .cornerRadius(8)
+            VStack spacing: 0, alignment: leading .padding(2) .background(onBadge|card) .cornerRadius(10) .onTap()
+              Circle size: 14 .fill(#9B6FB0) .background(onBadge|card) .cornerRadius(8)
+            VStack spacing: 0, alignment: leading .padding(2) .background(onBadge|card) .cornerRadius(10) .onTap()
+              Circle size: 14 .fill(#CC6B8E) .background(onBadge|card) .cornerRadius(8)
+            VStack spacing: 0, alignment: leading .padding(2) .background(onBadge|card) .cornerRadius(10) .onTap()
+              Circle size: 14 .fill(#4F9C94) .background(onBadge|card) .cornerRadius(8)
+            VStack spacing: 0, alignment: leading .padding(2) .background(onBadge|card) .cornerRadius(10) .onTap()
+              Circle size: 14 .fill(#8A7F72) .background(onBadge|card) .cornerRadius(8)
+          Text "ICON" .font(10) .weight(medium) .color(faint|laneBackground)
+          HStack spacing: 4
+            Image folder.fill .font(11) .color(secondary|badge|laneReview) .frame(width: 22, height: 22) .background(ground|neutralChip.bg) .cornerRadius(5) .onTap()
+            Image star.fill .font(11) .color(onBadge|card) .frame(width: 22, height: 22) .background(laneMain|select|heading) .cornerRadius(5) .onTap()
+            Image cube.fill .font(11) .color(secondary|badge|laneReview) .frame(width: 22, height: 22) .background(ground|neutralChip.bg) .cornerRadius(5) .onTap()
+            Image leaf.fill .font(11) .color(secondary|badge|laneReview) .frame(width: 22, height: 22) .background(ground|neutralChip.bg) .cornerRadius(5) .onTap()
+            Image music.note .font(11) .color(secondary|badge|laneReview) .frame(width: 22, height: 22) .background(ground|neutralChip.bg) .cornerRadius(5) .onTap()
+            Image hammer.fill .font(11) .color(secondary|badge|laneReview) .frame(width: 22, height: 22) .background(ground|neutralChip.bg) .cornerRadius(5) .onTap()
+          HStack spacing: 4
+            Image book.fill .font(11) .color(secondary|badge|laneReview) .frame(width: 22, height: 22) .background(ground|neutralChip.bg) .cornerRadius(5) .onTap()
+            Image flame.fill .font(11) .color(secondary|badge|laneReview) .frame(width: 22, height: 22) .background(ground|neutralChip.bg) .cornerRadius(5) .onTap()
+            Image bolt.fill .font(11) .color(secondary|badge|laneReview) .frame(width: 22, height: 22) .background(ground|neutralChip.bg) .cornerRadius(5) .onTap()
+            Image globe .font(11) .color(secondary|badge|laneReview) .frame(width: 22, height: 22) .background(ground|neutralChip.bg) .cornerRadius(5) .onTap()
+            Image paintbrush.fill .font(11) .color(secondary|badge|laneReview) .frame(width: 22, height: 22) .background(ground|neutralChip.bg) .cornerRadius(5) .onTap()
+            Image gearshape.fill .font(11) .color(secondary|badge|laneReview) .frame(width: 22, height: 22) .background(ground|neutralChip.bg) .cornerRadius(5) .onTap()
+          Text "FOLDER" .font(10) .weight(medium) .color(faint|laneBackground)
+          VStack spacing: 0, alignment: leading .padding(1) .background(fieldEdge) .cornerRadius(6)
+            TextField "~/dev/app-one" placeholder: "~/Dev/folder, for the +", autofocus: false .font(12) .paddingHorizontal(7) .paddingVertical(4) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(5)
+          Text "Sessions in /dev/app-one" .font(10) .color(faint|laneBackground) .lineLimit(2)
+          Text "Give the project a name." .font(11) .color(clayText) .opacity(1)
+          HStack spacing: 10
+            Text "Remove project" .font(11) .color(redText) .onTap()
+            Spacer minLength: 4
+            Text "Cancel" .font(11) .color(secondary|badge|laneReview) .onTap()
+            Text "Done" .font(11) .weight(semibold) .color(onBadge|card) .paddingHorizontal(10) .paddingVertical(3) .background(faint|laneBackground) .cornerRadius(6) .onTap()
+    VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(19)
+      VStack spacing: 0, alignment: leading .padding(1) .background(cardEdge|dropTarget|anchorSelected) .cornerRadius(9) .frame(maxWidth: infinity)
+        VStack alignment: leading, spacing: 0 .frame(maxWidth: infinity, alignment: leading) .paddingHorizontal(10) .paddingVertical(8) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8) .hoverBackground(cardHover)
+          HStack spacing: 6 .frame(maxWidth: infinity)
+            Text "One: parser" .font(12.5) .weight(semibold) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
+            Spacer minLength: 4
+            Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+            Text "" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+          HStack spacing: 6 .frame(maxWidth: infinity) .paddingTop(2)
+            ZStack .frame(width: 13, height: 13)
+              Circle size: 13 .fill(clear)
+              Circle size: 7 .fill(clear) .stroke(grey) .strokeWidth(1.5)
+            Text "No agent" .font(12) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .layoutPriority(2)
+            Spacer minLength: 0
+    VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .onTap()
+      HStack spacing: 8 .paddingHorizontal(8) .paddingVertical(5) .cornerRadius(8) .hoverBackground(hover) .frame(maxWidth: infinity) .contextMenu(3)
+        Image chevron.right .font(10) .weight(semibold) .color(faint|laneBackground) .rotation(90) .frame(width: 12, height: 16)
+        ZStack .frame(width: 18, height: 18)
+          RoundedRectangle cornerRadius: 5 .fill(#6A9BCC)
+          Image cube.fill .font(10) .weight(semibold) .color(text)
+        Text "App Two" .font(12.5) .weight(semibold) .color(laneMain|select|heading) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+        Text "1" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10)
+        Spacer minLength: 4
+    VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(19)
+      VStack spacing: 0, alignment: leading .padding(1) .background(cardEdge|dropTarget|anchorSelected) .cornerRadius(9) .frame(maxWidth: infinity)
+        VStack alignment: leading, spacing: 0 .frame(maxWidth: infinity, alignment: leading) .paddingHorizontal(10) .paddingVertical(8) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8) .hoverBackground(cardHover)
+          HStack spacing: 6 .frame(maxWidth: infinity)
+            Text "Two: release" .font(12.5) .weight(semibold) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
+            Spacer minLength: 4
+            Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+            Text "" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+          HStack spacing: 6 .frame(maxWidth: infinity) .paddingTop(2)
+            ZStack .frame(width: 13, height: 13)
+              Circle size: 13 .fill(clear)
+              Circle size: 7 .fill(clear) .stroke(grey) .strokeWidth(1.5)
+            Text "No agent" .font(12) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .layoutPriority(2)
+            Spacer minLength: 0
+    VStack spacing: 0 .paddingTop(10)
+      HStack spacing: 8 .paddingHorizontal(8) .paddingVertical(4) .cornerRadius(8) .hoverBackground(hover) .frame(maxWidth: infinity) .onTap()
+        Image chevron.right .font(10) .weight(semibold) .color(faint|laneBackground) .rotation(90) .frame(width: 12, height: 16)
+        Text "Quiet" .font(12.5) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+        Text "1" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(segTrack) .cornerRadius(10)
+        Spacer minLength: 0
+    HStack spacing: 8 .paddingHorizontal(8) .paddingVertical(3) .cornerRadius(7) .frame(maxWidth: infinity) .contextMenu(3) .opacity(0.55)
+      ZStack .frame(width: 16, height: 16)
+        RoundedRectangle cornerRadius: 5 .fill(green)
+        Image leaf.fill .font(9) .weight(semibold) .color(text)
+      Text "App Three" .font(12.5) .weight(regular) .color(secondary|badge|laneReview) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+      Spacer minLength: 4
+  Spacer
+
+Colours
+cardEdge|dropTarget|anchorSelected #1414131F
+cardHover #F7F6F2
+clay #D97757
+clayText #A34A2A
+faint|laneBackground #8A8880
+fieldEdge #14141333
+green #788C5D
+grey #A09E95
+ground|neutralChip.bg #F4F2EA
+hairline #E2DFD3
+hover #7F7F7F14
+laneMain|select|heading #3D3D3A
+metaText #6B6A64
+onBadge|card #FFFFFF
+redText #9E2F27
+secondary|badge|laneReview #5E5D59
+segTrack #E5E2D6
+tertiary #73726C
+text #141413

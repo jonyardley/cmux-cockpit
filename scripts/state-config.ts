@@ -7,13 +7,28 @@
 // untrusted: bad keys and values are refused, bad entries in the file are
 // dropped, and nothing here ever throws on input.
 
+import {
+  isCleanChar,
+  isHex,
+  isMatchKey,
+  isName,
+  isRoot,
+  isSymbol,
+  isText,
+  MAX_PROJECT_KEY,
+} from "../src/shared/project-rules.ts";
+
 export interface State {
   /** wsId -> agent id -> start of the needs_input spell that was dismissed (issue #5). */
   dismissed: Record<string, Record<string, number>>;
   /** wsId -> project key chosen by "Move to project" (issue #8). */
   projectOverride: Record<string, string>;
-  /** match path -> a project made in the sidebar, merged over projects.json at build (issue #9). */
-  projects: Record<string, ProjectSpec>;
+  /**
+   * project key -> a project made or edited in the sidebar (issue #9). The
+   * key is a sidebar-made project's folder, or a projects.json project's
+   * first match; either way the saved entry wins over the file at build.
+   */
+  projects: Record<string, SavedProject>;
   /**
    * wsId -> the pull request for the workspace's branch, found by
    * scripts/pr-poll.ts because cmux sends custom sidebars none (issue #7).
@@ -94,13 +109,20 @@ export interface UiState {
   collapsed?: Record<string, number>;
 }
 
-/** A project made in the sidebar. Its match is the key it is stored under. */
+/** A project made or edited in the sidebar. Its first match is the key it is stored under. */
 export interface ProjectSpec {
   name: string;
   color: string;
   icon: string;
   root?: string;
 }
+
+/** A projects.json project removed in the sidebar: deleting the entry would bring the file's back. */
+export interface ProjectRemoved {
+  removed: true;
+}
+
+export type SavedProject = ProjectSpec | ProjectRemoved;
 
 /** A pull request as the poller saves it, shaped like renderer.d.ts's PullRequest. */
 export interface SavedPr {
@@ -264,7 +286,6 @@ export const emptyState = (): State => ({
 // first; cmux ids are UUIDs, so that is accepted rather than worked round.
 const RESERVED = new Set(["__proto__", "constructor", "prototype"]);
 export const isId = (v: string): boolean => v.length > 0 && v.length <= 128 && !RESERVED.has(v);
-const MAX_PROJECT_KEY = 512;
 /** Entries kept per map, so a flood of URLs cannot grow the file without bound. */
 export const MAX_ENTRIES = 256;
 
@@ -282,25 +303,6 @@ function agentStarts(v: unknown): Record<string, number> | null {
 
 const projectKey = (v: unknown): string | null =>
   typeof v === "string" && v.length > 0 && v.length <= MAX_PROJECT_KEY ? v : null;
-
-// A sidebar-made project is keyed by its match: an absolute, lowercase
-// directory ending in "/", so it matches that folder and no sibling that
-// shares its prefix (projectOf adds the same "/" to the directory). At least
-// two segments deep, so no URL can plant a "/" that swallows every folder.
-const isMatchKey = (v: string): boolean =>
-  /^(\/[^/]+){2,}\/$/.test(v) && v.length <= MAX_PROJECT_KEY && v === v.toLowerCase();
-
-const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
-// SF Symbol names are dotted lowercase words, e.g. "music.note".
-const isSymbol = (v: unknown): v is string =>
-  typeof v === "string" && /^[a-z0-9]+(\.[a-z0-9]+)*$/.test(v) && v.length <= 64;
-
-// A control character, 0-31 or 127 (DEL): the same rule cleanLabel uses
-// to turn them to spaces, so a label it cleans reads as clean here too.
-const isCleanChar = (c: string): boolean => {
-  const code = c.charCodeAt(0);
-  return code >= 32 && code !== 127;
-};
 
 // Keeps whole code points (so a surrogate pair is never split in two) while
 // the UTF-16 length, the one isLabel measures, stays within `max`.
@@ -352,20 +354,18 @@ export function labelFrom(fallback: string, ...candidates: unknown[]): string {
   return fallback;
 }
 
-// Plain, single-line text with no leading, trailing or control characters,
-// up to `max` long. Shared by isName and isLabel so both keep one rule.
-function isText(v: unknown, max: number): v is string {
-  return typeof v === "string" && v.trim() === v && v.length > 0 && v.length <= max && [...v].every(isCleanChar);
-}
+// Exactly {"removed": true}, so a spec with a stray flag is not read as a removal.
+const isRemovedEntry = (v: unknown): boolean => isRecord(v) && v.removed === true && Object.keys(v).length === 1;
 
-const isName = (v: unknown): v is string => isText(v, 64);
+function savedProject(v: unknown): SavedProject | null {
+  return isRemovedEntry(v) ? { removed: true } : projectSpec(v);
+}
 
 function projectSpec(v: unknown): ProjectSpec | null {
   if (!isRecord(v) || !isName(v.name) || !isHex(v.color) || !isSymbol(v.icon)) return null;
   const spec: ProjectSpec = { name: v.name, color: v.color, icon: v.icon };
   if (v.root === undefined) return spec;
-  const root = v.root;
-  return typeof root === "string" && root.startsWith("/") && root.length <= MAX_PROJECT_KEY ? { ...spec, root } : null;
+  return isRoot(v.root) ? { ...spec, root: v.root } : null;
 }
 
 // Only a GitHub pull request page, since the sidebar opens it on a tap.
@@ -564,7 +564,7 @@ export function validateState(raw: unknown): State {
   return {
     dismissed: cleanMap(v.dismissed, agentStarts),
     projectOverride: cleanMap(v.projectOverride, projectKey),
-    projects: cleanMap(v.projects, projectSpec, isMatchKey),
+    projects: cleanMap(v.projects, savedProject, isMatchKey),
     prs: cleanMap(v.prs, savedPr),
     ownPrs: cleanMap(v.ownPrs, savedOwnPr, isPrUrl),
     subagents: cleanMap(v.subagents, savedSubagents),
@@ -641,10 +641,10 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
         : "projectOverride wants a project key string";
     }
     case "projects": {
-      const spec = projectSpec(parsed);
+      const spec = savedProject(parsed);
       return spec
         ? { ...state, projects: { ...state.projects, [id]: spec } }
-        : "projects wants {name, color: #rrggbb, icon: SF Symbol, root?}";
+        : "projects wants {name, color: #rrggbb, icon: SF Symbol, root?} or {removed: true}";
     }
     case "ui":
       return uiEntry(state, id, parsed);

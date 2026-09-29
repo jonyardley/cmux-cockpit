@@ -8,7 +8,7 @@ const { glyphColor } = await import("../src/shared/contrast.ts");
 const { shade } = await import("../src/shared/shade.ts");
 const { markLast } = await import("../src/shared/list.ts");
 const { READY_INK, prChipColors, prInk, shownHealth } = await import("../src/shared/pr-colors.ts");
-const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, nextIn, projectId, projectOf } = await import(
+const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, projectId, projectOf } = await import(
   "../src/shared/projects.ts"
 );
 const { cleanTitle, oneLine, readable, tracked } = await import("../src/shared/text.ts");
@@ -258,18 +258,6 @@ describe("newProject (issue #9)", () => {
   it("is null without an absolute folder two segments deep", () => {
     for (const d of [undefined, null, "", "/", "/dev", "/dev/", "~/dev/s", "dev/s"])
       assert.equal(newProject(d, []), null, String(d));
-  });
-});
-
-describe("nextIn", () => {
-  it("steps to the next item and wraps", () => {
-    assert.equal(nextIn(PROJECT_ICONS, PROJECT_ICONS[0]), PROJECT_ICONS[1]);
-    assert.equal(nextIn(PROJECT_ICONS, PROJECT_ICONS[PROJECT_ICONS.length - 1] ?? ""), PROJECT_ICONS[0]);
-  });
-
-  it("matches colours case-insensitively and starts over from an unknown value", () => {
-    assert.equal(nextIn(PROJECT_COLORS, PROJECT_COLORS[0].toLowerCase()), PROJECT_COLORS[1]);
-    assert.equal(nextIn(PROJECT_COLORS, "#000000"), PROJECT_COLORS[0]);
   });
 });
 

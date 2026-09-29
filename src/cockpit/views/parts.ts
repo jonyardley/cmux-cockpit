@@ -30,18 +30,14 @@ import {
   chipsFor,
   clearProjectOverride,
   createProjectFrom,
-  cycleProjectColor,
-  cycleProjectIcon,
   fileForReview,
   hasProjectOverride,
-  inAppProjectName,
   laneOf,
   moveToLane,
   moveToProject,
   newSessionFor,
   newSessionLabel,
   projectKey,
-  removeProject,
 } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
 import { ageOf, badgeCount, isReady, openPrLabel, statusHasAge, statusInfo, statusLine } from "../status.ts";
@@ -306,23 +302,12 @@ function projectItems(w: WsAccessor): MenuItem[] {
   ];
 }
 
-// Projects made in the sidebar (issue #9). The menu's items are fixed when the
-// card is built, so an item that does not apply says why instead of vanishing.
-function inAppProjectItems(w: WsAccessor): MenuItem[] {
-  const named = (verb: string) => () => {
-    const name = inAppProjectName(w());
-    return name ? `${verb}: ${name}` : `${verb} (sidebar-made projects only)`;
-  };
-  return [
-    Button(
-      () => (canCreateProject(w()) ? "New project from this folder" : "New project (folder has one, or none)"),
-      () => createProjectFrom(w()),
-    ),
-    Button(named("Next colour"), () => cycleProjectColor(w())),
-    Button(named("Next icon"), () => cycleProjectIcon(w())),
-    Button(named("Remove project"), () => removeProject(w())),
-  ];
-}
+// Only making a project lives on the card; editing one is on its header.
+const newProjectItem = (w: WsAccessor): MenuItem =>
+  Button(
+    () => (canCreateProject(w()) ? "New project from this folder" : "New project (folder has one, or none)"),
+    () => createProjectFrom(w()),
+  );
 
 export function cardMenu(w: WsAccessor): MenuItem[] {
   return [
@@ -335,7 +320,7 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
     Divider(),
     ...projectItems(w),
     Divider(),
-    ...inAppProjectItems(w),
+    newProjectItem(w),
     Divider(),
     Button(
       () => (w()?.pinned ? "Unpin" : "Pin"),

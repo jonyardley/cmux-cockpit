@@ -1,7 +1,9 @@
 // The segmented mode control and the lane and project section headers.
 
+import { isProjectKey } from "../../shared/projects.ts";
 import { laneTitle, projectBadge, ring, unreadBadge } from "../../shared/ui.ts";
 import { dropLane } from "../drop.ts";
+import { editLabel, openEditor } from "../edit.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
@@ -13,6 +15,7 @@ import {
   openProjectWorkspace,
   projectByKey,
   projectCount,
+  projectNewLabel,
   quietLabel,
   quietProjects,
   toggleLane,
@@ -237,10 +240,20 @@ export function quietRow(k: string): View {
     .paddingVertical(3)
     .cornerRadius(7)
     .frame({ maxWidth: "infinity" })
-    .contextMenu([Button(quietLabel(k), () => openProjectWorkspace(k))]);
+    .contextMenu([
+      Button(quietLabel(k), () => openProjectWorkspace(k)),
+      Divider(),
+      Button(editLabel(k), () => openEditor(k)),
+    ]);
   if (!open) return row.opacity(0.55);
   return row.hoverBackground(C.hover).onTap(() => openProjectWorkspace(k));
 }
+
+// A project's own menu: open a session in it, or edit it. Other has no edit.
+const projectMenu = (k: string): MenuItem[] => [
+  Button(projectNewLabel(k), () => openProjectWorkspace(k)),
+  ...(isProjectKey(k) ? [Divider(), Button(editLabel(k), () => openEditor(k))] : []),
+];
 
 export function projectHeader(k: string): View {
   const p = projectByKey(k);
@@ -256,6 +269,7 @@ export function projectHeader(k: string): View {
     .paddingVertical(HEADER_PAD)
     .cornerRadius(8)
     .hoverBackground(C.hover)
-    .frame({ maxWidth: "infinity" });
+    .frame({ maxWidth: "infinity" })
+    .contextMenu(projectMenu(k));
   return headerGap(row, () => toggleProject(k));
 }

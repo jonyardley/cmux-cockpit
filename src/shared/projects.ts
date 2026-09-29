@@ -5,6 +5,7 @@
 import type { ProjectSpec } from "../../scripts/state-config.ts";
 import { P } from "./palette.ts";
 import { SAVED_STATE } from "./persist.ts";
+import { isRemoved, MAX_NAME } from "./project-rules.ts";
 import { PROJECT_COLORS, PROJECT_ICONS } from "./project-sets.ts";
 
 export { PROJECT_COLORS, PROJECT_ICONS };
@@ -20,6 +21,8 @@ export interface Project {
   icon: string;
   /** Absolute path (build.ts expands a leading `~`) to open a new workspace in. */
   root?: string;
+  /** From config/projects.json, so removing it saves a removal rather than deleting an entry. */
+  seeded?: true;
 }
 
 export const PROJECTS: readonly Project[] = __PROJECTS__;
@@ -47,24 +50,15 @@ export function projectOf(directory: string | null | undefined): Project {
   return { ...NO_PROJECT };
 }
 
-// --- Projects made in the sidebar (issue #9) ---------------------------------------------
-// No text input and no submenus in the renderer, so a new project takes its
-// name from the folder, and colour and icon step through these sets.
+// --- Projects made or edited in the sidebar (issue #9) ----------------------------------
+// A new project takes its name from the folder; the editor under a project's
+// header (src/cockpit/edit.ts) changes any project after that.
 
-/** The item after `current`, wrapping; the first item when `current` is not in the set. */
-export function nextIn(set: readonly [string, ...string[]], current: string): string {
-  const i = set.findIndex((v) => v.toLowerCase() === current.toLowerCase());
-  return set[(i + 1) % set.length] ?? set[0];
+/** The saved spec behind a project, or undefined when it was never edited in the sidebar. */
+export function savedSpec(key: string): ProjectSpec | undefined {
+  const saved = Object.hasOwn(SAVED_STATE.projects, key) ? SAVED_STATE.projects[key] : undefined;
+  return saved && !isRemoved(saved) ? saved : undefined;
 }
-
-/** True when `key` is a project made in the sidebar that survived the build's merge. */
-export const isInAppKey = (key: string): boolean => Object.hasOwn(SAVED_STATE.projects, key);
-
-/** The saved spec behind a sidebar-made project, or undefined for a file project. */
-export const inAppSpec = (key: string): ProjectSpec | undefined =>
-  isInAppKey(key) ? SAVED_STATE.projects[key] : undefined;
-
-const MAX_NAME = 64;
 
 // The folder's last segment as a name the state contract accepts: control
 // characters out, trimmed, capitalised, and short enough to take a number.
