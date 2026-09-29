@@ -46,6 +46,15 @@ describe("the agents sidebar honours Move to project", () => {
     assert.equal(m.currentHeading(), "THIS WORKSPACE · App Three");
   });
 
+  it("names the chosen project on the workspace's PR row", () => {
+    const pr = { url: "https://github.com/o/r/pull/1", number: 1, status: "open" as const };
+    r.data.workspaces = [ws("moved", { directory: "/Users/coder/dev/app-one", pr, prs: [pr] })];
+    assert.deepEqual(
+      m.prs().map((e) => e.project.name),
+      ["App Three"],
+    );
+  });
+
   it("keeps the path match for a workspace whose choice names no project", () => {
     r.data.workspaces = [ws("gone", { selected: true, directory: "/Users/coder/dev/app-one" })];
     assert.equal(m.currentHeading(), "THIS WORKSPACE · App One");
