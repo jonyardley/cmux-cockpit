@@ -3,8 +3,8 @@
 // Who is working and who is idle lives on the cockpit's cards, not here.
 // Pure reads of `data`, so each is testable alone.
 
-import type { CheckState, PublishedKind, SavedPrOrigin, SavedPublished } from "../../scripts/state-config.ts";
-import { byActivity } from "../shared/activity.ts";
+import type { CheckState, SavedPublished } from "../../scripts/state-config.ts";
+import { byActivity, mostActive } from "../shared/activity.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
@@ -520,15 +520,29 @@ export interface PrEntry {
   summary: PrSummary | undefined;
   /** The poller's saved copy rather than cmux's own, so it can go stale. */
   saved: boolean;
-  /** Which chat opened it; undefined when no agent opened it through the hook. */
-  origin: SavedPrOrigin | undefined;
+  /** Its project, from the session's folder, else the repo an own PR was
+   * found in; grey when neither matches one. */
+  project: Project;
+  /** The session it belongs to; undefined when none holds or opened it, or that chat has closed. */
+  session: PrSession | undefined;
 }
+
+/** The chat a PR row names on its faint line, with that chat's status dot. */
+export interface PrSession {
+  name: string;
+  dot: string;
+  /** Idle or no agent: the dot draws as a hollow ring, as everywhere else in the panel. */
+  hollow: boolean;
+}
+
+/** A PR row's number, "#134"; "" before GitHub has given it one. */
+export const prNumberText = (e: Pick<PrEntry, "pr">): string => (e.pr.number ? "#" + e.pr.number : "");
 
 /**
  * What a PR row's chip says: the PR's worst state as its card says it
  * ("1 failing", "conflicts", "draft · running", "ready", "open", "merged"),
  * or for a PR with no number, "draft" for an open draft, else its status.
- * Stale rides inside the chip (see prRow).
+ * Stale rides inside the chip, since an empty sibling Text would still cost spacing.
  */
 export function prChipText(e: Pick<PrEntry, "pr" | "summary">): string {
   const { pr, summary } = e;
@@ -544,53 +558,77 @@ const prRank = (pr: PullRequest): number => (pr.status ? PR_RANK[pr.status] : 3)
 const byRankThenNewest = (x: PrEntry, y: PrEntry): number =>
   prRank(x.pr) - prRank(y.pr) || (y.pr.number ?? 0) - (x.pr.number ?? 0);
 
-// The workspace's title, else a real label (it is often just "PR"), else the branch.
+// A real label (it is often just "PR"), else the branch, else the
+// workspace's title. The label and branch come first because the row's faint
+// line already names the workspace.
 function prTitle(w: Workspace, pr: PullRequest): string {
   const label = String(pr.label || "").trim();
-  return displayTitle(w) || (/^pr$/i.test(label) ? "" : label) || pr.branch || "";
+  return (/^pr$/i.test(label) ? "" : label) || pr.branch || displayTitle(w) || "";
 }
 
 // Every PR across workspaces, open first then merged then closed, newest
 // first within each; then Jon's own open PRs no workspace holds, newest
 // first. Workspace PRs rank first, so a long list of his own PRs in a busy
-// repo can never push one out of the cut to MAX_PRS.
+// repo can never push a workspace's PR out of the cut to MAX_PRS.
 const allPrs = computed((): PrEntry[] => {
   const seen = new Set<string>();
+  const workspaces = data.workspaces() ?? [];
+  const held = workspacePrs(workspaces, seen);
+  held.sort(byRankThenNewest);
+  const own = ownPrs(new Map(workspaces.map((w) => [w.id, w])), seen);
+  own.sort(byRankThenNewest);
+  return [...held, ...own];
+});
+
+// Every workspace's PRs, once each, noting their urls in `seen`.
+function workspacePrs(workspaces: readonly Workspace[], seen: Set<string>): PrEntry[] {
   const out: PrEntry[] = [];
-  for (const w of data.workspaces() ?? []) {
+  for (const w of workspaces) {
     for (const pr of prsOf(w)) {
       if (!pr?.url || seen.has(pr.url)) continue;
       seen.add(pr.url);
-      const checks = checksOf(w);
-      const summary = summaryOf(pr, checks);
+      const summary = summaryOf(pr, checksOf(w));
       // The PR's own title when the poller saved one, as an own PR's row has.
       const title = summary?.title || prTitle(w, pr);
-      out.push({ key: pr.url, pr, title, summary, saved: fromPoller(w), origin: originOf(pr.url) });
+      out.push({
+        key: pr.url,
+        pr,
+        title,
+        summary,
+        saved: fromPoller(w),
+        project: projectOf(w.directory),
+        session: sessionOf(w),
+      });
     }
   }
-  out.sort(byRankThenNewest);
-  const own: PrEntry[] = [];
+  return out;
+}
+
+// Jon's own open PRs not in `seen`. No workspace holds one, so the chat that
+// opened it, while still open, names its session and project; else its repo does.
+function ownPrs(byId: ReadonlyMap<string, Workspace>, seen: Set<string>): PrEntry[] {
+  const out: PrEntry[] = [];
   for (const o of savedOwnPrs()) {
     if (seen.has(o.url)) continue;
     seen.add(o.url);
     const pr: PullRequest = { number: o.number, url: o.url, status: o.status, branch: o.branch };
     if (o.draft) pr.draft = true;
-    own.push({
+    const opener = byId.get(originOf(o.url)?.workspace ?? "");
+    out.push({
       key: o.url,
       pr,
       title: o.title,
       summary: summaryOf(pr, []),
       saved: true,
-      origin: originOf(o.url),
+      project: projectOf(opener?.directory ?? o.repo),
+      session: opener ? sessionOf(opener) : undefined,
     });
   }
-  own.sort(byRankThenNewest);
-  out.push(...own);
   return out;
-});
+}
 
-/** PR rows shown at most. */
-const MAX_PRS = 30;
+/** PR rows shown at most while the card is folded. */
+const MAX_PRS = 5;
 
 /** Every PR, before the cap, for the heading's count. */
 export const prCount = computed((): number => allPrs().length);
@@ -615,27 +653,16 @@ export const prNote = computed((): string => freshness().line);
 /** A PR row's chip dims while it is the poller's copy and that copy is stale. */
 export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale();
 
-// ---- Where a PR came from ------------------------------------------------------
-// A row says which chat opened its PR (report-pr.ts); a tap on the row
-// opens the PR on GitHub.
+// ---- Which session a PR belongs to ------------------------------------------
+// A row's faint line names the chat that holds the PR, else the one that
+// opened it (report-pr.ts), with its status dot; a tap on the row opens the
+// PR on GitHub.
 
-/** "this chat · 3m ago" for the selected workspace, else that workspace's
- * name; "a closed chat" once it has gone; "" with no origin. */
-export function prSource(e: Pick<PrEntry, "origin">): string {
-  const o = e.origin;
-  if (!o) return "";
-  if (o.workspace === selectedId()) {
-    const age = ageSince(o.epoch);
-    return age ? "this chat · " + age + " ago" : "this chat";
-  }
-  const w = (data.workspaces() ?? []).find((x) => x.id === o.workspace);
-  return w ? displayTitle(w) || "another chat" : "a closed chat";
-}
-
-/** The row's second line, "from this chat · 3m ago"; "" with no origin. */
-export function prFromText(e: Pick<PrEntry, "origin">): string {
-  const source = prSource(e);
-  return source ? "from " + source : "";
+/** "This chat" for the selected workspace, else its name, and its lead agent's dot. */
+function sessionOf(w: Workspace): PrSession {
+  const lead = mostActive(agentsOf(w));
+  const name = w.selected ? "This chat" : displayTitle(w) || "Another chat";
+  return { name, dot: dotFor(lead, w), hollow: hollowDot(lead) };
 }
 
 // ---- Made here ------------------------------------------------------------------
@@ -647,7 +674,6 @@ export interface MadeEntry {
   key: string;
   url: string;
   title: string;
-  kind: PublishedKind;
   /** The project of the workspace it was made in; none when that workspace has gone. */
   project: Project;
   /** Made in the selected workspace. */
@@ -667,7 +693,6 @@ function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, her
     // Not readable(): that is for agent chat, and would blank a title with
     // no Latin letters. The hook already checked it (isLabel).
     title: e.title.trim() || "Untitled",
-    kind: e.kind,
     project: projectOf(dirs.get(e.workspace)),
     here,
     epoch: e.epoch,
@@ -734,11 +759,6 @@ export const emptyNote = computed((): string => {
   if (noSubs) return "No helpers yet";
   return noMade ? "No published links yet" : "";
 });
-
-const MADE_ICON: Record<PublishedKind, string> = { page: "macwindow", doc: "doc.text" };
-
-/** A Made here row's leading symbol: a window for a page, a sheet for a doc. */
-export const madeIcon = (e: MadeEntry): string => MADE_ICON[e.kind];
 
 /** Other workspaces' titles sit a step back, so this workspace's lead. */
 export const madeTitleColor = (e: MadeEntry): string => (e.here ? T.text : T.secondary);

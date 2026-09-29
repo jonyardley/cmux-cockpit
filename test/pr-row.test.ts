@@ -1,5 +1,6 @@
-// The Pull requests rows' "from" line and tap: which chat opened each PR,
-// from the saved prOrigins map, and a tap on the row opening it. __STATE__ is set
+// The Pull requests rows' faint line and tap: the session each PR belongs to
+// (the workspace holding it, else the chat that opened it, from the saved
+// prOrigins map), its project, and a tap on the row opening it. __STATE__ is set
 // before the renderer import, as in made-here.test.ts.
 
 import assert from "node:assert/strict";
@@ -25,7 +26,14 @@ const checks = [
   },
   ownPrs: {
     [pr(3)]: { number: 3, url: pr(3), status: "open", branch: "c", title: "Gone chat's PR", repo: "/r" },
-    [pr(4)]: { number: 4, url: pr(4), status: "open", branch: "d", title: "Opened by hand", repo: "/r" },
+    [pr(4)]: {
+      number: 4,
+      url: pr(4),
+      status: "open",
+      branch: "d",
+      title: "Opened by hand",
+      repo: "/Users/j/dev/app-two/.git",
+    },
   },
   subagents: {},
   published: {},
@@ -47,7 +55,9 @@ const checks = [
 
 const { installRenderer, nodeOf } = await import("./support/renderer.ts");
 const r = installRenderer();
-const { ws } = await import("./support/fixtures.ts");
+const { agent, ws } = await import("./support/fixtures.ts");
+const { STATUS_DOT, T } = await import("../src/agents/theme.ts");
+const { P } = await import("../src/shared/palette.ts");
 const m = await import("../src/agents/model.ts");
 const { prRow } = await import("../src/agents/views/rows.ts");
 
@@ -68,25 +78,55 @@ beforeEach(() => {
   ];
 });
 
-describe("the row's from line", () => {
-  it("says this chat, with its age, for the selected workspace", () => {
-    assert.equal(m.prFromText(entry(1)), "from this chat · 3m ago");
+describe("the row's session and project", () => {
+  it("names the holding workspace, This chat when selected, with its lead agent's dot", () => {
+    r.data.workspaces = [
+      ws("here", { selected: true, title: "This one", agents: [agent("working")] }),
+      ws("other", { title: "Socket contract" }),
+    ];
+    assert.deepEqual(entry(1).session, { name: "This chat", dot: STATUS_DOT.working, hollow: false });
+    // No agent: a hollow grey ring, as elsewhere in the panel.
+    assert.deepEqual(entry(2).session, { name: "Socket contract", dot: T.grey, hollow: true });
   });
 
-  it("names another workspace, says a closed one has gone, and is empty with no origin", () => {
-    assert.equal(m.prFromText(entry(2)), "from Socket contract");
-    assert.equal(m.prFromText(entry(3)), "from a closed chat");
-    assert.equal(m.prFromText(entry(4)), "");
+  it("names the chat that opened an own PR while it is open, else none", () => {
+    assert.equal(entry(3).session, undefined);
+    assert.equal(entry(4).session, undefined);
+    r.data.workspaces = [...(r.data.workspaces ?? []), ws("gone", { title: "Back again" })];
+    assert.equal(entry(3).session?.name, "Back again");
+  });
+
+  it("writes the number, or nothing before GitHub gives one", () => {
+    assert.equal(m.prNumberText(entry(1)), "#1");
+    assert.equal(m.prNumberText({ pr: { url: pr(9) } }), "");
+  });
+
+  it("titles a PR with no saved title by its label or branch, since the faint line names the workspace", () => {
+    r.data.workspaces = [
+      ws("w", { title: "Socket contract", pr: { url: pr(7), number: 7, status: "open", branch: "sock", label: "PR" } }),
+    ];
+    assert.equal(entry(7).title, "sock");
+    assert.equal(entry(7).session?.name, "Socket contract");
   });
 
   it("falls back when the workspace has no name", () => {
-    const origin = { url: pr(9), number: 9, workspace: "untitled", session: "s", epoch: NOW };
-    assert.equal(m.prSource({ origin }), "another chat");
+    r.data.workspaces = [ws("here", { title: "" }), ws("other", { title: "" })];
+    assert.equal(entry(2).session?.name, "Another chat");
   });
 
-  it("drops the age while there is no clock", () => {
-    r.data.epoch = 0;
-    assert.equal(m.prSource(entry(1)), "this chat");
+  it("takes the project from the session's folder, else the own PR's repo, grey when neither matches", () => {
+    r.data.workspaces = [
+      ws("here", { selected: true, directory: "/Users/j/dev/app-one" }),
+      ws("other", { directory: "/elsewhere" }),
+      ws("gone", { directory: "/Users/j/dev/app-three/wt" }),
+    ];
+    assert.equal(entry(1).project.name, "App One");
+    assert.equal(entry(2).project.name, "");
+    assert.equal(entry(2).project.color, P.grey);
+    // #3's opener is open again, so its folder wins over the repo.
+    assert.equal(entry(3).project.name, "App Three");
+    // #4 has no opener, so its repo names the project.
+    assert.equal(entry(4).project.name, "App Two");
   });
 });
 

@@ -1,8 +1,8 @@
 // Small pieces shared by the agents panel's sections.
 
-import { prInk, shownHealth } from "../../shared/pr-colors.ts";
+import { prChipColors, shownHealth } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
-import { chipText, countPill, haloDot, projectBadge, ring, sectionTitle } from "../../shared/ui.ts";
+import { chipFrame, chipText, countPill, haloDot, projectBadge, ring, sectionTitle } from "../../shared/ui.ts";
 import { type PrEntry, prChipHealth, prChipText, prDim } from "../model.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
 
@@ -50,7 +50,7 @@ export function agentDot(color: () => string, halo: () => string, hollow: () => 
 
 // Reactive, so a row whose key outlives its project (a Made here row, keyed
 // by link, whose workspace loads late or closes) still follows it.
-export const glyph = (p: () => Project): View => projectBadge(p, 18, 9);
+export const glyph = (p: () => Project, size = 18): View => projectBadge(p, size, size / 2);
 
 /** Selects the workspace, then focuses the agent's surface when it has one. */
 export function jump(wsId: string, surfaceId: string | undefined): void {
@@ -58,8 +58,15 @@ export function jump(wsId: string, surfaceId: string | undefined): void {
   if (surfaceId) cmux("surface.focus", { surface_id: surfaceId, workspace_id: wsId });
 }
 
-/** A PR's state chip, "draft ↗": coloured words, dimmed while stale. Its row opens the PR. */
+/** A PR's state chip, "draft": its words on a faint face of its health's hue,
+ * dimmed while stale. No tap of its own: its row opens the PR. */
 export function prChip(e: () => PrEntry): View {
-  const ink = () => prInk(shownHealth(prChipHealth(e()), prDim(e())));
-  return chipText(() => prChipText(e()) + " ↗", ink).opacity(() => (prDim(e()) ? STALE_OPACITY : 1));
+  const colors = () => prChipColors(shownHealth(prChipHealth(e()), prDim(e())));
+  return chipFrame(
+    chipText(
+      () => prChipText(e()),
+      () => colors().fg,
+    ),
+    colors,
+  ).opacity(() => (prDim(e()) ? STALE_OPACITY : 1));
 }

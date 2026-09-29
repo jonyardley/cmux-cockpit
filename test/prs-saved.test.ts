@@ -109,7 +109,8 @@ describe("the agents panel's Pull requests list", () => {
     assert.deepEqual(
       agents.prs().map((e) => [e.pr.number, e.title]),
       [
-        [7, "Workspace"],
+        // No saved title: the branch, since the row's faint line names the workspace.
+        [7, "feat"],
         [42, "Fix the hook"],
       ],
     );

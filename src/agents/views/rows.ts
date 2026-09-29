@@ -2,8 +2,8 @@
 // A capped list ends in a quiet "+N more" row (issue #80) that opens it (#109).
 
 import type { Last } from "../../shared/list.ts";
-import { meta, openIfUrl, when } from "../../shared/ui.ts";
-import { type MadeEntry, madeAge, madeIcon, madeTitleColor, type PrEntry, prFromText } from "../model.ts";
+import { META_FONT, meta, openIfUrl, when } from "../../shared/ui.ts";
+import { type MadeEntry, madeAge, madeTitleColor, type PrEntry, prNumberText } from "../model.ts";
 import { T } from "../theme.ts";
 import { glyph, prChip, ruled } from "./parts.ts";
 
@@ -19,18 +19,13 @@ export function footRow(text: () => string, onTap: () => void): View {
   return ruled(row, () => true);
 }
 
-/** A PR row: a tap anywhere on it, the state words included, opens the PR on GitHub. */
+/** A PR row: its project's tile, the title and its state chip, then a faint
+ * line with the number and the session it belongs to. A tap anywhere on it,
+ * the chip included, opens the PR on GitHub. */
 export function prRow(e: () => Last<PrEntry>): View {
-  // The state words sit in the title's line, so the stack centres them on
-  // the title whether or not the from line shows under it. Stale rides inside
-  // the chip: an empty sibling Text would still cost spacing.
+  // The tile and chip centre on the title's line, whether or not the session shows under it.
   const top = HStack({ spacing: 10 }, [
-    Text(() => "#" + (e().pr.number ?? ""))
-      .font(12)
-      .monospaced()
-      .color(T.secondary)
-      .lineLimit(1)
-      .layoutPriority(2),
+    glyph(() => e().project, 16),
     Text(() => e().title)
       .font(12.5)
       .color(T.text)
@@ -40,34 +35,48 @@ export function prRow(e: () => Last<PrEntry>): View {
     Spacer({ minLength: 4 }),
     prChip(e).layoutPriority(2),
   ]);
-  // The whole row lights and taps as one target, the state words
-  // included, so a tap anywhere on it opens the PR on GitHub.
-  const row = VStack({ spacing: 2, alignment: "leading" }, [
-    top,
+  // The number, then the session's dot and name, the dot following the
+  // number's width. Indented past the tile, so it sits under the title.
+  // Each part is left out rather than drawn empty, since an empty Text still costs spacing.
+  const hollow = () => e().session?.hollow ?? false;
+  const sub = HStack({ spacing: 5 }, [
     when(
-      "pr-from",
-      () => !!prFromText(e()),
-      () =>
-        meta(() => prFromText(e()))
-          .lineLimit(1)
-          .truncation("middle"),
+      "pr-number",
+      () => !!prNumberText(e()),
+      () => meta(() => prNumberText(e())),
     ),
-  ])
+    when(
+      "pr-session",
+      () => !!e().session,
+      () =>
+        HStack({ spacing: 5 }, [
+          Circle({ size: 6 })
+            .fill(() => (hollow() ? "clear" : (e().session?.dot ?? "clear")))
+            .stroke(() => (hollow() ? T.grey : "clear"))
+            .strokeWidth(1.5),
+          Text(() => e().session?.name ?? "")
+            .font(META_FONT)
+            .color(T.tertiary)
+            .lineLimit(1)
+            .truncation("tail"),
+        ]),
+    ),
+    Spacer(),
+  ]).paddingLeading(26);
+  const row = VStack({ spacing: 2, alignment: "leading" }, [top, sub])
     .paddingHorizontal(12)
-    .paddingVertical(10)
+    .paddingVertical(8)
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => openIfUrl(e().pr.url));
   return ruled(row, () => e().last);
 }
 
-/** One page or doc an agent published: tap opens it on claude.ai. */
+/** One page or doc an agent published: its project's tile (grey when the
+ * workspace that made it is unknown), title and age. Tap opens it on claude.ai. */
 export function madeRow(e: () => Last<MadeEntry>): View {
   const row = HStack({ spacing: 10 }, [
-    Image(() => madeIcon(e()))
-      .font(11)
-      .color(T.tertiary)
-      .frame({ width: 16 }),
+    glyph(() => e().project),
     Text(() => e().title)
       .font(12.5)
       .color(() => madeTitleColor(e()))
@@ -76,10 +85,9 @@ export function madeRow(e: () => Last<MadeEntry>): View {
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
     meta(() => madeAge(e())),
-    glyph(() => e().project),
   ])
     .paddingHorizontal(12)
-    .paddingVertical(10)
+    .paddingVertical(9)
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => openIfUrl(e().url));
