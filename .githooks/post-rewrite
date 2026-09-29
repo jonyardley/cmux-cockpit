@@ -1,7 +1,0 @@
-#!/bin/sh
-# Installed by `npm run hooks`. Runs after a rebase, including a rebase pull.
-# Amends are skipped: they cannot bring in new src/ changes.
-if [ "$1" != "rebase" ]; then
-  exit 0
-fi
-exec "$(dirname "$0")/sync-after-pull"

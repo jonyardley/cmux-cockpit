@@ -1,3 +1,0 @@
-#!/bin/sh
-# Installed by `npm run hooks`. Runs after a merge, including a plain pull.
-exec "$(dirname "$0")/sync-after-pull"
