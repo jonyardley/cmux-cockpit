@@ -8,24 +8,21 @@ const r = seed({
   state: {
     asking: { ask: { reason: "allow npm publish?", epoch: EPOCH - 60 } },
     moves: {
-      n2: {
-        text: 'reply "1b 2a" on the bridge and the store.',
-        epoch: EPOCH - 900,
-        decisions: 2,
-        leans: "1b 2a",
-        head: "testspassmergenow",
-      },
-      n3: { text: "the work is finished. Run /clear now.", epoch: EPOCH - 600, head: "cleanupdonepr120merged" },
+      n2: { text: 'reply "1b 2a" on the bridge and the store.', epoch: EPOCH - 900, decisions: 2, leans: "1b 2a" },
+      n3: { text: "the work is finished. Run /clear now.", epoch: EPOCH - 600 },
     },
   },
 });
 const { agent, ws } = await import("./support/fixtures.ts");
 await import("../src/cockpit/index.ts");
 const { C } = await import("../src/cockpit/theme.ts");
+// latestAt is the prompt that began the turn, two minutes before it ended,
+// so each saved move (epoch at the turn end) is newer than it.
 const waiting = (id: string, title: string, secs: number, latestMessage?: string): Workspace =>
   ws(id, {
     title,
     agents: [agent("needs_input", { sinceEpoch: ago(secs), lastActivityAt: ago(secs) })],
+    latestAt: ago(secs + 120),
     ...(latestMessage ? { latestMessage } : {}),
   });
 
@@ -34,7 +31,7 @@ it("needs you and next", () => {
     waiting("n1", "Oldest question", 1800, "Should the strip cap at four?"),
     waiting("ask", "Publish", 60),
     waiting("n2", "Second", 900, "Tests pass. Merge now?"),
-    waiting("n3", "Third", 600, "Cleanup done, PR #120 merged."),
+    waiting("n3", "Third", 600),
     waiting("n4", "Fifth, past the cap", 30, "One more thing"),
     ws("ready", {
       title: "Finished while away",

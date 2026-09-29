@@ -7,8 +7,6 @@
 // untrusted: bad keys and values are refused, bad entries in the file are
 // dropped, and nothing here ever throws on input.
 
-import { HEAD_CHARS } from "../src/shared/reply-head.ts";
-
 export interface State {
   /** wsId -> agent id -> start of the needs_input spell that was dismissed (issue #5). */
   dismissed: Record<string, Record<string, number>>;
@@ -230,12 +228,6 @@ export interface SavedMove {
   decisions?: number;
   /** The reply's recommended answers in Jon's shorthand ("1b 2a"), when it marked any. */
   leans?: string;
-  /**
-   * The start of the reply the line came from, as replyHead makes it
-   * (src/shared/reply-head.ts), so the sidebar shows the move only while
-   * cmux's latest message is that reply. A move without one never shows.
-   */
-  head?: string;
 }
 
 /** The longest "Your move" line kept; the hook cuts one to this. */
@@ -534,24 +526,18 @@ const isLeans = (v: unknown): v is string =>
 const isDecisions = (v: unknown): v is number =>
   typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_DECISIONS;
 
-// A reply's head: letters and digits only, as replyHead leaves them.
-const HEAD = new RegExp(`^[\\p{L}\\p{N}]{1,${HEAD_CHARS}}$`, "u");
-const isHead = (v: unknown): v is string => typeof v === "string" && HEAD.test(v);
-
 function savedMove(v: unknown): SavedMove | null {
   if (!isRecord(v) || !isText(v.text, MAX_MOVE) || !isEpoch(v.epoch)) return null;
-  const { session, decisions, leans, head } = v;
+  const { session, decisions, leans } = v;
   if (session !== undefined && (typeof session !== "string" || !isId(session))) return null;
   if (decisions !== undefined && !isDecisions(decisions)) return null;
   if (leans !== undefined && !isLeans(leans)) return null;
-  if (head !== undefined && !isHead(head)) return null;
   return {
     text: v.text,
     epoch: v.epoch,
     ...(typeof session === "string" ? { session } : {}),
     ...(isDecisions(decisions) ? { decisions } : {}),
     ...(isLeans(leans) ? { leans } : {}),
-    ...(isHead(head) ? { head } : {}),
   };
 }
 
@@ -688,7 +674,7 @@ export const MOVE_MAX_AGE_S = 7 * 24 * 60 * 60;
 // As askEntry: the move goes last, and moves a week older than it are dropped.
 function moveEntry(state: State, id: string, parsed: unknown): State | string {
   const move = savedMove(parsed);
-  if (!move) return "moves wants {text, epoch, session?, decisions?, leans?, head?}";
+  if (!move) return "moves wants {text, epoch, session?, decisions?, leans?}";
   const kept = Object.entries(state.moves).filter(([, m]) => m.epoch >= move.epoch - MOVE_MAX_AGE_S);
   return { ...state, moves: { ...Object.fromEntries(kept), [id]: move } };
 }

@@ -492,12 +492,7 @@ first 240 characters of a message, so the sidebar never sees that line.
 the transcript's tail, read once more after a pause when a prompt or a tool
 result still comes after the last reply, since that reply is not the final
 one) and saves the line per workspace in the `moves` map: workspace id to
-`{"text", "epoch", "session"?, "decisions"?, "leans"?, "head"?}`. `head`
-is the start of that reply as `replyHead` (`src/shared/reply-head.ts`)
-makes it: cut to cmux's 240 characters, read as the sidebar reads a
-message (`readable`), links reduced to their words, lower-cased, only
-letters and digits, the first 40 of them. It is left out when nothing
-readable is left. A "Your move"
+`{"text", "epoch", "session"?, "decisions"?, "leans"?}`. A "Your move"
 line inside a code fence (a handoff opener) is not the reply's. `decisions`
 counts the reply's bold numbered headings with at least one lettered
 option under them, and `leans` holds the option marked **Lean** or
@@ -508,22 +503,47 @@ drops the workspace's saved one. Like `asking`, the map goes through
 than a week older (`MOVE_MAX_AGE_S`, since a chat can wait over a weekend),
 and `MAX_ENTRIES` caps it.
 
-`src/shared/move.ts` shows the move while the turn it ended is still
-waiting. cmux must say needs_input and it must not be an ask; it may read
-as idle only because of Claude Code's idle nudge (a dismissal hides it).
-The move counts while the workspace's `latestMessage`, given the same
-`replyHead`, starts with the saved `head`: the message is still the reply
-the move came from. A new turn's reply changes the message, so an old move
-never shows against it, and while the chat works the status check hides
-it. A move saved without a `head` (from before this rule) never shows.
-Timestamps are no guide: about 60s after a turn ends, the nudge lands and
-cmux restamps both `sinceEpoch` and `lastActivityAt` (or `latestAt`), so a
-move judged by them went stale a minute after it was saved. `epoch` stays
-for the week-long prune. Unconfirmed: whether cmux's `latestMessage` keeps
-the reply's markdown (the head is built to match either way) and whether
-it is always the turn's final reply. A turn Jon interrupts before any
-reply leaves the message, and so the old move, as they were. The session
-rule is the one asks use (`isOwnSaved` in `src/shared/needs.ts`). The
+`src/shared/move.ts` shows the move while the agent is at a turn end and
+no prompt has come since it was saved: cmux says idle or needs_input (never
+working or ended), it is not an ask, and the move's `epoch` is no earlier
+than the workspace's `latestAt`, give or take `ASK_SLACK`. What cmux does,
+confirmed in the v0.64.25 source:
+
+- Claude's Stop sets the agent idle
+  (`Sources/Mobile/AgentChat/AgentChatSessionRegistry+Lifecycle.swift:98`).
+  The idle_prompt Notification about 60s later moves it to needs_input and
+  stamps `sinceEpoch` and `lastActivityAt` at its arrival (the same file,
+  lines 89 to 97, and `AgentChatSessionRegistry.swift:501`). Every hook
+  event stamps `lastActivityAt`, so neither says when the agent last worked.
+- `latestMessage`, `latestPrompt` and `latestAt` belong to the workspace
+  (`Workspace.swift:3052-3054`). UserPromptSubmit writes the prompt into
+  both `latestPrompt` and `latestMessage` and sets `latestAt`
+  (`Workspace.swift:6643-6648`). Stop writes `last_assistant_message` into
+  `latestMessage` and `latestAt` only in iMessage mode, which is off by
+  default (`WorkspacePromptSubmit.swift:6,75-81,200`). Notifications never
+  write them (`TerminalController.swift:6434`).
+
+So `latestAt` is, by default, when Jon last sent a prompt. A new prompt,
+a turn he interrupts and an ask in the middle of a turn all follow a
+prompt, so each retires the move; in iMessage mode Stop moves `latestAt`
+at about the moment the hook saves, which the slack covers. The nudge
+leaves `latestAt` alone, so the move survives it. By default
+`latestMessage` is Jon's own prompt, which `cardMessage` hides as an echo,
+so the move is often the only reply text a card has. The Needs you row
+falls back to the message and then to "Waiting for your reply", the card
+to the message and then to the description.
+
+"Your turn" only appears after the nudge, about 60s after the turn ends;
+until then the agent is idle and the card reads idle, with the move and
+its chip already showing. That is cmux's behaviour, not the sidebar's. A
+dismissal reads as idle too, so it no longer hides the move.
+
+The session rule is the one asks use (`isOwnSaved` in
+`src/shared/needs.ts`): when one of the workspace's agents carries the
+move's session as its id, only that agent's turn end borrows it. Before
+the first hook an agent's id can be a `pending-claude-` alias
+(`AgentChatSessionRegistry.swift:519-553`); no agent then carries the
+session, and the move belongs to the workspace. The
 cockpit quotes it in place of the message on every card and on the Needs
 you row, adds it under the status on the Projects row, and leads the chips
 with a size: Decide (with the count past one) when the reply laid out

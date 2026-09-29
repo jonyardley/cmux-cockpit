@@ -1,7 +1,7 @@
 // A chat's saved "Your move" line on the cockpit's cards: shown while its
-// turn end is still waiting and cmux's latest message is the reply it came
-// from, never once the chat works again or while it is asking, with a size
-// chip when the line says how big answering it is.
+// turn end is still waiting and no prompt has come since it was saved (cmux's
+// latestAt), never while the chat works or asks, with a size chip when the
+// line says how big answering it is.
 // __STATE__ is set before the renderer import, as in asking-saved.test.ts.
 
 import assert from "node:assert/strict";
@@ -18,12 +18,11 @@ import { beforeEach, describe, it } from "node:test";
   prOrigins: {},
   asking: { asks: { reason: "allow git push?", epoch: 1000 } },
   moves: {
-    quick: { text: "the work is finished. Run /clear now.", epoch: 1000, head: "jonpr120ismerged" },
-    decide: { text: 'reply "1b 2a".', epoch: 1000, decisions: 2, leans: "1b 2a", head: "jonpr120ismerged" },
-    plain: { text: "tell me which one you meant.", epoch: 1000, head: "jonpr120ismerged" },
-    asks: { text: "go", epoch: 1000, head: "jonpr120ismerged" },
-    owned: { text: "go", epoch: 1000, session: "sessA", head: "jonpr120ismerged" },
-    headless: { text: "go", epoch: 1000 },
+    quick: { text: "the work is finished. Run /clear now.", epoch: 1000 },
+    decide: { text: 'reply "1b 2a".', epoch: 1000, decisions: 2, leans: "1b 2a" },
+    plain: { text: "tell me which one you meant.", epoch: 1000 },
+    asks: { text: "go", epoch: 1000 },
+    owned: { text: "go", epoch: 1000, session: "sessA" },
   },
   ui: {},
 };
@@ -37,11 +36,14 @@ const cockpit = await import("../src/cockpit/model.ts");
 
 const waiting = (since: number, extra: Partial<Agent> = {}) =>
   agent("needs_input", { sinceEpoch: since, lastActivityAt: since, ...extra });
-// The reply the saved moves came from, as cmux sends it: markdown kept, cut.
-const REPLY = "**Jon**, PR #120 is merged and the cleanup is finished.";
-// A workspace whose latest message is that reply.
+// Claude's Stop leaves the agent idle; cmux stamps its spell and activity then.
+const stopped = (since: number, extra: Partial<Agent> = {}) =>
+  agent("idle", { kind: "claude", sinceEpoch: since, lastActivityAt: since, ...extra });
+// The prompt that began the turn, as cmux stamps latestAt on UserPromptSubmit.
+const PROMPT_AT = 950;
+// A workspace whose last prompt came before the saved moves (epoch 1000).
 const at = (id: string, agents: Agent[], extra: Partial<Workspace> = {}) =>
-  ws(id, { agents, latestMessage: REPLY, ...extra });
+  ws(id, { agents, latestAt: PROMPT_AT, latestMessage: "Jon, PR #120 is merged.", ...extra });
 
 beforeEach(() => {
   r.data.epoch = 1060;
@@ -78,49 +80,49 @@ describe("moveSize", () => {
 });
 
 describe("moveOf", () => {
-  it("is the saved move while the latest message is the reply it came from", () => {
-    assert.equal(status.moveOf(at("quick", [waiting(1000)]))?.text, "the work is finished. Run /clear now.");
+  it("shows at idle straight after Stop, when the move is newer than the last prompt", () => {
+    const w = at("quick", [stopped(1000)]);
+    assert.equal(status.agentOf(w)?.status, "idle");
+    assert.equal(status.moveOf(w)?.text, "the work is finished. Run /clear now.");
+    assert.equal(status.cardDetail(w), "the work is finished. Run /clear now.");
     assert.ok(
-      status.moveOf(at("quick", [waiting(1000)], { latestMessage: "Jon, PR #120 is merged." })),
-      "markdown gone",
+      status.moveOf(at("quick", [stopped(1000)], { latestAt: 1000 + 3 })),
+      "Stop in iMessage mode, slack aside",
     );
+    assert.ok(status.moveOf(ws("quick", { agents: [stopped(1000)] })), "no prompt known");
   });
 
-  it("still shows when the nudge restamps both the spell and the activity a minute on", () => {
-    // The observed case: cmux stamps sinceEpoch and lastActivityAt at the nudge.
-    const w = at("quick", [waiting(1060)]);
+  it("still shows after the nudge restamps the spell and the activity a minute on", () => {
+    // idle_prompt about 60s after Stop: needs_input, sinceEpoch and lastActivityAt at its arrival, latestAt untouched.
+    const w = at("quick", [waiting(1060, { kind: "claude" })]);
+    assert.equal(status.agentOf(w)?.status, "needs_input");
     assert.equal(status.moveOf(w)?.text, "the work is finished. Run /clear now.");
     assert.equal(status.cardDetail(w), "the work is finished. Run /clear now.");
     assert.equal(status.needsDetail(w), "the work is finished. Run /clear now.");
   });
 
-  it("is null once the latest message is another reply", () => {
-    assert.equal(status.moveOf(at("quick", [waiting(1060)], { latestMessage: "Jon, the next turn." })), null);
-    assert.equal(status.moveOf(at("quick", [waiting(1060)], { latestMessage: "" })), null);
-    assert.equal(status.moveOf(ws("quick", { agents: [waiting(1060)] })), null, "no message");
-  });
-
-  it("is null while it works, while it asks, without a saved move, or saved without a head", () => {
-    assert.equal(status.moveOf(at("quick", [agent("working", { sinceEpoch: 1000 })])), null);
-    assert.equal(status.moveOf(at("asks", [waiting(1000)])), null);
-    assert.equal(status.moveOf(at("none", [waiting(1000)])), null);
-    assert.equal(status.moveOf(at("headless", [waiting(1000)])), null);
-  });
-
-  it("still shows after the idle nudge turns the agent idle and restarts its spell", () => {
-    // The nudge lands 60s on: cmux says needs_input from then, with no new activity.
+  it("still shows when the nudge reads as idle", () => {
     const nudged = agent("needs_input", { kind: "claude", sinceEpoch: 1060, lastActivityAt: 1000 });
     const w = at("quick", [nudged]);
     assert.equal(status.agentOf(w)?.status, "idle", "the nudge reads as idle");
     assert.equal(status.moveOf(w)?.text, "the work is finished. Run /clear now.");
-    assert.equal(status.cardDetail(w), "the work is finished. Run /clear now.");
   });
 
-  it("is gone once the agent works again and ends on a new reply, even when it reads as a nudge", () => {
-    const working = agent("working", { kind: "claude", sinceEpoch: 1100, lastActivityAt: 1100 });
-    assert.equal(status.moveOf(at("quick", [working])), null);
-    const later = agent("needs_input", { kind: "claude", sinceEpoch: 1160, lastActivityAt: 1100 });
-    assert.equal(status.moveOf(at("quick", [later], { latestMessage: "Jon, a later reply." })), null);
+  it("is gone once a prompt comes after it: a new turn, or an interrupted one", () => {
+    // A new prompt at 1100: the move from 1000 belongs to the turn before it.
+    assert.equal(status.moveOf(at("quick", [agent("working", { sinceEpoch: 1100 })], { latestAt: 1100 })), null);
+    // Interrupted at 1150 with no Stop, so nothing saved a new move: still gone.
+    assert.equal(status.moveOf(at("quick", [stopped(1150)], { latestAt: 1100 })), null);
+    const later = agent("needs_input", { kind: "claude", sinceEpoch: 1210, lastActivityAt: 1150 });
+    assert.equal(status.moveOf(at("quick", [later], { latestAt: 1100 })), null, "nudged after the interrupt");
+    assert.equal(status.moveOf(at("quick", [stopped(1000)], { latestAt: 1000 + 4 })), null, "past the slack");
+  });
+
+  it("is null while it works, while it asks, once it ended, or without a saved move", () => {
+    assert.equal(status.moveOf(at("quick", [agent("working", { sinceEpoch: 1000 })])), null);
+    assert.equal(status.moveOf(at("asks", [waiting(1000)])), null);
+    assert.equal(status.moveOf(at("quick", [agent("ended", { sinceEpoch: 1010 })])), null);
+    assert.equal(status.moveOf(at("none", [stopped(1000)])), null);
   });
 
   it("goes only to the agent whose id is the move's session, when one has it", () => {
@@ -140,8 +142,15 @@ describe("the card", () => {
   });
 
   it("keeps the message once the move is stale", () => {
-    const w = ws("quick", { agents: [waiting(2000)], latestMessage: "Something new." });
+    const w = at("quick", [waiting(2000)], { latestAt: 1900, latestMessage: "Something new." });
     assert.equal(status.cardDetail(w), "Something new.");
+  });
+
+  it("falls back to the message, then a plain line, when there is no move", () => {
+    const w = at("none", [stopped(1000)], { latestMessage: "Jon, the reply." });
+    assert.equal(status.cardDetail(w), "Jon, the reply.");
+    const needs = at("none", [waiting(1000)], { latestMessage: "" });
+    assert.equal(status.needsDetail(needs), "Waiting for your reply");
   });
 
   it("leads the chips with the size, and has no size chip when the line gives no clue", () => {

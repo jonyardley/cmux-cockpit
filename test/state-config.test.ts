@@ -64,7 +64,7 @@ test("validateState reads a good file unchanged", () => {
     },
     asking: { w6: { reason: "allow git push?", epoch: 300, session: "s1" }, w7: { reason: "a question", epoch: 301 } },
     moves: {
-      w8: { text: "Run /clear now.", epoch: 302, session: "s1", decisions: 2, leans: "1b 2a", head: "jonprismerged" },
+      w8: { text: "Run /clear now.", epoch: 302, session: "s1", decisions: 2, leans: "1b 2a" },
       w9: { text: "go", epoch: 303 },
     },
     ui: { mode: "projects", collapsed: { "lane:parked": 0, "project:/dev/a": 1 } },

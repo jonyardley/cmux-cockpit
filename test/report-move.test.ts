@@ -7,7 +7,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { decisionsIn, lastReply, moveFrom, moveLine } from "../scripts/hooks/report-move.ts";
 import { applySet, cleanMove, emptyState, MAX_MOVE, MOVE_MAX_AGE_S, urlMaySet } from "../scripts/state-config.ts";
-import { isReplyOf } from "../src/shared/reply-head.ts";
 
 const DECISIONS = [
   "Jon, two calls.",
@@ -132,29 +131,15 @@ describe("decisionsIn", () => {
 });
 
 describe("moveFrom", () => {
-  it("saves the line, when, the session, any decisions and the reply's head", () => {
+  it("saves the line, when, the session and any decisions", () => {
     assert.deepEqual(moveFrom(DECISIONS, 1000, "s1"), {
       text: 'reply "1a 2b" (under a minute, yours).',
       epoch: 1000,
       session: "s1",
       decisions: 2,
       leans: "1a 2b",
-      head: "jontwocalls1wherethecardgetsthelineaasto",
     });
-    assert.deepEqual(moveFrom("Your move: go", 5), { text: "go", epoch: 5, head: "yourmovego" });
-  });
-
-  it("saves a head the sidebar's latestMessage matches, markdown kept or not", () => {
-    const head = moveFrom(DECISIONS, 1000)?.head ?? "";
-    assert.ok(isReplyOf(DECISIONS.slice(0, 240), head), "cut as cmux cuts it");
-    assert.ok(isReplyOf("Jon, two calls. 1. Where the card gets the line a) A Stop hook saves it.", head));
-    assert.ok(!isReplyOf("Jon, one call.", head));
-  });
-
-  it("saves no head when nothing in the reply is readable", () => {
-    assert.equal(moveFrom("<x>only markup</x>\nYour move: go", 5)?.head, "yourmovego");
-    const past = "<task-notification>done</task-notification>" + " ".repeat(240) + "\nYour move: go";
-    assert.equal(moveFrom(past, 5)?.head, undefined, "the move line is past what cmux keeps");
+    assert.deepEqual(moveFrom("Your move: go", 5), { text: "go", epoch: 5 });
   });
 
   it("is null when the reply has no move line", () => {
@@ -210,7 +195,7 @@ describe("the moves map", () => {
   const set = (value: unknown) => applySet(emptyState(), "moves.ws1", JSON.stringify(value));
 
   it("keeps a well-formed move and drops a bad optional field's entry", () => {
-    const ok = set({ text: "go", epoch: 10, session: "s1", decisions: 2, leans: "1a 2b", head: "jontwocalls" });
+    const ok = set({ text: "go", epoch: 10, session: "s1", decisions: 2, leans: "1a 2b" });
     assert.ok(ok.ok);
     assert.deepEqual(ok.ok && ok.state.moves.ws1, {
       text: "go",
@@ -218,13 +203,7 @@ describe("the moves map", () => {
       session: "s1",
       decisions: 2,
       leans: "1a 2b",
-      head: "jontwocalls",
     });
-    assert.equal(set({ text: "go", epoch: 10, head: "jonécrit2" }).ok, true, "any letters and digits");
-    assert.equal(set({ text: "go", epoch: 10, head: "" }).ok, false);
-    assert.equal(set({ text: "go", epoch: 10, head: "jon two" }).ok, false);
-    assert.equal(set({ text: "go", epoch: 10, head: "a".repeat(41) }).ok, false);
-    assert.equal(set({ text: "go", epoch: 10, head: 7 }).ok, false);
     assert.equal(set({ text: "go", epoch: 10, decisions: 0 }).ok, false);
     assert.equal(set({ text: "go", epoch: 10, leans: "one b" }).ok, false);
     assert.equal(set({ text: " padded ", epoch: 10 }).ok, false);
