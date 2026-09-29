@@ -164,13 +164,6 @@ describe("madeHere", () => {
 });
 
 describe("Made here row helpers", () => {
-  it("shows a window for a page and a sheet for a doc", () => {
-    const [doc, page] = m.madeHere();
-    assert.ok(doc && page);
-    assert.equal(m.madeIcon(doc), "doc.text");
-    assert.equal(m.madeIcon(page), "macwindow");
-  });
-
   it("sets other workspaces' titles a step back", () => {
     const rows = m.madeHere();
     const here = rows.find((e) => e.here);

@@ -620,12 +620,12 @@ function whileOpen(k: "prs" | "made", body: () => void): void {
 
 describe("honest counts and +N more (#80)", () => {
   it("counts every PR before the cap and says how many the cap leaves out", () => {
-    r.data.workspaces = Array.from({ length: 33 }, (_, i) =>
+    r.data.workspaces = Array.from({ length: 8 }, (_, i) =>
       ws("p" + i, { pr: { url: "u/" + i, number: i + 1, status: "open" } }),
     );
-    assert.equal(m.prCount(), 33);
+    assert.equal(m.prCount(), 8);
     assert.equal(m.prFoot(), "+3 more");
-    assert.equal(m.prs().length, 30);
+    assert.equal(m.prs().length, 5);
     assert.ok(m.prs().every((e) => !e.last));
   });
 
@@ -640,17 +640,17 @@ describe("honest counts and +N more (#80)", () => {
   });
 
   it("opens the PR card past its cap on a tap, and folds it back (#109)", () => {
-    r.data.workspaces = Array.from({ length: 33 }, (_, i) =>
+    r.data.workspaces = Array.from({ length: 8 }, (_, i) =>
       ws("p" + i, { pr: { url: "u/" + i, number: i + 1, status: "open" } }),
     );
     assert.equal(m.prFoot(), "+3 more");
     whileOpen("prs", () => {
-      assert.equal(m.prs().length, 33);
+      assert.equal(m.prs().length, 8);
       assert.equal(m.prFoot(), "Show less");
       // The Show less line follows, so the final row keeps its rule.
       assert.ok(m.prs().every((e) => !e.last));
     });
-    assert.equal(m.prs().length, 30);
+    assert.equal(m.prs().length, 5);
     assert.equal(m.prFoot(), "+3 more");
   });
 
