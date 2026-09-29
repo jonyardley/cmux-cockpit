@@ -1,12 +1,13 @@
 // The project editor strip (src/cockpit/edit.ts), shown under a project's
 // header or quiet row: name, colour, icon and folder, then Remove and Done.
 
-import { PROJECT_COLORS, PROJECT_ICONS } from "../../shared/projects.ts";
+import { PROJECT_COLORS } from "../../shared/projects.ts";
 import { ring } from "../../shared/ui.ts";
 import {
   closeEditor,
   draftProblem,
   draftSpec,
+  iconRows,
   matchesLine,
   removeLabel,
   removeTapped,
@@ -47,9 +48,9 @@ function iconChoice(icon: string): View {
     .onTap(() => setDraftIcon(icon));
 }
 
-// Two rows of six, so twelve icons fit the sidebar's width.
-const iconRows = (): View[] =>
-  [PROJECT_ICONS.slice(0, 6), PROJECT_ICONS.slice(6)].map((row) => HStack({ spacing: 4 }, row.map(iconChoice)));
+// Rows of at most six, so the icons fit the sidebar's width.
+const iconPicker = (current: string): View[] =>
+  iconRows(current).map((row) => HStack({ spacing: 4 }, row.map(iconChoice)));
 
 function actions(): View {
   return HStack({ spacing: 10 }, [
@@ -76,7 +77,7 @@ export function projectEditor(k: string): View {
     label("COLOUR"),
     HStack({ spacing: 3 }, PROJECT_COLORS.map(swatch)),
     label("ICON"),
-    ...iconRows(),
+    ...iconPicker(spec.icon),
     label("FOLDER"),
     field(spec.root ?? "", "~/Dev/folder, for the +", false, setDraftFolder),
     Text(matchesLine(k)).font(10).color(C.faint).lineLimit(2),

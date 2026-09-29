@@ -520,6 +520,12 @@ export function canCreateProject(w: Workspace | undefined): boolean {
   return made !== null && !sentSpecs.get(made.key);
 }
 
+/** True once the project was removed in the sidebar, before the rebuild drops it. Reactive. */
+function isRemovedProject(k: string): boolean {
+  tick();
+  return sentSpecs.has(k) && sentSpecs.get(k) === null;
+}
+
 /** Saves a project's name, colour, icon and folder. */
 export function saveProject(k: string, spec: ProjectSpec): void {
   sentSpecs.set(k, spec);
@@ -569,10 +575,20 @@ export const projectCount = (k: string) => cardWorkspaces().filter((w) => projec
 /** Whether the project's header should offer "+": it has a folder to open. */
 export const canOpenProject = (k: string): boolean => !!projectByKey(k).root;
 
+/**
+ * The folder "+" opens: until the rebuild lands, the last root sent when it
+ * is already absolute (a "~" one waits for build.ts to expand it), else the
+ * built one.
+ */
+function rootToOpen(k: string): string | undefined {
+  const sent = sentSpecs.get(k)?.root;
+  return sent?.startsWith("/") ? sent : projectByKey(k).root;
+}
+
 /** Opens a new workspace in the project's root, if it has one. A folded
  * project unfolds first, so the new card is not hidden under its header. */
 export function openProjectWorkspace(k: string): void {
-  const root = projectByKey(k).root;
+  const root = rootToOpen(k);
   if (!root) return;
   if (isProjectCollapsed(k)) toggleProject(k);
   cmux("workspace.create", { cwd: root, focus: true });
@@ -631,7 +647,7 @@ const cardsByProject = computed(() => {
  */
 export const quietProjects = computed(() => {
   const groups = cardsByProject();
-  return PROJECTS.map(projectId).filter((k) => !groups.has(k));
+  return PROJECTS.map(projectId).filter((k) => !groups.has(k) && !isRemovedProject(k));
 });
 
 /** Folds or unfolds the Quiet rows, kept across a reload. */
@@ -653,10 +669,15 @@ export const projectEntries = computed(() => {
   const entries: ProjectEntry[] = [];
   // A project with sessions gets a header; the quiet ones share one header at
   // the bottom, a short row each. Other only shows once something falls into it.
-  for (const k of [...PROJECTS.map(projectId), projectId(OTHER)]) {
+  // A project removed before the rebuild loses its header at once; its
+  // cards wait in Other, where the rebuild will put them.
+  const gone = PROJECTS.map(projectId).filter(isRemovedProject);
+  const other = [...(groups.get(projectId(OTHER)) ?? []), ...gone.flatMap((k) => groups.get(k) ?? [])];
+  for (const k of PROJECTS.map(projectId)) {
     const rows = groups.get(k);
-    if (rows) pushGroup(entries, k, rows);
+    if (rows && !gone.includes(k)) pushGroup(entries, k, rows);
   }
+  if (other.length) pushGroup(entries, projectId(OTHER), other);
   const quiet = quietProjects();
   if (!quiet.length) return entries;
   // Ids outside the "p:" space, so a project matching "quiet" cannot clash.

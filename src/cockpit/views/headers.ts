@@ -3,7 +3,7 @@
 import { isProjectKey } from "../../shared/projects.ts";
 import { laneTitle, projectBadge, ring, unreadBadge } from "../../shared/ui.ts";
 import { dropLane } from "../drop.ts";
-import { openEditor } from "../edit.ts";
+import { editLabel, openEditor } from "../edit.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
@@ -243,7 +243,7 @@ export function quietRow(k: string): View {
     .contextMenu([
       Button(quietLabel(k), () => openProjectWorkspace(k)),
       Divider(),
-      Button("Edit project", () => openEditor(k)),
+      Button(editLabel(k), () => openEditor(k)),
     ]);
   if (!open) return row.opacity(0.55);
   return row.hoverBackground(C.hover).onTap(() => openProjectWorkspace(k));
@@ -252,7 +252,7 @@ export function quietRow(k: string): View {
 // A project's own menu: open a session in it, or edit it. Other has no edit.
 const projectMenu = (k: string): MenuItem[] => [
   Button(projectNewLabel(k), () => openProjectWorkspace(k)),
-  ...(isProjectKey(k) ? [Divider(), Button("Edit project", () => openEditor(k))] : []),
+  ...(isProjectKey(k) ? [Divider(), Button(editLabel(k), () => openEditor(k))] : []),
 ];
 
 export function projectHeader(k: string): View {

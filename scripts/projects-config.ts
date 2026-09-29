@@ -1,7 +1,8 @@
 // Validates the project table before the build injects it (see build.ts).
 // Kept apart from build.ts so the rules can be tested without running a build.
 
-import { isRemoved, type ProjectSpec, type SavedProject } from "./state-config.ts";
+import { isRemoved } from "../src/shared/project-rules.ts";
+import type { ProjectSpec, SavedProject } from "./state-config.ts";
 
 export interface Project {
   match: string | string[];
@@ -113,8 +114,9 @@ function clashing(projects: readonly Project[], edits: ReadonlyMap<string, Saved
  * entry under a file project's first match edits or removes that project, so
  * every project can be changed in the sidebar and the file is only the seed.
  * An edit that would give two projects one name is dropped, the file's entry
- * kept. The rest are sidebar-made projects, appended; one whose folder a file
- * match already claims, or whose name is taken, is dropped, so it can never
+ * kept. The rest are sidebar-made projects, appended; one whose folder a
+ * standing file project's match claims, or whose name is taken, is dropped
+ * (a removed file project claims neither), so it can never
  * sit as an empty header nobody can reach. Deeper folders go first, since
  * projectOf takes the first match. The result always passes validateProjects.
  */
@@ -127,7 +129,9 @@ export function mergeProjects(file: readonly Project[], saved: Record<string, Sa
     projects = withEdits(file, edits);
   }
   const kept: Record<string, SavedProject> = Object.fromEntries(edits);
-  const fileMatches = file.flatMap(matchList);
+  // Only the file projects still standing claim folders: a removed one's
+  // matches must not block a sidebar-made project in its old folder.
+  const fileMatches = projects.flatMap(matchList);
   const matches = new Set(fileMatches);
   const names = new Set(projects.map((p) => p.name));
   const deepestFirst = Object.entries(saved).sort(([a], [b]) => b.length - a.length);

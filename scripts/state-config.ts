@@ -7,6 +7,17 @@
 // untrusted: bad keys and values are refused, bad entries in the file are
 // dropped, and nothing here ever throws on input.
 
+import {
+  isCleanChar,
+  isHex,
+  isMatchKey,
+  isName,
+  isRoot,
+  isSymbol,
+  isText,
+  MAX_PROJECT_KEY,
+} from "../src/shared/project-rules.ts";
+
 export interface State {
   /** wsId -> agent id -> start of the needs_input spell that was dismissed (issue #5). */
   dismissed: Record<string, Record<string, number>>;
@@ -112,8 +123,6 @@ export interface ProjectRemoved {
 }
 
 export type SavedProject = ProjectSpec | ProjectRemoved;
-
-export const isRemoved = (p: SavedProject): p is ProjectRemoved => "removed" in p;
 
 /** A pull request as the poller saves it, shaped like renderer.d.ts's PullRequest. */
 export interface SavedPr {
@@ -277,7 +286,6 @@ export const emptyState = (): State => ({
 // first; cmux ids are UUIDs, so that is accepted rather than worked round.
 const RESERVED = new Set(["__proto__", "constructor", "prototype"]);
 export const isId = (v: string): boolean => v.length > 0 && v.length <= 128 && !RESERVED.has(v);
-const MAX_PROJECT_KEY = 512;
 /** Entries kept per map, so a flood of URLs cannot grow the file without bound. */
 export const MAX_ENTRIES = 256;
 
@@ -295,26 +303,6 @@ function agentStarts(v: unknown): Record<string, number> | null {
 
 const projectKey = (v: unknown): string | null =>
   typeof v === "string" && v.length > 0 && v.length <= MAX_PROJECT_KEY ? v : null;
-
-// A saved project is keyed by its first match, lowercase and at least two
-// segments deep, so no URL can plant a "/" that swallows every folder. A
-// sidebar-made one is an absolute folder ending in "/", matching that folder
-// and no sibling that shares its prefix (projectOf adds the same "/" to the
-// directory); a projects.json one is its fragment, often with no trailing "/".
-const isMatchKey = (v: string): boolean =>
-  /^(\/[^/]+){2,}\/?$/.test(v) && v.length <= MAX_PROJECT_KEY && v === v.toLowerCase();
-
-const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
-// SF Symbol names are dotted lowercase words, e.g. "music.note".
-const isSymbol = (v: unknown): v is string =>
-  typeof v === "string" && /^[a-z0-9]+(\.[a-z0-9]+)*$/.test(v) && v.length <= 64;
-
-// A control character, 0-31 or 127 (DEL): the same rule cleanLabel uses
-// to turn them to spaces, so a label it cleans reads as clean here too.
-const isCleanChar = (c: string): boolean => {
-  const code = c.charCodeAt(0);
-  return code >= 32 && code !== 127;
-};
 
 // Keeps whole code points (so a surrogate pair is never split in two) while
 // the UTF-16 length, the one isLabel measures, stays within `max`.
@@ -366,14 +354,6 @@ export function labelFrom(fallback: string, ...candidates: unknown[]): string {
   return fallback;
 }
 
-// Plain, single-line text with no leading, trailing or control characters,
-// up to `max` long. Shared by isName and isLabel so both keep one rule.
-function isText(v: unknown, max: number): v is string {
-  return typeof v === "string" && v.trim() === v && v.length > 0 && v.length <= max && [...v].every(isCleanChar);
-}
-
-const isName = (v: unknown): v is string => isText(v, 64);
-
 // Exactly {"removed": true}, so a spec with a stray flag is not read as a removal.
 const isRemovedEntry = (v: unknown): boolean => isRecord(v) && v.removed === true && Object.keys(v).length === 1;
 
@@ -385,10 +365,7 @@ function projectSpec(v: unknown): ProjectSpec | null {
   if (!isRecord(v) || !isName(v.name) || !isHex(v.color) || !isSymbol(v.icon)) return null;
   const spec: ProjectSpec = { name: v.name, color: v.color, icon: v.icon };
   if (v.root === undefined) return spec;
-  // Absolute or under "~", as in projects.json: build.ts expands the "~".
-  const root = v.root;
-  const rooted = typeof root === "string" && (root.startsWith("/") || root === "~" || root.startsWith("~/"));
-  return rooted && root.length <= MAX_PROJECT_KEY ? { ...spec, root } : null;
+  return isRoot(v.root) ? { ...spec, root: v.root } : null;
 }
 
 // Only a GitHub pull request page, since the sidebar opens it on a tap.

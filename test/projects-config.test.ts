@@ -91,6 +91,17 @@ describe("mergeProjects (issue #9)", () => {
     assert.equal(merged.projects[0]?.root, undefined);
   });
 
+  it("lets a sidebar-made project take a removed file project's folder and name", () => {
+    const saved = { "/dev/a": { removed: true as const }, "/users/jon/dev/a/": spec("A") };
+    const merged = mergeProjects(file, saved);
+    assert.deepEqual(
+      merged.projects.map((x) => x.match),
+      [["/dev/b", "/dev/b2"], "/users/jon/dev/a/"],
+    );
+    assert.deepEqual(merged.kept, saved);
+    assert.ok(validateProjects(merged.projects).ok);
+  });
+
   it("leaves out a file project saved as removed, and keeps the removal", () => {
     const merged = mergeProjects(file, { "/dev/a": { removed: true } });
     assert.deepEqual(

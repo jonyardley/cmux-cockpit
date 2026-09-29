@@ -72,7 +72,8 @@ icon and root (its matches stay, so a fragment that also catches that
 folder's worktrees keeps doing so), and `{"removed": true}` leaves it out.
 An edit that would give two projects one name is dropped and the file's
 entry kept. Any other key is a sidebar-made project, appended; one whose
-folder a file match claims, or whose name is taken, is left out. What was
+folder a remaining file project's match claims, or whose name is taken, is
+left out (a removed file project claims neither). What was
 left out is also dropped from the `__STATE__` the sidebar sees. The file
 itself is never written by the loop: it is the starting table.
 

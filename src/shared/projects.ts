@@ -2,9 +2,10 @@
 // The table itself is not committed: scripts/build.ts injects it from
 // config/projects.json (or the example table) as this define.
 
-import { isRemoved, type ProjectSpec } from "../../scripts/state-config.ts";
+import type { ProjectSpec } from "../../scripts/state-config.ts";
 import { P } from "./palette.ts";
 import { SAVED_STATE } from "./persist.ts";
+import { isRemoved, MAX_NAME } from "./project-rules.ts";
 import { PROJECT_COLORS, PROJECT_ICONS } from "./project-sets.ts";
 
 export { PROJECT_COLORS, PROJECT_ICONS };
@@ -58,8 +59,6 @@ export function savedSpec(key: string): ProjectSpec | undefined {
   const saved = Object.hasOwn(SAVED_STATE.projects, key) ? SAVED_STATE.projects[key] : undefined;
   return saved && !isRemoved(saved) ? saved : undefined;
 }
-
-const MAX_NAME = 64;
 
 // The folder's last segment as a name the state contract accepts: control
 // characters out, trimmed, capitalised, and short enough to take a number.

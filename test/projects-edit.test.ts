@@ -15,7 +15,11 @@ const file = JSON.parse(readFileSync("config/projects.example.json", "utf8")).ma
   seeded: true,
 }));
 const g = globalThis as Record<string, unknown>;
-g.__PROJECTS__ = [...file, { match: key, ...spec }];
+// "applet" is a projects.json match too short to save under; App Four's
+// icon is one the picker does not list.
+const short = { match: "applet", name: "Applet", color: "#9B6FB0", icon: "music.note", seeded: true };
+const four = { match: "/dev/app-four", name: "App Four", color: "#4F9C94", icon: "pianokeys", seeded: true };
+g.__PROJECTS__ = [...file, short, four, { match: key, ...spec }];
 g.__STATE__ = {
   dismissed: {},
   projectOverride: { w2: key, w3: "/dev/app-one" },
@@ -51,6 +55,9 @@ const menuOf = (build: () => void): string[] => {
   return [...r.menu];
 };
 const fields = (n: ViewNode): ViewNode[] => (n.kind === "TextField" ? [n] : n.children.flatMap((c) => fields(c)));
+const images = (n: ViewNode): string[] =>
+  n.kind === "Image" ? [String(n.args[0])] : n.children.flatMap((c) => images(c));
+const lastCwd = (): unknown => r.calls.at(-1)?.params.cwd;
 
 describe("the card menu", () => {
   it("keeps only making a project; editing moved to the header", () => {
@@ -66,6 +73,16 @@ describe("the project menu", () => {
     assert.ok(menuOf(() => projectHeader(key)).includes("button:Edit project"));
     assert.ok(menuOf(() => quietRow(APP_THREE)).includes("button:Edit project"));
     assert.ok(!menuOf(() => projectHeader("other")).includes("button:Edit project"));
+  });
+
+  it("says why a project whose first match is too short cannot be edited, and opens nothing", () => {
+    const why = "button:Edit project (its first match is too short to save)";
+    assert.ok(menuOf(() => quietRow("applet")).includes(why));
+    assert.ok(menuOf(() => projectHeader("applet")).includes(why));
+    assert.equal(edit.canSaveProject("applet"), false);
+    assert.equal(edit.canSaveProject(APP_ONE), true);
+    edit.openEditor("applet");
+    assert.equal(state.editingProject(), null);
   });
 
   it("says why a project with no folder opens no session", () => {
@@ -140,6 +157,46 @@ describe("the editor", () => {
     assert.equal(state.editingProject(), APP_TWO);
   });
 
+  it("says why a colour or icon will not save", () => {
+    edit.openEditor(APP_TWO);
+    edit.setDraftColor("red");
+    assert.equal(edit.draftProblem(), "Pick a colour from the dots.");
+    edit.setDraftColor(PROJECT_COLORS[1]);
+    edit.setDraftIcon("Not An Icon");
+    assert.equal(edit.draftProblem(), "Pick an icon.");
+    edit.setDraftIcon(PROJECT_ICONS[2]);
+    assert.equal(edit.draftProblem(), null);
+  });
+
+  it("offers a project's own icon first when the picker does not list it", () => {
+    assert.deepEqual(edit.iconRows(PROJECT_ICONS[0]), [PROJECT_ICONS.slice(0, 6), PROJECT_ICONS.slice(6)]);
+    const rows = edit.iconRows("pianokeys");
+    assert.deepEqual(rows.flat(), ["pianokeys", ...PROJECT_ICONS]);
+    assert.ok(rows.every((row) => row.length <= 6));
+    edit.openEditor("/dev/app-four");
+    const node = nodeOf(projectEditor("/dev/app-four"));
+    assert.ok(node);
+    assert.deepEqual(images(node), ["pianokeys", ...PROJECT_ICONS]);
+  });
+
+  it("opens + in the folder just saved, before the rebuild, once it is a full path", () => {
+    edit.openEditor(key);
+    edit.setDraftFolder("/Users/jon/dev/scratch-two");
+    edit.saveDraft();
+    model.openProjectWorkspace(key);
+    assert.equal(lastCwd(), "/Users/jon/dev/scratch-two");
+    // A "~" folder waits for the build to expand it, so the built one opens.
+    edit.openEditor(key);
+    edit.setDraftFolder("~/dev/scratch-two");
+    edit.saveDraft();
+    model.openProjectWorkspace(key);
+    assert.equal(lastCwd(), spec.root);
+    edit.openEditor(key);
+    edit.setDraftFolder(spec.root);
+    edit.saveDraft();
+    r.opened.length = 0;
+  });
+
   it("drops the folder when the field is emptied", () => {
     edit.openEditor(key);
     edit.setDraftFolder("   ");
@@ -186,6 +243,7 @@ describe("removing a project", () => {
   });
 
   it("asks once, then saves a file project as removed and clears overrides to it", () => {
+    r.data.workspaces = [ws("a", { directory: "/Users/jon/dev/app-one" })];
     edit.openEditor(APP_ONE);
     assert.equal(edit.removeLabel(), "Remove project");
     edit.removeTapped();
@@ -198,6 +256,10 @@ describe("removing a project", () => {
     ]);
     assert.equal(state.editingProject(), null);
     assert.equal(model.hasProjectOverride(ws("w3")), false);
+    // Its header goes at once; its card waits in Other for the rebuild.
+    const ids = model.projectEntries().map((e) => e.id);
+    assert.ok(!ids.includes("p:" + APP_ONE) && !ids.includes("q:" + APP_ONE), ids.join());
+    assert.equal(ids[ids.indexOf("p:other") + 1], "a@p");
     // Gone until the rebuild, so it does not reopen.
     edit.openEditor(APP_ONE);
     assert.equal(state.editingProject(), null);
