@@ -81,37 +81,31 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
     VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
       VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(onBadge|panel|onClay|readyChip.fg) .cornerRadius(11)
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
-          HStack spacing: 6, alignment: top .frame(maxWidth: infinity, alignment: leading)
-            VStack spacing: 2, alignment: leading .paddingLeading(12) .paddingVertical(10) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
-              HStack spacing: 10
-                Text "#12" .font(12) .monospaced() .color(secondary|badge) .lineLimit(1) .layoutPriority(2)
-                Text "Text snapshots for the sidebars" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-                Spacer minLength: 4
-            VStack spacing: 0 .paddingTop(9) .paddingTrailing(10) .layoutPriority(2)
-              VStack spacing: 0, alignment: leading .padding(1) .background(failingChip.edge) .cornerRadius(6) .hoverBackground(#A18A87) .onTap() .opacity(1)
+          VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(10) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+            HStack spacing: 10
+              Text "#12" .font(12) .monospaced() .color(secondary|badge) .lineLimit(1) .layoutPriority(2)
+              Text "Text snapshots for the sidebars" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+              Spacer minLength: 4
+              VStack spacing: 0, alignment: leading .padding(1) .background(failingChip.edge) .cornerRadius(6) .hoverBackground(#A18A87) .onTap() .opacity(1) .layoutPriority(2)
                 Text "1 failing ↗" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(failingChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(failingChip.bg) .cornerRadius(5) .hoverBackground(#E8D5D4)
           Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
-          HStack spacing: 6, alignment: top .frame(maxWidth: infinity, alignment: leading)
-            VStack spacing: 2, alignment: leading .paddingLeading(12) .paddingVertical(10) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
-              HStack spacing: 10
-                Text "#9" .font(12) .monospaced() .color(secondary|badge) .lineLimit(1) .layoutPriority(2)
-                Text "Ready chip" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-                Spacer minLength: 4
-              Text "from Chip colours" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2) .lineLimit(1) .truncation(middle)
-            VStack spacing: 0 .paddingTop(9) .paddingTrailing(10) .layoutPriority(2)
-              VStack spacing: 0, alignment: leading .padding(1) .background(neutralChip.edge) .cornerRadius(6) .hoverBackground(#9E9C94) .onTap() .opacity(1)
+          VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(10) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+            HStack spacing: 10
+              Text "#9" .font(12) .monospaced() .color(secondary|badge) .lineLimit(1) .layoutPriority(2)
+              Text "Ready chip" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+              Spacer minLength: 4
+              VStack spacing: 0, alignment: leading .padding(1) .background(neutralChip.edge) .cornerRadius(6) .hoverBackground(#9E9C94) .onTap() .opacity(1) .layoutPriority(2)
                 Text "open ↗" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(neutralChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(neutralChip.bg) .cornerRadius(5) .hoverBackground(#E4E2DB)
+            Text "from Chip colours" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2) .lineLimit(1) .truncation(middle)
           Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
-          HStack spacing: 6, alignment: top .frame(maxWidth: infinity, alignment: leading)
-            VStack spacing: 2, alignment: leading .paddingLeading(12) .paddingVertical(10) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
-              HStack spacing: 10
-                Text "#4" .font(12) .monospaced() .color(secondary|badge) .lineLimit(1) .layoutPriority(2)
-                Text "An orphaned PR" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-                Spacer minLength: 4
-            VStack spacing: 0 .paddingTop(9) .paddingTrailing(10) .layoutPriority(2)
-              VStack spacing: 0, alignment: leading .padding(1) .background(neutralChip.edge) .cornerRadius(6) .hoverBackground(#9E9C94) .onTap() .opacity(1)
+          VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(10) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+            HStack spacing: 10
+              Text "#4" .font(12) .monospaced() .color(secondary|badge) .lineLimit(1) .layoutPriority(2)
+              Text "An orphaned PR" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+              Spacer minLength: 4
+              VStack spacing: 0, alignment: leading .padding(1) .background(neutralChip.edge) .cornerRadius(6) .hoverBackground(#9E9C94) .onTap() .opacity(1) .layoutPriority(2)
                 Text "open ↗" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(neutralChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(neutralChip.bg) .cornerRadius(5) .hoverBackground(#E4E2DB)
           Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
   VStack spacing: 8, alignment: leading
