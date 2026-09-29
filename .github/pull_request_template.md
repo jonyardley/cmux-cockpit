@@ -6,7 +6,8 @@
 
 <!-- From the diff of test/__snapshots__/ after `npm run snapshots`: which
 scenes moved and what a reader would see differently, in words. Write
-"no snapshot changes" when none moved. -->
+"no snapshot changes" when none moved. Paste the before and after table
+`npm run pr-visuals` prints once the PR is open. -->
 
 ## Look at after reload
 
