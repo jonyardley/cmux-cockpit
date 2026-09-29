@@ -492,7 +492,12 @@ first 240 characters of a message, so the sidebar never sees that line.
 the transcript's tail, read once more after a pause when a prompt or a tool
 result still comes after the last reply, since that reply is not the final
 one) and saves the line per workspace in the `moves` map: workspace id to
-`{"text", "epoch", "session"?, "decisions"?, "leans"?}`. A "Your move"
+`{"text", "epoch", "session"?, "decisions"?, "leans"?, "head"?}`. `head`
+is the start of that reply as `replyHead` (`src/shared/reply-head.ts`)
+makes it: cut to cmux's 240 characters, read as the sidebar reads a
+message (`readable`), links reduced to their words, lower-cased, only
+letters and digits, the first 40 of them. It is left out when nothing
+readable is left. A "Your move"
 line inside a code fence (a handoff opener) is not the reply's. `decisions`
 counts the reply's bold numbered headings with at least one lettered
 option under them, and `leans` holds the option marked **Lean** or
@@ -503,16 +508,22 @@ drops the workspace's saved one. Like `asking`, the map goes through
 than a week older (`MOVE_MAX_AGE_S`, since a chat can wait over a weekend),
 and `MAX_ENTRIES` caps it.
 
-`src/shared/move.ts` shows the move while the agent has not worked since it
-was saved. cmux must say needs_input and it must not be an ask; it may read
+`src/shared/move.ts` shows the move while the turn it ended is still
+waiting. cmux must say needs_input and it must not be an ask; it may read
 as idle only because of Claude Code's idle nudge (a dismissal hides it).
-The move counts when it was saved no earlier than the agent last worked,
-give or take `ASK_SLACK`, taking the earlier of its `lastActivityAt` and
-`sinceEpoch`: cmux may restart the spell when the nudge lands about 60s
-after the turn ends (unconfirmed, issue #4), and the nudge must not hide the
-move. Real work moves both, so a move from an earlier turn never shows once
-the chat has worked again. The session rule is the one asks use
-(`savedFor` in `src/shared/needs.ts`). The
+The move counts while the workspace's `latestMessage`, given the same
+`replyHead`, starts with the saved `head`: the message is still the reply
+the move came from. A new turn's reply changes the message, so an old move
+never shows against it, and while the chat works the status check hides
+it. A move saved without a `head` (from before this rule) never shows.
+Timestamps are no guide: about 60s after a turn ends, the nudge lands and
+cmux restamps both `sinceEpoch` and `lastActivityAt` (or `latestAt`), so a
+move judged by them went stale a minute after it was saved. `epoch` stays
+for the week-long prune. Unconfirmed: whether cmux's `latestMessage` keeps
+the reply's markdown (the head is built to match either way) and whether
+it is always the turn's final reply. A turn Jon interrupts before any
+reply leaves the message, and so the old move, as they were. The session
+rule is the one asks use (`isOwnSaved` in `src/shared/needs.ts`). The
 cockpit quotes it in place of the message on every card and on the Needs
 you row, adds it under the status on the Projects row, and leads the chips
 with a size: Decide (with the count past one) when the reply laid out

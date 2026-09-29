@@ -8,7 +8,7 @@ import { ago, seed, snapshotScene } from "./support/snapshot.ts";
 const r = seed({
   state: {
     ui: { mode: "projects" },
-    moves: { "one-b": { text: "Read the draft in #142 and say go.", epoch: ago(90) } },
+    moves: { "one-b": { text: "Read the draft in #142 and say go.", epoch: ago(90), head: "draftisupforreview" } },
   },
 });
 const { agent, ws } = await import("./support/fixtures.ts");
@@ -25,6 +25,7 @@ it("the projects view", () => {
     ws("one-b", {
       title: "One: docs",
       directory: "/Users/jon/dev/app-one/docs",
+      latestMessage: "Draft is up for review.",
       agents: [agent("needs_input", { sinceEpoch: ago(90), lastActivityAt: ago(90) })],
     }),
     ws("two", {

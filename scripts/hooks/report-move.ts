@@ -9,13 +9,15 @@
 // no reply ends it yet (Stop can fire before the reply is flushed). The line
 // is saved per workspace in config/state.json's `moves` map with the count
 // of numbered decisions the reply laid out and the options it leaned to.
-// A turn with no move line drops the workspace's saved one. The sidebar
-// shows a move only while the agent has not worked since it was saved
+// A turn with no move line drops the workspace's saved one. The move also
+// carries the head of the reply it came from (src/shared/reply-head.ts),
+// and the sidebar shows it only while cmux's latest message is that reply
 // (src/shared/move.ts), so nothing here has to clear a stale one. It
 // never fails the hook: every problem is a note on stderr and exit 0.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { replyHead } from "../../src/shared/reply-head.ts";
 import { scheduleBuild } from "../hook-build.ts";
 import { cleanMove, isId, MAX_DECISIONS, type SavedMove, validateState } from "../state-config.ts";
 import { readApplyWrite } from "../state-url.ts";
@@ -92,12 +94,14 @@ export function moveFrom(text: string, now: number, session?: string): SavedMove
   const line = moveLine(text);
   if (!line) return null;
   const { count, leans } = decisionsIn(text);
+  const head = replyHead(text);
   return {
     text: line,
     epoch: now,
     ...(session ? { session } : {}),
     ...(count ? { decisions: count } : {}),
     ...(leans ? { leans } : {}),
+    ...(head ? { head } : {}),
   };
 }
 

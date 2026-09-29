@@ -106,24 +106,23 @@ export function askReason(a: Agent | null | undefined, w: Workspace | undefined)
 }
 
 /**
- * A hook's saved entry (an ask, a move) when it explains `a` from `since` on:
- * saved no earlier than `since`, ASK_SLACK aside, and `a`'s own. The entry is
+ * Whether a hook's saved entry (an ask, a move) can be `a`'s. The entry is
  * saved per workspace with the Claude session that made it; when one of the
  * workspace's agents carries that session as its id (unconfirmed whether
  * cmux agent ids are session ids, as for saved subagent runs), only that
  * agent owns it, so another agent's turn end never borrows it. Otherwise it
  * belongs to the workspace as a whole.
  */
-export function savedFor<T extends { epoch: number; session?: string }>(
-  saved: T | undefined,
-  a: Agent,
-  w: Workspace,
-  since: number,
-): T | null {
-  if (!saved || saved.epoch < since - ASK_SLACK) return null;
+export function isOwnSaved(saved: { session?: string }, a: Agent, w: Workspace): boolean {
   const { session } = saved;
   const owned = session !== undefined && (w.agents ?? []).some((x) => x?.id === session);
-  return owned && a.id !== session ? null : saved;
+  return !owned || a.id === session;
+}
+
+// A saved ask when it explains `a` from `since` on: saved no earlier than
+// `since`, ASK_SLACK aside, and `a`'s own (isOwnSaved).
+function savedFor(saved: SavedAsk | undefined, a: Agent, w: Workspace, since: number): SavedAsk | null {
+  return saved && saved.epoch >= since - ASK_SLACK && isOwnSaved(saved, a, w) ? saved : null;
 }
 
 // The saved ask that explains `a`'s current needs_input spell, if any.
