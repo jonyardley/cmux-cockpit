@@ -123,8 +123,7 @@ const EDGE_STEP = 0.35;
 
 /**
  * A chip's hover: its own face and edge, each a step darker. A chip with
- * no face (a PR's state, words only) takes a link's box instead, as
- * linkBox does. Worked out once per colour change. With `live` false
+ * no face ("clear") takes a link's box instead, as linkBox does. Worked out once per colour change. With `live` false
  * (nothing to open) the chip keeps its resting look.
  */
 export function chipHover(colors: () => ChipColors, live: () => boolean = () => true): Hover {
@@ -210,11 +209,14 @@ export function chipFrame(body: View, colors: () => ChipColors, hover?: Hover): 
   );
 }
 
-/** A chip's words: medium weight, one line; `mono` for ports, so digits hold still. */
-export function chipText(label: () => string, fg: () => string, mono = false): View {
+/**
+ * A chip's words: medium weight unless told otherwise, one line; `mono`
+ * for ports, so digits hold still.
+ */
+export function chipText(label: () => string, fg: () => string, mono = false, weight: Weight = "medium"): View {
   const sized = Text(label).font(META_FONT);
   // Monospaced straight after the font, as meta() does.
-  return (mono ? sized.monospaced() : sized).weight("medium").lineLimit(1).truncation("tail").color(fg);
+  return (mono ? sized.monospaced() : sized).weight(weight).lineLimit(1).truncation("tail").color(fg);
 }
 
 /** A chip that opens `url`: under the pointer its face and edge each step darker (chipHover). */
@@ -245,6 +247,34 @@ export function unreadBadge(n: () => number): View {
     .paddingVertical(() => (has() ? 1 : 0))
     .background(() => (has() ? P.badge : "clear"))
     .cornerRadius(7);
+}
+
+/** A count pill's face and words. */
+export interface PillColors {
+  bg: string;
+  fg: string;
+}
+
+/** The count pill with nothing urgent behind it: grey. */
+export const QUIET_PILL: PillColors = { bg: P.countBg, fg: P.metaText };
+
+/**
+ * A header's count pill, one look on both sides. An empty count shows no
+ * pill at all, so a caller hides it by passing "" (the agents panel does at
+ * zero; the cockpit shows its 0). `colors` tints it by the most urgent
+ * session behind the count; grey without it.
+ */
+export function countPill(count: () => string, colors: () => PillColors = () => QUIET_PILL): View {
+  const has = () => count() !== "";
+  return Text(count)
+    .font(11)
+    .weight("medium")
+    .color(() => colors().fg)
+    .lineLimit(1)
+    .paddingHorizontal(() => (has() ? 7 : 0))
+    .paddingVertical(1)
+    .background(() => (has() ? colors().bg : "clear"))
+    .cornerRadius(10);
 }
 
 // Headings come in two styles on both sides (issue #82): a lane or project

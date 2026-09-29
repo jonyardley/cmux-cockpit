@@ -12,7 +12,7 @@ import { quietSince, quietSuffix } from "../shared/quiet.ts";
 import { liveRunCount } from "../shared/subagents.ts";
 import { cardMessage, clip, oneLine, promptText, readable } from "../shared/text.ts";
 import { ageSince, finishedAt } from "../shared/time.ts";
-import { type HaloStatus, haloColor } from "../shared/ui.ts";
+import { type HaloStatus, haloColor, type PillColors, QUIET_PILL } from "../shared/ui.ts";
 import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge, YOU_WORD } from "../shared/words.ts";
 import { isSelected } from "./state.ts";
 import { C } from "./theme.ts";
@@ -133,6 +133,39 @@ export function statusInfo(w: Workspace | undefined): StatusStyle {
   return STATUS[a?.status ?? "none"] ?? STATUS.none;
 }
 
+// A header's count pill takes the hue of its most urgent session: needs
+// you, then asking, then working. Finished, idle and no agent leave it grey.
+
+/** How urgent a workspace is for its header's count pill. */
+export type Urgency = "needs" | "asking" | "working" | "quiet";
+
+const URGENCY_RANK: readonly Urgency[] = ["needs", "asking", "working", "quiet"];
+
+const COUNT_TINT: Record<Urgency, PillColors> = {
+  needs: { bg: C.clayCount, fg: C.clayText },
+  asking: { bg: C.amberCount, fg: C.amberText },
+  working: { bg: C.blueCount, fg: C.blueText },
+  quiet: QUIET_PILL,
+};
+
+/** A workspace's urgency, by statusInfo's order: an ask, then needs you, then working (quiet or not). */
+export function urgencyOf(w: Workspace | undefined): Urgency {
+  const a = agentOf(w);
+  if (askReason(a, w)) return "asking";
+  if (a?.status === "needs_input") return "needs";
+  return a?.status === "working" ? "working" : "quiet";
+}
+
+/** The most urgent of the workspaces' urgencies; quiet with none. */
+export function mostUrgent(ws: readonly Workspace[]): Urgency {
+  let best = URGENCY_RANK.length - 1;
+  for (const w of ws) best = Math.min(best, URGENCY_RANK.indexOf(urgencyOf(w)));
+  return URGENCY_RANK[best] ?? "quiet";
+}
+
+/** A count pill's colours for the workspaces it counts: its most urgent session's hue, else grey. */
+export const countColors = (ws: readonly Workspace[]): PillColors => COUNT_TINT[mostUrgent(ws)];
+
 /** The "Your move" line the workspace's chat ended its turn on, while that turn is still waiting on Jon. */
 export function moveOf(w: Workspace | undefined): SavedMove | null {
   const a = agentOf(w);
@@ -153,7 +186,7 @@ export const badgeCount = (w: Workspace | undefined): number => (isReady(w) ? 0 
  * The PR as text in a compact card's status line ("· #45 · 1 failing"), else
  * "". Compact cards have no chips, so this is where their PR shows, Ready or
  * not. The full card says nothing about the PR in its status row: the PR
- * words at the head of its chips row carry the verdict (issue #79).
+ * chip at the head of its chips row carries the verdict (issue #79).
  */
 export function compactPrText(pr: Pick<PrSummary, "text"> | undefined): string {
   const t = pr?.text;

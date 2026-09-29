@@ -165,6 +165,10 @@ describe("chipsFor", () => {
       ],
     );
     assert.equal(chips[0]?.url, "https://x/7");
+    // The number and the state words ride apart, so the chip inks each its own way.
+    assert.deepEqual([chips[0]?.tag, chips[0]?.state], ["#7", "open"]);
+    const [draft] = model.chipsFor(ws("d", { pr: { number: 8, status: "open", draft: true } }), false);
+    assert.deepEqual([draft?.tag, draft?.state], ["#8", "draft"]);
     assert.equal(model.chipsFor(ws("y", { branch: "feat" }), false).length, 0);
     assert.equal(model.chipsFor(ws("y", { branch: "feat" }), true)[0]?.dirty, false);
   });

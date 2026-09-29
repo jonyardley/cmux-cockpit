@@ -4,11 +4,11 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { installRenderer, recordModifiers } from "./support/renderer.ts";
+import { installRenderer, nodeOf, recordModifiers, type ViewNode } from "./support/renderer.ts";
 
 const r = installRenderer();
 const ui = await import("../src/shared/ui.ts");
-const { NEUTRAL_CHIP, prChipColors } = await import("../src/shared/pr-colors.ts");
+const { NEUTRAL_CHIP } = await import("../src/shared/pr-colors.ts");
 const { P } = await import("../src/shared/palette.ts");
 const { PROJECTS } = await import("../src/shared/projects.ts");
 
@@ -91,9 +91,9 @@ describe("the shared builders read what they are handed", () => {
     assert.equal(read(hover.edge), NEUTRAL_CHIP.edge);
   });
 
-  it("chipHover gives a PR's words a link's box, since a clear face has nothing to darken", () => {
+  it("chipHover gives a chip with no face a link's box, since a clear face has nothing to darken", () => {
     const read = (v: Reactive<string> | undefined): string | undefined => (typeof v === "function" ? v() : v);
-    const words = prChipColors("ready");
+    const words = { bg: "clear", fg: P.greenDeep, edge: "clear" };
     assert.equal(read(ui.chipHover(() => words).face), P.linkHover);
     assert.equal(read(ui.chipHover(() => words).edge), P.linkEdge);
     const idle = ui.chipHover(
@@ -137,6 +137,25 @@ describe("the shared builders read what they are handed", () => {
     const project = spy(first);
     ui.projectBadge(project.get, 18, 9);
     assert.ok(age.reads() > 0 && branch.reads() > 0 && project.reads() > 0);
+  });
+
+  it("countPill shows its tint, and no pill at all for an empty count", () => {
+    const mod = (n: ViewNode | undefined, name: string): unknown => n?.mods.find((m) => m.name === name)?.values[0];
+    const tint = { bg: P.blueCount, fg: P.blueText };
+    const lit = nodeOf(
+      ui.countPill(
+        () => "3",
+        () => tint,
+      ),
+    );
+    assert.equal(mod(lit, "background"), P.blueCount);
+    assert.equal(mod(lit, "color"), P.blueText);
+    assert.equal(mod(lit, "font"), 11);
+    const zero = nodeOf(ui.countPill(() => "0"));
+    assert.equal(mod(zero, "background"), ui.QUIET_PILL.bg);
+    const empty = nodeOf(ui.countPill(() => ""));
+    assert.equal(mod(empty, "background"), "clear");
+    assert.equal(mod(empty, "paddingHorizontal"), 0);
   });
 
   it("builds both heading styles", () => {

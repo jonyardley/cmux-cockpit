@@ -103,12 +103,12 @@ function fullCard(w: WsAccessor, key: string): View {
     glyph(w, 26, 8, 12),
     VStack({ alignment: "leading", spacing: 4 }, [
       titleRow(w, 13.5, true),
-      // No PR words here, Ready or not: the chips row below carries them (issue #79).
+      // No PR words here, Ready or not: the chips row below carries its chip (issue #79).
       HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12)])
         // Left-aligned by the frame, not a Spacer, as the chips row is.
         .frame({ maxWidth: "infinity", alignment: "leading" }),
       // The PR and branch under the status, then the message.
-      chipsRow(w, true, "words"),
+      chipsRow(w, true),
       detailLine(w, "detail", 2),
       progressBar(w, "full-progress"),
     ])

@@ -5,14 +5,13 @@ import { P } from "../shared/palette.ts";
 
 export const C = {
   ...P,
-  ground: "#F4F2EA",
   card: "#FFFFFF",
   hairline: "#E2DFD3",
   cardEdge: "#1414131F",
   amberRowEdge: `${P.amberText}29`,
   // The Ready pill's face: the finished green, faint (issue #53).
   readyBg: `${P.green}1F`,
-  segTrack: "#E5E2D6",
+  segTrack: P.countBg,
   needsBg: "#FBECE4",
   needsEdge: "#F0D2C3",
   needsRowEdge: `${P.clayText}29`,

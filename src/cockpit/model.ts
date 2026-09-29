@@ -20,6 +20,7 @@ import {
 } from "../shared/projects.ts";
 import { type PrHealth, prHealth, prSummary } from "../shared/prs.ts";
 import { finishedAt, nowEpoch } from "../shared/time.ts";
+import type { PillColors } from "../shared/ui.ts";
 import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
   bump,
@@ -38,7 +39,7 @@ import {
   tick,
   unsortedCollapsed,
 } from "./state.ts";
-import { isReady, moveOf, readyAgent, sinceOf, statusOf } from "./status.ts";
+import { countColors, isReady, moveOf, readyAgent, sinceOf, statusOf } from "./status.ts";
 import { C } from "./theme.ts";
 
 const OVERRIDE_SECS = 4;
@@ -422,7 +423,13 @@ const LEFT_OFF_LANES: ReadonlySet<LaneKey> = new Set<LaneKey>(["bg", "parked"]);
 /** Whether the card shows your last prompt: in Background and Parked, by cmux's own data as cardDensity is. */
 export const showsLeftOff = (w: Workspace | undefined): boolean => LEFT_OFF_LANES.has(actualLaneOf(w));
 
-export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => laneOf(w) === laneKey).length;
+/** The cards a lane header counts: every real card in that lane. */
+export const laneWorkspaces = (laneKey: LaneKey): Workspace[] => cardWorkspaces().filter((w) => laneOf(w) === laneKey);
+
+export const laneCount = (laneKey: LaneKey) => laneWorkspaces(laneKey).length;
+
+/** A lane header's count pill: tinted by its most urgent card, folded or not. */
+export const laneCountColors = (laneKey: LaneKey): PillColors => countColors(laneWorkspaces(laneKey));
 
 /**
  * A lane header's merge line: "2 ready to merge" when that many of its
@@ -570,7 +577,13 @@ export function toggleProject(k: string): void {
   );
   saveFolds();
 }
-export const projectCount = (k: string) => cardWorkspaces().filter((w) => projectKey(w) === k).length;
+/** The cards a project header counts: every real card in that project. */
+export const projectWorkspaces = (k: string): Workspace[] => cardWorkspaces().filter((w) => projectKey(w) === k);
+
+export const projectCount = (k: string) => projectWorkspaces(k).length;
+
+/** A project header's count pill: tinted by its most urgent card, folded or not. */
+export const projectCountColors = (k: string): PillColors => countColors(projectWorkspaces(k));
 
 /** Whether the project's header should offer "+": it has a folder to open. */
 export const canOpenProject = (k: string): boolean => !!projectByKey(k).root;
@@ -809,6 +822,10 @@ export interface Chip {
   text: string;
   url?: string;
   health?: PrHealth;
+  /** The PR chip's number, "#135", drawn in the chip's own ink. */
+  tag?: string;
+  /** The PR chip's state words after the number ("draft", "1 failing"), in its health's ink; "" with none. */
+  state?: string;
   /** The branch chip's uncommitted-changes dot. */
   dirty?: boolean;
   /** The size chip's size, which picks its ink. */
@@ -835,7 +852,7 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
   if (move && size) out.push({ id: "size", text: moveSizeText(size, move.decisions), size });
   const pr = prSummary(w);
   if (pr) {
-    const c: Chip = { id: "pr", text: pr.text, health: pr.health };
+    const c: Chip = { id: "pr", text: pr.text, health: pr.health, tag: pr.tag, state: pr.state };
     if (pr.url) c.url = pr.url;
     out.push(c);
   }

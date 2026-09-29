@@ -2,7 +2,7 @@
 
 import { prInk, shownHealth } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
-import { chipText, haloDot, projectBadge, ring, sectionTitle } from "../../shared/ui.ts";
+import { chipText, countPill, haloDot, projectBadge, ring, sectionTitle } from "../../shared/ui.ts";
 import { type PrEntry, prChipHealth, prChipText, prDim } from "../model.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
 
@@ -26,19 +26,12 @@ export function ruled(row: View, isLast: () => boolean): View {
 }
 
 export function sectionHeader(label: Reactive<string>, count?: () => string, dot?: string): View {
-  const n = () => (count ? count() : "");
   // A zero-width dot would still cost the HStack spacing and indent the label.
   return HStack({ spacing: 7 }, [
     ...(dot ? [Circle({ size: 7 }).fill(dot)] : []),
     sectionTitle(label, T.secondary),
-    Text(n)
-      .font(10.5)
-      .weight("medium")
-      .color(T.metaText)
-      .paddingHorizontal(() => (n() ? 7 : 0))
-      .paddingVertical(1)
-      .background(() => (n() ? T.countBg : "clear"))
-      .cornerRadius(10),
+    // The shared grey pill; an empty count shows none.
+    countPill(() => (count ? count() : "")),
     Spacer(),
   ])
     .paddingHorizontal(4)
