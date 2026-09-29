@@ -176,7 +176,8 @@ describe("setup", () => {
     const f = fakeEnv(w, cmuxWith(w.home));
     await setup(f.env, ["--hooks"]);
     const settings = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
-    assert.deepEqual(settings.hooks.Stop, [own]);
+    const move = { hooks: [{ type: "command", command: "node $HOME/.config/cmux/scripts/hooks/report-move.ts" }] };
+    assert.deepEqual(settings.hooks.Stop, [own, move]);
     assert.deepEqual(missingEntries(settings, wanted(), w.home), []);
     assert.ok(f.out.some((l) => l.includes("Stop: node $HOME/.config/cmux/scripts/hooks/report-mention.ts")));
     assert.ok(f.out.some((l) => l.includes("removed 1 retired")));
@@ -388,7 +389,7 @@ describe("uninstall", () => {
     await uninstall(fakeEnv(w).env, ["--yes", "--hooks"]);
     assert.ok(existsSync(p.helperApp));
     assert.ok(lstatSync(p.automationsLink).isSymbolicLink());
-    assert.equal(missingEntries(JSON.parse(readFileSync(p.claudeSettings, "utf8")), wanted(), w.home).length, 8);
+    assert.equal(missingEntries(JSON.parse(readFileSync(p.claudeSettings, "utf8")), wanted(), w.home).length, 9);
   });
 
   it("takes out a retired hook along with the current ones", async () => {

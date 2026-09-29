@@ -260,6 +260,9 @@ with `CLAUDE_CONFIG_DIR` set, setup, doctor and uninstall use
       { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-pr.ts" }] },
       { "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }] }
     ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-move.ts" }] }
+    ],
     "SubagentStart": [
       { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
     ],
@@ -284,6 +287,8 @@ What each script turns on:
 - `report-pr.ts`: a chip as soon as an agent runs `gh pr create`, instead
   of at the next poll.
 - `report-published.ts`: the "Made here" list of published pages and docs.
+- `report-move.ts`: what a waiting chat wants from you ("Run /clear now.")
+  on its card, with a chip saying how big a job it is.
 
 An older list had a `Stop` hook running `report-mention.ts`. The script
 is gone, so that entry would fail at the end of every turn: run

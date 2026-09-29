@@ -1,10 +1,18 @@
 // Scene: the Next button and the Needs you strip, capped at four rows with
-// "+N more", one of them asking. Fixture data only; see test/support/snapshot.ts.
+// "+N more", one of them asking and two quoting their saved move. Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
 import { ago, EPOCH, seed, snapshotScene } from "./support/snapshot.ts";
 
-const r = seed({ state: { asking: { ask: { reason: "allow npm publish?", epoch: EPOCH - 60 } } } });
+const r = seed({
+  state: {
+    asking: { ask: { reason: "allow npm publish?", epoch: EPOCH - 60 } },
+    moves: {
+      n2: { text: 'reply "1b 2a" on the bridge and the store.', epoch: EPOCH - 900, decisions: 2, leans: "1b 2a" },
+      n3: { text: "the work is finished. Run /clear now.", epoch: EPOCH - 600 },
+    },
+  },
+});
 const { agent, ws } = await import("./support/fixtures.ts");
 await import("../src/cockpit/index.ts");
 const { C } = await import("../src/cockpit/theme.ts");

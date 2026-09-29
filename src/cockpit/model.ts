@@ -5,6 +5,7 @@
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
+import { type MoveSize, moveSize, moveSizeText } from "../shared/move.ts";
 import { P } from "../shared/palette.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import { READY_INK } from "../shared/pr-colors.ts";
@@ -40,7 +41,7 @@ import {
   tick,
   unsortedCollapsed,
 } from "./state.ts";
-import { isReady, readyAgent, sinceOf, statusOf } from "./status.ts";
+import { isReady, moveOf, readyAgent, sinceOf, statusOf } from "./status.ts";
 import { C } from "./theme.ts";
 
 const OVERRIDE_SECS = 4;
@@ -758,7 +759,7 @@ export function jumpNext(): void {
 
 // --- Card chips (issue #48) ------------------------------------------------------------
 
-export type ChipId = "pr" | "br" | "port";
+export type ChipId = "size" | "pr" | "br" | "port";
 
 export interface Chip {
   id: ChipId;
@@ -769,6 +770,8 @@ export interface Chip {
   draft?: boolean;
   /** The branch chip's uncommitted-changes dot. */
   dirty?: boolean;
+  /** The size chip's size, which picks its ink. */
+  size?: MoveSize;
 }
 
 const isPort = (p: number): boolean => Number.isInteger(p) && p > 0 && p < 65536;
@@ -785,6 +788,10 @@ function portChip(ports: readonly number[] | undefined): Chip | null {
 export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] {
   const out: Chip[] = [];
   if (!w) return out;
+  // First, so what answering takes reads before where the work is.
+  const move = moveOf(w);
+  const size = move ? moveSize(move) : null;
+  if (move && size) out.push({ id: "size", text: moveSizeText(size, move.decisions), size });
   const pr = prSummary(w);
   if (pr) {
     const c: Chip = { id: "pr", text: pr.text, health: pr.health, draft: pr.draft };

@@ -1,5 +1,6 @@
 // Small pieces shared by the cockpit's cards and rows.
 
+import type { MoveSize } from "../../shared/move.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
 import { NEUTRAL_CHIP, summaryColors } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
@@ -138,7 +139,24 @@ export function statusLabel(w: WsAccessor, size: number, weight: Weight): View {
 // A chip's kind is fixed by its key (one when() per id), so the kind picks
 // the pieces once; only the text and colours are reactive. The PR chip takes
 // its health's colours; the branch and ports chips stay neutral.
+// The size chip (what answering the chat takes): the quiet chip's face, its
+// words in the state ink that fits, and nothing to tap, like the branch chip.
+const SIZE_INK: Record<MoveSize, string> = { quick: C.greenText, decide: C.clayText, review: C.blueText };
+
+function sizeChip(c: () => Chip): View {
+  const colors = () => ({ ...NEUTRAL_CHIP, fg: SIZE_INK[c().size ?? "quick"] });
+  return chipFrame(
+    chipText(
+      () => c().text,
+      () => colors().fg,
+      false,
+    ),
+    colors,
+  );
+}
+
 function chip(id: ChipId, c: () => Chip): View {
+  if (id === "size") return sizeChip(c);
   const isPr = id === "pr";
   const colors = () =>
     isPr ? summaryColors({ health: c().health ?? "quiet", status: c().status, draft: !!c().draft }) : NEUTRAL_CHIP;
@@ -255,6 +273,7 @@ export function chipsRow(w: WsAccessor, withBranch: boolean, withPr = true): Vie
   // The full card puts its PR on a line of its own (prLine), so it leaves the chip out.
   const row = () =>
     HStack({ spacing: 5 }, [
+      one("size").layoutPriority(2),
       ...(withPr ? [one("pr").layoutPriority(2)] : []),
       one("br"),
       one("port").layoutPriority(2),
