@@ -17,6 +17,7 @@ sidebars/cockpit.js
 sidebars/focus.js
 config/projects.json
 config/state.json
+config/renames/
 config/url-token
 config/*.lock
 config/*.tmp

@@ -24,7 +24,8 @@ const LSREGISTER =
 export const WHAT: Record<Extra, string> = {
   helper: "Helper app: keeps dismissals and project changes when cmux reloads the sidebar.",
   automations: "Automations: pull request chips for agents' PRs, and the agents panel kept in the right sidebar.",
-  hooks: 'Claude Code hooks: amber "Asking", subagent rows, instant PR chips and the "Made here" list.',
+  hooks:
+    'Claude Code hooks: amber "Asking", subagent rows, instant PR chips, the "Made here" list and /rename names on the workspace.',
 };
 
 async function decided(env: Env, choice: Choice, question: string): Promise<boolean> {

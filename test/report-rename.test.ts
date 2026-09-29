@@ -1,11 +1,18 @@
 // The pure parts of the rename hook: finding the latest /rename in a
-// transcript, deciding whether it goes to cmux, and reading cmux's group
-// list. The cmux calls, the stamp file and the stdin/env plumbing are not
-// covered.
+// transcript, the group-name clash, reading cmux's group
+// list, splitting a read into whole lines and loading the saved stamp.
+// The cmux calls, the file reads and writes and the stdin/env plumbing are
+// not covered.
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { groupNamesFrom, latestTitle, renameFor } from "../scripts/hooks/report-rename.ts";
+import {
+  clashesWithGroup,
+  groupNamesFrom,
+  latestTitle,
+  parseStamp,
+  wholeLines,
+} from "../scripts/hooks/report-rename.ts";
 
 const titled = (t: string): string => JSON.stringify({ type: "custom-title", customTitle: t, sessionId: "s" });
 const named = (t: string): string => JSON.stringify({ type: "agent-name", agentName: t, sessionId: "s" });
@@ -25,19 +32,47 @@ describe("latestTitle", () => {
   });
 });
 
-describe("renameFor", () => {
-  it("passes a new name on", () => {
-    assert.equal(renameFor("Design Review", null, ["Cockpit"]), "Design Review");
-    assert.equal(renameFor("Design Review", "Parallel lanes", []), "Design Review");
+describe("clashesWithGroup", () => {
+  it("is true for a name a group goes by, whatever its case or spacing", () => {
+    assert.equal(clashesWithGroup("cockpit ", ["Cockpit", "Background"]), true);
   });
 
-  it("passes nothing when there is no rename or it was already passed", () => {
-    assert.equal(renameFor(null, null, []), null);
-    assert.equal(renameFor("Design Review", "Design Review", []), null);
+  it("is false for any other name, or with no groups", () => {
+    assert.equal(clashesWithGroup("Design Review", ["Cockpit"]), false);
+    assert.equal(clashesWithGroup("Design Review", []), false);
+  });
+});
+
+describe("wholeLines", () => {
+  it("leaves a line still being written for the next read", () => {
+    const buf = Buffer.from(`${titled("A")}\n{"type":"cus`);
+    const { lines, consumed } = wholeLines(buf);
+    assert.equal(consumed, Buffer.byteLength(titled("A")) + 1);
+    assert.equal(latestTitle(lines), "A");
   });
 
-  it("skips a name a group goes by, whatever its case", () => {
-    assert.equal(renameFor("cockpit ", null, ["Cockpit", "Background"]), null);
+  it("counts bytes, not characters", () => {
+    assert.equal(wholeLines(Buffer.from("é\n")).consumed, 3);
+  });
+
+  it("takes nothing from a read with no line end", () => {
+    assert.equal(wholeLines(Buffer.from("partial")).consumed, 0);
+    assert.equal(wholeLines(Buffer.alloc(0)).consumed, 0);
+  });
+});
+
+describe("parseStamp", () => {
+  it("reads a saved stamp", () => {
+    const stamp = { offset: 120, seen: "Design Review", handled: null };
+    assert.deepEqual(parseStamp(JSON.stringify(stamp)), stamp);
+  });
+
+  it("starts empty for a missing, broken or wrong-shaped stamp", () => {
+    const empty = { offset: 0, seen: null, handled: null };
+    assert.deepEqual(parseStamp(null), empty);
+    assert.deepEqual(parseStamp("{"), empty);
+    assert.deepEqual(parseStamp(JSON.stringify({ offset: -1, seen: null, handled: null })), empty);
+    assert.deepEqual(parseStamp(JSON.stringify({ offset: 1, seen: 3, handled: null })), empty);
   });
 });
 
