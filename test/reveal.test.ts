@@ -79,6 +79,14 @@ describe("revealing a card from Needs you", () => {
     assert.deepEqual(methods(), ["workspace.select"]);
   });
 
+  it("switches Projects to All for a generated anchor, so its lane header shows", () => {
+    state.setMode("projects");
+    model.revealWorkspace(byId("anchor-parked"));
+    assert.equal(state.mode(), "all");
+    assert.equal(model.isCollapsed(laneByKey("parked")), true);
+    assert.deepEqual(methods(), ["workspace.select"]);
+  });
+
   it("unfolds the card's project in Projects, and leaves the lanes alone", () => {
     state.setMode("projects");
     const k = model.projectKey(byId("p"));

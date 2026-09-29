@@ -761,11 +761,12 @@ export function jumpNext(): void {
  * Selects a workspace from Needs you or Next, first unfolding what hides its
  * card in the chosen view: its lane in All, its project in Projects. A lane's
  * generated anchor has no card; its status sits on the lane header, which
- * shows folded or not, so it only selects.
+ * shows folded or not, but only in All, so Projects switches to All for it.
  */
 export function revealWorkspace(w: Workspace | undefined): void {
   if (!w) return;
   if (!laneAnchorIds().has(w.id)) unfoldCardOf(w);
+  else chooseMode("all");
   selectWorkspace(w.id);
 }
 
