@@ -12,7 +12,7 @@ import { quietSince, quietSuffix } from "../shared/quiet.ts";
 import { liveRunCount } from "../shared/subagents.ts";
 import { cardMessage, clip, oneLine, promptText, readable } from "../shared/text.ts";
 import { ageSince, finishedAt } from "../shared/time.ts";
-import { type HaloStatus, haloColor } from "../shared/ui.ts";
+import { type HaloStatus, haloColor, type PillColors, QUIET_PILL } from "../shared/ui.ts";
 import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge, YOU_WORD } from "../shared/words.ts";
 import { isSelected } from "./state.ts";
 import { C } from "./theme.ts";
@@ -39,6 +39,12 @@ export function ageOf(w: Workspace | undefined): string {
   return ageSince(sinceOf(w));
 }
 
+/**
+ * How urgent a workspace is for its header's count pill, ranked needs you,
+ * asking, working (quiet or not), then quiet: finished, idle and no agent.
+ */
+export type Urgency = "needs" | "asking" | "working" | "quiet";
+
 export interface StatusStyle {
   label: string;
   dot: string | null;
@@ -47,6 +53,8 @@ export interface StatusStyle {
   text: string;
   /** The ring round a hollow dot; grey when unset. */
   ring?: string;
+  /** What the style means for a header's count pill, so the pill and the dot cannot disagree. */
+  urgency: Urgency;
 }
 
 // The halo colour for each of shared/ui.ts's two haloed statuses; every
@@ -55,11 +63,19 @@ const HALO_COLOR: Record<HaloStatus, string> = { working: C.blueHalo, needs_inpu
 
 // Words from shared/words.ts and text colours from shared/palette.ts, so a
 // status reads the same in the agents panel.
+const STATUS_URGENCY: Record<AgentStatus, Urgency> = {
+  needs_input: "needs",
+  working: "working",
+  idle: "quiet",
+  ended: "quiet",
+};
+
 const style = (s: AgentStatus, dot: string | null): StatusStyle => ({
   label: STATUS_WORD[s],
   dot,
   halo: haloColor(s, HALO_COLOR),
   text: STATUS_TEXT[s],
+  urgency: STATUS_URGENCY[s],
 });
 
 const STATUS: Record<Status, StatusStyle> = {
@@ -67,7 +83,7 @@ const STATUS: Record<Status, StatusStyle> = {
   needs_input: style("needs_input", C.clay),
   idle: style("idle", null),
   ended: style("ended", C.green),
-  none: { label: NO_AGENT_WORD, dot: null, halo: haloColor("none", HALO_COLOR), text: C.faint },
+  none: { label: NO_AGENT_WORD, dot: null, halo: haloColor("none", HALO_COLOR), text: C.faint, urgency: "quiet" },
 };
 
 // Ready: finished and not yet looked at (issue #53).
@@ -115,7 +131,13 @@ const READY: StatusStyle = { ...STATUS.ended, halo: "clear" };
 
 // Asking (issue #81): needs_input because the agent stopped on a
 // permission or a question, not because its turn ended.
-const ASKING: StatusStyle = { label: ASKING_WORD, dot: C.amber, halo: C.amberHalo, text: C.amberText };
+const ASKING: StatusStyle = {
+  label: ASKING_WORD,
+  dot: C.amber,
+  halo: C.amberHalo,
+  text: C.amberText,
+  urgency: "asking",
+};
 
 /** Why the workspace's agent is asking ("allow git push?"), or null when it is not (shared/needs.ts). */
 export const askOf = (w: Workspace | undefined): string | null => askReason(agentOf(w), w);
@@ -132,6 +154,34 @@ export function statusInfo(w: Workspace | undefined): StatusStyle {
   if (quietSince(a, w)) return QUIET;
   return STATUS[a?.status ?? "none"] ?? STATUS.none;
 }
+
+// A header's count pill takes the hue of its most urgent session: needs
+// you, then asking, then working. Finished, idle and no agent leave it grey.
+
+const URGENCY_RANK: readonly Urgency[] = ["needs", "asking", "working", "quiet"];
+
+const COUNT_TINT: Record<Urgency, PillColors> = {
+  needs: { bg: C.clayCount, fg: C.clayText },
+  asking: { bg: C.amberCount, fg: C.amberText },
+  working: { bg: C.blueCount, fg: C.blueText },
+  quiet: QUIET_PILL,
+};
+
+/** A workspace's urgency: the one its card's status (statusInfo) carries. */
+export const urgencyOf = (w: Workspace | undefined): Urgency => statusInfo(w).urgency;
+
+/** The most urgent of the workspaces' urgencies; quiet with none. Stops at the first needs you, since nothing ranks above it. */
+export function mostUrgent(ws: readonly Workspace[]): Urgency {
+  let best = URGENCY_RANK.length - 1;
+  for (const w of ws) {
+    best = Math.min(best, URGENCY_RANK.indexOf(urgencyOf(w)));
+    if (best === 0) break;
+  }
+  return URGENCY_RANK[best] ?? "quiet";
+}
+
+/** A count pill's colours for the workspaces it counts: its most urgent session's hue, else grey. */
+export const countColors = (ws: readonly Workspace[]): PillColors => COUNT_TINT[mostUrgent(ws)];
 
 /** The "Your move" line the workspace's chat ended its turn on, while that turn is still waiting on Jon. */
 export function moveOf(w: Workspace | undefined): SavedMove | null {
@@ -153,7 +203,7 @@ export const badgeCount = (w: Workspace | undefined): number => (isReady(w) ? 0 
  * The PR as text in a compact card's status line ("· #45 · 1 failing"), else
  * "". Compact cards have no chips, so this is where their PR shows, Ready or
  * not. The full card says nothing about the PR in its status row: the PR
- * words at the head of its chips row carry the verdict (issue #79).
+ * chip at the head of its chips row carries the verdict (issue #79).
  */
 export function compactPrText(pr: Pick<PrSummary, "text"> | undefined): string {
   const t = pr?.text;

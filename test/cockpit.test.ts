@@ -145,7 +145,7 @@ describe("a real workspace anchoring a single-member group", () => {
     const parked = r.data.workspaces.find((w) => w.id === "real-parked");
     if (!parked) throw new Error("fixture");
     assert.equal(model.laneOf(parked), "parked");
-    assert.equal(model.laneCount("parked"), 1);
+    assert.equal(model.laneWorkspaces("parked").length, 1);
     assert.deepEqual(
       model.needsList().map((w) => w.id),
       ["real-parked"],
@@ -280,7 +280,7 @@ describe("missing lane groups", () => {
     ]);
     // Optimistic while cmux makes the group: the card and count move now.
     assert.equal(model.laneOf(byId("u") ?? ws("?")), "bg");
-    assert.equal(model.laneCount("bg"), 1);
+    assert.equal(model.laneWorkspaces("bg").length, 1);
 
     r.calls.length = 0;
     r.data.groups = [...r.data.groups, bgGroup()];
@@ -387,7 +387,7 @@ describe("a lane's generated anchor", () => {
   it("stays off the cards when an agent runs in it, and its lane counts only real cards", () => {
     anchor().agents = [agent("working")];
     assert.ok(!model.cardWorkspaces().some((w) => w.id === "anchor-review"));
-    assert.equal(model.laneCount("review"), 1);
+    assert.equal(model.laneWorkspaces("review").length, 1);
     assert.ok(!ids().includes("anchor-review@review"));
   });
 
@@ -588,7 +588,7 @@ describe("projects mode", () => {
     const ids = entries.map((e) => e.id);
     const at = ids.indexOf("p:/dev/app-two");
     assert.deepEqual(ids.slice(at, at + 3), ["p:/dev/app-two", "a@p", "b@p"]);
-    assert.equal(model.projectCount("/dev/app-two"), 2);
+    assert.equal(model.projectWorkspaces("/dev/app-two").length, 2);
     assert.equal(model.projectByKey("/dev/app-two").name, "App Two");
   });
 

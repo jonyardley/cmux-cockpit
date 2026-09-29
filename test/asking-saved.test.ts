@@ -102,6 +102,7 @@ describe("cockpit", () => {
       dot: C.amber,
       halo: C.amberHalo,
       text: C.amberText,
+      urgency: "asking",
     });
     assert.equal(status.statusLine(asking), "Asking 1m");
     assert.equal(status.needsDetail(asking), "allow git push?");

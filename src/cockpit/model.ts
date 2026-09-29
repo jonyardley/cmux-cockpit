@@ -422,7 +422,12 @@ const LEFT_OFF_LANES: ReadonlySet<LaneKey> = new Set<LaneKey>(["bg", "parked"]);
 /** Whether the card shows your last prompt: in Background and Parked, by cmux's own data as cardDensity is. */
 export const showsLeftOff = (w: Workspace | undefined): boolean => LEFT_OFF_LANES.has(actualLaneOf(w));
 
-export const laneCount = (laneKey: LaneKey) => cardWorkspaces().filter((w) => laneOf(w) === laneKey).length;
+/**
+ * The cards a lane header counts, every real card in that lane, folded or
+ * not. The header filters once per change and reads both its count and its
+ * pill's tint (status.ts countColors) from the one list.
+ */
+export const laneWorkspaces = (laneKey: LaneKey): Workspace[] => cardWorkspaces().filter((w) => laneOf(w) === laneKey);
 
 /**
  * A lane header's merge line: "2 ready to merge" when that many of its
@@ -570,7 +575,8 @@ export function toggleProject(k: string): void {
   );
   saveFolds();
 }
-export const projectCount = (k: string) => cardWorkspaces().filter((w) => projectKey(w) === k).length;
+/** The cards a project header counts and tints its pill by, as laneWorkspaces is for a lane. */
+export const projectWorkspaces = (k: string): Workspace[] => cardWorkspaces().filter((w) => projectKey(w) === k);
 
 /** Whether the project's header should offer "+": it has a folder to open. */
 export const canOpenProject = (k: string): boolean => !!projectByKey(k).root;
@@ -804,20 +810,33 @@ function unfoldCardOf(w: Workspace): void {
 
 export type ChipId = "size" | "pr" | "br" | "port";
 
-export interface Chip {
-  id: ChipId;
+/** The PR chip: its number and its state words, each inked its own way. */
+export interface PrChip {
+  id: "pr";
+  /** The number, "#135", drawn in the chip's own ink. */
+  tag: string;
+  /** The state words after the number ("draft", "1 failing"), in its health's ink; "" with none. */
+  state: string;
+  health: PrHealth;
+  url?: string;
+}
+
+/** Every other chip: one line of words. */
+export interface TextChip {
+  id: Exclude<ChipId, "pr">;
   text: string;
   url?: string;
-  health?: PrHealth;
   /** The branch chip's uncommitted-changes dot. */
   dirty?: boolean;
   /** The size chip's size, which picks its ink. */
   size?: MoveSize;
 }
 
+export type Chip = PrChip | TextChip;
+
 const isPort = (p: number): boolean => Number.isInteger(p) && p > 0 && p < 65536;
 
-function portChip(ports: readonly number[] | undefined): Chip | null {
+function portChip(ports: readonly number[] | undefined): TextChip | null {
   const list = [...new Set((ports ?? []).filter(isPort))];
   const [first] = list;
   if (first === undefined) return null;
@@ -835,7 +854,7 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
   if (move && size) out.push({ id: "size", text: moveSizeText(size, move.decisions), size });
   const pr = prSummary(w);
   if (pr) {
-    const c: Chip = { id: "pr", text: pr.text, health: pr.health };
+    const c: PrChip = { id: "pr", tag: pr.tag, state: pr.state, health: pr.health };
     if (pr.url) c.url = pr.url;
     out.push(c);
   }

@@ -7,11 +7,9 @@ import { P } from "../shared/palette.ts";
 
 export const T = {
   ...P,
-  ground: "#F6F4EC",
   panel: "#FFFFFF",
   panelEdge: "#1414131A",
   rule: "#F0EEE6",
-  countBg: "#E5E2D6",
   clayButton: "#B5532F",
   clayButtonHover: "#9E4727",
   /** Text on a clay face: the Answer button. */

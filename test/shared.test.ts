@@ -5,9 +5,9 @@ import { installRenderer } from "./support/renderer.ts";
 const r = installRenderer();
 const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/activity.ts");
 const { glyphColor } = await import("../src/shared/contrast.ts");
-const { shade } = await import("../src/shared/shade.ts");
+const { hoverFace, shade } = await import("../src/shared/shade.ts");
 const { markLast } = await import("../src/shared/list.ts");
-const { READY_INK, prChipColors, prInk, shownHealth } = await import("../src/shared/pr-colors.ts");
+const { NEUTRAL_CHIP, READY_INK, prChipColors, prInk, shownHealth } = await import("../src/shared/pr-colors.ts");
 const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, projectId, projectOf } = await import(
   "../src/shared/projects.ts"
 );
@@ -97,6 +97,19 @@ describe("shade", () => {
   });
   it("hands back anything that is not a 6- or 8-digit hex unchanged", () => {
     for (const odd of ["clear", "#FFF", "#GGGGGG", "FFFFFF"]) assert.equal(shade(odd, 0.5), odd);
+  });
+});
+
+describe("hoverFace", () => {
+  it("shades an opaque face and leaves it opaque", () => {
+    assert.equal(hoverFace("#FFFFFF", 0.5), shade("#FFFFFF", 0.5));
+  });
+  it("raises a faint face's alpha pair by a step, capped at FF", () => {
+    assert.equal(hoverFace("#FFFFFF1A", 0.5), "#8A8A892E");
+    assert.equal(hoverFace("#FFFFFFf0", 0), "#FFFFFFFF");
+  });
+  it("hands back anything that is not a hex unchanged", () => {
+    assert.equal(hoverFace("clear", 0.5), "clear");
   });
 });
 
@@ -273,10 +286,18 @@ describe("prChipColors", () => {
     assert.equal(prChipColors("quiet").fg, P.metaText);
   });
 
-  it("draws no pill behind any state, so ready reads on the white card", () => {
+  it("puts each state in a pill: a faint face of its hue, the quiet chip's with none", () => {
+    assert.deepEqual(prChipColors("ready"), { bg: `${P.green}29`, fg: READY_INK, edge: `${P.greenDeep}59` });
+    assert.deepEqual(prChipColors("running"), { bg: `${P.blue}1A`, fg: P.blueText, edge: `${P.blue}38` });
+    for (const h of ["failing", "conflicts"] as const)
+      assert.deepEqual(prChipColors(h), { bg: `${P.red}1A`, fg: P.redText, edge: `${P.red}38` }, h);
+    assert.deepEqual(prChipColors("quiet"), { bg: NEUTRAL_CHIP.bg, fg: P.metaText, edge: NEUTRAL_CHIP.edge });
+  });
+
+  it("gives every state a face and an edge, so none is bare words", () => {
     for (const h of ["ready", "failing", "conflicts", "running", "quiet"] as const) {
-      assert.equal(prChipColors(h).bg, "clear", h);
-      assert.equal(prChipColors(h).edge, "clear", h);
+      assert.notEqual(prChipColors(h).bg, "clear", h);
+      assert.notEqual(prChipColors(h).edge, "clear", h);
     }
   });
 

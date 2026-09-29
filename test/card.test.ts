@@ -158,15 +158,21 @@ describe("chipsFor", () => {
       true,
     );
     assert.deepEqual(
-      chips.map((c) => [c.id, c.text, c.dirty ?? false]),
+      chips.map((c) => (c.id === "pr" ? [c.id, c.tag, false] : [c.id, c.text, c.dirty ?? false])),
       [
         ["pr", "#7", false],
         ["br", "feat", true],
       ],
     );
     assert.equal(chips[0]?.url, "https://x/7");
+    // The number and the state words ride apart, so the chip inks each its own way.
+    const pr = chips[0];
+    assert.deepEqual(pr?.id === "pr" ? [pr.tag, pr.state, "text" in pr] : null, ["#7", "open", false]);
+    const [draft] = model.chipsFor(ws("d", { pr: { number: 8, status: "open", draft: true } }), false);
+    assert.deepEqual(draft?.id === "pr" ? [draft.tag, draft.state] : null, ["#8", "draft"]);
     assert.equal(model.chipsFor(ws("y", { branch: "feat" }), false).length, 0);
-    assert.equal(model.chipsFor(ws("y", { branch: "feat" }), true)[0]?.dirty, false);
+    const [br] = model.chipsFor(ws("y", { branch: "feat" }), true);
+    assert.equal(br?.id === "pr" ? null : br?.dirty, false);
   });
 
   it("adds a ports chip that opens the first port on localhost", () => {
@@ -176,7 +182,7 @@ describe("chipsFor", () => {
 
   it("shows the first port and how many more", () => {
     const [port] = model.chipsFor(ws("x", { ports: [5173, 3000, 5173, 8080] }), true);
-    assert.equal(port?.text, ":5173 +2 ↗");
+    assert.equal(port?.id === "pr" ? null : port?.text, ":5173 +2 ↗");
     assert.equal(port?.url, "http://localhost:5173");
   });
 

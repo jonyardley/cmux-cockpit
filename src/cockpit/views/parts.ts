@@ -2,7 +2,7 @@
 
 import type { MoveSize } from "../../shared/move.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
-import { NEUTRAL_CHIP, prChipColors, prInk } from "../../shared/pr-colors.ts";
+import { type ChipColors, NEUTRAL_CHIP, prInk } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
@@ -37,7 +37,9 @@ import {
   moveToProject,
   newSessionFor,
   newSessionLabel,
+  type PrChip,
   projectKey,
+  type TextChip,
 } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
 import { ageOf, badgeCount, isReady, openPrLabel, statusHasAge, statusInfo, statusLine } from "../status.ts";
@@ -135,13 +137,14 @@ export function statusLabel(w: WsAccessor, size: number, weight: Weight): View {
 // --- chips ---------------------------------------------------------------------------
 
 // A chip's kind is fixed by its key (one when() per id), so the kind picks
-// the pieces once; only the text and colours are reactive. The PR chip is
-// words in its health's colour; the branch and ports chips stay neutral pills.
+// the pieces once; only the text and colours are reactive. Every chip is the
+// quiet pill: the PR's number in the chip's ink, then its state in its
+// health's; the branch and ports chips in the chip's ink alone.
 // The size chip (what answering the chat takes): the quiet chip's face, its
 // words in the state ink that fits, and nothing to tap, like the branch chip.
 const SIZE_INK: Record<MoveSize, string> = { quick: C.greenText, decide: C.clayText, review: C.blueText };
 
-function sizeChip(c: () => Chip): View {
+function sizeChip(c: () => TextChip): View {
   const colors = () => ({ ...NEUTRAL_CHIP, fg: SIZE_INK[c().size ?? "quick"] });
   return chipFrame(
     chipText(
@@ -153,20 +156,49 @@ function sizeChip(c: () => Chip): View {
   );
 }
 
-function chip(id: ChipId, c: () => Chip): View {
-  if (id === "size") return sizeChip(c);
-  const isPr = id === "pr";
-  const colors = () => (isPr ? prChipColors(c().health ?? "quiet") : NEUTRAL_CHIP);
-  const fg = () => colors().fg;
-  const text = id === "br" ? branchText(() => c().text, fg, "medium") : chipText(() => c().text, fg, id === "port");
-  // The PR chip's glyph turns into ↗ under the pointer, in the same slot,
-  // so the chip keeps its width. The port chip's words already end in ↗.
-  const icon = (name: string): View => Image(name).font(9).color(fg);
+const quietChip = (): ChipColors => NEUTRAL_CHIP;
+
+/** Whether a PR chip opens its PR on a tap, or stays still so a click on it selects the card. */
+export type PrTap = "opens" | "still";
+
+// The PR chip (the design refinement's one chip): its glyph, "#135" in
+// medium, then "draft" or "1 failing" in regular in its health's ink. Where
+// it opens the PR, the glyph turns into ↗ under the pointer, in the same
+// slot, so the chip keeps its width.
+function prChip(c: () => PrChip, tap: PrTap): View {
+  const fg = () => NEUTRAL_CHIP.fg;
+  const words = [
+    // The number holds its width as the state words do, so "#130" is never cut.
+    chipText(() => c().tag, fg).layoutPriority(2),
+    // A PR with no state words has no second text, and no gap for it.
+    when(
+      "pr-state",
+      () => !!c().state,
+      () =>
+        chipText(
+          () => c().state,
+          () => prInk(c().health),
+          false,
+          "regular",
+        ),
+    ).layoutPriority(2),
+  ];
+  const glyph = Image("arrow.triangle.pull").font(9).color(fg);
+  // The full card's PR has no tap of its own (issue #72): a click on it
+  // selects the card, and the card menu's Open PR opens it. So no hover and
+  // no ↗, as the branch chip.
+  if (tap === "still") return chipFrame(HStack({ spacing: 4 }, [glyph, ...words]), quietChip);
   const live = () => !!c().url;
-  const lead = isPr
-    ? ZStack({}, [icon("arrow.triangle.pull").hideOnHover(live), outMark(fg, live)])
-    : icon("arrow.branch");
-  const parts: View[] = id === "port" ? [text] : [lead, text];
+  const body = HStack({ spacing: 4 }, [ZStack({}, [glyph.hideOnHover(live), outMark(fg, live)]), ...words]);
+  return chipFrame(body, quietChip, chipHover(quietChip, live)).onTap(() => openIfUrl(c().url));
+}
+
+function chip(id: TextChip["id"], c: () => TextChip): View {
+  if (id === "size") return sizeChip(c);
+  const fg = () => NEUTRAL_CHIP.fg;
+  const text = id === "br" ? branchText(() => c().text, fg, "medium") : chipText(() => c().text, fg, true);
+  // The port chip's words already end in ↗.
+  const parts: View[] = id === "port" ? [text] : [Image("arrow.branch").font(9).color(fg), text];
   // The uncommitted-changes dot trails the branch name (issue #48).
   if (id === "br")
     parts.push(
@@ -179,35 +211,23 @@ function chip(id: ChipId, c: () => Chip): View {
   const body = HStack({ spacing: 4 }, parts);
   // The branch chip opens nothing, so it has no hover and no tap of its
   // own: a click on it selects the card, as the card's free space does.
-  if (id === "br") return chipFrame(body, colors);
-  return chipFrame(body, colors, chipHover(colors, live)).onTap(() => openIfUrl(c().url));
+  if (id === "br") return chipFrame(body, quietChip);
+  const live = () => !!c().url;
+  return chipFrame(body, quietChip, chipHover(quietChip, live)).onTap(() => openIfUrl(c().url));
 }
 
 /** The chip with `id` from a `chipsFor` list, or an empty one while it is absent. */
-function chipById(chips: readonly Chip[], id: ChipId): Chip {
-  return chips.find((c) => c.id === id) ?? { id, text: "" };
+function chipById(chips: readonly Chip[], id: TextChip["id"]): TextChip {
+  for (const c of chips) if (c.id !== "pr" && c.id === id) return c;
+  return { id, text: "" };
 }
 
-// The full card's PR in its chips row: the number, then its worst state in
-// words (issue #72). Plain text with no tap of its own, so a click on it
-// selects the card; the card menu's Open PR opens it. No PR title: the
-// card's title already says what the work is, and at card width it was cut
-// to a few letters.
-function prWords(w: WsAccessor): View {
-  const pr = computed(() => prSummary(w()));
-  return HStack({ spacing: 5 }, [
-    meta(() => pr()?.tag ?? "", C.secondary),
-    // A PR with no status has no words.
-    when(
-      "pr-state",
-      () => !!pr()?.state,
-      () =>
-        chipText(
-          () => pr()?.state ?? "",
-          () => prInk(pr()?.health ?? "quiet"),
-        ),
-    ).layoutPriority(2),
-  ]);
+const NO_PR: PrChip = { id: "pr", tag: "", state: "", health: "quiet" };
+
+/** The PR chip from a `chipsFor` list, or an empty one while it is absent. */
+function prById(chips: readonly Chip[]): PrChip {
+  for (const c of chips) if (c.id === "pr") return c;
+  return NO_PR;
 }
 
 // "To review →" is a white chip with the quiet chip's edge.
@@ -239,22 +259,20 @@ export function toReviewAction(w: WsAccessor): View {
 // sits on the when() result because a priority inside it does not reach the
 // HStack. No Spacer: it is flexible too and would split the free width with
 // the branch chip, so the frame left-aligns instead.
-export function chipsRow(w: WsAccessor, withBranch: boolean, prAs: "chip" | "words" = "chip"): View {
+// `prTap` is "still" on the full card, whose PR opens from the card menu.
+export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap = "opens"): View {
   // One chip list per change, read by every predicate and chip below.
   const chips = computed(() => chipsFor(w(), withBranch));
   const one = (id: ChipId) =>
     when(
       id,
       () => chips().some((c) => c.id === id),
-      () => chip(id, () => chipById(chips(), id)),
+      () => (id === "pr" ? prChip(() => prById(chips()), prTap) : chip(id, () => chipById(chips(), id))),
     );
-  // The full card shows its PR as plain words (prWords), the other shapes as a chip that opens it.
-  const hasPr = () => chips().some((c) => c.id === "pr");
-  const pr = prAs === "chip" ? one("pr") : when("pr-words", hasPr, () => prWords(w));
   const row = () =>
     HStack({ spacing: 5 }, [
       one("size").layoutPriority(2),
-      pr.layoutPriority(2),
+      one("pr").layoutPriority(2),
       one("br"),
       one("port").layoutPriority(2),
       toReviewAction(w),
