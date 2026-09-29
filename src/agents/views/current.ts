@@ -117,7 +117,7 @@ function helpersBlock(): View {
           () =>
             VStack({ spacing: 0, alignment: "leading" }, [
               sectionTitle("HELPERS", T.secondary).paddingBottom(2),
-              motionList({ items: () => helpers(), key: (e) => e.key, spacing: 0 }, (e) => subagentLine(e)),
+              motionList({ items: helpers, key: (e) => e.key, spacing: 0 }, (e) => subagentLine(e)),
               faintHelperLine("cur-subs-more", () => (helperMore() > 0 ? "+" + helperMore() + " more" : "")),
             ]).frame({ maxWidth: "infinity", alignment: "leading" }),
         ),
@@ -167,7 +167,7 @@ function checksBlock(): View {
             .color(T.tertiary)
             .lineLimit(1),
         ]).paddingBottom(2),
-        motionList({ items: () => checks(), key: (e) => e.key, spacing: 0 }, (e) => checkLine(e)),
+        motionList({ items: checks, key: (e) => e.key, spacing: 0 }, (e) => checkLine(e)),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
         .paddingTop(12),
@@ -477,9 +477,13 @@ function currentHead(): View {
 
 export function currentPanel(): View {
   // One live agent is already the header; list them only when there are several.
+  // Unmounted below two, so the list and the head's rule change in one frame
+  // and no empty Reorderable sits in the card.
   const many = () => agentRows().length > 0;
   return panel([
     ruled(currentHead(), () => !many()),
-    motionList({ items: () => agentRows(), key: (e) => e.key, spacing: 0 }, (e) => ruled(agentLine(e), () => e().last)),
+    when("cur-agents", many, () =>
+      motionList({ items: agentRows, key: (e) => e.key, spacing: 0 }, (e) => ruled(agentLine(e), () => e().last)),
+    ),
   ]);
 }

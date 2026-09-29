@@ -180,6 +180,24 @@ describe("the agents panel's Checks block", () => {
     assert.equal(new Set(rows.map((c) => c.key)).size, 3);
   });
 
+  it("keeps each check's key when a re-sort moves it, and splits same-named checks", () => {
+    const before = agents.checkRows([
+      { name: "a", state: "pending" },
+      { name: "b", state: "pending" },
+      { name: "a", state: "pass" },
+    ]);
+    const after = agents.checkRows([
+      { name: "b", state: "pending" },
+      { name: "a", state: "pass" },
+      { name: "a", state: "pass" },
+    ]);
+    assert.deepEqual(
+      before.map((c) => c.key),
+      ["c:a:0", "c:b:0", "c:a:1"],
+    );
+    assert.equal(after.find((c) => c.name === "b")?.key, "c:b:0");
+  });
+
   it("is empty when nothing is selected", () => {
     r.data.workspaces = [ws("w1", { branch: "feat" })];
     r.data.epoch++;
