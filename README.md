@@ -78,6 +78,7 @@ npm run dev                         # rebuild sidebars/*.js on every save
 npm run check                       # lint, types, dead code (knip), build fresh, tests with a coverage floor, validate
 npm run snapshots                   # re-record the text snapshots after a change on screen
 npm run preview                     # every snapshot scene as a PNG in preview/ (needs Google Chrome)
+npm run pr-visuals                  # before/after PNGs of the scenes this branch changes, pushed to pr-images, as markdown for the PR
 cmux sidebar reload cockpit         # show the change
 ```
 
