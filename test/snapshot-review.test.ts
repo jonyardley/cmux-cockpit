@@ -37,5 +37,5 @@ it("for review: merge verdicts", () => {
     ws("anchor-review", { title: "For review", group: "g-review" }),
     ...Object.entries(PRS).map(([id, p]) => ws(id, { title: `${id} card`, group: "g-review", branch: p.branch })),
   ];
-  snapshotScene("review-verdicts", r, C);
+  snapshotScene("review-verdicts", r, C, "cockpit");
 });

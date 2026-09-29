@@ -83,6 +83,14 @@ const opts = (v: unknown): Opts => (v && typeof v === "object" && !Array.isArray
 
 const axisOf = (kind: string): Axis => (kind === "VStack" ? "col" : kind === "HStack" ? "row" : "z");
 
+// A stack's or list's spacing. CSS ignores a negative gap, so a negative one
+// is a zero gap and group() pulls each child after the first back instead.
+const gapCss = (spacing: number): string => `gap:${Math.max(spacing, 0)}px`;
+
+// The margin that overlaps a child with the one before it along the axis.
+const overlap = (axis: Axis, spacing: number): string =>
+  spacing < 0 && axis !== "z" ? `${axis === "row" ? "margin-left" : "margin-top"}:${spacing}px` : "";
+
 const leaf = (markup: string, fill = false): Built => ({ html: markup, fillW: fill, fillH: fill });
 
 // Modifiers that style the element built so far, as CSS its children inherit.
@@ -102,7 +110,9 @@ const STYLE: Record<string, (v: unknown) => string> = {
   stroke: (v) => `--stroke:${colour(v)};box-shadow:inset 0 0 0 var(--sw,1px) var(--stroke)`,
   strokeWidth: (v) => `--sw:${num(v) ?? 1}px`,
   opacity: (v) => `opacity:${num(v) ?? 1}`,
-  showOnHover: () => "opacity:0",
+  // Hidden until hovered unless its flag reads false. The recorder resolves a
+  // reactive flag already; a function here is read once all the same.
+  showOnHover: (v) => ((typeof v === "function" ? v() : v) === false ? "" : "opacity:0"),
   rotation: (v) => `transform:rotate(${num(v) ?? 0}deg)`,
 };
 
@@ -218,7 +228,7 @@ class Writer {
   private stack(n: ViewNode, axis: Axis, o: Opts): Built {
     const spacing = num(o.spacing) ?? 8;
     const align = ALIGN[String(o.alignment)];
-    const css = [axis === "z" ? "" : `gap:${spacing}px`];
+    const css = [axis === "z" ? "" : gapCss(spacing)];
     if (align) css.push(axis === "z" ? `place-items:${align}` : `align-items:${align}`);
     return this.group(n, axis, spacing, `<div class="${axis}" style="${css.filter(Boolean).join(";")}">`);
   }
@@ -231,13 +241,19 @@ class Writer {
     const axis: Axis = own === undefined ? parent : "col";
     const spacing = own ?? gap;
     const open =
-      !n.mods.length && own === undefined ? `<div class="contents">` : `<div class="${axis}" style="gap:${spacing}px">`;
+      !n.mods.length && own === undefined
+        ? `<div class="contents">`
+        : `<div class="${axis}" style="${gapCss(spacing)}">`;
     return this.group(n, axis, spacing, open);
   }
 
   // SwiftUI's stacks take the flexibility of their children.
   private group(n: ViewNode, axis: Axis, spacing: number, open: string): Built {
-    const kids = n.children.map((c) => this.node(c, axis, spacing));
+    const pull = overlap(axis, spacing);
+    const kids = n.children.map((c, i) => {
+      const kid = this.node(c, axis, spacing);
+      return i > 0 ? styled(kid, pull) : kid;
+    });
     const fillW = kids.some((k) => /^<div class="[^"]*\bfw\b/.test(k));
     const fillH = kids.some((k) => /^<div class="[^"]*\bfh\b/.test(k));
     return { html: `${open}${kids.join("")}</div>`, fillW, fillH };
@@ -253,26 +269,28 @@ class Writer {
   }
 
   // Modifiers in call order: a style lands on the element built so far, a
-  // layout modifier wraps it in a new element.
+  // layout modifier wraps it in a new element. A shape's fill paints the
+  // shape itself, keeping its corner radius, wherever in the chain it comes.
   private modify(n: ViewNode, core: Built): Built {
-    let b = core;
-    let pending: string[] = [];
     const shape = core.html.startsWith('<div class="shape');
-    let wrapped = false;
+    const fills = shape ? n.mods.filter((m) => m.name === "fill").map((m) => `background:${colour(m.values[0])}`) : [];
+    let b = { ...core, html: styled(core.html, fills.join(";")) };
+    let pending: string[] = [];
     const wrap = (css: string, f: Frame = { css: "" }): void => {
       const inner = classed({ ...b, html: styled(b.html, pending.join(";")) });
       pending = [];
       const fillW = f.fillW ?? b.fillW;
       const fillH = f.fillH ?? b.fillH;
       b = { html: `<div class="w" style="${css}">${inner}</div>`, fillW, fillH };
-      wrapped = true;
     };
     for (const m of n.mods) {
       const v = m.values[0];
-      if (m.name === "fill" && shape && !wrapped) pending.push(`background:${colour(v)}`);
-      else if (m.name === "fill") wrap(`background:${colour(v)}`);
-      else if (m.name === "frame") wrap(frame(opts(v)).css, frame(opts(v)));
-      else if (m.name in WRAP) wrap(WRAP[m.name]?.(v) ?? "");
+      if (m.name === "fill" && shape) continue;
+      if (m.name === "fill") wrap(`background:${colour(v)}`);
+      else if (m.name === "frame") {
+        const f = frame(opts(v));
+        wrap(f.css, f);
+      } else if (m.name in WRAP) wrap(WRAP[m.name]?.(v) ?? "");
       else pending.push(this.style(m.name, v));
     }
     return { ...b, html: styled(b.html, pending.filter(Boolean).join(";")) };

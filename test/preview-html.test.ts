@@ -69,6 +69,49 @@ it("hides showOnHover content and ignores tap handlers", () => {
   assert.match(page.html, /<div class="t" style="opacity:0">a<\/div>/);
 });
 
+it("hides showOnHover content only while its flag is on", () => {
+  assert.equal(body(node("Text", ["a"], [["showOnHover", true]])), '<div class="t" style="opacity:0">a</div>');
+  assert.equal(body(node("Text", ["a"], [["showOnHover", false]])), '<div class="t">a</div>');
+  assert.equal(body(node("Text", ["a"], [["showOnHover", () => false]])), '<div class="t">a</div>');
+  assert.equal(body(node("Text", ["a"], [["showOnHover", () => true]])), '<div class="t" style="opacity:0">a</div>');
+});
+
+it("overlaps a stack's children by a negative spacing, which a CSS gap cannot", () => {
+  const out = body(node("HStack", [{ spacing: -3 }], [], [node("Text", ["a"]), node("Text", ["b"])]));
+  assert.equal(
+    out,
+    '<div class="row" style="gap:0px"><div class="t">a</div><div class="t" style="margin-left:-3px">b</div></div>',
+  );
+  const col = body(node("VStack", [{ spacing: -2 }], [], [node("Text", ["a"]), node("Text", ["b"])]));
+  assert.match(col, /<div class="t" style="margin-top:-2px">b<\/div>/);
+});
+
+it("paints a shape's fill on the shape, keeping its radius, after a wrapping modifier", () => {
+  const out = body(
+    node(
+      "Circle",
+      [{}],
+      [
+        ["frame", { width: 10, height: 10 }],
+        ["fill", "#3366CC"],
+      ],
+    ),
+  );
+  assert.match(out, /<div class="shape[^"]*" style="border-radius:50%;background:#3366CC">/);
+  assert.doesNotMatch(out, /class="w" style="[^"]*background/);
+  const rounded = body(
+    node(
+      "RoundedRectangle",
+      [{ cornerRadius: 4 }],
+      [
+        ["padding", 2],
+        ["fill", "#3366CC"],
+      ],
+    ),
+  );
+  assert.match(rounded, /<div class="shape[^"]*" style="border-radius:4px;background:#3366CC">/);
+});
+
 it("lists and outlines what it cannot draw", () => {
   const page = toPage(node("Blob", [], [["sparkle", 1]]), "t", 300, "#FFFFFF");
   assert.deepEqual(page.unknown, [".sparkle", "Blob"]);
