@@ -7,9 +7,7 @@ const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/
 const { glyphColor } = await import("../src/shared/contrast.ts");
 const { shade } = await import("../src/shared/shade.ts");
 const { markLast } = await import("../src/shared/list.ts");
-const { NEUTRAL_CHIP, READY_INK, dimmedColors, prChipColors, prInk, summaryColors } = await import(
-  "../src/shared/pr-colors.ts"
-);
+const { READY_INK, prChipColors, prInk, shownHealth } = await import("../src/shared/pr-colors.ts");
 const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, nextIn, projectId, projectOf } = await import(
   "../src/shared/projects.ts"
 );
@@ -276,71 +274,45 @@ describe("nextIn", () => {
 });
 
 describe("prChipColors", () => {
-  it("shows the health when there is one, whatever the status", () => {
-    assert.equal(prChipColors("failing", "open").fg, "#9E2F27");
-    assert.equal(prChipColors("running", "open").fg, "#2F5690");
-    assert.deepEqual(prChipColors("ready", "open"), { bg: READY_INK, fg: "#FFFFFF", edge: P.greenDeepEdge });
+  it("colours each state's words: green ready, red failing and conflicts, blue running", () => {
+    assert.equal(prChipColors("ready").fg, READY_INK);
+    assert.equal(prChipColors("failing").fg, P.redText);
+    assert.equal(prChipColors("conflicts").fg, P.redText);
+    assert.equal(prChipColors("running").fg, P.blueText);
   });
 
-  it("is green only when genuinely ready: a plain open PR stays neutral (issue #82)", () => {
-    const ready = prChipColors("ready", "open");
-    assert.notDeepEqual(prChipColors("quiet", "open"), ready);
-    assert.deepEqual(prChipColors("quiet", "open"), prChipColors("quiet", "closed"));
-    assert.deepEqual(prChipColors("quiet", "open"), NEUTRAL_CHIP);
-    // Only a ready health turns a chip green, whatever else the PR says.
+  it("is grey with no verdict, so draft, open, merged and closed read alike", () => {
+    assert.equal(prChipColors("quiet").fg, P.metaText);
+  });
+
+  it("draws no pill behind any state, so ready reads on the white card", () => {
+    for (const h of ["ready", "failing", "conflicts", "running", "quiet"] as const) {
+      assert.equal(prChipColors(h).bg, "clear", h);
+      assert.equal(prChipColors(h).edge, "clear", h);
+    }
+  });
+
+  it("is green only when genuinely ready (issue #82)", () => {
     for (const h of ["failing", "conflicts", "running", "quiet"] as const)
-      for (const st of ["open", "merged", "closed", undefined] as const)
-        assert.notDeepEqual(prChipColors(h, st), ready, h + " " + String(st));
-  });
-
-  it("keeps merged purple while quiet, and is neutral with no status", () => {
-    assert.equal(prChipColors("quiet", "merged").fg, "#5B3E91");
-    assert.deepEqual(prChipColors("quiet", undefined), prChipColors("quiet", "closed"));
-    assert.deepEqual(prChipColors("quiet", undefined), { bg: "#F4F2EA", fg: "#4A4945", edge: "#E8E5DA" });
-  });
-
-  it("takes slate for a quiet open draft only, distinct from open and closed", () => {
-    const draft = prChipColors("quiet", "open", true);
-    assert.equal(draft.fg, "#4A5566");
-    assert.notDeepEqual(draft, prChipColors("quiet", "open"));
-    assert.notDeepEqual(draft, prChipColors("quiet", "closed"));
-    assert.deepEqual(prChipColors("quiet", "merged", true), prChipColors("quiet", "merged"));
-    assert.deepEqual(prChipColors("failing", "open", true), prChipColors("failing", "open"));
+      assert.notEqual(prChipColors(h).fg, READY_INK, h);
   });
 });
 
 describe("prInk", () => {
-  it("writes ready in its green, not the chip's white, which vanishes on a card", () => {
-    assert.equal(prInk("ready", "open"), READY_INK);
-    assert.notEqual(prInk("ready", "open"), prChipColors("ready", "open").fg);
+  it("is the chip's own words colour, so a PR reads the same as a chip and as text", () => {
+    for (const h of ["ready", "failing", "conflicts", "running", "quiet"] as const)
+      assert.equal(prInk(h), prChipColors(h).fg, h);
   });
 });
 
-describe("dimmedColors", () => {
-  it("drops the solid ready chip to neutral while dimmed, so a stale verdict stays readable", () => {
-    const ready = prChipColors("ready", "open");
-    assert.deepEqual(dimmedColors(ready, true), NEUTRAL_CHIP);
-    assert.equal(dimmedColors(ready, false), ready);
+describe("shownHealth", () => {
+  it("drops a stale ready to grey words, so an old verdict does not shout", () => {
+    assert.equal(shownHealth("ready", true), "quiet");
+    assert.equal(shownHealth("ready", false), "ready");
   });
 
-  it("leaves every other chip alone, dimmed or not", () => {
-    const failing = prChipColors("failing", "open");
-    assert.equal(dimmedColors(failing, true), failing);
-  });
-});
-
-describe("summaryColors", () => {
-  it("reads a summary's health, status and draft, and is neutral without one", () => {
-    assert.deepEqual(summaryColors(undefined), NEUTRAL_CHIP);
-    const base = { number: 1, url: undefined, tag: "#1", text: "#1", state: "open", title: "" };
-    assert.deepEqual(
-      summaryColors({ ...base, status: "open", health: "ready", draft: false }),
-      prChipColors("ready", "open"),
-    );
-    assert.deepEqual(
-      summaryColors({ ...base, status: "open", health: "quiet", draft: true }),
-      prChipColors("quiet", "open", true),
-    );
+  it("leaves every other health alone, stale or not", () => {
+    for (const h of ["failing", "conflicts", "running", "quiet"] as const) assert.equal(shownHealth(h, true), h);
   });
 });
 

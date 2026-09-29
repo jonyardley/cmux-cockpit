@@ -128,13 +128,13 @@ describe("the Pull requests list's chips", () => {
   };
 
   it("say what the card says: worst state first, conflicts in their own word", () => {
-    assert.deepEqual(chipOf("w1"), [7, "1 failing", { health: "failing", draft: false }]);
-    assert.deepEqual(chipOf("running"), [10, "running", { health: "running", draft: false }]);
-    assert.deepEqual(chipOf("green"), [8, "ready", { health: "ready", draft: false }]);
-    assert.deepEqual(chipOf("conflicts"), [16, "conflicts", { health: "conflicts", draft: false }]);
-    assert.deepEqual(chipOf("draftRunning"), [15, "draft · running", { health: "running", draft: true }]);
-    assert.deepEqual(chipOf("merged"), [11, "merged", { health: "quiet", draft: false }]);
-    assert.deepEqual(chipOf("bare"), [12, "open", { health: "quiet", draft: false }]);
+    assert.deepEqual(chipOf("w1"), [7, "1 failing", "failing"]);
+    assert.deepEqual(chipOf("running"), [10, "running", "running"]);
+    assert.deepEqual(chipOf("green"), [8, "ready", "ready"]);
+    assert.deepEqual(chipOf("conflicts"), [16, "conflicts", "conflicts"]);
+    assert.deepEqual(chipOf("draftRunning"), [15, "draft · running", "running"]);
+    assert.deepEqual(chipOf("merged"), [11, "merged", "quiet"]);
+    assert.deepEqual(chipOf("bare"), [12, "open", "quiet"]);
   });
 
   it("title a workspace's PR by its own title when the poller saved one", () => {
@@ -144,12 +144,9 @@ describe("the Pull requests list's chips", () => {
   });
 
   it("keep an own PR's draft, with no checks to judge it by", () => {
-    assert.deepEqual(chipOf(""), [42, "draft", { health: "quiet", draft: true }]);
+    assert.deepEqual(chipOf(""), [42, "draft", "quiet"]);
     const own = agents.prs().find((e) => e.pr.number === 7);
-    assert.deepEqual(own && [agents.prChipText(own), agents.prChipHealth(own)], [
-      "open",
-      { health: "quiet", draft: false },
-    ]);
+    assert.deepEqual(own && [agents.prChipText(own), agents.prChipHealth(own)], ["open", "quiet"]);
   });
 });
 
@@ -212,11 +209,6 @@ describe("prSummary", () => {
     assert.deepEqual(said("draft"), ["quiet", "#9 · draft"]);
   });
 
-  it("flags an open draft for the chip colour, and nothing else", () => {
-    assert.equal(prSummary(at("draft"))?.draft, true);
-    assert.equal(prSummary(at("green"))?.draft, false);
-  });
-
   it("keeps a draft's marker in every health, with one separator", () => {
     assert.deepEqual(said("draftFailing"), ["failing", "#14 · draft · 1 failing"]);
     assert.deepEqual(said("draftRunning"), ["running", "#15 · draft · running"]);
@@ -256,7 +248,6 @@ describe("prSummary", () => {
       status: "merged",
       url: "https://github.com/o/r/pull/7",
       health: "quiet",
-      draft: false,
       tag: "#11",
       text: "#11 · merged",
       state: "merged",
@@ -273,7 +264,6 @@ describe("prSummary", () => {
       status: undefined,
       url: undefined,
       health: "quiet",
-      draft: false,
       tag: "#3",
       text: "#3",
       state: "",

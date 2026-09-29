@@ -1,5 +1,5 @@
 // The Pull requests rows' "from" line and tap: which chat opened each PR,
-// from the saved prOrigins map, and going back to it. __STATE__ is set
+// from the saved prOrigins map, and a tap on the row opening it. __STATE__ is set
 // before the renderer import, as in made-here.test.ts.
 
 import assert from "node:assert/strict";
@@ -91,63 +91,26 @@ describe("the row's from line", () => {
 });
 
 describe("a tap on the row", () => {
-  it("has a chat to go to only while the chat's workspace is open", () => {
-    assert.ok(m.canShowInChat(entry(1)));
-    assert.ok(m.canShowInChat(entry(2)));
-    assert.ok(!m.canShowInChat(entry(3)));
-    assert.ok(!m.canShowInChat(entry(4)));
-  });
-
-  it("opens GitHub for this chat's PR when there is no terminal to flash", () => {
-    const origin = { url: pr(5), number: 5, workspace: "here", session: "s", epoch: NOW };
-    assert.ok(!m.canShowInChat({ origin }));
-    m.goToPr({ origin, pr: { url: pr(5) } });
-    assert.deepEqual(r.calls, []);
-    assert.deepEqual(r.opened, [pr(5)]);
-  });
-
-  it("selects the chat's workspace, then focuses and flashes its terminal", () => {
-    m.goToPr(entry(1));
-    assert.deepEqual(
-      r.calls.map((c) => [c.method, c.params]),
-      [
-        ["workspace.select", { workspace_id: "here" }],
-        ["surface.focus", { surface_id: "s-here", workspace_id: "here" }],
-        ["surface.trigger_flash", { surface_id: "s-here", workspace_id: "here" }],
-      ],
-    );
-    assert.deepEqual(r.opened, []);
-  });
-
-  it("only selects when no terminal was saved", () => {
-    m.goToPr(entry(2));
-    assert.deepEqual(
-      r.calls.map((c) => c.method),
-      ["workspace.select"],
-    );
-  });
-
-  it("opens GitHub once the chat has gone, or with no origin", () => {
-    m.goToPr(entry(3));
-    m.goToPr(entry(4));
-    assert.deepEqual(r.calls, []);
-    assert.deepEqual(r.opened, [pr(3), pr(4)]);
-  });
-
-  it("gives the pill its own tap inside the row's: the whole row lights and taps", () => {
+  it("has one tap target, the whole row, so a tap anywhere opens the PR", () => {
     const root = nodeOf(prRow(() => ({ ...entry(1), last: true })));
     assert.ok(root);
     const taps = (n: ViewNode): ViewNode[] => [
       ...(n.mods.some((x) => x.name === "onTap") ? [n] : []),
       ...n.children.flatMap(taps),
     ];
-    const [row, ...inner] = taps(root);
-    assert.ok(row);
-    // Tap and hover on one view, so the lit area is the tappable area.
-    assert.ok(row.mods.some((x) => x.name === "hoverBackground"));
-    // Exactly one tap nests inside the row's: the pill's own, which opens
-    // GitHub (tapChip; the fake renderer does not keep handlers).
-    assert.equal(inner.length, 1);
-    assert.equal(taps(row).length, 2);
+    const tappable = taps(root);
+    assert.equal(tappable.length, 1);
+    // The row itself, the first child of the ruled wrapper.
+    assert.equal(tappable[0], root.children[0]);
+    assert.ok(tappable[0]?.mods.some((x) => x.name === "hoverBackground"));
+  });
+
+  it("opens the PR on GitHub and never switches chats", () => {
+    const root = nodeOf(prRow(() => ({ ...entry(1), last: true })));
+    const tap = root?.children[0]?.handlers.onTap;
+    assert.equal(typeof tap, "function");
+    if (typeof tap === "function") tap();
+    assert.deepEqual(r.opened, [pr(1)]);
+    assert.deepEqual(r.calls, []);
   });
 });

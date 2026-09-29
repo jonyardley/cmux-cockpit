@@ -2,7 +2,7 @@
 
 import type { MoveSize } from "../../shared/move.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
-import { NEUTRAL_CHIP, summaryColors } from "../../shared/pr-colors.ts";
+import { NEUTRAL_CHIP, prChipColors, prInk } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
@@ -16,7 +16,6 @@ import {
   meta,
   openIfUrl,
   outMark,
-  chip as pill,
   projectBadge,
   ring,
   unreadBadge,
@@ -137,8 +136,8 @@ export function statusLabel(w: WsAccessor, size: number, weight: Weight): View {
 // --- chips ---------------------------------------------------------------------------
 
 // A chip's kind is fixed by its key (one when() per id), so the kind picks
-// the pieces once; only the text and colours are reactive. The PR chip takes
-// its health's colours; the branch and ports chips stay neutral.
+// the pieces once; only the text and colours are reactive. The PR chip is
+// words in its health's colour; the branch and ports chips stay neutral pills.
 // The size chip (what answering the chat takes): the quiet chip's face, its
 // words in the state ink that fits, and nothing to tap, like the branch chip.
 const SIZE_INK: Record<MoveSize, string> = { quick: C.greenText, decide: C.clayText, review: C.blueText };
@@ -158,8 +157,7 @@ function sizeChip(c: () => Chip): View {
 function chip(id: ChipId, c: () => Chip): View {
   if (id === "size") return sizeChip(c);
   const isPr = id === "pr";
-  const colors = () =>
-    isPr ? summaryColors({ health: c().health ?? "quiet", status: c().status, draft: !!c().draft }) : NEUTRAL_CHIP;
+  const colors = () => (isPr ? prChipColors(c().health ?? "quiet") : NEUTRAL_CHIP);
   const fg = () => colors().fg;
   const text = id === "br" ? branchText(() => c().text, fg, "medium") : chipText(() => c().text, fg, id === "port");
   // The PR chip's glyph turns into ↗ under the pointer, in the same slot,
@@ -214,14 +212,14 @@ export function prLine(w: WsAccessor, size: number): View {
                 .lineLimit(1)
                 .truncation("tail"),
           ),
-          // A PR with no status has no words, so no empty pill.
+          // A PR with no status has no words.
           when(
             "pr-state",
             () => !!pr()?.state,
             () =>
-              pill(
+              chipText(
                 () => pr()?.state ?? "",
-                () => summaryColors(pr()),
+                () => prInk(pr()?.health ?? "quiet"),
               ),
           ).layoutPriority(2),
         ],

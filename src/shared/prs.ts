@@ -98,8 +98,6 @@ export interface PrSummary {
   status: PrStatus | undefined;
   url: string | undefined;
   health: PrHealth;
-  /** An open draft, so the chip can take the draft colour. */
-  draft: boolean;
   /** The number alone, "#12", for the row density so rows do not widen. */
   tag: string;
   /** The full words: "#35 · 1 failing", "#9 · draft · running", "#35 · ready", "#11 · merged". */
@@ -126,9 +124,8 @@ export function summaryOf(pr: PullRequest, checks: readonly SavedCheck[]): PrSum
   const tag = "#" + pr.number;
   const text = [tag, ...words].join(" · ");
   const state = words.join(" · ") || (pr.status ?? "");
-  const draft = pr.status === "open" && pr.draft === true;
   const title = cleanTitle(pr.title);
-  return { number: pr.number, status: pr.status, url: pr.url, health, draft, tag, text, state, title };
+  return { number: pr.number, status: pr.status, url: pr.url, health, tag, text, state, title };
 }
 
 /** The health of the workspace's first numbered PR, without the words; quiet with none. */

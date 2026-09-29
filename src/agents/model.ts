@@ -27,7 +27,7 @@ import { childRunning, pairLive, type SavedRun, savedRunning, savedRuns } from "
 import { cardMessage, promptText, readable } from "../shared/text.ts";
 import { ageSince, finishedAt, nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
-import { type HaloStatus, haloColor, openIfUrl } from "../shared/ui.ts";
+import { type HaloStatus, haloColor } from "../shared/ui.ts";
 import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } from "../shared/words.ts";
 import { CHECK_DOT, STATUS_DOT, T } from "./theme.ts";
 
@@ -466,12 +466,8 @@ export function prChipText(e: Pick<PrEntry, "pr" | "summary">): string {
   return [word, pr.stale ? "stale" : undefined].filter(Boolean).join(" · ");
 }
 
-/** A PR row chip's health and draft flag, for its colours. */
-export function prChipHealth(e: Pick<PrEntry, "pr" | "summary">): { health: PrHealth; draft: boolean } {
-  return e.summary
-    ? { health: e.summary.health, draft: e.summary.draft }
-    : { health: "quiet", draft: e.pr.status === "open" && e.pr.draft === true };
-}
+/** A PR row chip's health, for its colour. */
+export const prChipHealth = (e: Pick<PrEntry, "summary">): PrHealth => e.summary?.health ?? "quiet";
 
 const PR_RANK: Record<PrStatus, number> = { open: 0, merged: 1, closed: 2 };
 const prRank = (pr: PullRequest): number => (pr.status ? PR_RANK[pr.status] : 3);
@@ -550,8 +546,8 @@ export const prNote = computed((): string => freshness().line);
 export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale();
 
 // ---- Where a PR came from ------------------------------------------------------
-// A row says which chat opened its PR (report-pr.ts), and a tap goes back
-// to that chat, or out to GitHub once it has gone.
+// A row says which chat opened its PR (report-pr.ts); a tap on the row
+// opens the PR on GitHub.
 
 /** "this chat · 3m ago" for the selected workspace, else that workspace's
  * name; "a closed chat" once it has gone; "" with no origin. */
@@ -570,42 +566,6 @@ export function prSource(e: Pick<PrEntry, "origin">): string {
 export function prFromText(e: Pick<PrEntry, "origin">): string {
   const source = prSource(e);
   return source ? "from " + source : "";
-}
-
-// The workspace the PR came from, while it is still open.
-function originWorkspace(e: Pick<PrEntry, "origin">): Workspace | undefined {
-  const id = e.origin?.workspace;
-  return id ? (data.workspaces() ?? []).find((w) => w.id === id) : undefined;
-}
-
-/** Whether a tap on the row has a chat to go to: its workspace is still
- * open, and it is somewhere else or has a terminal to flash. Going to the
- * workspace Jon is already in with nothing to flash would show nothing. */
-export function canShowInChat(e: Pick<PrEntry, "origin">): boolean {
-  const w = originWorkspace(e);
-  return !!w && (w.id !== selectedId() || !!e.origin?.surface);
-}
-
-/**
- * Switches to the chat that opened the PR, focuses its terminal and flashes
- * it. cmux has no call that scrolls a terminal to a line, so the flash is
- * what says which terminal it was.
- */
-export function showInChat(e: Pick<PrEntry, "origin">): void {
-  const w = originWorkspace(e);
-  if (!w) return;
-  cmux("workspace.select", { workspace_id: w.id });
-  const surface = e.origin?.surface;
-  if (!surface) return;
-  cmux("surface.focus", { surface_id: surface, workspace_id: w.id });
-  cmux("surface.trigger_flash", { surface_id: surface, workspace_id: w.id });
-}
-
-/** A PR row's tap: back to the chat that opened it, or to GitHub when
- * there is no open chat to go to. */
-export function goToPr(e: Pick<PrEntry, "origin" | "pr">): void {
-  if (canShowInChat(e)) showInChat(e);
-  else openIfUrl(e.pr.url);
 }
 
 // ---- Made here ------------------------------------------------------------------

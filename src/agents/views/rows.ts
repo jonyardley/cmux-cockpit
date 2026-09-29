@@ -3,7 +3,7 @@
 
 import type { Last } from "../../shared/list.ts";
 import { meta, openIfUrl, when } from "../../shared/ui.ts";
-import { goToPr, type MadeEntry, madeAge, madeIcon, madeTitleColor, type PrEntry, prFromText } from "../model.ts";
+import { type MadeEntry, madeAge, madeIcon, madeTitleColor, type PrEntry, prFromText } from "../model.ts";
 import { T } from "../theme.ts";
 import { glyph, prChip, ruled } from "./parts.ts";
 
@@ -19,11 +19,10 @@ export function footRow(text: () => string, onTap: () => void): View {
   return ruled(row, () => true);
 }
 
-/** A PR row: tap goes back to the chat that opened it (GitHub once that
- * chat has gone); the state pill opens GitHub. */
+/** A PR row: a tap anywhere on it, the state words included, opens the PR on GitHub. */
 export function prRow(e: () => Last<PrEntry>): View {
-  // The pill sits in the title's line, so the stack centres it on the
-  // title whether or not the from line shows under it. Stale rides inside
+  // The state words sit in the title's line, so the stack centres them on
+  // the title whether or not the from line shows under it. Stale rides inside
   // the chip: an empty sibling Text would still cost spacing.
   const top = HStack({ spacing: 10 }, [
     Text(() => "#" + (e().pr.number ?? ""))
@@ -41,9 +40,8 @@ export function prRow(e: () => Last<PrEntry>): View {
     Spacer({ minLength: 4 }),
     prChip(e).layoutPriority(2),
   ]);
-  // The whole row lights and taps, as the other rows do. The pill's own
-  // tap sits inside it and wins, as a chip's does on a cockpit card, so a
-  // tap on the pill opens GitHub and never also jumps to the chat.
+  // The whole row lights and taps as one target, the state words
+  // included, so a tap anywhere on it opens the PR on GitHub.
   const row = VStack({ spacing: 2, alignment: "leading" }, [
     top,
     when(
@@ -59,7 +57,7 @@ export function prRow(e: () => Last<PrEntry>): View {
     .paddingVertical(10)
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
-    .onTap(() => goToPr(e()));
+    .onTap(() => openIfUrl(e().pr.url));
   return ruled(row, () => e().last);
 }
 

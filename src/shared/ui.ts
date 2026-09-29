@@ -109,14 +109,17 @@ const FACE_STEP = 0.07;
 const EDGE_STEP = 0.35;
 
 /**
- * A chip's hover: its own face and edge, each a step darker, so a PR's
- * state colour survives. Worked out once per colour change. With `live`
- * false (nothing to open) the chip keeps its resting look.
+ * A chip's hover: its own face and edge, each a step darker. A chip with
+ * no face (a PR's state, words only) takes a link's box instead, as
+ * linkBox does. Worked out once per colour change. With `live` false
+ * (nothing to open) the chip keeps its resting look.
  */
 export function chipHover(colors: () => ChipColors, live: () => boolean = () => true): Hover {
   const lit = computed(() => {
     const c = colors();
-    return live() ? { face: shade(c.bg, FACE_STEP), edge: shade(c.edge, EDGE_STEP) } : { face: c.bg, edge: c.edge };
+    if (!live()) return { face: c.bg, edge: c.edge };
+    if (c.bg === "clear") return { face: P.linkHover, edge: P.linkEdge };
+    return { face: shade(c.bg, FACE_STEP), edge: shade(c.edge, EDGE_STEP) };
   });
   return { face: () => lit().face, edge: () => lit().edge };
 }
@@ -199,14 +202,6 @@ export function chipText(label: () => string, fg: () => string, mono = false): V
   const sized = Text(label).font(META_FONT);
   // Monospaced straight after the font, as meta() does.
   return (mono ? sized.monospaced() : sized).weight("medium").lineLimit(1).truncation("tail").color(fg);
-}
-
-/** The one chip both sidebars build for a PR's state and a port: words in a hugging frame. */
-export function chip(label: () => string, colors: () => ChipColors, mono = false): View {
-  return chipFrame(
-    chipText(label, () => colors().fg, mono),
-    colors,
-  );
 }
 
 /** A chip that opens `url`: under the pointer its face and edge each step darker (chipHover). */
