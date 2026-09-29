@@ -64,9 +64,9 @@ project's name, colour or icon into the sidebar itself.
    workspace id to project key, consulted the way `laneOf()` consults
    `laneOverride`. Drag and drop is possible in principle (`Reorderable`'s
    `onMove` is the renderer's only drop primitive) but the Projects list
-   is not currently a `Reorderable` surface (`flatEntries` returns `[]`
-   outside "all" mode) — that is a second, separate piece of work for the
-   same result.
+   is a `Reorderable` only for its row motion, every row pinned and its
+   drag hooks doing nothing (`motionList`), so drops there are a second,
+   separate piece of work for the same result.
 3. **Where it persists, sync?** It does not survive reload with today's
    renderer; it would need re-deriving from `directory` again after
    reload, same as before the override. This is the one question the

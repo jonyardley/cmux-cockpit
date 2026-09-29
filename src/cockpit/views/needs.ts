@@ -122,7 +122,7 @@ export function needsStrip(): View {
                 .weight("semibold")
                 .color(C.clayText),
             ]).paddingHorizontal(2),
-            motionList({ items: needsShown, key: (w) => w.id }, (w) => needsRow(w)),
+            motionList({ items: needsShown, key: (w) => w.id, spacing: 6 }, (w) => needsRow(w)),
             moreLine(),
           ]).padding(9),
           C.needsBg,
