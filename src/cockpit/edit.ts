@@ -51,6 +51,12 @@ export const setDraftIcon = (icon: string): void => setDraft({ ...draft(), icon 
 export const iconSearch = (): string => iconQuery();
 export const setIconSearch = (text: string): void => setIconQuery(text);
 
+/** Return in the search: picks its first match and keeps the editor open, so Return never saves the old icon. */
+export function pickFirstMatch(): void {
+  const first = iconMatches(iconQuery())[0];
+  if (first) setDraftIcon(first);
+}
+
 /** An empty folder clears it, so the header loses its "+". */
 export function setDraftFolder(text: string): void {
   const { root: _old, ...rest } = draft();

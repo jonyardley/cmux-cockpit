@@ -13,6 +13,7 @@ import {
   iconSearch,
   matchesLine,
   noMatchLine,
+  pickFirstMatch,
   removeLabel,
   removeTapped,
   saveDraft,
@@ -32,8 +33,15 @@ const glyph = (): string => glyphColor(draftSpec().color, C.text);
 
 // The field draws no box of its own, so it sits in a ring. Its text is read
 // once, so a rebuild mid-edit keeps what was typed.
-function field(text: string, placeholder: string, autofocus: boolean, onEdit: (t: string) => void, font = 12.5): View {
-  const input = TextField(text, { placeholder, autofocus, onEdit, onSubmit: saveDraft, onCancel: closeEditor })
+// Return saves, unless the field says what else it does.
+function field(
+  text: string,
+  placeholder: string,
+  autofocus: boolean,
+  onEdit: (t: string) => void,
+  { font = 12.5, onSubmit = saveDraft }: { font?: number; onSubmit?: () => void } = {},
+): View {
+  const input = TextField(text, { placeholder, autofocus, onEdit, onSubmit, onCancel: closeEditor })
     .font(font)
     .paddingHorizontal(8)
     .paddingVertical(5);
@@ -139,7 +147,7 @@ export function projectEditor(k: string): View {
     VStack({ spacing: 8 }, swatches()),
     label("Icon").paddingTop(14).paddingBottom(6),
     iconPicker(),
-    field(iconSearch(), "Search icons", false, setIconSearch, 12).paddingTop(8),
+    field(iconSearch(), "Search icons", false, setIconSearch, { font: 12, onSubmit: pickFirstMatch }).paddingTop(8),
     label("Folder").paddingTop(14).paddingBottom(5),
     field(spec.root ?? "", "~/Dev/folder, for the +", false, setDraftFolder),
     Text(matchesLine(k)).font(11).color(C.tertiary).lineLimit(2).paddingTop(4),

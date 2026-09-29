@@ -194,7 +194,7 @@ describe("the editor", () => {
     assert.equal(edit.noMatchLine(""), "");
   });
 
-  it("redraws the picker as the search is typed, and starts empty each time it opens", () => {
+  it("redraws the picker as the search is typed, picks the first match on Return, and starts empty each time it opens", () => {
     edit.openEditor(APP_TWO);
     const node = nodeOf(projectEditor(APP_TWO));
     const onEdit = node && fields(node)[1]?.handlers.onEdit;
@@ -202,7 +202,15 @@ describe("the editor", () => {
     onEdit("piano");
     assert.equal(edit.iconSearch(), "piano");
     assert.deepEqual(edit.iconRows(edit.draftSpec().icon), [["pianokeys"]]);
-    edit.setDraftIcon("pianokeys");
+    const onSubmit = node && fields(node)[1]?.handlers.onSubmit;
+    assert.ok(typeof onSubmit === "function");
+    onSubmit("piano");
+    assert.equal(edit.draftSpec().icon, "pianokeys");
+    assert.equal(state.editingProject(), APP_TWO);
+    assert.deepEqual(sets(), []);
+    onEdit("zzz");
+    onSubmit("zzz");
+    assert.equal(edit.draftSpec().icon, "pianokeys");
     edit.openEditor(APP_TWO);
     assert.equal(edit.iconSearch(), "");
   });
