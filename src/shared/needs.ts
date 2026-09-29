@@ -11,14 +11,16 @@ import { persistSet, SAVED_STATE } from "./persist.ts";
 export const NUDGE_GAP = 45;
 
 // Claude Code's "Claude is waiting for your input" notification fires about
-// 60s after a turn ends, and cmux records it as needs_input (cause not yet
-// confirmed, issue #4). A real ask (a permission prompt, a question) begins
-// as the agent works, so it follows the agent's last activity closely. A
-// nudge begins well after it, with nothing new in between. The workspace's
-// latestAt counts as activity too, so if either timestamp moves when the
-// nudge lands, the gap closes and the flag shows as before. The risk the
-// other way: an ask after 45s with no activity cmux records would read as
-// idle. Upstream docs give kind as claude, codex or the raw source.
+// 60s after a turn ends, and cmux records it as needs_input. A real ask (a
+// permission prompt, a question) begins as the agent works, so it follows
+// the agent's last activity closely. A nudge begins well after it, with
+// nothing new in between. The workspace's latestAt counts as activity too,
+// so if either timestamp moves when the nudge lands, the gap closes and the
+// flag shows as before. The cmux source now shows the nudge restamps
+// lastActivityAt along with sinceEpoch (v0.64.25, docs/state-loop.md), so on
+// 0.64.25 the gap check does not fire (issue #4). The risk the other way: an
+// ask after 45s with no activity cmux records would read as idle. Upstream
+// docs give kind as claude, codex or the raw source.
 export function isIdleNudge(a: Agent, w?: Workspace): boolean {
   if (a.status !== "needs_input" || a.kind !== "claude" || !a.sinceEpoch) return false;
   // A fresh saved ask proves a real one, however long the agent was quiet
@@ -76,14 +78,14 @@ export function effectiveAgent(a: Agent, w?: Workspace): Agent {
 // --- Asking or your turn (issue #81) -----------------------------------------------------
 
 /**
- * Seconds an ask may be heard before the needs_input spell it caused is
- * stamped. The hook and cmux's own hook fire on the same event, so they
- * land within a second or so of each other either way. Small on purpose:
- * an ask from before the agent went back to work must never colour the
- * turn end that follows it, and that takes at least an approval, the tool
- * run and a reply.
+ * Seconds allowed between a hook's timestamp and cmux's for the same event.
+ * A Claude Code hook (an ask, a move) and cmux's own hook fire on one event,
+ * so their stamps land within a second or so of each other either way. Small
+ * on purpose: an ask from before the agent went back to work must never
+ * colour the turn end that follows it, and that takes at least an approval,
+ * the tool run and a reply.
  */
-export const ASK_SLACK = 3;
+export const HOOK_SLACK = 3;
 
 // wsId -> the last ask its agent made, fixed at build. A test can seed
 // __STATE__ from before this map existed, so it may be missing at runtime.
@@ -97,7 +99,7 @@ function savedAskFor(wsId: string): SavedAsk | undefined {
  * is only its turn: it finished and waits for the next prompt. Pass the agent
  * as the sidebars show it (agentsOf), so a nudge or a dismissal is never an
  * ask. An ask counts only while the saved one is at least as new as the
- * spell (ASK_SLACK aside): once the agent works again and stops, that spell
+ * spell (HOOK_SLACK aside): once the agent works again and stops, that spell
  * starts after the ask and reads as its turn. Without a start time there is
  * no telling, so it reads as its turn.
  */
@@ -106,30 +108,38 @@ export function askReason(a: Agent | null | undefined, w: Workspace | undefined)
 }
 
 /**
- * A hook's saved entry (an ask, a move) when it explains `a` from `since` on:
- * saved no earlier than `since`, ASK_SLACK aside, and `a`'s own. The entry is
+ * Whether a saved ask can be `a`'s. The entry is
  * saved per workspace with the Claude session that made it; when one of the
  * workspace's agents carries that session as its id (unconfirmed whether
  * cmux agent ids are session ids, as for saved subagent runs), only that
  * agent owns it, so another agent's turn end never borrows it. Otherwise it
  * belongs to the workspace as a whole.
  */
+function isOwnSaved(saved: { session?: string }, a: Agent, w: Workspace): boolean {
+  const { session } = saved;
+  const owned = session !== undefined && (w.agents ?? []).some((x) => x?.id === session);
+  return !owned || a.id === session;
+}
+
+/**
+ * A hook's saved entry (an ask, a move) when it explains `a` from `since` on:
+ * saved no earlier than `since`, HOOK_SLACK aside, and `a`'s by `owns`. The
+ * one place the slack rule lives.
+ */
 export function savedFor<T extends { epoch: number; session?: string }>(
   saved: T | undefined,
   a: Agent,
   w: Workspace,
   since: number,
+  owns: (saved: T, a: Agent, w: Workspace) => boolean,
 ): T | null {
-  if (!saved || saved.epoch < since - ASK_SLACK) return null;
-  const { session } = saved;
-  const owned = session !== undefined && (w.agents ?? []).some((x) => x?.id === session);
-  return owned && a.id !== session ? null : saved;
+  return saved && saved.epoch >= since - HOOK_SLACK && owns(saved, a, w) ? saved : null;
 }
 
 // The saved ask that explains `a`'s current needs_input spell, if any.
 function freshAsk(a: Agent, w: Workspace | undefined): SavedAsk | null {
   if (!w || a.status !== "needs_input" || !a.sinceEpoch) return null;
-  return savedFor(savedAskFor(w.id), a, w, a.sinceEpoch);
+  return savedFor(savedAskFor(w.id), a, w, a.sinceEpoch, isOwnSaved);
 }
 
 /** A workspace's agents with nudges and dismissals applied, in the app's order. */

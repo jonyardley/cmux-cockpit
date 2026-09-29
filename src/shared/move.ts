@@ -4,7 +4,7 @@
 // through the saved state, never through the message itself.
 
 import type { SavedMove } from "../../scripts/state-config.ts";
-import { isIdleNudge, savedFor } from "./needs.ts";
+import { savedFor } from "./needs.ts";
 import { SAVED_STATE } from "./persist.ts";
 
 // wsId -> the move its chat last ended a turn on, fixed at build. A test can
@@ -14,35 +14,34 @@ function savedMoveFor(wsId: string): SavedMove | undefined {
   return map && Object.hasOwn(map, wsId) ? map[wsId] : undefined;
 }
 
-// When the agent last worked, as far as cmux says: the earlier of its last
-// activity and the start of its current spell, 0 when neither is known. The
-// earlier, because either can move without work: cmux may restart the spell
-// when Claude Code's idle nudge lands (unconfirmed, issue #4), and whether
-// it stamps activity on that nudge is unconfirmed too (isIdleNudge assumes
-// it does not). Real work moves both, so a move older than both is stale.
-function lastWorked(a: Agent): number {
-  const known = [a.lastActivityAt ?? 0, a.sinceEpoch ?? 0].filter((t) => t > 0);
-  return known.length ? Math.min(...known) : 0;
-}
+// A turn end: Claude's Stop sets the agent idle, and the idle_prompt nudge
+// about 60s later moves it to needs_input, restamping sinceEpoch and
+// lastActivityAt. The cmux facts behind this and waitingMove are in
+// docs/state-loop.md, section "What cmux does (v0.64.25)".
+const atTurnEnd = (a: Agent): boolean => a.status === "idle" || a.status === "needs_input";
+
+// A move is `a`'s only when `a` is the Claude session that saved it. A new
+// session in the same workspace (/clear, a relaunch, --resume), an agent
+// still on its `pending-claude-` alias, a codex agent, or a move saved with
+// no session: none of them borrows it, since hiding a move is the safe side.
+const ownsMove = (saved: SavedMove, a: Agent): boolean =>
+  saved.session !== undefined && a.kind === "claude" && a.id === saved.session;
 
 /**
  * The move `a` is waiting on, or null. Pass `a` as the sidebars show it
- * (agentsOf) and `asking` from askReason. Only a turn end counts: cmux says
- * needs_input and it is not an ask, and it reads as needs_input still or as
- * idle only because of the idle nudge (a dismissal hides the move with the
- * flag). The move is current while the agent has not worked since it was
- * saved (lastWorked, ASK_SLACK aside, since the hook and cmux's own hook
- * fire on the same Stop): a move from an earlier turn never shows once the
- * chat has worked again, and the nudge about 60s on does not hide it. As
- * with asks, when one of the workspace's agents carries the move's session
- * as its id, only that agent's turn end borrows it.
+ * (agentsOf) and `asking` from askReason. Only a turn end counts: idle or
+ * needs_input, never working or ended, and never an ask. The move is current
+ * while it is no older than the workspace's last prompt (latestAt, which
+ * cmux moves on UserPromptSubmit and never on a notification), HOOK_SLACK
+ * aside, so a new prompt, an interrupted turn and a mid-turn ask retire it
+ * and the nudge does not. With no latestAt there is no telling how old the
+ * move is, so none shows. It must also be `a`'s own (ownsMove).
  */
 export function waitingMove(a: Agent | null | undefined, w: Workspace | undefined, asking: boolean): SavedMove | null {
-  if (!a || !w || asking) return null;
-  const raw = (w.agents ?? []).find((x) => x?.id === a.id) ?? a;
-  if (raw.status !== "needs_input" || (a.status !== "needs_input" && !isIdleNudge(raw, w))) return null;
-  const since = lastWorked(raw);
-  return since ? savedFor(savedMoveFor(w.id), a, w, since) : null;
+  if (!a || !w || asking || !atTurnEnd(a)) return null;
+  const promptAt = w.latestAt ?? 0;
+  if (promptAt <= 0) return null;
+  return savedFor(savedMoveFor(w.id), a, w, promptAt, ownsMove);
 }
 
 /**

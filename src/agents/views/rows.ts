@@ -21,6 +21,9 @@ export function footRow(text: () => string, onTap: () => void): View {
 
 /** A PR row: a tap anywhere on it, the state words included, opens the PR on GitHub. */
 export function prRow(e: () => Last<PrEntry>): View {
+  // The state words sit in the title's line, so the stack centres them on
+  // the title whether or not the from line shows under it. Stale rides inside
+  // the chip: an empty sibling Text would still cost spacing.
   const top = HStack({ spacing: 10 }, [
     Text(() => "#" + (e().pr.number ?? ""))
       .font(12)
@@ -35,8 +38,11 @@ export function prRow(e: () => Last<PrEntry>): View {
       .truncation("tail")
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
+    prChip(e).layoutPriority(2),
   ]);
-  const text = VStack({ spacing: 2, alignment: "leading" }, [
+  // The whole row lights and taps as one target, the state words
+  // included, so a tap anywhere on it opens the PR on GitHub.
+  const row = VStack({ spacing: 2, alignment: "leading" }, [
     top,
     when(
       "pr-from",
@@ -47,17 +53,8 @@ export function prRow(e: () => Last<PrEntry>): View {
           .truncation("middle"),
     ),
   ])
-    .paddingLeading(12)
+    .paddingHorizontal(12)
     .paddingVertical(10)
-    .frame({ maxWidth: "infinity", alignment: "leading" });
-  // Top-aligned and padded down to the first line, so the state stays
-  // beside the title when the from line shows under it. Stale rides
-  // inside the chip: an empty sibling Text would still cost spacing.
-  const state = VStack({ spacing: 0 }, [prChip(e)])
-    .paddingTop(11)
-    .paddingTrailing(10)
-    .layoutPriority(2);
-  const row = HStack({ spacing: 6, alignment: "top" }, [text, state])
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => openIfUrl(e().pr.url));

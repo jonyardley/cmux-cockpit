@@ -10,8 +10,8 @@
 // is saved per workspace in config/state.json's `moves` map with the count
 // of numbered decisions the reply laid out and the options it leaned to.
 // A turn with no move line drops the workspace's saved one. The sidebar
-// shows a move only while the agent has not worked since it was saved
-// (src/shared/move.ts), so nothing here has to clear a stale one. It
+// shows a move only while no prompt has come since it was saved (cmux's
+// latestAt, src/shared/move.ts), so nothing here has to clear a stale one. It
 // never fails the hook: every problem is a note on stderr and exit 0.
 
 import { readFileSync } from "node:fs";
@@ -160,12 +160,14 @@ function hasSaved(wsId: string): boolean {
   }
 }
 
-// Records the turn's move, returning a note for stderr when something went wrong.
-function record(event: unknown, wsId: string | undefined): string | null {
+// Records the turn's move, returning a note for stderr when something went
+// wrong. `now` is the hook's entry time, taken before finalReply may sleep,
+// so a prompt that lands during that sleep is judged newer than the move.
+function record(event: unknown, wsId: string | undefined, now: number): string | null {
   if (!wsId || !isId(wsId) || field(event, "hook_event_name") !== "Stop") return null;
   const raw = field(event, "session_id");
   const session = typeof raw === "string" && isId(raw) ? raw : undefined;
-  const move = moveFrom(finalReply(event), Math.floor(Date.now() / 1000), session);
+  const move = moveFrom(finalReply(event), now, session);
   if (!move && !hasSaved(wsId)) return null;
   const result = readApplyWrite(STATE_PATH, `moves.${wsId}`, move ? JSON.stringify(move) : null);
   if (!result.ok) return result.error;
@@ -174,9 +176,10 @@ function record(event: unknown, wsId: string | undefined): string | null {
 }
 
 if (import.meta.main) {
+  const now = Math.floor(Date.now() / 1000);
   let note: string | null;
   try {
-    note = record(JSON.parse(readFileSync(0, "utf8")), process.env.CMUX_WORKSPACE_ID);
+    note = record(JSON.parse(readFileSync(0, "utf8")), process.env.CMUX_WORKSPACE_ID, now);
   } catch (err) {
     note = err instanceof Error ? err.message : String(err);
   }
