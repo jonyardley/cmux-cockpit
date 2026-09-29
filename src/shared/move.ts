@@ -36,13 +36,23 @@ const ownsMove = (saved: SavedMove, a: Agent): boolean =>
  * aside, so a new prompt, an interrupted turn and a mid-turn ask retire it
  * and the nudge does not. With no latestAt there is no telling how old the
  * move is, so none shows. It must also be `a`'s own (ownsMove).
+ *
+ * A background task's `<task-notification>` also reaches cmux as a prompt
+ * and moves latestAt, though Jon typed nothing. The chat answers it and stops,
+ * usually with no new move, so it never retires the saved one. The price: a
+ * notification after a real prompt hides that prompt, and a stale move shows
+ * until the chat's next turn end saves a new one.
  */
 export function waitingMove(a: Agent | null | undefined, w: Workspace | undefined, asking: boolean): SavedMove | null {
   if (!a || !w || asking || !atTurnEnd(a)) return null;
   const promptAt = w.latestAt ?? 0;
   if (promptAt <= 0) return null;
-  return savedFor(savedMoveFor(w.id), a, w, promptAt, ownsMove);
+  const since = isTaskNotification(w.latestPrompt) ? 0 : promptAt;
+  return savedFor(savedMoveFor(w.id), a, w, since, ownsMove);
 }
+
+const isTaskNotification = (prompt: string | undefined): boolean =>
+  (prompt ?? "").trimStart().startsWith("<task-notification>");
 
 /**
  * How big answering a move is: "decide" when the reply laid out numbered

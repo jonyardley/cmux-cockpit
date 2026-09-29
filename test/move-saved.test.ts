@@ -122,6 +122,16 @@ describe("moveOf", () => {
     assert.equal(status.moveOf(at("quick", [stopped("quick", 1000)], { latestAt: 1000 + 4 })), null, "past the slack");
   });
 
+  it("stays when the prompt after it is a background task's notification, not Jon", () => {
+    // cmux stamps latestAt for a <task-notification> turn too; the chat answers it and stops with no new move.
+    const notified = { latestAt: 1100, latestPrompt: "<task-notification> <task-id>a9b66b16a1f" };
+    const text = "the work is finished. Run /clear now.";
+    assert.equal(status.moveOf(at("quick", [stopped("quick", 1150)], notified))?.text, text);
+    assert.equal(status.moveOf(at("quick", [waiting("quick", 1210)], notified))?.text, text, "after the nudge");
+    // Jon's own prompt still retires it.
+    assert.equal(status.moveOf(at("quick", [stopped("quick", 1150)], { latestAt: 1100, latestPrompt: "go" })), null);
+  });
+
   it("is null while it works, while it asks, once it ended, or without a saved move", () => {
     assert.equal(status.moveOf(at("quick", [agent("working", { ...own("quick"), sinceEpoch: 1000 })])), null);
     assert.equal(status.moveOf(at("asks", [waiting("asks", 1000)])), null);
