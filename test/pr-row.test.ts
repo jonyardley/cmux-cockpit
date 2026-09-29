@@ -1,5 +1,5 @@
 // The Pull requests rows' "from" line and tap: which chat opened each PR,
-// from the saved prOrigins map, and going back to it. __STATE__ is set
+// from the saved prOrigins map, and a tap on the row opening it. __STATE__ is set
 // before the renderer import, as in made-here.test.ts.
 
 import assert from "node:assert/strict";
@@ -103,5 +103,14 @@ describe("a tap on the row", () => {
     // The row itself, the first child of the ruled wrapper.
     assert.equal(tappable[0], root.children[0]);
     assert.ok(tappable[0]?.mods.some((x) => x.name === "hoverBackground"));
+  });
+
+  it("opens the PR on GitHub and never switches chats", () => {
+    const root = nodeOf(prRow(() => ({ ...entry(1), last: true })));
+    const tap = root?.children[0]?.handlers.onTap;
+    assert.equal(typeof tap, "function");
+    if (typeof tap === "function") tap();
+    assert.deepEqual(r.opened, [pr(1)]);
+    assert.deepEqual(r.calls, []);
   });
 });

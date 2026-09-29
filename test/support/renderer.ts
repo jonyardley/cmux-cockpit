@@ -59,6 +59,8 @@ export interface ViewNode {
   args: unknown[];
   mods: { name: string; values: unknown[] }[];
   children: ViewNode[];
+  /** Tap handlers by modifier name, so a test can fire one; never printed. */
+  handlers: Record<string, unknown>;
 }
 
 // Each fake view's node, keyed by the proxy the sidebar code holds.
@@ -100,7 +102,7 @@ export function recordModifiers(build: () => void): string[] {
 }
 
 function view(kind: string, args: unknown[] = [], children: readonly unknown[] = []): View {
-  const node: ViewNode = { kind, args, mods: [], children: children.flatMap((c) => nodeOf(c) ?? []) };
+  const node: ViewNode = { kind, args, mods: [], children: children.flatMap((c) => nodeOf(c) ?? []), handlers: {} };
   const proxy: View = new Proxy(() => undefined, {
     get: (_target, prop) => {
       return (...margs: unknown[]) => {
@@ -109,7 +111,8 @@ function view(kind: string, args: unknown[] = [], children: readonly unknown[] =
         // A context menu is recorded by its length: its items are opaque.
         let values: unknown[] = [];
         if (name === "contextMenu") values = [Array.isArray(margs[0]) ? margs[0].length : 0];
-        else if (!HANDLERS.has(name)) values = margs.map(resolve);
+        else if (HANDLERS.has(name)) node.handlers[name] = margs[0];
+        else values = margs.map(resolve);
         node.mods.push({ name, values });
         return proxy;
       };

@@ -546,8 +546,8 @@ export const prNote = computed((): string => freshness().line);
 export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale();
 
 // ---- Where a PR came from ------------------------------------------------------
-// A row says which chat opened its PR (report-pr.ts), and a tap goes back
-// to that chat, or out to GitHub once it has gone.
+// A row says which chat opened its PR (report-pr.ts); a tap on the row
+// opens the PR on GitHub.
 
 /** "this chat · 3m ago" for the selected workspace, else that workspace's
  * name; "a closed chat" once it has gone; "" with no origin. */

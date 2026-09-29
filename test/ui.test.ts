@@ -127,15 +127,6 @@ describe("the shared builders read what they are handed", () => {
     assert.ok(linkMods.includes("showOnHover") && linkMods.includes("onTap"));
   });
 
-  it("chip reads its label and colours, monospaced or not", () => {
-    for (const mono of [false, true]) {
-      const label = spy(":3000");
-      const colors = spy(NEUTRAL_CHIP);
-      ui.chip(label.get, colors.get, mono);
-      assert.ok(label.reads() > 0 && colors.reads() > 0);
-    }
-  });
-
   it("meta, branchText and projectBadge read their text and project", () => {
     const age = spy("3m");
     ui.meta(age.get);

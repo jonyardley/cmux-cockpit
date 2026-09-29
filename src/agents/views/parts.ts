@@ -1,8 +1,8 @@
 // Small pieces shared by the agents panel's sections.
 
-import { prChipColors, shownHealth } from "../../shared/pr-colors.ts";
+import { prInk, shownHealth } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
-import { chip, haloDot, projectBadge, ring, sectionTitle } from "../../shared/ui.ts";
+import { chipText, haloDot, projectBadge, ring, sectionTitle } from "../../shared/ui.ts";
 import { type PrEntry, prChipHealth, prChipText, prDim } from "../model.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
 
@@ -67,6 +67,6 @@ export function jump(wsId: string, surfaceId: string | undefined): void {
 
 /** A PR's state chip, "draft ↗": coloured words, dimmed while stale. Its row opens the PR. */
 export function prChip(e: () => PrEntry): View {
-  const colors = () => prChipColors(shownHealth(prChipHealth(e()), prDim(e())));
-  return chip(() => prChipText(e()) + " ↗", colors).opacity(() => (prDim(e()) ? STALE_OPACITY : 1));
+  const ink = () => prInk(shownHealth(prChipHealth(e()), prDim(e())));
+  return chipText(() => prChipText(e()) + " ↗", ink).opacity(() => (prDim(e()) ? STALE_OPACITY : 1));
 }

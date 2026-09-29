@@ -7,7 +7,7 @@ const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/
 const { glyphColor } = await import("../src/shared/contrast.ts");
 const { shade } = await import("../src/shared/shade.ts");
 const { markLast } = await import("../src/shared/list.ts");
-const { READY_INK, prChipColors, prInk, shownHealth, summaryColors } = await import("../src/shared/pr-colors.ts");
+const { READY_INK, prChipColors, prInk, shownHealth } = await import("../src/shared/pr-colors.ts");
 const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, nextIn, projectId, projectOf } = await import(
   "../src/shared/projects.ts"
 );
@@ -313,13 +313,6 @@ describe("shownHealth", () => {
 
   it("leaves every other health alone, stale or not", () => {
     for (const h of ["failing", "conflicts", "running", "quiet"] as const) assert.equal(shownHealth(h, true), h);
-  });
-});
-
-describe("summaryColors", () => {
-  it("reads a summary's health, and is grey without one", () => {
-    assert.deepEqual(summaryColors(undefined), prChipColors("quiet"));
-    assert.deepEqual(summaryColors({ health: "ready" }), prChipColors("ready"));
   });
 });
 

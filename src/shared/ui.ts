@@ -204,14 +204,6 @@ export function chipText(label: () => string, fg: () => string, mono = false): V
   return (mono ? sized.monospaced() : sized).weight("medium").lineLimit(1).truncation("tail").color(fg);
 }
 
-/** The one chip both sidebars build for a PR's state and a port: words in a hugging frame (no face for a PR). */
-export function chip(label: () => string, colors: () => ChipColors, mono = false): View {
-  return chipFrame(
-    chipText(label, () => colors().fg, mono),
-    colors,
-  );
-}
-
 /** A chip that opens `url`: under the pointer its face and edge each step darker (chipHover). */
 export function tapChip(
   label: () => string,

@@ -7,7 +7,7 @@
 // (issue #82). The branch, ports, tidy and review chips keep their pills.
 
 import { P } from "./palette.ts";
-import type { PrHealth, PrSummary } from "./prs.ts";
+import type { PrHealth } from "./prs.ts";
 
 export interface ChipColors {
   bg: string;
@@ -45,7 +45,3 @@ export const shownHealth = (health: PrHealth, dim: boolean): PrHealth => (dim &&
 
 /** A PR chip's colours: its ink, with no face and no edge. */
 export const prChipColors = (health: PrHealth): ChipColors => wordChip(prInk(health));
-
-/** The colours for a PR as a view shows it (shared/prs.ts, or a chip carrying its fields); grey without one. */
-export const summaryColors = (pr: Pick<PrSummary, "health"> | undefined): ChipColors =>
-  prChipColors(pr?.health ?? "quiet");

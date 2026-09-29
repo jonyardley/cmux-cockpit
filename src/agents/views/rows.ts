@@ -54,7 +54,7 @@ export function prRow(e: () => Last<PrEntry>): View {
   // beside the title when the from line shows under it. Stale rides
   // inside the chip: an empty sibling Text would still cost spacing.
   const state = VStack({ spacing: 0 }, [prChip(e)])
-    .paddingTop(9)
+    .paddingTop(11)
     .paddingTrailing(10)
     .layoutPriority(2);
   const row = HStack({ spacing: 6, alignment: "top" }, [text, state])

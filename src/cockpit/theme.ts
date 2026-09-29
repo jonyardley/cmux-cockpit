@@ -41,7 +41,7 @@ export const C = {
   // A needs-you row under the pointer: a clear step down from its white
   // face, still in the strip's clay family.
   needsHover: "#FBF1EB",
-  // The tidy strip: purple, so it reads as merged work.
+  // The tidy strip: its own purple, which no PR state uses, so it stands apart.
   tidyBg: "#EFEAF7",
   tidyEdge: "#DED4EF",
   tidyText: "#5B3E91",

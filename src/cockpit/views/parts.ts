@@ -2,7 +2,7 @@
 
 import type { MoveSize } from "../../shared/move.ts";
 import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
-import { NEUTRAL_CHIP, summaryColors } from "../../shared/pr-colors.ts";
+import { NEUTRAL_CHIP, prChipColors, prInk } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
@@ -157,7 +157,7 @@ function sizeChip(c: () => Chip): View {
 function chip(id: ChipId, c: () => Chip): View {
   if (id === "size") return sizeChip(c);
   const isPr = id === "pr";
-  const colors = () => (isPr ? summaryColors({ health: c().health ?? "quiet" }) : NEUTRAL_CHIP);
+  const colors = () => (isPr ? prChipColors(c().health ?? "quiet") : NEUTRAL_CHIP);
   const fg = () => colors().fg;
   const text = id === "br" ? branchText(() => c().text, fg, "medium") : chipText(() => c().text, fg, id === "port");
   // The PR chip's glyph turns into ↗ under the pointer, in the same slot,
@@ -219,7 +219,7 @@ export function prLine(w: WsAccessor, size: number): View {
             () =>
               chipText(
                 () => pr()?.state ?? "",
-                () => summaryColors(pr()).fg,
+                () => prInk(pr()?.health ?? "quiet"),
               ),
           ).layoutPriority(2),
         ],
