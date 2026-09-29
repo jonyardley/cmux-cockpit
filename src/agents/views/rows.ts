@@ -22,6 +22,9 @@ export function footRow(text: () => string, onTap: () => void): View {
 /** A PR row: tap goes back to the chat that opened it (GitHub once that
  * chat has gone); the state pill opens GitHub. */
 export function prRow(e: () => Last<PrEntry>): View {
+  // The pill sits in the title's line, so the stack centres it on the
+  // title whether or not the from line shows under it. Stale rides inside
+  // the chip: an empty sibling Text would still cost spacing.
   const top = HStack({ spacing: 10 }, [
     Text(() => "#" + (e().pr.number ?? ""))
       .font(12)
@@ -36,10 +39,12 @@ export function prRow(e: () => Last<PrEntry>): View {
       .truncation("tail")
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
+    prChip(e).layoutPriority(2),
   ]);
-  // The tappable part stops short of the pill, so a tap on the pill can
-  // only open GitHub and never also jump to the chat.
-  const tappable = VStack({ spacing: 2, alignment: "leading" }, [
+  // The whole row lights and taps, as the other rows do. The pill's own
+  // tap sits inside it and wins, as a chip's does on a cockpit card, so a
+  // tap on the pill opens GitHub and never also jumps to the chat.
+  const row = VStack({ spacing: 2, alignment: "leading" }, [
     top,
     when(
       "pr-from",
@@ -50,24 +55,11 @@ export function prRow(e: () => Last<PrEntry>): View {
           .truncation("middle"),
     ),
   ])
-    .paddingLeading(12)
+    .paddingHorizontal(12)
     .paddingVertical(10)
+    .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => goToPr(e()));
-  // Top-aligned and padded down to the first line, so the pill stays
-  // beside the title when the from line shows under it. 5pt centres it on
-  // the title as drawn; 9pt sat it 4pt low. Stale rides inside the chip:
-  // an empty sibling Text would still cost spacing.
-  const pill = VStack({ spacing: 0 }, [prChip(e)])
-    .paddingTop(5)
-    .paddingTrailing(10)
-    .layoutPriority(2);
-  // The hover lights the whole row, pill column included, so it never
-  // stops short of the card's edge.
-  const row = HStack({ spacing: 6, alignment: "top" }, [tappable, pill]).hoverBackground(T.hover).frame({
-    maxWidth: "infinity",
-    alignment: "leading",
-  });
   return ruled(row, () => e().last);
 }
 

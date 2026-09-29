@@ -134,15 +134,20 @@ describe("a tap on the row", () => {
     assert.deepEqual(r.opened, [pr(3), pr(4)]);
   });
 
-  it("keeps the pill's tap apart from the row's, so a pill tap never also jumps", () => {
+  it("gives the pill its own tap inside the row's: the whole row lights and taps", () => {
     const root = nodeOf(prRow(() => ({ ...entry(1), last: true })));
     assert.ok(root);
     const taps = (n: ViewNode): ViewNode[] => [
       ...(n.mods.some((x) => x.name === "onTap") ? [n] : []),
       ...n.children.flatMap(taps),
     ];
-    const tappable = taps(root);
-    assert.equal(tappable.length, 2);
-    for (const n of tappable) assert.deepEqual(taps(n), [n]);
+    const [row, ...inner] = taps(root);
+    assert.ok(row);
+    // Tap and hover on one view, so the lit area is the tappable area.
+    assert.ok(row.mods.some((x) => x.name === "hoverBackground"));
+    // Exactly one tap nests inside the row's: the pill's own, which opens
+    // GitHub (tapChip; the fake renderer does not keep handlers).
+    assert.equal(inner.length, 1);
+    assert.equal(taps(row).length, 2);
   });
 });
