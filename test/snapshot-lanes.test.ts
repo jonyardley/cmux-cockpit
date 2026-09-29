@@ -40,6 +40,7 @@ it("lanes: every card state", () => {
       group: "g-main",
       branch: "snapshot-tests",
       dirty: true,
+      pr: { number: 130, status: "open", draft: true, url: "https://github.com/o/r/pull/130" },
       agents: [
         agent("working", {
           sinceEpoch: ago(840),
@@ -61,6 +62,13 @@ it("lanes: every card state", () => {
       unread: 2,
       agents: [agent("idle", { sinceEpoch: ago(360), lastActivityAt: ago(360) })],
       latestMessage: "Done: the strip now groups by repo.",
+    }),
+    // No time in its status line, so the full card keeps the age top right.
+    ws("untimed", {
+      title: "Untimed card",
+      group: "g-main",
+      latestAt: ago(300),
+      agents: [agent("idle")],
     }),
     ws("selected", {
       title: "Selected card",
