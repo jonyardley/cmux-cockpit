@@ -633,6 +633,11 @@ describe("group placeholders", () => {
     assert.equal(m.prCount(), 1);
   });
 
+  it("leaves it out with no group list, by its lane title alone", () => {
+    r.data.workspaces = [ws("anchor", { title: "For review", pr: { url: "u/old", number: 2163, status: "merged" } })];
+    assert.equal(m.prCount(), 0);
+  });
+
   it("keeps the PR of a real workspace a group is anchored on", () => {
     r.data.workspaces = [ws("real", { title: "Some chat", pr: { url: "u/1", number: 1, status: "open" } })];
     r.data.groups = [{ id: "g", name: "For review", anchorId: "real" }];

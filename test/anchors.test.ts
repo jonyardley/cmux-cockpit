@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 import { installRenderer } from "./support/renderer.ts";
 
 installRenderer();
-const { ws } = await import("./support/fixtures.ts");
+const { agent, ws } = await import("./support/fixtures.ts");
 const { isGeneratedAnchor, LANE_GROUP_NAMES, placeholderIds } = await import("../src/shared/anchors.ts");
 const { LANES } = await import("../src/cockpit/lanes.ts");
 
@@ -24,7 +24,12 @@ describe("isGeneratedAnchor", () => {
 
 describe("placeholderIds", () => {
   it("names only the lane groups' generated anchors present", () => {
-    const workspaces = [ws("p", { title: "Parked" }), ws("r", { title: "Chat" }), ws("mine", { title: "my group" })];
+    // Working, so only the group list marks it: the title match skips a busy one.
+    const workspaces = [
+      ws("p", { title: "Parked", agents: [agent("working")] }),
+      ws("r", { title: "Chat" }),
+      ws("mine", { title: "my group" }),
+    ];
     const groups = [
       { id: "g1", name: "Parked", anchorId: "p" },
       { id: "g2", name: "For review", anchorId: "r" },
@@ -34,6 +39,18 @@ describe("placeholderIds", () => {
     ];
     const byId = new Map(workspaces.map((w) => [w.id, w]));
     assert.deepEqual([...placeholderIds(groups, byId)], ["p"]);
+  });
+
+  it("with no group list, names an idle workspace titled after a lane", () => {
+    const workspaces = [
+      ws("idle", { title: " for REVIEW ", agents: [agent("idle")] }),
+      ws("none", { title: "Parked" }),
+      ws("busy", { title: "Background", agents: [agent("working")] }),
+      ws("asking", { title: "Main activity", agents: [agent("needs_input")] }),
+      ws("chat", { title: "Some chat" }),
+    ];
+    const byId = new Map(workspaces.map((w) => [w.id, w]));
+    assert.deepEqual([...placeholderIds([], byId)].sort(), ["idle", "none"]);
   });
 
   it("knows the same lane names the cockpit draws", () => {

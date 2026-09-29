@@ -25,10 +25,20 @@ export function isGeneratedAnchor(g: WorkspaceGroup, w: Workspace | undefined): 
   return name !== "" && (w.title ?? "").trim().toLowerCase() === name;
 }
 
+// Whether `w` looks like a lane's placeholder with no group list to go by:
+// titled exactly after a lane, with no agent working or asking in it.
+function looksLikePlaceholder(w: Workspace, lanes: ReadonlySet<string>): boolean {
+  const busy = (w.agents ?? []).some((a) => a?.status === "working" || a?.status === "needs_input");
+  return !busy && lanes.has((w.title ?? "").trim().toLowerCase());
+}
+
 /**
- * The ids of the lane groups' placeholders present in `byId`. Only lane
- * groups, as the cockpit hides no other: a group Jon makes himself keeps
- * its anchor as a real chat whatever it is titled.
+ * The ids of the lane groups' placeholders in `byId`. Only lane groups, as
+ * the cockpit hides no other: a group Jon makes himself keeps its anchor as
+ * a real chat whatever it is titled. The agents panel is not sent the group
+ * list, so a workspace that looks like a placeholder counts too; its cost is
+ * that a real chat titled exactly after a lane, with nothing running, drops
+ * out of the PR card.
  */
 export function placeholderIds(groups: readonly WorkspaceGroup[], byId: ReadonlyMap<string, Workspace>): Set<string> {
   const out = new Set<string>();
@@ -37,5 +47,7 @@ export function placeholderIds(groups: readonly WorkspaceGroup[], byId: Readonly
     const w = g.anchorId ? byId.get(g.anchorId) : undefined;
     if (w && isGeneratedAnchor(g, w)) out.add(w.id);
   }
+  const lanes = new Set(LANE_GROUP_NAMES.map((n) => n.toLowerCase()));
+  for (const w of byId.values()) if (looksLikePlaceholder(w, lanes)) out.add(w.id);
   return out;
 }
