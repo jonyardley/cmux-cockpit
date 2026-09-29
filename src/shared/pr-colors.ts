@@ -4,7 +4,7 @@
 // conflict (the words tell the two apart), blue running (the Checks
 // block's pending dot and the working dot are blue too), and grey for the
 // rest: a draft, a plain open PR, merged and closed. Only ready is green
-// (issue #82). The branch, ports, tidy and review chips keep their pills.
+// (issue #82). The branch, ports and review chips keep their pills.
 
 import { P } from "./palette.ts";
 import type { PrHealth } from "./prs.ts";
