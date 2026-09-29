@@ -4,7 +4,6 @@
 
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import type { ViewNode } from "./support/renderer.ts";
 
 const NOW = 1_000_000;
 const pr = (n: number) => "https://github.com/o/r/pull/" + n;
@@ -45,7 +44,7 @@ const checks = [
   ui: {},
 };
 
-const { installRenderer, nodeOf } = await import("./support/renderer.ts");
+const { installRenderer, nodeOf, taps } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
@@ -94,10 +93,6 @@ describe("a tap on the row", () => {
   it("has one tap target, the whole row, so a tap anywhere opens the PR", () => {
     const root = nodeOf(prRow(() => ({ ...entry(1), last: true })));
     assert.ok(root);
-    const taps = (n: ViewNode): ViewNode[] => [
-      ...(n.mods.some((x) => x.name === "onTap") ? [n] : []),
-      ...n.children.flatMap(taps),
-    ];
     const tappable = taps(root);
     assert.equal(tappable.length, 1);
     // The row itself, the first child of the ruled wrapper.

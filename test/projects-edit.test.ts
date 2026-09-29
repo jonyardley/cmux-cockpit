@@ -29,7 +29,7 @@ g.__STATE__ = {
   ui: {},
 };
 
-const { installRenderer, nodeOf } = await import("./support/renderer.ts");
+const { installRenderer, nodeOf, taps } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
 const model = await import("../src/cockpit/model.ts");
@@ -62,10 +62,11 @@ const images = (n: ViewNode): string[] =>
   n.kind === "Image" ? [String(n.args[0])] : n.children.flatMap((c) => images(c));
 const says = (n: ViewNode, text: string): boolean =>
   (n.kind === "Text" && n.args[0] === text) || n.children.some((c) => says(c, text));
-const tapOf = (n: ViewNode, text: string): unknown =>
-  typeof n.handlers.onTap === "function" && says(n, text)
-    ? n.handlers.onTap
-    : n.children.map((c) => tapOf(c, text)).find((t) => t !== undefined);
+const tapOf = (n: ViewNode, text: string): unknown => taps(n).find((t) => says(t, text))?.handlers.onTap;
+const filled = (n: ViewNode, color: string): boolean =>
+  (n.kind === "Circle" && n.mods.some((m) => m.name === "fill" && m.values[0] === color)) ||
+  n.children.some((c) => filled(c, color));
+const swatchTap = (n: ViewNode, color: string): unknown => taps(n).find((t) => filled(t, color))?.handlers.onTap;
 const lastCwd = (): unknown => r.calls.at(-1)?.params.cwd;
 
 describe("the card menu", () => {
@@ -231,24 +232,26 @@ describe("the editor", () => {
     assert.equal(count(node, "Rectangle"), edit.ICONS_PER_ROW - 1);
   });
 
-  // cmux sends submit when a field loses focus as well as on Return, so a
-  // tap on a colour dot submits the name field first: submit must do nothing.
-  it("stays open with the draft unchanged when any field submits, as it does on focus loss", () => {
+  // cmux sends submit on focus loss as well as Return, so a tap on a colour
+  // dot used to submit the name field first, saving and closing the editor
+  // before the tap landed. No field takes a submit handler, so it does nothing.
+  it("gives no field a submit handler, so a tap after typing lands and Done saves both", () => {
     edit.openEditor(APP_TWO);
-    edit.setDraftName("Renamed");
-    edit.setIconSearch("piano");
-    const before = edit.draftSpec();
-    const all = fields(nodeOf(projectEditor(APP_TWO)) ?? fail());
+    const node = nodeOf(projectEditor(APP_TWO)) ?? fail();
+    const all = fields(node);
     assert.equal(all.length, 3);
-    for (const f of all) {
-      const submit = f.handlers.onSubmit;
-      if (typeof submit === "function") submit("piano");
-      if (typeof submit === "function") submit("");
-    }
+    for (const f of all) assert.equal(f.handlers.onSubmit, undefined);
+    const onEdit = all[0]?.handlers.onEdit;
+    const dot = swatchTap(node, PROJECT_COLORS[3]);
+    const done = tapOf(node, "Done");
+    assert.ok(typeof onEdit === "function" && typeof dot === "function" && typeof done === "function");
+    onEdit("Renamed");
+    dot();
     assert.equal(state.editingProject(), APP_TWO);
-    assert.deepEqual(edit.draftSpec(), before);
-    assert.equal(edit.iconSearch(), "piano");
     assert.deepEqual(sets(), []);
+    done();
+    assert.equal(sets().at(-1)?.[1]?.name, "Renamed");
+    assert.equal(sets().at(-1)?.[1]?.color, PROJECT_COLORS[3]);
   });
 
   it("keeps the draft on Escape while searching", () => {

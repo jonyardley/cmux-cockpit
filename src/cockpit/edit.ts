@@ -165,7 +165,8 @@ function allMatches(query: string): string[] {
 }
 
 /** The matches the picker shows: as many as two rows take. */
-export const iconMatches = (query: string): string[] => allMatches(query).slice(0, MAX_MATCHES);
+const capped = (hits: string[]): string[] => hits.slice(0, MAX_MATCHES);
+export const iconMatches = (query: string): string[] => capped(allMatches(query));
 
 // Worked out once per keystroke, for the rows and the line under them.
 const searchHits = computed(() => allMatches(iconQuery()));
@@ -173,7 +174,7 @@ const searchHits = computed(() => allMatches(iconQuery()));
 /** The picker's rows, eight to a row: the common row while the search is empty, else its matches. */
 export function iconRows(current: string, query: string = iconQuery()): string[][] {
   const hits = query === iconQuery() ? searchHits() : allMatches(query);
-  return rowsOf(query.trim() ? hits.slice(0, MAX_MATCHES) : commonIcons(current), ICONS_PER_ROW);
+  return rowsOf(query.trim() ? capped(hits) : commonIcons(current), ICONS_PER_ROW);
 }
 
 /** The line under the rows: none found, or how many more a longer word would reach; "" otherwise. */
