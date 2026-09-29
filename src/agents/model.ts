@@ -5,6 +5,7 @@
 
 import type { CheckState, SavedPublished } from "../../scripts/state-config.ts";
 import { byActivity, mostActive } from "../shared/activity.ts";
+import { placeholderIds } from "../shared/anchors.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
@@ -572,7 +573,11 @@ function prTitle(w: Workspace, pr: PullRequest): string {
 // of the cut to MAX_PRS. Open workspace PRs still can.
 const allPrs = computed((): PrEntry[] => {
   const seen = new Set<string>();
-  const workspaces = data.workspaces() ?? [];
+  const all = data.workspaces() ?? [];
+  // A lane's placeholder is no chat (shared/anchors.ts): a PR cmux pins on it
+  // is dropped, and an own PR its agent opened names no session.
+  const placeholders = placeholderIds(data.groups() ?? [], new Map(all.map((w) => [w.id, w])));
+  const workspaces = all.filter((w) => !placeholders.has(w.id));
   const held = workspacePrs(workspaces, seen);
   const own = ownPrs(new Map(workspaces.map((w) => [w.id, w])), seen);
   const isOwn = new Set(own.map((e) => e.key));

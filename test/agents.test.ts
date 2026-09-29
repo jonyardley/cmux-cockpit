@@ -16,6 +16,7 @@ const { P } = await import("../src/shared/palette.ts");
 beforeEach(() => {
   r.data.epoch = 10_000;
   r.data.workspaces = [];
+  r.data.groups = [];
 });
 
 describe("currentHeading", () => {
@@ -617,6 +618,33 @@ function whileOpen(k: "prs" | "made", body: () => void): void {
     m.toggleExpanded(k);
   }
 }
+
+describe("group placeholders", () => {
+  it("leaves out a PR cmux pins on a group's placeholder workspace", () => {
+    r.data.workspaces = [
+      ws("anchor", { title: "For review", pr: { url: "u/old", number: 2163, status: "merged" } }),
+      ws("real", { title: "Some chat", pr: { url: "u/new", number: 7, status: "open" } }),
+    ];
+    r.data.groups = [{ id: "g", name: "For review", anchorId: "anchor" }];
+    assert.deepEqual(
+      m.prs().map((e) => e.pr.number),
+      [7],
+    );
+    assert.equal(m.prCount(), 1);
+  });
+
+  it("keeps the PR of a real workspace a group is anchored on", () => {
+    r.data.workspaces = [ws("real", { title: "Some chat", pr: { url: "u/1", number: 1, status: "open" } })];
+    r.data.groups = [{ id: "g", name: "For review", anchorId: "real" }];
+    assert.equal(m.prCount(), 1);
+  });
+
+  it("keeps the PR of a group Jon made himself, titled after it", () => {
+    r.data.workspaces = [ws("mine", { title: "my group", pr: { url: "u/1", number: 1, status: "open" } })];
+    r.data.groups = [{ id: "g", name: "my group", anchorId: "mine" }];
+    assert.equal(m.prCount(), 1);
+  });
+});
 
 describe("honest counts and +N more (#80)", () => {
   it("counts every PR before the cap and says how many the cap leaves out", () => {
