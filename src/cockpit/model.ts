@@ -5,6 +5,7 @@
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).
 
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
+import { isGeneratedAnchor } from "../shared/anchors.ts";
 import { type MoveSize, moveSize, moveSizeText } from "../shared/move.ts";
 import { P } from "../shared/palette.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
@@ -50,25 +51,9 @@ export const groups = (): WorkspaceGroup[] => data.groups() ?? [];
 export const groupForLane = (lane: Lane): WorkspaceGroup | null =>
   lane.key === "unsorted" ? null : (groups().find((g) => g.name === lane.name) ?? null);
 
-// A lane group's anchor is usually a generated placeholder workspace, but
-// cmux can also anchor a single-member group on a real workspace (e.g. a
-// group made from one existing tab), and that one belongs in its lane, its
-// count and Needs you like any other card.
-//
-// cmux's own group list says which anchors it generated, but the renderer's
-// data has no such flag (issue #7), so this is a heuristic pending one: a
-// generated anchor's title always matches its group's name, so an anchor
-// under that title is the placeholder even with agents running in it (they
-// show on the lane header instead). It gets two cases wrong: a real
-// workspace Jon titles exactly after its lane hides as the placeholder, and
-// a placeholder he renames shows as a card.
-function isGeneratedAnchor(g: WorkspaceGroup, w: Workspace | undefined): boolean {
-  if (!w) return true;
-  // With no name there is nothing to match: a nameless group's untitled
-  // anchor is a real card, not a placeholder that "" === "" would hide.
-  const name = (g.name ?? "").trim().toLowerCase();
-  return name !== "" && (w.title ?? "").trim().toLowerCase() === name;
-}
+// A lane group's anchor is usually a generated placeholder workspace
+// (shared/anchors.ts), but a real workspace used as an anchor belongs in its
+// lane, its count and Needs you like any other card.
 
 // Each lane group's generated anchor is not a real card; a real workspace
 // used as an anchor is.
