@@ -30,6 +30,8 @@ export const C = {
   laneParked: "#B0AEA5",
   laneUnsorted: "#C9C6BB",
   select: "#3D3D3A",
+  // A text field's edge: the field draws none of its own.
+  fieldEdge: "#14141333",
   heading: "#3D3D3A",
   // Clearly stronger than hover, so a drop target reads under the pointer.
   dropTarget: "#1414131F",

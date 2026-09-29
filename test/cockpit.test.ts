@@ -870,7 +870,6 @@ describe("new project from a card (issue #9)", () => {
     r.menu.length = 0;
     cardMenu(() => loose);
     assert.ok(r.menu.includes("button:New project from this folder"));
-    assert.ok(r.menu.includes("button:Next colour (sidebar-made projects only)"));
     r.opened.length = 0;
     model.createProjectFrom(loose);
     const url = new URL(r.opened[0] ?? "");
@@ -913,8 +912,6 @@ describe("new project from a card (issue #9)", () => {
     for (const w of [matched, ws("nofolder"), undefined]) {
       assert.equal(model.canCreateProject(w), false);
       model.createProjectFrom(w);
-      model.cycleProjectColor(w);
-      model.removeProject(w);
     }
     assert.deepEqual(r.opened, []);
     r.menu.length = 0;

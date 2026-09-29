@@ -26,6 +26,7 @@ import { handleDragChange, handleMove, isForeignAnchor } from "./drop.ts";
 import { flatEntries, panelMaxHeight, panelOpacity, projectEntries, wsById } from "./model.ts";
 import { C } from "./theme.ts";
 import { cardFor, projectRow } from "./views/cards.ts";
+import { projectEditor } from "./views/editor.ts";
 import { dropZone, laneHeader, projectHeader, quietHeader, quietRow, segmented } from "./views/headers.ts";
 import { needsStrip, nextButton } from "./views/needs.ts";
 
@@ -69,6 +70,7 @@ function projectsPanel(): View {
       if (entry.kind === "header") return projectHeader(entry.project);
       if (entry.kind === "quietHeader") return quietHeader();
       if (entry.kind === "quietRow") return quietRow(entry.project);
+      if (entry.kind === "editor") return projectEditor(entry.project);
       return projectRow(() => wsById(entry.wsId), entry.id);
     }),
   ]).paddingHorizontal(10);

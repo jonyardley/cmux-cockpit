@@ -10,17 +10,13 @@ import { P } from "../shared/palette.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import { READY_INK } from "../shared/pr-colors.ts";
 import {
-  inAppSpec,
-  isInAppKey,
   isProjectKey,
   newProject,
-  nextIn,
-  PROJECT_COLORS,
-  PROJECT_ICONS,
   PROJECTS,
   type Project,
   projectId,
   projectOf,
+  savedSpec,
 } from "../shared/projects.ts";
 import { type PrHealth, prHealth, prSummary } from "../shared/prs.ts";
 import { finishedAt, nowEpoch } from "../shared/time.ts";
@@ -28,6 +24,7 @@ import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
   bump,
   collapsedProjects,
+  editingProject,
   isMode,
   isSelected,
   mode,
@@ -490,27 +487,29 @@ export function clearProjectOverride(w: Workspace | undefined): void {
   persistSet(`projectOverride.${w.id}`, null);
 }
 
-// --- Projects made in the sidebar (issue #9) ------------------------------------------
-// Each save rebuilds and reloads the sidebar, but until that lands a second
-// tap must step on from the first, so the last spec sent is held here
-// (null once removed). Not reactive on its own: bump() after each write.
+// --- Projects made or edited in the sidebar (issue #9) ---------------------------------
+// Each save rebuilds and reloads the sidebar, but until that lands the editor
+// must open on what was last sent, so the last spec sent is held here (null
+// once removed). Not reactive on its own: bump() after each write.
 const sentSpecs = new Map<string, ProjectSpec | null>();
 
-const specOf = (k: string): ProjectSpec | undefined =>
-  sentSpecs.has(k) ? (sentSpecs.get(k) ?? undefined) : inAppSpec(k);
+const builtProject = (k: string): Project | undefined => PROJECTS.find((p) => projectId(p) === k);
 
-/** The card's project key when that project was made in the sidebar and not removed since. */
-function inAppKeyOf(w: Workspace | undefined): string | null {
-  if (!w) return null;
-  const k = projectKey(w);
-  return isInAppKey(k) && specOf(k) ? k : null;
+/** The project as it now stands: the last spec sent, else its saved or built one. Undefined once removed, or for Other. */
+export function specOf(k: string): ProjectSpec | undefined {
+  if (sentSpecs.has(k)) return sentSpecs.get(k) ?? undefined;
+  const p = builtProject(k);
+  if (!p) return undefined;
+  return savedSpec(k) ?? { name: p.name, color: p.color, icon: p.icon, ...(p.root ? { root: p.root } : {}) };
 }
 
-// Every project, plus those sent but not built yet, so two quick creates
-// never pick the same name or colour.
-function knownProjects(): Project[] {
-  const sent = [...sentSpecs].flatMap(([match, s]) => (s ? [{ match, ...s }] : []));
-  return [...PROJECTS, ...sent];
+/** Every project as it now stands, keyed by its first match, sent but not built ones included. */
+export function knownProjects(): Project[] {
+  const keys = new Set([...PROJECTS.map(projectId), ...sentSpecs.keys()]);
+  return [...keys].flatMap((k) => {
+    const spec = specOf(k);
+    return spec ? [{ match: k, ...spec }] : [];
+  });
 }
 
 /** True when the card sits in Other (no path match, no override), so its folder can become a project. */
@@ -521,14 +520,14 @@ export function canCreateProject(w: Workspace | undefined): boolean {
   return made !== null && !sentSpecs.get(made.key);
 }
 
-/** The name of the card's sidebar-made project, or null when it is in a file project or none. */
-export const inAppProjectName = (w: Workspace | undefined): string | null => {
+/** True once the project was removed in the sidebar, before the rebuild drops it. Reactive. */
+function isRemovedProject(k: string): boolean {
   tick();
-  const k = inAppKeyOf(w);
-  return k ? (specOf(k)?.name ?? null) : null;
-};
+  return sentSpecs.has(k) && sentSpecs.get(k) === null;
+}
 
-function sendSpec(k: string, spec: ProjectSpec | null): void {
+/** Saves a project's name, colour, icon and folder. */
+export function saveProject(k: string, spec: ProjectSpec): void {
   sentSpecs.set(k, spec);
   bump();
   persistSet(`projects.${k}`, spec);
@@ -537,34 +536,25 @@ function sendSpec(k: string, spec: ProjectSpec | null): void {
 /** Makes the card's folder a project, named after the folder. */
 export function createProjectFrom(w: Workspace | undefined): void {
   const made = w && canCreateProject(w) ? newProject(w.directory, knownProjects()) : null;
-  if (made) sendSpec(made.key, made.spec);
+  if (made) saveProject(made.key, made.spec);
 }
-
-function restyle(w: Workspace | undefined, change: (s: ProjectSpec) => ProjectSpec): void {
-  const k = inAppKeyOf(w);
-  const spec = k ? specOf(k) : undefined;
-  if (k && spec) sendSpec(k, change(spec));
-}
-
-export const cycleProjectColor = (w: Workspace | undefined): void =>
-  restyle(w, (s) => ({ ...s, color: nextIn(PROJECT_COLORS, s.color) }));
-
-export const cycleProjectIcon = (w: Workspace | undefined): void =>
-  restyle(w, (s) => ({ ...s, icon: nextIn(PROJECT_ICONS, s.icon) }));
 
 /**
- * Deletes the card's sidebar-made project and every override pointing at it,
- * so remaking the same folder later does not pull those workspaces back in.
+ * Removes a project and every override pointing at it, so remaking the same
+ * folder later does not pull those workspaces back in. One from
+ * projects.json is saved as removed, since deleting its entry would bring
+ * the file's back on the next build.
  */
-export function removeProject(w: Workspace | undefined): void {
-  const k = inAppKeyOf(w);
-  if (!k) return;
+export function removeProject(k: string): void {
+  if (!specOf(k)) return;
   for (const [id, key] of [...projectOverride]) {
     if (key !== k) continue;
     projectOverride.delete(id);
     persistSet(`projectOverride.${id}`, null);
   }
-  sendSpec(k, null);
+  sentSpecs.set(k, null);
+  bump();
+  persistSet(`projects.${k}`, builtProject(k)?.seeded ? { removed: true } : null);
 }
 
 export const hasProjectOverride = (w: Workspace | undefined): boolean => {
@@ -585,10 +575,20 @@ export const projectCount = (k: string) => cardWorkspaces().filter((w) => projec
 /** Whether the project's header should offer "+": it has a folder to open. */
 export const canOpenProject = (k: string): boolean => !!projectByKey(k).root;
 
+/**
+ * The folder "+" opens: until the rebuild lands, the last root sent when it
+ * is already absolute (a "~" one waits for build.ts to expand it), else the
+ * built one.
+ */
+function rootToOpen(k: string): string | undefined {
+  const sent = sentSpecs.get(k)?.root;
+  return sent?.startsWith("/") ? sent : projectByKey(k).root;
+}
+
 /** Opens a new workspace in the project's root, if it has one. A folded
  * project unfolds first, so the new card is not hidden under its header. */
 export function openProjectWorkspace(k: string): void {
-  const root = projectByKey(k).root;
+  const root = rootToOpen(k);
   if (!root) return;
   if (isProjectCollapsed(k)) toggleProject(k);
   cmux("workspace.create", { cwd: root, focus: true });
@@ -600,14 +600,17 @@ const openLabel = (k: string): string => `New session in ${projectByKey(k).name}
  * built, so a project with no folder says why instead of vanishing. */
 export function newSessionLabel(w: Workspace | undefined): string {
   if (!w) return "New session (no workspace)";
-  const k = projectKey(w);
-  return canOpenProject(k) ? openLabel(k) : "New session (project has no folder)";
+  return projectNewLabel(projectKey(w));
 }
 
 /** Opens a new session in the card's project folder; a no-op without one. */
 export function newSessionFor(w: Workspace | undefined): void {
   if (w) openProjectWorkspace(projectKey(w));
 }
+
+/** A project menu's first item: what it opens, or why it opens nothing. */
+export const projectNewLabel = (k: string): string =>
+  canOpenProject(k) ? openLabel(k) : "New session (project has no folder)";
 
 /** A quiet row's menu label: what a tap does, or why it does nothing. */
 export const quietLabel = (k: string): string =>
@@ -617,7 +620,14 @@ export type ProjectEntry =
   | { kind: "header"; id: string; project: string }
   | { kind: "ws"; id: string; wsId: string }
   | { kind: "quietHeader"; id: string }
-  | { kind: "quietRow"; id: string; project: string };
+  | { kind: "quietRow"; id: string; project: string }
+  | { kind: "editor"; id: string; project: string };
+
+// The open editor sits under its project's header or quiet row, with its own
+// key, since a row's kind is fixed by its key.
+function pushEditor(entries: ProjectEntry[], k: string): void {
+  if (editingProject() === k) entries.push({ kind: "editor", id: "e:" + k, project: k });
+}
 
 /** The cards grouped by project key, in one pass over the cards. */
 const cardsByProject = computed(() => {
@@ -637,7 +647,7 @@ const cardsByProject = computed(() => {
  */
 export const quietProjects = computed(() => {
   const groups = cardsByProject();
-  return PROJECTS.map(projectId).filter((k) => !groups.has(k));
+  return PROJECTS.map(projectId).filter((k) => !groups.has(k) && !isRemovedProject(k));
 });
 
 /** Folds or unfolds the Quiet rows, kept across a reload. */
@@ -648,6 +658,7 @@ export function toggleQuiet(): void {
 
 function pushGroup(entries: ProjectEntry[], k: string, rows: readonly Workspace[]): void {
   entries.push({ kind: "header", id: "p:" + k, project: k });
+  pushEditor(entries, k);
   if (isProjectCollapsed(k)) return;
   // One row shape in Projects mode, so the lane no longer rides in the id.
   for (const w of rows) entries.push({ kind: "ws", id: w.id + "@p", wsId: w.id });
@@ -658,15 +669,24 @@ export const projectEntries = computed(() => {
   const entries: ProjectEntry[] = [];
   // A project with sessions gets a header; the quiet ones share one header at
   // the bottom, a short row each. Other only shows once something falls into it.
-  for (const k of [...PROJECTS.map(projectId), projectId(OTHER)]) {
+  // A project removed before the rebuild loses its header at once; its
+  // cards wait in Other, where the rebuild will put them.
+  const gone = PROJECTS.map(projectId).filter(isRemovedProject);
+  const other = [...(groups.get(projectId(OTHER)) ?? []), ...gone.flatMap((k) => groups.get(k) ?? [])];
+  for (const k of PROJECTS.map(projectId)) {
     const rows = groups.get(k);
-    if (rows) pushGroup(entries, k, rows);
+    if (rows && !gone.includes(k)) pushGroup(entries, k, rows);
   }
+  if (other.length) pushGroup(entries, projectId(OTHER), other);
   const quiet = quietProjects();
   if (!quiet.length) return entries;
   // Ids outside the "p:" space, so a project matching "quiet" cannot clash.
   entries.push({ kind: "quietHeader", id: "quiet" });
-  if (!quietCollapsed()) for (const k of quiet) entries.push({ kind: "quietRow", id: "q:" + k, project: k });
+  if (quietCollapsed()) return entries;
+  for (const k of quiet) {
+    entries.push({ kind: "quietRow", id: "q:" + k, project: k });
+    pushEditor(entries, k);
+  }
   return entries;
 });
 
@@ -754,7 +774,30 @@ export function jumpNext(): void {
   if (!step) return;
   const queue = nextQueue();
   lastJump = { id: step.target.id, index: step.position - 1, afterId: queue[step.position]?.id ?? null };
-  selectWorkspace(step.target.id);
+  revealWorkspace(step.target);
+}
+
+/**
+ * Selects a workspace from Needs you or Next, first unfolding what hides its
+ * card in the chosen view: its lane in All, its project in Projects. A lane's
+ * generated anchor has no card; its status sits on the lane header, which
+ * shows folded or not, but only in All, so Projects switches to All for it.
+ */
+export function revealWorkspace(w: Workspace | undefined): void {
+  if (!w) return;
+  if (!laneAnchorIds().has(w.id)) unfoldCardOf(w);
+  else chooseMode("all");
+  selectWorkspace(w.id);
+}
+
+function unfoldCardOf(w: Workspace): void {
+  if (mode() === "all") {
+    const lane = laneByKey(laneOf(w));
+    if (isCollapsed(lane)) toggleLane(lane);
+    return;
+  }
+  const k = projectKey(w);
+  if (isProjectCollapsed(k)) toggleProject(k);
 }
 
 // --- Card chips (issue #48) ------------------------------------------------------------

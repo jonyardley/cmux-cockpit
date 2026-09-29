@@ -5,8 +5,7 @@
 import { dismissNeeds } from "../../shared/needs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloDot, meta, motionList, ring, sectionTitle, when } from "../../shared/ui.ts";
-import { jumpNext, needsList, needsMore, needsShown, nextStep } from "../model.ts";
-import { selectWorkspace } from "../state.ts";
+import { jumpNext, needsList, needsMore, needsShown, nextStep, revealWorkspace } from "../model.ts";
 import { ageOf, needsDetail, needsRowEdge, statusInfo } from "../status.ts";
 import { C } from "../theme.ts";
 import { cardMenu, glyphButton, type WsAccessor } from "./parts.ts";
@@ -45,7 +44,7 @@ function needsRow(w: WsAccessor): View {
   // One selection ring: the card below carries it, so the row keeps its edge.
   return ring(row, C.card, () => needsRowEdge(w()), 1, 9)
     .frame({ maxWidth: "infinity" })
-    .onTap(() => selectWorkspace(w()?.id))
+    .onTap(() => revealWorkspace(w()))
     .contextMenu(cardMenu(w));
 }
 

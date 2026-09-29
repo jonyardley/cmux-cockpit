@@ -5,7 +5,7 @@
 
 // State's shape is scripts/state-config.ts's contract; imported as a type
 // only, so esbuild erases it and a sidebar never bundles the script itself.
-import type { ProjectSpec, State } from "../../scripts/state-config.ts";
+import type { SavedProject, State } from "../../scripts/state-config.ts";
 
 declare const __STATE__: State;
 // Baked in beside __STATE__ (issue #78). Read through typeof, so a bundle or
@@ -34,7 +34,7 @@ export const STATE_UNREADABLE: boolean = typeof __STATE_UNREADABLE__ === "boolea
  * last, so the handler accepts the link. With no handler installed,
  * openURL to the unclaimed cmux-cockpit:// scheme does nothing.
  */
-export function persistSet(key: string, value: string | Record<string, number> | ProjectSpec | null): void {
+export function persistSet(key: string, value: string | Record<string, number> | SavedProject | null): void {
   const q = value === null ? "" : `&value=${encodeURIComponent(JSON.stringify(value))}`;
   const t = URL_TOKEN === "" ? "" : `&token=${encodeURIComponent(URL_TOKEN)}`;
   openURL(`cmux-cockpit://set?key=${encodeURIComponent(key)}${q}${t}`);
