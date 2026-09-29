@@ -5,7 +5,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
       Text "" .font(10.5) .weight(medium) .color(metaText) .paddingHorizontal(0) .paddingVertical(1) .background(clear) .cornerRadius(10)
       Spacer
     VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
-      VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(onBadge|panel|onClay) .cornerRadius(11)
+      VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(onBadge|panel|onClay|readyChip.fg) .cornerRadius(11)
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
           VStack spacing: 0, alignment: leading .padding(14) .frame(maxWidth: infinity, alignment: leading)
             HStack spacing: 8 .frame(maxWidth: infinity, alignment: leading)
@@ -16,9 +16,8 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 Text "Working 15m" .font(12.5) .weight(medium) .color(blueText|runningChip.fg) .lineLimit(1) .layoutPriority(1)
                 Spacer minLength: 4
                 ForEach .opacity(1) .layoutPriority(2)
-                  VStack spacing: 0, alignment: leading .padding(0) .background(clear) .cornerRadius(6) .onTap()
-                    VStack spacing: 0, alignment: leading .padding(1) .background(failingChip.edge) .cornerRadius(6) .hoverBackground(#A18A87) .background(clear) .cornerRadius(6)
-                      Text "1 failing" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(failingChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(failingChip.bg) .cornerRadius(5) .hoverBackground(#E8D5D4)
+                  VStack spacing: 0, alignment: leading .padding(1) .background(failingChip.edge) .cornerRadius(6) .hoverBackground(#A18A87) .onTap()
+                    Text "1 failing" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(failingChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(failingChip.bg) .cornerRadius(5) .hoverBackground(#E8D5D4)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
               Text "Recorded six scenes; the lanes one is the longest." .font(12) .color(secondary|badge) .lineLimit(4) .truncation(tail) .paddingHorizontal(8) .paddingVertical(6) .frame(maxWidth: infinity, alignment: leading) .background(quote) .cornerRadius(6)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(12)
@@ -35,9 +34,8 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
               HStack spacing: 8, alignment: center .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
                 Text "Ports" .font(11) .color(tertiary) .lineLimit(1) .frame(maxWidth: infinity, alignment: leading) .frame(width: 48)
                 HStack spacing: 6
-                  VStack spacing: 0, alignment: leading .padding(0) .background(clear) .cornerRadius(6) .onTap()
-                    VStack spacing: 0, alignment: leading .padding(1) .background(neutralChip.edge) .cornerRadius(6) .hoverBackground(#9E9C94) .background(clear) .cornerRadius(6)
-                      Text ":5173" .font(11) .monospaced() .weight(medium) .lineLimit(1) .truncation(tail) .color(neutralChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(neutralChip.bg) .cornerRadius(5) .hoverBackground(#E4E2DB)
+                  VStack spacing: 0, alignment: leading .padding(1) .background(neutralChip.edge) .cornerRadius(6) .hoverBackground(#9E9C94) .onTap()
+                    Text ":5173" .font(11) .monospaced() .weight(medium) .lineLimit(1) .truncation(tail) .color(neutralChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(neutralChip.bg) .cornerRadius(5) .hoverBackground(#E4E2DB)
               HStack spacing: 8, alignment: center .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
                 Text "PR" .font(11) .color(tertiary) .lineLimit(1) .frame(maxWidth: infinity, alignment: leading) .frame(width: 48)
                 VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
@@ -81,7 +79,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
       Text "3" .font(10.5) .weight(medium) .color(metaText) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
       Spacer
     VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
-      VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(onBadge|panel|onClay) .cornerRadius(11)
+      VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(onBadge|panel|onClay|readyChip.fg) .cornerRadius(11)
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
           HStack spacing: 6, alignment: top .frame(maxWidth: infinity, alignment: leading)
             VStack spacing: 2, alignment: leading .paddingLeading(12) .paddingVertical(10) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
@@ -90,9 +88,8 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 Text "Text snapshots for the sidebars" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                 Spacer minLength: 4
             VStack spacing: 0 .paddingTop(9) .paddingTrailing(10) .layoutPriority(2)
-              VStack spacing: 0, alignment: leading .padding(0) .background(clear) .cornerRadius(6) .onTap() .opacity(1)
-                VStack spacing: 0, alignment: leading .padding(1) .background(failingChip.edge) .cornerRadius(6) .hoverBackground(#A18A87) .background(clear) .cornerRadius(6)
-                  Text "1 failing ↗" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(failingChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(failingChip.bg) .cornerRadius(5) .hoverBackground(#E8D5D4)
+              VStack spacing: 0, alignment: leading .padding(1) .background(failingChip.edge) .cornerRadius(6) .hoverBackground(#A18A87) .onTap() .opacity(1)
+                Text "1 failing ↗" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(failingChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(failingChip.bg) .cornerRadius(5) .hoverBackground(#E8D5D4)
           Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
           HStack spacing: 6, alignment: top .frame(maxWidth: infinity, alignment: leading)
@@ -103,9 +100,8 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 Spacer minLength: 4
               Text "from Chip colours" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2) .lineLimit(1) .truncation(middle)
             VStack spacing: 0 .paddingTop(9) .paddingTrailing(10) .layoutPriority(2)
-              VStack spacing: 0, alignment: leading .padding(0) .background(clear) .cornerRadius(6) .onTap() .opacity(1)
-                VStack spacing: 0, alignment: leading .padding(1) .background(neutralChip.edge) .cornerRadius(6) .hoverBackground(#9E9C94) .background(clear) .cornerRadius(6)
-                  Text "open ↗" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(neutralChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(neutralChip.bg) .cornerRadius(5) .hoverBackground(#E4E2DB)
+              VStack spacing: 0, alignment: leading .padding(1) .background(neutralChip.edge) .cornerRadius(6) .hoverBackground(#9E9C94) .onTap() .opacity(1)
+                Text "open ↗" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(neutralChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(neutralChip.bg) .cornerRadius(5) .hoverBackground(#E4E2DB)
           Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
           HStack spacing: 6, alignment: top .frame(maxWidth: infinity, alignment: leading)
@@ -115,9 +111,8 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 Text "An orphaned PR" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                 Spacer minLength: 4
             VStack spacing: 0 .paddingTop(9) .paddingTrailing(10) .layoutPriority(2)
-              VStack spacing: 0, alignment: leading .padding(0) .background(clear) .cornerRadius(6) .onTap() .opacity(1)
-                VStack spacing: 0, alignment: leading .padding(1) .background(neutralChip.edge) .cornerRadius(6) .hoverBackground(#9E9C94) .background(clear) .cornerRadius(6)
-                  Text "open ↗" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(neutralChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(neutralChip.bg) .cornerRadius(5) .hoverBackground(#E4E2DB)
+              VStack spacing: 0, alignment: leading .padding(1) .background(neutralChip.edge) .cornerRadius(6) .hoverBackground(#9E9C94) .onTap() .opacity(1)
+                Text "open ↗" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(neutralChip.fg) .paddingHorizontal(6) .paddingVertical(1) .background(neutralChip.bg) .cornerRadius(5) .hoverBackground(#E4E2DB)
           Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
   VStack spacing: 8, alignment: leading
     HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
@@ -125,7 +120,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
       Text "2" .font(10.5) .weight(medium) .color(metaText) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
       Spacer
     VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
-      VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(onBadge|panel|onClay) .cornerRadius(11)
+      VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(onBadge|panel|onClay|readyChip.fg) .cornerRadius(11)
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
           HStack spacing: 10 .paddingHorizontal(12) .paddingVertical(10) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
             Image doc.text .font(11) .color(tertiary) .frame(width: 16)
@@ -166,7 +161,7 @@ metaText #6B6A64
 neutralChip.bg #F4F2EA
 neutralChip.edge #E8E5DA
 neutralChip.fg #4A4945
-onBadge|panel|onClay #FFFFFF
+onBadge|panel|onClay|readyChip.fg #FFFFFF
 panelEdge #1414131A
 quote #1414130A
 red #C0453A

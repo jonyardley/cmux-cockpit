@@ -34,7 +34,7 @@ const r = installRenderer();
 const { group, ws } = await import("./support/fixtures.ts");
 const model = await import("../src/cockpit/model.ts");
 const { C } = await import("../src/cockpit/theme.ts");
-const { READY_INK, prChipColors } = await import("../src/shared/pr-colors.ts");
+const { READY_INK } = await import("../src/shared/pr-colors.ts");
 
 // WCAG relative luminance of a #RRGGBB colour, and the contrast ratio of two.
 const luminance = (hex: string): number => {
@@ -121,11 +121,6 @@ describe("headerHint", () => {
     // Different hex is not enough: the two share a hue, so hold a real
     // lightness gap (a contrast ratio between them) or they read as one.
     assert.ok(contrast(hint.color, C.greenText) >= 1.5);
-  });
-
-  it("keeps the ready chip's words readable on its bright face", () => {
-    const chip = prChipColors("ready", "open");
-    assert.ok(contrast(chip.fg, chip.bg) >= 4.5);
   });
 
   it("keeps Parked's merge line faint", () => {

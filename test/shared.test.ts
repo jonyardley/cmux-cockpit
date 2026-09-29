@@ -279,12 +279,7 @@ describe("prChipColors", () => {
   it("shows the health when there is one, whatever the status", () => {
     assert.equal(prChipColors("failing", "open").fg, "#9E2F27");
     assert.equal(prChipColors("running", "open").fg, "#2F5690");
-    assert.deepEqual(prChipColors("ready", "open"), {
-      bg: P.readyFace,
-      fg: P.readyWords,
-      edge: P.readyEdge,
-      halo: P.readyHalo,
-    });
+    assert.deepEqual(prChipColors("ready", "open"), { bg: READY_INK, fg: "#FFFFFF", edge: P.greenDeepEdge });
   });
 
   it("is green only when genuinely ready: a plain open PR stays neutral (issue #82)", () => {
@@ -296,12 +291,6 @@ describe("prChipColors", () => {
     for (const h of ["failing", "conflicts", "running", "quiet"] as const)
       for (const st of ["open", "merged", "closed", undefined] as const)
         assert.notDeepEqual(prChipColors(h, st), ready, h + " " + String(st));
-  });
-
-  it("gives only ready a glow", () => {
-    for (const h of ["failing", "conflicts", "running", "quiet"] as const)
-      for (const st of ["open", "merged", "closed", undefined] as const)
-        for (const draft of [false, true]) assert.equal(prChipColors(h, st, draft).halo, undefined);
   });
 
   it("keeps merged purple while quiet, and is neutral with no status", () => {
@@ -321,14 +310,14 @@ describe("prChipColors", () => {
 });
 
 describe("prInk", () => {
-  it("writes ready in its green, not the chip's near-black words", () => {
+  it("writes ready in its green, not the chip's white, which vanishes on a card", () => {
     assert.equal(prInk("ready", "open"), READY_INK);
     assert.notEqual(prInk("ready", "open"), prChipColors("ready", "open").fg);
   });
 });
 
 describe("dimmedColors", () => {
-  it("drops the ready chip to neutral, glow and all, while dimmed, so a stale verdict does not shout", () => {
+  it("drops the solid ready chip to neutral while dimmed, so a stale verdict stays readable", () => {
     const ready = prChipColors("ready", "open");
     assert.deepEqual(dimmedColors(ready, true), NEUTRAL_CHIP);
     assert.equal(dimmedColors(ready, false), ready);

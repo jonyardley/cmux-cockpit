@@ -75,17 +75,16 @@ export function ring(
   face: Reactive<string>,
   edge: Reactive<string>,
   width: Reactive<number>,
-  radius: Reactive<number>,
+  radius: number,
   { hug = false, hover }: RingOptions = {},
 ): View {
   const wv = typeof width === "function" ? width : () => width;
-  const rv = typeof radius === "function" ? radius : () => radius;
   const sized = hug ? view : view.frame({ maxWidth: "infinity", alignment: "leading" });
-  const inner = sized.background(face).cornerRadius(() => rv() - wv());
+  const inner = sized.background(face).cornerRadius(() => radius - wv());
   const outer = VStack({ spacing: 0, alignment: "leading" }, [hover ? inner.hoverBackground(hover.face) : inner])
     .padding(wv)
     .background(edge)
-    .cornerRadius(rv);
+    .cornerRadius(radius);
   return hover?.edge ? outer.hoverBackground(hover.edge) : outer;
 }
 
@@ -183,35 +182,15 @@ export function branchText(fn: () => string, color: Reactive<string>, weight: We
   return Text(fn).font(META_FONT).weight(weight).color(color).lineLimit(1).truncation("middle");
 }
 
-/** A chip's glow: its halo colour and ring width, or a zero-width clear ring without one. */
-export const chipGlow = (c: ChipColors): { color: string; width: number } =>
-  c.halo ? { color: c.halo, width: CHIP_GLOW } : { color: "clear", width: 0 };
-
-const CHIP_GLOW = 3;
-
-/**
- * A chip's frame round `body`: its face and edge, hugging the content, then
- * its glow as an outer ring. A chip with no glow keeps a zero-width ring, so
- * one that turns ready gains the glow without changing kind.
- */
+/** A chip's frame round `body`: its face and edge, hugging the content. */
 export function chipFrame(body: View, colors: () => ChipColors, hover?: Hover): View {
-  const framed = ring(
+  return ring(
     body.paddingHorizontal(6).paddingVertical(1),
     () => colors().bg,
     () => colors().edge,
     1,
     6,
     { hug: true, ...(hover ? { hover } : {}) },
-  );
-  const glow = () => chipGlow(colors());
-  return ring(
-    framed,
-    "clear",
-    () => glow().color,
-    () => glow().width,
-    // The chip keeps its 6pt corner inside whatever glow surrounds it.
-    () => 6 + glow().width,
-    { hug: true },
   );
 }
 

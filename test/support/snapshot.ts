@@ -133,7 +133,6 @@ function chipTokens(): Record<string, string> {
     out[`${name}.bg`] = c.bg;
     out[`${name}.fg`] = c.fg;
     out[`${name}.edge`] = c.edge;
-    if (c.halo) out[`${name}.halo`] = c.halo;
   }
   return out;
 }
