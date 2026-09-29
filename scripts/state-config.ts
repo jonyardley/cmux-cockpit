@@ -40,10 +40,9 @@ export interface State {
    */
   published: Record<string, SavedPublished>;
   /**
-   * url -> the chat that opened a pull request and the first thing it said
-   * about it, recorded by scripts/hooks/report-pr.ts and
-   * scripts/hooks/report-mention.ts, oldest first. Written only by the
-   * hooks, never by a URL: a URL could plant a link or a quote.
+   * url -> the chat that opened a pull request, recorded by
+   * scripts/hooks/report-pr.ts, oldest first. Written only by the hook,
+   * never by a URL: a URL could plant a link.
    */
   prOrigins: Record<string, SavedPrOrigin>;
   /**
@@ -54,6 +53,13 @@ export interface State {
    * a URL (urlMaySet): a URL could plant a question.
    */
   asking: Record<string, SavedAsk>;
+  /**
+   * wsId -> the "Your move" line its chat last ended a turn on, recorded by
+   * scripts/hooks/report-move.ts, since cmux keeps only the start of a
+   * message and the line is always at its end. Hook-only, like `asking`:
+   * a URL could plant words the card shows as the chat's own.
+   */
+  moves: Record<string, SavedMove>;
   /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
   ui: UiState;
   /**
@@ -185,16 +191,6 @@ export interface SavedPublished {
   epoch: number;
 }
 
-/** The paragraph where a chat first named a PR it opened. */
-export interface SavedMention {
-  /** The paragraph on one line, at most MAX_MENTION characters. */
-  text: string;
-  /** The transcript message it came from (its uuid). */
-  message: string;
-  /** Epoch seconds of that message. */
-  epoch: number;
-}
-
 /** Which chat opened a PR, as the PR hook saves it. */
 export interface SavedPrOrigin {
   /** Its GitHub link, the map key too. */
@@ -208,8 +204,6 @@ export interface SavedPrOrigin {
   session: string;
   /** Epoch seconds it was opened. */
   epoch: number;
-  /** Absent until the chat names the PR in a reply (report-mention.ts). */
-  mention?: SavedMention;
 }
 
 /** Why an agent stopped to ask, as the notification hook saves it. */
@@ -222,12 +216,29 @@ export interface SavedAsk {
   session?: string;
 }
 
+/** What a chat last asked of Jon, as the Stop hook saves it. */
+export interface SavedMove {
+  /** The line after "Your move:", at most MAX_MOVE characters. */
+  text: string;
+  /** Epoch seconds the hook saw the turn end. */
+  epoch: number;
+  /** The Claude Code session whose turn it was. */
+  session?: string;
+  /** How many numbered decisions the reply laid out, when it laid any out. */
+  decisions?: number;
+  /** The reply's recommended answers in Jon's shorthand ("1b 2a"), when it marked any. */
+  leans?: string;
+}
+
+/** The longest "Your move" line kept; the hook cuts one to this. */
+export const MAX_MOVE = 200;
+/** The most decisions one reply is counted as laying out. */
+export const MAX_DECISIONS = 9;
+
 /** Runs kept per workspace, newest kept, so a busy agent cannot bloat the file. */
 export const MAX_SUBAGENTS = 10;
 /** The longest label kept; the hook cuts a description to this. */
 export const MAX_LABEL = 120;
-/** The longest first-mention paragraph kept; the hook cuts one to this. */
-export const MAX_MENTION = 320;
 
 /** Checks kept per PR, so one PR with a huge matrix cannot bloat the file. */
 export const MAX_CHECKS = 20;
@@ -242,6 +253,7 @@ export const emptyState = (): State => ({
   published: {},
   prOrigins: {},
   asking: {},
+  moves: {},
   ui: {},
 });
 
@@ -310,14 +322,14 @@ function cleanText(raw: unknown, max: number): string | null {
 }
 
 /**
- * cleanLabel for a first-mention paragraph: the same rule, but a paragraph
- * over MAX_MENTION is cut to leave room for an ellipsis and ends in one, so
- * the card shows it was cut. Both lengths are the UTF-16 one isText measures.
+ * cleanLabel for a "Your move" line: the same rule, but a line over
+ * MAX_MOVE is cut to leave room for an ellipsis and ends in one, so the
+ * card shows it was cut. Both lengths are the UTF-16 one isText measures.
  */
-export function cleanMention(raw: unknown): string | null {
+export function cleanMove(raw: unknown): string | null {
   const whole = cleanText(raw, Number.POSITIVE_INFINITY);
-  if (whole === null || whole.length <= MAX_MENTION) return whole;
-  return `${cutTo(whole, MAX_MENTION - 1).trimEnd()}…`;
+  if (whole === null || whole.length <= MAX_MOVE) return whole;
+  return `${cutTo(whole, MAX_MOVE - 1).trimEnd()}…`;
 }
 
 /**
@@ -481,15 +493,10 @@ function savedPublished(v: unknown): SavedPublished | null {
 const isPrNumber = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 1;
 const isIdText = (v: unknown): v is string => typeof v === "string" && isId(v);
 
-function savedMention(v: unknown): SavedMention | null {
-  if (!isRecord(v) || !isText(v.text, MAX_MENTION) || !isIdText(v.message) || !isEpoch(v.epoch)) return null;
-  return { text: v.text, message: v.message, epoch: v.epoch };
-}
-
 // The number a PR link ends in, so a saved number can be held to its link.
 const prNumberOf = (url: string): number => Number(/\/pull\/(\d+)$/.exec(url)?.[1]);
 
-// A bad mention is dropped on its own, so the origin still says which chat.
+// A field it no longer keeps (the old `mention`) is dropped on the next write.
 function savedPrOrigin(v: unknown): SavedPrOrigin | null {
   if (!isRecord(v) || !isPrUrl(v.url) || !isPrNumber(v.number) || !isEpoch(v.epoch)) return null;
   if (prNumberOf(v.url) !== v.number) return null;
@@ -497,8 +504,6 @@ function savedPrOrigin(v: unknown): SavedPrOrigin | null {
   if (!isIdText(workspace) || !isIdText(session) || !isOptionalId(surface)) return null;
   const origin: SavedPrOrigin = { url: v.url, number: v.number, workspace, session, epoch: v.epoch };
   if (typeof surface === "string") origin.surface = surface;
-  const mention = savedMention(v.mention);
-  if (mention) origin.mention = mention;
   return origin;
 }
 
@@ -513,6 +518,27 @@ function savedAsk(v: unknown): SavedAsk | null {
   const { session } = v;
   if (session !== undefined && (typeof session !== "string" || !isId(session))) return null;
   return { reason: v.reason, epoch: v.epoch, ...(typeof session === "string" ? { session } : {}) };
+}
+
+// Jon's shorthand for answers: a decision number and a letter, space apart.
+const isLeans = (v: unknown): v is string =>
+  typeof v === "string" && v.length <= 40 && /^[1-9][a-z](?: [1-9][a-z])*$/.test(v);
+const isDecisions = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_DECISIONS;
+
+function savedMove(v: unknown): SavedMove | null {
+  if (!isRecord(v) || !isText(v.text, MAX_MOVE) || !isEpoch(v.epoch)) return null;
+  const { session, decisions, leans } = v;
+  if (session !== undefined && (typeof session !== "string" || !isId(session))) return null;
+  if (decisions !== undefined && !isDecisions(decisions)) return null;
+  if (leans !== undefined && !isLeans(leans)) return null;
+  return {
+    text: v.text,
+    epoch: v.epoch,
+    ...(typeof session === "string" ? { session } : {}),
+    ...(isDecisions(decisions) ? { decisions } : {}),
+    ...(isLeans(leans) ? { leans } : {}),
+  };
 }
 
 function savedSubagents(v: unknown): SavedSubagent[] | null {
@@ -545,6 +571,7 @@ export function validateState(raw: unknown): State {
     published: cleanMap(v.published, savedPublished, isPublishedUrl),
     prOrigins: cleanMap(v.prOrigins, originAt, isPrUrl),
     asking: cleanMap(v.asking, savedAsk),
+    moves: cleanMap(v.moves, savedMove),
     ui: uiState(v.ui),
     ...(poll ? { poll } : {}),
   };
@@ -553,14 +580,14 @@ export function validateState(raw: unknown): State {
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
 // The maps applySet takes. `prs`, `ownPrs`, `subagents`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
-// `ui` is not keyed by id: its only keys are UI_KEYS. `asking` is set only by
-// its hook: the URL handler refuses it (urlMaySet).
-type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking";
-const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui", "asking"];
+// `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
+// set only by their hooks: the URL handler refuses them (urlMaySet).
+type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves";
+const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui", "asking", "moves"];
 const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
 
 // Maps applySet takes from a hook but never from a URL.
-const HOOK_ONLY: readonly string[] = ["asking"];
+const HOOK_ONLY: readonly string[] = ["asking", "moves"];
 
 /**
  * Whether a cmux-cockpit:// URL may make this set (scripts/state-set.ts
@@ -589,6 +616,8 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       return { ...state, projects: without(state.projects, id) };
     case "asking":
       return { ...state, asking: without(state.asking, id) };
+    case "moves":
+      return { ...state, moves: without(state.moves, id) };
     case "ui": {
       const { mode, collapsed } = state.ui;
       return { ...state, ui: id === "mode" ? (collapsed ? { collapsed } : {}) : mode ? { mode } : {} };
@@ -621,6 +650,8 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
       return uiEntry(state, id, parsed);
     case "asking":
       return askEntry(state, id, parsed);
+    case "moves":
+      return moveEntry(state, id, parsed);
   }
 }
 
@@ -631,6 +662,21 @@ function askEntry(state: State, id: string, parsed: unknown): State | string {
   if (!ask) return "asking wants {reason, epoch, session?}";
   const kept = Object.entries(state.asking).filter(([, a]) => a.epoch >= ask.epoch - ASK_MAX_AGE_S);
   return { ...state, asking: { ...Object.fromEntries(kept), [id]: ask } };
+}
+
+/**
+ * Another workspace's move older than this, next to a new one, is dropped: a
+ * week, not ASK_MAX_AGE_S's day, since a chat can wait on Jon over a weekend.
+ * MAX_ENTRIES still caps the map.
+ */
+export const MOVE_MAX_AGE_S = 7 * 24 * 60 * 60;
+
+// As askEntry: the move goes last, and moves a week older than it are dropped.
+function moveEntry(state: State, id: string, parsed: unknown): State | string {
+  const move = savedMove(parsed);
+  if (!move) return "moves wants {text, epoch, session?, decisions?, leans?}";
+  const kept = Object.entries(state.moves).filter(([, m]) => m.epoch >= move.epoch - MOVE_MAX_AGE_S);
+  return { ...state, moves: { ...Object.fromEntries(kept), [id]: move } };
 }
 
 function uiEntry(state: State, id: string, parsed: unknown): State | string {

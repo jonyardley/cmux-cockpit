@@ -296,7 +296,8 @@ only when a subagent event rebuilds: the `pr-poll-turn` and
 select, so a done row or a crashed run clears on the next poll even when
 nothing reports a new subagent event in between.
 
-It is fed by three hooks in `~/.claude/settings.json`, on `PreToolUse`
+It is fed by three hooks in `~/.claude/settings.json` (or
+`$CLAUDE_CONFIG_DIR/settings.json` when that is set), on `PreToolUse`
 (`Agent`), `SubagentStart` and `SubagentStop`.
 
 The registration is in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
@@ -399,23 +400,16 @@ under the other form adds a second entry. And an update that names its
 
 The agents panel's Pull requests rows say which chat opened each PR, and a
 tap goes back to that chat; the state pill opens GitHub. Neither cmux nor
-GitHub knows which chat opened a PR, or what it first said about it, so
-two hooks record them in the `prOrigins` map: PR link to `{"url",
-"number", "workspace", "surface", "session", "epoch", "mention"}`, oldest
-first. The sidebar does not show the `mention` since the peek card went.
+GitHub knows which chat opened a PR, so a hook records it in the
+`prOrigins` map: PR link to `{"url", "number", "workspace", "surface",
+"session", "epoch"}`, oldest first.
 
 - `scripts/hooks/report-pr.ts`, after a `gh pr create`, records the
   Claude Code `session_id`, `CMUX_WORKSPACE_ID` and `CMUX_SURFACE_ID`,
   with the number taken from the link, so it needs no gh call. A second
-  create of the same link keeps the mention already found. Every write
-  drops origins older than 30 days.
-- `scripts/hooks/report-mention.ts`, a Stop hook, takes the session's
-  origins with no `mention` from the last day and reads the transcript at
-  `transcript_path` for the first main-chat reply, from the create on,
-  naming the PR by its link, `#N` or "PR N". The paragraph holding it,
-  markdown markers dropped and cut to `MAX_MENTION` on one line, is saved
-  with the message's uuid and never changes. With nothing pending the
-  transcript is not read.
+  create of the same link replaces the first. Every write drops origins
+  older than 30 days. A `mention` saved by the old report-mention.ts hook
+  is dropped on the next write.
 
 No URL can set the map. A PR opened by hand, or before the hooks were
 installed, has no origin: its row has no "from" line and a tap opens
@@ -487,3 +481,42 @@ so a card turns amber a second or two after the prompt appears. A
 workspace holds one saved ask, so where cmux agent ids are not session
 ids, two agents waiting at once in one workspace both read the latest
 ask's reason.
+
+## What the chat wants
+
+A chat that ends its turn says what it needs from Jon on a last line that
+starts "Your move:" (his global rules ask for it). cmux keeps only the
+first 240 characters of a message, so the sidebar never sees that line.
+`scripts/hooks/report-move.ts`, a Stop hook, takes the turn's final reply
+(the event's `last_assistant_message`, else the main-chat reply that ends
+the transcript's tail, read once more after a pause when a prompt or a tool
+result still comes after the last reply, since that reply is not the final
+one) and saves the line per workspace in the `moves` map: workspace id to
+`{"text", "epoch", "session"?, "decisions"?, "leans"?}`. A "Your move"
+line inside a code fence (a handoff opener) is not the reply's. `decisions`
+counts the reply's bold numbered headings with at least one lettered
+option under them, and `leans` holds the option marked **Lean** or
+(recommended) under each, in Jon's shorthand (`1b 2a`); a rule or a
+markdown heading ends a decision's options. A turn with no move line
+drops the workspace's saved one. Like `asking`, the map goes through
+`applySet` and is refused from a URL, but a new move drops any other more
+than a week older (`MOVE_MAX_AGE_S`, since a chat can wait over a weekend),
+and `MAX_ENTRIES` caps it.
+
+`src/shared/move.ts` shows the move while the agent has not worked since it
+was saved. cmux must say needs_input and it must not be an ask; it may read
+as idle only because of Claude Code's idle nudge (a dismissal hides it).
+The move counts when it was saved no earlier than the agent last worked,
+give or take `ASK_SLACK`, taking the earlier of its `lastActivityAt` and
+`sinceEpoch`: cmux may restart the spell when the nudge lands about 60s
+after the turn ends (unconfirmed, issue #4), and the nudge must not hide the
+move. Real work moves both, so a move from an earlier turn never shows once
+the chat has worked again. The session rule is the one asks use
+(`savedFor` in `src/shared/needs.ts`). The
+cockpit quotes it in place of the message on every card and on the Needs
+you row, adds it under the status on the Projects row, and leads the chips
+with a size: Decide (with the count past one) when the reply laid out
+decisions, Review when the line points at something to read (a link,
+"read", "review", "look at"; a bare `#N` is only a reference), Quick for a
+word or a paste. A line that says nothing waits on Jon, or gives no clue,
+gets no chip.

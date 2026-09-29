@@ -108,7 +108,8 @@ Setup asks about each of these. Each works without the others.
 - **Claude Code hooks**: amber "Asking" with the question, a row per
   subagent, a chip as soon as an agent opens a PR, and the "Made here"
   list. Setup lists the entries it will add to `~/.claude/settings.json`
-  and asks before writing; it only ever adds, and keeps a copy of the old
+  (or `$CLAUDE_CONFIG_DIR/settings.json` when that is set) and asks
+  before writing; it only ever adds, and keeps a copy of the old
   file as `settings.json.cmux-cockpit.bak` ([by hand](#claude-code-hooks)).
 
 ## When something does not work
@@ -244,7 +245,9 @@ in `scripts/setup/claude-hooks.json`, which setup merges in; a test keeps
 this block the same as that file. Add these to
 the `hooks` object of `~/.claude/settings.json`. Where you already have an
 array for an event (say `PreToolUse`), add these entries to it rather than
-replacing it, or your existing hooks stop running:
+replacing it, or your existing hooks stop running. If you run Claude Code
+with `CLAUDE_CONFIG_DIR` set, setup, doctor and uninstall use
+`$CLAUDE_CONFIG_DIR/settings.json` instead, and so should you:
 
 ```json
 {
@@ -258,7 +261,7 @@ replacing it, or your existing hooks stop running:
       { "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }] }
     ],
     "Stop": [
-      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" }] }
+      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-move.ts" }] }
     ],
     "SubagentStart": [
       { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
@@ -284,8 +287,13 @@ What each script turns on:
 - `report-pr.ts`: a chip as soon as an agent runs `gh pr create`, instead
   of at the next poll.
 - `report-published.ts`: the "Made here" list of published pages and docs.
-- `report-mention.ts`: records the paragraph where the chat that opened a
-  PR first told you about it. Nothing shows it yet.
+- `report-move.ts`: what a waiting chat wants from you ("Run /clear now.")
+  on its card, with a chip saying how big a job it is.
+
+An older list had a `Stop` hook running `report-mention.ts`. The script
+is gone, so that entry would fail at the end of every turn: run
+`npm run setup -- --hooks` to take it out (doctor flags it), or delete it
+by hand if you added the hooks that way.
 
 ## The dock
 
@@ -320,8 +328,9 @@ npm run uninstall
 It asks before each step. It removes the helper app, removes the
 automations link only if it points at this repo (putting back
 `automations.json.backup` if you had one), and takes only the cockpit's
-own hooks out of `~/.claude/settings.json`, backing it up first. It never
-deletes the clone; it prints the commands below for that.
+own hooks out of `~/.claude/settings.json` (or
+`$CLAUDE_CONFIG_DIR/settings.json` when that is set), backing it up
+first. It never deletes the clone; it prints the commands below for that.
 
 Then this keeps a copy of your own files (`cmux.json`, your project table
 and saved state) in `~/cmux-cockpit-keep` before deleting the clone:
@@ -338,7 +347,8 @@ To take the extras out by hand instead:
 - the helper: `~/Applications/CmuxCockpit.app`
 - the automations link: `~/.cmuxterm/automations.json` (and restore
   `automations.json.backup` if you had one)
-- the `report-*.ts` hooks in `~/.claude/settings.json`
+- the `report-*.ts` hooks in `~/.claude/settings.json`, or in
+  `$CLAUDE_CONFIG_DIR/settings.json` when that is set
 
 ## Working on it
 

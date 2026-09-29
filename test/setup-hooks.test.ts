@@ -45,7 +45,7 @@ describe("the committed hook list", () => {
   it("names every report-*.ts hook, each with a command", () => {
     const scripts = new Set(WANTED.map((e) => /report-[a-z]+\.ts/.exec(e.command)?.[0]));
     assert.deepEqual([...scripts].sort(), [
-      "report-mention.ts",
+      "report-move.ts",
       "report-notification.ts",
       "report-pr.ts",
       "report-published.ts",

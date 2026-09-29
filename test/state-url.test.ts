@@ -91,6 +91,7 @@ describe("readApplyWrite", () => {
       published: {},
       prOrigins: {},
       asking: {},
+      moves: {},
       ui: {},
     });
   });

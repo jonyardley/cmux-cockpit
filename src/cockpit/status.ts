@@ -1,7 +1,9 @@
 // A workspace's status, from its most active agent, with idle nudges and
 // "needs you" dismissals applied (src/shared/needs.ts).
 
+import type { SavedMove } from "../../scripts/state-config.ts";
 import { mostActive } from "../shared/activity.ts";
+import { waitingMove } from "../shared/move.ts";
 import { agentsOf, askReason, hasRealAsk } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
 import { prInk } from "../shared/pr-colors.ts";
@@ -131,9 +133,15 @@ export function statusInfo(w: Workspace | undefined): StatusStyle {
   return STATUS[a?.status ?? "none"] ?? STATUS.none;
 }
 
-/** A Needs you row's second line: why the agent asks, else its latest message. */
+/** The "Your move" line the workspace's chat ended its turn on, while that turn is still waiting on Jon. */
+export function moveOf(w: Workspace | undefined): SavedMove | null {
+  const a = agentOf(w);
+  return waitingMove(a, w, !!askReason(a, w));
+}
+
+/** A Needs you row's second line: why the agent asks, else what it wants, else its latest message. */
 export const needsDetail = (w: Workspace | undefined): string =>
-  askOf(w) ?? (oneLine(cardMessage(w), 80) || "Waiting for your reply");
+  askOf(w) ?? (clip(moveOf(w)?.text ?? "", 80) || oneLine(cardMessage(w), 80) || "Waiting for your reply");
 
 /** A Needs you row's edge: amber while its agent asks, else clay, so each hue keeps one meaning. */
 export const needsRowEdge = (w: Workspace | undefined): string => (askOf(w) ? C.amberRowEdge : C.needsRowEdge);
@@ -201,10 +209,14 @@ export function leftOffText(w: Workspace | undefined): string {
   return t ? YOU_WORD + ": " + clip(t, LEFT_OFF_MAX) : "";
 }
 
-/** The agent's latest message (never a prompt echo), else the description. */
+/**
+ * What the waiting chat wants ("Run /clear now."), else the agent's latest
+ * message (never a prompt echo), else the description. The move comes first
+ * because cmux sends only the start of the message, and the move is its end.
+ */
 export function cardDetail(w: Workspace | undefined): string {
   // cardMessage is already readable(), so only the description needs it.
-  return clip(cardMessage(w) || readable(w?.description), DETAIL_MAX);
+  return clip(moveOf(w)?.text || cardMessage(w) || readable(w?.description), DETAIL_MAX);
 }
 
 /**
