@@ -11,13 +11,11 @@ import {
   headerHint,
   isCollapsed,
   isProjectCollapsed,
-  laneCount,
-  laneCountColors,
+  laneWorkspaces,
   openProjectWorkspace,
   projectByKey,
-  projectCount,
-  projectCountColors,
   projectNewLabel,
+  projectWorkspaces,
   quietLabel,
   quietProjects,
   toggleLane,
@@ -26,6 +24,7 @@ import {
   wsById,
 } from "../model.ts";
 import { isMode, isSelected, projectsMode, quietCollapsed, selectWorkspace } from "../state.ts";
+import { countColors } from "../status.ts";
 import { C } from "../theme.ts";
 import { glyphButton, statusDot } from "./parts.ts";
 
@@ -78,6 +77,16 @@ export function segmented(): View {
 // win the row's width and truncate rather than wrap, as laneTitle does.
 const laneHeading = (name: string, color: string): View =>
   sectionTitle(name.toUpperCase(), color).truncation("tail").layoutPriority(1);
+
+// A header's count pill over its cards: one filter per change, read by both
+// the count and the tint.
+function cardsPill(cards: () => Workspace[]): View {
+  const list = computed(cards);
+  return countPill(
+    () => String(list().length),
+    () => countColors(list()),
+  );
+}
 
 const CHEVRON_SLOT = { width: 12, height: 16 } as const;
 
@@ -148,10 +157,7 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
     laneMarker(lane.color),
     laneHeading(lane.name, laneKey === "parked" ? C.faint : C.secondary),
     ...(anchorId ? [anchorStatus(anchorId)] : []),
-    countPill(
-      () => String(laneCount(laneKey)),
-      () => laneCountColors(laneKey),
-    ),
+    cardsPill(() => laneWorkspaces(laneKey)),
     Spacer({ minLength: 4 }),
     laneHint(laneKey, target),
   ])
@@ -259,10 +265,7 @@ export function projectHeader(k: string): View {
     chevron(() => isProjectCollapsed(k)),
     badge(k, 18, 10),
     laneTitle(p.name, C.heading),
-    countPill(
-      () => String(projectCount(k)),
-      () => projectCountColors(k),
-    ),
+    cardsPill(() => projectWorkspaces(k)),
     Spacer({ minLength: 4 }),
     ...(canOpenProject(k) ? [glyphButton("plus", 20, 11, C.secondary, () => openProjectWorkspace(k))] : []),
   ])

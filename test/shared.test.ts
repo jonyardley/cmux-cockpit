@@ -5,7 +5,7 @@ import { installRenderer } from "./support/renderer.ts";
 const r = installRenderer();
 const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/activity.ts");
 const { glyphColor } = await import("../src/shared/contrast.ts");
-const { shade } = await import("../src/shared/shade.ts");
+const { hoverFace, shade } = await import("../src/shared/shade.ts");
 const { markLast } = await import("../src/shared/list.ts");
 const { NEUTRAL_CHIP, READY_INK, prChipColors, prInk, shownHealth } = await import("../src/shared/pr-colors.ts");
 const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, projectId, projectOf } = await import(
@@ -97,6 +97,19 @@ describe("shade", () => {
   });
   it("hands back anything that is not a 6- or 8-digit hex unchanged", () => {
     for (const odd of ["clear", "#FFF", "#GGGGGG", "FFFFFF"]) assert.equal(shade(odd, 0.5), odd);
+  });
+});
+
+describe("hoverFace", () => {
+  it("shades an opaque face and leaves it opaque", () => {
+    assert.equal(hoverFace("#FFFFFF", 0.5), shade("#FFFFFF", 0.5));
+  });
+  it("raises a faint face's alpha pair by a step, capped at FF", () => {
+    assert.equal(hoverFace("#FFFFFF1A", 0.5), "#8A8A892E");
+    assert.equal(hoverFace("#FFFFFFf0", 0), "#FFFFFFFF");
+  });
+  it("hands back anything that is not a hex unchanged", () => {
+    assert.equal(hoverFace("clear", 0.5), "clear");
   });
 });
 

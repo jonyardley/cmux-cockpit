@@ -8,7 +8,7 @@ import { installRenderer, nodeOf, recordModifiers, type ViewNode } from "./suppo
 
 const r = installRenderer();
 const ui = await import("../src/shared/ui.ts");
-const { NEUTRAL_CHIP } = await import("../src/shared/pr-colors.ts");
+const { NEUTRAL_CHIP, prChipColors } = await import("../src/shared/pr-colors.ts");
 const { P } = await import("../src/shared/palette.ts");
 const { PROJECTS } = await import("../src/shared/projects.ts");
 
@@ -91,17 +91,15 @@ describe("the shared builders read what they are handed", () => {
     assert.equal(read(hover.edge), NEUTRAL_CHIP.edge);
   });
 
-  it("chipHover gives a chip with no face a link's box, since a clear face has nothing to darken", () => {
+  it("chipHover lifts a faint state face a step more opaque, so its hover shows", () => {
     const read = (v: Reactive<string> | undefined): string | undefined => (typeof v === "function" ? v() : v);
-    const words = { bg: "clear", fg: P.greenDeep, edge: "clear" };
-    assert.equal(read(ui.chipHover(() => words).face), P.linkHover);
-    assert.equal(read(ui.chipHover(() => words).edge), P.linkEdge);
-    const idle = ui.chipHover(
-      () => words,
-      () => false,
-    );
-    assert.equal(read(idle.face), "clear");
-    assert.equal(read(idle.edge), "clear");
+    const alpha = (hex: string | undefined): number => Number.parseInt((hex ?? "").slice(7, 9), 16);
+    for (const health of ["ready", "failing", "running"] as const) {
+      const rest = prChipColors(health);
+      const face = read(ui.chipHover(() => rest).face);
+      assert.notEqual(face, rest.bg);
+      assert.ok(alpha(face) > alpha(rest.bg), health + " face " + face + " over " + rest.bg);
+    }
   });
 
   it("openIfUrl opens a url and ignores a missing one", () => {

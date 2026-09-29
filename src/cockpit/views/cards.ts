@@ -108,7 +108,7 @@ function fullCard(w: WsAccessor, key: string): View {
         // Left-aligned by the frame, not a Spacer, as the chips row is.
         .frame({ maxWidth: "infinity", alignment: "leading" }),
       // The PR and branch under the status, then the message.
-      chipsRow(w, true),
+      chipsRow(w, true, "still"),
       detailLine(w, "detail", 2),
       progressBar(w, "full-progress"),
     ])

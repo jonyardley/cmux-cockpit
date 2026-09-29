@@ -17,7 +17,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 Spacer minLength: 4
                 ForEach .opacity(1) .layoutPriority(2)
                   VStack spacing: 0, alignment: leading .padding(1) .background(redChipEdge) .cornerRadius(6) .hoverBackground(#84342C38) .onTap()
-                    Text "1 failing" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(redText) .paddingHorizontal(6) .paddingVertical(1) .background(redChipFace) .cornerRadius(5) .hoverBackground(#B442371A)
+                    Text "1 failing" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(redText) .paddingHorizontal(6) .paddingVertical(1) .background(redChipFace) .cornerRadius(5) .hoverBackground(#B442372E)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
               Text "Recorded six scenes; the lanes one is the longest." .font(12) .color(secondary|badge|neutralChip.fg) .lineLimit(4) .truncation(tail) .paddingHorizontal(8) .paddingVertical(6) .frame(maxWidth: infinity, alignment: leading) .background(quote) .cornerRadius(6)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(12)

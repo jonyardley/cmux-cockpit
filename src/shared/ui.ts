@@ -4,7 +4,7 @@ import { glyphColor } from "./contrast.ts";
 import { P } from "./palette.ts";
 import type { ChipColors } from "./pr-colors.ts";
 import type { Project } from "./projects.ts";
-import { shade } from "./shade.ts";
+import { hoverFace, shade } from "./shade.ts";
 import { tracked } from "./text.ts";
 
 /**
@@ -122,16 +122,16 @@ const FACE_STEP = 0.07;
 const EDGE_STEP = 0.35;
 
 /**
- * A chip's hover: its own face and edge, each a step darker. A chip with
- * no face ("clear") takes a link's box instead, as linkBox does. Worked out once per colour change. With `live` false
- * (nothing to open) the chip keeps its resting look.
+ * A chip's hover: its own face and edge, each a step darker; a faint face
+ * (a hue with an alpha pair) also a step more opaque, or its hover would
+ * barely show (hoverFace). Worked out once per colour change. With `live`
+ * false (nothing to open) the chip keeps its resting look.
  */
 export function chipHover(colors: () => ChipColors, live: () => boolean = () => true): Hover {
   const lit = computed(() => {
     const c = colors();
     if (!live()) return { face: c.bg, edge: c.edge };
-    if (c.bg === "clear") return { face: P.linkHover, edge: P.linkEdge };
-    return { face: shade(c.bg, FACE_STEP), edge: shade(c.edge, EDGE_STEP) };
+    return { face: hoverFace(c.bg, FACE_STEP), edge: shade(c.edge, EDGE_STEP) };
   });
   return { face: () => lit().face, edge: () => lit().edge };
 }
@@ -260,9 +260,9 @@ export const QUIET_PILL: PillColors = { bg: P.countBg, fg: P.metaText };
 
 /**
  * A header's count pill, one look on both sides. An empty count shows no
- * pill at all, so a caller hides it by passing "" (the agents panel does at
- * zero; the cockpit shows its 0). `colors` tints it by the most urgent
- * session behind the count; grey without it.
+ * pill at all: the agents panel passes "" for a section header with no
+ * count. Both sides show a 0 as a pill. `colors` tints it by the most
+ * urgent session behind the count; grey without it.
  */
 export function countPill(count: () => string, colors: () => PillColors = () => QUIET_PILL): View {
   const has = () => count() !== "";

@@ -32,6 +32,10 @@ const needsWs = () => ws("needs", { agents: [agent("needs_input", { sinceEpoch: 
 const askWs = () => ws("ask", { agents: [agent("needs_input", { sinceEpoch: 1000, lastActivityAt: 1000 })] });
 const workingWs = () => ws("working", { agents: [agent("working", { sinceEpoch: 1000 })] });
 const idleWs = () => ws("idle", { agents: [agent("idle"), agent("ended")] });
+// Working, but silent past QUIET_SECS: the hollow blue dot, still working.
+const quietWs = () => ws("quiet", { agents: [agent("working", { sinceEpoch: 100, lastActivityAt: 400 })] });
+// Finished with output unread: Ready, the finished green.
+const readyWs = () => ws("ready", { unread: 2, agents: [agent("idle", { lastActivityAt: 1000 })] });
 
 beforeEach(() => {
   r.data.epoch = 1060;
@@ -50,6 +54,18 @@ describe("urgencyOf", () => {
     assert.equal(status.urgencyOf(idleWs()), "quiet");
     assert.equal(status.urgencyOf(ws("none")), "quiet");
     assert.equal(status.urgencyOf(undefined), "quiet");
+  });
+
+  it("reads a quiet working agent as working, and Ready as quiet", () => {
+    assert.equal(status.statusInfo(quietWs()).ring, C.blue);
+    assert.equal(status.urgencyOf(quietWs()), "working");
+    assert.equal(status.isReady(readyWs()), true);
+    assert.equal(status.urgencyOf(readyWs()), "quiet");
+  });
+
+  it("is always the urgency the card's status carries, so the pill and the dot agree", () => {
+    for (const w of [needsWs(), askWs(), workingWs(), idleWs(), quietWs(), readyWs(), ws("none")])
+      assert.equal(status.urgencyOf(w), status.statusInfo(w).urgency, w.id);
   });
 });
 
@@ -101,10 +117,9 @@ describe("lane and project count pills", () => {
       model.laneWorkspaces("main").map((w) => w.id),
       ["working", "idle"],
     );
-    assert.equal(model.laneCount("main"), 2);
-    assert.deepEqual(model.laneCountColors("main"), { bg: C.blueCount, fg: C.blueText });
-    assert.deepEqual(model.laneCountColors("parked"), { bg: C.clayCount, fg: C.clayText });
-    assert.deepEqual(model.laneCountColors("review"), QUIET_PILL);
+    assert.deepEqual(status.countColors(model.laneWorkspaces("main")), { bg: C.blueCount, fg: C.blueText });
+    assert.deepEqual(status.countColors(model.laneWorkspaces("parked")), { bg: C.clayCount, fg: C.clayText });
+    assert.deepEqual(status.countColors(model.laneWorkspaces("review")), QUIET_PILL);
   });
 
   it("keeps the tint while the lane is folded", () => {
@@ -112,7 +127,7 @@ describe("lane and project count pills", () => {
     const parked = laneByKey("parked");
     if (!model.isCollapsed(parked)) model.toggleLane(parked);
     assert.equal(model.isCollapsed(parked), true);
-    assert.deepEqual(model.laneCountColors("parked"), { bg: C.clayCount, fg: C.clayText });
+    assert.deepEqual(status.countColors(model.laneWorkspaces("parked")), { bg: C.clayCount, fg: C.clayText });
   });
 
   it("lists the same cards the project counts, and tints by them", () => {
@@ -125,8 +140,10 @@ describe("lane and project count pills", () => {
       model.projectWorkspaces(k).map((w) => w.id),
       ["working", "idle"],
     );
-    assert.equal(model.projectCount(k), 2);
-    assert.deepEqual(model.projectCountColors(k), { bg: C.blueCount, fg: C.blueText });
-    assert.deepEqual(model.projectCountColors(model.projectKey(three)), { bg: C.clayCount, fg: C.clayText });
+    assert.deepEqual(status.countColors(model.projectWorkspaces(k)), { bg: C.blueCount, fg: C.blueText });
+    assert.deepEqual(status.countColors(model.projectWorkspaces(model.projectKey(three))), {
+      bg: C.clayCount,
+      fg: C.clayText,
+    });
   });
 });

@@ -187,13 +187,14 @@ describe("the card", () => {
   it("leads the chips with the size, and has no size chip when the line gives no clue", () => {
     const decide = cockpit.chipsFor(at("decide", [waiting("decide", 1000)], { branch: "arch" }), true);
     assert.deepEqual(
-      decide.map((c) => [c.id, c.text]),
+      decide.map((c) => [c.id, c.id === "pr" ? c.tag : c.text]),
       [
         ["size", "Decide · 2"],
         ["br", "arch"],
       ],
     );
-    assert.equal(decide[0]?.size, "decide");
+    const [size] = decide;
+    assert.equal(size?.id === "pr" ? null : size?.size, "decide");
     const plain = cockpit.chipsFor(at("plain", [waiting("plain", 1000)]), true);
     assert.deepEqual(plain, []);
     assert.equal(status.cardDetail(at("plain", [waiting("plain", 1000)])), "tell me which one you meant.");

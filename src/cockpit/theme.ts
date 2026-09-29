@@ -6,7 +6,7 @@ import { P } from "../shared/palette.ts";
 export const C = {
   ...P,
   card: "#FFFFFF",
-  hairline: "#E2DFD3",
+  hairline: P.chipEdge,
   cardEdge: "#1414131F",
   amberRowEdge: `${P.amberText}29`,
   // The Ready pill's face: the finished green, faint (issue #53).
