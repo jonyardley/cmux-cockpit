@@ -49,9 +49,10 @@ describe("the committed hook list", () => {
       "report-notification.ts",
       "report-pr.ts",
       "report-published.ts",
+      "report-rename.ts",
       "report-subagent.ts",
     ]);
-    assert.equal(WANTED.length, 9);
+    assert.equal(WANTED.length, 11);
   });
 
   it("refuses a source that is not the settings shape", () => {
@@ -132,7 +133,7 @@ describe("adding the hooks", () => {
     assert.ok(missing.some((m) => m.startsWith("PreToolUse [Agent]")));
     // A missing matcher and "" both mean every tool.
     assert.ok(!missing.some((m) => m.startsWith("PermissionRequest")));
-    assert.equal(missing.length, 7);
+    assert.equal(missing.length, 9);
   });
 
   it("spells each home form the same way", () => {
@@ -153,7 +154,7 @@ describe("removing the hooks", () => {
   it("takes out only the cockpit's, leaving the rest as it was", () => {
     const added = addEntries(theirs, missingEntries(theirs, WANTED, HOME));
     const { settings, removed } = removeEntries(added, WANTED, HOME);
-    assert.equal(removed, 9);
+    assert.equal(removed, 11);
     assert.deepEqual(settings, theirs);
   });
 

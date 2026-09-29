@@ -264,6 +264,12 @@ with `CLAUDE_CONFIG_DIR` set, setup, doctor and uninstall use
     "Stop": [
       { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-move.ts" }] }
     ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-rename.ts" }] }
+    ],
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-rename.ts" }] }
+    ],
     "SubagentStart": [
       { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
     ],
@@ -290,6 +296,8 @@ What each script turns on:
 - `report-published.ts`: the "Made here" list of published pages and docs.
 - `report-move.ts`: what a waiting chat wants from you ("Run /clear now.")
   on its card, with a chip saying how big a job it is.
+- `report-rename.ts`: a `/rename` in Claude Code renames the workspace
+  too, on your next message, so its sidebar row shows the new name.
 
 An older list had a `Stop` hook running `report-mention.ts`. The script
 is gone, so that entry would fail at the end of every turn: run
