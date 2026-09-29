@@ -566,10 +566,11 @@ function prTitle(w: Workspace, pr: PullRequest): string {
   return (/^pr$/i.test(label) ? "" : label) || pr.branch || displayTitle(w) || "";
 }
 
-// Every PR across workspaces, open first then merged then closed, newest
-// first within each; then Jon's own open PRs no workspace holds, newest
-// first. Workspace PRs rank first, so a long list of his own PRs in a busy
-// repo can never push a workspace's PR out of the cut to MAX_PRS.
+// Every PR, open first then merged then closed. Within each state the PRs
+// workspaces hold come before Jon's own that no workspace holds, newest first
+// in each, so finished work can never push his open PRs out of the cut to
+// MAX_PRS. The last sort is by state alone and keeps each group's order, since
+// Array.sort is stable.
 const allPrs = computed((): PrEntry[] => {
   const seen = new Set<string>();
   const workspaces = data.workspaces() ?? [];
@@ -577,7 +578,7 @@ const allPrs = computed((): PrEntry[] => {
   held.sort(byRankThenNewest);
   const own = ownPrs(new Map(workspaces.map((w) => [w.id, w])), seen);
   own.sort(byRankThenNewest);
-  return [...held, ...own];
+  return [...held, ...own].sort((x, y) => prRank(x.pr) - prRank(y.pr));
 });
 
 // Every workspace's PRs, once each, noting their urls in `seen`.
