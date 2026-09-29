@@ -5,7 +5,7 @@
 
 import { dismissNeeds } from "../../shared/needs.ts";
 import { NEUTRAL_CHIP, prChipColors, shownHealth } from "../../shared/pr-colors.ts";
-import { branchText, linkBox, META_FONT, meta, sectionTitle, tapChip, when } from "../../shared/ui.ts";
+import { branchText, linkBox, META_FONT, meta, motionList, sectionTitle, tapChip, when } from "../../shared/ui.ts";
 import {
   type AgentRow,
   agentRows,
@@ -117,7 +117,7 @@ function helpersBlock(): View {
           () =>
             VStack({ spacing: 0, alignment: "leading" }, [
               sectionTitle("HELPERS", T.secondary).paddingBottom(2),
-              ForEach({ items: () => helpers(), key: (e) => e.key }, (e) => subagentLine(e)),
+              motionList({ items: () => helpers(), key: (e) => e.key, spacing: 0 }, (e) => subagentLine(e)),
               faintHelperLine("cur-subs-more", () => (helperMore() > 0 ? "+" + helperMore() + " more" : "")),
             ]).frame({ maxWidth: "infinity", alignment: "leading" }),
         ),
@@ -167,7 +167,7 @@ function checksBlock(): View {
             .color(T.tertiary)
             .lineLimit(1),
         ]).paddingBottom(2),
-        ForEach({ items: () => checks(), key: (e) => e.key }, (e) => checkLine(e)),
+        motionList({ items: () => checks(), key: (e) => e.key, spacing: 0 }, (e) => checkLine(e)),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
         .paddingTop(12),
@@ -480,6 +480,6 @@ export function currentPanel(): View {
   const many = () => agentRows().length > 0;
   return panel([
     ruled(currentHead(), () => !many()),
-    ForEach({ items: () => agentRows(), key: (e) => e.key }, (e) => ruled(agentLine(e), () => e().last)),
+    motionList({ items: () => agentRows(), key: (e) => e.key, spacing: 0 }, (e) => ruled(agentLine(e), () => e().last)),
   ]);
 }
