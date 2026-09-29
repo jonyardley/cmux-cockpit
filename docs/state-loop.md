@@ -172,7 +172,8 @@ characters become spaces, cut to 120 characters, the branch when there is
 none) and `repo`, the common dir it was found in. Checks and the merge
 verdict are left out, so CI on a PR no workspace holds never rewrites the
 file or rebuilds. A fork's PR counts here, unlike for a workspace's branch.
-The agents panel's Pull requests list shows these after the workspaces'
+The agents panel's Pull requests list ranks every PR by state (open, then
+merged, then closed) and, within a state, shows these after the workspaces'
 own PRs, skipping any a workspace already shows. A repo whose lookup fails
 keeps its previous entries, and only its own; a repo no workspace sits in
 any more drops out. The poll writes `prs`, `ownPrs` and the subagent prune

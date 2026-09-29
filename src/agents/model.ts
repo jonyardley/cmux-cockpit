@@ -553,10 +553,10 @@ export function prChipText(e: Pick<PrEntry, "pr" | "summary">): string {
 /** A PR row chip's health, for its colour. */
 export const prChipHealth = (e: Pick<PrEntry, "summary">): PrHealth => e.summary?.health ?? "quiet";
 
+// A PR with no status ranks as open: only cmux sends one, for a PR a
+// workspace holds now, and the poller's own PRs always carry theirs.
 const PR_RANK: Record<PrStatus, number> = { open: 0, merged: 1, closed: 2 };
-const prRank = (pr: PullRequest): number => (pr.status ? PR_RANK[pr.status] : 3);
-const byRankThenNewest = (x: PrEntry, y: PrEntry): number =>
-  prRank(x.pr) - prRank(y.pr) || (y.pr.number ?? 0) - (x.pr.number ?? 0);
+const prRank = (pr: PullRequest): number => (pr.status ? PR_RANK[pr.status] : 0);
 
 // A real label (it is often just "PR"), else the branch, else the
 // workspace's title. The label and branch come first because the row's faint
@@ -568,17 +568,20 @@ function prTitle(w: Workspace, pr: PullRequest): string {
 
 // Every PR, open first then merged then closed. Within each state the PRs
 // workspaces hold come before Jon's own that no workspace holds, newest first
-// in each, so finished work can never push his open PRs out of the cut to
-// MAX_PRS. The last sort is by state alone and keeps each group's order, since
-// Array.sort is stable.
+// in each, so a merged or closed workspace PR can never push his open PRs out
+// of the cut to MAX_PRS. Open workspace PRs still can.
 const allPrs = computed((): PrEntry[] => {
   const seen = new Set<string>();
   const workspaces = data.workspaces() ?? [];
   const held = workspacePrs(workspaces, seen);
-  held.sort(byRankThenNewest);
   const own = ownPrs(new Map(workspaces.map((w) => [w.id, w])), seen);
-  own.sort(byRankThenNewest);
-  return [...held, ...own].sort((x, y) => prRank(x.pr) - prRank(y.pr));
+  const isOwn = new Set(own.map((e) => e.key));
+  return [...held, ...own].sort(
+    (x, y) =>
+      prRank(x.pr) - prRank(y.pr) ||
+      Number(isOwn.has(x.key)) - Number(isOwn.has(y.key)) ||
+      (y.pr.number ?? 0) - (x.pr.number ?? 0),
+  );
 });
 
 // Every workspace's PRs, once each, noting their urls in `seen`.

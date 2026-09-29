@@ -116,15 +116,18 @@ describe("the agents panel's Pull requests list", () => {
     );
   });
 
-  it("ranks Jon's own open PR above a workspace's merged one", () => {
+  it("ranks Jon's own open PR above a workspace's merged or closed one", () => {
     r.data.workspaces = [
       ws("w1", { title: "Workspace", branch: "feat" }),
       ws("done", { pr: { url: "https://github.com/o/r/pull/50", number: 50, status: "merged" } }),
+      ws("shut", { pr: { url: "https://github.com/o/r/pull/60", number: 60, status: "closed" } }),
+      // No status from cmux: a PR the workspace holds now, so it ranks as open.
+      ws("bare", { pr: { url: "https://github.com/o/r/pull/5", number: 5 } }),
     ];
     r.data.epoch++;
     assert.deepEqual(
       agents.prs().map((e) => e.pr.number),
-      [7, 42, 50],
+      [7, 5, 42, 50, 60],
     );
   });
 
