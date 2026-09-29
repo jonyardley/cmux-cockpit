@@ -10,7 +10,7 @@ import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
 import { prInk } from "../shared/pr-colors.ts";
-import { type Project, projectFor, projectOf, savedProjectChoice } from "../shared/projects.ts";
+import { type Project, projectOf, savedProjectFor } from "../shared/projects.ts";
 import {
   checksOf,
   fromPoller,
@@ -96,7 +96,7 @@ export const current = computed((): Current | null => {
   if (!w) return null;
   const inOrder = agentsOf(w);
   const agents = [...inOrder].sort(byActivity);
-  return { ws: w, a: agents[0] ?? null, agents, inOrder, project: projectFor(w.directory, savedProjectChoice(w.id)) };
+  return { ws: w, a: agents[0] ?? null, agents, inOrder, project: savedProjectFor(w.directory, w.id) };
 });
 
 /** The This workspace heading, with the selected workspace's project:
@@ -600,7 +600,7 @@ function workspacePrs(workspaces: readonly Workspace[], seen: Set<string>): PrEn
         title,
         summary,
         saved: fromPoller(w),
-        project: projectFor(w.directory, savedProjectChoice(w.id)),
+        project: savedProjectFor(w.directory, w.id),
         session: sessionOf(w),
       });
     }
@@ -624,7 +624,7 @@ function ownPrs(byId: ReadonlyMap<string, Workspace>, seen: Set<string>): PrEntr
       title: o.title,
       summary: summaryOf(pr, []),
       saved: true,
-      project: projectFor(opener?.directory ?? o.repo, savedProjectChoice(opener?.id)),
+      project: savedProjectFor(opener?.directory ?? o.repo, opener?.id),
       session: opener ? sessionOf(opener) : undefined,
     });
   }
@@ -697,7 +697,7 @@ function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, her
     // Not readable(): that is for agent chat, and would blank a title with
     // no Latin letters. The hook already checked it (isLabel).
     title: e.title.trim() || "Untitled",
-    project: projectFor(dirs.get(e.workspace), savedProjectChoice(e.workspace)),
+    project: savedProjectFor(dirs.get(e.workspace), e.workspace),
     here,
     epoch: e.epoch,
   };

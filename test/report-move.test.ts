@@ -153,7 +153,8 @@ describe("decisionsIn", () => {
   });
 
   it("does not take a bulleted situation for an option", () => {
-    const text = "**1. One**\n- I think the card is lean enough.\n- e.g. this one";
+    const text =
+      "**1. One**\n- I think the card is lean enough.\n- e.g. this one\n- a) the card is cut **Recommended**";
     assert.deepEqual(decisionsIn(text), { count: 0, leans: "" });
   });
 

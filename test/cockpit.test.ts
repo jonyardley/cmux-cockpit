@@ -1071,7 +1071,10 @@ describe("the selection override", () => {
 describe("data fields cmux may leave out (issue #7)", () => {
   beforeEach(setup);
 
-  it("shows an untitled workspace anchoring a nameless group as a card, not a placeholder", () => {
+  // A nameless group is never a lane group (lanes are found by name), so
+  // isGeneratedAnchor's nameless guard is for the type only; this checks
+  // that such a group leaves its workspace an ordinary card.
+  it("shows an untitled workspace anchoring a nameless group as a card", () => {
     r.data.groups = [...(r.data.groups ?? []), { id: "g-x", anchorId: "real" }];
     r.data.workspaces = [...(r.data.workspaces ?? []), ws("real", { title: "", group: "g-x" })];
     assert.equal(model.laneAnchorIds().has("real"), false);
@@ -1081,11 +1084,11 @@ describe("data fields cmux may leave out (issue #7)", () => {
     );
   });
 
-  it("ranks and draws an agent with no status without throwing", () => {
-    const bare = { id: "bare" };
-    const w = ws("w", { agents: [bare, agent("working")] });
-    assert.equal(status.statusOf(w), "working");
+  it("leaves out an agent with no status: no agent alone, and never counted live", () => {
+    const bare = { id: "bare", sinceEpoch: r.data.epoch - 720 };
+    assert.equal(status.statusOf(ws("w", { agents: [bare, agent("working")] })), "working");
     assert.equal(status.statusOf(ws("v", { agents: [bare] })), "none");
-    assert.doesNotThrow(() => status.statusLine(ws("v", { agents: [bare] })));
+    assert.equal(status.statusLine(ws("v", { agents: [bare] })), status.statusLine(ws("v")));
+    assert.deepEqual(needs.agentsOf(ws("v", { agents: [bare] })), []);
   });
 });

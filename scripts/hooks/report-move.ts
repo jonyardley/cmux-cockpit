@@ -29,8 +29,9 @@ const MOVE_LINE = /^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)?your move(?:\*\*|__)?\s*
 // as a bullet, "- **1. Where the card gets the line**".
 const DECISION = /^\s*(?:[-*]\s+)?\*\*([1-9])[.)]\s/;
 // An option under it: "> a) ...", "a) ...", "    a) ...", "> **a)** ...",
-// or a nested bullet, "    - **a.** ...".
-const OPTION = /^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)?([a-z])[.)](?:\*\*|__)?\s/;
+// or a bullet with a bold letter, "    - **a.** ...". A bullet needs the bold,
+// so a situation bullet such as "- a) the card is cut" stays prose.
+const OPTION = /^\s*(?:>\s*)?(?:[-*]\s+(?=\*\*|__))?(?:\*\*|__)?([a-z])[.)](?:\*\*|__)?\s/;
 // The marker on the option the reply recommends: "**Lean.**", "(lean)",
 // "**Recommended**". Only a marker: "keep the card lean" is prose.
 const LEAN = /(?:\*\*|__)(?:lean|recommended)[.:]?(?:\*\*|__)|\((?:lean|recommended)\)/i;

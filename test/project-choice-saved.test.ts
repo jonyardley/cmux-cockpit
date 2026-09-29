@@ -16,7 +16,7 @@ import { emptyState } from "../scripts/state-config.ts";
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const { projectFor, savedProjectChoice } = await import("../src/shared/projects.ts");
+const { projectFor, savedProjectFor } = await import("../src/shared/projects.ts");
 const m = await import("../src/agents/model.ts");
 
 describe("projectFor", () => {
@@ -30,10 +30,11 @@ describe("projectFor", () => {
   });
 
   it("reads the saved choice by workspace id", () => {
-    assert.equal(savedProjectChoice("moved"), "/dev/app-three");
-    assert.equal(savedProjectChoice("other"), undefined);
-    assert.equal(savedProjectChoice(undefined), undefined);
-    assert.equal(savedProjectChoice("toString"), undefined);
+    const dir = "/Users/coder/dev/app-one";
+    assert.equal(savedProjectFor(dir, "moved").name, "App Three");
+    assert.equal(savedProjectFor(dir, "other").name, "App One");
+    assert.equal(savedProjectFor(dir, undefined).name, "App One");
+    assert.equal(savedProjectFor(dir, "toString").name, "App One");
   });
 });
 
@@ -50,10 +51,12 @@ describe("the agents sidebar honours Move to project", () => {
     assert.equal(m.currentHeading(), "THIS WORKSPACE · App One");
   });
 
-  it("draws an agent with no status as no agent, not a crash (issue #7)", () => {
-    const bare = { id: "bare" };
+  it("leaves out an agent with no status: no row, no agent in the heading (issue #7)", () => {
+    const bare = { id: "bare", sinceEpoch: r.data.epoch - 720 };
+    r.data.workspaces = [ws("w", { selected: true, agents: [bare, agent("working")] })];
+    assert.equal(m.cur().agents.length, 1);
     r.data.workspaces = [ws("w", { selected: true, agents: [bare] })];
-    assert.equal(m.dotFor(bare), m.dotFor(null));
-    assert.doesNotThrow(() => m.headStatus(bare));
+    assert.equal(m.cur().a, null);
+    assert.equal(m.headStatus(m.cur().a), m.headStatus(null));
   });
 });
