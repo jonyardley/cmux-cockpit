@@ -261,8 +261,8 @@ test("applySet accepts real-shaped ids and path project keys", () => {
   assert.deepEqual(dismissed.ok && dismissed.state.dismissed, { [ws]: { "claude/session@1 x": 100 } });
 });
 
-// Projects made in the sidebar (issue #9): keyed by their match, an absolute
-// lowercase directory, and validated as strictly as any other entry.
+// Projects made or edited in the sidebar (issue #9): keyed by their first
+// match, and validated as strictly as any other entry.
 const spec = { name: "Scratch", color: "#6A9BCC", icon: "folder.fill", root: "/Users/jon/dev/Scratch" };
 const specJson = JSON.stringify(spec);
 
@@ -282,10 +282,10 @@ test("applySet keeps a dotted match whole, since only the first dot splits the k
 test("applySet refuses a project with a bad match or spec", () => {
   const bad: [string, unknown][] = [
     ["projects.dev/scratch/", spec],
-    // "/" or one segment would match nearly every folder; no trailing "/" would match siblings.
+    // "/" or one segment would match nearly every folder.
     ["projects./", spec],
     ["projects./dev/", spec],
-    ["projects./dev/s", spec],
+    ["projects./dev", spec],
     ["projects./Users/jon/dev/scratch/", spec],
     [`projects./a/${"x".repeat(512)}/`, spec],
     ["projects./dev/s/", { ...spec, name: "" }],
@@ -296,12 +296,22 @@ test("applySet refuses a project with a bad match or spec", () => {
     ["projects./dev/s/", { ...spec, color: "#abc" }],
     ["projects./dev/s/", { ...spec, icon: "Music Note" }],
     ["projects./dev/s/", { ...spec, icon: "a..b" }],
-    ["projects./dev/s/", { ...spec, root: "~/dev/s" }],
+    ["projects./dev/s/", { ...spec, root: "~jon/dev/s" }],
+    ["projects./dev/s/", { removed: false }],
+    ["projects./dev/s/", { removed: true, name: "Scratch" }],
     ["projects./dev/s/", { ...spec, root: "dev/s" }],
     ["projects./dev/s/", { ...spec, root: 5 }],
     ["projects./dev/s/", "Scratch"],
   ];
   for (const [key, value] of bad) assert.equal(applySet(emptyState(), key, JSON.stringify(value)).ok, false, key);
+});
+
+test("applySet takes a projects.json project's edit or removal under its fragment, and a ~ root", () => {
+  const edit = { ...spec, root: "~/dev/s" };
+  const set = applySet(emptyState(), "projects./dev/s", JSON.stringify(edit));
+  assert.deepEqual(set.ok && set.state.projects, { "/dev/s": edit });
+  const gone = applySet(emptyState(), "projects./.config/cmux", JSON.stringify({ removed: true }));
+  assert.deepEqual(gone.ok && gone.state.projects, { "/.config/cmux": { removed: true } });
 });
 
 test("applySet accepts a project with no root", () => {
@@ -317,10 +327,16 @@ test("validateState drops bad projects and keeps good ones", () => {
       "/dev/bad/": { ...spec, color: 1 },
       relative: spec,
       "/dev/X/": spec,
-      "/dev/nodash": spec,
+      "/dev": spec,
+      "/dev/fragment": spec,
+      "/dev/gone": { removed: true },
     },
   };
-  assert.deepEqual(validateState(raw).projects, { "/dev/good/": spec });
+  assert.deepEqual(validateState(raw).projects, {
+    "/dev/good/": spec,
+    "/dev/fragment": spec,
+    "/dev/gone": { removed: true },
+  });
 });
 
 test("applySet sets and deletes the cockpit's view and folds under ui", () => {

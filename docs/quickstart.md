@@ -161,8 +161,9 @@ project in the cockpit's Projects view:
   header that opens a new workspace there.
 
 Setup writes a first one from the git repos you have open in cmux. This
-file is ignored by git too. You can also make a project from any card's
-menu later ("New project from this folder").
+file is ignored by git too. After that you can edit any project from its
+header's menu ("Edit project"), and make one from any card's menu ("New
+project from this folder").
 
 ### Build
 

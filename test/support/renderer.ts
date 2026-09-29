@@ -171,6 +171,14 @@ export function createRenderer(): Renderer {
     ProgressView: builder("ProgressView"),
     ForEach: list("ForEach"),
     Reorderable: list("Reorderable"),
+    // Its handlers are kept on the node, so a test can type into it.
+    TextField: (value: Reactive<string>, options: TextFieldOptions = {}) => {
+      const { onEdit, onSubmit, onCancel, ...shown } = options;
+      const field = view("TextField", [resolve(value), shown]);
+      const node = nodeOf(field);
+      if (node) Object.assign(node.handlers, { onEdit, onSubmit, onCancel });
+      return field;
+    },
     Button: (label: Reactive<string>) => {
       r.menu.push("button:" + (typeof label === "function" ? label() : label));
       return menuItem();

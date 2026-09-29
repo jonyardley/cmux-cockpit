@@ -12,8 +12,12 @@ export interface State {
   dismissed: Record<string, Record<string, number>>;
   /** wsId -> project key chosen by "Move to project" (issue #8). */
   projectOverride: Record<string, string>;
-  /** match path -> a project made in the sidebar, merged over projects.json at build (issue #9). */
-  projects: Record<string, ProjectSpec>;
+  /**
+   * project key -> a project made or edited in the sidebar (issue #9). The
+   * key is a sidebar-made project's folder, or a projects.json project's
+   * first match; either way the saved entry wins over the file at build.
+   */
+  projects: Record<string, SavedProject>;
   /**
    * wsId -> the pull request for the workspace's branch, found by
    * scripts/pr-poll.ts because cmux sends custom sidebars none (issue #7).
@@ -94,13 +98,22 @@ export interface UiState {
   collapsed?: Record<string, number>;
 }
 
-/** A project made in the sidebar. Its match is the key it is stored under. */
+/** A project made or edited in the sidebar. Its first match is the key it is stored under. */
 export interface ProjectSpec {
   name: string;
   color: string;
   icon: string;
   root?: string;
 }
+
+/** A projects.json project removed in the sidebar: deleting the entry would bring the file's back. */
+export interface ProjectRemoved {
+  removed: true;
+}
+
+export type SavedProject = ProjectSpec | ProjectRemoved;
+
+export const isRemoved = (p: SavedProject): p is ProjectRemoved => "removed" in p;
 
 /** A pull request as the poller saves it, shaped like renderer.d.ts's PullRequest. */
 export interface SavedPr {
@@ -283,12 +296,13 @@ function agentStarts(v: unknown): Record<string, number> | null {
 const projectKey = (v: unknown): string | null =>
   typeof v === "string" && v.length > 0 && v.length <= MAX_PROJECT_KEY ? v : null;
 
-// A sidebar-made project is keyed by its match: an absolute, lowercase
-// directory ending in "/", so it matches that folder and no sibling that
-// shares its prefix (projectOf adds the same "/" to the directory). At least
-// two segments deep, so no URL can plant a "/" that swallows every folder.
+// A saved project is keyed by its first match, lowercase and at least two
+// segments deep, so no URL can plant a "/" that swallows every folder. A
+// sidebar-made one is an absolute folder ending in "/", matching that folder
+// and no sibling that shares its prefix (projectOf adds the same "/" to the
+// directory); a projects.json one is its fragment, often with no trailing "/".
 const isMatchKey = (v: string): boolean =>
-  /^(\/[^/]+){2,}\/$/.test(v) && v.length <= MAX_PROJECT_KEY && v === v.toLowerCase();
+  /^(\/[^/]+){2,}\/?$/.test(v) && v.length <= MAX_PROJECT_KEY && v === v.toLowerCase();
 
 const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
 // SF Symbol names are dotted lowercase words, e.g. "music.note".
@@ -360,12 +374,21 @@ function isText(v: unknown, max: number): v is string {
 
 const isName = (v: unknown): v is string => isText(v, 64);
 
+// Exactly {"removed": true}, so a spec with a stray flag is not read as a removal.
+const isRemovedEntry = (v: unknown): boolean => isRecord(v) && v.removed === true && Object.keys(v).length === 1;
+
+function savedProject(v: unknown): SavedProject | null {
+  return isRemovedEntry(v) ? { removed: true } : projectSpec(v);
+}
+
 function projectSpec(v: unknown): ProjectSpec | null {
   if (!isRecord(v) || !isName(v.name) || !isHex(v.color) || !isSymbol(v.icon)) return null;
   const spec: ProjectSpec = { name: v.name, color: v.color, icon: v.icon };
   if (v.root === undefined) return spec;
+  // Absolute or under "~", as in projects.json: build.ts expands the "~".
   const root = v.root;
-  return typeof root === "string" && root.startsWith("/") && root.length <= MAX_PROJECT_KEY ? { ...spec, root } : null;
+  const rooted = typeof root === "string" && (root.startsWith("/") || root === "~" || root.startsWith("~/"));
+  return rooted && root.length <= MAX_PROJECT_KEY ? { ...spec, root } : null;
 }
 
 // Only a GitHub pull request page, since the sidebar opens it on a tap.
@@ -564,7 +587,7 @@ export function validateState(raw: unknown): State {
   return {
     dismissed: cleanMap(v.dismissed, agentStarts),
     projectOverride: cleanMap(v.projectOverride, projectKey),
-    projects: cleanMap(v.projects, projectSpec, isMatchKey),
+    projects: cleanMap(v.projects, savedProject, isMatchKey),
     prs: cleanMap(v.prs, savedPr),
     ownPrs: cleanMap(v.ownPrs, savedOwnPr, isPrUrl),
     subagents: cleanMap(v.subagents, savedSubagents),
@@ -641,10 +664,10 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
         : "projectOverride wants a project key string";
     }
     case "projects": {
-      const spec = projectSpec(parsed);
+      const spec = savedProject(parsed);
       return spec
         ? { ...state, projects: { ...state.projects, [id]: spec } }
-        : "projects wants {name, color: #rrggbb, icon: SF Symbol, root?}";
+        : "projects wants {name, color: #rrggbb, icon: SF Symbol, root?} or {removed: true}";
     }
     case "ui":
       return uiEntry(state, id, parsed);

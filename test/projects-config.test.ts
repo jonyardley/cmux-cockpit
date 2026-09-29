@@ -63,10 +63,65 @@ describe("mergeProjects (issue #9)", () => {
     assert.ok(validateProjects(merged.projects).ok);
   });
 
-  it("lets the file win on a shared match, a folder a file match claims, or a shared name", () => {
-    const merged = mergeProjects(file, { "/dev/a": spec("X"), "/dev/b2/sub/": spec("Y"), "/dev/z/": spec("A") });
+  it("drops a sidebar-made project in a folder a file match claims, or with a file project's name", () => {
+    const merged = mergeProjects(file, { "/dev/b2/sub/": spec("Y"), "/dev/z/": spec("A") });
     assert.equal(merged.projects.length, 2);
     assert.deepEqual(merged.kept, {});
+  });
+
+  it("marks the file's projects as seeded, and no others", () => {
+    const merged = mergeProjects(file, { "/dev/c/": spec("C") });
+    assert.deepEqual(
+      merged.projects.map((x) => x.seeded ?? false),
+      [true, true, false],
+    );
+  });
+
+  it("lets a saved edit win over the file project it is keyed by, keeping its matches", () => {
+    const edit = { ...spec("Bee"), root: "~/dev/b" };
+    const merged = mergeProjects(file, { "/dev/b": edit });
+    assert.deepEqual(merged.projects[1], { match: ["/dev/b", "/dev/b2"], ...edit, seeded: true });
+    assert.deepEqual(merged.kept, { "/dev/b": edit });
+    assert.ok(validateProjects(merged.projects).ok);
+  });
+
+  it("drops the file's root when the edit has none, so the header loses its +", () => {
+    const withRoot: Project[] = [{ ...file[0], root: "~/dev/a" } as Project, ...file.slice(1)];
+    const merged = mergeProjects(withRoot, { "/dev/a": spec("A") });
+    assert.equal(merged.projects[0]?.root, undefined);
+  });
+
+  it("leaves out a file project saved as removed, and keeps the removal", () => {
+    const merged = mergeProjects(file, { "/dev/a": { removed: true } });
+    assert.deepEqual(
+      merged.projects.map((x) => x.name),
+      ["B"],
+    );
+    assert.deepEqual(merged.kept, { "/dev/a": { removed: true } });
+  });
+
+  it("ignores a removal or a fragment key that no file project has", () => {
+    const merged = mergeProjects(file, { "/dev/gone": spec("Gone"), "/dev/c/": { removed: true } });
+    assert.equal(merged.projects.length, 2);
+    assert.deepEqual(merged.kept, {});
+  });
+
+  it("drops an edit that would give two projects one name, keeping the file's entry", () => {
+    const merged = mergeProjects(file, { "/dev/a": spec("B") });
+    assert.deepEqual(
+      merged.projects.map((x) => x.name),
+      ["A", "B"],
+    );
+    assert.deepEqual(merged.kept, {});
+  });
+
+  it("lets two file projects swap names in one merge", () => {
+    const merged = mergeProjects(file, { "/dev/a": spec("B"), "/dev/b": spec("A") });
+    assert.deepEqual(
+      merged.projects.map((x) => x.name),
+      ["B", "A"],
+    );
+    assert.ok(validateProjects(merged.projects).ok);
   });
 
   it("puts a deeper folder first, so a folder inside another stays reachable", () => {

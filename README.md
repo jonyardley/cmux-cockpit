@@ -62,9 +62,11 @@ Tested on cmux 0.64.25.
   in the Projects view, opening a new workspace there. Projects with no
   sessions fold into one "Quiet" line of icons at the bottom; tapping an
   icon does the same as "+", and one without a `root` sits dimmed with no
-  tap. A card's menu can also make its folder a project ("New project from
-  this folder"), then step its colour and icon or remove it; those live in
-  `config/state.json` and are merged after the file's projects at build.
+  tap. The file is the starting table: right-click any project's header
+  (or quiet row) and choose "Edit project" to rename it, pick its colour
+  and icon, change its folder or remove it, and a card's menu can make its
+  folder a new project ("New project from this folder"). Those edits live
+  in `config/state.json` and win over the file at build.
 - `helper/` and `scripts/`: the URL handler app that saves state, the
   build, the pull request poller and the Claude Code hooks
   ([docs/state-loop.md](docs/state-loop.md)).

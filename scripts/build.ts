@@ -9,8 +9,8 @@
 // config/state.json (gitignored, written by the URL handler) is read the
 // same way and injected as __STATE__, so a sidebar starts from whatever was
 // saved last (docs/state-loop.md), with __STATE_UNREADABLE__ true when the
-// file cannot be read, or an unreadable one was kept aside and is still there. Its `projects` map, projects made in the
-// sidebar (issue #9), is merged over the file's table first.
+// file cannot be read, or an unreadable one was kept aside and is still there. Its `projects` map, projects made or
+// edited in the sidebar (issue #9), is laid over the file's table first.
 //
 // config/url-token (gitignored, this user only) is made here on the first
 // build and baked in as __URL_TOKEN__, so the sidebars' cmux-cockpit://
@@ -115,8 +115,8 @@ const urlToken = loadUrlToken();
 const { state: saved, unreadable } = loadState();
 const merged = mergeProjects(loadProjects(), saved.projects);
 const projects = withExpandedRoots(merged.projects);
-// Only the in-app projects that survived the merge, so the sidebar never
-// offers to edit one the file overrode.
+// Only the saved projects that survived the merge, so the sidebar edits from
+// what actually shows.
 const state: State = { ...saved, projects: merged.kept };
 
 for (const name of ENTRIES) {

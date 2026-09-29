@@ -29,11 +29,13 @@ sidebars send on every set.
 | ----------------- | ------------------------------ | ----- |
 | `dismissed`       | `{"<agentId>": <epoch>, ...}`  | #5    |
 | `projectOverride` | `"<project key>"`, its first match path, e.g. `"/dev/alpha"` | #8    |
-| `projects`        | `{"name", "color": "#rrggbb", "icon": "<SF Symbol>", "root"?}` | #9    |
+| `projects`        | `{"name", "color": "#rrggbb", "icon": "<SF Symbol>", "root"?}`, or `{"removed": true}` | #9    |
 | `ui`              | `ui.mode`: `"all"` or `"projects"`; `ui.collapsed`: `{"lane:<key>" or "project:<key>": 0 or 1}` |       |
 
 The id is a workspace id, except for `projects`, where it is the project's
-match: an absolute, lowercase directory, and `ui`, whose only ids are `mode`
+first match (lowercase, at least two segments deep: a sidebar-made
+project's absolute folder, or a `projects.json` project's fragment such as
+`/dev/alpha`), and `ui`, whose only ids are `mode`
 and `collapsed`. `ui` exists because every rebuild hot-reloads the sidebar:
 without it, a PR poll or a dismissal would drop the cockpit back on All with
 its folds reset. A lane group's fold lives in cmux; its `lane:` flag only
@@ -64,10 +66,15 @@ nothing; if an earlier copy is still there and differs, the write keeps a
 second one beside it, named `config/state.json.unreadable.<ms>.bak`. The line stays while the copy is there: delete the copy once you
 have looked at it.
 
-The build merges `projects` over `config/projects.json`, and the file wins:
-an in-app project whose match or name is already taken is left out, and so
-is dropped from the `__STATE__` the sidebar sees, so the menu never offers
-to edit it. Projects in the file are never written by the loop.
+The build lays `projects` over `config/projects.json`, and the saved entry
+wins: one keyed by a file project's first match replaces its name, colour,
+icon and root (its matches stay, so a fragment that also catches that
+folder's worktrees keeps doing so), and `{"removed": true}` leaves it out.
+An edit that would give two projects one name is dropped and the file's
+entry kept. Any other key is a sidebar-made project, appended; one whose
+folder a file match claims, or whose name is taken, is left out. What was
+left out is also dropped from the `__STATE__` the sidebar sees. The file
+itself is never written by the loop: it is the starting table.
 
 ## Pull requests: the one map no URL writes
 

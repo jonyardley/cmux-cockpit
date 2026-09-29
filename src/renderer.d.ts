@@ -102,6 +102,23 @@ declare function ProgressView(): View;
 declare function ForEach<T>(options: ForEachOptions<T>, render: (item: () => T) => View): View;
 declare function Reorderable<T>(options: ReorderableOptions<T>, render: (item: () => T) => View): View;
 
+interface TextFieldOptions {
+  placeholder?: string;
+  /** Takes the keyboard when it mounts; true unless set false. */
+  autofocus?: boolean;
+  /** Every keystroke, with the whole text. */
+  onEdit?: (text: string) => void;
+  /** Return. */
+  onSubmit?: (text: string) => void;
+  /** Escape. */
+  onCancel?: () => void;
+}
+/**
+ * A one-line text input. Seen drawing and taking typing and Return on cmux
+ * 0.64.25 (2026-09-29). It draws no box of its own, so wrap it in ring().
+ */
+declare function TextField(value: Reactive<string>, options?: TextFieldOptions): View;
+
 declare function Button(label: Reactive<string>, action: () => void): MenuItem;
 // No Menu(): cmux drops submenus from a context menu without an error, so
 // leaving it undeclared makes the compiler refuse one (PR #26).
