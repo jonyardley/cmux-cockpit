@@ -194,7 +194,13 @@ function checksBlock(): View {
         when(
           "cur-checks-open",
           () => openChecks().length > 0,
-          () => motionList({ items: openChecks, key: (e) => e.key, spacing: 0 }, (e) => checkLine(e)).paddingTop(2),
+          () =>
+            // The gap on a wrapper: the list is a Reorderable, its own stack.
+            VStack({ spacing: 0, alignment: "leading" }, [
+              motionList({ items: openChecks, key: (e) => e.key, spacing: 0 }, (e) => checkLine(e)),
+            ])
+              .frame({ maxWidth: "infinity", alignment: "leading" })
+              .paddingTop(2),
         ),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })

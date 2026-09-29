@@ -54,21 +54,22 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 HStack spacing: 8
                   Image xmark.circle .font(12) .color(redText)
                   Text "1 failing · 1 running" .font(12) .weight(medium) .color(redText) .lineLimit(1)
-                Reorderable spacing: 0 .paddingTop(2)
-                  HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .fixed()
-                    ZStack .frame(width: 13, height: 13)
-                      Circle size: 13 .fill(clear)
-                      Circle size: 7 .fill(red) .stroke(clear) .strokeWidth(1.5)
-                    Text "lint" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-                    Spacer minLength: 4
-                    Text "failed" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
-                  HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .fixed()
-                    ZStack .frame(width: 13, height: 13)
-                      Circle size: 13 .fill(clear)
-                      Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
-                    Text "build" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-                    Spacer minLength: 4
-                    Text "running" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
+                VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(2)
+                  Reorderable spacing: 0
+                    HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .fixed()
+                      ZStack .frame(width: 13, height: 13)
+                        Circle size: 13 .fill(clear)
+                        Circle size: 7 .fill(red) .stroke(clear) .strokeWidth(1.5)
+                      Text "lint" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                      Spacer minLength: 4
+                      Text "failed" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
+                    HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .fixed()
+                      ZStack .frame(width: 13, height: 13)
+                        Circle size: 13 .fill(clear)
+                        Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
+                      Text "build" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                      Spacer minLength: 4
+                      Text "running" .font(11) .color(secondary|badge|neutralChip.fg) .lineLimit(1)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
               VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(16) .paddingBottom(12)
                 Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
