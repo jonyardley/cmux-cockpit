@@ -100,13 +100,16 @@ function isHidden(n: ViewNode): boolean {
   return opacity === 0 && n.mods.some((m) => m.name === "frame" && zeroHeight(m.values[0]));
 }
 
-// ForEach and Reorderable are structure, not something on screen: an empty
-// one (a when() that is off) prints nothing, and a full one's rows print at
-// its own level unless the list itself carries spacing or a modifier.
+// An empty list (a when() that is off) prints nothing. A full ForEach is
+// structure, its rows printed at its own level unless it carries spacing or
+// a modifier; a full Reorderable always prints, since cmux lays it out as
+// its own stack with its own spacing.
 const isList = (n: ViewNode): boolean => n.kind === "ForEach" || n.kind === "Reorderable";
+const flattens = (n: ViewNode): boolean =>
+  isList(n) && (!n.children.length || (n.kind === "ForEach" && !n.mods.length && !n.args.length));
 
 function print(n: ViewNode, depth: number, tokens: Tokens, out: string[]): void {
-  if (isList(n) && (!n.children.length || (!n.mods.length && !n.args.length))) {
+  if (flattens(n)) {
     for (const c of n.children) print(c, depth, tokens, out);
     return;
   }

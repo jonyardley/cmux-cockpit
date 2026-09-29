@@ -16,6 +16,19 @@ export function when(key: string, pred: () => boolean, view: () => View): View {
   return ForEach({ items: () => (pred() ? [{ id: key }] : []), key: (x) => x.id }, view);
 }
 
+/**
+ * A ForEach whose rows fade in and out and slide to a new place: cmux gives
+ * that motion only to a Reorderable, so this is one with every row pinned
+ * and its drag hooks doing nothing. A ForEach snaps. Spacing is required:
+ * a Reorderable is its own stack, so it does not take its parent's.
+ */
+export function motionList<T>(
+  opts: Omit<ReorderableOptions<T>, "onMove" | "onDragChange"> & { spacing: number },
+  render: (item: () => T) => View,
+): View {
+  return Reorderable({ ...opts, onMove: () => {}, onDragChange: () => {} }, (item) => render(item).fixed());
+}
+
 /** Board 1's halo is 3pt of soft colour round the dot: 13pt round a 7pt dot. */
 export const haloSize = (dot: number): number => dot + 6;
 

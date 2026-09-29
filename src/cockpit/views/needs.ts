@@ -4,7 +4,7 @@
 
 import { dismissNeeds } from "../../shared/needs.ts";
 import { displayTitle } from "../../shared/titles.ts";
-import { haloDot, meta, ring, sectionTitle, when } from "../../shared/ui.ts";
+import { haloDot, meta, motionList, ring, sectionTitle, when } from "../../shared/ui.ts";
 import { jumpNext, needsList, needsMore, needsShown, nextStep, revealWorkspace } from "../model.ts";
 import { ageOf, needsDetail, needsRowEdge, statusInfo } from "../status.ts";
 import { C } from "../theme.ts";
@@ -121,7 +121,7 @@ export function needsStrip(): View {
                 .weight("semibold")
                 .color(C.clayText),
             ]).paddingHorizontal(2),
-            ForEach({ items: needsShown, key: (w) => w.id }, (w) => needsRow(w)),
+            motionList({ items: needsShown, key: (w) => w.id, spacing: 6 }, (w) => needsRow(w)),
             moreLine(),
           ]).padding(9),
           C.needsBg,
