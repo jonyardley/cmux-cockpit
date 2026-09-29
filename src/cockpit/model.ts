@@ -14,8 +14,8 @@ import {
   newProject,
   PROJECTS,
   type Project,
+  projectFor,
   projectId,
-  projectOf,
   savedSpec,
 } from "../shared/projects.ts";
 import { type PrHealth, prHealth, prSummary } from "../shared/prs.ts";
@@ -29,6 +29,7 @@ import {
   isMode,
   isSelected,
   mode,
+  OVERRIDE_SECS,
   quietCollapsed,
   savedFolds,
   selectWorkspace,
@@ -41,8 +42,6 @@ import {
 } from "./state.ts";
 import { isReady, moveOf, readyAgent, sinceOf, statusOf } from "./status.ts";
 import { C } from "./theme.ts";
-
-const OVERRIDE_SECS = 4;
 
 // --- groups and lanes ---------------------------------------------------------------
 
@@ -65,7 +64,10 @@ export const groupForLane = (lane: Lane): WorkspaceGroup | null =>
 // a placeholder he renames shows as a card.
 function isGeneratedAnchor(g: WorkspaceGroup, w: Workspace | undefined): boolean {
   if (!w) return true;
-  return (w.title ?? "").trim().toLowerCase() === g.name.trim().toLowerCase();
+  // With no name there is nothing to match: a nameless group's untitled
+  // anchor is a real card, not a placeholder that "" === "" would hide.
+  const name = (g.name ?? "").trim().toLowerCase();
+  return name !== "" && (w.title ?? "").trim().toLowerCase() === name;
 }
 
 // Each lane group's generated anchor is not a real card; a real workspace
@@ -513,9 +515,7 @@ const OTHER: Project = { match: "other", name: "Other", color: P.grey, icon: "te
 
 export const projectKey = (w: Workspace): string => {
   tick();
-  const o = projectOverride.get(w.id);
-  if (o) return o;
-  const p = projectOf(w.directory);
+  const p = projectFor(w.directory, projectOverride.get(w.id));
   return PROJECTS.includes(p) ? projectId(p) : projectId(OTHER);
 };
 

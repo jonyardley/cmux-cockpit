@@ -10,7 +10,7 @@ import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
 import { prInk } from "../shared/pr-colors.ts";
-import { type Project, projectOf } from "../shared/projects.ts";
+import { type Project, projectOf, savedProjectFor } from "../shared/projects.ts";
 import {
   checksOf,
   fromPoller,
@@ -96,7 +96,7 @@ export const current = computed((): Current | null => {
   if (!w) return null;
   const inOrder = agentsOf(w);
   const agents = [...inOrder].sort(byActivity);
-  return { ws: w, a: agents[0] ?? null, agents, inOrder, project: projectOf(w.directory) };
+  return { ws: w, a: agents[0] ?? null, agents, inOrder, project: savedProjectFor(w.directory, w.id) };
 });
 
 /** The This workspace heading, with the selected workspace's project:
@@ -183,13 +183,13 @@ export const haloFor = (a: Agent | null, w: Workspace = cur().ws): string =>
 /** An agent's dot: its status colour, amber while asking, grey without one. */
 export function dotFor(a: Agent | null, w: Workspace = cur().ws): string {
   if (!a) return T.grey;
-  return isAsking(a, w) ? T.amber : (STATUS_DOT[a.status] ?? T.grey);
+  return isAsking(a, w) ? T.amber : (a.status && STATUS_DOT[a.status]) || T.grey;
 }
 
 /** The card head's status colour, amber while asking. */
 export function statusColor(a: Agent | null, w: Workspace = cur().ws): string {
   if (!a) return T.secondary;
-  return isAsking(a, w) ? T.amberText : (STATUS_TEXT[a.status] ?? T.secondary);
+  return isAsking(a, w) ? T.amberText : (a.status && STATUS_TEXT[a.status]) || T.secondary;
 }
 
 // Idle and ended agents count from when they finished (issue #98), as the
@@ -217,7 +217,7 @@ export function headStatus(a: Agent | null, w: Workspace = cur().ws): string {
 
 // The shared word for the agent's status, Asking while it asks.
 const statusWord = (a: Agent, w: Workspace): string =>
-  isAsking(a, w) ? ASKING_WORD : (STATUS_WORD[a.status] ?? a.status);
+  isAsking(a, w) ? ASKING_WORD : a.status ? (STATUS_WORD[a.status] ?? a.status) : NO_AGENT_WORD;
 
 // The card's details
 
@@ -600,7 +600,7 @@ function workspacePrs(workspaces: readonly Workspace[], seen: Set<string>): PrEn
         title,
         summary,
         saved: fromPoller(w),
-        project: projectOf(w.directory),
+        project: savedProjectFor(w.directory, w.id),
         session: sessionOf(w),
       });
     }
@@ -624,7 +624,7 @@ function ownPrs(byId: ReadonlyMap<string, Workspace>, seen: Set<string>): PrEntr
       title: o.title,
       summary: summaryOf(pr, []),
       saved: true,
-      project: projectOf(opener?.directory ?? o.repo),
+      project: savedProjectFor(opener?.directory ?? o.repo, opener?.id),
       session: opener ? sessionOf(opener) : undefined,
     });
   }
@@ -697,7 +697,7 @@ function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, her
     // Not readable(): that is for agent chat, and would blank a title with
     // no Latin letters. The hook already checked it (isLabel).
     title: e.title.trim() || "Untitled",
-    project: projectOf(dirs.get(e.workspace)),
+    project: savedProjectFor(dirs.get(e.workspace), e.workspace),
     here,
     epoch: e.epoch,
   };

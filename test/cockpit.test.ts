@@ -1046,3 +1046,49 @@ describe("saving the view and folds", () => {
     assert.equal(last[1]["lane:parked"], 0);
   });
 });
+
+describe("the selection override", () => {
+  beforeEach(setup);
+
+  it("shows a tapped card as selected at once, then lapses if cmux never publishes the change", () => {
+    const tapped = ws("tapped");
+    const other = ws("other", { selected: true });
+    state.selectWorkspace("tapped");
+    assert.equal(state.isSelected(tapped), true);
+    assert.equal(state.isSelected(other), false);
+    r.data.epoch += 5;
+    assert.equal(state.isSelected(tapped), false);
+    assert.equal(state.isSelected(other), true);
+  });
+
+  it("holds within the expiry window", () => {
+    state.selectWorkspace("tapped");
+    r.data.epoch += 4;
+    assert.equal(state.isSelected(ws("tapped")), true);
+  });
+});
+
+describe("data fields cmux may leave out (issue #7)", () => {
+  beforeEach(setup);
+
+  // A nameless group is never a lane group (lanes are found by name), so
+  // isGeneratedAnchor's nameless guard is for the type only; this checks
+  // that such a group leaves its workspace an ordinary card.
+  it("shows an untitled workspace anchoring a nameless group as a card", () => {
+    r.data.groups = [...(r.data.groups ?? []), { id: "g-x", anchorId: "real" }];
+    r.data.workspaces = [...(r.data.workspaces ?? []), ws("real", { title: "", group: "g-x" })];
+    assert.equal(model.laneAnchorIds().has("real"), false);
+    assert.equal(
+      model.cardWorkspaces().some((w) => w.id === "real"),
+      true,
+    );
+  });
+
+  it("leaves out an agent with no status: no agent alone, and never counted live", () => {
+    const bare = { id: "bare", sinceEpoch: r.data.epoch - 720 };
+    assert.equal(status.statusOf(ws("w", { agents: [bare, agent("working")] })), "working");
+    assert.equal(status.statusOf(ws("v", { agents: [bare] })), "none");
+    assert.equal(status.statusLine(ws("v", { agents: [bare] })), status.statusLine(ws("v")));
+    assert.deepEqual(needs.agentsOf(ws("v", { agents: [bare] })), []);
+  });
+});

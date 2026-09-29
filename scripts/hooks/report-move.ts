@@ -25,13 +25,18 @@ import { readTail, replyFrom, sleep } from "./transcript.ts";
 // The line's label as Jon's rules write it, after any markdown the terminal
 // would not show (a quote, bold, a list marker).
 const MOVE_LINE = /^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)?your move(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(.+)$/i;
-// A decision's heading: "**1. Where the card gets the line**".
-const DECISION = /^\s*\*\*([1-9])[.)]\s/;
-// An option under it: "> a) ...", "a) ...", "    a) ...", "> **a)** ...".
-const OPTION = /^\s*(?:>\s*)?(?:\*\*|__)?([a-z])[.)](?:\*\*|__)?\s/;
+// A decision's heading: "**1. Where the card gets the line**", or the same
+// as a bullet, "- **1. Where the card gets the line**".
+const DECISION = /^\s*(?:[-*]\s+)?\*\*([1-9])[.)]\s/;
+// An option under it: "> a) ...", "a) ...", "    a) ...", "> **a)** ...",
+// or a bullet with a bold letter, "    - **a.** ...". A bullet needs the bold,
+// so a situation bullet such as "- a) the card is cut" stays prose.
+const OPTION = /^\s*(?:>\s*)?(?:[-*]\s+(?=\*\*|__))?(?:\*\*|__)?([a-z])[.)](?:\*\*|__)?\s/;
 // The marker on the option the reply recommends: "**Lean.**", "(lean)",
 // "**Recommended**". Only a marker: "keep the card lean" is prose.
 const LEAN = /(?:\*\*|__)(?:lean|recommended)[.:]?(?:\*\*|__)|\((?:lean|recommended)\)/i;
+// The same marker inside the option's bold label: "- **a. Recommended.** ...".
+const LEAN_LABEL = /^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)[a-z][.)]\s+(?:lean|recommended)[.:]?(?:\*\*|__)/i;
 // What ends a decision's options: a rule or a markdown heading.
 const BREAK = /^\s*(?:-{3,}|\*{3,}|_{3,}|#{1,6}\s)/;
 // A code fence's opening or closing line, in a quote or not.
@@ -82,7 +87,8 @@ export function decisionsIn(text: string): { count: number; leans: string } {
     const o = OPTION.exec(line)?.[1];
     if (!current || !o) continue;
     seen.add(current);
-    if (LEAN.test(line) && !leans.some((l) => l.startsWith(current))) leans.push(current + o);
+    if ((LEAN.test(line) || LEAN_LABEL.test(line)) && !leans.some((l) => l.startsWith(current)))
+      leans.push(current + o);
   }
   return { count: Math.min(seen.size, MAX_DECISIONS), leans: leans.join(" ") };
 }

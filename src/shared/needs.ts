@@ -143,9 +143,12 @@ function freshAsk(a: Agent, w: Workspace | undefined): SavedAsk | null {
 }
 
 /** A workspace's agents with nudges and dismissals applied, in the app's order. */
+// An agent cmux sends with no status is left out here, once, rather than at
+// each read: it could only draw as no agent yet count as live wherever a
+// read asks `status !== "ended"` (issue #7).
 export function agentsOf(w: Workspace | undefined): Agent[] {
   if (w) prune(w);
-  return (w?.agents ?? []).filter((a) => !!a).map((a) => effectiveAgent(a, w));
+  return (w?.agents ?? []).filter((a) => !!a?.status).map((a) => effectiveAgent(a, w));
 }
 
 /** True while any agent in the workspace is really asking, dismissed or not. */
