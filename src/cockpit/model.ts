@@ -323,6 +323,41 @@ export const panelOpacity = (m: ViewMode) => (): number => (isMode(m)() ? 1 : 0)
 /** Unbounded while `m` is the chosen mode, else 0: for `.frame({ maxHeight })`. */
 export const panelMaxHeight = (m: ViewMode) => (): number | "infinity" => (isMode(m)() ? "infinity" : 0);
 
+// --- Needs you ---------------------------------------------------------------------------
+
+/**
+ * Workspaces waiting on Jon, longest-waiting first. A lane's generated
+ * anchor counts too: it is off the cards, but an agent in it can still ask.
+ */
+const oldestFirst = (a: Workspace, b: Workspace): number => sinceOf(a) - sinceOf(b);
+
+export const needsList = computed(() =>
+  allWorkspaces()
+    .filter((w) => statusOf(w) === "needs_input")
+    .sort(oldestFirst),
+);
+
+// The strip lists this many rows, then "+N more" (issue #74), so a long queue
+// never pushes the lanes off screen.
+const NEEDS_ROWS = 4;
+
+export const needsShown = computed(() => needsList().slice(0, NEEDS_ROWS));
+
+/** How many waiting workspaces the strip leaves out. */
+export const needsMore = (): number => Math.max(0, needsList().length - NEEDS_ROWS);
+
+/**
+ * Real cards, less the ones the Needs you strip lists: those show there
+ * alone, not again in their lane or project and its count, and come back
+ * under their own title once answered or dismissed. One past the strip's
+ * cap keeps its card, so every session shows somewhere. Above the lanes and
+ * projects, since computed() runs on definition.
+ */
+export const listedCards = computed((): Workspace[] => {
+  const inStrip = new Set(needsShown().map((w) => w.id));
+  return cardWorkspaces().filter((w) => !inStrip.has(w.id));
+});
+
 // --- All mode: one flat list of lane headers and cards --------------------------------
 
 // A header's key carries the anchor it shows (issue #49), and an empty lane
@@ -384,7 +419,7 @@ function byState(rows: Workspace[]): Workspace[] {
 }
 
 const laneSections = computed((): LaneSection[] => {
-  const cards = cardWorkspaces();
+  const cards = listedCards();
   return LANES.map((lane) => ({
     lane,
     rows: byState(cards.filter((w) => laneOf(w) === lane.key)),
@@ -423,11 +458,12 @@ const LEFT_OFF_LANES: ReadonlySet<LaneKey> = new Set<LaneKey>(["bg", "parked"]);
 export const showsLeftOff = (w: Workspace | undefined): boolean => LEFT_OFF_LANES.has(actualLaneOf(w));
 
 /**
- * The cards a lane header counts, every real card in that lane, folded or
- * not. The header filters once per change and reads both its count and its
- * pill's tint (status.ts countColors) from the one list.
+ * The cards a lane header counts, every card it lists, folded or not: not
+ * the ones in the Needs you strip (listedCards). The header filters once per
+ * change and reads its count, its pill's tint (status.ts countColors) and,
+ * folded, its status dot from the one list.
  */
-export const laneWorkspaces = (laneKey: LaneKey): Workspace[] => cardWorkspaces().filter((w) => laneOf(w) === laneKey);
+export const laneWorkspaces = (laneKey: LaneKey): Workspace[] => listedCards().filter((w) => laneOf(w) === laneKey);
 
 /**
  * A lane header's merge line: "2 ready to merge" when that many of its
@@ -576,7 +612,7 @@ export function toggleProject(k: string): void {
   saveFolds();
 }
 /** The cards a project header counts and tints its pill by, as laneWorkspaces is for a lane. */
-export const projectWorkspaces = (k: string): Workspace[] => cardWorkspaces().filter((w) => projectKey(w) === k);
+export const projectWorkspaces = (k: string): Workspace[] => listedCards().filter((w) => projectKey(w) === k);
 
 /** Whether the project's header should offer "+": it has a folder to open. */
 export const canOpenProject = (k: string): boolean => !!projectByKey(k).root;
@@ -635,10 +671,10 @@ function pushEditor(entries: ProjectEntry[], k: string): void {
   if (editingProject() === k) entries.push({ kind: "editor", id: "e:" + k, project: k });
 }
 
-/** The cards grouped by project key, in one pass over the cards. */
+/** The listed cards grouped by project key, in one pass over the cards. */
 const cardsByProject = computed(() => {
   const groups = new Map<string, Workspace[]>();
-  for (const w of cardWorkspaces()) {
+  for (const w of listedCards()) {
     const k = projectKey(w);
     const rows = groups.get(k);
     if (rows) rows.push(w);
@@ -650,10 +686,12 @@ const cardsByProject = computed(() => {
 /**
  * Configured projects with no sessions, in table order (issue #54). They sit
  * under one "Quiet" header as a short row each rather than a full header.
+ * A project whose only sessions wait in Needs you is not quiet: it has no
+ * header until one comes back, as an empty lane has none.
  */
 export const quietProjects = computed(() => {
-  const groups = cardsByProject();
-  return PROJECTS.map(projectId).filter((k) => !groups.has(k) && !isRemovedProject(k));
+  const busy = new Set(cardWorkspaces().map(projectKey));
+  return PROJECTS.map(projectId).filter((k) => !busy.has(k) && !isRemovedProject(k));
 });
 
 /** Folds or unfolds the Quiet rows, kept across a reload. */
@@ -695,29 +733,6 @@ export const projectEntries = computed(() => {
   }
   return entries;
 });
-
-// --- Needs you ---------------------------------------------------------------------------
-
-/**
- * Workspaces waiting on Jon, longest-waiting first. A lane's generated
- * anchor counts too: it is off the cards, but an agent in it can still ask.
- */
-const oldestFirst = (a: Workspace, b: Workspace): number => sinceOf(a) - sinceOf(b);
-
-export const needsList = computed(() =>
-  allWorkspaces()
-    .filter((w) => statusOf(w) === "needs_input")
-    .sort(oldestFirst),
-);
-
-// The strip lists this many rows, then "+N more" (issue #74), so a long queue
-// never pushes the lanes off screen.
-const NEEDS_ROWS = 4;
-
-export const needsShown = computed(() => needsList().slice(0, NEEDS_ROWS));
-
-/** How many waiting workspaces the strip leaves out. */
-export const needsMore = (): number => Math.max(0, needsList().length - NEEDS_ROWS);
 
 // Next (issue #74)
 
@@ -791,8 +806,9 @@ export function jumpNext(): void {
  */
 export function revealWorkspace(w: Workspace | undefined): void {
   if (!w) return;
-  if (!laneAnchorIds().has(w.id)) unfoldCardOf(w);
-  else chooseMode("all");
+  if (laneAnchorIds().has(w.id)) chooseMode("all");
+  // One the strip lists has no card to unfold: its strip row is where it shows.
+  else if (listedCards().some((x) => x.id === w.id)) unfoldCardOf(w);
   selectWorkspace(w.id);
 }
 

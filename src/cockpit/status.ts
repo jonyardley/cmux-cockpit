@@ -170,15 +170,26 @@ const COUNT_TINT: Record<Urgency, PillColors> = {
 /** A workspace's urgency: the one its card's status (statusInfo) carries. */
 export const urgencyOf = (w: Workspace | undefined): Urgency => statusInfo(w).urgency;
 
-/** The most urgent of the workspaces' urgencies; quiet with none. Stops at the first needs you, since nothing ranks above it. */
-export function mostUrgent(ws: readonly Workspace[]): Urgency {
+/**
+ * The first of the workspaces at the highest urgency above quiet, or
+ * undefined when all are quiet: whose dot a folded header shows. Stops at
+ * the first needs you, since nothing ranks above it.
+ */
+export function mostUrgentOf(ws: readonly Workspace[]): Workspace | undefined {
   let best = URGENCY_RANK.length - 1;
+  let lead: Workspace | undefined;
   for (const w of ws) {
-    best = Math.min(best, URGENCY_RANK.indexOf(urgencyOf(w)));
+    const rank = URGENCY_RANK.indexOf(urgencyOf(w));
+    if (rank >= best) continue;
+    best = rank;
+    lead = w;
     if (best === 0) break;
   }
-  return URGENCY_RANK[best] ?? "quiet";
+  return lead;
 }
+
+/** The most urgent of the workspaces' urgencies; quiet with none. */
+export const mostUrgent = (ws: readonly Workspace[]): Urgency => urgencyOf(mostUrgentOf(ws));
 
 /** A count pill's colours for the workspaces it counts: its most urgent session's hue, else grey. */
 export const countColors = (ws: readonly Workspace[]): PillColors => COUNT_TINT[mostUrgent(ws)];
@@ -241,7 +252,7 @@ export function openPrLabel(pr: Pick<PrSummary, "tag" | "url"> | undefined): str
   return pr.url ? "Open PR " + pr.tag : "PR " + pr.tag + " has no link";
 }
 
-/** True when statusLine carries a time, so the full card leaves its top-right one off. */
+/** True when statusLine carries a time, so a card leaves its top-right one off. */
 export const statusHasAge = (w: Workspace | undefined): boolean => cardAge(w) !== "";
 
 function cardAge(w: Workspace | undefined): string {

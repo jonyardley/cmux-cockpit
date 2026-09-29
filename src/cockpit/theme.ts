@@ -29,6 +29,8 @@ export const C = {
   laneParked: "#B0AEA5",
   laneUnsorted: "#C9C6BB",
   select: "#3D3D3A",
+  // The selected card's outline: ink at a third, lighter than a drag's.
+  selectEdge: "#14141357",
   // A text field's edge: the field draws none of its own.
   fieldEdge: "#14141333",
   heading: "#3D3D3A",

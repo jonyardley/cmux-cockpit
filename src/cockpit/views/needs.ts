@@ -4,9 +4,9 @@
 
 import { dismissNeeds } from "../../shared/needs.ts";
 import { displayTitle } from "../../shared/titles.ts";
-import { haloDot, meta, motionList, ring, sectionTitle, when } from "../../shared/ui.ts";
+import { countPill, haloDot, meta, motionList, ring, sectionTitle, when } from "../../shared/ui.ts";
 import { jumpNext, needsList, needsMore, needsShown, nextStep, revealWorkspace } from "../model.ts";
-import { ageOf, needsDetail, needsRowEdge, statusInfo } from "../status.ts";
+import { ageOf, countColors, needsDetail, needsRowEdge, statusInfo } from "../status.ts";
 import { C } from "../theme.ts";
 import { cardMenu, glyphButton, type WsAccessor } from "./parts.ts";
 
@@ -112,15 +112,15 @@ export function needsStrip(): View {
       VStack({ spacing: 0 }, [
         ring(
           VStack({ alignment: "leading", spacing: 6 }, [
+            // The count in a pill after the name, tinted as a lane's is.
             HStack({ spacing: 7 }, [
-              Image("bell.fill").font(10).color(C.clayText),
               sectionTitle("NEEDS YOU", C.clayText),
-              Spacer(),
-              Text(() => String(needsList().length))
-                .font(10.5)
-                .weight("semibold")
-                .color(C.clayText),
-            ]).paddingHorizontal(2),
+              countPill(
+                () => String(needsList().length),
+                () => countColors(needsList()),
+              ),
+              Spacer({ minLength: 0 }),
+            ]).paddingHorizontal(5),
             motionList({ items: needsShown, key: (w) => w.id, spacing: 6 }, (w) => needsRow(w)),
             moreLine(),
           ]).padding(9),

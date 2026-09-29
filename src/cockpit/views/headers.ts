@@ -1,7 +1,7 @@
 // The segmented mode control and the lane and project section headers.
 
 import { isProjectKey } from "../../shared/projects.ts";
-import { countPill, laneTitle, projectBadge, ring, sectionTitle, unreadBadge } from "../../shared/ui.ts";
+import { countPill, laneTitle, projectBadge, ring, sectionTitle, unreadBadge, when } from "../../shared/ui.ts";
 import { dropLane } from "../drop.ts";
 import { editLabel, openEditor } from "../edit.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
@@ -24,7 +24,7 @@ import {
   wsById,
 } from "../model.ts";
 import { isMode, isSelected, projectsMode, quietCollapsed, selectWorkspace } from "../state.ts";
-import { countColors } from "../status.ts";
+import { countColors, mostUrgentOf } from "../status.ts";
 import { C } from "../theme.ts";
 import { glyphButton, statusDot } from "./parts.ts";
 
@@ -78,14 +78,23 @@ export function segmented(): View {
 const laneHeading = (name: string, color: string): View =>
   sectionTitle(name.toUpperCase(), color).truncation("tail").layoutPriority(1);
 
-// A header's count pill over its cards: one filter per change, read by both
-// the count and the tint.
-function cardsPill(cards: () => Workspace[]): View {
+// A header's count pill over its cards, then, while it is folded, the dot of
+// its most urgent session, so a folded header still says what is live under
+// it. One filter per change, read by the count, the tint and the dot.
+function cardsCount(cards: () => Workspace[], folded: () => boolean): View[] {
   const list = computed(cards);
-  return countPill(
-    () => String(list().length),
-    () => countColors(list()),
-  );
+  const lead = computed(() => (folded() ? mostUrgentOf(list()) : undefined));
+  return [
+    countPill(
+      () => String(list().length),
+      () => countColors(list()),
+    ),
+    when(
+      "folded-dot",
+      () => lead() !== undefined,
+      () => statusDot(lead, 7),
+    ),
+  ];
 }
 
 const CHEVRON_SLOT = { width: 12, height: 16 } as const;
@@ -157,7 +166,10 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
     laneMarker(lane.color),
     laneHeading(lane.name, laneKey === "parked" ? C.faint : C.secondary),
     ...(anchorId ? [anchorStatus(anchorId)] : []),
-    cardsPill(() => laneWorkspaces(laneKey)),
+    ...cardsCount(
+      () => laneWorkspaces(laneKey),
+      () => isCollapsed(lane),
+    ),
     Spacer({ minLength: 4 }),
     laneHint(laneKey, target),
   ])
@@ -265,7 +277,10 @@ export function projectHeader(k: string): View {
     chevron(() => isProjectCollapsed(k)),
     badge(k, 18, 10),
     laneTitle(p.name, C.heading),
-    cardsPill(() => projectWorkspaces(k)),
+    ...cardsCount(
+      () => projectWorkspaces(k),
+      () => isProjectCollapsed(k),
+    ),
     Spacer({ minLength: 4 }),
     ...(canOpenProject(k) ? [glyphButton("plus", 20, 11, C.secondary, () => openProjectWorkspace(k))] : []),
   ])

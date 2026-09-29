@@ -18,11 +18,10 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
   VStack spacing: 0 .paddingHorizontal(10) .paddingTop(6) .paddingBottom(8)
     VStack spacing: 0, alignment: leading .padding(1) .background(needsEdge) .cornerRadius(13)
       VStack alignment: leading, spacing: 6 .padding(9) .frame(maxWidth: infinity, alignment: leading) .background(needsBg) .cornerRadius(12)
-        HStack spacing: 7 .paddingHorizontal(2)
-          Image bell.fill .font(10) .color(clayText)
+        HStack spacing: 7 .paddingHorizontal(5)
           Text "N\u200aE\u200aE\u200aD\u200aS Y\u200aO\u200aU" .font(10.5) .weight(semibold) .color(clayText) .lineLimit(1)
-          Spacer
-          Text "1" .font(10.5) .weight(semibold) .color(clayText)
+          Text "1" .font(11) .weight(medium) .color(clayText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(clayCount) .cornerRadius(10)
+          Spacer minLength: 0
         Reorderable spacing: 6
           VStack spacing: 0, alignment: leading .padding(1) .background(needsRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(19) .fixed()
             HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8)
@@ -46,7 +45,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
             RoundedRectangle cornerRadius: 5 .fill(clay)
             Image star.fill .font(10) .weight(semibold) .color(text)
           Text "App One" .font(12.5) .weight(semibold) .color(laneMain|select|heading) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-          Text "2" .font(11) .weight(medium) .color(clayText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(clayCount) .cornerRadius(10)
+          Text "1" .font(11) .weight(medium) .color(blueText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(blueCount) .cornerRadius(10)
           Spacer minLength: 4
           ZStack .frame(width: 20, height: 20) .cornerRadius(10) .hoverBackground(hover) .onTap()
             Circle size: 20 .fill(clear)
@@ -58,33 +57,12 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
               Text "One: parser" .font(12.5) .weight(semibold) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
               Spacer minLength: 4
               Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
-              Text "7m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
             HStack spacing: 6 .frame(maxWidth: infinity) .paddingTop(2)
               ZStack .frame(width: 13, height: 13)
                 Circle size: 13 .fill(blueHalo)
                 Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
               Text "Working 7m" .font(12) .weight(medium) .color(blueText) .lineLimit(1) .layoutPriority(2)
               Spacer minLength: 0
-      VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(19) .fixed()
-        VStack spacing: 0, alignment: leading .padding(1) .background(cardEdge|dropTarget|anchorSelected) .cornerRadius(9) .frame(maxWidth: infinity)
-          VStack alignment: leading, spacing: 0 .frame(maxWidth: infinity, alignment: leading) .paddingHorizontal(10) .paddingVertical(8) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8) .hoverBackground(cardHover)
-            HStack spacing: 6 .frame(maxWidth: infinity)
-              Text "One: docs" .font(12.5) .weight(semibold) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
-              Spacer minLength: 4
-              Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
-              Text "1m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
-            HStack spacing: 6 .frame(maxWidth: infinity) .paddingTop(2)
-              ZStack .frame(width: 13, height: 13)
-                Circle size: 13 .fill(clayHalo)
-                Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
-              Text "Your turn 1m" .font(12) .weight(medium) .color(clayText) .lineLimit(1) .layoutPriority(2)
-              Spacer minLength: 0
-            Text "Read the draft in #142 and say go." .font(12) .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(2) .truncation(tail) .paddingTop(3) .frame(maxWidth: infinity, alignment: leading)
-            ForEach .paddingTop(3)
-              HStack spacing: 5 .frame(maxWidth: infinity, alignment: leading)
-                ForEach .layoutPriority(2)
-                  VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|hairline|neutralChip.edge) .cornerRadius(6)
-                    Text "Review" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(blueText) .paddingHorizontal(6) .paddingVertical(1) .background(chipFace|neutralChip.bg) .cornerRadius(5)
       VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .onTap() .fixed()
         HStack spacing: 8 .paddingHorizontal(8) .paddingVertical(5) .cornerRadius(8) .hoverBackground(hover) .frame(maxWidth: infinity) .contextMenu(3)
           Image chevron.right .font(10) .weight(semibold) .color(faint|laneBackground) .rotation(90) .frame(width: 12, height: 16)
@@ -103,7 +81,6 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
               ForEach .layoutPriority(2)
                 Text "Ready" .font(10.5) .weight(medium) .color(greenText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(readyBg) .cornerRadius(8)
               Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
-              Text "10m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
             HStack spacing: 6 .frame(maxWidth: infinity) .paddingTop(2)
               ZStack .frame(width: 13, height: 13)
                 Circle size: 13 .fill(clear)
@@ -131,7 +108,8 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
               Text "Scratch" .font(12.5) .weight(semibold) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
               Spacer minLength: 4
               Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
-              Text "" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              ForEach .layoutPriority(2)
+                Text "" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
             HStack spacing: 6 .frame(maxWidth: infinity) .paddingTop(2)
               ZStack .frame(width: 13, height: 13)
                 Circle size: 13 .fill(clear)
@@ -154,12 +132,12 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
 
 Colours
 blue #3B6FB6
+blueCount #3B6FB61F
 blueHalo #3B6FB62E
 blueText #2F5690
 cardEdge|dropTarget|anchorSelected #1414131F
 cardHover #F7F6F2
 chipEdge|hairline|neutralChip.edge #E2DFD3
-chipFace|neutralChip.bg #F1EFE8
 clay #D97757
 clayCount #D9775729
 clayHalo #D9775738

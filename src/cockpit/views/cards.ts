@@ -102,7 +102,7 @@ function fullCard(w: WsAccessor, key: string): View {
   const body = HStack({ spacing: 10, alignment: "top" }, [
     glyph(w, 26, 8, 12),
     VStack({ alignment: "leading", spacing: 4 }, [
-      titleRow(w, 13.5, true),
+      titleRow(w, 13.5),
       // No PR words here, Ready or not: the chips row below carries its chip (issue #79).
       HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12)])
         // Left-aligned by the frame, not a Spacer, as the chips row is.
@@ -158,9 +158,10 @@ export function compactCard(w: WsAccessor, key: string): View {
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
   ])
-    .paddingHorizontal(11)
-    .paddingVertical(9);
-  return cardChrome(body, w, key, 11);
+    .paddingLeading(10)
+    .paddingTrailing(12)
+    .paddingVertical(11);
+  return cardChrome(body, w, key, 12);
 }
 
 // "Row" density (Options board, .plain): dot, title, meta, then one line of

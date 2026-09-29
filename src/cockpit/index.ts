@@ -9,8 +9,9 @@
 //      first four of them, then "+N more".
 //   4. Lanes (cmux workspace groups matched by NAME): Main activity, For
 //      review, Background, Parked, then Unsorted (anything not in a lane).
-//      Cards sort by state inside a lane. An empty lane is a faint header
-//      with a "0" count, still a drop target.
+//      Cards sort by state inside a lane; one Needs you lists is not
+//      repeated there. An empty lane is a faint header with a "0" count,
+//      still a drop target.
 //
 // The lanes are ONE flat Reorderable of fixed headers plus card rows, so a
 // card can be dragged between lanes in one gesture (see drop.ts).
