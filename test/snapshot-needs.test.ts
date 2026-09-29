@@ -8,8 +8,14 @@ const r = seed({
   state: {
     asking: { ask: { reason: "allow npm publish?", epoch: EPOCH - 60 } },
     moves: {
-      n2: { text: 'reply "1b 2a" on the bridge and the store.', epoch: EPOCH - 900, decisions: 2, leans: "1b 2a" },
-      n3: { text: "the work is finished. Run /clear now.", epoch: EPOCH - 600 },
+      n2: {
+        text: 'reply "1b 2a" on the bridge and the store.',
+        epoch: EPOCH - 900,
+        session: "s-n2",
+        decisions: 2,
+        leans: "1b 2a",
+      },
+      n3: { text: "the work is finished. Run /clear now.", epoch: EPOCH - 600, session: "s-n3" },
     },
   },
 });
@@ -17,11 +23,12 @@ const { agent, ws } = await import("./support/fixtures.ts");
 await import("../src/cockpit/index.ts");
 const { C } = await import("../src/cockpit/theme.ts");
 // latestAt is the prompt that began the turn, two minutes before it ended,
-// so each saved move (epoch at the turn end) is newer than it.
+// so each saved move (epoch at the turn end) is newer than it. Each agent is
+// the Claude session that saved its workspace's move.
 const waiting = (id: string, title: string, secs: number, latestMessage?: string): Workspace =>
   ws(id, {
     title,
-    agents: [agent("needs_input", { sinceEpoch: ago(secs), lastActivityAt: ago(secs) })],
+    agents: [agent("needs_input", { id: "s-" + id, kind: "claude", sinceEpoch: ago(secs), lastActivityAt: ago(secs) })],
     latestAt: ago(secs + 120),
     ...(latestMessage ? { latestMessage } : {}),
   });

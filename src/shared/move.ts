@@ -4,7 +4,7 @@
 // through the saved state, never through the message itself.
 
 import type { SavedMove } from "../../scripts/state-config.ts";
-import { ASK_SLACK, isOwnSaved } from "./needs.ts";
+import { savedFor } from "./needs.ts";
 import { SAVED_STATE } from "./persist.ts";
 
 // wsId -> the move its chat last ended a turn on, fixed at build. A test can
@@ -15,34 +15,33 @@ function savedMoveFor(wsId: string): SavedMove | undefined {
 }
 
 // A turn end: Claude's Stop sets the agent idle, and the idle_prompt nudge
-// about 60s later moves it to needs_input (cmux v0.64.25,
-// Sources/Mobile/AgentChat/AgentChatSessionRegistry+Lifecycle.swift:89-98).
-// The sidebars may read that needs_input as idle again (isIdleNudge).
+// about 60s later moves it to needs_input, restamping sinceEpoch and
+// lastActivityAt. The cmux facts behind this and waitingMove are in
+// docs/state-loop.md, section "What cmux does (v0.64.25)".
 const atTurnEnd = (a: Agent): boolean => a.status === "idle" || a.status === "needs_input";
+
+// A move is `a`'s only when `a` is the Claude session that saved it. A new
+// session in the same workspace (/clear, a relaunch, --resume), an agent
+// still on its `pending-claude-` alias, a codex agent, or a move saved with
+// no session: none of them borrows it, since hiding a move is the safe side.
+const ownsMove = (saved: SavedMove, a: Agent): boolean =>
+  saved.session !== undefined && a.kind === "claude" && a.id === saved.session;
 
 /**
  * The move `a` is waiting on, or null. Pass `a` as the sidebars show it
  * (agentsOf) and `asking` from askReason. Only a turn end counts: idle or
  * needs_input, never working or ended, and never an ask. The move is current
- * while it is no older than the workspace's last prompt, ASK_SLACK aside.
- * cmux v0.64.25 moves latestAt on UserPromptSubmit (Workspace.swift:6643-6648),
- * so a new prompt, an interrupted turn and a mid-turn ask (each follows a
- * prompt) retire the move. In iMessage mode Stop also moves it
- * (WorkspacePromptSubmit.swift:75-81), at about the moment the hook saves,
- * which the slack covers. Notifications never touch it
- * (TerminalController.swift:6434), so the nudge, which restamps sinceEpoch
- * and lastActivityAt (AgentChatSessionRegistry.swift:501), leaves the move
- * showing. As with asks, when one of the workspace's agents carries the
- * move's session as its id, only that agent's turn end borrows it; before
- * the first hook the id can be a `pending-claude-` alias
- * (AgentChatSessionRegistry.swift:519-553), and then the move belongs to
- * the workspace.
+ * while it is no older than the workspace's last prompt (latestAt, which
+ * cmux moves on UserPromptSubmit and never on a notification), HOOK_SLACK
+ * aside, so a new prompt, an interrupted turn and a mid-turn ask retire it
+ * and the nudge does not. With no latestAt there is no telling how old the
+ * move is, so none shows. It must also be `a`'s own (ownsMove).
  */
 export function waitingMove(a: Agent | null | undefined, w: Workspace | undefined, asking: boolean): SavedMove | null {
   if (!a || !w || asking || !atTurnEnd(a)) return null;
-  const saved = savedMoveFor(w.id);
-  if (!saved || saved.epoch < (w.latestAt ?? 0) - ASK_SLACK) return null;
-  return isOwnSaved(saved, a, w) ? saved : null;
+  const promptAt = w.latestAt ?? 0;
+  if (promptAt <= 0) return null;
+  return savedFor(savedMoveFor(w.id), a, w, promptAt, ownsMove);
 }
 
 /**

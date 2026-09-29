@@ -435,7 +435,7 @@ older than a day, and `MAX_ENTRIES` caps the map.
 The sidebars read it back through `src/shared/needs.ts`'s `askReason`: a
 needs_input agent is asking when the workspace's saved ask is at least as
 new as the start of its current needs_input spell (`sinceEpoch`), give or
-take `ASK_SLACK` (3 seconds, since this hook and cmux's own fire on the
+take `HOOK_SLACK` (3 seconds, since this hook and cmux's own fire on the
 same event). When one of the workspace's agents carries the asking
 session as its id (unconfirmed whether cmux agent ids are session ids, as
 for saved subagent runs), only that agent is asking; otherwise the ask
@@ -506,15 +506,22 @@ and `MAX_ENTRIES` caps it.
 `src/shared/move.ts` shows the move while the agent is at a turn end and
 no prompt has come since it was saved: cmux says idle or needs_input (never
 working or ended), it is not an ask, and the move's `epoch` is no earlier
-than the workspace's `latestAt`, give or take `ASK_SLACK`. What cmux does,
-confirmed in the v0.64.25 source:
+than the workspace's `latestAt`, give or take `HOOK_SLACK`. With no
+`latestAt` (missing or 0) there is no telling how old the move is, so none
+shows. The slack rule is `savedFor` in `src/shared/needs.ts`, shared with
+asks.
+
+### What cmux does (v0.64.25)
+
+From the cmux source at that version:
 
 - Claude's Stop sets the agent idle
   (`Sources/Mobile/AgentChat/AgentChatSessionRegistry+Lifecycle.swift:98`).
   The idle_prompt Notification about 60s later moves it to needs_input and
   stamps `sinceEpoch` and `lastActivityAt` at its arrival (the same file,
   lines 89 to 97, and `AgentChatSessionRegistry.swift:501`). Every hook
-  event stamps `lastActivityAt`, so neither says when the agent last worked.
+  event stamps `lastActivityAt`, so neither says when the agent last worked,
+  and `isIdleNudge`'s gap check does not fire on this version (issue #4).
 - `latestMessage`, `latestPrompt` and `latestAt` belong to the workspace
   (`Workspace.swift:3052-3054`). UserPromptSubmit writes the prompt into
   both `latestPrompt` and `latestMessage` and sets `latestAt`
@@ -522,11 +529,15 @@ confirmed in the v0.64.25 source:
   `latestMessage` and `latestAt` only in iMessage mode, which is off by
   default (`WorkspacePromptSubmit.swift:6,75-81,200`). Notifications never
   write them (`TerminalController.swift:6434`).
+- Before an agent's first hook its id can be a `pending-claude-` alias
+  rather than the session id (`AgentChatSessionRegistry.swift:519-553`).
 
 So `latestAt` is, by default, when Jon last sent a prompt. A new prompt,
 a turn he interrupts and an ask in the middle of a turn all follow a
 prompt, so each retires the move; in iMessage mode Stop moves `latestAt`
-at about the moment the hook saves, which the slack covers. The nudge
+at about the moment the hook saves, which the slack covers. The hook
+stamps the move when it starts, before it may wait for the reply to be
+flushed, so a prompt sent during that wait is still newer. The nudge
 leaves `latestAt` alone, so the move survives it. By default
 `latestMessage` is Jon's own prompt, which `cardMessage` hides as an echo,
 so the move is often the only reply text a card has. The Needs you row
@@ -538,12 +549,11 @@ until then the agent is idle and the card reads idle, with the move and
 its chip already showing. That is cmux's behaviour, not the sidebar's. A
 dismissal reads as idle too, so it no longer hides the move.
 
-The session rule is the one asks use (`isOwnSaved` in
-`src/shared/needs.ts`): when one of the workspace's agents carries the
-move's session as its id, only that agent's turn end borrows it. Before
-the first hook an agent's id can be a `pending-claude-` alias
-(`AgentChatSessionRegistry.swift:519-553`); no agent then carries the
-session, and the move belongs to the workspace. The
+Ownership is stricter than for asks: the move shows only on a Claude agent
+whose id is the move's session. A move saved with no session, a new
+session in the same workspace (`/clear`, a relaunch, `--resume`), an agent
+still on its `pending-claude-` alias and a codex agent all show none, since
+a hidden move is the safe side and the next Stop saves a fresh one. The
 cockpit quotes it in place of the message on every card and on the Needs
 you row, adds it under the status on the Projects row, and leads the chips
 with a size: Decide (with the count past one) when the reply laid out
