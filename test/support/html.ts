@@ -39,6 +39,7 @@ const SYMBOLS: Record<string, string> = {
   "arrow.up": "↑",
   terminal: "▭",
   "star.fill": "★",
+  "pin.fill": "†",
   xmark: "✕",
   "checkmark.circle": "✓",
   "xmark.circle": "✕",
