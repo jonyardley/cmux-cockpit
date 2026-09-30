@@ -17,14 +17,14 @@ import { checksOf, prOf } from "../shared/prs.ts";
 import { nowEpoch } from "../shared/time.ts";
 import { displayTitle } from "../shared/titles.ts";
 import { type LaneKey, laneByKey } from "./lanes.ts";
-import { groups, laneAnchorIds, laneOf, moveToLane } from "./model.ts";
+import { isAnchor, laneAnchorIds, laneOf, moveToLane } from "./model.ts";
 import { drag } from "./state.ts";
 
 /** How long the notice naming a move stays up, in seconds. */
 export const NOTICE_SECS = 10;
 
 /** The PR state the lanes react to, read as the card's chip reads it. */
-const seenNow = (w: Workspace): PrSeen => prSeenOf(prOf(w), checksOf(w));
+export const seenNow = (w: Workspace): PrSeen => prSeenOf(prOf(w), checksOf(w));
 
 const RULES: Readonly<Record<PrSeen, { lane: LaneKey; why: string } | null>> = {
   ready: { lane: "review", why: "PR is ready" },
@@ -40,9 +40,6 @@ const seen = new Map<string, PrSeen>(Object.entries(savedSeen ?? {}));
 // The moves made in the last NOTICE_SECS, oldest first, so a pass that
 // files several cards names each one.
 let notices: { text: string; at: number }[] = [];
-
-// A workspace anchoring a group cannot leave it (drop.ts pins it), so it never moves.
-const isAnchor = (w: Workspace): boolean => groups().some((g) => g.anchorId === w.id);
 
 // A ready PR whose checks rerun reads "other" until they pass again. Only a
 // merge moves on from ready, so a push to a ready PR does not re-file a card

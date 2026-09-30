@@ -418,10 +418,10 @@ test("prSeen keeps a workspace's last seen PR state, and refuses anything else",
   assert.deepEqual(validateState({}).prSeen, {}, "a file from before the map reads as empty");
 });
 
-test("mergeKept keeps when Keep was tapped, and refuses anything but an epoch", () => {
+test("mergeKept keeps the kept PR's number, and refuses anything else", () => {
   const set = applySet(emptyState(), "mergeKept.w1", JSON.stringify(400));
   assert.deepEqual(set.ok && set.state.mergeKept, { w1: 400 });
-  for (const bad of [-1, "400", true, { at: 400 }])
+  for (const bad of [-1, 0, 1.5, "400", true, { at: 400 }])
     assert.equal(applySet(emptyState(), "mergeKept.w1", JSON.stringify(bad)).ok, false, String(bad));
   const cleared = set.ok ? applySet(set.state, "mergeKept.w1", null) : set;
   assert.deepEqual(cleared.ok && cleared.state.mergeKept, {});

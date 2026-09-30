@@ -82,9 +82,11 @@ export interface State {
    */
   prSeen: Record<string, PrSeen>;
   /**
-   * wsId -> epoch seconds Jon tapped Keep on its merged card, so the card
-   * stops offering Close workspace and Keep for good. Kept for the next
-   * build rather than rebuilding (rebuildsOn): the sidebar hides them itself.
+   * wsId -> the number of the merged PR Jon tapped Keep on, so that card
+   * stops offering Close workspace and Keep, and a later PR there offers
+   * them again. The poller drops an entry once the workspace's saved PR is
+   * another or gone. Kept for the next build rather than rebuilding
+   * (rebuildsOn): the sidebar hides them itself.
    */
   mergeKept: Record<string, number>;
   /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
@@ -313,7 +315,6 @@ export const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 
 const isEpoch = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
-const keptAt = (v: unknown): number | null => (isEpoch(v) ? v : null);
 
 function agentStarts(v: unknown): Record<string, number> | null {
   if (!isRecord(v)) return null;
@@ -512,6 +513,7 @@ function savedPublished(v: unknown): SavedPublished | null {
 }
 
 const isPrNumber = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 1;
+const keptPr = (v: unknown): number | null => (isPrNumber(v) ? v : null);
 const isIdText = (v: unknown): v is string => typeof v === "string" && isId(v);
 
 // The number a PR link ends in, so a saved number can be held to its link.
@@ -594,7 +596,7 @@ export function validateState(raw: unknown): State {
     asking: cleanMap(v.asking, savedAsk),
     moves: cleanMap(v.moves, savedMove),
     prSeen: cleanMap(v.prSeen, prSeen),
-    mergeKept: cleanMap(v.mergeKept, keptAt),
+    mergeKept: cleanMap(v.mergeKept, keptPr),
     ui: uiState(v.ui),
     ...(poll ? { poll } : {}),
   };
@@ -693,9 +695,9 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
         ? { ...state, prSeen: { ...state.prSeen, [id]: parsed } }
         : 'prSeen wants "ready", "merged" or "other"';
     case "mergeKept":
-      return isEpoch(parsed)
+      return isPrNumber(parsed)
         ? { ...state, mergeKept: { ...state.mergeKept, [id]: parsed } }
-        : "mergeKept wants an epoch";
+        : "mergeKept wants a PR number";
   }
 }
 
@@ -747,7 +749,7 @@ function isKeyFor(map: MapName, id: string): boolean {
  * and on each PR state change would loop.
  */
 const WRITE_ONLY: readonly string[] = ["ui", "prSeen", "mergeKept"];
-export const rebuildsOn = (key: string): boolean => !WRITE_ONLY.includes(key.split(".", 1)[0] ?? "");
+export const rebuildsOn = (key: string): boolean => !WRITE_ONLY.some((map) => key.startsWith(`${map}.`));
 
 /**
  * Applies one `set`: `key` is `<map>.<id>`, `value` the JSON for that entry,

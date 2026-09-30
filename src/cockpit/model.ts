@@ -49,6 +49,9 @@ import { C } from "./theme.ts";
 
 export const groups = (): WorkspaceGroup[] => data.groups() ?? [];
 
+/** A workspace anchoring a group: it cannot leave it (drop.ts pins it), and closing it would take the lane. */
+export const isAnchor = (w: Workspace): boolean => groups().some((g) => g.anchorId === w.id);
+
 export const groupForLane = (lane: Lane): WorkspaceGroup | null =>
   lane.key === "unsorted" ? null : (groups().find((g) => g.name === lane.name) ?? null);
 
@@ -944,7 +947,7 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
  * workspace anchoring one cannot leave it (drop.ts pins those too).
  */
 export function canFileForReview(w: Workspace | undefined): boolean {
-  return !!w && isReady(w) && laneOf(w) !== "review" && !groups().some((g) => g.anchorId === w.id);
+  return !!w && isReady(w) && laneOf(w) !== "review" && !isAnchor(w);
 }
 
 /** Files a Ready card into For review. */
