@@ -19,10 +19,11 @@ import {
   moveOf,
   needsInk,
   needsRowEdge,
+  OUTLINE_MAX,
+  outline,
   placeholderText,
   progressFraction,
   prTextColor,
-  selectRing,
 } from "../status.ts";
 import { C } from "../theme.ts";
 import {
@@ -239,14 +240,15 @@ function denseRow(w: WsAccessor, key: string): View {
     .paddingVertical(5);
   const dragged = () => drag()?.id === key;
   const on = () => dragged() || isSelected(w());
+  const edge = computed(() => outline(isSelected(w()), dragged(), "clear"));
   return ring(
     body,
     () => (on() ? C.card : "clear"),
-    () => (dragged() ? C.select : selectRing(isSelected(w()), "clear").color),
-    () => (dragged() ? 1.5 : selectRing(isSelected(w()), "clear").width),
+    () => edge().color,
+    () => edge().width,
     9,
     // The hover replaces the face: the wash on a clear row, a whole face on a lit one.
-    { hover: { face: () => (on() ? C.cardHover : C.hover) } },
+    { hover: { face: () => (on() ? C.cardHover : C.hover) }, steady: OUTLINE_MAX },
   )
     .opacity(() => cardOpacity(w(), on()))
     .frame({ maxWidth: "infinity" })
@@ -334,13 +336,14 @@ export function placeholderRow(w: WsAccessor): View {
   ])
     .paddingHorizontal(10)
     .paddingVertical(6);
-  const selected = () => isSelected(w());
+  const edge = computed(() => outline(isSelected(w()), false, needsRowEdge(w())));
   const face = ring(
     body,
     C.needsBg,
-    () => selectRing(selected(), needsRowEdge(w())).color,
-    () => selectRing(selected(), needsRowEdge(w())).width,
+    () => edge().color,
+    () => edge().width,
     9,
+    { steady: OUTLINE_MAX },
   ).frame({ maxWidth: "infinity" });
   return VStack({ spacing: 0 }, [face])
     .paddingBottom(4)

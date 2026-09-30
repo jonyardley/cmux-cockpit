@@ -57,8 +57,9 @@ import {
   ageOf,
   badgeCount,
   isReady,
+  OUTLINE_MAX,
   openPrLabel,
-  selectRing,
+  outline,
   statusHasAge,
   statusInfo,
   statusLine,
@@ -459,18 +460,21 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
   ];
 }
 
-// White card, hairline edge, a 2pt ink outline when selected (selectRing)
-// and 1.5pt ink while dragged.
+// White card, hairline edge, and outline()'s ink when selected or dragged.
 export function cardChrome(view: View, w: WsAccessor, key: string, radius: number): View {
   const dragged = () => drag()?.id === key;
   const lit = () => dragged() || isSelected(w());
+  const edge = computed(() => outline(isSelected(w()), dragged(), C.cardEdge));
   const face = ring(
     view,
     C.card,
-    () => (dragged() ? C.select : selectRing(isSelected(w()), C.cardEdge).color),
-    () => (dragged() ? 1.5 : selectRing(isSelected(w()), C.cardEdge).width),
+    () => edge().color,
+    () => edge().width,
     radius,
-    { hover: { face: C.cardHover } },
+    {
+      hover: { face: C.cardHover },
+      steady: OUTLINE_MAX,
+    },
   )
     .opacity(() => cardOpacity(w(), lit()))
     .frame({ maxWidth: "infinity" });

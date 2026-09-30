@@ -19,7 +19,7 @@ import {
   revealWorkspace,
 } from "../model.ts";
 import { isSelected } from "../state.ts";
-import { ageOf, countColors, needsInk, needsLine, needsRowEdge, selectRing } from "../status.ts";
+import { ageOf, countColors, needsInk, needsLine, needsRowEdge, OUTLINE_MAX, outline } from "../status.ts";
 import { C } from "../theme.ts";
 import { laneMarker } from "./headers.ts";
 import { cardMenu, glyph, glyphButton, type WsAccessor } from "./parts.ts";
@@ -60,17 +60,18 @@ function needsRow(w: WsAccessor): View {
     glyphButton("xmark", 16, 8.5, C.tertiary, () => dismissWaiting(w())),
   ])
     .paddingHorizontal(10)
-    .paddingVertical(9)
-    .hoverBackground(C.needsHover);
+    .paddingVertical(9);
   // The card's selection outline: a session the strip lists has no card
   // below to carry it.
-  const selected = () => isSelected(w());
+  const edge = computed(() => outline(isSelected(w()), false, needsRowEdge(w())));
   return ring(
     row,
     C.card,
-    () => selectRing(selected(), needsRowEdge(w())).color,
-    () => selectRing(selected(), needsRowEdge(w())).width,
+    () => edge().color,
+    () => edge().width,
     9,
+    // On the ring's face, so the hover also fills the steady padding.
+    { hover: { face: C.needsHover }, steady: OUTLINE_MAX },
   )
     .frame({ maxWidth: "infinity" })
     .onTap(() => revealWorkspace(w()))

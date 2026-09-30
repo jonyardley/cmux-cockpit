@@ -231,16 +231,23 @@ describe("showsChipsRow (issue #79)", () => {
   });
 });
 
-describe("selectRing", () => {
-  it("rings the selected workspace in ink at 2pt, stronger than a drag's 1.5pt", async () => {
+describe("outline", () => {
+  it("rings the selected workspace in ink at the widest, a drag in ink just under it", async () => {
     const { C } = await import("../src/cockpit/theme.ts");
-    assert.deepEqual(status.selectRing(true, C.cardEdge), { color: C.select, width: 2 });
-    assert.deepEqual(status.selectRing(true, "clear"), { color: C.select, width: 2 });
+    assert.deepEqual(status.outline(true, false, C.cardEdge), { color: C.select, width: status.OUTLINE_MAX });
+    assert.deepEqual(status.outline(true, true, C.cardEdge), { color: C.select, width: 1.5 });
+    assert.deepEqual(status.outline(false, true, "clear"), { color: C.select, width: 1.5 });
   });
 
   it("keeps the row's own resting edge at 1pt on the rest", async () => {
     const { C } = await import("../src/cockpit/theme.ts");
-    assert.deepEqual(status.selectRing(false, C.cardEdge), { color: C.cardEdge, width: 1 });
-    assert.deepEqual(status.selectRing(false, "clear"), { color: "clear", width: 1 });
+    assert.deepEqual(status.outline(false, false, C.cardEdge), { color: C.cardEdge, width: 1 });
+    assert.deepEqual(status.outline(false, false, "clear"), { color: "clear", width: 1 });
+  });
+
+  it("never draws wider than OUTLINE_MAX, which rings hold steady", () => {
+    for (const s of [true, false]) {
+      for (const d of [true, false]) assert.ok(status.outline(s, d, "clear").width <= status.OUTLINE_MAX);
+    }
   });
 });
