@@ -11,8 +11,14 @@
 // of numbered decisions the reply laid out and the options it leaned to.
 // A turn with no move line drops the workspace's saved one. The sidebar
 // shows a move only while no prompt has come since it was saved (cmux's
-// latestAt, src/shared/move.ts), so nothing here has to clear a stale one. It
-// never fails the hook: every problem is a note on stderr and exit 0.
+// latestAt, src/shared/move.ts), so nothing here has to clear a stale one.
+//
+// A final reply with neither label would read as Jon's turn once the idle
+// nudge lands, even when the chat is waiting on its own background work. So
+// in an interactive chat inside cmux, such a turn is sent back once for the
+// line (Claude Code's block decision on stdout, which dispatch.ts passes on
+// for this script alone), and nothing is saved until the turn really ends.
+// It never fails the hook: every problem is a note on stderr and exit 0.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -24,11 +30,15 @@ import { readTail, replyFrom, sleep } from "./transcript.ts";
 
 // The line's label as Jon's rules write it, after any markdown the terminal
 // would not show (a quote, bold, a list marker): "Your move:" when the turn
-// waits on Jon, "Nothing for you:" when it waits on the agent. Up to four
-// words may sit before the colon, since chats drift from the exact label:
-// "Nothing for you yet:", "Your move now:".
-const MOVE_LINE =
-  /^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)?(your move|nothing for you)(?:\s+[a-z'’]+){0,4}?(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(.+)$/i;
+// waits on Jon, "Nothing for you:" when it waits on the agent. One word of
+// drift may sit before the colon, inside the bold or after it ("Nothing for
+// you yet:", "**Your move** now:"); only these words, so a sentence such as
+// "Your move to main was blocked: ..." stays prose.
+const DRIFT = String.raw`(?:\s+(?:yet|now|right now|for now|so far|at the moment|here|today))?`;
+const MOVE_LINE = new RegExp(
+  String.raw`^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)?(your move|nothing for you)${DRIFT}(?:\*\*|__)?${DRIFT}\s*:\s*(?:\*\*|__)?\s*(.+)$`,
+  "i",
+);
 // A decision's heading: "**1. Where the card gets the line**", or the same
 // as a bullet, "- **1. Where the card gets the line**".
 const DECISION = /^\s*(?:[-*]\s+)?\*\*([1-9])[.)]\s/;
@@ -153,12 +163,10 @@ const TAIL_BYTES = 2 * 1024 * 1024;
 // How long to wait for the final reply to be flushed before the one reread.
 const RETRY_MS = 1500;
 
-/**
- * The turn's final reply: the event's own copy when Claude Code sends one,
- * else the transcript's, read again once if no reply ends it yet. A reply
- * that is there but has no move line is final: there is nothing to wait for.
- */
-export function finalReply(event: unknown): string {
+// The turn's final reply: the event's own copy when Claude Code sends one,
+// else the transcript's, read again once if no reply ends it yet. A reply
+// that is there but has no move line is final: there is nothing to wait for.
+function finalReply(event: unknown): string {
   const given = field(event, "last_assistant_message");
   if (typeof given === "string" && given) return given;
   const transcript = field(event, "transcript_path");
@@ -178,28 +186,60 @@ function hasSaved(wsId: string): boolean {
   }
 }
 
-// Records the turn's move, returning a note for stderr when something went
-// wrong. `now` is the hook's entry time, taken before finalReply may sleep,
-// so a prompt that lands during that sleep is judged newer than the move.
-function record(event: unknown, wsId: string | undefined, now: number): string | null {
-  if (!wsId || !isId(wsId) || field(event, "hook_event_name") !== "Stop") return null;
+/** What the chat is told when its turn is sent back. */
+export const SEND_BACK_REASON =
+  "Your reply has no closing line the cmux sidebar can read. Reply with only that line: " +
+  '"Your move: <what Jon does next>" when something waits on him, or ' +
+  '"Nothing for you: <what is running and what he hears next>" when the turn waits on your own work.';
+
+/**
+ * Whether to send the turn back for its closing line: only in an interactive
+ * chat (`attended`), never twice in a row (stop_hook_active), and only when
+ * the reply has neither label. A reply that lays out decisions is left alone:
+ * it waits on Jon whatever it ends on, and a one-line retry would lose its
+ * decisions and leans. No reply yet (not flushed, or an empty turn) is left
+ * alone too: there is nothing to judge.
+ */
+export function shouldSendBack(event: unknown, reply: string, attended: boolean): boolean {
+  if (!attended || field(event, "stop_hook_active") === true) return false;
+  return !!reply.trim() && lastMove(reply) === null && decisionsIn(reply).count === 0;
+}
+
+interface Outcome {
+  note: string | null;
+  sendBack: boolean;
+}
+
+// Records the turn's move, or sends the turn back without saving anything,
+// since the turn goes on. `now` is the hook's entry time, taken before
+// finalReply may sleep, so a prompt that lands during that sleep is judged
+// newer than the move.
+function record(event: unknown, wsId: string | undefined, now: number, attended: boolean): Outcome {
+  const none = { note: null, sendBack: false };
+  if (!wsId || !isId(wsId) || field(event, "hook_event_name") !== "Stop") return none;
   const raw = field(event, "session_id");
   const session = typeof raw === "string" && isId(raw) ? raw : undefined;
-  const move = moveFrom(finalReply(event), now, session);
-  if (!move && !hasSaved(wsId)) return null;
+  const reply = finalReply(event);
+  if (shouldSendBack(event, reply, attended)) return { note: null, sendBack: true };
+  const move = moveFrom(reply, now, session);
+  if (!move && !hasSaved(wsId)) return none;
   const result = readApplyWrite(STATE_PATH, `moves.${wsId}`, move ? JSON.stringify(move) : null);
-  if (!result.ok) return result.error;
+  if (!result.ok) return { note: result.error, sendBack: false };
   if (result.changed) scheduleBuild("report-move");
-  return null;
+  return none;
 }
 
 if (import.meta.main) {
   const now = Math.floor(Date.now() / 1000);
-  let note: string | null;
+  // "cli" is an interactive chat; a headless run (claude -p, the SDK) names
+  // another entry point and must end on the output its caller asked for.
+  const attended = process.env.CLAUDE_CODE_ENTRYPOINT === "cli";
+  let out: Outcome;
   try {
-    note = record(JSON.parse(readFileSync(0, "utf8")), process.env.CMUX_WORKSPACE_ID, now);
+    out = record(JSON.parse(readFileSync(0, "utf8")), process.env.CMUX_WORKSPACE_ID, now, attended);
   } catch (err) {
-    note = err instanceof Error ? err.message : String(err);
+    out = { note: err instanceof Error ? err.message : String(err), sendBack: false };
   }
-  if (note) console.error(`report-move: ${note}`);
+  if (out.note) console.error(`report-move: ${out.note}`);
+  if (out.sendBack) console.log(JSON.stringify({ decision: "block", reason: SEND_BACK_REASON }));
 }

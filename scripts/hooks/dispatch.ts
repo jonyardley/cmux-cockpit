@@ -9,7 +9,8 @@
 // 0 and drops the scripts' stdout, so it can never block a tool or answer
 // a permission prompt; their stderr is passed on, each line tagged. The one
 // exception is a Stop script routes.ts marks sendsBack: its block decision
-// is passed on, so the turn goes back to the chat (check-move.ts). Each
+// is passed on, so the turn goes back to the chat (report-move.ts). Only
+// those scripts' stdout is read at all. Each
 // script runs in its own process group, so a time limit, or Claude Code
 // stopping this one, ends whatever the script started too.
 
@@ -49,10 +50,10 @@ export function stopAll(): void {
   running.clear();
 }
 
-function runOne(dir: string, script: string, input: string, limitMs: number): Promise<Ran> {
+function runOne(dir: string, script: string, input: string, limitMs: number, readOut: boolean): Promise<Ran> {
   return new Promise((done) => {
     const child = spawn(process.execPath, [join(dir, script)], {
-      stdio: ["pipe", "pipe", "pipe"],
+      stdio: ["pipe", readOut ? "pipe" : "ignore", "pipe"],
       detached: true,
     });
     const pid = child.pid;
@@ -64,12 +65,12 @@ function runOne(dir: string, script: string, input: string, limitMs: number): Pr
       timedOut = true;
       if (pid !== undefined) killGroup(pid);
     }, limitMs);
-    child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (chunk: string) => {
+    child.stderr?.setEncoding("utf8");
+    child.stderr?.on("data", (chunk: string) => {
       stderr += chunk;
     });
-    child.stdout.setEncoding("utf8");
-    child.stdout.on("data", (chunk: string) => {
+    child.stdout?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => {
       stdout += chunk;
     });
     child.on("error", (err) => {
@@ -81,14 +82,24 @@ function runOne(dir: string, script: string, input: string, limitMs: number): Pr
       done({ script, status, timedOut, limitMs, stderr, stdout });
     });
     // A script that exits without reading its input must not crash this one.
-    child.stdin.on("error", () => {});
-    child.stdin.end(input);
+    child.stdin?.on("error", () => {});
+    child.stdin?.end(input);
   });
 }
 
-/** Runs `scripts` from `dir` side by side, each with `input` on stdin, and settles once all have. */
-export function runAll(dir: string, scripts: readonly string[], input: string, timeoutMs = SCRIPT_TIMEOUT_MS) {
-  return Promise.all(scripts.map((s) => runOne(dir, s, input, timeoutMs)));
+/**
+ * Runs `scripts` from `dir` side by side, each with `input` on stdin, and
+ * settles once all have. Only the `senders`' stdout is kept; the rest is
+ * dropped at the source.
+ */
+export function runAll(
+  dir: string,
+  scripts: readonly string[],
+  input: string,
+  timeoutMs = SCRIPT_TIMEOUT_MS,
+  senders: readonly string[] = [],
+) {
+  return Promise.all(scripts.map((s) => runOne(dir, s, input, timeoutMs, senders.includes(s))));
 }
 
 /** The event's JSON as an object, or null when it is not one. */
@@ -142,11 +153,12 @@ if (import.meta.main) {
     const event = process.argv[2] ?? "";
     const input = readFileSync(0, "utf8");
     const payload = parsePayload(input);
-    const ran = await runAll(import.meta.dirname, scriptsFor(event, payload), input);
+    const senders = sendersFor(event, payload);
+    const ran = await runAll(import.meta.dirname, scriptsFor(event, payload), input, SCRIPT_TIMEOUT_MS, senders);
     for (const r of ran) {
       for (const line of notes(r)) console.error(line);
     }
-    const decision = sendBack(ran, sendersFor(event, payload));
+    const decision = sendBack(ran, senders);
     if (decision) console.log(decision);
   } catch (err) {
     console.error(`dispatch: ${err instanceof Error ? err.message : String(err)}`);

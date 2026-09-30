@@ -26,7 +26,7 @@ export const ROUTES: Readonly<Record<string, readonly Route[]>> = {
       matcher: "Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__update",
     },
   ],
-  Stop: [{ script: "report-move.ts" }, { script: "report-rename.ts" }, { script: "check-move.ts", sendsBack: true }],
+  Stop: [{ script: "report-move.ts", sendsBack: true }, { script: "report-rename.ts" }],
   UserPromptSubmit: [{ script: "report-rename.ts" }],
   SessionStart: [{ script: "report-rename.ts" }],
   SubagentStart: [{ script: "report-subagent.ts" }],

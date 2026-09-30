@@ -59,7 +59,7 @@ describe("scriptsFor", () => {
   });
 
   it("runs an unmatched route every time, even when the input did not parse", () => {
-    assert.deepEqual(scriptsFor("Stop", {}), ["report-move.ts", "report-rename.ts", "check-move.ts"]);
+    assert.deepEqual(scriptsFor("Stop", {}), ["report-move.ts", "report-rename.ts"]);
     assert.deepEqual(scriptsFor("PermissionRequest", { tool_name: "Bash" }), ["report-notification.ts"]);
     assert.deepEqual(scriptsFor("SessionStart", null), ["report-rename.ts"]);
     assert.deepEqual(scriptsFor("PreToolUse", null), []);
@@ -78,8 +78,8 @@ describe("scriptsFor", () => {
 });
 
 describe("sendersFor", () => {
-  it("names only Stop's check-move, and nothing for any other event", () => {
-    assert.deepEqual(sendersFor("Stop", {}), ["check-move.ts"]);
+  it("names only Stop's report-move, and nothing for any other event", () => {
+    assert.deepEqual(sendersFor("Stop", {}), ["report-move.ts"]);
     assert.deepEqual(sendersFor("PreToolUse", { tool_name: "Agent" }), []);
     const routes = { PreToolUse: [{ script: "x.ts", sendsBack: true as const }] };
     assert.deepEqual(sendersFor("PreToolUse", {}, routes), [], "a marked route off Stop still cannot block");
@@ -87,16 +87,16 @@ describe("sendersFor", () => {
 });
 
 describe("sendBack", () => {
-  const ran = { script: "check-move.ts", status: 0, timedOut: false, limitMs: 30_000, stderr: "" };
+  const ran = { script: "report-move.ts", status: 0, timedOut: false, limitMs: 30_000, stderr: "" };
   const block = JSON.stringify({ decision: "block", reason: "add the line" });
 
   it("passes on a sender's block decision", () => {
-    assert.equal(sendBack([{ ...ran, stdout: block + "\n" }], ["check-move.ts"]), block);
+    assert.equal(sendBack([{ ...ran, stdout: block + "\n" }], ["report-move.ts"]), block);
   });
 
   it("ignores other scripts, failures, timeouts and anything that is not a block with a reason", () => {
-    const senders = ["check-move.ts"];
-    assert.equal(sendBack([{ ...ran, script: "report-move.ts", stdout: block }], senders), null);
+    const senders = ["report-move.ts"];
+    assert.equal(sendBack([{ ...ran, script: "report-rename.ts", stdout: block }], senders), null);
     assert.equal(sendBack([{ ...ran, status: 1, stdout: block }], senders), null);
     assert.equal(sendBack([{ ...ran, timedOut: true, stdout: block }], senders), null);
     assert.equal(sendBack([{ ...ran, stdout: "" }], senders), null);
@@ -160,6 +160,13 @@ setInterval(() => {}, 1000);`,
     assert.notEqual(by.get(throws)?.status, 0);
     assert.equal(by.get(hangs)?.timedOut, true);
     assert.equal(by.get(deaf)?.status, 0);
+  });
+
+  it("keeps stdout only from the senders", async () => {
+    const ran = await runAll(dir, [copy, "copy.ts"], "{}", 5000, []);
+    assert.ok(ran.every((r) => r.stdout === ""));
+    const [kept] = await runAll(dir, [copy], "{}", 5000, [copy]);
+    assert.equal(kept?.stdout.trim(), "stdout that must go nowhere");
   });
 
   it("ends what a script started when it runs out of time, not just the script", async () => {

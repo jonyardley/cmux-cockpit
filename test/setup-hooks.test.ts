@@ -57,17 +57,15 @@ describe("the entry points", () => {
     }
   });
 
-  it("route every report-*.ts and check-*.ts script there is, and only scripts that exist", () => {
-    const onDisk = readdirSync(HOOKS).filter((f) => /^(?:report|check)-[a-z]+\.ts$/.test(f));
+  it("route every report-*.ts script there is, and only scripts that exist", () => {
+    const onDisk = readdirSync(HOOKS).filter((f) => /^report-[a-z]+\.ts$/.test(f));
     assert.deepEqual([...routedScripts()].sort(), onDisk.sort());
     for (const s of routedScripts()) assert.ok(existsSync(join(HOOKS, s)), s);
   });
 
   it("replace every script setup once added one by one", () => {
     const old = new Set(LEGACY.map((c) => /report-[a-z]+\.ts$/.exec(c)?.[0]));
-    // check-move.ts came after the entry points, so setup never added it on its own.
-    const before = [...routedScripts()].filter((s) => s !== "check-move.ts");
-    for (const s of before) assert.ok(old.has(s), `${s} is not in the legacy list`);
+    for (const s of routedScripts()) assert.ok(old.has(s), `${s} is not in the legacy list`);
     assert.ok(old.has("report-mention.ts"));
   });
 });

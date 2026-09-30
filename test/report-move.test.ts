@@ -5,7 +5,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decisionsIn, lastReply, moveFrom, moveLine } from "../scripts/hooks/report-move.ts";
+import { decisionsIn, lastReply, moveFrom, moveLine, shouldSendBack } from "../scripts/hooks/report-move.ts";
 import { applySet, cleanMove, emptyState, MAX_MOVE, MOVE_MAX_AGE_S, urlMaySet } from "../scripts/state-config.ts";
 
 const DECISIONS = [
@@ -43,13 +43,18 @@ describe("moveLine", () => {
     assert.equal(moveLine("- your move: go"), "go");
   });
 
-  it("takes up to four words between the label and its colon, since chats drift from it", () => {
+  it("takes one word of drift before the colon, inside the bold or after it", () => {
     assert.equal(moveLine("Nothing for you yet: CI is running on #2183."), "CI is running on #2183.");
     assert.equal(moveLine("**Nothing for you right now:** the gate is running"), "the gate is running");
-    assert.equal(moveLine("Nothing for you until CI lands: it is queued"), "it is queued");
-    assert.equal(moveLine("Your move now: go"), "go");
-    assert.equal(moveLine("Nothing for you until the long gate run lands: x"), null, "five words is prose");
-    assert.equal(moveLine("Your move #2: go"), null, "only words sit between");
+    assert.equal(moveLine("**Nothing for you** yet: CI is running"), "CI is running");
+    assert.equal(moveLine("**Your move** now: go"), "go");
+    assert.equal(moveLine("Your move for now: go"), "go");
+  });
+
+  it("keeps a sentence that only starts like a label as prose", () => {
+    assert.equal(moveLine("Your move to main was blocked: the guard fired."), null);
+    assert.equal(moveLine("Nothing for you to do until CI lands: it is queued"), null);
+    assert.equal(moveLine("Your move #2: go"), null);
   });
 
   it("is null without the label, and cuts a long line with an ellipsis", () => {
@@ -197,6 +202,34 @@ describe("moveFrom", () => {
 
   it("is null when the reply has no move line", () => {
     assert.equal(moveFrom(DECISIONS.replace("Your move:", "Next:"), 1000), null);
+  });
+});
+
+describe("shouldSendBack", () => {
+  const stop = { hook_event_name: "Stop" };
+
+  it("sends back an interactive reply with no closing line", () => {
+    assert.equal(shouldSendBack(stop, "CI is running; I'll report when it lands.", true), true);
+    assert.equal(
+      shouldSendBack(stop, "Opener:\n\n```\nYour move: go\n```", true),
+      true,
+      "a fenced label is not the reply's",
+    );
+  });
+
+  it("lets a reply with either label end, drifted wording included", () => {
+    for (const reply of ["Done.\n\nYour move: go", "Nothing for you: CI runs.", "Nothing for you yet: CI runs."])
+      assert.equal(shouldSendBack(stop, reply, true), false, reply);
+  });
+
+  it("leaves a reply with decisions alone, since a one-line retry would lose them", () => {
+    assert.equal(shouldSendBack(stop, DECISIONS.replace("Your move:", "Next:"), true), false);
+  });
+
+  it("never sends back twice, a headless run, or a turn with no reply to judge", () => {
+    assert.equal(shouldSendBack({ ...stop, stop_hook_active: true }, "Done.", true), false);
+    assert.equal(shouldSendBack(stop, "Done.", false), false);
+    assert.equal(shouldSendBack(stop, "  \n", true), false);
   });
 });
 
