@@ -66,7 +66,7 @@ The fake renderer also records each view's tree, and
 words, colours by token name, spacing) into `test/__snapshots__/`, one
 file per scene. `npm run check` fails on any drift; when the change on
 screen is meant, `npm run snapshots` re-records them, and the snapshot
-diff fills the PR's `## What changed on screen` section.
+diff, in words, fills the PR's `## What changed on screen` section.
 
 `npm run preview` draws the same scenes as PNGs in the gitignored
 `preview/` (test/support/html.ts maps the tree to HTML, headless Chrome
@@ -74,6 +74,12 @@ screenshots it), so a design change can be judged by eye without a
 reload. It approximates SwiftUI in flexbox: spacing and colour are true,
 text width and symbols are close. Every scene must render with nothing
 the mapping does not know; add a new modifier or view there.
+
+Every PR that moves a scene also carries pictures: once the PR is open
+and HEAD is pushed with a clean tree, run `npm run pr-visuals` and paste
+the before and after table it prints into `## What changed on screen`.
+Re-run it after later pushes that change a scene again. Never leave a UI
+PR with the words alone.
 
 ## Workflow
 
