@@ -1,7 +1,7 @@
-// What a PR's chip says about it, apart from the saved state, so the PR
-// poller (scripts/state-url.ts) and both sidebars (prs.ts) read one rule.
+// What a PR's chip says about it, apart from the saved state, so both
+// sidebars (prs.ts) and the cockpit's buttons read one rule.
 
-import type { PrSeen, SavedCheck } from "../../scripts/state-config.ts";
+import type { SavedCheck } from "../../scripts/state-config.ts";
 
 /**
  * Only an open PR has a health, its worst state: failing checks, then merge
@@ -22,12 +22,5 @@ export function healthOf(pr: PullRequest, checks: readonly Pick<SavedCheck, "sta
   return checks.length > 0 && !pr.draft && pr.mergeable === true ? "ready" : "quiet";
 }
 
-/**
- * The PR state the cockpit's lanes react to (src/cockpit/automove.ts):
- * merged, ready (the green chip), or anything else, including no PR.
- */
-export function prSeenOf(pr: PullRequest | undefined, checks: readonly Pick<SavedCheck, "state">[]): PrSeen {
-  if (!pr?.number) return "other";
-  if (pr.status === "merged") return "merged";
-  return healthOf(pr, checks) === "ready" ? "ready" : "other";
-}
+/** A merged PR: the card dims and offers Park, Close workspace and Keep (src/cockpit/merged.ts). */
+export const isMergedPr = (pr: PullRequest | undefined): boolean => !!pr?.number && pr.status === "merged";

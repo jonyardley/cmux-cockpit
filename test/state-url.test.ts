@@ -92,7 +92,6 @@ describe("readApplyWrite", () => {
       prOrigins: {},
       asking: {},
       moves: {},
-      prSeen: {},
       mergeKept: {},
       ui: {},
     });
@@ -153,22 +152,6 @@ describe("writePollMaps and the poll status", () => {
     writeFileSync(path, JSON.stringify({ mergeKept: { same: 1, next: 1, gone: 1 } }));
     writePollMaps(path, { same: pr(1), next: pr(2) }, {}, keep);
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).mergeKept, { same: 1 });
-  });
-
-  it("seeds a workspace's seen PR state with the state before this poll, and keeps the rest", () => {
-    const path = join(dir, "seen.json");
-    const pr = { number: 1, url: "https://github.com/o/r/pull/1", status: "open" as const, branch: "b" };
-    const green = { ...pr, mergeable: true as const, checks: [{ name: "build", state: "pass" as const }] };
-    writePollMaps(path, { was: green, kept: green }, {}, keep);
-    const first = JSON.parse(readFileSync(path, "utf8")).prSeen;
-    assert.deepEqual(first, { was: "other", kept: "other" }, "no PR before the first poll");
-    writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, "utf8")), prSeen: { kept: "merged" } }));
-    writePollMaps(path, { was: { ...green, status: "merged" }, kept: green, fresh: pr }, {}, keep);
-    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).prSeen, {
-      kept: "merged",
-      was: "ready",
-      fresh: "other",
-    });
   });
 
   it("replaces the saved status whole, so a cleared error is gone", () => {
