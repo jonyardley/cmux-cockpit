@@ -13,6 +13,7 @@ import {
   groupNamesFrom,
   latestTitle,
   parseStamp,
+  promptFromEvent,
   promptText,
   sessionName,
   wholeLines,
@@ -105,6 +106,18 @@ describe("groupNamesFrom", () => {
 
 const user = (content: unknown, extra: Record<string, unknown> = {}): string =>
   JSON.stringify({ type: "user", message: { role: "user", content }, sessionId: "s", ...extra });
+
+describe("promptFromEvent", () => {
+  it("takes the prompt from a message event only", () => {
+    const base = { session_id: "s", transcript_path: "/t.jsonl" };
+    assert.equal(
+      promptFromEvent({ ...base, hook_event_name: "UserPromptSubmit", prompt: "Fix the cards" }),
+      "Fix the cards",
+    );
+    assert.equal(promptFromEvent({ ...base, hook_event_name: "Stop", stop_hook_active: false }), null);
+    assert.equal(promptFromEvent({ ...base, hook_event_name: "Stop", prompt: "Fix the cards" }), null);
+  });
+});
 
 describe("promptText", () => {
   it("keeps what Jon typed, on one line", () => {
