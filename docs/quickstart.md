@@ -364,8 +364,8 @@ npm run uninstall
 It asks before each step. It removes the helper app, removes the
 automations link only if it points at this repo (putting back
 `automations.json.backup` if you had one), and takes only the cockpit's
-own hooks out of `~/.claude/settings.json` (or
-`$CLAUDE_CONFIG_DIR/settings.json` when that is set), backing it up
+own `dispatch.ts` entries out of `settings.json` in every Claude Code
+folder it finds (`~/.claude` and `$CLAUDE_CONFIG_DIR`), backing each up
 first. It never deletes the clone; it prints the commands below for that.
 
 Then this keeps a copy of your own files (`cmux.json`, your project table
@@ -383,8 +383,8 @@ To take the extras out by hand instead:
 - the helper: `~/Applications/CmuxCockpit.app`
 - the automations link: `~/.cmuxterm/automations.json` (and restore
   `automations.json.backup` if you had one)
-- the `report-*.ts` hooks in `~/.claude/settings.json`, or in
-  `$CLAUDE_CONFIG_DIR/settings.json` when that is set
+- the `scripts/hooks/dispatch.ts` entries in `settings.json`, in
+  `~/.claude` and in `$CLAUDE_CONFIG_DIR` when that is set
 
 ## Working on it
 

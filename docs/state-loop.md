@@ -263,7 +263,7 @@ the agents model while cmux carries no agent's own subagent runs
 A run is keyed by the Agent tool call rather than the agent, since Claude
 Code names the call before it can name the run: `PreToolUse` (matcher
 `"Agent"`) appends a run keyed by `tool_use_id` (a duplicate delivery of the
-same call, from the hook being registered twice or a redelivered event, is
+same call, from the hook being installed twice or a redelivered event, is
 a no-op), labelled from the call's `description` (cleaned up and cut to
 `MAX_LABEL` code points, so a surrogate pair is never split, then trimmed),
 falling back to `subagent_type`, then `"subagent"`; it also saves the call's
@@ -287,7 +287,8 @@ the same Stop).
 after its Stop, below), a later resume looks like a first start and pairs
 like one, so it can take an unrelated unpaired row's label. A Stop
 redelivered after a resume ends the resumed run early. Neither has been
-seen; the hooks are registered once each.
+seen; setup installs each event's entry point once, and `routes.ts` lists
+`report-subagent.ts` once per event.
 
 **Residual case:** a denied or failed Agent call never gets a
 `SubagentStart`, so its row sits unpaired. If a second call of the same
@@ -388,10 +389,10 @@ reads it back, newest first, for the agents panel's Made here section
 seven days itself (`src/shared/published-age.ts`), since the hook prunes
 only when it writes.
 
-It runs as a PostToolUse hook on `Artifact` and the Claude Docs `batch`
-and `update` tools.
+`scripts/hooks/routes.ts` runs it on `PostToolUse` for `Artifact` and the
+Claude Docs `batch` and `update` tools.
 
-The registration is in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
+The entry points are in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
 the one copy of it.
 
 An Artifact call counts only as a page publish (no `action`, or
@@ -527,7 +528,7 @@ What each event saves:
   bypassPermissions these two fire no `PermissionRequest`, and cmux flags
   them from `PreToolUse` instead.
 
-The registration is in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
+The entry points are in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
 the one copy of it.
 
 The hook prints nothing to stdout, so it can never answer a permission
