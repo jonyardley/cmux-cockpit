@@ -6,6 +6,7 @@ import { after, describe, it } from "node:test";
 import { applyPublished } from "../scripts/hooks/report-published.ts";
 import { emptyState, type State } from "../scripts/state-config.ts";
 import {
+  changedMaps,
   ensureUrlToken,
   parseSetUrl,
   readApplyWrite,
@@ -132,7 +133,7 @@ describe("writePollMaps and the poll status", () => {
 
   it("saves the poll status in the same pass as the PR maps", () => {
     const path = join(dir, "saves.json");
-    assert.deepEqual(writePollMaps(path, {}, {}, keep, { okEpoch: 100 }), { ok: true, changed: true });
+    assert.deepEqual(writePollMaps(path, {}, {}, keep, { okEpoch: 100 }), { ok: true, changed: true, maps: ["poll"] });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).poll, { okEpoch: 100 });
   });
 
@@ -141,6 +142,22 @@ describe("writePollMaps and the poll status", () => {
     writePollMaps(path, {}, {}, keep, { okEpoch: 100, error: "signed-out" });
     assert.deepEqual(writePollMaps(path, {}, {}, keep), { ok: true, changed: false });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).poll, { okEpoch: 100, error: "signed-out" });
+  });
+
+  it("names every map a write changed, and only those", () => {
+    const path = join(dir, "names.json");
+    const pr = { number: 1, url: "https://github.com/o/r/pull/1", status: "open" as const, branch: "b" };
+    writePollMaps(path, {}, {}, keep, { okEpoch: 100 });
+    assert.deepEqual(writePollMaps(path, { w1: pr }, {}, keep, { okEpoch: 400 }), {
+      ok: true,
+      changed: true,
+      maps: ["poll", "prs"],
+    });
+    assert.deepEqual(writePollMaps(path, { w1: { ...pr, checks: [{ name: "ci", state: "pass" }] } }, {}, keep), {
+      ok: true,
+      changed: true,
+      maps: ["prs"],
+    });
   });
 
   it("keeps a Keep only while the workspace's saved PR is the one kept", () => {
@@ -159,14 +176,14 @@ describe("writePollMaps and the poll status", () => {
   it("replaces the saved status whole, so a cleared error is gone", () => {
     const path = join(dir, "replaces.json");
     writePollMaps(path, {}, {}, keep, { okEpoch: 100, error: "unavailable" });
-    assert.deepEqual(writePollMaps(path, {}, {}, keep, { okEpoch: 400 }), { ok: true, changed: true });
+    assert.deepEqual(writePollMaps(path, {}, {}, keep, { okEpoch: 400 }), { ok: true, changed: true, maps: ["poll"] });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).poll, { okEpoch: 400 });
   });
 
   it("removes the saved status when given null", () => {
     const path = join(dir, "removes.json");
     writePollMaps(path, {}, {}, keep, { okEpoch: 100 });
-    assert.deepEqual(writePollMaps(path, {}, {}, keep, null), { ok: true, changed: true });
+    assert.deepEqual(writePollMaps(path, {}, {}, keep, null), { ok: true, changed: true, maps: ["poll"] });
     assert.equal(JSON.parse(readFileSync(path, "utf8")).poll, undefined);
   });
 
@@ -429,5 +446,17 @@ describe("writeNames", () => {
     const saved = JSON.parse(readFileSync(path, "utf8"));
     assert.deepEqual(saved.names, { s1: name });
     assert.deepEqual(saved.projectOverride, { w1: "alpha" });
+  });
+});
+
+describe("changedMaps", () => {
+  it("lists the maps that differ, added and dropped ones included, sorted", () => {
+    const before = { ...emptyState(), dismissed: { w1: { a: 1 } } };
+    const after = { ...emptyState(), prs: { w1: { number: 1, url: "u", status: "open" as const, branch: "b" } } };
+    assert.deepEqual(changedMaps(before, after), ["dismissed", "prs"]);
+  });
+
+  it("is empty when nothing differs", () => {
+    assert.deepEqual(changedMaps(emptyState(), emptyState()), []);
   });
 });

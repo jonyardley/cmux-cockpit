@@ -107,6 +107,17 @@ export function ensureUrlToken(path: string): string {
 
 export type ApplyResult = { ok: true; changed: boolean } | { ok: false; error: string };
 
+/** A poll's write, which also names the maps it changed, for the log that sets redraws against cmux's hangs. */
+export type PollApplyResult = { ok: true; changed: boolean; maps?: string[] } | { ok: false; error: string };
+
+/** The top-level maps whose contents differ between two states, in key order. */
+export function changedMaps(before: State, after: State): string[] {
+  const texts = (s: State) => new Map(Object.entries(s).map(([k, v]) => [k, JSON.stringify(v)]));
+  const was = texts(before);
+  const now = texts(after);
+  return [...new Set([...was.keys(), ...now.keys()])].sort().filter((k) => was.get(k) !== now.get(k));
+}
+
 const LOCK_WAIT_MS = 2000;
 const LOCK_STALE_MS = 10_000;
 
@@ -227,8 +238,9 @@ export function writePollMaps(
   ownPrs: State["ownPrs"],
   subagents: (runs: State["subagents"]) => State["subagents"],
   poll?: SavedPoll | null,
-): ApplyResult {
-  return readUpdateWrite(path, (before) => {
+): PollApplyResult {
+  let maps: string[] = [];
+  const result = readUpdateWrite(path, (before) => {
     const next: State = {
       ...before,
       prs: sortedByKey(prs),
@@ -237,8 +249,11 @@ export function writePollMaps(
       ...(poll ? { poll } : {}),
     };
     if (poll === null) delete next.poll;
-    return { ok: true, state: validateState({ ...next, subagents: sortedByKey(subagents(before.subagents)) }) };
+    const state = validateState({ ...next, subagents: sortedByKey(subagents(before.subagents)) });
+    maps = changedMaps(before, state);
+    return { ok: true, state };
   });
+  return result.ok && result.changed ? { ...result, maps } : result;
 }
 
 /**

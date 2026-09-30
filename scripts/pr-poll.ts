@@ -35,7 +35,7 @@ import {
   validateState,
 } from "./state-config.ts";
 import { logLine } from "./state-log.ts";
-import { writePollMaps } from "./state-url.ts";
+import { type PollApplyResult, writePollMaps } from "./state-url.ts";
 import { prune } from "./subagent-runs.ts";
 
 const TIMEOUT_MS = 15_000;
@@ -524,7 +524,7 @@ export function writePollState(
   ownPrs: State["ownPrs"],
   now: number,
   poll?: SavedPoll | null,
-): { ok: true; changed: boolean } | { ok: false; error: string } {
+): PollApplyResult {
   return writePollMaps(stateFile, prs, ownPrs, (subagents) => prune(subagents, now), poll);
 }
 
@@ -587,6 +587,9 @@ function poll(root: string): number {
     log(`ok, unchanged (${counts})`);
     return 0;
   }
+  // Which maps moved, so the log can tell a check turning green from a
+  // freshness restamp when it is set against cmux's hang reports.
+  const moved = applied.maps?.length ? ` [${applied.maps.join(", ")}]` : "";
 
   // Through hook-build.ts's lock, so this build never races a hook's and
   // lands an older bundle last. It waits briefly for a build in flight,
@@ -596,11 +599,11 @@ function poll(root: string): number {
   // flight builds this write before it lets go, so nothing is rolled back.
   const built = buildNow();
   if (built === "built") {
-    log(`ok, ${counts}`);
+    log(`ok, ${counts}${moved}`);
     return 0;
   }
   if (built === "busy") {
-    log(`ok, ${counts}, built by the build in flight`);
+    log(`ok, ${counts}${moved}, built by the build in flight`);
     return 0;
   }
 
