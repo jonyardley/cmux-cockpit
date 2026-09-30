@@ -254,7 +254,7 @@ break taps silently.
 
 cmux sends custom sidebars no subagent data at all (#6), so
 `scripts/hooks/report-subagent.ts` records them itself, from three Claude
-Code hooks, in a fifth map, `subagents`: workspace id to a list of runs,
+Code hook events, in a fifth map, `subagents`: workspace id to a list of runs,
 oldest first, each `{"id", "session", "agentId"?, "type"?, "label",
 "startedEpoch", "endedEpoch"?}`. `src/shared/subagents.ts` reads it back for
 the agents model while cmux carries no agent's own subagent runs
@@ -287,8 +287,9 @@ the same Stop).
 after its Stop, below), a later resume looks like a first start and pairs
 like one, so it can take an unrelated unpaired row's label. A Stop
 redelivered after a resume ends the resumed run early. Neither has been
-seen; setup installs each event's entry point once, and `routes.ts` lists
-`report-subagent.ts` once per event.
+seen: `routes.ts` lists `report-subagent.ts` once per event, and a
+second copy of an event's entry point in settings would double every
+event.
 
 **Residual case:** a denied or failed Agent call never gets a
 `SubagentStart`, so its row sits unpaired. If a second call of the same
@@ -389,8 +390,9 @@ reads it back, newest first, for the agents panel's Made here section
 seven days itself (`src/shared/published-age.ts`), since the hook prunes
 only when it writes.
 
-`scripts/hooks/routes.ts` runs it on `PostToolUse` for `Artifact` and the
-Claude Docs `batch` and `update` tools.
+`scripts/hooks/dispatch.ts` runs it on `PostToolUse` for `Artifact` and
+the Claude Docs `batch` and `update` tools, as `scripts/hooks/routes.ts`
+lists.
 
 The entry points are in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
 the one copy of it.

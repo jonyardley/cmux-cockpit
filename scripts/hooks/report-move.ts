@@ -3,7 +3,7 @@
 // characters of a message, and Jon's chats put that line last, so the
 // sidebar never sees it without this hook.
 //
-// Run as a Claude Code Stop hook, once per turn. It takes the turn's final
+// Run by scripts/hooks/dispatch.ts on Stop, once per turn. It takes the turn's final
 // reply from the event's last_assistant_message, or else the main-chat
 // reply that ends the transcript's tail, read once more after RETRY_MS when
 // no reply ends it yet (Stop can fire before the reply is flushed). The line
