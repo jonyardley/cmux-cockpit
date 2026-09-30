@@ -10,7 +10,7 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
 const model = await import("../src/cockpit/model.ts");
-const { chipsFitOneLine, hasChipsRow, showsChipsRow } = await import("../src/cockpit/chips.ts");
+const { chipsFitOneLine, chipsSplit, hasChipsRow, showsChipsRow } = await import("../src/cockpit/chips.ts");
 const { liveRunCount } = await import("../src/shared/subagents.ts");
 
 beforeEach(() => {
@@ -267,6 +267,33 @@ describe("chipsFitOneLine", () => {
 
   it("fits a card with nothing in its chips row", () => {
     assert.equal(fits(ws("x")), true);
+  });
+
+  it("counts the uncommitted-changes dot on the branch", () => {
+    const pr: PullRequest = { number: 148, status: "open" };
+    assert.equal(fits(ws("x", { branch: "fix-card-layout-a", pr })), true);
+    assert.equal(fits(ws("x", { branch: "fix-card-layout-a", dirty: true, pr })), false);
+  });
+});
+
+describe("chipsSplit", () => {
+  const splits = (w: Workspace) => chipsSplit(model.chipsFor(w, true), w);
+  const long: PullRequest = { number: 148, status: "open", draft: true, additions: 342, deletions: 17 };
+
+  it("splits a PR and branch that do not fit on one line", () => {
+    assert.equal(splits(ws("x", { branch: "parser-streaming-tokeniser", pr: long })), true);
+  });
+
+  it("keeps a pair that fits on one line", () => {
+    assert.equal(splits(ws("x", { branch: "main", pr: { number: 12, status: "open" } })), false);
+  });
+
+  it("never splits with nothing for the second line", () => {
+    assert.equal(splits(ws("x", { pr: long })), false);
+  });
+
+  it("never splits with no PR for the first line", () => {
+    assert.equal(splits(ws("x", { branch: "a-very-long-branch-name-that-cannot-fit-on-one-line" })), false);
   });
 });
 

@@ -135,3 +135,9 @@ it("gives an empty list with modifiers no slot in its stack's gap", () => {
     '<div class="row" style="gap:5px"><div class="contents" style="flex-shrink:0.01"></div><div class="t">a</div></div>',
   );
 });
+
+it("keeps an empty Reorderable's slot, as it is a stack of its own", () => {
+  const empty = node("Reorderable", [], [["layoutPriority", 2]]);
+  const out = body(node("HStack", [{ spacing: 5 }], [], [empty, node("Text", ["a"])]));
+  assert.doesNotMatch(out, /class="contents"/);
+});

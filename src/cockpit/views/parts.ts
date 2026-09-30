@@ -20,7 +20,7 @@ import {
   unreadBadge,
   when,
 } from "../../shared/ui.ts";
-import { chipsFitOneLine, showsChipsRow } from "../chips.ts";
+import { chipsSplit, showsChipsRow } from "../chips.ts";
 import { LANES } from "../lanes.ts";
 import {
   cardOpacity,
@@ -296,7 +296,7 @@ function actionChip(label: Reactive<string>, tap: () => void, colors: () => Chip
 }
 
 /** Under Other, a card whose folder can become a project offers it: the card menu's item, in view. */
-export function makeProjectAction(w: WsAccessor): View {
+export function makeProjectAction(w: WsAccessor, top = 0): View {
   return when(
     "make-project",
     () => canCreateProject(w()),
@@ -307,8 +307,7 @@ export function makeProjectAction(w: WsAccessor): View {
           () => createProjectFrom(w()),
         ),
       ])
-        // The project card's gap above its chips (cards.ts's projectRow).
-        .paddingTop(5)
+        .paddingTop(top)
         .frame({ maxWidth: "infinity", alignment: "leading" }),
   );
 }
@@ -401,9 +400,8 @@ export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap = "ope
   const branchLine = () => [one("br"), one("port").layoutPriority(2), toReviewAction(w)];
   const line = (views: View[]) => HStack({ spacing: 5 }, views).frame({ maxWidth: "infinity", alignment: "leading" });
   // Split, the branch goes under the PR when the two do not fit side by
-  // side, so a narrow card shows both whole.
-  const hasPrLine = () => chips().some((c) => c.id === "pr" || c.id === "size");
-  const splits = () => hasPrLine() && !chipsFitOneLine(chips(), w());
+  // side, so a narrow card shows both whole. Worked out once per change.
+  const splits = computed(() => chipsSplit(chips(), w()));
   const oneLine = () => line([...prLine(), ...branchLine()]);
   const row = () =>
     split
