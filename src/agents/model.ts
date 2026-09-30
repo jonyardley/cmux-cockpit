@@ -511,6 +511,78 @@ export const checkWord = (c: CheckRow): string => CHECK_WORD[c.state];
 
 export const checkDot = (c: CheckRow): string => CHECK_DOT[c.state];
 
+// ---- Fix a failing check ----------------------------------------------------
+
+/** Where a Fix tap types: the workspace's most active agent's terminal. */
+export interface FixTarget {
+  wsId: string;
+  surfaceId: string;
+  pr: number;
+  /** The agent's current status spell, so one tap hides Fix until it ends. */
+  spell: string;
+}
+
+// The agent as cmux sends it, not as agentsOf shows it: a dismissed ask reads
+// idle there, yet its permission prompt is still on screen and would take the
+// typed words as its answer.
+function rawAgent(c: Current): Agent | undefined {
+  const id = c.a?.id;
+  return id === undefined ? undefined : (c.ws.agents ?? []).find((x) => x?.id === id);
+}
+
+// Idle, or needs_input that is only its turn. A needs_input with no start
+// time cannot be told apart from an ask (shared/needs.ts), so it never counts.
+function canType(a: Agent, w: Workspace): boolean {
+  if (a.status === "idle") return true;
+  return a.status === "needs_input" && !!a.sinceEpoch && askReason(a, w) === null;
+}
+
+const spellOf = (a: Agent): string => `${a.id}:${a.status}:${a.sinceEpoch ?? a.lastActivityAt ?? ""}`;
+
+// wsId -> the spell a Fix was sent in. Not reactive: reads call fixTick(),
+// writes set it.
+const fixSent = new Map<string, string>();
+const [fixTick, setFixTick] = signal(0);
+
+/**
+ * The selected workspace's Fix target, or null while Fix must not show:
+ * no PR number, no terminal, the agent working, asking or ended, or a Fix
+ * already sent in this spell.
+ */
+export const fixTarget = computed((): FixTarget | null => {
+  fixTick();
+  const c = current();
+  const pr = currentPr()?.number;
+  const a = c ? rawAgent(c) : undefined;
+  if (!c || !pr || !a?.surfaceId || !canType(a, c.ws)) return null;
+  const spell = spellOf(a);
+  const sent = fixSent.get(c.ws.id);
+  if (sent === spell) return null;
+  // A new spell ends the last Fix's hold. Runs during render and what shows
+  // is unchanged, so no tick.
+  if (sent !== undefined) fixSent.delete(c.ws.id);
+  return { wsId: c.ws.id, surfaceId: a.surfaceId, pr, spell };
+});
+
+/** Whether a check row shows Fix: failed, with an agent that can take it. */
+export const canFix = (c: CheckRow): boolean => c.state === "fail" && !!fixTarget();
+
+/** What Fix types into the agent for a failed check on PR `pr`. */
+export const fixPrompt = (check: string, pr: number): string =>
+  `The ${check} check failed on PR #${pr}. Find its run with gh pr checks ${pr}, ` +
+  `read the log with gh run view <run-id> --log-failed, fix the cause, push, and tell me what it was.`;
+
+/** Types the Fix prompt for `check` into the agent and presses Enter. */
+export function sendFix(check: string): void {
+  const t = fixTarget();
+  if (!t) return;
+  const at = { workspace_id: t.wsId, surface_id: t.surfaceId };
+  cmux("surface.send_text", { ...at, text: fixPrompt(check, t.pr) });
+  cmux("surface.send_key", { ...at, key: "enter" });
+  fixSent.set(t.wsId, t.spell);
+  setFixTick(fixTick() + 1);
+}
+
 // ---- Pull requests ----------------------------------------------------------
 
 export interface PrEntry {
