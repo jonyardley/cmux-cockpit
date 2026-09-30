@@ -68,7 +68,7 @@ describe("wholeLines", () => {
 
 describe("parseStamp", () => {
   it("reads a saved stamp", () => {
-    const stamp = { offset: 120, seen: "Design Review", handled: null, prompt: "Fix it", named: "title:Design Review" };
+    const stamp = { offset: 120, seen: "Design Review", handled: null, prompt: "Fix it" };
     assert.deepEqual(parseStamp(JSON.stringify(stamp)), stamp);
   });
 
@@ -79,12 +79,11 @@ describe("parseStamp", () => {
       seen: null,
       handled: "Design Review",
       prompt: null,
-      named: null,
     });
   });
 
   it("starts empty for a missing, broken or wrong-shaped stamp", () => {
-    const empty = { offset: 0, seen: null, handled: null, prompt: null, named: null };
+    const empty = { offset: 0, seen: null, handled: null, prompt: null };
     assert.deepEqual(parseStamp(null), empty);
     assert.deepEqual(parseStamp("{"), empty);
     assert.deepEqual(parseStamp(JSON.stringify({ offset: -1, seen: null, handled: null })), empty);
@@ -119,8 +118,15 @@ describe("promptText", () => {
     assert.equal(promptText("[Request interrupted by user]"), null);
   });
 
-  it("drops a leading reminder and image markers but keeps the words after them", () => {
+  it("drops reminders anywhere and image markers but keeps the words around them", () => {
     assert.equal(promptText("<system-reminder>x</system-reminder>\n[Image #2] Why is this red?"), "Why is this red?");
+    assert.equal(promptText("Fix it <system-reminder>As you answer</system-reminder>"), "Fix it");
+  });
+
+  it("finds nothing the agents panel would blank: a bare path, a pasted-text marker, no words", () => {
+    assert.equal(promptText("~/dev/app/src/foo.ts"), null);
+    assert.equal(promptText("[Pasted text #1 +40 lines]"), null);
+    assert.equal(promptText("1 2 3"), null);
   });
 });
 
@@ -138,6 +144,13 @@ describe("firstPrompt", () => {
       user("A later prompt"),
     ];
     assert.equal(firstPrompt(lines), "Real names on agent rows");
+  });
+
+  it("passes over a prompt the panel would blank for a later readable one", () => {
+    assert.equal(
+      firstPrompt([user("[Pasted text #1 +40 lines]"), user("Why is the build red?")]),
+      "Why is the build red?",
+    );
   });
 
   it("finds none when no line holds one", () => {
