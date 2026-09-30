@@ -950,6 +950,24 @@ describe("Move to project override (issue #8)", () => {
     assert.equal(model.hasProjectOverride(a), false);
   });
 
+  it("gives the badge the moved-to project, and Other with no workspace", () => {
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    a.directory = "/Users/coder/dev/app-one";
+    assert.equal(model.projectOfWorkspace(a).name, "App One");
+    model.moveToProject(a, "/dev/app-two");
+    assert.equal(model.projectOfWorkspace(a).name, "App Two");
+    model.clearProjectOverride(a);
+    assert.equal(model.projectOfWorkspace(a).name, "App One");
+    assert.equal(model.projectOfWorkspace(undefined).name, "Other");
+  });
+
+  it("gives a workspace with no path match the Other badge", () => {
+    const u = byId("u");
+    if (!u) throw new Error("fixture");
+    assert.equal(model.projectOfWorkspace(u).name, "Other");
+  });
+
   it("moveToProject persists the new key, clearProjectOverride a delete", () => {
     const a = byId("a");
     if (!a) throw new Error("fixture");
