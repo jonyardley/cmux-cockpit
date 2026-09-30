@@ -93,6 +93,7 @@ describe("readApplyWrite", () => {
       asking: {},
       moves: {},
       prSeen: {},
+      mergeKept: {},
       ui: {},
     });
   });

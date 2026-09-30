@@ -22,6 +22,7 @@ import {
 } from "../../shared/ui.ts";
 import { showsChipsRow } from "../chips.ts";
 import { LANES } from "../lanes.ts";
+import { cardOpacity, closeMerged, keepMerged, offersMergedActions } from "../merged.ts";
 import {
   type Chip,
   type ChipId,
@@ -257,6 +258,31 @@ export function toReviewAction(w: WsAccessor): View {
   ).layoutPriority(2);
 }
 
+// Close workspace and Keep on a merged card, each a quiet chip with its own
+// onTap, so the tap never also selects the card. Close is in ink and Keep
+// in the secondary grey, so the one that acts reads first.
+function mergedButton(label: string, ink: string, tap: () => void): View {
+  const body = Text(label).font(11).weight("medium").color(ink).lineLimit(1).paddingHorizontal(7).paddingVertical(1);
+  return ring(body, REVIEW_CHIP.bg, REVIEW_CHIP.edge, 1, 6, { hug: true, hover: chipHover(() => REVIEW_CHIP) }).onTap(
+    tap,
+  );
+}
+
+/** A merged card's Close workspace and Keep, on a line of their own, until Keep is tapped. */
+export function mergedActions(w: WsAccessor, indent = 0): View {
+  return when(
+    "merged-actions",
+    () => offersMergedActions(w()),
+    () =>
+      HStack({ spacing: 5 }, [
+        mergedButton("Close workspace", C.text, () => closeMerged(w())),
+        mergedButton("Keep", C.secondary, () => keepMerged(w())),
+      ])
+        .paddingLeading(indent)
+        .frame({ maxWidth: "infinity", alignment: "leading" }),
+  );
+}
+
 // One when() per chip, so each has a fixed key and its own place in the
 // HStack. The PR and ports chips are short and say the most, so they hold
 // their width and the branch chip gives way, cut at its end. The priority
@@ -372,7 +398,9 @@ export function cardChrome(view: View, w: WsAccessor, key: string, radius: numbe
     () => (lit() ? 1.5 : 1),
     radius,
     { hover: { face: C.cardHover } },
-  ).frame({ maxWidth: "infinity" });
+  )
+    .opacity(() => cardOpacity(w()))
+    .frame({ maxWidth: "infinity" });
   // Cards keep a 6pt gap; the list spacing is 2pt so rows sit tight.
   return VStack({ spacing: 0 }, [face])
     .paddingBottom(4)

@@ -23,6 +23,7 @@ describe("SAVED_STATE", () => {
       asking: {},
       moves: {},
       prSeen: {},
+      mergeKept: {},
       ui: {},
     });
   });

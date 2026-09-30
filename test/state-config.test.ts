@@ -68,6 +68,7 @@ test("validateState reads a good file unchanged", () => {
       w9: { text: "go", epoch: 303 },
     },
     prSeen: { w3: "ready", w5: "merged", w6: "other" },
+    mergeKept: { w5: 400 },
     ui: { mode: "projects", collapsed: { "lane:parked": 0, "project:/dev/a": 1 } },
   };
   assert.deepEqual(validateState(raw), raw);
@@ -95,6 +96,7 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     asking: {},
     moves: {},
     prSeen: {},
+    mergeKept: {},
     ui: {},
   });
 });
@@ -219,6 +221,7 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
       asking: {},
       moves: {},
       prSeen: {},
+      mergeKept: {},
       ui: {},
     },
   });
@@ -399,6 +402,7 @@ test("rebuildsOn skips the build for the cockpit's own view, folds and seen PR s
   assert.equal(rebuildsOn("ui.mode"), false);
   assert.equal(rebuildsOn("ui.collapsed"), false);
   assert.equal(rebuildsOn("prSeen.w1"), false, "a rebuild per PR change would loop");
+  assert.equal(rebuildsOn("mergeKept.w1"), false, "the sidebar hides the buttons itself");
   for (const key of ["dismissed.w1", "projectOverride.w1", "projects./dev/a/"])
     assert.equal(rebuildsOn(key), true, key);
 });
@@ -412,6 +416,17 @@ test("prSeen keeps a workspace's last seen PR state, and refuses anything else",
   assert.deepEqual(cleared.ok && cleared.state.prSeen, {});
   assert.deepEqual(validateState({ prSeen: { w1: "merged", w2: "draft", w3: 1 } }).prSeen, { w1: "merged" });
   assert.deepEqual(validateState({}).prSeen, {}, "a file from before the map reads as empty");
+});
+
+test("mergeKept keeps when Keep was tapped, and refuses anything but an epoch", () => {
+  const set = applySet(emptyState(), "mergeKept.w1", JSON.stringify(400));
+  assert.deepEqual(set.ok && set.state.mergeKept, { w1: 400 });
+  for (const bad of [-1, "400", true, { at: 400 }])
+    assert.equal(applySet(emptyState(), "mergeKept.w1", JSON.stringify(bad)).ok, false, String(bad));
+  const cleared = set.ok ? applySet(set.state, "mergeKept.w1", null) : set;
+  assert.deepEqual(cleared.ok && cleared.state.mergeKept, {});
+  assert.deepEqual(validateState({ mergeKept: { w1: 5, w2: "5", w3: -1 } }).mergeKept, { w1: 5 });
+  assert.deepEqual(validateState({}).mergeKept, {}, "a file from before the map reads as empty");
 });
 
 test("cleanLabel cuts by the length isLabel measures, so an astral title still validates", () => {

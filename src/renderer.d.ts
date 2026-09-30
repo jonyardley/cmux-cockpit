@@ -150,6 +150,9 @@ declare function cmux(
   method: "surface.send_key",
   params: { workspace_id: string; surface_id: string; key: "enter" },
 ): void;
+/** Closes a whole workspace, its terminals and agents with it, as
+ * `cmux close-workspace` does. The worktree on disk is left alone. */
+declare function cmux(method: "workspace.close", params: { workspace_id: string }): void;
 /** Dispatches a cmux socket command, e.g. workspace.select. */
 declare function cmux(method: string, params: Record<string, string | number | boolean>): void;
 declare function openURL(url: string): void;
