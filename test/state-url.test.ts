@@ -12,6 +12,7 @@ import {
   readUrlToken,
   tokenMatches,
   unreadableCopyOf,
+  writeNames,
   writePollMaps,
   writePublished,
   writeSubagents,
@@ -88,6 +89,7 @@ describe("readApplyWrite", () => {
       prs: {},
       ownPrs: {},
       subagents: {},
+      names: {},
       published: {},
       prOrigins: {},
       asking: {},
@@ -401,5 +403,31 @@ describe("an unreadable state file is kept aside before a write replaces it", ()
     readApplyWrite(path, "projectOverride.w1", '"alpha"');
     readApplyWrite(path, "projectOverride.w2", '"beta"');
     assert.equal(existsSync(unreadableCopyOf(path)), false);
+  });
+});
+
+describe("writeNames", () => {
+  const dirs: string[] = [];
+  after(() => {
+    for (const dir of dirs) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("saves a name, leaving the rest of the state alone, and sees no change when nothing differs", () => {
+    const dir = mkdtempSync(join(tmpdir(), "state-url-names-"));
+    dirs.push(dir);
+    const path = join(dir, "state.json");
+    readApplyWrite(path, "projectOverride.w1", '"alpha"');
+    const name = { name: "Fix the poller", from: "prompt" } as const;
+    assert.deepEqual(
+      writeNames(path, (m) => ({ ...m, s1: name })),
+      { ok: true, changed: true },
+    );
+    assert.deepEqual(
+      writeNames(path, (m) => m),
+      { ok: true, changed: false },
+    );
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    assert.deepEqual(saved.names, { s1: name });
+    assert.deepEqual(saved.projectOverride, { w1: "alpha" });
   });
 });

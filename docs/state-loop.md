@@ -478,6 +478,29 @@ chat selects the workspace, focuses the terminal and flashes it; cmux has
 no call that scrolls a terminal to a line, so it cannot land on the
 message itself.
 
+## Agent names
+
+The agents panel lists a workspace's agents by name. cmux's own agent
+title is the session's first message, which it cannot read for a session
+run from `~/.claude-personal`, and a `/clear` title is filtered to nothing,
+so rows fell back to "Claude 1", "Claude 2". A hook records a name per
+session in the `names` map: Claude Code session id to `{"name", "from"}`,
+oldest first, where `from` is `"title"` or `"prompt"`.
+
+- `scripts/hooks/report-rename.ts`, on each message and at session start,
+  reads what the transcript added since its last read (the same read that
+  carries a `/rename` to the workspace). The name is the latest `/rename`,
+  else the first real prompt: slash commands, shell escapes, system
+  reminders and other text Claude Code wraps in a tag are skipped. It
+  works the same for `~/.claude` and `~/.claude-personal`, since the
+  transcript path comes with the event. It writes only when the name
+  changes, and a write rebuilds.
+
+cmux sends the session id as the agent's `id` (checked on a live reload,
+for both folders), so a row looks its name up by that. The saved name
+wins over cmux's title, which wins over the numbered fallback. No URL can
+set the map.
+
 ## Asking or your turn
 
 cmux marks an agent needs_input both when it stops to ask (a permission

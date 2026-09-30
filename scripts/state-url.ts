@@ -276,6 +276,17 @@ export function writePublished(
 }
 
 /**
+ * Folds `update` over the whole `names` map (scripts/hooks/report-rename.ts),
+ * under the same lock, kept oldest first as writePublished keeps its map.
+ */
+export function writeNames(path: string, update: (names: State["names"]) => State["names"]): ApplyResult {
+  return readUpdateWrite(path, (before) => ({
+    ok: true,
+    state: validateState({ ...before, names: update(before.names) }),
+  }));
+}
+
+/**
  * Folds `update` over the whole `prOrigins` map (scripts/hooks/report-pr.ts),
  * under the same lock, kept oldest first as
  * writePublished keeps its map.

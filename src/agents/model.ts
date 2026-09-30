@@ -11,6 +11,7 @@ import { type Last, markLast } from "../shared/list.ts";
 import { NUDGE_WINDOW, waitingMove } from "../shared/move.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
+import { SAVED_STATE } from "../shared/persist.ts";
 import { prInk } from "../shared/pr-colors.ts";
 import { type Project, projectOf, savedProjectFor } from "../shared/projects.ts";
 import {
@@ -266,11 +267,19 @@ export interface AgentRow {
 
 const fallbackLabel = (a: Agent): string => a.name || a.kind || "agent";
 
-// A real title wins; otherwise agents sharing a fallback label are numbered
+/** The name scripts/hooks/report-rename.ts saved for the agent's session, or "" when none. */
+function savedName(a: Agent): string {
+  // A test can seed __STATE__ from before this map existed, as savedRuns notes.
+  const names = SAVED_STATE.names;
+  return names && Object.hasOwn(names, a.id) ? readable(names[a.id]?.name) : "";
+}
+
+// The saved session name wins, then cmux's title (its first message, when
+// it could read one); otherwise agents sharing a fallback label are numbered
 // in cmux's own order, ended ones included, so a number holds still as
 // activity changes and as earlier agents end.
 function labelsFor(inOrder: Agent[]): Map<string, string> {
-  const plain = inOrder.map((a) => ({ a, title: readable(a.title), base: fallbackLabel(a) }));
+  const plain = inOrder.map((a) => ({ a, title: savedName(a) || readable(a.title), base: fallbackLabel(a) }));
   const count = new Map<string, number>();
   for (const e of plain) if (!e.title) count.set(e.base, (count.get(e.base) ?? 0) + 1);
   const seen = new Map<string, number>();
