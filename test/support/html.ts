@@ -36,6 +36,7 @@ const INERT = new Set(["onTap", "contextMenu", "hoverBackground", "fixed", "hide
 // rather than counting as unknown.
 const SYMBOLS: Record<string, string> = {
   "arrow.branch": "⑂",
+  "arrow.up": "↑",
   terminal: "▭",
   "star.fill": "★",
   xmark: "✕",

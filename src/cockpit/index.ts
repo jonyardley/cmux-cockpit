@@ -26,7 +26,7 @@ import { motionList } from "../shared/ui.ts";
 import { handleDragChange, handleMove, isForeignAnchor } from "./drop.ts";
 import { flatEntries, panelMaxHeight, panelOpacity, projectEntries, wsById } from "./model.ts";
 import { C } from "./theme.ts";
-import { cardFor, projectRow } from "./views/cards.ts";
+import { cardFor, placeholderRow, projectRow } from "./views/cards.ts";
 import { projectEditor } from "./views/editor.ts";
 import { dropZone, laneHeader, projectHeader, quietHeader, quietRow, segmented } from "./views/headers.ts";
 import { needsStrip, nextButton } from "./views/needs.ts";
@@ -57,6 +57,8 @@ function lanesPanel(): View {
         const entry = e();
         if (entry.kind === "header") return laneHeader(entry.lane, entry.anchorId);
         if (entry.kind === "zone") return dropZone(entry.lane);
+        // Its session sits in Needs you; the placeholder only marks the spot.
+        if (entry.kind === "ghost") return placeholderRow(() => wsById(entry.wsId)).fixed(true);
         // Reactive, since a card keeps its row when its group changes.
         return cardFor(() => wsById(entry.wsId), entry.id).fixed(() => isForeignAnchor(entry.wsId));
       },
@@ -72,6 +74,7 @@ function projectsPanel(): View {
       if (entry.kind === "quietHeader") return quietHeader();
       if (entry.kind === "quietRow") return quietRow(entry.project);
       if (entry.kind === "editor") return projectEditor(entry.project);
+      if (entry.kind === "ghost") return placeholderRow(() => wsById(entry.wsId));
       return projectRow(() => wsById(entry.wsId), entry.id);
     }),
   ]).paddingHorizontal(10);

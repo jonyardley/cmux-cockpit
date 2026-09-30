@@ -206,6 +206,16 @@ export function moveOf(w: Workspace | undefined): SavedMove | null {
 export const needsDetail = (w: Workspace | undefined): string =>
   askOf(w) ?? (clip(moveOf(w)?.text ?? "", 80) || oneLine(cardMessage(w), 80) || "Waiting for your reply");
 
+/** A Needs you row's detail with its status in front: "Asking: allow git push?", "Your turn: want the banner?". */
+export const needsLine = (w: Workspace | undefined): string => statusInfo(w).label + ": " + needsDetail(w);
+
+/** The ink of a Needs you row's detail and its placeholder's words: amber while asking, else clay. */
+export const needsInk = (w: Workspace | undefined): string => (askOf(w) ? C.amberText : C.clayText);
+
+/** A placeholder's words after the title: where its card went and why. */
+export const placeholderText = (w: Workspace | undefined): string =>
+  (askOf(w) ? "is asking" : "your turn") + ", in Needs you";
+
 /** A Needs you row's edge: amber while its agent asks, else clay, so each hue keeps one meaning. */
 export const needsRowEdge = (w: Workspace | undefined): string => (askOf(w) ? C.amberRowEdge : C.needsRowEdge);
 

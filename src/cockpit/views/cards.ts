@@ -1,12 +1,13 @@
-// Workspace cards at the three lane densities (full, compact, row), plus the
-// one row shape the Projects view uses.
+// Workspace cards at the three lane densities (full, compact, row), the
+// one row shape the Projects view uses, and the placeholder a card leaves
+// while its session waits in Needs you.
 
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { meta, ring, unreadBadge, when } from "../../shared/ui.ts";
 import { hasChipsRow } from "../chips.ts";
 import type { Lane } from "../lanes.ts";
-import { cardDensity, showsLeftOff } from "../model.ts";
+import { cardDensity, revealWorkspace, showsLeftOff } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
 import {
   ageOf,
@@ -16,6 +17,9 @@ import {
   helperText,
   leftOffText,
   moveOf,
+  needsInk,
+  needsRowEdge,
+  placeholderText,
   progressFraction,
   prTextColor,
 } from "../status.ts";
@@ -283,4 +287,44 @@ export function projectRow(w: WsAccessor, key: string): View {
     .paddingHorizontal(10)
     .paddingVertical(8);
   return cardChrome(body, w, key, 9);
+}
+
+// In a card's place while its session waits in Needs you: the tile, the
+// title and where it went, on the strip's blush face, so it reads as a
+// marker, not a second card. A tap opens the workspace, as its strip row
+// does, and the card comes back to this spot once answered or dismissed.
+export function placeholderRow(w: WsAccessor): View {
+  const ink = () => needsInk(w());
+  const body = HStack({ spacing: 7 }, [
+    glyph(w, 15, 4, 8),
+    Text(() => displayTitle(w()))
+      .font(12)
+      .weight("semibold")
+      .color(ink)
+      .lineLimit(1)
+      .truncation("middle"),
+    Text(() => placeholderText(w()))
+      .font(12)
+      .color(ink)
+      .lineLimit(1)
+      .truncation("tail")
+      .frame({ maxWidth: "infinity", alignment: "leading" })
+      .layoutPriority(1),
+    Image("arrow.up").font(10).weight("semibold").color(ink),
+  ])
+    .paddingHorizontal(10)
+    .paddingVertical(6);
+  const selected = () => isSelected(w());
+  const face = ring(
+    body,
+    C.needsBg,
+    () => (selected() ? C.selectEdge : needsRowEdge(w())),
+    () => (selected() ? 1.5 : 1),
+    9,
+  ).frame({ maxWidth: "infinity" });
+  return VStack({ spacing: 0 }, [face])
+    .paddingBottom(4)
+    .frame({ maxWidth: "infinity" })
+    .onTap(() => revealWorkspace(w()))
+    .contextMenu(cardMenu(w));
 }

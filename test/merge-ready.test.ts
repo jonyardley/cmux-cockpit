@@ -104,7 +104,7 @@ describe("mergeReadyText", () => {
     const w = r.data.workspaces.find((x) => x.id === "readyMain");
     if (w) w.agents = [agent("needs_input", { sinceEpoch: r.data.epoch - 30 })];
     assert.ok(model.needsShown().some((x) => x.id === "readyMain"));
-    assert.equal(model.laneWorkspaces("main").length, 0);
+    assert.ok(model.flatEntries().some((e) => e.kind === "ghost" && e.wsId === "readyMain"));
     assert.equal(model.mergeReadyText("main"), "1 ready to merge");
   });
 

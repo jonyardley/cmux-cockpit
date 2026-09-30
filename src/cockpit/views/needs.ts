@@ -1,43 +1,62 @@
 // The "Needs you" strip: every workspace whose agent is waiting on input.
 // A row is amber while its agent is asking (a permission or a question,
-// with the reason under the title) and clay while it is only its turn.
+// with the reason under the title) and clay while it is only its turn. Each
+// row carries its project's tile and names the lane (or project group) its
+// card left a placeholder in.
 
-import { dismissNeeds } from "../../shared/needs.ts";
 import { displayTitle } from "../../shared/titles.ts";
-import { countPill, haloDot, meta, motionList, ring, sectionTitle, when } from "../../shared/ui.ts";
-import { jumpNext, needsList, needsMore, needsShown, nextStep, revealWorkspace } from "../model.ts";
+import { countPill, meta, motionList, ring, sectionTitle, when } from "../../shared/ui.ts";
+import {
+  dismissWaiting,
+  jumpNext,
+  needsList,
+  needsMore,
+  needsShown,
+  nextStep,
+  originOf,
+  revealWorkspace,
+} from "../model.ts";
 import { isSelected } from "../state.ts";
-import { ageOf, countColors, needsDetail, needsRowEdge, statusInfo } from "../status.ts";
+import { ageOf, countColors, needsInk, needsLine, needsRowEdge } from "../status.ts";
 import { C } from "../theme.ts";
-import { cardMenu, glyphButton, type WsAccessor } from "./parts.ts";
+import { cardMenu, glyph, glyphButton, type WsAccessor } from "./parts.ts";
+
+// The lane's marker and name, or the project group's in Projects view.
+function originLine(w: WsAccessor): View {
+  const origin = computed(() => originOf(w()));
+  return HStack({ spacing: 5 }, [
+    RoundedRectangle({ cornerRadius: 2 })
+      .fill(() => origin().color)
+      .frame({ width: 7, height: 7 }),
+    Text(() => origin().name)
+      .font(11)
+      .color(C.metaText)
+      .lineLimit(1)
+      .truncation("tail"),
+  ]).frame({ maxWidth: "infinity", alignment: "leading" });
+}
 
 function needsRow(w: WsAccessor): View {
-  // One status per change, read by the dot and its halo.
-  const info = computed(() => statusInfo(w()));
   const row = HStack({ spacing: 10, alignment: "top" }, [
-    // 13pt halo frame: top 2 keeps the dot centred on the title line.
-    haloDot(
-      Circle({ size: 7 }).fill(() => info().dot ?? C.clay),
-      () => info().halo,
-      7,
-    ).paddingTop(2),
-    VStack({ alignment: "leading", spacing: 1 }, [
+    glyph(w, 20, 5, 10),
+    VStack({ alignment: "leading", spacing: 2 }, [
       Text(() => displayTitle(w()))
         .font(12.5)
         .weight("semibold")
         .color(C.text)
         .lineLimit(1)
         .truncation("middle"),
-      Text(() => needsDetail(w()))
+      Text(() => needsLine(w()))
         .font(12)
-        .color(C.secondary)
+        .color(() => needsInk(w()))
         .lineLimit(1)
         .truncation("tail"),
+      originLine(w),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
       .layoutPriority(1),
     meta(() => ageOf(w()), C.secondary),
-    glyphButton("xmark", 16, 8.5, C.tertiary, () => dismissNeeds(w())),
+    glyphButton("xmark", 16, 8.5, C.tertiary, () => dismissWaiting(w())),
   ])
     .paddingHorizontal(10)
     .paddingVertical(9)
@@ -94,7 +113,7 @@ export function nextButton(): View {
 }
 
 // "+2 more" under the capped rows, in line with the rows' titles: a row's
-// 1pt edge, 10 padding, 13pt halo and 10 spacing put its title at 34.
+// 1pt edge, 10 padding, 20pt tile and 10 spacing put its title at 41.
 function moreLine(): View {
   return when(
     "more",
@@ -104,7 +123,7 @@ function moreLine(): View {
         .font(11.5)
         .color(C.clayText)
         .lineLimit(1)
-        .paddingLeading(34)
+        .paddingLeading(41)
         .frame({ maxWidth: "infinity", alignment: "leading" }),
   );
 }

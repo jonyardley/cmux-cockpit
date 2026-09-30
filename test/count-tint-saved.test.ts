@@ -178,10 +178,13 @@ describe("lane and project count pills", () => {
     assert.deepEqual(status.countColors(model.laneWorkspaces("review")), QUIET_PILL);
   });
 
-  it("leaves a card the Needs you strip lists out of its lane's count and tint", () => {
+  it("counts and tints by a placeholder for a card the Needs you strip lists", () => {
     seed();
-    assert.deepEqual(model.laneWorkspaces("parked"), []);
-    assert.deepEqual(status.countColors(model.laneWorkspaces("parked")), QUIET_PILL);
+    assert.deepEqual(
+      model.laneWorkspaces("parked").map((w) => w.id),
+      ["needs"],
+    );
+    assert.deepEqual(status.countColors(model.laneWorkspaces("parked")), { bg: C.clayCount, fg: C.clayText });
   });
 
   it("counts and tints by a card past the strip's cap, which keeps its lane", () => {

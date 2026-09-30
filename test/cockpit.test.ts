@@ -11,6 +11,7 @@ const status = await import("../src/cockpit/status.ts");
 const { READY_INK } = await import("../src/shared/pr-colors.ts");
 const needs = await import("../src/shared/needs.ts");
 const { LANES, laneByKey } = await import("../src/cockpit/lanes.ts");
+const { C } = await import("../src/cockpit/theme.ts");
 const { cardMenu } = await import("../src/cockpit/views/parts.ts");
 const projects = await import("../src/shared/projects.ts");
 
@@ -120,7 +121,7 @@ describe("lanes", () => {
 // (2026-09-26): a single-member group's anchor can be a real workspace, not a
 // generated placeholder, and it must not vanish from its lane.
 describe("a real workspace anchoring a single-member group", () => {
-  it("hides the generated anchor but shows the real one, in Needs you and then counted in its lane", () => {
+  it("hides the generated anchor but shows the real one, in Needs you and counted in its lane", () => {
     r.data.epoch += 100;
     r.data.selectedId = null;
     r.data.groups = [
@@ -149,8 +150,9 @@ describe("a real workspace anchoring a single-member group", () => {
       model.needsList().map((w) => w.id),
       ["real-parked"],
     );
-    // Waiting, it shows in Needs you alone; answered, it is back in its lane.
-    assert.equal(model.laneWorkspaces("parked").length, 0);
+    // Waiting, it shows in Needs you and its lane counts its placeholder;
+    // answered, its card is back in the same count.
+    assert.equal(model.laneWorkspaces("parked").length, 1);
     parked.agents = [agent("working", { sinceEpoch: 1 })];
     assert.equal(model.laneWorkspaces("parked").length, 1);
   });
@@ -174,6 +176,17 @@ describe("resolveDrop", () => {
 
   it("files a drop at the very top into the first lane", () => {
     assert.deepEqual(drop.resolveDrop("w:c", 0), { laneKey: "main", nextRef: null, prevRef: null });
+  });
+
+  it("anchors to a placeholder as it would to the card, since it stands for a real tab", () => {
+    const c = byId("c");
+    if (!c) throw new Error("fixture");
+    c.agents = [agent("needs_input", { sinceEpoch: 500 })];
+    // Without a@main: [h:main, b@main, h:review, g:c, ...]; slot 3 is under h:review.
+    assert.deepEqual(drop.resolveDrop("w:a", 3), { laneKey: "review", nextRef: "c", prevRef: null });
+    // A placeholder is never a drag's own row.
+    drop.handleMove("g:c", 0);
+    assert.equal(r.calls.length, 0);
   });
 
   it("ignores a next card that belongs to another lane", () => {
@@ -540,26 +553,68 @@ describe("needs you", () => {
     );
   });
 
-  it("takes a card it lists out of its lane, and puts it back once dismissed", () => {
+  it("leaves a placeholder in a listed card's place, counted, and puts the card back once dismissed", () => {
     const a = byId("a");
     if (!a) throw new Error("fixture");
     a.agents = [agent("needs_input", { sinceEpoch: 500 })];
     assert.ok(!ids().includes("a@main"));
+    assert.ok(ids().includes("g:a"));
     assert.deepEqual(
       model.laneWorkspaces("main").map((w) => w.id),
-      ["b"],
+      ["a", "b"],
     );
-    needs.dismissNeeds(a);
-    assert.ok(ids().includes("a@main"));
+    const at = ids().indexOf("g:a");
+    model.dismissWaiting(a);
+    assert.ok(!ids().includes("g:a"));
+    assert.equal(ids().indexOf("a@main"), at);
     assert.equal(model.laneWorkspaces("main").length, 2);
   });
 
-  it("leaves a lane whose only card waits as an empty lane's zone", () => {
+  it("holds a dismissed card in its placeholder's spot until its status changes", () => {
+    const a = byId("a");
+    const b = byId("b");
+    if (!a || !b) throw new Error("fixture");
+    b.agents = [agent("working", { sinceEpoch: 400 })];
+    a.agents = [agent("needs_input", { sinceEpoch: 500 })];
+    const lane = () => ids().filter((id) => id.endsWith("@main") || id === "g:a");
+    assert.deepEqual(lane(), ["g:a", "b@main"]);
+    model.dismissWaiting(a);
+    // Idle now, it would sort under the working card; it keeps the top.
+    assert.deepEqual(lane(), ["a@main", "b@main"]);
+    a.agents = [agent("working", { sinceEpoch: 600 })];
+    assert.equal(model.stateRank(a), 2);
+    a.agents = [agent("idle", { sinceEpoch: 700 })];
+    assert.deepEqual(lane(), ["b@main", "a@main"]);
+  });
+
+  it("keeps a lane whose only card waits, with the placeholder under its header", () => {
     const c = byId("c");
     if (!c) throw new Error("fixture");
     c.agents = [agent("needs_input", { sinceEpoch: 500 })];
-    assert.ok(ids().includes("z:review"));
-    assert.ok(!ids().some((id) => id.startsWith("h:review")));
+    assert.ok(!ids().includes("z:review"));
+    const at = ids().findIndex((id) => id.startsWith("h:review"));
+    assert.equal(ids()[at + 1], "g:c");
+  });
+
+  it("hides a folded lane's placeholder but still counts it", () => {
+    const c = byId("c");
+    if (!c) throw new Error("fixture");
+    c.agents = [agent("needs_input", { sinceEpoch: 500 })];
+    const review = laneByKey("review");
+    if (!model.isCollapsed(review)) model.toggleLane(review);
+    assert.ok(!ids().includes("g:c"));
+    assert.equal(model.laneWorkspaces("review").length, 1);
+    model.toggleLane(review);
+  });
+
+  it("names the lane a waiting session came from, or its project group in Projects view", () => {
+    const a = byId("a");
+    if (!a) throw new Error("fixture");
+    a.directory = "/Users/coder/dev/app-two";
+    assert.deepEqual(model.originOf(a), { name: "Main activity", color: C.laneMain });
+    state.setMode("projects");
+    assert.equal(model.originOf(a).name, "App Two");
+    assert.equal(model.originOf(undefined).name, "");
   });
 
   it("keeps a card being dragged in its lane when it starts asking, and takes it out once dropped", () => {
@@ -573,7 +628,7 @@ describe("needs you", () => {
     assert.ok(!ids().includes("a@main"));
   });
 
-  it("takes a card it lists out of its project, and keeps the header of a project with only waiting sessions", () => {
+  it("leaves a placeholder for a card it lists in its project, whose header stays", () => {
     const a = byId("a");
     const c = byId("c");
     if (!a || !c) throw new Error("fixture");
@@ -583,11 +638,11 @@ describe("needs you", () => {
     state.setMode("projects");
     const entries = () => model.projectEntries().map((e) => e.id);
     assert.ok(!entries().includes("a@p"));
-    // Its header stays, count 0, so its "+" is still there; not quiet, as it
-    // has a session, waiting in Needs you.
-    assert.ok(entries().includes("p:/dev/app-two"));
+    // Its header stays over the placeholder, counting it, so its "+" is
+    // still there; not quiet, as it has a session, waiting in Needs you.
+    assert.equal(entries()[entries().indexOf("p:/dev/app-two") + 1], "a@g");
     assert.ok(!entries().includes("q:/dev/app-two"));
-    assert.equal(model.projectWorkspaces("/dev/app-two").length, 0);
+    assert.equal(model.projectWorkspaces("/dev/app-two").length, 1);
     // An editor open on it stays open.
     state.setEditingProject("/dev/app-two");
     assert.ok(entries().includes("e:/dev/app-two"));
