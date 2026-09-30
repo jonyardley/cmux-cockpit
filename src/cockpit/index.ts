@@ -3,6 +3,8 @@
 // Layout, top to bottom:
 //   0. Only when config/state.json could not be read at build: one line
 //      saying so, so the board does not just look empty (issue #78).
+//   0b. For NOTICE_SECS after a lane moved by itself (automove.ts): one line
+//      naming the move and why.
 //   1. All | Projects segmented control (author state).
 //   2. Next: opens what needs you, then what is Ready, one press at a time.
 //   3. "Needs you" strip: the workspaces whose agent is waiting on input, the
@@ -23,6 +25,7 @@ import type { ViewMode } from "../../scripts/state-config.ts";
 import { stateNotice } from "../shared/freshness.ts";
 import { faintLine } from "../shared/notice.ts";
 import { motionList } from "../shared/ui.ts";
+import { autoMoveNotice } from "./automove.ts";
 import { handleDragChange, handleMove, isForeignAnchor } from "./drop.ts";
 import { flatEntries, panelMaxHeight, panelOpacity, projectEntries, wsById } from "./model.ts";
 import { C } from "./theme.ts";
@@ -34,6 +37,12 @@ import { needsStrip, nextButton } from "./views/needs.ts";
 // The unreadable-state line, gone entirely while the state read fine.
 function stateLine(): View {
   return faintLine("state-notice", stateNotice, C.clayText, 14).paddingVertical(6);
+}
+
+// The automatic move's notice. Always built, whichever tab shows, since
+// reading it is also what applies the moves (automove.ts).
+function autoMoveLine(): View {
+  return faintLine("auto-move", autoMoveNotice, C.secondary, 14).paddingVertical(6);
 }
 
 // Top-aligned, so a zero-height panel's rows overflow downward, unseen.
@@ -85,6 +94,7 @@ function projectsPanel(): View {
 sidebar(() =>
   VStack({ spacing: 0, alignment: "leading" }, [
     stateLine(),
+    autoMoveLine(),
     segmented(),
     nextButton(),
     needsStrip(),

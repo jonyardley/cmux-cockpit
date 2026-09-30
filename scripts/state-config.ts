@@ -75,6 +75,12 @@ export interface State {
    * a URL could plant words the card shows as the chat's own.
    */
   moves: Record<string, SavedMove>;
+  /**
+   * wsId -> its PR's state when the cockpit last looked (src/cockpit/automove.ts),
+   * so a lane moves only when that state changes, never on every reload.
+   * Kept for the next build rather than rebuilding (rebuildsOn).
+   */
+  prSeen: Record<string, PrSeen>;
   /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
   ui: UiState;
   /**
@@ -98,6 +104,12 @@ export interface SavedPoll {
 }
 
 export type ViewMode = "all" | "projects";
+
+/** A PR as the lanes see it: ready to merge (the green chip), merged, or anything else. */
+export type PrSeen = "ready" | "merged" | "other";
+const PR_SEEN: readonly unknown[] = ["ready", "merged", "other"];
+const isPrSeen = (v: unknown): v is PrSeen => PR_SEEN.includes(v);
+const prSeen = (v: unknown): PrSeen | null => (isPrSeen(v) ? v : null);
 
 /**
  * The cockpit's own view state. Each rebuild hot-reloads the sidebar, which
@@ -276,6 +288,7 @@ export const emptyState = (): State => ({
   prOrigins: {},
   asking: {},
   moves: {},
+  prSeen: {},
   ui: {},
 });
 
@@ -572,6 +585,7 @@ export function validateState(raw: unknown): State {
     prOrigins: cleanMap(v.prOrigins, originAt, isPrUrl),
     asking: cleanMap(v.asking, savedAsk),
     moves: cleanMap(v.moves, savedMove),
+    prSeen: cleanMap(v.prSeen, prSeen),
     ui: uiState(v.ui),
     ...(poll ? { poll } : {}),
   };
@@ -582,8 +596,8 @@ export type SetResult = { ok: true; state: State } | { ok: false; error: string 
 // The maps applySet takes. `prs`, `ownPrs`, `subagents`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
-type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves";
-const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui", "asking", "moves"];
+type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves" | "prSeen";
+const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui", "asking", "moves", "prSeen"];
 const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
 
 // Maps applySet takes from a hook but never from a URL.
@@ -618,6 +632,8 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       return { ...state, asking: without(state.asking, id) };
     case "moves":
       return { ...state, moves: without(state.moves, id) };
+    case "prSeen":
+      return { ...state, prSeen: without(state.prSeen, id) };
     case "ui": {
       const { mode, collapsed } = state.ui;
       return { ...state, ui: id === "mode" ? (collapsed ? { collapsed } : {}) : mode ? { mode } : {} };
@@ -652,6 +668,10 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
       return askEntry(state, id, parsed);
     case "moves":
       return moveEntry(state, id, parsed);
+    case "prSeen":
+      return isPrSeen(parsed)
+        ? { ...state, prSeen: { ...state.prSeen, [id]: parsed } }
+        : 'prSeen wants "ready", "merged" or "other"';
   }
 }
 
@@ -696,11 +716,12 @@ function isKeyFor(map: MapName, id: string): boolean {
 
 /**
  * Whether a set needs a rebuild to show. The sidebar already shows its own
- * view and folds, and every rebuild bakes in the file as it stands, so a `ui`
- * set only has to be written: rebuilding on each tap would reload the
- * sidebar under the tap.
+ * view and folds, and the PR states it has seen (prSeen) change nothing on
+ * screen, and every rebuild bakes in the file as it stands, so a `ui` or
+ * `prSeen` set only has to be written: rebuilding on each tap would reload
+ * the sidebar under the tap, and on each PR state change would loop.
  */
-export const rebuildsOn = (key: string): boolean => !key.startsWith("ui.");
+export const rebuildsOn = (key: string): boolean => !key.startsWith("ui.") && !key.startsWith("prSeen.");
 
 /**
  * Applies one `set`: `key` is `<map>.<id>`, `value` the JSON for that entry,

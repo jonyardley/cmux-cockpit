@@ -5,7 +5,10 @@
 
 import type { SavedCheck, SavedOwnPr, SavedPr, SavedPrOrigin } from "../../scripts/state-config.ts";
 import { SAVED_STATE } from "./persist.ts";
+import { healthOf, type PrHealth } from "./pr-health.ts";
 import { cleanTitle } from "./text.ts";
+
+export type { PrHealth } from "./pr-health.ts";
 
 // The saved PR, while the workspace's branch is not yet known (cmux has not
 // reported it) or still matches the branch it was found for.
@@ -62,26 +65,6 @@ export function checksOf(w: Workspace): SavedCheck[] {
   return savedFor(w)?.checks ?? [];
 }
 
-/**
- * What a PR's chip says about the PR, so a problem shows without selecting
- * the workspace. Only an open PR has a health, its worst state: failing
- * checks, then merge conflicts, then checks running. Ready needs GitHub's
- * own verdict (mergeable, so no conflicts or blocking review) on a PR out
- * of draft whose saved checks all passed. With no saved checks (cmux's own
- * PR, one of Jon's own PRs no workspace holds, or a repo without CI), or an
- * entry saved before the poller kept the verdict, it stays quiet rather
- * than claim a ready it cannot see.
- */
-export type PrHealth = "failing" | "conflicts" | "running" | "ready" | "quiet";
-
-function healthOf(pr: PullRequest, checks: readonly SavedCheck[], failing: number): PrHealth {
-  if (pr.status !== "open") return "quiet";
-  if (failing > 0) return "failing";
-  if (pr.conflicts === true) return "conflicts";
-  if (checks.some((c) => c.state === "pending")) return "running";
-  return checks.length > 0 && !pr.draft && pr.mergeable === true ? "ready" : "quiet";
-}
-
 // The chip's words after the number, joined by " · ": a draft keeps its
 // marker whatever its health, and a PR that is not open says its status.
 function wordsOf(pr: PullRequest, health: PrHealth, failing: number): string[] {
@@ -119,7 +102,7 @@ export interface PrSummary {
 export function summaryOf(pr: PullRequest, checks: readonly SavedCheck[]): PrSummary | undefined {
   if (!pr.number) return undefined;
   const failing = checks.filter((c) => c.state === "fail").length;
-  const health = healthOf(pr, checks, failing);
+  const health = healthOf(pr, checks);
   const words = wordsOf(pr, health, failing);
   const tag = "#" + pr.number;
   const text = [tag, ...words].join(" · ");
@@ -133,7 +116,7 @@ export function prHealth(w: Workspace | undefined): PrHealth {
   const pr = prOf(w);
   if (!w || !pr?.number) return "quiet";
   const checks = checksOf(w);
-  return healthOf(pr, checks, checks.filter((c) => c.state === "fail").length);
+  return healthOf(pr, checks);
 }
 
 /** The workspace's first PR as a view shows it; undefined without a numbered PR. */
