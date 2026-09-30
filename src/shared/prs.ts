@@ -92,6 +92,28 @@ export interface PrSummary {
   state: string;
   /** The PR's own title, display-cleaned; "" when it has none. */
   title: string;
+  /** Its diff size, "+120 −8" (diffText); "" when it has none. */
+  diff: string;
+}
+
+// A count in at most four characters, never rounded up: 950, 1.2k, 12k, 3.4M.
+function lines(n: number): string {
+  if (n < 1000) return String(n);
+  const [scaled, unit] = n < 1e6 ? [n / 1e3, "k"] : [n / 1e6, "M"];
+  if (scaled >= 1000) return "999M";
+  return (scaled < 10 ? String(Math.floor(scaled * 10) / 10) : String(Math.floor(scaled))) + unit;
+}
+
+/**
+ * An open PR's diff size as "+120 −8" (a true minus sign). "" once it is
+ * merged or closed, since the size is a cue for review; "" unless both
+ * counts are known, so a missing one is never shown as 0; and "" for an
+ * empty diff, which has nothing to say.
+ */
+export function diffText(pr: Pick<PullRequest, "status" | "additions" | "deletions">): string {
+  const { additions: add, deletions: del } = pr;
+  if (pr.status !== "open" || add === undefined || del === undefined) return "";
+  return add || del ? "+" + lines(add) + " −" + lines(del) : "";
 }
 
 /**
@@ -108,7 +130,7 @@ export function summaryOf(pr: PullRequest, checks: readonly SavedCheck[]): PrSum
   const text = [tag, ...words].join(" · ");
   const state = words.join(" · ") || (pr.status ?? "");
   const title = cleanTitle(pr.title);
-  return { number: pr.number, status: pr.status, url: pr.url, health, tag, text, state, title };
+  return { number: pr.number, status: pr.status, url: pr.url, health, tag, text, state, title, diff: diffText(pr) };
 }
 
 /** The health of the workspace's first numbered PR, without the words; quiet with none. */

@@ -201,6 +201,9 @@ interface PullRequest {
   conflicts?: boolean;
   /** The PR's own title; only the saved PR carries it. */
   title?: string;
+  /** Lines added and removed; only the saved PR carries them. */
+  additions?: number;
+  deletions?: number;
   label?: string;
   branch?: string;
   stale?: boolean;

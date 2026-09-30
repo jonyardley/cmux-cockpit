@@ -918,6 +918,8 @@ export interface PrChip {
   /** The state words after the number ("draft", "1 failing"), in its health's ink; "" with none. */
   state: string;
   health: PrHealth;
+  /** The diff size, "+120 −8", in faint ink after the state; "" with none. */
+  diff: string;
   url?: string;
 }
 
@@ -954,7 +956,7 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
   if (move && size) out.push({ id: "size", text: moveSizeText(size, move.decisions), size });
   const pr = prSummary(w);
   if (pr) {
-    const c: PrChip = { id: "pr", tag: pr.tag, state: pr.state, health: pr.health };
+    const c: PrChip = { id: "pr", tag: pr.tag, state: pr.state, health: pr.health, diff: pr.diff };
     if (pr.url) c.url = pr.url;
     out.push(c);
   }

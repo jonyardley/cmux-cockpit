@@ -161,6 +161,9 @@ export interface SavedPr {
   conflicts?: true;
   /** Its title (pr-poll.ts's cleanTitle), so a card can say what the PR does; left out when it has none. */
   title?: string;
+  /** Lines added and removed across its diff; left out when gh sent no count. */
+  additions?: number;
+  deletions?: number;
   /** Its CI checks, failing first (pr-poll.ts's checksFrom); left out when it has none. */
   checks?: SavedCheck[];
 }
@@ -406,6 +409,8 @@ function savedCheck(v: unknown): SavedCheck[] {
 }
 
 const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
+/** A diff's line count: a whole number, never negative. */
+export const isLineCount = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 
 function savedPr(v: unknown): SavedPr | null {
   if (!isRecord(v) || !isPrUrl(v.url) || !isPrStatus(v.status)) return null;
@@ -421,6 +426,8 @@ function savedPr(v: unknown): SavedPr | null {
     ...(v.mergeable === true ? { mergeable: true } : {}),
     ...(v.conflicts === true ? { conflicts: true } : {}),
     ...(isLabel(v.title) ? { title: v.title } : {}),
+    ...(isLineCount(v.additions) ? { additions: v.additions } : {}),
+    ...(isLineCount(v.deletions) ? { deletions: v.deletions } : {}),
   };
   const checks = Array.isArray(v.checks) ? v.checks.flatMap(savedCheck).slice(0, MAX_CHECKS) : [];
   return checks.length ? { ...pr, checks } : pr;

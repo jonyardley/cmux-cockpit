@@ -227,7 +227,7 @@ function chipById(chips: readonly Chip[], id: TextChip["id"]): TextChip {
   return { id, text: "" };
 }
 
-const NO_PR: PrChip = { id: "pr", tag: "", state: "", health: "quiet" };
+const NO_PR: PrChip = { id: "pr", tag: "", state: "", health: "quiet", diff: "" };
 
 /** The PR chip from a `chipsFor` list, or an empty one while it is absent. */
 function prById(chips: readonly Chip[]): PrChip {
@@ -301,6 +301,20 @@ export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap = "ope
     HStack({ spacing: 5 }, [
       one("size").layoutPriority(2),
       one("pr").layoutPriority(2),
+      // The PR's diff size beside its chip, faint and unframed. Outside the
+      // chip and below the branch's priority, so on a narrow card it is cut
+      // first and the branch keeps its width (issue #152).
+      when(
+        "pr-diff",
+        () => !!prById(chips()).diff,
+        () =>
+          chipText(
+            () => prById(chips()).diff,
+            () => C.faint,
+            false,
+            "regular",
+          ),
+      ).layoutPriority(-1),
       one("br"),
       one("port").layoutPriority(2),
       toReviewAction(w),
