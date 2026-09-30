@@ -31,10 +31,12 @@ export const hasChipsRow = (w: Workspace | undefined, withBranch: boolean): bool
 // Jon keeps the sidebar (about 246pt inside the card, 11pt chip text). The
 // renderer gives no width to read, so a much narrower or wider sidebar
 // makes this a worse guess.
-const LINE_CHARS = 36;
+export const PROJECT_LINE_CHARS = 36;
 /**
  * The full card's line, narrower by its glyph: set from the preview, where
- * "#176 merged", Park and Close fill it with a few points spare.
+ * "#176 merged", Park and Close fill it with a few points spare. It decides
+ * every full card's split, and errs towards splitting: a line too many
+ * costs height, a line too few cuts the branch.
  */
 export const FULL_LINE_CHARS = 32;
 // A chip's frame and the gap after it, in characters.
@@ -70,20 +72,31 @@ function chipChars(c: Chip): number {
  * Whether a card's chips fit on one line, estimated from their text, as the
  * renderer cannot measure.
  */
-export function chipsFitOneLine(chips: readonly Chip[], w: Workspace | undefined, lineChars = LINE_CHARS): boolean {
+export function chipsFitOneLine(chips: readonly Chip[], w: Workspace | undefined, lineChars: number): boolean {
   let used = actionChars(w);
   for (const c of chips) used += chipChars(c);
   return used <= lineChars;
 }
 
 /**
- * Whether a project card's chips split over two lines: the PR (and size)
- * on the first; the branch, port, To review and a merged card's Park and
- * Close on the second. Only when both lines have something and they do not
- * fit on one.
+ * Whether a card's chips split over two lines: the PR (and size) on the
+ * first; the branch, port, To review and a merged card's Park and Close on
+ * the second. Only when both lines have something and they do not fit on
+ * one `lineChars` wide.
  */
-export function chipsSplit(chips: readonly Chip[], w: Workspace | undefined): boolean {
+export function chipsSplit(chips: readonly Chip[], w: Workspace | undefined, lineChars: number): boolean {
   const first = chips.some((c) => c.id === "pr" || c.id === "size");
   const second = chips.some((c) => c.id === "br" || c.id === "port") || canFileForReview(w) || offersMergedChip(w);
-  return first && second && !chipsFitOneLine(chips, w);
+  return first && second && !chipsFitOneLine(chips, w, lineChars);
+}
+
+/**
+ * Whether a split's second line fits: the branch, port, To review and a
+ * merged card's Park and Close. When it does not, Park and Close take a
+ * line of their own under it.
+ */
+export function secondLineFits(chips: readonly Chip[], w: Workspace | undefined, lineChars: number): boolean {
+  let used = actionChars(w);
+  for (const c of chips) if (c.id === "br" || c.id === "port") used += chipChars(c);
+  return used <= lineChars;
 }
