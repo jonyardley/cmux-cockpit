@@ -3,7 +3,7 @@
 import { isProjectKey } from "../../shared/projects.ts";
 import { countPill, laneTitle, projectBadge, ring, sectionTitle, unreadBadge, when } from "../../shared/ui.ts";
 import { dropLane } from "../drop.ts";
-import { editLabel, openEditor } from "../edit.ts";
+import { editLabel, isNewDraft, openEditor, openNewProject } from "../edit.ts";
 import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
@@ -267,6 +267,25 @@ export function quietRow(k: string): View {
     ]);
   if (!open) return row.opacity(0.55);
   return row.hoverBackground(C.hover).onTap(() => openProjectWorkspace(k));
+}
+
+// "+ New project", at the foot of the busy projects: opens the editor on a
+// folder, and a second tap closes it. Styled as a quiet row, so it reads as
+// part of the list rather than a button competing with the headers.
+export function newProjectRow(): View {
+  const row = HStack({ spacing: 8 }, [
+    Image("plus").font(10).weight("semibold").color(C.secondary).frame({ width: 16, height: 16 }),
+    laneTitle("New project", C.secondary, "regular"),
+    Spacer({ minLength: 0 }),
+  ])
+    .paddingHorizontal(8)
+    .paddingVertical(3)
+    .cornerRadius(7)
+    .background(() => (isNewDraft() ? C.hover : "clear"))
+    .hoverBackground(C.hover)
+    .frame({ maxWidth: "infinity" })
+    .onTap(openNewProject);
+  return VStack({ spacing: 0 }, [row]).paddingTop(6);
 }
 
 // A project's own menu: open a session in it, or edit it. Other has no edit.

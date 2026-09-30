@@ -8,7 +8,7 @@ import { build } from "esbuild";
 import { bundleOptions, ENTRIES, stateFor, UNREAD } from "../scripts/bundle.ts";
 import { emptyState } from "../scripts/state-config.ts";
 
-const baked = { projects: [], state: emptyState(), unreadable: false, urlToken: "" };
+const baked = { projects: [], state: emptyState(), unreadable: false, urlToken: "", home: "" };
 
 async function bundleText(entry: (typeof ENTRIES)[number]): Promise<string> {
   const result = await build(bundleOptions(entry, baked));

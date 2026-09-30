@@ -64,9 +64,11 @@ Tested on cmux 0.64.25.
   icon does the same as "+", and one without a `root` sits dimmed with no
   tap. The file is the starting table: right-click any project's header
   (or quiet row) and choose "Edit project" to rename it, pick its colour
-  and icon, change its folder or remove it, and a card's menu can make its
-  folder a new project ("New project from this folder"). Those edits live
-  in `config/state.json` and win over the file at build.
+  and icon, change its folder or remove it. To add one, tap "+ New
+  project" above the quiet ones and type its folder (`~` allowed), or tap
+  a folder you have open; a card under Other also offers "Make ... a
+  project", as its menu's "New project from this folder" does. Those edits
+  live in `config/state.json` and win over the file at build.
 - `helper/` and `scripts/`: the URL handler app that saves state, the
   build, the pull request poller and the Claude Code hooks
   ([docs/state-loop.md](docs/state-loop.md)).

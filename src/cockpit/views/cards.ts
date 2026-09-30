@@ -31,6 +31,7 @@ import {
   cardMenu,
   chipsRow,
   glyph,
+  makeProjectAction,
   mergedActions,
   pinMark,
   statusDot,
@@ -304,6 +305,7 @@ export function projectRow(w: WsAccessor, key: string): View {
     moveLine(w),
     chipsRow(w, true).paddingTop(() => (hasChipsRow(w(), true) ? 3 : 0)),
     mergedActions(w, 0, 4),
+    makeProjectAction(w),
   ])
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .paddingHorizontal(10)

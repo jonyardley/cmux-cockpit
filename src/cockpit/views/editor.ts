@@ -1,11 +1,15 @@
 // The project editor card (src/cockpit/edit.ts), shown under a project's
 // header or quiet row: the project's tile beside its name, then colour,
-// icon with its search, and folder, then Remove, Cancel and Done.
+// icon with its search, and folder, then Remove, Cancel and Done. Making a
+// new project, it opens on the folder instead, with the open folders that
+// have no project under it, and the name follows the folder.
 
 import { glyphColor } from "../../shared/contrast.ts";
+import { tildeHome } from "../../shared/home.ts";
 import { PROJECT_COLORS } from "../../shared/projects.ts";
 import { projectBadge, ring, sectionTitle, when } from "../../shared/ui.ts";
 import {
+  addSuggested,
   cancelSearch,
   closeEditor,
   draftProblem,
@@ -13,6 +17,7 @@ import {
   ICONS_PER_ROW,
   iconRows,
   iconSearch,
+  isNewDraft,
   matchesLine,
   removeLabel,
   removeTapped,
@@ -25,6 +30,7 @@ import {
   setDraftName,
   setIconSearch,
 } from "../edit.ts";
+import { folderSuggestions } from "../model.ts";
 import { C } from "../theme.ts";
 
 const SWATCHES_PER_ROW = 8;
@@ -131,12 +137,54 @@ function iconPicker(): View {
   ]);
 }
 
+// A new project's name, read from the draft as the folder is typed: it
+// follows the folder, and Edit project renames it later.
+function newNameRow(): View {
+  return HStack({ spacing: 10 }, [
+    tile(),
+    VStack({ spacing: 3, alignment: "leading" }, [
+      label("New project"),
+      Text(() => draftSpec().name || "Named after its folder")
+        .font(13)
+        .weight("semibold")
+        .color(() => (draftSpec().name ? C.text : C.tertiary))
+        .lineLimit(1),
+    ]),
+  ]);
+}
+
+// One open folder with no project, as a row: a tap makes it a project.
+function suggestion(dir: string): View {
+  const row = HStack({ spacing: 6 }, [
+    Image("plus").font(10).weight("semibold").color(C.secondary),
+    Text(tildeHome(dir)).font(11.5).monospaced().color(C.secondary).lineLimit(1).truncation("middle"),
+    Spacer({ minLength: 0 }),
+  ])
+    .paddingHorizontal(6)
+    .paddingVertical(3)
+    .frame({ maxWidth: "infinity" });
+  return ring(row, C.chipFace, C.chipEdge, 1, 6, { hover: { face: C.linkHover } }).onTap(() => addSuggested(dir));
+}
+
+function suggestions(): View {
+  return when(
+    "new-suggestions",
+    () => folderSuggestions().length > 0,
+    () =>
+      VStack({ spacing: 4, alignment: "leading" }, [
+        Text("Or one you have open").font(11).color(C.tertiary).paddingTop(8),
+        ForEach({ items: folderSuggestions, key: (dir) => dir }, (dir) => suggestion(dir())),
+      ]),
+  );
+}
+
 function actions(): View {
+  const fresh = isNewDraft();
   return HStack({ spacing: 6 }, [
-    Text(removeLabel).font(12).color(C.redText).onTap(removeTapped),
+    ...(fresh ? [] : [Text(removeLabel).font(12).color(C.redText).onTap(removeTapped)]),
     Spacer({ minLength: 4 }),
     Text("Cancel").font(12).color(C.secondary).paddingHorizontal(8).paddingVertical(4).onTap(closeEditor),
-    Text("Done")
+    Text(fresh ? "Add" : "Done")
       .font(12)
       .weight("semibold")
       .color(C.onBadge)
@@ -148,10 +196,22 @@ function actions(): View {
   ]);
 }
 
+// Editing, the folder comes last with the folders it matches; making a
+// project, it comes first, focused, with the open folders under it.
+function folderRows(k: string, root: string): View[] {
+  if (isNewDraft()) return [field(root, "~/dev/folder", true, setDraftFolder), suggestions()];
+  return [
+    field(root, "~/Dev/folder, for the +", false, setDraftFolder),
+    Text(matchesLine(k)).font(11).color(C.tertiary).lineLimit(2).paddingTop(4),
+  ];
+}
+
 export function projectEditor(k: string): View {
   const spec = draftSpec();
+  const folder = [label("Folder").paddingTop(14).paddingBottom(5), ...folderRows(k, spec.root ?? "")];
+  const fresh = isNewDraft();
   const body = VStack({ spacing: 0, alignment: "leading" }, [
-    nameRow(spec.name),
+    ...(fresh ? [newNameRow(), ...folder] : [nameRow(spec.name)]),
     label("Colour").paddingTop(14).paddingBottom(7),
     VStack({ spacing: 8 }, swatches()),
     label("Icon").paddingTop(14).paddingBottom(6),
@@ -162,9 +222,7 @@ export function projectEditor(k: string): View {
         onCancel: cancelSearch,
       }),
     ]).paddingTop(8),
-    label("Folder").paddingTop(14).paddingBottom(5),
-    field(spec.root ?? "", "~/Dev/folder, for the +", false, setDraftFolder),
-    Text(matchesLine(k)).font(11).color(C.tertiary).lineLimit(2).paddingTop(4),
+    ...(fresh ? [] : folder),
     Text(() => draftProblem() ?? "")
       .font(11)
       .color(C.clayText)

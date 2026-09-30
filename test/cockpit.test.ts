@@ -795,6 +795,8 @@ describe("projects mode", () => {
         "b@p",
         "p@p",
         "u@p",
+        // "+ New project", above the quiet ones.
+        "new",
         "quiet",
         "q:/dev/app-three",
       ],

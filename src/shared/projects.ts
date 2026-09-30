@@ -109,10 +109,18 @@ export function newProject(
   const taken = new Set(existing.map((p) => p.name));
   let name = base;
   for (let n = 2; taken.has(name); n++) name = `${base} ${n}`;
+  return {
+    key: dir.toLowerCase() + "/",
+    spec: { name, color: nextColor(existing), icon: PROJECT_ICONS[0], root: dir },
+  };
+}
+
+/** The first colour no project in `existing` uses yet; once all are taken, they go round again. */
+export function nextColor(existing: readonly Project[]): string {
   const used = new Set(existing.map((p) => p.color.toLowerCase()));
-  const color =
+  return (
     PROJECT_COLORS.find((c) => !used.has(c.toLowerCase())) ??
     PROJECT_COLORS[existing.length % PROJECT_COLORS.length] ??
-    PROJECT_COLORS[0];
-  return { key: dir.toLowerCase() + "/", spec: { name, color, icon: PROJECT_ICONS[0], root: dir } };
+    PROJECT_COLORS[0]
+  );
 }

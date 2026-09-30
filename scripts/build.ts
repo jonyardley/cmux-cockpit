@@ -124,7 +124,7 @@ const projects = withExpandedRoots(merged.projects);
 const state: State = { ...saved, projects: merged.kept };
 
 for (const name of ENTRIES) {
-  const result = await build(bundleOptions(name, { projects, state, unreadable, urlToken }));
+  const result = await build(bundleOptions(name, { projects, state, unreadable, urlToken, home: homedir() }));
   for (const out of result.outputFiles) writeIfChanged(out.path, out.contents);
 }
 // The doctor's freshness mark: a bundle left untouched keeps its old time,

@@ -43,6 +43,7 @@ import {
   fileForReview,
   hasProjectOverride,
   laneOf,
+  makeProjectLabel,
   moveToLane,
   moveToProject,
   newSessionFor,
@@ -290,6 +291,18 @@ function actionChip(label: string, tap: () => void, colors: () => ChipColors = (
     6,
     { hug: true, hover: chipHover(colors) },
   ).onTap(tap);
+}
+
+/** Under Other, a card whose folder can become a project offers it: the card menu's item, in view. */
+export function makeProjectAction(w: WsAccessor): View {
+  return when(
+    "make-project",
+    () => canCreateProject(w()),
+    () =>
+      HStack({ spacing: 0 }, [actionChip(makeProjectLabel(w()), () => createProjectFrom(w()))])
+        .paddingTop(4)
+        .frame({ maxWidth: "infinity", alignment: "leading" }),
+  );
 }
 
 // "To review →" (issue #53): files the card into For review, in the ready
