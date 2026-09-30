@@ -1,5 +1,5 @@
 // A card whose chat is idle on a background shell still running reads
-// "Waiting 4m · 1 shell" in working blue, not Idle or Ready: cmux sends
+// "Waiting 4m · 1 shell" in working blue, not Idle, once its turn is read: cmux sends
 // custom sidebars no shells, so the count comes from the hook's saved copy
 // (scripts/hooks/report-shell.ts). __STATE__ is set before the renderer
 // import, as in helpers-saved.test.ts.
@@ -34,16 +34,25 @@ const { C } = await import("../src/cockpit/theme.ts");
 const idle = () => agent("idle", { id: "chat", sinceEpoch: r.data.epoch - 240, lastActivityAt: r.data.epoch - 240 });
 
 describe("background shells on the card", () => {
-  it("counts the saved shells of an open chat", () => {
-    assert.equal(liveShellCount(ws("one", { agents: [idle()] })), 1);
-    assert.equal(liveShellCount(ws("two", { agents: [idle()] })), 2);
+  it("counts the saved shells of the chat that started them", () => {
+    const a = idle();
+    assert.equal(liveShellCount(ws("one", { agents: [a] }), a), 1);
+    assert.equal(liveShellCount(ws("two", { agents: [a] }), a), 2);
   });
 
-  it("counts none once the chat that started them has ended or gone", () => {
-    assert.equal(liveShellCount(ws("one", { agents: [agent("ended", { id: "chat" })] })), 0);
-    assert.equal(liveShellCount(ws("other", { agents: [idle()] })), 0);
-    assert.equal(liveShellCount(ws("none", { agents: [idle()] })), 0);
-    assert.equal(liveShellCount(undefined), 0);
+  it("counts none for another chat, an ended one, or none", () => {
+    const a = idle();
+    assert.equal(liveShellCount(ws("other", { agents: [a] }), a), 0);
+    const ended = agent("ended", { id: "chat" });
+    assert.equal(liveShellCount(ws("one", { agents: [ended] }), ended), 0);
+    assert.equal(liveShellCount(ws("none", { agents: [a] }), a), 0);
+    assert.equal(liveShellCount(ws("one"), null), 0);
+    assert.equal(liveShellCount(undefined, a), 0);
+  });
+
+  it("does not turn another chat's card to Waiting", () => {
+    const w = ws("other", { agents: [idle()] });
+    assert.match(status.statusLine(w), /^Idle/);
   });
 
   it("reads Waiting in working blue, with the idle age and the shell count", () => {
@@ -60,9 +69,10 @@ describe("background shells on the card", () => {
     assert.equal(info.urgency, "working");
   });
 
-  it("is never Ready while a shell runs, even with unread output", () => {
-    assert.equal(status.isReady(ws("one", { unread: 2, agents: [idle()] })), false);
-    assert.equal(status.isReady(ws("none", { unread: 2, agents: [idle()] })), true);
+  it("stays Ready while its finished turn is unread, since the shell may never end", () => {
+    const w = ws("one", { unread: 2, agents: [idle()] });
+    assert.equal(status.isReady(w), true);
+    assert.match(status.statusLine(w), /^Finished/);
   });
 
   it("leaves a working chat as Working", () => {

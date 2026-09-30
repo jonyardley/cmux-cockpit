@@ -21,7 +21,7 @@ export const ROUTES: Readonly<Record<string, readonly Route[]>> = {
   ],
   PostToolUse: [
     { script: "report-pr.ts", matcher: "Bash" },
-    { script: "report-shell.ts", matcher: "Bash" },
+    { script: "report-shell.ts", matcher: "Bash|KillShell|TaskStop" },
     {
       script: "report-published.ts",
       matcher: "Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__update",

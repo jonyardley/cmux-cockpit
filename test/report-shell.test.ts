@@ -10,8 +10,9 @@ import {
   backgroundId,
   finishedIds,
   MAX_AGE_S,
-  processEvent,
+  mayChange,
   prune,
+  stoppedId,
 } from "../scripts/hooks/report-shell.ts";
 import { MAX_SHELLS, type State, validateState } from "../scripts/state-config.ts";
 
@@ -41,6 +42,30 @@ test("a background Bash call's id comes from the tool result, or failing that it
   assert.equal(backgroundId(bash("s1", true, text)), "bq7x");
   assert.equal(backgroundId(bash("s1", false, { backgroundTaskId: "b1" })), null);
   assert.equal(backgroundId(bash("s1", true, { stdout: "done" })), null);
+  assert.equal(
+    backgroundId({ ...bash("s1", true, { backgroundTaskId: "b1" }), agent_id: "sub" }),
+    null,
+    "a subagent's",
+  );
+});
+
+test("a KillShell or TaskStop call names the task it stopped", () => {
+  assert.equal(stoppedId({ tool_name: "TaskStop", tool_input: { task_id: "b1" } }), "b1");
+  assert.equal(stoppedId({ tool_name: "KillShell", tool_input: { shell_id: "b2" } }), "b2");
+  assert.equal(stoppedId({ tool_name: "Bash", tool_input: { task_id: "b1" } }), null);
+  const map: ShellMap = { w1: [{ id: "b1", session: "s1", startedEpoch: 1 }] };
+  const event = { hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "b1" } };
+  assert.deepEqual(applyEvent(map, "w1", event, 10), {});
+});
+
+test("only a Stop or a background, kill or stop call goes on to the state file", () => {
+  assert.equal(mayChange(stop), true);
+  assert.equal(mayChange(bash("s1", true, { backgroundTaskId: "b1" })), true);
+  assert.equal(mayChange(bash("s1", false, {})), false);
+  assert.equal(
+    mayChange({ hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "b" } }),
+    true,
+  );
 });
 
 test("PostToolUse saves a background shell once, under its workspace", () => {
@@ -58,10 +83,22 @@ test("Stop drops the shells the transcript says finished, and the workspace once
       { id: "b2", session: "s1", startedEpoch: 2 },
     ],
   };
-  const one = applyEvent(map, "w1", stop, 10, new Set(["b1"]));
+  const one = applyEvent(map, "w1", stop, 10, () => new Set(["b1"]));
   assert.deepEqual(one, { w1: [{ id: "b2", session: "s1", startedEpoch: 2 }] });
-  assert.deepEqual(applyEvent(one, "w1", stop, 10, new Set(["b2"])), {});
-  assert.equal(applyEvent(map, "w1", stop, 10, new Set(["other"])), map, "nothing of ours finished");
+  assert.deepEqual(
+    applyEvent(one, "w1", stop, 10, () => new Set(["b2"])),
+    {},
+  );
+  assert.equal(
+    applyEvent(map, "w1", stop, 10, () => new Set(["other"])),
+    map,
+    "nothing of ours finished",
+  );
+});
+
+test("a Stop with no shells saved never reads the transcript", () => {
+  const read = () => assert.fail("read the transcript");
+  assert.deepEqual(applyEvent({}, "w1", stop, 10, read), {});
 });
 
 test("finishedIds reads only task-notification lines", () => {
@@ -75,14 +112,6 @@ test("a shell older than MAX_AGE_S is pruned", () => {
     w2: [{ id: "new", session: "s1", startedEpoch: 100 }],
   };
   assert.deepEqual(prune(map, MAX_AGE_S + 1), { w2: map.w2 });
-});
-
-test("processEvent reports a change only when the saved map moves", () => {
-  const event = bash("s1", true, { backgroundTaskId: "b1" });
-  const first = processEvent({}, "w1", event, 50);
-  assert.equal(first.changed, true);
-  assert.equal(processEvent(first.after, "w1", event, 60).changed, false);
-  assert.equal(processEvent(first.after, "w1", stop, 60, new Set(["b1"])).changed, true);
 });
 
 test("validateState keeps the newest MAX_SHELLS shells and drops malformed ones", () => {

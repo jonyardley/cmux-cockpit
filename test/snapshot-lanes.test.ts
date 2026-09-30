@@ -115,7 +115,6 @@ it("lanes: every card state", () => {
     ws("waiting", {
       title: "Iteration timings",
       group: "g-bg",
-      unread: 1,
       latestPrompt: "hi",
       agents: [agent("idle", { id: "shell-chat", sinceEpoch: ago(240), lastActivityAt: ago(240) })],
       latestMessage: "The batch resumes by itself once load drops.",

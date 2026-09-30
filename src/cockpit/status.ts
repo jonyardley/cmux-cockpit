@@ -126,8 +126,7 @@ export function isReady(w: Workspace | undefined): boolean {
 /** The agent a Ready card reports, or null when the workspace is not Ready. */
 export function readyAgent(w: Workspace | undefined): Agent | null {
   if (!w || !((w.unread ?? 0) > 0) || isSelected(w) || hasRealAsk(w)) return null;
-  if (!FINISHED.has(statusOf(w)) || isWaiting(agentOf(w), w)) return null;
-  return finishedAgent(w);
+  return FINISHED.has(statusOf(w)) ? finishedAgent(w) : null;
 }
 
 // The finished green and word: Ready adds no hue or word of its own.
@@ -151,12 +150,14 @@ export const askOf = (w: Workspace | undefined): string | null => askReason(agen
 const QUIET: StatusStyle = { ...STATUS.working, dot: null, halo: "clear", ring: C.blue };
 
 // Waiting: the turn ended but a background shell it started still runs,
-// so the card reads as busy, in working blue, not as finished. Never
-// Ready (readyAgent): the agent has not finished while its shell runs.
+// so the card reads as busy, in working blue, not as finished. Ready still
+// wins while its output is unread: a shell can be a dev server that never
+// exits, and the finished turn is what Jon has to look at.
 const WAITING: StatusStyle = { ...STATUS.working, label: WAITING_WORD };
 
-/** True when the workspace's agent is idle on a background shell still running. */
-const isWaiting = (a: Agent | null, w: Workspace | undefined): boolean => a?.status === "idle" && liveShellCount(w) > 0;
+/** True when the workspace's agent is idle on a background shell its own chat still runs. */
+export const isWaiting = (a: Agent | null, w: Workspace | undefined): boolean =>
+  a?.status === "idle" && liveShellCount(w, a) > 0;
 
 export function statusInfo(w: Workspace | undefined): StatusStyle {
   if (isReady(w)) return READY;
@@ -271,7 +272,7 @@ export function prTextColor(pr: Pick<PrSummary, "health"> | undefined, quiet: st
 export function statusLine(w: Workspace | undefined): string {
   const info = statusInfo(w);
   const line = withAge(info.label, cardAge(w));
-  if (info === WAITING) return line + " " + shellText(liveShellCount(w));
+  if (info === WAITING) return line + " " + shellText(liveShellCount(w, agentOf(w)));
   return info === QUIET ? line + quietSuffix(agentOf(w), w) : line;
 }
 

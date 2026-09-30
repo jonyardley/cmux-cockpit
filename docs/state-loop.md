@@ -391,20 +391,27 @@ so a file from before it existed reads the same.
 
 `PostToolUse` on `Bash` saves a call that ran with `run_in_background`,
 keyed by the task id Claude Code gave it (`tool_response.backgroundTaskId`,
-else the id in its "running in background with ID" text). `Stop` reads the
-transcript's last 512 KB for `<task-notification>` blocks, which Claude
-Code writes when a background task finishes or is stopped, and drops the
-shells they name. A finished shell wakes its chat, and that turn ends in a
+else the id in its "running in background with ID" text); a subagent's
+Bash call is skipped, since its finish never reaches the main chat's Stop.
+`PostToolUse` on `KillShell` or `TaskStop` drops the shell it stopped.
+`Stop`, when the workspace has shells saved, reads the transcript's last
+2 MB for `<task-notification>` blocks, which Claude Code writes when a
+background task finishes or is stopped, and drops the shells they name.
+Every other event exits before touching the state file. A finished shell wakes its chat, and that turn ends in a
 `Stop`, so the drop lands within a turn. A shell older than `MAX_AGE_S`
 (12 hours) is pruned on the next event, for a notification that was missed.
 
-`src/shared/shells.ts` counts a workspace's shells whose session is one of
-its open agents, so closing a chat, which kills its shells, clears them
-from the card at once. An idle agent with a shell counted reads "Waiting
-4m · 1 shell" in working blue on its cockpit card, and is never Ready.
+`src/shared/shells.ts` counts the shells of the card's own agent while it
+is open, so closing a chat, which kills its shells, clears them from the
+card at once, and one chat's shell never marks another's card. An idle
+agent with a shell counted reads "Waiting 4m · 1 shell" in working blue on
+its cockpit card and sorts with the working cards. Ready still wins while
+its turn is unread: a shell can be a dev server that never exits.
 
-Known gap: after `/clear` the chat runs under a new session id, so a shell
-started before the clear stops counting while it still runs.
+Known gaps: after `/clear` the chat runs under a new session id, so a
+shell started before the clear stops counting while it still runs. A shell
+whose output the chat read to the end with `TaskOutput` may get no
+notification, and then shows until the 12 hour prune.
 
 ## Published pages and docs
 

@@ -44,7 +44,7 @@ import {
   tick,
   unsortedCollapsed,
 } from "./state.ts";
-import { isReady, moveOf, readyAgent, sinceOf, statusOf } from "./status.ts";
+import { agentOf, isReady, isWaiting, moveOf, readyAgent, sinceOf, statusOf } from "./status.ts";
 import { C } from "./theme.ts";
 
 // --- groups and lanes ---------------------------------------------------------------
@@ -456,7 +456,8 @@ function liveRank(w: Workspace | undefined): number {
   }
   if (w && heldAtTop(w)) return 0;
   if (isReady(w)) return 1;
-  return s === "working" ? 2 : 3;
+  // A Waiting card is drawn in working blue, so it sorts with the working.
+  return s === "working" || isWaiting(agentOf(w), w) ? 2 : 3;
 }
 
 // The rank each card last had while not selected. Opening a Ready card
