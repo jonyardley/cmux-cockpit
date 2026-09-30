@@ -96,20 +96,23 @@ export interface PrSummary {
   diff: string;
 }
 
-// A line count in at most four characters: 950, 1.2k, 12k.
+// A count in at most four characters, never rounded up: 950, 1.2k, 12k, 3.4M.
 function lines(n: number): string {
   if (n < 1000) return String(n);
-  const k = n / 1000;
-  return (k < 10 ? String(Math.floor(k * 10) / 10) : String(Math.floor(k))) + "k";
+  const [scaled, unit] = n < 1e6 ? [n / 1e3, "k"] : [n / 1e6, "M"];
+  if (scaled >= 1000) return "999M";
+  return (scaled < 10 ? String(Math.floor(scaled * 10) / 10) : String(Math.floor(scaled))) + unit;
 }
 
 /**
- * A PR's diff size as "+120 −8" (a true minus sign), "" when neither count
- * is known or both are zero, since an empty diff has nothing to say.
+ * An open PR's diff size as "+120 −8" (a true minus sign). "" once it is
+ * merged or closed, since the size is a cue for review; "" unless both
+ * counts are known, so a missing one is never shown as 0; and "" for an
+ * empty diff, which has nothing to say.
  */
-export function diffText(pr: Pick<PullRequest, "additions" | "deletions">): string {
-  const add = pr.additions ?? 0;
-  const del = pr.deletions ?? 0;
+export function diffText(pr: Pick<PullRequest, "status" | "additions" | "deletions">): string {
+  const { additions: add, deletions: del } = pr;
+  if (pr.status !== "open" || add === undefined || del === undefined) return "";
   return add || del ? "+" + lines(add) + " −" + lines(del) : "";
 }
 

@@ -313,21 +313,34 @@ describe("checksSummary", () => {
 });
 
 describe("diffText", () => {
+  const open = (additions?: number, deletions?: number) =>
+    diffText({
+      status: "open",
+      ...(additions === undefined ? {} : { additions }),
+      ...(deletions === undefined ? {} : { deletions }),
+    });
+
   it("writes lines added and removed with a true minus sign", () => {
-    assert.equal(diffText({ additions: 120, deletions: 8 }), "+120 \u22128");
-    assert.equal(diffText({ additions: 5 }), "+5 \u22120");
-    assert.equal(diffText({ deletions: 3 }), "+0 \u22123");
+    assert.equal(open(120, 8), "+120 \u22128");
+    assert.equal(open(5, 0), "+5 \u22120");
   });
 
-  it("shortens thousands to at most four characters, never rounding up", () => {
-    assert.equal(diffText({ additions: 999, deletions: 1000 }), "+999 \u22121k");
-    assert.equal(diffText({ additions: 1999, deletions: 9999 }), "+1.9k \u22129.9k");
-    assert.equal(diffText({ additions: 12_345, deletions: 250_000 }), "+12k \u2212250k");
+  it("shortens large counts to at most four characters, never rounding up", () => {
+    assert.equal(open(999, 1000), "+999 \u22121k");
+    assert.equal(open(1999, 9999), "+1.9k \u22129.9k");
+    assert.equal(open(12_345, 250_000), "+12k \u2212250k");
+    assert.equal(open(999_999, 1_000_000), "+999k \u22121M");
+    assert.equal(open(34_567_890, 5e12), "+34M \u2212999M");
   });
 
-  it("says nothing without counts or for an empty diff", () => {
-    assert.equal(diffText({}), "");
-    assert.equal(diffText({ additions: 0, deletions: 0 }), "");
+  it("says nothing without both counts, for an empty diff, or once the PR is not open", () => {
+    assert.equal(open(), "");
+    assert.equal(open(5), "");
+    assert.equal(open(undefined, 3), "");
+    assert.equal(open(0, 0), "");
+    assert.equal(diffText({ status: "merged", additions: 5, deletions: 1 }), "");
+    assert.equal(diffText({ status: "closed", additions: 5, deletions: 1 }), "");
+    assert.equal(diffText({ additions: 5, deletions: 1 }), "");
   });
 });
 

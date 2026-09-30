@@ -409,7 +409,8 @@ function savedCheck(v: unknown): SavedCheck[] {
 }
 
 const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
-const isLineCount = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+/** A diff's line count: a whole number, never negative. */
+export const isLineCount = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 
 function savedPr(v: unknown): SavedPr | null {
   if (!isRecord(v) || !isPrUrl(v.url) || !isPrStatus(v.status)) return null;

@@ -23,6 +23,7 @@ import { tryTakeLock } from "./lockfile.ts";
 import {
   type CheckState,
   cleanLabel,
+  isLineCount,
   isRecord,
   MAX_CHECKS,
   type PollError,
@@ -153,9 +154,6 @@ interface Listed extends SavedPr {
   fork: boolean;
 }
 
-// A line count from gh: a whole number, never negative.
-const isCount = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
-
 // One entry of `gh pr list --json <PR_FIELDS>`, or nothing when it is malformed.
 function listed(p: unknown): Listed[] {
   if (!isRecord(p)) return [];
@@ -176,8 +174,8 @@ function listed(p: unknown): Listed[] {
   if (p.isDraft === true) pr.draft = true;
   if (p.mergeStateStatus === "CLEAN") pr.mergeable = true;
   if (p.mergeStateStatus === "DIRTY") pr.conflicts = true;
-  if (isCount(p.additions)) pr.additions = p.additions;
-  if (isCount(p.deletions)) pr.deletions = p.deletions;
+  if (isLineCount(p.additions)) pr.additions = p.additions;
+  if (isLineCount(p.deletions)) pr.deletions = p.deletions;
   return [pr];
 }
 

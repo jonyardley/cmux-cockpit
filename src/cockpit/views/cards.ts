@@ -140,8 +140,8 @@ export function compactCard(w: WsAccessor, key: string): View {
         statusDot(w, 6),
         statusLabel(w, 11.5, "regular"),
         helpers(w, 11.5),
-        // The one part that gives way: the status and helpers hold priority
-        // 2, so on a narrow card the PR text is cut and the status and time show.
+        // Gives way after the diff size below: the status and helpers hold
+        // priority 2, so on a narrow card the PR text is cut and the status and time show.
         // Behind a when(), so a card with no PR has no slot and no gap after the status.
         when(
           "compact-pr",
