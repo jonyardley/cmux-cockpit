@@ -1,5 +1,6 @@
 // Scene: the Projects view, with cards grouped under two projects, one card
-// outside any project, one card quoting its saved move, and the third project folded into the quiet list.
+// outside any project, one card quoting its saved move, a merged card offering Park and Close,
+// and the third project folded into the quiet list.
 // Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
@@ -45,6 +46,13 @@ it("the projects view", () => {
       unread: 1,
       pinned: true,
       agents: [agent("idle", { sinceEpoch: ago(600), lastActivityAt: ago(600) })],
+    }),
+    ws("two-merged", {
+      title: "Two: changelog",
+      directory: "/Users/jon/.config/app-two",
+      branch: "changelog-for-release",
+      pr: { number: 14, status: "merged", url: "https://github.com/o/r/pull/14" },
+      agents: [agent("idle", { sinceEpoch: ago(900), lastActivityAt: ago(900) })],
     }),
     ws("elsewhere", { title: "Scratch", directory: "/tmp/scratch" }),
   ];

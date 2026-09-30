@@ -22,5 +22,5 @@ export function healthOf(pr: PullRequest, checks: readonly Pick<SavedCheck, "sta
   return checks.length > 0 && !pr.draft && pr.mergeable === true ? "ready" : "quiet";
 }
 
-/** A merged PR: the card dims and offers Park, Close workspace and Keep (src/cockpit/merged.ts). */
+/** A merged PR: the card dims and offers Park and Close, and Keep in its menu (src/cockpit/merged.ts). */
 export const isMergedPr = (pr: PullRequest | undefined): boolean => !!pr?.number && pr.status === "merged";

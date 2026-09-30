@@ -5,7 +5,7 @@
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { meta, ring, unreadBadge, when } from "../../shared/ui.ts";
-import { hasChipsRow } from "../chips.ts";
+import { cardChips, chipsFitOneLine, FULL_LINE_CHARS, hasChipsRow } from "../chips.ts";
 import type { Lane } from "../lanes.ts";
 import { cardOpacity } from "../merged.ts";
 import { cardDensity, revealWorkspace, showsLeftOff } from "../model.ts";
@@ -105,6 +105,9 @@ function leftOffLine(w: WsAccessor, key: string, indent = 0): View {
   );
 }
 
+// A merged full card's Park and Close fit on its chips line; else they take a line of their own.
+const mergedFits = (w: Workspace | undefined): boolean => chipsFitOneLine(cardChips(w, true), w, FULL_LINE_CHARS);
+
 function fullCard(w: WsAccessor, key: string): View {
   const body = HStack({ spacing: 10, alignment: "top" }, [
     glyph(w, 26, 8, 12),
@@ -114,9 +117,10 @@ function fullCard(w: WsAccessor, key: string): View {
       HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12)])
         // Left-aligned by the frame, not a Spacer, as the chips row is.
         .frame({ maxWidth: "infinity", alignment: "leading" }),
-      // The PR and branch under the status, then the message.
-      chipsRow(w, true, "still"),
-      mergedActions(w),
+      // The PR and branch under the status (a merged PR's Park and Close in the
+      // branch's place), then the message.
+      chipsRow(w, true, "still", false, () => mergedFits(w())),
+      mergedActions(w, 0, 0, () => !mergedFits(w())),
       detailLine(w, "detail", 2),
       progressBar(w, "full-progress"),
     ])
@@ -307,7 +311,6 @@ export function projectRow(w: WsAccessor, key: string): View {
       .paddingTop(2),
     moveLine(w),
     chipsRow(w, true, "opens", true).paddingTop(() => (hasChipsRow(w(), true) ? ROW_GAP : 0)),
-    mergedActions(w, 0, ROW_GAP),
     makeProjectAction(w, ROW_GAP),
   ])
     .frame({ maxWidth: "infinity", alignment: "leading" })

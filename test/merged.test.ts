@@ -1,5 +1,5 @@
 // Merged PRs tidy themselves up (merged.ts): a merged card dims and offers
-// Park, Close workspace and Keep, and Keep hides them for that PR. __STATE__ is
+// Park and Close, with Keep in the card menu, which hides them for that PR. __STATE__ is
 // set before the renderer import, as in prs-saved.test.ts, so a Keep saved
 // before the last reload holds.
 
@@ -24,6 +24,7 @@ const seeded: State = {
     busy: merged,
     parks: merged,
     inParked: merged,
+    pinKept: merged,
   },
   mergeKept: { saved: 1, moved: 1 },
 };
@@ -102,7 +103,7 @@ describe("merged cards", () => {
     assert.equal(r.opened.length, 1, "nothing else writes");
   });
 
-  it("Close workspace closes a merged card's workspace, and nothing else", () => {
+  it("Close closes a merged card's workspace, and nothing else", () => {
     m.closeMerged(ws("closes"));
     assert.deepEqual(closes(), ["closes"]);
     for (const w of [ws("open"), ws("saved"), ws("anchor"), undefined]) m.closeMerged(w);
@@ -124,6 +125,29 @@ describe("merged cards", () => {
     });
     assert.equal(laneOf(w), "parked");
     assert.equal(m.offersPark(w), false, "Park goes once it has done its job");
+  });
+
+  it("names Keep in the card menu by what tapping it would do", () => {
+    assert.equal(m.keepLabel(ws("done")), "Keep, hide Park and Close");
+    assert.equal(m.keepLabel(ws("saved")), "Kept, Park and Close hidden");
+    assert.equal(m.keepLabel(ws("done", { pinned: true })), "Keep, hide Park", "a pinned card shows Park alone");
+    const parkedBusy = ws("done", { group: "g-parked", agents: [agent("working")] });
+    assert.equal(m.keepLabel(parkedBusy), "Keep: for a merged PR's buttons", "no button shows, so none to hide");
+    for (const w of [ws("open"), ws("anchor"), undefined])
+      assert.equal(m.keepLabel(w), "Keep: for a merged PR's buttons");
+  });
+
+  it("Keep hides Park on a pinned card too", () => {
+    m.keepMerged(ws("pinKept", { pinned: true }));
+    assert.deepEqual(saves(), ["mergeKept.pinKept=1"]);
+    assert.equal(m.offersPark(ws("pinKept", { pinned: true })), false);
+  });
+
+  it("offers a merged button while Park or Close shows", () => {
+    assert.equal(m.offersMergedChip(ws("done")), true);
+    assert.equal(m.offersMergedChip(ws("done", { pinned: true })), true, "Park alone");
+    assert.equal(m.offersMergedChip(ws("done", { group: "g-parked", agents: [agent("working")] })), false);
+    assert.equal(m.offersMergedChip(ws("open")), false);
   });
 
   it("offers Park alone on a pinned card, and none once Keep is tapped", () => {
