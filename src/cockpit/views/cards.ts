@@ -31,6 +31,7 @@ import {
   chipsRow,
   glyph,
   mergedActions,
+  pinMark,
   statusDot,
   statusLabel,
   titleRow,
@@ -226,6 +227,7 @@ function denseRow(w: WsAccessor, key: string): View {
       // On the when() result: the priority inside meta() does not reach this HStack.
       .layoutPriority(2),
     meta(() => ageOf(w()), C.metaText),
+    pinMark(w),
   ]);
   const body = VStack({ alignment: "leading", spacing: 2 }, [
     head,

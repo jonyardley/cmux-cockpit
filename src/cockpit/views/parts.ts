@@ -104,6 +104,17 @@ function readyPill(w: WsAccessor): View {
   ).layoutPriority(2);
 }
 
+// The pin at the far right of a pinned workspace's title row: faint, so it
+// reads as a property, never a state. Behind a when(), so it takes no slot
+// otherwise.
+export function pinMark(w: WsAccessor): View {
+  return when(
+    "pinned",
+    () => !!w()?.pinned,
+    () => Image("pin.fill").font(9.5).color(C.faint),
+  ).layoutPriority(2);
+}
+
 // Title row shared by the cards and the Projects row: title takes the
 // slack, pill or badge and age hold their width on the right. The age shows
 // only while the status line under it has no time, so one card never reads
@@ -126,6 +137,7 @@ export function titleRow(w: WsAccessor, size: number): View {
       () => !statusHasAge(w()),
       () => meta(() => ageOf(w())),
     ).layoutPriority(2),
+    pinMark(w),
   ]).frame({ maxWidth: "infinity" });
 }
 

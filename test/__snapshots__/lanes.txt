@@ -190,6 +190,8 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                   Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
                   ForEach .layoutPriority(2)
                     Text "5m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+                  ForEach .layoutPriority(2)
+                    Image pin.fill .font(9.5) .color(faint|laneBackground)
                 HStack spacing: 6 .frame(maxWidth: infinity, alignment: leading)
                   ZStack .frame(width: 13, height: 13)
                     Circle size: 13 .fill(clear)
@@ -294,6 +296,8 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
               Spacer minLength: 4
               Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
               Text "3m" .font(11) .monospaced() .color(metaText) .lineLimit(1) .layoutPriority(2)
+              ForEach .layoutPriority(2)
+                Image pin.fill .font(9.5) .color(faint|laneBackground)
   VStack spacing: 0 .paddingHorizontal(10) .opacity(0) .frame(maxHeight: 0, alignment: top) [hidden]
   Spacer
 

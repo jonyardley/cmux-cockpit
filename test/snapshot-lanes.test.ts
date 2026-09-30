@@ -74,6 +74,7 @@ it("lanes: every card state", () => {
     ws("untimed", {
       title: "Untimed card",
       group: "g-main",
+      pinned: true,
       latestAt: ago(300),
       agents: [agent("idle")],
     }),
@@ -107,6 +108,7 @@ it("lanes: every card state", () => {
     }),
     ws("loose", {
       title: "Loose workspace",
+      pinned: true,
       agents: [agent("working", { sinceEpoch: ago(200), lastActivityAt: ago(20) })],
     }),
   ];

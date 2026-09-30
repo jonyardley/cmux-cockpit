@@ -32,6 +32,7 @@ it("the projects view", () => {
       title: "Two: release",
       directory: "/Users/jon/.config/app-two",
       unread: 1,
+      pinned: true,
       agents: [agent("idle", { sinceEpoch: ago(600), lastActivityAt: ago(600) })],
     }),
     ws("elsewhere", { title: "Scratch", directory: "/tmp/scratch" }),
