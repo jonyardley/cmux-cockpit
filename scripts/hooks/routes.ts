@@ -10,6 +10,8 @@ type Obj = Record<string, unknown>;
 export interface Route {
   script: string;
   matcher?: string;
+  /** Its block decision on stdout reaches Claude Code (dispatch.ts); every other script's stdout is dropped. */
+  sendsBack?: true;
 }
 
 export const ROUTES: Readonly<Record<string, readonly Route[]>> = {
@@ -24,7 +26,7 @@ export const ROUTES: Readonly<Record<string, readonly Route[]>> = {
       matcher: "Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__update",
     },
   ],
-  Stop: [{ script: "report-move.ts" }, { script: "report-rename.ts" }],
+  Stop: [{ script: "report-move.ts", sendsBack: true }, { script: "report-rename.ts" }],
   UserPromptSubmit: [{ script: "report-rename.ts" }],
   SessionStart: [{ script: "report-rename.ts" }],
   SubagentStart: [{ script: "report-subagent.ts" }],
@@ -67,10 +69,17 @@ export function matches(matcher: string | undefined, value: string | undefined):
   }
 }
 
-/** The scripts to run for one event, in list order, given the event's JSON (null when it did not parse). */
-export function scriptsFor(event: string, payload: Obj | null, routes = ROUTES): string[] {
+function routesFor(event: string, payload: Obj | null, routes: typeof ROUTES): readonly Route[] {
   const key = MATCHED_FIELD[event];
   const raw = key === undefined || payload === null ? undefined : payload[key];
   const value = typeof raw === "string" ? raw : undefined;
-  return (routes[event] ?? []).filter((r) => matches(r.matcher, value)).map((r) => r.script);
+  return (routes[event] ?? []).filter((r) => matches(r.matcher, value));
 }
+
+/** The scripts to run for one event, in list order, given the event's JSON (null when it did not parse). */
+export const scriptsFor = (event: string, payload: Obj | null, routes = ROUTES): string[] =>
+  routesFor(event, payload, routes).map((r) => r.script);
+
+/** Which of those scripts may send the turn back: only Stop's, since a block on any other event would stop a tool or answer a prompt. */
+export const sendersFor = (event: string, payload: Obj | null, routes = ROUTES): string[] =>
+  event === "Stop" ? routesFor(event, payload, routes).flatMap((r) => (r.sendsBack ? [r.script] : [])) : [];
