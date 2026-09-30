@@ -3,7 +3,7 @@
 
 import type { SavedMove } from "../../scripts/state-config.ts";
 import { mostActive } from "../shared/activity.ts";
-import { waitingMove } from "../shared/move.ts";
+import { asksNothing, waitingMove } from "../shared/move.ts";
 import { agentsOf, askReason, hasRealAsk } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
 import { prInk } from "../shared/pr-colors.ts";
@@ -116,7 +116,8 @@ function finishedAgent(w: Workspace): Agent | null {
  * not read. Opening the workspace clears it: cmux marks it read, and a
  * selected workspace (a tap shows at once) is being looked at anyway. A
  * real ask is never Ready, even one dismissed from Needs you: the agent
- * stopped to ask, it did not finish. The unread check comes first, so the
+ * stopped to ask, it did not finish. Nor is a turn that ended on "Nothing
+ * for you": the agent said there is nothing to look at yet. The unread check comes first, so the
  * many cards with nothing unread cost one field read.
  */
 export function isReady(w: Workspace | undefined): boolean {
@@ -126,7 +127,15 @@ export function isReady(w: Workspace | undefined): boolean {
 /** The agent a Ready card reports, or null when the workspace is not Ready. */
 export function readyAgent(w: Workspace | undefined): Agent | null {
   if (!w || !((w.unread ?? 0) > 0) || isSelected(w) || hasRealAsk(w)) return null;
-  return FINISHED.has(statusOf(w)) ? finishedAgent(w) : null;
+  const a = FINISHED.has(statusOf(w)) ? finishedAgent(w) : null;
+  return a && !endedQuiet(a, w) ? a : null;
+}
+
+// The turn ended on "Nothing for you": Jon has nothing to look at, so
+// unread output (a gate's alert, say) is no reason to call it Ready.
+function endedQuiet(a: Agent, w: Workspace): boolean {
+  const m = waitingMove(a, w, false);
+  return m !== null && asksNothing(m);
 }
 
 // The finished green and word: Ready adds no hue or word of its own.
