@@ -250,25 +250,15 @@ describe("a turn that ended on Nothing for you", () => {
     assert.equal(status.agentOf(at("quietDecide", [waiting("quietDecide", 1060)]))?.status, "needs_input");
   });
 
-  it("is no ask and never Ready, even with unread output, and nothing to dismiss", () => {
+  it("is no ask: Ready once there is output and no shell runs, and nothing to dismiss", () => {
     const w = at("quiet", [waiting("quiet", 1060)], { unread: 1 });
     assert.equal(needs.hasRealAsk(w), false);
     assert.equal(needs.isNeedsDismissed(w), false);
-    assert.equal(status.isReady(w), false);
-  });
-
-  it("is not Ready on a quiet turn still idle before the nudge, as a gate's alert leaves it", () => {
-    const w = at("quiet", [stopped("quiet", 1000)], { unread: 1 });
-    assert.equal(status.isReady(w), false);
-    assert.equal(status.readyAgent(w), null);
+    assert.equal(status.isReady(w), true);
   });
 
   it("is Ready with unread output when the turn ended on a Your move line", () => {
     assert.equal(status.isReady(at("quick", [stopped("quick", 1000)], { unread: 1 })), true);
-  });
-
-  it("is Ready again once a new prompt makes the quiet move stale", () => {
-    assert.equal(status.isReady(at("quiet", [stopped("quiet", 1200)], { unread: 1, latestAt: 1100 })), true);
   });
 
   it("leaves another session's agent alone", () => {

@@ -76,8 +76,14 @@ export const NUDGE_WINDOW = 120;
  */
 export function quietTurn(a: Agent, w: Workspace | undefined): SavedMove | null {
   if (a.status !== "needs_input" || !a.sinceEpoch) return null;
+  const m = quietMove(a, w);
+  return m && a.sinceEpoch - m.epoch <= NUDGE_WINDOW ? m : null;
+}
+
+/** The move `a`'s turn ended on when it asks nothing of Jon ("Nothing for you"), or null. */
+export function quietMove(a: Agent, w: Workspace | undefined): SavedMove | null {
   const m = waitingMove(a, w, false);
-  return m && asksNothing(m) && a.sinceEpoch - m.epoch <= NUDGE_WINDOW ? m : null;
+  return m && asksNothing(m) ? m : null;
 }
 
 /**

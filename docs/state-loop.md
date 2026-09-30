@@ -418,7 +418,9 @@ is open, so closing a chat, which kills its shells, clears them from the
 card at once, and one chat's shell never marks another's card. An idle
 agent with a shell counted reads "Waiting 4m · 1 shell" in working blue on
 its cockpit card and sorts with the working cards. Ready still wins while
-its turn is unread: a shell can be a dev server that never exits.
+its turn is unread, since a shell can be a dev server that never exits,
+unless the turn ended on "Nothing for you": that card stays Waiting until
+the shell ends or a new turn saves another line.
 
 Known gaps: after `/clear` the chat runs under a new session id, so a
 shell started before the clear stops counting while it still runs. A shell

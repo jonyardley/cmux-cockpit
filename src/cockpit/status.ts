@@ -3,7 +3,7 @@
 
 import type { SavedMove } from "../../scripts/state-config.ts";
 import { mostActive } from "../shared/activity.ts";
-import { asksNothing, waitingMove } from "../shared/move.ts";
+import { quietMove, waitingMove } from "../shared/move.ts";
 import { agentsOf, askReason, hasRealAsk } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
 import { prInk } from "../shared/pr-colors.ts";
@@ -117,7 +117,7 @@ function finishedAgent(w: Workspace): Agent | null {
  * selected workspace (a tap shows at once) is being looked at anyway. A
  * real ask is never Ready, even one dismissed from Needs you: the agent
  * stopped to ask, it did not finish. Nor is a turn that ended on "Nothing
- * for you": the agent said there is nothing to look at yet. The unread check comes first, so the
+ * for you" while its background shell still runs: nothing to look at yet. The unread check comes first, so the
  * many cards with nothing unread cost one field read.
  */
 export function isReady(w: Workspace | undefined): boolean {
@@ -128,15 +128,14 @@ export function isReady(w: Workspace | undefined): boolean {
 export function readyAgent(w: Workspace | undefined): Agent | null {
   if (!w || !((w.unread ?? 0) > 0) || isSelected(w) || hasRealAsk(w)) return null;
   const a = FINISHED.has(statusOf(w)) ? finishedAgent(w) : null;
-  return a && !endedQuiet(a, w) ? a : null;
+  return a && !waitsOnItsShell(a, w) ? a : null;
 }
 
-// The turn ended on "Nothing for you": Jon has nothing to look at, so
-// unread output (a gate's alert, say) is no reason to call it Ready.
-function endedQuiet(a: Agent, w: Workspace): boolean {
-  const m = waitingMove(a, w, false);
-  return m !== null && asksNothing(m);
-}
+// The turn ended on "Nothing for you" and the shell it waits on still runs:
+// Jon has nothing to look at yet, so unread output (a gate's alert, say) is
+// no reason to call it Ready. Once the shell ends, unread output is Ready
+// again, so a failure that lands after a quiet turn still surfaces.
+const waitsOnItsShell = (a: Agent, w: Workspace): boolean => quietMove(a, w) !== null && liveShellCount(w, a) > 0;
 
 // The finished green and word: Ready adds no hue or word of its own.
 const READY: StatusStyle = { ...STATUS.ended, halo: "clear" };
@@ -160,8 +159,9 @@ const QUIET: StatusStyle = { ...STATUS.working, dot: null, halo: "clear", ring: 
 
 // Waiting: the turn ended but a background shell it started still runs,
 // so the card reads as busy, in working blue, not as finished. Ready still
-// wins while its output is unread: a shell can be a dev server that never
-// exits, and the finished turn is what Jon has to look at.
+// wins while its output is unread, since a shell can be a dev server that
+// never exits and the finished turn is what Jon has to look at, unless the
+// turn ended on "Nothing for you": then it stays Waiting (waitsOnItsShell).
 const WAITING: StatusStyle = { ...STATUS.working, label: WAITING_WORD };
 
 /** True when the workspace's agent is idle on a background shell its own chat still runs. */
