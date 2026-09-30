@@ -422,37 +422,25 @@ they miss some work: a rename keeps the saved title (the update tool's
 rename input is not documented), and Docs' `create` tool, which adds a
 tab, comment or upload, is not hooked, so it touches nothing.
 
-## Lanes that move themselves
+## Ready and merged PRs
 
-When a workspace's PR turns ready to merge (the green chip) the cockpit
-files it into For review, and when the PR merges, into Parked, with a faint
-line at the top for 10 seconds naming the move. Only a change moves a card,
-so a drag holds until the PR changes again, and a card already in the
-target lane stays put. A ready PR whose checks rerun stays "ready" until
-it merges, so a push to it does not re-file a card dragged out of For
-review. The `prSeen` map keeps each workspace's last seen
-state: `"ready"`, `"merged"` or `"other"`.
+Nothing moves a card by itself: it stays in the lane Jon left it in. When
+a workspace's PR turns ready to merge (the green chip, the ready test in
+src/shared/pr-health.ts), the card's "To review →" button turns green,
+and a tap files it into For review. Before 2026-09-30 the cockpit moved
+the card itself, which lost cards; a state file from then may still hold a
+`prSeen` map, which the next read drops.
 
-The poller seeds a workspace's entry the first time it saves a PR for it,
-with the state that PR had before that poll (`"other"` when there was
-none, or it was for another branch), so a PR already ready or merged when
-this shipped moves nothing. Each poll drops the entries of workspaces it
-found no PR for. The
-cockpit writes an entry only when the state changes, and a `prSeen` set
-never rebuilds (it changes nothing on screen, and a rebuild per change
-would loop). src/cockpit/automove.ts has the rules; src/shared/pr-health.ts
-has the ready test the chip and the poller share.
-
-Once merged, the card also dims (full strength again while selected) and
-offers Keep, and Close workspace, which sends the `workspace.close` socket
+Once merged, the card dims (full strength again while selected) and
+offers Park, which files it into Parked (left out once it is there), Keep,
+and Close workspace, which sends the `workspace.close` socket
 command. It stays at full strength while an agent there is working or
 asking or it has unread output, and Close is left out while an agent is
 working or asking. A pinned workspace (cmux will not close one) and a
 lane's anchor offer neither. Keep sets `mergeKept.<workspace id>` to the
 kept PR's number, so the buttons stay hidden for that PR past every
 reload and come back for a later one; the poller drops an entry once the
-workspace's saved PR is another or gone. Like `prSeen`, the set never
-rebuilds, since the sidebar hides them itself. The worktree is never
+workspace's saved PR is another or gone. The set never rebuilds, since the sidebar hides them itself. The worktree is never
 removed from the sidebar: that stays in the close-out command.
 src/cockpit/merged.ts has the rules.
 

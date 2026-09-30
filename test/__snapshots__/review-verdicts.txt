@@ -12,15 +12,48 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
             Text "Projects" .font(12) .weight(medium) .color(secondary|badge|laneReview|neutralChip.fg)
   VStack spacing: 0 .paddingHorizontal(10) .opacity(1) .frame(maxHeight: infinity, alignment: top)
     Reorderable spacing: 2
-      VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .fixed()
-        VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(8)
-          HStack spacing: 8 .paddingHorizontal(7) .paddingVertical(4) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(7)
-            Spacer minLength: 0 .frame(width: 12, height: 16)
-            RoundedRectangle cornerRadius: 3 .fill(laneMain|select|heading) .frame(width: 9, height: 9) .opacity(0.55)
-            Text "M\u200aA\u200aI\u200aN A\u200aC\u200aT\u200aI\u200aV\u200aI\u200aT\u200aY" .font(10.5) .weight(semibold) .color(faint|laneBackground) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-            Text "0" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg|segTrack) .cornerRadius(10) .opacity(0.55)
-            Spacer minLength: 4
-            Text "" .font(11) .weight(medium) .color(laneMain|select|heading) .lineLimit(1)
+      VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .onTap() .fixed()
+        HStack spacing: 8 .paddingHorizontal(8) .paddingVertical(5) .cornerRadius(8) .background(clear) .hoverBackground(hover) .frame(maxWidth: infinity)
+          Image chevron.right .font(10) .weight(semibold) .color(faint|laneBackground) .rotation(90) .frame(width: 12, height: 16)
+          RoundedRectangle cornerRadius: 3 .fill(laneMain|select|heading) .frame(width: 9, height: 9)
+          Text "M\u200aA\u200aI\u200aN A\u200aC\u200aT\u200aI\u200aV\u200aI\u200aT\u200aY" .font(10.5) .weight(semibold) .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+          Text "1" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg|segTrack) .cornerRadius(10)
+          Spacer minLength: 4
+          Text "1 ready to merge" .font(11) .weight(regular) .color(greenDeep|readyInk) .lineLimit(1)
+      VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
+        VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(19)
+          VStack spacing: 0, alignment: leading .padding(1) .background(cardEdge|dropTarget|anchorSelected) .cornerRadius(12) .opacity(1) .frame(maxWidth: infinity)
+            HStack spacing: 10, alignment: top .paddingLeading(10) .paddingTrailing(12) .paddingVertical(11) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(11) .hoverBackground(cardHover)
+              ZStack .frame(width: 26, height: 26)
+                RoundedRectangle cornerRadius: 8 .fill(grey)
+                Image terminal .font(12) .weight(semibold) .color(text)
+              VStack alignment: leading, spacing: 4 .frame(maxWidth: infinity, alignment: leading) .layoutPriority(1)
+                HStack spacing: 6 .frame(maxWidth: infinity)
+                  Text "waiting card" .font(13.5) .weight(semibold) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
+                  ForEach .layoutPriority(2)
+                    Text "" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+                HStack spacing: 6 .frame(maxWidth: infinity, alignment: leading)
+                  ZStack .frame(width: 13, height: 13)
+                    Circle size: 13 .fill(clear)
+                    Circle size: 7 .fill(clear) .stroke(grey) .strokeWidth(1.5)
+                  Text "No agent" .font(12) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .layoutPriority(2)
+                HStack spacing: 5 .frame(maxWidth: infinity, alignment: leading)
+                  ForEach .layoutPriority(2)
+                    VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|hairline|neutralChip.edge) .cornerRadius(6)
+                      HStack spacing: 4 .paddingHorizontal(6) .paddingVertical(1) .background(chipFace|neutralChip.bg) .cornerRadius(5)
+                        Image arrow.triangle.pull .font(9) .color(secondary|badge|laneReview|neutralChip.fg)
+                        Text "#9" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(secondary|badge|laneReview|neutralChip.fg) .layoutPriority(2)
+                        ForEach .layoutPriority(2)
+                          Text "ready" .font(11) .weight(regular) .lineLimit(1) .truncation(tail) .color(greenDeep|readyInk)
+                  VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|hairline|neutralChip.edge) .cornerRadius(6)
+                    HStack spacing: 4 .paddingHorizontal(6) .paddingVertical(1) .background(chipFace|neutralChip.bg) .cornerRadius(5)
+                      Image arrow.branch .font(9) .color(secondary|badge|laneReview|neutralChip.fg)
+                      Text "feat-9" .font(11) .weight(medium) .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .truncation(middle)
+                  ForEach .layoutPriority(2)
+                    VStack spacing: 0, alignment: leading .padding(1) .background(greenChipEdge) .cornerRadius(6) .hoverBackground(#30422359) .onTap()
+                      Text "To review →" .font(11) .weight(medium) .color(greenDeep|readyInk) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(greenChipFace) .cornerRadius(5) .hoverBackground(#7184583D)
       VStack spacing: 0 .paddingTop(9) .frame(maxWidth: infinity) .onTap() .fixed()
         HStack spacing: 8 .paddingHorizontal(8) .paddingVertical(5) .cornerRadius(8) .background(clear) .hoverBackground(hover) .frame(maxWidth: infinity)
           Image chevron.right .font(10) .weight(semibold) .color(faint|laneBackground) .rotation(90) .frame(width: 12, height: 16)
@@ -175,6 +208,8 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                   Text "· #7 · merged" .font(11.5) .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .truncation(tail)
                 HStack spacing: 5 .paddingLeading(0) .paddingTop(0) .frame(maxWidth: infinity, alignment: leading)
                   VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|hairline|neutralChip.edge) .cornerRadius(6) .hoverBackground(#9A9890) .onTap()
+                    Text "Park" .font(11) .weight(medium) .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(onBadge|card) .cornerRadius(5) .hoverBackground(#EFEFEE)
+                  VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|hairline|neutralChip.edge) .cornerRadius(6) .hoverBackground(#9A9890) .onTap()
                     Text "Close workspace" .font(11) .weight(medium) .color(text) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(onBadge|card) .cornerRadius(5) .hoverBackground(#EFEFEE)
                   VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|hairline|neutralChip.edge) .cornerRadius(6) .hoverBackground(#9A9890) .onTap()
                     Text "Keep" .font(11) .weight(medium) .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(onBadge|card) .cornerRadius(5) .hoverBackground(#EFEFEE)
@@ -233,8 +268,11 @@ blueText #2F5690
 cardEdge|dropTarget|anchorSelected #1414131F
 cardHover #F7F6F2
 chipEdge|hairline|neutralChip.edge #E2DFD3
+chipFace|neutralChip.bg #F1EFE8
 countBg|segTrack #E5E2D6
 faint|laneBackground #8A8880
+greenChipEdge #3F5A2B59
+greenChipFace #788C5D29
 greenDeep|readyInk #3F5A2B
 grey #A09E95
 hover #7F7F7F14

@@ -1,5 +1,6 @@
 // Scene: the For review lane with a card for each merge verdict, and its
-// header's "N ready to merge". Fixture data only; see test/support/snapshot.ts.
+// header's "N ready to merge", under a Main activity card whose PR is ready:
+// it stays there, offering a green "To review →". Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
 import type { SavedPr } from "../scripts/state-config.ts";
@@ -25,6 +26,7 @@ const PRS: Record<string, SavedPr> = {
   blocked: pr(6),
   merged: pr(7, { status: "merged" }),
   closed: pr(8, { status: "closed" }),
+  waiting: pr(9, { mergeable: true }),
 };
 const r = seed({ state: { prs: PRS } });
 const { group, ws } = await import("./support/fixtures.ts");
@@ -32,10 +34,16 @@ await import("../src/cockpit/index.ts");
 const { C } = await import("../src/cockpit/theme.ts");
 
 it("for review: merge verdicts", () => {
-  r.data.groups = [group("g-review", "For review", { anchorId: "anchor-review" })];
+  r.data.groups = [
+    group("g-main", "Main activity", { anchorId: "anchor-main" }),
+    group("g-review", "For review", { anchorId: "anchor-review" }),
+  ];
+  const { waiting: _, ...verdicts } = PRS;
   r.data.workspaces = [
+    ws("anchor-main", { title: "Main activity", group: "g-main" }),
+    ws("waiting", { title: "waiting card", group: "g-main", branch: "feat-9" }),
     ws("anchor-review", { title: "For review", group: "g-review" }),
-    ...Object.entries(PRS).map(([id, p]) => ws(id, { title: `${id} card`, group: "g-review", branch: p.branch })),
+    ...Object.entries(verdicts).map(([id, p]) => ws(id, { title: `${id} card`, group: "g-review", branch: p.branch })),
   ];
   snapshotScene("review-verdicts", r, C, "cockpit");
 });

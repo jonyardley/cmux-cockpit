@@ -21,18 +21,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
-import { prSeenOf } from "../src/shared/pr-health.ts";
 import { pauseSync, tryTakeLock, waitForLock } from "./lockfile.ts";
-import {
-  applySet,
-  isRecord,
-  type PrSeen,
-  type SavedPoll,
-  type SavedPr,
-  type SetResult,
-  type State,
-  validateState,
-} from "./state-config.ts";
+import { applySet, isRecord, type SavedPoll, type SetResult, type State, validateState } from "./state-config.ts";
 
 // `token` is left out, rather than null, when the URL carries none.
 export type ParsedSet = { ok: true; key: string; value: string | null; token?: string } | { ok: false; error: string };
@@ -214,27 +204,6 @@ export function writePrs(path: string, prs: State["prs"]): ApplyResult {
 }
 
 /**
- * The cockpit's lane moves (src/cockpit/automove.ts) react only to a change
- * in a PR's state, so a workspace the poller finds a PR for with no seen
- * state yet gets one: the state its PR had before this poll, "other" when
- * it had none or had one for another branch (the cockpit hides a PR saved
- * for another branch too). The cockpit then sees a PR that turned ready or
- * merged in this very poll as a change, and one already ready as nothing
- * new. Only missing entries are filled, and entries for workspaces with no
- * PR this poll are dropped, so closed workspaces do not pile up; the
- * cockpit writes the rest.
- */
-function seededSeen(before: State, prs: State["prs"]): State["prSeen"] {
-  const seenFor = (id: string, pr: SavedPr): PrSeen => {
-    const kept = Object.hasOwn(before.prSeen, id) ? before.prSeen[id] : undefined;
-    if (kept) return kept;
-    const old = Object.hasOwn(before.prs, id) ? before.prs[id] : undefined;
-    return old?.branch === pr.branch ? prSeenOf(old, old.checks ?? []) : "other";
-  };
-  return Object.fromEntries(Object.entries(prs).map(([id, pr]) => [id, seenFor(id, pr)]));
-}
-
-/**
  * Keeps a Keep (State.mergeKept) only while the workspace's saved PR is the
  * one kept, so closed workspaces and later PRs do not leave entries behind.
  */
@@ -247,8 +216,8 @@ function keptStill(before: State, prs: State["prs"]): State["mergeKept"] {
 /**
  * One poll's whole write (scripts/pr-poll.ts) in a single locked pass:
  * replaces the `prs` and `ownPrs` maps, keys sorted as writePrs does,
- * folds `subagents` over the `subagents` map and seeds `prSeen`
- * (seededSeen), and prunes `mergeKept` (keptStill), so the file is never left half updated. `poll` (#78) is the
+ * folds `subagents` over the `subagents` map and prunes `mergeKept`
+ * (keptStill), so the file is never left half updated. `poll` (#78) is the
  * saved poll status in the same pass: replaced when given, removed when
  * null, kept as it was when left out.
  */
@@ -264,7 +233,6 @@ export function writePollMaps(
       ...before,
       prs: sortedByKey(prs),
       ownPrs: sortedByKey(ownPrs),
-      prSeen: seededSeen(before, prs),
       mergeKept: keptStill(before, prs),
       ...(poll ? { poll } : {}),
     };

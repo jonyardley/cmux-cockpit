@@ -76,12 +76,6 @@ export interface State {
    */
   moves: Record<string, SavedMove>;
   /**
-   * wsId -> its PR's state when the cockpit last looked (src/cockpit/automove.ts),
-   * so a lane moves only when that state changes, never on every reload.
-   * Kept for the next build rather than rebuilding (rebuildsOn).
-   */
-  prSeen: Record<string, PrSeen>;
-  /**
    * wsId -> the number of the merged PR Jon tapped Keep on, so that card
    * stops offering Close workspace and Keep, and a later PR there offers
    * them again. The poller drops an entry once the workspace's saved PR is
@@ -112,12 +106,6 @@ export interface SavedPoll {
 }
 
 export type ViewMode = "all" | "projects";
-
-/** A PR as the lanes see it: ready to merge (the green chip), merged, or anything else. */
-export type PrSeen = "ready" | "merged" | "other";
-const PR_SEEN: readonly unknown[] = ["ready", "merged", "other"];
-const isPrSeen = (v: unknown): v is PrSeen => PR_SEEN.includes(v);
-const prSeen = (v: unknown): PrSeen | null => (isPrSeen(v) ? v : null);
 
 /**
  * The cockpit's own view state. Each rebuild hot-reloads the sidebar, which
@@ -302,7 +290,6 @@ export const emptyState = (): State => ({
   prOrigins: {},
   asking: {},
   moves: {},
-  prSeen: {},
   mergeKept: {},
   ui: {},
 });
@@ -607,7 +594,6 @@ export function validateState(raw: unknown): State {
     prOrigins: cleanMap(v.prOrigins, originAt, isPrUrl),
     asking: cleanMap(v.asking, savedAsk),
     moves: cleanMap(v.moves, savedMove),
-    prSeen: cleanMap(v.prSeen, prSeen),
     mergeKept: cleanMap(v.mergeKept, keptPr),
     ui: uiState(v.ui),
     ...(poll ? { poll } : {}),
@@ -619,17 +605,8 @@ export type SetResult = { ok: true; state: State } | { ok: false; error: string 
 // The maps applySet takes. `prs`, `ownPrs`, `subagents`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
-type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves" | "prSeen" | "mergeKept";
-const MAPS: readonly MapName[] = [
-  "dismissed",
-  "projectOverride",
-  "projects",
-  "ui",
-  "asking",
-  "moves",
-  "prSeen",
-  "mergeKept",
-];
+type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves" | "mergeKept";
+const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui", "asking", "moves", "mergeKept"];
 const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
 
 // Maps applySet takes from a hook but never from a URL.
@@ -664,8 +641,6 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       return { ...state, asking: without(state.asking, id) };
     case "moves":
       return { ...state, moves: without(state.moves, id) };
-    case "prSeen":
-      return { ...state, prSeen: without(state.prSeen, id) };
     case "mergeKept":
       return { ...state, mergeKept: without(state.mergeKept, id) };
     case "ui": {
@@ -702,10 +677,6 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
       return askEntry(state, id, parsed);
     case "moves":
       return moveEntry(state, id, parsed);
-    case "prSeen":
-      return isPrSeen(parsed)
-        ? { ...state, prSeen: { ...state.prSeen, [id]: parsed } }
-        : 'prSeen wants "ready", "merged" or "other"';
     case "mergeKept":
       return isPrNumber(parsed)
         ? { ...state, mergeKept: { ...state.mergeKept, [id]: parsed } }
@@ -754,13 +725,11 @@ function isKeyFor(map: MapName, id: string): boolean {
 
 /**
  * Whether a set needs a rebuild to show. The sidebar already shows its own
- * view and folds and hides a kept card's buttons itself, and the PR states
- * it has seen (prSeen) change nothing on screen, and every rebuild bakes in
- * the file as it stands, so a `ui`, `mergeKept` or `prSeen` set only has to
- * be written: rebuilding on each tap would reload the sidebar under the tap,
- * and on each PR state change would loop.
+ * view and folds and hides a kept card's buttons itself, and every rebuild
+ * bakes in the file as it stands, so a `ui` or `mergeKept` set only has to
+ * be written: rebuilding on each tap would reload the sidebar under the tap.
  */
-const WRITE_ONLY: readonly string[] = ["ui", "prSeen", "mergeKept"];
+const WRITE_ONLY: readonly string[] = ["ui", "mergeKept"];
 export const rebuildsOn = (key: string): boolean => !WRITE_ONLY.some((map) => key.startsWith(`${map}.`));
 
 /**

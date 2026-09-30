@@ -1,16 +1,17 @@
-// Merged PRs tidy themselves up: once a workspace's PR merges (the move to
-// Parked is automove.ts's), its card dims and offers Close workspace, which
-// closes it through the socket, and Keep, which stops the offer for that PR
-// for good. Removing the worktree stays in Jon's close-out command.
+// Merged PRs offer their own tidy-up: once a workspace's PR merges, its card
+// dims and offers Park, which files it into Parked; Close workspace, which
+// closes it through the socket; and Keep, which stops the offer for that PR
+// for good. Nothing moves the card by itself, so it stays where Jon left it
+// until he taps. Removing the worktree stays in Jon's close-out command.
 //
 // Keep is saved (State.mergeKept, the kept PR's number) so it holds past the
 // rebuild each PR poll brings, and a later PR in the same workspace offers
 // the buttons again. A plain Map, so reads call tick() and writes call bump().
 
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
+import { isMergedPr } from "../shared/pr-health.ts";
 import { prOf } from "../shared/prs.ts";
-import { seenNow } from "./automove.ts";
-import { isAnchor } from "./model.ts";
+import { isAnchor, laneOf, moveToLane } from "./model.ts";
 import { bump, tick } from "./state.ts";
 import { statusOf } from "./status.ts";
 
@@ -19,8 +20,8 @@ import { statusOf } from "./status.ts";
 const savedKept: Record<string, number> | undefined = SAVED_STATE.mergeKept;
 const kept = new Map<string, number>(Object.entries(savedKept ?? {}));
 
-/** The card's PR has merged, by the same rule that files it into Parked. */
-export const isMerged = (w: Workspace | undefined): boolean => !!w && seenNow(w) === "merged";
+/** The card's PR has merged, by the rule its chip reads. */
+export const isMerged = (w: Workspace | undefined): boolean => !!w && isMergedPr(prOf(w));
 
 // An agent still working or asking, or unread output: the card still wants Jon.
 const wantsJon = (w: Workspace): boolean => {
@@ -57,6 +58,19 @@ export function offersMergedActions(w: Workspace | undefined): boolean {
  */
 export const offersClose = (w: Workspace | undefined): boolean =>
   !!w && offersMergedActions(w) && statusOf(w) !== "working" && statusOf(w) !== "needs_input";
+
+/**
+ * Park shows on a merged card until it is in Parked or Keep is tapped. A
+ * pinned workspace offers it alone: parking closes nothing, so the pin that
+ * keeps Close and Keep away is no reason to hide it.
+ */
+export const offersPark = (w: Workspace | undefined): boolean =>
+  !!w && isMerged(w) && !isKept(w) && !isAnchor(w) && laneOf(w) !== "parked";
+
+/** Files a merged card into Parked. */
+export function parkMerged(w: Workspace | undefined): void {
+  if (w && offersPark(w)) moveToLane(w, "parked");
+}
 
 /** Hides a merged card's buttons for this PR; the card stays dimmed. */
 export function keepMerged(w: Workspace | undefined): void {
