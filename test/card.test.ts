@@ -10,9 +10,16 @@ const r = installRenderer();
 const { agent, group, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
 const model = await import("../src/cockpit/model.ts");
-const { cardChips, chipsFitOneLine, chipsSplit, FULL_LINE_CHARS, hasChipsRow, showsChipsRow } = await import(
-  "../src/cockpit/chips.ts"
-);
+const {
+  cardChips,
+  chipsFitOneLine,
+  chipsSplit,
+  FULL_LINE_CHARS,
+  hasChipsRow,
+  PROJECT_LINE_CHARS,
+  secondLineFits,
+  showsChipsRow,
+} = await import("../src/cockpit/chips.ts");
 const { liveRunCount } = await import("../src/shared/subagents.ts");
 
 beforeEach(() => {
@@ -255,7 +262,7 @@ describe("cardChips", () => {
 });
 
 describe("chipsFitOneLine", () => {
-  const fits = (w: Workspace) => chipsFitOneLine(model.chipsFor(w, true), w);
+  const fits = (w: Workspace) => chipsFitOneLine(model.chipsFor(w, true), w, PROJECT_LINE_CHARS);
 
   it("counts a merged card's Park and Close towards the line", () => {
     const pr: PullRequest = { number: 174, status: "merged" };
@@ -270,7 +277,7 @@ describe("chipsFitOneLine", () => {
     const pr: PullRequest = { number: 1234, status: "merged" };
     const full = (w: Workspace) => chipsFitOneLine(cardChips(w, true), w, FULL_LINE_CHARS);
     assert.equal(full(ws("x", { pr, branch: "feat" })), true);
-    assert.equal(full(ws("x", { pr, branch: "feat", ports: [5173] })), false, "the buttons take their own line");
+    assert.equal(full(ws("x", { pr, branch: "feat", ports: [5173] })), false, "so the full card splits");
   });
 
   it("keeps a short PR and branch on one line", () => {
@@ -316,7 +323,7 @@ describe("chipsFitOneLine", () => {
 });
 
 describe("chipsSplit", () => {
-  const splits = (w: Workspace) => chipsSplit(model.chipsFor(w, true), w);
+  const splits = (w: Workspace) => chipsSplit(model.chipsFor(w, true), w, PROJECT_LINE_CHARS);
   const long: PullRequest = { number: 148, status: "open", draft: true, additions: 342, deletions: 17 };
 
   it("splits a PR and branch that do not fit on one line", () => {
@@ -342,12 +349,22 @@ describe("chipsSplit", () => {
     assert.equal(full(w), true, "too wide for a full card");
     assert.equal(full(ws("x", { branch: "main", pr: { number: 12, status: "open" } })), false);
   });
+});
 
-  it("puts a merged full card's Park and Close under its PR when ports crowd the line", () => {
-    const pr: PullRequest = { number: 1234, status: "merged" };
-    const full = (w: Workspace) => chipsSplit(cardChips(w, true), w, FULL_LINE_CHARS);
-    assert.equal(full(ws("x", { pr, branch: "feat" })), false);
-    assert.equal(full(ws("x", { pr, branch: "feat", ports: [5173] })), true);
+describe("secondLineFits", () => {
+  const pr: PullRequest = { number: 178, status: "merged" };
+  const second = (w: Workspace) => secondLineFits(cardChips(w, true), w, FULL_LINE_CHARS);
+
+  it("keeps a merged card's Park and Close beside its port", () => {
+    assert.equal(second(ws("x", { pr, branch: "feat", ports: [5173] })), true);
+  });
+
+  it("drops them under a long uncommitted branch and ports", () => {
+    assert.equal(second(ws("x", { pr, branch: "all-view-card-fit", dirty: true, ports: [5173] })), false);
+  });
+
+  it("fits a second line with no Park or Close", () => {
+    assert.equal(second(ws("x", { pr: { number: 178, status: "open" }, branch: "feat" })), true);
   });
 });
 

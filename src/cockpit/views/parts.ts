@@ -20,7 +20,7 @@ import {
   unreadBadge,
   when,
 } from "../../shared/ui.ts";
-import { cardChips, chipsSplit, showsChipsRow } from "../chips.ts";
+import { cardChips, chipsSplit, secondLineFits, showsChipsRow } from "../chips.ts";
 import { LANES } from "../lanes.ts";
 import {
   cardOpacity,
@@ -368,8 +368,8 @@ export function mergedActions(w: WsAccessor, indent = 0, top = 0): View {
 // HStack. No Spacer: it is flexible too and would split the free width with
 // the branch chip, so the frame left-aligns instead.
 // `prTap` is "still" on the full card, whose PR opens from the card menu.
-// `splitAt` is the card's line in characters (chips.ts); 0 keeps one line.
-export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap = "opens", splitAt = 0): View {
+// `lineChars` is the card's line in characters (chips.ts).
+export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap, lineChars: number): View {
   // One chip list per change, read by every predicate and chip below.
   const chips = computed(() => cardChips(w(), withBranch));
   const one = (id: ChipId) =>
@@ -396,31 +396,44 @@ export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap = "ope
         ),
     ).layoutPriority(-1),
   ];
-  // A merged card's Park and Close close the line.
-  const branchLine = () => [
+  const merged = computed(() => offersMergedChip(w()));
+  // A merged card's Park and Close close the line, while `inline` holds.
+  const branchLine = (inline: () => boolean) => [
     one("br"),
     one("port").layoutPriority(2),
     toReviewAction(w),
     when(
       "merged-inline",
-      () => offersMergedChip(w()),
+      () => merged() && inline(),
       () => HStack({ spacing: 5 }, mergedChips(w)),
     ).layoutPriority(2),
   ];
   const line = (views: View[]) => HStack({ spacing: 5 }, views).frame({ maxWidth: "infinity", alignment: "leading" });
   // Split, the branch goes under the PR when the two do not fit side by
-  // side, so a narrow card shows both whole. Worked out once per change.
-  const splits = computed(() => chipsSplit(chips(), w(), splitAt));
-  const oneLine = () => line([...prLine(), ...branchLine()]);
+  // side, so a narrow card shows both whole; Park and Close go under the
+  // branch when the branch's line has no room for them. Worked out once
+  // per change.
+  const splits = computed(() => chipsSplit(chips(), w(), lineChars));
+  const mergedBelow = computed(() => !secondLineFits(chips(), w(), lineChars));
   const row = () =>
-    splitAt > 0
-      ? VStack({ spacing: 0 }, [
-          when("chips-split", splits, () =>
-            VStack({ alignment: "leading", spacing: 4 }, [line(prLine()), line(branchLine())]),
+    VStack({ spacing: 0 }, [
+      when("chips-split", splits, () =>
+        VStack({ alignment: "leading", spacing: 4 }, [
+          line(prLine()),
+          line(branchLine(() => !mergedBelow())),
+          when(
+            "merged-below",
+            () => merged() && mergedBelow(),
+            () => line(mergedChips(w)),
           ),
-          when("chips-one", () => !splits(), oneLine),
-        ]).frame({ maxWidth: "infinity", alignment: "leading" })
-      : oneLine();
+        ]),
+      ),
+      when(
+        "chips-one",
+        () => !splits(),
+        () => line([...prLine(), ...branchLine(() => true)]),
+      ),
+    ]).frame({ maxWidth: "infinity", alignment: "leading" });
   // Behind a when(), so a card with nothing to show has no empty row and no
   // gap above it (issue #79).
   return when("chips-row", () => showsChipsRow(chips(), w()), row);
