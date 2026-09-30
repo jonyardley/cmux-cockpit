@@ -1017,10 +1017,27 @@ describe("Move to project override (issue #8)", () => {
     model.newSessionFor(undefined);
     assert.deepEqual(r.calls, []);
     model.newSessionFor(one);
-    assert.deepEqual(r.calls, [{ method: "workspace.create", params: { cwd: "~/dev/app-one", focus: true } }]);
+    assert.deepEqual(r.calls, [
+      { method: "workspace.create", params: { cwd: "~/dev/app-one", focus: true, group_id: "g-main" } },
+    ]);
     r.menu.length = 0;
     cardMenu(() => one);
     assert.equal(r.menu[0], "button:New session in App One");
+  });
+});
+
+describe("New session from a card", () => {
+  beforeEach(setup);
+
+  it("opens ungrouped while there is no Main activity group", () => {
+    r.data.groups = r.data.groups.filter((g) => g.name !== "Main activity");
+    model.newSessionFor(ws("one", { directory: "/Users/coder/dev/app-one" }));
+    assert.deepEqual(r.calls, [{ method: "workspace.create", params: { cwd: "~/dev/app-one", focus: true } }]);
+  });
+
+  it("leaves the project header's + ungrouped", () => {
+    model.openProjectWorkspace("/dev/app-one");
+    assert.deepEqual(r.calls, [{ method: "workspace.create", params: { cwd: "~/dev/app-one", focus: true } }]);
   });
 });
 

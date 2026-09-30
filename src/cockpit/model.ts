@@ -730,11 +730,11 @@ function rootToOpen(k: string): string | undefined {
 
 /** Opens a new workspace in the project's root, if it has one. A folded
  * project unfolds first, so the new card is not hidden under its header. */
-export function openProjectWorkspace(k: string): void {
+export function openProjectWorkspace(k: string, group?: WorkspaceGroup | null): void {
   const root = rootToOpen(k);
   if (!root) return;
   if (isProjectCollapsed(k)) toggleProject(k);
-  cmux("workspace.create", { cwd: root, focus: true });
+  cmux("workspace.create", group ? { cwd: root, focus: true, group_id: group.id } : { cwd: root, focus: true });
 }
 
 const openLabel = (k: string): string => `New session in ${projectByKey(k).name}`;
@@ -746,9 +746,11 @@ export function newSessionLabel(w: Workspace | undefined): string {
   return projectNewLabel(projectKey(w));
 }
 
-/** Opens a new session in the card's project folder; a no-op without one. */
+/** Opens a new session in the card's project folder, a no-op without one.
+ * It lands in Main activity, since Jon is about to work in it; with no
+ * Main activity group yet it opens ungrouped. */
 export function newSessionFor(w: Workspace | undefined): void {
-  if (w) openProjectWorkspace(projectKey(w));
+  if (w) openProjectWorkspace(projectKey(w), groupForLane(laneByKey("main")));
 }
 
 /** A project menu's first item: what it opens, or why it opens nothing. */
