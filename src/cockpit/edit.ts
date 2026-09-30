@@ -4,8 +4,8 @@
 // from config/projects.json or was made in the sidebar (issue #9).
 
 import type { ProjectSpec } from "../../scripts/state-config.ts";
-import { expandHome, isHome } from "../shared/home.ts";
-import { isHex, isMatchKey, isName, isRoot, isSymbol, MAX_NAME } from "../shared/project-rules.ts";
+import { expandHome, isHome, tildeHome } from "../shared/home.ts";
+import { isHex, isMatchKey, isName, isRoot, isSymbol, MAX_NAME, MAX_PROJECT_KEY } from "../shared/project-rules.ts";
 import {
   matchesOf,
   newProject,
@@ -13,8 +13,8 @@ import {
   PROJECT_COLORS,
   PROJECT_ICONS,
   PROJECTS,
+  type Project,
   projectId,
-  projectOf,
 } from "../shared/projects.ts";
 import { SYMBOLS } from "../shared/symbols.ts";
 import { knownProjects, openFolderOnce, removeProject, saveProject, specOf } from "./model.ts";
@@ -86,22 +86,65 @@ export function setDraftFolder(text: string): void {
   setDraft(root ? { ...named, root } : named);
 }
 
-// The project a typed folder would make, "~" expanded; null when it cannot make one.
-function madeFrom(root: string): ReturnType<typeof newProject> {
+type Made = NonNullable<ReturnType<typeof newProject>>;
+// A folder's check: the project it would make, or why it cannot, in words.
+type FolderCheck = { made: Made } | { problem: string };
+
+// The typed folder, "~" expanded once: missing, not a full path, or home.
+function pathProblem(root: string): { dir: string } | { problem: string } {
+  if (!root.trim()) return { problem: "Type the project's folder." };
   const dir = expandHome(root);
-  return dir === null || isHome(dir) ? null : newProject(dir, knownProjects());
+  if (dir === null || !dir.startsWith("/")) return { problem: "Type the folder's full path, starting with / or ~/." };
+  if (isHome(dir)) return { problem: "That is your home folder: pick one inside it, such as ~/dev/app." };
+  return { dir };
 }
 
-// A new project's folder, in words: missing, not deep enough, or already one.
+// Where a project matches: every match of a built one, else its key.
+const matchesFor = (p: Project): readonly string[] => {
+  const built = PROJECTS.find((x) => projectId(x) === projectId(p));
+  return built ? matchesOf(built) : matchesOf(p);
+};
+
+// A known project's folder, "~" expanded and lowercased, ending in "/"; "" without one.
+const rootKey = (p: Project): string => {
+  const dir = p.root ? expandHome(p.root) : null;
+  return dir ? dir.toLowerCase().replace(/\/*$/, "/") : "";
+};
+
+// The project already holding the folder, or one the folder would swallow.
+// Known projects count those sent but not built, and not those removed.
+function overlapProblem(made: Made): string | null {
+  const d = made.key;
+  const known = knownProjects();
+  const owner = known.find((p) => matchesFor(p).some((m) => d.includes(m)));
+  if (owner) return `That folder is already in ${owner.name}.`;
+  const inside = known.find((p) => [...matchesFor(p), rootKey(p)].some((m) => m !== d && m.startsWith(d)));
+  if (inside)
+    return `${tildeHome(made.spec.root ?? "")} holds other projects, such as ${inside.name}: pick a folder inside it.`;
+  return null;
+}
+
+// One check for the editor's words, Done and a suggested folder.
+function checkFolder(root: string): FolderCheck {
+  const path = pathProblem(root);
+  if ("problem" in path) return path;
+  const made = newProject(path.dir, knownProjects());
+  if (!made) return { problem: "Pick a folder at least two levels deep, such as ~/dev/app." };
+  if (!isMatchKey(made.key)) return { problem: `Keep the folder's path under ${MAX_PROJECT_KEY} characters.` };
+  const overlap = overlapProblem(made);
+  return overlap ? { problem: overlap } : { made };
+}
+
+// The project a typed folder would make, "~" expanded; null when it cannot make one.
+function madeFrom(root: string): Made | null {
+  const check = checkFolder(root);
+  return "made" in check ? check.made : null;
+}
+
+// A new project's folder, in words, or null when it would save.
 function newFolderProblem(root: string): string | null {
-  if (!root) return "Type the project's folder.";
-  if (expandHome(root) === null) return "Type the folder's full path, starting with /.";
-  if (isHome(expandHome(root) ?? undefined)) return "That is your home folder: pick one inside it, such as ~/dev/app.";
-  const made = madeFrom(root);
-  if (!made) return "Pick a folder at least two levels deep, such as ~/dev/app.";
-  // An existing project that matches it would keep its sessions, so it says which.
-  const known = specOf(made.key)?.name ?? projectOf(made.spec.root).name;
-  return known ? `That folder is already in ${known}.` : null;
+  const check = checkFolder(root);
+  return "problem" in check ? check.problem : null;
 }
 
 /** Escape in the search: with words typed it does nothing, so the draft is not lost; empty, it closes as Cancel does. */
@@ -162,8 +205,8 @@ function saveNew(): void {
 
 /** A suggested folder, one tap: saved in the draft's colour and icon, named after the folder. Its workspace is already open. */
 export function addSuggested(dir: string): void {
-  const made = isHome(dir) ? null : newProject(dir, knownProjects());
-  if (!made || specOf(made.key)) return;
+  const made = madeFrom(dir);
+  if (!made) return;
   saveProject(made.key, { ...made.spec, color: draft().color, icon: draft().icon });
   closeEditor();
 }

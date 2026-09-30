@@ -4,7 +4,10 @@
 // defines it simply has none.
 
 declare const __HOME__: string | undefined;
-const HOME: string = typeof __HOME__ === "string" ? __HOME__.replace(/\/+$/, "") : "";
+/** `path` with any trailing "/" taken off. */
+export const trimSlash = (path: string): string => path.replace(/\/+$/, "");
+
+const HOME: string = typeof __HOME__ === "string" ? trimSlash(__HOME__) : "";
 
 const underHome = (path: string): boolean => path === "~" || path.startsWith("~/");
 
@@ -15,9 +18,9 @@ export function expandHome(path: string, home: string = HOME): string | null {
   return home ? home + p.slice(1) : null;
 }
 
-/** Whether `dir` is the home folder itself, which would swallow every session as one project. */
+/** Whether `dir` is the home folder itself, which would swallow every session as one project. Any case, as macOS folders are. */
 export function isHome(dir: string | undefined, home: string = HOME): boolean {
-  return !!home && String(dir ?? "").replace(/\/+$/, "") === home;
+  return !!home && trimSlash(String(dir ?? "")).toLowerCase() === trimSlash(home).toLowerCase();
 }
 
 /** An absolute path under home as "~/...", for showing; any other path as it is. */

@@ -13,7 +13,8 @@ const { ws } = await import("./support/fixtures.ts");
 const model = await import("../src/cockpit/model.ts");
 const edit = await import("../src/cockpit/edit.ts");
 const state = await import("../src/cockpit/state.ts");
-const { expandHome, tildeHome } = await import("../src/shared/home.ts");
+const parts = await import("../src/cockpit/views/parts.ts");
+const { expandHome, isHome, tildeHome } = await import("../src/shared/home.ts");
 const { nextColor, PROJECT_COLORS } = await import("../src/shared/projects.ts");
 
 const sets = () =>
@@ -27,6 +28,15 @@ const creates = () => r.calls.filter((c) => c.method === "workspace.create").map
 // Each test makes its own folder, since a project sent stays known for the file.
 let n = 0;
 const folder = () => `~/dev/fresh-${++n}`;
+
+// A project sent from the sidebar and not yet built, as a save leaves it.
+const sendProject = (name: string, root: string) => {
+  const dir = expandHome(root) ?? root;
+  const k = `${dir.toLowerCase()}/`;
+  model.saveProject(k, { name, color: PROJECT_COLORS[0] ?? "", icon: "star.fill", root });
+  r.opened.length = 0;
+  return k;
+};
 
 beforeEach(() => {
   r.opened.length = 0;
@@ -54,6 +64,13 @@ describe("the home folder", () => {
     assert.equal(tildeHome("/Users/jon"), "~");
     assert.equal(tildeHome("/Users/jonny/dev"), "/Users/jonny/dev");
     assert.equal(tildeHome("/Users/jon/dev", ""), "/Users/jon/dev");
+  });
+
+  it("knows the home folder in any case, with or without a trailing /", () => {
+    assert.equal(isHome("/users/JON/"), true);
+    assert.equal(isHome("/Users/jon"), true);
+    assert.equal(isHome("/Users/jonny"), false);
+    assert.equal(isHome("/Users/jon", ""), false);
   });
 });
 
@@ -105,18 +122,59 @@ describe("+ New project", () => {
     assert.equal(edit.draftProblem(), "That folder is already in App One.");
   });
 
+  it("wants a full path, not a relative one or another user's ~", () => {
+    edit.openNewProject();
+    for (const typed of ["dev/app", "~bob/app"]) {
+      edit.setDraftFolder(typed);
+      assert.equal(edit.draftProblem(), "Type the folder's full path, starting with / or ~/.");
+    }
+  });
+
+  it("calls the home folder home in any case", () => {
+    edit.openNewProject();
+    edit.setDraftFolder("/USERS/jon/");
+    assert.equal(edit.draftProblem(), "That is your home folder: pick one inside it, such as ~/dev/app.");
+  });
+
+  it("says when a folder is too long once its ~ is expanded", () => {
+    edit.openNewProject();
+    edit.setDraftFolder(`~/${"x".repeat(505)}`);
+    assert.equal(edit.draftProblem(), "Keep the folder's path under 512 characters.");
+    assert.equal(edit.draftSpec().name, "");
+  });
+
+  it("counts a project sent but not yet built", () => {
+    sendProject("Sent Only", "/Users/jon/dev/sent-only");
+    edit.openNewProject();
+    edit.setDraftFolder("~/dev/sent-only/src");
+    assert.equal(edit.draftProblem(), "That folder is already in Sent Only.");
+  });
+
+  it("refuses a folder that holds other projects", () => {
+    edit.openNewProject();
+    edit.setDraftFolder("~/dev");
+    assert.equal(edit.draftProblem(), "~/dev holds other projects, such as App One: pick a folder inside it.");
+  });
+
+  it("takes a removed project's folder again", () => {
+    const k = sendProject("Gone Soon", "/Users/jon/dev/gone-soon");
+    model.removeProject(k);
+    edit.openNewProject();
+    edit.setDraftFolder("~/dev/gone-soon");
+    assert.equal(edit.draftProblem(), null);
+    assert.equal(edit.draftSpec().name, "Gone-soon");
+  });
+
   it("saves under the expanded folder and opens a workspace there", () => {
     const f = folder();
+    const color = nextColor(model.knownProjects());
     edit.openNewProject();
     edit.setDraftFolder(f);
     edit.setDraftIcon("music.note");
     edit.saveDraft();
     const dir = `/Users/jon${f.slice(1)}`;
     assert.deepEqual(sets(), [
-      [
-        `projects.${dir.toLowerCase()}/`,
-        { name: `Fresh-${n}`, color: edit.draftSpec().color, icon: "music.note", root: dir },
-      ],
+      [`projects.${dir.toLowerCase()}/`, { name: `Fresh-${n}`, color, icon: "music.note", root: dir }],
     ]);
     assert.deepEqual(creates(), [dir]);
     assert.equal(state.editingProject(), null);
@@ -167,8 +225,10 @@ describe("the folders on offer", () => {
   });
 
   it("ignores a folder that is already a project, or the home folder", () => {
+    sendProject("Owned", "/Users/jon/dev/owned");
     edit.addSuggested("/Users/jon");
-    edit.addSuggested("/Users/jon/dev/offer-two");
+    edit.addSuggested("/Users/jon/dev/owned");
+    edit.addSuggested("/Users/jon/dev/app-one");
     edit.addSuggested("/x");
     assert.deepEqual(sets(), []);
   });
@@ -181,5 +241,38 @@ describe("the card chip", () => {
       'Make "Chip-card" a project',
     );
     assert.equal(model.makeProjectLabel(undefined), "Make a project");
+  });
+
+  it("reads its words live, so a second folder of the same name says Foo 2", () => {
+    const one = ws("f1", { directory: "/Users/jon/dev/foo" });
+    const two = ws("f2", { directory: "/Users/jon/work/foo" });
+    r.data.workspaces = [one, two];
+    // Text is swapped for one that keeps what it was given, to see the label is a closure.
+    const realText = Text;
+    const given: Reactive<string>[] = [];
+    const g = globalThis as Record<string, unknown>;
+    g.Text = (content: Reactive<string>) => {
+      given.push(content);
+      return realText(content);
+    };
+    try {
+      parts.makeProjectAction(() => two);
+    } finally {
+      g.Text = realText;
+    }
+    const label = given[0];
+    assert.equal(typeof label, "function");
+    const read = () => (typeof label === "function" ? label() : label);
+    assert.equal(read(), 'Make "Foo" a project');
+    model.createProjectFrom(one);
+    assert.equal(read(), 'Make "Foo 2" a project');
+  });
+});
+
+describe("a project's +", () => {
+  it("opens a just-sent ~ folder expanded, before the rebuild", () => {
+    const k = sendProject("Rooty", "~/dev/rooty");
+    model.openProjectWorkspace(k);
+    assert.deepEqual(creates(), ["/Users/jon/dev/rooty"]);
   });
 });

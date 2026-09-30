@@ -6,7 +6,7 @@
 
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
 import { isGeneratedAnchor } from "../shared/anchors.ts";
-import { isHome } from "../shared/home.ts";
+import { expandHome, isHome, trimSlash } from "../shared/home.ts";
 import { type MoveSize, moveSize, moveSizeText } from "../shared/move.ts";
 import { dismissNeeds, isNeedsDismissed } from "../shared/needs.ts";
 import { P } from "../shared/palette.ts";
@@ -621,6 +621,7 @@ export function specOf(k: string): ProjectSpec | undefined {
 
 /** Every project as it now stands, keyed by its first match, sent but not built ones included. */
 export function knownProjects(): Project[] {
+  tick();
   const keys = new Set([...PROJECTS.map(projectId), ...sentSpecs.keys()]);
   return [...keys].flatMap((k) => {
     const spec = specOf(k);
@@ -663,19 +664,16 @@ export function makeProjectLabel(w: Workspace | undefined): string {
 }
 
 const MAX_SUGGESTIONS = 3;
-const folderKey = (dir: string | undefined): string =>
-  String(dir ?? "")
-    .replace(/\/+$/, "")
-    .toLowerCase();
+const folderKey = (dir: string | undefined): string => trimSlash(String(dir ?? "")).toLowerCase();
 
 /** Folders of open workspaces that could become a project, each once, for the new project editor. Reactive. */
-export function folderSuggestions(): string[] {
+export const folderSuggestions = computed((): string[] => {
   const dirs = new Map<string, string>();
   for (const w of cards()) {
-    if (canCreateProject(w) && w.directory) dirs.set(folderKey(w.directory), w.directory.replace(/\/+$/, ""));
+    if (canCreateProject(w) && w.directory) dirs.set(folderKey(w.directory), trimSlash(w.directory));
   }
   return [...dirs.values()].slice(0, MAX_SUGGESTIONS);
-}
+});
 
 /** Opens a workspace in `dir`, unless one is open there already. */
 export function openFolderOnce(dir: string): void {
@@ -721,13 +719,13 @@ export const projectWorkspaces = (k: string): Workspace[] => cards().filter((w) 
 export const canOpenProject = (k: string): boolean => !!projectByKey(k).root;
 
 /**
- * The folder "+" opens: until the rebuild lands, the last root sent when it
- * is already absolute (a "~" one waits for build.ts to expand it), else the
- * built one.
+ * The folder "+" opens: until the rebuild lands, the last root sent, its "~"
+ * expanded as build.ts will, else the built one.
  */
 function rootToOpen(k: string): string | undefined {
   const sent = sentSpecs.get(k)?.root;
-  return sent?.startsWith("/") ? sent : projectByKey(k).root;
+  const dir = sent === undefined ? null : expandHome(sent);
+  return dir?.startsWith("/") ? dir : projectByKey(k).root;
 }
 
 /** Opens a new workspace in the project's root, if it has one. A folded

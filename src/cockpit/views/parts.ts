@@ -275,7 +275,7 @@ const CLOSE_CHIP: ChipColors = { ...ACTION_CHIP, fg: C.text };
 
 // A card's action chip, with its own onTap, so the tap never also selects
 // the card.
-function actionChip(label: string, tap: () => void, colors: () => ChipColors = () => ACTION_CHIP): View {
+function actionChip(label: Reactive<string>, tap: () => void, colors: () => ChipColors = () => ACTION_CHIP): View {
   const body = Text(label)
     .font(11)
     .weight("medium")
@@ -299,7 +299,12 @@ export function makeProjectAction(w: WsAccessor): View {
     "make-project",
     () => canCreateProject(w()),
     () =>
-      HStack({ spacing: 0 }, [actionChip(makeProjectLabel(w()), () => createProjectFrom(w()))])
+      HStack({ spacing: 0 }, [
+        actionChip(
+          () => makeProjectLabel(w()),
+          () => createProjectFrom(w()),
+        ),
+      ])
         .paddingTop(4)
         .frame({ maxWidth: "infinity", alignment: "leading" }),
   );
