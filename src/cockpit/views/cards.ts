@@ -4,7 +4,7 @@
 
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
-import { meta, ring, unreadBadge, when } from "../../shared/ui.ts";
+import { haloSize, meta, ring, unreadBadge, when } from "../../shared/ui.ts";
 import { FULL_LINE_CHARS, hasChipsRow, PROJECT_LINE_CHARS } from "../chips.ts";
 import type { Lane } from "../lanes.ts";
 import { cardOpacity } from "../merged.ts";
@@ -187,6 +187,11 @@ export function compactCard(w: WsAccessor, key: string): View {
   return cardChrome(body, w, key, 12);
 }
 
+const ROW_GLYPH = 14;
+// The dot's frame (its halo's width, drawn or not) and the badge, each with
+// the 6pt gap after it, so the lines under the title start where it does.
+const ROW_TEXT_INDENT = haloSize(7) + 6 + ROW_GLYPH + 6;
+
 // "Row" density (Options board, .plain): dot, title, meta, then one line of
 // the latest message under the title; selection is the white hairline pill,
 // a drag lifts it in ink.
@@ -195,6 +200,8 @@ function denseRow(w: WsAccessor, key: string): View {
   const pr = computed(() => prSummary(w()));
   const head = HStack({ spacing: 6 }, [
     statusDot(w, 7),
+    // The project's badge, small, so a row names its project as a card does.
+    glyph(w, ROW_GLYPH, 4, 8),
     Text(() => displayTitle(w()))
       .font(12.5)
       .weight(() => (isSelected(w()) ? "medium" : "regular"))
@@ -232,10 +239,10 @@ function denseRow(w: WsAccessor, key: string): View {
   ]);
   const body = VStack({ alignment: "leading", spacing: 2 }, [
     head,
-    // Under the title: past the 7pt dot and the 6pt gap after it.
-    leftOffLine(w, "row-left-off", 13),
-    detailLine(w, "row-detail", 1, 13),
-    mergedActions(w, 13, 3),
+    // Under the title: past the dot, the badge and the gap after each.
+    leftOffLine(w, "row-left-off", ROW_TEXT_INDENT),
+    detailLine(w, "row-detail", 1, ROW_TEXT_INDENT),
+    mergedActions(w, ROW_TEXT_INDENT, 3),
   ])
     .paddingLeading(25)
     .paddingTrailing(12)

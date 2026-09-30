@@ -3,7 +3,7 @@
 import type { MoveSize } from "../../shared/move.ts";
 import { isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
 import { type ChipColors, NEUTRAL_CHIP, prChipColors, prInk } from "../../shared/pr-colors.ts";
-import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
+import { PROJECTS, projectId } from "../../shared/projects.ts";
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import {
@@ -50,6 +50,7 @@ import {
   newSessionLabel,
   type PrChip,
   projectKey,
+  projectOfWorkspace,
   reviewIsGreen,
   type TextChip,
 } from "../model.ts";
@@ -95,9 +96,9 @@ export function statusDot(w: WsAccessor, size: number): View {
 
 export function glyph(w: WsAccessor, size: number, radius: number, font: number): View {
   // computed(), not a plain thunk: fill, icon and glyph colour all read it,
-  // so the directory is looked up once per change, not once per reader.
+  // so the project is looked up once per change, not once per reader.
   return projectBadge(
-    computed(() => projectOf(w()?.directory)),
+    computed(() => projectOfWorkspace(w())),
     size,
     font,
     radius,

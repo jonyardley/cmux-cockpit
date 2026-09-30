@@ -705,6 +705,9 @@ export const hasProjectOverride = (w: Workspace | undefined): boolean => {
 };
 
 export const projectByKey = (k: string): Project => PROJECTS.find((p) => projectId(p) === k) ?? OTHER;
+
+/** The project a card's badge shows: its Move to project choice while that stands, else its path match. */
+export const projectOfWorkspace = (w: Workspace | undefined): Project => (w ? projectByKey(projectKey(w)) : OTHER);
 export const isProjectCollapsed = (k: string) => collapsedProjects().includes(k);
 export function toggleProject(k: string): void {
   setCollapsedProjects(
