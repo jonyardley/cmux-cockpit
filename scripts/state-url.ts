@@ -23,7 +23,16 @@ import {
 import { dirname } from "node:path";
 import { prSeenOf } from "../src/shared/pr-health.ts";
 import { pauseSync, tryTakeLock, waitForLock } from "./lockfile.ts";
-import { applySet, isRecord, type SavedPoll, type SetResult, type State, validateState } from "./state-config.ts";
+import {
+  applySet,
+  isRecord,
+  type PrSeen,
+  type SavedPoll,
+  type SavedPr,
+  type SetResult,
+  type State,
+  validateState,
+} from "./state-config.ts";
 
 // `token` is left out, rather than null, when the URL carries none.
 export type ParsedSet = { ok: true; key: string; value: string | null; token?: string } | { ok: false; error: string };
@@ -208,17 +217,21 @@ export function writePrs(path: string, prs: State["prs"]): ApplyResult {
  * The cockpit's lane moves (src/cockpit/automove.ts) react only to a change
  * in a PR's state, so a workspace the poller finds a PR for with no seen
  * state yet gets one: the state its PR had before this poll, "other" when
- * it had none. The cockpit then sees a PR that turned ready or merged in
- * this very poll as a change, and one already ready as nothing new. Only
- * missing entries are filled; the cockpit writes the rest.
+ * it had none or had one for another branch (the cockpit hides a PR saved
+ * for another branch too). The cockpit then sees a PR that turned ready or
+ * merged in this very poll as a change, and one already ready as nothing
+ * new. Only missing entries are filled, and entries for workspaces with no
+ * PR this poll are dropped, so closed workspaces do not pile up; the
+ * cockpit writes the rest.
  */
 function seededSeen(before: State, prs: State["prs"]): State["prSeen"] {
-  const missing = Object.keys(prs).filter((id) => !Object.hasOwn(before.prSeen, id));
-  const old = (id: string) => (Object.hasOwn(before.prs, id) ? before.prs[id] : undefined);
-  return {
-    ...before.prSeen,
-    ...Object.fromEntries(missing.map((id) => [id, prSeenOf(old(id), old(id)?.checks ?? [])])),
+  const seenFor = (id: string, pr: SavedPr): PrSeen => {
+    const kept = Object.hasOwn(before.prSeen, id) ? before.prSeen[id] : undefined;
+    if (kept) return kept;
+    const old = Object.hasOwn(before.prs, id) ? before.prs[id] : undefined;
+    return old?.branch === pr.branch ? prSeenOf(old, old.checks ?? []) : "other";
   };
+  return Object.fromEntries(Object.entries(prs).map(([id, pr]) => [id, seenFor(id, pr)]));
 }
 
 /**

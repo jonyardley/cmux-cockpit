@@ -37,47 +37,57 @@ const RULES: Readonly<Record<PrSeen, { lane: LaneKey; why: string } | null>> = {
 const savedSeen: Record<string, PrSeen> | undefined = SAVED_STATE.prSeen;
 const seen = new Map<string, PrSeen>(Object.entries(savedSeen ?? {}));
 
-let notice: { text: string; at: number } | null = null;
+// The moves made in the last NOTICE_SECS, oldest first, so a pass that
+// files several cards names each one.
+let notices: { text: string; at: number }[] = [];
 
 // A workspace anchoring a group cannot leave it (drop.ts pins it), so it never moves.
 const isAnchor = (w: Workspace): boolean => groups().some((g) => g.anchorId === w.id);
 
+// A ready PR whose checks rerun reads "other" until they pass again. Only a
+// merge moves on from ready, so a push to a ready PR does not re-file a card
+// Jon dragged out of For review.
+const settled = (before: PrSeen, now: PrSeen): boolean => before === now || (before === "ready" && now === "other");
+
 // Records the new state, then moves the card if the change calls for it.
-function react(w: Workspace, now: PrSeen): void {
+function react(w: Workspace, now: PrSeen, at: number): void {
   seen.set(w.id, now);
   persistSet(`prSeen.${w.id}`, now);
   const rule = RULES[now];
   if (!rule || isAnchor(w) || laneOf(w) === rule.lane) return;
   moveToLane(w, rule.lane);
   const name = displayTitle(w);
-  notice = { text: `Moved ${name ? name + " " : ""}to ${laneByKey(rule.lane).name}: ${rule.why}`, at: nowEpoch() };
+  notices.push({ text: `Moved ${name ? name + " " : ""}to ${laneByKey(rule.lane).name}: ${rule.why}`, at });
 }
 
 /**
  * Applies the rules to every workspace whose PR state changed since it was
- * last seen. One with no entry yet waits for the poller to seed it. The renderer has no effect hook, so autoMoveNotice runs this on
- * each read, like model.ts's fileAwaitingCards; it is idempotent, since a
- * state is recorded the moment it is seen. It waits while cmux has not sent
- * its groups (a move then would make a second lane group) and while a drag
- * is in flight.
+ * last seen. One with no entry yet waits for the poller to seed it. The
+ * renderer has no effect hook, so autoMoveNotice runs this on each read,
+ * like model.ts's fileAwaitingCards; it is idempotent, since a state is
+ * recorded the moment it is seen. It waits for cmux's clock (a move stamped
+ * 0 would lapse at once), for its groups (a move before them would make a
+ * second lane group) and out any drag in flight.
  */
 export function applyAutoMoves(): void {
   const ws = data.workspaces();
-  if (!ws || !data.groups() || drag()) return;
+  const at = nowEpoch();
+  if (!ws || !data.groups()?.length || at <= 0 || drag()) return;
   // A lane's generated anchor is its group, with no PR: nothing to record.
   const anchors = laneAnchorIds();
   for (const w of ws) {
     const before = seen.get(w.id);
     if (before === undefined || anchors.has(w.id)) continue;
     const now = seenNow(w);
-    if (before !== now) react(w, now);
+    if (!settled(before, now)) react(w, now, at);
   }
 }
 
-/** The notice naming the last automatic move, for NOTICE_SECS; "" otherwise. */
+/** The automatic moves of the last NOTICE_SECS, joined by " · "; "" when there are none. */
 export function autoMoveNotice(): string {
   applyAutoMoves();
-  if (!notice) return "";
-  const age = nowEpoch() - notice.at;
-  return age >= 0 && age < NOTICE_SECS ? notice.text : "";
+  if (!notices.length) return "";
+  const now = nowEpoch();
+  notices = notices.filter((n) => now - n.at < NOTICE_SECS);
+  return notices.map((n) => n.text).join(" · ");
 }

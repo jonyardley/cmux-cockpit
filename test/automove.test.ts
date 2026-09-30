@@ -25,6 +25,9 @@ const seeded: State = {
     dragged: "other",
     gone: "other",
     back: "ready",
+    two1: "other",
+    two2: "other",
+    waits: "other",
   },
 };
 (globalThis as Record<string, unknown>).__STATE__ = seeded;
@@ -76,12 +79,41 @@ describe("lanes that move themselves", () => {
     assert.deepEqual(saves(), []);
   });
 
-  it("records a PR that stops being ready, without moving it", () => {
+  it("does not re-file a ready PR whose checks rerun and pass again", () => {
     prs.back = running;
-    r.data.workspaces.push(ws("back", { group: "g-review" }));
+    r.data.workspaces.push(ws("back", { group: "g-main" }));
+    auto.applyAutoMoves();
+    prs.back = ready;
+    auto.applyAutoMoves();
+    assert.deepEqual(joins(), [], "Jon dragged it out of For review, so it stays out");
+    assert.deepEqual(saves(), []);
+  });
+
+  it("names every card one pass moves", () => {
+    prs.two1 = merged;
+    prs.two2 = merged;
+    r.data.workspaces.push(
+      ws("two1", { title: "One", group: "g-main" }),
+      ws("two2", { title: "Two", group: "g-main" }),
+    );
+    assert.equal(auto.autoMoveNotice(), "Moved One to Parked: PR merged · Moved Two to Parked: PR merged");
+  });
+
+  it("waits for cmux's clock and its groups before moving anything", () => {
+    prs.waits = ready;
+    r.data.workspaces.push(ws("waits", { group: "g-main" }));
+    const groups = r.data.groups;
+    r.data.groups = [];
+    auto.applyAutoMoves();
+    r.data.groups = groups;
+    const epoch = r.data.epoch;
+    r.data.epoch = 0;
     auto.applyAutoMoves();
     assert.deepEqual(joins(), []);
-    assert.deepEqual(saves(), ["prSeen.back=other"]);
+    assert.deepEqual(saves(), []);
+    r.data.epoch = epoch;
+    auto.applyAutoMoves();
+    assert.deepEqual(joins(), ["waits>g-review"]);
   });
 
   it("files a PR that turns ready into For review, and says so", () => {
