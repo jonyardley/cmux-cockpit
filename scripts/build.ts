@@ -17,6 +17,9 @@
 // links carry it and state-set.ts can refuse any link that does not
 // (docs/state-loop.md).
 //
+// A bundle is written only when its bytes differ from the one on disk
+// (write-if-changed.ts), since every write reloads that sidebar in cmux.
+//
 //   node scripts/build.ts    build once
 
 import { existsSync, readFileSync } from "node:fs";
@@ -25,6 +28,7 @@ import { build } from "esbuild";
 import { mergeProjects, type Project, validateProjects } from "./projects-config.ts";
 import { emptyState, isRecord, type State, validateState } from "./state-config.ts";
 import { ensureUrlToken, keepUnreadableCopy, unreadableCopyOf } from "./state-url.ts";
+import { writeIfChanged } from "./write-if-changed.ts";
 
 const ENTRIES = ["agents", "cockpit"] as const;
 
@@ -121,7 +125,7 @@ const state: State = { ...saved, projects: merged.kept };
 
 for (const name of ENTRIES) {
   const outfile = `sidebars/${name}.js`;
-  await build({
+  const result = await build({
     entryPoints: [`src/${name}/index.ts`],
     outfile,
     bundle: true,
@@ -139,5 +143,7 @@ for (const name of ENTRIES) {
       __URL_TOKEN__: JSON.stringify(urlToken),
     },
     logLevel: "warning",
+    write: false,
   });
+  for (const out of result.outputFiles) writeIfChanged(out.path, out.contents);
 }

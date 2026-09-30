@@ -417,8 +417,11 @@ export function tallyOutcome(tally: GhTally, outcome: "ok" | "skip" | PollError)
 }
 
 // A saved success is refreshed only once it is this old, so a quiet run
-// with gh working is not a write and a rebuild (docs/state-loop.md).
-const RESTAMP_S = 5 * 60;
+// with gh working is not a write and a rebuild (docs/state-loop.md). Each
+// refresh reloads both sidebars, a visible flicker, so it waits as long as
+// it can while staying under freshness.ts's STALE_AFTER (15 minutes): a
+// poll inside the last five minutes of that still refreshes it in time.
+const RESTAMP_S = 10 * 60;
 
 /**
  * The poll status to save after a run (#78), or undefined to keep the saved
