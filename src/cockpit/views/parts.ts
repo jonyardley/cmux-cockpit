@@ -22,6 +22,7 @@ import {
 } from "../../shared/ui.ts";
 import { showsChipsRow } from "../chips.ts";
 import { LANES } from "../lanes.ts";
+import { cardOpacity, closeMerged, keepMerged, offersClose, offersMergedActions } from "../merged.ts";
 import {
   type Chip,
   type ChipId,
@@ -237,24 +238,47 @@ function prById(chips: readonly Chip[]): PrChip {
 // "To review →" is a white chip with the quiet chip's edge.
 const REVIEW_CHIP = { ...NEUTRAL_CHIP, bg: C.card };
 
-// "To review →" on a Ready card: files it into For review (issue #53). A
-// quiet chip with its own onTap, so the tap never also selects the card.
+// A card's quiet action: a white chip with its own onTap, so the tap never
+// also selects the card.
+function actionChip(label: string, ink: string, tap: () => void): View {
+  const body = Text(label).font(11).weight("medium").color(ink).lineLimit(1).paddingHorizontal(7).paddingVertical(1);
+  return ring(body, REVIEW_CHIP.bg, REVIEW_CHIP.edge, 1, 6, { hug: true, hover: chipHover(() => REVIEW_CHIP) }).onTap(
+    tap,
+  );
+}
+
+// "To review →" on a Ready card: files it into For review (issue #53).
 export function toReviewAction(w: WsAccessor): View {
-  const body = Text("To review →")
-    .font(11)
-    .weight("medium")
-    .color(C.secondary)
-    .lineLimit(1)
-    .paddingHorizontal(7)
-    .paddingVertical(1);
   return when(
     "to-review",
     () => canFileForReview(w()),
-    () =>
-      ring(body, REVIEW_CHIP.bg, REVIEW_CHIP.edge, 1, 6, { hug: true, hover: chipHover(() => REVIEW_CHIP) }).onTap(() =>
-        fileForReview(w()),
-      ),
+    () => actionChip("To review →", C.secondary, () => fileForReview(w())),
   ).layoutPriority(2);
+}
+
+/**
+ * A merged card's Close workspace and Keep, on a line of their own, until
+ * Keep is tapped; `top` is the gap above it. Close is in ink and Keep in the
+ * secondary grey, so the one that acts reads first, and Close stays away
+ * while an agent there is working or asking.
+ */
+export function mergedActions(w: WsAccessor, indent = 0, top = 0): View {
+  return when(
+    "merged-actions",
+    () => offersMergedActions(w()),
+    () =>
+      HStack({ spacing: 5 }, [
+        when(
+          "merged-close",
+          () => offersClose(w()),
+          () => actionChip("Close workspace", C.text, () => closeMerged(w())),
+        ),
+        actionChip("Keep", C.secondary, () => keepMerged(w())),
+      ])
+        .paddingLeading(indent)
+        .paddingTop(top)
+        .frame({ maxWidth: "infinity", alignment: "leading" }),
+  );
 }
 
 // One when() per chip, so each has a fixed key and its own place in the
@@ -372,7 +396,9 @@ export function cardChrome(view: View, w: WsAccessor, key: string, radius: numbe
     () => (lit() ? 1.5 : 1),
     radius,
     { hover: { face: C.cardHover } },
-  ).frame({ maxWidth: "infinity" });
+  )
+    .opacity(() => cardOpacity(w(), lit()))
+    .frame({ maxWidth: "infinity" });
   // Cards keep a 6pt gap; the list spacing is 2pt so rows sit tight.
   return VStack({ spacing: 0 }, [face])
     .paddingBottom(4)

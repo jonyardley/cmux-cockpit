@@ -7,6 +7,7 @@ import { displayTitle } from "../../shared/titles.ts";
 import { meta, ring, unreadBadge, when } from "../../shared/ui.ts";
 import { hasChipsRow } from "../chips.ts";
 import type { Lane } from "../lanes.ts";
+import { cardOpacity } from "../merged.ts";
 import { cardDensity, revealWorkspace, showsLeftOff } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
 import {
@@ -29,6 +30,7 @@ import {
   cardMenu,
   chipsRow,
   glyph,
+  mergedActions,
   statusDot,
   statusLabel,
   titleRow,
@@ -113,6 +115,7 @@ function fullCard(w: WsAccessor, key: string): View {
         .frame({ maxWidth: "infinity", alignment: "leading" }),
       // The PR and branch under the status, then the message.
       chipsRow(w, true, "still"),
+      mergedActions(w),
       detailLine(w, "detail", 2),
       progressBar(w, "full-progress"),
     ])
@@ -157,6 +160,7 @@ export function compactCard(w: WsAccessor, key: string): View {
       // Compact cards have no chips row, so a Ready one in Background takes
       // the action on a line of its own.
       toReviewAction(w),
+      mergedActions(w),
       progressBar(w, "compact-progress"),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
@@ -215,6 +219,7 @@ function denseRow(w: WsAccessor, key: string): View {
     // Under the title: past the 7pt dot and the 6pt gap after it.
     leftOffLine(w, "row-left-off", 13),
     detailLine(w, "row-detail", 1, 13),
+    mergedActions(w, 13, 3),
   ])
     .paddingLeading(25)
     .paddingTrailing(12)
@@ -230,6 +235,7 @@ function denseRow(w: WsAccessor, key: string): View {
     // The hover replaces the face: the wash on a clear row, a whole face on a lit one.
     { hover: { face: () => (on() ? C.cardHover : C.hover) } },
   )
+    .opacity(() => cardOpacity(w(), on()))
     .frame({ maxWidth: "infinity" })
     .onTap(() => selectWorkspace(w()?.id))
     .contextMenu(cardMenu(w));
@@ -282,6 +288,7 @@ export function projectRow(w: WsAccessor, key: string): View {
       .paddingTop(2),
     moveLine(w),
     chipsRow(w, true).paddingTop(() => (hasChipsRow(w(), true) ? 3 : 0)),
+    mergedActions(w, 0, 4),
   ])
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .paddingHorizontal(10)

@@ -427,6 +427,19 @@ never rebuilds (it changes nothing on screen, and a rebuild per change
 would loop). src/cockpit/automove.ts has the rules; src/shared/pr-health.ts
 has the ready test the chip and the poller share.
 
+Once merged, the card also dims (full strength again while selected) and
+offers Keep, and Close workspace, which sends the `workspace.close` socket
+command. It stays at full strength while an agent there is working or
+asking or it has unread output, and Close is left out while an agent is
+working or asking. A pinned workspace (cmux will not close one) and a
+lane's anchor offer neither. Keep sets `mergeKept.<workspace id>` to the
+kept PR's number, so the buttons stay hidden for that PR past every
+reload and come back for a later one; the poller drops an entry once the
+workspace's saved PR is another or gone. Like `prSeen`, the set never
+rebuilds, since the sidebar hides them itself. The worktree is never
+removed from the sidebar: that stays in the close-out command.
+src/cockpit/merged.ts has the rules.
+
 ## Where a PR came from
 
 The agents panel's Pull requests rows say which chat opened each PR, and a

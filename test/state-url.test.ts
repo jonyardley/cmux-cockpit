@@ -93,6 +93,7 @@ describe("readApplyWrite", () => {
       asking: {},
       moves: {},
       prSeen: {},
+      mergeKept: {},
       ui: {},
     });
   });
@@ -139,6 +140,19 @@ describe("writePollMaps and the poll status", () => {
     writePollMaps(path, {}, {}, keep, { okEpoch: 100, error: "signed-out" });
     assert.deepEqual(writePollMaps(path, {}, {}, keep), { ok: true, changed: false });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).poll, { okEpoch: 100, error: "signed-out" });
+  });
+
+  it("keeps a Keep only while the workspace's saved PR is the one kept", () => {
+    const path = join(dir, "kept.json");
+    const pr = (n: number) => ({
+      number: n,
+      url: `https://github.com/o/r/pull/${n}`,
+      status: "merged" as const,
+      branch: "b",
+    });
+    writeFileSync(path, JSON.stringify({ mergeKept: { same: 1, next: 1, gone: 1 } }));
+    writePollMaps(path, { same: pr(1), next: pr(2) }, {}, keep);
+    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).mergeKept, { same: 1 });
   });
 
   it("seeds a workspace's seen PR state with the state before this poll, and keeps the rest", () => {
