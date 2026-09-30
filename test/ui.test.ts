@@ -52,6 +52,21 @@ describe("the shared builders read what they are handed", () => {
     ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 6, { hug: true });
   });
 
+  it("a steady ring pads the face by what the edge lacks, so every width keeps one size", () => {
+    // Every padding in the ring's tree, the face's and the edge's, summed.
+    const padOf = (node: ViewNode | undefined): number =>
+      (node?.mods ?? [])
+        .filter((m) => m.name === "padding")
+        .reduce((sum, m) => sum + Number(typeof m.values[0] === "function" ? m.values[0]() : m.values[0]), 0) +
+      (node?.children ?? []).reduce((sum, c) => sum + padOf(c), 0);
+    const sized = (w: number): number => padOf(nodeOf(ui.ring(Text("x"), "#FFFFFF", "#000000", w, 9, { steady: 2 })));
+    assert.equal(sized(1), 2);
+    assert.equal(sized(1.5), 2);
+    assert.equal(sized(2), 2);
+    // Without steady, the edge alone sets the size.
+    assert.equal(padOf(nodeOf(ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 9))), 1);
+  });
+
   it("ring frames the full width before painting the face, unless it hugs (issue #93)", () => {
     const orderOf = (hug: boolean): string[] =>
       recordModifiers(() => ui.ring(Text("x"), "#FFFFFF", "#000000", 1, 6, { hug })).filter(

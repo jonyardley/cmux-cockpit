@@ -305,12 +305,19 @@ export function cardDetail(w: Workspace | undefined): string {
 }
 
 /**
- * The ink for a card's message line. The selected workspace's card keeps
- * its line, faded, since the agents panel on the right shows that message in
- * full: the line stays so the card keeps its height and nothing moves on a
- * tap. Every other card reads it in the secondary ink.
+ * The outline of a card, row or needs-you row: ink at 2pt on the selected
+ * workspace, the one open in the terminal, so it is found at a glance; ink
+ * at 1.5pt while dragged, so the two stay apart; the row's own resting edge
+ * at 1pt otherwise. Rings draw it steady at OUTLINE_MAX, so no width moves
+ * anything on a tap or a drag.
  */
-export const detailColor = (selected: boolean): string => (selected ? C.faint : C.secondary);
+export function outline(selected: boolean, dragged: boolean, rest: string): { color: string; width: number } {
+  if (dragged) return { color: C.select, width: 1.5 };
+  return selected ? { color: C.select, width: OUTLINE_MAX } : { color: rest, width: 1 };
+}
+
+/** The widest outline() gets, which every ring that draws it holds steady. */
+export const OUTLINE_MAX = 2;
 
 /** The progress bar's fraction, held to 0 to 1; null when no value is sent. */
 export function progressFraction(w: Workspace | undefined): number | null {

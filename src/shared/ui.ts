@@ -89,10 +89,13 @@ export function ring(
   edge: Reactive<string>,
   width: Reactive<number>,
   radius: number,
-  { hug = false, hover }: RingOptions = {},
+  { hug = false, hover, steady }: RingOptions = {},
 ): View {
   const wv = typeof width === "function" ? width : () => width;
-  const sized = hug ? view : view.frame({ maxWidth: "infinity", alignment: "leading" });
+  // A steady ring pads the face by what the edge lacks, so a width change
+  // recolours the edge without resizing the view or moving what sits below.
+  const held = steady === undefined ? view : view.padding(() => steady - wv());
+  const sized = hug ? held : held.frame({ maxWidth: "infinity", alignment: "leading" });
   const inner = sized.background(face).cornerRadius(() => radius - wv());
   const outer = VStack({ spacing: 0, alignment: "leading" }, [hover ? inner.hoverBackground(hover.face) : inner])
     .padding(wv)
@@ -104,6 +107,8 @@ export function ring(
 interface RingOptions {
   hug?: boolean;
   hover?: Hover;
+  /** The widest the edge gets; the view keeps that size at every width. */
+  steady?: number;
 }
 
 /**
