@@ -7,9 +7,7 @@
 // check that runs everywhere. Without cmux on PATH (CI) it also skips.
 
 import { spawnSync } from "node:child_process";
-import { realpathSync } from "node:fs";
-import { homedir } from "node:os";
-import { join } from "node:path";
+import { isLiveCheckout } from "./live-checkout.ts";
 
 interface Report {
   directory: string;
@@ -17,18 +15,8 @@ interface Report {
   sidebars: { name: string; ok: boolean; error: string | null }[];
 }
 
-function real(path: string): string | null {
-  try {
-    return realpathSync(path);
-  } catch {
-    return null;
-  }
-}
-
 function main(): number {
-  const mine = real(join(process.cwd(), "sidebars"));
-  const live = real(join(homedir(), ".config", "cmux", "sidebars"));
-  if (!mine || mine !== live) {
+  if (!isLiveCheckout(process.cwd())) {
     console.log("validate: skipped, not the main checkout (cmux only reads ~/.config/cmux/sidebars)");
     return 0;
   }

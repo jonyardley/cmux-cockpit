@@ -550,7 +550,7 @@ describe("writePollState", () => {
     // A stale, unpaired run, seeded directly rather than through the hook.
     writeSubagents(path, () => ({ w1: [{ id: "toolu_1", session: "s1", label: "Old", startedEpoch: 0 }] }));
     const result = writePollState(path, {}, {}, 20 * 60);
-    assert.deepEqual(result, { ok: true, changed: true });
+    assert.deepEqual(result, { ok: true, changed: true, maps: ["subagents"] });
     const written = JSON.parse(readFileSync(path, "utf8"));
     assert.deepEqual(written.subagents, {});
   });
@@ -558,16 +558,21 @@ describe("writePollState", () => {
   it("says unchanged when there is nothing to prune and the prs are the same", () => {
     const path = join(dir, "state-stable.json");
     writePollState(path, { a: pr(1) }, {}, 100);
-    assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100), { ok: true, changed: false });
+    assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100), { ok: true, changed: false, maps: [] });
   });
 
   it("saves the poll status it is given alongside the maps", () => {
     const path = join(dir, "state-poll.json");
     writePollState(path, { a: pr(1) }, {}, 100, { okEpoch: 100 });
-    assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100, { okEpoch: 100 }), { ok: true, changed: false });
+    assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100, { okEpoch: 100 }), {
+      ok: true,
+      changed: false,
+      maps: [],
+    });
     assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100, { okEpoch: 100, error: "unavailable" }), {
       ok: true,
       changed: true,
+      maps: ["poll"],
     });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).poll, { okEpoch: 100, error: "unavailable" });
   });
@@ -576,7 +581,11 @@ describe("writePollState", () => {
     const path = join(dir, "state-prune-only.json");
     writeSubagents(path, () => ({ w1: [{ id: "toolu_1", session: "s1", label: "Old", startedEpoch: 0 }] }));
     writePollState(path, { a: pr(1) }, {}, 100);
-    assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100 + 20 * 60), { ok: true, changed: true });
+    assert.deepEqual(writePollState(path, { a: pr(1) }, {}, 100 + 20 * 60), {
+      ok: true,
+      changed: true,
+      maps: ["subagents"],
+    });
   });
 });
 

@@ -1,4 +1,4 @@
-// The one log both state-set.ts and pr-poll.ts write to (docs/state-loop.md),
+// The one log state-set.ts, pr-poll.ts and build.ts write to (docs/state-loop.md),
 // so the path and the best-effort append behaviour live in one place instead
 // of two copies drifting apart.
 
@@ -18,4 +18,9 @@ export function logLine(line: string): void {
   } catch {
     // ignored: logging is best-effort
   }
+}
+
+/** One build's log line: the sidebars it rewrote, each a full redraw in cmux. */
+export function redrawLine(written: readonly string[]): string {
+  return `build: redrew ${written.length ? written.join(", ") : "nothing"}`;
 }

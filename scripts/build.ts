@@ -28,8 +28,10 @@ import { homedir } from "node:os";
 import { build } from "esbuild";
 import { expandHome } from "../src/shared/home.ts";
 import { bundleOptions, ENTRIES } from "./bundle.ts";
+import { isLiveCheckout } from "./live-checkout.ts";
 import { mergeProjects, type Project, validateProjects } from "./projects-config.ts";
 import { emptyState, isRecord, type State, validateState } from "./state-config.ts";
+import { logLine, redrawLine } from "./state-log.ts";
 import { ensureUrlToken, keepUnreadableCopy, unreadableCopyOf } from "./state-url.ts";
 import { BUILT_MARK, touchBuilt, writeIfChanged } from "./write-if-changed.ts";
 
@@ -120,9 +122,18 @@ const projects = withExpandedRoots(merged.projects);
 // what actually shows.
 const state: State = { ...saved, projects: merged.kept };
 
-for (const name of ENTRIES) {
-  const result = await build(bundleOptions(name, { projects, state, unreadable, urlToken, home: homedir() }));
-  for (const out of result.outputFiles) writeIfChanged(out.path, out.contents);
+// Each rewrite is a full redraw in cmux, so the live checkout logs them next
+// to the poller's lines, to set against cmux's hang reports. Logged even when
+// a later sidebar fails, since the earlier one has already redrawn.
+const written: string[] = [];
+try {
+  for (const name of ENTRIES) {
+    const result = await build(bundleOptions(name, { projects, state, unreadable, urlToken, home: homedir() }));
+    const rewrote = result.outputFiles.map((out) => writeIfChanged(out.path, out.contents));
+    if (rewrote.includes(true)) written.push(name);
+  }
+} finally {
+  if (isLiveCheckout(process.cwd())) logLine(redrawLine(written));
 }
 // The doctor's freshness mark: a bundle left untouched keeps its old time,
 // so the build's own time is kept here instead.
