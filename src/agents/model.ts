@@ -8,6 +8,7 @@ import { byActivity, mostActive } from "../shared/activity.ts";
 import { placeholderIds } from "../shared/anchors.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
+import { waitingMove } from "../shared/move.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
 import { prInk } from "../shared/pr-colors.ts";
@@ -530,38 +531,53 @@ function rawAgent(c: Current): Agent | undefined {
   return id === undefined ? undefined : (c.ws.agents ?? []).find((x) => x?.id === id);
 }
 
-// Idle, or needs_input that is only its turn. A needs_input with no start
-// time cannot be told apart from an ask (shared/needs.ts), so it never counts.
+// How long after a saved turn end the idle_prompt nudge may turn it into
+// needs_input: about 60s on cmux 0.64.25 (docs/state-loop.md), doubled.
+const NUDGE_WINDOW = 120;
+
+// Idle is only ever a turn end: Claude's Stop sets it, an ask never does.
+// needs_input is an ask until proven otherwise, since an ask reads the same
+// until its saved entry reaches a build, and an unhooked one never does. It
+// counts as a turn only when this session's saved turn end (shared/move.ts)
+// is current and the nudge at most NUDGE_WINDOW after it explains the spell.
 function canType(a: Agent, w: Workspace): boolean {
   if (a.status === "idle") return true;
-  return a.status === "needs_input" && !!a.sinceEpoch && askReason(a, w) === null;
+  if (a.status !== "needs_input" || !a.sinceEpoch) return false;
+  const move = waitingMove(a, w, askReason(a, w) !== null);
+  return !!move && a.sinceEpoch - move.epoch <= NUDGE_WINDOW;
 }
 
-const spellOf = (a: Agent): string => `${a.id}:${a.status}:${a.sinceEpoch ?? a.lastActivityAt ?? ""}`;
+// sinceEpoch alone: lastActivityAt moves on every hook event, a paste's
+// included, so it would end the hold before the agent starts working.
+const spellOf = (a: Agent): string => `${a.id}:${a.status}:${a.sinceEpoch ?? ""}`;
 
-// wsId -> the spell a Fix was sent in. Not reactive: reads call fixTick(),
-// writes set it.
-const fixSent = new Map<string, string>();
+// cmux() reports nothing back, so a hold also lapses after this long: a
+// dropped Enter, or a spell with no start time, brings Fix back.
+const FIX_HOLD = 90;
+
+// wsId -> the spell a Fix was sent in and when. Not reactive: reads call
+// fixTick(), writes set it.
+const fixSent = new Map<string, { spell: string; at: number }>();
 const [fixTick, setFixTick] = signal(0);
+
+function held(wsId: string, spell: string): boolean {
+  const sent = fixSent.get(wsId);
+  return !!sent && sent.spell === spell && nowEpoch() - sent.at < FIX_HOLD;
+}
 
 /**
  * The selected workspace's Fix target, or null while Fix must not show:
- * no PR number, no terminal, the agent working, asking or ended, or a Fix
- * already sent in this spell.
+ * the PR not open or its checks stale, no terminal, the agent working,
+ * asking or ended, or a Fix sent in this spell less than FIX_HOLD ago.
  */
 export const fixTarget = computed((): FixTarget | null => {
   fixTick();
   const c = current();
-  const pr = currentPr()?.number;
+  const pr = currentPr();
   const a = c ? rawAgent(c) : undefined;
-  if (!c || !pr || !a?.surfaceId || !canType(a, c.ws)) return null;
+  if (!c || pr?.status !== "open" || currentPrDim() || !a?.surfaceId || !canType(a, c.ws)) return null;
   const spell = spellOf(a);
-  const sent = fixSent.get(c.ws.id);
-  if (sent === spell) return null;
-  // A new spell ends the last Fix's hold. Runs during render and what shows
-  // is unchanged, so no tick.
-  if (sent !== undefined) fixSent.delete(c.ws.id);
-  return { wsId: c.ws.id, surfaceId: a.surfaceId, pr, spell };
+  return held(c.ws.id, spell) ? null : { wsId: c.ws.id, surfaceId: a.surfaceId, pr: pr.number, spell };
 });
 
 /** Whether a check row shows Fix: failed, with an agent that can take it. */
@@ -579,7 +595,7 @@ export function sendFix(check: string): void {
   const at = { workspace_id: t.wsId, surface_id: t.surfaceId };
   cmux("surface.send_text", { ...at, text: fixPrompt(check, t.pr) });
   cmux("surface.send_key", { ...at, key: "enter" });
-  fixSent.set(t.wsId, t.spell);
+  fixSent.set(t.wsId, { spell: t.spell, at: nowEpoch() });
   setFixTick(fixTick() + 1);
 }
 

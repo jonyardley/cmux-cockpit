@@ -144,10 +144,11 @@ declare function cmux(
   method: "surface.send_text",
   params: { workspace_id: string; surface_id: string; text: string },
 ): void;
-/** Presses one key in a terminal surface, e.g. "enter" (cmux send-key's names). */
+/** Presses one key in a terminal surface. Only "enter" is used; add a name
+ * from `cmux send-key` here before sending it, so a typo fails the build. */
 declare function cmux(
   method: "surface.send_key",
-  params: { workspace_id: string; surface_id: string; key: string },
+  params: { workspace_id: string; surface_id: string; key: "enter" },
 ): void;
 /** Dispatches a cmux socket command, e.g. workspace.select. */
 declare function cmux(method: string, params: Record<string, string | number | boolean>): void;
