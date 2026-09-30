@@ -1,11 +1,13 @@
 // Adding and removing the cockpit's Claude Code hooks (scripts/setup/hooks-merge.ts),
-// and the quickstart's by-hand block matching the one committed list.
+// the entry points claude-settings.ts derives from scripts/hooks/routes.ts,
+// and the quickstart's by-hand block matching them.
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { HOOKS_SOURCE, wanted } from "../scripts/setup/claude-settings.ts";
+import { ROUTES } from "../scripts/hooks/routes.ts";
+import { cockpit, entryCommand, hooksState, legacy, stale, wanted } from "../scripts/setup/claude-settings.ts";
 import {
   addEntries,
   canonical,
@@ -13,16 +15,17 @@ import {
   hooksShapeError,
   missingEntries,
   parseSettings,
-  removeEntries,
-  wantedEntries,
+  removeCommands,
+  removeHooks,
 } from "../scripts/setup/hooks-merge.ts";
 
 const HOME = "/Users/someone";
 const WANTED = wanted();
-const cmd = (script: string): { type: string; command: string } => ({
-  type: "command",
-  command: `node $HOME/.config/cmux/scripts/hooks/${script}`,
-});
+const COMMANDS = WANTED.map((e) => e.command);
+const LEGACY = legacy();
+const HOOKS = join(import.meta.dirname, "..", "scripts", "hooks");
+const hook = (command: string): { type: string; command: string } => ({ type: "command", command });
+const routedScripts = (): Set<string> => new Set(Object.values(ROUTES).flatMap((rs) => rs.map((r) => r.script)));
 
 const theirs = {
   model: "opus",
@@ -33,31 +36,37 @@ const theirs = {
   },
 };
 
-describe("the committed hook list", () => {
-  it("is the quickstart's by-hand JSON block, so the doc cannot drift", () => {
+describe("the entry points", () => {
+  it("are the quickstart's by-hand JSON block, so the doc cannot drift", () => {
     const doc = readFileSync(join(import.meta.dirname, "..", "docs", "quickstart.md"), "utf8");
     const section = doc.slice(doc.indexOf("### Claude Code hooks"));
     const block = /```json\n([\s\S]*?)\n```/.exec(section)?.[1];
     assert.ok(block, "the quickstart has a json block under Claude Code hooks");
-    assert.deepEqual(JSON.parse(block), JSON.parse(readFileSync(HOOKS_SOURCE, "utf8")));
+    assert.deepEqual(JSON.parse(block), addEntries({}, WANTED));
   });
 
-  it("names every report-*.ts hook, each with a command", () => {
-    const scripts = new Set(WANTED.map((e) => /report-[a-z]+\.ts/.exec(e.command)?.[0]));
-    assert.deepEqual([...scripts].sort(), [
-      "report-move.ts",
-      "report-notification.ts",
-      "report-pr.ts",
-      "report-published.ts",
-      "report-rename.ts",
-      "report-subagent.ts",
-    ]);
-    assert.equal(WANTED.length, 11);
+  it("are one per routed event, each running dispatch.ts with that event and no matcher", () => {
+    assert.deepEqual(
+      WANTED.map((e) => e.event),
+      Object.keys(ROUTES),
+    );
+    for (const e of WANTED) {
+      assert.equal(e.matcher, null);
+      assert.equal(e.command, `node $HOME/.config/cmux/scripts/hooks/dispatch.ts ${e.event}`);
+      assert.deepEqual(e.hook, hook(e.command));
+    }
   });
 
-  it("refuses a source that is not the settings shape", () => {
-    assert.throws(() => wantedEntries([]), /not a settings object/);
-    assert.throws(() => wantedEntries({ hooks: { X: {} } }), /not a settings object/);
+  it("route every report-*.ts script there is, and only scripts that exist", () => {
+    const onDisk = readdirSync(HOOKS).filter((f) => /^report-[a-z]+\.ts$/.test(f));
+    assert.deepEqual([...routedScripts()].sort(), onDisk.sort());
+    for (const s of routedScripts()) assert.ok(existsSync(join(HOOKS, s)), s);
+  });
+
+  it("replace every script setup once added one by one", () => {
+    const old = new Set(LEGACY.map((c) => /report-[a-z]+\.ts$/.exec(c)?.[0]));
+    for (const s of routedScripts()) assert.ok(old.has(s), `${s} is not in the legacy list`);
+    assert.ok(old.has("report-mention.ts"));
   });
 });
 
@@ -87,9 +96,10 @@ describe("parseSettings", () => {
 });
 
 describe("adding the hooks", () => {
-  it("adds every entry to an empty file, in one group per event and matcher", () => {
+  it("adds every entry point to an empty file, one group each", () => {
     const next = addEntries({}, missingEntries({}, WANTED, HOME));
-    assert.deepEqual(next, JSON.parse(readFileSync(HOOKS_SOURCE, "utf8")));
+    const expected = Object.fromEntries(Object.keys(ROUTES).map((e) => [e, [{ hooks: [hook(entryCommand(e))] }]]));
+    assert.deepEqual(next, { hooks: expected });
   });
 
   it("keeps every other key and existing hook, in order, appending after them", () => {
@@ -101,7 +111,7 @@ describe("adding the hooks", () => {
     // Their Stop hook stays first; the cockpit's is appended after it.
     assert.deepEqual(hooks.Stop?.[0], theirs.hooks.Stop[0]);
     assert.equal(hooks.Stop?.length, 2);
-    assert.equal(hooks.PreToolUse?.length, 3);
+    assert.equal(hooks.PreToolUse?.length, 2);
     assert.deepEqual(Object.keys(next), ["model", "permissions", "hooks"]);
     // The input is not changed.
     assert.equal(theirs.hooks.PreToolUse.length, 1);
@@ -113,74 +123,127 @@ describe("adding the hooks", () => {
     assert.deepEqual(addEntries(once, []), once);
   });
 
-  it("counts a hook already there under any spelling of home, and only for its own matcher", () => {
+  it("counts an entry point already there under any spelling of home, but not under a narrower matcher", () => {
     const spelled = {
       hooks: {
-        PostToolUse: [
-          {
-            matcher: "Bash",
-            hooks: [{ type: "command", command: `node ${HOME}/.config/cmux/scripts/hooks/report-pr.ts` }],
-          },
-        ],
-        PreToolUse: [{ matcher: "Other", hooks: [cmd("report-subagent.ts")] }],
+        Stop: [{ hooks: [hook(`node ${HOME}/.config/cmux/scripts/hooks/dispatch.ts Stop`)] }],
         PermissionRequest: [
-          { hooks: [{ type: "command", command: "node ~/.config/cmux/scripts/hooks/report-notification.ts" }] },
+          { matcher: "", hooks: [hook("node ~/.config/cmux/scripts/hooks/dispatch.ts PermissionRequest")] },
         ],
+        PreToolUse: [{ matcher: "Agent", hooks: [hook(entryCommand("PreToolUse"))] }],
       },
     };
-    const missing = missingEntries(spelled, WANTED, HOME).map(describeEntry);
-    assert.ok(!missing.some((m) => m.startsWith("PostToolUse [Bash]")));
-    assert.ok(missing.some((m) => m.startsWith("PreToolUse [Agent]")));
+    const missing = missingEntries(spelled, WANTED, HOME).map((e) => e.event);
+    assert.ok(!missing.includes("Stop"));
     // A missing matcher and "" both mean every tool.
-    assert.ok(!missing.some((m) => m.startsWith("PermissionRequest")));
-    assert.equal(missing.length, 9);
+    assert.ok(!missing.includes("PermissionRequest"));
+    // Under "Agent" it would run for one tool only, so it still counts as missing.
+    assert.ok(missing.includes("PreToolUse"));
+    assert.equal(missing.length, WANTED.length - 2);
   });
 
-  it("spells each home form the same way", () => {
-    for (const c of ["node $HOME/x.ts", "node $" + "{HOME}/x.ts", "node ~/x.ts", ` node ${HOME}/x.ts `]) {
+  it("counts an entry point under * as there, since * matches everything", () => {
+    const star = { hooks: { Stop: [{ matcher: "*", hooks: [hook(entryCommand("Stop"))] }] } };
+    assert.ok(!missingEntries(star, WANTED, HOME).some((e) => e.event === "Stop"));
+  });
+
+  it("spells each home form, quoting and spacing the same way", () => {
+    const forms = ["node $HOME/x.ts", "node $" + "{HOME}/x.ts", "node ~/x.ts", ` node ${HOME}/x.ts `];
+    for (const c of [...forms, 'node "$HOME/x.ts"', "node  '$HOME/x.ts'"]) {
       assert.equal(canonical(c, HOME), `node ${HOME}/x.ts`);
     }
     assert.equal(canonical("node $HOMEY/x.ts", HOME), "node $HOMEY/x.ts");
   });
 
   it("describes an entry with its matcher, or without one", () => {
-    const lines = WANTED.map(describeEntry);
-    assert.ok(lines.includes("PostToolUse [Bash]: node $HOME/.config/cmux/scripts/hooks/report-pr.ts"));
-    assert.ok(lines.includes("SubagentStart: node $HOME/.config/cmux/scripts/hooks/report-subagent.ts"));
+    assert.ok(WANTED.map(describeEntry).includes("Stop: node $HOME/.config/cmux/scripts/hooks/dispatch.ts Stop"));
+    const matched = { event: "PreToolUse", matcher: "Bash", command: "x", hook: hook("x") };
+    assert.equal(describeEntry(matched), "PreToolUse [Bash]: x");
   });
 });
 
 describe("removing the hooks", () => {
   it("takes out only the cockpit's, leaving the rest as it was", () => {
     const added = addEntries(theirs, missingEntries(theirs, WANTED, HOME));
-    const { settings, removed } = removeEntries(added, WANTED, HOME);
-    assert.equal(removed, 11);
+    const { settings, removed } = removeCommands(added, COMMANDS, HOME);
+    assert.equal(removed, WANTED.length);
     assert.deepEqual(settings, theirs);
   });
 
   it("keeps a group's other hooks, and drops a group or event only when it empties", () => {
+    const [subagent = "", , pr = ""] = LEGACY;
     const mixed = {
       hooks: {
-        PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "mine.sh" }, cmd("report-pr.ts")] }],
-        SubagentStop: [{ hooks: [cmd("report-subagent.ts")] }],
+        PostToolUse: [{ matcher: "Bash", hooks: [hook("mine.sh"), hook(pr)] }],
+        SubagentStop: [{ hooks: [hook(subagent)] }],
         Notification: [],
       },
     };
-    const { settings, removed } = removeEntries(mixed, WANTED, HOME);
+    const { settings, removed } = removeCommands(mixed, LEGACY, HOME);
     assert.equal(removed, 2);
     assert.deepEqual(settings, {
-      hooks: { PostToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "mine.sh" }] }], Notification: [] },
+      hooks: { PostToolUse: [{ matcher: "Bash", hooks: [hook("mine.sh")] }], Notification: [] },
     });
   });
 
-  it("leaves a cockpit command under another matcher, and a file with no hooks", () => {
-    const other = { hooks: { PreToolUse: [{ matcher: "Other", hooks: [cmd("report-subagent.ts")] }] } };
-    assert.equal(removeEntries(other, WANTED, HOME).removed, 0);
-    assert.deepEqual(removeEntries({ a: 1 }, WANTED, HOME), { settings: { a: 1 }, removed: 0 });
+  it("takes a command out under any matcher, and leaves a file with no hooks", () => {
+    const old = hook("node ~/.config/cmux/scripts/hooks/report-subagent.ts");
+    const other = { hooks: { PreToolUse: [{ matcher: "Other", hooks: [old] }] } };
+    assert.equal(removeCommands(other, LEGACY, HOME).removed, 1);
+    assert.deepEqual(removeCommands({ a: 1 }, COMMANDS, HOME), { settings: { a: 1 }, removed: 0 });
   });
 
   it("is idempotent", () => {
-    const once = removeEntries(addEntries({}, WANTED), WANTED, HOME).settings;
-    assert.deepEqual(removeEntries(once, WANTED, HOME), { settings: once, removed: 0 });
+    const once = removeCommands(addEntries({}, WANTED), COMMANDS, HOME).settings;
+    assert.deepEqual(removeCommands(once, COMMANDS, HOME), { settings: once, removed: 0 });
+  });
+});
+
+describe("stale and cockpit hooks", () => {
+  const drop = (event: string, matcher: string, command: string) =>
+    stale(HOME)(event, matcher, canonical(command, HOME));
+
+  it("keeps each entry point on its own event with no matcher, or *", () => {
+    for (const e of WANTED) {
+      assert.equal(drop(e.event, "", e.command), false, e.event);
+      assert.equal(drop(e.event, "*", e.command), false, e.event);
+    }
+  });
+
+  it("drops an entry point under a narrower matcher, on the wrong event, or for an event with no routes", () => {
+    assert.ok(drop("PreToolUse", "Agent", entryCommand("PreToolUse")));
+    assert.ok(drop("Stop", "", entryCommand("PreToolUse")));
+    assert.ok(drop("SessionEnd", "", entryCommand("SessionEnd")));
+  });
+
+  it("drops the old per-script hooks however home and quotes are written, and leaves anything else", () => {
+    assert.ok(drop("PostToolUse", "Bash", 'node "$HOME/.config/cmux/scripts/hooks/report-pr.ts"'));
+    assert.ok(drop("Stop", "", "node ~/.config/cmux/scripts/hooks/report-mention.ts"));
+    assert.equal(drop("Stop", "", "say done"), false);
+    assert.equal(drop("Stop", "", "node $HOME/.config/cmux/scripts/hooks/guard-edit.ts"), false);
+  });
+
+  it("has uninstall take every entry point, even one for an event since dropped", () => {
+    const all = (event: string, command: string) => cockpit(HOME)(event, "", canonical(command, HOME));
+    assert.ok(all("Stop", entryCommand("Stop")));
+    assert.ok(all("SessionEnd", entryCommand("SessionEnd")));
+    assert.ok(all("Stop", LEGACY[4] ?? ""));
+    assert.equal(all("Stop", "say done"), false);
+    const settings = { hooks: { SessionEnd: [{ hooks: [hook(entryCommand("SessionEnd")), hook("mine.sh")] }] } };
+    assert.deepEqual(removeHooks(settings, cockpit(HOME), HOME), {
+      settings: { hooks: { SessionEnd: [{ hooks: [hook("mine.sh")] }] } },
+      removed: 1,
+    });
+  });
+});
+
+describe("hooksState", () => {
+  it("counts entry points missing and old per-script hooks left", () => {
+    assert.deepEqual(hooksState(addEntries({}, WANTED), HOME), { missing: [], stale: 0 });
+    const state = hooksState({ hooks: { Stop: [{ hooks: LEGACY.map(hook) }] } }, HOME);
+    assert.equal(state.missing.length, WANTED.length);
+    assert.equal(state.stale, LEGACY.length);
+    const narrowed = { hooks: { PreToolUse: [{ matcher: "Agent", hooks: [hook(entryCommand("PreToolUse"))] }] } };
+    assert.equal(hooksState(narrowed, HOME).stale, 1);
   });
 });

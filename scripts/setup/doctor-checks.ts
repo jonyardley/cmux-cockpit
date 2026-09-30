@@ -8,9 +8,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { validateProjects } from "../projects-config.ts";
 import { linkState } from "./automations.ts";
-import { claudeDirNotes, loadSettings, retired, wanted } from "./claude-settings.ts";
-import { type Env, type Paths, pathsFor } from "./env.ts";
-import { missingEntries, removeEntries } from "./hooks-merge.ts";
+import { claudeDirNotes, claudeFolders, hooksState, loadSettings } from "./claude-settings.ts";
+import { type ClaudeFolder, type Env, type Paths, pathsFor } from "./env.ts";
 import { atLeast, CMUX_DRAG, CMUX_MIN, NODE_MIN, parseVersion, show } from "./versions.ts";
 
 export interface Check {
@@ -166,21 +165,35 @@ export const automationsCheck: Probe = (_env, paths) => {
   return fail(label, `${found}; pull request chips wait for a poll`, "npm run setup -- --automations");
 };
 
+// What is wrong with one folder's hooks, naming its file, and whether setup
+// can fix it or the file needs a hand first; null when nothing is.
+function folderProblem(env: Env, folder: ClaudeFolder): { why: string; byHand: boolean } | null {
+  const loaded = loadSettings(folder);
+  if (!loaded.ok) return { why: `${folder.shown} is ${loaded.error}`, byHand: true };
+  if (!loaded.existed) return { why: `no ${folder.shown}`, byHand: false };
+  const { missing, stale } = hooksState(loaded.settings, env.home);
+  const problems = [
+    ...(missing.length > 0 ? [`is missing ${missing.length} entry points`] : []),
+    ...(stale > 0 ? [`still has ${stale} old cockpit hooks, which run scripts twice or fail`] : []),
+  ];
+  return problems.length === 0 ? null : { why: `${folder.shown} ${problems.join(" and ")}`, byHand: false };
+}
+
+// Every folder setup writes to is checked, and each one wanting a fix is named.
 function hooksFound(env: Env, paths: Paths): Check {
   const label = "Claude Code hooks";
-  const loaded = loadSettings(paths);
-  if (!loaded.ok) return fail(label, `${paths.claudeSettingsShown} is ${loaded.error}`, "fix the file by hand");
-  if (!loaded.existed) return fail(label, `no ${paths.claudeSettingsShown}`, "npm run setup -- --hooks");
-  const stale = removeEntries(loaded.settings, retired(), env.home).removed;
-  if (stale > 0) return fail(label, `${stale} retired hook left, failing on every turn`, "npm run setup -- --hooks");
-  const missing = missingEntries(loaded.settings, wanted(), env.home);
-  if (missing.length === 0) return pass(label, `all present in ${paths.claudeSettingsShown}`);
-  return fail(label, `${missing.length} missing`, "npm run setup -- --hooks");
+  const folders = claudeFolders(paths);
+  const problems = folders.flatMap((f) => folderProblem(env, f) ?? []);
+  if (problems.length === 0) return pass(label, `entry points in ${folders.map((f) => f.shown).join(" and ")}`);
+  const fix = problems.some((p) => p.byHand)
+    ? "fix the file by hand, then npm run setup -- --hooks"
+    : "npm run setup -- --hooks";
+  return fail(label, problems.map((p) => p.why).join("; "), fix);
 }
 
 export const hooksCheck: Probe = (env, paths) => {
   const check = hooksFound(env, paths);
-  const notes = claudeDirNotes(paths, env.home);
+  const notes = claudeDirNotes(paths);
   return notes.length === 0 ? check : { ...check, notes };
 };
 
