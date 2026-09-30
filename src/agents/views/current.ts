@@ -22,6 +22,7 @@ import {
   askedLine,
   branchFooter,
   type CheckRow,
+  canFix,
   cardLine,
   checkDot,
   checks,
@@ -45,6 +46,7 @@ import {
   openChecks,
   portChips,
   type SubagentRow,
+  sendFix,
   statusColor,
   statusLine,
 } from "../model.ts";
@@ -147,6 +149,22 @@ function helpersBlock(): View {
   );
 }
 
+// Types a fix prompt into the agent: only on a failed check, and only while
+// the agent can take typing (model.ts fixTarget). Open chat's clay face.
+function fixButton(e: () => CheckRow): View {
+  return Text("Fix")
+    .font(11)
+    .weight("semibold")
+    .color(T.onClay)
+    .lineLimit(1)
+    .paddingHorizontal(8)
+    .paddingVertical(2)
+    .background(T.clayButton)
+    .hoverBackground(T.clayButtonHover)
+    .cornerRadius(6)
+    .onTap(() => sendFix(e().name));
+}
+
 function checkLine(e: () => CheckRow): View {
   return HStack({ spacing: 9 }, [
     agentDot(
@@ -165,6 +183,11 @@ function checkLine(e: () => CheckRow): View {
       .font(11)
       .color(T.secondary)
       .lineLimit(1),
+    when(
+      "check-fix",
+      () => canFix(e()),
+      () => fixButton(e),
+    ),
   ])
     .paddingVertical(5)
     .frame({ maxWidth: "infinity", alignment: "leading" });

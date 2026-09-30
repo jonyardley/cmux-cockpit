@@ -8,6 +8,7 @@ import { byActivity, mostActive } from "../shared/activity.ts";
 import { placeholderIds } from "../shared/anchors.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
+import { waitingMove } from "../shared/move.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
 import { prInk } from "../shared/pr-colors.ts";
@@ -510,6 +511,93 @@ const CHECK_WORD: Record<CheckState, string> = { pass: "passed", fail: "failed",
 export const checkWord = (c: CheckRow): string => CHECK_WORD[c.state];
 
 export const checkDot = (c: CheckRow): string => CHECK_DOT[c.state];
+
+// ---- Fix a failing check ----------------------------------------------------
+
+/** Where a Fix tap types: the workspace's most active agent's terminal. */
+export interface FixTarget {
+  wsId: string;
+  surfaceId: string;
+  pr: number;
+  /** The agent's current status spell, so one tap hides Fix until it ends. */
+  spell: string;
+}
+
+// The agent as cmux sends it, not as agentsOf shows it: a dismissed ask reads
+// idle there, yet its permission prompt is still on screen and would take the
+// typed words as its answer.
+function rawAgent(c: Current): Agent | undefined {
+  const id = c.a?.id;
+  return id === undefined ? undefined : (c.ws.agents ?? []).find((x) => x?.id === id);
+}
+
+// How long after a saved turn end the idle_prompt nudge may turn it into
+// needs_input: about 60s on cmux 0.64.25 (docs/state-loop.md), doubled.
+const NUDGE_WINDOW = 120;
+
+// Idle is only ever a turn end: Claude's Stop sets it, an ask never does.
+// needs_input is an ask until proven otherwise, since an ask reads the same
+// until its saved entry reaches a build, and an unhooked one never does. It
+// counts as a turn only when this session's saved turn end (shared/move.ts)
+// is current and the nudge at most NUDGE_WINDOW after it explains the spell.
+function canType(a: Agent, w: Workspace): boolean {
+  if (a.status === "idle") return true;
+  if (a.status !== "needs_input" || !a.sinceEpoch) return false;
+  const move = waitingMove(a, w, askReason(a, w) !== null);
+  return !!move && a.sinceEpoch - move.epoch <= NUDGE_WINDOW;
+}
+
+// sinceEpoch alone: lastActivityAt moves on every hook event, a paste's
+// included, so it would end the hold before the agent starts working.
+const spellOf = (a: Agent): string => `${a.id}:${a.status}:${a.sinceEpoch ?? ""}`;
+
+// cmux() reports nothing back, so a hold also lapses after this long: a
+// dropped Enter, or a spell with no start time, brings Fix back.
+const FIX_HOLD = 90;
+
+// wsId -> the spell a Fix was sent in and when. Not reactive: reads call
+// fixTick(), writes set it.
+const fixSent = new Map<string, { spell: string; at: number }>();
+const [fixTick, setFixTick] = signal(0);
+
+function held(wsId: string, spell: string): boolean {
+  const sent = fixSent.get(wsId);
+  return !!sent && sent.spell === spell && nowEpoch() - sent.at < FIX_HOLD;
+}
+
+/**
+ * The selected workspace's Fix target, or null while Fix must not show:
+ * the PR not open or its checks stale, no terminal, the agent working,
+ * asking or ended, or a Fix sent in this spell less than FIX_HOLD ago.
+ */
+export const fixTarget = computed((): FixTarget | null => {
+  fixTick();
+  const c = current();
+  const pr = currentPr();
+  const a = c ? rawAgent(c) : undefined;
+  if (!c || pr?.status !== "open" || currentPrDim() || !a?.surfaceId || !canType(a, c.ws)) return null;
+  const spell = spellOf(a);
+  return held(c.ws.id, spell) ? null : { wsId: c.ws.id, surfaceId: a.surfaceId, pr: pr.number, spell };
+});
+
+/** Whether a check row shows Fix: failed, with an agent that can take it. */
+export const canFix = (c: CheckRow): boolean => c.state === "fail" && !!fixTarget();
+
+/** What Fix types into the agent for a failed check on PR `pr`. */
+export const fixPrompt = (check: string, pr: number): string =>
+  `The ${check} check failed on PR #${pr}. Find its run with gh pr checks ${pr}, ` +
+  `read the log with gh run view <run-id> --log-failed, fix the cause, push, and tell me what it was.`;
+
+/** Types the Fix prompt for `check` into the agent and presses Enter. */
+export function sendFix(check: string): void {
+  const t = fixTarget();
+  if (!t) return;
+  const at = { workspace_id: t.wsId, surface_id: t.surfaceId };
+  cmux("surface.send_text", { ...at, text: fixPrompt(check, t.pr) });
+  cmux("surface.send_key", { ...at, key: "enter" });
+  fixSent.set(t.wsId, { spell: t.spell, at: nowEpoch() });
+  setFixTick(fixTick() + 1);
+}
 
 // ---- Pull requests ----------------------------------------------------------
 

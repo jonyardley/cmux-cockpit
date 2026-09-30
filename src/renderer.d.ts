@@ -139,6 +139,17 @@ declare function computed<T>(fn: () => T): () => T;
  * does not exist yet (#87).
  */
 declare function sidebar(root: () => View, options?: { surface?: "glass" }): void;
+/** Types text into a terminal surface as if pasted; it does not press Enter. */
+declare function cmux(
+  method: "surface.send_text",
+  params: { workspace_id: string; surface_id: string; text: string },
+): void;
+/** Presses one key in a terminal surface. Only "enter" is used; add a name
+ * from `cmux send-key` here before sending it, so a typo fails the build. */
+declare function cmux(
+  method: "surface.send_key",
+  params: { workspace_id: string; surface_id: string; key: "enter" },
+): void;
 /** Dispatches a cmux socket command, e.g. workspace.select. */
 declare function cmux(method: string, params: Record<string, string | number | boolean>): void;
 declare function openURL(url: string): void;
