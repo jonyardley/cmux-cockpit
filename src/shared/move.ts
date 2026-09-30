@@ -46,28 +46,38 @@ export function waitingMove(a: Agent | null | undefined, w: Workspace | undefine
 
 // Nothing to answer, so no size. "Nothing follows" is different: it ends in /clear.
 const NOTHING_WAITS = /nothing (?:else )?waits on you/i;
-// "Your move: nothing. Waiting until CI lands."
-const NOTHING_FIRST = /^nothing\b(?!\s+follows)/i;
+// "Your move: nothing. Waiting until CI lands.": the bare word, then a stop.
+// "nothing pending, /clear now" and "nothing follows" still ask something.
+const NOTHING_FIRST = /^nothing[.:]/i;
 
 /**
  * True when the move asks nothing of Jon: the reply ended on "Nothing for
  * you:" (saved as idle), or on the older "Your move: nothing. Waiting until
  * X." or "nothing waits on you". "Nothing follows" is not one: it ends in
- * /clear.
+ * /clear. A reply that laid out decisions always asks something, whatever
+ * its last line says.
  */
-export const asksNothing = (m: Pick<SavedMove, "text" | "idle">): boolean =>
-  m.idle === true || NOTHING_WAITS.test(m.text) || NOTHING_FIRST.test(m.text);
+export const asksNothing = (m: Pick<SavedMove, "text" | "idle" | "decisions">): boolean =>
+  !((m.decisions ?? 0) > 0) && (m.idle === true || NOTHING_WAITS.test(m.text) || NOTHING_FIRST.test(m.text));
+
+/**
+ * How long after a saved turn end the idle_prompt nudge may turn it into
+ * needs_input: about 60s on cmux 0.64.25 (docs/state-loop.md), doubled.
+ */
+export const NUDGE_WINDOW = 120;
 
 /**
  * The move behind `a`'s needs_input when it asks nothing of Jon, or null.
  * Pass `a` as cmux sends it, and only when it is not asking: the idle nudge
  * lands about 60s after a turn that ended on "Nothing for you", and that
- * turn waits on the agent's own background work, not on Jon.
+ * turn waits on the agent's own background work, not on Jon. Only that
+ * nudge: a later needs_input with no prompt between (the agent woke on its
+ * own and stopped to ask) is past NUDGE_WINDOW and still needs him.
  */
 export function quietTurn(a: Agent, w: Workspace | undefined): SavedMove | null {
-  if (a.status !== "needs_input") return null;
+  if (a.status !== "needs_input" || !a.sinceEpoch) return null;
   const m = waitingMove(a, w, false);
-  return m && asksNothing(m) ? m : null;
+  return m && asksNothing(m) && a.sinceEpoch - m.epoch <= NUDGE_WINDOW ? m : null;
 }
 
 /**

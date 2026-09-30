@@ -3,7 +3,7 @@
 // when Jon has dismissed it. The sidebars run in separate contexts, so each
 // holds its own dismissals, and a reload forgets them (issues #3 and #5).
 
-import type { SavedAsk } from "../../scripts/state-config.ts";
+import type { SavedAsk, SavedMove } from "../../scripts/state-config.ts";
 import { sinceOrActivity } from "./activity.ts";
 import { quietTurn } from "./move.ts";
 import { persistSet, SAVED_STATE } from "./persist.ts";
@@ -44,9 +44,13 @@ const dismissed = new Map<string, Map<string, number>>(
 const [tick, setTick] = signal(0);
 const bump = () => setTick(tick() + 1);
 
-// Real asks only: a nudge already reads as idle, so there is nothing to dismiss.
+// A needs_input that is not Jon's: the idle nudge, or the nudge on a turn
+// that ended on "Nothing for you" (quietOf).
+const notJons = (a: Agent, w: Workspace | undefined): boolean => isIdleNudge(a, w) || quietOf(a, w) !== null;
+
+// Real asks only: a nudge or a quiet turn already reads as idle, so there is nothing to dismiss.
 const asking = (w: Workspace | undefined): Agent[] =>
-  (w?.agents ?? []).filter((a) => a?.status === "needs_input" && !isIdleNudge(a, w));
+  (w?.agents ?? []).filter((a) => a?.status === "needs_input" && !notJons(a, w));
 
 function isDismissed(w: Workspace | undefined, a: Agent): boolean {
   tick();
@@ -79,7 +83,7 @@ export function effectiveAgent(a: Agent, w?: Workspace): Agent {
   if (isIdleNudge(a, w) && a.lastActivityAt) return { ...a, status: "idle", sinceEpoch: a.lastActivityAt };
   // A turn that ended on "Nothing for you" waits on the agent, not Jon: idle
   // since that turn ended, not since the nudge.
-  const quiet = freshAsk(a, w) ? null : quietTurn(a, w);
+  const quiet = quietOf(a, w);
   if (quiet) return { ...a, status: "idle", sinceEpoch: quiet.epoch };
   return isIdleNudge(a, w) || isDismissed(w, a) ? { ...a, status: "idle" } : a;
 }
@@ -118,6 +122,12 @@ function isOwnSaved(saved: { session?: string }, a: Agent, w: Workspace): boolea
   const { session } = saved;
   const owned = session !== undefined && (w.agents ?? []).some((x) => x?.id === session);
   return !owned || a.id === session;
+}
+
+// The move behind `a`'s nudge when that turn ended on "Nothing for you"
+// (shared/move.ts), unless a fresh saved ask says it is really asking.
+function quietOf(a: Agent, w: Workspace | undefined): SavedMove | null {
+  return a.status === "needs_input" && !freshAsk(a, w) ? quietTurn(a, w) : null;
 }
 
 // The saved ask that explains `a`'s current needs_input spell, if any.

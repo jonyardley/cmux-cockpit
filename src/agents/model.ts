@@ -8,7 +8,7 @@ import { byActivity, mostActive } from "../shared/activity.ts";
 import { placeholderIds } from "../shared/anchors.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { type Last, markLast } from "../shared/list.ts";
-import { waitingMove } from "../shared/move.ts";
+import { NUDGE_WINDOW, waitingMove } from "../shared/move.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
 import { prInk } from "../shared/pr-colors.ts";
@@ -530,10 +530,6 @@ function rawAgent(c: Current): Agent | undefined {
   const id = c.a?.id;
   return id === undefined ? undefined : (c.ws.agents ?? []).find((x) => x?.id === id);
 }
-
-// How long after a saved turn end the idle_prompt nudge may turn it into
-// needs_input: about 60s on cmux 0.64.25 (docs/state-loop.md), doubled.
-const NUDGE_WINDOW = 120;
 
 // Idle is only ever a turn end: Claude's Stop sets it, an ask never does.
 // needs_input is an ask until proven otherwise, since an ask reads the same

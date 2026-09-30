@@ -724,7 +724,7 @@ export const MOVE_MAX_AGE_S = 7 * 24 * 60 * 60;
 // As askEntry: the move goes last, and moves a week older than it are dropped.
 function moveEntry(state: State, id: string, parsed: unknown): State | string {
   const move = savedMove(parsed);
-  if (!move) return "moves wants {text, epoch, session?, decisions?, leans?}";
+  if (!move) return "moves wants {text, epoch, session?, decisions?, leans?, idle?: true}";
   const kept = Object.entries(state.moves).filter(([, m]) => m.epoch >= move.epoch - MOVE_MAX_AGE_S);
   return { ...state, moves: { ...Object.fromEntries(kept), [id]: move } };
 }

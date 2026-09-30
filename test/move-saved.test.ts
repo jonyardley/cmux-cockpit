@@ -27,6 +27,7 @@ import { beforeEach, describe, it } from "node:test";
     quiet: { text: "CI is running on #2171. I report when it lands.", epoch: 1000, session: "s-quiet", idle: true },
     legacy: { text: "nothing. Waiting until CI lands.", epoch: 1000, session: "s-legacy" },
     quietAsks: { text: "CI is running.", epoch: 1000, session: "s-quietAsks", idle: true },
+    quietDecide: { text: "CI is running.", epoch: 1000, session: "s-quietDecide", idle: true, decisions: 2 },
   },
   ui: {},
 };
@@ -215,6 +216,9 @@ describe("a turn that ended on Nothing for you", () => {
     assert.equal(move.asksNothing({ text: "PR #130 is merged; nothing waits on you." }), true);
     assert.equal(move.asksNothing({ text: "the work is finished and nothing follows. /clear now." }), false);
     assert.equal(move.asksNothing({ text: "Nothing follows: /clear now." }), false);
+    assert.equal(move.asksNothing({ text: "nothing pending. /clear now." }), false);
+    assert.equal(move.asksNothing({ text: "nothing to decide, say go." }), false);
+    assert.equal(move.asksNothing({ text: "CI is running.", idle: true, decisions: 1 }), false, "decisions still wait");
     assert.equal(move.asksNothing({ text: "say go." }), false);
   });
 
@@ -238,6 +242,19 @@ describe("a turn that ended on Nothing for you", () => {
     assert.equal(status.agentOf(at("quiet", [waiting("quiet", 1160)], { latestAt: 1100 }))?.status, "needs_input");
     const asks = waiting("quietAsks", 1060);
     assert.equal(needs.effectiveAgent(asks, at("quietAsks", [asks])).status, "needs_input");
+  });
+
+  it("still needs Jon on a later stop with no prompt between, or with decisions laid out", () => {
+    // The agent woke on its own after CI and stopped to ask, well past the nudge.
+    assert.equal(status.agentOf(at("quiet", [waiting("quiet", 1000 + move.NUDGE_WINDOW + 1)]))?.status, "needs_input");
+    assert.equal(status.agentOf(at("quietDecide", [waiting("quietDecide", 1060)]))?.status, "needs_input");
+  });
+
+  it("is no ask: Ready once there is output, and nothing to dismiss", () => {
+    const w = at("quiet", [waiting("quiet", 1060)], { unread: 1 });
+    assert.equal(needs.hasRealAsk(w), false);
+    assert.equal(needs.isNeedsDismissed(w), false);
+    assert.equal(status.isReady(w), true);
   });
 
   it("leaves another session's agent alone", () => {
