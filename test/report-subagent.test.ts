@@ -329,9 +329,10 @@ test("buildUntilStable builds once and stops when nothing changed", () => {
 });
 
 test("buildUntilStable builds again for each write that lands while it ran, until stable", () => {
-  // v0 (before) -> build 1 -> v1 (changed, so build again) -> build 2 -> v2
-  // (changed again) -> build 3 -> v2 (unchanged: stop).
-  const snapshots = ["v0", "v1", "v2", "v2"];
+  // Each pass reads before and after its build: v0 -> build 1 -> v1
+  // (changed, so again) v1 -> build 2 -> v2 (changed again) v2 -> build 3
+  // -> v2 (unchanged: stop).
+  const snapshots = ["v0", "v1", "v1", "v2", "v2", "v2"];
   let i = 0;
   let builds = 0;
   buildUntilStable(

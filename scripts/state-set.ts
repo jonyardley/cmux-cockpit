@@ -66,7 +66,7 @@ function main(): number {
 
   // Detached, so the tap returns at once; a build failure is logged by the
   // build itself. When one is already in flight it picks this write up.
-  scheduleBuild("state-set");
+  scheduleBuild("state-set", true);
   log(`ok, build scheduled key=${key}`);
   return 0;
 }

@@ -20,6 +20,15 @@ build keeps them to real changes: each sidebar is baked with only the maps
 it reads (`scripts/bundle.ts`), and a bundle whose bytes did not change is
 not rewritten (`scripts/write-if-changed.ts`), so cmux does not reload it.
 
+Redraws also cost cmux memory: it aborted twice on 2026-09-30 when
+SwiftUI's view graph ran out of room, the second time after 48 redraws in
+an hour, often a few seconds apart. So a build from a hook or a poll waits
+until 20 seconds have passed since a bundle was last rewritten
+(`REDRAW_GAP_MS` in `scripts/hook-build.ts`), and every write in that wait
+lands in the one redraw. A tap raises `config/build-urgent`, which cuts
+the wait short so the sidebar answers at once, and `npm run build` never
+waits.
+
 ## The URL
 
 ```

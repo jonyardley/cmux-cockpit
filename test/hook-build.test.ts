@@ -10,7 +10,17 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync }
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
-import { BUILD_LOCK_STALE_MS, buildInputs, buildNow, buildThenRelease, lockedBuild } from "../scripts/hook-build.ts";
+import {
+  BUILD_LOCK_STALE_MS,
+  BUILD_TIMEOUT_MS,
+  buildInputs,
+  buildNow,
+  buildThenRelease,
+  gapLeft,
+  lockedBuild,
+  REDRAW_GAP_MS,
+  settleGap,
+} from "../scripts/hook-build.ts";
 import { tryTakeLock, waitForLock } from "../scripts/lockfile.ts";
 
 describe("tryTakeLock", () => {
@@ -105,6 +115,7 @@ describe("buildNow", () => {
           return overrides.build ? overrides.build() : true;
         },
         snapshot: () => snapshots[Math.min(i++, snapshots.length - 1)] ?? "v0",
+        settle: () => events.push("settle"),
         pause: () => events.push("pause"),
         maxWaitMs: 500,
       },
@@ -115,19 +126,19 @@ describe("buildNow", () => {
     let tries = 0;
     const { events, deps } = fakes({ take: () => ++tries > 2 });
     assert.equal(buildNow(deps), "built");
-    assert.deepEqual(events, ["busy", "pause", "busy", "pause", "take", "build", "release"]);
+    assert.deepEqual(events, ["busy", "pause", "busy", "pause", "take", "settle", "build", "release"]);
   });
 
   it("builds again when a write lands while it builds", () => {
     const { events, deps } = fakes({ snapshots: ["v0", "v1", "v1"] });
     assert.equal(buildNow(deps), "built");
-    assert.deepEqual(events, ["take", "build", "build", "release"]);
+    assert.deepEqual(events, ["take", "settle", "build", "settle", "build", "release"]);
   });
 
   it("reports a failed build, still dropping the lock", () => {
     const { events, deps } = fakes({ build: () => false });
     assert.equal(buildNow(deps), "failed");
-    assert.deepEqual(events, ["take", "build", "release"]);
+    assert.deepEqual(events, ["take", "settle", "build", "release"]);
   });
 
   it("drops the lock even when the build throws", () => {
@@ -379,5 +390,63 @@ describe("lockedBuild", () => {
     assert.equal(lockedBuild({ ...deps, maxWaitMs: 200 }), 1);
     assert.equal(events.includes("build"), false);
     assert.equal(events.includes("release"), false);
+  });
+});
+
+describe("the redraw gap", () => {
+  it("is what is left of the gap since the last redraw, never below nothing", () => {
+    assert.equal(gapLeft(1_000, 0, 20_000), 19_000);
+    assert.equal(gapLeft(5_000, 0, 20_000), 15_000);
+    assert.equal(gapLeft(50_000, 0, 20_000), 0);
+  });
+
+  it("with the build's timeout, stays under the lock's stale threshold", () => {
+    assert.ok(REDRAW_GAP_MS + BUILD_TIMEOUT_MS < BUILD_LOCK_STALE_MS);
+  });
+
+  // A clock that moves only when the fake pause says so.
+  function clock(start: number) {
+    let t = start;
+    const pauses: number[] = [];
+    return {
+      pauses,
+      now: () => t,
+      pause: (ms: number) => {
+        pauses.push(ms);
+        t += ms;
+      },
+    };
+  }
+
+  it("waits out the rest of the gap in short steps", () => {
+    const c = clock(REDRAW_GAP_MS - 600);
+    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => false, pause: c.pause });
+    assert.deepEqual(c.pauses, [250, 250, 100]);
+  });
+
+  it("does not wait once the gap has passed", () => {
+    const c = clock(REDRAW_GAP_MS + 1);
+    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => false, pause: c.pause });
+    assert.deepEqual(c.pauses, []);
+  });
+
+  it("stops waiting as soon as a tap raises the urgent flag", () => {
+    const c = clock(0);
+    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => c.pauses.length === 2, pause: c.pause });
+    assert.deepEqual(c.pauses, [250, 250]);
+  });
+
+  it("settles before every build pass, so writes in the wait join that pass", () => {
+    const events: string[] = [];
+    const snapshots = ["v0", "v1", "v1", "v1"];
+    let i = 0;
+    buildThenRelease({
+      take: () => true,
+      release: () => events.push("release"),
+      build: () => events.push("build") > 0,
+      snapshot: () => snapshots[Math.min(i++, snapshots.length - 1)] ?? "v1",
+      settle: () => events.push("settle"),
+    });
+    assert.deepEqual(events, ["settle", "build", "settle", "build", "release"]);
   });
 });
