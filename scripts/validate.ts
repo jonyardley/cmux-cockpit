@@ -7,7 +7,7 @@
 // check that runs everywhere. Without cmux on PATH (CI) it also skips.
 
 import { spawnSync } from "node:child_process";
-import { isLiveCheckout } from "./state-log.ts";
+import { isLiveCheckout } from "./live-checkout.ts";
 
 interface Report {
   directory: string;

@@ -589,7 +589,7 @@ function poll(root: string): number {
   }
   // Which maps moved, so the log can tell a check turning green from a
   // freshness restamp when it is set against cmux's hang reports.
-  const moved = applied.maps?.length ? ` [${applied.maps.join(", ")}]` : "";
+  const moved = applied.maps.length ? ` [${applied.maps.join(", ")}]` : "";
 
   // Through hook-build.ts's lock, so this build never races a hook's and
   // lands an older bundle last. It waits briefly for a build in flight,

@@ -113,10 +113,11 @@ is still on the branch it was found for. Two polls never overlap: a
 is already going (a lock older than five minutes is a crashed run's, and is
 cleared and retaken). Every run logs a line, whether it changed anything,
 found nothing new, was skipped, or hit an error; a run that changed
-something names the maps it changed, such as `[poll, prs]`. A build in the
-main checkout then logs `build: redrew agents, cockpit`, naming each
-sidebar it rewrote (`nothing` when it rewrote none), since each rewrite is a
-full redraw in cmux. Set against a report in `~/Library/Logs/cmux/hangs`,
+something names the maps it changed, such as `[poll, prs]`. Every build in
+the main checkout logs `build: redrew agents, cockpit`, naming each sidebar
+it rewrote (`nothing` when it rewrote none), since each rewrite is a full
+redraw in cmux. A poll logs its own line only once its build returns, so
+the `build:` line comes first and the poll's time is when the build ended. Set against a report in `~/Library/Logs/cmux/hangs`,
 the two lines say which change, if any, redrew a panel just before cmux
 stalled.
 

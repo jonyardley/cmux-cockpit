@@ -108,7 +108,7 @@ export function ensureUrlToken(path: string): string {
 export type ApplyResult = { ok: true; changed: boolean } | { ok: false; error: string };
 
 /** A poll's write, which also names the maps it changed, for the log that sets redraws against cmux's hangs. */
-export type PollApplyResult = { ok: true; changed: boolean; maps?: string[] } | { ok: false; error: string };
+export type PollApplyResult = { ok: true; changed: boolean; maps: string[] } | { ok: false; error: string };
 
 /** The top-level maps whose contents differ between two states, in key order. */
 export function changedMaps(before: State, after: State): string[] {
@@ -239,7 +239,8 @@ export function writePollMaps(
   subagents: (runs: State["subagents"]) => State["subagents"],
   poll?: SavedPoll | null,
 ): PollApplyResult {
-  let maps: string[] = [];
+  let was: State | undefined;
+  let now: State | undefined;
   const result = readUpdateWrite(path, (before) => {
     const next: State = {
       ...before,
@@ -250,10 +251,13 @@ export function writePollMaps(
     };
     if (poll === null) delete next.poll;
     const state = validateState({ ...next, subagents: sortedByKey(subagents(before.subagents)) });
-    maps = changedMaps(before, state);
+    was = before;
+    now = state;
     return { ok: true, state };
   });
-  return result.ok && result.changed ? { ...result, maps } : result;
+  if (!result.ok) return result;
+  // Compared only once the write found a change, since most polls change nothing.
+  return { ...result, maps: result.changed && was && now ? changedMaps(was, now) : [] };
 }
 
 /**

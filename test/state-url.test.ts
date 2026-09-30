@@ -140,7 +140,7 @@ describe("writePollMaps and the poll status", () => {
   it("keeps the saved status when none is given", () => {
     const path = join(dir, "keeps.json");
     writePollMaps(path, {}, {}, keep, { okEpoch: 100, error: "signed-out" });
-    assert.deepEqual(writePollMaps(path, {}, {}, keep), { ok: true, changed: false });
+    assert.deepEqual(writePollMaps(path, {}, {}, keep), { ok: true, changed: false, maps: [] });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).poll, { okEpoch: 100, error: "signed-out" });
   });
 
@@ -190,7 +190,7 @@ describe("writePollMaps and the poll status", () => {
   it("is no change when the status is the same", () => {
     const path = join(dir, "same.json");
     writePollMaps(path, {}, {}, keep, { okEpoch: 100 });
-    assert.deepEqual(writePollMaps(path, {}, {}, keep, { okEpoch: 100 }), { ok: true, changed: false });
+    assert.deepEqual(writePollMaps(path, {}, {}, keep, { okEpoch: 100 }), { ok: true, changed: false, maps: [] });
   });
 });
 
