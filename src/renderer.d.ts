@@ -174,6 +174,7 @@ interface SubagentRun {
 }
 
 interface Agent {
+  /** For Claude Code, the session id: the name of its transcript file. */
   id: string;
   /** Optional like every data field: there is no published schema (issue #7). */
   status?: AgentStatus;
@@ -181,6 +182,9 @@ interface Agent {
   kind?: string;
   title?: string;
   surfaceId?: string;
+  /** The session's transcript file, under whichever Claude folder ran it
+   * (~/.claude or ~/.claude-personal). */
+  transcriptPath?: string;
   /** Epoch seconds the current status began. */
   sinceEpoch?: number;
   /** Epoch seconds of the agent's latest activity. */

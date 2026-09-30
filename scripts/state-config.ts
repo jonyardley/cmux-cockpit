@@ -48,6 +48,14 @@ export interface State {
    */
   subagents: Record<string, SavedSubagent[]>;
   /**
+   * Claude Code session id -> the name its agent row shows, recorded by
+   * scripts/hooks/report-rename.ts because cmux's own agent title is the
+   * first message, which it cannot read for every Claude folder. Oldest
+   * first, so the cap drops the sessions named longest ago. Written only
+   * by the hook, never by a URL: a URL could plant words as a chat's name.
+   */
+  names: Record<string, SavedName>;
+  /**
    * url -> a page or doc an agent published, recorded by
    * scripts/hooks/report-published.ts (issue #52), oldest first. Keyed by
    * URL so a republish replaces its entry. Written only by the hook, never
@@ -208,6 +216,16 @@ export interface SavedSubagent {
   endedEpoch?: number;
 }
 
+/** Where a session's name came from: a `/rename`, or its first real prompt. */
+export type NameSource = "title" | "prompt";
+
+/** A session's name, as the hook saves it. */
+export interface SavedName {
+  /** At most MAX_LABEL characters, cleaned as cleanLabel does. */
+  name: string;
+  from: NameSource;
+}
+
 /** What an agent published: a claude.ai page (Artifact) or doc (Claude Docs). */
 export type PublishedKind = "page" | "doc";
 
@@ -286,6 +304,7 @@ export const emptyState = (): State => ({
   prs: {},
   ownPrs: {},
   subagents: {},
+  names: {},
   published: {},
   prOrigins: {},
   asking: {},
@@ -563,6 +582,13 @@ function savedMove(v: unknown): SavedMove | null {
   };
 }
 
+const SOURCES: readonly unknown[] = ["title", "prompt"];
+const isSource = (v: unknown): v is NameSource => SOURCES.includes(v);
+
+function savedName(v: unknown): SavedName | null {
+  return isRecord(v) && isLabel(v.name) && isSource(v.from) ? { name: v.name, from: v.from } : null;
+}
+
 function savedSubagents(v: unknown): SavedSubagent[] | null {
   const runs = Array.isArray(v) ? v.flatMap(savedSubagent).slice(-MAX_SUBAGENTS) : [];
   return runs.length ? runs : null;
@@ -590,6 +616,7 @@ export function validateState(raw: unknown): State {
     prs: cleanMap(v.prs, savedPr),
     ownPrs: cleanMap(v.ownPrs, savedOwnPr, isPrUrl),
     subagents: cleanMap(v.subagents, savedSubagents),
+    names: cleanMap(v.names, savedName),
     published: cleanMap(v.published, savedPublished, isPublishedUrl),
     prOrigins: cleanMap(v.prOrigins, originAt, isPrUrl),
     asking: cleanMap(v.asking, savedAsk),
@@ -602,7 +629,7 @@ export function validateState(raw: unknown): State {
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
+// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
 type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves" | "mergeKept";

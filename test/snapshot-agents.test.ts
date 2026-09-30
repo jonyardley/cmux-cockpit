@@ -1,5 +1,7 @@
 // Scene: the agents panel for a selected workspace with a running helper,
-// ports and a PR with checks, then every PR and what agents made. Fixture
+// ports and a PR with checks, then every PR and what agents made. Its three
+// agents are named each way a row can be: a saved session name, cmux's own
+// title, and the plain fallback. Fixture
 // data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
@@ -27,6 +29,7 @@ const r = seed({
     ownPrs: {
       [url(4)]: { url: url(4), number: 4, status: "open", branch: "old", title: "An orphaned PR", repo: "/r/.git" },
     },
+    names: { s1: { name: "Record the text snapshots", from: "prompt" } },
     subagents: {
       here: [{ id: "t1", session: "s1", label: "Review the diff", startedEpoch: ago(90) }],
     },
@@ -66,7 +69,11 @@ it("the agents panel", () => {
       branch: "snapshots",
       ports: [5173],
       latestMessage: "Recorded six scenes; the lanes one is the longest.",
-      agents: [agent("working", { id: "s1", sinceEpoch: ago(900), lastActivityAt: ago(20) })],
+      agents: [
+        agent("working", { id: "s1", name: "Claude", sinceEpoch: ago(900), lastActivityAt: ago(20) }),
+        agent("idle", { name: "Claude", title: "Check the chip colours", lastActivityAt: ago(240) }),
+        agent("idle", { name: "Claude", lastActivityAt: ago(600) }),
+      ],
     }),
     ws("other", {
       title: "Chip colours",

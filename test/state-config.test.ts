@@ -43,6 +43,7 @@ test("validateState reads a good file unchanged", () => {
         { id: "toolu_2", session: "s1", label: "Probe the hook", startedEpoch: 150 },
       ],
     },
+    names: { s1: { name: "Real names on agent rows", from: "prompt" } },
     published: {
       "https://claude.ai/code/artifact/0b3c-9e2a": {
         url: "https://claude.ai/code/artifact/0b3c-9e2a",
@@ -91,6 +92,7 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     prs: {},
     ownPrs: {},
     subagents: {},
+    names: {},
     published: {},
     prOrigins: {},
     asking: {},
@@ -215,6 +217,7 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
       prs: {},
       ownPrs: {},
       subagents: {},
+      names: {},
       published: {},
       prOrigins: {},
       asking: {},
@@ -516,4 +519,28 @@ test("validateState keeps good asks and drops bad ones", () => {
     },
   });
   assert.deepEqual(state.asking, { w1: { reason: "allow git push?", epoch: 5, session: "s1" } });
+});
+
+test("validateState keeps good session names and drops bad ones", () => {
+  const good = { name: "Real names on agent rows", from: "prompt" };
+  const { names } = validateState({
+    names: {
+      s1: good,
+      s2: { name: "Design Review", from: "title" },
+      s3: { name: " padded", from: "prompt" },
+      s4: { name: "x".repeat(MAX_LABEL + 1), from: "prompt" },
+      s5: { name: "Fine", from: "url" },
+      s6: "Fine",
+      __proto__: good,
+    },
+  });
+  assert.deepEqual(names, { s1: good, s2: { name: "Design Review", from: "title" } });
+  assert.deepEqual(validateState({}).names, {});
+});
+
+test("applySet refuses to set a session name from a URL", () => {
+  assert.deepEqual(applySet(emptyState(), "names.s1", '{"name":"x","from":"title"}'), {
+    ok: false,
+    error: "unknown map names",
+  });
 });
