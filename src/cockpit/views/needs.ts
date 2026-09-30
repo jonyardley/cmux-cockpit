@@ -12,6 +12,8 @@ import {
   needsList,
   needsMore,
   needsShown,
+  needsWaitLate,
+  needsWaitText,
   nextStep,
   originOf,
   revealWorkspace,
@@ -147,6 +149,8 @@ export function needsStrip(): View {
                 () => countColors(needsList()),
               ),
               Spacer({ minLength: 0 }),
+              // How long the oldest ask has waited: clay from 30 minutes.
+              meta(needsWaitText, () => (needsWaitLate() ? C.clayText : C.secondary)),
             ]).paddingHorizontal(5),
             motionList({ items: needsShown, key: (w) => w.id, spacing: 6 }, (w) => needsRow(w)),
             moreLine(),

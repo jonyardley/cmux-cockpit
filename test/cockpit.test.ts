@@ -482,6 +482,69 @@ describe("a lane's generated anchor", () => {
   });
 });
 
+// Issue #153: the Needs you header says how long the oldest ask has waited.
+describe("Needs you clock", () => {
+  beforeEach(setup);
+
+  const ask = (id: string, waited: number) => {
+    const w = r.data.workspaces.find((x) => x.id === id);
+    if (!w) throw new Error("fixture");
+    w.agents = [agent("needs_input", { sinceEpoch: r.data.epoch - waited })];
+  };
+
+  it("is blank with nothing waiting or no clock", () => {
+    assert.equal(model.needsWaitText(), "");
+    assert.equal(model.needsWaitLate(), false);
+    ask("a", 45 * 60);
+    const now = r.data.epoch;
+    r.data.epoch = 0;
+    try {
+      assert.equal(model.needsWaitText(), "");
+      assert.equal(model.needsWaitLate(), false);
+    } finally {
+      r.data.epoch = now;
+    }
+  });
+
+  it("skips an untimed ask rather than blanking the clock", () => {
+    const untimed = r.data.workspaces.find((x) => x.id === "b");
+    if (!untimed) throw new Error("fixture");
+    untimed.agents = [agent("needs_input")];
+    ask("a", 45 * 60);
+    assert.equal(model.needsList()[0]?.id, "b");
+    assert.equal(model.needsWaitText(), "45m");
+    assert.equal(model.needsWaitLate(), true);
+  });
+
+  it("times the oldest ask, wherever it sits in the data", () => {
+    ask("a", 5 * 60);
+    ask("u", 12 * 60);
+    ask("c", 60);
+    assert.equal(model.needsWaitText(), "12m");
+    assert.equal(model.needsWaitLate(), false);
+  });
+
+  it("turns late at 30 minutes, not before", () => {
+    ask("a", model.NEEDS_LATE_SECS - 1);
+    assert.equal(model.needsWaitText(), "29m");
+    assert.equal(model.needsWaitLate(), false);
+    ask("a", model.NEEDS_LATE_SECS);
+    assert.equal(model.needsWaitText(), "30m");
+    assert.equal(model.needsWaitLate(), true);
+    ask("a", 3 * 3600);
+    assert.equal(model.needsWaitText(), "3h");
+    assert.equal(model.needsWaitLate(), true);
+  });
+
+  it("stops counting an ask once it is dismissed", () => {
+    ask("a", 45 * 60);
+    ask("b", 2 * 60);
+    model.dismissWaiting(r.data.workspaces.find((x) => x.id === "a"));
+    assert.equal(model.needsWaitText(), "2m");
+    assert.equal(model.needsWaitLate(), false);
+  });
+});
+
 // Issue #50: an empty lane is a drop box in its own place, whether or not a
 // card is being dragged.
 describe("empty lanes", () => {

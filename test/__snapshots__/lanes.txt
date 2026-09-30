@@ -22,6 +22,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
           Text "N\u200aE\u200aE\u200aD\u200aS Y\u200aO\u200aU" .font(10.5) .weight(semibold) .color(clayText) .lineLimit(1)
           Text "2" .font(11) .weight(medium) .color(clayText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(clayCount) .cornerRadius(10)
           Spacer minLength: 0
+          Text "5m" .font(11) .monospaced() .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .layoutPriority(2)
         Reorderable spacing: 6
           VStack spacing: 0, alignment: leading .padding(1) .background(needsRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(19) .fixed()
             HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8)
