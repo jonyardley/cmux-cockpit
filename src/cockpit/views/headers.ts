@@ -156,8 +156,11 @@ const headerGap = (row: View, tap?: () => void): View => {
   return tap ? gap.onTap(tap) : gap;
 };
 
-const laneMarker = (color: string): View =>
-  RoundedRectangle({ cornerRadius: 3 }).fill(color).frame({ width: 9, height: 9 });
+/** A lane's square marker: 9pt on its header, smaller where a line names the lane. */
+export const laneMarker = (color: Reactive<string>, size = 9): View =>
+  RoundedRectangle({ cornerRadius: size / 3 })
+    .fill(color)
+    .frame({ width: size, height: size });
 
 export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
   const lane = laneByKey(laneKey);

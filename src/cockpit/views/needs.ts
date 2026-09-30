@@ -19,15 +19,14 @@ import {
 import { isSelected } from "../state.ts";
 import { ageOf, countColors, needsInk, needsLine, needsRowEdge } from "../status.ts";
 import { C } from "../theme.ts";
+import { laneMarker } from "./headers.ts";
 import { cardMenu, glyph, glyphButton, type WsAccessor } from "./parts.ts";
 
 // The lane's marker and name, or the project group's in Projects view.
 function originLine(w: WsAccessor): View {
   const origin = computed(() => originOf(w()));
   return HStack({ spacing: 5 }, [
-    RoundedRectangle({ cornerRadius: 2 })
-      .fill(() => origin().color)
-      .frame({ width: 7, height: 7 }),
+    laneMarker(() => origin().color, 7),
     Text(() => origin().name)
       .font(11)
       .color(C.metaText)

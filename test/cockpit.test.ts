@@ -189,6 +189,21 @@ describe("resolveDrop", () => {
     assert.equal(r.calls.length, 0);
   });
 
+  it("counts a placeholder as a waiting peer, so a held card drops beside it", () => {
+    const a = byId("a");
+    const b = byId("b");
+    if (!a || !b) throw new Error("fixture");
+    const d = ws("d", { group: "g-main", agents: [agent("needs_input", { sinceEpoch: 700 })] });
+    r.data.workspaces.push(d);
+    a.agents = [agent("needs_input", { sinceEpoch: 500 })];
+    b.agents = [agent("needs_input", { sinceEpoch: 600 })];
+    model.dismissWaiting(b);
+    model.dismissWaiting(d);
+    // [h:main, g:a, w:b, w:d, ...], all waiting rank; without w:d, slot 1
+    // sits above g:a, so d lands before a, not before b further down.
+    assert.deepEqual(drop.resolveDrop("w:d", 1), { laneKey: "main", nextRef: "a", prevRef: null });
+  });
+
   it("ignores a next card that belongs to another lane", () => {
     // Without c@review: slot 4 sits after h:review, before h:bg.
     const t = drop.resolveDrop("w:c", 4);
@@ -585,6 +600,38 @@ describe("needs you", () => {
     assert.equal(model.stateRank(a), 2);
     a.agents = [agent("idle", { sinceEpoch: 700 })];
     assert.deepEqual(lane(), ["b@main", "a@main"]);
+  });
+
+  it("holds nothing when the menu dismisses a card that is not waiting", () => {
+    const a = byId("a");
+    const b = byId("b");
+    if (!a || !b) throw new Error("fixture");
+    b.agents = [agent("working", { sinceEpoch: 400 })];
+    model.dismissWaiting(a);
+    assert.deepEqual(
+      ids().filter((id) => id.endsWith("@main")),
+      ["b@main", "a@main"],
+    );
+  });
+
+  it("releases a hold when the agent asks again, so the next answer sorts normally", () => {
+    const a = byId("a");
+    const b = byId("b");
+    if (!a || !b) throw new Error("fixture");
+    b.agents = [agent("working", { sinceEpoch: 400 })];
+    a.agents = [agent("needs_input", { sinceEpoch: 500 })];
+    model.dismissWaiting(a);
+    a.agents = [agent("needs_input", { sinceEpoch: 900 })];
+    assert.equal(model.stateRank(a), 0);
+    a.agents = [agent("idle", { sinceEpoch: 950 })];
+    assert.equal(model.stateRank(a), 3);
+  });
+
+  it("names the lane for a waiting generated anchor, even in Projects view", () => {
+    const anchor = byId("anchor-main");
+    if (!anchor) throw new Error("fixture");
+    state.setMode("projects");
+    assert.equal(model.originOf(anchor).name, "Main activity");
   });
 
   it("keeps a lane whose only card waits, with the placeholder under its header", () => {

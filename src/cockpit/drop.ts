@@ -38,16 +38,17 @@ function slotOf(key: string, index: number): { entries: LaneEntry[]; at: number;
   return { entries, at, laneKey: entries[at - 1]?.lane ?? FIRST_LANE };
 }
 
+const isTab = (e: LaneEntry | undefined): e is Extract<LaneEntry, { kind: "ws" | "ghost" }> =>
+  e?.kind === "ws" || e?.kind === "ghost";
+
 // The lane's cards in the dragged card's state, as they sit above and below
 // the slot.
 function peersAround(entries: LaneEntry[], at: number, laneKey: LaneKey, rank: number | null) {
-  const peer = (e: LaneEntry | undefined): e is Extract<LaneEntry, { kind: "ws" }> =>
-    e?.kind === "ws" && e.lane === laneKey && rank !== null && stateRank(wsById(e.wsId)) === rank;
+  // A placeholder is its card, waiting, so it is a peer in the waiting rank.
+  const peer = (e: LaneEntry | undefined): e is Extract<LaneEntry, { kind: "ws" | "ghost" }> =>
+    isTab(e) && e.lane === laneKey && rank !== null && stateRank(wsById(e.wsId)) === rank;
   return { above: entries.slice(0, at).filter(peer).at(-1), below: entries.slice(at).find(peer) };
 }
-
-const isTab = (e: LaneEntry | undefined): e is Extract<LaneEntry, { kind: "ws" | "ghost" }> =>
-  e?.kind === "ws" || e?.kind === "ghost";
 
 // Cards sort by state inside a lane (model.ts's stateRank), and the drag
 // order only holds among cards in the same state. So a drop anchors to the

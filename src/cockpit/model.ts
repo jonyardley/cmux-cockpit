@@ -7,7 +7,7 @@
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
 import { isGeneratedAnchor } from "../shared/anchors.ts";
 import { type MoveSize, moveSize, moveSizeText } from "../shared/move.ts";
-import { dismissNeeds } from "../shared/needs.ts";
+import { dismissNeeds, isNeedsDismissed } from "../shared/needs.ts";
 import { P } from "../shared/palette.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import { READY_INK } from "../shared/pr-colors.ts";
@@ -340,6 +340,9 @@ export const needsMore = (): number => Math.max(0, needsList().length - NEEDS_RO
  * it starts asking, so it never vanishes from under the pointer. Above the
  * lanes and projects, since computed() runs on definition.
  */
+/** Real cards, memoised once per change for every lane and project header that filters them. */
+const cards = computed(cardWorkspaces);
+
 const inStrip = computed((): ReadonlySet<string> => {
   const dragged = drag()?.id;
   return new Set(needsShown().flatMap((w) => (dragged === "w:" + w.id ? [] : [w.id])));
@@ -347,19 +350,26 @@ const inStrip = computed((): ReadonlySet<string> => {
 
 // Dismissing from Needs you leaves the card in the placeholder's spot, the
 // top of its lane with the other waiting cards, rather than sorting it down
-// as idle. It holds there until its status next changes. A plain Map, like
-// heldRank: written by a tap, which the dismissal's own change redraws, and
-// released during render.
+// as idle. It holds there until its status next changes, and a new ask
+// releases it too (liveRank). A plain Map: read with tick(), set with
+// bump(); a release during render needs no bump, since the status change
+// that caused it already redraws.
 const dismissedHold = new Map<string, string>();
 
 /** Dismisses a waiting session from Needs you, holding its card where its placeholder sat. */
 export function dismissWaiting(w: Workspace | undefined): void {
   if (!w) return;
   dismissNeeds(w);
+  // Only a real dismissal holds: the menu offers it on cards not waiting too.
+  if (!isNeedsDismissed(w)) return;
+  const live = new Set((data.workspaces() ?? []).map((x) => x.id));
+  for (const id of dismissedHold.keys()) if (!live.has(id)) dismissedHold.delete(id);
   dismissedHold.set(w.id, statusOf(w));
+  bump();
 }
 
 function heldAtTop(w: Workspace): boolean {
+  tick();
   const held = dismissedHold.get(w.id);
   if (held === undefined) return false;
   if (held === statusOf(w)) return true;
@@ -370,7 +380,8 @@ function heldAtTop(w: Workspace): boolean {
 /** Where a session in Needs you came from: its lane and marker, or its project group in Projects view. */
 export function originOf(w: Workspace | undefined): { name: string; color: string } {
   if (!w) return { name: "", color: "clear" };
-  if (mode() === "projects") {
+  // A lane's generated anchor is in no project group: it names its lane in both views.
+  if (mode() === "projects" && !laneAnchorIds().has(w.id)) {
     const p = projectByKey(projectKey(w));
     return { name: p.name, color: p.color };
   }
@@ -409,7 +420,11 @@ const isEmpty = (s: LaneSection): boolean => s.rows.length === 0 && !s.anchorId;
 
 function liveRank(w: Workspace | undefined): number {
   const s = statusOf(w);
-  if (s === "needs_input" || (w && heldAtTop(w))) return 0;
+  if (s === "needs_input") {
+    if (w) dismissedHold.delete(w.id);
+    return 0;
+  }
+  if (w && heldAtTop(w)) return 0;
   if (isReady(w)) return 1;
   return s === "working" ? 2 : 3;
 }
@@ -441,10 +456,10 @@ function byState(rows: Workspace[]): Workspace[] {
 }
 
 const laneSections = computed((): LaneSection[] => {
-  const cards = cardWorkspaces();
+  const all = cards();
   return LANES.map((lane) => ({
     lane,
-    rows: byState(cards.filter((w) => laneOf(w) === lane.key)),
+    rows: byState(all.filter((w) => laneOf(w) === lane.key)),
     anchorId: headerAnchorId(lane),
   }));
 });
@@ -494,20 +509,19 @@ export const showsLeftOff = (w: Workspace | undefined): boolean => LEFT_OFF_LANE
  * filters once per change and reads its count, its pill's tint (status.ts
  * countColors) and, folded, its status dot from the one list.
  */
-export const laneWorkspaces = (laneKey: LaneKey): Workspace[] => cardWorkspaces().filter((w) => laneOf(w) === laneKey);
+export const laneWorkspaces = (laneKey: LaneKey): Workspace[] => cards().filter((w) => laneOf(w) === laneKey);
 
 /**
  * A lane header's merge line: "2 ready to merge" when that many of its
  * workspaces hold a PR GitHub would merge now (prs.ts's ready health), else
- * "". Every card in the lane counts, those the Needs you strip lists too,
- * since a waiting session's PR is still mergeable. The lane's generated
+ * "". Every card the lane counts (laneWorkspaces), placeholders too, since
+ * a waiting session's PR is still mergeable. The lane's generated
  * anchor counts as well: it has no card, and its status already sits on the
  * header.
  */
 export function mergeReadyText(laneKey: LaneKey): string {
   const anchor = generatedAnchorId(laneByKey(laneKey));
-  const cards = cardWorkspaces().filter((w) => laneOf(w) === laneKey);
-  const ws = [...cards, ...(anchor ? [wsById(anchor)] : [])];
+  const ws = [...laneWorkspaces(laneKey), ...(anchor ? [wsById(anchor)] : [])];
   const n = ws.filter((w) => prHealth(w) === "ready").length;
   return n ? n + " ready to merge" : "";
 }
@@ -643,7 +657,7 @@ export function toggleProject(k: string): void {
   saveFolds();
 }
 /** The cards a project header counts and tints its pill by, as laneWorkspaces is for a lane. */
-export const projectWorkspaces = (k: string): Workspace[] => cardWorkspaces().filter((w) => projectKey(w) === k);
+export const projectWorkspaces = (k: string): Workspace[] => cards().filter((w) => projectKey(w) === k);
 
 /** Whether the project's header should offer "+": it has a folder to open. */
 export const canOpenProject = (k: string): boolean => !!projectByKey(k).root;
@@ -706,7 +720,7 @@ function pushEditor(entries: ProjectEntry[], k: string): void {
 /** The cards grouped by project key, in one pass over the cards. */
 const cardsByProject = computed(() => {
   const groups = new Map<string, Workspace[]>();
-  for (const w of cardWorkspaces()) {
+  for (const w of cards()) {
     const k = projectKey(w);
     const rows = groups.get(k);
     if (rows) rows.push(w);
