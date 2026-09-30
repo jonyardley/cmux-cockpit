@@ -114,9 +114,9 @@ function fullCard(w: WsAccessor, key: string): View {
       HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12)])
         // Left-aligned by the frame, not a Spacer, as the chips row is.
         .frame({ maxWidth: "infinity", alignment: "leading" }),
-      // The PR and branch under the status, then the message.
+      // The PR and branch under the status (a merged PR's Park and Close in the
+      // branch's place), then the message.
       chipsRow(w, true, "still"),
-      mergedActions(w),
       detailLine(w, "detail", 2),
       progressBar(w, "full-progress"),
     ])
@@ -307,7 +307,6 @@ export function projectRow(w: WsAccessor, key: string): View {
       .paddingTop(2),
     moveLine(w),
     chipsRow(w, true, "opens", true).paddingTop(() => (hasChipsRow(w(), true) ? ROW_GAP : 0)),
-    mergedActions(w, 0, ROW_GAP),
     makeProjectAction(w, ROW_GAP),
   ])
     .frame({ maxWidth: "infinity", alignment: "leading" })

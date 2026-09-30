@@ -1,5 +1,6 @@
 // Scene: the cockpit's lanes with a card in every state, each lane at its
-// own density, and a working card under the folded Parked header. Fixture data only; see test/support/snapshot.ts.
+// own density, a merged card in Main activity and in Unsorted, and a working
+// card under the folded Parked header. Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
 import { ago, EPOCH, seed, snapshotScene } from "./support/snapshot.ts";
@@ -70,6 +71,14 @@ it("lanes: every card state", () => {
       agents: [agent("idle", { sinceEpoch: ago(360), lastActivityAt: ago(360) })],
       latestMessage: "Done: the strip now groups by repo.",
     }),
+    // Merged: dimmed, its branch left out for Park and Close.
+    ws("merged", {
+      title: "Card layout fit",
+      group: "g-main",
+      branch: "card-layout-fit",
+      pr: { number: 176, status: "merged", url: "https://github.com/o/r/pull/176" },
+      agents: [agent("idle", { sinceEpoch: ago(900), lastActivityAt: ago(900) })],
+    }),
     // No time in its status line, so the full card keeps the age top right.
     ws("untimed", {
       title: "Untimed card",
@@ -106,6 +115,11 @@ it("lanes: every card state", () => {
       title: "Parked card",
       group: "g-parked",
       agents: [agent("working", { sinceEpoch: ago(300), lastActivityAt: ago(5) })],
+    }),
+    ws("loose-merged", {
+      title: "Merged elsewhere",
+      branch: "tidy-strip",
+      pr: { number: 171, status: "merged", url: "https://github.com/o/r/pull/171" },
     }),
     ws("loose", {
       title: "Loose workspace",

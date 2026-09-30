@@ -1,5 +1,5 @@
 // Merged PRs tidy themselves up (merged.ts): a merged card dims and offers
-// Park, Close workspace and Keep, and Keep hides them for that PR. __STATE__ is
+// Park and Close, with Keep in the card menu, which hides them for that PR. __STATE__ is
 // set before the renderer import, as in prs-saved.test.ts, so a Keep saved
 // before the last reload holds.
 
@@ -102,7 +102,7 @@ describe("merged cards", () => {
     assert.equal(r.opened.length, 1, "nothing else writes");
   });
 
-  it("Close workspace closes a merged card's workspace, and nothing else", () => {
+  it("Close closes a merged card's workspace, and nothing else", () => {
     m.closeMerged(ws("closes"));
     assert.deepEqual(closes(), ["closes"]);
     for (const w of [ws("open"), ws("saved"), ws("anchor"), undefined]) m.closeMerged(w);
@@ -124,6 +124,13 @@ describe("merged cards", () => {
     });
     assert.equal(laneOf(w), "parked");
     assert.equal(m.offersPark(w), false, "Park goes once it has done its job");
+  });
+
+  it("names Keep in the card menu by what tapping it would do", () => {
+    assert.equal(m.keepLabel(ws("done")), "Keep, hide Park and Close");
+    assert.equal(m.keepLabel(ws("saved")), "Kept, Park and Close hidden");
+    for (const w of [ws("open"), ws("anchor"), ws("done", { pinned: true }), undefined])
+      assert.equal(m.keepLabel(w), "Keep: for a merged PR's buttons");
   });
 
   it("offers Park alone on a pinned card, and none once Keep is tapped", () => {

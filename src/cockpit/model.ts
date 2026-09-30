@@ -998,7 +998,8 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
     if (pr.url) c.url = pr.url;
     out.push(c);
   }
-  if (withBranch && w.branch) out.push({ id: "br", text: w.branch, dirty: !!w.dirty });
+  // A merged PR's branch is done with, so its card gives the room to Park and Close.
+  if (withBranch && w.branch && pr?.status !== "merged") out.push({ id: "br", text: w.branch, dirty: !!w.dirty });
   const port = portChip(w.ports);
   if (port) out.push(port);
   return out;

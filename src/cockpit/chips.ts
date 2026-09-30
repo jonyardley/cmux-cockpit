@@ -1,15 +1,16 @@
 // Whether a card's chips row has anything to show (issue #79), so a card with
 // nothing there drops the row and the gap above it.
 
+import { offersClose, offersPark } from "./merged.ts";
 import { type Chip, canFileForReview, chipsFor } from "./model.ts";
 
 /**
- * True when the chips row shows a chip from `chips` (a chipsFor list) or the
- * To review action. Taking the list lets the row share one chipsFor per
+ * True when the chips row shows a chip from `chips` (a chipsFor list), the
+ * To review action or a merged card's Park or Close. Taking the list lets the row share one chipsFor per
  * change with its chips.
  */
 export function showsChipsRow(chips: readonly Chip[], w: Workspace | undefined): boolean {
-  return chips.length > 0 || canFileForReview(w);
+  return chips.length > 0 || canFileForReview(w) || offersMergedChip(w);
 }
 
 /** showsChipsRow for a card that has no chip list to hand. */
@@ -29,6 +30,19 @@ const GLYPH_CHARS = 2;
 const DIRTY_CHARS = 2;
 // "To review →" as it draws, frame included.
 const REVIEW_CHARS = 14;
+// A merged card's "Park" and "Close", frames included.
+const PARK_CHARS = 7;
+const CLOSE_CHARS = 8;
+
+// The action buttons that share the chips line, in characters.
+function actionChars(w: Workspace | undefined): number {
+  return (
+    (canFileForReview(w) ? REVIEW_CHARS : 0) + (offersPark(w) ? PARK_CHARS : 0) + (offersClose(w) ? CLOSE_CHARS : 0)
+  );
+}
+
+/** A merged card's Park or Close sits in its chips row, after the branch. */
+export const offersMergedChip = (w: Workspace | undefined): boolean => offersPark(w) || offersClose(w);
 
 function chipChars(c: Chip): number {
   if (c.id === "pr") {
@@ -45,18 +59,19 @@ function chipChars(c: Chip): number {
  * renderer cannot measure.
  */
 export function chipsFitOneLine(chips: readonly Chip[], w: Workspace | undefined): boolean {
-  let used = canFileForReview(w) ? REVIEW_CHARS : 0;
+  let used = actionChars(w);
   for (const c of chips) used += chipChars(c);
   return used <= LINE_CHARS;
 }
 
 /**
  * Whether a project card's chips split over two lines: the PR (and size)
- * on the first, the branch, port and To review on the second. Only when
- * both lines have something and they do not fit on one.
+ * on the first; the branch, port, To review and a merged card's Park and
+ * Close on the second. Only when both lines have something and they do not
+ * fit on one.
  */
 export function chipsSplit(chips: readonly Chip[], w: Workspace | undefined): boolean {
   const first = chips.some((c) => c.id === "pr" || c.id === "size");
-  const second = chips.some((c) => c.id === "br" || c.id === "port") || canFileForReview(w);
+  const second = chips.some((c) => c.id === "br" || c.id === "port") || canFileForReview(w) || offersMergedChip(w);
   return first && second && !chipsFitOneLine(chips, w);
 }

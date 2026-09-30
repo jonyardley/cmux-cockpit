@@ -220,6 +220,14 @@ describe("showsChipsRow (issue #79)", () => {
     assert.equal(shows(ws("x", { ports: [5173] }), true), true);
   });
 
+  it("leaves a merged PR's branch out: the work is done", () => {
+    const chips = model.chipsFor(ws("x", { pr: { number: 7, status: "merged" }, branch: "feat" }), true);
+    assert.deepEqual(
+      chips.map((c) => c.id),
+      ["pr"],
+    );
+  });
+
   it("leaves the branch out when the card does", () => {
     assert.equal(shows(ws("x", { branch: "feat" }), false), false);
   });
@@ -233,6 +241,15 @@ describe("showsChipsRow (issue #79)", () => {
 
 describe("chipsFitOneLine", () => {
   const fits = (w: Workspace) => chipsFitOneLine(model.chipsFor(w, true), w);
+
+  it("counts a merged card's Park and Close towards the line", () => {
+    const pr: PullRequest = { number: 174, status: "merged" };
+    assert.equal(fits(ws("x", { pr })), true, "#174 merged, Park and Close fit");
+    const ports = [5173, 3000];
+    assert.equal(fits(ws("x", { pr: { ...pr, status: "closed" }, ports })), true, "a closed PR has no buttons");
+    assert.equal(fits(ws("x", { pr, ports })), false, "Park and Close push it over");
+    assert.equal(fits(ws("x", { pr, ports, pinned: true })), true, "a pinned card offers Park alone");
+  });
 
   it("keeps a short PR and branch on one line", () => {
     assert.equal(fits(ws("x", { branch: "main", pr: { number: 12, status: "open" } })), true);
