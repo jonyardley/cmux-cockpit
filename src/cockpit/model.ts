@@ -7,6 +7,7 @@
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
 import { isGeneratedAnchor } from "../shared/anchors.ts";
 import { type MoveSize, moveSize, moveSizeText } from "../shared/move.ts";
+import { dismissNeeds, isNeedsDismissed } from "../shared/needs.ts";
 import { P } from "../shared/palette.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import { READY_INK } from "../shared/pr-colors.ts";
@@ -332,30 +333,74 @@ export const needsShown = computed(() => needsList().slice(0, NEEDS_ROWS));
 export const needsMore = (): number => Math.max(0, needsList().length - NEEDS_ROWS);
 
 /**
- * Real cards, less the ones the Needs you strip lists: those show there
- * alone, not again in their lane or project and its count, and come back
- * under their own title once answered or dismissed. One past the strip's
- * cap keeps its card, so every session shows somewhere. The card being
- * dragged stays put even if it starts asking, so it never vanishes from
- * under the pointer. Above the lanes and projects, since computed() runs on
- * definition.
+ * The sessions the Needs you strip lists. Their card leaves its lane or
+ * project for a placeholder in the same spot, which the header still
+ * counts, and comes back there once answered or dismissed. One past the
+ * strip's cap keeps its card. The card being dragged stays a card even if
+ * it starts asking, so it never vanishes from under the pointer. Above the
+ * lanes and projects, since computed() runs on definition.
  */
-export const listedCards = computed((): Workspace[] => {
-  const inStrip = new Set(needsShown().map((w) => w.id));
+/** Real cards, memoised once per change for every lane and project header that filters them. */
+const cards = computed(cardWorkspaces);
+
+const inStrip = computed((): ReadonlySet<string> => {
   const dragged = drag()?.id;
-  return cardWorkspaces().filter((w) => !inStrip.has(w.id) || dragged === "w:" + w.id);
+  return new Set(needsShown().flatMap((w) => (dragged === "w:" + w.id ? [] : [w.id])));
 });
+
+// Dismissing from Needs you leaves the card in the placeholder's spot, the
+// top of its lane with the other waiting cards, rather than sorting it down
+// as idle. It holds there until its status next changes, and a new ask
+// releases it too (liveRank). A plain Map: read with tick(), set with
+// bump(); a release during render needs no bump, since the status change
+// that caused it already redraws.
+const dismissedHold = new Map<string, string>();
+
+/** Dismisses a waiting session from Needs you, holding its card where its placeholder sat. */
+export function dismissWaiting(w: Workspace | undefined): void {
+  if (!w) return;
+  dismissNeeds(w);
+  // Only a real dismissal holds: the menu offers it on cards not waiting too.
+  if (!isNeedsDismissed(w)) return;
+  const live = new Set((data.workspaces() ?? []).map((x) => x.id));
+  for (const id of dismissedHold.keys()) if (!live.has(id)) dismissedHold.delete(id);
+  dismissedHold.set(w.id, statusOf(w));
+  bump();
+}
+
+function heldAtTop(w: Workspace): boolean {
+  tick();
+  const held = dismissedHold.get(w.id);
+  if (held === undefined) return false;
+  if (held === statusOf(w)) return true;
+  dismissedHold.delete(w.id);
+  return false;
+}
+
+/** Where a session in Needs you came from: its lane and marker, or its project group in Projects view. */
+export function originOf(w: Workspace | undefined): { name: string; color: string } {
+  if (!w) return { name: "", color: "clear" };
+  // A lane's generated anchor is in no project group: it names its lane in both views.
+  if (mode() === "projects" && !laneAnchorIds().has(w.id)) {
+    const p = projectByKey(projectKey(w));
+    return { name: p.name, color: p.color };
+  }
+  const lane = laneByKey(laneOf(w));
+  return { name: lane.name, color: lane.color };
+}
 
 // --- All mode: one flat list of lane headers and cards --------------------------------
 
 // A header's key carries the anchor it shows (issue #49), and an empty lane
 // is a zone (issue #50), since a row's kind is fixed by its key. A card's key
 // is "w:" and its session, without its lane, so a lane move keeps its row
-// (cards.ts's cardFor).
+// (cards.ts's cardFor). A session in the Needs you strip leaves a
+// placeholder, keyed "g:" and its session.
 export type LaneEntry =
   | { kind: "header"; id: string; lane: LaneKey; anchorId: string | null }
   | { kind: "zone"; id: string; lane: LaneKey }
-  | { kind: "ws"; id: string; wsId: string; lane: LaneKey };
+  | { kind: "ws"; id: string; wsId: string; lane: LaneKey }
+  | { kind: "ghost"; id: string; wsId: string; lane: LaneKey };
 
 /** A lane's generated anchor when it has an agent or unread messages, so its header shows them. */
 function headerAnchorId(lane: Lane): string | null {
@@ -375,7 +420,11 @@ const isEmpty = (s: LaneSection): boolean => s.rows.length === 0 && !s.anchorId;
 
 function liveRank(w: Workspace | undefined): number {
   const s = statusOf(w);
-  if (s === "needs_input") return 0;
+  if (s === "needs_input") {
+    if (w) dismissedHold.delete(w.id);
+    return 0;
+  }
+  if (w && heldAtTop(w)) return 0;
   if (isReady(w)) return 1;
   return s === "working" ? 2 : 3;
 }
@@ -407,10 +456,10 @@ function byState(rows: Workspace[]): Workspace[] {
 }
 
 const laneSections = computed((): LaneSection[] => {
-  const cards = listedCards();
+  const all = cards();
   return LANES.map((lane) => ({
     lane,
-    rows: byState(cards.filter((w) => laneOf(w) === lane.key)),
+    rows: byState(all.filter((w) => laneOf(w) === lane.key)),
     anchorId: headerAnchorId(lane),
   }));
 });
@@ -424,7 +473,16 @@ function sectionEntries(s: LaneSection): LaneEntry[] {
     anchorId: s.anchorId,
   };
   if (isCollapsed(s.lane)) return [header];
-  return [header, ...s.rows.map((w): LaneEntry => ({ kind: "ws", id: "w:" + w.id, wsId: w.id, lane: key }))];
+  const waiting = inStrip();
+  return [
+    header,
+    ...s.rows.map(
+      (w): LaneEntry =>
+        waiting.has(w.id)
+          ? { kind: "ghost", id: "g:" + w.id, wsId: w.id, lane: key }
+          : { kind: "ws", id: "w:" + w.id, wsId: w.id, lane: key },
+    ),
+  ];
 }
 
 // An empty lane is a zone row in its own place, at rest and mid-drag alike,
@@ -446,25 +504,24 @@ const LEFT_OFF_LANES: ReadonlySet<LaneKey> = new Set<LaneKey>(["bg", "parked"]);
 export const showsLeftOff = (w: Workspace | undefined): boolean => LEFT_OFF_LANES.has(actualLaneOf(w));
 
 /**
- * The cards a lane header counts, every card it lists, folded or not: not
- * the ones in the Needs you strip (listedCards). The header filters once per
- * change and reads its count, its pill's tint (status.ts countColors) and,
- * folded, its status dot from the one list.
+ * The cards a lane header counts, every card it lists, folded or not, and
+ * the placeholders of those waiting in the Needs you strip. The header
+ * filters once per change and reads its count, its pill's tint (status.ts
+ * countColors) and, folded, its status dot from the one list.
  */
-export const laneWorkspaces = (laneKey: LaneKey): Workspace[] => listedCards().filter((w) => laneOf(w) === laneKey);
+export const laneWorkspaces = (laneKey: LaneKey): Workspace[] => cards().filter((w) => laneOf(w) === laneKey);
 
 /**
  * A lane header's merge line: "2 ready to merge" when that many of its
  * workspaces hold a PR GitHub would merge now (prs.ts's ready health), else
- * "". Every card in the lane counts, those the Needs you strip lists too,
- * since a waiting session's PR is still mergeable. The lane's generated
+ * "". Every card the lane counts (laneWorkspaces), placeholders too, since
+ * a waiting session's PR is still mergeable. The lane's generated
  * anchor counts as well: it has no card, and its status already sits on the
  * header.
  */
 export function mergeReadyText(laneKey: LaneKey): string {
   const anchor = generatedAnchorId(laneByKey(laneKey));
-  const cards = cardWorkspaces().filter((w) => laneOf(w) === laneKey);
-  const ws = [...cards, ...(anchor ? [wsById(anchor)] : [])];
+  const ws = [...laneWorkspaces(laneKey), ...(anchor ? [wsById(anchor)] : [])];
   const n = ws.filter((w) => prHealth(w) === "ready").length;
   return n ? n + " ready to merge" : "";
 }
@@ -600,7 +657,7 @@ export function toggleProject(k: string): void {
   saveFolds();
 }
 /** The cards a project header counts and tints its pill by, as laneWorkspaces is for a lane. */
-export const projectWorkspaces = (k: string): Workspace[] => listedCards().filter((w) => projectKey(w) === k);
+export const projectWorkspaces = (k: string): Workspace[] => cards().filter((w) => projectKey(w) === k);
 
 /** Whether the project's header should offer "+": it has a folder to open. */
 export const canOpenProject = (k: string): boolean => !!projectByKey(k).root;
@@ -649,6 +706,7 @@ export const quietLabel = (k: string): string =>
 export type ProjectEntry =
   | { kind: "header"; id: string; project: string }
   | { kind: "ws"; id: string; wsId: string }
+  | { kind: "ghost"; id: string; wsId: string }
   | { kind: "quietHeader"; id: string }
   | { kind: "quietRow"; id: string; project: string }
   | { kind: "editor"; id: string; project: string };
@@ -659,10 +717,10 @@ function pushEditor(entries: ProjectEntry[], k: string): void {
   if (editingProject() === k) entries.push({ kind: "editor", id: "e:" + k, project: k });
 }
 
-/** The listed cards grouped by project key, in one pass over the cards. */
+/** The cards grouped by project key, in one pass over the cards. */
 const cardsByProject = computed(() => {
   const groups = new Map<string, Workspace[]>();
-  for (const w of listedCards()) {
+  for (const w of cards()) {
     const k = projectKey(w);
     const rows = groups.get(k);
     if (rows) rows.push(w);
@@ -693,15 +751,20 @@ function pushGroup(entries: ProjectEntry[], k: string, rows: readonly Workspace[
   pushEditor(entries, k);
   if (isProjectCollapsed(k)) return;
   // One row shape in Projects mode, so the lane no longer rides in the id.
-  for (const w of rows) entries.push({ kind: "ws", id: w.id + "@p", wsId: w.id });
+  // A session in the Needs you strip leaves a placeholder in its place.
+  const waiting = inStrip();
+  for (const w of rows) {
+    entries.push(
+      waiting.has(w.id) ? { kind: "ghost", id: w.id + "@g", wsId: w.id } : { kind: "ws", id: w.id + "@p", wsId: w.id },
+    );
+  }
 }
 
 export const projectEntries = computed(() => {
   const groups = cardsByProject();
-  // Headers come from every card, rows from the listed ones: a project whose
-  // sessions all wait in Needs you keeps its header, count 0 and no rows, so
-  // its "+" and an open editor stay.
-  const busy = new Set(cardWorkspaces().map(projectKey));
+  // A project whose sessions all wait in Needs you keeps its header over
+  // their placeholders, so its "+" and an open editor stay.
+  const busy = new Set(groups.keys());
   const entries: ProjectEntry[] = [];
   // A project with sessions gets a header; the quiet ones share one header at
   // the bottom, a short row each. Other only shows once something falls into it.

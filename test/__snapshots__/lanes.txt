@@ -25,24 +25,30 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
         Reorderable spacing: 6
           VStack spacing: 0, alignment: leading .padding(1) .background(needsRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(19) .fixed()
             HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8)
-              ZStack .frame(width: 13, height: 13) .paddingTop(2)
-                Circle size: 13 .fill(clayHalo)
-                Circle size: 7 .fill(clay)
-              VStack alignment: leading, spacing: 1 .frame(maxWidth: infinity, alignment: leading) .layoutPriority(1)
+              ZStack .frame(width: 20, height: 20)
+                RoundedRectangle cornerRadius: 5 .fill(grey)
+                Image terminal .font(10) .weight(semibold) .color(text)
+              VStack alignment: leading, spacing: 2 .frame(maxWidth: infinity, alignment: leading) .layoutPriority(1)
                 Text "Chip colours" .font(12.5) .weight(semibold) .color(text) .lineLimit(1) .truncation(middle)
-                Text "Which green should the ready chip use?" .font(12) .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .truncation(tail)
+                Text "Your turn: Which green should the ready chip use?" .font(12) .color(clayText) .lineLimit(1) .truncation(tail)
+                HStack spacing: 5 .frame(maxWidth: infinity, alignment: leading)
+                  RoundedRectangle cornerRadius: 2.3333333333333335 .fill(laneMain|select|heading) .frame(width: 7, height: 7)
+                  Text "Main activity" .font(11) .color(metaText) .lineLimit(1) .truncation(tail)
               Text "5m" .font(11) .monospaced() .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .layoutPriority(2)
               ZStack .frame(width: 16, height: 16) .cornerRadius(8) .hoverBackground(hover) .onTap()
                 Circle size: 16 .fill(clear)
                 Image xmark .font(8.5) .weight(semibold) .color(tertiary)
           VStack spacing: 0, alignment: leading .padding(1) .background(amberRowEdge) .cornerRadius(9) .frame(maxWidth: infinity) .onTap() .contextMenu(19) .fixed()
             HStack spacing: 10, alignment: top .paddingHorizontal(10) .paddingVertical(9) .hoverBackground(needsHover) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(8)
-              ZStack .frame(width: 13, height: 13) .paddingTop(2)
-                Circle size: 13 .fill(amberHalo)
-                Circle size: 7 .fill(amber)
-              VStack alignment: leading, spacing: 1 .frame(maxWidth: infinity, alignment: leading) .layoutPriority(1)
+              ZStack .frame(width: 20, height: 20)
+                RoundedRectangle cornerRadius: 5 .fill(grey)
+                Image terminal .font(10) .weight(semibold) .color(text)
+              VStack alignment: leading, spacing: 2 .frame(maxWidth: infinity, alignment: leading) .layoutPriority(1)
                 Text "Release notes" .font(12.5) .weight(semibold) .color(text) .lineLimit(1) .truncation(middle)
-                Text "allow git push?" .font(12) .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .truncation(tail)
+                Text "Asking: allow git push?" .font(12) .color(amberText) .lineLimit(1) .truncation(tail)
+                HStack spacing: 5 .frame(maxWidth: infinity, alignment: leading)
+                  RoundedRectangle cornerRadius: 2.3333333333333335 .fill(laneMain|select|heading) .frame(width: 7, height: 7)
+                  Text "Main activity" .font(11) .color(metaText) .lineLimit(1) .truncation(tail)
               Text "2m" .font(11) .monospaced() .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .layoutPriority(2)
               ZStack .frame(width: 16, height: 16) .cornerRadius(8) .hoverBackground(hover) .onTap()
                 Circle size: 16 .fill(clear)
@@ -54,9 +60,27 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
           Image chevron.right .font(10) .weight(semibold) .color(faint|laneBackground) .rotation(90) .frame(width: 12, height: 16)
           RoundedRectangle cornerRadius: 3 .fill(laneMain|select|heading) .frame(width: 9, height: 9)
           Text "M\u200aA\u200aI\u200aN A\u200aC\u200aT\u200aI\u200aV\u200aI\u200aT\u200aY" .font(10.5) .weight(semibold) .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .truncation(tail) .layoutPriority(1)
-          Text "5" .font(11) .weight(medium) .color(blueText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(blueCount) .cornerRadius(10)
+          Text "7" .font(11) .weight(medium) .color(clayText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(clayCount) .cornerRadius(10)
           Spacer minLength: 4
           Text "" .font(11) .weight(regular) .color(greenDeep|readyInk) .lineLimit(1)
+      VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(19) .fixed(true)
+        VStack spacing: 0, alignment: leading .padding(1) .background(needsRowEdge) .cornerRadius(9) .frame(maxWidth: infinity)
+          HStack spacing: 7 .paddingHorizontal(10) .paddingVertical(6) .frame(maxWidth: infinity, alignment: leading) .background(needsBg) .cornerRadius(8)
+            ZStack .frame(width: 15, height: 15)
+              RoundedRectangle cornerRadius: 4 .fill(grey)
+              Image terminal .font(8) .weight(semibold) .color(text)
+            Text "Chip colours" .font(12) .weight(semibold) .color(clayText) .lineLimit(1) .truncation(middle)
+            Text "your turn, in Needs you" .font(12) .color(clayText) .lineLimit(1) .truncation(tail) .frame(maxWidth: infinity, alignment: leading) .layoutPriority(1)
+            Image arrow.up .font(10) .weight(semibold) .color(clayText)
+      VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(19) .fixed(true)
+        VStack spacing: 0, alignment: leading .padding(1) .background(amberRowEdge) .cornerRadius(9) .frame(maxWidth: infinity)
+          HStack spacing: 7 .paddingHorizontal(10) .paddingVertical(6) .frame(maxWidth: infinity, alignment: leading) .background(needsBg) .cornerRadius(8)
+            ZStack .frame(width: 15, height: 15)
+              RoundedRectangle cornerRadius: 4 .fill(grey)
+              Image terminal .font(8) .weight(semibold) .color(text)
+            Text "Release notes" .font(12) .weight(semibold) .color(amberText) .lineLimit(1) .truncation(middle)
+            Text "is asking, in Needs you" .font(12) .color(amberText) .lineLimit(1) .truncation(tail) .frame(maxWidth: infinity, alignment: leading) .layoutPriority(1)
+            Image arrow.up .font(10) .weight(semibold) .color(amberText)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
         VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(19)
           VStack spacing: 0, alignment: leading .padding(1) .background(cardEdge|dropTarget|anchorSelected) .cornerRadius(12) .frame(maxWidth: infinity)
@@ -271,9 +295,8 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
   Spacer
 
 Colours
-amber #D9A03F
-amberHalo #D9A03F38
 amberRowEdge #8A5A0B29
+amberText #8A5A0B
 blue #3B6FB6
 blueCount #3B6FB61F
 blueHalo #3B6FB62E
@@ -282,9 +305,7 @@ cardEdge|dropTarget|anchorSelected #1414131F
 cardHover #F7F6F2
 chipEdge|hairline|neutralChip.edge #E2DFD3
 chipFace|neutralChip.bg #F1EFE8
-clay #D97757
 clayCount #D9775729
-clayHalo #D9775738
 clayText #A34A2A
 countBg|segTrack #E5E2D6
 faint|laneBackground #8A8880

@@ -179,8 +179,8 @@ describe("cards sorted by state inside a lane", () => {
   const lane = () => model.flatEntries().flatMap((e) => (e.kind === "ws" ? [e.wsId] : []));
 
   // Four older asks fill the Needs you strip, so n1 is past its cap and
-  // keeps its card in the lane (model.ts's listedCards); the four sit in
-  // the strip alone, so Unsorted lists none of them.
+  // keeps its card in the lane (model.ts's inStrip); the four leave
+  // placeholders in Unsorted, which lane() leaves out as it reads cards.
   const fullStrip = ["q1", "q2", "q3", "q4"].map((id) => ws(id, { agents: asking(600) }));
 
   beforeEach(() =>

@@ -107,6 +107,9 @@ describe("cockpit", () => {
     assert.equal(status.statusLine(asking), "Asking 1m");
     assert.equal(status.needsDetail(asking), "allow git push?");
     assert.equal(status.needsRowEdge(asking), C.amberRowEdge);
+    assert.equal(status.needsLine(asking), "Asking: allow git push?");
+    assert.equal(status.needsInk(asking), C.amberText);
+    assert.equal(status.placeholderText(asking), "is asking, in Needs you");
 
     const turn = ws("wA", { agents: [waiting(1100)], latestMessage: "Pushed it." });
     r.data.epoch = 1160;
@@ -115,6 +118,9 @@ describe("cockpit", () => {
     assert.equal(status.statusInfo(turn).dot, C.clay);
     assert.equal(status.needsDetail(turn), "Pushed it.");
     assert.equal(status.needsRowEdge(turn), C.needsRowEdge);
+    assert.equal(status.needsLine(turn), "Your turn: Pushed it.");
+    assert.equal(status.needsInk(turn), C.clayText);
+    assert.equal(status.placeholderText(turn), "your turn, in Needs you");
     assert.equal(status.needsDetail(ws("x", { agents: [waiting(1100)] })), "Waiting for your reply");
   });
 

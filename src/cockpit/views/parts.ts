@@ -1,7 +1,7 @@
 // Small pieces shared by the cockpit's cards and rows.
 
 import type { MoveSize } from "../../shared/move.ts";
-import { dismissNeeds, isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
+import { isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
 import { type ChipColors, NEUTRAL_CHIP, prInk } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
 import { prSummary } from "../../shared/prs.ts";
@@ -30,6 +30,7 @@ import {
   chipsFor,
   clearProjectOverride,
   createProjectFrom,
+  dismissWaiting,
   fileForReview,
   hasProjectOverride,
   laneOf,
@@ -354,7 +355,7 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
     ),
     Button(
       () => (isNeedsDismissed(w()) ? "Restore needs you" : "Dismiss needs you"),
-      () => (isNeedsDismissed(w()) ? restoreNeeds(w()) : dismissNeeds(w())),
+      () => (isNeedsDismissed(w()) ? restoreNeeds(w()) : dismissWaiting(w())),
     ),
   ];
 }

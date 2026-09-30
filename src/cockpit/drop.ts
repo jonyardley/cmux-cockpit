@@ -38,11 +38,15 @@ function slotOf(key: string, index: number): { entries: LaneEntry[]; at: number;
   return { entries, at, laneKey: entries[at - 1]?.lane ?? FIRST_LANE };
 }
 
+const isTab = (e: LaneEntry | undefined): e is Extract<LaneEntry, { kind: "ws" | "ghost" }> =>
+  e?.kind === "ws" || e?.kind === "ghost";
+
 // The lane's cards in the dragged card's state, as they sit above and below
 // the slot.
 function peersAround(entries: LaneEntry[], at: number, laneKey: LaneKey, rank: number | null) {
-  const peer = (e: LaneEntry | undefined): e is Extract<LaneEntry, { kind: "ws" }> =>
-    e?.kind === "ws" && e.lane === laneKey && rank !== null && stateRank(wsById(e.wsId)) === rank;
+  // A placeholder is its card, waiting, so it is a peer in the waiting rank.
+  const peer = (e: LaneEntry | undefined): e is Extract<LaneEntry, { kind: "ws" | "ghost" }> =>
+    isTab(e) && e.lane === laneKey && rank !== null && stateRank(wsById(e.wsId)) === rank;
   return { above: entries.slice(0, at).filter(peer).at(-1), below: entries.slice(at).find(peer) };
 }
 
@@ -60,10 +64,11 @@ export function resolveDrop(key: string, index: number): DropTarget {
   const { above, below } = peersAround(entries, at, laneKey, rank);
   if (below) return { laneKey, nextRef: below.wsId, prevRef: null };
   if (above) return { laneKey, nextRef: null, prevRef: above.wsId };
+  // A placeholder stands for a real tab in its lane, so it anchors a drop as a card does.
   const prev = entries[at - 1];
   const next = entries[at];
-  const nextRef = next?.kind === "ws" && next.lane === laneKey ? next.wsId : null;
-  const prevRef = prev?.kind === "ws" ? prev.wsId : null;
+  const nextRef = isTab(next) && next.lane === laneKey ? next.wsId : null;
+  const prevRef = isTab(prev) ? prev.wsId : null;
   return { laneKey, nextRef, prevRef };
 }
 
