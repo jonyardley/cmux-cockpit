@@ -27,6 +27,15 @@
 // dropping it, so neither a write that skipped its own build nor a source
 // change that landed mid-build is left unbuilt.
 //
+// Every redraw of a sidebar rebuilds its whole view tree in cmux, and cmux
+// aborted twice on 2026-09-30 when SwiftUI's view graph ran out of room
+// after bursts of redraws a few seconds apart. So a build from a hook or a
+// poll first waits until REDRAW_GAP_MS has passed since a bundle was last
+// rewritten (settleGap), coalescing every write in that time into one
+// redraw. A tap is Jon waiting on screen, so scheduleBuild's `urgent` raises
+// a flag that cuts the wait down to TAP_GAP_MS; `npm run build` raises it
+// too when it finds a build waiting, and never waits out the gap itself.
+//
 // `npm run build` runs this file with --locked (lockedBuild): it waits for
 // the same lock, for as long as a live build could hold it, then builds
 // with the output shown, so a git hook's rebuild, the close-out's and the
@@ -44,16 +53,28 @@ import { unreadableCopyOf } from "./state-url.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const BUILD_LOCK = join(ROOT, "config", "hook-build.lock");
+// Raised by a tap so a build waiting out the redraw gap goes at once.
+const URGENT_FLAG = join(ROOT, "config", "build-urgent");
+const BUNDLES = ["agents", "cockpit"].map((name) => join(ROOT, "sidebars", `${name}.js`));
 // Exported so a test can check the stale threshold sits comfortably above
 // this delay plus the timeout, without duplicating the figures.
 export const COALESCE_MS = 300;
 export const BUILD_TIMEOUT_MS = 60_000;
 // Comfortably above the coalesce delay plus how long one build pass may
-// run (2x the timeout). A holder touches the lock before every pass, so a
+// run: the redraw gap it may wait out, then the build's timeout (see
+// REDRAW_GAP_MS). A holder touches the lock before every pass, so a
 // build that is genuinely still going, however many passes it takes for
 // writes that landed mid-build, is never mistaken for a crashed one's and
 // retaken out from under it.
 export const BUILD_LOCK_STALE_MS = 2 * BUILD_TIMEOUT_MS;
+// The least time between two redraws from hooks and polls. With the build's
+// timeout it stays under the stale threshold, so a holder waiting it out is
+// never taken for a crashed one.
+export const REDRAW_GAP_MS = 20_000;
+// The least time between redraws once a tap cuts the wait short, so quick
+// taps in a row still do not redraw back to back.
+export const TAP_GAP_MS = 1_000;
+const GAP_STEP_MS = 250;
 
 function logFd(): number | "ignore" {
   try {
@@ -79,10 +100,12 @@ function touchBuildLock(): void {
 }
 
 const LOCK_POLL_MS = 100;
-// How long buildNow waits for a build in flight. Short, since pr-poll.ts
-// runs it inside the automation's five-minute timeout, and the build in
-// flight builds this caller's write anyway (see buildThenRelease).
-const BUILD_WAIT_MS = 10_000;
+// How long buildNow waits for a build in flight: longer than a holder can
+// spend waiting out the redraw gap, so the poll gets its own build result
+// and can roll back on a failure, yet well inside the automation's
+// five-minute timeout. The build in flight builds this caller's write
+// anyway if the wait runs out (see buildThenRelease).
+const BUILD_WAIT_MS = REDRAW_GAP_MS + 10_000;
 
 /**
  * Runs `build` at least once, and again each time `snapshot` reads
@@ -95,15 +118,80 @@ const BUILD_WAIT_MS = 10_000;
  * started. Returns whether the last build succeeded, and the snapshot it
  * built. Exported for testing with fakes instead of a real spawn and file.
  */
-export function buildUntilStable(build: () => boolean, snapshot: () => string): { ok: boolean; built: string } {
-  let before = snapshot();
+export function buildUntilStable(
+  build: () => boolean,
+  snapshot: () => string,
+  settle: () => void = () => {},
+): { ok: boolean; built: string } {
   for (;;) {
+    settle();
+    const before = snapshot();
     if (!build()) return { ok: false, built: before };
-    const after = snapshot();
-    if (after === before) return { ok: true, built: after };
-    before = after;
+    if (snapshot() === before) return { ok: true, built: before };
   }
 }
+
+/**
+ * How long is left of the redraw gap at `now`, given the last redraw's
+ * time. Never more than the gap, so a bundle stamped in the future (the
+ * clock stepped back) cannot hold a build, and the lock, indefinitely.
+ */
+export const gapLeft = (now: number, lastRedraw: number, gap: number = REDRAW_GAP_MS): number =>
+  Math.min(gap, Math.max(0, lastRedraw + gap - now));
+
+/** What settleGap reads and waits with; swappable so a test can use fakes. */
+export interface GapDeps {
+  now: () => number;
+  lastRedraw: () => number;
+  urgent: () => boolean;
+  pause: (ms: number) => void;
+}
+
+/**
+ * Waits out what is left of the redraw gap, in short steps so a tap's
+ * urgent flag cuts it down to TAP_GAP_MS. Returns at once when the gap has
+ * passed. Exported for testing.
+ */
+export function settleGap(d: GapDeps): void {
+  let gap = REDRAW_GAP_MS;
+  for (;;) {
+    if (d.urgent()) gap = TAP_GAP_MS;
+    const left = gapLeft(d.now(), d.lastRedraw(), gap);
+    if (left <= 0) return;
+    d.pause(Math.min(left, GAP_STEP_MS));
+  }
+}
+
+// When a bundle was last rewritten, which is when cmux last redrew: an
+// unchanged bundle is never written (write-if-changed.ts). 0 with none.
+function lastRedraw(): number {
+  return Math.max(0, ...BUNDLES.map((f) => statSync(f, { throwIfNoEntry: false })?.mtimeMs ?? 0));
+}
+
+// Takes down the urgent flag, saying whether it was up.
+function takeUrgent(): boolean {
+  try {
+    rmSync(URGENT_FLAG);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function raiseUrgent(): void {
+  try {
+    closeSync(openSync(URGENT_FLAG, "a"));
+  } catch {
+    // No flag: the tap waits out the gap like any other write.
+  }
+}
+
+// The lock is touched before the wait as well as before the build, so the
+// wait never counts towards its age.
+const throttle = (): void => {
+  touchBuildLock();
+  settleGap({ now: Date.now, lastRedraw, urgent: takeUrgent, pause: pauseSync });
+};
 
 // The one marker for a file that is not there, so its absence still reads
 // the same each time and its arrival reads differently.
@@ -192,6 +280,8 @@ export interface BuildDeps {
   release: () => void;
   build: () => boolean;
   snapshot: () => string;
+  /** Runs before each build pass: the redraw gap for hooks and polls. */
+  settle: () => void;
   pause: (ms: number) => void;
   maxWaitMs: number;
 }
@@ -201,6 +291,7 @@ const REAL_DEPS: BuildDeps = {
   release: releaseBuildLock,
   build: runBuild,
   snapshot: buildInputs,
+  settle: throttle,
   pause: pauseSync,
   maxWaitMs: BUILD_WAIT_MS,
 };
@@ -213,11 +304,13 @@ const REAL_DEPS: BuildDeps = {
  * another caller has taken the lock by then, that caller builds it.
  * Returns whether the last build succeeded. Exported for testing.
  */
-export function buildThenRelease(d: Pick<BuildDeps, "take" | "release" | "build" | "snapshot">): boolean {
+export function buildThenRelease(
+  d: Pick<BuildDeps, "take" | "release" | "build" | "snapshot"> & Partial<Pick<BuildDeps, "settle">>,
+): boolean {
   for (;;) {
     let result: { ok: boolean; built: string };
     try {
-      result = buildUntilStable(d.build, d.snapshot);
+      result = buildUntilStable(d.build, d.snapshot, d.settle);
     } finally {
       d.release();
     }
@@ -252,9 +345,11 @@ export function buildNow(deps: Partial<BuildDeps> = {}): "built" | "failed" | "b
 /**
  * Spawns the coalescing build detached and unreferenced, so the hook
  * returns at once; skips spawning when one is already in flight. `tag`
- * names the calling hook in any stderr note.
+ * names the calling hook in any stderr note. `urgent` (a tap) skips the
+ * redraw gap, for this build or the one already waiting.
  */
-export function scheduleBuild(tag: string): void {
+export function scheduleBuild(tag: string, urgent = false): void {
+  if (urgent) raiseUrgent();
   if (!tryTakeBuildLock()) return;
   const log = logFd();
   try {
@@ -265,11 +360,13 @@ export function scheduleBuild(tag: string): void {
     });
     child.on("error", (err) => {
       console.error(`${tag}: build: ${err.message}`);
+      takeUrgent();
       releaseBuildLock();
     });
     child.unref();
   } catch (err) {
     console.error(`${tag}: build: ${err instanceof Error ? err.message : String(err)}`);
+    takeUrgent();
     releaseBuildLock();
   } finally {
     if (log !== "ignore") closeSync(log);
@@ -279,6 +376,8 @@ export function scheduleBuild(tag: string): void {
 /** What `npm run build` runs against: the build returns build.ts's exit status. */
 export interface LockedBuildDeps extends Omit<BuildDeps, "build"> {
   build: () => number;
+  /** Tells a build waiting out the redraw gap to go now. */
+  hurry: () => void;
 }
 
 // One poll past the stale threshold: a lock that is still held by then is
@@ -318,6 +417,12 @@ const LOCKED_DEPS: LockedBuildDeps = {
   ...REAL_DEPS,
   take: takeForLockedBuild,
   build: () => spawnBuild("inherit"),
+  // A deliberate build (a git hook, the close-out, the check) goes at once,
+  // and takes down any urgent flag, since it builds whatever raised it.
+  settle: () => {
+    takeUrgent();
+  },
+  hurry: raiseUrgent,
   maxWaitMs: LOCKED_WAIT_MS,
 };
 
@@ -335,7 +440,10 @@ export function lockedBuild(deps: Partial<LockedBuildDeps> = {}): number {
   // held up by a build in flight never reads as a hang.
   const take = (): boolean => {
     if (d.take()) return true;
-    if (!said) console.error("build: waiting for the build in flight (config/hook-build.lock)");
+    if (!said) {
+      console.error("build: waiting for the build in flight (config/hook-build.lock)");
+      d.hurry();
+    }
     said = true;
     return false;
   };
