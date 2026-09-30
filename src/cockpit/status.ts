@@ -212,9 +212,9 @@ export const needsLine = (w: Workspace | undefined): string => statusInfo(w).lab
 /** The ink of a Needs you row's detail and its placeholder's words: amber while asking, else clay. */
 export const needsInk = (w: Workspace | undefined): string => (askOf(w) ? C.amberText : C.clayText);
 
-/** A placeholder's words after the title: where its card went and why. */
+/** A placeholder's words after the title: why its card went; the arrow says where. */
 export const placeholderText = (w: Workspace | undefined): string =>
-  (askOf(w) ? "is asking" : "your turn") + ", in Needs you";
+  askOf(w) ? "is " + ASKING_WORD.toLowerCase() : STATUS_WORD.needs_input.toLowerCase();
 
 /** A Needs you row's edge: amber while its agent asks, else clay, so each hue keeps one meaning. */
 export const needsRowEdge = (w: Workspace | undefined): string => (askOf(w) ? C.amberRowEdge : C.needsRowEdge);

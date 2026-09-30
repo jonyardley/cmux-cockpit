@@ -317,7 +317,7 @@ export function projectRow(w: WsAccessor, key: string): View {
 }
 
 // In a card's place while its session waits in Needs you: the tile, the
-// title and where it went, on the strip's blush face, so it reads as a
+// title, why it went and an arrow up to where, on the strip's blush face, so it reads as a
 // marker, not a second card. A tap opens the workspace, as its strip row
 // does, and the card comes back to this spot once answered or dismissed.
 export function placeholderRow(w: WsAccessor): View {
