@@ -34,6 +34,8 @@ export interface Baked {
   state: State;
   unreadable: boolean;
   urlToken: string;
+  /** The home folder, so the cockpit can expand a typed "~" (src/shared/home.ts). */
+  home: string;
 }
 
 /** esbuild's options for one sidebar, built in memory: the caller writes the output. */
@@ -54,6 +56,7 @@ export function bundleOptions(entry: Entry, baked: Baked): BuildOptions & { writ
       __STATE__: JSON.stringify(stateFor(entry, baked.state)),
       __STATE_UNREADABLE__: JSON.stringify(baked.unreadable),
       __URL_TOKEN__: JSON.stringify(baked.urlToken),
+      __HOME__: JSON.stringify(baked.home),
     },
     logLevel: "warning",
     write: false,

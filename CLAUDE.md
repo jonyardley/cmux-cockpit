@@ -62,7 +62,7 @@ its own process; within a file, advance `r.data.epoch` to expire optimistic
 overrides between tests.
 
 The fake renderer also records each view's tree, and
-`test/snapshot-*.test.ts` print six fixture scenes as text (elements,
+`test/snapshot-*.test.ts` print seven fixture scenes as text (elements,
 words, colours by token name, spacing) into `test/__snapshots__/`, one
 file per scene. `npm run check` fails on any drift; when the change on
 screen is meant, `npm run snapshots` re-records them, and the snapshot

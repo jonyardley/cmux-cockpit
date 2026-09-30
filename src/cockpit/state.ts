@@ -29,6 +29,8 @@ export const [collapsedProjects, setCollapsedProjects] = signal<string[]>(
 export const [drag, setDrag] = signal<DragState | null>(null);
 /** The project whose editor is open under its header, if any (src/cockpit/edit.ts). */
 export const [editingProject, setEditingProject] = signal<string | null>(null);
+/** The editor's key while it makes a new project: no project key starts with "+". */
+export const NEW_PROJECT = "+new";
 
 // Plain Maps and lets are not reactive: code that reads them calls tick(),
 // and code that writes them calls bump(), so dependents recompute.

@@ -26,6 +26,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { build } from "esbuild";
+import { expandHome } from "../src/shared/home.ts";
 import { bundleOptions, ENTRIES } from "./bundle.ts";
 import { mergeProjects, type Project, validateProjects } from "./projects-config.ts";
 import { emptyState, isRecord, type State, validateState } from "./state-config.ts";
@@ -53,15 +54,11 @@ function loadProjects(): readonly Project[] {
   return result.projects;
 }
 
-/** Expands a leading `~` (bare, or `~/...`) against HOME. Other roots pass through. */
-function expandRoot(root: string): string {
-  if (root === "~") return homedir();
-  if (root.startsWith("~/")) return homedir() + root.slice(1);
-  return root;
-}
-
+// Expands a leading "~" (bare, or "~/...") against HOME; other roots pass
+// through. A real home folder always expands, so the root itself is only a
+// fallback the types ask for.
 function withExpandedRoots(projects: readonly Project[]): readonly Project[] {
-  return projects.map((p) => (p.root ? { ...p, root: expandRoot(p.root) } : p));
+  return projects.map((p) => (p.root ? { ...p, root: expandHome(p.root, homedir()) ?? p.root } : p));
 }
 
 // A bad or missing state file must never break the build: it is Jon's saved
@@ -124,7 +121,7 @@ const projects = withExpandedRoots(merged.projects);
 const state: State = { ...saved, projects: merged.kept };
 
 for (const name of ENTRIES) {
-  const result = await build(bundleOptions(name, { projects, state, unreadable, urlToken }));
+  const result = await build(bundleOptions(name, { projects, state, unreadable, urlToken, home: homedir() }));
   for (const out of result.outputFiles) writeIfChanged(out.path, out.contents);
 }
 // The doctor's freshness mark: a bundle left untouched keeps its old time,

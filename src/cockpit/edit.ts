@@ -4,11 +4,21 @@
 // from config/projects.json or was made in the sidebar (issue #9).
 
 import type { ProjectSpec } from "../../scripts/state-config.ts";
-import { isHex, isMatchKey, isName, isRoot, isSymbol, MAX_NAME } from "../shared/project-rules.ts";
-import { matchesOf, PROJECT_COLORS, PROJECT_ICONS, PROJECTS, projectId } from "../shared/projects.ts";
+import { expandHome, isHome, tildeHome } from "../shared/home.ts";
+import { isHex, isMatchKey, isName, isRoot, isSymbol, MAX_NAME, MAX_PROJECT_KEY } from "../shared/project-rules.ts";
+import {
+  matchesOf,
+  newProject,
+  nextColor,
+  PROJECT_COLORS,
+  PROJECT_ICONS,
+  PROJECTS,
+  type Project,
+  projectId,
+} from "../shared/projects.ts";
 import { SYMBOLS } from "../shared/symbols.ts";
-import { knownProjects, removeProject, saveProject, specOf } from "./model.ts";
-import { editingProject, setEditingProject } from "./state.ts";
+import { knownProjects, openFolderOnce, removeProject, saveProject, specOf } from "./model.ts";
+import { editingProject, NEW_PROJECT, setEditingProject } from "./state.ts";
 
 const [draft, setDraft] = signal<ProjectSpec>({ name: "", color: PROJECT_COLORS[0], icon: PROJECT_ICONS[0] });
 // Remove asks twice: a project from the file cannot come back from the sidebar.
@@ -42,6 +52,21 @@ export function openEditor(k: string): void {
   setEditingProject(k);
 }
 
+/** Whether the open editor is making a new project rather than editing one. */
+export const isNewDraft = (): boolean => editingProject() === NEW_PROJECT;
+
+/** Opens the editor blank, in the next free colour, to make a project from a folder; a second tap closes it. */
+export function openNewProject(): void {
+  if (isNewDraft()) {
+    closeEditor();
+    return;
+  }
+  setDraft({ name: "", color: nextColor(knownProjects()), icon: PROJECT_ICONS[0] });
+  setRemoving(false);
+  setIconQuery("");
+  setEditingProject(NEW_PROJECT);
+}
+
 export function closeEditor(): void {
   setEditingProject(null);
   setRemoving(false);
@@ -53,11 +78,73 @@ export const setDraftIcon = (icon: string): void => setDraft({ ...draft(), icon 
 export const iconSearch = (): string => iconQuery();
 export const setIconSearch = (text: string): void => setIconQuery(text);
 
-/** An empty folder clears it, so the header loses its "+". */
+/** An empty folder clears it, so the header loses its "+". A new project takes its name from the folder. */
 export function setDraftFolder(text: string): void {
   const { root: _old, ...rest } = draft();
   const root = text.trim();
-  setDraft(root ? { ...rest, root } : rest);
+  const named = isNewDraft() ? { ...rest, name: madeFrom(root)?.spec.name ?? "" } : rest;
+  setDraft(root ? { ...named, root } : named);
+}
+
+type Made = NonNullable<ReturnType<typeof newProject>>;
+// A folder's check: the project it would make, or why it cannot, in words.
+type FolderCheck = { made: Made } | { problem: string };
+
+// The typed folder, "~" expanded once: missing, not a full path, or home.
+function pathProblem(root: string): { dir: string } | { problem: string } {
+  if (!root.trim()) return { problem: "Type the project's folder." };
+  const dir = expandHome(root);
+  if (dir === null || !dir.startsWith("/")) return { problem: "Type the folder's full path, starting with / or ~/." };
+  if (isHome(dir)) return { problem: "That is your home folder: pick one inside it, such as ~/dev/app." };
+  return { dir };
+}
+
+// Where a project matches: every match of a built one, else its key.
+const matchesFor = (p: Project): readonly string[] => {
+  const built = PROJECTS.find((x) => projectId(x) === projectId(p));
+  return built ? matchesOf(built) : matchesOf(p);
+};
+
+// A known project's folder, "~" expanded and lowercased, ending in "/"; "" without one.
+const rootKey = (p: Project): string => {
+  const dir = p.root ? expandHome(p.root) : null;
+  return dir ? dir.toLowerCase().replace(/\/*$/, "/") : "";
+};
+
+// The project already holding the folder, or one the folder would swallow.
+// Known projects count those sent but not built, and not those removed.
+function overlapProblem(made: Made): string | null {
+  const d = made.key;
+  const known = knownProjects();
+  const owner = known.find((p) => matchesFor(p).some((m) => d.includes(m)));
+  if (owner) return `That folder is already in ${owner.name}.`;
+  const inside = known.find((p) => [...matchesFor(p), rootKey(p)].some((m) => m !== d && m.startsWith(d)));
+  if (inside)
+    return `${tildeHome(made.spec.root ?? "")} holds other projects, such as ${inside.name}: pick a folder inside it.`;
+  return null;
+}
+
+// One check for the editor's words, Done and a suggested folder.
+function checkFolder(root: string): FolderCheck {
+  const path = pathProblem(root);
+  if ("problem" in path) return path;
+  const made = newProject(path.dir, knownProjects());
+  if (!made) return { problem: "Pick a folder at least two levels deep, such as ~/dev/app." };
+  if (!isMatchKey(made.key)) return { problem: `Keep the folder's path under ${MAX_PROJECT_KEY} characters.` };
+  const overlap = overlapProblem(made);
+  return overlap ? { problem: overlap } : { made };
+}
+
+// The project a typed folder would make, "~" expanded; null when it cannot make one.
+function madeFrom(root: string): Made | null {
+  const check = checkFolder(root);
+  return "made" in check ? check.made : null;
+}
+
+// A new project's folder, in words, or null when it would save.
+function newFolderProblem(root: string): string | null {
+  const check = checkFolder(root);
+  return "problem" in check ? check.problem : null;
 }
 
 /** Escape in the search: with words typed it does nothing, so the draft is not lost; empty, it closes as Cancel does. */
@@ -79,6 +166,8 @@ function nameProblem(name: string): string | null {
 /** Why Done would not save, in words, or null when it would: the rules the state file holds (src/shared/project-rules.ts). */
 export function draftProblem(): string | null {
   const { name, color, icon, root } = draft();
+  const folder = isNewDraft() ? newFolderProblem(root ?? "") : null;
+  if (folder) return folder;
   const named = nameProblem(name.trim());
   if (named) return named;
   if (!isHex(color)) return "Pick a colour from the dots.";
@@ -94,8 +183,31 @@ const sameSpec = (a: ProjectSpec, b: ProjectSpec | undefined): boolean =>
 export function saveDraft(): void {
   const k = editingProject();
   if (k === null || draftProblem()) return;
+  if (k === NEW_PROJECT) {
+    saveNew();
+    return;
+  }
   const spec = { ...draft(), name: draft().name.trim() };
   if (!sameSpec(spec, specOf(k))) saveProject(k, spec);
+  closeEditor();
+}
+
+// Saved under the folder's own key, its "~" expanded, then a workspace opens
+// there unless one is open already.
+function saveNew(): void {
+  const made = madeFrom(draft().root ?? "");
+  if (!made) return;
+  const { color, icon, name } = draft();
+  saveProject(made.key, { ...made.spec, color, icon, name: name.trim() });
+  closeEditor();
+  if (made.spec.root) openFolderOnce(made.spec.root);
+}
+
+/** A suggested folder, one tap: saved in the draft's colour and icon, named after the folder. Its workspace is already open. */
+export function addSuggested(dir: string): void {
+  const made = madeFrom(dir);
+  if (!made) return;
+  saveProject(made.key, { ...made.spec, color: draft().color, icon: draft().icon });
   closeEditor();
 }
 

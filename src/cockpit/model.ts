@@ -6,6 +6,7 @@
 
 import type { ProjectSpec, ViewMode } from "../../scripts/state-config.ts";
 import { isGeneratedAnchor } from "../shared/anchors.ts";
+import { expandHome, isHome, trimSlash } from "../shared/home.ts";
 import { type MoveSize, moveSize, moveSizeText } from "../shared/move.ts";
 import { dismissNeeds, isNeedsDismissed } from "../shared/needs.ts";
 import { P } from "../shared/palette.ts";
@@ -31,6 +32,7 @@ import {
   isMode,
   isSelected,
   mode,
+  NEW_PROJECT,
   OVERRIDE_SECS,
   quietCollapsed,
   savedFolds,
@@ -619,6 +621,7 @@ export function specOf(k: string): ProjectSpec | undefined {
 
 /** Every project as it now stands, keyed by its first match, sent but not built ones included. */
 export function knownProjects(): Project[] {
+  tick();
   const keys = new Set([...PROJECTS.map(projectId), ...sentSpecs.keys()]);
   return [...keys].flatMap((k) => {
     const spec = specOf(k);
@@ -628,7 +631,8 @@ export function knownProjects(): Project[] {
 
 /** True when the card sits in Other (no path match, no override), so its folder can become a project. */
 export function canCreateProject(w: Workspace | undefined): boolean {
-  if (!w || projectKey(w) !== projectId(OTHER)) return false;
+  tick();
+  if (!w || projectKey(w) !== projectId(OTHER) || isHome(w.directory)) return false;
   const made = newProject(w.directory, knownProjects());
   // Already sent and waiting on the rebuild: a second tap would only rename it.
   return made !== null && !sentSpecs.get(made.key);
@@ -651,6 +655,30 @@ export function saveProject(k: string, spec: ProjectSpec): void {
 export function createProjectFrom(w: Workspace | undefined): void {
   const made = w && canCreateProject(w) ? newProject(w.directory, knownProjects()) : null;
   if (made) saveProject(made.key, made.spec);
+}
+
+/** The card chip's words: `Make "Pianola" a project`, named as the project would be. */
+export function makeProjectLabel(w: Workspace | undefined): string {
+  const name = newProject(w?.directory, knownProjects())?.spec.name;
+  return name ? `Make "${name}" a project` : "Make a project";
+}
+
+const MAX_SUGGESTIONS = 3;
+const folderKey = (dir: string | undefined): string => trimSlash(String(dir ?? "")).toLowerCase();
+
+/** Folders of open workspaces that could become a project, each once, for the new project editor. Reactive. */
+export const folderSuggestions = computed((): string[] => {
+  const dirs = new Map<string, string>();
+  for (const w of cards()) {
+    if (canCreateProject(w) && w.directory) dirs.set(folderKey(w.directory), trimSlash(w.directory));
+  }
+  return [...dirs.values()].slice(0, MAX_SUGGESTIONS);
+});
+
+/** Opens a workspace in `dir`, unless one is open there already. */
+export function openFolderOnce(dir: string): void {
+  if (allWorkspaces().some((w) => folderKey(w.directory) === folderKey(dir))) return;
+  cmux("workspace.create", { cwd: dir, focus: true });
 }
 
 /**
@@ -691,13 +719,13 @@ export const projectWorkspaces = (k: string): Workspace[] => cards().filter((w) 
 export const canOpenProject = (k: string): boolean => !!projectByKey(k).root;
 
 /**
- * The folder "+" opens: until the rebuild lands, the last root sent when it
- * is already absolute (a "~" one waits for build.ts to expand it), else the
- * built one.
+ * The folder "+" opens: until the rebuild lands, the last root sent, its "~"
+ * expanded as build.ts will, else the built one.
  */
 function rootToOpen(k: string): string | undefined {
   const sent = sentSpecs.get(k)?.root;
-  return sent?.startsWith("/") ? sent : projectByKey(k).root;
+  const dir = sent === undefined ? null : expandHome(sent);
+  return dir?.startsWith("/") ? dir : projectByKey(k).root;
 }
 
 /** Opens a new workspace in the project's root, if it has one. A folded
@@ -737,7 +765,8 @@ export type ProjectEntry =
   | { kind: "ghost"; id: string; wsId: string }
   | { kind: "quietHeader"; id: string }
   | { kind: "quietRow"; id: string; project: string }
-  | { kind: "editor"; id: string; project: string };
+  | { kind: "editor"; id: string; project: string }
+  | { kind: "newRow"; id: string };
 
 // The open editor sits under its project's header or quiet row, with its own
 // key, since a row's kind is fixed by its key.
@@ -805,6 +834,9 @@ export const projectEntries = computed(() => {
   }
   const otherBusy = [projectId(OTHER), ...gone].some((k) => busy.has(k));
   if (otherBusy) pushGroup(entries, projectId(OTHER), other);
+  // "+ New project" and its editor, above the quiet ones.
+  entries.push({ kind: "newRow", id: "new" });
+  pushEditor(entries, NEW_PROJECT);
   const quiet = quietProjects();
   if (!quiet.length) return entries;
   // Ids outside the "p:" space, so a project matching "quiet" cannot clash.
