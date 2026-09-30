@@ -30,10 +30,11 @@ off until you install it.
   a workspace. The poller runs `gh pr list` in every
   workspace's repo with your `gh` sign-in, and writes the results to
   `config/state.json`.
-- **The Claude Code hooks** you add to `~/.claude/settings.json` (or
-  `$CLAUDE_CONFIG_DIR/settings.json` when that is set) run
-  `scripts/hooks/report-*.ts` with Node on the events listed in the
-  [quickstart](docs/quickstart.md#claude-code-hooks). They write
+- **The Claude Code hooks** setup adds to `~/.claude/settings.json` and
+  `$CLAUDE_CONFIG_DIR/settings.json` run `scripts/hooks/dispatch.ts` with
+  Node on the events listed in the
+  [quickstart](docs/quickstart.md#claude-code-hooks), which runs the
+  `scripts/hooks/report-*.ts` scripts `scripts/hooks/routes.ts` names. They write
   `config/state.json` and start a background rebuild of the sidebars;
   `report-pr.ts` instead runs `gh pr view`, sends cmux the result and
   starts a poll. Problems are logged to

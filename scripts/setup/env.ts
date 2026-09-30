@@ -6,7 +6,7 @@
 
 import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { logPathFor } from "../state-log.ts";
 
@@ -85,6 +85,20 @@ function shown(path: string, home: string): string {
   return path.startsWith(base) ? `~/${path.slice(base.length)}` : path;
 }
 
+/** One Claude Code config folder: its settings.json, the backup setup makes, and the file as messages name it. */
+export interface ClaudeFolder {
+  dir: string;
+  settings: string;
+  backup: string;
+  /** settings for messages, such as ~/.claude/settings.json. */
+  shown: string;
+}
+
+function claudeFolder(dir: string, home: string): ClaudeFolder {
+  const settings = join(dir, "settings.json");
+  return { dir, settings, backup: `${settings}.cmux-cockpit.bak`, shown: shown(settings, home) };
+}
+
 /**
  * Every path the three scripts read or write, from one home, one checkout and
  * CLAUDE_CONFIG_DIR as set, if at all. The last is required, undefined when
@@ -93,7 +107,6 @@ function shown(path: string, home: string): string {
 export function pathsFor(home: string, repo: string, claudeConfigDir: string | undefined) {
   const cmuxterm = join(home, ".cmuxterm");
   const { dir: claude, ignored } = claudeDirFor(home, claudeConfigDir);
-  const defaultSettings = join(home, ".claude", "settings.json");
   const app = join(home, "Applications", "CmuxCockpit.app");
   return {
     mainCheckout: join(home, ".config", "cmux"),
@@ -114,19 +127,12 @@ export function pathsFor(home: string, repo: string, claudeConfigDir: string | u
     cmuxterm,
     automationsLink: join(cmuxterm, "automations.json"),
     automationsBackup: join(cmuxterm, "automations.json.backup"),
-    claudeDir: claude,
-    claudeSettings: join(claude, "settings.json"),
-    /** claudeSettings for messages, such as ~/.claude/settings.json. */
-    claudeSettingsShown: shown(join(claude, "settings.json"), home),
-    claudeBackup: join(claude, "settings.json.cmux-cockpit.bak"),
+    /** ~/.claude, the folder Claude Code uses without CLAUDE_CONFIG_DIR. */
+    claudeDefault: claudeFolder(join(home, ".claude"), home),
+    /** The folder CLAUDE_CONFIG_DIR names, else ~/.claude again; claudeFolders says which count. */
+    claudeConfigured: claudeFolder(claude, home),
     /** CLAUDE_CONFIG_DIR when it was set but not usable, so ~/.claude stands in. */
     claudeConfigIgnored: ignored,
-    /**
-     * ~/.claude/settings.json when CLAUDE_CONFIG_DIR moves Claude Code
-     * elsewhere, so setup and the doctor can spot cockpit hooks left there;
-     * undefined when it is the file in use.
-     */
-    otherClaudeSettings: resolve(claude, "settings.json") === defaultSettings ? undefined : defaultSettings,
     helperApp: app,
     helperPlist: join(app, "Contents", "Info.plist"),
     stateLog: logPathFor(home),

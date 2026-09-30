@@ -16,7 +16,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, it } from "node:test";
-import { retired, wanted } from "../scripts/setup/claude-settings.ts";
+import { claudeFolders, entryCommand, legacy, wanted } from "../scripts/setup/claude-settings.ts";
 import { setup, uninstall } from "../scripts/setup/commands.ts";
 import {
   exitCode,
@@ -135,9 +135,9 @@ describe("setup", () => {
     assert.ok(f.calls.some((c) => c.endsWith("scripts/install-helper.ts")));
     assert.equal(readlinkSync(p.automationsLink), p.repoAutomations);
     assert.ok(f.calls.includes("cmux automation reload"));
-    const settings = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
+    const settings = JSON.parse(readFileSync(p.claudeDefault.settings, "utf8"));
     assert.deepEqual(missingEntries(settings, wanted(), w.home), []);
-    assert.equal(existsSync(p.claudeBackup), false); // nothing to back up: there was no file
+    assert.equal(existsSync(p.claudeDefault.backup), false); // nothing to back up: there was no file
     assert.deepEqual(f.asked, []);
   });
 
@@ -154,66 +154,52 @@ describe("setup", () => {
     const w = where();
     built(w.repo);
     const p = pathsFor(w.home, w.repo, undefined);
-    mkdirSync(p.claudeDir, { recursive: true });
-    writeFileSync(p.claudeSettings, JSON.stringify({ model: "opus" }));
-    writeFileSync(p.claudeBackup, "an older backup");
+    mkdirSync(p.claudeDefault.dir, { recursive: true });
+    writeFileSync(p.claudeDefault.settings, JSON.stringify({ model: "opus" }));
+    writeFileSync(p.claudeDefault.backup, "an older backup");
     const f = fakeEnv(w, cmuxWith(w.home), { interactive: true, reply: true });
     await setup(f.env, []);
-    assert.ok(f.asked.includes("  Write them?"));
-    assert.ok(f.out.some((l) => l.includes("PostToolUse [Bash]: node $HOME/.config/cmux/scripts/hooks/report-pr.ts")));
-    assert.equal(readFileSync(p.claudeBackup, "utf8"), "an older backup");
-    assert.equal(readFileSync(`${p.claudeBackup}-20260928-140502`, "utf8"), JSON.stringify({ model: "opus" }));
-    assert.equal(JSON.parse(readFileSync(p.claudeSettings, "utf8")).model, "opus");
+    assert.ok(f.asked.includes("  Write them to ~/.claude/settings.json?"));
+    assert.ok(
+      f.out.some((l) => l.includes("PostToolUse: node $HOME/.config/cmux/scripts/hooks/dispatch.ts PostToolUse")),
+    );
+    assert.equal(readFileSync(p.claudeDefault.backup, "utf8"), "an older backup");
+    assert.equal(readFileSync(`${p.claudeDefault.backup}-20260928-140502`, "utf8"), JSON.stringify({ model: "opus" }));
+    assert.equal(JSON.parse(readFileSync(p.claudeDefault.settings, "utf8")).model, "opus");
   });
 
-  it("takes out a retired hook, keeping the person's own hooks for that event", async () => {
+  it("swaps old per-script hooks for the entry points, keeping the person's own hooks", async () => {
     const w = where();
     built(w.repo);
     const p = pathsFor(w.home, w.repo, undefined);
     const own = { hooks: [{ type: "command", command: "say done" }] };
-    const old = { hooks: [{ type: "command", command: "node ~/.config/cmux/scripts/hooks/report-mention.ts" }] };
-    mkdirSync(p.claudeDir, { recursive: true });
-    writeFileSync(p.claudeSettings, JSON.stringify({ hooks: { Stop: [own, old] } }));
+    const old = (script: string) => ({ type: "command", command: `node ~/.config/cmux/scripts/hooks/${script}` });
+    const published = { matcher: "Artifact|mcp__claude_ai_Claude_Docs__batch", hooks: [old("report-published.ts")] };
+    mkdirSync(p.claudeDefault.dir, { recursive: true });
+    const stopBefore = [own, { hooks: [old("report-mention.ts"), old("report-move.ts")] }];
+    writeFileSync(p.claudeDefault.settings, JSON.stringify({ hooks: { Stop: stopBefore, PostToolUse: [published] } }));
     const f = fakeEnv(w, cmuxWith(w.home));
     await setup(f.env, ["--hooks"]);
-    const settings = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
-    const move = { hooks: [{ type: "command", command: "node $HOME/.config/cmux/scripts/hooks/report-move.ts" }] };
-    assert.deepEqual(settings.hooks.Stop, [own, move]);
+    const settings = JSON.parse(readFileSync(p.claudeDefault.settings, "utf8"));
+    const stop = { hooks: [{ type: "command", command: entryCommand("Stop") }] };
+    assert.deepEqual(settings.hooks.Stop, [own, stop]);
     assert.deepEqual(missingEntries(settings, wanted(), w.home), []);
-    assert.ok(f.out.some((l) => l.includes("Stop: node $HOME/.config/cmux/scripts/hooks/report-mention.ts")));
-    assert.ok(f.out.some((l) => l.includes("removed 1 retired")));
-  });
-
-  it("swaps a hook whose matcher has since changed, so it never runs twice", async () => {
-    const w = where();
-    built(w.repo);
-    const p = pathsFor(w.home, w.repo, undefined);
-    const command = "node $HOME/.config/cmux/scripts/hooks/report-published.ts";
-    const old = { matcher: "Artifact|mcp__claude_ai_Claude_Docs__batch", hooks: [{ type: "command", command }] };
-    mkdirSync(p.claudeDir, { recursive: true });
-    writeFileSync(p.claudeSettings, JSON.stringify({ hooks: { PostToolUse: [old] } }));
-    const f = fakeEnv(w, cmuxWith(w.home));
-    await setup(f.env, ["--hooks"]);
-    const groups: { matcher?: string; hooks: { command: string }[] }[] = JSON.parse(
-      readFileSync(p.claudeSettings, "utf8"),
-    ).hooks.PostToolUse;
-    const published = groups.filter((g) => g.hooks.some((h) => h.command === command));
-    assert.deepEqual(
-      published.map((g) => g.matcher),
-      ["Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__update"],
-    );
+    assert.equal(JSON.stringify(settings).includes("report-"), false);
+    assert.ok(f.out.some((l) => l.includes("3 old per-script cockpit hooks come out")));
+    assert.ok(f.out.some((l) => l.includes("took out 3 old per-script hooks")));
+    assert.ok(existsSync(p.claudeDefault.backup));
   });
 
   it("refuses to touch settings that are not valid JSON", async () => {
     const w = where();
     built(w.repo);
     const p = pathsFor(w.home, w.repo, undefined);
-    mkdirSync(p.claudeDir, { recursive: true });
-    writeFileSync(p.claudeSettings, "{ broken");
+    mkdirSync(p.claudeDefault.dir, { recursive: true });
+    writeFileSync(p.claudeDefault.settings, "{ broken");
     const f = fakeEnv(w, cmuxWith(w.home));
     await setup(f.env, ["--hooks"]);
-    assert.equal(readFileSync(p.claudeSettings, "utf8"), "{ broken");
-    assert.equal(existsSync(p.claudeBackup), false);
+    assert.equal(readFileSync(p.claudeDefault.settings, "utf8"), "{ broken");
+    assert.equal(existsSync(p.claudeDefault.backup), false);
     assert.ok(f.out.some((l) => l.includes("not valid JSON") && l.includes("Nothing changed")));
   });
 
@@ -253,12 +239,12 @@ describe("setup", () => {
     const w = where();
     built(w.repo);
     const p = pathsFor(w.home, w.repo, undefined);
-    mkdirSync(p.claudeDir, { recursive: true });
+    mkdirSync(p.claudeDefault.dir, { recursive: true });
     const real = join(w.home, "real-settings.json");
     writeFileSync(real, "{}");
-    symlinkSync(real, p.claudeSettings);
+    symlinkSync(real, p.claudeDefault.settings);
     await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--hooks"]);
-    assert.ok(lstatSync(p.claudeSettings).isSymbolicLink());
+    assert.ok(lstatSync(p.claudeDefault.settings).isSymbolicLink());
     assert.deepEqual(missingEntries(JSON.parse(readFileSync(real, "utf8")), wanted(), w.home), []);
   });
 
@@ -266,16 +252,16 @@ describe("setup", () => {
     const w = where();
     built(w.repo);
     const p = pathsFor(w.home, w.repo, undefined);
-    mkdirSync(p.claudeDir, { recursive: true });
-    writeFileSync(p.claudeSettings, "{}");
+    mkdirSync(p.claudeDefault.dir, { recursive: true });
+    writeFileSync(p.claudeDefault.settings, "{}");
     const f = fakeEnv(w, cmuxWith(w.home), { interactive: true, reply: true });
     const ask = f.env.ask;
     f.env.ask = async (q) => {
-      if (q.includes("Write them")) writeFileSync(p.claudeSettings, '{ "permissions": {} }');
+      if (q.includes("Write them")) writeFileSync(p.claudeDefault.settings, '{ "permissions": {} }');
       return ask(q);
     };
     await setup(f.env, []);
-    assert.equal(readFileSync(p.claudeSettings, "utf8"), '{ "permissions": {} }');
+    assert.equal(readFileSync(p.claudeDefault.settings, "utf8"), '{ "permissions": {} }');
     assert.ok(f.out.some((l) => l.includes("changed while setup waited")));
   });
 });
@@ -351,17 +337,18 @@ describe("doctor", () => {
     assert.equal(fresh?.ok, true, "a build that left the bundles unchanged still counts as fresh");
   });
 
-  it("flags a retired hook left in the settings, with setup as the fix", async () => {
+  it("flags an old per-script hook left beside the entry points, naming the file", async () => {
     const w = where();
     built(w.repo);
     await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--hooks"]);
     const p = pathsFor(w.home, w.repo, undefined);
-    const settings = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
-    settings.hooks.Stop = [{ hooks: [retired()[0]?.hook] }];
-    writeFileSync(p.claudeSettings, JSON.stringify(settings));
+    const settings = JSON.parse(readFileSync(p.claudeDefault.settings, "utf8"));
+    settings.hooks.Stop.push({ hooks: [{ type: "command", command: legacy()[0] }] });
+    writeFileSync(p.claudeDefault.settings, JSON.stringify(settings));
     const check = runChecks(fakeEnv(w).env).find((c) => c.label === "Claude Code hooks");
     assert.equal(check?.ok, false);
-    assert.match(check?.detail ?? "", /1 retired hook left/);
+    assert.equal(check?.detail, "~/.claude/settings.json still has 1 old per-script hooks, so those scripts run twice");
+    assert.equal(check?.fix, "npm run setup -- --hooks");
   });
 
   it("reads a broken cmux.json, projects.json and settings as crosses, not crashes", () => {
@@ -369,13 +356,14 @@ describe("doctor", () => {
     const p = pathsFor(w.home, w.repo, undefined);
     writeFileSync(p.cmuxJson, "{");
     writeFileSync(p.projects, '[{ "match": "/A" }]');
-    mkdirSync(p.claudeDir, { recursive: true });
-    writeFileSync(p.claudeSettings, "{");
+    mkdirSync(p.claudeDefault.dir, { recursive: true });
+    writeFileSync(p.claudeDefault.settings, "{");
     mkdirSync(p.helperApp, { recursive: true });
     const checks = new Map(runChecks(fakeEnv(w, { "/usr/bin/plutil": failed() }).env).map((c) => [c.label, c]));
     assert.match(checks.get("cmux.json")?.detail ?? "", /not valid JSON/);
     assert.match(checks.get("Projects")?.detail ?? "", /lowercase/);
-    assert.match(checks.get("Claude Code hooks")?.detail ?? "", /not valid JSON/);
+    assert.match(checks.get("Claude Code hooks")?.detail ?? "", /^~\/\.claude\/settings\.json is not valid JSON/);
+    assert.match(checks.get("Claude Code hooks")?.fix ?? "", /by hand/);
     assert.match(checks.get("Helper app")?.detail ?? "", /no cmux-cockpit:\/\/ scheme/);
   });
 
@@ -414,19 +402,20 @@ describe("uninstall", () => {
     await uninstall(fakeEnv(w).env, ["--yes", "--hooks"]);
     assert.ok(existsSync(p.helperApp));
     assert.ok(lstatSync(p.automationsLink).isSymbolicLink());
-    assert.equal(missingEntries(JSON.parse(readFileSync(p.claudeSettings, "utf8")), wanted(), w.home).length, 11);
+    const left = JSON.parse(readFileSync(p.claudeDefault.settings, "utf8"));
+    assert.equal(missingEntries(left, wanted(), w.home).length, wanted().length);
   });
 
-  it("takes out a retired hook along with the current ones", async () => {
+  it("takes out old per-script hooks along with the entry points", async () => {
     const w = where();
     built(w.repo);
     await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--hooks"]);
     const p = pathsFor(w.home, w.repo, undefined);
-    const settings = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
-    settings.hooks.Stop = [{ hooks: [retired()[0]?.hook] }];
-    writeFileSync(p.claudeSettings, JSON.stringify(settings));
+    const settings = JSON.parse(readFileSync(p.claudeDefault.settings, "utf8"));
+    settings.hooks.Stop.push({ matcher: "odd", hooks: legacy().map((command) => ({ type: "command", command })) });
+    writeFileSync(p.claudeDefault.settings, JSON.stringify(settings));
     await uninstall(fakeEnv(w).env, ["--yes", "--hooks"]);
-    assert.deepEqual(JSON.parse(readFileSync(p.claudeSettings, "utf8")).hooks ?? {}, {});
+    assert.deepEqual(JSON.parse(readFileSync(p.claudeDefault.settings, "utf8")).hooks ?? {}, {});
   });
 
   it("takes out what setup added, restoring the old automations file, and keeps the clone", async () => {
@@ -435,9 +424,9 @@ describe("uninstall", () => {
     const p = pathsFor(w.home, w.repo, undefined);
     mkdirSync(p.cmuxterm, { recursive: true });
     writeFileSync(p.automationsLink, JSON.stringify({ rules: [] }));
-    mkdirSync(p.claudeDir, { recursive: true });
+    mkdirSync(p.claudeDefault.dir, { recursive: true });
     const mine = { model: "opus", hooks: { Stop: [{ hooks: [{ type: "command", command: "say done" }] }] } };
-    writeFileSync(p.claudeSettings, JSON.stringify(mine));
+    writeFileSync(p.claudeDefault.settings, JSON.stringify(mine));
     await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--yes"]);
     mkdirSync(p.helperApp, { recursive: true });
 
@@ -446,7 +435,7 @@ describe("uninstall", () => {
     assert.equal(existsSync(p.helperApp), false);
     assert.ok(f.calls.some((c) => c.includes("lsregister -u")));
     assert.equal(readFileSync(p.automationsLink, "utf8"), JSON.stringify({ rules: [] }));
-    assert.deepEqual(JSON.parse(readFileSync(p.claudeSettings, "utf8")), mine);
+    assert.deepEqual(JSON.parse(readFileSync(p.claudeDefault.settings, "utf8")), mine);
     assert.ok(existsSync(w.repo));
     assert.ok(f.out.some((l) => l.includes("rm -rf ~/.config/cmux")));
   });
@@ -478,31 +467,34 @@ describe("uninstall", () => {
   });
 });
 
-describe("Claude Code's config folder", () => {
-  it("is CLAUDE_CONFIG_DIR when that is an absolute path, else ~/.claude", () => {
+describe("Claude Code's config folders", () => {
+  it("names CLAUDE_CONFIG_DIR's folder when that is an absolute path, else ~/.claude", () => {
     const home = "/Users/me";
     const set = pathsFor(home, "/r", "/Users/me/.claude-personal");
-    assert.equal(set.claudeDir, "/Users/me/.claude-personal");
-    assert.equal(set.claudeSettings, "/Users/me/.claude-personal/settings.json");
-    assert.equal(set.claudeBackup, "/Users/me/.claude-personal/settings.json.cmux-cockpit.bak");
-    assert.equal(set.claudeSettingsShown, "~/.claude-personal/settings.json");
-    assert.equal(pathsFor(home, "/r", "/etc/claude").claudeSettingsShown, "/etc/claude/settings.json");
+    assert.deepEqual(set.claudeConfigured, {
+      dir: "/Users/me/.claude-personal",
+      settings: "/Users/me/.claude-personal/settings.json",
+      backup: "/Users/me/.claude-personal/settings.json.cmux-cockpit.bak",
+      shown: "~/.claude-personal/settings.json",
+    });
+    assert.equal(set.claudeDefault.settings, "/Users/me/.claude/settings.json");
+    assert.equal(pathsFor(home, "/r", "/etc/claude").claudeConfigured.shown, "/etc/claude/settings.json");
     for (const ignored of [undefined, "", "relative/claude"]) {
       const p = pathsFor(home, "/r", ignored);
-      assert.equal(p.claudeSettings, "/Users/me/.claude/settings.json");
-      assert.equal(p.claudeBackup, "/Users/me/.claude/settings.json.cmux-cockpit.bak");
-      assert.equal(p.claudeSettingsShown, "~/.claude/settings.json");
+      assert.deepEqual(p.claudeConfigured, p.claudeDefault);
+      assert.equal(p.claudeConfigured.backup, "/Users/me/.claude/settings.json.cmux-cockpit.bak");
+      assert.equal(p.claudeConfigured.shown, "~/.claude/settings.json");
     }
   });
 
   it("expands a leading ~ against home, and names a value it still ignores", () => {
     const home = "/Users/me";
-    assert.equal(pathsFor(home, "/r", "~/.claude-personal").claudeSettings, "/Users/me/.claude-personal/settings.json");
-    assert.equal(pathsFor(home, "/r", "~").claudeDir, "/Users/me");
+    assert.equal(pathsFor(home, "/r", "~/.claude-personal").claudeConfigured.dir, "/Users/me/.claude-personal");
+    assert.equal(pathsFor(home, "/r", "~").claudeConfigured.dir, "/Users/me");
     assert.equal(pathsFor(home, "/r", "~/.claude-personal").claudeConfigIgnored, undefined);
     for (const ignored of ["relative/claude", "~other/claude"]) {
       const p = pathsFor(home, "/r", ignored);
-      assert.equal(p.claudeSettings, "/Users/me/.claude/settings.json");
+      assert.equal(p.claudeConfigured.settings, "/Users/me/.claude/settings.json");
       assert.equal(p.claudeConfigIgnored, ignored);
     }
     assert.equal(pathsFor(home, "/r", undefined).claudeConfigIgnored, undefined);
@@ -510,22 +502,24 @@ describe("Claude Code's config folder", () => {
   });
 
   it("shortens to ~ only under the real home, with no doubled slash", () => {
-    assert.equal(pathsFor("/Users/me/", "/r", undefined).claudeSettingsShown, "~/.claude/settings.json");
-    assert.equal(pathsFor("/Users/me/", "/r", "/Users/me/p").claudeSettingsShown, "~/p/settings.json");
-    assert.equal(pathsFor("/", "/r", undefined).claudeSettingsShown, "/.claude/settings.json");
-    assert.equal(pathsFor("/", "/r", "/etc/claude").claudeSettingsShown, "/etc/claude/settings.json");
-    assert.equal(pathsFor("/Users/me", "/r", "/Users/meg/c").claudeSettingsShown, "/Users/meg/c/settings.json");
+    const shown = (home: string, dir: string | undefined) => pathsFor(home, "/r", dir).claudeConfigured.shown;
+    assert.equal(shown("/Users/me/", undefined), "~/.claude/settings.json");
+    assert.equal(shown("/Users/me/", "/Users/me/p"), "~/p/settings.json");
+    assert.equal(shown("/", undefined), "/.claude/settings.json");
+    assert.equal(shown("/", "/etc/claude"), "/etc/claude/settings.json");
+    assert.equal(shown("/Users/me", "/Users/meg/c"), "/Users/meg/c/settings.json");
   });
 
-  it("only looks at ~/.claude/settings.json as the other file when the variable moves away from it", () => {
-    const home = "/Users/me";
-    assert.equal(pathsFor(home, "/r", undefined).otherClaudeSettings, undefined);
-    assert.equal(pathsFor(home, "/r", "/Users/me/.claude/").otherClaudeSettings, undefined);
-    assert.equal(pathsFor(home, "/r", "~/.claude").otherClaudeSettings, undefined);
-    assert.equal(
-      pathsFor(home, "/r", "/Users/me/.claude-personal").otherClaudeSettings,
-      "/Users/me/.claude/settings.json",
-    );
+  it("counts ~/.claude once however it is spelled, and beside CLAUDE_CONFIG_DIR's only when it exists", () => {
+    const w = where();
+    const dirs = (dir: string | undefined) => claudeFolders(pathsFor(w.home, w.repo, dir)).map((f) => f.shown);
+    const personal = join(w.home, ".claude-personal");
+    assert.deepEqual(dirs(undefined), ["~/.claude/settings.json"]); // a fresh machine: made on write
+    assert.deepEqual(dirs(personal), ["~/.claude-personal/settings.json"]);
+    mkdirSync(join(w.home, ".claude"));
+    assert.deepEqual(dirs(personal), ["~/.claude/settings.json", "~/.claude-personal/settings.json"]);
+    assert.deepEqual(dirs(`${w.home}/.claude/`), ["~/.claude/settings.json"]);
+    assert.deepEqual(dirs("~/.claude"), ["~/.claude/settings.json"]);
   });
 
   it("has setup and the doctor name an ignored CLAUDE_CONFIG_DIR", async () => {
@@ -535,53 +529,91 @@ describe("Claude Code's config folder", () => {
     const f = fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: "relative/claude" });
     await setup(f.env, ["--hooks"]);
     assert.ok(f.out.includes(`  ! ${line}`), f.out.join("\n"));
-    assert.ok(existsSync(pathsFor(w.home, w.repo, undefined).claudeSettings));
+    assert.ok(existsSync(pathsFor(w.home, w.repo, undefined).claudeDefault.settings));
     const doctor = report(runChecks(fakeEnv(w, {}, { claudeConfigDir: "relative/claude" }).env));
     assert.ok(doctor.includes(`    ! ${line}`), doctor.join("\n"));
     assert.ok(!report(runChecks(fakeEnv(w).env)).some((l) => l.includes("CLAUDE_CONFIG_DIR")));
   });
 
-  it("warns of cockpit hooks left in ~/.claude/settings.json, and leaves them there", async () => {
-    const w = where();
-    built(w.repo);
-    await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--hooks"]);
-    const old = pathsFor(w.home, w.repo, undefined).claudeSettings;
-    const before = readFileSync(old, "utf8");
-    const dir = join(w.home, ".claude-personal");
-    const line = `~/.claude/settings.json also holds ${wanted().length} cockpit hooks`;
-
-    const f = fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir });
-    await setup(f.env, ["--hooks"]);
-    assert.equal(f.out.filter((l) => l.startsWith(`  ! ${line}`)).length, 1, f.out.join("\n"));
-    assert.equal(readFileSync(old, "utf8"), before);
-
-    const hooks = runChecks(fakeEnv(w, {}, { claudeConfigDir: dir }).env).find((c) => c.label === "Claude Code hooks");
-    assert.equal(hooks?.ok, true);
-    assert.ok(hooks?.notes?.some((n) => n.startsWith(line)));
-    assert.equal(runChecks(fakeEnv(w).env).find((c) => c.label === "Claude Code hooks")?.notes, undefined);
-  });
-
-  it("is where setup --hooks writes and the doctor and uninstall look", async () => {
+  it("has setup put the entry points in both folders, swapping out old hooks in each with its own backup", async () => {
     const w = where();
     built(w.repo);
     const dir = join(w.home, ".claude-personal");
     const p = pathsFor(w.home, w.repo, dir);
+    const old = { hooks: { UserPromptSubmit: [{ hooks: [{ type: "command", command: legacy()[5] }] }] } };
+    for (const folder of [p.claudeDefault, p.claudeConfigured]) {
+      mkdirSync(folder.dir, { recursive: true });
+      writeFileSync(folder.settings, JSON.stringify(old));
+    }
     const f = fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir });
     await setup(f.env, ["--hooks"]);
-    assert.deepEqual(missingEntries(JSON.parse(readFileSync(p.claudeSettings, "utf8")), wanted(), w.home), []);
-    assert.equal(existsSync(pathsFor(w.home, w.repo, undefined).claudeSettings), false); // ~/.claude untouched
-    assert.ok(f.out.some((l) => l.includes("These go into ~/.claude-personal/settings.json,")));
+    for (const folder of [p.claudeDefault, p.claudeConfigured]) {
+      const settings = JSON.parse(readFileSync(folder.settings, "utf8"));
+      assert.deepEqual(missingEntries(settings, wanted(), w.home), [], folder.shown);
+      assert.equal(JSON.stringify(settings).includes("report-rename"), false, folder.shown);
+      assert.equal(readFileSync(folder.backup, "utf8"), JSON.stringify(old), folder.shown);
+      assert.ok(f.out.some((l) => l.includes(`These go into ${folder.shown},`)));
+    }
 
-    const hooks = (env: ReturnType<typeof fakeEnv>) => runChecks(env.env).find((c) => c.label === "Claude Code hooks");
-    assert.equal(
-      hooks(fakeEnv(w, {}, { claudeConfigDir: dir }))?.detail,
-      "all present in ~/.claude-personal/settings.json",
-    );
-    assert.equal(hooks(fakeEnv(w))?.detail, "no ~/.claude/settings.json"); // without the variable, the other file
+    const again = fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir });
+    await setup(again.env, ["--hooks"]);
+    assert.equal(again.out.filter((l) => l.includes("every entry point is already in")).length, 2);
+  });
 
-    await uninstall(fakeEnv(w, {}, { claudeConfigDir: dir }).env, ["--yes", "--hooks"]);
-    const left = JSON.parse(readFileSync(p.claudeSettings, "utf8"));
-    assert.equal(missingEntries(left, wanted(), w.home).length, wanted().length);
+  it("carries on to the next folder when one holds a file it cannot read", async () => {
+    const w = where();
+    built(w.repo);
+    const dir = join(w.home, ".claude-personal");
+    const p = pathsFor(w.home, w.repo, dir);
+    mkdirSync(p.claudeDefault.dir, { recursive: true });
+    writeFileSync(p.claudeDefault.settings, "{ broken");
+    await setup(fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir }).env, ["--hooks"]);
+    assert.equal(readFileSync(p.claudeDefault.settings, "utf8"), "{ broken");
+    const settings = JSON.parse(readFileSync(p.claudeConfigured.settings, "utf8"));
+    assert.deepEqual(missingEntries(settings, wanted(), w.home), []);
+  });
+
+  it("has the doctor check both folders and name the one missing its entry points", async () => {
+    const w = where();
+    built(w.repo);
+    const dir = join(w.home, ".claude-personal");
+    const p = pathsFor(w.home, w.repo, dir);
+    const hooks = () =>
+      runChecks(fakeEnv(w, {}, { claudeConfigDir: dir }).env).find((c) => c.label === "Claude Code hooks");
+
+    await setup(fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir }).env, ["--hooks"]);
+    assert.equal(hooks()?.detail, "entry points in ~/.claude-personal/settings.json");
+
+    // ~/.claude turns up later (Claude Code run without the variable): the doctor wants it too.
+    mkdirSync(p.claudeDefault.dir);
+    assert.equal(hooks()?.ok, false);
+    assert.equal(hooks()?.detail, "no ~/.claude/settings.json");
+
+    const settings = JSON.parse(readFileSync(p.claudeConfigured.settings, "utf8"));
+    delete settings.hooks.UserPromptSubmit;
+    writeFileSync(p.claudeDefault.settings, JSON.stringify(settings));
+    assert.equal(hooks()?.detail, "~/.claude/settings.json is missing 1 entry points");
+    assert.equal(hooks()?.fix, "npm run setup -- --hooks");
+
+    await setup(fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir }).env, ["--hooks"]);
+    assert.equal(hooks()?.ok, true);
+    assert.equal(hooks()?.detail, "entry points in ~/.claude/settings.json and ~/.claude-personal/settings.json");
+  });
+
+  it("has uninstall take the hooks out of both folders", async () => {
+    const w = where();
+    built(w.repo);
+    const dir = join(w.home, ".claude-personal");
+    const p = pathsFor(w.home, w.repo, dir);
+    mkdirSync(p.claudeDefault.dir, { recursive: true });
+    await setup(fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir }).env, ["--hooks"]);
+    const f = fakeEnv(w, {}, { claudeConfigDir: dir });
+    await uninstall(f.env, ["--yes", "--hooks"]);
+    for (const folder of [p.claudeDefault, p.claudeConfigured]) {
+      const left = JSON.parse(readFileSync(folder.settings, "utf8"));
+      assert.equal(missingEntries(left, wanted(), w.home).length, wanted().length, folder.shown);
+      assert.ok(f.out.includes(`✓ removed ${wanted().length} hooks from ${folder.shown}`));
+    }
   });
 });
 

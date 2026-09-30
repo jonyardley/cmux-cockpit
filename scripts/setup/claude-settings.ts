@@ -1,84 +1,94 @@
-// Reading, backing up and writing Claude Code's settings.json (in
-// CLAUDE_CONFIG_DIR when set, else ~/.claude) for the hooks extra, around
-// the pure merge in hooks-merge.ts. The wanted list comes from
-// claude-hooks.json, next to this file.
+// Reading, backing up and writing each Claude Code settings.json setup looks
+// after, around the pure merge in hooks-merge.ts. What goes in is one entry
+// point per event in scripts/hooks/routes.ts; which scripts each runs stays
+// in that file, read at run time, so settings only change when an event is
+// added or dropped.
 
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { type Paths, stamp } from "./env.ts";
-import { type Entry, missingEntries, parseSettings, wantedEntries } from "./hooks-merge.ts";
+import { resolve } from "node:path";
+import { ROUTES } from "../hooks/routes.ts";
+import { type ClaudeFolder, type Paths, stamp } from "./env.ts";
+import { type Entry, missingEntries, parseSettings, removeCommands } from "./hooks-merge.ts";
 
-export const HOOKS_SOURCE = join(import.meta.dirname, "claude-hooks.json");
+const HOOKS_DIR = "$HOME/.config/cmux/scripts/hooks";
 
-/** The hooks setup adds, from the one committed list. */
-export const wanted = (): Entry[] => wantedEntries(JSON.parse(readFileSync(HOOKS_SOURCE, "utf8")));
+/** The command Claude Code runs for one event. */
+export const entryCommand = (event: string): string => `node ${HOOKS_DIR}/dispatch.ts ${event}`;
 
-// Hooks setup once added whose scripts have since gone, or whose matcher
-// has since changed. Left in place the first fail at the end of every
-// turn and the second run twice, so setup and uninstall take them out and
-// doctor flags them. The match on a group's matcher is exact.
-const RETIRED: readonly { event: string; matcher: string | null; command: string }[] = [
-  { event: "Stop", matcher: null, command: "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" },
-  {
-    event: "PostToolUse",
-    matcher: "Artifact|mcp__claude_ai_Claude_Docs__batch",
-    command: "node $HOME/.config/cmux/scripts/hooks/report-published.ts",
-  },
+/** The entry points setup adds: one per event routes.ts lists, with no matcher, since dispatch.ts does the matching. */
+export const wanted = (): Entry[] =>
+  Object.keys(ROUTES).map((event) => {
+    const command = entryCommand(event);
+    return { event, matcher: null, command, hook: { type: "command", command } };
+  });
+
+// The scripts setup once added to settings one by one, before the entry
+// points. Left in beside them each would run twice, so setup and uninstall
+// take them out under any matcher, and doctor flags them. report-mention.ts
+// has since gone altogether.
+const LEGACY_SCRIPTS = [
+  "report-subagent.ts",
+  "report-notification.ts",
+  "report-pr.ts",
+  "report-published.ts",
+  "report-move.ts",
+  "report-rename.ts",
+  "report-mention.ts",
 ];
 
-/** The retired hooks, as entries removeEntries can take out. */
-export const retired = (): Entry[] =>
-  RETIRED.map(({ event, matcher, command }) => ({ event, matcher, command, hook: { type: "command", command } }));
+/** The per-script commands the entry points replace. */
+export const legacy = (): string[] => LEGACY_SCRIPTS.map((s) => `node ${HOOKS_DIR}/${s}`);
 
 export type Loaded =
   | { ok: true; settings: Record<string, unknown>; existed: boolean; text: string }
   | { ok: false; error: string };
 
-function loadFile(file: string): Loaded {
-  if (!existsSync(file)) return { ok: true, settings: {}, existed: false, text: "" };
-  const text = readFileSync(file, "utf8");
+/** A folder's settings file, parsed; a missing one reads as empty. */
+export function loadSettings(folder: ClaudeFolder): Loaded {
+  if (!existsSync(folder.settings)) return { ok: true, settings: {}, existed: false, text: "" };
+  const text = readFileSync(folder.settings, "utf8");
   const parsed = parseSettings(text);
   return parsed.ok ? { ok: true, settings: parsed.settings, existed: true, text } : parsed;
 }
 
-/** The settings file, parsed; a missing one reads as empty. */
-export const loadSettings = (paths: Paths): Loaded => loadFile(paths.claudeSettings);
-
 /**
- * One line each for what setup and the doctor should say about where the
- * hooks go: a CLAUDE_CONFIG_DIR that was ignored, and cockpit hooks left in
- * ~/.claude/settings.json while CLAUDE_CONFIG_DIR points elsewhere. Those
- * are never removed here: ~/.claude may be a Claude profile kept on purpose.
+ * The Claude Code folders the hooks go in: CLAUDE_CONFIG_DIR's (or
+ * ~/.claude when it is unset or ignored) always, and ~/.claude as well
+ * when it is another folder that exists, since Claude Code started
+ * without the variable reads it.
  */
-export function claudeDirNotes(paths: Paths, home: string): string[] {
-  const notes: string[] = [];
-  if (paths.claudeConfigIgnored !== undefined) {
-    notes.push(
-      `CLAUDE_CONFIG_DIR is "${paths.claudeConfigIgnored}", not an absolute path, so it is ignored and ~/.claude is used`,
-    );
-  }
-  if (paths.otherClaudeSettings !== undefined) {
-    const other = loadFile(paths.otherClaudeSettings);
-    const held = other.ok ? wanted().length - missingEntries(other.settings, wanted(), home).length : 0;
-    if (held > 0) {
-      notes.push(
-        `~/.claude/settings.json also holds ${held} cockpit hooks; they are left alone, so take them out by hand if nothing starts Claude Code without CLAUDE_CONFIG_DIR`,
-      );
-    }
-  }
-  return notes;
+export function claudeFolders(paths: Paths): ClaudeFolder[] {
+  const { claudeDefault, claudeConfigured } = paths;
+  if (resolve(claudeDefault.dir) === resolve(claudeConfigured.dir)) return [claudeConfigured];
+  return existsSync(claudeDefault.dir) ? [claudeDefault, claudeConfigured] : [claudeConfigured];
+}
+
+/** What a folder's settings hold of the cockpit's: entry points missing, and old per-script hooks left. */
+export function hooksState(settings: Record<string, unknown>, home: string) {
+  return {
+    missing: missingEntries(settings, wanted(), home),
+    legacy: removeCommands(settings, legacy(), home).removed,
+  };
+}
+
+/** One line for setup and the doctor when CLAUDE_CONFIG_DIR was set but ignored. */
+export function claudeDirNotes(paths: Paths): string[] {
+  if (paths.claudeConfigIgnored === undefined) return [];
+  return [
+    `CLAUDE_CONFIG_DIR is "${paths.claudeConfigIgnored}", not an absolute path, so it is ignored and ~/.claude is used`,
+  ];
 }
 
 /** True when the file still holds what `loaded` read, so a write cannot lose one Claude Code made meanwhile. */
-export function unchanged(paths: Paths, loaded: { existed: boolean; text: string }): boolean {
-  if (!existsSync(paths.claudeSettings)) return !loaded.existed;
-  return loaded.existed && readFileSync(paths.claudeSettings, "utf8") === loaded.text;
+export function unchanged(folder: ClaudeFolder, loaded: { existed: boolean; text: string }): boolean {
+  if (!existsSync(folder.settings)) return !loaded.existed;
+  return loaded.existed && readFileSync(folder.settings, "utf8") === loaded.text;
 }
 
 /** Copies the settings file aside before a write; an earlier backup is kept and this one takes a time stamp. */
-export function backupSettings(paths: Paths, now: Date): string {
-  const to = existsSync(paths.claudeBackup) ? `${paths.claudeBackup}-${stamp(now)}` : paths.claudeBackup;
-  copyFileSync(paths.claudeSettings, to);
+export function backupSettings(folder: ClaudeFolder, now: Date): string {
+  const to = existsSync(folder.backup) ? `${folder.backup}-${stamp(now)}` : folder.backup;
+  copyFileSync(folder.settings, to);
   return to;
 }
 
@@ -87,9 +97,9 @@ export function backupSettings(paths: Paths, now: Date): string {
  * leaves half of it. A settings.json that is a link (a dotfiles repo, say)
  * is written through: the file it points at is replaced, the link kept.
  */
-export function writeSettings(paths: Paths, settings: Record<string, unknown>): void {
-  mkdirSync(paths.claudeDir, { recursive: true });
-  const target = existsSync(paths.claudeSettings) ? realpathSync(paths.claudeSettings) : paths.claudeSettings;
+export function writeSettings(folder: ClaudeFolder, settings: Record<string, unknown>): void {
+  mkdirSync(folder.dir, { recursive: true });
+  const target = existsSync(folder.settings) ? realpathSync(folder.settings) : folder.settings;
   const tmp = `${target}.cmux-cockpit.tmp`;
   writeFileSync(tmp, `${JSON.stringify(settings, null, 2)}\n`);
   renameSync(tmp, target);

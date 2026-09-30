@@ -8,14 +8,15 @@ import { applyLink, linkState, planLink, removeLink, repoRuleIds } from "./autom
 import {
   backupSettings,
   claudeDirNotes,
+  claudeFolders,
+  legacy,
   loadSettings,
-  retired,
   unchanged,
   wanted,
   writeSettings,
 } from "./claude-settings.ts";
-import type { Env, Paths } from "./env.ts";
-import { addEntries, describe, type Entry, missingEntries, removeEntries } from "./hooks-merge.ts";
+import type { ClaudeFolder, Env, Paths } from "./env.ts";
+import { addEntries, describe, type Entry, missingEntries, removeCommands } from "./hooks-merge.ts";
 
 const LSREGISTER =
   "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
@@ -66,45 +67,50 @@ function addAutomations(env: Env, paths: Paths): void {
   env.run("cmux", ["automation", "reload"]);
 }
 
+// Each Claude Code folder in turn, so one with a broken file never stops the others.
 async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
-  for (const note of claudeDirNotes(paths, env.home)) env.print(`  ! ${note}`);
-  const loaded = loadSettings(paths);
+  for (const note of claudeDirNotes(paths)) env.print(`  ! ${note}`);
+  for (const folder of claudeFolders(paths)) await addHooksTo(env, folder, flags);
+}
+
+async function addHooksTo(env: Env, folder: ClaudeFolder, flags: Flags): Promise<void> {
+  const loaded = loadSettings(folder);
   if (!loaded.ok) {
-    env.print(`  ✗ ${paths.claudeSettingsShown} is ${loaded.error}. Nothing changed; fix it and run setup again.`);
+    env.print(`  ✗ ${folder.shown} is ${loaded.error}. Nothing changed there; fix it and run setup again.`);
     return;
   }
   const add = missingEntries(loaded.settings, wanted(), env.home);
-  const cleared = removeEntries(loaded.settings, retired(), env.home);
+  const cleared = removeCommands(loaded.settings, legacy(), env.home);
   if (add.length === 0 && cleared.removed === 0) {
-    env.print(`  ✓ all the hooks are already in ${paths.claudeSettingsShown}`);
+    env.print(`  ✓ every entry point is already in ${folder.shown}`);
     return;
   }
-  listChanges(env, paths, add, cleared.removed);
-  const confirmed = flags.yes || flags.picked.includes("hooks") || (await env.ask("  Write them?"));
+  listChanges(env, folder, add, cleared.removed);
+  const confirmed = flags.yes || flags.picked.includes("hooks") || (await env.ask(`  Write them to ${folder.shown}?`));
   if (!confirmed) {
-    env.print("  skipped, nothing written");
+    env.print(`  skipped, nothing written to ${folder.shown}`);
     return;
   }
-  if (!unchanged(paths, loaded)) {
-    env.print(`  ✗ ${paths.claudeSettingsShown} changed while setup waited, so nothing was written. Run setup again.`);
+  if (!unchanged(folder, loaded)) {
+    env.print(`  ✗ ${folder.shown} changed while setup waited, so nothing was written. Run setup again.`);
     return;
   }
-  if (loaded.existed) env.print(`  ✓ backed up to ${backupSettings(paths, env.now())}`);
-  writeSettings(paths, addEntries(cleared.settings, add));
-  env.print(`  ✓ added ${add.length} hooks${cleared.removed ? `, removed ${cleared.removed} retired` : ""}`);
+  if (loaded.existed) env.print(`  ✓ backed up to ${backupSettings(folder, env.now())}`);
+  writeSettings(folder, addEntries(cleared.settings, add));
+  const swapped = cleared.removed ? `, took out ${cleared.removed} old per-script hooks` : "";
+  env.print(`  ✓ added ${add.length} entry points to ${folder.shown}${swapped}`);
 }
 
-// What addHooks will write: the hooks it adds, and any retired ones it takes out.
-function listChanges(env: Env, paths: Paths, add: readonly Entry[], retiredCount: number): void {
+// What addHooksTo will write: the entry points it adds, and the old per-script hooks it takes out.
+function listChanges(env: Env, folder: ClaudeFolder, add: readonly Entry[], legacyCount: number): void {
   if (add.length > 0) {
     env.print(
-      `  These go into ${paths.claudeSettingsShown}, rewritten with two-space indents; nothing else there is removed or reordered:`,
+      `  These go into ${folder.shown}, rewritten with two-space indents; nothing else there is removed or reordered:`,
     );
     for (const e of add) env.print(`    ${describe(e)}`);
   }
-  if (retiredCount > 0) {
-    env.print("  These come out, since their scripts have gone and they would fail on every turn:");
-    for (const e of retired()) env.print(`    ${describe(e)}`);
+  if (legacyCount > 0) {
+    env.print(`  ${legacyCount} old per-script cockpit hooks come out, since the entry points run those scripts now.`);
   }
 }
 
@@ -131,20 +137,29 @@ export async function removeExtras(env: Env, paths: Paths, flags: Flags): Promis
 }
 
 async function removeHooks(env: Env, paths: Paths, confirm: (q: string) => Promise<boolean>): Promise<void> {
-  if (!existsSync(paths.claudeSettings)) return;
-  const loaded = loadSettings(paths);
+  for (const folder of claudeFolders(paths)) await removeHooksFrom(env, folder, confirm);
+}
+
+async function removeHooksFrom(
+  env: Env,
+  folder: ClaudeFolder,
+  confirm: (q: string) => Promise<boolean>,
+): Promise<void> {
+  if (!existsSync(folder.settings)) return;
+  const loaded = loadSettings(folder);
   if (!loaded.ok) {
-    env.print(`✗ ${paths.claudeSettingsShown} is ${loaded.error}; its hooks are left alone.`);
+    env.print(`✗ ${folder.shown} is ${loaded.error}; its hooks are left alone.`);
     return;
   }
-  const next = removeEntries(loaded.settings, [...wanted(), ...retired()], env.home);
+  const commands = [...wanted().map((e) => e.command), ...legacy()];
+  const next = removeCommands(loaded.settings, commands, env.home);
   if (next.removed === 0) return;
-  if (!(await confirm(`Remove the ${next.removed} cockpit hooks from ${paths.claudeSettingsShown}?`))) return;
-  if (!unchanged(paths, loaded)) {
-    env.print(`✗ ${paths.claudeSettingsShown} changed while uninstall waited, so nothing was written. Run it again.`);
+  if (!(await confirm(`Remove the ${next.removed} cockpit hooks from ${folder.shown}?`))) return;
+  if (!unchanged(folder, loaded)) {
+    env.print(`✗ ${folder.shown} changed while uninstall waited, so nothing was written. Run it again.`);
     return;
   }
-  env.print(`✓ backed up to ${backupSettings(paths, env.now())}`);
-  writeSettings(paths, next.settings);
-  env.print(`✓ removed ${next.removed} hooks`);
+  env.print(`✓ backed up to ${backupSettings(folder, env.now())}`);
+  writeSettings(folder, next.settings);
+  env.print(`✓ removed ${next.removed} hooks from ${folder.shown}`);
 }

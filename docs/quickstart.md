@@ -109,10 +109,12 @@ Setup asks about each of these. Each works without the others.
   ([by hand](#pull-request-chips-and-keeping-the-agents-panel)).
 - **Claude Code hooks**: amber "Asking" with the question, a row per
   subagent, a chip as soon as an agent opens a PR, and the "Made here"
-  list. Setup lists the entries it will add to `~/.claude/settings.json`
-  (or `$CLAUDE_CONFIG_DIR/settings.json` when that is set) and asks
-  before writing; it only ever adds, and keeps a copy of the old
-  file as `settings.json.cmux-cockpit.bak` ([by hand](#claude-code-hooks)).
+  list. Setup adds one entry point per event to the `settings.json` of
+  every Claude Code folder it finds: `~/.claude` when it exists, and
+  `$CLAUDE_CONFIG_DIR` when that is set. It lists what it will add to
+  each file and asks before writing, takes out the per-script entries
+  older versions added, touches nothing else, and keeps a copy of each
+  old file as `settings.json.cmux-cockpit.bak` ([by hand](#claude-code-hooks)).
 
 ## When something does not work
 
@@ -279,52 +281,37 @@ run `cmux reload-config` again.
 ### Claude Code hooks
 
 These hooks tell the sidebars what cmux cannot see. Each one runs only
-inside a cmux terminal and quietly does nothing elsewhere. The list lives
-in `scripts/setup/claude-hooks.json`, which setup merges in; a test keeps
-this block the same as that file. Add these to
-the `hooks` object of `~/.claude/settings.json`. Where you already have an
-array for an event (say `PreToolUse`), add these entries to it rather than
-replacing it, or your existing hooks stop running. If you run Claude Code
-with `CLAUDE_CONFIG_DIR` set, setup, doctor and uninstall use
-`$CLAUDE_CONFIG_DIR/settings.json` instead, and so should you:
+inside a cmux terminal and quietly does nothing elsewhere. Claude Code's
+settings hold one entry point per event, `scripts/hooks/dispatch.ts`,
+and the repo holds which scripts each event runs, in
+`scripts/hooks/routes.ts`. The entry point runs each of them as its own
+process, so one that fails or hangs never stops the others, and a change
+to the list takes effect without touching settings again.
+
+Setup, doctor and uninstall work on every Claude Code folder they find:
+`~/.claude` when it exists, and `$CLAUDE_CONFIG_DIR` when that is set.
+By hand, add these to the `hooks` object of `settings.json` in each of
+them (a test keeps this block the same as what setup writes). Where you
+already have an array for an event (say `PreToolUse`), add the entry to
+it rather than replacing it, or your existing hooks stop running:
 
 ```json
 {
   "hooks": {
-    "PreToolUse": [
-      { "matcher": "Agent", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] },
-      { "matcher": "AskUserQuestion|ExitPlanMode", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-notification.ts" }] }
-    ],
-    "PostToolUse": [
-      { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-pr.ts" }] },
-      { "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__update", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }] }
-    ],
-    "Stop": [
-      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-move.ts" }] }
-    ],
-    "UserPromptSubmit": [
-      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-rename.ts" }] }
-    ],
-    "SessionStart": [
-      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-rename.ts" }] }
-    ],
-    "SubagentStart": [
-      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
-    ],
-    "SubagentStop": [
-      { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-subagent.ts" }] }
-    ],
-    "PermissionRequest": [
-      { "matcher": "", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-notification.ts" }] }
-    ],
-    "Notification": [
-      { "matcher": "permission_prompt|elicitation_dialog|elicitation_url_dialog", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-notification.ts" }] }
-    ]
+    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/dispatch.ts PreToolUse" }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/dispatch.ts PostToolUse" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/dispatch.ts Stop" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/dispatch.ts UserPromptSubmit" }] }],
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/dispatch.ts SessionStart" }] }],
+    "SubagentStart": [{ "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/dispatch.ts SubagentStart" }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/dispatch.ts SubagentStop" }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/dispatch.ts PermissionRequest" }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/dispatch.ts Notification" }] }]
   }
 }
 ```
 
-What each script turns on:
+What each script in `routes.ts` turns on:
 
 - `report-notification.ts`: amber "Asking" with the question, instead of
   every stop reading as "Your turn".
@@ -337,10 +324,12 @@ What each script turns on:
 - `report-rename.ts`: a `/rename` in Claude Code renames the workspace
   too, on your next message, so its sidebar row shows the new name.
 
-An older list had a `Stop` hook running `report-mention.ts`. The script
-is gone, so that entry would fail at the end of every turn: run
-`npm run setup -- --hooks` to take it out (doctor flags it), or delete it
-by hand if you added the hooks that way.
+Older versions added each script to settings on its own, with its own
+matcher. Left beside the entry points, those would run their script
+twice: `npm run setup -- --hooks` takes them out (doctor names any file
+still holding them), or delete every entry naming a `report-*.ts` script
+by hand. One of them, `report-mention.ts`, is gone altogether and would
+fail at the end of every turn.
 
 ## The dock
 
