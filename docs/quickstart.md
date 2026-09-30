@@ -322,8 +322,8 @@ What each script in `routes.ts` turns on:
 - `report-move.ts`: what a waiting chat wants from you ("Run /clear now.")
   on its card, with a chip saying how big a job it is.
 - `report-rename.ts`: a `/rename` in Claude Code renames the workspace
-  too, when Claude's turn ends (or on your next message, if the session
-  was idle), so its sidebar row shows the new name. It
+  too, when Claude's turn finishes (or on your next message, if the session
+  was idle or you pressed Esc), so its sidebar row shows the new name. It
   also names each agent row in the agents panel: the `/rename`, else the
   session's first real prompt.
 

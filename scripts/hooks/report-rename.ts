@@ -4,13 +4,14 @@
 // reads it, so without this the row keeps its old name.
 //
 // Run by scripts/hooks/dispatch.ts on UserPromptSubmit, Stop and
-// SessionStart: the name moves when the turn a rename was made in ends,
-// on the next message after a rename made while idle, or when a renamed
-// session is resumed. A small file per session and workspace under config/renames/
-// holds how far into the transcript the hook has read, the latest rename
-// seen there and the last one it handled, so each message reads only what
-// was added since, and a name Jon later gives the workspace in cmux by hand
-// is not put back on every message. A name that matches a cmux group's name
+// SessionStart: the name moves when the turn a rename was made in finishes,
+// on the next message after a rename made while idle or in a turn cut short
+// (Esc or an error runs no Stop hook), or when a renamed session is resumed.
+// A small file per session and workspace under config/renames/ holds how far
+// into the transcript the hook has read, the latest rename seen there and
+// the last one it handled, so each run reads only what was added since, and
+// a name Jon later gives the workspace in cmux by hand is not put back on
+// every run. A name that matches a cmux group's name
 // is skipped: the cockpit takes a workspace titled after its group for the
 // group's generated placeholder (isGeneratedAnchor in src/cockpit/model.ts)
 // and would hide it. It never fails the hook: every problem is a note on
@@ -270,11 +271,18 @@ function alreadySaved(session: string, name: SavedName): boolean {
 }
 
 // Saves the session's name for the agents panel when it changed, returning
-// a note for stderr when the write failed; it is tried again next message.
+// a note for stderr when the write failed; it is tried again next run. A
+// held lock throws, and is caught here so the stamp still records a rename
+// already passed to cmux.
 function saveName(session: string, stamp: Stamp): string | null {
   const name = sessionName(stamp.seen, stamp.prompt);
   if (!name || alreadySaved(session, name)) return null;
-  const res = writeNames(STATE_PATH, (names) => withName(names, session, name));
+  let res: ReturnType<typeof writeNames>;
+  try {
+    res = writeNames(STATE_PATH, (names) => withName(names, session, name));
+  } catch (err) {
+    return `saving the name failed: ${errorText(err)}`;
+  }
   if (!res.ok) return `saving the name failed: ${res.error}`;
   if (res.changed) scheduleBuild("report-rename");
   return null;
@@ -282,7 +290,7 @@ function saveName(session: string, stamp: Stamp): string | null {
 
 // UserPromptSubmit runs before Claude Code writes the prompt to the
 // transcript, so the first one is taken from the event itself.
-function promptFromEvent(event: unknown): string | null {
+export function promptFromEvent(event: unknown): string | null {
   const prompt = field(event, "prompt");
   return field(event, "hook_event_name") === "UserPromptSubmit" && typeof prompt === "string"
     ? promptText(prompt)
@@ -295,13 +303,13 @@ function renameWorkspace(wsId: string, stamp: Stamp): string | null {
   const title = stamp.seen;
   if (!title || title === stamp.handled) return null;
   const groups = cmux(["--json", "workspace", "group", "list"]);
-  // Without the group list a clash cannot be ruled out, so try again next message.
+  // Without the group list a clash cannot be ruled out, so try again next run.
   if (!groups.ok) return `cmux group list failed: ${groups.err}`;
   if (!clashesWithGroup(title, groupNamesFrom(groups.out))) {
     const res = cmux(["workspace-action", "--action", "rename", "--workspace", wsId, "--title", title]);
     if (!res.ok) return `cmux rename failed: ${res.err}`;
   }
-  // Handled when skipped too, so a name that clashes is checked once, not every message.
+  // Handled when skipped too, so a name that clashes is checked once, not every run.
   stamp.handled = title;
   return null;
 }
