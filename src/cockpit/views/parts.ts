@@ -187,19 +187,6 @@ function prChip(c: () => PrChip, tap: PrTap): View {
           "regular",
         ),
     ).layoutPriority(2),
-    // The diff size last and faint, at the lowest priority, so on a narrow
-    // card it is what gets cut and the number and state show (issue #152).
-    when(
-      "pr-diff",
-      () => !!c().diff,
-      () =>
-        chipText(
-          () => c().diff,
-          () => C.faint,
-          true,
-          "regular",
-        ),
-    ),
   ];
   const glyph = Image("arrow.triangle.pull").font(9).color(fg);
   // The full card's PR has no tap of its own (issue #72): a click on it
@@ -314,6 +301,20 @@ export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap = "ope
     HStack({ spacing: 5 }, [
       one("size").layoutPriority(2),
       one("pr").layoutPriority(2),
+      // The PR's diff size beside its chip, faint and unframed. Outside the
+      // chip and below the branch's priority, so on a narrow card it is cut
+      // first and the branch keeps its width (issue #152).
+      when(
+        "pr-diff",
+        () => !!prById(chips()).diff,
+        () =>
+          chipText(
+            () => prById(chips()).diff,
+            () => C.faint,
+            false,
+            "regular",
+          ),
+      ).layoutPriority(-1),
       one("br"),
       one("port").layoutPriority(2),
       toReviewAction(w),

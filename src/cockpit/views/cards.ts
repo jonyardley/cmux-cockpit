@@ -162,7 +162,6 @@ export function compactCard(w: WsAccessor, key: string): View {
           () =>
             Text(() => pr()?.diff ?? "")
               .font(11.5)
-              .monospaced()
               .color(C.faint)
               .lineLimit(1)
               .truncation("tail"),
