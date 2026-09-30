@@ -250,11 +250,15 @@ describe("a turn that ended on Nothing for you", () => {
     assert.equal(status.agentOf(at("quietDecide", [waiting("quietDecide", 1060)]))?.status, "needs_input");
   });
 
-  it("is no ask: Ready once there is output, and nothing to dismiss", () => {
+  it("is no ask: Ready once there is output and no shell runs, and nothing to dismiss", () => {
     const w = at("quiet", [waiting("quiet", 1060)], { unread: 1 });
     assert.equal(needs.hasRealAsk(w), false);
     assert.equal(needs.isNeedsDismissed(w), false);
     assert.equal(status.isReady(w), true);
+  });
+
+  it("is Ready with unread output when the turn ended on a Your move line", () => {
+    assert.equal(status.isReady(at("quick", [stopped("quick", 1000)], { unread: 1 })), true);
   });
 
   it("leaves another session's agent alone", () => {

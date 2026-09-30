@@ -21,6 +21,16 @@ const shell = (id: string, session: string) => ({ id, session, startedEpoch: 100
     one: [shell("b1", "chat")],
     two: [shell("b1", "chat"), shell("b2", "chat")],
     other: [shell("b1", "someone-else")],
+    quiet: [shell("b1", "chat")],
+  },
+  moves: {
+    quiet: {
+      text: "the rounds take about 20 minutes, and I report what they show.",
+      epoch: 1000,
+      session: "chat",
+      idle: true,
+    },
+    quietDone: { text: "CI is running.", epoch: 1000, session: "chat", idle: true },
   },
 };
 
@@ -73,6 +83,18 @@ describe("background shells on the card", () => {
     const w = ws("one", { unread: 2, agents: [idle()] });
     assert.equal(status.isReady(w), true);
     assert.match(status.statusLine(w), /^Finished/);
+  });
+
+  it("stays Waiting, not Ready, on a Nothing for you turn while its shell runs", () => {
+    const a = agent("idle", { id: "chat", kind: "claude", sinceEpoch: 1000, lastActivityAt: 1000 });
+    const w = ws("quiet", { unread: 1, latestAt: 950, agents: [a] });
+    assert.equal(status.isReady(w), false);
+    assert.match(status.statusLine(w), /^Waiting .* · 1 shell$/);
+  });
+
+  it("is Ready on a Nothing for you turn once no shell runs, so a late failure still shows", () => {
+    const a = agent("idle", { id: "chat", kind: "claude", sinceEpoch: 1000, lastActivityAt: 1000 });
+    assert.equal(status.isReady(ws("quietDone", { unread: 1, latestAt: 950, agents: [a] })), true);
   });
 
   it("leaves a working chat as Working", () => {
