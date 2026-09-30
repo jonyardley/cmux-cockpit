@@ -7,10 +7,12 @@ import { beforeEach, describe, it } from "node:test";
 import { installRenderer } from "./support/renderer.ts";
 
 const r = installRenderer();
-const { agent, ws } = await import("./support/fixtures.ts");
+const { agent, group, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
 const model = await import("../src/cockpit/model.ts");
-const { chipsFitOneLine, chipsSplit, hasChipsRow, showsChipsRow } = await import("../src/cockpit/chips.ts");
+const { cardChips, chipsFitOneLine, chipsSplit, FULL_LINE_CHARS, hasChipsRow, showsChipsRow } = await import(
+  "../src/cockpit/chips.ts"
+);
 const { liveRunCount } = await import("../src/shared/subagents.ts");
 
 beforeEach(() => {
@@ -220,14 +222,6 @@ describe("showsChipsRow (issue #79)", () => {
     assert.equal(shows(ws("x", { ports: [5173] }), true), true);
   });
 
-  it("leaves a merged PR's branch out: the work is done", () => {
-    const chips = model.chipsFor(ws("x", { pr: { number: 7, status: "merged" }, branch: "feat" }), true);
-    assert.deepEqual(
-      chips.map((c) => c.id),
-      ["pr"],
-    );
-  });
-
   it("leaves the branch out when the card does", () => {
     assert.equal(shows(ws("x", { branch: "feat" }), false), false);
   });
@@ -236,6 +230,27 @@ describe("showsChipsRow (issue #79)", () => {
     for (const w of [ws("a"), ws("b", { pr: { number: 7 } }), ws("c", { branch: "feat" }), ws("d", { ports: [80] })]) {
       assert.equal(shows(w, true), hasChipsRow(w, true));
     }
+  });
+});
+
+describe("cardChips", () => {
+  const merged: PullRequest = { number: 7, status: "merged" };
+  const ids = (w: Workspace) => cardChips(w, true).map((c) => c.id);
+
+  it("leaves a merged card's clean branch out while Park or Close takes its room", () => {
+    assert.deepEqual(ids(ws("x", { pr: merged, branch: "feat" })), ["pr"]);
+    assert.deepEqual(ids(ws("x", { pr: { ...merged, status: "open" }, branch: "feat" })), ["pr", "br"]);
+  });
+
+  it("keeps a branch with uncommitted changes: its dot is the only sign of work left", () => {
+    assert.deepEqual(ids(ws("x", { pr: merged, branch: "feat", dirty: true })), ["pr", "br"]);
+  });
+
+  it("keeps the branch when no merged button shows", () => {
+    r.data.groups = [group("g-parked", "Parked", { anchorId: "anchor-parked" })];
+    const busy = ws("x", { pr: merged, branch: "feat", group: "g-parked", agents: [agent("working")] });
+    assert.deepEqual(ids(busy), ["pr", "br"], "in Parked with an agent working: no Park, no Close");
+    r.data.groups = [];
   });
 });
 
@@ -249,6 +264,13 @@ describe("chipsFitOneLine", () => {
     assert.equal(fits(ws("x", { pr: { ...pr, status: "closed" }, ports })), true, "a closed PR has no buttons");
     assert.equal(fits(ws("x", { pr, ports })), false, "Park and Close push it over");
     assert.equal(fits(ws("x", { pr, ports, pinned: true })), true, "a pinned card offers Park alone");
+  });
+
+  it("fits a merged full card's Park and Close beside its PR, but not beside ports too", () => {
+    const pr: PullRequest = { number: 1234, status: "merged" };
+    const full = (w: Workspace) => chipsFitOneLine(cardChips(w, true), w, FULL_LINE_CHARS);
+    assert.equal(full(ws("x", { pr, branch: "feat" })), true);
+    assert.equal(full(ws("x", { pr, branch: "feat", ports: [5173] })), false, "the buttons take their own line");
   });
 
   it("keeps a short PR and branch on one line", () => {

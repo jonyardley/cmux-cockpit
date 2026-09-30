@@ -1,7 +1,7 @@
 // Whether a card's chips row has anything to show (issue #79), so a card with
 // nothing there drops the row and the gap above it.
 
-import { offersClose, offersPark } from "./merged.ts";
+import { offersClose, offersMergedChip, offersPark } from "./merged.ts";
 import { type Chip, canFileForReview, chipsFor } from "./model.ts";
 
 /**
@@ -13,15 +13,30 @@ export function showsChipsRow(chips: readonly Chip[], w: Workspace | undefined):
   return chips.length > 0 || canFileForReview(w) || offersMergedChip(w);
 }
 
+/**
+ * The chips a card draws: chipsFor, less a merged card's branch while Park
+ * or Close takes its room. A branch with uncommitted changes stays, since
+ * its dot is the card's only sign of work left in the worktree.
+ */
+export function cardChips(w: Workspace | undefined, withBranch: boolean): Chip[] {
+  const chips = chipsFor(w, withBranch);
+  return offersMergedChip(w) ? chips.filter((c) => c.id !== "br" || c.dirty) : chips;
+}
+
 /** showsChipsRow for a card that has no chip list to hand. */
 export const hasChipsRow = (w: Workspace | undefined, withBranch: boolean): boolean =>
-  showsChipsRow(chipsFor(w, withBranch), w);
+  showsChipsRow(cardChips(w, withBranch), w);
 
 // Characters' worth of chips a project card fits on one line at the width
 // Jon keeps the sidebar (about 246pt inside the card, 11pt chip text). The
 // renderer gives no width to read, so a much narrower or wider sidebar
 // makes this a worse guess.
 const LINE_CHARS = 36;
+/**
+ * The full card's line, narrower by its glyph: set from the preview, where
+ * "#176 merged", Park and Close fill it with a few points spare.
+ */
+export const FULL_LINE_CHARS = 32;
 // A chip's frame and the gap after it, in characters.
 const FRAME_CHARS = 3;
 // The glyph before a PR or branch chip's words, with its gap.
@@ -41,9 +56,6 @@ function actionChars(w: Workspace | undefined): number {
   );
 }
 
-/** A merged card's Park or Close sits in its chips row, after the branch. */
-export const offersMergedChip = (w: Workspace | undefined): boolean => offersPark(w) || offersClose(w);
-
 function chipChars(c: Chip): number {
   if (c.id === "pr") {
     const words = c.tag.length + (c.state ? c.state.length + 1 : 0);
@@ -58,10 +70,10 @@ function chipChars(c: Chip): number {
  * Whether a card's chips fit on one line, estimated from their text, as the
  * renderer cannot measure.
  */
-export function chipsFitOneLine(chips: readonly Chip[], w: Workspace | undefined): boolean {
+export function chipsFitOneLine(chips: readonly Chip[], w: Workspace | undefined, lineChars = LINE_CHARS): boolean {
   let used = actionChars(w);
   for (const c of chips) used += chipChars(c);
-  return used <= LINE_CHARS;
+  return used <= lineChars;
 }
 
 /**

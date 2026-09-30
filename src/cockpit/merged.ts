@@ -67,21 +67,33 @@ export const offersClose = (w: Workspace | undefined): boolean =>
 export const offersPark = (w: Workspace | undefined): boolean =>
   !!w && isMerged(w) && !isKept(w) && !isAnchor(w) && laneOf(w) !== "parked";
 
+/** Park or Close shows, so the card has a merged button to lay out. */
+export const offersMergedChip = (w: Workspace | undefined): boolean => offersPark(w) || offersClose(w);
+
 /** Files a merged card into Parked. */
 export function parkMerged(w: Workspace | undefined): void {
   if (w && offersPark(w)) moveToLane(w, "parked");
 }
 
+// The merged buttons on the card now, in words: "Park and Close", "Park" or "".
+function shownButtons(w: Workspace | undefined): string {
+  const shown: string[] = [];
+  if (offersPark(w)) shown.push("Park");
+  if (offersClose(w)) shown.push("Close");
+  return shown.join(" and ");
+}
+
 /** The card menu's Keep item, named by what tapping it would do. */
 export function keepLabel(w: Workspace | undefined): string {
-  if (offersMergedActions(w)) return "Keep, hide Park and Close";
+  const shown = shownButtons(w);
+  if (shown) return "Keep, hide " + shown;
   return w && isMerged(w) && isKept(w) ? "Kept, Park and Close hidden" : "Keep: for a merged PR's buttons";
 }
 
 /** Hides a merged card's buttons for this PR; the card stays dimmed. */
 export function keepMerged(w: Workspace | undefined): void {
   const pr = w && prOf(w)?.number;
-  if (!w || !pr || !offersMergedActions(w)) return;
+  if (!w || !pr || !offersMergedChip(w)) return;
   kept.set(w.id, pr);
   bump();
   persistSet(`mergeKept.${w.id}`, pr);
