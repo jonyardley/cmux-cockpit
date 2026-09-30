@@ -8,8 +8,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
-import { notes, parsePayload, runAll } from "../scripts/hooks/dispatch.ts";
-import { matches, ROUTES, scriptsFor } from "../scripts/hooks/routes.ts";
+import { notes, parsePayload, runAll, sendBack } from "../scripts/hooks/dispatch.ts";
+import { matches, ROUTES, scriptsFor, sendersFor } from "../scripts/hooks/routes.ts";
 
 describe("matches", () => {
   it("takes missing, empty and * as everything", () => {
@@ -59,7 +59,7 @@ describe("scriptsFor", () => {
   });
 
   it("runs an unmatched route every time, even when the input did not parse", () => {
-    assert.deepEqual(scriptsFor("Stop", {}), ["report-move.ts", "report-rename.ts"]);
+    assert.deepEqual(scriptsFor("Stop", {}), ["report-move.ts", "report-rename.ts", "check-move.ts"]);
     assert.deepEqual(scriptsFor("PermissionRequest", { tool_name: "Bash" }), ["report-notification.ts"]);
     assert.deepEqual(scriptsFor("SessionStart", null), ["report-rename.ts"]);
     assert.deepEqual(scriptsFor("PreToolUse", null), []);
@@ -74,6 +74,35 @@ describe("scriptsFor", () => {
 
   it("covers every event the entry points are installed for", () => {
     for (const [event, routes] of Object.entries(ROUTES)) assert.ok(routes.length > 0, event);
+  });
+});
+
+describe("sendersFor", () => {
+  it("names only Stop's check-move, and nothing for any other event", () => {
+    assert.deepEqual(sendersFor("Stop", {}), ["check-move.ts"]);
+    assert.deepEqual(sendersFor("PreToolUse", { tool_name: "Agent" }), []);
+    const routes = { PreToolUse: [{ script: "x.ts", sendsBack: true as const }] };
+    assert.deepEqual(sendersFor("PreToolUse", {}, routes), [], "a marked route off Stop still cannot block");
+  });
+});
+
+describe("sendBack", () => {
+  const ran = { script: "check-move.ts", status: 0, timedOut: false, limitMs: 30_000, stderr: "" };
+  const block = JSON.stringify({ decision: "block", reason: "add the line" });
+
+  it("passes on a sender's block decision", () => {
+    assert.equal(sendBack([{ ...ran, stdout: block + "\n" }], ["check-move.ts"]), block);
+  });
+
+  it("ignores other scripts, failures, timeouts and anything that is not a block with a reason", () => {
+    const senders = ["check-move.ts"];
+    assert.equal(sendBack([{ ...ran, script: "report-move.ts", stdout: block }], senders), null);
+    assert.equal(sendBack([{ ...ran, status: 1, stdout: block }], senders), null);
+    assert.equal(sendBack([{ ...ran, timedOut: true, stdout: block }], senders), null);
+    assert.equal(sendBack([{ ...ran, stdout: "" }], senders), null);
+    assert.equal(sendBack([{ ...ran, stdout: "not json" }], senders), null);
+    assert.equal(sendBack([{ ...ran, stdout: '{"decision":"block"}' }], senders), null);
+    assert.equal(sendBack([{ ...ran, stdout: '{"decision":"approve","reason":"x"}' }], senders), null);
   });
 });
 
@@ -147,7 +176,7 @@ setInterval(() => {}, 1000);`,
   });
 
   it("tags each stderr line with its script, and names a silent failure or a timeout", () => {
-    const base = { script: "x.ts", status: 0, timedOut: false, limitMs: 30_000, stderr: "" };
+    const base = { script: "x.ts", status: 0, timedOut: false, limitMs: 30_000, stderr: "", stdout: "" };
     assert.deepEqual(notes(base), []);
     assert.deepEqual(notes({ ...base, status: 1, stderr: "a\n\nb\n" }), ["dispatch x.ts: a", "dispatch x.ts: b"]);
     assert.deepEqual(notes({ ...base, status: 2 }), ["dispatch x.ts: exited 2"]);
@@ -173,5 +202,14 @@ describe("dispatch.ts as Claude Code runs it", () => {
       assert.equal(r.status, 0, JSON.stringify(args));
       assert.equal(r.stdout, "");
     }
+  });
+
+  it("prints nothing on Stop outside a cmux workspace, whatever the reply", () => {
+    const env = { ...process.env };
+    delete env.CMUX_WORKSPACE_ID;
+    const input = JSON.stringify({ hook_event_name: "Stop", last_assistant_message: "Done." });
+    const r = spawnSync(process.execPath, ["scripts/hooks/dispatch.ts", "Stop"], { input, encoding: "utf8", env });
+    assert.equal(r.status, 0);
+    assert.equal(r.stdout, "");
   });
 });

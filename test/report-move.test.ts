@@ -43,6 +43,15 @@ describe("moveLine", () => {
     assert.equal(moveLine("- your move: go"), "go");
   });
 
+  it("takes up to four words between the label and its colon, since chats drift from it", () => {
+    assert.equal(moveLine("Nothing for you yet: CI is running on #2183."), "CI is running on #2183.");
+    assert.equal(moveLine("**Nothing for you right now:** the gate is running"), "the gate is running");
+    assert.equal(moveLine("Nothing for you until CI lands: it is queued"), "it is queued");
+    assert.equal(moveLine("Your move now: go"), "go");
+    assert.equal(moveLine("Nothing for you until the long gate run lands: x"), null, "five words is prose");
+    assert.equal(moveLine("Your move #2: go"), null, "only words sit between");
+  });
+
   it("is null without the label, and cuts a long line with an ellipsis", () => {
     assert.equal(moveLine("Nothing to do here."), null);
     assert.equal(moveLine("I made my move: done"), null);
@@ -183,6 +192,7 @@ describe("moveFrom", () => {
     });
     assert.deepEqual(moveFrom("Nothing for you: CI runs.\n\nYour move: go", 5), { text: "go", epoch: 5 });
     assert.equal(moveLine("I have nothing for you: fine"), null, "only as the line's label");
+    assert.equal(moveFrom("Nothing for you yet: CI runs.", 5)?.idle, true, "a drifted label is still idle");
   });
 
   it("is null when the reply has no move line", () => {

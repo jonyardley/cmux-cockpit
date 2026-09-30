@@ -24,9 +24,11 @@ import { readTail, replyFrom, sleep } from "./transcript.ts";
 
 // The line's label as Jon's rules write it, after any markdown the terminal
 // would not show (a quote, bold, a list marker): "Your move:" when the turn
-// waits on Jon, "Nothing for you:" when it waits on the agent.
+// waits on Jon, "Nothing for you:" when it waits on the agent. Up to four
+// words may sit before the colon, since chats drift from the exact label:
+// "Nothing for you yet:", "Your move now:".
 const MOVE_LINE =
-  /^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)?(your move|nothing for you)(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(.+)$/i;
+  /^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)?(your move|nothing for you)(?:\s+[a-z'’]+){0,4}?(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(.+)$/i;
 // A decision's heading: "**1. Where the card gets the line**", or the same
 // as a bullet, "- **1. Where the card gets the line**".
 const DECISION = /^\s*(?:[-*]\s+)?\*\*([1-9])[.)]\s/;
@@ -151,10 +153,12 @@ const TAIL_BYTES = 2 * 1024 * 1024;
 // How long to wait for the final reply to be flushed before the one reread.
 const RETRY_MS = 1500;
 
-// The turn's final reply: the event's own copy when Claude Code sends one,
-// else the transcript's, read again once if no reply ends it yet. A reply
-// that is there but has no move line is final: there is nothing to wait for.
-function finalReply(event: unknown): string {
+/**
+ * The turn's final reply: the event's own copy when Claude Code sends one,
+ * else the transcript's, read again once if no reply ends it yet. A reply
+ * that is there but has no move line is final: there is nothing to wait for.
+ */
+export function finalReply(event: unknown): string {
   const given = field(event, "last_assistant_message");
   if (typeof given === "string" && given) return given;
   const transcript = field(event, "transcript_path");

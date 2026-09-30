@@ -7,14 +7,17 @@
 // process with the same stdin, all at once, each with its own time limit.
 // One that fails, hangs or crashes never stops the others. It always exits
 // 0 and drops the scripts' stdout, so it can never block a tool or answer
-// a permission prompt; their stderr is passed on, each line tagged. Each
+// a permission prompt; their stderr is passed on, each line tagged. The one
+// exception is a Stop script routes.ts marks sendsBack: its block decision
+// is passed on, so the turn goes back to the chat (check-move.ts). Each
 // script runs in its own process group, so a time limit, or Claude Code
 // stopping this one, ends whatever the script started too.
 
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { scriptsFor } from "./routes.ts";
+import { field } from "./gh-command.ts";
+import { scriptsFor, sendersFor } from "./routes.ts";
 
 /** Each script's time limit; well inside Claude Code's 60 seconds for the hook as a whole. */
 export const SCRIPT_TIMEOUT_MS = 30_000;
@@ -27,6 +30,7 @@ export interface Ran {
   /** The limit it ran under, in milliseconds. */
   limitMs: number;
   stderr: string;
+  stdout: string;
 }
 
 // The process groups still running, so a stop can end them all.
@@ -48,12 +52,13 @@ export function stopAll(): void {
 function runOne(dir: string, script: string, input: string, limitMs: number): Promise<Ran> {
   return new Promise((done) => {
     const child = spawn(process.execPath, [join(dir, script)], {
-      stdio: ["pipe", "ignore", "pipe"],
+      stdio: ["pipe", "pipe", "pipe"],
       detached: true,
     });
     const pid = child.pid;
     if (pid !== undefined) running.add(pid);
     let stderr = "";
+    let stdout = "";
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
@@ -63,13 +68,17 @@ function runOne(dir: string, script: string, input: string, limitMs: number): Pr
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
     });
+    child.stdout.setEncoding("utf8");
+    child.stdout.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
     child.on("error", (err) => {
       stderr += err.message;
     });
     child.on("close", (status) => {
       clearTimeout(timer);
       if (pid !== undefined) running.delete(pid);
-      done({ script, status, timedOut, limitMs, stderr });
+      done({ script, status, timedOut, limitMs, stderr, stdout });
     });
     // A script that exits without reading its input must not crash this one.
     child.stdin.on("error", () => {});
@@ -94,6 +103,22 @@ export function parsePayload(input: string): Record<string, unknown> | null {
   }
 }
 
+/**
+ * The block decision to hand Claude Code, as a JSON line, or null. Only from
+ * a script in `senders` that finished cleanly and printed a decision of
+ * "block" with a reason; the first such one wins.
+ */
+export function sendBack(ran: readonly Ran[], senders: readonly string[]): string | null {
+  for (const r of ran) {
+    if (!senders.includes(r.script) || r.status !== 0 || r.timedOut) continue;
+    const out = parsePayload(r.stdout.trim());
+    const reason = field(out, "reason");
+    if (field(out, "decision") === "block" && typeof reason === "string" && reason)
+      return JSON.stringify({ decision: "block", reason });
+  }
+  return null;
+}
+
 /** The stderr lines worth passing on for one script, tagged with its name. */
 export function notes(r: Ran): string[] {
   const lines = r.stderr
@@ -116,10 +141,13 @@ if (import.meta.main) {
   try {
     const event = process.argv[2] ?? "";
     const input = readFileSync(0, "utf8");
-    const scripts = scriptsFor(event, parsePayload(input));
-    for (const r of await runAll(import.meta.dirname, scripts, input)) {
+    const payload = parsePayload(input);
+    const ran = await runAll(import.meta.dirname, scriptsFor(event, payload), input);
+    for (const r of ran) {
       for (const line of notes(r)) console.error(line);
     }
+    const decision = sendBack(ran, sendersFor(event, payload));
+    if (decision) console.log(decision);
   } catch (err) {
     console.error(`dispatch: ${err instanceof Error ? err.message : String(err)}`);
   }
