@@ -231,20 +231,10 @@ describe("touchedFrom", () => {
   const UUID = "e9937512-be18-4567-8e49-e43617e3393c";
   const LINK = `https://claude.ai/code/artifact/${UUID}`;
   const container = { kind: "project", id: UUID };
-
-  it("touches the link an Artifact open names", () => {
-    assert.equal(touchedFrom(artifact({ action: "open", url: DOC })), DOC);
-  });
-
-  it("touches nothing for other Artifact actions, or an open without a claude.ai link", () => {
-    for (const action of ["read", "list", "pin", "publish"]) {
-      assert.equal(touchedFrom(artifact({ action, url: DOC })), null, action);
-    }
-    assert.equal(touchedFrom(artifact({ action: "open", url: "https://example.com/artifact/x" })), null);
-  });
+  const update = "mcp__claude_ai_Claude_Docs__update";
+  const batch = "mcp__claude_ai_Claude_Docs__batch";
 
   it("touches the doc a Docs update edits, by its container or a ref to the doc", () => {
-    const update = "mcp__claude_ai_Claude_Docs__update";
     const edit = { ref: { object: "node", id: "cc5b" }, container, payload: {} };
     assert.equal(touchedFrom(docs(update, edit, "ok")), LINK);
     assert.equal(touchedFrom(docs(update, { ref: { object: "project", id: UUID }, payload: {} }, "ok")), LINK);
@@ -252,26 +242,28 @@ describe("touchedFrom", () => {
   });
 
   it("touches the doc a batch edits, but not one a batch creates", () => {
-    const batch = "mcp__claude_ai_Claude_Docs__batch";
     assert.equal(touchedFrom(docs(batch, { container, batch: [{}] }, "ok")), LINK);
     assert.equal(touchedFrom(docs(batch, createDoc, `${DOC}`)), null);
   });
 
-  it("touches nothing for a doc id that could not be a link, other tools or other events", () => {
-    const batch = "mcp__claude_ai_Claude_Docs__batch";
-    assert.equal(touchedFrom(docs(batch, { container: { kind: "project", id: "a/b" } }, "ok")), null);
+  it("does not count opening or reading as work on it", () => {
+    assert.equal(touchedFrom(artifact({ action: "open", url: DOC })), null);
     assert.equal(touchedFrom(docs("mcp__claude_ai_Claude_Docs__read", { container }, "ok")), null);
-    assert.equal(touchedFrom({ ...artifact({ action: "open", url: DOC }), hook_event_name: "PreToolUse" }), null);
+  });
+
+  it("touches nothing for a doc id that could not be a link, other events or junk", () => {
+    assert.equal(touchedFrom(docs(batch, { container: { kind: "project", id: "a/b" } }, "ok")), null);
+    assert.equal(touchedFrom({ ...docs(update, { container }, "ok"), hook_event_name: "PreToolUse" }), null);
     assert.equal(touchedFrom(null), null);
   });
 });
 
 describe("applyTouch", () => {
-  const saved = (url: string, epoch: number): SavedPublished => ({
+  const saved = (url: string, epoch: number, workspace = "old"): SavedPublished => ({
     url,
     title: "Kept",
     kind: "doc",
-    workspace: "old",
+    workspace,
     epoch,
   });
 
@@ -286,6 +278,17 @@ describe("applyTouch", () => {
   it("adds nothing for a link with no saved entry, but still prunes", () => {
     const start = { [PAGE]: saved(PAGE, NOW - MAX_AGE_S - 1) };
     assert.deepEqual(applyTouch(start, DOC, "w2", NOW), {});
+  });
+
+  it("never brings back an entry already past seven days", () => {
+    assert.deepEqual(applyTouch({ [DOC]: saved(DOC, NOW - MAX_AGE_S - 1) }, DOC, "w2", NOW), {});
+  });
+
+  it("leaves the map alone for a touch within a minute of the last from the same workspace", () => {
+    const start = { [DOC]: saved(DOC, NOW - 59, "w2") };
+    assert.equal(applyTouch(start, DOC, "w2", NOW), start);
+    assert.equal(applyTouch(start, DOC, "w3", NOW)[DOC]?.workspace, "w3", "another workspace still moves it");
+    assert.equal(applyTouch({ [DOC]: saved(DOC, NOW - 60, "w2") }, DOC, "w2", NOW)[DOC]?.epoch, NOW);
   });
 });
 
@@ -303,7 +306,8 @@ describe("the hook as Claude Code runs it", () => {
   });
 
   it("exits 0 on a touch outside a cmux workspace, saying nothing", () => {
-    const result = run(JSON.stringify(artifact({ action: "open", url: DOC })));
+    const edit = { container: { kind: "project", id: "e9937512-be18-4567-8e49-e43617e3393c" }, batch: [{}] };
+    const result = run(JSON.stringify(docs("mcp__claude_ai_Claude_Docs__batch", edit, "ok")));
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
   });

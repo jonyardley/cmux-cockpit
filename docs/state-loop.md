@@ -400,20 +400,27 @@ HTML file's `<title>` (only its first 256 KB is read), then
 `tool_input.container.create.name` for a doc. It never fails the hook: a
 problem is a line on stderr and exit 0.
 
-Working on something already saved touches it: an Artifact `open`, a
-Docs `update`, or a `batch` whose `tool_input.container.id` names an
-existing doc. The doc's id is the `<uuid>` of its
-`claude.ai/code/artifact/<uuid>` link, the form a Docs create returns. A
-touch moves the entry to now and to the workspace doing the work, title
-kept, so a doc made days ago and edited today reads as this workspace's.
-These calls carry no title, so a link with no saved entry adds nothing.
+Editing a doc already saved touches it: a Docs `update`, or a `batch`
+whose `tool_input.container.id` names an existing doc. The doc's id is the
+`<uuid>` of its `claude.ai/code/artifact/<uuid>` link, the form a Docs
+create returns. A touch moves the entry to now and to the workspace doing
+the work, title kept, so a doc made days ago and edited today reads as
+this workspace's. Opening or reading is not work on it and touches
+nothing. An edit carries no title, so a link with no saved entry adds
+nothing, an entry past seven days stays gone, and a touch within a minute
+of the last from the same workspace is not saved, so filling a doc a
+section at a time does not rebuild on every call.
 
-Two gaps are known. One artifact has two link forms,
+These gaps are known. One artifact has two link forms,
 `claude.ai/artifact/<id>` and `claude.ai/code/artifact/<uuid>`, with
 different ids and no local way to map one to the other, so republishing
 under the other form adds a second entry. And an update that names its
 `url` is recorded without reading the result, so a refused republish
 (which returns the live version rather than failing) still counts.
+Touches share the second gap: a refused edit still moves the entry. And
+they miss some work: a rename keeps the saved title (the update tool's
+rename input is not documented), and Docs' `create` tool, which adds a
+tab, comment or upload, is not hooked, so it touches nothing.
 
 ## Lanes that move themselves
 

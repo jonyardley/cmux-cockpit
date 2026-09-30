@@ -769,7 +769,7 @@ export interface MadeEntry {
   title: string;
   /** The project of the workspace it was made in; none when that workspace has gone. */
   project: Project;
-  /** Made in the selected workspace. */
+  /** Made, or last edited, in the selected workspace. */
   here: boolean;
   epoch: number;
 }
@@ -856,5 +856,5 @@ export const emptyNote = computed((): string => {
 /** Other workspaces' titles sit a step back, so this workspace's lead. */
 export const madeTitleColor = (e: MadeEntry): string => (e.here ? T.text : T.secondary);
 
-/** A Made here row's age, "3h" since it was last published. */
+/** A Made here row's age, "3h" since it was last published or edited. */
 export const madeAge = (e: MadeEntry): string => ageSince(e.epoch);

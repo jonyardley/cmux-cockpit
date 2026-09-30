@@ -230,9 +230,10 @@ export interface SavedPublished {
   /** Its title, at most MAX_LABEL characters. */
   title: string;
   kind: PublishedKind;
-  /** The cmux workspace the agent ran in (CMUX_WORKSPACE_ID). */
+  /** The cmux workspace the agent ran in (CMUX_WORKSPACE_ID) when it last
+   * published it, or edited it (a doc). */
   workspace: string;
-  /** Epoch seconds it was last published. */
+  /** Epoch seconds it was last published, or edited (a doc). */
   epoch: number;
 }
 
