@@ -16,7 +16,7 @@ import { beforeEach, describe, it } from "node:test";
   subagents: {},
   published: {},
   prOrigins: {},
-  asking: { asks: { reason: "allow git push?", epoch: 1000 } },
+  asking: { asks: { reason: "allow git push?", epoch: 1000 }, quietAsks: { reason: "allow git push?", epoch: 1060 } },
   moves: {
     quick: { text: "the work is finished. Run /clear now.", epoch: 1000, session: "s-quick" },
     decide: { text: 'reply "1b 2a".', epoch: 1000, session: "s-decide", decisions: 2, leans: "1b 2a" },
@@ -24,6 +24,10 @@ import { beforeEach, describe, it } from "node:test";
     asks: { text: "go", epoch: 1000, session: "s-asks" },
     owned: { text: "go", epoch: 1000, session: "sessA" },
     bare: { text: "go", epoch: 1000 },
+    quiet: { text: "CI is running on #2171. I report when it lands.", epoch: 1000, session: "s-quiet", idle: true },
+    legacy: { text: "nothing. Waiting until CI lands.", epoch: 1000, session: "s-legacy" },
+    quietAsks: { text: "CI is running.", epoch: 1000, session: "s-quietAsks", idle: true },
+    quietDecide: { text: "CI is running.", epoch: 1000, session: "s-quietDecide", idle: true, decisions: 2 },
   },
   ui: {},
 };
@@ -32,6 +36,7 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const move = await import("../src/shared/move.ts");
+const needs = await import("../src/shared/needs.ts");
 const status = await import("../src/cockpit/status.ts");
 const cockpit = await import("../src/cockpit/model.ts");
 
@@ -71,6 +76,8 @@ describe("moveSize", () => {
   });
 
   it("gives no size when nothing waits on Jon", () => {
+    assert.equal(move.moveSize({ text: "CI is running; say go if you want it sooner.", idle: true }), null);
+    assert.equal(move.moveSize({ text: "nothing. Waiting until CI lands." }), null);
     assert.equal(move.moveSize({ text: "PR #130 is merged; nothing waits on you." }), null);
     assert.equal(move.moveSize({ text: "done, nothing else waits on you. Read the notes if curious." }), null);
   });
@@ -198,5 +205,60 @@ describe("the card", () => {
     const plain = cockpit.chipsFor(at("plain", [waiting("plain", 1000)]), true);
     assert.deepEqual(plain, []);
     assert.equal(status.cardDetail(at("plain", [waiting("plain", 1000)])), "tell me which one you meant.");
+  });
+});
+
+describe("a turn that ended on Nothing for you", () => {
+  it("asks nothing when saved as idle, or in the older wordings, but not for nothing follows", () => {
+    assert.equal(move.asksNothing({ text: "CI is running.", idle: true }), true);
+    assert.equal(move.asksNothing({ text: "nothing. Waiting until CI lands." }), true);
+    assert.equal(move.asksNothing({ text: "Nothing: the pass is running." }), true);
+    assert.equal(move.asksNothing({ text: "PR #130 is merged; nothing waits on you." }), true);
+    assert.equal(move.asksNothing({ text: "the work is finished and nothing follows. /clear now." }), false);
+    assert.equal(move.asksNothing({ text: "Nothing follows: /clear now." }), false);
+    assert.equal(move.asksNothing({ text: "nothing pending. /clear now." }), false);
+    assert.equal(move.asksNothing({ text: "nothing to decide, say go." }), false);
+    assert.equal(move.asksNothing({ text: "CI is running.", idle: true, decisions: 1 }), false, "decisions still wait");
+    assert.equal(move.asksNothing({ text: "say go." }), false);
+  });
+
+  it("reads as idle once the nudge lands, since the turn ended, and leaves Needs you", () => {
+    const w = at("quiet", [waiting("quiet", 1060)]);
+    r.data.workspaces = [w];
+    const a = status.agentOf(w);
+    assert.equal(a?.status, "idle");
+    assert.equal(a?.sinceEpoch, 1000, "idle since the turn ended, not since the nudge");
+    assert.equal(cockpit.needsList().length, 0);
+    assert.equal(status.cardDetail(w), "CI is running on #2171. I report when it lands.");
+    assert.deepEqual(cockpit.chipsFor(w, true), [], "no size chip");
+  });
+
+  it("reads the older Your move: nothing line the same way", () => {
+    assert.equal(status.agentOf(at("legacy", [waiting("legacy", 1060)]))?.status, "idle");
+  });
+
+  it("still needs Jon on a Your move line, a new prompt since, or a real ask", () => {
+    assert.equal(status.agentOf(at("quick", [waiting("quick", 1060)]))?.status, "needs_input");
+    assert.equal(status.agentOf(at("quiet", [waiting("quiet", 1160)], { latestAt: 1100 }))?.status, "needs_input");
+    const asks = waiting("quietAsks", 1060);
+    assert.equal(needs.effectiveAgent(asks, at("quietAsks", [asks])).status, "needs_input");
+  });
+
+  it("still needs Jon on a later stop with no prompt between, or with decisions laid out", () => {
+    // The agent woke on its own after CI and stopped to ask, well past the nudge.
+    assert.equal(status.agentOf(at("quiet", [waiting("quiet", 1000 + move.NUDGE_WINDOW + 1)]))?.status, "needs_input");
+    assert.equal(status.agentOf(at("quietDecide", [waiting("quietDecide", 1060)]))?.status, "needs_input");
+  });
+
+  it("is no ask: Ready once there is output, and nothing to dismiss", () => {
+    const w = at("quiet", [waiting("quiet", 1060)], { unread: 1 });
+    assert.equal(needs.hasRealAsk(w), false);
+    assert.equal(needs.isNeedsDismissed(w), false);
+    assert.equal(status.isReady(w), true);
+  });
+
+  it("leaves another session's agent alone", () => {
+    const other = agent("needs_input", { id: "s-other", kind: "claude", sinceEpoch: 1060, lastActivityAt: 1060 });
+    assert.equal(status.agentOf(at("quiet", [other]))?.status, "needs_input");
   });
 });

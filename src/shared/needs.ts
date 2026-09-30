@@ -3,9 +3,11 @@
 // when Jon has dismissed it. The sidebars run in separate contexts, so each
 // holds its own dismissals, and a reload forgets them (issues #3 and #5).
 
-import type { SavedAsk } from "../../scripts/state-config.ts";
+import type { SavedAsk, SavedMove } from "../../scripts/state-config.ts";
 import { sinceOrActivity } from "./activity.ts";
+import { quietTurn } from "./move.ts";
 import { persistSet, SAVED_STATE } from "./persist.ts";
+import { savedFor } from "./saved.ts";
 
 /** Seconds between an agent's last activity and a needs_input that is only a nudge. */
 export const NUDGE_GAP = 45;
@@ -42,9 +44,13 @@ const dismissed = new Map<string, Map<string, number>>(
 const [tick, setTick] = signal(0);
 const bump = () => setTick(tick() + 1);
 
-// Real asks only: a nudge already reads as idle, so there is nothing to dismiss.
+// A needs_input that is not Jon's: the idle nudge, or the nudge on a turn
+// that ended on "Nothing for you" (quietOf).
+const notJons = (a: Agent, w: Workspace | undefined): boolean => isIdleNudge(a, w) || quietOf(a, w) !== null;
+
+// Real asks only: a nudge or a quiet turn already reads as idle, so there is nothing to dismiss.
 const asking = (w: Workspace | undefined): Agent[] =>
-  (w?.agents ?? []).filter((a) => a?.status === "needs_input" && !isIdleNudge(a, w));
+  (w?.agents ?? []).filter((a) => a?.status === "needs_input" && !notJons(a, w));
 
 function isDismissed(w: Workspace | undefined, a: Agent): boolean {
   tick();
@@ -67,25 +73,22 @@ function prune(w: Workspace): void {
   if (!byAgent.size) dismissed.delete(w.id);
 }
 
-/** The agent as the sidebars show it: needs_input reads as idle when it is a nudge or dismissed. */
+/**
+ * The agent as the sidebars show it: needs_input reads as idle when it is a
+ * nudge, dismissed, or a turn that ended on "Nothing for you".
+ */
 export function effectiveAgent(a: Agent, w?: Workspace): Agent {
   if (a.status !== "needs_input") return a;
   // A nudge's idle spell began when the turn ended, not when the nudge landed.
   if (isIdleNudge(a, w) && a.lastActivityAt) return { ...a, status: "idle", sinceEpoch: a.lastActivityAt };
+  // A turn that ended on "Nothing for you" waits on the agent, not Jon: idle
+  // since that turn ended, not since the nudge.
+  const quiet = quietOf(a, w);
+  if (quiet) return { ...a, status: "idle", sinceEpoch: quiet.epoch };
   return isIdleNudge(a, w) || isDismissed(w, a) ? { ...a, status: "idle" } : a;
 }
 
 // --- Asking or your turn (issue #81) -----------------------------------------------------
-
-/**
- * Seconds allowed between a hook's timestamp and cmux's for the same event.
- * A Claude Code hook (an ask, a move) and cmux's own hook fire on one event,
- * so their stamps land within a second or so of each other either way. Small
- * on purpose: an ask from before the agent went back to work must never
- * colour the turn end that follows it, and that takes at least an approval,
- * the tool run and a reply.
- */
-export const HOOK_SLACK = 3;
 
 // wsId -> the last ask its agent made, fixed at build. A test can seed
 // __STATE__ from before this map existed, so it may be missing at runtime.
@@ -121,19 +124,10 @@ function isOwnSaved(saved: { session?: string }, a: Agent, w: Workspace): boolea
   return !owned || a.id === session;
 }
 
-/**
- * A hook's saved entry (an ask, a move) when it explains `a` from `since` on:
- * saved no earlier than `since`, HOOK_SLACK aside, and `a`'s by `owns`. The
- * one place the slack rule lives.
- */
-export function savedFor<T extends { epoch: number; session?: string }>(
-  saved: T | undefined,
-  a: Agent,
-  w: Workspace,
-  since: number,
-  owns: (saved: T, a: Agent, w: Workspace) => boolean,
-): T | null {
-  return saved && saved.epoch >= since - HOOK_SLACK && owns(saved, a, w) ? saved : null;
+// The move behind `a`'s nudge when that turn ended on "Nothing for you"
+// (shared/move.ts), unless a fresh saved ask says it is really asking.
+function quietOf(a: Agent, w: Workspace | undefined): SavedMove | null {
+  return a.status === "needs_input" && !freshAsk(a, w) ? quietTurn(a, w) : null;
 }
 
 // The saved ask that explains `a`'s current needs_input spell, if any.

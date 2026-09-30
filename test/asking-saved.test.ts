@@ -27,6 +27,7 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const needs = await import("../src/shared/needs.ts");
+const { HOOK_SLACK } = await import("../src/shared/saved.ts");
 const status = await import("../src/cockpit/status.ts");
 const cockpit = await import("../src/cockpit/model.ts");
 const m = await import("../src/agents/model.ts");
@@ -47,11 +48,11 @@ describe("askReason", () => {
     const w = ws("wA");
     assert.equal(needs.askReason(waiting(1000), w), "allow git push?");
     assert.equal(needs.askReason(waiting(990), w), "allow git push?", "an ask heard after the spell began");
-    assert.equal(needs.askReason(waiting(1000 + needs.HOOK_SLACK), w), "allow git push?", "within the slack");
+    assert.equal(needs.askReason(waiting(1000 + HOOK_SLACK), w), "allow git push?", "within the slack");
   });
 
   it("is null once the spell began after the ask: the agent worked again and finished", () => {
-    assert.equal(needs.askReason(waiting(1001 + needs.HOOK_SLACK), ws("wA")), null);
+    assert.equal(needs.askReason(waiting(1001 + HOOK_SLACK), ws("wA")), null);
   });
 
   it("is null without a saved ask, a start time, a needs_input or an agent", () => {

@@ -4,8 +4,8 @@
 // through the saved state, never through the message itself.
 
 import type { SavedMove } from "../../scripts/state-config.ts";
-import { savedFor } from "./needs.ts";
 import { SAVED_STATE } from "./persist.ts";
+import { savedFor } from "./saved.ts";
 
 // wsId -> the move its chat last ended a turn on, fixed at build. A test can
 // seed __STATE__ from before this map existed, so it may be missing at runtime.
@@ -44,6 +44,42 @@ export function waitingMove(a: Agent | null | undefined, w: Workspace | undefine
   return savedFor(savedMoveFor(w.id), a, w, promptAt, ownsMove);
 }
 
+// Nothing to answer, so no size. "Nothing follows" is different: it ends in /clear.
+const NOTHING_WAITS = /nothing (?:else )?waits on you/i;
+// "Your move: nothing. Waiting until CI lands.": the bare word, then a stop.
+// "nothing pending, /clear now" and "nothing follows" still ask something.
+const NOTHING_FIRST = /^nothing[.:]/i;
+
+/**
+ * True when the move asks nothing of Jon: the reply ended on "Nothing for
+ * you:" (saved as idle), or on the older "Your move: nothing. Waiting until
+ * X." or "nothing waits on you". "Nothing follows" is not one: it ends in
+ * /clear. A reply that laid out decisions always asks something, whatever
+ * its last line says.
+ */
+export const asksNothing = (m: Pick<SavedMove, "text" | "idle" | "decisions">): boolean =>
+  !((m.decisions ?? 0) > 0) && (m.idle === true || NOTHING_WAITS.test(m.text) || NOTHING_FIRST.test(m.text));
+
+/**
+ * How long after a saved turn end the idle_prompt nudge may turn it into
+ * needs_input: about 60s on cmux 0.64.25 (docs/state-loop.md), doubled.
+ */
+export const NUDGE_WINDOW = 120;
+
+/**
+ * The move behind `a`'s needs_input when it asks nothing of Jon, or null.
+ * Pass `a` as cmux sends it, and only when it is not asking: the idle nudge
+ * lands about 60s after a turn that ended on "Nothing for you", and that
+ * turn waits on the agent's own background work, not on Jon. Only that
+ * nudge: a later needs_input with no prompt between (the agent woke on its
+ * own and stopped to ask) is past NUDGE_WINDOW and still needs him.
+ */
+export function quietTurn(a: Agent, w: Workspace | undefined): SavedMove | null {
+  if (a.status !== "needs_input" || !a.sinceEpoch) return null;
+  const m = waitingMove(a, w, false);
+  return m && asksNothing(m) && a.sinceEpoch - m.epoch <= NUDGE_WINDOW ? m : null;
+}
+
 /**
  * How big answering a move is: "decide" when the reply laid out numbered
  * decisions, "review" when Jon reads something first (a link, "read",
@@ -56,12 +92,10 @@ export type MoveSize = "quick" | "decide" | "review";
 // A bare "#N" is only a reference ("see #2044"), so it is no clue.
 const REVIEW = /https?:\/\/|claude\.ai\/|\b(?:read|review|look at)\b/i;
 const QUICK = /\/clear\b|\bgo\b|(?:^|\s)!\s?\w|\bpaste\b|nothing follows|under (?:a|one|two) minutes?/i;
-// Nothing to answer, so no size. "Nothing follows" is different: it ends in /clear.
-const NOTHING_WAITS = /nothing (?:else )?waits on you/i;
 
-export function moveSize(m: Pick<SavedMove, "text" | "decisions">): MoveSize | null {
+export function moveSize(m: Pick<SavedMove, "text" | "decisions" | "idle">): MoveSize | null {
   if ((m.decisions ?? 0) > 0) return "decide";
-  if (NOTHING_WAITS.test(m.text)) return null;
+  if (asksNothing(m)) return null;
   if (REVIEW.test(m.text)) return "review";
   if (QUICK.test(m.text)) return "quick";
   return null;
