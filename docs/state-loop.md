@@ -311,11 +311,14 @@ only when a subagent event rebuilds: the `pr-poll-turn` and
 select, so a done row or a crashed run clears on the next poll even when
 nothing reports a new subagent event in between.
 
-It is fed by three hooks in `~/.claude/settings.json` (or
-`$CLAUDE_CONFIG_DIR/settings.json` when that is set), on `PreToolUse`
-(`Agent`), `SubagentStart` and `SubagentStop`.
+It is fed by three Claude Code events: `PreToolUse` (on `Agent`),
+`SubagentStart` and `SubagentStop`. Claude Code's settings hold one entry
+point per event, `scripts/hooks/dispatch.ts`, and `scripts/hooks/routes.ts`
+lists the scripts each event runs and the matcher that picks them; that
+list, not the settings, is where `report-subagent.ts` is wired to those
+three events.
 
-The registration is in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
+The entry points are in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
 the one copy of it.
 
 Each run gets the event as JSON on stdin and reads the workspace from
