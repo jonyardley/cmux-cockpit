@@ -88,6 +88,7 @@ it("lanes: every card state", () => {
     ws("ended", {
       title: "Ended agent",
       group: "g-review",
+      pinned: true,
       agents: [agent("ended", { sinceEpoch: ago(900), lastActivityAt: ago(900) })],
     }),
     ws("idle", {

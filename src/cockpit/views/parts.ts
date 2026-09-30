@@ -106,13 +106,14 @@ function readyPill(w: WsAccessor): View {
 
 // The pin at the far right of a pinned workspace's title row: faint, so it
 // reads as a property, never a state. Behind a when(), so it takes no slot
-// otherwise.
+// otherwise. No layout priority: an image cannot shrink, and the title keeps
+// first claim on the width. Not a control: unpinning stays in the menu.
 export function pinMark(w: WsAccessor): View {
   return when(
     "pinned",
     () => !!w()?.pinned,
     () => Image("pin.fill").font(9.5).color(C.faint),
-  ).layoutPriority(2);
+  );
 }
 
 // Title row shared by the cards and the Projects row: title takes the
