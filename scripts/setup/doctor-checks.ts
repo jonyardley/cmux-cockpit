@@ -133,11 +133,12 @@ export const buildCheck: Probe = (_env, paths) => {
   const built = ["cockpit.js", "agents.js"].map((f) => join(paths.sidebars, f));
   const missing = built.filter((f) => !existsSync(f));
   if (missing.length > 0) return fail(label, "the sidebars are not built", "npm run build", true);
-  const oldest = Math.min(...built.map((f) => statSync(f).mtimeMs));
-  if (oldest < newest(buildInputs(paths))) {
+  // The build's own mark, since a bundle it left unchanged keeps its old time.
+  const mark = statSync(paths.lastBuild, { throwIfNoEntry: false });
+  if (!mark || mark.mtimeMs < newest(buildInputs(paths))) {
     return fail(label, "older than src/, the scripts or config/", "npm run build", true);
   }
-  return pass(label, "sidebars/ is newer than what it is built from", true);
+  return pass(label, "the last build is newer than what it is built from", true);
 };
 
 export const helperCheck: Probe = (env, paths) => {

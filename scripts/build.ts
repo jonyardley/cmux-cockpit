@@ -18,19 +18,19 @@
 // (docs/state-loop.md).
 //
 // A bundle is written only when its bytes differ from the one on disk
-// (write-if-changed.ts), since every write reloads that sidebar in cmux.
+// (write-if-changed.ts), and each carries only the saved state it reads
+// (bundle.ts), since every write reloads that sidebar in cmux.
 //
 //   node scripts/build.ts    build once
 
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { build } from "esbuild";
+import { bundleOptions, ENTRIES } from "./bundle.ts";
 import { mergeProjects, type Project, validateProjects } from "./projects-config.ts";
 import { emptyState, isRecord, type State, validateState } from "./state-config.ts";
 import { ensureUrlToken, keepUnreadableCopy, unreadableCopyOf } from "./state-url.ts";
-import { writeIfChanged } from "./write-if-changed.ts";
-
-const ENTRIES = ["agents", "cockpit"] as const;
+import { BUILT_MARK, touchBuilt, writeIfChanged } from "./write-if-changed.ts";
 
 function loadProjects(): readonly Project[] {
   const real = "config/projects.json";
@@ -124,26 +124,9 @@ const projects = withExpandedRoots(merged.projects);
 const state: State = { ...saved, projects: merged.kept };
 
 for (const name of ENTRIES) {
-  const outfile = `sidebars/${name}.js`;
-  const result = await build({
-    entryPoints: [`src/${name}/index.ts`],
-    outfile,
-    bundle: true,
-    // esm with no exports is a flat script: no wrapper, top-level sidebar().
-    format: "esm",
-    target: "es2022",
-    platform: "neutral",
-    charset: "utf8",
-    legalComments: "none",
-    banner: { js: `// GENERATED from src/${name}/ by \`npm run build\`. Do not edit.` },
-    define: {
-      __PROJECTS__: JSON.stringify(projects),
-      __STATE__: JSON.stringify(state),
-      __STATE_UNREADABLE__: JSON.stringify(unreadable),
-      __URL_TOKEN__: JSON.stringify(urlToken),
-    },
-    logLevel: "warning",
-    write: false,
-  });
+  const result = await build(bundleOptions(name, { projects, state, unreadable, urlToken }));
   for (const out of result.outputFiles) writeIfChanged(out.path, out.contents);
 }
+// The doctor's freshness mark: a bundle left untouched keeps its old time,
+// so the build's own time is kept here instead.
+touchBuilt(BUILT_MARK);
