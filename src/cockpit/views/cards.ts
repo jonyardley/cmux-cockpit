@@ -14,7 +14,6 @@ import {
   ageOf,
   cardDetail,
   compactPrText,
-  detailColor,
   helperText,
   leftOffText,
   moveOf,
@@ -23,6 +22,7 @@ import {
   placeholderText,
   progressFraction,
   prTextColor,
+  selectRing,
 } from "../status.ts";
 import { C } from "../theme.ts";
 import {
@@ -66,8 +66,7 @@ function helpers(w: WsAccessor, size: number): View {
 }
 
 // The latest message under the status, in the full card's detail size, over
-// `lines` lines, `indent` in from the card's edge; faded on the selected
-// card (detailColor), never hidden, so a tap never changes a card's height.
+// `lines` lines, `indent` in from the card's edge.
 function detailLine(w: WsAccessor, key: string, lines: number, indent = 0): View {
   // Read by the when() and its Text, so the message is worked out once per change.
   const detail = computed(() => cardDetail(w()));
@@ -77,7 +76,7 @@ function detailLine(w: WsAccessor, key: string, lines: number, indent = 0): View
     () =>
       Text(detail)
         .font(12)
-        .color(() => detailColor(isSelected(w())))
+        .color(C.secondary)
         .lineLimit(lines)
         .truncation("tail")
         .paddingLeading(indent)
@@ -87,8 +86,7 @@ function detailLine(w: WsAccessor, key: string, lines: number, indent = 0): View
 
 // Your last prompt, above the agent's latest message, on cards in lanes
 // you come back to after a while (model.ts's showsLeftOff). Tertiary ink,
-// so the agent's words stay the stronger line, and faint on the selected
-// card, as its message is, since the agents panel shows both in full.
+// so the agent's words stay the stronger line.
 function leftOffLine(w: WsAccessor, key: string, indent = 0): View {
   const text = computed(() => (showsLeftOff(w()) ? leftOffText(w()) : ""));
   return when(
@@ -97,7 +95,7 @@ function leftOffLine(w: WsAccessor, key: string, indent = 0): View {
     () =>
       Text(text)
         .font(12)
-        .color(() => (isSelected(w()) ? C.faint : C.tertiary))
+        .color(C.tertiary)
         .lineLimit(1)
         .truncation("tail")
         .paddingLeading(indent)
@@ -244,8 +242,8 @@ function denseRow(w: WsAccessor, key: string): View {
   return ring(
     body,
     () => (on() ? C.card : "clear"),
-    () => (dragged() ? C.select : on() ? C.cardEdge : "clear"),
-    () => (dragged() ? 1.5 : 1),
+    () => (dragged() ? C.select : selectRing(isSelected(w()), "clear").color),
+    () => (dragged() ? 1.5 : selectRing(isSelected(w()), "clear").width),
     9,
     // The hover replaces the face: the wash on a clear row, a whole face on a lit one.
     { hover: { face: () => (on() ? C.cardHover : C.hover) } },
@@ -282,7 +280,7 @@ function moveLine(w: WsAccessor): View {
     () =>
       Text(text)
         .font(12)
-        .color(() => detailColor(isSelected(w())))
+        .color(C.secondary)
         .lineLimit(2)
         .truncation("tail")
         .paddingTop(3)
@@ -340,8 +338,8 @@ export function placeholderRow(w: WsAccessor): View {
   const face = ring(
     body,
     C.needsBg,
-    () => (selected() ? C.selectEdge : needsRowEdge(w())),
-    () => (selected() ? 1.5 : 1),
+    () => selectRing(selected(), needsRowEdge(w())).color,
+    () => selectRing(selected(), needsRowEdge(w())).width,
     9,
   ).frame({ maxWidth: "infinity" });
   return VStack({ spacing: 0 }, [face])

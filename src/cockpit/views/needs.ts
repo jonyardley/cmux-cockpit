@@ -19,7 +19,7 @@ import {
   revealWorkspace,
 } from "../model.ts";
 import { isSelected } from "../state.ts";
-import { ageOf, countColors, needsInk, needsLine, needsRowEdge } from "../status.ts";
+import { ageOf, countColors, needsInk, needsLine, needsRowEdge, selectRing } from "../status.ts";
 import { C } from "../theme.ts";
 import { laneMarker } from "./headers.ts";
 import { cardMenu, glyph, glyphButton, type WsAccessor } from "./parts.ts";
@@ -68,8 +68,8 @@ function needsRow(w: WsAccessor): View {
   return ring(
     row,
     C.card,
-    () => (selected() ? C.selectEdge : needsRowEdge(w())),
-    () => (selected() ? 1.5 : 1),
+    () => selectRing(selected(), needsRowEdge(w())).color,
+    () => selectRing(selected(), needsRowEdge(w())).width,
     9,
   )
     .frame({ maxWidth: "infinity" })

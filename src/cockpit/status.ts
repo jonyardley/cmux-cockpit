@@ -305,12 +305,13 @@ export function cardDetail(w: Workspace | undefined): string {
 }
 
 /**
- * The ink for a card's message line. The selected workspace's card keeps
- * its line, faded, since the agents panel on the right shows that message in
- * full: the line stays so the card keeps its height and nothing moves on a
- * tap. Every other card reads it in the secondary ink.
+ * The outline of a card, row or needs-you row: ink at 2pt on the selected
+ * workspace, the one open in the terminal, so it is found at a glance; the
+ * row's own resting edge at 1pt otherwise. A drag keeps 1.5pt, so the two
+ * stay apart. The card's text stays at full strength either way.
  */
-export const detailColor = (selected: boolean): string => (selected ? C.faint : C.secondary);
+export const selectRing = (selected: boolean, rest: string): { color: string; width: number } =>
+  selected ? { color: C.select, width: 2 } : { color: rest, width: 1 };
 
 /** The progress bar's fraction, held to 0 to 1; null when no value is sent. */
 export function progressFraction(w: Workspace | undefined): number | null {

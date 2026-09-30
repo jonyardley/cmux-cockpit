@@ -53,7 +53,16 @@ import {
   type TextChip,
 } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
-import { ageOf, badgeCount, isReady, openPrLabel, statusHasAge, statusInfo, statusLine } from "../status.ts";
+import {
+  ageOf,
+  badgeCount,
+  isReady,
+  openPrLabel,
+  selectRing,
+  statusHasAge,
+  statusInfo,
+  statusLine,
+} from "../status.ts";
 import { C } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;
@@ -450,16 +459,16 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
   ];
 }
 
-// White card, hairline edge, a soft grey outline when selected and ink
-// while dragged.
+// White card, hairline edge, a 2pt ink outline when selected (selectRing)
+// and 1.5pt ink while dragged.
 export function cardChrome(view: View, w: WsAccessor, key: string, radius: number): View {
   const dragged = () => drag()?.id === key;
   const lit = () => dragged() || isSelected(w());
   const face = ring(
     view,
     C.card,
-    () => (dragged() ? C.select : lit() ? C.selectEdge : C.cardEdge),
-    () => (lit() ? 1.5 : 1),
+    () => (dragged() ? C.select : selectRing(isSelected(w()), C.cardEdge).color),
+    () => (dragged() ? 1.5 : selectRing(isSelected(w()), C.cardEdge).width),
     radius,
     { hover: { face: C.cardHover } },
   )

@@ -161,8 +161,8 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                   Text "Working 40m · quiet 17m" .font(12) .weight(medium) .color(blueText) .lineLimit(1) .layoutPriority(2)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
         VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(19)
-          VStack spacing: 0, alignment: leading .padding(1.5) .background(selectEdge) .cornerRadius(12) .opacity(1) .frame(maxWidth: infinity)
-            HStack spacing: 10, alignment: top .paddingLeading(10) .paddingTrailing(12) .paddingVertical(11) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(10.5) .hoverBackground(cardHover)
+          VStack spacing: 0, alignment: leading .padding(2) .background(laneMain|select|heading) .cornerRadius(12) .opacity(1) .frame(maxWidth: infinity)
+            HStack spacing: 10, alignment: top .paddingLeading(10) .paddingTrailing(12) .paddingVertical(11) .frame(maxWidth: infinity, alignment: leading) .background(onBadge|card) .cornerRadius(10) .hoverBackground(cardHover)
               ZStack .frame(width: 26, height: 26)
                 RoundedRectangle cornerRadius: 8 .fill(grey)
                 Image terminal .font(12) .weight(semibold) .color(text)
@@ -331,6 +331,5 @@ needsRowEdge #A34A2A29
 onBadge|card #FFFFFF
 readyBg #788C5D1F
 secondary|badge|laneReview|neutralChip.fg #5E5D59
-selectEdge #14141357
 tertiary #73726C
 text #141413

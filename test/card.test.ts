@@ -231,11 +231,16 @@ describe("showsChipsRow (issue #79)", () => {
   });
 });
 
-describe("detailColor", () => {
-  it("fades the selected card's message line, and keeps the secondary ink on the rest", async () => {
+describe("selectRing", () => {
+  it("rings the selected workspace in ink at 2pt, stronger than a drag's 1.5pt", async () => {
     const { C } = await import("../src/cockpit/theme.ts");
-    assert.equal(status.detailColor(true), C.faint);
-    assert.equal(status.detailColor(false), C.secondary);
-    assert.notEqual(C.faint, C.secondary);
+    assert.deepEqual(status.selectRing(true, C.cardEdge), { color: C.select, width: 2 });
+    assert.deepEqual(status.selectRing(true, "clear"), { color: C.select, width: 2 });
+  });
+
+  it("keeps the row's own resting edge at 1pt on the rest", async () => {
+    const { C } = await import("../src/cockpit/theme.ts");
+    assert.deepEqual(status.selectRing(false, C.cardEdge), { color: C.cardEdge, width: 1 });
+    assert.deepEqual(status.selectRing(false, "clear"), { color: "clear", width: 1 });
   });
 });
