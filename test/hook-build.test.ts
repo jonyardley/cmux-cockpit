@@ -20,6 +20,7 @@ import {
   lockedBuild,
   REDRAW_GAP_MS,
   settleGap,
+  TAP_GAP_MS,
 } from "../scripts/hook-build.ts";
 import { tryTakeLock, waitForLock } from "../scripts/lockfile.ts";
 
@@ -312,6 +313,8 @@ describe("lockedBuild", () => {
           return overrides.build ? overrides.build() : 0;
         },
         snapshot: overrides.snapshot ?? (() => "v0"),
+        settle: () => {},
+        hurry: () => events.push("hurry"),
         pause: () => events.push("pause"),
         maxWaitMs: 500,
       },
@@ -322,7 +325,8 @@ describe("lockedBuild", () => {
     let tries = 0;
     const { events, deps } = fakes({ take: () => ++tries > 2 });
     assert.equal(lockedBuild(deps), 0);
-    assert.deepEqual(events, ["busy", "pause", "busy", "pause", "take", "build", "release"]);
+    // Hurries the waiting build once, on the first try that finds it held.
+    assert.deepEqual(events, ["busy", "hurry", "pause", "busy", "pause", "take", "build", "release"]);
   });
 
   it("waits as long as a live build could hold the lock by default", () => {
@@ -400,6 +404,10 @@ describe("the redraw gap", () => {
     assert.equal(gapLeft(50_000, 0, 20_000), 0);
   });
 
+  it("never exceeds the gap, even with a redraw stamped in the future", () => {
+    assert.equal(gapLeft(0, 600_000, 20_000), 20_000);
+  });
+
   it("with the build's timeout, stays under the lock's stale threshold", () => {
     assert.ok(REDRAW_GAP_MS + BUILD_TIMEOUT_MS < BUILD_LOCK_STALE_MS);
   });
@@ -430,10 +438,16 @@ describe("the redraw gap", () => {
     assert.deepEqual(c.pauses, []);
   });
 
-  it("stops waiting as soon as a tap raises the urgent flag", () => {
+  it("cuts the wait to the tap gap once a tap raises the urgent flag", () => {
     const c = clock(0);
     settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => c.pauses.length === 2, pause: c.pause });
-    assert.deepEqual(c.pauses, [250, 250]);
+    assert.deepEqual(c.pauses, [250, 250, 250, 250]);
+  });
+
+  it("goes at once on a tap when the tap gap has already passed", () => {
+    const c = clock(TAP_GAP_MS);
+    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => true, pause: c.pause });
+    assert.deepEqual(c.pauses, []);
   });
 
   it("settles before every build pass, so writes in the wait join that pass", () => {
