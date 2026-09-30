@@ -329,8 +329,8 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                 Circle size: 13 .fill(blueHalo)
                 Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
               ZStack .frame(width: 14, height: 14)
-                RoundedRectangle cornerRadius: 4 .fill(grey)
-                Image terminal .font(8) .weight(semibold) .color(text)
+                RoundedRectangle cornerRadius: 4 .fill(clay)
+                Image star.fill .font(8) .weight(semibold) .color(text)
               Text "Loose workspace" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
               Spacer minLength: 4
               Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
@@ -371,6 +371,7 @@ cardEdge|dropTarget|anchorSelected #1414131F
 cardHover #F7F6F2
 chipEdge|hairline|neutralChip.edge #E2DFD3
 chipFace|neutralChip.bg #F1EFE8
+clay #D97757
 clayCount #D9775729
 clayText #A34A2A
 countBg|segTrack #E5E2D6

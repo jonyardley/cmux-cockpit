@@ -412,7 +412,7 @@ export function originOf(w: Workspace | undefined): { name: string; color: strin
   if (!w) return { name: "", color: "clear" };
   // A lane's generated anchor is in no project group: it names its lane in both views.
   if (mode() === "projects" && !laneAnchorIds().has(w.id)) {
-    const p = projectByKey(projectKey(w));
+    const p = projectOfWorkspace(w);
     return { name: p.name, color: p.color };
   }
   const lane = laneByKey(laneOf(w));
@@ -582,11 +582,15 @@ export function headerHint(laneKey: LaneKey, dropping: boolean): HeaderHint {
 
 const OTHER: Project = { match: "other", name: "Other", color: P.grey, icon: "terminal" };
 
-export const projectKey = (w: Workspace): string => {
+/** A workspace's project: its Move to project choice while that stands, else its path match, else Other. */
+export const projectOfWorkspace = (w: Workspace | undefined): Project => {
+  if (!w) return OTHER;
   tick();
   const p = projectFor(w.directory, projectOverride.get(w.id));
-  return PROJECTS.includes(p) ? projectId(p) : projectId(OTHER);
+  return PROJECTS.includes(p) ? p : OTHER;
 };
+
+export const projectKey = (w: Workspace): string => projectId(projectOfWorkspace(w));
 
 /** Move a workspace to a project, kept across a reload until cleared. Used by the context menu. */
 export function moveToProject(w: Workspace | undefined, key: string): void {
@@ -705,9 +709,6 @@ export const hasProjectOverride = (w: Workspace | undefined): boolean => {
 };
 
 export const projectByKey = (k: string): Project => PROJECTS.find((p) => projectId(p) === k) ?? OTHER;
-
-/** The project a card's badge shows: its Move to project choice while that stands, else its path match. */
-export const projectOfWorkspace = (w: Workspace | undefined): Project => (w ? projectByKey(projectKey(w)) : OTHER);
 export const isProjectCollapsed = (k: string) => collapsedProjects().includes(k);
 export function toggleProject(k: string): void {
   setCollapsedProjects(

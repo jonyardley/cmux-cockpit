@@ -123,6 +123,8 @@ it("lanes: every card state", () => {
     }),
     ws("loose", {
       title: "Loose workspace",
+      // A project match, so a row's badge is recorded in a project's colour, not only Other's.
+      directory: "/Users/coder/dev/app-one",
       pinned: true,
       agents: [agent("working", { sinceEpoch: ago(200), lastActivityAt: ago(20) })],
     }),
