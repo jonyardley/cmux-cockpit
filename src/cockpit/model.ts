@@ -21,7 +21,7 @@ import {
   savedSpec,
 } from "../shared/projects.ts";
 import { type PrHealth, prHealth, prSummary } from "../shared/prs.ts";
-import { finishedAt, nowEpoch } from "../shared/time.ts";
+import { ageSince, finishedAt, nowEpoch } from "../shared/time.ts";
 import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import {
   bump,
@@ -331,6 +331,19 @@ export const needsList = computed(() =>
 const NEEDS_ROWS = 4;
 
 export const needsShown = computed(() => needsList().slice(0, NEEDS_ROWS));
+
+// The header's clock turns clay once the oldest ask has waited this long (issue #153).
+export const NEEDS_LATE_SECS = 30 * 60;
+
+/** The header's clock: how long the oldest ask has waited, as its row says it; "" when nothing says. */
+export const needsWaitText = (): string => ageSince(sinceOf(needsList()[0]));
+
+/** Whether the oldest ask has waited 30 minutes or more. */
+export function needsWaitLate(): boolean {
+  const at = sinceOf(needsList()[0]);
+  const now = nowEpoch();
+  return at > 0 && now > 0 && now - at >= NEEDS_LATE_SECS;
+}
 
 /** How many waiting workspaces the strip leaves out. */
 export const needsMore = (): number => Math.max(0, needsList().length - NEEDS_ROWS);
