@@ -8,7 +8,15 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, rename
 import { resolve } from "node:path";
 import { ROUTES } from "../hooks/routes.ts";
 import { type ClaudeFolder, type Paths, stamp } from "./env.ts";
-import { type Entry, missingEntries, parseSettings, removeCommands } from "./hooks-merge.ts";
+import {
+  canonical,
+  type Drop,
+  type Entry,
+  everything,
+  missingEntries,
+  parseSettings,
+  removeHooks,
+} from "./hooks-merge.ts";
 
 const HOOKS_DIR = "$HOME/.config/cmux/scripts/hooks";
 
@@ -39,6 +47,32 @@ const LEGACY_SCRIPTS = [
 /** The per-script commands the entry points replace. */
 export const legacy = (): string[] => LEGACY_SCRIPTS.map((s) => `node ${HOOKS_DIR}/${s}`);
 
+// Every entry point command, whatever its event, as canonical() spells it.
+const isEntryPoint = (command: string, home: string): boolean =>
+  command.startsWith(`${canonical(`node ${HOOKS_DIR}/dispatch.ts`, home)} `);
+
+/**
+ * The cockpit hooks setup takes out and doctor flags: the old per-script
+ * ones, and an entry point that no longer fits, being under a matcher that
+ * narrows it (it would skip events and sit beside the proper one) or for
+ * an event it has no routes for, or for another event than its own.
+ */
+export function stale(home: string): Drop {
+  const old = new Set(legacy().map((c) => canonical(c, home)));
+  return (event, matcher, command) => {
+    if (old.has(command)) return true;
+    if (!isEntryPoint(command, home)) return false;
+    const proper = event in ROUTES && command === canonical(entryCommand(event), home);
+    return !(proper && everything(matcher));
+  };
+}
+
+/** Every cockpit hook, old or current, for uninstall. */
+export function cockpit(home: string): Drop {
+  const old = stale(home);
+  return (event, matcher, command) => isEntryPoint(command, home) || old(event, matcher, command);
+}
+
 export type Loaded =
   | { ok: true; settings: Record<string, unknown>; existed: boolean; text: string }
   | { ok: false; error: string };
@@ -63,11 +97,11 @@ export function claudeFolders(paths: Paths): ClaudeFolder[] {
   return existsSync(claudeDefault.dir) ? [claudeDefault, claudeConfigured] : [claudeConfigured];
 }
 
-/** What a folder's settings hold of the cockpit's: entry points missing, and old per-script hooks left. */
+/** What a folder's settings hold of the cockpit's: entry points missing, and stale hooks left. */
 export function hooksState(settings: Record<string, unknown>, home: string) {
   return {
     missing: missingEntries(settings, wanted(), home),
-    legacy: removeCommands(settings, legacy(), home).removed,
+    stale: removeHooks(settings, stale(home), home).removed,
   };
 }
 

@@ -4,6 +4,7 @@
 
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -185,8 +186,8 @@ describe("setup", () => {
     assert.deepEqual(settings.hooks.Stop, [own, stop]);
     assert.deepEqual(missingEntries(settings, wanted(), w.home), []);
     assert.equal(JSON.stringify(settings).includes("report-"), false);
-    assert.ok(f.out.some((l) => l.includes("3 old per-script cockpit hooks come out")));
-    assert.ok(f.out.some((l) => l.includes("took out 3 old per-script hooks")));
+    assert.ok(f.out.some((l) => l.includes("3 old cockpit hooks come out")));
+    assert.ok(f.out.some((l) => l.includes("took out 3 old cockpit hooks")));
     assert.ok(existsSync(p.claudeDefault.backup));
   });
 
@@ -347,7 +348,10 @@ describe("doctor", () => {
     writeFileSync(p.claudeDefault.settings, JSON.stringify(settings));
     const check = runChecks(fakeEnv(w).env).find((c) => c.label === "Claude Code hooks");
     assert.equal(check?.ok, false);
-    assert.equal(check?.detail, "~/.claude/settings.json still has 1 old per-script hooks, so those scripts run twice");
+    assert.equal(
+      check?.detail,
+      "~/.claude/settings.json still has 1 old cockpit hooks, which run scripts twice or fail",
+    );
     assert.equal(check?.fix, "npm run setup -- --hooks");
   });
 
@@ -558,6 +562,51 @@ describe("Claude Code's config folders", () => {
     const again = fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir });
     await setup(again.env, ["--hooks"]);
     assert.equal(again.out.filter((l) => l.includes("every entry point is already in")).length, 2);
+  });
+
+  it("moves an entry point out from under a narrower matcher, and takes out one for a dropped event", async () => {
+    const w = where();
+    built(w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
+    mkdirSync(p.claudeDefault.dir, { recursive: true });
+    const narrowed = { matcher: "Agent", hooks: [{ type: "command", command: entryCommand("PreToolUse") }] };
+    const dropped = { hooks: [{ type: "command", command: entryCommand("SessionEnd") }] };
+    writeFileSync(
+      p.claudeDefault.settings,
+      JSON.stringify({ hooks: { PreToolUse: [narrowed], SessionEnd: [dropped] } }),
+    );
+    await setup(fakeEnv(w, cmuxWith(w.home)).env, ["--hooks"]);
+    const settings = JSON.parse(readFileSync(p.claudeDefault.settings, "utf8"));
+    assert.deepEqual(settings.hooks.PreToolUse, [
+      { hooks: [{ type: "command", command: entryCommand("PreToolUse") }] },
+    ]);
+    assert.equal(settings.hooks.SessionEnd, undefined);
+    assert.equal(runChecks(fakeEnv(w).env).find((c) => c.label === "Claude Code hooks")?.ok, true);
+  });
+
+  it("carries on to the next folder when one cannot be written", async () => {
+    const w = where();
+    built(w.repo);
+    const dir = join(w.home, ".claude-personal");
+    const p = pathsFor(w.home, w.repo, dir);
+    const locked = join(w.home, "dotfiles");
+    mkdirSync(locked);
+    writeFileSync(join(locked, "settings.json"), "{}");
+    chmodSync(locked, 0o555);
+    mkdirSync(p.claudeDefault.dir, { recursive: true });
+    symlinkSync(join(locked, "settings.json"), p.claudeDefault.settings);
+    const f = fakeEnv(w, cmuxWith(w.home), { claudeConfigDir: dir });
+    try {
+      await setup(f.env, ["--hooks"]);
+    } finally {
+      chmodSync(locked, 0o755);
+    }
+    assert.ok(
+      f.out.some((l) => l.startsWith("  ✗ ~/.claude/settings.json could not be updated")),
+      f.out.join("\n"),
+    );
+    const settings = JSON.parse(readFileSync(p.claudeConfigured.settings, "utf8"));
+    assert.deepEqual(missingEntries(settings, wanted(), w.home), []);
   });
 
   it("carries on to the next folder when one holds a file it cannot read", async () => {

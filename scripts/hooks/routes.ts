@@ -50,17 +50,20 @@ const MATCHED_FIELD: Readonly<Record<string, string>> = {
 };
 
 /**
- * True when `matcher` picks `value`, as Claude Code reads it: missing, ""
- * and "*" match everything, anything else is a case-sensitive regex over
- * the whole value. A matcher that is not a valid regex matches only itself.
+ * True when `matcher` picks `value`, as Claude Code's hooks guide describes
+ * it: missing, "" and "*" match everything; a plain name, or names joined
+ * with |, match those names exactly; anything else is a case-sensitive
+ * regex found anywhere in the value. One that is not a valid regex matches
+ * nothing.
  */
 export function matches(matcher: string | undefined, value: string | undefined): boolean {
   if (matcher === undefined || matcher === "" || matcher === "*") return true;
   if (value === undefined) return false;
+  if (/^[\w|]+$/.test(matcher)) return matcher.split("|").includes(value);
   try {
-    return new RegExp(`^(?:${matcher})$`).test(value);
+    return new RegExp(matcher).test(value);
   } catch {
-    return matcher === value;
+    return false;
   }
 }
 

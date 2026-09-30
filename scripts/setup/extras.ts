@@ -9,14 +9,15 @@ import {
   backupSettings,
   claudeDirNotes,
   claudeFolders,
-  legacy,
+  cockpit,
   loadSettings,
+  stale,
   unchanged,
   wanted,
   writeSettings,
 } from "./claude-settings.ts";
 import type { ClaudeFolder, Env, Paths } from "./env.ts";
-import { addEntries, describe, type Entry, missingEntries, removeCommands } from "./hooks-merge.ts";
+import { addEntries, describe, type Entry, missingEntries, removeHooks } from "./hooks-merge.ts";
 
 const LSREGISTER =
   "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
@@ -67,10 +68,22 @@ function addAutomations(env: Env, paths: Paths): void {
   env.run("cmux", ["automation", "reload"]);
 }
 
-// Each Claude Code folder in turn, so one with a broken file never stops the others.
+// Each Claude Code folder in turn, so one that cannot be read or written never stops the others.
 async function addHooks(env: Env, paths: Paths, flags: Flags): Promise<void> {
   for (const note of claudeDirNotes(paths)) env.print(`  ! ${note}`);
-  for (const folder of claudeFolders(paths)) await addHooksTo(env, folder, flags);
+  for (const folder of claudeFolders(paths)) {
+    await eachFolder(env, folder, "  ", () => addHooksTo(env, folder, flags));
+  }
+}
+
+// Runs one folder's step, turning a thrown error (a read-only file, say) into a line.
+async function eachFolder(env: Env, folder: ClaudeFolder, indent: string, step: () => Promise<void>): Promise<void> {
+  try {
+    await step();
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    env.print(`${indent}✗ ${folder.shown} could not be updated (${why}); the other folders carry on.`);
+  }
 }
 
 async function addHooksTo(env: Env, folder: ClaudeFolder, flags: Flags): Promise<void> {
@@ -79,8 +92,8 @@ async function addHooksTo(env: Env, folder: ClaudeFolder, flags: Flags): Promise
     env.print(`  ✗ ${folder.shown} is ${loaded.error}. Nothing changed there; fix it and run setup again.`);
     return;
   }
-  const add = missingEntries(loaded.settings, wanted(), env.home);
-  const cleared = removeCommands(loaded.settings, legacy(), env.home);
+  const cleared = removeHooks(loaded.settings, stale(env.home), env.home);
+  const add = missingEntries(cleared.settings, wanted(), env.home);
   if (add.length === 0 && cleared.removed === 0) {
     env.print(`  ✓ every entry point is already in ${folder.shown}`);
     return;
@@ -97,7 +110,7 @@ async function addHooksTo(env: Env, folder: ClaudeFolder, flags: Flags): Promise
   }
   if (loaded.existed) env.print(`  ✓ backed up to ${backupSettings(folder, env.now())}`);
   writeSettings(folder, addEntries(cleared.settings, add));
-  const swapped = cleared.removed ? `, took out ${cleared.removed} old per-script hooks` : "";
+  const swapped = cleared.removed ? `, took out ${cleared.removed} old cockpit hooks` : "";
   env.print(`  ✓ added ${add.length} entry points to ${folder.shown}${swapped}`);
 }
 
@@ -110,7 +123,7 @@ function listChanges(env: Env, folder: ClaudeFolder, add: readonly Entry[], lega
     for (const e of add) env.print(`    ${describe(e)}`);
   }
   if (legacyCount > 0) {
-    env.print(`  ${legacyCount} old per-script cockpit hooks come out, since the entry points run those scripts now.`);
+    env.print(`  ${legacyCount} old cockpit hooks come out, since the entry points run those scripts now.`);
   }
 }
 
@@ -133,11 +146,13 @@ export async function removeExtras(env: Env, paths: Paths, flags: Flags): Promis
     env.run("cmux", ["automation", "reload"]);
   }
 
-  if (offered("hooks", flags)) await removeHooks(env, paths, confirm);
+  if (offered("hooks", flags)) await takeOutHooks(env, paths, confirm);
 }
 
-async function removeHooks(env: Env, paths: Paths, confirm: (q: string) => Promise<boolean>): Promise<void> {
-  for (const folder of claudeFolders(paths)) await removeHooksFrom(env, folder, confirm);
+async function takeOutHooks(env: Env, paths: Paths, confirm: (q: string) => Promise<boolean>): Promise<void> {
+  for (const folder of claudeFolders(paths)) {
+    await eachFolder(env, folder, "", () => removeHooksFrom(env, folder, confirm));
+  }
 }
 
 async function removeHooksFrom(
@@ -151,8 +166,7 @@ async function removeHooksFrom(
     env.print(`✗ ${folder.shown} is ${loaded.error}; its hooks are left alone.`);
     return;
   }
-  const commands = [...wanted().map((e) => e.command), ...legacy()];
-  const next = removeCommands(loaded.settings, commands, env.home);
+  const next = removeHooks(loaded.settings, cockpit(env.home), env.home);
   if (next.removed === 0) return;
   if (!(await confirm(`Remove the ${next.removed} cockpit hooks from ${folder.shown}?`))) return;
   if (!unchanged(folder, loaded)) {

@@ -7,7 +7,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { ROUTES } from "../scripts/hooks/routes.ts";
-import { entryCommand, hooksState, legacy, wanted } from "../scripts/setup/claude-settings.ts";
+import { cockpit, entryCommand, hooksState, legacy, stale, wanted } from "../scripts/setup/claude-settings.ts";
 import {
   addEntries,
   canonical,
@@ -16,6 +16,7 @@ import {
   missingEntries,
   parseSettings,
   removeCommands,
+  removeHooks,
 } from "../scripts/setup/hooks-merge.ts";
 
 const HOME = "/Users/someone";
@@ -141,8 +142,14 @@ describe("adding the hooks", () => {
     assert.equal(missing.length, WANTED.length - 2);
   });
 
-  it("spells each home form the same way", () => {
-    for (const c of ["node $HOME/x.ts", "node $" + "{HOME}/x.ts", "node ~/x.ts", ` node ${HOME}/x.ts `]) {
+  it("counts an entry point under * as there, since * matches everything", () => {
+    const star = { hooks: { Stop: [{ matcher: "*", hooks: [hook(entryCommand("Stop"))] }] } };
+    assert.ok(!missingEntries(star, WANTED, HOME).some((e) => e.event === "Stop"));
+  });
+
+  it("spells each home form, quoting and spacing the same way", () => {
+    const forms = ["node $HOME/x.ts", "node $" + "{HOME}/x.ts", "node ~/x.ts", ` node ${HOME}/x.ts `];
+    for (const c of [...forms, 'node "$HOME/x.ts"', "node  '$HOME/x.ts'"]) {
       assert.equal(canonical(c, HOME), `node ${HOME}/x.ts`);
     }
     assert.equal(canonical("node $HOMEY/x.ts", HOME), "node $HOMEY/x.ts");
@@ -192,11 +199,51 @@ describe("removing the hooks", () => {
   });
 });
 
+describe("stale and cockpit hooks", () => {
+  const drop = (event: string, matcher: string, command: string) =>
+    stale(HOME)(event, matcher, canonical(command, HOME));
+
+  it("keeps each entry point on its own event with no matcher, or *", () => {
+    for (const e of WANTED) {
+      assert.equal(drop(e.event, "", e.command), false, e.event);
+      assert.equal(drop(e.event, "*", e.command), false, e.event);
+    }
+  });
+
+  it("drops an entry point under a narrower matcher, on the wrong event, or for an event with no routes", () => {
+    assert.ok(drop("PreToolUse", "Agent", entryCommand("PreToolUse")));
+    assert.ok(drop("Stop", "", entryCommand("PreToolUse")));
+    assert.ok(drop("SessionEnd", "", entryCommand("SessionEnd")));
+  });
+
+  it("drops the old per-script hooks however home and quotes are written, and leaves anything else", () => {
+    assert.ok(drop("PostToolUse", "Bash", 'node "$HOME/.config/cmux/scripts/hooks/report-pr.ts"'));
+    assert.ok(drop("Stop", "", "node ~/.config/cmux/scripts/hooks/report-mention.ts"));
+    assert.equal(drop("Stop", "", "say done"), false);
+    assert.equal(drop("Stop", "", "node $HOME/.config/cmux/scripts/hooks/guard-edit.ts"), false);
+  });
+
+  it("has uninstall take every entry point, even one for an event since dropped", () => {
+    const all = (event: string, command: string) => cockpit(HOME)(event, "", canonical(command, HOME));
+    assert.ok(all("Stop", entryCommand("Stop")));
+    assert.ok(all("SessionEnd", entryCommand("SessionEnd")));
+    assert.ok(all("Stop", LEGACY[4] ?? ""));
+    assert.equal(all("Stop", "say done"), false);
+    const settings = { hooks: { SessionEnd: [{ hooks: [hook(entryCommand("SessionEnd")), hook("mine.sh")] }] } };
+    assert.deepEqual(removeHooks(settings, cockpit(HOME), HOME), {
+      settings: { hooks: { SessionEnd: [{ hooks: [hook("mine.sh")] }] } },
+      removed: 1,
+    });
+  });
+});
+
 describe("hooksState", () => {
   it("counts entry points missing and old per-script hooks left", () => {
-    assert.deepEqual(hooksState(addEntries({}, WANTED), HOME), { missing: [], legacy: 0 });
+    assert.deepEqual(hooksState(addEntries({}, WANTED), HOME), { missing: [], stale: 0 });
     const state = hooksState({ hooks: { Stop: [{ hooks: LEGACY.map(hook) }] } }, HOME);
     assert.equal(state.missing.length, WANTED.length);
-    assert.equal(state.legacy, LEGACY.length);
+    assert.equal(state.stale, LEGACY.length);
+    const narrowed = { hooks: { PreToolUse: [{ matcher: "Agent", hooks: [hook(entryCommand("PreToolUse"))] }] } };
+    assert.equal(hooksState(narrowed, HOME).stale, 1);
   });
 });

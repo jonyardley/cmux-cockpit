@@ -171,10 +171,10 @@ function folderProblem(env: Env, folder: ClaudeFolder): { why: string; byHand: b
   const loaded = loadSettings(folder);
   if (!loaded.ok) return { why: `${folder.shown} is ${loaded.error}`, byHand: true };
   if (!loaded.existed) return { why: `no ${folder.shown}`, byHand: false };
-  const { missing, legacy } = hooksState(loaded.settings, env.home);
+  const { missing, stale } = hooksState(loaded.settings, env.home);
   const problems = [
     ...(missing.length > 0 ? [`is missing ${missing.length} entry points`] : []),
-    ...(legacy > 0 ? [`still has ${legacy} old per-script hooks, so those scripts run twice`] : []),
+    ...(stale > 0 ? [`still has ${stale} old cockpit hooks, which run scripts twice or fail`] : []),
   ];
   return problems.length === 0 ? null : { why: `${folder.shown} ${problems.join(" and ")}`, byHand: false };
 }

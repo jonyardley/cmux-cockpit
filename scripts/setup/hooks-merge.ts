@@ -65,20 +65,29 @@ const hooksOf = (group: Obj): Obj[] => (Array.isArray(group.hooks) ? (group.hook
 // Missing and "" both match everything in Claude Code, so they are the same here.
 const matcherOf = (group: Obj): string => (typeof group.matcher === "string" ? group.matcher : "");
 
-/** A command with $HOME, ${HOME} and a leading ~/ spelled as `home`, so each spelling reads as the same hook. */
+/**
+ * A command with $HOME, ${HOME} and a leading ~/ spelled as `home`, quotes
+ * dropped and spaces collapsed, so each way of writing it by hand reads as
+ * the same hook.
+ */
 export function canonical(command: string, home: string): string {
   return command
+    .replace(/["']/g, "")
     .replace(/\$\{HOME\}|\$HOME\b/g, () => home)
     .replace(/(^|\s)~\//g, (_, lead: string) => `${lead}${home}/`)
+    .replace(/\s+/g, " ")
     .trim();
 }
+
+/** True for a matcher that matches everything in Claude Code: missing (read as ""), "" or "*". */
+export const everything = (matcher: string): boolean => matcher === "" || matcher === "*";
 
 function has(settings: Obj, e: Entry, home: string): boolean {
   const want = canonical(e.command, home);
   const groups = groupsOf(settings)[e.event] ?? [];
   return groups.some(
     (g) =>
-      matcherOf(g) === (e.matcher ?? "") &&
+      (everything(matcherOf(g)) ? "" : matcherOf(g)) === (e.matcher ?? "") &&
       hooksOf(g).some((h) => typeof h.command === "string" && canonical(h.command, home) === want),
   );
 }
@@ -113,21 +122,25 @@ export function addEntries(settings: Obj, add: readonly Entry[]): Obj {
   return next;
 }
 
-// One group with the given commands taken out, and how many went; null when none were in it.
-function strip(group: Obj, commands: ReadonlySet<string>, home: string): { group: Obj; gone: number } | null {
+/** Says whether to take out one hook, given its event, its group's matcher ("" for none) and its canonical command. */
+export type Drop = (event: string, matcher: string, command: string) => boolean;
+
+// One group with the dropped hooks taken out, and how many went; null when none were in it.
+function strip(event: string, group: Obj, drop: Drop, home: string): { group: Obj; gone: number } | null {
+  const matcher = matcherOf(group);
   const kept = hooksOf(group).filter(
-    (h) => !(typeof h.command === "string" && commands.has(canonical(h.command, home))),
+    (h) => !(typeof h.command === "string" && drop(event, matcher, canonical(h.command, home))),
   );
   const gone = hooksOf(group).length - kept.length;
   return gone === 0 ? null : { group: { ...group, hooks: kept }, gone };
 }
 
-// One event's groups without the given commands, and how many hooks went.
-function stripEvent(groups: readonly Obj[], commands: ReadonlySet<string>, home: string) {
+// One event's groups without the dropped hooks, and how many went.
+function stripEvent(event: string, groups: readonly Obj[], drop: Drop, home: string) {
   const kept: Obj[] = [];
   let removed = 0;
   for (const g of groups) {
-    const s = strip(g, commands, home);
+    const s = strip(event, g, drop, home);
     if (!s) kept.push(g);
     else {
       removed += s.gone;
@@ -138,24 +151,29 @@ function stripEvent(groups: readonly Obj[], commands: ReadonlySet<string>, home:
 }
 
 /**
- * A copy of `settings` without any hook running one of `commands`, on any
- * event and under any matcher, and how many hooks went. A group left with
- * no hooks goes, and an event left with no groups; the rest stays in order.
+ * A copy of `settings` without every hook `drop` picks, and how many went.
+ * A group left with no hooks goes, and an event left with no groups; the
+ * rest stays in order.
  */
-export function removeCommands(settings: Obj, commands: readonly string[], home: string) {
+export function removeHooks(settings: Obj, drop: Drop, home: string) {
   const next = structuredClone(settings);
   let removed = 0;
   if (!isObj(next.hooks)) return { settings: next, removed };
   const hooks = next.hooks;
-  const wanted = new Set(commands.map((c) => canonical(c, home)));
   for (const [event, groups] of Object.entries(groupsOf(next))) {
-    const s = stripEvent(groups, wanted, home);
+    const s = stripEvent(event, groups, drop, home);
     if (s.removed === 0) continue;
     removed += s.removed;
     if (s.kept.length === 0) delete hooks[event];
     else hooks[event] = s.kept;
   }
   return { settings: next, removed };
+}
+
+/** removeHooks for hooks running one of `commands`, on any event and under any matcher. */
+export function removeCommands(settings: Obj, commands: readonly string[], home: string) {
+  const set = new Set(commands.map((c) => canonical(c, home)));
+  return removeHooks(settings, (_event, _matcher, command) => set.has(command), home);
 }
 
 /** One line naming an entry, as setup lists what it will add. */

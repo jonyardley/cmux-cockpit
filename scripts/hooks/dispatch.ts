@@ -7,7 +7,9 @@
 // process with the same stdin, all at once, each with its own time limit.
 // One that fails, hangs or crashes never stops the others. It always exits
 // 0 and drops the scripts' stdout, so it can never block a tool or answer
-// a permission prompt; their stderr is passed on, each line tagged.
+// a permission prompt; their stderr is passed on, each line tagged. Each
+// script runs in its own process group, so a time limit, or Claude Code
+// stopping this one, ends whatever the script started too.
 
 import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -22,18 +24,41 @@ export interface Ran {
   /** The exit code, or null when it was killed or never started. */
   status: number | null;
   timedOut: boolean;
+  /** The limit it ran under, in milliseconds. */
+  limitMs: number;
   stderr: string;
 }
 
-function runOne(dir: string, script: string, input: string, timeoutMs: number): Promise<Ran> {
+// The process groups still running, so a stop can end them all.
+const running = new Set<number>();
+
+// Ends one script's whole process group; one already gone is fine.
+function killGroup(pid: number): void {
+  try {
+    process.kill(-pid, "SIGKILL");
+  } catch {}
+}
+
+/** Ends every script still running, and whatever each started. */
+export function stopAll(): void {
+  for (const pid of running) killGroup(pid);
+  running.clear();
+}
+
+function runOne(dir: string, script: string, input: string, limitMs: number): Promise<Ran> {
   return new Promise((done) => {
-    const child = spawn(process.execPath, [join(dir, script)], { stdio: ["pipe", "ignore", "pipe"] });
+    const child = spawn(process.execPath, [join(dir, script)], {
+      stdio: ["pipe", "ignore", "pipe"],
+      detached: true,
+    });
+    const pid = child.pid;
+    if (pid !== undefined) running.add(pid);
     let stderr = "";
     let timedOut = false;
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill("SIGKILL");
-    }, timeoutMs);
+      if (pid !== undefined) killGroup(pid);
+    }, limitMs);
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
       stderr += chunk;
@@ -43,7 +68,8 @@ function runOne(dir: string, script: string, input: string, timeoutMs: number): 
     });
     child.on("close", (status) => {
       clearTimeout(timer);
-      done({ script, status, timedOut, stderr });
+      if (pid !== undefined) running.delete(pid);
+      done({ script, status, timedOut, limitMs, stderr });
     });
     // A script that exits without reading its input must not crash this one.
     child.stdin.on("error", () => {});
@@ -74,12 +100,19 @@ export function notes(r: Ran): string[] {
     .split("\n")
     .map((l) => l.trimEnd())
     .filter((l) => l !== "");
-  if (r.timedOut) lines.push(`stopped after ${SCRIPT_TIMEOUT_MS / 1000}s`);
+  if (r.timedOut) lines.push(`stopped after ${r.limitMs / 1000}s`);
   else if (r.status !== 0 && lines.length === 0) lines.push(`exited ${r.status ?? "on a signal"}`);
   return lines.map((l) => `dispatch ${r.script}: ${l}`);
 }
 
 if (import.meta.main) {
+  // Claude Code stopping this hook (a timeout, or Esc) stops the scripts too.
+  for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+    process.on(signal, () => {
+      stopAll();
+      process.exit(0);
+    });
+  }
   try {
     const event = process.argv[2] ?? "";
     const input = readFileSync(0, "utf8");
