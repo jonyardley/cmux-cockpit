@@ -729,12 +729,17 @@ function rootToOpen(k: string): string | undefined {
 }
 
 /** Opens a new workspace in the project's root, if it has one. A folded
- * project unfolds first, so the new card is not hidden under its header. */
-export function openProjectWorkspace(k: string, group?: WorkspaceGroup | null): void {
+ * project unfolds first, so the new card is not hidden under its header.
+ * Given a lane whose group exists, it opens at the top of that group, which
+ * unfolds for the same reason; with no group yet it opens ungrouped. */
+export function openProjectWorkspace(k: string, lane?: Lane): void {
   const root = rootToOpen(k);
   if (!root) return;
   if (isProjectCollapsed(k)) toggleProject(k);
-  cmux("workspace.create", group ? { cwd: root, focus: true, group_id: group.id } : { cwd: root, focus: true });
+  const g = lane ? groupForLane(lane) : null;
+  if (lane && g && isCollapsed(lane)) toggleLane(lane);
+  const into: { group_id?: string; group_placement?: "top" } = g ? { group_id: g.id, group_placement: "top" } : {};
+  cmux("workspace.create", { cwd: root, focus: true, ...into });
 }
 
 const openLabel = (k: string): string => `New session in ${projectByKey(k).name}`;
@@ -747,10 +752,9 @@ export function newSessionLabel(w: Workspace | undefined): string {
 }
 
 /** Opens a new session in the card's project folder, a no-op without one.
- * It lands in Main activity, since Jon is about to work in it; with no
- * Main activity group yet it opens ungrouped. */
+ * It lands in Main activity, since Jon is about to work in it. */
 export function newSessionFor(w: Workspace | undefined): void {
-  if (w) openProjectWorkspace(projectKey(w), groupForLane(laneByKey("main")));
+  if (w) openProjectWorkspace(projectKey(w), laneByKey("main"));
 }
 
 /** A project menu's first item: what it opens, or why it opens nothing. */

@@ -154,8 +154,11 @@ declare function cmux(
  * `cmux close-workspace` does. The worktree on disk is left alone. */
 declare function cmux(method: "workspace.close", params: { workspace_id: string }): void;
 /** Opens a workspace in a folder, as `cmux new-workspace` does; with a
- * group_id it joins that group, at the top as --group does by default. */
-declare function cmux(method: "workspace.create", params: { cwd: string; focus: boolean; group_id?: string }): void;
+ * group_id it joins that group, at the place group_placement names. */
+declare function cmux(
+  method: "workspace.create",
+  params: { cwd: string; focus: boolean; group_id?: string; group_placement?: "top" | "end" },
+): void;
 /** Dispatches a cmux socket command, e.g. workspace.select. */
 declare function cmux(method: string, params: Record<string, string | number | boolean>): void;
 declare function openURL(url: string): void;

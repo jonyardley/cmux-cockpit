@@ -1018,7 +1018,10 @@ describe("Move to project override (issue #8)", () => {
     assert.deepEqual(r.calls, []);
     model.newSessionFor(one);
     assert.deepEqual(r.calls, [
-      { method: "workspace.create", params: { cwd: "~/dev/app-one", focus: true, group_id: "g-main" } },
+      {
+        method: "workspace.create",
+        params: { cwd: "~/dev/app-one", focus: true, group_id: "g-main", group_placement: "top" },
+      },
     ]);
     r.menu.length = 0;
     cardMenu(() => one);
@@ -1033,6 +1036,23 @@ describe("New session from a card", () => {
     r.data.groups = r.data.groups.filter((g) => g.name !== "Main activity");
     model.newSessionFor(ws("one", { directory: "/Users/coder/dev/app-one" }));
     assert.deepEqual(r.calls, [{ method: "workspace.create", params: { cwd: "~/dev/app-one", focus: true } }]);
+  });
+
+  it("unfolds a folded Main activity first, so the new card is not hidden", () => {
+    r.data.groups = r.data.groups.map((g) => (g.name === "Main activity" ? { ...g, collapsed: true } : g));
+    model.newSessionFor(ws("one", { directory: "/Users/coder/dev/app-one" }));
+    assert.deepEqual(
+      r.calls.map((c) => c.method),
+      ["workspace.group.expand", "workspace.create"],
+    );
+    assert.deepEqual(r.calls[0]?.params, { group_id: "g-main" });
+    assert.equal(model.isCollapsed(laneByKey("main")), false);
+  });
+
+  it("leaves the lanes alone when the project has no folder", () => {
+    r.data.groups = r.data.groups.map((g) => (g.name === "Main activity" ? { ...g, collapsed: true } : g));
+    model.newSessionFor(ws("two", { directory: "/Users/coder/dev/app-two" }));
+    assert.deepEqual(r.calls, []);
   });
 
   it("leaves the project header's + ungrouped", () => {
