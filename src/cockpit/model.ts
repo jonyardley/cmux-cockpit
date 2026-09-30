@@ -968,14 +968,19 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
 
 // Ready cards (issue #53).
 
+/** Its PR is ready to merge (the green chip), so "To review" shows in green. */
+export const reviewIsGreen = (w: Workspace | undefined): boolean => prHealth(w) === "ready";
+
 /**
- * A Ready card offers "To review", unless it is already in For review or
- * anchors a group: a generated lane anchor is its group, and a real
- * workspace anchoring one cannot leave it (drop.ts pins those too).
+ * A Ready card, or one whose PR is ready to merge, offers "To review",
+ * unless it is already in For review or anchors a group: a generated lane
+ * anchor is its group, and a real workspace anchoring one cannot leave it
+ * (drop.ts pins those too). A ready PR never files the card itself, so
+ * this is the way in.
  */
 export function canFileForReview(w: Workspace | undefined): boolean {
-  return !!w && isReady(w) && laneOf(w) !== "review" && !isAnchor(w);
+  return !!w && (isReady(w) || reviewIsGreen(w)) && laneOf(w) !== "review" && !isAnchor(w);
 }
 
-/** Files a Ready card into For review. */
+/** Files a card into For review. */
 export const fileForReview = (w: Workspace | undefined): void => moveToLane(w, "review");

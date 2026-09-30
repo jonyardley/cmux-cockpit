@@ -59,9 +59,13 @@ export function offersMergedActions(w: Workspace | undefined): boolean {
 export const offersClose = (w: Workspace | undefined): boolean =>
   !!w && offersMergedActions(w) && statusOf(w) !== "working" && statusOf(w) !== "needs_input";
 
-/** Park sits beside Keep until the card is in Parked. */
+/**
+ * Park shows on a merged card until it is in Parked or Keep is tapped. A
+ * pinned workspace offers it alone: parking closes nothing, so the pin that
+ * keeps Close and Keep away is no reason to hide it.
+ */
 export const offersPark = (w: Workspace | undefined): boolean =>
-  !!w && offersMergedActions(w) && laneOf(w) !== "parked";
+  !!w && isMerged(w) && !isKept(w) && !isAnchor(w) && laneOf(w) !== "parked";
 
 /** Files a merged card into Parked. */
 export function parkMerged(w: Workspace | undefined): void {

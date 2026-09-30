@@ -103,8 +103,8 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                   Text "Finished 6m" .font(12) .weight(medium) .color(greenText) .lineLimit(1) .layoutPriority(2)
                 HStack spacing: 5 .frame(maxWidth: infinity, alignment: leading)
                   ForEach .layoutPriority(2)
-                    VStack spacing: 0, alignment: leading .padding(1) .background(greenChipEdge) .cornerRadius(6) .hoverBackground(#30422359) .onTap()
-                      Text "To review →" .font(11) .weight(medium) .color(greenDeep|readyInk) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(greenChipFace) .cornerRadius(5) .hoverBackground(#7184583D)
+                    VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|hairline|neutralChip.edge) .cornerRadius(6) .hoverBackground(#9A9890) .onTap()
+                      Text "To review →" .font(11) .weight(medium) .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(onBadge|card) .cornerRadius(5) .hoverBackground(#EFEFEE)
                 Text "Done: the strip now groups by repo." .font(12) .color(secondary|badge|laneReview|neutralChip.fg) .lineLimit(2) .truncation(tail) .paddingLeading(0) .frame(maxWidth: infinity, alignment: leading)
       VStack spacing: 0 .frame(maxWidth: infinity) .fixed(false)
         VStack spacing: 0 .paddingBottom(4) .frame(maxWidth: infinity) .onTap() .contextMenu(19)
@@ -316,8 +316,6 @@ clayText #A34A2A
 countBg|segTrack #E5E2D6
 faint|laneBackground #8A8880
 green #788C5D
-greenChipEdge #3F5A2B59
-greenChipFace #788C5D29
 greenDeep|readyInk #3F5A2B
 greenText #5E7A40
 grey #A09E95

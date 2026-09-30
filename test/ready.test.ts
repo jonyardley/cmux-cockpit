@@ -213,6 +213,21 @@ describe("To review", () => {
     assert.equal(model.canFileForReview(w), false);
   });
 
+  it("offers To review in green on a card whose PR is ready to merge, Ready or not", () => {
+    r.data.groups = lanes();
+    const read = ws("green", { group: "g-main", branch: "feat", agents: [agent("working")] });
+    r.data.workspaces = [read];
+    assert.equal(status.isReady(read), false, "its agent is still working");
+    assert.equal(model.canFileForReview(read), true, "the ready PR is reason enough");
+    assert.equal(model.reviewIsGreen(read), true);
+    assert.equal(model.reviewIsGreen(readyWs("w")), false, "a Ready card with no PR keeps the white chip");
+    for (const id of ["failing", "running", "draft", "open"]) {
+      const w = ws(id, { group: "g-main", branch: "feat" });
+      assert.equal(model.reviewIsGreen(w), false, id);
+      assert.equal(model.canFileForReview(w), false, id);
+    }
+  });
+
   it("is not offered in For review, off a Ready card, or with no workspace", () => {
     r.data.groups = lanes();
     const inReview = readyWs("r", { group: "g-review" });

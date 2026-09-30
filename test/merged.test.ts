@@ -112,19 +112,27 @@ describe("merged cards", () => {
   it("offers Park until the card is in Parked, and Park files it there", () => {
     assert.equal(m.offersPark(ws("inParked", { group: "g-parked" })), false, "already parked");
     assert.equal(m.offersPark(ws("open")), false, "an open PR is not parked for you");
+    assert.equal(m.offersPark(ws("anchor")), false, "an anchor cannot leave its lane");
     const w = ws("parks");
     r.data.workspaces = [ws("anchor", { title: "Parked", group: "g-parked" }), w];
     assert.equal(m.offersPark(w), true);
+    assert.deepEqual(r.calls, [], "nothing moves until Park is tapped");
     m.parkMerged(w);
+    assert.deepEqual(r.calls.at(-1), {
+      method: "workspace.group.add",
+      params: { group_id: "g-parked", workspace_id: "parks" },
+    });
     assert.equal(laneOf(w), "parked");
     assert.equal(m.offersPark(w), false, "Park goes once it has done its job");
   });
 
-  it("never moves a merged card by itself", () => {
-    const w = ws("done");
-    r.data.workspaces = [w];
-    m.cardOpacity(w, false);
-    m.offersMergedActions(w);
-    assert.equal(laneOf(w), "unsorted", "it stays where it was until Park is tapped");
+  it("offers Park alone on a pinned card, and none once Keep is tapped", () => {
+    const pinned = ws("parks", { pinned: true });
+    assert.equal(m.offersMergedActions(pinned), false);
+    assert.equal(m.offersPark(pinned), true, "parking closes nothing, so a pin does not hide it");
+    assert.equal(m.offersPark(ws("saved")), false, "Keep hides Park too");
+    const n = r.calls.length;
+    m.parkMerged(ws("saved"));
+    assert.equal(r.calls.length, n, "a kept card does not park");
   });
 });

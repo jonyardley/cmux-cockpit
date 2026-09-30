@@ -1,5 +1,5 @@
-// What a PR's chip says about it, apart from the saved state, so both
-// sidebars (prs.ts) and the cockpit's buttons read one rule.
+// What a PR's chip says about it, apart from the saved state, so the
+// sidebars' chips (prs.ts) and the cockpit's merged card read one rule.
 
 import type { SavedCheck } from "../../scripts/state-config.ts";
 

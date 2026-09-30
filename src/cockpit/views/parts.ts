@@ -2,7 +2,7 @@
 
 import type { MoveSize } from "../../shared/move.ts";
 import { isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
-import { type ChipColors, NEUTRAL_CHIP, prInk, READY_INK } from "../../shared/pr-colors.ts";
+import { type ChipColors, NEUTRAL_CHIP, prChipColors, prInk } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId, projectOf } from "../../shared/projects.ts";
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
@@ -49,6 +49,7 @@ import {
   newSessionLabel,
   type PrChip,
   projectKey,
+  reviewIsGreen,
   type TextChip,
 } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
@@ -258,23 +259,37 @@ function prById(chips: readonly Chip[]): PrChip {
 
 // A card's quiet action: a white chip with the quiet chip's edge.
 const ACTION_CHIP: ChipColors = { ...NEUTRAL_CHIP, bg: C.card };
-// "To review →" in Ready's green, so a ready PR's next step stands out.
-const REVIEW_CHIP: ChipColors = { bg: C.greenChipFace, fg: READY_INK, edge: C.greenChipEdge };
+// Close workspace, the action that acts, in ink.
+const CLOSE_CHIP: ChipColors = { ...ACTION_CHIP, fg: C.text };
 
 // A card's action chip, with its own onTap, so the tap never also selects
-// the card; its words take the chip's own ink unless `ink` is given.
-function actionChip(label: string, tap: () => void, colors: ChipColors = ACTION_CHIP, ink = colors.fg): View {
-  const body = Text(label).font(11).weight("medium").color(ink).lineLimit(1).paddingHorizontal(7).paddingVertical(1);
-  return ring(body, colors.bg, colors.edge, 1, 6, { hug: true, hover: chipHover(() => colors) }).onTap(tap);
+// the card.
+function actionChip(label: string, tap: () => void, colors: () => ChipColors = () => ACTION_CHIP): View {
+  const body = Text(label)
+    .font(11)
+    .weight("medium")
+    .color(() => colors().fg)
+    .lineLimit(1)
+    .paddingHorizontal(7)
+    .paddingVertical(1);
+  return ring(
+    body,
+    () => colors().bg,
+    () => colors().edge,
+    1,
+    6,
+    { hug: true, hover: chipHover(colors) },
+  ).onTap(tap);
 }
 
-// "To review →" on a Ready card: files it into For review (issue #53). A
-// ready PR never moves the card itself, so this is the way in.
+// "To review →" (issue #53): files the card into For review, in the ready
+// chip's green while its PR is ready to merge, else a quiet white chip.
 export function toReviewAction(w: WsAccessor): View {
+  const colors = () => (reviewIsGreen(w()) ? prChipColors("ready") : ACTION_CHIP);
   return when(
     "to-review",
     () => canFileForReview(w()),
-    () => actionChip("To review →", () => fileForReview(w()), REVIEW_CHIP),
+    () => actionChip("To review →", () => fileForReview(w()), colors),
   ).layoutPriority(2);
 }
 
@@ -282,13 +297,13 @@ export function toReviewAction(w: WsAccessor): View {
  * A merged card's Park, Close workspace and Keep, on a line of their own,
  * until Keep is tapped; `top` is the gap above it. Close is in ink and the
  * others in the secondary grey, so the one that acts reads first. Park goes
- * once the card is in Parked, and Close stays away while an agent there is
- * working or asking.
+ * once the card is in Parked, a pinned card offers Park alone, and Close
+ * stays away while an agent there is working or asking.
  */
 export function mergedActions(w: WsAccessor, indent = 0, top = 0): View {
   return when(
     "merged-actions",
-    () => offersMergedActions(w()),
+    () => offersMergedActions(w()) || offersPark(w()),
     () =>
       HStack({ spacing: 5 }, [
         when(
@@ -299,9 +314,18 @@ export function mergedActions(w: WsAccessor, indent = 0, top = 0): View {
         when(
           "merged-close",
           () => offersClose(w()),
-          () => actionChip("Close workspace", () => closeMerged(w()), ACTION_CHIP, C.text),
+          () =>
+            actionChip(
+              "Close workspace",
+              () => closeMerged(w()),
+              () => CLOSE_CHIP,
+            ),
         ),
-        actionChip("Keep", () => keepMerged(w())),
+        when(
+          "merged-keep",
+          () => offersMergedActions(w()),
+          () => actionChip("Keep", () => keepMerged(w())),
+        ),
       ])
         .paddingLeading(indent)
         .paddingTop(top)
