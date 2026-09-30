@@ -297,7 +297,7 @@ with `CLAUDE_CONFIG_DIR` set, setup, doctor and uninstall use
     ],
     "PostToolUse": [
       { "matcher": "Bash", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-pr.ts" }] },
-      { "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }] }
+      { "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__update", "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }] }
     ],
     "Stop": [
       { "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-move.ts" }] }

@@ -183,6 +183,26 @@ describe("setup", () => {
     assert.ok(f.out.some((l) => l.includes("removed 1 retired")));
   });
 
+  it("swaps a hook whose matcher has since changed, so it never runs twice", async () => {
+    const w = where();
+    built(w.repo);
+    const p = pathsFor(w.home, w.repo, undefined);
+    const command = "node $HOME/.config/cmux/scripts/hooks/report-published.ts";
+    const old = { matcher: "Artifact|mcp__claude_ai_Claude_Docs__batch", hooks: [{ type: "command", command }] };
+    mkdirSync(p.claudeDir, { recursive: true });
+    writeFileSync(p.claudeSettings, JSON.stringify({ hooks: { PostToolUse: [old] } }));
+    const f = fakeEnv(w, cmuxWith(w.home));
+    await setup(f.env, ["--hooks"]);
+    const groups: { matcher?: string; hooks: { command: string }[] }[] = JSON.parse(
+      readFileSync(p.claudeSettings, "utf8"),
+    ).hooks.PostToolUse;
+    const published = groups.filter((g) => g.hooks.some((h) => h.command === command));
+    assert.deepEqual(
+      published.map((g) => g.matcher),
+      ["Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__update"],
+    );
+  });
+
   it("refuses to touch settings that are not valid JSON", async () => {
     const w = where();
     built(w.repo);

@@ -13,14 +13,22 @@ export const HOOKS_SOURCE = join(import.meta.dirname, "claude-hooks.json");
 /** The hooks setup adds, from the one committed list. */
 export const wanted = (): Entry[] => wantedEntries(JSON.parse(readFileSync(HOOKS_SOURCE, "utf8")));
 
-// Hooks setup once added whose scripts have since gone. Left in place they
-// fail at the end of every turn, so setup and uninstall take them out and
-// doctor flags them.
-const RETIRED = [{ event: "Stop", command: "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" }];
+// Hooks setup once added whose scripts have since gone, or whose matcher
+// has since changed. Left in place the first fail at the end of every
+// turn and the second run twice, so setup and uninstall take them out and
+// doctor flags them. The match on a group's matcher is exact.
+const RETIRED: readonly { event: string; matcher: string | null; command: string }[] = [
+  { event: "Stop", matcher: null, command: "node $HOME/.config/cmux/scripts/hooks/report-mention.ts" },
+  {
+    event: "PostToolUse",
+    matcher: "Artifact|mcp__claude_ai_Claude_Docs__batch",
+    command: "node $HOME/.config/cmux/scripts/hooks/report-published.ts",
+  },
+];
 
 /** The retired hooks, as entries removeEntries can take out. */
 export const retired = (): Entry[] =>
-  RETIRED.map(({ event, command }) => ({ event, matcher: null, command, hook: { type: "command", command } }));
+  RETIRED.map(({ event, matcher, command }) => ({ event, matcher, command, hook: { type: "command", command } }));
 
 export type Loaded =
   | { ok: true; settings: Record<string, unknown>; existed: boolean; text: string }

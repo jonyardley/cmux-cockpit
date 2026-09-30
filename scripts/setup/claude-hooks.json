@@ -16,7 +16,7 @@
         "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-pr.ts" }]
       },
       {
-        "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch",
+        "matcher": "Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__update",
         "hooks": [{ "type": "command", "command": "node $HOME/.config/cmux/scripts/hooks/report-published.ts" }]
       }
     ],
