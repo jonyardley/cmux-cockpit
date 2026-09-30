@@ -498,9 +498,22 @@ describe("Needs you clock", () => {
     ask("a", 45 * 60);
     const now = r.data.epoch;
     r.data.epoch = 0;
-    assert.equal(model.needsWaitText(), "");
-    assert.equal(model.needsWaitLate(), false);
-    r.data.epoch = now;
+    try {
+      assert.equal(model.needsWaitText(), "");
+      assert.equal(model.needsWaitLate(), false);
+    } finally {
+      r.data.epoch = now;
+    }
+  });
+
+  it("skips an untimed ask rather than blanking the clock", () => {
+    const untimed = r.data.workspaces.find((x) => x.id === "b");
+    if (!untimed) throw new Error("fixture");
+    untimed.agents = [agent("needs_input")];
+    ask("a", 45 * 60);
+    assert.equal(model.needsList()[0]?.id, "b");
+    assert.equal(model.needsWaitText(), "45m");
+    assert.equal(model.needsWaitLate(), true);
   });
 
   it("times the oldest ask, wherever it sits in the data", () => {
