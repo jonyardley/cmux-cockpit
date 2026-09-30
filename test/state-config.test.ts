@@ -66,6 +66,7 @@ test("validateState reads a good file unchanged", () => {
     moves: {
       w8: { text: "Run /clear now.", epoch: 302, session: "s1", decisions: 2, leans: "1b 2a" },
       w9: { text: "go", epoch: 303 },
+      w10: { text: "CI is running.", epoch: 304, idle: true },
     },
     prSeen: { w3: "ready", w5: "merged", w6: "other" },
     mergeKept: { w5: 400 },

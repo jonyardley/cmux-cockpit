@@ -175,6 +175,16 @@ describe("moveFrom", () => {
     assert.deepEqual(moveFrom("Your move: go", 5), { text: "go", epoch: 5 });
   });
 
+  it("saves a Nothing for you line as idle, and a later Your move line wins", () => {
+    assert.deepEqual(moveFrom("Done.\n\n**Nothing for you:** CI is running on #2171.", 5), {
+      text: "CI is running on #2171.",
+      epoch: 5,
+      idle: true,
+    });
+    assert.deepEqual(moveFrom("Nothing for you: CI runs.\n\nYour move: go", 5), { text: "go", epoch: 5 });
+    assert.equal(moveLine("I have nothing for you: fine"), null, "only as the line's label");
+  });
+
   it("is null when the reply has no move line", () => {
     assert.equal(moveFrom(DECISIONS.replace("Your move:", "Next:"), 1000), null);
   });

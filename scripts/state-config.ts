@@ -270,6 +270,8 @@ export interface SavedMove {
   decisions?: number;
   /** The reply's recommended answers in Jon's shorthand ("1b 2a"), when it marked any. */
   leans?: string;
+  /** Set when the line was "Nothing for you:", not "Your move:": the turn waits on the agent. */
+  idle?: true;
 }
 
 /** The longest "Your move" line kept; the hook cuts one to this. */
@@ -551,16 +553,18 @@ const isDecisions = (v: unknown): v is number =>
 
 function savedMove(v: unknown): SavedMove | null {
   if (!isRecord(v) || !isText(v.text, MAX_MOVE) || !isEpoch(v.epoch)) return null;
-  const { session, decisions, leans } = v;
+  const { session, decisions, leans, idle } = v;
   if (session !== undefined && (typeof session !== "string" || !isId(session))) return null;
   if (decisions !== undefined && !isDecisions(decisions)) return null;
   if (leans !== undefined && !isLeans(leans)) return null;
+  if (idle !== undefined && idle !== true) return null;
   return {
     text: v.text,
     epoch: v.epoch,
     ...(typeof session === "string" ? { session } : {}),
     ...(isDecisions(decisions) ? { decisions } : {}),
     ...(isLeans(leans) ? { leans } : {}),
+    ...(idle === true ? { idle } : {}),
   };
 }
 

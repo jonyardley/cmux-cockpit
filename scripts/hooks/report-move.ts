@@ -23,8 +23,10 @@ import { field } from "./gh-command.ts";
 import { readTail, replyFrom, sleep } from "./transcript.ts";
 
 // The line's label as Jon's rules write it, after any markdown the terminal
-// would not show (a quote, bold, a list marker).
-const MOVE_LINE = /^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)?your move(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(.+)$/i;
+// would not show (a quote, bold, a list marker): "Your move:" when the turn
+// waits on Jon, "Nothing for you:" when it waits on the agent.
+const MOVE_LINE =
+  /^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)?(your move|nothing for you)(?:\*\*|__)?\s*:\s*(?:\*\*|__)?\s*(.+)$/i;
 // A decision's heading: "**1. Where the card gets the line**", or the same
 // as a bullet, "- **1. Where the card gets the line**".
 const DECISION = /^\s*(?:[-*]\s+)?\*\*([1-9])[.)]\s/;
@@ -59,15 +61,20 @@ function unfenced(text: string): string[] {
   });
 }
 
-/** The last "Your move" line in `text` outside a code fence, cleaned, or null when there is none. */
-export function moveLine(text: string): string | null {
+/** The last move line in `text` outside a code fence, cleaned, with whether it asks nothing of Jon. */
+function lastMove(text: string): { line: string; idle: boolean } | null {
   const lines = unfenced(text);
   for (let i = lines.length - 1; i >= 0; i--) {
     const hit = MOVE_LINE.exec(lines[i] ?? "");
-    if (hit?.[1]) return cleanMove(unmark(hit[1]));
+    if (!hit?.[1] || !hit[2]) continue;
+    const line = cleanMove(unmark(hit[2]));
+    return line ? { line, idle: hit[1].toLowerCase() !== "your move" } : null;
   }
   return null;
 }
+
+/** The last "Your move" or "Nothing for you" line in `text` outside a code fence, cleaned, or null when there is none. */
+export const moveLine = (text: string): string | null => lastMove(text)?.line ?? null;
 
 /**
  * How many decisions a reply lays out, and the letter it leans to under each
@@ -95,15 +102,16 @@ export function decisionsIn(text: string): { count: number; leans: string } {
 
 /** What the hook saves for a reply, or null when the reply has no move line. */
 export function moveFrom(text: string, now: number, session?: string): SavedMove | null {
-  const line = moveLine(text);
-  if (!line) return null;
+  const found = lastMove(text);
+  if (!found) return null;
   const { count, leans } = decisionsIn(text);
   return {
-    text: line,
+    text: found.line,
     epoch: now,
     ...(session ? { session } : {}),
     ...(count ? { decisions: count } : {}),
     ...(leans ? { leans } : {}),
+    ...(found.idle ? { idle: true } : {}),
   };
 }
 
