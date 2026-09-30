@@ -106,6 +106,7 @@ export function pathsFor(home: string, repo: string, claudeConfigDir: string | u
     urlToken: join(repo, "config", "url-token"),
     nodeModules: join(repo, "node_modules"),
     sidebars: join(repo, "sidebars"),
+    lastBuild: join(repo, "config", "last-build"),
     src: join(repo, "src"),
     findNode: join(repo, "scripts", "find-node.sh"),
     installHelper: join(repo, "scripts", "install-helper.ts"),

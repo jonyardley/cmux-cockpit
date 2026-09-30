@@ -58,6 +58,7 @@ function cmuxWith(home: string): Answers {
 
 const built = (repo: string): void => {
   for (const f of ["cockpit.js", "agents.js"]) writeFileSync(join(repo, "sidebars", f), "");
+  writeFileSync(join(repo, "config", "last-build"), "");
 };
 
 describe("setup", () => {
@@ -344,6 +345,10 @@ describe("doctor", () => {
     utimesSync(pathsFor(w.home, w.repo, undefined).projects, later, later);
     const again = runChecks(fakeEnv(w).env).find((c) => c.label === "Build");
     assert.equal(again?.ok, false, "an edited projects.json needs a rebuild too");
+    const mark = join(w.repo, "config", "last-build");
+    utimesSync(mark, new Date(Date.now() + 120_000), new Date(Date.now() + 120_000));
+    const fresh = runChecks(fakeEnv(w).env).find((c) => c.label === "Build");
+    assert.equal(fresh?.ok, true, "a build that left the bundles unchanged still counts as fresh");
   });
 
   it("flags a retired hook left in the settings, with setup as the fix", async () => {

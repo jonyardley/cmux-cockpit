@@ -19,6 +19,7 @@ config/projects.json
 config/state.json
 config/renames/
 config/url-token
+config/last-build
 config/*.lock
 config/*.tmp
 # npm run preview's pages and screenshots.

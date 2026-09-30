@@ -15,6 +15,11 @@ sidebar ──openURL──▶ CmuxCockpit.app ──▶ scripts/state-set.ts
 sidebars/*.js with __STATE__ baked in ──▶ cmux hot-reloads the sidebar
 ```
 
+Every reload redraws the whole panel, which shows as a flicker, so the
+build keeps them to real changes: each sidebar is baked with only the maps
+it reads (`scripts/bundle.ts`), and a bundle whose bytes did not change is
+not rewritten (`scripts/write-if-changed.ts`), so cmux does not reload it.
+
 ## The URL
 
 ```

@@ -417,7 +417,9 @@ export function tallyOutcome(tally: GhTally, outcome: "ok" | "skip" | PollError)
 }
 
 // A saved success is refreshed only once it is this old, so a quiet run
-// with gh working is not a write and a rebuild (docs/state-loop.md).
+// with gh working is not a write and a rebuild (docs/state-loop.md). Only
+// the agents panel reads it (scripts/bundle.ts), so a refresh never
+// reloads the cockpit.
 const RESTAMP_S = 5 * 60;
 
 /**
