@@ -1,6 +1,7 @@
 // Scene: the cockpit's lanes with a card in every state, each lane at its
-// own density, a merged card in Main activity and in Unsorted, and a working
-// card under the folded Parked header. Fixture data only; see test/support/snapshot.ts.
+// own density, a merged card in Main activity and in Unsorted, a working
+// card under the folded Parked header, and one waiting on a background
+// shell. Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
 import { ago, EPOCH, seed, snapshotScene } from "./support/snapshot.ts";
@@ -9,6 +10,7 @@ const r = seed({
   state: {
     asking: { asking: { reason: "allow git push?", epoch: EPOCH - 120 } },
     subagents: {},
+    shells: { waiting: [{ id: "b1", session: "shell-chat", startedEpoch: EPOCH - 300 }] },
   },
 });
 const { agent, group, ws } = await import("./support/fixtures.ts");
@@ -109,6 +111,15 @@ it("lanes: every card state", () => {
     }),
     ws("anchor-bg", { title: "Background", group: "g-bg" }),
     ws("none", { title: "No agent", group: "g-bg", branch: "main" }),
+    // Idle on a background shell still running: Waiting in working blue.
+    ws("waiting", {
+      title: "Iteration timings",
+      group: "g-bg",
+      unread: 1,
+      latestPrompt: "hi",
+      agents: [agent("idle", { id: "shell-chat", sinceEpoch: ago(240), lastActivityAt: ago(240) })],
+      latestMessage: "The batch resumes by itself once load drops.",
+    }),
     ws("anchor-parked", { title: "Parked", group: "g-parked" }),
     // Working under the folded Parked header, so the header shows its dot.
     ws("parked", {

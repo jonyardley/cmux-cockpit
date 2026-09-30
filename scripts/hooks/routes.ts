@@ -21,12 +21,13 @@ export const ROUTES: Readonly<Record<string, readonly Route[]>> = {
   ],
   PostToolUse: [
     { script: "report-pr.ts", matcher: "Bash" },
+    { script: "report-shell.ts", matcher: "Bash" },
     {
       script: "report-published.ts",
       matcher: "Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__update",
     },
   ],
-  Stop: [{ script: "report-move.ts", sendsBack: true }, { script: "report-rename.ts" }],
+  Stop: [{ script: "report-move.ts", sendsBack: true }, { script: "report-rename.ts" }, { script: "report-shell.ts" }],
   UserPromptSubmit: [{ script: "report-rename.ts" }],
   SessionStart: [{ script: "report-rename.ts" }],
   SubagentStart: [{ script: "report-subagent.ts" }],

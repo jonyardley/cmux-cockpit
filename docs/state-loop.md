@@ -381,6 +381,31 @@ build is going then gets another pass from that holder, so the last bundle
 written is built from the newest source, even in a clone without the git
 hooks installed.
 
+## Background shells
+
+cmux sends custom sidebars nothing about the shells a chat leaves running
+in the background, so `scripts/hooks/report-shell.ts` records them in
+`shells`: workspace id to a list of `{"id", "session", "startedEpoch"}`,
+oldest first, at most `MAX_SHELLS`. The map is left out while it is empty,
+so a file from before it existed reads the same.
+
+`PostToolUse` on `Bash` saves a call that ran with `run_in_background`,
+keyed by the task id Claude Code gave it (`tool_response.backgroundTaskId`,
+else the id in its "running in background with ID" text). `Stop` reads the
+transcript's last 512 KB for `<task-notification>` blocks, which Claude
+Code writes when a background task finishes or is stopped, and drops the
+shells they name. A finished shell wakes its chat, and that turn ends in a
+`Stop`, so the drop lands within a turn. A shell older than `MAX_AGE_S`
+(12 hours) is pruned on the next event, for a notification that was missed.
+
+`src/shared/shells.ts` counts a workspace's shells whose session is one of
+its open agents, so closing a chat, which kills its shells, clears them
+from the card at once. An idle agent with a shell counted reads "Waiting
+4m · 1 shell" in working blue on its cockpit card, and is never Ready.
+
+Known gap: after `/clear` the chat runs under a new session id, so a shell
+started before the clear stops counting while it still runs.
+
 ## Published pages and docs
 
 cmux knows nothing about the pages and docs agents publish on claude.ai
