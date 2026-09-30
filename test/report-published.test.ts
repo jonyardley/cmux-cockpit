@@ -8,7 +8,13 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
-import { applyPublished, publishedFrom, titleFromHtml } from "../scripts/hooks/report-published.ts";
+import {
+  applyPublished,
+  applyTouch,
+  publishedFrom,
+  titleFromHtml,
+  touchedFrom,
+} from "../scripts/hooks/report-published.ts";
 import type { SavedPublished } from "../scripts/state-config.ts";
 import { PUBLISHED_MAX_AGE_S as MAX_AGE_S } from "../src/shared/published-age.ts";
 
@@ -221,6 +227,68 @@ describe("applyPublished", () => {
   });
 });
 
+describe("touchedFrom", () => {
+  const UUID = "e9937512-be18-4567-8e49-e43617e3393c";
+  const LINK = `https://claude.ai/code/artifact/${UUID}`;
+  const container = { kind: "project", id: UUID };
+
+  it("touches the link an Artifact open names", () => {
+    assert.equal(touchedFrom(artifact({ action: "open", url: DOC })), DOC);
+  });
+
+  it("touches nothing for other Artifact actions, or an open without a claude.ai link", () => {
+    for (const action of ["read", "list", "pin", "publish"]) {
+      assert.equal(touchedFrom(artifact({ action, url: DOC })), null, action);
+    }
+    assert.equal(touchedFrom(artifact({ action: "open", url: "https://example.com/artifact/x" })), null);
+  });
+
+  it("touches the doc a Docs update edits, by its container or a ref to the doc", () => {
+    const update = "mcp__claude_ai_Claude_Docs__update";
+    const edit = { ref: { object: "node", id: "cc5b" }, container, payload: {} };
+    assert.equal(touchedFrom(docs(update, edit, "ok")), LINK);
+    assert.equal(touchedFrom(docs(update, { ref: { object: "project", id: UUID }, payload: {} }, "ok")), LINK);
+    assert.equal(touchedFrom(docs(update, { ref: { object: "node", id: "cc5b" }, payload: {} }, "ok")), null);
+  });
+
+  it("touches the doc a batch edits, but not one a batch creates", () => {
+    const batch = "mcp__claude_ai_Claude_Docs__batch";
+    assert.equal(touchedFrom(docs(batch, { container, batch: [{}] }, "ok")), LINK);
+    assert.equal(touchedFrom(docs(batch, createDoc, `${DOC}`)), null);
+  });
+
+  it("touches nothing for a doc id that could not be a link, other tools or other events", () => {
+    const batch = "mcp__claude_ai_Claude_Docs__batch";
+    assert.equal(touchedFrom(docs(batch, { container: { kind: "project", id: "a/b" } }, "ok")), null);
+    assert.equal(touchedFrom(docs("mcp__claude_ai_Claude_Docs__read", { container }, "ok")), null);
+    assert.equal(touchedFrom({ ...artifact({ action: "open", url: DOC }), hook_event_name: "PreToolUse" }), null);
+    assert.equal(touchedFrom(null), null);
+  });
+});
+
+describe("applyTouch", () => {
+  const saved = (url: string, epoch: number): SavedPublished => ({
+    url,
+    title: "Kept",
+    kind: "doc",
+    workspace: "old",
+    epoch,
+  });
+
+  it("moves a saved entry to now and the touching workspace, last as the newest, title kept", () => {
+    const start = { [DOC]: saved(DOC, NOW - 5000), [PAGE]: saved(PAGE, NOW - 10) };
+    const map = applyTouch(start, DOC, "w2", NOW);
+    assert.deepEqual(Object.keys(map), [PAGE, DOC]);
+    assert.deepEqual(map[DOC], { url: DOC, title: "Kept", kind: "doc", workspace: "w2", epoch: NOW });
+    assert.equal(start[DOC]?.workspace, "old", "the input is not changed");
+  });
+
+  it("adds nothing for a link with no saved entry, but still prunes", () => {
+    const start = { [PAGE]: saved(PAGE, NOW - MAX_AGE_S - 1) };
+    assert.deepEqual(applyTouch(start, DOC, "w2", NOW), {});
+  });
+});
+
 describe("the hook as Claude Code runs it", () => {
   // No CMUX_WORKSPACE_ID, so it can never write this checkout's state file.
   const env = { ...process.env };
@@ -230,6 +298,12 @@ describe("the hook as Claude Code runs it", () => {
 
   it("exits 0 on junk, saying nothing", () => {
     const result = run("not json");
+    assert.equal(result.status, 0);
+    assert.equal(result.stderr, "");
+  });
+
+  it("exits 0 on a touch outside a cmux workspace, saying nothing", () => {
+    const result = run(JSON.stringify(artifact({ action: "open", url: DOC })));
     assert.equal(result.status, 0);
     assert.equal(result.stderr, "");
   });

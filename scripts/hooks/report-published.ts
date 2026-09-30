@@ -2,9 +2,12 @@
 // findable in terminal scrollback.
 //
 // Run as a Claude Code PostToolUse hook (docs/state-loop.md has the
-// settings.json block) on the Artifact tool and the Claude Docs batch tool.
-// Docs' `create` tool is left out: it adds a tab, comment or upload to an
-// existing doc, never a new doc. Each invocation gets one event as JSON on stdin and the
+// settings.json block) on the Artifact tool and the Claude Docs batch and
+// update tools. Docs' `create` tool is left out: it adds a tab, comment or
+// upload to an existing doc, never a new doc. Opening an artifact, or
+// editing a doc, touches its saved entry: it moves to now and to the
+// workspace doing the work, so a doc made days ago and worked on today
+// shows as this workspace's. Each invocation gets one event as JSON on stdin and the
 // workspace id from CMUX_WORKSPACE_ID, and folds the link into
 // config/state.json's `published` map (scripts/state-config.ts), keyed by
 // URL so a republish updates its entry, under the same file lock every
@@ -33,6 +36,8 @@ import { writePublished } from "../state-url.ts";
 type PublishedMap = State["published"];
 
 const DOCS_BATCH = "mcp__claude_ai_Claude_Docs__batch";
+const DOCS_UPDATE = "mcp__claude_ai_Claude_Docs__update";
+const DOC_ID = /^[\w-]{1,200}$/;
 const ARTIFACT_URL = /https:\/\/claude\.ai\/(?:code\/)?artifact\/[\w-]+/g;
 // A tool result is small; this bounds a pathological one, not a real one.
 const MAX_DEPTH = 8;
@@ -171,6 +176,45 @@ export function publishedFrom(event: unknown, wsId: string, now: number, read: R
   return found ? { ...found, kind, workspace: wsId, epoch: now } : null;
 }
 
+// A doc's id is the <uuid> of its claude.ai/code/artifact/<uuid> link.
+function docLink(id: unknown): string | null {
+  return typeof id === "string" && DOC_ID.test(id) ? `https://claude.ai/code/artifact/${id}` : null;
+}
+
+// The doc an edit names: its container, or a ref to the doc itself (a rename).
+function editedDoc(input: unknown): string | null {
+  const container = field(input, "container");
+  if (field(container, "create") !== undefined) return null;
+  const ref = field(input, "ref");
+  return docLink(field(container, "id")) ?? (field(ref, "object") === "project" ? docLink(field(ref, "id")) : null);
+}
+
+/**
+ * The link one PostToolUse event works on without publishing it: an
+ * Artifact open, or a Claude Docs edit (update, or a batch on an existing
+ * doc). Null for anything else. Only an entry already saved is touched,
+ * since these calls carry no title.
+ */
+export function touchedFrom(event: unknown): string | null {
+  if (field(event, "hook_event_name") !== "PostToolUse") return null;
+  const tool = field(event, "tool_name");
+  const input = field(event, "tool_input");
+  if (tool === "Artifact") {
+    const url = field(input, "url");
+    return field(input, "action") === "open" && isPublishedUrl(url) ? url : null;
+  }
+  return tool === DOCS_BATCH || tool === DOCS_UPDATE ? editedDoc(input) : null;
+}
+
+/**
+ * Moves a saved entry to `now` and to workspace `wsId`, last as the newest,
+ * pruning as applyPublished does. A link with no saved entry only prunes.
+ */
+export function applyTouch(map: PublishedMap, url: string, wsId: string, now: number): PublishedMap {
+  const saved = map[url];
+  return applyPublished(map, saved ? { ...saved, workspace: wsId, epoch: now } : null, now);
+}
+
 /**
  * Adds or replaces one entry, moved last as the newest, and drops every
  * entry older than seven days (PUBLISHED_MAX_AGE_S). A null entry only prunes. The input is not
@@ -197,9 +241,19 @@ const errorText = (err: unknown): string => (err instanceof Error ? err.message 
 function record(event: unknown, wsId: string | undefined): string | null {
   const now = Math.floor(Date.now() / 1000);
   const entry = publishedFrom(event, wsId ?? "", now, readHead);
-  if (!entry) return null;
-  if (!wsId) return "skipped, not in a cmux workspace";
-  const result = writePublished(STATE_PATH, (published) => applyPublished(published, entry, now));
+  if (entry) {
+    if (!wsId) return "skipped, not in a cmux workspace";
+    return write((published) => applyPublished(published, entry, now));
+  }
+  // A touch outside cmux is nothing worth a note: it would fire on every doc edit.
+  const touched = touchedFrom(event);
+  if (!touched || !wsId) return null;
+  return write((published) => applyTouch(published, touched, wsId, now));
+}
+
+// Folds `update` into the saved map, rebuilding when it changed.
+function write(update: (published: PublishedMap) => PublishedMap): string | null {
+  const result = writePublished(STATE_PATH, update);
   if (!result.ok) return result.error;
   if (result.changed) scheduleBuild("report-published");
   return null;

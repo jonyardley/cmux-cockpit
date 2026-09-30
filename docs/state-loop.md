@@ -380,7 +380,8 @@ reads it back, newest first, for the agents panel's Made here section
 seven days itself (`src/shared/published-age.ts`), since the hook prunes
 only when it writes.
 
-It runs as a PostToolUse hook on `Artifact` and the Claude Docs `batch` tool.
+It runs as a PostToolUse hook on `Artifact` and the Claude Docs `batch`
+and `update` tools.
 
 The registration is in the [quickstart's hooks block](quickstart.md#claude-code-hooks),
 the one copy of it.
@@ -398,6 +399,14 @@ HTML file's `<title>` (only its first 256 KB is read), then
 `tool_input.title`, then the file's name for a page, or
 `tool_input.container.create.name` for a doc. It never fails the hook: a
 problem is a line on stderr and exit 0.
+
+Working on something already saved touches it: an Artifact `open`, a
+Docs `update`, or a `batch` whose `tool_input.container.id` names an
+existing doc. The doc's id is the `<uuid>` of its
+`claude.ai/code/artifact/<uuid>` link, the form a Docs create returns. A
+touch moves the entry to now and to the workspace doing the work, title
+kept, so a doc made days ago and edited today reads as this workspace's.
+These calls carry no title, so a link with no saved entry adds nothing.
 
 Two gaps are known. One artifact has two link forms,
 `claude.ai/artifact/<id>` and `claude.ai/code/artifact/<uuid>`, with
