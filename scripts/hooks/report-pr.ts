@@ -3,9 +3,10 @@
 // cmux learns about PRs from its shell integration, which sends `report_pr`
 // down the app socket for PR commands typed in the terminal. A PR an agent
 // opens from its own subprocess never sends that, so cmux shows no PR.
-// Run as a Claude Code PostToolUse hook on Bash: after a `gh pr create` that
-// printed a PR URL, it asks gh for that PR and sends the line the shell
-// integration would (Resources/shell-integration/cmux-zsh-integration.zsh,
+// Run by scripts/hooks/dispatch.ts on PostToolUse for Bash: after a
+// `gh pr create` that printed a PR URL, it asks gh for that PR and sends
+// the line the shell integration would
+// (Resources/shell-integration/cmux-zsh-integration.zsh,
 // `report_pr` and `_cmux_write_socket_payload`, cmux 0.64). It also starts
 // a PR poll a few seconds later, since the poll the agent's turn end fires
 // straight after a create can run before gh lists the new PR. After a

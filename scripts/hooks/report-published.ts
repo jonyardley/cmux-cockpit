@@ -1,10 +1,10 @@
 // Records the pages and docs agents publish (#52), which are otherwise only
 // findable in terminal scrollback.
 //
-// Run as a Claude Code PostToolUse hook (docs/state-loop.md has the
-// settings.json block) on the Artifact tool and the Claude Docs batch and
-// update tools. Docs' `create` tool is left out: it adds a tab, comment or
-// upload to an existing doc, never a new doc. Editing a doc touches its
+// Run by scripts/hooks/dispatch.ts on Claude Code's PostToolUse, for the
+// Artifact tool and the Claude Docs batch and update tools (the matcher is
+// in scripts/hooks/routes.ts). Docs' `create` tool is left out: it adds a
+// tab, comment or upload to an existing doc, never a new doc. Editing a doc touches its
 // saved entry: it moves to now and to the workspace doing the work, so a
 // doc made days ago and worked on today shows as this workspace's. Each invocation gets one event as JSON on stdin and the
 // workspace id from CMUX_WORKSPACE_ID, and folds the link into

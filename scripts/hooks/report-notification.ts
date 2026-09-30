@@ -8,8 +8,8 @@
 // (src/shared/needs.ts's askReason). An ask older than the agent's current
 // needs_input spell is ignored there, so nothing here has to clear it.
 //
-// Run as a Claude Code hook on three events (docs/state-loop.md has the
-// settings.json block):
+// Run by scripts/hooks/dispatch.ts on three Claude Code events, with the
+// matchers scripts/hooks/routes.ts lists:
 //   - PermissionRequest (every tool): fires the moment Claude Code is about
 //     to ask, the same moment cmux's own PermissionRequest hook marks the
 //     agent needs_input, and carries the tool and its input, so the reason

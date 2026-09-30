@@ -1,10 +1,10 @@
 // Tells cmux about a workspace's subagent runs (#6): custom sidebars get no
 // subagent data from cmux at all, so this hook is the only source.
 //
-// Run as a Claude Code hook on three events (docs/state-loop.md has the
-// settings.json block): PreToolUse (matcher "Agent"), SubagentStart and
-// SubagentStop. Each invocation gets one event as JSON on stdin and the
-// workspace id from CMUX_WORKSPACE_ID, and folds it into
+// Run by scripts/hooks/dispatch.ts on three Claude Code events, as
+// scripts/hooks/routes.ts lists them: PreToolUse (matcher "Agent"),
+// SubagentStart and SubagentStop. Each invocation gets one event as JSON
+// on stdin and the workspace id from CMUX_WORKSPACE_ID, and folds it into
 // config/state.json's `subagents` map (scripts/state-config.ts) under the
 // same file lock a URL write or a PR poll uses (state-url.ts's
 // writeSubagents). It never fails the hook: a missing workspace id, bad
@@ -55,8 +55,8 @@ function typeOf(raw: unknown): string | undefined {
 }
 
 // PreToolUse on the Agent tool: a new run, keyed by the call, not yet paired
-// to an agent id. A duplicate delivery of the same call (the hook can be
-// registered twice, or an event can be redelivered) is a no-op: a run with
+// to an agent id. A duplicate delivery of the same call (the entry point
+// can be installed twice, or an event can be redelivered) is a no-op: a run with
 // that tool_use_id already exists.
 // A run this function leaves unchanged returns the same array reference,
 // so applyEvent can tell a no-op from a real change without a deep compare.
