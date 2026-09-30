@@ -279,6 +279,20 @@ export function writeSubagents(
 }
 
 /**
+ * Folds `update` over the whole `shells` map (scripts/hooks/report-shell.ts),
+ * under the same lock, with keys sorted as writeSubagents sorts them.
+ */
+export function writeShells(
+  path: string,
+  update: (shells: NonNullable<State["shells"]>) => NonNullable<State["shells"]>,
+): ApplyResult {
+  return readUpdateWrite(path, (before) => {
+    const shells = sortedByKey(update(before.shells ?? {}));
+    return { ok: true, state: validateState({ ...before, shells }) };
+  });
+}
+
+/**
  * Folds `update` over the whole `published` map
  * (scripts/hooks/report-published.ts), under the same lock. Keys are not
  * sorted: the map is kept oldest first, so validateState's cap drops the

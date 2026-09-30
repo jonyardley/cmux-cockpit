@@ -14,6 +14,12 @@ export const ASKING_WORD = "Asking";
 
 export const NO_AGENT_WORD = "No agent";
 
+/** An idle agent whose background shell is still running: "Waiting 4m · 1 shell". */
+export const WAITING_WORD = "Waiting";
+
+/** "· 1 shell", "· 2 shells": what an idle agent is waiting on. */
+export const shellText = (n: number): string => "· " + n + (n === 1 ? " shell" : " shells");
+
 /** A working agent with no activity for a while: "Working 42m · quiet 17m". */
 export const QUIET_WORD = "quiet";
 

@@ -48,6 +48,14 @@ export interface State {
    */
   subagents: Record<string, SavedSubagent[]>;
   /**
+   * wsId -> the background shells its chats have running, oldest first,
+   * recorded by scripts/hooks/report-shell.ts because cmux sends custom
+   * sidebars none. A shell is removed once Claude Code reports it done.
+   * Written only by the hook, never by a URL. Left out while nothing is
+   * saved, so a file from before it existed reads the same.
+   */
+  shells?: Record<string, SavedShell[]>;
+  /**
    * Claude Code session id -> the name its agent row shows, recorded by
    * scripts/hooks/report-rename.ts because cmux's own agent title is the
    * first message, which it cannot read for every Claude folder. Oldest
@@ -216,6 +224,16 @@ export interface SavedSubagent {
   endedEpoch?: number;
 }
 
+/** A background shell a chat started, as report-shell.ts saves it. */
+export interface SavedShell {
+  /** Claude Code's task id for it, which its task-notification names. */
+  id: string;
+  /** The Claude Code session that started it. */
+  session: string;
+  /** Epoch seconds it started. */
+  startedEpoch: number;
+}
+
 /** Where a session's name came from: a `/rename`, or its first real prompt. */
 export type NameSource = "title" | "prompt";
 
@@ -288,6 +306,9 @@ export interface SavedMove {
 export const MAX_MOVE = 200;
 /** The most decisions one reply is counted as laying out. */
 export const MAX_DECISIONS = 9;
+
+/** Shells kept per workspace, newest kept, so a runaway loop cannot bloat the file. */
+export const MAX_SHELLS = 10;
 
 /** Runs kept per workspace, newest kept, so a busy agent cannot bloat the file. */
 export const MAX_SUBAGENTS = 10;
@@ -589,6 +610,16 @@ function savedName(v: unknown): SavedName | null {
   return isRecord(v) && isLabel(v.name) && isSource(v.from) ? { name: v.name, from: v.from } : null;
 }
 
+function savedShell(v: unknown): SavedShell[] {
+  if (!isRecord(v) || !isIdText(v.id) || !isIdText(v.session) || !isEpoch(v.startedEpoch)) return [];
+  return [{ id: v.id, session: v.session, startedEpoch: v.startedEpoch }];
+}
+
+function savedShells(v: unknown): SavedShell[] | null {
+  const shells = Array.isArray(v) ? v.flatMap(savedShell).slice(-MAX_SHELLS) : [];
+  return shells.length ? shells : null;
+}
+
 function savedSubagents(v: unknown): SavedSubagent[] | null {
   const runs = Array.isArray(v) ? v.flatMap(savedSubagent).slice(-MAX_SUBAGENTS) : [];
   return runs.length ? runs : null;
@@ -609,6 +640,7 @@ function cleanMap<T>(v: unknown, clean: (value: unknown, id: string) => T | null
 export function validateState(raw: unknown): State {
   const v = isRecord(raw) ? raw : {};
   const poll = savedPoll(v.poll);
+  const shells = cleanMap(v.shells, savedShells);
   return {
     dismissed: cleanMap(v.dismissed, agentStarts),
     projectOverride: cleanMap(v.projectOverride, projectKey),
@@ -623,6 +655,7 @@ export function validateState(raw: unknown): State {
     moves: cleanMap(v.moves, savedMove),
     mergeKept: cleanMap(v.mergeKept, keptPr),
     ui: uiState(v.ui),
+    ...(Object.keys(shells).length ? { shells } : {}),
     ...(poll ? { poll } : {}),
   };
 }

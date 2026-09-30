@@ -9,11 +9,20 @@ import { STATUS_TEXT } from "../shared/palette.ts";
 import { prInk } from "../shared/pr-colors.ts";
 import type { PrSummary } from "../shared/prs.ts";
 import { quietSince, quietSuffix } from "../shared/quiet.ts";
+import { liveShellCount } from "../shared/shells.ts";
 import { liveRunCount } from "../shared/subagents.ts";
 import { cardMessage, clip, oneLine, promptText, readable } from "../shared/text.ts";
 import { ageSince, finishedAt } from "../shared/time.ts";
 import { countTint, type HaloStatus, haloColor, type PillColors, type Urgency } from "../shared/ui.ts";
-import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge, YOU_WORD } from "../shared/words.ts";
+import {
+  ASKING_WORD,
+  NO_AGENT_WORD,
+  STATUS_WORD,
+  shellText,
+  WAITING_WORD,
+  withAge,
+  YOU_WORD,
+} from "../shared/words.ts";
 import { isSelected } from "./state.ts";
 import { C } from "./theme.ts";
 
@@ -140,12 +149,23 @@ export const askOf = (w: Workspace | undefined): string | null => askReason(agen
 // the dot goes hollow in blue rather than taking a new hue.
 const QUIET: StatusStyle = { ...STATUS.working, dot: null, halo: "clear", ring: C.blue };
 
+// Waiting: the turn ended but a background shell it started still runs,
+// so the card reads as busy, in working blue, not as finished. Ready still
+// wins while its output is unread: a shell can be a dev server that never
+// exits, and the finished turn is what Jon has to look at.
+const WAITING: StatusStyle = { ...STATUS.working, label: WAITING_WORD };
+
+/** True when the workspace's agent is idle on a background shell its own chat still runs. */
+export const isWaiting = (a: Agent | null, w: Workspace | undefined): boolean =>
+  a?.status === "idle" && liveShellCount(w, a) > 0;
+
 export function statusInfo(w: Workspace | undefined): StatusStyle {
   if (isReady(w)) return READY;
-  // The agent is worked out once, for both the ask and the status.
+  // The agent is worked out once, for the ask, the shells and the status.
   const a = agentOf(w);
   if (askReason(a, w)) return ASKING;
   if (quietSince(a, w)) return QUIET;
+  if (isWaiting(a, w)) return WAITING;
   return STATUS[a?.status ?? "none"] ?? STATUS.none;
 }
 
@@ -252,6 +272,7 @@ export function prTextColor(pr: Pick<PrSummary, "health"> | undefined, quiet: st
 export function statusLine(w: Workspace | undefined): string {
   const info = statusInfo(w);
   const line = withAge(info.label, cardAge(w));
+  if (info === WAITING) return line + " " + shellText(liveShellCount(w, agentOf(w)));
   return info === QUIET ? line + quietSuffix(agentOf(w), w) : line;
 }
 

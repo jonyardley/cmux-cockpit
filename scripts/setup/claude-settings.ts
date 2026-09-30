@@ -33,7 +33,8 @@ export const wanted = (): Entry[] =>
 // The scripts setup once added to settings one by one, before the entry
 // points. Left in beside them each would run twice, so setup and uninstall
 // take them out under any matcher, and doctor flags them. report-mention.ts
-// has since gone altogether.
+// has since gone altogether. Report scripts added since are listed too, so
+// one also added by hand is never run twice.
 const LEGACY_SCRIPTS = [
   "report-subagent.ts",
   "report-notification.ts",
@@ -41,6 +42,7 @@ const LEGACY_SCRIPTS = [
   "report-published.ts",
   "report-move.ts",
   "report-rename.ts",
+  "report-shell.ts",
   "report-mention.ts",
 ];
 
