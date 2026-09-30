@@ -41,6 +41,7 @@ const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open",
     conflictsFailing: { ...saved, number: 18, conflicts: true },
     conflictsMerged: { ...saved, number: 19, status: "merged", conflicts: true, checks: [] },
     titled: { ...saved, number: 20, title: "✳ Show the PR title", checks: [] },
+    sized: { ...saved, number: 22, additions: 1234, deletions: 8, checks: [] },
     // Not in the poller's worst-first order, so a sort would show.
     unsorted: {
       ...saved,
@@ -72,7 +73,7 @@ const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open",
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
-const { checksOf, prOf, prSummary, prsOf } = await import("../src/shared/prs.ts");
+const { checksOf, diffText, prOf, prSummary, prsOf } = await import("../src/shared/prs.ts");
 const agents = await import("../src/agents/model.ts");
 const { P } = await import("../src/shared/palette.ts");
 
@@ -311,6 +312,25 @@ describe("checksSummary", () => {
   });
 });
 
+describe("diffText", () => {
+  it("writes lines added and removed with a true minus sign", () => {
+    assert.equal(diffText({ additions: 120, deletions: 8 }), "+120 \u22128");
+    assert.equal(diffText({ additions: 5 }), "+5 \u22120");
+    assert.equal(diffText({ deletions: 3 }), "+0 \u22123");
+  });
+
+  it("shortens thousands to at most four characters, never rounding up", () => {
+    assert.equal(diffText({ additions: 999, deletions: 1000 }), "+999 \u22121k");
+    assert.equal(diffText({ additions: 1999, deletions: 9999 }), "+1.9k \u22129.9k");
+    assert.equal(diffText({ additions: 12_345, deletions: 250_000 }), "+12k \u2212250k");
+  });
+
+  it("says nothing without counts or for an empty diff", () => {
+    assert.equal(diffText({}), "");
+    assert.equal(diffText({ additions: 0, deletions: 0 }), "");
+  });
+});
+
 describe("prSummary", () => {
   const at = (id: string) => ws(id, { branch: "feat" });
   const said = (id: string) => {
@@ -320,6 +340,11 @@ describe("prSummary", () => {
 
   it("puts a failure first and counts it", () => {
     assert.deepEqual(said("w1"), ["failing", "#7 · 1 failing"]);
+  });
+
+  it("carries the saved diff size, and none without counts", () => {
+    assert.equal(prSummary(at("sized"))?.diff, "+1.2k \u22128");
+    assert.equal(prSummary(at("bare"))?.diff, "");
   });
 
   it("says running while a check is pending and none has failed", () => {
@@ -375,6 +400,7 @@ describe("prSummary", () => {
       text: "#11 · merged",
       state: "merged",
       title: "",
+      diff: "",
     });
   });
 
@@ -391,6 +417,7 @@ describe("prSummary", () => {
       text: "#3",
       state: "",
       title: "",
+      diff: "",
     });
   });
 });

@@ -170,6 +170,8 @@ describe("chipsFor", () => {
     assert.deepEqual(pr?.id === "pr" ? [pr.tag, pr.state, "text" in pr] : null, ["#7", "open", false]);
     const [draft] = model.chipsFor(ws("d", { pr: { number: 8, status: "open", draft: true } }), false);
     assert.deepEqual(draft?.id === "pr" ? [draft.tag, draft.state] : null, ["#8", "draft"]);
+    const [sized] = model.chipsFor(ws("s", { pr: { number: 9, status: "open", additions: 40, deletions: 2 } }), false);
+    assert.deepEqual(sized?.id === "pr" ? [sized.diff, pr?.id === "pr" ? pr.diff : null] : null, ["+40 \u22122", ""]);
     assert.equal(model.chipsFor(ws("y", { branch: "feat" }), false).length, 0);
     const [br] = model.chipsFor(ws("y", { branch: "feat" }), true);
     assert.equal(br?.id === "pr" ? null : br?.dirty, false);

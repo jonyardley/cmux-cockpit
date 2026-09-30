@@ -17,8 +17,8 @@ const pr = (number: number, extra: Partial<SavedPr> = {}): SavedPr => ({
 });
 
 const PRS: Record<string, SavedPr> = {
-  ready: pr(1, { mergeable: true }),
-  draft: pr(2, { mergeable: true, draft: true }),
+  ready: pr(1, { mergeable: true, additions: 120, deletions: 8 }),
+  draft: pr(2, { mergeable: true, draft: true, additions: 1234, deletions: 56 }),
   failing: pr(3, { mergeable: true, checks: [{ name: "build", state: "fail" }] }),
   running: pr(4, { checks: [{ name: "build", state: "pending" }] }),
   conflicts: pr(5, { conflicts: true }),

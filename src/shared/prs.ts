@@ -92,6 +92,25 @@ export interface PrSummary {
   state: string;
   /** The PR's own title, display-cleaned; "" when it has none. */
   title: string;
+  /** Its diff size, "+120 −8" (diffText); "" when it has none. */
+  diff: string;
+}
+
+// A line count in at most four characters: 950, 1.2k, 12k.
+function lines(n: number): string {
+  if (n < 1000) return String(n);
+  const k = n / 1000;
+  return (k < 10 ? String(Math.floor(k * 10) / 10) : String(Math.floor(k))) + "k";
+}
+
+/**
+ * A PR's diff size as "+120 −8" (a true minus sign), "" when neither count
+ * is known or both are zero, since an empty diff has nothing to say.
+ */
+export function diffText(pr: Pick<PullRequest, "additions" | "deletions">): string {
+  const add = pr.additions ?? 0;
+  const del = pr.deletions ?? 0;
+  return add || del ? "+" + lines(add) + " −" + lines(del) : "";
 }
 
 /**
@@ -108,7 +127,7 @@ export function summaryOf(pr: PullRequest, checks: readonly SavedCheck[]): PrSum
   const text = [tag, ...words].join(" · ");
   const state = words.join(" · ") || (pr.status ?? "");
   const title = cleanTitle(pr.title);
-  return { number: pr.number, status: pr.status, url: pr.url, health, tag, text, state, title };
+  return { number: pr.number, status: pr.status, url: pr.url, health, tag, text, state, title, diff: diffText(pr) };
 }
 
 /** The health of the workspace's first numbered PR, without the words; quiet with none. */

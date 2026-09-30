@@ -153,6 +153,20 @@ export function compactCard(w: WsAccessor, key: string): View {
               .lineLimit(1)
               .truncation("tail"),
         ),
+        // The diff size after the PR, faint, and first to go on a narrow
+        // card (issue #152): For review's cards are compact, and there the
+        // size is what says how long a review will take.
+        when(
+          "compact-diff",
+          () => !!pr()?.diff,
+          () =>
+            Text(() => pr()?.diff ?? "")
+              .font(11.5)
+              .monospaced()
+              .color(C.faint)
+              .lineLimit(1)
+              .truncation("tail"),
+        ).layoutPriority(-1),
         // Left-aligned by the frame, not a Spacer, as on the full card.
       ]).frame({ maxWidth: "infinity", alignment: "leading" }),
       leftOffLine(w, "compact-left-off"),

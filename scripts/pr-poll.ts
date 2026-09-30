@@ -153,6 +153,9 @@ interface Listed extends SavedPr {
   fork: boolean;
 }
 
+// A line count from gh: a whole number, never negative.
+const isCount = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+
 // One entry of `gh pr list --json <PR_FIELDS>`, or nothing when it is malformed.
 function listed(p: unknown): Listed[] {
   if (!isRecord(p)) return [];
@@ -173,6 +176,8 @@ function listed(p: unknown): Listed[] {
   if (p.isDraft === true) pr.draft = true;
   if (p.mergeStateStatus === "CLEAN") pr.mergeable = true;
   if (p.mergeStateStatus === "DIRTY") pr.conflicts = true;
+  if (isCount(p.additions)) pr.additions = p.additions;
+  if (isCount(p.deletions)) pr.deletions = p.deletions;
   return [pr];
 }
 
@@ -184,6 +189,8 @@ function saved(p: Listed): SavedPr {
   if (p.conflicts) pr.conflicts = true;
   const title = cleanTitle(p.title);
   if (title) pr.title = title;
+  if (p.additions !== undefined) pr.additions = p.additions;
+  if (p.deletions !== undefined) pr.deletions = p.deletions;
   const checks = checksFrom(p.rollup);
   return checks.length ? { ...pr, checks } : pr;
 }
@@ -245,7 +252,7 @@ export function ownPrsFrom(text: string, repo: string): State["ownPrs"] | undefi
 
 // The fields pickPr reads.
 const PR_FIELDS =
-  "number,state,url,headRefName,updatedAt,isCrossRepository,isDraft,mergeStateStatus,statusCheckRollup,title";
+  "number,state,url,headRefName,updatedAt,isCrossRepository,isDraft,mergeStateStatus,statusCheckRollup,title,additions,deletions";
 // The fields ownPrsFrom reads.
 const OWN_FIELDS = "number,state,url,headRefName,isCrossRepository,isDraft,title";
 // Jon's open PRs asked for per repo; more than this is not a sidebar list.

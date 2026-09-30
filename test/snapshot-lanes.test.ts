@@ -40,7 +40,14 @@ it("lanes: every card state", () => {
       group: "g-main",
       branch: "snapshot-tests",
       dirty: true,
-      pr: { number: 130, status: "open", draft: true, url: "https://github.com/o/r/pull/130" },
+      pr: {
+        number: 130,
+        status: "open",
+        draft: true,
+        url: "https://github.com/o/r/pull/130",
+        additions: 342,
+        deletions: 17,
+      },
       agents: [
         agent("working", {
           sinceEpoch: ago(840),

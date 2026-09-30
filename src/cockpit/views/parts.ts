@@ -187,6 +187,19 @@ function prChip(c: () => PrChip, tap: PrTap): View {
           "regular",
         ),
     ).layoutPriority(2),
+    // The diff size last and faint, at the lowest priority, so on a narrow
+    // card it is what gets cut and the number and state show (issue #152).
+    when(
+      "pr-diff",
+      () => !!c().diff,
+      () =>
+        chipText(
+          () => c().diff,
+          () => C.faint,
+          true,
+          "regular",
+        ),
+    ),
   ];
   const glyph = Image("arrow.triangle.pull").font(9).color(fg);
   // The full card's PR has no tap of its own (issue #72): a click on it
@@ -227,7 +240,7 @@ function chipById(chips: readonly Chip[], id: TextChip["id"]): TextChip {
   return { id, text: "" };
 }
 
-const NO_PR: PrChip = { id: "pr", tag: "", state: "", health: "quiet" };
+const NO_PR: PrChip = { id: "pr", tag: "", state: "", health: "quiet", diff: "" };
 
 /** The PR chip from a `chipsFor` list, or an empty one while it is absent. */
 function prById(chips: readonly Chip[]): PrChip {

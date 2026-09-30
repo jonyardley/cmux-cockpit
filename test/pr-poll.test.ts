@@ -206,6 +206,26 @@ describe("pickPr with checks", () => {
     assert.equal(titled("x".repeat(500))?.title?.length, 120);
     for (const v of [" \n ", 5, undefined]) assert.deepEqual(titled(v), pr(1));
   });
+
+  it("keeps the diff's line counts, dropping any that is not a whole count", () => {
+    const sized = (additions: unknown, deletions: unknown) =>
+      pickPr(gh([{ ...ghPr(1, "OPEN", "2026-09-01"), additions, deletions }]), "feat");
+    assert.deepEqual(sized(120, 8), pr(1, { additions: 120, deletions: 8 }));
+    assert.deepEqual(sized(0, 0), pr(1, { additions: 0, deletions: 0 }));
+    assert.deepEqual(sized(-1, 1.5), pr(1));
+    assert.deepEqual(sized("120", undefined), pr(1));
+  });
+});
+
+describe("the saved diff size", () => {
+  it("keeps each count only as a whole number, never negative", () => {
+    const saved = (additions: unknown) => validateState({ prs: { w1: { ...pr(1), additions } } }).prs.w1;
+    assert.deepEqual(saved(0), pr(1, { additions: 0 }));
+    assert.deepEqual(saved(42), pr(1, { additions: 42 }));
+    for (const v of [-3, 2.5, "42", Number.NaN, 2 ** 60]) assert.deepEqual(saved(v), pr(1));
+    const del = validateState({ prs: { w1: { ...pr(1), deletions: 7 } } }).prs.w1;
+    assert.deepEqual(del, pr(1, { deletions: 7 }));
+  });
 });
 
 describe("the saved draft flag", () => {
