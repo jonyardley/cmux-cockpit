@@ -298,18 +298,18 @@ function moveLine(w: WsAccessor): View {
 export function projectRow(w: WsAccessor, key: string): View {
   // Spacing lives on the rows, so a row with no chips has no gap below it.
   const body = VStack({ alignment: "leading", spacing: 0 }, [
-    titleRow(w, 12.5),
+    titleRow(w, 12.5, 2),
     HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), Spacer({ minLength: 0 })])
       .frame({ maxWidth: "infinity" })
       .paddingTop(2),
     moveLine(w),
-    chipsRow(w, true).paddingTop(() => (hasChipsRow(w(), true) ? 3 : 0)),
-    mergedActions(w, 0, 4),
+    chipsRow(w, true, "opens", true).paddingTop(() => (hasChipsRow(w(), true) ? 5 : 0)),
+    mergedActions(w, 0, 5),
     makeProjectAction(w),
   ])
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .paddingHorizontal(10)
-    .paddingVertical(8);
+    .paddingVertical(10);
   return cardChrome(body, w, key, 9);
 }
 

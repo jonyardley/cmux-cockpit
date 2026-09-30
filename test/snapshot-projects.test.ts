@@ -18,8 +18,17 @@ const { C } = await import("../src/cockpit/theme.ts");
 it("the projects view", () => {
   r.data.workspaces = [
     ws("one-a", {
-      title: "One: parser",
+      title: "One: parser rewrite for the streaming tokeniser",
       directory: "/Users/jon/dev/app-one",
+      branch: "parser-streaming-tokeniser",
+      pr: {
+        number: 148,
+        status: "open",
+        draft: true,
+        url: "https://github.com/o/r/pull/148",
+        additions: 342,
+        deletions: 17,
+      },
       agents: [agent("working", { sinceEpoch: ago(420), lastActivityAt: ago(15) })],
     }),
     ws("one-b", {
@@ -31,6 +40,8 @@ it("the projects view", () => {
     ws("two", {
       title: "Two: release",
       directory: "/Users/jon/.config/app-two",
+      branch: "main",
+      pr: { number: 12, status: "open", url: "https://github.com/o/r/pull/12" },
       unread: 1,
       pinned: true,
       agents: [agent("idle", { sinceEpoch: ago(600), lastActivityAt: ago(600) })],

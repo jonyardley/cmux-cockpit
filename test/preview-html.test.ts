@@ -126,3 +126,12 @@ it("shows a TextField's placeholder faint when it is empty, and its value otherw
   assert.match(body(node("TextField", ["", { placeholder: "Name" }])), /color:#14141466">Name<\/span>/);
   assert.match(body(node("TextField", ["~/dev", { placeholder: "Name" }])), />~\/dev<\/div>$/);
 });
+
+it("gives an empty list with modifiers no slot in its stack's gap", () => {
+  const empty = node("ForEach", [], [["layoutPriority", 2]]);
+  const out = body(node("HStack", [{ spacing: 5 }], [], [empty, node("Text", ["a"])]));
+  assert.equal(
+    out,
+    '<div class="row" style="gap:5px"><div class="contents" style="flex-shrink:0.01"></div><div class="t">a</div></div>',
+  );
+});
