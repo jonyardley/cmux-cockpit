@@ -334,6 +334,21 @@ describe("chipsSplit", () => {
   it("never splits with no PR for the first line", () => {
     assert.equal(splits(ws("x", { branch: "a-very-long-branch-name-that-cannot-fit-on-one-line" })), false);
   });
+
+  it("splits sooner on the full card's narrower line", () => {
+    const full = (w: Workspace) => chipsSplit(cardChips(w, true), w, FULL_LINE_CHARS);
+    const w = ws("x", { branch: "fix-card-layout", pr: { number: 148, status: "open" } });
+    assert.equal(splits(w), false, "fits a project card");
+    assert.equal(full(w), true, "too wide for a full card");
+    assert.equal(full(ws("x", { branch: "main", pr: { number: 12, status: "open" } })), false);
+  });
+
+  it("puts a merged full card's Park and Close under its PR when ports crowd the line", () => {
+    const pr: PullRequest = { number: 1234, status: "merged" };
+    const full = (w: Workspace) => chipsSplit(cardChips(w, true), w, FULL_LINE_CHARS);
+    assert.equal(full(ws("x", { pr, branch: "feat" })), false);
+    assert.equal(full(ws("x", { pr, branch: "feat", ports: [5173] })), true);
+  });
 });
 
 describe("outline", () => {

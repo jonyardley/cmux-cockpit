@@ -347,13 +347,12 @@ const mergedChips = (w: WsAccessor): View[] => [
 
 /**
  * Park and Close on a line of their own, for the compact card and the row,
- * which have no chips row to carry them, and for a full card whose chips
- * line has no room (`show`); `top` is the gap above it.
+ * which have no chips row to carry them; `top` is the gap above it.
  */
-export function mergedActions(w: WsAccessor, indent = 0, top = 0, show: () => boolean = () => true): View {
+export function mergedActions(w: WsAccessor, indent = 0, top = 0): View {
   return when(
     "merged-actions",
-    () => offersMergedChip(w()) && show(),
+    () => offersMergedChip(w()),
     () =>
       HStack({ spacing: 5 }, mergedChips(w))
         .paddingLeading(indent)
@@ -369,13 +368,8 @@ export function mergedActions(w: WsAccessor, indent = 0, top = 0, show: () => bo
 // HStack. No Spacer: it is flexible too and would split the free width with
 // the branch chip, so the frame left-aligns instead.
 // `prTap` is "still" on the full card, whose PR opens from the card menu.
-export function chipsRow(
-  w: WsAccessor,
-  withBranch: boolean,
-  prTap: PrTap = "opens",
-  split = false,
-  mergedInline: () => boolean = () => true,
-): View {
+// `splitAt` is the card's line in characters (chips.ts); 0 keeps one line.
+export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap = "opens", splitAt = 0): View {
   // One chip list per change, read by every predicate and chip below.
   const chips = computed(() => cardChips(w(), withBranch));
   const one = (id: ChipId) =>
@@ -402,20 +396,24 @@ export function chipsRow(
         ),
     ).layoutPriority(-1),
   ];
-  // A merged card's Park and Close close the line, where there is room.
+  // A merged card's Park and Close close the line.
   const branchLine = () => [
     one("br"),
     one("port").layoutPriority(2),
     toReviewAction(w),
-    when("merged-inline", mergedInline, () => HStack({ spacing: 5 }, mergedChips(w))).layoutPriority(2),
+    when(
+      "merged-inline",
+      () => offersMergedChip(w()),
+      () => HStack({ spacing: 5 }, mergedChips(w)),
+    ).layoutPriority(2),
   ];
   const line = (views: View[]) => HStack({ spacing: 5 }, views).frame({ maxWidth: "infinity", alignment: "leading" });
   // Split, the branch goes under the PR when the two do not fit side by
   // side, so a narrow card shows both whole. Worked out once per change.
-  const splits = computed(() => chipsSplit(chips(), w()));
+  const splits = computed(() => chipsSplit(chips(), w(), splitAt));
   const oneLine = () => line([...prLine(), ...branchLine()]);
   const row = () =>
-    split
+    splitAt > 0
       ? VStack({ spacing: 0 }, [
           when("chips-split", splits, () =>
             VStack({ alignment: "leading", spacing: 4 }, [line(prLine()), line(branchLine())]),
