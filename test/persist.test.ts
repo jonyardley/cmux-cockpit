@@ -22,6 +22,7 @@ describe("SAVED_STATE", () => {
       prOrigins: {},
       asking: {},
       moves: {},
+      prSeen: {},
       ui: {},
     });
   });

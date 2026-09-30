@@ -406,6 +406,23 @@ under the other form adds a second entry. And an update that names its
 `url` is recorded without reading the result, so a refused republish
 (which returns the live version rather than failing) still counts.
 
+## Lanes that move themselves
+
+When a workspace's PR turns ready to merge (the green chip) the cockpit
+files it into For review, and when the PR merges, into Parked, with a faint
+line at the top for 10 seconds naming the move. Only a change moves a card,
+so a drag holds until the PR changes again, and a card already in the
+target lane stays put. The `prSeen` map keeps each workspace's last seen
+state: `"ready"`, `"merged"` or `"other"`.
+
+The poller seeds a workspace's entry the first time it saves a PR for it,
+with the state that PR had before that poll (`"other"` when there was
+none), so a PR already ready or merged when this shipped moves nothing. The
+cockpit writes an entry only when the state changes, and a `prSeen` set
+never rebuilds (it changes nothing on screen, and a rebuild per change
+would loop). src/cockpit/automove.ts has the rules; src/shared/pr-health.ts
+has the ready test the chip and the poller share.
+
 ## Where a PR came from
 
 The agents panel's Pull requests rows say which chat opened each PR, and a

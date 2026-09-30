@@ -67,6 +67,7 @@ test("validateState reads a good file unchanged", () => {
       w8: { text: "Run /clear now.", epoch: 302, session: "s1", decisions: 2, leans: "1b 2a" },
       w9: { text: "go", epoch: 303 },
     },
+    prSeen: { w3: "ready", w5: "merged", w6: "other" },
     ui: { mode: "projects", collapsed: { "lane:parked": 0, "project:/dev/a": 1 } },
   };
   assert.deepEqual(validateState(raw), raw);
@@ -93,6 +94,7 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     prOrigins: {},
     asking: {},
     moves: {},
+    prSeen: {},
     ui: {},
   });
 });
@@ -216,6 +218,7 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
       prOrigins: {},
       asking: {},
       moves: {},
+      prSeen: {},
       ui: {},
     },
   });
@@ -392,11 +395,23 @@ test("a fold on a project with a long match path is kept, not dropped", () => {
   if (set.ok) assert.deepEqual(set.state.ui.collapsed, { [key]: 1 });
 });
 
-test("rebuildsOn skips the build for the cockpit's own view and folds only", () => {
+test("rebuildsOn skips the build for the cockpit's own view, folds and seen PR states only", () => {
   assert.equal(rebuildsOn("ui.mode"), false);
   assert.equal(rebuildsOn("ui.collapsed"), false);
+  assert.equal(rebuildsOn("prSeen.w1"), false, "a rebuild per PR change would loop");
   for (const key of ["dismissed.w1", "projectOverride.w1", "projects./dev/a/"])
     assert.equal(rebuildsOn(key), true, key);
+});
+
+test("prSeen keeps a workspace's last seen PR state, and refuses anything else", () => {
+  const set = applySet(emptyState(), "prSeen.w1", JSON.stringify("ready"));
+  assert.deepEqual(set.ok && set.state.prSeen, { w1: "ready" });
+  const bad = applySet(emptyState(), "prSeen.w1", JSON.stringify("open"));
+  assert.equal(bad.ok, false);
+  const cleared = set.ok ? applySet(set.state, "prSeen.w1", null) : set;
+  assert.deepEqual(cleared.ok && cleared.state.prSeen, {});
+  assert.deepEqual(validateState({ prSeen: { w1: "merged", w2: "draft", w3: 1 } }).prSeen, { w1: "merged" });
+  assert.deepEqual(validateState({}).prSeen, {}, "a file from before the map reads as empty");
 });
 
 test("cleanLabel cuts by the length isLabel measures, so an astral title still validates", () => {

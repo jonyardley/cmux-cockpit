@@ -21,6 +21,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
+import { prSeenOf } from "../src/shared/pr-health.ts";
 import { pauseSync, tryTakeLock, waitForLock } from "./lockfile.ts";
 import { applySet, isRecord, type SavedPoll, type SetResult, type State, validateState } from "./state-config.ts";
 
@@ -204,11 +205,29 @@ export function writePrs(path: string, prs: State["prs"]): ApplyResult {
 }
 
 /**
+ * The cockpit's lane moves (src/cockpit/automove.ts) react only to a change
+ * in a PR's state, so a workspace the poller finds a PR for with no seen
+ * state yet gets one: the state its PR had before this poll, "other" when
+ * it had none. The cockpit then sees a PR that turned ready or merged in
+ * this very poll as a change, and one already ready as nothing new. Only
+ * missing entries are filled; the cockpit writes the rest.
+ */
+function seededSeen(before: State, prs: State["prs"]): State["prSeen"] {
+  const missing = Object.keys(prs).filter((id) => !Object.hasOwn(before.prSeen, id));
+  const old = (id: string) => (Object.hasOwn(before.prs, id) ? before.prs[id] : undefined);
+  return {
+    ...before.prSeen,
+    ...Object.fromEntries(missing.map((id) => [id, prSeenOf(old(id), old(id)?.checks ?? [])])),
+  };
+}
+
+/**
  * One poll's whole write (scripts/pr-poll.ts) in a single locked pass:
- * replaces the `prs` and `ownPrs` maps, keys sorted as writePrs does, and
- * folds `subagents` over the `subagents` map, so the file is never left
- * half updated. `poll` (#78) is the saved poll status in the same pass:
- * replaced when given, removed when null, kept as it was when left out.
+ * replaces the `prs` and `ownPrs` maps, keys sorted as writePrs does,
+ * folds `subagents` over the `subagents` map and seeds `prSeen`
+ * (seededSeen), so the file is never left half updated. `poll` (#78) is the
+ * saved poll status in the same pass: replaced when given, removed when
+ * null, kept as it was when left out.
  */
 export function writePollMaps(
   path: string,
@@ -218,7 +237,13 @@ export function writePollMaps(
   poll?: SavedPoll | null,
 ): ApplyResult {
   return readUpdateWrite(path, (before) => {
-    const next: State = { ...before, prs: sortedByKey(prs), ownPrs: sortedByKey(ownPrs), ...(poll ? { poll } : {}) };
+    const next: State = {
+      ...before,
+      prs: sortedByKey(prs),
+      ownPrs: sortedByKey(ownPrs),
+      prSeen: seededSeen(before, prs),
+      ...(poll ? { poll } : {}),
+    };
     if (poll === null) delete next.poll;
     return { ok: true, state: validateState({ ...next, subagents: sortedByKey(subagents(before.subagents)) }) };
   });
