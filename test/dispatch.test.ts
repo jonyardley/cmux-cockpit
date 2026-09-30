@@ -59,7 +59,7 @@ describe("scriptsFor", () => {
   });
 
   it("runs an unmatched route every time, even when the input did not parse", () => {
-    assert.deepEqual(scriptsFor("Stop", {}), ["report-move.ts"]);
+    assert.deepEqual(scriptsFor("Stop", {}), ["report-move.ts", "report-rename.ts"]);
     assert.deepEqual(scriptsFor("PermissionRequest", { tool_name: "Bash" }), ["report-notification.ts"]);
     assert.deepEqual(scriptsFor("SessionStart", null), ["report-rename.ts"]);
     assert.deepEqual(scriptsFor("PreToolUse", null), []);

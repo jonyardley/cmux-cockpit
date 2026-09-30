@@ -487,7 +487,8 @@ so rows fell back to "Claude 1", "Claude 2". A hook records a name per
 session in the `names` map: Claude Code session id to `{"name", "from"}`,
 oldest first, where `from` is `"title"` or `"prompt"`.
 
-- `scripts/hooks/report-rename.ts`, on each message and at session start,
+- `scripts/hooks/report-rename.ts`, on each message, at each turn's end
+  and at session start,
   reads what the transcript added since its last read (the same read that
   carries a `/rename` to the workspace). The name is the latest `/rename`,
   else the first real prompt: slash commands, shell escapes, system

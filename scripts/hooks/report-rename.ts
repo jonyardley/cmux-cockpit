@@ -3,8 +3,9 @@
 // custom-title line into the transcript and fires no hook, and cmux never
 // reads it, so without this the row keeps its old name.
 //
-// Run by scripts/hooks/dispatch.ts on UserPromptSubmit and SessionStart:
-// the name moves on the next message after a rename, or when a renamed
+// Run by scripts/hooks/dispatch.ts on UserPromptSubmit, Stop and
+// SessionStart: the name moves when the turn a rename was made in ends,
+// on the next message after a rename made while idle, or when a renamed
 // session is resumed. A small file per session and workspace under config/renames/
 // holds how far into the transcript the hook has read, the latest rename
 // seen there and the last one it handled, so each message reads only what
