@@ -245,13 +245,16 @@ class Writer {
 
   // A list lays its rows out in its parent's direction unless it carries a
   // spacing of its own (a Reorderable is a column), and is invisible
-  // structure unless it has modifiers.
+  // structure unless it has modifiers. An empty ForEach is always
+  // invisible: SwiftUI applies its modifiers to its rows, so with no rows it
+  // takes no slot in its stack's spacing (an unshown when() chip). A
+  // Reorderable is a stack of its own, so it keeps its slot.
   private list(n: ViewNode, parent: Axis, gap: number, o: Opts): Built {
     const own = num(o.spacing);
     const axis: Axis = own === undefined ? parent : "col";
     const spacing = own ?? gap;
     const open =
-      !n.mods.length && own === undefined
+      (n.kind === "ForEach" && !n.children.length) || (!n.mods.length && own === undefined)
         ? `<div class="contents">`
         : `<div class="${axis}" style="${gapCss(spacing)}">`;
     return this.group(n, axis, spacing, open);

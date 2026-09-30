@@ -10,7 +10,7 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
 const model = await import("../src/cockpit/model.ts");
-const { hasChipsRow, showsChipsRow } = await import("../src/cockpit/chips.ts");
+const { chipsFitOneLine, chipsSplit, hasChipsRow, showsChipsRow } = await import("../src/cockpit/chips.ts");
 const { liveRunCount } = await import("../src/shared/subagents.ts");
 
 beforeEach(() => {
@@ -228,6 +228,72 @@ describe("showsChipsRow (issue #79)", () => {
     for (const w of [ws("a"), ws("b", { pr: { number: 7 } }), ws("c", { branch: "feat" }), ws("d", { ports: [80] })]) {
       assert.equal(shows(w, true), hasChipsRow(w, true));
     }
+  });
+});
+
+describe("chipsFitOneLine", () => {
+  const fits = (w: Workspace) => chipsFitOneLine(model.chipsFor(w, true), w);
+
+  it("keeps a short PR and branch on one line", () => {
+    assert.equal(fits(ws("x", { branch: "main", pr: { number: 12, status: "open" } })), true);
+  });
+
+  it("splits a draft PR with its diff size and a long branch", () => {
+    const w = ws("x", {
+      branch: "parser-streaming-tokeniser",
+      pr: { number: 148, status: "open", draft: true, additions: 342, deletions: 17 },
+    });
+    assert.equal(fits(w), false);
+  });
+
+  it("counts the diff size towards the line", () => {
+    const branch = "draft-pages-b";
+    assert.equal(fits(ws("x", { branch, pr: { number: 148, status: "open" } })), true);
+    assert.equal(fits(ws("x", { branch, pr: { number: 148, status: "open", additions: 342, deletions: 17 } })), false);
+  });
+
+  it("counts the To review button towards the line", () => {
+    const w = ws("x", { branch: "fix-card-layout", pr: { number: 12, status: "open" } });
+    assert.equal(fits(w), true);
+    const ready = ws("y", {
+      branch: "fix-card-layout",
+      pr: { number: 12, status: "open" },
+      unread: 1,
+      agents: [agent("idle", { sinceEpoch: r.data.epoch - 600, lastActivityAt: r.data.epoch - 600 })],
+    });
+    assert.equal(model.canFileForReview(ready), true);
+    assert.equal(fits(ready), false);
+  });
+
+  it("fits a card with nothing in its chips row", () => {
+    assert.equal(fits(ws("x")), true);
+  });
+
+  it("counts the uncommitted-changes dot on the branch", () => {
+    const pr: PullRequest = { number: 148, status: "open" };
+    assert.equal(fits(ws("x", { branch: "fix-card-layout-a", pr })), true);
+    assert.equal(fits(ws("x", { branch: "fix-card-layout-a", dirty: true, pr })), false);
+  });
+});
+
+describe("chipsSplit", () => {
+  const splits = (w: Workspace) => chipsSplit(model.chipsFor(w, true), w);
+  const long: PullRequest = { number: 148, status: "open", draft: true, additions: 342, deletions: 17 };
+
+  it("splits a PR and branch that do not fit on one line", () => {
+    assert.equal(splits(ws("x", { branch: "parser-streaming-tokeniser", pr: long })), true);
+  });
+
+  it("keeps a pair that fits on one line", () => {
+    assert.equal(splits(ws("x", { branch: "main", pr: { number: 12, status: "open" } })), false);
+  });
+
+  it("never splits with nothing for the second line", () => {
+    assert.equal(splits(ws("x", { pr: long })), false);
+  });
+
+  it("never splits with no PR for the first line", () => {
+    assert.equal(splits(ws("x", { branch: "a-very-long-branch-name-that-cannot-fit-on-one-line" })), false);
   });
 });
 

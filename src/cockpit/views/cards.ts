@@ -291,6 +291,9 @@ function moveLine(w: WsAccessor): View {
   );
 }
 
+// The project card's gap above its chips and each action line under the status.
+const ROW_GAP = 5;
+
 // Projects view (board 2, #11): one row shape for every session. No glyph,
 // since the project header carries it; title and age, status dot and label
 // without the message (a waiting chat's move aside), then the branch and PR chips. Selection is the card's
@@ -298,18 +301,18 @@ function moveLine(w: WsAccessor): View {
 export function projectRow(w: WsAccessor, key: string): View {
   // Spacing lives on the rows, so a row with no chips has no gap below it.
   const body = VStack({ alignment: "leading", spacing: 0 }, [
-    titleRow(w, 12.5),
+    titleRow(w, 12.5, 2),
     HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), Spacer({ minLength: 0 })])
       .frame({ maxWidth: "infinity" })
       .paddingTop(2),
     moveLine(w),
-    chipsRow(w, true).paddingTop(() => (hasChipsRow(w(), true) ? 3 : 0)),
-    mergedActions(w, 0, 4),
-    makeProjectAction(w),
+    chipsRow(w, true, "opens", true).paddingTop(() => (hasChipsRow(w(), true) ? ROW_GAP : 0)),
+    mergedActions(w, 0, ROW_GAP),
+    makeProjectAction(w, ROW_GAP),
   ])
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .paddingHorizontal(10)
-    .paddingVertical(8);
+    .paddingVertical(10);
   return cardChrome(body, w, key, 9);
 }
 

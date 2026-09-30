@@ -20,7 +20,7 @@ import {
   unreadBadge,
   when,
 } from "../../shared/ui.ts";
-import { showsChipsRow } from "../chips.ts";
+import { chipsSplit, showsChipsRow } from "../chips.ts";
 import { LANES } from "../lanes.ts";
 import {
   cardOpacity,
@@ -140,14 +140,16 @@ export function pinMark(w: WsAccessor): View {
 // slack, pill or badge and age hold their width on the right. The age shows
 // only while the status line under it has no time, so one card never reads
 // two.
-export function titleRow(w: WsAccessor, size: number): View {
-  return HStack({ spacing: 6 }, [
+export function titleRow(w: WsAccessor, size: number, lines = 1): View {
+  // Over two lines, the pills and age sit by the first; one line keeps the default.
+  return HStack(lines > 1 ? { spacing: 6, alignment: "top" } : { spacing: 6 }, [
     Text(() => displayTitle(w()))
       .font(size)
       .weight("semibold")
       .color(C.text)
-      .lineLimit(1)
-      .truncation("middle")
+      .lineLimit(lines)
+      // One line keeps both ends; over more lines the end is what gets cut.
+      .truncation(lines > 1 ? "tail" : "middle")
       .layoutPriority(1),
     Spacer({ minLength: 4 }),
     readyPill(w),
@@ -294,7 +296,7 @@ function actionChip(label: Reactive<string>, tap: () => void, colors: () => Chip
 }
 
 /** Under Other, a card whose folder can become a project offers it: the card menu's item, in view. */
-export function makeProjectAction(w: WsAccessor): View {
+export function makeProjectAction(w: WsAccessor, top = 0): View {
   return when(
     "make-project",
     () => canCreateProject(w()),
@@ -305,7 +307,7 @@ export function makeProjectAction(w: WsAccessor): View {
           () => createProjectFrom(w()),
         ),
       ])
-        .paddingTop(4)
+        .paddingTop(top)
         .frame({ maxWidth: "infinity", alignment: "leading" }),
   );
 }
@@ -368,7 +370,7 @@ export function mergedActions(w: WsAccessor, indent = 0, top = 0): View {
 // HStack. No Spacer: it is flexible too and would split the free width with
 // the branch chip, so the frame left-aligns instead.
 // `prTap` is "still" on the full card, whose PR opens from the card menu.
-export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap = "opens"): View {
+export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap = "opens", split = false): View {
   // One chip list per change, read by every predicate and chip below.
   const chips = computed(() => chipsFor(w(), withBranch));
   const one = (id: ChipId) =>
@@ -377,31 +379,39 @@ export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap = "ope
       () => chips().some((c) => c.id === id),
       () => (id === "pr" ? prChip(() => prById(chips()), prTap) : chip(id, () => chipById(chips(), id))),
     );
+  const prLine = () => [
+    one("size").layoutPriority(2),
+    one("pr").layoutPriority(2),
+    // The PR's diff size beside its chip, faint and unframed. Outside the
+    // chip and below the branch's priority, so on a narrow card it is cut
+    // first and the branch keeps its width (issue #152).
+    when(
+      "pr-diff",
+      () => !!prById(chips()).diff,
+      () =>
+        chipText(
+          () => prById(chips()).diff,
+          () => C.faint,
+          false,
+          "regular",
+        ),
+    ).layoutPriority(-1),
+  ];
+  const branchLine = () => [one("br"), one("port").layoutPriority(2), toReviewAction(w)];
+  const line = (views: View[]) => HStack({ spacing: 5 }, views).frame({ maxWidth: "infinity", alignment: "leading" });
+  // Split, the branch goes under the PR when the two do not fit side by
+  // side, so a narrow card shows both whole. Worked out once per change.
+  const splits = computed(() => chipsSplit(chips(), w()));
+  const oneLine = () => line([...prLine(), ...branchLine()]);
   const row = () =>
-    HStack({ spacing: 5 }, [
-      one("size").layoutPriority(2),
-      one("pr").layoutPriority(2),
-      // The PR's diff size beside its chip, faint and unframed. Outside the
-      // chip and below the branch's priority, so on a narrow card it is cut
-      // first and the branch keeps its width (issue #152).
-      when(
-        "pr-diff",
-        () => !!prById(chips()).diff,
-        () =>
-          chipText(
-            () => prById(chips()).diff,
-            () => C.faint,
-            false,
-            "regular",
+    split
+      ? VStack({ spacing: 0 }, [
+          when("chips-split", splits, () =>
+            VStack({ alignment: "leading", spacing: 4 }, [line(prLine()), line(branchLine())]),
           ),
-      ).layoutPriority(-1),
-      one("br"),
-      one("port").layoutPriority(2),
-      toReviewAction(w),
-    ]).frame({
-      maxWidth: "infinity",
-      alignment: "leading",
-    });
+          when("chips-one", () => !splits(), oneLine),
+        ]).frame({ maxWidth: "infinity", alignment: "leading" })
+      : oneLine();
   // Behind a when(), so a card with nothing to show has no empty row and no
   // gap above it (issue #79).
   return when("chips-row", () => showsChipsRow(chips(), w()), row);
