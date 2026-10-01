@@ -621,9 +621,32 @@ export interface PrEntry {
   session: PrSession | undefined;
 }
 
+/** Where a row's Open chat goes: the workspace, and its lead agent's
+ * surface when it has one (views/parts.ts jump). */
+export interface ChatTarget {
+  wsId: string;
+  surfaceId: string | undefined;
+}
+
+/** The workspace a row's right-click Open chat goes to, by id; none for the
+ * selected workspace with no terminal to focus, where it would do nothing
+ * (as canOpenChat). */
+function chatWs(w: Workspace, lead: Agent | null): string | undefined {
+  return w.selected && !lead?.surfaceId ? undefined : w.id;
+}
+
+/** Where Open chat jumps, read when it is chosen, so it focuses the agent the
+ * panel leads with then; none once the workspace has gone. */
+export function chatTarget(wsId: string): ChatTarget | undefined {
+  const w = (data.workspaces() ?? []).find((x) => x.id === wsId);
+  return w ? { wsId, surfaceId: mostActive(agentsOf(w))?.surfaceId } : undefined;
+}
+
 /** The chat a PR row names on its faint line, with that chat's status dot. */
 export interface PrSession {
   name: string;
+  /** The workspace the row's right-click Open chat goes to (chatWs). */
+  chat: string | undefined;
   dot: string;
   /** Idle or no agent: the dot draws as a hollow ring, as everywhere else in the panel. */
   hollow: boolean;
@@ -764,7 +787,7 @@ export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale(
 function sessionOf(w: Workspace): PrSession {
   const lead = mostActive(agentsOf(w));
   const name = w.selected ? "This chat" : displayTitle(w) || "Another chat";
-  return { name, dot: dotFor(lead, w), hollow: hollowDot(lead) };
+  return { name, dot: dotFor(lead, w), hollow: hollowDot(lead), chat: chatWs(w, lead) };
 }
 
 // ---- Made here ------------------------------------------------------------------
@@ -781,6 +804,14 @@ export interface MadeEntry {
   /** Made, or last edited, in the selected workspace. */
   here: boolean;
   epoch: number;
+  /** The workspace the row's right-click Open chat goes to (chatWs); none once it has gone. */
+  chat: string | undefined;
+}
+
+/** What a Made here row reads from the workspace that made it, once per workspace. */
+interface MadeWs {
+  directory: string | undefined;
+  chat: string | undefined;
 }
 
 /** The selected workspace's own entries shown at most. */
@@ -788,16 +819,18 @@ const MADE_HERE_OWN = 5;
 /** Other workspaces' entries shown at most, the latest few. */
 const MADE_ELSEWHERE = 3;
 
-function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, here: boolean): MadeEntry {
+function madeEntry(e: SavedPublished, wsOf: (id: string) => MadeWs | undefined, here: boolean): MadeEntry {
+  const w = wsOf(e.workspace);
   return {
     key: "m:" + e.url,
     url: e.url,
     // Not readable(): that is for agent chat, and would blank a title with
     // no Latin letters. The hook already checked it (isLabel).
     title: e.title.trim() || "Untitled",
-    project: savedProjectFor(dirs.get(e.workspace), e.workspace),
+    project: savedProjectFor(w?.directory, e.workspace),
     here,
     epoch: e.epoch,
+    chat: w?.chat,
   };
 }
 
@@ -834,8 +867,17 @@ export const madeHere = computed((): Last<MadeEntry>[] => {
   const open = isExpanded("made");
   const own = open ? f.own : f.own.slice(0, MADE_HERE_OWN);
   const others = open ? f.others : f.others.slice(0, MADE_ELSEWHERE);
-  const dirs = new Map(f.workspaces.map((w) => [w.id, w.directory]));
-  const rows = [...own.map((e) => madeEntry(e, dirs, true)), ...others.map((e) => madeEntry(e, dirs, false))];
+  const byId = new Map(f.workspaces.map((w) => [w.id, w]));
+  // Read once per workspace a shown row names, not per row.
+  const seen = new Map<string, MadeWs | undefined>();
+  const wsOf = (id: string): MadeWs | undefined => {
+    if (!seen.has(id)) {
+      const w = byId.get(id);
+      seen.set(id, w && { directory: w.directory, chat: chatWs(w, mostActive(agentsOf(w))) });
+    }
+    return seen.get(id);
+  };
+  const rows = [...own.map((e) => madeEntry(e, wsOf, true)), ...others.map((e) => madeEntry(e, wsOf, false))];
   return markLastBefore(rows, madeOver());
 });
 
