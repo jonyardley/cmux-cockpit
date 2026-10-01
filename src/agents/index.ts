@@ -30,19 +30,10 @@
 import { stateNotice } from "../shared/freshness.ts";
 import { faintLine } from "../shared/notice.ts";
 import { motionList, when } from "../shared/ui.ts";
-import {
-  current,
-  currentHeading,
-  emptyNote,
-  madeCount,
-  madeFoot,
-  madeHere,
-  prCount,
-  prFoot,
-  prNote,
-  prs,
-  toggleExpanded,
-} from "./model.ts";
+import { toggleExpanded } from "./lists.ts";
+import { emptyNote, madeCount, madeFoot, madeHere } from "./made.ts";
+import { current, currentHeading } from "./model.ts";
+import { prCount, prFoot, prNote, prs } from "./pr-list.ts";
 import { T } from "./theme.ts";
 import { currentPanel } from "./views/current.ts";
 import { panel, sectionHeader } from "./views/parts.ts";

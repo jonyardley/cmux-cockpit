@@ -18,6 +18,7 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const { projectFor, savedProjectFor } = await import("../src/shared/projects.ts");
 const m = await import("../src/agents/model.ts");
+const prList = await import("../src/agents/pr-list.ts");
 
 describe("projectFor", () => {
   it("takes the chosen project over the path match", () => {
@@ -50,7 +51,7 @@ describe("the agents sidebar honours Move to project", () => {
     const pr = { url: "https://github.com/o/r/pull/1", number: 1, status: "open" as const };
     r.data.workspaces = [ws("moved", { directory: "/Users/coder/dev/app-one", pr, prs: [pr] })];
     assert.deepEqual(
-      m.prs().map((e) => e.project.name),
+      prList.prs().map((e) => e.project.name),
       ["App Three"],
     );
   });

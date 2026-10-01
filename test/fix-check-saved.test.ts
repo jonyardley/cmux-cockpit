@@ -39,6 +39,7 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
+const checkModel = await import("../src/agents/checks.ts");
 const { dismissNeeds } = await import("../src/shared/needs.ts");
 
 beforeEach(() => {
@@ -57,15 +58,15 @@ const onTurn = (after: number) =>
   agent("needs_input", { id: "s-turn", kind: "claude", surfaceId: "s1", sinceEpoch: 1000 + after });
 
 const fixable = () =>
-  m
+  checkModel
     .checks()
-    .filter(m.canFix)
+    .filter(checkModel.canFix)
     .map((c) => c.name);
 
 describe("fixPrompt", () => {
   it("names the check and the PR, and says how to read the log", () => {
     assert.equal(
-      m.fixPrompt("lint", 7),
+      checkModel.fixPrompt("lint", 7),
       "The lint check failed on PR #7. Find its run with gh pr checks 7, read the log with " +
         "gh run view <run-id> --log-failed, fix the cause, push, and tell me what it was.",
     );
@@ -121,13 +122,13 @@ describe("when Fix shows", () => {
 
   it("hides with no agent", () => {
     r.data.workspaces = [ws("sel", { selected: true })];
-    assert.equal(m.checks().filter((c) => c.state === "fail").length, 1);
+    assert.equal(checkModel.checks().filter((c) => c.state === "fail").length, 1);
     assert.deepEqual(fixable(), []);
   });
 
   it("hides on a merged PR, and while the checks are stale", () => {
     select("merged", agent("idle", { surfaceId: "s1", sinceEpoch: 900 }));
-    assert.equal(m.checks().filter((c) => c.state === "fail").length, 1);
+    assert.equal(checkModel.checks().filter((c) => c.state === "fail").length, 1);
     assert.deepEqual(fixable(), []);
     select("sel", agent("idle", { surfaceId: "s1", sinceEpoch: 900 }));
     r.data.epoch = 1000 + 15 * 60 + 1;
@@ -138,11 +139,11 @@ describe("when Fix shows", () => {
 describe("sendFix", () => {
   it("types the prompt into the agent's terminal, then presses Enter", () => {
     select("sel", agent("idle", { surfaceId: "s1", sinceEpoch: 900 }));
-    m.sendFix("lint");
+    checkModel.sendFix("lint");
     assert.deepEqual(r.calls, [
       {
         method: "surface.send_text",
-        params: { workspace_id: "sel", surface_id: "s1", text: m.fixPrompt("lint", 7) },
+        params: { workspace_id: "sel", surface_id: "s1", text: checkModel.fixPrompt("lint", 7) },
       },
       { method: "surface.send_key", params: { workspace_id: "sel", surface_id: "s1", key: "enter" } },
     ]);
@@ -151,9 +152,9 @@ describe("sendFix", () => {
   it("hides Fix until the agent's status changes, so a second tap sends nothing", () => {
     const a = agent("idle", { surfaceId: "s1", sinceEpoch: 900 });
     select("sel", a);
-    m.sendFix("lint");
+    checkModel.sendFix("lint");
     assert.deepEqual(fixable(), []);
-    m.sendFix("lint");
+    checkModel.sendFix("lint");
     assert.equal(r.calls.length, 2);
     // A paste stamps lastActivityAt before the agent starts working: still held.
     select("sel", { ...a, lastActivityAt: 1101 });
@@ -168,7 +169,7 @@ describe("sendFix", () => {
   it("brings Fix back after the hold lapses when the agent never started", () => {
     // No start time, so the spell cannot change: only the hold's clock ends it.
     select("sel", agent("idle", { surfaceId: "s1" }));
-    m.sendFix("lint");
+    checkModel.sendFix("lint");
     assert.deepEqual(fixable(), []);
     r.data.epoch = 1100 + 89;
     assert.deepEqual(fixable(), []);
@@ -178,7 +179,7 @@ describe("sendFix", () => {
 
   it("sends nothing while the agent works", () => {
     select("sel", agent("working", { surfaceId: "s1", sinceEpoch: 900 }));
-    m.sendFix("lint");
+    checkModel.sendFix("lint");
     assert.deepEqual(r.calls, []);
   });
 });

@@ -20,7 +20,7 @@ import { describe, it } from "node:test";
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
-const m = await import("../src/agents/model.ts");
+const m = await import("../src/agents/made.ts");
 
 describe("madeHere without saved pages", () => {
   it("is empty when the saved state has no published map", () => {

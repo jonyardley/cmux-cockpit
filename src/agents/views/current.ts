@@ -16,40 +16,35 @@ import {
   tapChip,
   when,
 } from "../../shared/ui.ts";
+import { type CheckRow, canFix, checkDot, checks, checksLine, checkWord, openChecks, sendFix } from "../checks.ts";
 import {
-  type AgentRow,
-  agentRows,
   askedLine,
   branchFooter,
-  type CheckRow,
-  canFix,
   cardLine,
-  checkDot,
-  checks,
-  checksLine,
-  checkWord,
   cur,
   currentAsk,
   currentPr,
   currentPrDim,
   dotFor,
+  haloFor,
+  headStatus,
+  hollowDot,
+  portChips,
+  statusColor,
+  statusLine,
+} from "../model.ts";
+import {
+  type AgentRow,
+  agentRows,
   finishedLine,
   HELPER_PILL,
-  haloFor,
   hasHelpers,
-  headStatus,
   helperAge,
   helperCount,
   helperMore,
   helpers,
-  hollowDot,
-  openChecks,
-  portChips,
   type SubagentRow,
-  sendFix,
-  statusColor,
-  statusLine,
-} from "../model.ts";
+} from "../team.ts";
 import { STALE_OPACITY, STATUS_DOT, T } from "../theme.ts";
 import { agentDot, jump, panel, ruled } from "./parts.ts";
 
@@ -150,7 +145,7 @@ function helpersBlock(): View {
 }
 
 // Types a fix prompt into the agent: only on a failed check, and only while
-// the agent can take typing (model.ts fixTarget). Open chat's clay face.
+// the agent can take typing (checks.ts fixTarget). Open chat's clay face.
 function fixButton(e: () => CheckRow): View {
   return Text("Fix")
     .font(11)

@@ -3,7 +3,7 @@
 import { prChipColors, shownHealth } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
 import { chipFrame, chipText, countPill, haloDot, projectBadge, ring, sectionTitle, when } from "../../shared/ui.ts";
-import { chatTarget, type PrEntry, prChipHealth, prChipText, prDim } from "../model.ts";
+import { chatTarget, type PrEntry, prChipHealth, prChipText, prDim } from "../pr-list.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
 
 // White panel with a hairline edge: the runtime has no shadows, so depth is
@@ -59,7 +59,7 @@ export function jump(wsId: string, surfaceId: string | undefined): void {
 }
 
 /** A row with a right-click Open chat while it has a workspace to go to
- * (model.ts chatWs). Two `when`s, since a row's menu is fixed when it is
+ * (pr-list.ts chatWs). Two `when`s, since a row's menu is fixed when it is
  * built and a ForEach row's kind is fixed by its key; returned bare, for
  * ruled to hold, so no stack is added round the row. */
 export function withChatMenu(row: () => View, chat: () => string | undefined): View[] {

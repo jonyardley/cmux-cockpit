@@ -33,6 +33,8 @@ const { freshnessOf, prFreshness, STALE_AFTER, stateNotice, stateNoticeFor } = a
   "../src/shared/freshness.ts"
 );
 const m = await import("../src/agents/model.ts");
+const checks = await import("../src/agents/checks.ts");
+const prList = await import("../src/agents/pr-list.ts");
 const { P } = await import("../src/shared/palette.ts");
 
 beforeEach(() => {
@@ -89,12 +91,12 @@ describe("the saved poll status", () => {
   });
 
   it("puts the line under the Pull requests heading", () => {
-    assert.equal(m.prNote(), "gh unavailable · last checked 2h ago");
+    assert.equal(prList.prNote(), "gh unavailable · last checked 2h ago");
   });
 
   it("dims the poller's chips, and only those", () => {
     r.data.workspaces = [ws("w1", { branch: "feat" }), ws("own", { pr: { url: "u/9", number: 9, status: "open" } })];
-    const dim = m.prs().map((e) => [e.pr.number, e.saved, m.prDim(e)]);
+    const dim = prList.prs().map((e) => [e.pr.number, e.saved, prList.prDim(e)]);
     assert.deepEqual(dim, [
       [9, false, false],
       [7, true, true],
@@ -113,7 +115,7 @@ describe("the saved poll status", () => {
   it("greys a stale pass in the This workspace checks line", () => {
     r.data.workspaces = [ws("green", { branch: "green", selected: true })];
     assert.equal(m.currentPrDim(), true);
-    assert.deepEqual(m.checksLine(), { text: "1 check passed", mark: "checkmark.circle", color: P.metaText });
+    assert.deepEqual(checks.checksLine(), { text: "1 check passed", mark: "checkmark.circle", color: P.metaText });
   });
 });
 

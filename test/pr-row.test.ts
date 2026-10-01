@@ -58,7 +58,7 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const { HERE_FACE, HERE_HOVER, STATUS_DOT, T } = await import("../src/agents/theme.ts");
 const { P } = await import("../src/shared/palette.ts");
-const m = await import("../src/agents/model.ts");
+const m = await import("../src/agents/pr-list.ts");
 const { prRow } = await import("../src/agents/views/rows.ts");
 
 const entry = (n: number) => {

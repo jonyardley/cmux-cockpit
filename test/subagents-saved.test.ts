@@ -31,7 +31,7 @@ const run = (id: string, extra: Record<string, unknown> = {}) => ({
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const m = await import("../src/agents/model.ts");
+const m = await import("../src/agents/team.ts");
 
 const ids = () => m.subagents().map((e) => e.key.split(":")[2]);
 
