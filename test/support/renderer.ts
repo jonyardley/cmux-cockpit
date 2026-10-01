@@ -69,6 +69,12 @@ const nodes = new WeakMap<object, ViewNode>();
 /** The node behind a view the fake renderer built, or undefined for anything else. */
 export const nodeOf = (v: unknown): ViewNode | undefined => (typeof v === "function" ? nodes.get(v) : undefined);
 /** Every node in the tree with a tap handler, in drawing order. */
+/** A node's first value for modifier `name`, read now if it is reactive; undefined when the modifier is not there. */
+export function modValue(n: ViewNode | undefined, name: string): unknown {
+  const v = n?.mods.find((m) => m.name === name)?.values[0];
+  return typeof v === "function" ? v() : v;
+}
+
 export const taps = (n: ViewNode): ViewNode[] => [
   ...(typeof n.handlers.onTap === "function" ? [n] : []),
   ...n.children.flatMap(taps),

@@ -40,11 +40,11 @@ const NOW = 1_000_000;
   ui: {},
 };
 
-const { installRenderer, menuOf, nodeOf, taps } = await import("./support/renderer.ts");
+const { installRenderer, menuOf, modValue, nodeOf, taps } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
-const { T } = await import("../src/agents/theme.ts");
+const { HERE_FACE, HERE_HOVER, T } = await import("../src/agents/theme.ts");
 const { madeRow } = await import("../src/agents/views/rows.ts");
 
 const ids = () => m.madeHere().map((e) => e.url.replace("https://claude.ai/artifact/", ""));
@@ -174,6 +174,22 @@ describe("Made here row helpers", () => {
     assert.ok(here && other);
     assert.equal(m.madeTitleColor(here), T.text);
     assert.equal(m.madeTitleColor(other), T.secondary);
+  });
+
+  // Issue #183: this chat's rows are shaded, as its PR row is.
+  it("shades this chat's rows, a step darker under the pointer, and no other", () => {
+    const rows = m.madeHere();
+    const row = (here: boolean) => {
+      const e = rows.find((x) => x.here === here);
+      assert.ok(e);
+      // The tappable row, under the right-click menu's wrapper.
+      const root = nodeOf(madeRow(() => e));
+      return root ? taps(root)[0] : undefined;
+    };
+    assert.equal(modValue(row(true), "background"), HERE_FACE);
+    assert.equal(modValue(row(true), "hoverBackground"), HERE_HOVER);
+    assert.equal(modValue(row(false), "background"), "clear");
+    assert.equal(modValue(row(false), "hoverBackground"), T.hover);
   });
 
   it("ages each row from when it was last published", () => {
