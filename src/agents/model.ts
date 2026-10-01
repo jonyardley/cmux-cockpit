@@ -621,9 +621,23 @@ export interface PrEntry {
   session: PrSession | undefined;
 }
 
+/** Where a row's Open chat goes: the workspace, and its lead agent's
+ * surface when it has one (views/parts.ts jump). */
+export interface ChatTarget {
+  wsId: string;
+  surfaceId: string | undefined;
+}
+
+/** The workspace a row's Open chat jumps to, its lead agent's surface focused. */
+function chatOf(w: Workspace): ChatTarget {
+  return { wsId: w.id, surfaceId: mostActive(agentsOf(w))?.surfaceId };
+}
+
 /** The chat a PR row names on its faint line, with that chat's status dot. */
 export interface PrSession {
   name: string;
+  /** Where the row's right-click Open chat goes. */
+  chat: ChatTarget;
   dot: string;
   /** Idle or no agent: the dot draws as a hollow ring, as everywhere else in the panel. */
   hollow: boolean;
@@ -764,7 +778,7 @@ export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale(
 function sessionOf(w: Workspace): PrSession {
   const lead = mostActive(agentsOf(w));
   const name = w.selected ? "This chat" : displayTitle(w) || "Another chat";
-  return { name, dot: dotFor(lead, w), hollow: hollowDot(lead) };
+  return { name, dot: dotFor(lead, w), hollow: hollowDot(lead), chat: { wsId: w.id, surfaceId: lead?.surfaceId } };
 }
 
 // ---- Made here ------------------------------------------------------------------
@@ -781,6 +795,8 @@ export interface MadeEntry {
   /** Made, or last edited, in the selected workspace. */
   here: boolean;
   epoch: number;
+  /** Where the row's right-click Open chat goes; none once that workspace has gone. */
+  chat: ChatTarget | undefined;
 }
 
 /** The selected workspace's own entries shown at most. */
@@ -788,16 +804,18 @@ const MADE_HERE_OWN = 5;
 /** Other workspaces' entries shown at most, the latest few. */
 const MADE_ELSEWHERE = 3;
 
-function madeEntry(e: SavedPublished, dirs: Map<string, string | undefined>, here: boolean): MadeEntry {
+function madeEntry(e: SavedPublished, byId: ReadonlyMap<string, Workspace>, here: boolean): MadeEntry {
+  const w = byId.get(e.workspace);
   return {
     key: "m:" + e.url,
     url: e.url,
     // Not readable(): that is for agent chat, and would blank a title with
     // no Latin letters. The hook already checked it (isLabel).
     title: e.title.trim() || "Untitled",
-    project: savedProjectFor(dirs.get(e.workspace), e.workspace),
+    project: savedProjectFor(w?.directory, e.workspace),
     here,
     epoch: e.epoch,
+    chat: w ? chatOf(w) : undefined,
   };
 }
 
@@ -834,8 +852,8 @@ export const madeHere = computed((): Last<MadeEntry>[] => {
   const open = isExpanded("made");
   const own = open ? f.own : f.own.slice(0, MADE_HERE_OWN);
   const others = open ? f.others : f.others.slice(0, MADE_ELSEWHERE);
-  const dirs = new Map(f.workspaces.map((w) => [w.id, w.directory]));
-  const rows = [...own.map((e) => madeEntry(e, dirs, true)), ...others.map((e) => madeEntry(e, dirs, false))];
+  const byId = new Map(f.workspaces.map((w) => [w.id, w]));
+  const rows = [...own.map((e) => madeEntry(e, byId, true)), ...others.map((e) => madeEntry(e, byId, false))];
   return markLastBefore(rows, madeOver());
 });
 

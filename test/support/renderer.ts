@@ -115,8 +115,11 @@ function view(kind: string, args: unknown[] = [], children: readonly unknown[] =
         modifierLog?.push(name);
         // A context menu is recorded by its length: its items are opaque.
         let values: unknown[] = [];
-        if (name === "contextMenu") values = [Array.isArray(margs[0]) ? margs[0].length : 0];
-        else if (HANDLERS.has(name)) node.handlers[name] = margs[0];
+        // Its items are kept on handlers.contextMenu, for menuOf.
+        if (name === "contextMenu") {
+          values = [Array.isArray(margs[0]) ? margs[0].length : 0];
+          node.handlers.contextMenu = margs[0];
+        } else if (HANDLERS.has(name)) node.handlers[name] = margs[0];
         else values = margs.map(resolve);
         node.mods.push({ name, values });
         return proxy;
@@ -128,8 +131,18 @@ function view(kind: string, args: unknown[] = [], children: readonly unknown[] =
   return proxy;
 }
 
-// MenuItem is an opaque brand: the renderer never reads it back.
-const menuItem = () => ({}) as MenuItem;
+// MenuItem is an opaque brand the renderer never reads back; the fake keeps
+// a button's label and action on it so a test can press it (menuOf).
+const menuItem = (item: { label?: string; action?: () => void } = {}) => item as unknown as MenuItem;
+
+/** A view's context menu buttons, as built: each label and its action. */
+export function menuOf(node: ViewNode | undefined): { label: string; action: () => void }[] {
+  const items: unknown = node?.handlers.contextMenu;
+  if (!Array.isArray(items)) return [];
+  return items.flatMap((i: { label?: string; action?: () => void }) =>
+    i.label !== undefined && i.action ? [{ label: i.label, action: i.action }] : [],
+  );
+}
 
 const list =
   (kind: string) =>
@@ -184,9 +197,10 @@ export function createRenderer(): Renderer {
       if (node) Object.assign(node.handlers, { onEdit, onCancel });
       return field;
     },
-    Button: (label: Reactive<string>) => {
-      r.menu.push("button:" + (typeof label === "function" ? label() : label));
-      return menuItem();
+    Button: (label: Reactive<string>, action: () => void) => {
+      const text = typeof label === "function" ? label() : label;
+      r.menu.push("button:" + text);
+      return menuItem({ label: text, action });
     },
     Divider: () => {
       r.menu.push("divider");

@@ -1,6 +1,7 @@
 // The Pull requests rows' faint line and tap: the session each PR belongs to
 // (the workspace holding it, else the chat that opened it, from the saved
-// prOrigins map), its project, and a tap on the row opening it. __STATE__ is set
+// prOrigins map), its project, a tap on the row opening it, and a right-click
+// Open chat going to its session. __STATE__ is set
 // before the renderer import, as in made-here.test.ts.
 
 import assert from "node:assert/strict";
@@ -52,7 +53,7 @@ const checks = [
   ui: {},
 };
 
-const { installRenderer, nodeOf, taps } = await import("./support/renderer.ts");
+const { installRenderer, menuOf, nodeOf, taps } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const { STATUS_DOT, T } = await import("../src/agents/theme.ts");
@@ -83,9 +84,19 @@ describe("the row's session and project", () => {
       ws("here", { selected: true, title: "This one", agents: [agent("working")] }),
       ws("other", { title: "Socket contract" }),
     ];
-    assert.deepEqual(entry(1).session, { name: "This chat", dot: STATUS_DOT.working, hollow: false });
+    assert.deepEqual(entry(1).session, {
+      name: "This chat",
+      dot: STATUS_DOT.working,
+      hollow: false,
+      chat: { wsId: "here", surfaceId: undefined },
+    });
     // No agent: a hollow grey ring, as elsewhere in the panel.
-    assert.deepEqual(entry(2).session, { name: "Socket contract", dot: T.grey, hollow: true });
+    assert.deepEqual(entry(2).session, {
+      name: "Socket contract",
+      dot: T.grey,
+      hollow: true,
+      chat: { wsId: "other", surfaceId: undefined },
+    });
   });
 
   it("names the chat that opened an own PR while it is open, else none", () => {
@@ -135,17 +146,55 @@ describe("a tap on the row", () => {
     assert.ok(root);
     const tappable = taps(root);
     assert.equal(tappable.length, 1);
-    // The row itself, the first child of the ruled wrapper.
-    assert.equal(tappable[0], root.children[0]);
+    // The row itself, inside the ruled wrapper's menu switch.
+    assert.equal(tappable[0], root.children[0]?.children[0]);
     assert.ok(tappable[0]?.mods.some((x) => x.name === "hoverBackground"));
   });
 
   it("opens the PR on GitHub and never switches chats", () => {
     const root = nodeOf(prRow(() => ({ ...entry(1), last: true })));
-    const tap = root?.children[0]?.handlers.onTap;
+    const tap = root?.children[0]?.children[0]?.handlers.onTap;
     assert.equal(typeof tap, "function");
     if (typeof tap === "function") tap();
     assert.deepEqual(r.opened, [pr(1)]);
     assert.deepEqual(r.calls, []);
+  });
+});
+
+describe("a right-click on the row", () => {
+  const menu = (n: number) => menuOf(nodeOf(prRow(() => ({ ...entry(n), last: true })))?.children[0]?.children[0]);
+
+  it("offers Open chat, which selects the session's workspace and focuses its lead agent", () => {
+    r.data.workspaces = [
+      ws("here", { selected: true }),
+      ws("other", { title: "Socket contract", agents: [agent("working", { surfaceId: "s-other" })] }),
+    ];
+    const items = menu(2);
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["Open chat"],
+    );
+    items[0]?.action();
+    assert.deepEqual(r.calls, [
+      { method: "workspace.select", params: { workspace_id: "other" } },
+      { method: "surface.focus", params: { surface_id: "s-other", workspace_id: "other" } },
+    ]);
+    assert.deepEqual(r.opened, []);
+  });
+
+  it("selects the workspace alone when it has no agent to focus", () => {
+    menu(2)[0]?.action();
+    assert.deepEqual(r.calls, [{ method: "workspace.select", params: { workspace_id: "other" } }]);
+  });
+
+  it("goes to the chat that opened an own PR while it is open", () => {
+    r.data.workspaces = [...(r.data.workspaces ?? []), ws("gone", { title: "Back again" })];
+    menu(3)[0]?.action();
+    assert.deepEqual(r.calls, [{ method: "workspace.select", params: { workspace_id: "gone" } }]);
+  });
+
+  it("has no menu when no chat holds or opened the PR", () => {
+    assert.deepEqual(menu(3), []);
+    assert.deepEqual(menu(4), []);
   });
 });

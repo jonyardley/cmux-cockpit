@@ -3,7 +3,7 @@
 import { prChipColors, shownHealth } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
 import { chipFrame, chipText, countPill, haloDot, projectBadge, ring, sectionTitle } from "../../shared/ui.ts";
-import { type PrEntry, prChipHealth, prChipText, prDim } from "../model.ts";
+import { type ChatTarget, type PrEntry, prChipHealth, prChipText, prDim } from "../model.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
 
 // White panel with a hairline edge: the runtime has no shadows, so depth is
@@ -56,6 +56,19 @@ export const glyph = (p: () => Project, size = 18): View => projectBadge(p, size
 export function jump(wsId: string, surfaceId: string | undefined): void {
   cmux("workspace.select", { workspace_id: wsId });
   if (surfaceId) cmux("surface.focus", { surface_id: surfaceId, workspace_id: wsId });
+}
+
+/** A row with a right-click Open chat while it has a chat to go to. Keyed by
+ * whether it has one, since a row's menu is fixed when it is built and a
+ * ForEach row's kind is fixed by its key. */
+export function withChatMenu(row: () => View, chat: () => ChatTarget | undefined): View {
+  const open = () => {
+    const t = chat();
+    if (t) jump(t.wsId, t.surfaceId);
+  };
+  return ForEach({ items: () => [{ id: chat() ? "chat" : "plain" }], key: (x) => x.id }, (x) =>
+    x().id === "chat" ? row().contextMenu([Button("Open chat", open)]) : row(),
+  );
 }
 
 /** A PR's state chip, "draft": its words on a faint face of its health's hue,
