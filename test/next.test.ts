@@ -7,7 +7,11 @@ import { installRenderer } from "./support/renderer.ts";
 
 const r = installRenderer();
 const { agent, group, ws } = await import("./support/fixtures.ts");
-const model = await import("../src/cockpit/model.ts");
+const model = {
+  ...(await import("../src/cockpit/strip.ts")),
+  ...(await import("../src/cockpit/lane-entries.ts")),
+  ...(await import("../src/cockpit/next.ts")),
+};
 const drop = await import("../src/cockpit/drop.ts");
 const state = await import("../src/cockpit/state.ts");
 
@@ -179,7 +183,7 @@ describe("cards sorted by state inside a lane", () => {
   const lane = () => model.flatEntries().flatMap((e) => (e.kind === "ws" ? [e.wsId] : []));
 
   // Four older asks fill the Needs you strip, so n1 is past its cap and
-  // keeps its card in the lane (model.ts's inStrip); the four leave
+  // keeps its card in the lane (strip.ts's inStrip); the four leave
   // placeholders in Unsorted, which lane() leaves out as it reads cards.
   const fullStrip = ["q1", "q2", "q3", "q4"].map((id) => ws(id, { agents: asking(600) }));
 

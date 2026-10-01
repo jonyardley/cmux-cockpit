@@ -32,7 +32,7 @@ const open = { url: "https://github.com/o/r/pull/1", status: "open", branch: "fe
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, group, ws } = await import("./support/fixtures.ts");
-const model = await import("../src/cockpit/model.ts");
+const model = { ...(await import("../src/cockpit/strip.ts")), ...(await import("../src/cockpit/lane-entries.ts")) };
 const { C } = await import("../src/cockpit/theme.ts");
 const { READY_INK } = await import("../src/shared/pr-colors.ts");
 

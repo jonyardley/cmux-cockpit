@@ -2,27 +2,23 @@
 
 import { isProjectKey } from "../../shared/projects.ts";
 import { countPill, laneTitle, projectBadge, ring, sectionTitle, unreadBadge, when } from "../../shared/ui.ts";
-import { dropLane } from "../drop.ts";
-import { editLabel, isNewDraft, openEditor, openNewProject } from "../edit.ts";
-import { type LaneKey, laneByKey } from "../lanes.ts";
 import {
   canOpenProject,
-  chooseMode,
-  headerHint,
-  isCollapsed,
   isProjectCollapsed,
-  laneWorkspaces,
   openProjectWorkspace,
   projectByKey,
   projectNewLabel,
   projectWorkspaces,
   quietLabel,
   quietProjects,
-  toggleLane,
   toggleProject,
   toggleQuiet,
-  wsById,
-} from "../model.ts";
+} from "../by-project.ts";
+import { dropLane } from "../drop.ts";
+import { editLabel, isNewDraft, openEditor, openNewProject } from "../edit.ts";
+import { headerHint, laneWorkspaces } from "../lane-entries.ts";
+import { type LaneKey, laneByKey } from "../lanes.ts";
+import { chooseMode, isCollapsed, toggleLane, wsById } from "../model.ts";
 import { isMode, isSelected, projectsMode, quietCollapsed, selectWorkspace } from "../state.ts";
 import { headerStatus } from "../status.ts";
 import { C } from "../theme.ts";
@@ -133,7 +129,7 @@ function dropHint(target: () => boolean): View {
 }
 
 // A lane header's trailing words: "Drop here" under a drag, else how many
-// of its PRs are ready to merge (model.ts's headerHint). One Text, so an
+// of its PRs are ready to merge (lane-entries.ts's headerHint). One Text, so an
 // empty one leaves no spacing slot and both sit flush right.
 function laneHint(laneKey: LaneKey, target: () => boolean): View {
   const hint = computed(() => headerHint(laneKey, target()));
