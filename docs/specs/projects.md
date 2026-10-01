@@ -10,7 +10,7 @@ Answers issues [#8](https://github.com/jonyardley/cmux-cockpit/issues/8)
 (assign sessions to projects) and
 [#9](https://github.com/jonyardley/cmux-cockpit/issues/9) (create and
 customise a project). Grounded in `src/shared/projects.ts`,
-`src/cockpit/model.ts`, `src/cockpit/lanes.ts`, `src/cockpit/drop.ts`,
+`src/cockpit/model.ts`, `src/cockpit/by-project.ts`, `src/cockpit/lanes.ts`, `src/cockpit/drop.ts`,
 `scripts/build.ts`, `scripts/projects-config.ts`, and the renderer's
 published capabilities (`docs/custom-sidebars.md` in manaflow-ai/cmux).
 
@@ -20,7 +20,7 @@ Automatic, path-based assignment (#8 Q1) is done. `projectOf()` in
 `src/shared/projects.ts` lowercases a workspace's `directory` and matches it
 against each `Project.match` (a string or list of path fragments); the first
 hit wins, otherwise a workspace falls into a synthetic "Other" project.
-`src/cockpit/model.ts`'s `projectKey()`/`projectEntries()` groups cards by
+`src/cockpit/by-project.ts`'s `projectKey()`/`projectEntries()` groups cards by
 this for the Projects view. `PROJECTS` comes from `config/projects.json`
 (gitignored, real table) or `config/projects.example.json` (fallback),
 injected at build time as the `__PROJECTS__` define by `scripts/build.ts`

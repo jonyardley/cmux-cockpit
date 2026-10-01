@@ -18,7 +18,7 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { group } = await import("./support/fixtures.ts");
 const state = await import("../src/cockpit/state.ts");
-const model = await import("../src/cockpit/model.ts");
+const model = { ...(await import("../src/cockpit/model.ts")), ...(await import("../src/cockpit/by-project.ts")) };
 const { laneByKey } = await import("../src/cockpit/lanes.ts");
 
 describe("state.ts and model.ts seed the view and folds from the saved state", () => {

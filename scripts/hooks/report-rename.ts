@@ -13,7 +13,7 @@
 // a name Jon later gives the workspace in cmux by hand is not put back on
 // every run. A name that matches a cmux group's name
 // is skipped: the cockpit takes a workspace titled after its group for the
-// group's generated placeholder (isGeneratedAnchor in src/cockpit/model.ts)
+// group's generated placeholder (isGeneratedAnchor in src/shared/anchors.ts)
 // and would hide it. It never fails the hook: every problem is a note on
 // stderr and exit 0.
 //

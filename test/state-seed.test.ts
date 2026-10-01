@@ -21,7 +21,7 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const needs = await import("../src/shared/needs.ts");
-const model = await import("../src/cockpit/model.ts");
+const model = { ...(await import("../src/cockpit/model.ts")), ...(await import("../src/cockpit/by-project.ts")) };
 
 describe("needs.ts seeds dismissed from the saved state (issue #5)", () => {
   it("shows the saved dismissal's agent as idle, and only that exact spell", () => {
@@ -36,7 +36,7 @@ describe("needs.ts seeds dismissed from the saved state (issue #5)", () => {
   });
 });
 
-describe("model.ts seeds projectOverride from the saved state (issue #8)", () => {
+describe("by-project.ts seeds projectOverride from the saved state (issue #8)", () => {
   it("keeps a saved override for a configured project", () => {
     assert.equal(model.hasProjectOverride(ws("w2")), true);
     assert.equal(model.projectKey(ws("w2", { directory: "/Users/coder/dev/app-two" })), "/dev/app-one");

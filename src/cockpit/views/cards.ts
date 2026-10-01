@@ -6,9 +6,11 @@ import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloSize, meta, ring, unreadBadge, when } from "../../shared/ui.ts";
 import { FULL_LINE_CHARS, hasChipsRow, PROJECT_LINE_CHARS } from "../chips.ts";
+import { showsLeftOff } from "../lane-entries.ts";
 import type { Lane } from "../lanes.ts";
 import { cardOpacity } from "../merged.ts";
-import { cardDensity, revealWorkspace, showsLeftOff } from "../model.ts";
+import { cardDensity } from "../model.ts";
+import { revealWorkspace } from "../next.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
 import {
   ageOf,
@@ -87,7 +89,7 @@ function detailLine(w: WsAccessor, key: string, lines: number, indent = 0): View
 }
 
 // Your last prompt, above the agent's latest message, on cards in lanes
-// you come back to after a while (model.ts's showsLeftOff). Tertiary ink,
+// you come back to after a while (lane-entries.ts's showsLeftOff). Tertiary ink,
 // so the agent's words stay the stronger line.
 function leftOffLine(w: WsAccessor, key: string, indent = 0): View {
   const text = computed(() => (showsLeftOff(w()) ? leftOffText(w()) : ""));

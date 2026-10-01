@@ -6,20 +6,10 @@
 
 import { displayTitle } from "../../shared/titles.ts";
 import { countPill, meta, motionList, ring, sectionTitle, when } from "../../shared/ui.ts";
-import {
-  dismissWaiting,
-  jumpNext,
-  needsList,
-  needsMore,
-  needsShown,
-  needsWaitLate,
-  needsWaitText,
-  nextStep,
-  originOf,
-  revealWorkspace,
-} from "../model.ts";
+import { jumpNext, nextStep, originOf, revealWorkspace } from "../next.ts";
 import { isSelected } from "../state.ts";
 import { ageOf, countColors, needsInk, needsLine, needsRowEdge, OUTLINE_MAX, outline } from "../status.ts";
+import { dismissWaiting, needsList, needsMore, needsShown, needsWaitLate, needsWaitText } from "../strip.ts";
 import { C } from "../theme.ts";
 import { laneMarker } from "./headers.ts";
 import { cardMenu, glyph, glyphButton, type WsAccessor } from "./parts.ts";

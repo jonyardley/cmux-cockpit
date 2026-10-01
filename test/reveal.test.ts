@@ -9,7 +9,12 @@ import { installRenderer } from "./support/renderer.ts";
 
 const r = installRenderer();
 const { agent, group, ws } = await import("./support/fixtures.ts");
-const model = await import("../src/cockpit/model.ts");
+const model = {
+  ...(await import("../src/cockpit/model.ts")),
+  ...(await import("../src/cockpit/lane-entries.ts")),
+  ...(await import("../src/cockpit/by-project.ts")),
+  ...(await import("../src/cockpit/next.ts")),
+};
 const state = await import("../src/cockpit/state.ts");
 const { laneByKey } = await import("../src/cockpit/lanes.ts");
 

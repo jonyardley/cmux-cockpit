@@ -24,7 +24,7 @@ flat scripts cmux loads. README.md has the layout and commands.
    modules. The floor is the total across those modules, not per file, so
    one module can sit below it. Raise it when coverage rises; never lower
    it to get green.
-2. New or changed logic in a `model.ts`, `status.ts`, `drop.ts` or
+2. New or changed logic in a sidebar's model modules (below) or a
    `shared/` module has a test in `test/`.
 3. The PR says what the maintainer should look at after reload: validate and the
    renderer only run on main, so behaviour on screen is unverified until then.
@@ -32,9 +32,12 @@ flat scripts cmux loads. README.md has the layout and commands.
 ## Where code goes
 
 - `src/shared/`: pure helpers both sidebars use. One copy, never mirrored.
-- `src/<sidebar>/model.ts` (plus `status.ts`, `drop.ts`, `state.ts` in
-  cockpit): data and state. Reads `data`, returns plain values, no views.
-  This is what the tests cover.
+- `src/<sidebar>/*.ts` other than `index.ts` and `theme.ts`: data and
+  state. Reads `data`, returns plain values, no views. This is what the
+  tests cover. In cockpit, `model.ts` holds lanes and placement, and
+  `strip.ts` (Needs you), `lane-entries.ts` (All), `by-project.ts`
+  (Projects), `next.ts` and `card-chips.ts` build on it, never the other
+  way round. A new module joins the coverage list in `package.json`.
 - `src/<sidebar>/views/`: view builders only. Keep logic out; if a view
   needs a decision, put it in the model and test it there.
 - `src/<sidebar>/theme.ts`: colour tokens. No hex literals scattered in new

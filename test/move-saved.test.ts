@@ -38,7 +38,7 @@ const { agent, ws } = await import("./support/fixtures.ts");
 const move = await import("../src/shared/move.ts");
 const needs = await import("../src/shared/needs.ts");
 const status = await import("../src/cockpit/status.ts");
-const cockpit = await import("../src/cockpit/model.ts");
+const cockpit = { ...(await import("../src/cockpit/strip.ts")), ...(await import("../src/cockpit/card-chips.ts")) };
 
 // The Claude session that saved workspace `id`'s move, as cmux reports it once hooked.
 const own = (id: string): Partial<Agent> => ({ id: "s-" + id, kind: "claude" });

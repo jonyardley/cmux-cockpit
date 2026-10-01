@@ -8,6 +8,7 @@ import { glyphColor } from "../../shared/contrast.ts";
 import { tildeHome } from "../../shared/home.ts";
 import { PROJECT_COLORS } from "../../shared/projects.ts";
 import { projectBadge, ring, sectionTitle, when } from "../../shared/ui.ts";
+import { folderSuggestions } from "../by-project.ts";
 import {
   addSuggested,
   cancelSearch,
@@ -30,7 +31,6 @@ import {
   setDraftName,
   setIconSearch,
 } from "../edit.ts";
-import { folderSuggestions } from "../model.ts";
 import { C } from "../theme.ts";
 
 const SWATCHES_PER_ROW = 8;
