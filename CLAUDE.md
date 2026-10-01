@@ -53,6 +53,21 @@ flat scripts cmux loads. README.md has the layout and commands.
   Maps and `let`s are not reactive: read with `tick()`, write with `bump()`.
 - A ForEach row's kind is fixed by its key: new kinds need new keys.
 
+## When the maintainer reports a bug on screen
+
+- Their description is the ground truth. Before offering any cause, restate
+  the exact trigger in one line (what they did, what appeared instead) and
+  ask for the missing step if it is not there. Never call the reported state
+  "working as designed" or "not missing" until you have reproduced it.
+- Reproduce it off screen from their steps: a test on the fake renderer or a
+  `npm run preview` scene. If you cannot reproduce it, say so; do not guess.
+- Before writing the fix, trace where the panel really reads that data
+  (which field, which sidebar, cmux data or local state), and make the
+  reproducing test pass against that path, not an assumed one.
+- A fix that looks right, then snaps back after a few seconds on screen, can
+  be an optimistic override expiring over data that disagrees: test past the
+  expiry by advancing `r.data.epoch`.
+
 ## Tests
 
 `node:test` with TypeScript run natively. `test/support/renderer.ts` fakes
