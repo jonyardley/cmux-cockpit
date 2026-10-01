@@ -52,10 +52,10 @@ const checks = [
   ui: {},
 };
 
-const { installRenderer, nodeOf, taps } = await import("./support/renderer.ts");
+const { installRenderer, modValue, nodeOf, taps } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const { STATUS_DOT, T } = await import("../src/agents/theme.ts");
+const { HERE_FACE, HERE_HOVER, STATUS_DOT, T } = await import("../src/agents/theme.ts");
 const { P } = await import("../src/shared/palette.ts");
 const m = await import("../src/agents/model.ts");
 const { prRow } = await import("../src/agents/views/rows.ts");
@@ -130,14 +130,10 @@ describe("the row's session and project", () => {
 });
 
 // Issue #183: this chat's PR is the one to find, so it leads the list and
-// its row is tinted, whatever its number or state.
+// its row is shaded, whatever its number.
 describe("this chat's own PR", () => {
   const order = () => m.prs().map((e) => e.pr.number);
-  const face = (n: number): unknown => {
-    const row = nodeOf(prRow(() => ({ ...entry(n), last: true })))?.children[0];
-    const v = row?.mods.find((x) => x.name === "background")?.values[0];
-    return typeof v === "function" ? v() : v;
-  };
+  const row = (n: number) => nodeOf(prRow(() => ({ ...entry(n), last: true })))?.children[0];
 
   it("sorts first, ahead of higher numbers and PRs no workspace holds", () => {
     assert.deepEqual(order(), [1, 2, 4, 3]);
@@ -151,7 +147,13 @@ describe("this chat's own PR", () => {
     assert.equal(entry(2).session?.name, "This chat");
   });
 
-  it("stays first once merged, ahead of open PRs", () => {
+  it("leads with an own PR this chat opened", () => {
+    r.data.workspaces = [ws("here", { title: "This one" }), ws("gone", { selected: true, title: "Back again" })];
+    assert.equal(order()[0], 3);
+    assert.equal(entry(3).session?.name, "This chat");
+  });
+
+  it("keeps the card's PR first once merged, ahead of open PRs", () => {
     r.data.workspaces = [
       ws("w", { selected: true, pr: { url: pr(8), number: 8, status: "merged", branch: "m" } }),
       ws("other", { title: "Socket contract" }),
@@ -159,9 +161,29 @@ describe("this chat's own PR", () => {
     assert.equal(order()[0], 8);
   });
 
-  it("tints this chat's row and no other", () => {
-    assert.equal(face(1), T.here);
-    assert.equal(face(2), "clear");
+  it("leaves this chat's other merged PRs in place, so open ones stay in the folded cut", () => {
+    r.data.workspaces = [
+      ws("w", {
+        selected: true,
+        prs: [
+          { url: pr(20), number: 20, status: "open", branch: "a" },
+          { url: pr(21), number: 21, status: "merged", branch: "b" },
+          { url: pr(22), number: 22, status: "merged", branch: "c" },
+          { url: pr(23), number: 23, status: "merged", branch: "d" },
+        ],
+      }),
+      ws("other", { title: "Socket contract" }),
+    ];
+    // #20 is the card's and open; the merged three sort after every open PR.
+    assert.deepEqual(order(), [20, 2, 4, 3, 23]);
+    assert.ok(m.isHerePr(entry(23)));
+  });
+
+  it("shades this chat's row, a step darker under the pointer, and no other", () => {
+    assert.equal(modValue(row(1), "background"), HERE_FACE);
+    assert.equal(modValue(row(1), "hoverBackground"), HERE_HOVER);
+    assert.equal(modValue(row(2), "background"), "clear");
+    assert.equal(modValue(row(2), "hoverBackground"), T.hover);
   });
 });
 

@@ -631,8 +631,17 @@ export interface PrSession {
   here: boolean;
 }
 
-/** This chat's own PR: the row the panel tints and puts first (issue #183). */
+/** This chat's own PR: the panel tints its row (issue #183). */
 export const isHerePr = (e: Pick<PrEntry, "session">): boolean => e.session?.here ?? false;
+
+/**
+ * Whether a PR row leads the list: one of this chat's that is open, or the
+ * one its card shows (`cardUrl`), whatever its state. A chat's older merged
+ * or closed PRs stay in their place, so they never push open PRs out of the
+ * folded cut.
+ */
+export const leadsList = (e: Pick<PrEntry, "session" | "pr">, cardUrl: string | undefined): boolean =>
+  isHerePr(e) && (e.pr.status === "open" || (!!cardUrl && e.pr.url === cardUrl));
 
 /** A PR row's number, "#134"; "" before GitHub has given it one. */
 export const prNumberText = (e: Pick<PrEntry, "pr">): string => (e.pr.number ? "#" + e.pr.number : "");
@@ -665,10 +674,11 @@ function prTitle(w: Workspace, pr: PullRequest): string {
   return (/^pr$/i.test(label) ? "" : label) || pr.branch || displayTitle(w) || "";
 }
 
-// Every PR, this chat's first (issue #183), then open, then merged, then closed. Within each state the PRs
+// Every PR, open first then merged then closed. Within each state the PRs
 // workspaces hold come before Jon's own that no workspace holds, newest first
 // in each, so a merged or closed workspace PR can never push his open PRs out
-// of the cut to MAX_PRS. Open workspace PRs still can.
+// of the cut to MAX_PRS. Open workspace PRs still can. Ahead of all of them
+// go this chat's leads (issue #183): its card's PR and its other open ones.
 const allPrs = computed((): PrEntry[] => {
   const seen = new Set<string>();
   const all = data.workspaces() ?? [];
@@ -679,9 +689,11 @@ const allPrs = computed((): PrEntry[] => {
   const held = workspacePrs(workspaces, seen);
   const own = ownPrs(new Map(workspaces.map((w) => [w.id, w])), seen);
   const isOwn = new Set(own.map((e) => e.key));
+  const cardUrl = prSummary(all.find((w) => w.selected))?.url;
+  const leads = (e: PrEntry): number => Number(leadsList(e, cardUrl));
   return [...held, ...own].sort(
     (x, y) =>
-      Number(isHerePr(y)) - Number(isHerePr(x)) ||
+      leads(y) - leads(x) ||
       prRank(x.pr) - prRank(y.pr) ||
       Number(isOwn.has(x.key)) - Number(isOwn.has(y.key)) ||
       (y.pr.number ?? 0) - (x.pr.number ?? 0),
@@ -769,8 +781,9 @@ export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale(
 /** "This chat" for the selected workspace, else its name, and its lead agent's dot. */
 function sessionOf(w: Workspace): PrSession {
   const lead = mostActive(agentsOf(w));
-  const name = w.selected ? "This chat" : displayTitle(w) || "Another chat";
-  return { name, dot: dotFor(lead, w), hollow: hollowDot(lead), here: !!w.selected };
+  const here = !!w.selected;
+  const name = here ? "This chat" : displayTitle(w) || "Another chat";
+  return { name, dot: dotFor(lead, w), hollow: hollowDot(lead), here };
 }
 
 // ---- Made here ------------------------------------------------------------------

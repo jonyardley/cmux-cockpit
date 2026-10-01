@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { installRenderer, nodeOf, recordModifiers, type ViewNode } from "./support/renderer.ts";
+import { installRenderer, modValue, nodeOf, recordModifiers, type ViewNode } from "./support/renderer.ts";
 
 const r = installRenderer();
 const ui = await import("../src/shared/ui.ts");
@@ -153,7 +153,6 @@ describe("the shared builders read what they are handed", () => {
   });
 
   it("countPill shows its tint, and no pill at all for an empty count", () => {
-    const mod = (n: ViewNode | undefined, name: string): unknown => n?.mods.find((m) => m.name === name)?.values[0];
     const tint = { bg: P.blueCount, fg: P.blueText };
     const lit = nodeOf(
       ui.countPill(
@@ -161,14 +160,14 @@ describe("the shared builders read what they are handed", () => {
         () => tint,
       ),
     );
-    assert.equal(mod(lit, "background"), P.blueCount);
-    assert.equal(mod(lit, "color"), P.blueText);
-    assert.equal(mod(lit, "font"), 11);
+    assert.equal(modValue(lit, "background"), P.blueCount);
+    assert.equal(modValue(lit, "color"), P.blueText);
+    assert.equal(modValue(lit, "font"), 11);
     const zero = nodeOf(ui.countPill(() => "0"));
-    assert.equal(mod(zero, "background"), ui.QUIET_PILL.bg);
+    assert.equal(modValue(zero, "background"), ui.QUIET_PILL.bg);
     const empty = nodeOf(ui.countPill(() => ""));
-    assert.equal(mod(empty, "background"), "clear");
-    assert.equal(mod(empty, "paddingHorizontal"), 0);
+    assert.equal(modValue(empty, "background"), "clear");
+    assert.equal(modValue(empty, "paddingHorizontal"), 0);
   });
 
   it("builds both heading styles", () => {

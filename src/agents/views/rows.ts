@@ -4,7 +4,7 @@
 import type { Last } from "../../shared/list.ts";
 import { META_FONT, meta, openIfUrl, when } from "../../shared/ui.ts";
 import { isHerePr, type MadeEntry, madeAge, madeTitleColor, type PrEntry, prNumberText } from "../model.ts";
-import { T } from "../theme.ts";
+import { HERE_FACE, HERE_HOVER, T } from "../theme.ts";
 import { glyph, prChip, ruled } from "./parts.ts";
 
 /** The quiet row a capped list ends in: "+12 more", or "Show less" once
@@ -21,7 +21,7 @@ export function footRow(text: () => string, onTap: () => void): View {
 
 /** A PR row: its project's tile, the title and its state chip, then a faint
  * line with the number and the session it belongs to. This chat's own row is
- * tinted, its title and "This chat" bold (issue #183). A tap anywhere on it,
+ * shaded, its title and "This chat" bold in ink (issue #183). A tap anywhere on it,
  * the chip included, opens the PR on GitHub. */
 export function prRow(e: () => Last<PrEntry>): View {
   const here = () => isHerePr(e());
@@ -60,7 +60,7 @@ export function prRow(e: () => Last<PrEntry>): View {
           Text(() => e().session?.name ?? "")
             .font(META_FONT)
             .weight(() => (here() ? "semibold" : "regular"))
-            .color(() => (here() ? T.blue : T.tertiary))
+            .color(() => (here() ? T.text : T.tertiary))
             .lineLimit(1)
             .truncation("tail"),
         ]),
@@ -70,15 +70,15 @@ export function prRow(e: () => Last<PrEntry>): View {
   const row = VStack({ spacing: 2, alignment: "leading" }, [top, sub])
     .paddingHorizontal(12)
     .paddingVertical(8)
-    .background(() => (here() ? T.here : "clear"))
-    .hoverBackground(T.hover)
+    .background(() => (here() ? HERE_FACE : "clear"))
+    .hoverBackground(() => (here() ? HERE_HOVER : T.hover))
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => openIfUrl(e().pr.url));
   return ruled(row, () => e().last);
 }
 
 /** One page or doc an agent published: its project's tile (grey when the
- * workspace that made it is unknown), title and age; tinted with a bold title
+ * workspace that made it is unknown), title and age; shaded with a bold title
  * when this chat made it, as its PR row is. Tap opens it on claude.ai. */
 export function madeRow(e: () => Last<MadeEntry>): View {
   const row = HStack({ spacing: 10 }, [
@@ -95,8 +95,8 @@ export function madeRow(e: () => Last<MadeEntry>): View {
   ])
     .paddingHorizontal(12)
     .paddingVertical(9)
-    .background(() => (e().here ? T.here : "clear"))
-    .hoverBackground(T.hover)
+    .background(() => (e().here ? HERE_FACE : "clear"))
+    .hoverBackground(() => (e().here ? HERE_HOVER : T.hover))
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => openIfUrl(e().url));
   return ruled(row, () => e().last);

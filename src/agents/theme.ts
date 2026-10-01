@@ -4,6 +4,7 @@
 
 import type { CheckState } from "../../scripts/state-config.ts";
 import { P } from "../shared/palette.ts";
+import { hoverFace } from "../shared/shade.ts";
 
 export const T = {
   ...P,
@@ -17,9 +18,13 @@ export const T = {
   hover: "#7f7f7f0F",
   /** The faint face behind the agent's latest message on the card. */
   quote: "#1414130A",
-  /** The face behind this chat's own rows in Pull requests and Made here (issue #183). */
-  here: "#3B6EC414",
 } as const;
+
+/** The face behind this chat's own rows in Pull requests and Made here
+ * (issue #183): faint ink, since hue only ever means state. hoverBackground
+ * replaces it under the pointer, so the hover face is a step on from it. */
+export const HERE_FACE = `${P.text}0A`;
+export const HERE_HOVER = hoverFace(HERE_FACE, 0);
 
 /** A stale PR chip's opacity: dimmed while the poller's data is old or gh is down (issue #78). */
 export const STALE_OPACITY = 0.5;
