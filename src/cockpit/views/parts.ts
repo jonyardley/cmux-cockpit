@@ -20,6 +20,27 @@ import {
   unreadBadge,
   when,
 } from "../../shared/ui.ts";
+import {
+  canCreateProject,
+  clearProjectOverride,
+  createProjectFrom,
+  hasProjectOverride,
+  makeProjectLabel,
+  moveToProject,
+  newSessionFor,
+  newSessionLabel,
+  projectKey,
+  projectOfWorkspace,
+} from "../by-project.ts";
+import {
+  type Chip,
+  type ChipId,
+  canFileForReview,
+  fileForReview,
+  type PrChip,
+  reviewIsGreen,
+  type TextChip,
+} from "../card-chips.ts";
 import { cardChips, chipsSplit, secondLineFits, showsChipsRow } from "../chips.ts";
 import { LANES } from "../lanes.ts";
 import {
@@ -32,28 +53,7 @@ import {
   offersPark,
   parkMerged,
 } from "../merged.ts";
-import {
-  type Chip,
-  type ChipId,
-  canCreateProject,
-  canFileForReview,
-  clearProjectOverride,
-  createProjectFrom,
-  dismissWaiting,
-  fileForReview,
-  hasProjectOverride,
-  laneOf,
-  makeProjectLabel,
-  moveToLane,
-  moveToProject,
-  newSessionFor,
-  newSessionLabel,
-  type PrChip,
-  projectKey,
-  projectOfWorkspace,
-  reviewIsGreen,
-  type TextChip,
-} from "../model.ts";
+import { laneOf, moveToLane } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
 import {
   ageOf,
@@ -66,6 +66,7 @@ import {
   statusInfo,
   statusLine,
 } from "../status.ts";
+import { dismissWaiting } from "../strip.ts";
 import { C } from "../theme.ts";
 
 export type WsAccessor = () => Workspace | undefined;

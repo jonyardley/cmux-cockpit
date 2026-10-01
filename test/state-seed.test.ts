@@ -21,7 +21,7 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const needs = await import("../src/shared/needs.ts");
-const model = await import("../src/cockpit/model.ts");
+const model = { ...(await import("../src/cockpit/model.ts")), ...(await import("../src/cockpit/by-project.ts")) };
 
 describe("needs.ts seeds dismissed from the saved state (issue #5)", () => {
   it("shows the saved dismissal's agent as idle, and only that exact spell", () => {

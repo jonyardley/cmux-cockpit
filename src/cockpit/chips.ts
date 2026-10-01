@@ -1,8 +1,8 @@
 // Whether a card's chips row has anything to show (issue #79), so a card with
 // nothing there drops the row and the gap above it.
 
+import { type Chip, canFileForReview, chipsFor } from "./card-chips.ts";
 import { offersClose, offersMergedChip, offersPark } from "./merged.ts";
-import { type Chip, canFileForReview, chipsFor } from "./model.ts";
 
 /**
  * True when the chips row shows a chip from `chips` (a chipsFor list), the

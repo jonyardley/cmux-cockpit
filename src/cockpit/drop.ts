@@ -4,19 +4,9 @@
 // dispatches workspace.reorder and workspace.group.add (or
 // workspace.group.remove for Unsorted).
 
+import { flatEntries, type LaneEntry, stateRank } from "./lane-entries.ts";
 import { FIRST_LANE, type LaneKey, laneByKey } from "./lanes.ts";
-import {
-  flatEntries,
-  groupForLane,
-  groups,
-  type LaneEntry,
-  laneAnchorIds,
-  laneOf,
-  moveToLane,
-  overrideOrder,
-  stateRank,
-  wsById,
-} from "./model.ts";
+import { groupForLane, groups, laneAnchorIds, laneOf, moveToLane, overrideOrder, wsById } from "./model.ts";
 import { drag, mode, setDrag } from "./state.ts";
 
 export interface DropTarget {

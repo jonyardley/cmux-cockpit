@@ -22,7 +22,11 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, group, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
-const model = await import("../src/cockpit/model.ts");
+const model = {
+  ...(await import("../src/cockpit/model.ts")),
+  ...(await import("../src/cockpit/lane-entries.ts")),
+  ...(await import("../src/cockpit/by-project.ts")),
+};
 const { C } = await import("../src/cockpit/theme.ts");
 const { QUIET_PILL, countTint } = await import("../src/shared/ui.ts");
 const { laneByKey } = await import("../src/cockpit/lanes.ts");

@@ -7,7 +7,7 @@ import { installRenderer } from "./support/renderer.ts";
 
 const r = installRenderer();
 const { agent, group, ws } = await import("./support/fixtures.ts");
-const model = await import("../src/cockpit/model.ts");
+const model = { ...(await import("../src/cockpit/lane-entries.ts")) };
 const status = await import("../src/cockpit/status.ts");
 const { promptText } = await import("../src/shared/text.ts");
 const agents = await import("../src/agents/model.ts");

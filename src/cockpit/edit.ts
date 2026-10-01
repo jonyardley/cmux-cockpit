@@ -17,7 +17,7 @@ import {
   projectId,
 } from "../shared/projects.ts";
 import { SYMBOLS } from "../shared/symbols.ts";
-import { knownProjects, openFolderOnce, removeProject, saveProject, specOf } from "./model.ts";
+import { knownProjects, openFolderOnce, removeProject, saveProject, specOf } from "./by-project.ts";
 import { editingProject, NEW_PROJECT, setEditingProject } from "./state.ts";
 
 const [draft, setDraft] = signal<ProjectSpec>({ name: "", color: PROJECT_COLORS[0], icon: PROJECT_ICONS[0] });

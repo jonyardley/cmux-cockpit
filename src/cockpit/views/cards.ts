@@ -6,9 +6,11 @@ import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
 import { haloSize, meta, ring, unreadBadge, when } from "../../shared/ui.ts";
 import { FULL_LINE_CHARS, hasChipsRow, PROJECT_LINE_CHARS } from "../chips.ts";
+import { showsLeftOff } from "../lane-entries.ts";
 import type { Lane } from "../lanes.ts";
 import { cardOpacity } from "../merged.ts";
-import { cardDensity, revealWorkspace, showsLeftOff } from "../model.ts";
+import { cardDensity } from "../model.ts";
+import { revealWorkspace } from "../next.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
 import {
   ageOf,

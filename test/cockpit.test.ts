@@ -4,7 +4,13 @@ import { installRenderer } from "./support/renderer.ts";
 
 const r = installRenderer();
 const { agent, group, ws } = await import("./support/fixtures.ts");
-const model = await import("../src/cockpit/model.ts");
+const model = {
+  ...(await import("../src/cockpit/model.ts")),
+  ...(await import("../src/cockpit/strip.ts")),
+  ...(await import("../src/cockpit/lane-entries.ts")),
+  ...(await import("../src/cockpit/by-project.ts")),
+  ...(await import("../src/cockpit/next.ts")),
+};
 const drop = await import("../src/cockpit/drop.ts");
 const state = await import("../src/cockpit/state.ts");
 const status = await import("../src/cockpit/status.ts");
