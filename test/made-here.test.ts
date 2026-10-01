@@ -43,12 +43,11 @@ const NOW = 1_000_000;
 const { installRenderer, menuOf, modValue, nodeOf, taps } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const lists = await import("../src/agents/lists.ts");
-const made = await import("../src/agents/made.ts");
+const m = { ...(await import("../src/agents/lists.ts")), ...(await import("../src/agents/made.ts")) };
 const { HERE_FACE, HERE_HOVER, T } = await import("../src/agents/theme.ts");
 const { madeRow } = await import("../src/agents/views/rows.ts");
 
-const ids = () => made.madeHere().map((e) => e.url.replace("https://claude.ai/artifact/", ""));
+const ids = () => m.madeHere().map((e) => e.url.replace("https://claude.ai/artifact/", ""));
 
 beforeEach(() => {
   r.data.epoch = NOW;
@@ -63,11 +62,11 @@ beforeEach(() => {
 // Opens a card for the body only, folding it again even when an assertion
 // fails, so the open state never leaks into later tests.
 function whileOpen(k: "prs" | "made", body: () => void): void {
-  lists.toggleExpanded(k);
+  m.toggleExpanded(k);
   try {
     body();
   } finally {
-    lists.toggleExpanded(k);
+    m.toggleExpanded(k);
   }
 }
 
@@ -79,7 +78,7 @@ describe("madeHere", () => {
   it("marks no row last while a +N more line follows, so the final row keeps its rule", () => {
     // Seven fresh entries, six shown: o4 is the one left out.
     assert.deepEqual(
-      made.madeHere().map((e) => e.last),
+      m.madeHere().map((e) => e.last),
       [false, false, false, false, false, false],
     );
   });
@@ -90,56 +89,56 @@ describe("madeHere", () => {
     // Only o1 (NOW - 50) and o2 (NOW - 60) are still inside the seven days.
     assert.deepEqual(ids(), ["o1", "o2"]);
     assert.deepEqual(
-      made.madeHere().map((e) => e.last),
+      m.madeHere().map((e) => e.last),
       [false, true],
     );
-    assert.equal(made.madeFoot(), "");
+    assert.equal(m.madeFoot(), "");
   });
 
   it("counts every fresh entry before the caps, and how many the caps leave out", () => {
-    assert.equal(made.madeCount(), 7);
-    assert.equal(made.madeFoot(), "+1 more");
+    assert.equal(m.madeCount(), 7);
+    assert.equal(m.madeFoot(), "+1 more");
   });
 
   it("shows every fresh entry once the card is open, and folds back to the caps (#109)", () => {
-    assert.equal(made.madeFoot(), "+1 more");
+    assert.equal(m.madeFoot(), "+1 more");
     whileOpen("made", () => {
       assert.deepEqual(ids(), ["here-new", "here-old", "jp", "o1", "o2", "o3", "o4"]);
-      assert.equal(made.madeFoot(), "Show less");
-      assert.ok(made.madeHere().every((e) => !e.last));
+      assert.equal(m.madeFoot(), "Show less");
+      assert.ok(m.madeHere().every((e) => !e.last));
     });
-    assert.equal(made.madeHere().length, 6);
-    assert.equal(made.madeFoot(), "+1 more");
+    assert.equal(m.madeHere().length, 6);
+    assert.equal(m.madeFoot(), "+1 more");
   });
 
   it("opening one card leaves the other folded", () => {
     whileOpen("prs", () => {
-      assert.equal(lists.isExpanded("made"), false);
-      assert.equal(made.madeFoot(), "+1 more");
+      assert.equal(m.isExpanded("made"), false);
+      assert.equal(m.madeFoot(), "+1 more");
     });
   });
 
   it("shows another workspace's card folded, and the first still open on return", () => {
     whileOpen("made", () => {
       r.data.workspaces = [ws("sel"), ws("other", { selected: true })];
-      assert.equal(lists.isExpanded("made"), false);
+      assert.equal(m.isExpanded("made"), false);
       r.data.workspaces = [ws("sel", { selected: true }), ws("other")];
-      assert.equal(lists.isExpanded("made"), true);
+      assert.equal(m.isExpanded("made"), true);
     });
   });
 
   it("counts nothing before the clock's first tick", () => {
     r.data.epoch = 0;
-    assert.equal(made.madeCount(), 0);
-    assert.equal(made.madeFoot(), "");
+    assert.equal(m.madeCount(), 0);
+    assert.equal(m.madeFoot(), "");
   });
 
   it("keys each row by its link, so a row keeps its one kind", () => {
-    assert.equal(made.madeHere()[0]?.key, "m:https://claude.ai/artifact/here-new");
+    assert.equal(m.madeHere()[0]?.key, "m:https://claude.ai/artifact/here-new");
   });
 
   it("takes each row's project from the workspace it was made in, none once that workspace has gone", () => {
-    const byId = new Map(made.madeHere().map((e) => [e.title, e.project.name]));
+    const byId = new Map(m.madeHere().map((e) => [e.title, e.project.name]));
     assert.equal(byId.get("Title here-new"), "App One");
     assert.equal(byId.get("Title o1"), "App Two");
     assert.equal(byId.get("Title o3"), "");
@@ -148,16 +147,16 @@ describe("madeHere", () => {
   it("lists everything as from elsewhere when no workspace is selected", () => {
     r.data.workspaces = [ws("other", { directory: "/Users/jon/dev/app-two" })];
     assert.deepEqual(ids(), ["o1", "o2", "o3"]);
-    assert.ok(made.madeHere().every((e) => !e.here));
+    assert.ok(m.madeHere().every((e) => !e.here));
   });
 
   it("keeps a title with no Latin letters, trimmed", () => {
-    assert.ok(made.madeHere().some((e) => e.title === "日本語メモ"));
+    assert.ok(m.madeHere().some((e) => e.title === "日本語メモ"));
   });
 
   it("lists nothing before the clock's first tick, when every entry would read as fresh", () => {
     r.data.epoch = 0;
-    assert.deepEqual(made.madeHere(), []);
+    assert.deepEqual(m.madeHere(), []);
   });
 
   it("drops an entry once it passes seven days on the clock", () => {
@@ -169,17 +168,17 @@ describe("madeHere", () => {
 
 describe("Made here row helpers", () => {
   it("sets other workspaces' titles a step back", () => {
-    const rows = made.madeHere();
+    const rows = m.madeHere();
     const here = rows.find((e) => e.here);
     const other = rows.find((e) => !e.here);
     assert.ok(here && other);
-    assert.equal(made.madeTitleColor(here), T.text);
-    assert.equal(made.madeTitleColor(other), T.secondary);
+    assert.equal(m.madeTitleColor(here), T.text);
+    assert.equal(m.madeTitleColor(other), T.secondary);
   });
 
   // Issue #183: this chat's rows are shaded, as its PR row is.
   it("shades this chat's rows, a step darker under the pointer, and no other", () => {
-    const rows = made.madeHere();
+    const rows = m.madeHere();
     const row = (here: boolean) => {
       const e = rows.find((x) => x.here === here);
       assert.ok(e);
@@ -194,15 +193,15 @@ describe("Made here row helpers", () => {
   });
 
   it("ages each row from when it was last published", () => {
-    const [first] = made.madeHere();
+    const [first] = m.madeHere();
     assert.ok(first);
-    assert.equal(made.madeAge(first), "1m");
+    assert.equal(m.madeAge(first), "1m");
   });
 });
 
 describe("a right-click on a Made here row", () => {
   const row = (title: string) => {
-    const e = made.madeHere().find((x) => x.title === title);
+    const e = m.madeHere().find((x) => x.title === title);
     assert.ok(e, title);
     return e;
   };

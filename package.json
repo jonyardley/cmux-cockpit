@@ -14,7 +14,7 @@
     "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
     "knip": "knip",
     "test": "node --test",
-    "coverage": "node --test --experimental-test-coverage --test-coverage-include='src/**/model.ts' --test-coverage-include='src/cockpit/{status,drop,lanes,state,edit,merged}.ts' --test-coverage-include='src/agents/{lists,team,checks,pr-list,made}.ts' --test-coverage-include='src/shared/**' --test-coverage-lines=90 --test-coverage-branches=80 --test-coverage-functions=80",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-include='src/**/model.ts' --test-coverage-include='src/cockpit/{status,drop,lanes,state,edit,merged}.ts' --test-coverage-include='src/agents/{lists,team,checks,pr-list,made}.ts' --test-coverage-include='src/shared/**' --test-coverage-lines=99 --test-coverage-branches=96 --test-coverage-functions=99",
     "validate": "node scripts/validate.ts",
     "pr-body": "node scripts/pr-body.ts",
     "snapshots": "UPDATE_SNAPSHOTS=1 node --test 'test/snapshot-*.test.ts'",

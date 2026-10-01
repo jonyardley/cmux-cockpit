@@ -4,11 +4,13 @@ import { installRenderer } from "./support/renderer.ts";
 
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const m = await import("../src/agents/model.ts");
-const lists = await import("../src/agents/lists.ts");
-const team = await import("../src/agents/team.ts");
-const prList = await import("../src/agents/pr-list.ts");
-const made = await import("../src/agents/made.ts");
+const m = {
+  ...(await import("../src/agents/model.ts")),
+  ...(await import("../src/agents/lists.ts")),
+  ...(await import("../src/agents/team.ts")),
+  ...(await import("../src/agents/pr-list.ts")),
+  ...(await import("../src/agents/made.ts")),
+};
 const { ageSince } = await import("../src/shared/time.ts");
 const { cardMessage } = await import("../src/shared/text.ts");
 const { dismissNeeds } = await import("../src/shared/needs.ts");
@@ -320,7 +322,7 @@ describe("prs", () => {
       ws("none", { pr: { number: 4, status: "open" } }),
     ];
     assert.deepEqual(
-      prList.prs().map((e) => e.pr.number),
+      m.prs().map((e) => e.pr.number),
       [5, 3, 1, 9],
     );
   });
@@ -332,7 +334,7 @@ describe("prs", () => {
       ws("b", { title: "", pr: { url: "u/3", label: "pr", branch: "feat/x" } }),
     ];
     assert.deepEqual(
-      prList.prs().map((e) => e.title),
+      m.prs().map((e) => e.title),
       ["Tidy", "Fix bug", "feat/x"],
     );
   });
@@ -341,13 +343,13 @@ describe("prs", () => {
 describe("madeHere", () => {
   it("is empty while nothing has been published", () => {
     r.data.workspaces = [ws("sel", { selected: true })];
-    assert.deepEqual(made.madeHere(), []);
+    assert.deepEqual(m.madeHere(), []);
   });
 });
 
 describe("prChipText", () => {
   // A PR with no number has no summary, so the chip falls back on its status.
-  const said = (pr: PullRequest) => prList.prChipText({ pr, summary: undefined });
+  const said = (pr: PullRequest) => m.prChipText({ pr, summary: undefined });
 
   it("says draft for an open draft, else the status", () => {
     assert.equal(said({ status: "open", draft: true }), "draft");
@@ -364,9 +366,9 @@ describe("prChipText", () => {
   it("says the summary's state for a numbered PR, stale after it", () => {
     const pr: PullRequest = { number: 3, status: "open", draft: true, stale: true };
     const summary = summaryOf(pr, [{ name: "test", state: "pending" }]);
-    assert.equal(prList.prChipText({ pr, summary }), "draft · running · stale");
-    assert.equal(prList.prChipHealth({ summary }), "running");
-    assert.equal(prList.prChipHealth({ summary: undefined }), "quiet");
+    assert.equal(m.prChipText({ pr, summary }), "draft · running · stale");
+    assert.equal(m.prChipHealth({ summary }), "running");
+    assert.equal(m.prChipHealth({ summary: undefined }), "quiet");
   });
 });
 
@@ -378,14 +380,14 @@ describe("subagents", () => {
       ws("sel", { selected: true, agents }),
     ];
   };
-  const ids = () => team.subagents().map((e) => e.key.split(":")[2]);
+  const ids = () => m.subagents().map((e) => e.key.split(":")[2]);
 
   it("is empty with no selection, no agents, or no children", () => {
-    assert.deepEqual(team.subagents(), []);
+    assert.deepEqual(m.subagents(), []);
     sel([]);
-    assert.deepEqual(team.subagents(), []);
+    assert.deepEqual(m.subagents(), []);
     sel([agent("working")]);
-    assert.deepEqual(team.subagents(), []);
+    assert.deepEqual(m.subagents(), []);
   });
 
   it("puts running runs first, oldest start first, then settled ones newest end first", () => {
@@ -416,19 +418,19 @@ describe("subagents", () => {
       }),
     ]);
     assert.deepEqual(
-      team.helpers().map((e) => [e.label, team.helperAge(e)]),
+      m.helpers().map((e) => [e.label, m.helperAge(e)]),
       [
         ["No start yet", "running"],
         ["Edge-case review", "4m"],
       ],
     );
-    assert.equal(team.finishedLine(), "3 finished earlier");
+    assert.equal(m.finishedLine(), "3 finished earlier");
   });
 
   it("settles every run under an ended session, whatever the run says", () => {
     sel([agent("ended", { children: [run("stuck", { running: true, startedEpoch: 100 })] })]);
     assert.deepEqual(
-      team.subagents().map((e) => e.running),
+      m.subagents().map((e) => e.running),
       [false],
     );
   });
@@ -442,7 +444,7 @@ describe("subagents", () => {
     ] as SubagentRun[]; // cmux has sent holes in agent lists; the model must survive one here too.
     sel([agent("working", { children })]);
     assert.deepEqual(
-      team.subagents().map((e) => [e.key.split(":")[2], e.label, e.running]),
+      m.subagents().map((e) => [e.key.split(":")[2], e.label, e.running]),
       [
         ["live", "subagent", true],
         ["#2", "subagent", true],
@@ -456,12 +458,12 @@ describe("subagents", () => {
     const a1 = agent("working", { children: three("s") });
     const a2 = agent("idle", { children: three("s") });
     sel([a1, a2]);
-    const keys = team.subagents().map((e) => e.key);
+    const keys = m.subagents().map((e) => e.key);
     assert.equal(keys.length, 6);
     assert.equal(new Set(keys).size, 6);
     assert.ok(keys.some((k) => k.startsWith("s:" + a2.id + ":")));
-    assert.equal(team.helpers().length, 5);
-    assert.equal(team.helperMore(), 1);
+    assert.equal(m.helpers().length, 5);
+    assert.equal(m.helperMore(), 1);
   });
 });
 
@@ -478,11 +480,11 @@ describe("helpers and finishedLine", () => {
       run("c", { label: "Explore the bridge", running: true, startedEpoch: 300 }),
     ]);
     assert.deepEqual(
-      team.helpers().map((e) => e.label),
+      m.helpers().map((e) => e.label),
       ["Explore the bridge", "Edge-case review"],
     );
-    assert.equal(team.finishedLine(), "1 finished earlier");
-    assert.equal(team.hasHelpers(), true);
+    assert.equal(m.finishedLine(), "1 finished earlier");
+    assert.equal(m.hasHelpers(), true);
   });
 
   it("with only settled runs, shows no Helpers heading, just the one finished line", () => {
@@ -491,9 +493,9 @@ describe("helpers and finishedLine", () => {
       run("b", { running: false, endedEpoch: 300 }),
       run("c", { running: false, endedEpoch: 400 }),
     ]);
-    assert.deepEqual(team.helpers(), []);
-    assert.equal(team.hasHelpers(), false);
-    assert.equal(team.finishedLine(), "3 finished earlier");
+    assert.deepEqual(m.helpers(), []);
+    assert.equal(m.hasHelpers(), false);
+    assert.equal(m.finishedLine(), "3 finished earlier");
   });
 
   it("counts only the settled runs of sessions still open", () => {
@@ -506,18 +508,18 @@ describe("helpers and finishedLine", () => {
         ],
       }),
     ];
-    assert.equal(team.finishedLine(), "1 finished earlier");
+    assert.equal(m.finishedLine(), "1 finished earlier");
     r.data.workspaces = [ws("sel", { selected: true, agents: [agent("ended", { children: [run("old")] })] })];
-    assert.equal(team.finishedLine(), "");
+    assert.equal(m.finishedLine(), "");
   });
 
   it("ends the lines in +N more past five running, so they add up to the left card's count", () => {
     sel(Array.from({ length: 8 }, (_, i) => run("r" + i, { running: true, startedEpoch: 100 + i })));
-    assert.equal(team.helpers().length, 5);
-    assert.equal(team.helperMore(), 3);
-    assert.equal(team.helpers().length + team.helperMore(), liveRunCount(m.cur().ws));
+    assert.equal(m.helpers().length, 5);
+    assert.equal(m.helperMore(), 3);
+    assert.equal(m.helpers().length + m.helperMore(), liveRunCount(m.cur().ws));
     sel([run("a", { running: true })]);
-    assert.equal(team.helperMore(), 0);
+    assert.equal(m.helperMore(), 0);
   });
 
   it("counts every running run in the heading's pill, past the cap too, and none settled", () => {
@@ -525,26 +527,26 @@ describe("helpers and finishedLine", () => {
       ...Array.from({ length: 7 }, (_, i) => run("r" + i, { running: true, startedEpoch: 100 + i })),
       run("done", { running: false, endedEpoch: 300 }),
     ]);
-    assert.equal(team.helperCount(), 7);
-    assert.equal(team.helperCount(), team.helpers().length + team.helperMore());
-    assert.equal(team.helperCount(), liveRunCount(m.cur().ws));
-    assert.equal(team.hasHelpers(), true);
+    assert.equal(m.helperCount(), 7);
+    assert.equal(m.helperCount(), m.helpers().length + m.helperMore());
+    assert.equal(m.helperCount(), liveRunCount(m.cur().ws));
+    assert.equal(m.hasHelpers(), true);
     sel([]);
-    assert.equal(team.helperCount(), 0);
-    assert.equal(team.hasHelpers(), false);
+    assert.equal(m.helperCount(), 0);
+    assert.equal(m.hasHelpers(), false);
   });
 
   it("tints the helpers pill working blue, by the shared count tint", () => {
-    assert.deepEqual(team.HELPER_PILL, { bg: P.blueCount, fg: P.blueText });
-    assert.deepEqual(team.HELPER_PILL, countTint("working"));
+    assert.deepEqual(m.HELPER_PILL, { bg: P.blueCount, fg: P.blueText });
+    assert.deepEqual(m.HELPER_PILL, countTint("working"));
   });
 
   it("says nothing finished when none has, and hides the block with no runs", () => {
     sel([run("a", { running: true, startedEpoch: 100 })]);
-    assert.equal(team.finishedLine(), "");
+    assert.equal(m.finishedLine(), "");
     sel([]);
-    assert.equal(team.finishedLine(), "");
-    assert.equal(team.hasHelpers(), false);
+    assert.equal(m.finishedLine(), "");
+    assert.equal(m.hasHelpers(), false);
   });
 });
 
@@ -556,7 +558,7 @@ describe("agentRows", () => {
         agents: [agent("working", { name: "Claude" }), agent("ended", { name: "Claude" }), agent("ended")],
       }),
     ];
-    assert.deepEqual(team.agentRows(), []);
+    assert.deepEqual(m.agentRows(), []);
   });
 
   it("numbers agents sharing a fallback label in cmux's order, and a real title wins", () => {
@@ -565,7 +567,7 @@ describe("agentRows", () => {
     const titled = agent("idle", { name: "Claude", title: "Fix the poller", lastActivityAt: 50 });
     const gone = agent("ended", { name: "Claude" });
     r.data.workspaces = [ws("w", { selected: true, agents: [first, gone, second, titled] })];
-    const rows = team.agentRows();
+    const rows = m.agentRows();
     // Most active first; numbers follow cmux's order, ended agents included.
     assert.deepEqual(
       rows.map((e) => [e.key, e.label, e.last]),
@@ -583,13 +585,13 @@ describe("agentRows", () => {
     const three = agent("idle", { name: "Claude", lastActivityAt: 50 });
     r.data.workspaces = [ws("w", { selected: true, agents: [one, two, three] })];
     assert.deepEqual(
-      team.agentRows().map((e) => e.label),
+      m.agentRows().map((e) => e.label),
       ["Claude 1", "Claude 2", "Claude 3"],
     );
     one.status = "ended";
     r.data.workspaces = [ws("w", { selected: true, agents: [one, two, three] })];
     assert.deepEqual(
-      team.agentRows().map((e) => e.label),
+      m.agentRows().map((e) => e.label),
       ["Claude 2", "Claude 3"],
     );
   });
@@ -599,14 +601,14 @@ describe("agentRows", () => {
       ws("w", { selected: true, agents: [agent("working", { name: "Claude" }), agent("idle", { kind: "codex" })] }),
     ];
     assert.deepEqual(
-      team.agentRows().map((e) => e.label),
+      m.agentRows().map((e) => e.label),
       ["Claude", "codex"],
     );
   });
 
   it("caps at six rows", () => {
     r.data.workspaces = [ws("w", { selected: true, agents: Array.from({ length: 8 }, () => agent("idle")) })];
-    const rows = team.agentRows();
+    const rows = m.agentRows();
     assert.equal(rows.length, 6);
     assert.equal(rows[0]?.label, "agent 1");
   });
@@ -615,11 +617,11 @@ describe("agentRows", () => {
 // Opens a card for the body only, folding it again even when an assertion
 // fails, so the open state never leaks into later tests.
 function whileOpen(k: "prs" | "made", body: () => void): void {
-  lists.toggleExpanded(k);
+  m.toggleExpanded(k);
   try {
     body();
   } finally {
-    lists.toggleExpanded(k);
+    m.toggleExpanded(k);
   }
 }
 
@@ -631,10 +633,10 @@ describe("group placeholders", () => {
     ];
     r.data.groups = [{ id: "g", name: "For review", anchorId: "anchor" }];
     assert.deepEqual(
-      prList.prs().map((e) => e.pr.number),
+      m.prs().map((e) => e.pr.number),
       [7],
     );
-    assert.equal(prList.prCount(), 1);
+    assert.equal(m.prCount(), 1);
   });
 
   it("leaves it out with no group list, by its lane title alone, even with an agent asking", () => {
@@ -645,7 +647,7 @@ describe("group placeholders", () => {
         pr: { url: "u/old", number: 2163, status: "merged" },
       }),
     ];
-    assert.equal(prList.prCount(), 0);
+    assert.equal(m.prCount(), 0);
   });
 
   it("keeps a lane-titled chat's PR while the group list says it is not the anchor", () => {
@@ -654,19 +656,19 @@ describe("group placeholders", () => {
       ws("chat", { title: "Parked", pr: { url: "u/1", number: 1, status: "open" } }),
     ];
     r.data.groups = [{ id: "g", name: "Background", anchorId: "anchor" }];
-    assert.equal(prList.prCount(), 1);
+    assert.equal(m.prCount(), 1);
   });
 
   it("keeps the PR of a real workspace a group is anchored on", () => {
     r.data.workspaces = [ws("real", { title: "Some chat", pr: { url: "u/1", number: 1, status: "open" } })];
     r.data.groups = [{ id: "g", name: "For review", anchorId: "real" }];
-    assert.equal(prList.prCount(), 1);
+    assert.equal(m.prCount(), 1);
   });
 
   it("keeps the PR of a group Jon made himself, titled after it", () => {
     r.data.workspaces = [ws("mine", { title: "my group", pr: { url: "u/1", number: 1, status: "open" } })];
     r.data.groups = [{ id: "g", name: "my group", anchorId: "mine" }];
-    assert.equal(prList.prCount(), 1);
+    assert.equal(m.prCount(), 1);
   });
 });
 
@@ -675,18 +677,18 @@ describe("honest counts and +N more (#80)", () => {
     r.data.workspaces = Array.from({ length: 8 }, (_, i) =>
       ws("p" + i, { pr: { url: "u/" + i, number: i + 1, status: "open" } }),
     );
-    assert.equal(prList.prCount(), 8);
-    assert.equal(prList.prFoot(), "+3 more");
-    assert.equal(prList.prs().length, 5);
-    assert.ok(prList.prs().every((e) => !e.last));
+    assert.equal(m.prCount(), 8);
+    assert.equal(m.prFoot(), "+3 more");
+    assert.equal(m.prs().length, 5);
+    assert.ok(m.prs().every((e) => !e.last));
   });
 
   it("has nothing more to say for a short PR list", () => {
     r.data.workspaces = [ws("p", { pr: { url: "u/1", number: 1, status: "open" } })];
-    assert.equal(prList.prCount(), 1);
-    assert.equal(prList.prFoot(), "");
+    assert.equal(m.prCount(), 1);
+    assert.equal(m.prFoot(), "");
     assert.deepEqual(
-      prList.prs().map((e) => e.last),
+      m.prs().map((e) => e.last),
       [true],
     );
   });
@@ -695,47 +697,47 @@ describe("honest counts and +N more (#80)", () => {
     r.data.workspaces = Array.from({ length: 8 }, (_, i) =>
       ws("p" + i, { pr: { url: "u/" + i, number: i + 1, status: "open" } }),
     );
-    assert.equal(prList.prFoot(), "+3 more");
+    assert.equal(m.prFoot(), "+3 more");
     whileOpen("prs", () => {
-      assert.equal(prList.prs().length, 8);
-      assert.equal(prList.prFoot(), "Show less");
+      assert.equal(m.prs().length, 8);
+      assert.equal(m.prFoot(), "Show less");
       // The Show less line follows, so the final row keeps its rule.
-      assert.ok(prList.prs().every((e) => !e.last));
+      assert.ok(m.prs().every((e) => !e.last));
     });
-    assert.equal(prList.prs().length, 5);
-    assert.equal(prList.prFoot(), "+3 more");
+    assert.equal(m.prs().length, 5);
+    assert.equal(m.prFoot(), "+3 more");
   });
 
   it("has no closing line for an open PR card that fits its cap", () => {
     r.data.workspaces = [ws("p", { pr: { url: "u/1", number: 1, status: "open" } })];
     whileOpen("prs", () => {
-      assert.equal(prList.prFoot(), "");
+      assert.equal(m.prFoot(), "");
       assert.deepEqual(
-        prList.prs().map((e) => e.last),
+        m.prs().map((e) => e.last),
         [true],
       );
     });
   });
 
   it("footText reads +N more while cut, Show less while open, nothing when it fits", () => {
-    assert.equal(lists.footText(2, false), "+2 more");
-    assert.equal(lists.footText(2, true), "Show less");
-    assert.equal(lists.footText(0, false), "");
-    assert.equal(lists.footText(0, true), "");
+    assert.equal(m.footText(2, false), "+2 more");
+    assert.equal(m.footText(2, true), "Show less");
+    assert.equal(m.footText(0, false), "");
+    assert.equal(m.footText(0, true), "");
   });
 
   it("moreThan is never negative", () => {
-    assert.equal(lists.moreThan(3, 5), 0);
-    assert.equal(lists.moreThan(7, 5), 2);
+    assert.equal(m.moreThan(3, 5), 0);
+    assert.equal(m.moreThan(7, 5), 2);
   });
 
   it("markLastBefore leaves no row last while more follow", () => {
     assert.deepEqual(
-      lists.markLastBefore([{ k: 1 }, { k: 2 }], 1).map((e) => e.last),
+      m.markLastBefore([{ k: 1 }, { k: 2 }], 1).map((e) => e.last),
       [false, false],
     );
     assert.deepEqual(
-      lists.markLastBefore([{ k: 1 }, { k: 2 }], 0).map((e) => e.last),
+      m.markLastBefore([{ k: 1 }, { k: 2 }], 0).map((e) => e.last),
       [false, true],
     );
   });
@@ -744,14 +746,14 @@ describe("honest counts and +N more (#80)", () => {
 describe("the PR rows' source", () => {
   it("marks cmux's own PRs as not the poller's, so they never dim", () => {
     r.data.workspaces = [ws("p", { pr: { url: "u/1", number: 1, status: "open" } })];
-    const [row] = prList.prs();
+    const [row] = m.prs();
     assert.equal(row?.saved, false);
-    assert.equal(row && prList.prDim(row), false);
+    assert.equal(row && m.prDim(row), false);
   });
 
   it("says nothing under the heading and dims nothing with no poll saved", () => {
-    assert.equal(prList.prNote(), "");
-    assert.equal(prList.prDim({ saved: true }), false);
+    assert.equal(m.prNote(), "");
+    assert.equal(m.prDim({ saved: true }), false);
     r.data.workspaces = [ws("sel", { selected: true, pr: { url: "u/1", number: 1, status: "open" } })];
     assert.equal(m.currentPrDim(), false);
   });
@@ -760,25 +762,25 @@ describe("the PR rows' source", () => {
 describe("emptyNote (#80)", () => {
   it("names both when the selected workspace's agent has no helpers and nothing was published", () => {
     r.data.workspaces = [ws("sel", { selected: true, agents: [agent("working")] })];
-    assert.equal(made.emptyNote(), "No helpers or published links yet");
+    assert.equal(m.emptyNote(), "No helpers or published links yet");
   });
 
   it("claims no helpers only while the selected workspace has a live agent", () => {
     r.data.workspaces = [ws("sel", { selected: true })];
-    assert.equal(made.emptyNote(), "No published links yet");
+    assert.equal(m.emptyNote(), "No published links yet");
     r.data.workspaces = [ws("sel", { selected: true, agents: [agent("ended")] })];
-    assert.equal(made.emptyNote(), "No published links yet");
+    assert.equal(m.emptyNote(), "No published links yet");
   });
 
   it("claims nothing about published links before the clock's first tick", () => {
     r.data.epoch = 0;
     r.data.workspaces = [ws("sel", { selected: true })];
-    assert.equal(made.emptyNote(), "");
+    assert.equal(m.emptyNote(), "");
   });
 
   it("names only published links when no workspace is selected", () => {
     r.data.workspaces = [ws("other")];
-    assert.equal(made.emptyNote(), "No published links yet");
+    assert.equal(m.emptyNote(), "No published links yet");
   });
 
   it("names only published links while the selected workspace has helpers", () => {
@@ -788,7 +790,7 @@ describe("emptyNote (#80)", () => {
         agents: [agent("working", { children: [{ id: "c1", label: "Explore", running: true }] })],
       }),
     ];
-    assert.equal(made.emptyNote(), "No published links yet");
+    assert.equal(m.emptyNote(), "No published links yet");
   });
 });
 

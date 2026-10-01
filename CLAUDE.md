@@ -24,22 +24,21 @@ flat scripts cmux loads. README.md has the layout and commands.
    modules. The floor is the total across those modules, not per file, so
    one module can sit below it. Raise it when coverage rises; never lower
    it to get green.
-2. New or changed logic in a `model.ts`, `status.ts`, `drop.ts`, one of
-   the agents model modules (`lists.ts`, `team.ts`, `checks.ts`,
-   `pr-list.ts`, `made.ts`) or a `shared/` module has a test in `test/`.
+2. New or changed logic in a sidebar's model modules (below) or a
+   `shared/` module has a test in `test/`.
 3. The PR says what the maintainer should look at after reload: validate and the
    renderer only run on main, so behaviour on screen is unverified until then.
 
 ## Where code goes
 
 - `src/shared/`: pure helpers both sidebars use. One copy, never mirrored.
-- `src/<sidebar>/model.ts` (plus `status.ts`, `drop.ts`, `state.ts` in
-  cockpit): data and state. Reads `data`, returns plain values, no views.
-  This is what the tests cover. In agents, `model.ts` holds the selected
-  workspace itself; its lists sit beside it: `lists.ts` (caps and "+N
-  more"), `team.ts` (agent rows and Helpers), `checks.ts` (checks and
-  Fix), `pr-list.ts` (Pull requests) and `made.ts` (Made here). They import
-  `model.ts`, never the other way.
+- `src/<sidebar>/*.ts` other than `index.ts` and `theme.ts`: data and
+  state. Reads `data`, returns plain values, no views. This is what the
+  tests cover. In agents, `model.ts` holds the selected workspace itself;
+  its lists sit beside it and import it, never the other way: `lists.ts`
+  (caps and "+N more"), `team.ts` (agent rows and Helpers), `checks.ts`
+  (checks and Fix), `pr-list.ts` (Pull requests) and `made.ts` (Made
+  here). A new module joins the coverage list in `package.json`.
 - `src/<sidebar>/views/`: view builders only. Keep logic out; if a view
   needs a decision, put it in the model and test it there.
 - `src/<sidebar>/theme.ts`: colour tokens. No hex literals scattered in new
