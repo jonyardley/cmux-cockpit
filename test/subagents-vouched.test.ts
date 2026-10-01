@@ -34,7 +34,7 @@ const saved = (id: string, extra: Record<string, unknown> = {}) => ({
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const m = await import("../src/agents/model.ts");
+const m = await import("../src/agents/team.ts");
 const { liveRunCount } = await import("../src/shared/subagents.ts");
 
 // cmux's view of a background run: settled a moment after it started.

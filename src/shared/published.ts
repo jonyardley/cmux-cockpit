@@ -1,7 +1,7 @@
 // Pages and docs agents published (issue #52), from the saved state:
 // scripts/hooks/report-published.ts records them in config/state.json
 // because cmux knows nothing about them. The agents panel's "Made here"
-// section (madeHere in src/agents/model.ts) reads them through here; this
+// section (madeHere in src/agents/made.ts) reads them through here; this
 // module holds no view.
 
 import type { SavedPublished } from "../../scripts/state-config.ts";

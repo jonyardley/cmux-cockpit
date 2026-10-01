@@ -23,7 +23,7 @@
 // it cannot read for a ~/.claude-personal session and filters to nothing
 // after a `/clear`, so rows fell back to "Claude 1", "Claude 2". The name
 // goes into config/state.json's `names` map under the session id, which is
-// the agent's id in cmux, and the build bakes it in (src/agents/model.ts).
+// the agent's id in cmux, and the build bakes it in (src/agents/team.ts).
 
 import { spawnSync } from "node:child_process";
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from "node:fs";

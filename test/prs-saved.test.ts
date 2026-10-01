@@ -74,7 +74,7 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
 const { checksOf, diffText, prOf, prSummary, prsOf } = await import("../src/shared/prs.ts");
-const agents = await import("../src/agents/model.ts");
+const agents = { ...(await import("../src/agents/checks.ts")), ...(await import("../src/agents/pr-list.ts")) };
 const { P } = await import("../src/shared/palette.ts");
 
 describe("prsOf", () => {

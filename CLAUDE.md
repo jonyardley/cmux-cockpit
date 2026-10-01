@@ -36,8 +36,12 @@ flat scripts cmux loads. README.md has the layout and commands.
   state. Reads `data`, returns plain values, no views. This is what the
   tests cover. In cockpit, `model.ts` holds lanes and placement, and
   `strip.ts` (Needs you), `lane-entries.ts` (All), `by-project.ts`
-  (Projects), `next.ts` and `card-chips.ts` build on it, never the other
-  way round. A new module joins the coverage list in `package.json`.
+  (Projects), `next.ts` and `card-chips.ts` build on it. In agents,
+  `model.ts` holds the selected workspace itself, and `lists.ts` (caps
+  and "+N more"), `team.ts` (agent rows and Helpers), `checks.ts` (checks
+  and Fix), `pr-list.ts` (Pull requests) and `made.ts` (Made here) build
+  on it. Never the other way round. A new module joins the coverage list
+  in `package.json`.
 - `src/<sidebar>/views/`: view builders only. Keep logic out; if a view
   needs a decision, put it in the model and test it there.
 - `src/<sidebar>/theme.ts`: colour tokens. No hex literals scattered in new

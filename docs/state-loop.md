@@ -439,7 +439,7 @@ the map. Only a `https://claude.ai/artifact/<id>` or
 `https://claude.ai/code/artifact/<id>` link is kept, since the sidebar will
 open it on a tap, and no URL can set the map. `src/shared/published.ts`
 reads it back, newest first, for the agents panel's Made here section
-(`madeHere` in `src/agents/model.ts`), and applies the same
+(`madeHere` in `src/agents/made.ts`), and applies the same
 seven days itself (`src/shared/published-age.ts`), since the hook prunes
 only when it writes.
 

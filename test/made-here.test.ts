@@ -43,7 +43,7 @@ const NOW = 1_000_000;
 const { installRenderer, menuOf, modValue, nodeOf, taps } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const m = await import("../src/agents/model.ts");
+const m = { ...(await import("../src/agents/lists.ts")), ...(await import("../src/agents/made.ts")) };
 const { HERE_FACE, HERE_HOVER, T } = await import("../src/agents/theme.ts");
 const { madeRow } = await import("../src/agents/views/rows.ts");
 

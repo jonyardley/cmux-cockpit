@@ -3,7 +3,8 @@
 
 import type { Last } from "../../shared/list.ts";
 import { META_FONT, meta, openIfUrl, when } from "../../shared/ui.ts";
-import { isHerePr, type MadeEntry, madeAge, madeTitleColor, type PrEntry, prNumberText } from "../model.ts";
+import { type MadeEntry, madeAge, madeTitleColor } from "../made.ts";
+import { isHerePr, type PrEntry, prNumberText } from "../pr-list.ts";
 import { HERE_FACE, HERE_HOVER, T } from "../theme.ts";
 import { glyph, prChip, ruled, withChatMenu } from "./parts.ts";
 

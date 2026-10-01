@@ -29,7 +29,7 @@ export function savedRuns(wsId: string): SavedRun[] {
     label: s.label,
     startedEpoch: s.startedEpoch,
     ...(s.agentId === undefined ? {} : { agentId: s.agentId }),
-    // `running` is left unset: model.ts's savedRanked works it out itself
+    // `running` is left unset: team.ts's savedRanked works it out itself
     // from the run's session and its owning agent's status, so a stale
     // value here would only ever be ignored, never shown.
     // Left out rather than set to undefined: exactOptionalPropertyTypes.
@@ -38,7 +38,7 @@ export function savedRuns(wsId: string): SavedRun[] {
 }
 
 // Upstream always sends `running`; without it, a run with no end is live. A
-// run under an ended session is over whatever it says. src/agents/model.ts
+// run under an ended session is over whatever it says. src/agents/team.ts
 // ranks by these too, so the two sidebars never disagree.
 export const childRunning = (c: SubagentRun, owner: Agent): boolean =>
   owner.status !== "ended" && (c.running ?? !c.endedEpoch);

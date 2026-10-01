@@ -20,7 +20,7 @@ const url = "https://github.com/o/r/pull/7";
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
-const m = await import("../src/agents/model.ts");
+const m = await import("../src/agents/pr-list.ts");
 
 describe("an own PR opened from a lane's placeholder", () => {
   it("shows once, with no session named", () => {

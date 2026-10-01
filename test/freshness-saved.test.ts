@@ -32,7 +32,11 @@ const { ws } = await import("./support/fixtures.ts");
 const { freshnessOf, prFreshness, STALE_AFTER, stateNotice, stateNoticeFor } = await import(
   "../src/shared/freshness.ts"
 );
-const m = await import("../src/agents/model.ts");
+const m = {
+  ...(await import("../src/agents/model.ts")),
+  ...(await import("../src/agents/checks.ts")),
+  ...(await import("../src/agents/pr-list.ts")),
+};
 const { P } = await import("../src/shared/palette.ts");
 
 beforeEach(() => {

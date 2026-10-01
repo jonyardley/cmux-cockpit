@@ -17,7 +17,7 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const { projectFor, savedProjectFor } = await import("../src/shared/projects.ts");
-const m = await import("../src/agents/model.ts");
+const m = { ...(await import("../src/agents/model.ts")), ...(await import("../src/agents/pr-list.ts")) };
 
 describe("projectFor", () => {
   it("takes the chosen project over the path match", () => {

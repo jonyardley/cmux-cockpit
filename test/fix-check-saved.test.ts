@@ -38,7 +38,7 @@ const pr = (n: number, status = "open") => ({
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const m = await import("../src/agents/model.ts");
+const m = { ...(await import("../src/agents/model.ts")), ...(await import("../src/agents/checks.ts")) };
 const { dismissNeeds } = await import("../src/shared/needs.ts");
 
 beforeEach(() => {

@@ -4,7 +4,13 @@ import { installRenderer } from "./support/renderer.ts";
 
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const m = await import("../src/agents/model.ts");
+const m = {
+  ...(await import("../src/agents/model.ts")),
+  ...(await import("../src/agents/lists.ts")),
+  ...(await import("../src/agents/team.ts")),
+  ...(await import("../src/agents/pr-list.ts")),
+  ...(await import("../src/agents/made.ts")),
+};
 const { ageSince } = await import("../src/shared/time.ts");
 const { cardMessage } = await import("../src/shared/text.ts");
 const { dismissNeeds } = await import("../src/shared/needs.ts");

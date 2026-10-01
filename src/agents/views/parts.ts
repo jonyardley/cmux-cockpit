@@ -3,7 +3,7 @@
 import { prChipColors, shownHealth } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
 import { chipFrame, chipText, countPill, haloDot, projectBadge, ring, sectionTitle, when } from "../../shared/ui.ts";
-import { chatTarget, type PrEntry, prChipHealth, prChipText, prDim } from "../model.ts";
+import { chatTarget, type PrEntry, prChipHealth, prChipText, prDim } from "../pr-list.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
 
 // White panel with a hairline edge: the runtime has no shadows, so depth is
