@@ -36,7 +36,7 @@ describe("needs.ts seeds dismissed from the saved state (issue #5)", () => {
   });
 });
 
-describe("model.ts seeds projectOverride from the saved state (issue #8)", () => {
+describe("by-project.ts seeds projectOverride from the saved state (issue #8)", () => {
   it("keeps a saved override for a configured project", () => {
     assert.equal(model.hasProjectOverride(ws("w2")), true);
     assert.equal(model.projectKey(ws("w2", { directory: "/Users/coder/dev/app-two" })), "/dev/app-one");

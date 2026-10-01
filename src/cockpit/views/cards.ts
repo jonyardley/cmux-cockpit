@@ -89,7 +89,7 @@ function detailLine(w: WsAccessor, key: string, lines: number, indent = 0): View
 }
 
 // Your last prompt, above the agent's latest message, on cards in lanes
-// you come back to after a while (model.ts's showsLeftOff). Tertiary ink,
+// you come back to after a while (lane-entries.ts's showsLeftOff). Tertiary ink,
 // so the agent's words stay the stronger line.
 function leftOffLine(w: WsAccessor, key: string, indent = 0): View {
   const text = computed(() => (showsLeftOff(w()) ? leftOffText(w()) : ""));

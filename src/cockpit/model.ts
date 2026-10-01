@@ -1,5 +1,6 @@
-// Workspaces as the cockpit sees them: which lane each is in, selection and
-// collapse, and the row lists each mode renders.
+// Workspaces as the cockpit sees them: which lane each is in, tab order,
+// lane folds and the view mode. strip.ts, lane-entries.ts, by-project.ts,
+// next.ts and card-chips.ts build each mode's rows on top of this.
 //
 // Optimistic overrides flip locally the same frame, then clear once the data
 // agrees or after OVERRIDE_SECS (so a normalised result from the app wins).

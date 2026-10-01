@@ -40,7 +40,7 @@ function peersAround(entries: LaneEntry[], at: number, laneKey: LaneKey, rank: n
   return { above: entries.slice(0, at).filter(peer).at(-1), below: entries.slice(at).find(peer) };
 }
 
-// Cards sort by state inside a lane (model.ts's stateRank), and the drag
+// Cards sort by state inside a lane (lane-entries.ts's stateRank), and the drag
 // order only holds among cards in the same state. So a drop anchors to the
 // nearest card in the dragged card's own state: just before the first one
 // below the slot, else just after the last one above it. Either way it sits
@@ -111,7 +111,7 @@ export function handleMove(key: string, index: number): void {
 // A group's anchor IS that group in cmux, so it cannot leave it: its card is
 // pinned in place instead of jumping and snapping back. That covers a
 // project group's anchor, and also a lane group anchored on a real
-// workspace rather than a generated placeholder (model.ts's
+// workspace rather than a generated placeholder (shared/anchors.ts's
 // isGeneratedAnchor): laneAnchorIds() no longer hides that real anchor, so
 // it shows as a normal card here, but it stays undraggable for the same
 // reason. The context menu still offers its "Lane:" items, so it is never

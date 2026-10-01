@@ -10,7 +10,7 @@ import { beforeEach, describe, it } from "node:test";
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
-const model = { ...(await import("../src/cockpit/by-project.ts")) };
+const model = await import("../src/cockpit/by-project.ts");
 const edit = await import("../src/cockpit/edit.ts");
 const state = await import("../src/cockpit/state.ts");
 const parts = await import("../src/cockpit/views/parts.ts");

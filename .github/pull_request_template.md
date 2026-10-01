@@ -23,5 +23,5 @@ it found, and what happened to each finding: fixed, or why not. Write
 ## Checklist
 
 - [ ] `npm run check` passes locally
-- [ ] New or changed logic in `model.ts`, `status.ts`, `drop.ts` or `shared/` has a test
+- [ ] New or changed logic in a sidebar's model modules or `shared/` has a test
 - [ ] No edits to `sidebars/*.js`, and `config/projects.json` is not committed

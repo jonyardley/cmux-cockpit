@@ -9,7 +9,7 @@ import { installRenderer } from "./support/renderer.ts";
 const r = installRenderer();
 const { agent, group, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
-const model = { ...(await import("../src/cockpit/card-chips.ts")) };
+const model = await import("../src/cockpit/card-chips.ts");
 const {
   cardChips,
   chipsFitOneLine,

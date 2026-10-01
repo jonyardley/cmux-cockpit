@@ -59,8 +59,8 @@ export const needsMore = (): number => Math.max(0, needsList().length - NEEDS_RO
  * project for a placeholder in the same spot, which the header still
  * counts, and comes back there once answered or dismissed. One past the
  * strip's cap keeps its card. The card being dragged stays a card even if
- * it starts asking, so it never vanishes from under the pointer. Above the
- * lanes and projects, since computed() runs on definition.
+ * it starts asking, so it never vanishes from under the pointer. Imported by
+ * lane-entries.ts and by-project.ts, so it is built before their rows are.
  */
 export const inStrip = computed((): ReadonlySet<string> => {
   const dragged = drag()?.id;
@@ -73,7 +73,7 @@ export const inStrip = computed((): ReadonlySet<string> => {
 // releases it too (liveRank). A plain Map: read with tick(), set with
 // bump(); a release during render needs no bump, since the status change
 // that caused it already redraws.
-export const dismissedHold = new Map<string, string>();
+const dismissedHold = new Map<string, string>();
 
 /** Dismisses a waiting session from Needs you, holding its card where its placeholder sat. */
 export function dismissWaiting(w: Workspace | undefined): void {
@@ -85,6 +85,11 @@ export function dismissWaiting(w: Workspace | undefined): void {
   for (const id of dismissedHold.keys()) if (!live.has(id)) dismissedHold.delete(id);
   dismissedHold.set(w.id, statusOf(w));
   bump();
+}
+
+/** Lets go of a dismissed card's hold, as a new ask does. */
+export function releaseHold(w: Workspace): void {
+  dismissedHold.delete(w.id);
 }
 
 export function heldAtTop(w: Workspace): boolean {

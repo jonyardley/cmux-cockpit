@@ -6,7 +6,7 @@ import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
 import { actualLaneOf, cards, generatedAnchorId, isCollapsed, laneOf, wsById } from "./model.ts";
 import { isSelected } from "./state.ts";
 import { agentOf, isReady, isWaiting, statusOf } from "./status.ts";
-import { dismissedHold, heldAtTop, inStrip } from "./strip.ts";
+import { heldAtTop, inStrip, releaseHold } from "./strip.ts";
 import { C } from "./theme.ts";
 
 // --- All mode: one flat list of lane headers and cards --------------------------------
@@ -41,7 +41,7 @@ const isEmpty = (s: LaneSection): boolean => s.rows.length === 0 && !s.anchorId;
 function liveRank(w: Workspace | undefined): number {
   const s = statusOf(w);
   if (s === "needs_input") {
-    if (w) dismissedHold.delete(w.id);
+    if (w) releaseHold(w);
     return 0;
   }
   if (w && heldAtTop(w)) return 0;
@@ -147,9 +147,6 @@ export function mergeReadyText(laneKey: LaneKey): string {
   return n ? n + " ready to merge" : "";
 }
 
-// Ready's green (pr-colors.ts), so the count reads as the PR verdict, not
-// the agent's Ready pill.
-
 /** The words at a lane header's trailing edge, and their ink. */
 export interface HeaderHint {
   text: string;
@@ -159,7 +156,8 @@ export interface HeaderHint {
 /**
  * "Drop here" while a drag is over the lane, else its merge line. Parked
  * keeps its merge line faint, as it does its title: set-aside work should
- * not call out in green.
+ * not call out in green. Otherwise Ready's green (pr-colors.ts), so the
+ * count reads as the PR verdict, not the agent's Ready pill.
  */
 export function headerHint(laneKey: LaneKey, dropping: boolean): HeaderHint {
   if (dropping) return { text: "Drop here", color: C.heading };

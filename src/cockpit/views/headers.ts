@@ -129,7 +129,7 @@ function dropHint(target: () => boolean): View {
 }
 
 // A lane header's trailing words: "Drop here" under a drag, else how many
-// of its PRs are ready to merge (model.ts's headerHint). One Text, so an
+// of its PRs are ready to merge (lane-entries.ts's headerHint). One Text, so an
 // empty one leaves no spacing slot and both sit flush right.
 function laneHint(laneKey: LaneKey, target: () => boolean): View {
   const hint = computed(() => headerHint(laneKey, target()));
