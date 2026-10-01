@@ -59,7 +59,7 @@ export function jump(wsId: string, surfaceId: string | undefined): void {
 }
 
 /** A row with a right-click Open chat while it has a workspace to go to
- * (pr-list.ts chatWs). Two `when`s, since a row's menu is fixed when it is
+ * (model.ts chatWs). Two `when`s, since a row's menu is fixed when it is
  * built and a ForEach row's kind is fixed by its key; returned bare, for
  * ruled to hold, so no stack is added round the row. */
 export function withChatMenu(row: () => View, chat: () => string | undefined): View[] {

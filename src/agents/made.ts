@@ -11,8 +11,7 @@ import { savedPublished } from "../shared/published.ts";
 import { ageSince, nowEpoch } from "../shared/time.ts";
 import { footText, isExpanded, markLastBefore } from "./lists.ts";
 
-import { cur } from "./model.ts";
-import { chatWs } from "./pr-list.ts";
+import { chatWs, cur } from "./model.ts";
 import { subagents } from "./team.ts";
 import { T } from "./theme.ts";
 

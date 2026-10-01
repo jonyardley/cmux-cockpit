@@ -1,5 +1,6 @@
 // The agents panel's data: the selected workspace in detail (and its
-// question, when its agent needs you), every PR, and what agents published.
+// question, when its agent needs you). Its lists sit beside it: lists.ts,
+// team.ts, checks.ts, pr-list.ts and made.ts.
 // Who is working and who is idle lives on the cockpit's cards, not here.
 // Pure reads of `data`, so each is testable alone.
 
@@ -192,3 +193,10 @@ export const prStale = (): boolean => freshness().stale;
 
 /** The workspace's PR chip dims while it is the poller's copy and that copy is stale. */
 export const currentPrDim = computed((): boolean => !!currentPr() && fromPoller(cur().ws) && prStale());
+
+/** The workspace a row's right-click Open chat goes to, by id; none for the
+ * selected workspace with no terminal to focus, where it would do nothing
+ * (as canOpenChat). */
+export function chatWs(w: Workspace, lead: Agent | null): string | undefined {
+  return w.selected && !lead?.surfaceId ? undefined : w.id;
+}

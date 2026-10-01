@@ -1,6 +1,6 @@
 // The selected workspace's PR checks, their summary line, and the Fix
 // action that sends a failing check to the agent.
-// Pure reads of `data`, so each is testable alone.
+// Reads of `data`, except sendFix, which types into the agent's terminal.
 
 import type { CheckState } from "../../scripts/state-config.ts";
 import { NUDGE_WINDOW, waitingMove } from "../shared/move.ts";

@@ -20,7 +20,7 @@ import {
 import { displayTitle } from "../shared/titles.ts";
 import { footText, isExpanded, markLastBefore, moreThan } from "./lists.ts";
 
-import { dotFor, freshness, hollowDot, prStale } from "./model.ts";
+import { chatWs, dotFor, freshness, hollowDot, prStale } from "./model.ts";
 
 // ---- Pull requests ----------------------------------------------------------
 
@@ -44,13 +44,6 @@ export interface PrEntry {
 export interface ChatTarget {
   wsId: string;
   surfaceId: string | undefined;
-}
-
-/** The workspace a row's right-click Open chat goes to, by id; none for the
- * selected workspace with no terminal to focus, where it would do nothing
- * (as canOpenChat). */
-export function chatWs(w: Workspace, lead: Agent | null): string | undefined {
-  return w.selected && !lead?.surfaceId ? undefined : w.id;
 }
 
 /** Where Open chat jumps, read when it is chosen, so it focuses the agent the

@@ -1,6 +1,6 @@
 // The agents panel's capped lists: how many rows a cap leaves out, which
-// cards are open past their cap, and the closing "+N more" line.
-// Pure reads of `data`, so each is testable alone.
+// cards are open past their cap, and the closing "+N more" line. Which are
+// open is panel state, set by toggleExpanded.
 
 import { type Last, markLast } from "../shared/list.ts";
 

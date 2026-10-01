@@ -26,7 +26,8 @@ The git hooks, once installed:
 - `npm run check` passes: Biome, both type checks, knip, a fresh build,
   the tests with their coverage floor, and `cmux sidebar validate` (main
   checkout only).
-- New or changed logic in a `model.ts`, `status.ts`, `drop.ts` or
+- New or changed logic in a sidebar's model modules (every
+  `src/<sidebar>/*.ts` other than `index.ts` and `theme.ts`) or a
   `src/shared/` module has a test in `test/`.
 - The PR template's "Look at after reload" section says what to check on
   screen after `cmux sidebar reload`. cmux loads sidebars only from
