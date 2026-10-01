@@ -40,7 +40,7 @@ const NOW = 1_000_000;
   ui: {},
 };
 
-const { installRenderer, menuOf, nodeOf } = await import("./support/renderer.ts");
+const { installRenderer, menuOf, nodeOf, taps } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
@@ -189,8 +189,12 @@ describe("a right-click on a Made here row", () => {
     assert.ok(e, title);
     return e;
   };
-  // The row itself sits inside the ruled wrapper's menu switch.
-  const menu = (title: string) => menuOf(nodeOf(madeRow(() => row(title)))?.children[0]?.children[0]);
+  // The row itself is the one tap target, and carries the menu.
+  const rowNode = (title: string) => {
+    const root = nodeOf(madeRow(() => row(title)));
+    return root && taps(root)[0];
+  };
+  const menu = (title: string) => menuOf(rowNode(title));
 
   it("offers Open chat, which goes to the workspace that made it and focuses its lead agent", () => {
     r.data.workspaces = [
@@ -210,9 +214,14 @@ describe("a right-click on a Made here row", () => {
     assert.deepEqual(r.opened, []);
   });
 
-  it("offers it on the selected workspace's own rows too", () => {
+  it("offers it on the selected workspace's own rows only with a terminal to focus", () => {
+    assert.deepEqual(menu("Title here-new"), []);
+    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("idle", { surfaceId: "s-sel" })] })];
     menu("Title here-new")[0]?.action();
-    assert.deepEqual(r.calls, [{ method: "workspace.select", params: { workspace_id: "sel" } }]);
+    assert.deepEqual(r.calls, [
+      { method: "workspace.select", params: { workspace_id: "sel" } },
+      { method: "surface.focus", params: { surface_id: "s-sel", workspace_id: "sel" } },
+    ]);
   });
 
   it("has no menu once the workspace that made it has gone", () => {
@@ -221,7 +230,7 @@ describe("a right-click on a Made here row", () => {
   });
 
   it("still opens the page on a tap", () => {
-    const tap = nodeOf(madeRow(() => row("Title o1")))?.children[0]?.children[0]?.handlers.onTap;
+    const tap = rowNode("Title o1")?.handlers.onTap;
     assert.equal(typeof tap, "function");
     if (typeof tap === "function") tap();
     assert.deepEqual(r.opened, ["https://claude.ai/artifact/o1"]);

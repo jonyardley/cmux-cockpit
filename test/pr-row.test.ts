@@ -88,14 +88,15 @@ describe("the row's session and project", () => {
       name: "This chat",
       dot: STATUS_DOT.working,
       hollow: false,
-      chat: { wsId: "here", surfaceId: undefined },
+      // Selected, with no terminal to focus: Open chat would do nothing.
+      chat: undefined,
     });
     // No agent: a hollow grey ring, as elsewhere in the panel.
     assert.deepEqual(entry(2).session, {
       name: "Socket contract",
       dot: T.grey,
       hollow: true,
-      chat: { wsId: "other", surfaceId: undefined },
+      chat: "other",
     });
   });
 
@@ -146,14 +147,14 @@ describe("a tap on the row", () => {
     assert.ok(root);
     const tappable = taps(root);
     assert.equal(tappable.length, 1);
-    // The row itself, inside the ruled wrapper's menu switch.
-    assert.equal(tappable[0], root.children[0]?.children[0]);
+    // The row itself.
+    assert.equal(tappable[0]?.kind, "VStack");
     assert.ok(tappable[0]?.mods.some((x) => x.name === "hoverBackground"));
   });
 
   it("opens the PR on GitHub and never switches chats", () => {
     const root = nodeOf(prRow(() => ({ ...entry(1), last: true })));
-    const tap = root?.children[0]?.children[0]?.handlers.onTap;
+    const tap = root && taps(root)[0]?.handlers.onTap;
     assert.equal(typeof tap, "function");
     if (typeof tap === "function") tap();
     assert.deepEqual(r.opened, [pr(1)]);
@@ -162,7 +163,11 @@ describe("a tap on the row", () => {
 });
 
 describe("a right-click on the row", () => {
-  const menu = (n: number) => menuOf(nodeOf(prRow(() => ({ ...entry(n), last: true })))?.children[0]?.children[0]);
+  // The menu sits on the row, the one tap target.
+  const menu = (n: number) => {
+    const root = nodeOf(prRow(() => ({ ...entry(n), last: true })));
+    return menuOf(root && taps(root)[0]);
+  };
 
   it("offers Open chat, which selects the session's workspace and focuses its lead agent", () => {
     r.data.workspaces = [
@@ -191,6 +196,30 @@ describe("a right-click on the row", () => {
     r.data.workspaces = [...(r.data.workspaces ?? []), ws("gone", { title: "Back again" })];
     menu(3)[0]?.action();
     assert.deepEqual(r.calls, [{ method: "workspace.select", params: { workspace_id: "gone" } }]);
+  });
+
+  it("focuses the lead agent as it is when chosen, not when the row was built", () => {
+    r.data.workspaces = [
+      ws("here", { selected: true }),
+      ws("other", { agents: [agent("idle", { surfaceId: "s-a" })] }),
+    ];
+    const items = menu(2);
+    r.data.workspaces = [
+      ws("here", { selected: true }),
+      ws("other", { agents: [agent("working", { surfaceId: "s-b" })] }),
+    ];
+    items[0]?.action();
+    assert.deepEqual(r.calls.at(-1), { method: "surface.focus", params: { surface_id: "s-b", workspace_id: "other" } });
+  });
+
+  it("has no menu on This chat's row with no terminal to focus, since it would do nothing", () => {
+    assert.deepEqual(menu(1), []);
+    r.data.workspaces = [ws("here", { selected: true, agents: [agent("idle", { surfaceId: "s-here" })] })];
+    menu(1)[0]?.action();
+    assert.deepEqual(r.calls.at(-1), {
+      method: "surface.focus",
+      params: { surface_id: "s-here", workspace_id: "here" },
+    });
   });
 
   it("has no menu when no chat holds or opened the PR", () => {
