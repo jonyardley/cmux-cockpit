@@ -40,9 +40,9 @@ const NOW = 1_000_000;
   ui: {},
 };
 
-const { installRenderer, modValue, nodeOf } = await import("./support/renderer.ts");
+const { installRenderer, menuOf, modValue, nodeOf, taps } = await import("./support/renderer.ts");
 const r = installRenderer();
-const { ws } = await import("./support/fixtures.ts");
+const { agent, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
 const { HERE_FACE, HERE_HOVER, T } = await import("../src/agents/theme.ts");
 const { madeRow } = await import("../src/agents/views/rows.ts");
@@ -51,6 +51,8 @@ const ids = () => m.madeHere().map((e) => e.url.replace("https://claude.ai/artif
 
 beforeEach(() => {
   r.data.epoch = NOW;
+  r.calls.length = 0;
+  r.opened.length = 0;
   r.data.workspaces = [
     ws("sel", { selected: true, directory: "/Users/jon/dev/app-one" }),
     ws("other", { directory: "/Users/jon/dev/app-two" }),
@@ -180,7 +182,9 @@ describe("Made here row helpers", () => {
     const row = (here: boolean) => {
       const e = rows.find((x) => x.here === here);
       assert.ok(e);
-      return nodeOf(madeRow(() => e))?.children[0];
+      // The tappable row, under the right-click menu's wrapper.
+      const root = nodeOf(madeRow(() => e));
+      return root ? taps(root)[0] : undefined;
     };
     assert.equal(modValue(row(true), "background"), HERE_FACE);
     assert.equal(modValue(row(true), "hoverBackground"), HERE_HOVER);
@@ -192,5 +196,60 @@ describe("Made here row helpers", () => {
     const [first] = m.madeHere();
     assert.ok(first);
     assert.equal(m.madeAge(first), "1m");
+  });
+});
+
+describe("a right-click on a Made here row", () => {
+  const row = (title: string) => {
+    const e = m.madeHere().find((x) => x.title === title);
+    assert.ok(e, title);
+    return e;
+  };
+  // The row itself is the one tap target, and carries the menu.
+  const rowNode = (title: string) => {
+    const root = nodeOf(madeRow(() => row(title)));
+    return root && taps(root)[0];
+  };
+  const menu = (title: string) => menuOf(rowNode(title));
+
+  it("offers Open chat, which goes to the workspace that made it and focuses its lead agent", () => {
+    r.data.workspaces = [
+      ws("sel", { selected: true }),
+      ws("other", { agents: [agent("idle", { surfaceId: "s-other" })] }),
+    ];
+    const items = menu("Title o1");
+    assert.deepEqual(
+      items.map((i) => i.label),
+      ["Open chat"],
+    );
+    items[0]?.action();
+    assert.deepEqual(r.calls, [
+      { method: "workspace.select", params: { workspace_id: "other" } },
+      { method: "surface.focus", params: { surface_id: "s-other", workspace_id: "other" } },
+    ]);
+    assert.deepEqual(r.opened, []);
+  });
+
+  it("offers it on the selected workspace's own rows only with a terminal to focus", () => {
+    assert.deepEqual(menu("Title here-new"), []);
+    r.data.workspaces = [ws("sel", { selected: true, agents: [agent("idle", { surfaceId: "s-sel" })] })];
+    menu("Title here-new")[0]?.action();
+    assert.deepEqual(r.calls, [
+      { method: "workspace.select", params: { workspace_id: "sel" } },
+      { method: "surface.focus", params: { surface_id: "s-sel", workspace_id: "sel" } },
+    ]);
+  });
+
+  it("has no menu once the workspace that made it has gone", () => {
+    assert.equal(row("Title o3").chat, undefined);
+    assert.deepEqual(menu("Title o3"), []);
+  });
+
+  it("still opens the page on a tap", () => {
+    const tap = rowNode("Title o1")?.handlers.onTap;
+    assert.equal(typeof tap, "function");
+    if (typeof tap === "function") tap();
+    assert.deepEqual(r.opened, ["https://claude.ai/artifact/o1"]);
+    assert.deepEqual(r.calls, []);
   });
 });
