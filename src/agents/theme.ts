@@ -17,6 +17,8 @@ export const T = {
   hover: "#7f7f7f0F",
   /** The faint face behind the agent's latest message on the card. */
   quote: "#1414130A",
+  /** The face behind this chat's own rows in Pull requests and Made here (issue #183). */
+  here: "#3B6EC414",
 } as const;
 
 /** A stale PR chip's opacity: dimmed while the poller's data is old or gh is down (issue #78). */

@@ -627,7 +627,12 @@ export interface PrSession {
   dot: string;
   /** Idle or no agent: the dot draws as a hollow ring, as everywhere else in the panel. */
   hollow: boolean;
+  /** The selected workspace: its row is tinted and sorts first (issue #183). */
+  here: boolean;
 }
+
+/** This chat's own PR: the row the panel tints and puts first (issue #183). */
+export const isHerePr = (e: Pick<PrEntry, "session">): boolean => e.session?.here ?? false;
 
 /** A PR row's number, "#134"; "" before GitHub has given it one. */
 export const prNumberText = (e: Pick<PrEntry, "pr">): string => (e.pr.number ? "#" + e.pr.number : "");
@@ -660,7 +665,7 @@ function prTitle(w: Workspace, pr: PullRequest): string {
   return (/^pr$/i.test(label) ? "" : label) || pr.branch || displayTitle(w) || "";
 }
 
-// Every PR, open first then merged then closed. Within each state the PRs
+// Every PR, this chat's first (issue #183), then open, then merged, then closed. Within each state the PRs
 // workspaces hold come before Jon's own that no workspace holds, newest first
 // in each, so a merged or closed workspace PR can never push his open PRs out
 // of the cut to MAX_PRS. Open workspace PRs still can.
@@ -676,6 +681,7 @@ const allPrs = computed((): PrEntry[] => {
   const isOwn = new Set(own.map((e) => e.key));
   return [...held, ...own].sort(
     (x, y) =>
+      Number(isHerePr(y)) - Number(isHerePr(x)) ||
       prRank(x.pr) - prRank(y.pr) ||
       Number(isOwn.has(x.key)) - Number(isOwn.has(y.key)) ||
       (y.pr.number ?? 0) - (x.pr.number ?? 0),
@@ -764,7 +770,7 @@ export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale(
 function sessionOf(w: Workspace): PrSession {
   const lead = mostActive(agentsOf(w));
   const name = w.selected ? "This chat" : displayTitle(w) || "Another chat";
-  return { name, dot: dotFor(lead, w), hollow: hollowDot(lead) };
+  return { name, dot: dotFor(lead, w), hollow: hollowDot(lead), here: !!w.selected };
 }
 
 // ---- Made here ------------------------------------------------------------------

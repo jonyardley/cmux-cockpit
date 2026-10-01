@@ -3,7 +3,7 @@
 
 import type { Last } from "../../shared/list.ts";
 import { META_FONT, meta, openIfUrl, when } from "../../shared/ui.ts";
-import { type MadeEntry, madeAge, madeTitleColor, type PrEntry, prNumberText } from "../model.ts";
+import { isHerePr, type MadeEntry, madeAge, madeTitleColor, type PrEntry, prNumberText } from "../model.ts";
 import { T } from "../theme.ts";
 import { glyph, prChip, ruled } from "./parts.ts";
 
@@ -20,14 +20,17 @@ export function footRow(text: () => string, onTap: () => void): View {
 }
 
 /** A PR row: its project's tile, the title and its state chip, then a faint
- * line with the number and the session it belongs to. A tap anywhere on it,
+ * line with the number and the session it belongs to. This chat's own row is
+ * tinted, its title and "This chat" bold (issue #183). A tap anywhere on it,
  * the chip included, opens the PR on GitHub. */
 export function prRow(e: () => Last<PrEntry>): View {
+  const here = () => isHerePr(e());
   // The tile and chip centre on the title's line, whether or not the session shows under it.
   const top = HStack({ spacing: 10 }, [
     glyph(() => e().project, 16),
     Text(() => e().title)
       .font(12.5)
+      .weight(() => (here() ? "semibold" : "regular"))
       .color(T.text)
       .lineLimit(1)
       .truncation("tail")
@@ -56,7 +59,8 @@ export function prRow(e: () => Last<PrEntry>): View {
             .strokeWidth(1.5),
           Text(() => e().session?.name ?? "")
             .font(META_FONT)
-            .color(T.tertiary)
+            .weight(() => (here() ? "semibold" : "regular"))
+            .color(() => (here() ? T.blue : T.tertiary))
             .lineLimit(1)
             .truncation("tail"),
         ]),
@@ -66,6 +70,7 @@ export function prRow(e: () => Last<PrEntry>): View {
   const row = VStack({ spacing: 2, alignment: "leading" }, [top, sub])
     .paddingHorizontal(12)
     .paddingVertical(8)
+    .background(() => (here() ? T.here : "clear"))
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => openIfUrl(e().pr.url));
@@ -73,12 +78,14 @@ export function prRow(e: () => Last<PrEntry>): View {
 }
 
 /** One page or doc an agent published: its project's tile (grey when the
- * workspace that made it is unknown), title and age. Tap opens it on claude.ai. */
+ * workspace that made it is unknown), title and age; tinted with a bold title
+ * when this chat made it, as its PR row is. Tap opens it on claude.ai. */
 export function madeRow(e: () => Last<MadeEntry>): View {
   const row = HStack({ spacing: 10 }, [
     glyph(() => e().project),
     Text(() => e().title)
       .font(12.5)
+      .weight(() => (e().here ? "semibold" : "regular"))
       .color(() => madeTitleColor(e()))
       .lineLimit(1)
       .truncation("tail")
@@ -88,6 +95,7 @@ export function madeRow(e: () => Last<MadeEntry>): View {
   ])
     .paddingHorizontal(12)
     .paddingVertical(9)
+    .background(() => (e().here ? T.here : "clear"))
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
     .onTap(() => openIfUrl(e().url));

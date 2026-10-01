@@ -114,12 +114,12 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
       VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(onBadge|panel|onClay) .cornerRadius(11)
         Reorderable spacing: 0
           VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-            VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+            VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .background(here) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
               HStack spacing: 10
                 ZStack .frame(width: 16, height: 16)
                   RoundedRectangle cornerRadius: 5 .fill(clay)
                   Image star.fill .font(8) .weight(semibold) .color(text)
-                Text "Text snapshots for the sidebars" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                Text "Text snapshots for the sidebars" .font(12.5) .weight(semibold) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                 Spacer minLength: 4
                 VStack spacing: 0, alignment: leading .padding(1) .background(redChipEdge) .cornerRadius(6) .opacity(1) .layoutPriority(2)
                   Text "1 failing" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(redText) .paddingHorizontal(6) .paddingVertical(1) .background(redChipFace) .cornerRadius(5)
@@ -127,16 +127,16 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 Text "#12" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
                 HStack spacing: 5
                   Circle size: 6 .fill(blue) .stroke(clear) .strokeWidth(1.5)
-                  Text "This chat" .font(11) .color(tertiary) .lineLimit(1) .truncation(tail)
+                  Text "This chat" .font(11) .weight(semibold) .color(blue) .lineLimit(1) .truncation(tail)
                 Spacer
             Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
           VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-            VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+            VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .background(clear) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
               HStack spacing: 10
                 ZStack .frame(width: 16, height: 16)
                   RoundedRectangle cornerRadius: 5 .fill(grey)
                   Image terminal .font(8) .weight(semibold) .color(text)
-                Text "Ready chip" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                Text "Ready chip" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                 Spacer minLength: 4
                 VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|neutralChip.edge) .cornerRadius(6) .opacity(1) .layoutPriority(2)
                   Text "open" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(metaText) .paddingHorizontal(6) .paddingVertical(1) .background(chipFace|neutralChip.bg) .cornerRadius(5)
@@ -144,16 +144,16 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 Text "#9" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
                 HStack spacing: 5
                   Circle size: 6 .fill(clear) .stroke(grey) .strokeWidth(1.5)
-                  Text "Chip colours" .font(11) .color(tertiary) .lineLimit(1) .truncation(tail)
+                  Text "Chip colours" .font(11) .weight(regular) .color(tertiary) .lineLimit(1) .truncation(tail)
                 Spacer
             Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
           VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-            VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+            VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .background(clear) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
               HStack spacing: 10
                 ZStack .frame(width: 16, height: 16)
                   RoundedRectangle cornerRadius: 5 .fill(grey)
                   Image terminal .font(8) .weight(semibold) .color(text)
-                Text "An orphaned PR" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                Text "An orphaned PR" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                 Spacer minLength: 4
                 VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|neutralChip.edge) .cornerRadius(6) .opacity(1) .layoutPriority(2)
                   Text "open" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(metaText) .paddingHorizontal(6) .paddingVertical(1) .background(chipFace|neutralChip.bg) .cornerRadius(5)
@@ -170,20 +170,20 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
       VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(onBadge|panel|onClay) .cornerRadius(11)
         Reorderable spacing: 0
           VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-            HStack spacing: 10 .paddingHorizontal(12) .paddingVertical(9) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+            HStack spacing: 10 .paddingHorizontal(12) .paddingVertical(9) .background(here) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
               ZStack .frame(width: 18, height: 18)
                 RoundedRectangle cornerRadius: 5 .fill(clay)
                 Image star.fill .font(9) .weight(semibold) .color(text)
-              Text "Snapshot plan" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+              Text "Snapshot plan" .font(12.5) .weight(semibold) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
               Spacer minLength: 4
               Text "1h" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
             Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
           VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-            HStack spacing: 10 .paddingHorizontal(12) .paddingVertical(9) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+            HStack spacing: 10 .paddingHorizontal(12) .paddingVertical(9) .background(clear) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
               ZStack .frame(width: 18, height: 18)
                 RoundedRectangle cornerRadius: 5 .fill(grey)
                 Image terminal .font(9) .weight(semibold) .color(text)
-              Text "Chip palette" .font(12.5) .color(secondary|badge|neutralChip.fg) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+              Text "Chip palette" .font(12.5) .weight(regular) .color(secondary|badge|neutralChip.fg) .lineLimit(1) .truncation(tail) .layoutPriority(1)
               Spacer minLength: 4
               Text "2h" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
             Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
@@ -199,6 +199,7 @@ chipFace|neutralChip.bg #F1EFE8
 clay #D97757
 countBg #E5E2D6
 grey #A09E95
+here #3B6EC414
 hover #7F7F7F0F
 linkEdge #14141347
 linkHover #ECEAE3

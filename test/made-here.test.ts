@@ -40,11 +40,12 @@ const NOW = 1_000_000;
   ui: {},
 };
 
-const { installRenderer } = await import("./support/renderer.ts");
+const { installRenderer, nodeOf } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { ws } = await import("./support/fixtures.ts");
 const m = await import("../src/agents/model.ts");
 const { T } = await import("../src/agents/theme.ts");
+const { madeRow } = await import("../src/agents/views/rows.ts");
 
 const ids = () => m.madeHere().map((e) => e.url.replace("https://claude.ai/artifact/", ""));
 
@@ -171,6 +172,21 @@ describe("Made here row helpers", () => {
     assert.ok(here && other);
     assert.equal(m.madeTitleColor(here), T.text);
     assert.equal(m.madeTitleColor(other), T.secondary);
+  });
+
+  // Issue #183: this chat's rows are tinted, as its PR row is.
+  it("tints this chat's rows and no other", () => {
+    const face = (e: (typeof rows)[number]): unknown => {
+      const row = nodeOf(madeRow(() => e))?.children[0];
+      const v = row?.mods.find((x) => x.name === "background")?.values[0];
+      return typeof v === "function" ? v() : v;
+    };
+    const rows = m.madeHere();
+    const here = rows.find((e) => e.here);
+    const other = rows.find((e) => !e.here);
+    assert.ok(here && other);
+    assert.equal(face(here), T.here);
+    assert.equal(face(other), "clear");
   });
 
   it("ages each row from when it was last published", () => {

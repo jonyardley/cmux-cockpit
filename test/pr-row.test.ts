@@ -83,9 +83,9 @@ describe("the row's session and project", () => {
       ws("here", { selected: true, title: "This one", agents: [agent("working")] }),
       ws("other", { title: "Socket contract" }),
     ];
-    assert.deepEqual(entry(1).session, { name: "This chat", dot: STATUS_DOT.working, hollow: false });
+    assert.deepEqual(entry(1).session, { name: "This chat", dot: STATUS_DOT.working, hollow: false, here: true });
     // No agent: a hollow grey ring, as elsewhere in the panel.
-    assert.deepEqual(entry(2).session, { name: "Socket contract", dot: T.grey, hollow: true });
+    assert.deepEqual(entry(2).session, { name: "Socket contract", dot: T.grey, hollow: true, here: false });
   });
 
   it("names the chat that opened an own PR while it is open, else none", () => {
@@ -126,6 +126,42 @@ describe("the row's session and project", () => {
     assert.equal(entry(3).project.name, "App Three");
     // #4 has no opener, so its repo names the project.
     assert.equal(entry(4).project.name, "App Two");
+  });
+});
+
+// Issue #183: this chat's PR is the one to find, so it leads the list and
+// its row is tinted, whatever its number or state.
+describe("this chat's own PR", () => {
+  const order = () => m.prs().map((e) => e.pr.number);
+  const face = (n: number): unknown => {
+    const row = nodeOf(prRow(() => ({ ...entry(n), last: true })))?.children[0];
+    const v = row?.mods.find((x) => x.name === "background")?.values[0];
+    return typeof v === "function" ? v() : v;
+  };
+
+  it("sorts first, ahead of higher numbers and PRs no workspace holds", () => {
+    assert.deepEqual(order(), [1, 2, 4, 3]);
+    assert.ok(m.isHerePr(entry(1)));
+    assert.ok(!m.isHerePr(entry(2)));
+  });
+
+  it("follows the selection to another workspace", () => {
+    r.data.workspaces = [ws("here", { title: "This one" }), ws("other", { selected: true, title: "Socket contract" })];
+    assert.deepEqual(order(), [2, 1, 4, 3]);
+    assert.equal(entry(2).session?.name, "This chat");
+  });
+
+  it("stays first once merged, ahead of open PRs", () => {
+    r.data.workspaces = [
+      ws("w", { selected: true, pr: { url: pr(8), number: 8, status: "merged", branch: "m" } }),
+      ws("other", { title: "Socket contract" }),
+    ];
+    assert.equal(order()[0], 8);
+  });
+
+  it("tints this chat's row and no other", () => {
+    assert.equal(face(1), T.here);
+    assert.equal(face(2), "clear");
   });
 });
 
