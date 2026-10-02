@@ -23,28 +23,16 @@ describe("motionList", () => {
     }
   });
 
-  it("does nothing when cmux reports a drag or a drop, so the rows keep their order", () => {
-    // The fake Reorderable keeps no handlers, so stand a capturing one in for this build.
-    const real = Reorderable;
-    let hooks: Pick<ReorderableOptions<unknown>, "onMove" | "onDragChange"> | undefined;
-    Object.assign(globalThis, {
-      Reorderable: <T>(opts: ReorderableOptions<T>, render: (item: () => T) => View): View => {
-        hooks = { onMove: opts.onMove, onDragChange: opts.onDragChange };
-        return real(opts, render);
-      },
-    });
+  it("does nothing when cmux reports a drag or a drop: no dispatch, and the rows keep their order", () => {
     const rows = [{ id: "a" }, { id: "b" }];
-    try {
-      motionList({ items: () => rows, key: (x) => x.id, spacing: 2 }, (x) => Text(x().id));
-    } finally {
-      Object.assign(globalThis, { Reorderable: real });
-    }
-    assert.ok(hooks);
+    const moving = nodeOf(motionList({ items: () => rows, key: (x) => x.id, spacing: 2 }, (x) => Text(x().id)));
+    const { onMove, onDragChange, items } = moving?.handlers ?? {};
+    assert.ok(typeof onMove === "function" && typeof onDragChange === "function" && typeof items === "function");
     const before = r.calls.length;
-    assert.equal(hooks.onDragChange({ id: "b", index: 0 }), undefined);
-    assert.equal(hooks.onMove("b", 0), undefined);
-    assert.equal(hooks.onDragChange(null), undefined);
-    assert.deepEqual(rows, [{ id: "a" }, { id: "b" }]);
+    onDragChange({ id: "b", index: 0 });
+    onMove("b", 0);
+    onDragChange(null);
     assert.equal(r.calls.length, before);
+    assert.deepEqual(items(), [{ id: "a" }, { id: "b" }]);
   });
 });
