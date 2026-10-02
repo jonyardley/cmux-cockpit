@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { installRenderer, modValue, nodeOf, recordModifiers, type ViewNode } from "./support/renderer.ts";
+import { installRenderer, modValue, nodeOf, recordModifiers, taps, type ViewNode } from "./support/renderer.ts";
 
 const r = installRenderer();
 const ui = await import("../src/shared/ui.ts");
@@ -179,5 +179,65 @@ describe("the shared builders read what they are handed", () => {
     const label = spy("THIS WORKSPACE · Cockpit");
     ui.sectionTitle(label.get, "#000000");
     assert.ok(label.reads() > 0);
+  });
+});
+
+describe("the shared links open their url, and only look live while they have one", () => {
+  // Every value a modifier takes anywhere in the tree, read now.
+  const valuesOf = (node: ViewNode | undefined, name: string): unknown[] =>
+    node
+      ? [
+          ...node.mods.filter((m) => m.name === name).map((m) => modValue({ ...node, mods: [m] }, name)),
+          ...node.children.flatMap((c) => valuesOf(c, name)),
+        ]
+      : [];
+  const tapOf = (view: View): (() => void) => {
+    const root = nodeOf(view);
+    const handler = root ? taps(root)[0]?.handlers.onTap : undefined;
+    assert.equal(typeof handler, "function");
+    return handler as () => void; // checked to be a function on the line above
+  };
+
+  it("outMark shows at full strength by default, and hides by opacity when not live", () => {
+    assert.equal(modValue(nodeOf(ui.outMark("#000000")), "opacity"), 1);
+    assert.equal(modValue(nodeOf(ui.outMark("#000000", () => false)), "opacity"), 0);
+  });
+
+  it("tapChip opens its url on a tap, and opens nothing without one", () => {
+    const before = r.opened.length;
+    tapOf(
+      ui.tapChip(
+        () => "#12",
+        () => NEUTRAL_CHIP,
+        () => "https://example.com/pr/12",
+      ),
+    )();
+    tapOf(
+      ui.tapChip(
+        () => "#13",
+        () => NEUTRAL_CHIP,
+        () => undefined,
+      ),
+    )();
+    assert.deepEqual(r.opened.slice(before), ["https://example.com/pr/12"]);
+  });
+
+  it("linkBox opens its url on a tap, with the link's hover and the browser mark", () => {
+    const before = r.opened.length;
+    const box = ui.linkBox([Text("#12")], "#000000", () => "https://example.com/pr/12");
+    tapOf(box)();
+    assert.deepEqual(r.opened.slice(before), ["https://example.com/pr/12"]);
+    const hovers = valuesOf(nodeOf(box), "hoverBackground");
+    assert.ok(hovers.includes(P.linkHover) && hovers.includes(P.linkEdge));
+    assert.deepEqual(valuesOf(nodeOf(box), "opacity"), [1]);
+  });
+
+  it("linkBox with no url keeps its resting look and opens nothing", () => {
+    const before = r.opened.length;
+    const box = ui.linkBox([Text("#12")], "#000000", () => undefined);
+    tapOf(box)();
+    assert.equal(r.opened.length, before);
+    assert.deepEqual(valuesOf(nodeOf(box), "hoverBackground"), ["clear", "clear"]);
+    assert.deepEqual(valuesOf(nodeOf(box), "opacity"), [0]);
   });
 });
