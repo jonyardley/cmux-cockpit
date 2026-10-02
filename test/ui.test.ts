@@ -4,7 +4,16 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { installRenderer, modValue, nodeOf, recordModifiers, type ViewNode } from "./support/renderer.ts";
+import {
+  installRenderer,
+  liveOf,
+  modValue,
+  modValues,
+  nodeOf,
+  recordModifiers,
+  taps,
+  type ViewNode,
+} from "./support/renderer.ts";
 
 const r = installRenderer();
 const ui = await import("../src/shared/ui.ts");
@@ -55,10 +64,7 @@ describe("the shared builders read what they are handed", () => {
   it("a steady ring pads the face by what the edge lacks, so every width keeps one size", () => {
     // Every padding in the ring's tree, the face's and the edge's, summed.
     const padOf = (node: ViewNode | undefined): number =>
-      (node?.mods ?? [])
-        .filter((m) => m.name === "padding")
-        .reduce((sum, m) => sum + Number(typeof m.values[0] === "function" ? m.values[0]() : m.values[0]), 0) +
-      (node?.children ?? []).reduce((sum, c) => sum + padOf(c), 0);
+      node ? modValues(node, "padding").reduce((sum: number, v) => sum + Number(v), 0) : 0;
     const sized = (w: number): number => padOf(nodeOf(ui.ring(Text("x"), "#FFFFFF", "#000000", w, 9, { steady: 2 })));
     assert.equal(sized(1), 2);
     assert.equal(sized(1.5), 2);
@@ -179,5 +185,107 @@ describe("the shared builders read what they are handed", () => {
     const label = spy("THIS WORKSPACE · Cockpit");
     ui.sectionTitle(label.get, "#000000");
     assert.ok(label.reads() > 0);
+  });
+});
+
+describe("the shared links open their url, and only look live while they have one", () => {
+  const tapOf = (view: View): (() => void) => {
+    const root = nodeOf(view);
+    const handler = root ? taps(root)[0]?.handlers.onTap : undefined;
+    assert.equal(typeof handler, "function");
+    return handler as () => void; // checked to be a function on the line above
+  };
+  // Every node in the tree, parent before child.
+  const all = (n: ViewNode): ViewNode[] => [n, ...n.children.flatMap(all)];
+  // The live value of modifier `name` on every node that has it, re-read on each call.
+  const liveAll = (view: View, name: string): (() => unknown[]) => {
+    const root = nodeOf(view);
+    const reads = root
+      ? all(root)
+          .filter((n) => n.mods.some((m) => m.name === name))
+          .map((n) => liveOf(n, name))
+      : [];
+    return () => reads.map((read) => read());
+  };
+
+  it("outMark shows at full strength by default, and follows live as it changes", () => {
+    assert.equal(modValue(nodeOf(ui.outMark("#000000")), "opacity"), 1);
+    let live = false;
+    const opacity = liveOf(nodeOf(ui.outMark("#000000", () => live)), "opacity");
+    assert.equal(opacity(), 0);
+    live = true;
+    assert.equal(opacity(), 1);
+  });
+
+  it("tapChip opens its url on a tap, and opens nothing without one", () => {
+    const before = r.opened.length;
+    tapOf(
+      ui.tapChip(
+        () => "#12",
+        () => NEUTRAL_CHIP,
+        () => "https://example.com/pr/12",
+      ),
+    )();
+    tapOf(
+      ui.tapChip(
+        () => "#13",
+        () => NEUTRAL_CHIP,
+        () => undefined,
+      ),
+    )();
+    assert.deepEqual(r.opened.slice(before), ["https://example.com/pr/12"]);
+  });
+
+  it("tapChip keeps its resting colours under the pointer while it has no url, and darkens once it has one", () => {
+    let url: string | undefined;
+    const hovers = liveAll(
+      ui.tapChip(
+        () => "#12",
+        () => NEUTRAL_CHIP,
+        () => url,
+      ),
+      "hoverBackground",
+    );
+    // The edge's hover sits on the outer box, so it comes before the face's.
+    assert.deepEqual(hovers(), [NEUTRAL_CHIP.edge, NEUTRAL_CHIP.bg]);
+    url = "https://example.com/pr/12";
+    const [edge, face] = hovers();
+    assert.notEqual(edge, NEUTRAL_CHIP.edge);
+    assert.notEqual(face, NEUTRAL_CHIP.bg);
+  });
+
+  it("linkBox opens its url on a tap, with the link's edge and face under the pointer and the browser mark", () => {
+    const before = r.opened.length;
+    const box = ui.linkBox([Text("#12")], "#000000", () => "https://example.com/pr/12");
+    tapOf(box)();
+    assert.deepEqual(r.opened.slice(before), ["https://example.com/pr/12"]);
+    const root = nodeOf(box);
+    assert.ok(root);
+    assert.deepEqual(modValues(root, "hoverBackground"), [P.linkEdge, P.linkHover]);
+    assert.deepEqual(modValues(root, "opacity"), [1]);
+  });
+
+  it("linkBox with no url keeps its resting look and opens nothing", () => {
+    const before = r.opened.length;
+    const box = ui.linkBox([Text("#12")], "#000000", () => undefined);
+    tapOf(box)();
+    assert.equal(r.opened.length, before);
+    const root = nodeOf(box);
+    assert.ok(root);
+    assert.deepEqual(modValues(root, "hoverBackground"), ["clear", "clear"]);
+    assert.deepEqual(modValues(root, "opacity"), [0]);
+  });
+
+  it("linkBox follows its url after it is built: a url that arrives late lights the hover and the mark", () => {
+    let url: string | undefined;
+    const box = ui.linkBox([Text("#12")], "#000000", () => url);
+    const hovers = liveAll(box, "hoverBackground");
+    const opacity = liveAll(box, "opacity");
+    assert.deepEqual([hovers(), opacity()], [["clear", "clear"], [0]]);
+    url = "https://example.com/pr/12";
+    assert.deepEqual([hovers(), opacity()], [[P.linkEdge, P.linkHover], [1]]);
+    const before = r.opened.length;
+    tapOf(box)();
+    assert.deepEqual(r.opened.slice(before), ["https://example.com/pr/12"]);
   });
 });

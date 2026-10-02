@@ -57,7 +57,14 @@ const HANDLERS = new Set(["onTap"]);
 export interface ViewNode {
   kind: string;
   args: unknown[];
-  mods: { name: string; values: unknown[] }[];
+  /** The builder's own arguments as handed, so a test can re-read a reactive one (a Text's words). */
+  rawArgs?: unknown[];
+  /**
+   * Modifiers in call order, each with its reactive values read once
+   * (`values`, what the snapshot prints) and its arguments as handed
+   * (`raw`), so a test can re-read a reactive one later (liveOf).
+   */
+  mods: { name: string; values: unknown[]; raw?: unknown[] }[];
   children: ViewNode[];
   /** Tap handlers by modifier name, so a test can fire one; never printed. */
   handlers: Record<string, unknown>;
@@ -68,13 +75,33 @@ const nodes = new WeakMap<object, ViewNode>();
 
 /** The node behind a view the fake renderer built, or undefined for anything else. */
 export const nodeOf = (v: unknown): ViewNode | undefined => (typeof v === "function" ? nodes.get(v) : undefined);
-/** Every node in the tree with a tap handler, in drawing order. */
 /** A node's first value for modifier `name`, read now if it is reactive; undefined when the modifier is not there. */
 export function modValue(n: ViewNode | undefined, name: string): unknown {
   const v = n?.mods.find((m) => m.name === name)?.values[0];
   return typeof v === "function" ? v() : v;
 }
 
+/** Every value modifier `name` takes anywhere in the tree, read at build, parent before child. */
+export const modValues = (n: ViewNode, name: string): unknown[] => [
+  ...n.mods.filter((m) => m.name === name).map((m) => m.values[0]),
+  ...n.children.flatMap((c) => modValues(c, name)),
+];
+
+/**
+ * Modifier `name`'s value on `n`, re-read on each call: a reactive argument
+ * follows its inputs after the build, a plain one stays what it was. The
+ * build-time `values` cannot tell those apart; this can.
+ */
+export const liveOf = (n: ViewNode | undefined, name: string): (() => unknown) =>
+  reread(n?.mods.find((m) => m.name === name)?.raw?.[0]);
+
+/** An argument as handed, re-read on each call: a reactive one follows its inputs, a plain one stays put. */
+export const reread =
+  (raw: unknown): (() => unknown) =>
+  () =>
+    typeof raw === "function" && raw.length === 0 ? raw() : raw;
+
+/** Every node in the tree with a tap handler, in drawing order. */
 export const taps = (n: ViewNode): ViewNode[] => [
   ...(typeof n.handlers.onTap === "function" ? [n] : []),
   ...n.children.flatMap(taps),
@@ -127,7 +154,7 @@ function view(kind: string, args: unknown[] = [], children: readonly unknown[] =
           node.handlers.contextMenu = margs[0];
         } else if (HANDLERS.has(name)) node.handlers[name] = margs[0];
         else values = margs.map(resolve);
-        node.mods.push({ name, values });
+        node.mods.push({ name, values, raw: margs });
         return proxy;
       };
     },
@@ -160,7 +187,13 @@ const list =
     }
     // A Reorderable's row spacing is on screen; its keys and handlers are not.
     const spacing = "spacing" in options ? options.spacing : undefined;
-    return view(kind, spacing === undefined ? [] : [{ spacing }], rows);
+    const built = view(kind, spacing === undefined ? [] : [{ spacing }], rows);
+    // Its options are kept on the node, never printed: items so a test can
+    // re-read what the list would show now, and a Reorderable's drag hooks
+    // (onMove, onDragChange) so it can fire them.
+    const node = nodeOf(built);
+    if (node) Object.assign(node.handlers, options);
+    return built;
   };
 
 // A leaf's arguments are its content or options; a stack's array argument
@@ -168,9 +201,12 @@ const list =
 const builder =
   (kind: string) =>
   (...args: unknown[]): View => {
-    const own = args.filter((a) => !Array.isArray(a)).map(resolve);
+    const raw = args.filter((a) => !Array.isArray(a));
     const children: unknown = args.find(Array.isArray);
-    return view(kind, own, Array.isArray(children) ? children : []);
+    const built = view(kind, raw.map(resolve), Array.isArray(children) ? children : []);
+    const node = nodeOf(built);
+    if (node) node.rawArgs = raw;
+    return built;
   };
 
 export function createRenderer(): Renderer {
