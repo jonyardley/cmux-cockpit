@@ -164,7 +164,7 @@ async function main(): Promise<void> {
     return;
   }
   if (!result.ok) return console.error(`report-shell: ${result.error}`);
-  if (result.changed) scheduleBuild("report-shell", "slow");
+  if (result.changed) scheduleBuild("report-shell");
 }
 
 if (import.meta.main) await main();

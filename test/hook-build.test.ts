@@ -16,8 +16,11 @@ import {
   buildInputs,
   buildNow,
   buildThenRelease,
+  COALESCE_MS,
+  flagFor,
   gapLeft,
   lockedBuild,
+  PACE_GAP,
   REDRAW_GAP_MS,
   SLOW_GAP_MS,
   settleGap,
@@ -416,9 +419,9 @@ describe("the redraw gap", () => {
     assert.ok(REDRAW_GAP_MS + BUILD_TIMEOUT_MS < BUILD_LOCK_STALE_MS);
   });
 
-  it("orders the paces, and the slow gap alone stays under the stale threshold", () => {
+  it("orders the paces, and the slow gap and the build's timeout each stay under the stale threshold", () => {
     assert.ok(TAP_GAP_MS < REDRAW_GAP_MS && REDRAW_GAP_MS < SLOW_GAP_MS);
-    assert.ok(SLOW_GAP_MS < BUILD_LOCK_STALE_MS);
+    assert.ok(Math.max(SLOW_GAP_MS, BUILD_TIMEOUT_MS) + COALESCE_MS < BUILD_LOCK_STALE_MS);
   });
 
   // A clock that moves only when the fake pause says so.
@@ -461,11 +464,11 @@ describe("the redraw gap", () => {
 
   type Clock = ReturnType<typeof clock>;
 
-  // How long a settle from a fresh redraw waits in all, given when each
-  // flag reads as raised, so a test can say which gap it waited out.
-  function waited(urgent: (c: Clock) => boolean, soon: (c: Clock) => boolean): number {
+  // How long a settle from a fresh redraw waits in all, starting from
+  // `gap`, given when each flag reads as raised.
+  function waited(gap: number, urgent: (c: Clock) => boolean, soon: (c: Clock) => boolean): number {
     const c = clock(0);
-    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => urgent(c), soon: () => soon(c), pause: c.pause });
+    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => urgent(c), soon: () => soon(c), pause: c.pause }, gap);
     return c.pauses.reduce((a, b) => a + b, 0);
   }
   const never = (): boolean => false;
@@ -474,21 +477,39 @@ describe("the redraw gap", () => {
     (c: Clock): boolean =>
       c.pauses.length === step;
 
-  it("waits out the slow gap when only an agent's chatter is waiting", () => {
-    assert.equal(waited(never, never), SLOW_GAP_MS);
-  });
-
-  it("waits out the usual gap once a write at the usual pace raised the soon flag", () => {
-    assert.equal(waited(never, at(0)), REDRAW_GAP_MS);
+  it("waits out its own pace's gap when no flag goes up", () => {
+    assert.equal(waited(PACE_GAP.slow, never, never), SLOW_GAP_MS);
+    assert.equal(waited(PACE_GAP.soon, never, never), REDRAW_GAP_MS);
+    assert.equal(waited(PACE_GAP.tap, never, never), TAP_GAP_MS);
   });
 
   it("cuts a slow wait under way once the soon flag goes up, going at once past the usual gap", () => {
     // Raised 30 seconds in (120 steps of 250ms), already past the usual gap.
-    assert.equal(waited(never, at(120)), 30_000);
+    assert.equal(waited(PACE_GAP.slow, never, at(120)), 30_000);
+    assert.equal(waited(PACE_GAP.slow, never, at(0)), REDRAW_GAP_MS);
   });
 
-  it("never lengthens a tap's wait when the soon flag goes up after it", () => {
-    assert.equal(waited(at(0), at(1)), TAP_GAP_MS);
+  it("never lengthens a wait when a slower flag goes up after a faster one", () => {
+    assert.equal(waited(PACE_GAP.slow, at(0), at(1)), TAP_GAP_MS);
+  });
+
+  it("takes down the soon flag even on the step the urgent one ends the wait", () => {
+    const read: string[] = [];
+    const c = clock(TAP_GAP_MS);
+    settleGap({
+      now: c.now,
+      lastRedraw: () => 0,
+      urgent: () => read.push("urgent") > 0,
+      soon: () => read.push("soon") > 0,
+      pause: c.pause,
+    });
+    assert.deepEqual(read, ["urgent", "soon"]);
+  });
+
+  it("raises the urgent flag for a tap, the soon flag for the usual pace, and none for slow", () => {
+    assert.equal(flagFor("tap", "/r"), "/r/config/build-urgent");
+    assert.equal(flagFor("soon", "/r"), "/r/config/build-soon");
+    assert.equal(flagFor("slow", "/r"), null);
   });
 
   it("goes at once on a tap when the tap gap has already passed", () => {
