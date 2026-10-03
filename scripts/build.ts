@@ -23,11 +23,12 @@
 //
 //   node scripts/build.ts    build once
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { build } from "esbuild";
 import { expandHome } from "../src/shared/home.ts";
 import { bundleOptions, ENTRIES } from "./bundle.ts";
+import { changedKeys, takeTags } from "./hook-build.ts";
 import { isLiveCheckout } from "./live-checkout.ts";
 import { mergeProjects, type Project, validateProjects } from "./projects-config.ts";
 import { emptyState, isRecord, type State, validateState } from "./state-config.ts";
@@ -84,15 +85,23 @@ function keepBrokenCopy(): void {
   }
 }
 
-function unreadableState(why: string): { state: State; unreadable: boolean } {
-  console.warn(`build: ${STATE_PATH} ${why}, starting from empty state`);
-  keepBrokenCopy();
-  return { state: emptyState(), unreadable: true };
+// `broken` is this file alone; `unreadable` also holds while an earlier
+// broken file's copy is still there.
+interface Loaded {
+  state: State;
+  unreadable: boolean;
+  broken: boolean;
 }
 
-function loadState(): { state: State; unreadable: boolean } {
+function unreadableState(why: string): Loaded {
+  console.warn(`build: ${STATE_PATH} ${why}, starting from empty state`);
+  keepBrokenCopy();
+  return { state: emptyState(), unreadable: true, broken: true };
+}
+
+function loadState(): Loaded {
   const kept = existsSync(BROKEN_COPY);
-  if (!existsSync(STATE_PATH)) return { state: emptyState(), unreadable: kept };
+  if (!existsSync(STATE_PATH)) return { state: emptyState(), unreadable: kept, broken: false };
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(STATE_PATH, "utf8"));
@@ -100,7 +109,7 @@ function loadState(): { state: State; unreadable: boolean } {
     return unreadableState(`cannot be read or parsed (${err instanceof Error ? err.message : String(err)})`);
   }
   if (!isRecord(raw)) return unreadableState("is not a JSON object");
-  return { state: validateState(raw), unreadable: kept };
+  return { state: validateState(raw), unreadable: kept, broken: false };
 }
 
 // Unlike the state file, a token that cannot be made is fatal: a bundle
@@ -114,8 +123,35 @@ function loadUrlToken(): string {
   }
 }
 
+// The state the last build baked in, so the log can name the keys a build
+// carries that it did not. null when there is none yet or it cannot be
+// read, so every key counts as changed.
+const LAST_BUILT = "config/last-built-state.json";
+
+function loadLastBuilt(): Record<string, unknown> | null {
+  try {
+    const raw: unknown = JSON.parse(readFileSync(LAST_BUILT, "utf8"));
+    return isRecord(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
+// Best-effort, like the log: losing it only widens the next line's keys.
+function saveLastBuilt(baked: State): void {
+  try {
+    writeFileSync(LAST_BUILT, JSON.stringify(baked));
+  } catch {
+    // ignored
+  }
+}
+
 const urlToken = loadUrlToken();
-const { state: saved, unreadable } = loadState();
+// Taken just before the state is read, so every write these tags stand for
+// is already in the file this build reads (scheduleBuild records a tag only
+// after its write).
+const tags = takeTags();
+const { state: saved, unreadable, broken } = loadState();
 const merged = mergeProjects(loadProjects(), saved.projects);
 const projects = withExpandedRoots(merged.projects);
 // Only the saved projects that survived the merge, so the sidebar edits from
@@ -125,15 +161,19 @@ const state: State = { ...saved, projects: merged.kept };
 // Each rewrite is a full redraw in cmux, so the live checkout logs them next
 // to the poller's lines, to set against cmux's hang reports. Logged even when
 // a later sidebar fails, since the earlier one has already redrawn.
+// An unreadable file names no keys, and leaves the last bake in place so
+// the next readable build is set against real state, not an empty one.
 const written: string[] = [];
+const changed = broken ? null : changedKeys(loadLastBuilt(), saved);
 try {
   for (const name of ENTRIES) {
     const result = await build(bundleOptions(name, { projects, state, unreadable, urlToken, home: homedir() }));
     const rewrote = result.outputFiles.map((out) => writeIfChanged(out.path, out.contents));
     if (rewrote.includes(true)) written.push(name);
   }
+  if (!broken) saveLastBuilt(saved);
 } finally {
-  if (isLiveCheckout(process.cwd())) logLine(redrawLine(written));
+  if (isLiveCheckout(process.cwd())) logLine(redrawLine(written, { tags, changed }));
 }
 // The doctor's freshness mark: a bundle left untouched keeps its old time,
 // so the build's own time is kept here instead.
