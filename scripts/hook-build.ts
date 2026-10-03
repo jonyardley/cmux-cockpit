@@ -330,12 +330,14 @@ export function recordTag(tag: string, root: string = ROOT): void {
 
 /**
  * Takes every tag recorded since the last take, in order. Moves the file
- * aside before reading it, so a tag appended mid-take lands in a fresh file
- * for the next build instead of being read and deleted unseen. Exported for
- * build.ts and for testing.
+ * aside before reading it, so a tag appended after the move lands in a
+ * fresh file for the next build instead of being read and deleted unseen.
+ * Exported for build.ts and for testing.
  */
 export function takeTags(root: string = ROOT): string[] {
-  const taken = `${tagsFile(root)}.tmp`;
+  // This process's own name, since `npm run dev` builds outside the lock
+  // and two takes must not overwrite each other's file.
+  const taken = `${tagsFile(root)}.${process.pid}.tmp`;
   try {
     renameSync(tagsFile(root), taken);
   } catch {
@@ -346,16 +348,26 @@ export function takeTags(root: string = ROOT): string[] {
   return text === MISSING ? [] : text.split("\n").filter((t) => t !== "");
 }
 
+// JSON with every object's keys sorted, so a map rebuilt in another order
+// (the poll's PRs come back in gh's order) reads the same.
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_key, v: unknown) =>
+    v !== null && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  );
+
 /**
  * The top-level keys whose values differ between two states, sorted: added,
- * removed or changed. `before` is null on a first build, so every key counts.
- * Exported for build.ts and for testing.
+ * removed or changed, ignoring the order of keys inside them. `before` is
+ * null on a first build, so every key counts. Exported for build.ts and for
+ * testing.
  */
 export function changedKeys(before: object | null, after: object): string[] {
   const prev = new Map(Object.entries(before ?? {}));
   const next = new Map(Object.entries(after));
   const keys = new Set([...prev.keys(), ...next.keys()]);
-  return [...keys].filter((k) => JSON.stringify(prev.get(k)) !== JSON.stringify(next.get(k))).sort();
+  return [...keys].filter((k) => canonical(prev.get(k)) !== canonical(next.get(k))).sort();
 }
 
 // Only ever called with BUILD_LOCK held: from buildThenRelease, whose lock
@@ -559,7 +571,6 @@ const LOCKED_DEPS: LockedBuildDeps = {
  */
 export function lockedBuild(deps: Partial<LockedBuildDeps> = {}): number {
   const d: LockedBuildDeps = { ...LOCKED_DEPS, ...deps };
-  d.note("npm run build");
   let said = false;
   // Says once why it is waiting, so a git hook's `npm run --silent build`
   // held up by a build in flight never reads as a hang.
@@ -576,6 +587,9 @@ export function lockedBuild(deps: Partial<LockedBuildDeps> = {}): number {
     console.error("build: the build lock (config/hook-build.lock) stayed held; try again");
     return 1;
   }
+  // Only once it holds the lock, so a run that gave up is never named on
+  // a later build's line.
+  d.note("npm run build");
   let status = 0;
   buildThenRelease({
     ...d,

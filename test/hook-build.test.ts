@@ -372,15 +372,18 @@ describe("lockedBuild", () => {
     // A lock that never frees: count the pauses the default wait allows,
     // without any real sleeping.
     let paused = 0;
+    const notes: string[] = [];
     const status = lockedBuild({
       take: () => false,
-      note: () => {},
+      note: (tag: string) => notes.push(tag),
       pause: (ms: number) => {
         paused += ms;
       },
     });
     assert.equal(status, 1);
     assert.ok(paused >= BUILD_LOCK_STALE_MS, `waited ${paused}ms`);
+    // It built nothing, so no later build's line names it.
+    assert.deepEqual(notes, []);
   });
 
   it("retakes a crashed build's stale lock and builds", () => {
@@ -601,6 +604,16 @@ describe("changedKeys", () => {
     const before = { prs: { a: 1 }, subagents: [1], dismissed: [] };
     const after = { prs: { a: 2 }, dismissed: [], poll: { at: 1 } };
     assert.deepEqual(changedKeys(before, after), ["poll", "prs", "subagents"]);
+  });
+
+  it("ignores the order of keys inside a value, at any depth", () => {
+    const before = { prs: { a: { n: 1, s: "open" }, b: { n: 2, s: "draft" } } };
+    const after = { prs: { b: { s: "draft", n: 2 }, a: { s: "open", n: 1 } } };
+    assert.deepEqual(changedKeys(before, after), []);
+  });
+
+  it("still reads a reordered list as changed", () => {
+    assert.deepEqual(changedKeys({ dismissed: ["a", "b"] }, { dismissed: ["b", "a"] }), ["dismissed"]);
   });
 
   it("names none when nothing changed", () => {

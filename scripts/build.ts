@@ -147,12 +147,15 @@ function saveLastBuilt(baked: State): void {
 }
 
 const urlToken = loadUrlToken();
-// Taken just before the state is read, so every write these tags stand for
-// is already in the file this build reads (scheduleBuild records a tag only
-// after its write).
+const table = loadProjects();
+// Taken after the steps that can exit, so a bad project table never drops
+// tags unlogged, and just before the state is read, so a tag almost always
+// stands for a write this build includes. A hook records its tag just
+// after its write, so one that writes between the take and the read is
+// built here and named on the next line instead.
 const tags = takeTags();
 const { state: saved, unreadable, broken } = loadState();
-const merged = mergeProjects(loadProjects(), saved.projects);
+const merged = mergeProjects(table, saved.projects);
 const projects = withExpandedRoots(merged.projects);
 // Only the saved projects that survived the merge, so the sidebar edits from
 // what actually shows.
@@ -164,14 +167,14 @@ const state: State = { ...saved, projects: merged.kept };
 // An unreadable file names no keys, and leaves the last bake in place so
 // the next readable build is set against real state, not an empty one.
 const written: string[] = [];
-const changed = broken ? null : changedKeys(loadLastBuilt(), saved);
+const changed = broken ? null : changedKeys(loadLastBuilt(), state);
 try {
   for (const name of ENTRIES) {
     const result = await build(bundleOptions(name, { projects, state, unreadable, urlToken, home: homedir() }));
     const rewrote = result.outputFiles.map((out) => writeIfChanged(out.path, out.contents));
     if (rewrote.includes(true)) written.push(name);
   }
-  if (!broken) saveLastBuilt(saved);
+  if (!broken) saveLastBuilt(state);
 } finally {
   if (isLiveCheckout(process.cwd())) logLine(redrawLine(written, { tags, changed }));
 }
