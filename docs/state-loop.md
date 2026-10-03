@@ -23,14 +23,28 @@ not rewritten (`scripts/write-if-changed.ts`), so cmux does not reload it.
 Redraws also cost cmux memory: it aborted twice on 2026-09-30 when
 SwiftUI's view graph ran out of room, the second time after 48 redraws in
 an hour, often a few seconds apart. So a build from a hook or a poll waits
-until 20 seconds have passed since a bundle was last rewritten
-(`REDRAW_GAP_MS` in `scripts/hook-build.ts`), and every write in that wait
-lands in the one redraw. A tap raises `config/build-urgent`, which cuts
-the wait to one second so the sidebar answers at once without quick taps
-redrawing back to back. `npm run build` never waits out the gap: finding a
-build waiting, it raises the same flag, and it takes the flag down when it
-builds. The poll waits up to 30 seconds for a waiting build, so it still
-gets its own build result.
+out a gap since a bundle was last rewritten, and every write in that wait
+lands in the one redraw. The gap depends on who wrote (`Pace` in
+`scripts/hook-build.ts`), and each build starts from its own pace's gap:
+
+- A subagent run waits 90 seconds (`SLOW_GAP_MS`). Runs start and end
+  every few seconds while agents are busy and drove a large share of the
+  57 to 113 redraws an hour on 2026-10-02, yet only the ten-minute quiet
+  check reads them, so a late one changes nothing a card says in time to
+  matter. Helper rows can show up to 90 seconds late.
+- Any other hook or the PR poll waits 20 seconds (`REDRAW_GAP_MS`): a
+  "Your move" line, a shell, a PR or a "needs you" reason decides what a
+  card says now. It raises `config/build-soon`, which cuts a slow wait
+  already under way to the same 20.
+- A tap raises `config/build-urgent`, which cuts the wait to one second so
+  the sidebar answers at once without quick taps redrawing back to back.
+
+A flag only ever shortens a wait, and the wait takes down both flags on
+every step, so neither outlives the build it hurried. `npm run build`
+never waits out the gap: finding a build waiting, it raises the urgent
+flag, and it takes both flags down when it builds. The poll waits up to
+30 seconds for a waiting build, which its soon flag has cut to 20 seconds,
+so it still gets its own build result.
 
 ## The URL
 

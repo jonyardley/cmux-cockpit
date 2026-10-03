@@ -30,11 +30,17 @@
 // Every redraw of a sidebar rebuilds its whole view tree in cmux, and cmux
 // aborted twice on 2026-09-30 when SwiftUI's view graph ran out of room
 // after bursts of redraws a few seconds apart. So a build from a hook or a
-// poll first waits until REDRAW_GAP_MS has passed since a bundle was last
-// rewritten (settleGap), coalescing every write in that time into one
-// redraw. A tap is Jon waiting on screen, so scheduleBuild's `urgent` raises
-// a flag that cuts the wait down to TAP_GAP_MS; `npm run build` raises it
-// too when it finds a build waiting, and never waits out the gap itself.
+// poll first waits out a gap since a bundle was last rewritten (settleGap),
+// coalescing every write in that time into one redraw. How long depends on
+// who asked (Pace): subagent runs, which start and end every few seconds
+// while agents are busy and decide nothing on a card for minutes (only
+// the ten-minute quiet check reads them), wait SLOW_GAP_MS; every other
+// hook and the PR poll wait REDRAW_GAP_MS, since what they save decides
+// what a card says now; a tap is Jon waiting on screen and waits
+// TAP_GAP_MS. A build starts from its own pace's gap, and a faster write
+// raises a flag that cuts a slower wait already under way. `npm run build`
+// raises the tap's flag when it finds a build waiting, and never waits out
+// the gap itself.
 //
 // `npm run build` runs this file with --locked (lockedBuild): it waits for
 // the same lock, for as long as a live build could hold it, then builds
@@ -55,26 +61,43 @@ const ROOT = join(import.meta.dirname, "..");
 const BUILD_LOCK = join(ROOT, "config", "hook-build.lock");
 // Raised by a tap so a build waiting out the redraw gap goes at once.
 const URGENT_FLAG = join(ROOT, "config", "build-urgent");
+// Raised by a write at the usual pace, so a build waiting out the slow gap
+// for subagent runs waits no longer than REDRAW_GAP_MS.
+const SOON_FLAG = join(ROOT, "config", "build-soon");
 const BUNDLES = ["agents", "cockpit"].map((name) => join(ROOT, "sidebars", `${name}.js`));
 // Exported so a test can check the stale threshold sits comfortably above
 // this delay plus the timeout, without duplicating the figures.
 export const COALESCE_MS = 300;
 export const BUILD_TIMEOUT_MS = 60_000;
-// Comfortably above the coalesce delay plus how long one build pass may
-// run: the redraw gap it may wait out, then the build's timeout (see
-// REDRAW_GAP_MS). A holder touches the lock before every pass, so a
+// Comfortably above the coalesce delay plus the longer of the two things
+// one build pass waits on: the redraw gap (at most SLOW_GAP_MS) or the
+// build's timeout. A holder touches the lock before the gap and again
+// before the build, so neither counts towards the other. Since it touches
+// it before every pass, a
 // build that is genuinely still going, however many passes it takes for
 // writes that landed mid-build, is never mistaken for a crashed one's and
 // retaken out from under it.
 export const BUILD_LOCK_STALE_MS = 2 * BUILD_TIMEOUT_MS;
-// The least time between two redraws from hooks and polls. With the build's
-// timeout it stays under the stale threshold, so a holder waiting it out is
-// never taken for a crashed one.
+// The least time between two redraws from hooks and polls. Under the stale
+// threshold, so a holder waiting it out is never taken for a crashed one.
 export const REDRAW_GAP_MS = 20_000;
+// The least time between two redraws when only subagent runs are waiting.
+// They drove a large share of the redraws (57 to 113 an hour on
+// 2026-10-02). Under the stale threshold too.
+export const SLOW_GAP_MS = 90_000;
 // The least time between redraws once a tap cuts the wait short, so quick
 // taps in a row still do not redraw back to back.
 export const TAP_GAP_MS = 1_000;
 const GAP_STEP_MS = 250;
+
+/** How soon a write needs to show: "tap" is Jon waiting on screen, "soon"
+ * anything that decides what a card says, "slow" subagent runs. */
+export type Pace = "tap" | "soon" | "slow";
+
+/** The gap a build waits out for a write at each pace. */
+export const PACE_GAP: Record<Pace, number> = { tap: TAP_GAP_MS, soon: REDRAW_GAP_MS, slow: SLOW_GAP_MS };
+
+const isPace = (v: unknown): v is Pace => v === "tap" || v === "soon" || v === "slow";
 
 function logFd(): number | "ignore" {
   try {
@@ -101,7 +124,8 @@ function touchBuildLock(): void {
 
 const LOCK_POLL_MS = 100;
 // How long buildNow waits for a build in flight: longer than a holder can
-// spend waiting out the redraw gap, so the poll gets its own build result
+// spend waiting out the redraw gap once buildNow's soon flag has cut it to
+// REDRAW_GAP_MS, so the poll gets its own build result
 // and can roll back on a failure, yet well inside the automation's
 // five-minute timeout. The build in flight builds this caller's write
 // anyway if the wait runs out (see buildThenRelease).
@@ -144,18 +168,25 @@ export interface GapDeps {
   now: () => number;
   lastRedraw: () => number;
   urgent: () => boolean;
+  soon: () => boolean;
   pause: (ms: number) => void;
 }
 
 /**
- * Waits out what is left of the redraw gap, in short steps so a tap's
- * urgent flag cuts it down to TAP_GAP_MS. Returns at once when the gap has
- * passed. Exported for testing.
+ * Waits out what is left of the redraw gap, starting from `gap`, in short
+ * steps so a flag raised mid-wait cuts it: to REDRAW_GAP_MS once a write
+ * at the usual pace raises the soon flag, to TAP_GAP_MS once a tap raises
+ * the urgent one. A flag only ever shortens the wait. Reads (and so takes
+ * down) both flags on every step, the last one included, so no flag
+ * outlives the build it hurried. Returns at once when the gap has passed.
+ * Exported for testing.
  */
-export function settleGap(d: GapDeps): void {
-  let gap = REDRAW_GAP_MS;
+export function settleGap(d: GapDeps, gap: number = REDRAW_GAP_MS): void {
   for (;;) {
-    if (d.urgent()) gap = TAP_GAP_MS;
+    const urgent = d.urgent();
+    const soon = d.soon();
+    if (urgent) gap = Math.min(gap, TAP_GAP_MS);
+    if (soon) gap = Math.min(gap, REDRAW_GAP_MS);
     const left = gapLeft(d.now(), d.lastRedraw(), gap);
     if (left <= 0) return;
     d.pause(Math.min(left, GAP_STEP_MS));
@@ -168,29 +199,49 @@ function lastRedraw(): number {
   return Math.max(0, ...BUNDLES.map((f) => statSync(f, { throwIfNoEntry: false })?.mtimeMs ?? 0));
 }
 
-// Takes down the urgent flag, saying whether it was up.
-function takeUrgent(): boolean {
+// Takes down a flag, saying whether it was up.
+function takeFlag(flag: string): boolean {
   try {
-    rmSync(URGENT_FLAG);
+    rmSync(flag);
     return true;
   } catch {
     return false;
   }
 }
 
-function raiseUrgent(): void {
+// No flag raised: the write waits out the slower gap instead.
+function raiseFlag(flag: string): void {
   try {
-    closeSync(openSync(URGENT_FLAG, "a"));
+    closeSync(openSync(flag, "a"));
   } catch {
-    // No flag: the tap waits out the gap like any other write.
+    // Nothing to do: see above.
   }
+}
+
+const takeUrgent = (): boolean => takeFlag(URGENT_FLAG);
+const takeSoon = (): boolean => takeFlag(SOON_FLAG);
+const raiseUrgent = (): void => raiseFlag(URGENT_FLAG);
+const raiseSoon = (): void => raiseFlag(SOON_FLAG);
+
+// Takes down both flags: whatever raised them, this build covers it.
+const takeFlags = (): void => {
+  takeUrgent();
+  takeSoon();
+};
+
+/** The flag a write at `pace` raises to hurry a build already waiting:
+ * none for "slow", which hurries nothing. Exported for testing. */
+export function flagFor(pace: Pace, root: string = ROOT): string | null {
+  if (pace === "tap") return join(root, "config", "build-urgent");
+  if (pace === "soon") return join(root, "config", "build-soon");
+  return null;
 }
 
 // The lock is touched before the wait as well as before the build, so the
 // wait never counts towards its age.
-const throttle = (): void => {
+const throttle = (pace: Pace) => (): void => {
   touchBuildLock();
-  settleGap({ now: Date.now, lastRedraw, urgent: takeUrgent, pause: pauseSync });
+  settleGap({ now: Date.now, lastRedraw, urgent: takeUrgent, soon: takeSoon, pause: pauseSync }, PACE_GAP[pace]);
 };
 
 // The one marker for a file that is not there, so its absence still reads
@@ -284,6 +335,8 @@ export interface BuildDeps {
   settle: () => void;
   pause: (ms: number) => void;
   maxWaitMs: number;
+  /** Tells a build waiting out a slower gap to go sooner. */
+  hurry: () => void;
 }
 
 const REAL_DEPS: BuildDeps = {
@@ -291,9 +344,11 @@ const REAL_DEPS: BuildDeps = {
   release: releaseBuildLock,
   build: runBuild,
   snapshot: buildInputs,
-  settle: throttle,
+  // buildNow is the PR poll's: what it saves decides what a card says.
+  settle: throttle("soon"),
   pause: pauseSync,
   maxWaitMs: BUILD_WAIT_MS,
+  hurry: raiseSoon,
 };
 
 /**
@@ -322,14 +377,16 @@ export function buildThenRelease(
 // The detached side of the coalesce: sleeps so a near-simultaneous write
 // lands first, then builds until its inputs stop changing under it,
 // dropping the lock once it has.
-async function coalesceBuild(): Promise<void> {
+async function coalesceBuild(pace: Pace): Promise<void> {
   await sleep(COALESCE_MS);
-  buildThenRelease(REAL_DEPS);
+  buildThenRelease({ ...REAL_DEPS, settle: throttle(pace) });
 }
 
 /**
- * Builds now, synchronously, under the same lock scheduleBuild uses:
- * waits a short while for a build in flight rather than racing it, then
+ * Builds now, synchronously, under the same lock scheduleBuild uses, at
+ * the usual pace: its own wait starts from REDRAW_GAP_MS, and it raises
+ * the soon flag so a build already waiting for subagent runs is cut to
+ * that too. It waits a short while for a build in flight rather than racing it, then
  * builds until its inputs stop changing under it and drops the lock.
  * "built" and "failed" say how the build went, so the caller can roll its
  * write back on a failure. "busy" means the lock stayed held: the build
@@ -338,6 +395,7 @@ async function coalesceBuild(): Promise<void> {
  */
 export function buildNow(deps: Partial<BuildDeps> = {}): "built" | "failed" | "busy" {
   const d: BuildDeps = { ...REAL_DEPS, ...deps };
+  d.hurry();
   if (!waitForLock(d.take, d.maxWaitMs, d.pause, LOCK_POLL_MS)) return "busy";
   return buildThenRelease(d) ? "built" : "failed";
 }
@@ -345,39 +403,40 @@ export function buildNow(deps: Partial<BuildDeps> = {}): "built" | "failed" | "b
 /**
  * Spawns the coalescing build detached and unreferenced, so the hook
  * returns at once; skips spawning when one is already in flight. `tag`
- * names the calling hook in any stderr note. `urgent` (a tap) skips the
- * redraw gap, for this build or the one already waiting.
+ * names the calling hook in any stderr note. `pace` sets how long the
+ * build waits since the last redraw (see Pace), and a faster pace cuts the
+ * wait of a build already waiting.
  */
-export function scheduleBuild(tag: string, urgent = false): void {
-  if (urgent) raiseUrgent();
+export function scheduleBuild(tag: string, pace: Pace = "soon"): void {
+  const flag = flagFor(pace);
+  if (flag) raiseFlag(flag);
   if (!tryTakeBuildLock()) return;
   const log = logFd();
   try {
-    const child = spawn(process.execPath, [import.meta.filename, "--coalesce-build"], {
+    const child = spawn(process.execPath, [import.meta.filename, "--coalesce-build", pace], {
       cwd: ROOT,
       detached: true,
       stdio: ["ignore", "ignore", log],
     });
     child.on("error", (err) => {
       console.error(`${tag}: build: ${err.message}`);
-      takeUrgent();
+      takeFlags();
       releaseBuildLock();
     });
     child.unref();
   } catch (err) {
     console.error(`${tag}: build: ${err instanceof Error ? err.message : String(err)}`);
-    takeUrgent();
+    takeFlags();
     releaseBuildLock();
   } finally {
     if (log !== "ignore") closeSync(log);
   }
 }
 
-/** What `npm run build` runs against: the build returns build.ts's exit status. */
+/** What `npm run build` runs against: the build returns build.ts's exit
+ * status, and `hurry` tells a build waiting out a gap to go now. */
 export interface LockedBuildDeps extends Omit<BuildDeps, "build"> {
   build: () => number;
-  /** Tells a build waiting out the redraw gap to go now. */
-  hurry: () => void;
 }
 
 // One poll past the stale threshold: a lock that is still held by then is
@@ -418,10 +477,8 @@ const LOCKED_DEPS: LockedBuildDeps = {
   take: takeForLockedBuild,
   build: () => spawnBuild("inherit"),
   // A deliberate build (a git hook, the close-out, the check) goes at once,
-  // and takes down any urgent flag, since it builds whatever raised it.
-  settle: () => {
-    takeUrgent();
-  },
+  // and takes down both flags, since it builds whatever raised them.
+  settle: takeFlags,
   hurry: raiseUrgent,
   maxWaitMs: LOCKED_WAIT_MS,
 };
@@ -462,5 +519,6 @@ export function lockedBuild(deps: Partial<LockedBuildDeps> = {}): number {
   return status;
 }
 
-if (import.meta.main && process.argv[2] === "--coalesce-build") await coalesceBuild();
+if (import.meta.main && process.argv[2] === "--coalesce-build")
+  await coalesceBuild(isPace(process.argv[3]) ? process.argv[3] : "soon");
 if (import.meta.main && process.argv[2] === "--locked") process.exitCode = lockedBuild();

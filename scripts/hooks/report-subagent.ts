@@ -213,7 +213,7 @@ async function main(): Promise<void> {
     return;
   }
   if (!result.ok) return console.error(`report-subagent: ${result.error}`);
-  if (changed) scheduleBuild("report-subagent");
+  if (changed) scheduleBuild("report-subagent", "slow");
 }
 
 if (import.meta.main) await main();
