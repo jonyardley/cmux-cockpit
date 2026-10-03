@@ -19,6 +19,7 @@ import {
   gapLeft,
   lockedBuild,
   REDRAW_GAP_MS,
+  SLOW_GAP_MS,
   settleGap,
   TAP_GAP_MS,
 } from "../scripts/hook-build.ts";
@@ -119,6 +120,7 @@ describe("buildNow", () => {
         settle: () => events.push("settle"),
         pause: () => events.push("pause"),
         maxWaitMs: 500,
+        hurry: () => events.push("hurry"),
       },
     };
   }
@@ -127,19 +129,21 @@ describe("buildNow", () => {
     let tries = 0;
     const { events, deps } = fakes({ take: () => ++tries > 2 });
     assert.equal(buildNow(deps), "built");
-    assert.deepEqual(events, ["busy", "pause", "busy", "pause", "take", "settle", "build", "release"]);
+    // Hurries first, so a build already waiting for an agent's chatter
+    // goes within the usual gap and this wait does not run out.
+    assert.deepEqual(events, ["hurry", "busy", "pause", "busy", "pause", "take", "settle", "build", "release"]);
   });
 
   it("builds again when a write lands while it builds", () => {
     const { events, deps } = fakes({ snapshots: ["v0", "v1", "v1"] });
     assert.equal(buildNow(deps), "built");
-    assert.deepEqual(events, ["take", "settle", "build", "settle", "build", "release"]);
+    assert.deepEqual(events, ["hurry", "take", "settle", "build", "settle", "build", "release"]);
   });
 
   it("reports a failed build, still dropping the lock", () => {
     const { events, deps } = fakes({ build: () => false });
     assert.equal(buildNow(deps), "failed");
-    assert.deepEqual(events, ["take", "settle", "build", "release"]);
+    assert.deepEqual(events, ["hurry", "take", "settle", "build", "release"]);
   });
 
   it("drops the lock even when the build throws", () => {
@@ -412,6 +416,11 @@ describe("the redraw gap", () => {
     assert.ok(REDRAW_GAP_MS + BUILD_TIMEOUT_MS < BUILD_LOCK_STALE_MS);
   });
 
+  it("orders the paces, and the slow gap alone stays under the stale threshold", () => {
+    assert.ok(TAP_GAP_MS < REDRAW_GAP_MS && REDRAW_GAP_MS < SLOW_GAP_MS);
+    assert.ok(SLOW_GAP_MS < BUILD_LOCK_STALE_MS);
+  });
+
   // A clock that moves only when the fake pause says so.
   function clock(start: number) {
     let t = start;
@@ -428,25 +437,63 @@ describe("the redraw gap", () => {
 
   it("waits out the rest of the gap in short steps", () => {
     const c = clock(REDRAW_GAP_MS - 600);
-    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => false, pause: c.pause });
+    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => false, soon: () => true, pause: c.pause });
     assert.deepEqual(c.pauses, [250, 250, 100]);
   });
 
   it("does not wait once the gap has passed", () => {
-    const c = clock(REDRAW_GAP_MS + 1);
-    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => false, pause: c.pause });
+    const c = clock(SLOW_GAP_MS + 1);
+    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => false, soon: () => false, pause: c.pause });
     assert.deepEqual(c.pauses, []);
   });
 
   it("cuts the wait to the tap gap once a tap raises the urgent flag", () => {
     const c = clock(0);
-    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => c.pauses.length === 2, pause: c.pause });
+    settleGap({
+      now: c.now,
+      lastRedraw: () => 0,
+      urgent: () => c.pauses.length === 2,
+      soon: () => false,
+      pause: c.pause,
+    });
     assert.deepEqual(c.pauses, [250, 250, 250, 250]);
+  });
+
+  type Clock = ReturnType<typeof clock>;
+
+  // How long a settle from a fresh redraw waits in all, given when each
+  // flag reads as raised, so a test can say which gap it waited out.
+  function waited(urgent: (c: Clock) => boolean, soon: (c: Clock) => boolean): number {
+    const c = clock(0);
+    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => urgent(c), soon: () => soon(c), pause: c.pause });
+    return c.pauses.reduce((a, b) => a + b, 0);
+  }
+  const never = (): boolean => false;
+  const at =
+    (step: number) =>
+    (c: Clock): boolean =>
+      c.pauses.length === step;
+
+  it("waits out the slow gap when only an agent's chatter is waiting", () => {
+    assert.equal(waited(never, never), SLOW_GAP_MS);
+  });
+
+  it("waits out the usual gap once a write at the usual pace raised the soon flag", () => {
+    assert.equal(waited(never, at(0)), REDRAW_GAP_MS);
+  });
+
+  it("cuts a slow wait under way once the soon flag goes up, going at once past the usual gap", () => {
+    // Raised 30 seconds in (120 steps of 250ms), already past the usual gap.
+    assert.equal(waited(never, at(120)), 30_000);
+  });
+
+  it("never lengthens a tap's wait when the soon flag goes up after it", () => {
+    assert.equal(waited(at(0), at(1)), TAP_GAP_MS);
   });
 
   it("goes at once on a tap when the tap gap has already passed", () => {
     const c = clock(TAP_GAP_MS);
-    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => true, pause: c.pause });
+    settleGap({ now: c.now, lastRedraw: () => 0, urgent: () => true, soon: () => false, pause: c.pause });
     assert.deepEqual(c.pauses, []);
   });
 

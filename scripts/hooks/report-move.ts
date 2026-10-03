@@ -225,7 +225,7 @@ function record(event: unknown, wsId: string | undefined, now: number, attended:
   if (!move && !hasSaved(wsId)) return none;
   const result = readApplyWrite(STATE_PATH, `moves.${wsId}`, move ? JSON.stringify(move) : null);
   if (!result.ok) return { note: result.error, sendBack: false };
-  if (result.changed) scheduleBuild("report-move");
+  if (result.changed) scheduleBuild("report-move", "slow");
   return none;
 }
 
