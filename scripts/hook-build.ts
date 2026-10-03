@@ -42,6 +42,13 @@
 // raises the tap's flag when it finds a build waiting, and never waits out
 // the gap itself.
 //
+// So the log can say what drove each redraw, every write that asks for a
+// build first adds its tag to config/build-tags (recordTag), even when it
+// then finds the lock held and trusts the build in flight. build.ts takes
+// the file (takeTags) as it reads the state, and names those tags on its
+// `build: redrew` line, with the state keys that changed since the last
+// build (changedKeys).
+//
 // `npm run build` runs this file with --locked (lockedBuild): it waits for
 // the same lock, for as long as a live build could hold it, then builds
 // with the output shown, so a git hook's rebuild, the close-out's and the
@@ -50,7 +57,17 @@
 // waits on a lock it holds itself.
 
 import { spawn, spawnSync } from "node:child_process";
-import { closeSync, openSync, readdirSync, readFileSync, rmSync, statSync, utimesSync } from "node:fs";
+import {
+  appendFileSync,
+  closeSync,
+  openSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  utimesSync,
+} from "node:fs";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { pauseSync, tryTakeLock, waitForLock } from "./lockfile.ts";
@@ -298,6 +315,61 @@ export function buildInputs(root: string = ROOT): string {
   return [readOrMissing(state), ...files.map((f) => `${f} ${stamp(f)}`)].join("\n");
 }
 
+// The tags of the writes waiting for a build, one per line.
+const tagsFile = (root: string): string => join(root, "config", "build-tags");
+
+/** Adds one write's tag for the next build to name. Best-effort: a tag
+ * that cannot be kept never stops the write's build. Exported for testing. */
+export function recordTag(tag: string, root: string = ROOT): void {
+  try {
+    appendFileSync(tagsFile(root), `${tag}\n`);
+  } catch {
+    // ignored: the build still runs, its line just names one write fewer
+  }
+}
+
+/**
+ * Takes every tag recorded since the last take, in order. Moves the file
+ * aside before reading it, so a tag appended after the move lands in a
+ * fresh file for the next build instead of being read and deleted unseen.
+ * Exported for build.ts and for testing.
+ */
+export function takeTags(root: string = ROOT): string[] {
+  // This process's own name, since `npm run dev` builds outside the lock
+  // and two takes must not overwrite each other's file.
+  const taken = `${tagsFile(root)}.${process.pid}.tmp`;
+  try {
+    renameSync(tagsFile(root), taken);
+  } catch {
+    return [];
+  }
+  const text = readOrMissing(taken);
+  rmSync(taken, { force: true });
+  return text === MISSING ? [] : text.split("\n").filter((t) => t !== "");
+}
+
+// JSON with every object's keys sorted, so a map rebuilt in another order
+// (the poll's PRs come back in gh's order) reads the same.
+const canonical = (value: unknown): string =>
+  JSON.stringify(value, (_key, v: unknown) =>
+    v !== null && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  );
+
+/**
+ * The top-level keys whose values differ between two states, sorted: added,
+ * removed or changed, ignoring the order of keys inside them. `before` is
+ * null on a first build, so every key counts. Exported for build.ts and for
+ * testing.
+ */
+export function changedKeys(before: object | null, after: object): string[] {
+  const prev = new Map(Object.entries(before ?? {}));
+  const next = new Map(Object.entries(after));
+  const keys = new Set([...prev.keys(), ...next.keys()]);
+  return [...keys].filter((k) => canonical(prev.get(k)) !== canonical(next.get(k))).sort();
+}
+
 // Only ever called with BUILD_LOCK held: from buildThenRelease, whose lock
 // scheduleBuild, buildNow or lockedBuild took first. Spawns scripts/build.ts
 // itself, never `npm run build`, which would wait on this same lock.
@@ -337,6 +409,8 @@ export interface BuildDeps {
   maxWaitMs: number;
   /** Tells a build waiting out a slower gap to go sooner. */
   hurry: () => void;
+  /** Records the caller's tag for the build's log line. */
+  note: (tag: string) => void;
 }
 
 const REAL_DEPS: BuildDeps = {
@@ -349,6 +423,7 @@ const REAL_DEPS: BuildDeps = {
   pause: pauseSync,
   maxWaitMs: BUILD_WAIT_MS,
   hurry: raiseSoon,
+  note: recordTag,
 };
 
 /**
@@ -391,10 +466,12 @@ async function coalesceBuild(pace: Pace): Promise<void> {
  * "built" and "failed" say how the build went, so the caller can roll its
  * write back on a failure. "busy" means the lock stayed held: the build
  * holding it builds this write before it lets go (buildThenRelease), so
- * the caller should not roll back.
+ * the caller should not roll back. `tag` names the caller on the build's
+ * log line.
  */
-export function buildNow(deps: Partial<BuildDeps> = {}): "built" | "failed" | "busy" {
+export function buildNow(tag: string, deps: Partial<BuildDeps> = {}): "built" | "failed" | "busy" {
   const d: BuildDeps = { ...REAL_DEPS, ...deps };
+  d.note(tag);
   d.hurry();
   if (!waitForLock(d.take, d.maxWaitMs, d.pause, LOCK_POLL_MS)) return "busy";
   return buildThenRelease(d) ? "built" : "failed";
@@ -403,11 +480,13 @@ export function buildNow(deps: Partial<BuildDeps> = {}): "built" | "failed" | "b
 /**
  * Spawns the coalescing build detached and unreferenced, so the hook
  * returns at once; skips spawning when one is already in flight. `tag`
- * names the calling hook in any stderr note. `pace` sets how long the
+ * names the calling hook in any stderr note and, recorded first so a write
+ * the build in flight picks up is counted too, on the build's log line. `pace` sets how long the
  * build waits since the last redraw (see Pace), and a faster pace cuts the
  * wait of a build already waiting.
  */
 export function scheduleBuild(tag: string, pace: Pace = "soon"): void {
+  recordTag(tag);
   const flag = flagFor(pace);
   if (flag) raiseFlag(flag);
   if (!tryTakeBuildLock()) return;
@@ -508,6 +587,9 @@ export function lockedBuild(deps: Partial<LockedBuildDeps> = {}): number {
     console.error("build: the build lock (config/hook-build.lock) stayed held; try again");
     return 1;
   }
+  // Only once it holds the lock, so a run that gave up is never named on
+  // a later build's line.
+  d.note("npm run build");
   let status = 0;
   buildThenRelease({
     ...d,

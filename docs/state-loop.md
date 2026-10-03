@@ -142,7 +142,15 @@ found nothing new, was skipped, or hit an error; a run that changed
 something names the maps it changed, such as `[poll, prs]`. Every build in
 the main checkout logs `build: redrew agents, cockpit`, naming each sidebar
 it rewrote (`nothing` when it rewrote none), since each rewrite is a full
-redraw in cmux. A poll logs its own line only once its build returns, so
+redraw in cmux. The line goes on to say what drove it:
+`build: redrew cockpit; writes report-subagent x3, report-move; changed moves, subagents`.
+`writes` tallies the tag of every write the build picked up, including
+the ones that found a build already in flight and joined it (each write
+adds its tag to `config/build-tags`, and the build takes the file as it
+reads the state); `pr-poll` is the poll and `npm run build` a deliberate
+build. `changed` names the top-level state keys that differ from what the
+last build baked in (`config/last-built-state.json`), so a line with
+writes but `redrew nothing` points at a key no sidebar reads. A poll logs its own line only once its build returns, so
 the `build:` line comes first and the poll's time is when the build ended. Set against a report in `~/Library/Logs/cmux/hangs`,
 the two lines say which change, if any, redrew a panel just before cmux
 stalled.

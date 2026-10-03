@@ -597,7 +597,7 @@ function poll(root: string): number {
   // is limited to a minute there, since this run has no outer timeout when
   // the report-pr hook starts it. Still busy after the wait, the build in
   // flight builds this write before it lets go, so nothing is rolled back.
-  const built = buildNow();
+  const built = buildNow("pr-poll");
   if (built === "built") {
     log(`ok, ${counts}${moved}`);
     return 0;

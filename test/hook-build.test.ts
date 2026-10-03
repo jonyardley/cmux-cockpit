@@ -17,14 +17,17 @@ import {
   buildNow,
   buildThenRelease,
   COALESCE_MS,
+  changedKeys,
   flagFor,
   gapLeft,
   lockedBuild,
   PACE_GAP,
   REDRAW_GAP_MS,
+  recordTag,
   SLOW_GAP_MS,
   settleGap,
   TAP_GAP_MS,
+  takeTags,
 } from "../scripts/hook-build.ts";
 import { tryTakeLock, waitForLock } from "../scripts/lockfile.ts";
 
@@ -104,11 +107,14 @@ describe("buildNow", () => {
   // A lock held by the fakes, and a record of what ran in what order.
   function fakes(overrides: { take?: () => boolean; build?: () => boolean; snapshots?: string[] } = {}) {
     const events: string[] = [];
+    const notes: string[] = [];
     const snapshots = overrides.snapshots ?? ["v0", "v0"];
     let i = 0;
     return {
       events,
+      notes,
       deps: {
+        note: (tag: string) => notes.push(tag),
         take: () => {
           const took = overrides.take ? overrides.take() : true;
           events.push(took ? "take" : "busy");
@@ -131,7 +137,7 @@ describe("buildNow", () => {
   it("waits for a build in flight, builds once, then drops the lock", () => {
     let tries = 0;
     const { events, deps } = fakes({ take: () => ++tries > 2 });
-    assert.equal(buildNow(deps), "built");
+    assert.equal(buildNow("pr-poll", deps), "built");
     // Hurries first, so a build already waiting for an agent's chatter
     // goes within the usual gap and this wait does not run out.
     assert.deepEqual(events, ["hurry", "busy", "pause", "busy", "pause", "take", "settle", "build", "release"]);
@@ -139,13 +145,13 @@ describe("buildNow", () => {
 
   it("builds again when a write lands while it builds", () => {
     const { events, deps } = fakes({ snapshots: ["v0", "v1", "v1"] });
-    assert.equal(buildNow(deps), "built");
+    assert.equal(buildNow("pr-poll", deps), "built");
     assert.deepEqual(events, ["hurry", "take", "settle", "build", "settle", "build", "release"]);
   });
 
   it("reports a failed build, still dropping the lock", () => {
     const { events, deps } = fakes({ build: () => false });
-    assert.equal(buildNow(deps), "failed");
+    assert.equal(buildNow("pr-poll", deps), "failed");
     assert.deepEqual(events, ["hurry", "take", "settle", "build", "release"]);
   });
 
@@ -155,13 +161,22 @@ describe("buildNow", () => {
         throw new Error("boom");
       },
     });
-    assert.throws(() => buildNow(deps), /boom/);
+    assert.throws(() => buildNow("pr-poll", deps), /boom/);
     assert.equal(events.at(-1), "release");
+  });
+
+  it("records its tag for the build's log line, even when the lock stays held", () => {
+    const built = fakes();
+    buildNow("pr-poll", built.deps);
+    assert.deepEqual(built.notes, ["pr-poll"]);
+    const busy = fakes({ take: () => false });
+    buildNow("pr-poll", { ...busy.deps, maxWaitMs: 200 });
+    assert.deepEqual(busy.notes, ["pr-poll"]);
   });
 
   it("reports busy, building and releasing nothing, when the lock stays held", () => {
     const { events, deps } = fakes({ take: () => false });
-    assert.equal(buildNow({ ...deps, maxWaitMs: 200 }), "busy");
+    assert.equal(buildNow("pr-poll", { ...deps, maxWaitMs: 200 }), "busy");
     assert.equal(events.includes("build"), false);
     assert.equal(events.includes("release"), false);
   });
@@ -282,6 +297,14 @@ describe("buildInputs", () => {
     assert.notEqual(buildInputs(root), before);
   });
 
+  it("ignores the tags file and the last bake, so recording a tag never costs a pass", () => {
+    const root = tree();
+    const before = buildInputs(root);
+    recordTag("report-move", root);
+    writeFileSync(join(root, "config", "last-built-state.json"), "{}");
+    assert.equal(buildInputs(root), before);
+  });
+
   it("ignores files that are not TypeScript, such as an editor's swap file", () => {
     const root = tree();
     const before = buildInputs(root);
@@ -306,9 +329,12 @@ describe("lockedBuild", () => {
   // Fakes like buildNow's, but the build returns an exit status.
   function fakes(overrides: { take?: () => boolean; build?: () => number; snapshot?: () => string } = {}) {
     const events: string[] = [];
+    const notes: string[] = [];
     return {
       events,
+      notes,
       deps: {
+        note: (tag: string) => notes.push(tag),
         take: () => {
           const took = overrides.take ? overrides.take() : true;
           events.push(took ? "take" : "busy");
@@ -336,18 +362,28 @@ describe("lockedBuild", () => {
     assert.deepEqual(events, ["busy", "hurry", "pause", "busy", "pause", "take", "build", "release"]);
   });
 
+  it("records its own tag for the build's log line", () => {
+    const { notes, deps } = fakes();
+    lockedBuild(deps);
+    assert.deepEqual(notes, ["npm run build"]);
+  });
+
   it("waits as long as a live build could hold the lock by default", () => {
     // A lock that never frees: count the pauses the default wait allows,
     // without any real sleeping.
     let paused = 0;
+    const notes: string[] = [];
     const status = lockedBuild({
       take: () => false,
+      note: (tag: string) => notes.push(tag),
       pause: (ms: number) => {
         paused += ms;
       },
     });
     assert.equal(status, 1);
     assert.ok(paused >= BUILD_LOCK_STALE_MS, `waited ${paused}ms`);
+    // It built nothing, so no later build's line names it.
+    assert.deepEqual(notes, []);
   });
 
   it("retakes a crashed build's stale lock and builds", () => {
@@ -530,5 +566,61 @@ describe("the redraw gap", () => {
       settle: () => events.push("settle"),
     });
     assert.deepEqual(events, ["settle", "build", "settle", "build", "release"]);
+  });
+});
+
+describe("recordTag and takeTags", () => {
+  const dir = mkdtempSync(join(tmpdir(), "hook-build-tags-"));
+  mkdirSync(join(dir, "config"));
+  after(() => rmSync(dir, { recursive: true, force: true }));
+
+  it("takes nothing when no write has recorded a tag", () => {
+    assert.deepEqual(takeTags(dir), []);
+  });
+
+  it("takes every tag recorded since the last take, in order, repeats included", () => {
+    recordTag("report-subagent", dir);
+    recordTag("report-move", dir);
+    recordTag("report-subagent", dir);
+    assert.deepEqual(takeTags(dir), ["report-subagent", "report-move", "report-subagent"]);
+    assert.deepEqual(takeTags(dir), []);
+  });
+
+  it("keeps a tag recorded after a take for the next one", () => {
+    recordTag("state-set", dir);
+    assert.deepEqual(takeTags(dir), ["state-set"]);
+    recordTag("pr-poll", dir);
+    assert.deepEqual(takeTags(dir), ["pr-poll"]);
+  });
+
+  it("never fails the write when the tag cannot be kept", () => {
+    assert.doesNotThrow(() => recordTag("report-move", join(dir, "no-such-folder")));
+    assert.deepEqual(takeTags(join(dir, "no-such-folder")), []);
+  });
+});
+
+describe("changedKeys", () => {
+  it("names the keys added, removed or changed, sorted", () => {
+    const before = { prs: { a: 1 }, subagents: [1], dismissed: [] };
+    const after = { prs: { a: 2 }, dismissed: [], poll: { at: 1 } };
+    assert.deepEqual(changedKeys(before, after), ["poll", "prs", "subagents"]);
+  });
+
+  it("ignores the order of keys inside a value, at any depth", () => {
+    const before = { prs: { a: { n: 1, s: "open" }, b: { n: 2, s: "draft" } } };
+    const after = { prs: { b: { s: "draft", n: 2 }, a: { s: "open", n: 1 } } };
+    assert.deepEqual(changedKeys(before, after), []);
+  });
+
+  it("still reads a reordered list as changed", () => {
+    assert.deepEqual(changedKeys({ dismissed: ["a", "b"] }, { dismissed: ["b", "a"] }), ["dismissed"]);
+  });
+
+  it("names none when nothing changed", () => {
+    assert.deepEqual(changedKeys({ prs: { a: 1 } }, { prs: { a: 1 } }), []);
+  });
+
+  it("counts every key as changed on a first build", () => {
+    assert.deepEqual(changedKeys(null, { subagents: [], prs: {} }), ["prs", "subagents"]);
   });
 });

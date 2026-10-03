@@ -21,6 +21,9 @@ config/renames/
 config/url-token
 config/last-build
 config/build-urgent
+config/build-soon
+config/build-tags
+config/last-built-state.json
 config/*.lock
 config/*.tmp
 # npm run preview's pages and screenshots.
