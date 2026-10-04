@@ -31,6 +31,11 @@ impl Health {
     pub fn caught_up(&self) -> bool {
         self.replay_to.is_some_and(|to| self.last_seq >= to)
     }
+
+    /// Connected and still replaying what cmux kept.
+    pub fn replaying(&self) -> bool {
+        self.down.is_none() && self.replay_to.is_some() && !self.caught_up()
+    }
 }
 
 /// What a status change looked like, for the latency log.
@@ -465,8 +470,10 @@ mod tests {
         j.event(&ack(0, 2));
         j.event(&hook(1, "Stop", 7, "A", None));
         assert!(!j.health.caught_up());
+        assert!(j.health.replaying());
         j.event(&hook(2, "Stop", 7, "A", None));
         assert!(j.health.caught_up());
+        assert!(!j.health.replaying());
     }
 
     #[test]
