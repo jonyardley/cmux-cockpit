@@ -38,12 +38,15 @@ pub fn fit(text: &str, max: usize) -> String {
     out
 }
 
-/// Text the core already cut with an ellipsis, which may have landed
-/// mid-word: the part word goes, so the ellipsis follows a whole one.
-/// Text without the ellipsis comes back with its spaces folded.
-pub fn whole_words(text: &str) -> String {
+/// Text the core may have cut to `cap` characters (UTF-16 units, as its
+/// `clip` counts) with an ellipsis, which can land mid-word: when it is at
+/// the cap and ends on the ellipsis, the part word goes, so the ellipsis
+/// follows a whole one. Shorter text ending in an ellipsis was written that
+/// way ("Running tests…") and is kept. Spaces are folded either way.
+pub fn whole_words(text: &str, cap: usize) -> String {
+    let at_cap = text.encode_utf16().count() == cap;
     let folded = text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let Some(head) = folded.strip_suffix(ELLIPSIS) else {
+    let Some(head) = folded.strip_suffix(ELLIPSIS).filter(|_| at_cap) else {
         return folded;
     };
     if head.ends_with(' ') || head.is_empty() {
@@ -134,10 +137,15 @@ mod tests {
 
     #[test]
     fn drops_the_part_word_the_core_cut() {
-        assert_eq!(whole_words("the batch resum…"), "the batch…");
-        assert_eq!(whole_words("the batch …"), "the batch…");
-        assert_eq!(whole_words("resum…"), "…");
-        assert_eq!(whole_words("the  batch"), "the batch");
+        assert_eq!(whole_words("the batch resum…", 16), "the batch…");
+        assert_eq!(whole_words("the batch …", 11), "the batch…");
+        assert_eq!(whole_words("resum…", 6), "…");
+        assert_eq!(whole_words("the  batch", 10), "the batch");
+    }
+
+    #[test]
+    fn keeps_an_ellipsis_the_agent_wrote_under_the_cap() {
+        assert_eq!(whole_words("Running tests…", 140), "Running tests…");
     }
 
     #[test]

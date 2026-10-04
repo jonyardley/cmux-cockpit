@@ -17,7 +17,17 @@ use cockpit_core::status::StatusStyle;
 use cockpit_core::theme::Token;
 use cockpit_core::ui::PillColors;
 
+use cockpit_core::status::DETAIL_MAX;
+
 use crate::text::whole_words;
+
+/// The core's caps on a Needs you row's detail and the left-off prompt
+/// (status.rs `needs_detail` and `LEFT_OFF_MAX`, private there), so a cut
+/// at the cap can be taken back to a whole word.
+const NEEDS_DETAIL_MAX: usize = 80;
+const LEFT_OFF_MAX: usize = 90;
+/// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
+const LEFT_OFF_LEAD: &str = "You: ";
 
 /// The view switch's one live view for now.
 pub const ALL_LABEL: &str = "All";
@@ -331,7 +341,7 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
                 ws_id: id.clone(),
                 icon: icon_of(&style),
                 title: title_of(w, id),
-                line: whole_words(&session.needs_line(data, w)),
+                line: needs_line(session, data, w),
                 ink: session.needs_ink(w),
             }
         })
@@ -353,6 +363,23 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
     }
 }
 
+/// A Needs you row's line, "Asking: allow git push?", with a detail the
+/// core cut taken back to a whole word.
+fn needs_line(session: &mut Session, data: &Data, w: Option<&Workspace>) -> String {
+    let label = session.status_info(data, w).label;
+    let detail = whole_words(&session.needs_detail(w), NEEDS_DETAIL_MAX);
+    format!("{label}: {detail}")
+}
+
+/// "You: " and the last prompt, with a prompt the core cut taken back to
+/// a whole word.
+fn left_off(text: &str) -> String {
+    match text.strip_prefix(LEFT_OFF_LEAD) {
+        Some(prompt) => format!("{LEFT_OFF_LEAD}{}", whole_words(prompt, LEFT_OFF_MAX)),
+        None => whole_words(text, 0),
+    }
+}
+
 fn card(session: &mut Session, data: &Data, id: &str) -> Card {
     let w = data.ws_by_id(id);
     let style = session.status_info(data, w);
@@ -365,7 +392,7 @@ fn card(session: &mut Session, data: &Data, id: &str) -> Card {
         (session.status_line(data, w), style.text)
     };
     let left_off = if shows_left_off(data, w) {
-        whole_words(&session.left_off_text(w))
+        left_off(&session.left_off_text(w))
     } else {
         String::new()
     };
@@ -376,7 +403,7 @@ fn card(session: &mut Session, data: &Data, id: &str) -> Card {
         status,
         status_ink,
         left_off,
-        detail: whole_words(&session.card_detail(w)),
+        detail: whole_words(&session.card_detail(w), DETAIL_MAX),
         detail_lines: detail_lines(density),
     }
 }
@@ -516,6 +543,15 @@ mod tests {
         assert!(faint_heading(LaneKey::Parked, false));
         assert!(faint_heading(LaneKey::Main, true));
         assert!(!faint_heading(LaneKey::Main, false));
+    }
+
+    #[test]
+    fn takes_a_cut_prompt_back_to_a_whole_word() {
+        let prompt = format!("{} tail", "word ".repeat(17));
+        let cut = format!("{LEFT_OFF_LEAD}{}…", &prompt[..LEFT_OFF_MAX - 1]);
+        let got = left_off(&cut);
+        assert!(got.ends_with("word…"), "{got}");
+        assert_eq!(left_off("You: fix it…"), "You: fix it…");
     }
 
     #[test]
