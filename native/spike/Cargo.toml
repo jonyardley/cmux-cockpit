@@ -1,0 +1,9 @@
+[package]
+name = "status-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "R1.0 throwaway: joins cmux events and claude agents --json into one status line per workspace"
+
+[dependencies]
+serde_json = "1"

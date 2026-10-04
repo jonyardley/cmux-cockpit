@@ -37,3 +37,6 @@ CLAUDE.local.md
 .claude/*
 !.claude/settings.json
 .playwright-mcp/
+
+# Rust build output under native/.
+native/**/target/
