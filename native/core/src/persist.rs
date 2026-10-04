@@ -14,6 +14,7 @@ use regex::Regex;
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
+use crate::data::PrStatus;
 use crate::js::{encode_uri_component, utf16_len};
 use crate::saved::Stamped;
 
@@ -76,7 +77,8 @@ pub struct SavedCheck {
 pub struct SavedPr {
     pub number: f64,
     pub url: String,
-    pub status: String,
+    /// Read as cmux's own PR status is, an unknown word as Unknown.
+    pub status: PrStatus,
     pub branch: String,
     #[serde(default)]
     pub draft: Option<bool>,

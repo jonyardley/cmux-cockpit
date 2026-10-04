@@ -1,15 +1,15 @@
-//! The lanes, placement and Needs you strip match the TypeScript model's
-//! golden JSON (test/golden/README.md) for every cockpit scene. Only the
-//! fields model.rs, status.rs and strip.rs answer are compared: the view
-//! mode, every workspace's placement, whether each lane is folded, and the
-//! strip's list, rows, placeholders, "+N more" and clock. A lane header's
-//! cards and merge line, the lane and project entries and Next belong to
-//! the modules later lanes port.
+//! The core matches the TypeScript model's golden JSON
+//! (test/golden/README.md) for every cockpit scene: the view mode, every
+//! workspace's placement, and the All view as the app builds it (Needs
+//! you, Next, All's rows, and each lane header's fold, cards and merge
+//! line). The Projects rows and quiet projects belong to the by-project
+//! port and are not compared.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
 
+use cockpit_core::app::build_view;
 use cockpit_core::data::Data;
 use cockpit_core::lanes::LANES;
 use cockpit_core::model::{actual_lane_of, card_density};
@@ -48,30 +48,11 @@ fn computed(input: &Value) -> Value {
         });
         placement.insert(w.id.clone(), place);
     }
-    let mut collapsed = Map::new();
-    for lane in &LANES {
-        collapsed.insert(
-            lane.key.as_str().to_string(),
-            Value::from(s.is_collapsed(&data, lane)),
-        );
-    }
-    let strip = s.needs(&data);
-    let ids = |list: &[&cockpit_core::data::Workspace]| -> Vec<String> {
-        list.iter().map(|w| w.id.clone()).collect()
-    };
-    let needs = json!({
-        "inStrip": strip.in_strip.iter().collect::<Vec<_>>(),
-        "late": strip.late,
-        "list": ids(&strip.list),
-        "more": strip.more,
-        "shown": ids(&strip.shown),
-        "waitText": strip.wait_text,
-    });
+    let view = serde_json::to_value(build_view(&mut s, &data)).unwrap();
     json!({
         "mode": s.mode().as_str(),
-        "needs": needs,
         "placement": placement,
-        "collapsed": collapsed,
+        "view": view,
     })
 }
 
@@ -82,33 +63,39 @@ fn check(scene: &str) {
 
     assert_eq!(got["mode"], want["mode"], "{scene}: mode");
     assert_eq!(got["placement"], want["placement"], "{scene}: placement");
-    assert_eq!(got["needs"], want["needs"], "{scene}: needs");
+    let view = &got["view"];
+    assert_eq!(view["mode"], want["mode"], "{scene}: the view's mode");
+    for field in ["needs", "next", "laneEntries"] {
+        assert_eq!(view[field], want[field], "{scene}: {field}");
+    }
     let headers = want["laneHeaders"].as_object().unwrap();
     assert_eq!(headers.len(), LANES.len(), "{scene}: one header per lane");
     for (lane, header) in headers {
-        assert_eq!(
-            got["collapsed"][lane], header["collapsed"],
-            "{scene}: laneHeaders.{lane}.collapsed"
-        );
+        for field in ["collapsed", "workspaces", "mergeReady"] {
+            assert_eq!(
+                view["laneHeaders"][lane][field], header[field],
+                "{scene}: laneHeaders.{lane}.{field}"
+            );
+        }
     }
 }
 
 #[test]
-fn lanes_scene_matches_the_golden_lanes_placement_and_needs() {
+fn lanes_scene_matches_the_golden_model() {
     check("lanes");
 }
 
 #[test]
-fn needs_and_next_scene_matches_the_golden_lanes_placement_and_needs() {
+fn needs_and_next_scene_matches_the_golden_model() {
     check("needs-and-next");
 }
 
 #[test]
-fn projects_scene_matches_the_golden_lanes_placement_and_needs() {
+fn projects_scene_matches_the_golden_model() {
     check("projects");
 }
 
 #[test]
-fn review_verdicts_scene_matches_the_golden_lanes_placement_and_needs() {
+fn review_verdicts_scene_matches_the_golden_model() {
     check("review-verdicts");
 }

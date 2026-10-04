@@ -20,6 +20,10 @@ pub enum Token {
     AmberText,
     MetaText,
     Faint,
+    /// A lane header's words.
+    Heading,
+    /// palette.ts's greenDeep: pr-colors.ts's READY_INK, a PR GitHub would merge.
+    GreenDeep,
     CountBg,
     BlueCount,
     ClayCount,

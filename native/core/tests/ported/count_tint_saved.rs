@@ -260,3 +260,94 @@ mod header_status {
         }
     }
 }
+
+mod lane_and_project_count_pills {
+    use super::*;
+    use cockpit_core::lanes::{LaneKey, lane_by_key};
+
+    /// Four older asks in Unsorted fill the Needs you strip, so a later
+    /// one is past its cap and keeps its card, count and tint in its lane.
+    fn full_strip(fx: &mut Fx) -> Vec<Workspace> {
+        ["s1", "s2", "s3", "s4"]
+            .iter()
+            .map(|id| ws(id).agents(vec![fx.agent(NeedsInput).since(900.0)]))
+            .collect()
+    }
+
+    /// A generated anchor has no card, so it is neither counted nor tinted.
+    fn seed(fx: &mut Fx) -> Data {
+        frame(
+            1060.0,
+            vec![
+                group("g-main", "Main activity").anchor("anchor-main"),
+                group("g-parked", "Parked").anchor("anchor-parked"),
+            ],
+            vec![
+                ws("anchor-main").title("Main activity").group("g-main"),
+                working_ws(fx)
+                    .group("g-main")
+                    .directory("/Users/coder/dev/app-two"),
+                idle_ws(fx)
+                    .group("g-main")
+                    .directory("/Users/coder/dev/app-two"),
+                ws("anchor-parked").title("Parked").group("g-parked"),
+                needs_ws(fx)
+                    .group("g-parked")
+                    .directory("/Users/coder/dev/app-three"),
+            ],
+        )
+    }
+
+    fn lane_ids(s: &mut Session, data: &Data, key: LaneKey) -> Vec<String> {
+        s.lane_workspaces(data, key)
+            .iter()
+            .map(|w| w.id.clone())
+            .collect()
+    }
+
+    fn lane_tint(s: &mut Session, data: &Data, key: LaneKey) -> PillColors {
+        let cards = s.lane_workspaces(data, key);
+        s.count_colors(data, &cards)
+    }
+
+    #[test]
+    fn lists_the_same_cards_the_lane_counts_and_tints_by_them() {
+        let (mut s, _, mut fx) = setup();
+        let data = seed(&mut fx);
+        assert_eq!(lane_ids(&mut s, &data, LaneKey::Main), ["working", "idle"]);
+        assert_eq!(lane_tint(&mut s, &data, LaneKey::Main), blue());
+        assert_eq!(lane_tint(&mut s, &data, LaneKey::Review), QUIET_PILL);
+    }
+
+    #[test]
+    fn counts_and_tints_by_a_placeholder_for_a_card_the_needs_you_strip_lists() {
+        let (mut s, _, mut fx) = setup();
+        let data = seed(&mut fx);
+        assert_eq!(lane_ids(&mut s, &data, LaneKey::Parked), ["needs"]);
+        assert_eq!(lane_tint(&mut s, &data, LaneKey::Parked), clay());
+    }
+
+    #[test]
+    fn counts_and_tints_by_a_card_past_the_strips_cap_which_keeps_its_lane() {
+        let (mut s, _, mut fx) = setup();
+        let mut data = seed(&mut fx);
+        let strip = full_strip(&mut fx);
+        data.workspaces.get_or_insert_with(Vec::new).extend(strip);
+        assert_eq!(lane_ids(&mut s, &data, LaneKey::Parked), ["needs"]);
+        assert_eq!(lane_tint(&mut s, &data, LaneKey::Parked), clay());
+    }
+
+    #[test]
+    fn keeps_the_tint_while_the_lane_is_folded() {
+        let (mut s, _, mut fx) = setup();
+        let mut data = seed(&mut fx);
+        let strip = full_strip(&mut fx);
+        data.workspaces.get_or_insert_with(Vec::new).extend(strip);
+        let parked = lane_by_key(LaneKey::Parked);
+        if !s.is_collapsed(&data, &parked) {
+            s.toggle_lane(&data, &parked);
+        }
+        assert!(s.is_collapsed(&data, &parked));
+        assert_eq!(lane_tint(&mut s, &data, LaneKey::Parked), clay());
+    }
+}

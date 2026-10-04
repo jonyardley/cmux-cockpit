@@ -60,6 +60,15 @@ pub struct LaneMove {
     pub awaiting: bool,
 }
 
+/// The workspace Next last opened: its id, its place in the queue then,
+/// and the one that followed it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LastJump {
+    pub id: String,
+    pub index: usize,
+    pub after_id: Option<String>,
+}
+
 /// The core's state between frames.
 #[derive(Debug, Clone, Default)]
 pub struct Session {
@@ -87,6 +96,13 @@ pub struct Session {
     // cockpit/strip.ts: a card dismissed from Needs you, held at the top of
     // its lane until its status moves on from the one it was dismissed in.
     pub(crate) dismissed_hold: HashMap<String, Status>,
+
+    // cockpit/lane-entries.ts: the rank each card last had while not
+    // selected, so an opened card keeps its place until Jon moves on.
+    pub(crate) held_rank: HashMap<String, u8>,
+
+    // cockpit/next.ts: the last workspace Next opened, and what followed it.
+    pub(crate) last_jump: Option<LastJump>,
 
     // cockpit/model.ts: optimistic lane moves, order and folds.
     pub(crate) lane_override: IndexMap<String, LaneMove>,
@@ -142,6 +158,21 @@ impl Session {
     /// Every request made since the last call, oldest first.
     pub fn take_outbox(&mut self) -> Vec<Outbound> {
         std::mem::take(&mut self.outbox)
+    }
+
+    /// Puts requests taken earlier back at the front of the outbox, oldest first.
+    pub fn requeue(&mut self, mut earlier: Vec<Outbound>) {
+        earlier.append(&mut self.outbox);
+        self.outbox = earlier;
+    }
+
+    /// Swaps in a new project table, keeping everything else. A Move to
+    /// project override naming a key the table no longer has is dropped,
+    /// as the seed drops it.
+    pub fn set_projects(&mut self, projects: Vec<Project>) {
+        self.project_override
+            .retain(|_, key| is_project_key(&projects, key));
+        self.projects = projects;
     }
 
     /// The requests made so far, without taking them.
