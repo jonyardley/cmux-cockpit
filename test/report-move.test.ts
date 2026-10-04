@@ -359,13 +359,28 @@ describe("deliver", () => {
   const move: SavedMove = { text: "go", epoch: 10, session: "s1" };
   // A fake cmux holding one workspace's description; `alter` stands in for
   // a cmux that cuts what it is given, and `refuse` for one that says no.
-  const fake = (start: string | null, opts: { refuse?: boolean; alter?: boolean; saved?: boolean } = {}) => {
+  const fake = (
+    start: string | null,
+    opts: { refuse?: boolean; alter?: boolean; saved?: boolean; silent?: number; silentAfterWrite?: boolean } = {},
+  ) => {
     const calls: string[] = [];
+    const logged: string[] = [];
     let held = start;
+    // `silent` reads go unanswered first, as from a busy cmux; with
+    // `silentAfterWrite`, every read after a write does.
+    let silent = opts.silent ?? 0;
+    let wrote = false;
     const d: Delivery = {
-      read: () => held,
+      read: () => {
+        if (silent > 0 || (opts.silentAfterWrite && wrote)) {
+          silent--;
+          return null;
+        }
+        return held;
+      },
       write: (_ws, desc) => {
         calls.push(desc === null ? "clear" : "set");
+        wrote = true;
         if (opts.refuse) return false;
         held = desc === null ? "" : opts.alter ? desc.slice(0, 20) : desc;
         return true;
@@ -378,8 +393,9 @@ describe("deliver", () => {
       build: () => {
         calls.push("build");
       },
+      log: (line) => logged.push(line),
     };
-    return { d, calls, held: () => held };
+    return { d, calls, logged, held: () => held };
   };
 
   it("sets an empty description and saves nothing, so nothing rebuilds", () => {
@@ -428,6 +444,32 @@ describe("deliver", () => {
     const saved = fake("", { saved: true });
     deliver("ws1", null, saved.d);
     assert.deepEqual(saved.calls, ["save ws1 null", "build"]);
+  });
+
+  it("asks once more when cmux does not answer the read, so one missed answer costs no rebuild", () => {
+    const f = fake("", { silent: 1 });
+    assert.equal(deliver("ws1", move, f.d), null);
+    assert.deepEqual(f.calls, ["set"]);
+    assert.deepEqual(f.logged, []);
+  });
+
+  it("says in the state log why each move went to the saved map", () => {
+    const why = (f: ReturnType<typeof fake>) => {
+      deliver("ws1-0000-long-id", move, f.d);
+      return f.logged;
+    };
+    const saved = (reason: string) => [`saved the move for ws1-0000: ${reason}`];
+    assert.deepEqual(why(fake(null)), saved("cmux did not answer the read, twice"));
+    assert.deepEqual(why(fake("Ship checklist")), saved("the description holds other words"));
+    assert.deepEqual(why(fake("", { refuse: true })), saved("cmux refused the description"));
+    assert.deepEqual(why(fake("", { alter: true })), saved("cmux changed the description"));
+    assert.deepEqual(why(fake("", { silentAfterWrite: true })), saved("cmux did not answer the read-back"));
+  });
+
+  it("logs nothing for a turn with no move", () => {
+    const f = fake("", { saved: true });
+    deliver("ws1", null, f.d);
+    assert.deepEqual(f.logged, []);
   });
 
   it("passes a failed save on as a note and builds nothing", () => {

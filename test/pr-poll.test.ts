@@ -18,12 +18,14 @@ import {
   ghOutcome,
   type Lookups,
   lockWithin,
+  movedTag,
   nextPoll,
   type OwnLookups,
   ownPrsFrom,
   parseWindowIds,
   parseWorkspaces,
   pickPr,
+  prChanges,
   tallyOutcome,
   writePollState,
 } from "../scripts/pr-poll.ts";
@@ -758,5 +760,43 @@ describe("lockWithin", () => {
     const l = lock(10);
     assert.equal(await lockWithin(l.acquire, 2, l.wait), false);
     assert.deepEqual(l.seen, { tries: 3, waits: 2 });
+  });
+});
+
+describe("prChanges and movedTag", () => {
+  const pr: SavedPr = {
+    number: 197,
+    url: "u",
+    status: "open",
+    branch: "ci/testflight",
+    draft: true,
+    checks: [{ name: "gitleaks", state: "pending" }],
+  };
+  const ID = "05B6A0B0-914D-429F-8990-1D374BFC50D0";
+
+  it("names each changed field of each workspace's PR, by the id's first 8 characters", () => {
+    const after: SavedPr = { ...pr, additions: 3, checks: [{ name: "gitleaks", state: "pass" }] };
+    assert.deepEqual(prChanges({ [ID]: pr }, { [ID]: after }), ["05B6A0B0 additions, checks"]);
+  });
+
+  it("names a field that comes or goes, and a PR found or dropped", () => {
+    const { draft: _, ...ready } = pr;
+    assert.deepEqual(prChanges({ [ID]: pr }, { [ID]: ready }), ["05B6A0B0 draft"]);
+    assert.deepEqual(prChanges({}, { [ID]: pr, "AAAAAAAA-1": pr }), ["05B6A0B0 found", "AAAAAAAA found"]);
+    assert.deepEqual(prChanges({ [ID]: pr }, {}), ["05B6A0B0 dropped"]);
+  });
+
+  it("is empty when no PR changed", () => {
+    assert.deepEqual(prChanges({ [ID]: pr }, { [ID]: { ...pr } }), []);
+  });
+
+  it("keeps the maps tag the log has always had, then adds the fields", () => {
+    assert.equal(movedTag(["prs"], ["05B6A0B0 checks"]), " [prs] 05B6A0B0 checks");
+    assert.equal(
+      movedTag(["ownPrs", "prs"], ["05B6A0B0 checks", "8064D819 found"]),
+      " [ownPrs, prs] 05B6A0B0 checks; 8064D819 found",
+    );
+    assert.equal(movedTag(["poll"], []), " [poll]");
+    assert.equal(movedTag([], []), "");
   });
 });
