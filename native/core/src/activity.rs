@@ -12,7 +12,7 @@ fn rank(a: &Agent) -> i32 {
         Some(AgentStatus::Working) => 2,
         Some(AgentStatus::Idle) => 1,
         Some(AgentStatus::Ended) => 0,
-        Some(AgentStatus::Unknown) | None => -1,
+        Some(AgentStatus::Other(_)) | None => -1,
     }
 }
 

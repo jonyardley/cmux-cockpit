@@ -65,8 +65,6 @@ pub struct Session {
     pub projects: Vec<Project>,
     /// config/state.json as the build read it (`__STATE__`).
     pub saved: SavedState,
-    /// This install's URL token, which persist URLs carry.
-    pub url_token: String,
     pub(crate) outbox: Vec<Outbound>,
 
     // shared/needs.ts: wsId to agent id to the start of a dismissed spell.

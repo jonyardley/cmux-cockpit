@@ -366,7 +366,7 @@ mod a_turn_that_ended_on_nothing_for_you {
         let (mut s, _, mut fx) = setup();
         let w = at("quiet", vec![waiting(&mut fx, "quiet", 1060.0)]);
         let a = s.agent_of(Some(&w));
-        assert_eq!(a.as_ref().and_then(|a| a.status), Some(Idle));
+        assert_eq!(a.as_ref().and_then(|a| a.status.clone()), Some(Idle));
         assert_eq!(
             a.and_then(|a| a.since_epoch),
             Some(1000.0),

@@ -106,6 +106,10 @@ impl Session {
     /// reports: straight after a reload cmux can report a workspace before
     /// its agents, and that must not wipe a dismissal seeded from disk.
     fn prune(&mut self, w: &Workspace) {
+        // Most workspaces have no dismissal: leave before working out their asks.
+        if !self.dismissed.contains_key(&w.id) {
+            return;
+        }
         let live: IndexMap<String, f64> = asking(&self.saved, Some(w))
             .into_iter()
             .map(|a| (a.id.clone(), since_or_activity(a)))
@@ -199,5 +203,33 @@ impl Session {
             return;
         }
         self.persist_set(format!("dismissed.{}", w.id), None);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::data::{Agent, AgentStatus, Workspace};
+    use crate::session::Session;
+
+    #[test]
+    fn saves_a_dismissal_in_the_workspaces_agent_order() {
+        let ask = |id: &str, since: f64| Agent {
+            id: id.into(),
+            status: Some(AgentStatus::NeedsInput),
+            since_epoch: Some(since),
+            ..Agent::default()
+        };
+        let w = Workspace {
+            id: "w".into(),
+            agents: Some(vec![Some(ask("a2", 600.0)), Some(ask("a1", 500.0))]),
+            ..Workspace::default()
+        };
+        let mut s = Session::default();
+        s.dismiss_needs(Some(&w));
+        let url = s.take_outbox().pop().and_then(|o| o.persist_url(""));
+        assert_eq!(
+            url.as_deref(),
+            Some("cmux-cockpit://set?key=dismissed.w&value=%7B%22a2%22%3A600%2C%22a1%22%3A500%7D")
+        );
     }
 }

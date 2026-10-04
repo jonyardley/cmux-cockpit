@@ -5,13 +5,13 @@ use crate::data::AgentStatus;
 
 /// The status word for each agent status, as a card head or status line
 /// starts. None for a status this port does not know.
-pub fn status_word(s: AgentStatus) -> Option<&'static str> {
+pub fn status_word(s: &AgentStatus) -> Option<&'static str> {
     match s {
         AgentStatus::NeedsInput => Some("Your turn"),
         AgentStatus::Working => Some("Working"),
         AgentStatus::Idle => Some("Idle"),
         AgentStatus::Ended => Some("Finished"),
-        AgentStatus::Unknown => None,
+        AgentStatus::Other(_) => None,
     }
 }
 
@@ -49,8 +49,8 @@ mod tests {
 
     #[test]
     fn words_a_status_and_its_age() {
-        assert_eq!(status_word(AgentStatus::Ended), Some("Finished"));
-        assert_eq!(status_word(AgentStatus::Unknown), None);
+        assert_eq!(status_word(&AgentStatus::Ended), Some("Finished"));
+        assert_eq!(status_word(&AgentStatus::Other("x".into())), None);
         assert_eq!(with_age("Finished", "3m"), "Finished 3m");
         assert_eq!(with_age("Idle", ""), "Idle");
         assert_eq!(shell_text(1), "· 1 shell");

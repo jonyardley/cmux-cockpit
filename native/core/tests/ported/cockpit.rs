@@ -125,7 +125,10 @@ mod a_real_workspace_anchoring_a_single_member_group {
                     .agents(vec![fx.agent(NeedsInput).since(1.0)]),
             ],
         );
-        assert_eq!(s.lane_anchor_ids(&data), ["gen-main"]);
+        assert_eq!(
+            s.lane_anchor_ids(&data).into_iter().collect::<Vec<_>>(),
+            ["gen-main"]
+        );
         assert_eq!(ids(&s.card_workspaces(&data)), ["real-parked"]);
         assert_eq!(
             s.lane_of(&data, by_id(&data, "real-parked")),
@@ -564,7 +567,7 @@ mod data_fields_cmux_may_leave_out_issue_7 {
         if let Some(list) = data.workspaces.as_mut() {
             list.push(ws("real").title("").group("g-x"));
         }
-        assert!(!has(&s.lane_anchor_ids(&data), "real"));
+        assert!(!s.lane_anchor_ids(&data).contains("real"));
         assert!(has(&ids(&s.card_workspaces(&data)), "real"));
     }
 

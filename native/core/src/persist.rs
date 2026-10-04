@@ -3,15 +3,15 @@
 //! read unchanged, and the one-entry writes the sidebar sends back.
 //!
 //! The build cleans the file before baking it in, so most entries arrive
-//! valid. A malformed entry in a map is still dropped on its own rather
-//! than failing the whole file, as the TypeScript reader drops it.
+//! valid. A malformed entry in a map, or a field of the wrong type, is
+//! still dropped on its own rather than failing the whole file, as the
+//! TypeScript reader drops it (lenient.rs).
 
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 use regex::Regex;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Deserializer};
+use serde::Deserialize;
 use serde_json::{Map, Value};
 
 use crate::js::{encode_uri_component, utf16_len};
@@ -39,9 +39,10 @@ impl ViewMode {
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct UiState {
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub mode: Option<ViewMode>,
     /// "lane:<key>", "project:<key>" or "quiet" to 1 folded, 0 unfolded.
-    #[serde(deserialize_with = "lenient_map")]
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub collapsed: BTreeMap<String, f64>,
 }
 
@@ -169,7 +170,9 @@ impl Stamped for SavedMove {
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SavedPoll {
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub ok_epoch: Option<f64>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub error: Option<String>,
 }
 
@@ -179,31 +182,37 @@ pub struct SavedPoll {
 #[serde(default, rename_all = "camelCase")]
 pub struct SavedState {
     /// wsId to agent id to the start of the dismissed needs_input spell.
-    #[serde(deserialize_with = "lenient_map")]
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub dismissed: BTreeMap<String, BTreeMap<String, f64>>,
     /// wsId to the project key chosen by "Move to project".
-    #[serde(deserialize_with = "lenient_map")]
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub project_override: BTreeMap<String, String>,
-    #[serde(deserialize_with = "lenient_map")]
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub projects: BTreeMap<String, SavedProject>,
-    #[serde(deserialize_with = "lenient_map")]
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub prs: BTreeMap<String, SavedPr>,
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub own_prs: BTreeMap<String, Value>,
-    #[serde(deserialize_with = "lenient_map")]
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub subagents: BTreeMap<String, Vec<SavedSubagent>>,
     /// Left out of the file while nothing is saved.
-    #[serde(deserialize_with = "lenient_map")]
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub shells: BTreeMap<String, Vec<SavedShell>>,
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub names: BTreeMap<String, Value>,
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub published: BTreeMap<String, Value>,
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub pr_origins: BTreeMap<String, Value>,
-    #[serde(deserialize_with = "lenient_map")]
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub asking: BTreeMap<String, SavedAsk>,
-    #[serde(deserialize_with = "lenient_map")]
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub moves: BTreeMap<String, SavedMove>,
-    #[serde(deserialize_with = "lenient_map")]
+    #[serde(deserialize_with = "crate::lenient::map")]
     pub merge_kept: BTreeMap<String, f64>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub ui: UiState,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub poll: Option<SavedPoll>,
 }
 
@@ -212,23 +221,6 @@ impl SavedState {
     pub fn from_json(text: &str) -> Result<SavedState, serde_json::Error> {
         serde_json::from_str(text)
     }
-}
-
-/// A JSON object read entry by entry, dropping any entry whose value does
-/// not fit `V`; a value that is not an object at all reads as empty.
-fn lenient_map<'de, D, V>(d: D) -> Result<BTreeMap<String, V>, D::Error>
-where
-    D: Deserializer<'de>,
-    V: DeserializeOwned,
-{
-    let raw = Value::deserialize(d)?;
-    let Value::Object(entries) = raw else {
-        return Ok(BTreeMap::new());
-    };
-    Ok(entries
-        .into_iter()
-        .filter_map(|(k, v)| serde_json::from_value(v).ok().map(|v| (k, v)))
-        .collect())
 }
 
 /// The URL that asks the (separately installed) handler to set or delete
@@ -384,6 +376,19 @@ mod tests {
     }
 
     #[test]
+    fn keeps_the_rest_of_the_file_when_one_field_is_bad() {
+        let json = r#"{"ui": {"mode": "lanes", "collapsed": {"quiet": 1}},
+            "poll": {"okEpoch": "x"}, "ownPrs": null, "names": 3,
+            "dismissed": {"w1": {"a1": 500}}}"#;
+        let s = SavedState::from_json(json).unwrap();
+        assert_eq!(s.ui.mode, None);
+        assert_eq!(s.ui.collapsed.get("quiet"), Some(&1.0));
+        assert_eq!(s.poll.and_then(|p| p.ok_epoch), None);
+        assert!(s.own_prs.is_empty() && s.names.is_empty());
+        assert_eq!(s.dismissed.len(), 1);
+    }
+
+    #[test]
     fn builds_the_persist_url() {
         let v = Value::from("/dev/app-two");
         assert_eq!(
@@ -410,6 +415,21 @@ mod tests {
         assert_eq!(move_of_description(Some(&d)), Some(m));
         assert_eq!(move_of_description(Some("plain words")), None);
         assert!(!is_move_description(None));
+    }
+
+    #[test]
+    fn writes_a_moves_fields_in_the_order_the_typescript_does() {
+        let m = SavedMove {
+            text: "go".into(),
+            epoch: 1000.0,
+            session: Some("s".into()),
+            decisions: Some(1.0),
+            ..SavedMove::default()
+        };
+        assert_eq!(
+            move_description(&m),
+            r#"go ⟦move {"epoch":1000,"session":"s","decisions":1}⟧"#
+        );
     }
 
     #[test]

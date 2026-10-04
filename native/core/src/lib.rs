@@ -9,6 +9,7 @@ pub mod anchors;
 pub mod data;
 pub mod js;
 pub mod lanes;
+pub mod lenient;
 pub mod model;
 pub mod moves;
 pub mod needs;

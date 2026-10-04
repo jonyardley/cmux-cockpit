@@ -13,56 +13,56 @@ use crate::shells::live_shell_count;
 use crate::text::{card_message, clip, one_line, readable};
 use crate::theme::Token;
 use crate::time::{age_since, finished_at};
-use crate::ui::{HaloStatus, PillColors, URGENCY_RANK, Urgency, count_tint, halo_status};
+use crate::ui::{PillColors, URGENCY_RANK, Urgency, count_tint};
 use crate::words::{
     ASKING_WORD, NO_AGENT_WORD, WAITING_WORD, YOU_WORD, shell_text, status_word, with_age,
 };
 
 /// A workspace's status: its agent's, or none.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Status {
     NeedsInput,
     Working,
     Idle,
     Ended,
-    /// A status cmux sent that this port does not know.
-    Unknown,
+    /// A status cmux sent that this port does not know, in cmux's word.
+    Other(String),
     /// No agent.
     None,
 }
 
 impl Status {
     fn of(a: Option<&Agent>) -> Status {
-        match a.and_then(|a| a.status) {
+        match a.and_then(|a| a.status.clone()) {
             Some(AgentStatus::NeedsInput) => Status::NeedsInput,
             Some(AgentStatus::Working) => Status::Working,
             Some(AgentStatus::Idle) => Status::Idle,
             Some(AgentStatus::Ended) => Status::Ended,
-            Some(AgentStatus::Unknown) => Status::Unknown,
+            Some(AgentStatus::Other(s)) => Status::Other(s),
             None => Status::None,
         }
     }
 
     /// The status as the TypeScript names it.
-    pub fn as_str(self) -> &'static str {
+    pub fn as_str(&self) -> &str {
         match self {
             Status::NeedsInput => "needs_input",
             Status::Working => "working",
             Status::Idle => "idle",
             Status::Ended => "ended",
-            Status::Unknown => "unknown",
+            Status::Other(s) => s,
             Status::None => "none",
         }
     }
 
     /// Idle or ended: the agent finished.
-    fn finished(self) -> bool {
+    fn finished(&self) -> bool {
         matches!(self, Status::Idle | Status::Ended)
     }
 }
 
 /// Which of the card's status looks applies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatusKind {
     /// Finished and not yet looked at (issue #53).
     Ready,
@@ -91,28 +91,28 @@ pub struct StatusStyle {
 }
 
 /// The halo token for a status: working and needs only, else clear.
-pub fn halo_color(status: Status) -> Token {
-    match halo_status(Some(status.as_str())) {
-        Some(HaloStatus::Working) => Token::BlueHalo,
-        Some(HaloStatus::NeedsInput) => Token::ClayHalo,
-        None => Token::Clear,
+pub fn halo_color(status: &Status) -> Token {
+    match status {
+        Status::Working => Token::BlueHalo,
+        Status::NeedsInput => Token::ClayHalo,
+        _ => Token::Clear,
     }
 }
 
-fn plain_style(s: Status) -> StatusStyle {
+fn plain_style(s: &Status) -> StatusStyle {
     let (dot, text, urgency) = match s {
         Status::Working => (Some(Token::Blue), Token::BlueText, Urgency::Working),
         Status::NeedsInput => (Some(Token::Clay), Token::ClayText, Urgency::Needs),
         Status::Idle => (None, Token::MetaText, Urgency::Quiet),
         Status::Ended => (Some(Token::Green), Token::GreenText, Urgency::Quiet),
-        Status::Unknown | Status::None => (None, Token::Faint, Urgency::Quiet),
+        Status::Other(_) | Status::None => (None, Token::Faint, Urgency::Quiet),
     };
     let label = match s {
-        Status::Working => status_word(AgentStatus::Working),
-        Status::NeedsInput => status_word(AgentStatus::NeedsInput),
-        Status::Idle => status_word(AgentStatus::Idle),
-        Status::Ended => status_word(AgentStatus::Ended),
-        Status::Unknown | Status::None => None,
+        Status::Working => status_word(&AgentStatus::Working),
+        Status::NeedsInput => status_word(&AgentStatus::NeedsInput),
+        Status::Idle => status_word(&AgentStatus::Idle),
+        Status::Ended => status_word(&AgentStatus::Ended),
+        Status::Other(_) | Status::None => None,
     };
     StatusStyle {
         label: label.unwrap_or(NO_AGENT_WORD),
@@ -126,12 +126,12 @@ fn plain_style(s: Status) -> StatusStyle {
 
 impl StatusKind {
     /// The look this kind draws with.
-    pub fn style(self) -> StatusStyle {
+    pub fn style(&self) -> StatusStyle {
         match self {
             // The finished green and word: Ready adds no hue of its own.
             StatusKind::Ready => StatusStyle {
                 halo: Token::Clear,
-                ..plain_style(Status::Ended)
+                ..plain_style(&Status::Ended)
             },
             StatusKind::Asking => StatusStyle {
                 label: ASKING_WORD,
@@ -146,11 +146,11 @@ impl StatusKind {
                 dot: None,
                 halo: Token::Clear,
                 ring: Some(Token::Blue),
-                ..plain_style(Status::Working)
+                ..plain_style(&Status::Working)
             },
             StatusKind::Waiting => StatusStyle {
                 label: WAITING_WORD,
-                ..plain_style(Status::Working)
+                ..plain_style(&Status::Working)
             },
             StatusKind::Plain(s) => plain_style(s),
         }
@@ -450,7 +450,7 @@ impl Session {
         if self.ask_of(w).is_some() {
             format!("is {}", ASKING_WORD.to_lowercase())
         } else {
-            status_word(AgentStatus::NeedsInput)
+            status_word(&AgentStatus::NeedsInput)
                 .unwrap_or_default()
                 .to_lowercase()
         }
@@ -551,5 +551,23 @@ impl Session {
             }
         };
         clip(&text, DETAIL_MAX)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keeps_cmuxs_word_for_a_status_it_does_not_know_and_draws_it_as_no_agent() {
+        let a = Agent {
+            id: "a".into(),
+            status: Some(AgentStatus::Other("thinking".into())),
+            ..Agent::default()
+        };
+        let s = Status::of(Some(&a));
+        assert_eq!(s.as_str(), "thinking");
+        assert_eq!(halo_color(&s), Token::Clear);
+        assert_eq!(StatusKind::Plain(s).style().label, NO_AGENT_WORD);
     }
 }

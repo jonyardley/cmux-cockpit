@@ -8,6 +8,7 @@
 
 use std::cmp::Ordering;
 
+use indexmap::IndexSet;
 use serde_json::{Map, Value};
 
 use crate::anchors::is_generated_anchor;
@@ -109,17 +110,12 @@ impl Session {
     /// Each lane group's generated anchor, which is not a real card, plus
     /// any workspace that looks like the anchor of a lane whose group is on
     /// its way. In lane order, each once.
-    pub fn lane_anchor_ids(&self, data: &Data) -> Vec<String> {
+    pub fn lane_anchor_ids(&self, data: &Data) -> IndexSet<String> {
         let now = now_epoch(data);
-        let mut out: Vec<String> = Vec::new();
-        fn add(id: &str, out: &mut Vec<String>) {
-            if !out.iter().any(|x| x == id) {
-                out.push(id.to_string());
-            }
-        }
+        let mut out: IndexSet<String> = IndexSet::new();
         for lane in &LANES {
             if let Some(id) = generated_anchor_id(data, lane) {
-                add(&id, &mut out);
+                out.insert(id);
             } else if group_for_lane(data, lane).is_none() && self.awaiting_lane(lane.key, now) {
                 // cmux can publish a new group's anchor a frame before the
                 // group, so an ungrouped workspace that looks like it hides.
@@ -127,7 +123,7 @@ impl Session {
                 for w in data.workspace_list() {
                     let title = w.title.as_deref().unwrap_or_default().trim().to_lowercase();
                     if w.group_id().is_none() && w.agent_slots() == 0 && title == name {
-                        add(&w.id, &mut out);
+                        out.insert(w.id.clone());
                     }
                 }
             }

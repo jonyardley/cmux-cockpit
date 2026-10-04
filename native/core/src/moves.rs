@@ -3,6 +3,8 @@
 //! The line reaches the sidebar through the workspace's description, and
 //! through the saved state when setting the description failed.
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -12,11 +14,40 @@ use crate::js::{positive, truthy};
 use crate::persist::{SavedMove, SavedState, move_of_description};
 use crate::saved::saved_for;
 
+/// Descriptions parsed so far, at most PARSED_MAX: the move is read
+/// several times per card on every frame, and the description rarely
+/// changes between them.
+const PARSED_MAX: usize = 64;
+
+thread_local! {
+    static PARSED: RefCell<HashMap<String, Option<SavedMove>>> = RefCell::new(HashMap::new());
+}
+
+/// The move a description carries, parsed once per distinct description.
+fn live_move(d: Option<&str>) -> Option<SavedMove> {
+    let d = d?;
+    PARSED.with(|cell| {
+        // A read already under way (never expected) parses afresh.
+        let Ok(mut cache) = cell.try_borrow_mut() else {
+            return move_of_description(Some(d));
+        };
+        if let Some(m) = cache.get(d) {
+            return m.clone();
+        }
+        if cache.len() >= PARSED_MAX {
+            cache.clear();
+        }
+        let m = move_of_description(Some(d));
+        cache.insert(d.to_string(), m.clone());
+        m
+    })
+}
+
 /// The move `w`'s chat last ended a turn on: the description's or the
 /// saved one, whichever is newer.
 fn saved_move_for(saved: &SavedState, w: &Workspace) -> Option<SavedMove> {
     let stored = saved.moves.get(&w.id);
-    let live = move_of_description(w.description.as_deref());
+    let live = live_move(w.description.as_deref());
     match (live, stored) {
         (Some(live), Some(stored)) if stored.epoch > live.epoch => Some(stored.clone()),
         (Some(live), _) => Some(live),

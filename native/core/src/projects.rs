@@ -53,12 +53,12 @@ impl Project {
 /// The key of Other, the group for a card no project matches.
 pub const OTHER_KEY: &str = "other";
 
-/// Other: the group for a card no project matches.
+/// Other: the group for a card no project matches, in palette.ts's grey.
 pub fn other() -> Project {
     Project {
         matches: Match::One(OTHER_KEY.to_string()),
         name: "Other".to_string(),
-        color: "grey".to_string(),
+        color: "#A09E95".to_string(),
         icon: "terminal".to_string(),
         root: None,
         seeded: None,

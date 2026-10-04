@@ -1,23 +1,48 @@
 //! What cmux hands the sidebar each frame, mirroring src/renderer.d.ts.
 //! There is no published schema (issue #7), so every field is optional and
-//! a missing one reads as its default. A null in a list (an agent, a
-//! subagent run) is kept as None, since the TypeScript skips each one where
-//! it reads the list.
+//! a missing one reads as its default. Each field is read on its own
+//! (lenient.rs): a value of the wrong type reads as missing rather than
+//! failing the frame, as the TypeScript would only misread that field. A
+//! null in the agents or children list is kept as a hole, since the
+//! TypeScript skips each one where it reads the list.
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
 
 /// An agent's status as cmux sends it. A status this port does not know
-/// reads as `Unknown`, ranked below every known one, rather than failing
-/// the whole frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
+/// keeps cmux's own word, ranked below every known one.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentStatus {
     NeedsInput,
     Working,
     Idle,
     Ended,
-    #[serde(other)]
-    Unknown,
+    Other(String),
+}
+
+impl AgentStatus {
+    /// The status as cmux names it.
+    pub fn as_str(&self) -> &str {
+        match self {
+            AgentStatus::NeedsInput => "needs_input",
+            AgentStatus::Working => "working",
+            AgentStatus::Idle => "idle",
+            AgentStatus::Ended => "ended",
+            AgentStatus::Other(s) => s,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for AgentStatus {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.as_str() {
+            "needs_input" => AgentStatus::NeedsInput,
+            "working" => AgentStatus::Working,
+            "idle" => AgentStatus::Idle,
+            "ended" => AgentStatus::Ended,
+            _ => AgentStatus::Other(s),
+        })
+    }
 }
 
 /// A pull request's state as cmux sends it.
@@ -35,10 +60,15 @@ pub enum PrStatus {
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SubagentRun {
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub id: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub label: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub running: Option<bool>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub started_epoch: Option<f64>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub ended_epoch: Option<f64>,
 }
 
@@ -47,18 +77,28 @@ pub struct SubagentRun {
 #[serde(default, rename_all = "camelCase")]
 pub struct Agent {
     /// For Claude Code, the session id.
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub id: String,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub status: Option<AgentStatus>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub name: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub kind: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub title: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub surface_id: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub transcript_path: Option<String>,
     /// Epoch seconds the current status began.
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub since_epoch: Option<f64>,
     /// Epoch seconds of the agent's latest activity.
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub last_activity_at: Option<f64>,
     /// Subagent runs under this session, oldest first.
+    #[serde(deserialize_with = "crate::lenient::slots")]
     pub children: Option<Vec<Option<SubagentRun>>>,
 }
 
@@ -73,17 +113,29 @@ impl Agent {
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct PullRequest {
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub url: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub number: Option<f64>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub status: Option<PrStatus>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub draft: Option<bool>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub mergeable: Option<bool>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub conflicts: Option<bool>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub title: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub additions: Option<f64>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub deletions: Option<f64>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub label: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub branch: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub stale: Option<bool>,
 }
 
@@ -91,7 +143,9 @@ pub struct PullRequest {
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default)]
 pub struct Progress {
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub value: Option<f64>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub label: Option<String>,
 }
 
@@ -99,24 +153,42 @@ pub struct Progress {
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Workspace {
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub id: String,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub title: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub directory: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub selected: Option<bool>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub pinned: Option<bool>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub unread: Option<f64>,
     /// The workspace group's id, when it is in one.
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub group: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub branch: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub dirty: Option<bool>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub latest_message: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub latest_prompt: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub description: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub latest_at: Option<f64>,
+    #[serde(deserialize_with = "crate::lenient::slots")]
     pub agents: Option<Vec<Option<Agent>>>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub pr: Option<PullRequest>,
+    #[serde(deserialize_with = "crate::lenient::list")]
     pub prs: Option<Vec<PullRequest>>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub progress: Option<Progress>,
+    #[serde(deserialize_with = "crate::lenient::list")]
     pub ports: Option<Vec<f64>>,
 }
 
@@ -142,9 +214,13 @@ impl Workspace {
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct WorkspaceGroup {
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub id: String,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub name: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub anchor_id: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub collapsed: Option<bool>,
 }
 
@@ -153,9 +229,13 @@ pub struct WorkspaceGroup {
 #[serde(default, rename_all = "camelCase")]
 pub struct Data {
     /// The app clock in epoch seconds (`data.clock().epoch`).
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub epoch: Option<f64>,
+    #[serde(deserialize_with = "crate::lenient::list")]
     pub groups: Option<Vec<WorkspaceGroup>>,
+    #[serde(deserialize_with = "crate::lenient::field")]
     pub selected_id: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::list")]
     pub workspaces: Option<Vec<Workspace>>,
 }
 
@@ -189,8 +269,24 @@ mod tests {
         assert_eq!(w.group_id(), None);
         assert_eq!(w.agent_slots(), 2);
         let a = w.agent_list().next().unwrap();
-        assert_eq!(a.status, Some(AgentStatus::Unknown));
+        assert_eq!(a.status, Some(AgentStatus::Other("thinking".into())));
         assert_eq!(a.child_runs().count(), 0);
         assert!(data.group_list().is_empty());
+    }
+
+    #[test]
+    fn reads_a_value_of_the_wrong_type_as_missing_not_the_frame_as_bad() {
+        let json = r#"{"epoch": 10, "groups": "nope", "workspaces": [7, {"id": "w",
+            "unread": "3", "ports": [3000, null], "prs": [null, {"number": 4}],
+            "agents": [{"id": null, "status": 5}]}]}"#;
+        let data: Data = serde_json::from_str(json).unwrap();
+        assert!(data.groups.is_none());
+        let w = &data.workspace_list()[0];
+        assert_eq!(w.id, "w");
+        assert_eq!(w.unread, None);
+        assert_eq!(w.ports, Some(vec![3000.0]));
+        assert_eq!(w.prs.as_ref().map(Vec::len), Some(1));
+        let a = w.agent_list().next().unwrap();
+        assert_eq!((a.id.as_str(), &a.status), ("", &None));
     }
 }
