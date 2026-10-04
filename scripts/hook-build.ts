@@ -34,7 +34,8 @@
 // coalescing every write in that time into one redraw. How long depends on
 // who asked (Pace): subagent runs, which start and end every few seconds
 // while agents are busy and decide nothing on a card for minutes (only
-// the ten-minute quiet check reads them), wait SLOW_GAP_MS; every other
+// the ten-minute quiet check reads them), first wait LATER_MS outside the
+// lock (scheduleLateBuild) and then SLOW_GAP_MS; every other
 // hook and the PR poll wait REDRAW_GAP_MS, since what they save decides
 // what a card says now; a tap is Jon waiting on screen and waits
 // TAP_GAP_MS. A build starts from its own pace's gap, and a faster write
@@ -487,29 +488,89 @@ export function buildNow(tag: string, deps: Partial<BuildDeps> = {}): "built" | 
  */
 export function scheduleBuild(tag: string, pace: Pace = "soon"): void {
   recordTag(tag);
+  startBuild(tag, pace);
+}
+
+// scheduleBuild once the tag is recorded: raises the pace's flag and
+// spawns the coalescing build unless one is in flight.
+function startBuild(tag: string, pace: Pace): void {
   const flag = flagFor(pace);
   if (flag) raiseFlag(flag);
   if (!tryTakeBuildLock()) return;
+  spawnDetached(tag, ["--coalesce-build", pace], () => {
+    takeFlags();
+    releaseBuildLock();
+  });
+}
+
+// Runs this file again with `args`, detached and unreferenced, its stderr
+// to the state log; `undo` puts back what the caller set up when the spawn fails.
+function spawnDetached(tag: string, args: string[], undo: () => void): void {
   const log = logFd();
   try {
-    const child = spawn(process.execPath, [import.meta.filename, "--coalesce-build", pace], {
+    const child = spawn(process.execPath, [import.meta.filename, ...args], {
       cwd: ROOT,
       detached: true,
       stdio: ["ignore", "ignore", log],
     });
     child.on("error", (err) => {
       console.error(`${tag}: build: ${err.message}`);
-      takeFlags();
-      releaseBuildLock();
+      undo();
     });
     child.unref();
   } catch (err) {
     console.error(`${tag}: build: ${err instanceof Error ? err.message : String(err)}`);
-    takeFlags();
-    releaseBuildLock();
+    undo();
   } finally {
     if (log !== "ignore") closeSync(log);
   }
+}
+
+// Subagent runs decide nothing on a card for minutes (only the ten-minute
+// quiet check and the helper rows read them), so they never redraw at their
+// own pace: each write rides along with the next build anyone asks for, and
+// the first write with none arranged sets up one build LATER_MS on, so no
+// run waits longer than that to show. The wait happens before the lock is
+// taken, since a holder waiting this long would read as a crashed build's
+// (BUILD_LOCK_STALE_MS). When another build bakes the run first, the late
+// one finds the bundles unchanged and rewrites nothing, so cmux redraws nothing.
+export const LATER_MS = 5 * 60_000;
+const LATER_FLAG = join(ROOT, "config", "build-later");
+
+// A flag older than this is a late build's that died, and is retaken.
+const LATER_STALE_MS = LATER_MS + BUILD_LOCK_STALE_MS;
+
+/**
+ * Records a write that can wait (see LATER_MS) and arranges the late build
+ * unless one already is. The flag is taken like a lock, in one exclusive
+ * create, so subagents starting together arrange one late build between
+ * them. `tag` names the caller as in scheduleBuild.
+ */
+export function scheduleLateBuild(tag: string): void {
+  recordTag(tag);
+  if (!tryTakeLock(LATER_FLAG, LATER_STALE_MS)) return;
+  spawnDetached(tag, ["--late-build", tag], () => takeFlag(LATER_FLAG));
+}
+
+/**
+ * How long a late build still has to wait, by the wall clock from when its
+ * flag was raised, so a Mac that slept through the wait builds on waking
+ * rather than sleeping the rest out. Exported for testing.
+ */
+export const lateWaitLeft = (raisedAtMs: number, now: number): number => Math.max(0, raisedAtMs + LATER_MS - now);
+
+const flagRaisedAt = (): number | undefined => statSync(LATER_FLAG, { throwIfNoEntry: false })?.mtimeMs;
+
+// The detached side of scheduleLateBuild. It waits in short steps against
+// the wall clock (see lateWaitLeft), then takes its flag down before the
+// build, so a write landing during it arranges the next late build; a flag
+// raised since, by a write after this one's was retaken as stale, is left up.
+async function lateBuild(tag: string): Promise<void> {
+  const raisedAt = flagRaisedAt() ?? Date.now();
+  for (let left = lateWaitLeft(raisedAt, Date.now()); left > 0; left = lateWaitLeft(raisedAt, Date.now()))
+    await sleep(Math.min(left, 30_000));
+  if (flagRaisedAt() === raisedAt) takeFlag(LATER_FLAG);
+  startBuild(tag, "slow");
 }
 
 /** What `npm run build` runs against: the build returns build.ts's exit
@@ -604,3 +665,4 @@ export function lockedBuild(deps: Partial<LockedBuildDeps> = {}): number {
 if (import.meta.main && process.argv[2] === "--coalesce-build")
   await coalesceBuild(isPace(process.argv[3]) ? process.argv[3] : "soon");
 if (import.meta.main && process.argv[2] === "--locked") process.exitCode = lockedBuild();
+if (import.meta.main && process.argv[2] === "--late-build") await lateBuild(process.argv[3] ?? "late build");

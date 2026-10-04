@@ -20,6 +20,8 @@ import {
   changedKeys,
   flagFor,
   gapLeft,
+  LATER_MS,
+  lateWaitLeft,
   lockedBuild,
   PACE_GAP,
   REDRAW_GAP_MS,
@@ -622,5 +624,19 @@ describe("changedKeys", () => {
 
   it("counts every key as changed on a first build", () => {
     assert.deepEqual(changedKeys(null, { subagents: [], prs: {} }), ["prs", "subagents"]);
+  });
+});
+
+describe("the late build for subagent runs", () => {
+  it("waits out what is left of LATER_MS by the wall clock, and nothing after a sleep", () => {
+    assert.equal(lateWaitLeft(1_000, 1_000), LATER_MS);
+    assert.equal(lateWaitLeft(1_000, 1_000 + LATER_MS - 1), 1);
+    assert.equal(lateWaitLeft(1_000, 1_000 + LATER_MS), 0);
+    assert.equal(lateWaitLeft(1_000, 1_000 + 60 * 60_000), 0, "the Mac slept an hour");
+  });
+
+  it("waits longer than the slow gap, outside the lock", () => {
+    assert.ok(LATER_MS > SLOW_GAP_MS);
+    assert.ok(LATER_MS > BUILD_LOCK_STALE_MS, "too long to wait while holding the lock");
   });
 });

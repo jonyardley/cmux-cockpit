@@ -5,8 +5,27 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decisionsIn, lastReply, moveFrom, moveLine, shouldSendBack } from "../scripts/hooks/report-move.ts";
-import { applySet, cleanMove, emptyState, MAX_MOVE, MOVE_MAX_AGE_S, urlMaySet } from "../scripts/state-config.ts";
+import {
+  type Delivery,
+  decisionsIn,
+  deliver,
+  lastReply,
+  moveFrom,
+  moveLine,
+  shouldSendBack,
+} from "../scripts/hooks/report-move.ts";
+import {
+  applySet,
+  cleanMove,
+  emptyState,
+  isMoveDescription,
+  MAX_MOVE,
+  MOVE_MAX_AGE_S,
+  moveDescription,
+  moveOfDescription,
+  type SavedMove,
+  urlMaySet,
+} from "../scripts/state-config.ts";
 
 const DECISIONS = [
   "Jon, two calls.",
@@ -307,5 +326,114 @@ describe("the moves map", () => {
     const cleared = next.ok ? applySet(next.state, "moves.new", null) : next;
     assert.deepEqual(cleared.ok && cleared.state.moves, {});
     assert.equal(urlMaySet("moves.ws1"), false);
+  });
+});
+
+describe("the move description", () => {
+  const full: SavedMove = {
+    text: 'reply "1b 2a" ⟦x⟧.',
+    epoch: 10,
+    session: "s1",
+    decisions: 2,
+    leans: "1b 2a",
+    idle: true,
+  };
+
+  it("round-trips a move, line first", () => {
+    const d = moveDescription(full);
+    assert.ok(d.startsWith(full.text + " "));
+    assert.deepEqual(moveOfDescription(d), full);
+    assert.deepEqual(moveOfDescription(moveDescription({ text: "go", epoch: 5 })), { text: "go", epoch: 5 });
+    assert.ok(isMoveDescription(d));
+  });
+
+  it("reads nothing from Jon's own words or a broken tail", () => {
+    for (const d of [undefined, "", "my notes", "go ⟦move {bad}⟧", 'go ⟦move {"epoch":"x"}⟧', 'go ⟦move {"epoch":1}'])
+      assert.equal(moveOfDescription(d), null, String(d));
+    assert.equal(isMoveDescription("my notes"), false);
+    assert.equal(isMoveDescription(undefined), false);
+  });
+});
+
+describe("deliver", () => {
+  const move: SavedMove = { text: "go", epoch: 10, session: "s1" };
+  // A fake cmux holding one workspace's description; `alter` stands in for
+  // a cmux that cuts what it is given, and `refuse` for one that says no.
+  const fake = (start: string | null, opts: { refuse?: boolean; alter?: boolean; saved?: boolean } = {}) => {
+    const calls: string[] = [];
+    let held = start;
+    const d: Delivery = {
+      read: () => held,
+      write: (_ws, desc) => {
+        calls.push(desc === null ? "clear" : "set");
+        if (opts.refuse) return false;
+        held = desc === null ? "" : opts.alter ? desc.slice(0, 20) : desc;
+        return true;
+      },
+      hasSaved: () => opts.saved ?? false,
+      save: (ws, m) => {
+        calls.push(`save ${ws} ${m ? m.text : "null"}`);
+        return { ok: true, changed: true };
+      },
+      build: () => {
+        calls.push("build");
+      },
+    };
+    return { d, calls, held: () => held };
+  };
+
+  it("sets an empty description and saves nothing, so nothing rebuilds", () => {
+    const f = fake("");
+    assert.equal(deliver("ws1", move, f.d), null);
+    assert.deepEqual(f.calls, ["set"]);
+    assert.equal(f.held(), moveDescription(move));
+  });
+
+  it("replaces an older move's description", () => {
+    const f = fake(moveDescription({ text: "old", epoch: 1 }));
+    deliver("ws1", move, f.d);
+    assert.deepEqual(f.calls, ["set"]);
+  });
+
+  it("never overwrites Jon's own description: the move is saved instead", () => {
+    const f = fake("Ship checklist");
+    deliver("ws1", move, f.d);
+    assert.deepEqual(f.calls, ["save ws1 go", "build"]);
+    assert.equal(f.held(), "Ship checklist");
+  });
+
+  it("falls back to the saved map when cmux refuses, or cannot say what is there", () => {
+    const refused = fake("", { refuse: true });
+    deliver("ws1", move, refused.d);
+    assert.deepEqual(refused.calls, ["set", "save ws1 go", "build"]);
+    const unknown = fake(null);
+    deliver("ws1", move, unknown.d);
+    assert.deepEqual(unknown.calls, ["save ws1 go", "build"]);
+  });
+
+  it("clears a description cmux cut, then saves the move", () => {
+    const f = fake("", { alter: true });
+    deliver("ws1", move, f.d);
+    assert.deepEqual(f.calls, ["set", "clear", "save ws1 go", "build"]);
+    assert.equal(f.held(), "");
+  });
+
+  it("on a turn with no move clears a move's description, never Jon's, and drops a saved move", () => {
+    const ours = fake(moveDescription(move));
+    deliver("ws1", null, ours.d);
+    assert.deepEqual(ours.calls, ["clear"]);
+    const his = fake("Ship checklist");
+    deliver("ws1", null, his.d);
+    assert.deepEqual(his.calls, []);
+    const saved = fake("", { saved: true });
+    deliver("ws1", null, saved.d);
+    assert.deepEqual(saved.calls, ["save ws1 null", "build"]);
+  });
+
+  it("passes a failed save on as a note and builds nothing", () => {
+    const f = fake("Ship checklist");
+    f.d.save = () => ({ ok: false, error: "locked" });
+    assert.equal(deliver("ws1", move, f.d), "locked");
+    assert.ok(!f.calls.includes("build"));
   });
 });

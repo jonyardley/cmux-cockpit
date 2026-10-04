@@ -1,17 +1,36 @@
 // What a chat wants from Jon when its turn ends: the "Your move" line that
 // scripts/hooks/report-move.ts saves, and how big a job answering it is.
 // cmux keeps only the start of a message, so the line reaches the sidebar
-// through the saved state, never through the message itself.
+// through the workspace's description, which cmux sends live, and through
+// the saved state when setting the description failed.
 
-import type { SavedMove } from "../../scripts/state-config.ts";
+import { moveOfDescription, type SavedMove } from "../../scripts/state-config.ts";
 import { SAVED_STATE } from "./persist.ts";
 import { savedFor } from "./saved.ts";
 
-// wsId -> the move its chat last ended a turn on, fixed at build. A test can
-// seed __STATE__ from before this map existed, so it may be missing at runtime.
-function savedMoveFor(wsId: string): SavedMove | undefined {
+// The move a description carries, parsed once per distinct description:
+// moveOf runs several times per card on every tick.
+const parsed = new Map<string, SavedMove | undefined>();
+function liveMove(d: string | undefined): SavedMove | undefined {
+  if (d === undefined) return undefined;
+  if (parsed.has(d)) return parsed.get(d);
+  if (parsed.size >= 64) parsed.clear();
+  const m = moveOfDescription(d) ?? undefined;
+  parsed.set(d, m);
+  return m;
+}
+
+// The move `w`'s chat last ended a turn on: the description's or the saved
+// one, whichever is newer, since a failed description write falls back to
+// the saved map and leaves an older description behind. The saved map is
+// fixed at build, and a test can seed __STATE__ from before it existed, so
+// it may be missing at runtime.
+function savedMoveFor(w: Workspace): SavedMove | undefined {
   const map: Record<string, SavedMove> | undefined = SAVED_STATE.moves;
-  return map && Object.hasOwn(map, wsId) ? map[wsId] : undefined;
+  const saved = map && Object.hasOwn(map, w.id) ? map[w.id] : undefined;
+  const live = liveMove(w.description);
+  if (!live || !saved) return live ?? saved;
+  return saved.epoch > live.epoch ? saved : live;
 }
 
 // A turn end: Claude's Stop sets the agent idle, and the idle_prompt nudge
@@ -41,7 +60,7 @@ export function waitingMove(a: Agent | null | undefined, w: Workspace | undefine
   if (!a || !w || asking || !atTurnEnd(a)) return null;
   const promptAt = w.latestAt ?? 0;
   if (promptAt <= 0) return null;
-  return savedFor(savedMoveFor(w.id), a, w, promptAt, ownsMove);
+  return savedFor(savedMoveFor(w), a, w, promptAt, ownsMove);
 }
 
 // Nothing to answer, so no size. "Nothing follows" is different: it ends in /clear.

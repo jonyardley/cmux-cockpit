@@ -33,7 +33,7 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { scheduleBuild } from "../hook-build.ts";
+import { scheduleLateBuild } from "../hook-build.ts";
 import { labelFrom, type SavedSubagent, type State, validateState } from "../state-config.ts";
 import { writeSubagents } from "../state-url.ts";
 import { prune } from "../subagent-runs.ts";
@@ -213,7 +213,7 @@ async function main(): Promise<void> {
     return;
   }
   if (!result.ok) return console.error(`report-subagent: ${result.error}`);
-  if (changed) scheduleBuild("report-subagent", "slow");
+  if (changed) scheduleLateBuild("report-subagent");
 }
 
 if (import.meta.main) await main();

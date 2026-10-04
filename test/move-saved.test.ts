@@ -39,6 +39,7 @@ const move = await import("../src/shared/move.ts");
 const needs = await import("../src/shared/needs.ts");
 const status = await import("../src/cockpit/status.ts");
 const cockpit = { ...(await import("../src/cockpit/strip.ts")), ...(await import("../src/cockpit/card-chips.ts")) };
+const { moveDescription } = await import("../scripts/state-config.ts");
 
 // The Claude session that saved workspace `id`'s move, as cmux reports it once hooked.
 const own = (id: string): Partial<Agent> => ({ id: "s-" + id, kind: "claude" });
@@ -264,5 +265,35 @@ describe("a turn that ended on Nothing for you", () => {
   it("leaves another session's agent alone", () => {
     const other = agent("needs_input", { id: "s-other", kind: "claude", sinceEpoch: 1060, lastActivityAt: 1060 });
     assert.equal(status.agentOf(at("quiet", [other]))?.status, "needs_input");
+  });
+});
+
+describe("a move in the workspace description", () => {
+  const described = (
+    id: string,
+    m: { text: string; epoch: number; decisions?: number },
+    extra: Partial<Workspace> = {},
+  ) => at(id, [stopped(id, m.epoch)], { description: moveDescription({ ...m, session: "s-" + id }), ...extra });
+
+  it("shows with no saved move and no rebuild, decisions and all", () => {
+    const w = described("live", { text: 'reply "1a".', epoch: 1000, decisions: 1 });
+    assert.equal(status.moveOf(w)?.text, 'reply "1a".');
+    assert.equal(status.moveOf(w)?.decisions, 1);
+    assert.equal(status.cardDetail(w), 'reply "1a".');
+  });
+
+  it("loses to a newer saved move, and wins over an older one", () => {
+    assert.equal(
+      status.moveOf(described("quick", { text: "older", epoch: 990 }))?.text,
+      "the work is finished. Run /clear now.",
+    );
+    assert.equal(status.moveOf(described("quick", { text: "newer", epoch: 1010 }))?.text, "newer");
+  });
+
+  it("never shows its raw form once a prompt has retired it", () => {
+    const w = described("live", { text: "say go", epoch: 1000 }, { latestAt: 1100, latestMessage: "" });
+    assert.equal(status.moveOf(w), null);
+    assert.equal(status.cardDetail(w), "");
+    assert.equal(status.cardDetail(ws("own", { description: "Jon's own words" })), "Jon's own words");
   });
 });
