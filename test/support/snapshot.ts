@@ -159,7 +159,7 @@ function render(root: ViewNode, tables: Record<string, string>[]): string {
 // The lines that differ, saved ("-") then now ("+"), between the common
 // head and tail, with the first one's line number. assert's own diff
 // clips long lines, and a snapshot line is often long.
-function lineDiff(saved: string, now: string): string {
+export function lineDiff(saved: string, now: string): string {
   const a = saved.split("\n");
   const b = now.split("\n");
   let head = 0;
@@ -193,7 +193,7 @@ function matchSnapshot(scene: string, text: string): void {
     assert.fail(`${scene} changed on screen; if that is meant, run npm run snapshots\n${lineDiff(saved, text)}`);
 }
 
-interface Seed {
+export interface Seed {
   state?: Partial<State>;
   /** The project table (__PROJECTS__); the example table when left out. */
   projects?: unknown[];

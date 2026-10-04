@@ -1,0 +1,158 @@
+{
+  "data": {
+    "epoch": 1000000,
+    "groups": [
+      { "anchorId": "anchor-main", "id": "g-main", "name": "Main activity" },
+      { "anchorId": "anchor-review", "id": "g-review", "name": "For review" },
+      { "anchorId": "anchor-bg", "id": "g-bg", "name": "Background" },
+      { "anchorId": "anchor-parked", "id": "g-parked", "name": "Parked" }
+    ],
+    "selectedId": "selected",
+    "workspaces": [
+      { "group": "g-main", "id": "anchor-main", "title": "Main activity" },
+      {
+        "agents": [{ "id": "a1", "lastActivityAt": 999700, "sinceEpoch": 999700, "status": "needs_input" }],
+        "group": "g-main",
+        "id": "needs",
+        "latestMessage": "Which green should the ready chip use?",
+        "title": "Chip colours"
+      },
+      {
+        "agents": [{ "id": "a2", "lastActivityAt": 999880, "sinceEpoch": 999880, "status": "needs_input" }],
+        "group": "g-main",
+        "id": "asking",
+        "title": "Release notes"
+      },
+      {
+        "agents": [
+          {
+            "children": [{ "id": "run1", "label": "Explore views", "running": true, "startedEpoch": 999940 }],
+            "id": "a3",
+            "lastActivityAt": 999970,
+            "sinceEpoch": 999160,
+            "status": "working"
+          }
+        ],
+        "branch": "snapshot-tests",
+        "dirty": true,
+        "group": "g-main",
+        "id": "working",
+        "latestMessage": "Recording the view tree as text.",
+        "pr": {
+          "additions": 342,
+          "deletions": 17,
+          "draft": true,
+          "number": 130,
+          "status": "open",
+          "url": "https://github.com/o/r/pull/130"
+        },
+        "progress": { "label": "Tests", "value": 0.4 },
+        "title": "Snapshot tests"
+      },
+      {
+        "agents": [{ "id": "a4", "lastActivityAt": 998980, "sinceEpoch": 997600, "status": "working" }],
+        "group": "g-main",
+        "id": "quiet",
+        "title": "Long build"
+      },
+      {
+        "agents": [{ "id": "a5", "lastActivityAt": 999640, "sinceEpoch": 999640, "status": "idle" }],
+        "group": "g-main",
+        "id": "ready",
+        "latestMessage": "Done: the strip now groups by repo.",
+        "title": "Tidy strip",
+        "unread": 2
+      },
+      {
+        "agents": [{ "id": "a6", "lastActivityAt": 999100, "sinceEpoch": 999100, "status": "idle" }],
+        "branch": "card-layout-fit",
+        "group": "g-main",
+        "id": "merged",
+        "pr": { "number": 176, "status": "merged", "url": "https://github.com/o/r/pull/176" },
+        "title": "Card layout fit"
+      },
+      {
+        "agents": [{ "id": "a7", "status": "idle" }],
+        "group": "g-main",
+        "id": "untimed",
+        "latestAt": 999700,
+        "pinned": true,
+        "title": "Untimed card"
+      },
+      {
+        "agents": [{ "id": "a8", "lastActivityAt": 999990, "sinceEpoch": 999940, "status": "working" }],
+        "group": "g-main",
+        "id": "selected",
+        "selected": true,
+        "title": "Selected card"
+      },
+      { "group": "g-review", "id": "anchor-review", "title": "For review" },
+      {
+        "agents": [{ "id": "a9", "lastActivityAt": 999100, "sinceEpoch": 999100, "status": "ended" }],
+        "group": "g-review",
+        "id": "ended",
+        "pinned": true,
+        "title": "Ended agent"
+      },
+      {
+        "agents": [{ "id": "a10", "sinceEpoch": 995000, "status": "idle" }],
+        "group": "g-review",
+        "id": "idle",
+        "latestPrompt": "Look at the merge verdicts next",
+        "title": "Left off",
+        "unread": 1
+      },
+      { "group": "g-bg", "id": "anchor-bg", "title": "Background" },
+      { "branch": "main", "group": "g-bg", "id": "none", "title": "No agent" },
+      {
+        "agents": [{ "id": "shell-chat", "lastActivityAt": 999760, "sinceEpoch": 999760, "status": "idle" }],
+        "group": "g-bg",
+        "id": "waiting",
+        "latestMessage": "The batch resumes by itself once load drops.",
+        "latestPrompt": "hi",
+        "title": "Iteration timings"
+      },
+      { "group": "g-parked", "id": "anchor-parked", "title": "Parked" },
+      {
+        "agents": [{ "id": "a12", "lastActivityAt": 999995, "sinceEpoch": 999700, "status": "working" }],
+        "group": "g-parked",
+        "id": "parked",
+        "title": "Parked card"
+      },
+      {
+        "branch": "tidy-strip",
+        "id": "loose-merged",
+        "pr": { "number": 171, "status": "merged", "url": "https://github.com/o/r/pull/171" },
+        "title": "Merged elsewhere"
+      },
+      {
+        "agents": [{ "id": "a13", "lastActivityAt": 999980, "sinceEpoch": 999800, "status": "working" }],
+        "directory": "/Users/coder/dev/app-one",
+        "id": "loose",
+        "pinned": true,
+        "title": "Loose workspace"
+      }
+    ]
+  },
+  "projects": [
+    { "color": "#D97757", "icon": "star.fill", "match": "/dev/app-one", "name": "App One", "root": "~/dev/app-one" },
+    { "color": "#6A9BCC", "icon": "cube.fill", "match": ["/dev/app-two", "/.config/app-two"], "name": "App Two" },
+    { "color": "#788C5D", "icon": "leaf.fill", "match": "/dev/app-three", "name": "App Three" }
+  ],
+  "state": {
+    "asking": { "asking": { "epoch": 999880, "reason": "allow git push?" } },
+    "dismissed": {},
+    "mergeKept": {},
+    "moves": {},
+    "names": {},
+    "ownPrs": {},
+    "prOrigins": {},
+    "projectOverride": {},
+    "projects": {},
+    "prs": {},
+    "published": {},
+    "shells": { "waiting": [{ "id": "b1", "session": "shell-chat", "startedEpoch": 999700 }] },
+    "subagents": {},
+    "ui": {}
+  }
+}

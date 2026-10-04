@@ -1,0 +1,151 @@
+{
+  "laneEntries": [
+    { "anchorId": null, "id": "h:main", "kind": "header", "lane": "main" },
+    { "id": "w:waiting", "kind": "ws", "lane": "main", "wsId": "waiting" },
+    { "anchorId": null, "id": "h:review", "kind": "header", "lane": "review" },
+    { "id": "w:ready", "kind": "ws", "lane": "review", "wsId": "ready" },
+    { "id": "w:draft", "kind": "ws", "lane": "review", "wsId": "draft" },
+    { "id": "w:failing", "kind": "ws", "lane": "review", "wsId": "failing" },
+    { "id": "w:running", "kind": "ws", "lane": "review", "wsId": "running" },
+    { "id": "w:conflicts", "kind": "ws", "lane": "review", "wsId": "conflicts" },
+    { "id": "w:blocked", "kind": "ws", "lane": "review", "wsId": "blocked" },
+    { "id": "w:merged", "kind": "ws", "lane": "review", "wsId": "merged" },
+    { "id": "w:closed", "kind": "ws", "lane": "review", "wsId": "closed" },
+    { "id": "z:bg", "kind": "zone", "lane": "bg" },
+    { "id": "z:parked", "kind": "zone", "lane": "parked" },
+    { "id": "z:unsorted", "kind": "zone", "lane": "unsorted" }
+  ],
+  "laneHeaders": {
+    "bg": { "collapsed": false, "mergeReady": "", "workspaces": [] },
+    "main": { "collapsed": false, "mergeReady": "1 ready to merge", "workspaces": ["waiting"] },
+    "parked": { "collapsed": false, "mergeReady": "", "workspaces": [] },
+    "review": {
+      "collapsed": false,
+      "mergeReady": "1 ready to merge",
+      "workspaces": ["ready", "draft", "failing", "running", "conflicts", "blocked", "merged", "closed"]
+    },
+    "unsorted": { "collapsed": false, "mergeReady": "", "workspaces": [] }
+  },
+  "mode": "all",
+  "needs": { "inStrip": [], "late": false, "list": [], "more": 0, "shown": [], "waitText": "" },
+  "next": { "queue": [], "step": null },
+  "placement": {
+    "anchor-main": {
+      "actualLane": "main",
+      "card": false,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "stateRank": 3,
+      "status": "none"
+    },
+    "anchor-review": {
+      "actualLane": "review",
+      "card": false,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "stateRank": 3,
+      "status": "none"
+    },
+    "blocked": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "stateRank": 3,
+      "status": "none"
+    },
+    "closed": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "stateRank": 3,
+      "status": "none"
+    },
+    "conflicts": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "stateRank": 3,
+      "status": "none"
+    },
+    "draft": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "stateRank": 3,
+      "status": "none"
+    },
+    "failing": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "stateRank": 3,
+      "status": "none"
+    },
+    "merged": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "stateRank": 3,
+      "status": "none"
+    },
+    "ready": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "stateRank": 3,
+      "status": "none"
+    },
+    "running": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "stateRank": 3,
+      "status": "none"
+    },
+    "waiting": {
+      "actualLane": "main",
+      "card": true,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "stateRank": 3,
+      "status": "none"
+    }
+  },
+  "projectEntries": [
+    { "id": "p:other", "kind": "header", "project": "other" },
+    { "id": "waiting@p", "kind": "ws", "wsId": "waiting" },
+    { "id": "ready@p", "kind": "ws", "wsId": "ready" },
+    { "id": "draft@p", "kind": "ws", "wsId": "draft" },
+    { "id": "failing@p", "kind": "ws", "wsId": "failing" },
+    { "id": "running@p", "kind": "ws", "wsId": "running" },
+    { "id": "conflicts@p", "kind": "ws", "wsId": "conflicts" },
+    { "id": "blocked@p", "kind": "ws", "wsId": "blocked" },
+    { "id": "merged@p", "kind": "ws", "wsId": "merged" },
+    { "id": "closed@p", "kind": "ws", "wsId": "closed" },
+    { "id": "new", "kind": "newRow" },
+    { "id": "quiet", "kind": "quietHeader" },
+    { "id": "q:/dev/app-one", "kind": "quietRow", "project": "/dev/app-one" },
+    { "id": "q:/dev/app-two", "kind": "quietRow", "project": "/dev/app-two" },
+    { "id": "q:/dev/app-three", "kind": "quietRow", "project": "/dev/app-three" }
+  ],
+  "quietProjects": ["/dev/app-one", "/dev/app-two", "/dev/app-three"]
+}

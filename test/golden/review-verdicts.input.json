@@ -1,0 +1,126 @@
+{
+  "data": {
+    "epoch": 1000000,
+    "groups": [
+      { "anchorId": "anchor-main", "id": "g-main", "name": "Main activity" },
+      { "anchorId": "anchor-review", "id": "g-review", "name": "For review" }
+    ],
+    "selectedId": null,
+    "workspaces": [
+      { "group": "g-main", "id": "anchor-main", "title": "Main activity" },
+      { "branch": "feat-9", "group": "g-main", "id": "waiting", "title": "waiting card" },
+      { "group": "g-review", "id": "anchor-review", "title": "For review" },
+      { "branch": "feat-1", "group": "g-review", "id": "ready", "title": "ready card" },
+      { "branch": "feat-2", "group": "g-review", "id": "draft", "title": "draft card" },
+      { "branch": "feat-3", "group": "g-review", "id": "failing", "title": "failing card" },
+      { "branch": "feat-4", "group": "g-review", "id": "running", "title": "running card" },
+      { "branch": "feat-5", "group": "g-review", "id": "conflicts", "title": "conflicts card" },
+      { "branch": "feat-6", "group": "g-review", "id": "blocked", "title": "blocked card" },
+      { "branch": "feat-7", "group": "g-review", "id": "merged", "title": "merged card" },
+      { "branch": "feat-8", "group": "g-review", "id": "closed", "title": "closed card" }
+    ]
+  },
+  "projects": [
+    { "color": "#D97757", "icon": "star.fill", "match": "/dev/app-one", "name": "App One", "root": "~/dev/app-one" },
+    { "color": "#6A9BCC", "icon": "cube.fill", "match": ["/dev/app-two", "/.config/app-two"], "name": "App Two" },
+    { "color": "#788C5D", "icon": "leaf.fill", "match": "/dev/app-three", "name": "App Three" }
+  ],
+  "state": {
+    "asking": {},
+    "dismissed": {},
+    "mergeKept": {},
+    "moves": {},
+    "names": {},
+    "ownPrs": {},
+    "prOrigins": {},
+    "projectOverride": {},
+    "projects": {},
+    "prs": {
+      "blocked": {
+        "branch": "feat-6",
+        "checks": [{ "name": "build", "state": "pass" }],
+        "number": 6,
+        "status": "open",
+        "title": "Feature 6",
+        "url": "https://github.com/o/r/pull/6"
+      },
+      "closed": {
+        "branch": "feat-8",
+        "checks": [{ "name": "build", "state": "pass" }],
+        "number": 8,
+        "status": "closed",
+        "title": "Feature 8",
+        "url": "https://github.com/o/r/pull/8"
+      },
+      "conflicts": {
+        "branch": "feat-5",
+        "checks": [{ "name": "build", "state": "pass" }],
+        "conflicts": true,
+        "number": 5,
+        "status": "open",
+        "title": "Feature 5",
+        "url": "https://github.com/o/r/pull/5"
+      },
+      "draft": {
+        "additions": 1234,
+        "branch": "feat-2",
+        "checks": [{ "name": "build", "state": "pass" }],
+        "deletions": 56,
+        "draft": true,
+        "mergeable": true,
+        "number": 2,
+        "status": "open",
+        "title": "Feature 2",
+        "url": "https://github.com/o/r/pull/2"
+      },
+      "failing": {
+        "branch": "feat-3",
+        "checks": [{ "name": "build", "state": "fail" }],
+        "mergeable": true,
+        "number": 3,
+        "status": "open",
+        "title": "Feature 3",
+        "url": "https://github.com/o/r/pull/3"
+      },
+      "merged": {
+        "branch": "feat-7",
+        "checks": [{ "name": "build", "state": "pass" }],
+        "number": 7,
+        "status": "merged",
+        "title": "Feature 7",
+        "url": "https://github.com/o/r/pull/7"
+      },
+      "ready": {
+        "additions": 120,
+        "branch": "feat-1",
+        "checks": [{ "name": "build", "state": "pass" }],
+        "deletions": 8,
+        "mergeable": true,
+        "number": 1,
+        "status": "open",
+        "title": "Feature 1",
+        "url": "https://github.com/o/r/pull/1"
+      },
+      "running": {
+        "branch": "feat-4",
+        "checks": [{ "name": "build", "state": "pending" }],
+        "number": 4,
+        "status": "open",
+        "title": "Feature 4",
+        "url": "https://github.com/o/r/pull/4"
+      },
+      "waiting": {
+        "branch": "feat-9",
+        "checks": [{ "name": "build", "state": "pass" }],
+        "mergeable": true,
+        "number": 9,
+        "status": "open",
+        "title": "Feature 9",
+        "url": "https://github.com/o/r/pull/9"
+      }
+    },
+    "published": {},
+    "subagents": {},
+    "ui": {}
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "data": {
+    "epoch": 1000000,
+    "groups": [],
+    "selectedId": null,
+    "workspaces": [
+      {
+        "agents": [{ "id": "a1", "lastActivityAt": 999985, "sinceEpoch": 999580, "status": "working" }],
+        "branch": "parser-streaming-tokeniser",
+        "directory": "/Users/jon/dev/app-one",
+        "id": "one-a",
+        "pr": {
+          "additions": 342,
+          "deletions": 17,
+          "draft": true,
+          "number": 148,
+          "status": "open",
+          "url": "https://github.com/o/r/pull/148"
+        },
+        "title": "One: parser rewrite for the streaming tokeniser"
+      },
+      {
+        "agents": [
+          { "id": "s-one-b", "kind": "claude", "lastActivityAt": 999910, "sinceEpoch": 999910, "status": "needs_input" }
+        ],
+        "directory": "/Users/jon/dev/app-one/docs",
+        "id": "one-b",
+        "latestAt": 999850,
+        "title": "One: docs"
+      },
+      {
+        "agents": [{ "id": "a3", "lastActivityAt": 999400, "sinceEpoch": 999400, "status": "idle" }],
+        "branch": "main",
+        "directory": "/Users/jon/.config/app-two",
+        "id": "two",
+        "pinned": true,
+        "pr": { "number": 12, "status": "open", "url": "https://github.com/o/r/pull/12" },
+        "title": "Two: release",
+        "unread": 1
+      },
+      {
+        "agents": [{ "id": "a4", "lastActivityAt": 999100, "sinceEpoch": 999100, "status": "idle" }],
+        "branch": "changelog-for-release",
+        "directory": "/Users/jon/.config/app-two",
+        "id": "two-merged",
+        "pr": { "number": 14, "status": "merged", "url": "https://github.com/o/r/pull/14" },
+        "title": "Two: changelog"
+      },
+      { "directory": "/tmp/scratch", "id": "elsewhere", "title": "Scratch" }
+    ]
+  },
+  "projects": [
+    { "color": "#D97757", "icon": "star.fill", "match": "/dev/app-one", "name": "App One", "root": "~/dev/app-one" },
+    { "color": "#6A9BCC", "icon": "cube.fill", "match": ["/dev/app-two", "/.config/app-two"], "name": "App Two" },
+    { "color": "#788C5D", "icon": "leaf.fill", "match": "/dev/app-three", "name": "App Three" }
+  ],
+  "state": {
+    "asking": {},
+    "dismissed": {},
+    "mergeKept": {},
+    "moves": { "one-b": { "epoch": 999910, "session": "s-one-b", "text": "Read the draft in #142 and say go." } },
+    "names": {},
+    "ownPrs": {},
+    "prOrigins": {},
+    "projectOverride": {},
+    "projects": {},
+    "prs": {},
+    "published": {},
+    "subagents": {},
+    "ui": { "mode": "projects" }
+  }
+}
