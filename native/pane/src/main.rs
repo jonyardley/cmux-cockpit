@@ -122,13 +122,27 @@ fn print_once(opts: &Options) {
             let note = if ready {
                 format!("replayed in {:.1}s", started.elapsed().as_secs_f32())
             } else {
-                format!("NOT fully replayed after {}s", ONCE_LIMIT.as_secs())
+                not_ready(feed)
             };
             println!("{}{note}", text::render(feed));
             ControlFlow::Break(())
         },
         |line| eprintln!("cockpit-pane: {line}"),
     );
+}
+
+/// Why `--print --once` printed before it was ready: whichever of the
+/// replay and the polls had not answered within `ONCE_LIMIT`.
+fn not_ready(feed: &runner::Feed) -> String {
+    let mut waiting = feed.join.missing();
+    if !feed.join.health.caught_up() {
+        waiting.insert(0, "replay");
+    }
+    format!(
+        "NOT ready after {}s, no answer from: {}",
+        ONCE_LIMIT.as_secs(),
+        waiting.join(", ")
+    )
 }
 
 /// `--print`: reprints the text on every change, with timings on stderr.

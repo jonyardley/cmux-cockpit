@@ -3,11 +3,12 @@
 //!
 //! - `cmux events`: replay, then live, reconnecting itself (stream.rs).
 //! - `claude agents --json` every 2 seconds.
-//! - `cmux --json workspace list` and `cmux rpc workspace.group.list`
-//!   (read only) on start, every 30 seconds, and when a workspace event
-//!   says either may have changed. Any `workspace.` event but a selection
-//!   counts, which takes in `workspace.reordered`, sent when a card is
-//!   dragged between lanes, and any `workspace.group.` name.
+//! - `cmux --json workspace list`, then `cmux rpc workspace.group.list`
+//!   (read only) for the list's window, on start, every 30 seconds, and
+//!   when an event says either may have changed: any `workspace.` event
+//!   but a selection, which takes in `workspace.reordered` (sent when a
+//!   card is dragged between lanes) and `workspace.group.` names, and any
+//!   `workspace_group.` one.
 //! - config/state.json and config/projects.json, checked every 2 seconds.
 //!
 //! The join (join.rs) turns the first four into one frame of the core's
@@ -207,37 +208,51 @@ fn poll_agents(tx: &Sender<Input>, stop: &AtomicBool) {
     }
 }
 
-/// One read of cmux's layout: the workspace list and the groups, each
-/// None when its command failed or printed something else.
-type Layout = (Option<Vec<Workspace>>, Option<Groups>);
+/// The workspace list and the window it answers for.
+type List = (Vec<Workspace>, Option<String>);
 
-fn read_layout() -> Layout {
-    let list = output("cmux", &["--json", "workspace", "list"]).and_then(|o| parse::workspaces(&o));
-    let groups = output("cmux", &["rpc", "workspace.group.list"]).and_then(|o| parse::groups(&o));
-    (list, groups)
+fn read_list() -> Option<List> {
+    let out = output("cmux", &["--json", "workspace", "list"])?;
+    Some((parse::workspaces(&out)?, parse::window_ref(&out)))
 }
 
-/// Reads the layout on start, every `every`, and on each nudge. The
-/// groups go first, so the workspace list that makes the join loaded
-/// never lands without them; a read that failed keeps the last good one.
+/// The groups of `window`, the workspace list's own, so the two never
+/// answer for different windows; cmux's default window when unknown.
+fn read_groups(window: Option<&str>) -> Option<Groups> {
+    let params = window.map(|w| serde_json::json!({ "window_id": w }).to_string());
+    let mut args = vec!["rpc", "workspace.group.list"];
+    args.extend(params.as_deref());
+    output("cmux", &args).and_then(|o| parse::groups(&o, window))
+}
+
+/// Reads the workspace list, then its window's groups, on start, every
+/// `every`, and on each nudge. The list goes out as soon as it is read,
+/// so a slow group read never holds it up; until the groups first answer
+/// the join is not loaded. A read that fails keeps the last good one.
 fn poll_layout(
     tx: &Sender<Input>,
     nudge: &Receiver<()>,
     every: Duration,
-    read: impl Fn() -> Layout,
+    read_list: impl Fn() -> Option<List>,
+    read_groups: impl Fn(Option<&str>) -> Option<Groups>,
 ) {
+    let mut window: Option<String> = None;
     loop {
-        let (list, groups) = read();
-        let inputs = [groups.map(Input::Groups), list.map(Input::Workspaces)];
-        for input in inputs.into_iter().flatten() {
-            if tx.send(input).is_err() {
+        if let Some((list, win)) = read_list() {
+            window = win.or(window);
+            if tx.send(Input::Workspaces(list)).is_err() {
                 return;
             }
+        }
+        if let Some(groups) = read_groups(window.as_deref())
+            && tx.send(Input::Groups(groups)).is_err()
+        {
+            return;
         }
         if let Err(RecvTimeoutError::Disconnected) = nudge.recv_timeout(every) {
             return;
         }
-        // A burst of workspace events reads the list once.
+        // A burst of workspace events reads the layout once.
         while nudge.try_recv().is_ok() {}
     }
 }
@@ -307,7 +322,9 @@ pub fn run(
         let stop = Arc::clone(&stop);
         thread::spawn(move || poll_agents(&tx, &stop));
     }
-    thread::spawn(move || poll_layout(&tx, &nudge_rx, WORKSPACES_EVERY, read_layout));
+    thread::spawn(move || {
+        poll_layout(&tx, &nudge_rx, WORKSPACES_EVERY, read_list, read_groups);
+    });
 
     let mut feed = Feed::default();
     let mut files = Files {
@@ -602,30 +619,36 @@ mod tests {
         let (nudge_tx, nudge_rx) = mpsc::channel();
         let reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let counter = Arc::clone(&reads);
-        let read = move || {
+        let asked = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let windows = Arc::clone(&asked);
+        let list = || Some((vec![ws("P")], Some("window:1".to_string())));
+        let read_groups = move |window: Option<&str>| {
+            if let Ok(mut w) = windows.lock() {
+                w.push(window.map(str::to_string));
+            }
             let n = counter.fetch_add(1, Ordering::SeqCst);
-            let g = groups(&[group("g", "Parked", "P", &["P"])][..n.min(1)]);
-            (Some(vec![ws("P")]), Some(g))
+            Some(groups(&[group("g", "Parked", "P", &["P"])][..n.min(1)]))
         };
         // A long period, so only the nudge can explain a second read.
-        let poll =
-            thread::spawn(move || poll_layout(&tx, &nudge_rx, Duration::from_secs(600), read));
+        let poll = thread::spawn(move || {
+            poll_layout(&tx, &nudge_rx, Duration::from_secs(600), list, read_groups);
+        });
         let next = || rx.recv_timeout(Duration::from_secs(1));
-        assert!(
-            matches!(next(), Ok(Input::Groups(g)) if g.list.is_empty()),
-            "groups first"
-        );
         assert!(matches!(next(), Ok(Input::Workspaces(_))));
+        assert!(matches!(next(), Ok(Input::Groups(g)) if g.list.is_empty()));
 
         let nudged = Instant::now();
         let _ = nudge_tx.send(());
-        assert!(matches!(next(), Ok(Input::Groups(g)) if g.list.len() == 1));
         assert!(matches!(next(), Ok(Input::Workspaces(_))));
+        assert!(matches!(next(), Ok(Input::Groups(g)) if g.list.len() == 1));
         assert!(nudged.elapsed() < Duration::from_secs(1));
         assert_eq!(reads.load(Ordering::SeqCst), 2);
 
         drop(nudge_tx);
         assert!(poll.join().is_ok(), "a closed nudge ends the poll");
+        let asked = asked.lock().map(|a| a.clone()).unwrap_or_default();
+        let one = Some("window:1".to_string());
+        assert_eq!(asked, vec![one.clone(), one], "the list's own window");
     }
 
     #[test]
@@ -633,14 +656,30 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         let (nudge_tx, nudge_rx) = mpsc::channel::<()>();
         drop(nudge_tx);
-        poll_layout(&tx, &nudge_rx, Duration::from_secs(600), || {
-            (Some(vec![ws("A")]), None)
-        });
+        let list = || Some((vec![ws("A"), ws("B")], None));
+        poll_layout(&tx, &nudge_rx, Duration::from_secs(600), list, |_| None);
         let sent: Vec<Input> = rx.try_iter().collect();
         assert!(
             matches!(sent.as_slice(), [Input::Workspaces(_)]),
             "{sent:?}"
         );
+
+        // The join keeps the groups it had through a poll that sent none.
+        let mut feed = Feed::default();
+        feed.input(Input::Groups(groups(&[group(
+            "g",
+            "Background",
+            "A",
+            &["A", "B"],
+        )])));
+        for input in sent {
+            feed.input(input);
+        }
+        let d = feed.join.frame(0.0);
+        assert_eq!(d.group_list().len(), 1);
+        assert_eq!(d.ws_by_id("B").and_then(|w| w.group.as_deref()), Some("g"));
+        assert!(feed.join.missing().contains(&"Agent View"));
+        assert!(!feed.join.missing().contains(&"group list"));
     }
 
     #[test]

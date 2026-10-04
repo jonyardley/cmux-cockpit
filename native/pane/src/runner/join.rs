@@ -76,9 +76,10 @@ pub struct Join {
 /// selection, which the join applies itself. A prompt counts, since the
 /// list carries the latest prompt and its time.
 pub fn changes_workspaces(e: &Value) -> bool {
-    e["name"]
-        .as_str()
-        .is_some_and(|n| n.starts_with("workspace.") && n != "workspace.selected")
+    e["name"].as_str().is_some_and(|n| {
+        (n.starts_with("workspace.") && n != "workspace.selected")
+            || n.starts_with("workspace_group.")
+    })
 }
 
 impl Join {
@@ -86,7 +87,20 @@ impl Join {
     /// list and the groups, so no frame that counts puts every card in
     /// Unsorted.
     pub fn loaded(&self) -> bool {
-        self.agents.is_some() && self.workspaces.is_some() && self.groups.is_some()
+        self.missing().is_empty()
+    }
+
+    /// The polls that have not answered yet, by name.
+    pub fn missing(&self) -> Vec<&'static str> {
+        let answered = [
+            ("Agent View", self.agents.is_some()),
+            ("workspace list", self.workspaces.is_some()),
+            ("group list", self.groups.is_some()),
+        ];
+        answered
+            .into_iter()
+            .filter_map(|(name, done)| (!done).then_some(name))
+            .collect()
     }
 
     /// The stream's ack: replay runs to `latest_seq`. A connection that
@@ -618,6 +632,7 @@ mod tests {
         assert!(j.workspaces(vec![ws("A")]));
         assert!(!j.workspaces(vec![ws("A")]));
         assert!(!j.loaded(), "no groups yet");
+        assert_eq!(j.missing(), vec!["group list"]);
         assert!(j.groups(Groups::default()));
         assert!(!j.groups(Groups::default()));
         assert!(j.loaded());
@@ -670,6 +685,12 @@ mod tests {
             &json!({"name": "workspace.prompt.submitted"})
         ));
         assert!(!changes_workspaces(&json!({"name": "agent.hook.Stop"})));
+        // cmux refers to groups as `workspace_group:N`, so a group event
+        // may be named either way.
+        assert!(changes_workspaces(&json!({"name": "workspace.group.add"})));
+        assert!(changes_workspaces(
+            &json!({"name": "workspace_group.collapsed"})
+        ));
     }
 
     #[test]

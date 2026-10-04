@@ -34,6 +34,12 @@ pub fn agents(out: &[u8]) -> Option<AgentView> {
     Some(view)
 }
 
+/// The window a reply answers for (`window:1`), from its `window_ref`.
+pub fn window_ref(out: &[u8]) -> Option<String> {
+    let v: Value = serde_json::from_slice(out).ok()?;
+    v["window_ref"].as_str().map(str::to_string)
+}
+
 /// `cmux --json workspace list` as the core's workspaces, in cmux's
 /// order, or None when the output has no list.
 pub fn workspaces(out: &[u8]) -> Option<Vec<Workspace>> {
@@ -77,10 +83,14 @@ pub struct Groups {
 }
 
 /// `cmux rpc workspace.group.list` as the core's groups and each
-/// workspace's group, or None when the reply has no list. A group with no
-/// id is skipped, as are its members.
-pub fn groups(out: &[u8]) -> Option<Groups> {
+/// workspace's group, or None when the reply has no list, or answers for
+/// a window other than `window` (when given). A group with no id is
+/// skipped, as are its members.
+pub fn groups(out: &[u8], window: Option<&str>) -> Option<Groups> {
     let v: Value = serde_json::from_slice(out).ok()?;
+    if window.is_some_and(|w| v["window_ref"].as_str() != Some(w)) {
+        return None;
+    }
     let list = v["groups"].as_array()?;
     let mut groups = Groups::default();
     for g in list {
@@ -200,7 +210,8 @@ mod tests {
 
     #[test]
     fn maps_a_captured_group_list_to_the_sidebars_groups() {
-        let g = groups(GROUP_LIST).unwrap();
+        let g = groups(GROUP_LIST, Some("window:1")).unwrap();
+        assert_eq!(window_ref(GROUP_LIST).as_deref(), Some("window:1"));
         let names: Vec<_> = g.list.iter().filter_map(|g| g.name.as_deref()).collect();
         assert_eq!(
             names,
@@ -239,7 +250,7 @@ mod tests {
             {"id": "g2", "member_workspace_ids": ["A", "B"]},
             {"id": "g3"}
         ]}"#;
-        let g = groups(out).unwrap();
+        let g = groups(out, None).unwrap();
         let ids: Vec<_> = g.list.iter().map(|g| g.id.as_str()).collect();
         assert_eq!(ids, ["g1", "g2", "g3"]);
         assert_eq!(
@@ -249,9 +260,18 @@ mod tests {
         assert_eq!(g.member_of.get("A").map(String::as_str), Some("g1"));
         assert_eq!(g.member_of.get("B").map(String::as_str), Some("g2"));
         assert_eq!(g.member_of.get("X"), None);
-        assert_eq!(groups(br#"{"groups": []}"#), Some(Groups::default()));
-        assert_eq!(groups(b"{}"), None);
-        assert_eq!(groups(b"Error: method not found"), None);
+        assert_eq!(groups(br#"{"groups": []}"#, None), Some(Groups::default()));
+        assert_eq!(groups(b"{}", None), None);
+        assert_eq!(groups(b"Error: method not found", None), None);
+    }
+
+    #[test]
+    fn a_group_list_for_another_window_reads_as_none() {
+        assert_eq!(groups(GROUP_LIST, Some("window:2")), None);
+        let unmarked = br#"{"groups": []}"#;
+        assert_eq!(groups(unmarked, Some("window:1")), None);
+        assert_eq!(groups(unmarked, None), Some(Groups::default()));
+        assert_eq!(window_ref(b"{}"), None);
     }
 
     #[test]
