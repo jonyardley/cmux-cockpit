@@ -10,6 +10,7 @@
 
 pub mod cursor;
 pub mod model;
+pub mod runner;
 pub mod text;
 pub mod theme;
 mod views;

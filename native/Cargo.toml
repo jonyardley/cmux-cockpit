@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["core", "pane", "spike"]
+members = ["core", "pane"]
 
 [workspace.package]
 version = "0.0.0"
