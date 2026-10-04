@@ -273,12 +273,16 @@ pub fn run(
         batch.extend(rx.try_iter());
 
         for input in batch {
+            // A replayed status change is history, not latency.
+            let live = !pane.join.health.replaying();
             let (changed, nudge, latency) = pane.input(input);
             pending |= changed;
             if nudge {
                 let _ = nudge_tx.send(());
             }
-            latest = latency.or(latest);
+            if live {
+                latest = latency.or(latest);
+            }
         }
         let now = Instant::now();
         if now >= files_due {
