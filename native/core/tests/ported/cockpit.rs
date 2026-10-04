@@ -682,6 +682,7 @@ mod needs_you {
             .filter(|id| id.ends_with("@main"))
             .collect();
         assert_eq!(main, ["b@main", "a@main"]);
+        assert!(s.outbox().is_empty(), "nothing to dismiss, nothing saved");
     }
 
     #[test]

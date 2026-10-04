@@ -76,9 +76,18 @@ impl Session {
     /// What the Next button walks through: needs you, then Ready, each
     /// longest waiting first.
     pub fn next_queue<'d>(&mut self, data: &'d Data) -> Vec<&'d Workspace> {
-        let mut queue = self.needs_list(data);
-        queue.extend(self.ready_by_finish(data));
-        queue
+        let needs = self.needs_list(data);
+        self.next_queue_after(data, needs)
+    }
+
+    /// The queue from a Needs you list already built this frame.
+    pub fn next_queue_after<'d>(
+        &mut self,
+        data: &'d Data,
+        mut needs: Vec<&'d Workspace>,
+    ) -> Vec<&'d Workspace> {
+        needs.extend(self.ready_by_finish(data));
+        needs
     }
 
     /// Each press moves on from where Jon is: after the selected workspace
@@ -115,10 +124,19 @@ impl Session {
     /// Ready, or the only one waiting is the one Jon is on.
     pub fn next_step<'d>(&mut self, data: &'d Data) -> Option<NextStep<'d>> {
         let queue = self.next_queue(data);
+        self.next_step_in(data, &queue)
+    }
+
+    /// Where the next press goes in a queue already built this frame.
+    pub fn next_step_in<'d>(
+        &mut self,
+        data: &Data,
+        queue: &[&'d Workspace],
+    ) -> Option<NextStep<'d>> {
         if queue.is_empty() {
             return None;
         }
-        let i = self.next_index(data, &queue);
+        let i = self.next_index(data, queue);
         let target = *queue.get(i)?;
         if self.is_selected(data, Some(target)) {
             return None;
@@ -132,10 +150,10 @@ impl Session {
 
     /// The Next button: selects the next workspace in the queue.
     pub fn jump_next(&mut self, data: &Data) {
-        let Some(step) = self.next_step(data) else {
+        let queue = self.next_queue(data);
+        let Some(step) = self.next_step_in(data, &queue) else {
             return;
         };
-        let queue = self.next_queue(data);
         self.last_jump = Some(LastJump {
             id: step.target.id.clone(),
             index: step.position - 1,

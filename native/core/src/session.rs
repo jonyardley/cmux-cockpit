@@ -160,6 +160,21 @@ impl Session {
         std::mem::take(&mut self.outbox)
     }
 
+    /// Puts requests taken earlier back at the front of the outbox, oldest first.
+    pub fn requeue(&mut self, mut earlier: Vec<Outbound>) {
+        earlier.append(&mut self.outbox);
+        self.outbox = earlier;
+    }
+
+    /// Swaps in a new project table, keeping everything else. A Move to
+    /// project override naming a key the table no longer has is dropped,
+    /// as the seed drops it.
+    pub fn set_projects(&mut self, projects: Vec<Project>) {
+        self.project_override
+            .retain(|_, key| is_project_key(&projects, key));
+        self.projects = projects;
+    }
+
     /// The requests made so far, without taking them.
     pub fn outbox(&self) -> &[Outbound] {
         &self.outbox

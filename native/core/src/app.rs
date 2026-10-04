@@ -14,7 +14,7 @@ use serde::Serialize;
 
 use crate::data::{Data, Workspace};
 use crate::lane_entries::LaneEntry;
-use crate::lanes::{LANES, LaneKey};
+use crate::lanes::LaneKey;
 use crate::persist::SavedState;
 use crate::projects::Project;
 use crate::session::Session;
@@ -25,9 +25,11 @@ pub enum Event {
     /// A new frame of cmux data.
     Data(Data),
     /// A new config/state.json. The session is seeded from it afresh, as
-    /// a reload seeds the sidebar, so local overrides start over.
+    /// a reload seeds the sidebar, so local overrides start over; requests
+    /// not yet taken from the outbox are kept.
     State(Box<SavedState>),
-    /// A new project table, seeded the same way.
+    /// A new project table. Only the table changes: the view, folds,
+    /// dismissals and overrides Jon set since the state file was read stay.
     Projects(Vec<Project>),
     /// Asks the shell to draw the current view again.
     Refresh,
@@ -115,26 +117,30 @@ pub fn build_view(s: &mut Session, data: &Data) -> ViewModel {
         wait_text: strip.wait_text,
         late: strip.late,
     };
-    let queue = ids(&s.next_queue(data));
-    let step = s.next_step(data).map(|st| StepView {
+    let queue = s.next_queue_after(data, strip.list);
+    let step = s.next_step_in(data, &queue).map(|st| StepView {
         target: st.target.id.clone(),
         position: st.position,
         total: st.total,
     });
-    let lane_entries = s.lane_entries(data);
+    let cards = s.lane_cards(data);
+    let lane_entries = s.lane_entries_from(data, &cards, &strip.in_strip);
     let mut lane_headers = BTreeMap::new();
-    for lane in &LANES {
+    for (lane, lane_cards) in &cards {
         let header = LaneHeaderView {
             collapsed: s.is_collapsed(data, lane),
-            workspaces: ids(&s.lane_workspaces(data, lane.key)),
-            merge_ready: s.merge_ready_text(data, lane.key),
+            workspaces: ids(lane_cards),
+            merge_ready: s.merge_ready_of(data, lane.key, lane_cards),
         };
         lane_headers.insert(lane.key, header);
     }
     ViewModel {
         mode: s.mode().as_str().to_string(),
         needs,
-        next: NextView { queue, step },
+        next: NextView {
+            queue: ids(&queue),
+            step,
+        },
         lane_entries,
         lane_headers,
     }
@@ -163,12 +169,11 @@ impl App for Cockpit {
             Event::Data(data) => model.data = Some(data),
             Event::State(saved) => {
                 let projects = std::mem::take(&mut model.session.projects);
+                let outbox = model.session.take_outbox();
                 model.session = Session::new(projects, *saved);
+                model.session.requeue(outbox);
             }
-            Event::Projects(projects) => {
-                let saved = std::mem::take(&mut model.session.saved);
-                model.session = Session::new(projects, saved);
-            }
+            Event::Projects(projects) => model.session.set_projects(projects),
             Event::Refresh => {}
         }
         model.rebuild();
@@ -197,12 +202,31 @@ mod tests {
     }
 
     #[test]
-    fn keeps_the_saved_state_when_the_project_table_changes() {
+    fn keeps_what_jon_set_when_the_project_table_changes() {
         let app = Cockpit;
         let mut model = Model::default();
-        let saved = SavedState::from_json(r#"{"ui": {"mode": "projects"}}"#).unwrap();
-        let _ = app.update(Event::State(Box::new(saved)), &mut model);
+        let _ = app.update(Event::State(Box::default()), &mut model);
+        model.session.choose_mode(ViewMode::Projects);
         let _ = app.update(Event::Projects(Vec::new()), &mut model);
         assert_eq!(app.view(&model).mode, "projects");
+        assert_eq!(
+            model.session.outbox().len(),
+            1,
+            "the mode's save still waits"
+        );
+    }
+
+    #[test]
+    fn keeps_requests_not_yet_sent_when_a_new_state_file_arrives() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        model.session.choose_mode(ViewMode::Projects);
+        let _ = app.update(Event::State(Box::default()), &mut model);
+        assert_eq!(app.view(&model).mode, "all", "reseeded from the file");
+        assert_eq!(
+            model.session.outbox().len(),
+            1,
+            "the mode's save still waits"
+        );
     }
 }

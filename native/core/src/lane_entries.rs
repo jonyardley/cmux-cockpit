@@ -2,6 +2,7 @@
 //! state order, placeholders for the cards the Needs you strip lists, and
 //! what each header counts and says.
 
+use indexmap::IndexSet;
 use serde::Serialize;
 
 use crate::data::{Data, Workspace};
@@ -157,21 +158,18 @@ impl Session {
         ranked.into_iter().map(|(_, w)| w).collect()
     }
 
-    fn lane_sections<'d>(&mut self, data: &'d Data) -> Vec<LaneSection<'d>> {
-        let all = self.card_workspaces(data);
-        let mut out = Vec::new();
-        for lane in LANES {
-            let mut rows = Vec::new();
-            for w in &all {
-                if self.lane_of(data, w) == lane.key {
-                    rows.push(*w);
-                }
+    /// Every lane with the cards it counts, in tab order: one pass over the
+    /// cards for every lane. Ranks kept for workspaces gone from the data
+    /// are dropped here, so the map never outgrows the open workspaces.
+    pub fn lane_cards<'d>(&mut self, data: &'d Data) -> Vec<(Lane, Vec<&'d Workspace>)> {
+        self.held_rank.retain(|id, _| data.ws_by_id(id).is_some());
+        let mut out: Vec<(Lane, Vec<&Workspace>)> =
+            LANES.iter().map(|l| (*l, Vec::new())).collect();
+        for w in self.card_workspaces(data) {
+            let key = self.lane_of(data, w);
+            if let Some((_, cards)) = out.iter_mut().find(|(l, _)| l.key == key) {
+                cards.push(w);
             }
-            out.push(LaneSection {
-                lane,
-                rows: self.by_state(data, rows),
-                anchor_id: header_anchor_id(data, &lane),
-            });
         }
         out
     }
@@ -182,8 +180,25 @@ impl Session {
     /// mounted under Projects.
     pub fn lane_entries(&mut self, data: &Data) -> Vec<LaneEntry> {
         let waiting = self.in_strip(data);
+        let cards = self.lane_cards(data);
+        self.lane_entries_from(data, &cards, &waiting)
+    }
+
+    /// All's rows from the lanes' cards and the strip's placeholders,
+    /// already worked out this frame.
+    pub fn lane_entries_from(
+        &mut self,
+        data: &Data,
+        cards: &[(Lane, Vec<&Workspace>)],
+        waiting: &IndexSet<String>,
+    ) -> Vec<LaneEntry> {
         let mut out = Vec::new();
-        for section in self.lane_sections(data) {
+        for (lane, lane_cards) in cards {
+            let section = LaneSection {
+                lane: *lane,
+                rows: self.by_state(data, lane_cards.clone()),
+                anchor_id: header_anchor_id(data, lane),
+            };
             let key = section.lane.key;
             if section.is_empty() {
                 out.push(LaneEntry::Zone {
@@ -241,12 +256,18 @@ impl Session {
     /// lane counts, placeholders too, and its generated anchor, which has
     /// no card of its own.
     pub fn merge_ready_text(&mut self, data: &Data, key: LaneKey) -> String {
-        let mut ws = self.lane_workspaces(data, key);
-        if let Some(anchor) = generated_anchor_id(data, &lane_by_key(key)) {
-            ws.extend(data.ws_by_id(&anchor));
-        }
-        let n = ws
+        let cards = self.lane_workspaces(data, key);
+        self.merge_ready_of(data, key, &cards)
+    }
+
+    /// The merge line from the lane's cards, already worked out this frame.
+    pub fn merge_ready_of(&self, data: &Data, key: LaneKey, cards: &[&Workspace]) -> String {
+        let anchor = generated_anchor_id(data, &lane_by_key(key));
+        let anchor = anchor.as_deref().and_then(|id| data.ws_by_id(id));
+        let n = cards
             .iter()
+            .copied()
+            .chain(anchor)
             .filter(|w| pr_health(&self.saved, Some(w)) == PrHealth::Ready)
             .count();
         if n == 0 {
@@ -273,5 +294,36 @@ impl Session {
                 Token::GreenDeep
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::data::{Data, Workspace};
+    use crate::session::Session;
+
+    fn frame(ids: &[&str]) -> Data {
+        Data {
+            epoch: Some(1000.0),
+            workspaces: Some(
+                ids.iter()
+                    .map(|id| Workspace {
+                        id: (*id).into(),
+                        ..Workspace::default()
+                    })
+                    .collect(),
+            ),
+            ..Data::default()
+        }
+    }
+
+    #[test]
+    fn forgets_the_rank_of_a_workspace_gone_from_the_data() {
+        let mut s = Session::default();
+        s.lane_entries(&frame(&["a", "b"]));
+        assert!(s.held_rank.contains_key("a"));
+        s.lane_entries(&frame(&["b"]));
+        assert!(!s.held_rank.contains_key("a"));
+        assert!(s.held_rank.contains_key("b"));
     }
 }

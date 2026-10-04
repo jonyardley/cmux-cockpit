@@ -4,6 +4,8 @@
 //! merge line needs is here; the chips' words, summaries and colours come
 //! with the chips port.
 
+use std::borrow::Cow;
+
 use crate::data::{PrStatus, PullRequest, Workspace};
 use crate::js::{non_empty, truthy};
 use crate::persist::{SavedCheck, SavedPr, SavedState};
@@ -31,22 +33,12 @@ impl PrHealth {
     }
 }
 
-/// A saved PR's status word as cmux would send it.
-fn status_of_word(word: &str) -> PrStatus {
-    match word {
-        "open" => PrStatus::Open,
-        "merged" => PrStatus::Merged,
-        "closed" => PrStatus::Closed,
-        _ => PrStatus::Unknown,
-    }
-}
-
 /// The saved PR as cmux's own shape, so both read one way.
 fn as_pull_request(saved: &SavedPr) -> PullRequest {
     PullRequest {
         url: Some(saved.url.clone()),
         number: Some(saved.number),
-        status: Some(status_of_word(&saved.status)),
+        status: Some(saved.status),
         draft: saved.draft,
         mergeable: saved.mergeable,
         conflicts: saved.conflicts,
@@ -82,9 +74,17 @@ pub fn prs_of(saved: &SavedState, w: &Workspace) -> Vec<PullRequest> {
         .collect()
 }
 
-/// The workspace's first PR, if any.
-pub fn pr_of(saved: &SavedState, w: Option<&Workspace>) -> Option<PullRequest> {
-    prs_of(saved, w?).into_iter().next()
+/// The workspace's first PR, if any: borrowed when it is cmux's own, so
+/// a read every frame clones no list.
+pub fn pr_of<'a>(saved: &SavedState, w: Option<&'a Workspace>) -> Option<Cow<'a, PullRequest>> {
+    let w = w?;
+    if let Some(first) = w.prs.as_ref().and_then(|l| l.first()) {
+        return Some(Cow::Borrowed(first));
+    }
+    if let Some(pr) = &w.pr {
+        return Some(Cow::Borrowed(pr));
+    }
+    saved_for(saved, w).map(|p| Cow::Owned(as_pull_request(p)))
 }
 
 /// Whether the workspace's PRs are the poller's saved copy rather than cmux's own.
