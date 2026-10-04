@@ -1,7 +1,6 @@
 //! test/move-saved.test.ts: a chat's saved "Your move" line on the
 //! cockpit's cards. The size chip's place in the chips list is
-//! card-chips.ts's, and the Needs you list strip.ts's, so those asserts
-//! are left for their lanes.
+//! card-chips.ts's, so those asserts are left for its lane.
 
 use cockpit_core::data::{Agent, Data, Workspace};
 use cockpit_core::moves::{
@@ -360,11 +359,12 @@ mod a_turn_that_ended_on_nothing_for_you {
         assert!(!asks_nothing(&line("say go.")));
     }
 
-    /// Partly ported: leaving the Needs you list and the chips are strip.ts's and card-chips.ts's.
+    /// Partly ported: the chips list is card-chips.ts's; the size chip itself is checked.
     #[test]
     fn reads_as_idle_once_the_nudge_lands_since_the_turn_ended_and_leaves_needs_you() {
         let (mut s, _, mut fx) = setup();
         let w = at("quiet", vec![waiting(&mut fx, "quiet", 1060.0)]);
+        let data = frame(1060.0, vec![], vec![w.clone()]);
         let a = s.agent_of(Some(&w));
         assert_eq!(a.as_ref().and_then(|a| a.status.clone()), Some(Idle));
         assert_eq!(
@@ -373,6 +373,7 @@ mod a_turn_that_ended_on_nothing_for_you {
             "idle since the turn ended, not since the nudge"
         );
         assert!(!s.has_real_ask(Some(&w)));
+        assert!(s.needs_list(&data).is_empty());
         assert_eq!(
             s.card_detail(Some(&w)),
             "CI is running on #2171. I report when it lands."

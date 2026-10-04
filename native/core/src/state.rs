@@ -10,6 +10,13 @@ use crate::time::now_epoch;
 /// How long an optimistic override holds before cmux's own data wins.
 pub const OVERRIDE_SECS: f64 = 4.0;
 
+/// A card being dragged: its row's key (`w:<wsId>`) and the slot it is over.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DragState {
+    pub id: String,
+    pub index: f64,
+}
+
 impl Session {
     /// The chosen view.
     pub fn mode(&self) -> ViewMode {
@@ -43,6 +50,15 @@ impl Session {
 
     pub fn set_quiet_collapsed(&mut self, v: bool) {
         self.quiet_collapsed = v;
+    }
+
+    /// The drag under way, if any.
+    pub fn drag(&self) -> Option<&DragState> {
+        self.drag.as_ref()
+    }
+
+    pub fn set_drag(&mut self, d: Option<DragState>) {
+        self.drag = d;
     }
 
     /// The folded projects' keys.
