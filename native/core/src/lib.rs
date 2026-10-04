@@ -1,5 +1,32 @@
-//! The cockpit's shared core. Empty for now: R1.1 sets up the workspace and
-//! the gates, and later issues port the sidebar logic in here.
+//! The cockpit's shared core: the sidebar logic ported from TypeScript, and
+//! the Crux app the shells drive. So far the cockpit's lanes and placement
+//! (model.rs) and what an agent's status means (status.rs), with the shared
+//! helpers they need. Session holds the state between frames; each call
+//! takes the frame's cmux data.
+
+pub mod activity;
+pub mod anchors;
+pub mod data;
+pub mod js;
+pub mod lanes;
+pub mod lenient;
+pub mod model;
+pub mod moves;
+pub mod needs;
+pub mod persist;
+pub mod projects;
+pub mod quiet;
+pub mod saved;
+pub mod session;
+pub mod shells;
+pub mod state;
+pub mod status;
+pub mod subagents;
+pub mod text;
+pub mod theme;
+pub mod time;
+pub mod ui;
+pub mod words;
 
 use crux_core::{
     App, Command,
