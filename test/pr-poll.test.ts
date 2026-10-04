@@ -634,8 +634,9 @@ describe("nextPoll", () => {
     assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1, skipped: 0 }, 1000 + 299), { okEpoch: 1000 });
   });
 
-  it("refreshes a success once it is five minutes old", () => {
-    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1, skipped: 0 }, 1000 + 300), { okEpoch: 1300 });
+  it("refreshes a success once it is ten minutes old, and not before", () => {
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1, skipped: 0 }, 1000 + 599), { okEpoch: 1000 });
+    assert.deepEqual(nextPoll({ okEpoch: 1000 }, { answered: 1, skipped: 0 }, 1000 + 600), { okEpoch: 1600 });
   });
 
   it("records why when every gh call failed, keeping the last success", () => {

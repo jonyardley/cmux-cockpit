@@ -7,9 +7,12 @@
 // reply from the event's last_assistant_message, or else the main-chat
 // reply that ends the transcript's tail, read once more after RETRY_MS when
 // no reply ends it yet (Stop can fire before the reply is flushed). The line
-// is saved per workspace in config/state.json's `moves` map with the count
-// of numbered decisions the reply laid out and the options it leaned to.
-// A turn with no move line drops the workspace's saved one. The sidebar
+// goes, with the count of numbered decisions the reply laid out and the
+// options it leaned to, into the workspace's cmux description, which the
+// sidebar reads live, so a turn end redraws nothing. Only when cmux refuses
+// it is the move saved in config/state.json's `moves` map instead, which
+// rebuilds the sidebars. A turn with no move line leaves the description
+// alone (it may be Jon's own) and drops any saved move. The sidebar
 // shows a move only while no prompt has come since it was saved (cmux's
 // latestAt, src/shared/move.ts), so nothing here has to clear a stale one.
 //
@@ -20,10 +23,11 @@
 // for this script alone), and nothing is saved until the turn really ends.
 // It never fails the hook: every problem is a note on stderr and exit 0.
 
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scheduleBuild } from "../hook-build.ts";
-import { cleanMove, isId, MAX_DECISIONS, type SavedMove, validateState } from "../state-config.ts";
+import { cleanMove, isId, MAX_DECISIONS, moveDescription, type SavedMove, validateState } from "../state-config.ts";
 import { readApplyWrite } from "../state-url.ts";
 import { field } from "./gh-command.ts";
 import { readTail, replyFrom, sleep } from "./transcript.ts";
@@ -221,12 +225,44 @@ function record(event: unknown, wsId: string | undefined, now: number, attended:
   const session = typeof raw === "string" && isId(raw) ? raw : undefined;
   const reply = finalReply(event);
   if (shouldSendBack(event, reply, attended)) return { note: null, sendBack: true };
-  const move = moveFrom(reply, now, session);
-  if (!move && !hasSaved(wsId)) return none;
-  const result = readApplyWrite(STATE_PATH, `moves.${wsId}`, move ? JSON.stringify(move) : null);
-  if (!result.ok) return { note: result.error, sendBack: false };
-  if (result.changed) scheduleBuild("report-move");
-  return none;
+  return { note: deliver(wsId, moveFrom(reply, now, session), REAL_DELIVERY), sendBack: false };
+}
+
+/** Where a move goes: cmux's description, else the saved map and a rebuild. */
+export interface Delivery {
+  /** Sets the workspace's description; false when cmux refused it. */
+  describe: (wsId: string, description: string) => boolean;
+  hasSaved: (wsId: string) => boolean;
+  save: (wsId: string, move: SavedMove | null) => { ok: true; changed: boolean } | { ok: false; error: string };
+  build: () => void;
+}
+
+function cmuxDescribe(wsId: string, description: string): boolean {
+  const bin = process.env.CMUX_CLAUDE_HOOK_CMUX_BIN || "cmux";
+  const args = ["workspace-action", "--action", "set-description", "--workspace", wsId, "--description", description];
+  return spawnSync(bin, args, { timeout: 5000, env: { ...process.env, CMUX_QUIET: "1" } }).status === 0;
+}
+
+const REAL_DELIVERY: Delivery = {
+  describe: cmuxDescribe,
+  hasSaved,
+  save: (wsId, move) => readApplyWrite(STATE_PATH, `moves.${wsId}`, move ? JSON.stringify(move) : null),
+  build: () => scheduleBuild("report-move"),
+};
+
+/**
+ * Hands a turn's move to the cockpit, or drops a saved one when the turn
+ * had none. The description comes first, since cmux sends it to the sidebar
+ * live and nothing is rebuilt; the saved map, and the rebuild it costs, only
+ * when cmux refused it. Returns a note for stderr, or null. Exported for testing.
+ */
+export function deliver(wsId: string, move: SavedMove | null, d: Delivery): string | null {
+  if (move && d.describe(wsId, moveDescription(move))) return null;
+  if (!move && !d.hasSaved(wsId)) return null;
+  const result = d.save(wsId, move);
+  if (!result.ok) return result.error;
+  if (result.changed) d.build();
+  return null;
 }
 
 if (import.meta.main) {

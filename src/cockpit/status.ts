@@ -1,7 +1,7 @@
 // A workspace's status, from its most active agent, with idle nudges and
 // "needs you" dismissals applied (src/shared/needs.ts).
 
-import type { SavedMove } from "../../scripts/state-config.ts";
+import { isMoveDescription, type SavedMove } from "../../scripts/state-config.ts";
 import { mostActive } from "../shared/activity.ts";
 import { quietMove, waitingMove } from "../shared/move.ts";
 import { agentsOf, askReason, hasRealAsk } from "../shared/needs.ts";
@@ -324,6 +324,11 @@ export function leftOffText(w: Workspace | undefined): string {
   return t ? YOU_WORD + ": " + clip(t, LEFT_OFF_MAX) : "";
 }
 
+// The description as Jon wrote it: a move's description is shown through
+// moveOf while it is current, and never as plain words once it is not.
+const ownDescription = (w: Workspace | undefined): string =>
+  isMoveDescription(w?.description) ? "" : readable(w?.description);
+
 /**
  * What the waiting chat wants ("Run /clear now."), else the agent's latest
  * message (never a prompt echo), else the description. The move comes first
@@ -331,7 +336,7 @@ export function leftOffText(w: Workspace | undefined): string {
  */
 export function cardDetail(w: Workspace | undefined): string {
   // cardMessage is already readable(), so only the description needs it.
-  return clip(moveOf(w)?.text || cardMessage(w) || readable(w?.description), DETAIL_MAX);
+  return clip(moveOf(w)?.text || cardMessage(w) || ownDescription(w), DETAIL_MAX);
 }
 
 /**

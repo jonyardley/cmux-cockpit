@@ -5,8 +5,27 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { decisionsIn, lastReply, moveFrom, moveLine, shouldSendBack } from "../scripts/hooks/report-move.ts";
-import { applySet, cleanMove, emptyState, MAX_MOVE, MOVE_MAX_AGE_S, urlMaySet } from "../scripts/state-config.ts";
+import {
+  type Delivery,
+  decisionsIn,
+  deliver,
+  lastReply,
+  moveFrom,
+  moveLine,
+  shouldSendBack,
+} from "../scripts/hooks/report-move.ts";
+import {
+  applySet,
+  cleanMove,
+  emptyState,
+  isMoveDescription,
+  MAX_MOVE,
+  MOVE_MAX_AGE_S,
+  moveDescription,
+  moveOfDescription,
+  type SavedMove,
+  urlMaySet,
+} from "../scripts/state-config.ts";
 
 const DECISIONS = [
   "Jon, two calls.",
@@ -307,5 +326,81 @@ describe("the moves map", () => {
     const cleared = next.ok ? applySet(next.state, "moves.new", null) : next;
     assert.deepEqual(cleared.ok && cleared.state.moves, {});
     assert.equal(urlMaySet("moves.ws1"), false);
+  });
+});
+
+describe("the move description", () => {
+  const full: SavedMove = {
+    text: 'reply "1b 2a" ⟦x⟧.',
+    epoch: 10,
+    session: "s1",
+    decisions: 2,
+    leans: "1b 2a",
+    idle: true,
+  };
+
+  it("round-trips a move, line first", () => {
+    const d = moveDescription(full);
+    assert.ok(d.startsWith(full.text + " "));
+    assert.deepEqual(moveOfDescription(d), full);
+    assert.deepEqual(moveOfDescription(moveDescription({ text: "go", epoch: 5 })), { text: "go", epoch: 5 });
+    assert.ok(isMoveDescription(d));
+  });
+
+  it("reads nothing from Jon's own words or a broken tail", () => {
+    for (const d of [undefined, "", "my notes", "go ⟦move {bad}⟧", 'go ⟦move {"epoch":"x"}⟧', 'go ⟦move {"epoch":1}'])
+      assert.equal(moveOfDescription(d), null, String(d));
+    assert.equal(isMoveDescription("my notes"), false);
+    assert.equal(isMoveDescription(undefined), false);
+  });
+});
+
+describe("deliver", () => {
+  const move: SavedMove = { text: "go", epoch: 10, session: "s1" };
+  const fake = (describes: boolean, saved = false) => {
+    const calls: string[] = [];
+    const d: Delivery = {
+      describe: (ws, desc) => {
+        calls.push(`describe ${ws} ${desc}`);
+        return describes;
+      },
+      hasSaved: () => saved,
+      save: (ws, m) => {
+        calls.push(`save ${ws} ${m ? m.text : "null"}`);
+        return { ok: true, changed: true };
+      },
+      build: () => {
+        calls.push("build");
+      },
+    };
+    return { d, calls };
+  };
+
+  it("sets the description and saves nothing, so nothing rebuilds", () => {
+    const { d, calls } = fake(true);
+    assert.equal(deliver("ws1", move, d), null);
+    assert.deepEqual(calls, [`describe ws1 ${moveDescription(move)}`]);
+  });
+
+  it("falls back to the saved map and a rebuild when cmux refuses", () => {
+    const { d, calls } = fake(false);
+    deliver("ws1", move, d);
+    assert.deepEqual(calls, [`describe ws1 ${moveDescription(move)}`, "save ws1 go", "build"]);
+  });
+
+  it("leaves the description alone on a turn with no move, dropping only a saved one", () => {
+    const none = fake(true);
+    deliver("ws1", null, none.d);
+    assert.deepEqual(none.calls, []);
+    const saved = fake(true, true);
+    deliver("ws1", null, saved.d);
+    assert.deepEqual(saved.calls, ["save ws1 null", "build"]);
+  });
+
+  it("passes a failed save on as a note and builds nothing", () => {
+    const { d, calls } = fake(false);
+    d.save = () => ({ ok: false, error: "locked" });
+    assert.equal(deliver("ws1", move, d), "locked");
+    assert.ok(!calls.includes("build"));
   });
 });

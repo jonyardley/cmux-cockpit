@@ -20,6 +20,8 @@ import {
   changedKeys,
   flagFor,
   gapLeft,
+  LATER_MS,
+  lateBuildArranged,
   lockedBuild,
   PACE_GAP,
   REDRAW_GAP_MS,
@@ -622,5 +624,19 @@ describe("changedKeys", () => {
 
   it("counts every key as changed on a first build", () => {
     assert.deepEqual(changedKeys(null, { subagents: [], prs: {} }), ["prs", "subagents"]);
+  });
+});
+
+describe("the late build for subagent runs", () => {
+  it("counts as arranged until it could no longer be live", () => {
+    assert.equal(lateBuildArranged(null, 1_000), false);
+    assert.equal(lateBuildArranged(0, LATER_MS), true);
+    assert.equal(lateBuildArranged(0, LATER_MS + BUILD_LOCK_STALE_MS - 1), true);
+    assert.equal(lateBuildArranged(0, LATER_MS + BUILD_LOCK_STALE_MS), false, "a late build that died");
+  });
+
+  it("waits longer than the slow gap, outside the lock", () => {
+    assert.ok(LATER_MS > SLOW_GAP_MS);
+    assert.ok(LATER_MS > BUILD_LOCK_STALE_MS, "too long to wait while holding the lock");
   });
 });

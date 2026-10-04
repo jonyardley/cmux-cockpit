@@ -603,6 +603,34 @@ function savedMove(v: unknown): SavedMove | null {
   };
 }
 
+// A move rides to the cockpit in its workspace's cmux description, which the
+// sidebar reads live, so a turn end redraws nothing (docs/state-loop.md,
+// "What the chat wants"). The line comes first, so cmux's own list shows it;
+// the rest of the move follows in one bracketed JSON tail.
+const MOVE_TAIL = /^(.*) ⟦move (\{.*\})⟧$/s;
+
+/** A move as the workspace description the Stop hook sets. */
+export function moveDescription(m: SavedMove): string {
+  const { text, ...rest } = m;
+  return text + " ⟦move " + JSON.stringify(rest) + "⟧";
+}
+
+/** The move a workspace description carries, or null when it carries none or a bad one. */
+export function moveOfDescription(d: string | undefined): SavedMove | null {
+  const found = d === undefined ? null : MOVE_TAIL.exec(d);
+  if (!found) return null;
+  let rest: unknown;
+  try {
+    rest = JSON.parse(found[2] ?? "");
+  } catch {
+    return null;
+  }
+  return isRecord(rest) ? savedMove({ ...rest, text: found[1] }) : null;
+}
+
+/** True when a description is a move's, so it is never shown as Jon's own words. */
+export const isMoveDescription = (d: string | undefined): boolean => d !== undefined && MOVE_TAIL.test(d);
+
 const SOURCES: readonly unknown[] = ["title", "prompt"];
 const isSource = (v: unknown): v is NameSource => SOURCES.includes(v);
 
