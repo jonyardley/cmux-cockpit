@@ -1,0 +1,279 @@
+//! test/card.test.ts: the status line with its time and helper count, the
+//! agent's message, the progress fraction and the outline. The chips cases
+//! test card-chips.ts and chips.ts, left for their lane.
+
+use cockpit_core::data::{Data, Progress};
+use cockpit_core::status::{
+    DETAIL_MAX, OUTLINE_MAX, Outline, PrRef, open_pr_label, outline, progress_fraction,
+};
+use cockpit_core::theme::Token;
+
+use crate::support::*;
+
+const NOW: f64 = 1_000_100.0;
+
+fn data() -> Data {
+    frame(NOW, vec![], vec![])
+}
+
+mod status_line {
+    use super::*;
+
+    #[test]
+    fn says_how_long_the_status_has_held() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        let w = ws("x").agents(vec![fx.agent(Working).since(NOW - 14.0 * 60.0)]);
+        assert_eq!(s.status_line(&data(), Some(&w)), "Working 14m");
+    }
+
+    #[test]
+    fn reads_the_most_active_agents_time() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        let w = ws("x").agents(vec![
+            fx.agent(Idle).since(NOW - 7200.0),
+            fx.agent(Working).since(NOW - 30.0),
+        ]);
+        assert_eq!(s.status_line(&data(), Some(&w)), "Working <1m");
+    }
+
+    #[test]
+    fn leaves_the_time_off_when_nothing_says_when_the_status_began() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        let w = ws("x").agents(vec![fx.agent(Idle)]);
+        assert_eq!(s.status_line(&data(), Some(&w)), "Idle");
+    }
+
+    #[test]
+    fn never_reads_last_activity_or_latest_at_as_the_status_start() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        let w = ws("x")
+            .latest_at(NOW - 600.0)
+            .agents(vec![fx.agent(Working).activity(NOW - 5.0)]);
+        assert_eq!(s.status_line(&data(), Some(&w)), "Working");
+    }
+
+    #[test]
+    fn gives_no_time_for_a_workspace_with_no_agent() {
+        let mut s = fresh();
+        let w = ws("x").latest_at(NOW - 600.0);
+        assert_eq!(s.status_line(&data(), Some(&w)), "No agent");
+        assert_eq!(s.status_line(&data(), None), "No agent");
+    }
+}
+
+mod open_pr_label {
+    use super::*;
+
+    #[test]
+    fn names_the_pr_it_opens() {
+        let pr = PrRef {
+            tag: "#130",
+            url: Some("https://x/130"),
+        };
+        assert_eq!(open_pr_label(Some(pr)), "Open PR #130");
+    }
+
+    #[test]
+    fn says_when_the_pr_has_no_link_rather_than_that_there_is_no_pr() {
+        let pr = PrRef {
+            tag: "#130",
+            url: None,
+        };
+        assert_eq!(open_pr_label(Some(pr)), "PR #130 has no link");
+    }
+
+    #[test]
+    fn says_when_there_is_no_pr() {
+        assert_eq!(open_pr_label(None), "No PR to open");
+    }
+}
+
+mod status_has_age {
+    use super::*;
+
+    #[test]
+    fn is_true_when_the_status_line_carries_a_time_so_the_full_card_drops_its_top_right_one() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        let w = ws("x").agents(vec![fx.agent(Working).since(NOW - 30.0)]);
+        assert!(s.status_has_age(&data(), Some(&w)));
+    }
+
+    #[test]
+    fn is_false_when_the_status_line_has_no_time_so_the_top_right_age_stays() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        assert!(!s.status_has_age(&data(), Some(&ws("x").agents(vec![fx.agent(Idle)]))));
+        assert!(!s.status_has_age(&data(), Some(&ws("x").latest_at(NOW - 600.0))));
+        assert!(!s.status_has_age(&data(), None));
+    }
+}
+
+mod card_detail {
+    use super::*;
+
+    #[test]
+    fn shows_the_agents_latest_message() {
+        let mut s = fresh();
+        let w = ws("x").message("Running the recovery tests").prompt("go");
+        assert_eq!(s.card_detail(Some(&w)), "Running the recovery tests");
+    }
+
+    #[test]
+    fn hides_a_message_that_only_echoes_the_prompt_and_never_shows_the_prompt() {
+        let mut s = fresh();
+        let echo = ws("x").message("go on then").prompt("go on then");
+        assert_eq!(s.card_detail(Some(&echo)), "");
+        assert_eq!(s.card_detail(Some(&ws("x").prompt("go on then"))), "");
+    }
+
+    #[test]
+    fn falls_back_on_the_workspace_description() {
+        let mut s = fresh();
+        let w = ws("x").description("Fixing the lanes");
+        assert_eq!(s.card_detail(Some(&w)), "Fixing the lanes");
+    }
+
+    #[test]
+    fn cuts_a_long_message_to_two_lines_worth() {
+        let mut s = fresh();
+        let long = "word ".repeat(80);
+        let out = s.card_detail(Some(&ws("x").message(&long)));
+        assert_eq!(out.chars().count(), DETAIL_MAX);
+        assert!(out.ends_with('…'));
+    }
+}
+
+mod helpers {
+    use super::*;
+
+    #[test]
+    fn counts_running_cmux_children_across_the_workspaces_agents() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        let w = ws("x").agents(vec![
+            fx.agent(Working).children(vec![
+                run("a", Some(true), None),
+                run("b", Some(false), Some(5.0)),
+                run("c", None, None),
+            ]),
+            fx.agent(Working).children(vec![run("d", Some(true), None)]),
+        ]);
+        assert_eq!(s.live_run_count(Some(&w)), 3);
+        assert_eq!(s.helper_text(Some(&w)), "· 3 helpers");
+    }
+
+    #[test]
+    fn says_one_helper_in_the_singular() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        let w = ws("x").agents(vec![fx.agent(Working).children(vec![run(
+            "a",
+            Some(true),
+            None,
+        )])]);
+        assert_eq!(s.helper_text(Some(&w)), "· 1 helper");
+    }
+
+    #[test]
+    fn counts_nothing_under_an_ended_session_whatever_the_run_says() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        let w = ws("x").agents(vec![fx.agent(Ended).children(vec![run(
+            "a",
+            Some(true),
+            None,
+        )])]);
+        assert_eq!(s.live_run_count(Some(&w)), 0);
+        assert_eq!(s.helper_text(Some(&w)), "");
+    }
+
+    #[test]
+    fn is_empty_with_no_workspace_or_no_runs() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        assert_eq!(s.live_run_count(None), 0);
+        assert_eq!(
+            s.helper_text(Some(&ws("x").agents(vec![fx.agent(Working)]))),
+            ""
+        );
+    }
+
+    #[test]
+    fn skips_holes_in_a_children_array() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        let w = ws("x").agents(vec![
+            fx.agent(Working)
+                .children(vec![None, run("a", Some(true), None)]),
+        ]);
+        assert_eq!(s.live_run_count(Some(&w)), 1);
+    }
+}
+
+mod progress_fraction {
+    use super::*;
+
+    fn at(value: Option<f64>) -> Option<Progress> {
+        Some(Progress { value, label: None })
+    }
+
+    #[test]
+    fn is_the_progress_value_held_between_0_and_1() {
+        assert_eq!(
+            progress_fraction(Some(&ws("x").progress(at(Some(0.62))))),
+            Some(0.62)
+        );
+        assert_eq!(
+            progress_fraction(Some(&ws("x").progress(at(Some(1.4))))),
+            Some(1.0)
+        );
+        assert_eq!(
+            progress_fraction(Some(&ws("x").progress(at(Some(-1.0))))),
+            Some(0.0)
+        );
+    }
+
+    #[test]
+    fn is_null_when_no_value_is_sent() {
+        assert_eq!(progress_fraction(Some(&ws("x"))), None);
+        assert_eq!(progress_fraction(Some(&ws("x").progress(None))), None);
+        let label_only = Some(Progress {
+            value: None,
+            label: Some("Building".into()),
+        });
+        assert_eq!(progress_fraction(Some(&ws("x").progress(label_only))), None);
+        assert_eq!(
+            progress_fraction(Some(&ws("x").progress(at(Some(f64::NAN))))),
+            None
+        );
+        assert_eq!(progress_fraction(None), None);
+    }
+}
+
+mod outline {
+    use super::*;
+
+    #[test]
+    fn rings_the_selected_workspace_in_ink_at_the_widest_a_drag_in_ink_just_under_it() {
+        let select = |width| Outline {
+            color: Token::Select,
+            width,
+        };
+        assert_eq!(outline(true, false, Token::CardEdge), select(OUTLINE_MAX));
+        assert_eq!(outline(true, true, Token::CardEdge), select(1.5));
+        assert_eq!(outline(false, true, Token::Clear), select(1.5));
+    }
+
+    #[test]
+    fn keeps_the_rows_own_resting_edge_at_1pt_on_the_rest() {
+        let rest = |color| Outline { color, width: 1.0 };
+        assert_eq!(
+            outline(false, false, Token::CardEdge),
+            rest(Token::CardEdge)
+        );
+        assert_eq!(outline(false, false, Token::Clear), rest(Token::Clear));
+    }
+
+    #[test]
+    fn never_draws_wider_than_outline_max_which_rings_hold_steady() {
+        for selected in [true, false] {
+            for dragged in [true, false] {
+                assert!(outline(selected, dragged, Token::Clear).width <= OUTLINE_MAX);
+            }
+        }
+    }
+}
