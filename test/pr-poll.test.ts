@@ -799,4 +799,13 @@ describe("prChanges and movedTag", () => {
     assert.equal(movedTag(["poll"], []), " [poll]");
     assert.equal(movedTag([], []), "");
   });
+
+  it("names the first five changes and counts the rest", () => {
+    const changes = ["A found", "B found", "C found", "D found", "E found"];
+    assert.equal(movedTag(["prs"], changes), " [prs] A found; B found; C found; D found; E found");
+    assert.equal(
+      movedTag(["prs"], [...changes, "F found", "G checks"]),
+      " [prs] A found; B found; C found; D found; E found; +2 more",
+    );
+  });
 });

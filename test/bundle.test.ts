@@ -103,6 +103,24 @@ describe("a poll that moves only what the agents panel shows", () => {
     assert.notEqual(failing.cockpit, running.cockpit);
   });
 
+  it("leaves the cockpit alone when a ready PR's merge verdict flips while a check runs", async () => {
+    const outOfDraft = (checks: SavedCheck[]): SavedPr => {
+      const { draft: _, ...p } = pr(checks);
+      return p;
+    };
+    const ready = { ...outOfDraft([{ name: "gitleaks", state: "pass" }]), mergeable: true as const };
+    const rerun = outOfDraft([
+      { name: "gitleaks", state: "pass" },
+      { name: "Lint, Build & Test", state: "pending" },
+    ]);
+    const [verdict, noVerdict] = await Promise.all([{ ...rerun, mergeable: true as const }, rerun].map(both));
+    const first = await both(ready);
+    assert.ok(verdict && noVerdict);
+    assert.notEqual(verdict.cockpit, first.cockpit, "a ready chip turning running redraws the cockpit");
+    assert.equal(noVerdict.cockpit, verdict.cockpit);
+    assert.notEqual(noVerdict.agents, verdict.agents);
+  });
+
   it("leaves the cockpit alone when a draft's merge verdict comes or goes", async () => {
     const [without, withVerdict] = await Promise.all([pushed, { ...pushed, mergeable: true as const }].map(both));
     assert.ok(without && withVerdict);
@@ -120,7 +138,12 @@ describe("cockpitPr", () => {
     const running = [check("c", "pending"), check("d", "pending"), check("e", "pass")];
     assert.deepEqual(cockpitPr({ ...open, checks: running }).checks, [check("", "pending")]);
     const passed = [check("d", "pass"), check("e", "pass")];
-    assert.deepEqual(cockpitPr({ ...open, checks: passed }).checks, [check("", "pass")]);
+    assert.deepEqual(cockpitPr({ ...open, mergeable: true, checks: passed }).checks, [check("", "pass")]);
+  });
+
+  it("keeps no checks for a quiet PR, since none would change its chip", () => {
+    assert.ok(!("checks" in cockpitPr({ ...open, checks: [check("d", "pass")] })));
+    assert.ok(!("checks" in cockpitPr({ ...open, draft: true, mergeable: true, checks: [check("d", "pass")] })));
   });
 
   it("leaves out checks it has none of, and every check of a PR that is not open", () => {
@@ -128,11 +151,45 @@ describe("cockpitPr", () => {
     assert.ok(!("checks" in cockpitPr({ ...open, status: "merged", checks: [check("a", "fail")] })));
   });
 
-  it("keeps the merge verdict only on an open PR out of draft, and conflicts always", () => {
-    assert.equal(cockpitPr({ ...open, mergeable: true }).mergeable, true);
-    assert.ok(!("mergeable" in cockpitPr({ ...open, mergeable: true, draft: true })));
-    assert.ok(!("mergeable" in cockpitPr({ ...open, mergeable: true, status: "closed" })));
+  it("keeps the merge verdict only while the chip says ready, and conflicts only while it says conflicts", () => {
+    const passed = [check("d", "pass")];
+    assert.equal(cockpitPr({ ...open, mergeable: true, checks: passed }).mergeable, true);
+    assert.ok(!("mergeable" in cockpitPr({ ...open, mergeable: true })));
+    assert.ok(!("mergeable" in cockpitPr({ ...open, mergeable: true, checks: [check("c", "pending")] })));
+    assert.ok(!("mergeable" in cockpitPr({ ...open, mergeable: true, draft: true, checks: passed })));
+    assert.ok(!("mergeable" in cockpitPr({ ...open, mergeable: true, status: "closed", checks: passed })));
     assert.equal(cockpitPr({ ...open, conflicts: true, draft: true }).conflicts, true);
+    assert.ok(!("conflicts" in cockpitPr({ ...open, conflicts: true, checks: [check("a", "fail")] })));
+    assert.ok(!("conflicts" in cockpitPr({ ...open, conflicts: true, status: "merged" })));
+  });
+
+  it("keeps only the number, link, status, branch and title of a PR that is not open", () => {
+    const whole: SavedPr = { ...open, title: "t", draft: true, conflicts: true, additions: 3, deletions: 1 };
+    for (const status of ["merged", "closed"] as const)
+      assert.deepEqual(cockpitPr({ ...whole, status }), { number: 1, url: "u", status, branch: "b", title: "t" });
+  });
+
+  it("shows every PR exactly as the whole PR would", async () => {
+    // A test process never bakes __STATE__; prs.ts reads it on import.
+    (globalThis as Record<string, unknown>).__STATE__ = emptyState();
+    const { summaryOf } = await import("../src/shared/prs.ts");
+    const states: SavedCheck["state"][] = ["fail", "pending", "pass"];
+    const checkLists: SavedCheck[][] = [
+      [],
+      ...states.map((s) => [check("a", s)]),
+      ...states.flatMap((s) => states.map((t) => [check("a", s), check("b", t)])),
+      [check("a", "fail"), check("b", "fail"), check("c", "pending"), check("d", "pass")],
+    ];
+    const flags: Partial<SavedPr>[] = [{}, { draft: true }, { mergeable: true }, { conflicts: true }];
+    const combos = flags.flatMap((a) => flags.map((b) => ({ ...a, ...b })));
+    for (const status of ["open", "merged", "closed"] as const)
+      for (const extra of combos)
+        for (const checks of checkLists) {
+          const pr: SavedPr = { ...open, status, title: "t", additions: 4, deletions: 2, ...extra, checks };
+          const cut = cockpitPr(pr);
+          const label = JSON.stringify(pr);
+          assert.deepEqual(summaryOf(cut, cut.checks ?? []), summaryOf(pr, pr.checks ?? []), label);
+        }
   });
 
   it("is what stateFor bakes into the cockpit, and the agents panel keeps the whole PR", () => {

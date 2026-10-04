@@ -336,7 +336,8 @@ function prChange(tag: string, was: SavedPr | undefined, now: SavedPr | undefine
  * What a poll changed in the `prs` map, for its log line: each workspace
  * whose PR changed, by the first 8 characters of its id, with the fields
  * that differ ("05B6A0B0 checks, draft"), or "found" and "dropped" for a
- * PR that appeared or went. In workspace order, empty when nothing changed.
+ * PR that appeared or went. Sorted by workspace id, so the same change
+ * logs the same words; empty when nothing changed.
  */
 export function prChanges(before: State["prs"], after: State["prs"]): string[] {
   const ids = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
@@ -344,14 +345,21 @@ export function prChanges(before: State["prs"], after: State["prs"]): string[] {
   return ids.flatMap((id) => prChange(id.slice(0, 8), pick(before, id), pick(after, id)) ?? []);
 }
 
+/** The most PR changes movedTag names before it counts the rest. */
+const MAX_TAGGED = 5;
+
 /**
  * The poll's log tag: the maps that moved, then the PR fields that did
  * (prChanges), so the log can tell a check turning green from a freshness
- * restamp, and real progress from a field going back and forth.
+ * restamp, and real progress from a field going back and forth. Past
+ * MAX_TAGGED changes the rest are counted ("+3 more"), so a first poll over
+ * many workspaces keeps one short line.
  */
 export function movedTag(maps: string[], fields: string[]): string {
   if (!maps.length) return "";
-  return ` [${maps.join(", ")}]` + (fields.length ? " " + fields.join("; ") : "");
+  const shown = fields.slice(0, MAX_TAGGED);
+  if (fields.length > MAX_TAGGED) shown.push(`+${fields.length - MAX_TAGGED} more`);
+  return ` [${maps.join(", ")}]` + (shown.length ? " " + shown.join("; ") : "");
 }
 
 export interface OwnLookups {

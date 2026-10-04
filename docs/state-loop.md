@@ -20,9 +20,13 @@ build keeps them to real changes: each sidebar is baked with only the maps
 it reads (`scripts/bundle.ts`), and a bundle whose bytes did not change is
 not rewritten (`scripts/write-if-changed.ts`), so cmux does not reload it.
 The cockpit's PRs are also cut to what its card shows (`cockpitPr`): their
-checks only as the chip's health (how many fail, else whether any run,
-else whether any passed), and no merge verdict on a draft. A check passing
-while another still runs then redraws the agents panel, which lists each
+checks and merge flags only as the chip's health, rebuilt on the chip's own
+rule (`healthOf` in `src/shared/pr-health.ts`) as the fewest that keep it
+(one nameless check per failure, one running, one passed with the merge
+verdict for ready, the conflicts flag alone, nothing for quiet), and a PR
+that is not open keeps only its number, link, status, branch and title. A
+check passing while another still runs, or a merge verdict flipping while
+the chip says running, then redraws the agents panel, which lists each
 check, and leaves the cockpit as it was. On 2026-10-04 one PR pushed ten
 times in seventy minutes, and those check steps drove over half the
 redraws, nearly every one redrawing both panels.
@@ -678,10 +682,14 @@ Moves drove about half the redraws on 2026-10-04 before this. The hook
 writes only over an empty description or an earlier move's, never Jon's
 own words, and reads the description back afterwards: one cmux cut or
 changed would read as no move, so it is cleared. In each of those cases,
-and when cmux refuses the write or does not answer the read (asked twice),
-the move is saved per workspace in the `moves` map instead, which rebuilds
-the sidebars as before, and the state log says why:
-`report-move saved the move for 05B6A0B0: cmux refused the description`.
+and when cmux refuses the write, does not answer the read or the read-back
+(each asked twice), or does not list the workspace (asked once), the move
+is saved per workspace in the `moves` map instead, which rebuilds the
+sidebars as before, and once the save has run the state log says why:
+`report-move saved the move for 05B6A0B0: cmux refused the description`,
+or `report-move could not save the move for 05B6A0B0 (...): <error>`. A
+turn with no move reads the description once, since that read only gates
+clearing an earlier move.
 A hook's own stderr is not kept, so before this the log could not say. The sidebar
 reads whichever of the two is newer. A "Your move"
 line inside a code fence (a handoff opener) is not the reply's. `decisions`
