@@ -1,16 +1,19 @@
-//! test/cockpit.test.ts: the cases that test model.rs, status.rs, strip.rs
-//! and the project-of-a-workspace slice. Cases that test lane entries, the
-//! Projects rows, drops, Next, the card menu or new projects are left for
-//! the lanes that port those modules.
+//! test/cockpit.test.ts: the cases that test model.rs, status.rs, strip.rs,
+//! lane_entries.rs, next.rs and the project-of-a-workspace slice. Cases
+//! that test the Projects rows, drops, the card menu or new projects are
+//! left for the lanes that port those modules.
 
 use cockpit_core::data::{Data, Workspace, WorkspaceGroup};
+use cockpit_core::lane_entries::LaneEntry;
 use cockpit_core::lanes::{LANES, LaneKey, lane_by_key};
 use cockpit_core::model::{PanelHeight, actual_lane_of, card_density};
+use cockpit_core::next::{Colour, Origin};
 use cockpit_core::persist::ViewMode;
 use cockpit_core::session::Session;
 use cockpit_core::state::DragState;
 use cockpit_core::status::Status;
 use cockpit_core::strip::NEEDS_LATE_SECS;
+use cockpit_core::theme::Token;
 use cockpit_core::time::now_epoch;
 use serde_json::Value;
 
@@ -49,6 +52,30 @@ fn has(list: &[String], id: &str) -> bool {
     list.iter().any(|x| x == id)
 }
 
+/// All's rows by key. A card's key leaves its lane out, so it survives a
+/// lane move; here it shows its lane as well, so the lists still say where
+/// each card sits.
+fn entry_ids(s: &mut Session, data: &Data) -> Vec<String> {
+    s.lane_entries(data)
+        .into_iter()
+        .map(|e| match e {
+            LaneEntry::Ws { ws_id, lane, .. } => format!("{ws_id}@{}", lane.as_str()),
+            other => other.id().to_string(),
+        })
+        .collect()
+}
+
+/// The header row of a lane.
+fn header(s: &mut Session, data: &Data, lane: LaneKey) -> Option<LaneEntry> {
+    s.lane_entries(data)
+        .into_iter()
+        .find(|e| matches!(e, LaneEntry::Header { .. }) && e.lane() == lane)
+}
+
+fn position(list: &[String], id: &str) -> Option<usize> {
+    list.iter().position(|x| x == id)
+}
+
 mod lanes {
     use super::*;
 
@@ -75,6 +102,34 @@ mod lanes {
     fn hides_lane_anchors_from_the_cards() {
         let (mut s, data, _) = setup();
         assert_eq!(ids(&s.card_workspaces(&data)), ["a", "b", "c", "p", "u"]);
+    }
+
+    #[test]
+    fn lists_every_header_with_parked_collapsed_until_touched() {
+        let (mut s, data, _) = setup();
+        assert_eq!(
+            entry_ids(&mut s, &data),
+            [
+                "h:main",
+                "a@main",
+                "b@main",
+                "h:review",
+                "c@review",
+                "z:bg",
+                "h:parked",
+                "h:unsorted",
+                "u@unsorted",
+            ]
+        );
+    }
+
+    #[test]
+    fn stays_built_under_projects_so_the_hidden_lanes_need_no_rebuild() {
+        let (mut s, data, _) = setup();
+        let all = entry_ids(&mut s, &data);
+        assert!(!all.is_empty());
+        s.set_mode(ViewMode::Projects);
+        assert_eq!(entry_ids(&mut s, &data), all);
     }
 
     #[test]
@@ -106,11 +161,10 @@ mod lanes {
 mod a_real_workspace_anchoring_a_single_member_group {
     use super::*;
 
-    /// Partly ported: the lane's count is lane-entries.ts's.
     #[test]
     fn hides_the_generated_anchor_but_shows_the_real_one_in_needs_you_and_counted_in_its_lane() {
         let (mut s, _, mut fx) = setup();
-        let data = frame(
+        let mut data = frame(
             NOW,
             vec![
                 group("g-main", "Main activity").anchor("gen-main"),
@@ -138,6 +192,11 @@ mod a_real_workspace_anchoring_a_single_member_group {
             LaneKey::Parked
         );
         assert_eq!(ids(&s.needs_list(&data)), ["real-parked"]);
+        // Waiting, it shows in Needs you and its lane counts its placeholder;
+        // answered, its card is back in the same count.
+        assert_eq!(s.lane_workspaces(&data, LaneKey::Parked).len(), 1);
+        ws_mut(&mut data, "real-parked").agents = Some(vec![Some(fx.agent(Working).since(1.0))]);
+        assert_eq!(s.lane_workspaces(&data, LaneKey::Parked).len(), 1);
     }
 }
 
@@ -184,7 +243,6 @@ mod missing_lane_groups {
             .collect()
     }
 
-    /// Partly ported: the lane's count is lane-entries.ts's.
     #[test]
     fn creates_the_lanes_group_then_files_the_card_once_it_appears() {
         let (mut s, mut data, _) = setup();
@@ -197,8 +255,9 @@ mod missing_lane_groups {
                 &[("name", "Background"), ("idempotency_key", &key)]
             )]
         );
-        // Optimistic while cmux makes the group: the card moves now.
+        // Optimistic while cmux makes the group: the card and count move now.
         assert_eq!(s.lane_of(&data, by_id(&data, "u")), LaneKey::Bg);
+        assert_eq!(s.lane_workspaces(&data, LaneKey::Bg).len(), 1);
 
         s.take_outbox();
         add_bg_group(&mut data);
@@ -313,22 +372,43 @@ mod missing_lane_groups {
 mod a_lanes_generated_anchor {
     use super::*;
 
-    /// Partly ported: the lane's count and rows are lane-entries.ts's.
     #[test]
     fn stays_off_the_cards_when_an_agent_runs_in_it_and_its_lane_counts_only_real_cards() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "anchor-review").agents = Some(vec![Some(fx.agent(Working))]);
         assert!(!has(&ids(&s.card_workspaces(&data)), "anchor-review"));
+        assert_eq!(s.lane_workspaces(&data, LaneKey::Review).len(), 1);
+        assert!(!has(&entry_ids(&mut s, &data), "anchor-review@review"));
     }
 
-    /// Partly ported: the header row is lane-entries.ts's.
+    #[test]
+    fn puts_its_status_on_the_lane_header_under_a_key_of_its_own() {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "anchor-review").agents = Some(vec![Some(fx.agent(Working))]);
+        assert_eq!(
+            header(&mut s, &data, LaneKey::Review),
+            Some(LaneEntry::Header {
+                id: "h:review:anchor-review".into(),
+                lane: LaneKey::Review,
+                anchor_id: Some("anchor-review".into()),
+            })
+        );
+    }
+
     #[test]
     fn leaves_the_header_plain_when_the_anchor_has_no_agent() {
         let (mut s, data, _) = setup();
+        assert_eq!(
+            header(&mut s, &data, LaneKey::Review),
+            Some(LaneEntry::Header {
+                id: "h:review".into(),
+                lane: LaneKey::Review,
+                anchor_id: None,
+            })
+        );
         assert!(!has(&ids(&s.card_workspaces(&data)), "anchor-review"));
     }
 
-    /// Partly ported: the header row is lane-entries.ts's.
     #[test]
     fn keeps_a_real_workspace_used_as_an_anchor_as_a_card_with_or_without_an_agent() {
         let (mut s, _, mut fx) = setup();
@@ -338,8 +418,36 @@ mod a_lanes_generated_anchor {
             vec![ws("real").title("Spike: wireless").group("g-bg")],
         );
         assert_eq!(ids(&s.card_workspaces(&data)), ["real"]);
+        assert_eq!(
+            header(&mut s, &data, LaneKey::Bg).map(|h| h.id().to_string()),
+            Some("h:bg".to_string())
+        );
         ws_mut(&mut data, "real").agents = Some(vec![Some(fx.agent(Working))]);
         assert_eq!(ids(&s.card_workspaces(&data)), ["real"]);
+    }
+
+    #[test]
+    fn keeps_a_lane_whose_only_activity_is_its_anchors_agent_open_not_folded() {
+        let (mut s, mut data, mut fx) = setup();
+        if let Some(list) = data.workspaces.as_mut() {
+            list.retain(|w| w.id != "c");
+        }
+        ws_mut(&mut data, "anchor-review").agents =
+            Some(vec![Some(fx.agent(NeedsInput).since(1.0))]);
+        let rows = entry_ids(&mut s, &data);
+        assert!(has(&rows, "h:review:anchor-review"));
+        assert!(!has(&rows, "z:review"));
+        assert!(has(&rows, "z:bg"));
+    }
+
+    #[test]
+    fn shows_on_the_header_for_unread_messages_alone_once_the_agent_has_gone() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "anchor-review").unread = Some(3.0);
+        assert_eq!(
+            header(&mut s, &data, LaneKey::Review).map(|h| h.id().to_string()),
+            Some("h:review:anchor-review".to_string())
+        );
     }
 
     #[test]
@@ -429,8 +537,90 @@ mod needs_you_clock {
     }
 }
 
+/// Issue #50: an empty lane is a drop box in its own place, whether or not
+/// a card is being dragged.
+mod empty_lanes {
+    use super::*;
+
+    fn drop_empty(data: &mut Data) {
+        if let Some(list) = data.workspaces.as_mut() {
+            list.retain(|w| w.id != "c");
+        }
+    }
+
+    fn headers_and_zones(s: &mut Session, data: &Data) -> Vec<String> {
+        entry_ids(s, data)
+            .into_iter()
+            .filter(|id| id.starts_with("z:") || id.starts_with("h:"))
+            .collect()
+    }
+
+    #[test]
+    fn lose_their_headers_for_a_zone_each_in_lane_order_and_in_the_lanes_own_place() {
+        let (mut s, mut data, _) = setup();
+        drop_empty(&mut data);
+        let rows = entry_ids(&mut s, &data);
+        assert!(!has(&rows, "h:review"));
+        assert!(!has(&rows, "h:bg"));
+        assert_eq!(
+            headers_and_zones(&mut s, &data),
+            ["h:main", "z:review", "z:bg", "h:parked", "h:unsorted"]
+        );
+    }
+
+    #[test]
+    fn have_no_zone_once_every_lane_has_a_card_and_no_empty_line_at_all() {
+        let (mut s, mut data, _) = setup();
+        data.workspaces
+            .get_or_insert_with(Vec::new)
+            .push(ws("d").group("g-bg"));
+        data.groups
+            .get_or_insert_with(Vec::new)
+            .push(group("g-bg", "Background").anchor("anchor-bg"));
+        assert!(
+            !entry_ids(&mut s, &data)
+                .iter()
+                .any(|id| id.starts_with("z:") || id.starts_with("f:"))
+        );
+    }
+
+    #[test]
+    fn keep_the_same_rows_as_a_drag_starts_and_ends_so_the_drop_index_never_shifts() {
+        let (mut s, data, _) = setup();
+        let rest = entry_ids(&mut s, &data);
+        s.set_drag(Some(DragState {
+            id: "w:a".into(),
+            index: 1.0,
+        }));
+        assert_eq!(entry_ids(&mut s, &data), rest);
+        s.set_drag(None);
+        assert_eq!(entry_ids(&mut s, &data), rest);
+    }
+
+    /// Adapted: the TypeScript drops c onto Background's zone (drop.ts);
+    /// here `move_to_lane` makes the lane change that drop makes.
+    #[test]
+    fn keep_their_zone_after_a_drop_empties_a_lane_with_no_drag_running() {
+        let (mut s, data, _) = setup();
+        s.move_to_lane(&data, Some(by_id(&data, "c")), LaneKey::Bg);
+        assert_eq!(s.lane_of(&data, by_id(&data, "c")), LaneKey::Bg);
+        assert_eq!(
+            headers_and_zones(&mut s, &data),
+            ["h:main", "z:review", "h:bg", "h:parked", "h:unsorted"]
+        );
+    }
+}
+
 mod needs_you {
     use super::*;
+
+    /// The Main activity rows: its cards and a's placeholder.
+    fn main_rows(s: &mut Session, data: &Data) -> Vec<String> {
+        entry_ids(s, data)
+            .into_iter()
+            .filter(|id| id.ends_with("@main") || id == "g:a")
+            .collect()
+    }
 
     #[test]
     fn a_dismissal_holds_until_the_agent_asks_again() {
@@ -450,33 +640,111 @@ mod needs_you {
         assert_eq!(ids(&s.needs_list(&data)), ["c", "a"]);
     }
 
-    /// Partly ported: the lane's rows are lane-entries.ts's; here the hold itself.
+    #[test]
+    fn leaves_a_placeholder_in_a_listed_cards_place_counted_and_puts_the_card_back_once_dismissed()
+    {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
+        let rows = entry_ids(&mut s, &data);
+        assert!(!has(&rows, "a@main"));
+        assert!(has(&rows, "g:a"));
+        assert_eq!(ids(&s.lane_workspaces(&data, LaneKey::Main)), ["a", "b"]);
+        let at = position(&rows, "g:a");
+        s.dismiss_waiting(&data, Some(by_id(&data, "a")));
+        let rows = entry_ids(&mut s, &data);
+        assert!(!has(&rows, "g:a"));
+        assert_eq!(position(&rows, "a@main"), at);
+        assert_eq!(s.lane_workspaces(&data, LaneKey::Main).len(), 2);
+    }
+
     #[test]
     fn holds_a_dismissed_card_in_its_placeholders_spot_until_its_status_changes() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "b").agents = Some(vec![Some(fx.agent(Working).since(400.0))]);
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
-        assert!(has(&s.in_strip(&data).into_iter().collect::<Vec<_>>(), "a"));
+        assert_eq!(main_rows(&mut s, &data), ["g:a", "b@main"]);
         s.dismiss_waiting(&data, Some(by_id(&data, "a")));
-        assert!(s.in_strip(&data).is_empty());
-        assert!(s.held_at_top(by_id(&data, "a")));
+        // Idle now, it would sort under the working card; it keeps the top.
+        assert_eq!(main_rows(&mut s, &data), ["a@main", "b@main"]);
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(Working).since(600.0))]);
-        assert!(!s.held_at_top(by_id(&data, "a")));
+        assert_eq!(s.state_rank(&data, Some(by_id(&data, "a"))), 2);
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(Idle).since(700.0))]);
-        assert!(!s.held_at_top(by_id(&data, "a")));
+        assert_eq!(main_rows(&mut s, &data), ["b@main", "a@main"]);
     }
 
-    /// Partly ported: the lane's rows are lane-entries.ts's; here the hold itself.
     #[test]
     fn holds_nothing_when_the_menu_dismisses_a_card_that_is_not_waiting() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "b").agents = Some(vec![Some(fx.agent(Working).since(400.0))]);
         s.dismiss_waiting(&data, Some(by_id(&data, "a")));
-        assert!(!s.held_at_top(by_id(&data, "a")));
-        assert!(s.outbox().is_empty(), "nothing to dismiss, nothing saved");
+        let main: Vec<String> = entry_ids(&mut s, &data)
+            .into_iter()
+            .filter(|id| id.ends_with("@main"))
+            .collect();
+        assert_eq!(main, ["b@main", "a@main"]);
     }
 
-    /// Partly ported: the lane's rows are lane-entries.ts's; here the strip's side.
+    #[test]
+    fn releases_a_hold_when_the_agent_asks_again_so_the_next_answer_sorts_normally() {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "b").agents = Some(vec![Some(fx.agent(Working).since(400.0))]);
+        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
+        s.dismiss_waiting(&data, Some(by_id(&data, "a")));
+        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(900.0))]);
+        assert_eq!(s.state_rank(&data, Some(by_id(&data, "a"))), 0);
+        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(Idle).since(950.0))]);
+        assert_eq!(s.state_rank(&data, Some(by_id(&data, "a"))), 3);
+    }
+
+    #[test]
+    fn names_the_lane_for_a_waiting_generated_anchor_even_in_projects_view() {
+        let (mut s, data, _) = setup();
+        s.set_mode(ViewMode::Projects);
+        let origin = s.origin_of(&data, Some(by_id(&data, "anchor-main")));
+        assert_eq!(origin.name, "Main activity");
+    }
+
+    #[test]
+    fn keeps_a_lane_whose_only_card_waits_with_the_placeholder_under_its_header() {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "c").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
+        let rows = entry_ids(&mut s, &data);
+        assert!(!has(&rows, "z:review"));
+        let at = rows.iter().position(|id| id.starts_with("h:review"));
+        assert_eq!(
+            at.and_then(|i| rows.get(i + 1)).map(String::as_str),
+            Some("g:c")
+        );
+    }
+
+    #[test]
+    fn hides_a_folded_lanes_placeholder_but_still_counts_it() {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "c").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
+        let review = lane_by_key(LaneKey::Review);
+        if !s.is_collapsed(&data, &review) {
+            s.toggle_lane(&data, &review);
+        }
+        assert!(!has(&entry_ids(&mut s, &data), "g:c"));
+        assert_eq!(s.lane_workspaces(&data, LaneKey::Review).len(), 1);
+    }
+
+    #[test]
+    fn names_the_lane_a_waiting_session_came_from_or_its_project_group_in_projects_view() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "a").directory = Some("/Users/coder/dev/app-two".into());
+        assert_eq!(
+            s.origin_of(&data, Some(by_id(&data, "a"))),
+            Origin {
+                name: "Main activity".into(),
+                color: Colour::Token(Token::LaneMain),
+            }
+        );
+        s.set_mode(ViewMode::Projects);
+        assert_eq!(s.origin_of(&data, Some(by_id(&data, "a"))).name, "App Two");
+        assert_eq!(s.origin_of(&data, None).name, "");
+    }
+
     #[test]
     fn keeps_a_card_being_dragged_in_its_lane_when_it_starts_asking_and_takes_it_out_once_dropped()
     {
@@ -487,9 +755,9 @@ mod needs_you {
         }));
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
         assert!(has(&ids(&s.needs_shown(&data)), "a"));
-        assert!(!s.in_strip(&data).contains("a"));
+        assert!(has(&entry_ids(&mut s, &data), "a@main"));
         s.set_drag(None);
-        assert!(s.in_strip(&data).contains("a"));
+        assert!(!has(&entry_ids(&mut s, &data), "a@main"));
     }
 }
 

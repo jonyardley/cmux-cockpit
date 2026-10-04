@@ -60,6 +60,15 @@ pub struct LaneMove {
     pub awaiting: bool,
 }
 
+/// The workspace Next last opened: its id, its place in the queue then,
+/// and the one that followed it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LastJump {
+    pub id: String,
+    pub index: usize,
+    pub after_id: Option<String>,
+}
+
 /// The core's state between frames.
 #[derive(Debug, Clone, Default)]
 pub struct Session {
@@ -87,6 +96,13 @@ pub struct Session {
     // cockpit/strip.ts: a card dismissed from Needs you, held at the top of
     // its lane until its status moves on from the one it was dismissed in.
     pub(crate) dismissed_hold: HashMap<String, Status>,
+
+    // cockpit/lane-entries.ts: the rank each card last had while not
+    // selected, so an opened card keeps its place until Jon moves on.
+    pub(crate) held_rank: HashMap<String, u8>,
+
+    // cockpit/next.ts: the last workspace Next opened, and what followed it.
+    pub(crate) last_jump: Option<LastJump>,
 
     // cockpit/model.ts: optimistic lane moves, order and folds.
     pub(crate) lane_override: IndexMap<String, LaneMove>,

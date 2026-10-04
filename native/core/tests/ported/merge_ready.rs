@@ -1,0 +1,164 @@
+//! test/merge-ready.test.ts: a lane header's "N ready to merge", from the
+//! cards whose saved PR GitHub would merge now, and the words at the
+//! header's trailing edge.
+
+use cockpit_core::data::Data;
+use cockpit_core::lane_entries::{HeaderHint, LaneEntry};
+use cockpit_core::lanes::LaneKey;
+use cockpit_core::session::Session;
+use cockpit_core::theme::Token;
+
+use crate::support::*;
+
+const NOW: f64 = 1_000_100.0;
+
+const STATE: &str = r#"{"prs": {
+    "ready1": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 1, "mergeable": true},
+    "ready2": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 2, "mergeable": true},
+    "draft": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 3, "mergeable": true, "draft": true},
+    "failing": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "fail"}], "number": 4, "mergeable": true},
+    "merged": {"url": "https://github.com/o/r/pull/1", "status": "merged", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 5, "mergeable": true},
+    "readyMain": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 6, "mergeable": true},
+    "conflicts": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 7, "mergeable": true, "conflicts": true},
+    "running": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pending"}], "number": 8, "mergeable": true},
+    "noVerdict": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 9},
+    "blocked": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 10, "mergeable": false},
+    "noChecks": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [], "number": 11, "mergeable": true},
+    "anchor-parked": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 12, "mergeable": true}
+}}"#;
+
+fn setup() -> (Session, Data, Fx) {
+    let data = frame(
+        NOW,
+        vec![
+            group("g-main", "Main activity").anchor("anchor-main"),
+            group("g-review", "For review").anchor("anchor-review"),
+            group("g-bg", "Background").anchor("anchor-bg"),
+            group("g-parked", "Parked").anchor("anchor-parked"),
+        ],
+        vec![
+            ws("anchor-main").title("Main activity").group("g-main"),
+            ws("readyMain").group("g-main"),
+            ws("anchor-review").title("For review").group("g-review"),
+            ws("ready1").group("g-review"),
+            ws("ready2").group("g-review"),
+            ws("draft").group("g-review"),
+            ws("failing").group("g-review"),
+            ws("merged").group("g-review"),
+            ws("anchor-bg").title("Background").group("g-bg"),
+            ws("conflicts").group("g-bg"),
+            ws("running").group("g-bg"),
+            ws("noVerdict").group("g-bg"),
+            ws("blocked").group("g-bg"),
+            ws("noChecks").group("g-bg"),
+            // A generated anchor has no card; its PR still counts on the header.
+            ws("anchor-parked").title("Parked").group("g-parked"),
+        ],
+    );
+    (session(STATE), data, Fx::default())
+}
+
+mod merge_ready_text {
+    use super::*;
+
+    #[test]
+    fn counts_only_the_lanes_prs_that_are_out_of_draft_passing_and_mergeable() {
+        let (mut s, data, _) = setup();
+        assert_eq!(
+            s.merge_ready_text(&data, LaneKey::Review),
+            "2 ready to merge"
+        );
+    }
+
+    #[test]
+    fn counts_each_lane_on_its_own() {
+        let (mut s, data, _) = setup();
+        assert_eq!(s.merge_ready_text(&data, LaneKey::Main), "1 ready to merge");
+    }
+
+    #[test]
+    fn says_nothing_when_the_lanes_prs_are_in_conflict_running_blocked_without_a_verdict_or_without_checks()
+     {
+        let (mut s, data, _) = setup();
+        assert_eq!(s.merge_ready_text(&data, LaneKey::Bg), "");
+    }
+
+    #[test]
+    fn says_nothing_for_a_lane_with_no_workspaces() {
+        let (mut s, data, _) = setup();
+        assert_eq!(s.merge_ready_text(&data, LaneKey::Unsorted), "");
+    }
+
+    #[test]
+    fn counts_the_lanes_generated_anchor_which_has_no_card_of_its_own() {
+        let (mut s, data, _) = setup();
+        assert_eq!(
+            s.merge_ready_text(&data, LaneKey::Parked),
+            "1 ready to merge"
+        );
+    }
+
+    #[test]
+    fn still_counts_a_card_the_needs_you_strip_lists_a_waiting_sessions_pr_is_still_mergeable() {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "readyMain").agents =
+            Some(vec![Some(fx.agent(NeedsInput).since(NOW - 30.0))]);
+        assert!(s.needs_shown(&data).iter().any(|w| w.id == "readyMain"));
+        assert!(
+            s.lane_entries(&data)
+                .iter()
+                .any(|e| matches!(e, LaneEntry::Ghost { ws_id, .. } if ws_id == "readyMain"))
+        );
+        assert_eq!(s.merge_ready_text(&data, LaneKey::Main), "1 ready to merge");
+    }
+
+    #[test]
+    fn drops_a_card_once_it_has_moved_to_another_branch() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "ready2").branch = Some("other".into());
+        assert_eq!(
+            s.merge_ready_text(&data, LaneKey::Review),
+            "1 ready to merge"
+        );
+    }
+}
+
+mod header_hint {
+    use super::*;
+
+    #[test]
+    fn says_drop_here_while_a_drag_is_over_the_lane_whatever_is_ready() {
+        let (mut s, data, _) = setup();
+        assert_eq!(
+            s.header_hint(&data, LaneKey::Review, true),
+            HeaderHint {
+                text: "Drop here".into(),
+                color: Token::Heading,
+            }
+        );
+    }
+
+    /// Partly ported: the contrast ratio between the two greens is a
+    /// property of their hex, which stays with whoever draws; here the
+    /// token, and that it is not the agent's Ready green.
+    #[test]
+    fn gives_the_merge_line_in_readys_green_not_the_agents_ready_green() {
+        let (mut s, data, _) = setup();
+        let hint = s.header_hint(&data, LaneKey::Review, false);
+        assert_eq!(hint.text, "2 ready to merge");
+        assert_eq!(hint.color, Token::GreenDeep);
+        assert_ne!(hint.color, Token::GreenText);
+    }
+
+    #[test]
+    fn keeps_parkeds_merge_line_faint() {
+        let (mut s, data, _) = setup();
+        assert_eq!(
+            s.header_hint(&data, LaneKey::Parked, false),
+            HeaderHint {
+                text: "1 ready to merge".into(),
+                color: Token::Faint,
+            }
+        );
+    }
+}
