@@ -22,6 +22,8 @@ Tested on cmux 0.64.25.
 - macOS with cmux, and custom sidebars switched on
   (`customSidebars.beta.enabled` in `cmux.json`; the quickstart does this).
 - Node 24.2 or later.
+- To commit or run `npm run check`: Rust through rustup. The toolchain
+  pinned in `rust-toolchain.toml` installs itself on first use.
 - Optional: Claude Code for the hooks, and `gh` signed in for pull request
   chips.
 
@@ -69,6 +71,9 @@ Tested on cmux 0.64.25.
   a folder you have open; a card under Other also offers "Make ... a
   project", as its menu's "New project from this folder" does. Those edits
   live in `config/state.json` and win over the file at build.
+- `native/`: one Cargo workspace for the native rewrite: `core` (the
+  `cockpit_core` Crux app, empty for now) and `spike` (the R1.0 status
+  spike). `rust-toolchain.toml` pins the Rust toolchain.
 - `helper/` and `scripts/`: the URL handler app that saves state, the
   build, the pull request poller and the Claude Code hooks
   ([docs/state-loop.md](docs/state-loop.md)).
@@ -77,7 +82,8 @@ Tested on cmux 0.64.25.
 
 ```
 npm run dev                         # rebuild sidebars/*.js on every save
-npm run check                       # lint, types, dead code (knip), build fresh, tests with a coverage floor, validate
+npm run check                       # lint, types, dead code (knip), build fresh, tests with a coverage floor, validate, then npm run rust
+npm run rust                        # rustfmt, clippy with warnings denied, and the Rust tests under native/
 npm run snapshots                   # re-record the text snapshots after a change on screen
 npm run preview                     # every snapshot scene as a PNG in preview/ (needs Google Chrome)
 npm run pr-visuals                  # before/after PNGs of the scenes this branch changes, pushed to pr-images, as markdown for the PR

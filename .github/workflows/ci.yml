@@ -27,8 +27,24 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # The Rust toolchain pinned in rust-toolchain.toml, with rustfmt and
+      # clippy. With no argument, rustup installs the toolchain that file names.
+      - run: rustup toolchain install
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            native/target
+          # The source hash makes a fresh save after each change; the
+          # fallback only restores a cache built by the same toolchain and
+          # lock file, so a toolchain bump starts clean.
+          key: rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'native/Cargo.lock') }}-${{ hashFiles('native/**/Cargo.toml', 'native/**/*.rs') }}
+          restore-keys: rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'native/Cargo.lock') }}-
       - run: cp config/projects.example.json config/projects.json
-      # Lint, types, dead code, build, tests with a coverage floor.
+      # Lint, types, dead code, build, tests with a coverage floor, then
+      # rustfmt, clippy and the Rust tests under native/.
       # `cmux sidebar validate` needs the macOS app, so it runs in the
       # pre-commit hook on main only.
       - run: npm run check

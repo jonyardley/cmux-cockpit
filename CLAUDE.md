@@ -23,7 +23,8 @@ flat scripts cmux loads. README.md has the layout and commands.
    or files), build is fresh, tests, and the coverage floor on the logic
    modules. The floor is the total across those modules, not per file, so
    one module can sit below it. Raise it when coverage rises; never lower
-   it to get green.
+   it to get green. It ends with `npm run rust`: rustfmt, clippy and the
+   Rust tests under `native/`.
 2. New or changed logic in a sidebar's model modules (below) or a
    `shared/` module has a test in `test/`.
 3. The PR says what the maintainer should look at after reload: validate and the
@@ -102,6 +103,21 @@ and HEAD is pushed with a clean tree, run `npm run pr-visuals` and paste
 the before and after table it prints into `## What changed on screen`.
 Re-run it after later pushes that change a scene again. Never leave a UI
 PR with the words alone.
+
+## Rust in native/
+
+`native/` is one Cargo workspace: `core` (the `cockpit_core` Crux app)
+and `spike` (the R1.0 throwaway). `rust-toolchain.toml` at the root pins
+the toolchain, and `npm run rust` (part of `npm run check`) runs rustfmt,
+clippy with warnings denied, and the tests, from `native/`.
+
+- No `unwrap`, `expect` or `panic!` in core logic: model the failure
+  and return it. Tests may unwrap. Clippy enforces this in every crate
+  that opts into the workspace lints, as `core` does.
+- No `#[allow(...)]`, `#![allow(...)]` or lint config to get green: fix
+  the code. Same spirit as the TypeScript never-list.
+- Clippy clean with warnings denied, on every target, tests included.
+- New logic in `core` has a test beside it.
 
 ## Workflow
 
