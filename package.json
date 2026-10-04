@@ -30,10 +30,10 @@
     "agents": "cmux right-sidebar set custom agents"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.14",
-    "@types/node": "26.6.2",
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "26.6.3",
     "esbuild": "0.28.2",
-    "knip": "6.38.0",
+    "knip": "6.39.0",
     "typescript": "7.0.2"
   }
 }
