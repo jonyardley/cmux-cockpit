@@ -55,16 +55,17 @@ fn computed(input: &Value) -> Value {
             Value::from(s.is_collapsed(&data, lane)),
         );
     }
-    let ids = |list: Vec<&cockpit_core::data::Workspace>| -> Vec<String> {
-        list.into_iter().map(|w| w.id.clone()).collect()
+    let strip = s.needs(&data);
+    let ids = |list: &[&cockpit_core::data::Workspace]| -> Vec<String> {
+        list.iter().map(|w| w.id.clone()).collect()
     };
     let needs = json!({
-        "inStrip": s.in_strip(&data).into_iter().collect::<Vec<_>>(),
-        "late": s.needs_wait_late(&data),
-        "list": ids(s.needs_list(&data)),
-        "more": s.needs_more(&data),
-        "shown": ids(s.needs_shown(&data)),
-        "waitText": s.needs_wait_text(&data),
+        "inStrip": strip.in_strip.iter().collect::<Vec<_>>(),
+        "late": strip.late,
+        "list": ids(&strip.list),
+        "more": strip.more,
+        "shown": ids(&strip.shown),
+        "waitText": strip.wait_text,
     });
     json!({
         "mode": s.mode().as_str(),

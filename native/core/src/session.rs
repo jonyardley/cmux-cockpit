@@ -8,7 +8,7 @@
 //! reads here take `&mut self` where theirs do. The data itself is passed
 //! in on each call, never held.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -86,7 +86,7 @@ pub struct Session {
 
     // cockpit/strip.ts: a card dismissed from Needs you, held at the top of
     // its lane until its status moves on from the one it was dismissed in.
-    pub(crate) dismissed_hold: IndexMap<String, Status>,
+    pub(crate) dismissed_hold: HashMap<String, Status>,
 
     // cockpit/model.ts: optimistic lane moves, order and folds.
     pub(crate) lane_override: IndexMap<String, LaneMove>,

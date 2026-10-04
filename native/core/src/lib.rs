@@ -1,8 +1,8 @@
 //! The cockpit's shared core: the sidebar logic ported from TypeScript, and
 //! the Crux app the shells drive. So far the cockpit's lanes and placement
 //! (model.rs), what an agent's status means (status.rs) and the Needs you
-//! strip (strip.rs), with the shared helpers they need. Session holds the state between frames; each call
-//! takes the frame's cmux data.
+//! strip (strip.rs), with the shared helpers they need. Session holds the
+//! state between frames; each call takes the frame's cmux data.
 
 pub mod activity;
 pub mod anchors;

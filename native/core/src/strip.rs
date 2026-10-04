@@ -2,6 +2,10 @@
 //! the oldest has waited, the row cap and its "+N more", and the cards the
 //! strip stands in for. A dismissal from the strip holds the card at the
 //! top of its lane until its status moves on; lane entries read that hold.
+//!
+//! The TypeScript memoises the list once per change. Here `needs` builds
+//! it once and answers every field from that; the single getters are for
+//! callers that want one field.
 
 use std::cmp::Ordering;
 
@@ -20,60 +24,80 @@ pub const NEEDS_ROWS: usize = 4;
 /// The header's clock turns clay once the oldest ask has waited this long (issue #153).
 pub const NEEDS_LATE_SECS: f64 = 30.0 * 60.0;
 
-/// The row key a dragged card carries.
-fn card_key(id: &str) -> String {
-    format!("w:{id}")
+/// The strip for one frame, every field from one build of the list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NeedsStrip<'d> {
+    /// Every workspace waiting on Jon, longest waiting first.
+    pub list: Vec<&'d Workspace>,
+    /// The rows the strip lists: the first NEEDS_ROWS.
+    pub shown: Vec<&'d Workspace>,
+    /// The shown rows whose card leaves a placeholder: less a card being dragged.
+    pub in_strip: IndexSet<String>,
+    /// How many the strip leaves out, its "+N more".
+    pub more: usize,
+    /// The header's clock: "12m" for the oldest ask, "" when nothing says.
+    pub wait_text: String,
+    /// Whether the oldest ask has waited NEEDS_LATE_SECS or more.
+    pub late: bool,
 }
 
 impl Session {
-    /// Workspaces waiting on Jon, longest waiting first, ties in tab order.
-    /// A lane's generated anchor counts too: it is off the cards, but an
-    /// agent in it can still ask.
-    pub fn needs_list<'d>(&mut self, data: &'d Data) -> Vec<&'d Workspace> {
+    /// Each waiting workspace with when its wait began, longest waiting
+    /// first, ties in tab order. A lane's generated anchor counts too: it
+    /// is off the cards, but an agent in it can still ask.
+    fn waiting<'d>(&mut self, data: &'d Data) -> Vec<(f64, &'d Workspace)> {
         let mut waiting: Vec<(f64, &Workspace)> = Vec::new();
         for w in self.all_workspaces(data) {
-            if self.status_of(Some(w)) == Status::NeedsInput {
-                waiting.push((self.since_of(Some(w)), w));
+            let (status, since) = self.status_and_since(Some(w));
+            if status == Status::NeedsInput {
+                waiting.push((since, w));
             }
         }
         // A stable sort, as Array.prototype.sort is.
         waiting.sort_by(|(a, _), (b, _)| a.partial_cmp(b).unwrap_or(Ordering::Equal));
-        waiting.into_iter().map(|(_, w)| w).collect()
+        waiting
+    }
+
+    /// The whole strip for this frame.
+    pub fn needs<'d>(&mut self, data: &'d Data) -> NeedsStrip<'d> {
+        let waiting = self.waiting(data);
+        let wait = oldest_wait(data, &waiting);
+        let list: Vec<&Workspace> = waiting.into_iter().map(|(_, w)| w).collect();
+        let shown: Vec<&Workspace> = list.iter().take(NEEDS_ROWS).copied().collect();
+        let in_strip = self.placeholders(&shown);
+        NeedsStrip {
+            more: list.len().saturating_sub(NEEDS_ROWS),
+            wait_text: wait.map(fmt_age).unwrap_or_default(),
+            late: wait.unwrap_or(0.0) >= NEEDS_LATE_SECS,
+            list,
+            shown,
+            in_strip,
+        }
+    }
+
+    /// Workspaces waiting on Jon, longest waiting first.
+    pub fn needs_list<'d>(&mut self, data: &'d Data) -> Vec<&'d Workspace> {
+        self.needs(data).list
     }
 
     /// The rows the strip lists: the first NEEDS_ROWS of the list.
     pub fn needs_shown<'d>(&mut self, data: &'d Data) -> Vec<&'d Workspace> {
-        let mut list = self.needs_list(data);
-        list.truncate(NEEDS_ROWS);
-        list
+        self.needs(data).shown
     }
 
     /// How many waiting workspaces the strip leaves out, its "+N more".
     pub fn needs_more(&mut self, data: &Data) -> usize {
-        self.needs_list(data).len().saturating_sub(NEEDS_ROWS)
-    }
-
-    /// How long the oldest ask has waited in seconds, timed as its row is;
-    /// None with no timed ask or no clock. An untimed ask sorts first, so
-    /// it is skipped rather than left to blank the clock.
-    fn oldest_wait(&mut self, data: &Data) -> Option<f64> {
-        let list = self.needs_list(data);
-        let at = list
-            .into_iter()
-            .map(|w| self.since_of(Some(w)))
-            .find(|t| positive(*t))?;
-        let now = now_epoch(data);
-        (now != 0.0 && !now.is_nan()).then(|| (now - at).max(0.0))
+        self.needs(data).more
     }
 
     /// The header's clock: "12m" for the oldest ask, "" when nothing says.
     pub fn needs_wait_text(&mut self, data: &Data) -> String {
-        self.oldest_wait(data).map(fmt_age).unwrap_or_default()
+        self.needs(data).wait_text
     }
 
     /// Whether the oldest ask has waited NEEDS_LATE_SECS or more.
     pub fn needs_wait_late(&mut self, data: &Data) -> bool {
-        self.oldest_wait(data).unwrap_or(0.0) >= NEEDS_LATE_SECS
+        self.needs(data).late
     }
 
     /// The workspaces the strip lists whose card leaves its lane or project
@@ -81,10 +105,14 @@ impl Session {
     /// and so does the card being dragged, so it never vanishes from under
     /// the pointer. In the strip's order.
     pub fn in_strip(&mut self, data: &Data) -> IndexSet<String> {
-        let dragged = self.drag.as_ref().map(|d| d.id.clone());
-        self.needs_shown(data)
-            .into_iter()
-            .filter(|w| dragged.as_deref() != Some(card_key(&w.id).as_str()))
+        self.needs(data).in_strip
+    }
+
+    fn placeholders(&self, shown: &[&Workspace]) -> IndexSet<String> {
+        let dragged = self.drag.as_ref().and_then(|d| d.id.strip_prefix("w:"));
+        shown
+            .iter()
+            .filter(|w| dragged != Some(w.id.as_str()))
             .map(|w| w.id.clone())
             .collect()
     }
@@ -98,20 +126,15 @@ impl Session {
         if !self.is_needs_dismissed(Some(w)) {
             return;
         }
-        let live: IndexSet<&str> = data
-            .workspace_list()
-            .iter()
-            .map(|x| x.id.as_str())
-            .collect();
         self.dismissed_hold
-            .retain(|id, _| live.contains(id.as_str()));
+            .retain(|id, _| data.ws_by_id(id).is_some());
         let status = self.status_of(Some(w));
         self.dismissed_hold.insert(w.id.clone(), status);
     }
 
     /// Lets go of a dismissed card's hold, as a new ask does.
     pub fn release_hold(&mut self, w: &Workspace) {
-        self.dismissed_hold.shift_remove(&w.id);
+        self.dismissed_hold.remove(&w.id);
     }
 
     /// Whether a dismissed card still holds the top of its lane: until its
@@ -123,9 +146,21 @@ impl Session {
         if held == self.status_of(Some(w)) {
             return true;
         }
-        self.dismissed_hold.shift_remove(&w.id);
+        self.dismissed_hold.remove(&w.id);
         false
     }
+}
+
+/// How long the oldest ask has waited in seconds, timed as its row is;
+/// None with no timed ask or no clock. An untimed ask sorts first, so it
+/// is skipped rather than left to blank the clock.
+fn oldest_wait(data: &Data, waiting: &[(f64, &Workspace)]) -> Option<f64> {
+    let at = waiting
+        .iter()
+        .map(|(since, _)| *since)
+        .find(|t| positive(*t))?;
+    let now = now_epoch(data);
+    (now != 0.0 && !now.is_nan()).then(|| (now - at).max(0.0))
 }
 
 #[cfg(test)]
@@ -133,7 +168,6 @@ mod tests {
     use crate::data::{Agent, AgentStatus, Data, Workspace};
     use crate::persist::SavedState;
     use crate::session::Session;
-    use crate::state::DragState;
 
     fn asking(id: &str, since: f64) -> Workspace {
         Workspace {
@@ -167,37 +201,6 @@ mod tests {
         assert_eq!(ids(&s.needs_list(&data)), ["x", "y"]);
     }
 
-    #[test]
-    fn leaves_the_dragged_card_out_of_the_placeholders_only() {
-        let data = frame(2000.0, vec![asking("x", 500.0), asking("y", 600.0)]);
-        let mut s = Session::default();
-        s.set_drag(Some(DragState {
-            id: "w:x".into(),
-            index: 1.0,
-        }));
-        assert_eq!(ids(&s.needs_shown(&data)), ["x", "y"]);
-        assert_eq!(s.in_strip(&data).into_iter().collect::<Vec<_>>(), ["y"]);
-        s.set_drag(None);
-        assert_eq!(
-            s.in_strip(&data).into_iter().collect::<Vec<_>>(),
-            ["x", "y"]
-        );
-    }
-
-    #[test]
-    fn counts_none_more_and_keeps_no_clock_with_nothing_waiting() {
-        let data = frame(2000.0, vec![]);
-        let mut s = Session::new(Vec::new(), SavedState::default());
-        assert_eq!(s.needs_more(&data), 0);
-        assert_eq!(s.needs_wait_text(&data), "");
-        assert!(!s.needs_wait_late(&data));
-    }
-
-    /// The R1.0 spike's expected differences (native/spike/README.md): cmux
-    /// says needs_input for a turn that ended on "Nothing for you" and for a
-    /// dismissed spell, and the strip leaves both out. Both read from
-    /// config/state.json as the sidebar reads them: the move from `moves`,
-    /// the dismissal from `dismissed`.
     #[test]
     fn leaves_out_the_r1_0_expected_differences_nothing_for_you_and_dismissed() {
         let saved = SavedState::from_json(
