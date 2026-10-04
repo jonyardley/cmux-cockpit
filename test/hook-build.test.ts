@@ -21,7 +21,7 @@ import {
   flagFor,
   gapLeft,
   LATER_MS,
-  lateBuildArranged,
+  lateWaitLeft,
   lockedBuild,
   PACE_GAP,
   REDRAW_GAP_MS,
@@ -628,11 +628,11 @@ describe("changedKeys", () => {
 });
 
 describe("the late build for subagent runs", () => {
-  it("counts as arranged until it could no longer be live", () => {
-    assert.equal(lateBuildArranged(null, 1_000), false);
-    assert.equal(lateBuildArranged(0, LATER_MS), true);
-    assert.equal(lateBuildArranged(0, LATER_MS + BUILD_LOCK_STALE_MS - 1), true);
-    assert.equal(lateBuildArranged(0, LATER_MS + BUILD_LOCK_STALE_MS), false, "a late build that died");
+  it("waits out what is left of LATER_MS by the wall clock, and nothing after a sleep", () => {
+    assert.equal(lateWaitLeft(1_000, 1_000), LATER_MS);
+    assert.equal(lateWaitLeft(1_000, 1_000 + LATER_MS - 1), 1);
+    assert.equal(lateWaitLeft(1_000, 1_000 + LATER_MS), 0);
+    assert.equal(lateWaitLeft(1_000, 1_000 + 60 * 60_000), 0, "the Mac slept an hour");
   });
 
   it("waits longer than the slow gap, outside the lock", () => {

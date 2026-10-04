@@ -8,6 +8,18 @@ import { moveOfDescription, type SavedMove } from "../../scripts/state-config.ts
 import { SAVED_STATE } from "./persist.ts";
 import { savedFor } from "./saved.ts";
 
+// The move a description carries, parsed once per distinct description:
+// moveOf runs several times per card on every tick.
+const parsed = new Map<string, SavedMove | undefined>();
+function liveMove(d: string | undefined): SavedMove | undefined {
+  if (d === undefined) return undefined;
+  if (parsed.has(d)) return parsed.get(d);
+  if (parsed.size >= 64) parsed.clear();
+  const m = moveOfDescription(d) ?? undefined;
+  parsed.set(d, m);
+  return m;
+}
+
 // The move `w`'s chat last ended a turn on: the description's or the saved
 // one, whichever is newer, since a failed description write falls back to
 // the saved map and leaves an older description behind. The saved map is
@@ -16,7 +28,7 @@ import { savedFor } from "./saved.ts";
 function savedMoveFor(w: Workspace): SavedMove | undefined {
   const map: Record<string, SavedMove> | undefined = SAVED_STATE.moves;
   const saved = map && Object.hasOwn(map, w.id) ? map[w.id] : undefined;
-  const live = moveOfDescription(w.description) ?? undefined;
+  const live = liveMove(w.description);
   if (!live || !saved) return live ?? saved;
   return saved.epoch > live.epoch ? saved : live;
 }

@@ -33,7 +33,9 @@ lands in the one redraw. The gap depends on who wrote (`Pace` in
   the ten-minute quiet check and the helper rows read them. So a run's
   write rides along with the next build anyone asks for, and the first
   write with none arranged sets up one late build five minutes on
-  (`LATER_MS`, flagged by `config/build-later`), which then waits out the
+  (`LATER_MS`, flagged by `config/build-later`, taken like a lock so
+  runs starting together arrange one, and timed by the wall clock so a
+  Mac that slept builds on waking), which then waits out the
   90 second gap (`SLOW_GAP_MS`). The five minutes pass before the build
   lock is taken, since a holder waiting that long would read as a
   crashed build's. When another build baked the runs first, the late one
@@ -278,7 +280,7 @@ snap back until cmux reports the move, and the agents panel reloads for a
 change it does not use. Saves are rare (a dismissal, a project move, a PR
 opened or merged), so this is accepted until cmux's own store lands (#20).
 The one routine save is the poller refreshing `okEpoch` (#78): at most
-once every 10 minutes, and only while polls run, so while agents are
+once every 5 minutes, and only while polls run, so while agents are
 working or workspaces are being switched.
 
 ## Trust
@@ -662,17 +664,20 @@ goes into the workspace's cmux description (`cmux workspace-action
 --action set-description`), line first and the rest in one bracketed
 JSON tail (`moveDescription` in `scripts/state-config.ts`), since cmux
 sends the description to the sidebar live and nothing has to be rebuilt.
-Moves drove about half the redraws on 2026-10-04 before this. Only when
-cmux refuses the write is the move saved per workspace in the `moves`
-map instead, which rebuilds the sidebars as before. The sidebar reads
-whichever of the two is newer. A "Your move"
+Moves drove about half the redraws on 2026-10-04 before this. The hook
+writes only over an empty description or an earlier move's, never Jon's
+own words, and reads the description back afterwards: one cmux cut or
+changed would read as no move, so it is cleared. In each of those cases,
+and when cmux refuses the write, the move is saved per workspace in the
+`moves` map instead, which rebuilds the sidebars as before. The sidebar
+reads whichever of the two is newer. A "Your move"
 line inside a code fence (a handoff opener) is not the reply's. `decisions`
 counts the reply's bold numbered headings with at least one lettered
 option under them, and `leans` holds the option marked **Lean** or
 (recommended) under each, in Jon's shorthand (`1b 2a`); a rule or a
 markdown heading ends a decision's options. A turn with no move line
-leaves the description alone, since it may be Jon's own words, and drops
-the workspace's saved move if it has one. A move's description is never
+clears the description if it holds a move (Jon's own words are left
+alone) and drops the workspace's saved move if it has one. A move's description is never
 shown as plain words: once a prompt retires the move, the card falls back
 to the latest message. Like `asking`, the map goes through
 `applySet` and is refused from a URL, but a new move drops any other more

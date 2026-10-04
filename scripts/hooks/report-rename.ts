@@ -25,13 +25,13 @@
 // goes into config/state.json's `names` map under the session id, which is
 // the agent's id in cmux, and the build bakes it in (src/agents/team.ts).
 
-import { spawnSync } from "node:child_process";
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readable } from "../../src/shared/text.ts";
 import { scheduleBuild } from "../hook-build.ts";
 import { cleanLabel, type SavedName } from "../state-config.ts";
 import { writeNames } from "../state-url.ts";
+import { cmux } from "./cmux-cli.ts";
 import { field } from "./gh-command.ts";
 
 // A new stretch of transcript is normally a few kilobytes; this bounds the
@@ -148,12 +148,6 @@ export function groupNamesFrom(json: string): string[] {
     const name = field(g, "name");
     return typeof name === "string" ? [name] : [];
   });
-}
-
-function cmux(args: string[]): { ok: boolean; out: string; err: string } {
-  const bin = process.env.CMUX_CLAUDE_HOOK_CMUX_BIN || "cmux";
-  const res = spawnSync(bin, args, { encoding: "utf8", timeout: 5000, env: { ...process.env, CMUX_QUIET: "1" } });
-  return { ok: res.status === 0, out: res.stdout ?? "", err: (res.stderr || res.error?.message || "").trim() };
 }
 
 /** What the hook knows about one session in one workspace. */

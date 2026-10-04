@@ -9,10 +9,11 @@
 // no reply ends it yet (Stop can fire before the reply is flushed). The line
 // goes, with the count of numbered decisions the reply laid out and the
 // options it leaned to, into the workspace's cmux description, which the
-// sidebar reads live, so a turn end redraws nothing. Only when cmux refuses
-// it is the move saved in config/state.json's `moves` map instead, which
-// rebuilds the sidebars. A turn with no move line leaves the description
-// alone (it may be Jon's own) and drops any saved move. The sidebar
+// sidebar reads live, so a turn end redraws nothing. When the description
+// holds Jon's own words, or cmux refuses or alters the write, the move is
+// saved in config/state.json's `moves` map instead, which rebuilds the
+// sidebars. A turn with no move line clears a move's description (never
+// Jon's words) and drops any saved move. The sidebar
 // shows a move only while no prompt has come since it was saved (cmux's
 // latestAt, src/shared/move.ts), so nothing here has to clear a stale one.
 //
@@ -23,12 +24,20 @@
 // for this script alone), and nothing is saved until the turn really ends.
 // It never fails the hook: every problem is a note on stderr and exit 0.
 
-import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scheduleBuild } from "../hook-build.ts";
-import { cleanMove, isId, MAX_DECISIONS, moveDescription, type SavedMove, validateState } from "../state-config.ts";
+import {
+  cleanMove,
+  isId,
+  isMoveDescription,
+  MAX_DECISIONS,
+  moveDescription,
+  type SavedMove,
+  validateState,
+} from "../state-config.ts";
 import { readApplyWrite } from "../state-url.ts";
+import { cmux } from "./cmux-cli.ts";
 import { field } from "./gh-command.ts";
 import { readTail, replyFrom, sleep } from "./transcript.ts";
 
@@ -230,34 +239,72 @@ function record(event: unknown, wsId: string | undefined, now: number, attended:
 
 /** Where a move goes: cmux's description, else the saved map and a rebuild. */
 export interface Delivery {
-  /** Sets the workspace's description; false when cmux refused it. */
-  describe: (wsId: string, description: string) => boolean;
+  /** The workspace's description, "" for none, or null when cmux could not say. */
+  read: (wsId: string) => string | null;
+  /** Sets the description, or clears it for null; false when cmux refused. */
+  write: (wsId: string, description: string | null) => boolean;
   hasSaved: (wsId: string) => boolean;
   save: (wsId: string, move: SavedMove | null) => { ok: true; changed: boolean } | { ok: false; error: string };
   build: () => void;
 }
 
-function cmuxDescribe(wsId: string, description: string): boolean {
-  const bin = process.env.CMUX_CLAUDE_HOOK_CMUX_BIN || "cmux";
-  const args = ["workspace-action", "--action", "set-description", "--workspace", wsId, "--description", description];
-  return spawnSync(bin, args, { timeout: 5000, env: { ...process.env, CMUX_QUIET: "1" } }).status === 0;
+function readDescription(wsId: string): string | null {
+  const res = cmux(["--json", "workspace", "list"]);
+  if (!res.ok) return null;
+  try {
+    const list = field(JSON.parse(res.out), "workspaces");
+    const ws = Array.isArray(list) ? list.find((w) => field(w, "id") === wsId) : undefined;
+    if (ws === undefined) return null;
+    const d = field(ws, "description");
+    return typeof d === "string" ? d : "";
+  } catch {
+    return null;
+  }
+}
+
+function writeDescription(wsId: string, description: string | null): boolean {
+  const args = ["workspace-action", "--workspace", wsId];
+  const res = cmux(
+    description === null
+      ? [...args, "--action", "clear-description"]
+      : [...args, "--action", "set-description", "--description", description],
+  );
+  if (!res.ok) console.error(`report-move: cmux refused the description: ${res.err}`);
+  return res.ok;
 }
 
 const REAL_DELIVERY: Delivery = {
-  describe: cmuxDescribe,
+  read: readDescription,
+  write: writeDescription,
   hasSaved,
   save: (wsId, move) => readApplyWrite(STATE_PATH, `moves.${wsId}`, move ? JSON.stringify(move) : null),
   build: () => scheduleBuild("report-move"),
 };
 
+// Sets the move's description, then reads it back: a description cmux cut
+// or changed would read as no move and show a broken tail, so it is cleared
+// and the caller falls back to the saved map.
+function describeMove(wsId: string, move: SavedMove, d: Delivery): boolean {
+  const description = moveDescription(move);
+  if (!d.write(wsId, description)) return false;
+  if (d.read(wsId) === description) return true;
+  d.write(wsId, null);
+  return false;
+}
+
 /**
- * Hands a turn's move to the cockpit, or drops a saved one when the turn
+ * Hands a turn's move to the cockpit, or retires the last one when the turn
  * had none. The description comes first, since cmux sends it to the sidebar
- * live and nothing is rebuilt; the saved map, and the rebuild it costs, only
- * when cmux refused it. Returns a note for stderr, or null. Exported for testing.
+ * live and nothing is rebuilt, but only while it is empty or already holds a
+ * move: Jon's own words are never overwritten. Otherwise, or when cmux
+ * refuses or alters it, the move goes to the saved map, at the cost of a
+ * rebuild. Returns a note for stderr, or null. Exported for testing.
  */
 export function deliver(wsId: string, move: SavedMove | null, d: Delivery): string | null {
-  if (move && d.describe(wsId, moveDescription(move))) return null;
+  const current = d.read(wsId);
+  const ours = current !== null && (current === "" || isMoveDescription(current));
+  if (move && ours && describeMove(wsId, move, d)) return null;
+  if (!move && current !== null && isMoveDescription(current)) d.write(wsId, null);
   if (!move && !d.hasSaved(wsId)) return null;
   const result = d.save(wsId, move);
   if (!result.ok) return result.error;

@@ -537,35 +537,39 @@ function spawnDetached(tag: string, args: string[], undo: () => void): void {
 export const LATER_MS = 5 * 60_000;
 const LATER_FLAG = join(ROOT, "config", "build-later");
 
-/**
- * Whether a late build is still arranged: its flag was raised under
- * LATER_MS plus a build's stale time ago, so a flag left by a late build
- * that died is ignored once it could no longer be live. Exported for testing.
- */
-export const lateBuildArranged = (raisedAtMs: number | null, now: number): boolean =>
-  raisedAtMs !== null && now - raisedAtMs < LATER_MS + BUILD_LOCK_STALE_MS;
+// A flag older than this is a late build's that died, and is retaken.
+const LATER_STALE_MS = LATER_MS + BUILD_LOCK_STALE_MS;
 
 /**
  * Records a write that can wait (see LATER_MS) and arranges the late build
- * unless one already is. `tag` names the caller as in scheduleBuild.
+ * unless one already is. The flag is taken like a lock, in one exclusive
+ * create, so subagents starting together arrange one late build between
+ * them. `tag` names the caller as in scheduleBuild.
  */
 export function scheduleLateBuild(tag: string): void {
   recordTag(tag);
-  if (lateBuildArranged(statSync(LATER_FLAG, { throwIfNoEntry: false })?.mtimeMs ?? null, Date.now())) return;
-  try {
-    // "w", not raiseFlag's "a": the flag's modification time is when it was raised.
-    closeSync(openSync(LATER_FLAG, "w"));
-  } catch {
-    return;
-  }
+  if (!tryTakeLock(LATER_FLAG, LATER_STALE_MS)) return;
   spawnDetached(tag, ["--late-build", tag], () => takeFlag(LATER_FLAG));
 }
 
-// The detached side of scheduleLateBuild. The flag comes down before the
-// build, so a write landing during it arranges the next late build.
+/**
+ * How long a late build still has to wait, by the wall clock from when its
+ * flag was raised, so a Mac that slept through the wait builds on waking
+ * rather than sleeping the rest out. Exported for testing.
+ */
+export const lateWaitLeft = (raisedAtMs: number, now: number): number => Math.max(0, raisedAtMs + LATER_MS - now);
+
+const flagRaisedAt = (): number | undefined => statSync(LATER_FLAG, { throwIfNoEntry: false })?.mtimeMs;
+
+// The detached side of scheduleLateBuild. It waits in short steps against
+// the wall clock (see lateWaitLeft), then takes its flag down before the
+// build, so a write landing during it arranges the next late build; a flag
+// raised since, by a write after this one's was retaken as stale, is left up.
 async function lateBuild(tag: string): Promise<void> {
-  await sleep(LATER_MS);
-  takeFlag(LATER_FLAG);
+  const raisedAt = flagRaisedAt() ?? Date.now();
+  for (let left = lateWaitLeft(raisedAt, Date.now()); left > 0; left = lateWaitLeft(raisedAt, Date.now()))
+    await sleep(Math.min(left, 30_000));
+  if (flagRaisedAt() === raisedAt) takeFlag(LATER_FLAG);
   startBuild(tag, "slow");
 }
 

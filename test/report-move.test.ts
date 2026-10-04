@@ -357,14 +357,20 @@ describe("the move description", () => {
 
 describe("deliver", () => {
   const move: SavedMove = { text: "go", epoch: 10, session: "s1" };
-  const fake = (describes: boolean, saved = false) => {
+  // A fake cmux holding one workspace's description; `alter` stands in for
+  // a cmux that cuts what it is given, and `refuse` for one that says no.
+  const fake = (start: string | null, opts: { refuse?: boolean; alter?: boolean; saved?: boolean } = {}) => {
     const calls: string[] = [];
+    let held = start;
     const d: Delivery = {
-      describe: (ws, desc) => {
-        calls.push(`describe ${ws} ${desc}`);
-        return describes;
+      read: () => held,
+      write: (_ws, desc) => {
+        calls.push(desc === null ? "clear" : "set");
+        if (opts.refuse) return false;
+        held = desc === null ? "" : opts.alter ? desc.slice(0, 20) : desc;
+        return true;
       },
-      hasSaved: () => saved,
+      hasSaved: () => opts.saved ?? false,
       save: (ws, m) => {
         calls.push(`save ${ws} ${m ? m.text : "null"}`);
         return { ok: true, changed: true };
@@ -373,34 +379,61 @@ describe("deliver", () => {
         calls.push("build");
       },
     };
-    return { d, calls };
+    return { d, calls, held: () => held };
   };
 
-  it("sets the description and saves nothing, so nothing rebuilds", () => {
-    const { d, calls } = fake(true);
-    assert.equal(deliver("ws1", move, d), null);
-    assert.deepEqual(calls, [`describe ws1 ${moveDescription(move)}`]);
+  it("sets an empty description and saves nothing, so nothing rebuilds", () => {
+    const f = fake("");
+    assert.equal(deliver("ws1", move, f.d), null);
+    assert.deepEqual(f.calls, ["set"]);
+    assert.equal(f.held(), moveDescription(move));
   });
 
-  it("falls back to the saved map and a rebuild when cmux refuses", () => {
-    const { d, calls } = fake(false);
-    deliver("ws1", move, d);
-    assert.deepEqual(calls, [`describe ws1 ${moveDescription(move)}`, "save ws1 go", "build"]);
+  it("replaces an older move's description", () => {
+    const f = fake(moveDescription({ text: "old", epoch: 1 }));
+    deliver("ws1", move, f.d);
+    assert.deepEqual(f.calls, ["set"]);
   });
 
-  it("leaves the description alone on a turn with no move, dropping only a saved one", () => {
-    const none = fake(true);
-    deliver("ws1", null, none.d);
-    assert.deepEqual(none.calls, []);
-    const saved = fake(true, true);
+  it("never overwrites Jon's own description: the move is saved instead", () => {
+    const f = fake("Ship checklist");
+    deliver("ws1", move, f.d);
+    assert.deepEqual(f.calls, ["save ws1 go", "build"]);
+    assert.equal(f.held(), "Ship checklist");
+  });
+
+  it("falls back to the saved map when cmux refuses, or cannot say what is there", () => {
+    const refused = fake("", { refuse: true });
+    deliver("ws1", move, refused.d);
+    assert.deepEqual(refused.calls, ["set", "save ws1 go", "build"]);
+    const unknown = fake(null);
+    deliver("ws1", move, unknown.d);
+    assert.deepEqual(unknown.calls, ["save ws1 go", "build"]);
+  });
+
+  it("clears a description cmux cut, then saves the move", () => {
+    const f = fake("", { alter: true });
+    deliver("ws1", move, f.d);
+    assert.deepEqual(f.calls, ["set", "clear", "save ws1 go", "build"]);
+    assert.equal(f.held(), "");
+  });
+
+  it("on a turn with no move clears a move's description, never Jon's, and drops a saved move", () => {
+    const ours = fake(moveDescription(move));
+    deliver("ws1", null, ours.d);
+    assert.deepEqual(ours.calls, ["clear"]);
+    const his = fake("Ship checklist");
+    deliver("ws1", null, his.d);
+    assert.deepEqual(his.calls, []);
+    const saved = fake("", { saved: true });
     deliver("ws1", null, saved.d);
     assert.deepEqual(saved.calls, ["save ws1 null", "build"]);
   });
 
   it("passes a failed save on as a note and builds nothing", () => {
-    const { d, calls } = fake(false);
-    d.save = () => ({ ok: false, error: "locked" });
-    assert.equal(deliver("ws1", move, d), "locked");
-    assert.ok(!calls.includes("build"));
+    const f = fake("Ship checklist");
+    f.d.save = () => ({ ok: false, error: "locked" });
+    assert.equal(deliver("ws1", move, f.d), "locked");
+    assert.ok(!f.calls.includes("build"));
   });
 });
