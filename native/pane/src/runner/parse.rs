@@ -14,17 +14,15 @@ pub struct AgentView {
     pub busy: HashMap<u32, bool>,
     /// pid to session id, which the core keys dismissals by.
     pub session: HashMap<u32, String>,
-    /// Background sessions carry no pid, so they only count.
-    pub background: usize,
 }
 
-/// `claude agents --json`, or None when it is not a list.
+/// `claude agents --json`, or None when it is not a list. Background
+/// sessions carry no pid, so they cannot be joined and are skipped.
 pub fn agents(out: &[u8]) -> Option<AgentView> {
     let list: Vec<Value> = serde_json::from_slice(out).ok()?;
     let mut view = AgentView::default();
     for a in &list {
         let Some(pid) = a["pid"].as_u64().and_then(|p| u32::try_from(p).ok()) else {
-            view.background += 1;
             continue;
         };
         view.busy.insert(pid, a["status"] == "busy");
@@ -111,14 +109,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn reads_agent_view_with_background_sessions_counted_not_joined() {
+    fn reads_agent_view_skipping_background_sessions() {
         let out = br#"[
             {"id": "b8", "kind": "background", "state": "blocked"},
             {"pid": 9533, "kind": "interactive", "sessionId": "77bc", "status": "busy"},
             {"pid": 27486, "kind": "interactive", "sessionId": "7a72", "status": "idle"}
         ]"#;
         let v = agents(out).unwrap();
-        assert_eq!(v.background, 1);
+        assert_eq!(v.busy.len(), 2);
         assert_eq!(v.busy.get(&9533), Some(&true));
         assert_eq!(v.busy.get(&27486), Some(&false));
         assert_eq!(v.session.get(&9533).map(String::as_str), Some("77bc"));

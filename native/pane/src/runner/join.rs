@@ -5,7 +5,9 @@
 //! and `--tab=` on a `sidebar.metadata.updated` status write (this wins),
 //! or `_ppid` and `workspace_id` on an `agent.hook.*` event. The status
 //! comes from the session's last hook (cockpit_core::hooks). A session is
-//! dropped once it ends or Agent View stops listing its pid.
+//! hidden once it ends or Agent View stops listing its pid, and forgotten
+//! once Agent View has left it out `FORGET_AFTER` times running, so a
+//! reused pid starts clean.
 
 use std::collections::HashMap;
 
@@ -14,6 +16,11 @@ use cockpit_core::hooks::{Hooked, status_from_hook, status_without_hooks};
 use serde_json::Value;
 
 use super::parse::{AgentView, iso_epoch};
+
+/// How many Agent Views running may leave a pid out before the join
+/// forgets it. More than one, so a new session's first hook is not lost
+/// to an Agent View read a moment before it listed the pid.
+pub const FORGET_AFTER: u8 = 3;
 
 /// How the event stream stands, for the pane to show beside the view.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -58,13 +65,18 @@ pub struct Join {
     /// pid to its latest status-setting hook.
     sessions: HashMap<u32, Hooked>,
     agents: Option<AgentView>,
+    /// pid to how many Agent Views running have left it out.
+    absent: HashMap<u32, u8>,
 }
 
-/// A workspace event that can change the list: anything but a prompt.
+/// A workspace event that can change the list: anything but a prompt or
+/// a selection, which the join applies itself.
 pub fn changes_workspaces(e: &Value) -> bool {
-    e["name"]
-        .as_str()
-        .is_some_and(|n| n.starts_with("workspace.") && n != "workspace.prompt.submitted")
+    e["name"].as_str().is_some_and(|n| {
+        n.starts_with("workspace.")
+            && n != "workspace.prompt.submitted"
+            && n != "workspace.selected"
+    })
 }
 
 impl Join {
@@ -79,6 +91,8 @@ impl Join {
         if ack["resume"]["requested_after_seq"] == 0 {
             self.tab_of.clear();
             self.sessions.clear();
+            self.absent.clear();
+            self.health.last_seq = 0;
         }
         self.health.replay_to = ack["resume"]["latest_seq"].as_u64();
         self.health.down = None;
@@ -90,6 +104,7 @@ impl Join {
 
     /// Takes a new Agent View; false when it matches the last one.
     pub fn agents(&mut self, view: AgentView) -> bool {
+        self.forget_absent(&view);
         if self.agents.as_ref() == Some(&view) {
             return false;
         }
@@ -110,8 +125,35 @@ impl Join {
         true
     }
 
-    /// Applies one event frame. Returns the status change it made, if any,
-    /// and whether anything in the frame changed at all.
+    /// Counts the pids this Agent View leaves out, and forgets those it
+    /// has left out `FORGET_AFTER` times running. They are hidden already,
+    /// so forgetting them changes no frame.
+    fn forget_absent(&mut self, view: &AgentView) {
+        let mut pids: Vec<u32> = self
+            .tab_of
+            .keys()
+            .chain(self.sessions.keys())
+            .copied()
+            .collect();
+        pids.sort_unstable();
+        pids.dedup();
+        for pid in pids {
+            if view.busy.contains_key(&pid) {
+                self.absent.remove(&pid);
+                continue;
+            }
+            let n = self.absent.entry(pid).or_default();
+            *n = n.saturating_add(1);
+            if *n >= FORGET_AFTER {
+                self.absent.remove(&pid);
+                self.tab_of.remove(&pid);
+                self.sessions.remove(&pid);
+            }
+        }
+    }
+
+    /// Applies one event frame. Returns whether anything in the frame
+    /// changed, and the status change it made, if any.
     pub fn event(&mut self, e: &Value) -> (bool, Option<Change>) {
         if e.get("resume").is_some() {
             self.ack(e);
@@ -137,15 +179,13 @@ impl Join {
             return (false, None);
         };
         let at = e["occurred_at"].as_str().and_then(iso_epoch);
-        if !self.hook(hook, p, seq, at.unwrap_or_default()) {
-            return (false, None);
-        }
-        let change = Change {
+        let (changed, status_changed) = self.hook(hook, p, at.unwrap_or_default());
+        let change = status_changed.then(|| Change {
             seq,
             hook: hook.to_string(),
             at,
-        };
-        (true, Some(change))
+        });
+        (changed, change)
     }
 
     fn select(&mut self, p: &Value) -> bool {
@@ -169,22 +209,25 @@ impl Join {
         old.as_deref() != Some(tab)
     }
 
-    /// True when the hook changed the session's status.
-    fn hook(&mut self, hook: &str, p: &Value, seq: u64, at: f64) -> bool {
+    /// Whether the hook changed the session at all (a repeated status
+    /// still moves its last activity, which picks the workspace's most
+    /// active agent), and whether it changed its status or workspace.
+    fn hook(&mut self, hook: &str, p: &Value, at: f64) -> (bool, bool) {
         let Some(ws) = p["workspace_id"].as_str() else {
-            return false;
+            return (false, false);
         };
         let Some(pid) = pid_of(&p["_ppid"]) else {
-            return false;
+            return (false, false);
         };
         let Some(status) = status_from_hook(hook, p["tool_name"].as_str()) else {
-            return false;
+            return (false, false);
         };
         let prev = self.sessions.get(&pid);
-        let changed = prev.is_none_or(|s| s.status != status || s.workspace != ws);
-        let next = Hooked::after(prev, status, at, seq, ws);
+        let moved = prev.is_none_or(|s| s.status != status || s.workspace != ws);
+        let next = Hooked::after(prev, status, at, ws);
+        let changed = prev != Some(&next);
         self.sessions.insert(pid, next);
-        changed
+        (changed, moved)
     }
 
     /// A session is gone once Agent View stops listing its pid.
@@ -325,7 +368,6 @@ mod tests {
                 .iter()
                 .map(|(p, _, s)| (*p, (*s).to_string()))
                 .collect(),
-            background: 0,
         }
     }
 
@@ -388,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn a_hook_that_repeats_the_status_is_not_a_change() {
+    fn a_hook_that_repeats_the_status_is_not_a_status_change() {
         let mut j = Join::default();
         assert!(
             j.event(&hook(1, "PreToolUse", 7, "A", Some("Bash")))
@@ -397,7 +439,16 @@ mod tests {
         );
         assert_eq!(
             j.event(&hook(2, "PostToolUse", 7, "A", Some("Bash"))),
-            (false, None)
+            (false, None),
+            "same status at the same time changes nothing"
+        );
+        let later = json!({"type": "event", "seq": 2, "name": "agent.hook.PostToolUse",
+                           "occurred_at": "1970-01-01T00:02:00Z",
+                           "payload": {"_ppid": 7, "workspace_id": "A"}});
+        assert_eq!(
+            j.event(&later),
+            (true, None),
+            "a later hook moves the last activity, but is no status change"
         );
         assert!(j.event(&hook(3, "Stop", 7, "A", None)).1.is_some());
         assert_eq!(
@@ -464,6 +515,43 @@ mod tests {
     }
 
     #[test]
+    fn a_replay_from_zero_after_a_restart_is_not_caught_up_at_the_old_sequence() {
+        let mut j = Join::default();
+        j.event(&ack(0, 500));
+        j.event(&hook(500, "Stop", 7, "A", None));
+        assert!(j.health.caught_up());
+        j.event(&ack(0, 40));
+        assert_eq!(j.health.last_seq, 0);
+        assert!(j.health.replaying());
+    }
+
+    #[test]
+    fn a_pid_agent_view_keeps_leaving_out_is_forgotten_so_a_reused_pid_starts_clean() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A"), ws("B")]);
+        j.agents(view(&[(4242, false, "old")]));
+        j.event(&status_write(1, 4242, "A"));
+        j.event(&hook(2, "PermissionRequest", 4242, "A", None));
+        for _ in 0..FORGET_AFTER - 1 {
+            j.agents(view(&[]));
+        }
+        j.agents(view(&[(4242, false, "old")]));
+        assert_eq!(
+            statuses(&j.frame(0.0))[0].1,
+            vec![("old".into(), Some(AgentStatus::NeedsInput))],
+            "a pid back before the limit keeps what it had"
+        );
+        for _ in 0..FORGET_AFTER {
+            j.agents(view(&[]));
+        }
+        j.agents(view(&[(4242, false, "new")]));
+        j.event(&status_write(3, 4242, "B"));
+        let d = statuses(&j.frame(0.0));
+        assert_eq!(d[0].1, vec![], "nothing left in A");
+        assert_eq!(d[1].1, vec![("new".into(), Some(AgentStatus::Idle))]);
+    }
+
+    #[test]
     fn caught_up_once_events_reach_the_acks_sequence() {
         let mut j = Join::default();
         assert!(!j.health.caught_up());
@@ -514,9 +602,10 @@ mod tests {
     }
 
     #[test]
-    fn workspace_events_other_than_prompts_change_the_list() {
+    fn workspace_events_other_than_prompts_and_selections_change_the_list() {
         assert!(changes_workspaces(&json!({"name": "workspace.reordered"})));
         assert!(changes_workspaces(&json!({"name": "workspace.action"})));
+        assert!(!changes_workspaces(&json!({"name": "workspace.selected"})));
         assert!(!changes_workspaces(
             &json!({"name": "workspace.prompt.submitted"})
         ));

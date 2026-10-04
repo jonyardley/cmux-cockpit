@@ -79,10 +79,6 @@ fn print_live(pane: &Pane, latency: Option<&Latency>, shown: &mut String) {
     {
         eprintln!("{}", timing_line(l, runner::now_epoch()));
     }
-    // A replay's burst prints once, when it has caught up.
-    if pane.join.health.replaying() {
-        return;
-    }
     let text = text::render(pane);
     if text != *shown {
         let mut out = std::io::stdout().lock();
@@ -119,6 +115,7 @@ fn main() -> ExitCode {
     let opts = Options {
         config: args.config.unwrap_or_else(default_config),
         after: args.after,
+        wake: args.once.then_some(Duration::from_secs(1)),
     };
     let started = Instant::now();
     let mut shown = String::new();

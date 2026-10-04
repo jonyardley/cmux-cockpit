@@ -47,8 +47,6 @@ pub struct Hooked {
     pub since: f64,
     /// Epoch seconds of the latest hook that set a status.
     pub last_activity: f64,
-    /// The event sequence of that hook.
-    pub seq: u64,
     /// The workspace the hook named.
     pub workspace: String,
 }
@@ -57,13 +55,7 @@ impl Hooked {
     /// The session after a hook at epoch `at` that sets `status`. A status
     /// that does not change keeps its start, so an agent working through
     /// many tool calls counts from the first one.
-    pub fn after(
-        prev: Option<&Hooked>,
-        status: AgentStatus,
-        at: f64,
-        seq: u64,
-        workspace: &str,
-    ) -> Hooked {
+    pub fn after(prev: Option<&Hooked>, status: AgentStatus, at: f64, workspace: &str) -> Hooked {
         let since = match prev {
             Some(p) if p.status == status => p.since,
             _ => at,
@@ -72,7 +64,6 @@ impl Hooked {
             status,
             since,
             last_activity: at,
-            seq,
             workspace: workspace.to_string(),
         }
     }
@@ -143,14 +134,11 @@ mod tests {
 
     #[test]
     fn an_unchanged_status_keeps_its_start_and_a_new_one_starts_now() {
-        let first = Hooked::after(None, AgentStatus::Working, 100.0, 1, "w");
+        let first = Hooked::after(None, AgentStatus::Working, 100.0, "w");
         assert_eq!((first.since, first.last_activity), (100.0, 100.0));
-        let again = Hooked::after(Some(&first), AgentStatus::Working, 160.0, 2, "w");
-        assert_eq!(
-            (again.since, again.last_activity, again.seq),
-            (100.0, 160.0, 2)
-        );
-        let asked = Hooked::after(Some(&again), AgentStatus::NeedsInput, 170.0, 3, "w");
+        let again = Hooked::after(Some(&first), AgentStatus::Working, 160.0, "w");
+        assert_eq!((again.since, again.last_activity), (100.0, 160.0));
+        let asked = Hooked::after(Some(&again), AgentStatus::NeedsInput, 170.0, "w");
         assert_eq!(asked.since, 170.0);
     }
 }

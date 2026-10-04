@@ -4,6 +4,7 @@
 //! write-then-rename as readily as an edit in place.
 
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
@@ -41,34 +42,30 @@ impl Watched {
     }
 }
 
-/// config/state.json; a missing or unreadable file reads as empty, as a
-/// first run has none. The error says why, for the log.
-pub fn read_state(path: &Path) -> (SavedState, Option<String>) {
+/// A file's text; None when it does not exist, which is no error.
+fn text_of(path: &Path) -> Result<Option<String>, String> {
     match fs::read_to_string(path) {
-        Ok(text) => match SavedState::from_json(&text) {
-            Ok(s) => (s, None),
-            Err(e) => (
-                SavedState::default(),
-                Some(format!("{}: {e}", path.display())),
-            ),
-        },
-        Err(e) => (
-            SavedState::default(),
-            Some(format!("{}: {e}", path.display())),
-        ),
+        Ok(t) => Ok(Some(t)),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("{}: {e}", path.display())),
     }
 }
 
-/// config/projects.json, the project table; a missing or unreadable
-/// file reads as no projects.
-pub fn read_projects(path: &Path) -> (Vec<Project>, Option<String>) {
-    let text = match fs::read_to_string(path) {
-        Ok(t) => t,
-        Err(e) => return (Vec::new(), Some(format!("{}: {e}", path.display()))),
-    };
-    match serde_json::from_str(&text) {
-        Ok(p) => (p, None),
-        Err(e) => (Vec::new(), Some(format!("{}: {e}", path.display()))),
+/// config/state.json; a missing file reads as empty, as a first run has
+/// none. An unreadable one is an error, so the caller keeps what it had.
+pub fn read_state(path: &Path) -> Result<SavedState, String> {
+    match text_of(path)? {
+        Some(text) => SavedState::from_json(&text).map_err(|e| format!("{}: {e}", path.display())),
+        None => Ok(SavedState::default()),
+    }
+}
+
+/// config/projects.json, the project table; a missing file reads as no
+/// projects, an unreadable one as an error.
+pub fn read_projects(path: &Path) -> Result<Vec<Project>, String> {
+    match text_of(path)? {
+        Some(text) => serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display())),
+        None => Ok(Vec::new()),
     }
 }
 
@@ -99,14 +96,11 @@ mod tests {
     }
 
     #[test]
-    fn reads_the_state_and_project_files_or_falls_back_to_empty() {
+    fn reads_the_state_and_project_files() {
         let state = temp("state.json");
         fs::write(&state, r#"{"ui": {"mode": "projects"}}"#).unwrap();
-        let (s, err) = read_state(&state);
-        assert_eq!(
-            (s.ui.mode.map(|m| m.as_str()), err),
-            (Some("projects"), None)
-        );
+        let s = read_state(&state).unwrap();
+        assert_eq!(s.ui.mode.map(|m| m.as_str()), Some("projects"));
 
         let projects = temp("projects.json");
         fs::write(
@@ -114,15 +108,16 @@ mod tests {
             r##"[{"match": "/dev/a", "name": "A", "color": "#000", "icon": "star"}]"##,
         )
         .unwrap();
-        let (p, err) = read_projects(&projects);
-        assert_eq!((p.len(), err), (1, None));
+        assert_eq!(read_projects(&projects).unwrap().len(), 1);
+    }
 
-        fs::write(&projects, "not json").unwrap();
-        let (p, err) = read_projects(&projects);
-        assert!(p.is_empty() && err.is_some());
-
-        let (s, err) = read_state(&temp("missing.json"));
-        assert!(err.is_some());
-        assert_eq!(s, SavedState::default());
+    #[test]
+    fn a_missing_file_is_empty_and_a_torn_one_an_error() {
+        assert_eq!(read_state(&temp("missing.json")), Ok(SavedState::default()));
+        assert_eq!(read_projects(&temp("missing.json")), Ok(Vec::new()));
+        let torn = temp("torn.json");
+        fs::write(&torn, "[{\"match\": ").unwrap();
+        assert!(read_projects(&torn).is_err());
+        assert!(read_state(&torn).is_err());
     }
 }

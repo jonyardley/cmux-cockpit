@@ -40,6 +40,9 @@ pub const WORKSPACES_EVERY: Duration = Duration::from_secs(30);
 pub const FILES_EVERY: Duration = Duration::from_secs(2);
 /// A fresh frame at least this often, so ages move on with nothing new.
 pub const CLOCK_EVERY: Duration = Duration::from_secs(30);
+/// While a replay streams in, a frame waits for this much quiet, so a
+/// burst builds one frame rather than one per batch.
+pub const REPLAY_SETTLE: Duration = Duration::from_millis(300);
 
 /// What the input threads hand the runner.
 #[derive(Debug)]
@@ -119,6 +122,15 @@ pub struct Options {
     pub config: PathBuf,
     /// Replay `cmux events` after this sequence.
     pub after: u64,
+    /// Also call `on_frame` at least this often with no new frame, for a
+    /// caller with a deadline of its own.
+    pub wake: Option<Duration>,
+}
+
+/// Whether a frame goes in now: something changed, and no replay is
+/// mid-burst (it has caught up, or gone quiet).
+pub fn frame_now(pending: bool, replaying: bool, quiet: bool) -> bool {
+    pending && (!replaying || quiet)
 }
 
 /// Wall-clock epoch seconds.
@@ -176,28 +188,37 @@ struct Files {
 
 impl Files {
     /// Sends the core whichever file changed, projects first so a new
-    /// state's overrides are checked against the new table.
+    /// state's overrides are checked against the new table. A file that
+    /// will not read (half written, say) is logged and the core keeps the
+    /// last good one until the file changes again.
     fn check(&mut self, pane: &mut Pane, log: &mut dyn FnMut(String)) -> bool {
         let mut changed = false;
         if self.projects.changed() {
-            let (projects, err) = read_projects(&self.projects.path);
-            err.into_iter().for_each(&mut *log);
-            pane.projects(projects);
-            changed = true;
+            match read_projects(&self.projects.path) {
+                Ok(projects) => {
+                    pane.projects(projects);
+                    changed = true;
+                }
+                Err(e) => log(e),
+            }
         }
         if self.state.changed() {
-            let (saved, err) = read_state(&self.state.path);
-            err.into_iter().for_each(&mut *log);
-            pane.state(saved);
-            changed = true;
+            match read_state(&self.state.path) {
+                Ok(saved) => {
+                    pane.state(saved);
+                    changed = true;
+                }
+                Err(e) => log(e),
+            }
         }
         changed
     }
 }
 
-/// Runs until `on_frame` breaks, calling it after every batch of inputs
-/// that changed something, with the batch's latest status change. `log`
-/// takes lines for stderr.
+/// Runs until `on_frame` breaks, calling it after each new frame with
+/// the latest status change since the last one, and every `opts.wake`
+/// with none. A replay builds its frame once it has caught up or gone
+/// quiet. `log` takes lines for stderr.
 pub fn run(
     opts: &Options,
     mut on_frame: impl FnMut(&Pane, Option<&Latency>) -> ControlFlow<()>,
@@ -224,26 +245,36 @@ pub fn run(
         projects: Watched::new(opts.config.join("projects.json")),
     };
     files.check(&mut pane, &mut log);
-    let mut files_due = Instant::now() + FILES_EVERY;
-    let mut clock_due = Instant::now() + CLOCK_EVERY;
+    let start = Instant::now();
+    let mut files_due = start + FILES_EVERY;
+    let mut clock_due = start + CLOCK_EVERY;
+    let mut wake_due = opts.wake.map(|w| start + w);
+    // The core has heard of a change it has no frame for yet.
+    let mut pending = true;
+    let mut latest: Option<Latency> = None;
 
     loop {
-        let wait = files_due
-            .min(clock_due)
-            .saturating_duration_since(Instant::now());
-        let mut batch = Vec::new();
-        match rx.recv_timeout(wait) {
-            Ok(first) => batch.push(first),
-            Err(RecvTimeoutError::Timeout) => {}
-            Err(RecvTimeoutError::Disconnected) => break,
+        let due = wake_due.map_or(files_due.min(clock_due), |w| {
+            w.min(files_due).min(clock_due)
+        });
+        let mut wait = due.saturating_duration_since(Instant::now());
+        if pending && pane.join.health.replaying() {
+            wait = wait.min(REPLAY_SETTLE);
         }
+        let mut batch = Vec::new();
+        let quiet = match rx.recv_timeout(wait) {
+            Ok(first) => {
+                batch.push(first);
+                false
+            }
+            Err(RecvTimeoutError::Timeout) => true,
+            Err(RecvTimeoutError::Disconnected) => break,
+        };
         batch.extend(rx.try_iter());
 
-        let mut dirty = false;
-        let mut latest: Option<Latency> = None;
         for input in batch {
             let (changed, nudge, latency) = pane.input(input);
-            dirty |= changed;
+            pending |= changed;
             if nudge {
                 let _ = nudge_tx.send(());
             }
@@ -252,21 +283,28 @@ pub fn run(
         let now = Instant::now();
         if now >= files_due {
             files_due = now + FILES_EVERY;
-            dirty |= files.check(&mut pane, &mut log);
+            pending |= files.check(&mut pane, &mut log);
         }
-        if now >= clock_due {
-            dirty = true;
+        pending |= now >= clock_due;
+        let woke = wake_due.is_some_and(|w| now >= w);
+        if woke {
+            wake_due = opts.wake.map(|w| now + w);
         }
-        if !dirty {
-            continue;
-        }
-        clock_due = now + CLOCK_EVERY;
-        pane.frame(now_epoch());
-        if on_frame(&pane, latest.as_ref()).is_break() {
+        let flow = if frame_now(pending, pane.join.health.replaying(), quiet) {
+            pending = false;
+            clock_due = now + CLOCK_EVERY;
+            pane.frame(now_epoch());
+            on_frame(&pane, latest.take().as_ref())
+        } else if woke {
+            on_frame(&pane, None)
+        } else {
+            ControlFlow::Continue(())
+        };
+        if flow.is_break() {
             break;
         }
     }
-    events.stop();
+    events.shut_down();
 }
 
 #[cfg(test)]
@@ -318,6 +356,14 @@ mod tests {
         let ack = json!({"boot_id": "B", "resume": {"requested_after_seq": 4, "latest_seq": 9}});
         pane.input(Input::Event(Box::new(ack), Instant::now()));
         assert_eq!(pane.join.health.down, None);
+    }
+
+    #[test]
+    fn a_replay_frames_once_caught_up_or_quiet() {
+        assert!(!frame_now(false, false, true), "nothing new, no frame");
+        assert!(frame_now(true, false, false), "live: at once");
+        assert!(!frame_now(true, true, false), "mid-burst: wait");
+        assert!(frame_now(true, true, true), "a quiet replay frames anyway");
     }
 
     #[test]

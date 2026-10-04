@@ -7,6 +7,7 @@
 
 use std::io::{BufRead, BufReader};
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -49,7 +50,11 @@ pub fn follow(source: &mut dyn EventSource, mut after: u64, tx: &Sender<Input>) 
     loop {
         let why = match source.open(after) {
             Ok(lines) => match read(lines, &mut after, &mut boot, tx) {
-                End::Closed => return,
+                End::Closed => {
+                    // Nobody listens, so the stream it opened goes too.
+                    source.ended();
+                    return;
+                }
                 End::Restarted => {
                     after = 0;
                     continue;
@@ -101,13 +106,20 @@ fn read(
 }
 
 /// The real `cmux events` process. The child is shared so the runner can
-/// stop it on the way out.
+/// stop it on the way out; once `shut_down`, no new one starts.
 #[derive(Debug, Default, Clone)]
 pub struct CmuxEvents {
-    pub child: Arc<Mutex<Option<Child>>>,
+    child: Arc<Mutex<Option<Child>>>,
+    closed: Arc<AtomicBool>,
 }
 
 impl CmuxEvents {
+    /// Stops the stream for good: the current process, and any reconnect.
+    pub fn shut_down(&self) {
+        self.closed.store(true, Ordering::SeqCst);
+        self.stop();
+    }
+
     /// Stops the current `cmux events`, if one runs, and says how it ended.
     pub fn stop(&self) -> String {
         let Ok(mut slot) = self.child.lock() else {
@@ -127,6 +139,15 @@ impl CmuxEvents {
 impl EventSource for CmuxEvents {
     fn open(&mut self, after: u64) -> Result<Box<dyn BufRead + Send>, String> {
         self.stop();
+        // Held from the check to the store, so a shut_down in between
+        // waits and then stops the new process.
+        let mut slot = self
+            .child
+            .lock()
+            .map_err(|_| "cmux events: lost track of the process".to_string())?;
+        if self.closed.load(Ordering::SeqCst) {
+            return Err("shut down".to_string());
+        }
         let mut child = Command::new("cmux")
             .args(["events", "--no-heartbeat", "--after", &after.to_string()])
             .stdout(Stdio::piped())
@@ -134,9 +155,7 @@ impl EventSource for CmuxEvents {
             .spawn()
             .map_err(|e| format!("cmux events did not start: {e}"))?;
         let stdout = child.stdout.take().ok_or("cmux events gave no output")?;
-        if let Ok(mut slot) = self.child.lock() {
-            *slot = Some(child);
-        }
+        *slot = Some(child);
         Ok(Box::new(BufReader::new(stdout)))
     }
 
@@ -146,7 +165,7 @@ impl EventSource for CmuxEvents {
 
     fn pause(&mut self, d: Duration) -> bool {
         thread::sleep(d);
-        true
+        !self.closed.load(Ordering::SeqCst)
     }
 }
 
@@ -162,6 +181,7 @@ mod tests {
         script: Vec<Result<String, String>>,
         opened_after: Vec<u64>,
         pauses: Vec<Duration>,
+        ended: usize,
     }
 
     impl Fake {
@@ -175,6 +195,7 @@ mod tests {
                 script,
                 opened_after: Vec::new(),
                 pauses: Vec::new(),
+                ended: 0,
             }
         }
     }
@@ -190,6 +211,7 @@ mod tests {
         }
 
         fn ended(&mut self) -> String {
+            self.ended += 1;
             "killed".to_string()
         }
 
@@ -288,5 +310,6 @@ mod tests {
             vec![0],
             "no reconnect once nobody listens"
         );
+        assert_eq!(fake.ended, 1, "the stream it opened is stopped");
     }
 }
