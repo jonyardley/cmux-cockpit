@@ -1,0 +1,222 @@
+{
+  "laneEntries": [
+    { "anchorId": null, "id": "h:main", "kind": "header", "lane": "main" },
+    { "id": "g:needs", "kind": "ghost", "lane": "main", "wsId": "needs" },
+    { "id": "g:asking", "kind": "ghost", "lane": "main", "wsId": "asking" },
+    { "id": "w:ready", "kind": "ws", "lane": "main", "wsId": "ready" },
+    { "id": "w:working", "kind": "ws", "lane": "main", "wsId": "working" },
+    { "id": "w:quiet", "kind": "ws", "lane": "main", "wsId": "quiet" },
+    { "id": "w:selected", "kind": "ws", "lane": "main", "wsId": "selected" },
+    { "id": "w:merged", "kind": "ws", "lane": "main", "wsId": "merged" },
+    { "id": "w:untimed", "kind": "ws", "lane": "main", "wsId": "untimed" },
+    { "anchorId": null, "id": "h:review", "kind": "header", "lane": "review" },
+    { "id": "w:ended", "kind": "ws", "lane": "review", "wsId": "ended" },
+    { "id": "w:idle", "kind": "ws", "lane": "review", "wsId": "idle" },
+    { "anchorId": null, "id": "h:bg", "kind": "header", "lane": "bg" },
+    { "id": "w:waiting", "kind": "ws", "lane": "bg", "wsId": "waiting" },
+    { "id": "w:none", "kind": "ws", "lane": "bg", "wsId": "none" },
+    { "anchorId": null, "id": "h:parked", "kind": "header", "lane": "parked" },
+    { "anchorId": null, "id": "h:unsorted", "kind": "header", "lane": "unsorted" },
+    { "id": "w:loose", "kind": "ws", "lane": "unsorted", "wsId": "loose" },
+    { "id": "w:loose-merged", "kind": "ws", "lane": "unsorted", "wsId": "loose-merged" }
+  ],
+  "laneHeaders": {
+    "bg": { "collapsed": false, "mergeReady": "", "workspaces": ["none", "waiting"] },
+    "main": {
+      "collapsed": false,
+      "mergeReady": "",
+      "workspaces": ["needs", "asking", "working", "quiet", "ready", "merged", "untimed", "selected"]
+    },
+    "parked": { "collapsed": true, "mergeReady": "", "workspaces": ["parked"] },
+    "review": { "collapsed": false, "mergeReady": "", "workspaces": ["ended", "idle"] },
+    "unsorted": { "collapsed": false, "mergeReady": "", "workspaces": ["loose-merged", "loose"] }
+  },
+  "mode": "all",
+  "needs": {
+    "inStrip": ["needs", "asking"],
+    "late": false,
+    "list": ["needs", "asking"],
+    "more": 0,
+    "shown": ["needs", "asking"],
+    "waitText": "5m"
+  },
+  "next": { "queue": ["needs", "asking", "ready"], "step": { "position": 1, "target": "needs", "total": 3 } },
+  "placement": {
+    "anchor-bg": {
+      "actualLane": "bg",
+      "card": false,
+      "density": "compact",
+      "lane": "bg",
+      "project": "other",
+      "status": "none"
+    },
+    "anchor-main": {
+      "actualLane": "main",
+      "card": false,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "status": "none"
+    },
+    "anchor-parked": {
+      "actualLane": "parked",
+      "card": false,
+      "density": "row",
+      "lane": "parked",
+      "project": "other",
+      "status": "none"
+    },
+    "anchor-review": {
+      "actualLane": "review",
+      "card": false,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "none"
+    },
+    "asking": {
+      "actualLane": "main",
+      "card": true,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "status": "needs_input"
+    },
+    "ended": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "ended"
+    },
+    "idle": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "idle"
+    },
+    "loose": {
+      "actualLane": "unsorted",
+      "card": true,
+      "density": "row",
+      "lane": "unsorted",
+      "project": "/dev/app-one",
+      "status": "working"
+    },
+    "loose-merged": {
+      "actualLane": "unsorted",
+      "card": true,
+      "density": "row",
+      "lane": "unsorted",
+      "project": "other",
+      "status": "none"
+    },
+    "merged": {
+      "actualLane": "main",
+      "card": true,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "status": "idle"
+    },
+    "needs": {
+      "actualLane": "main",
+      "card": true,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "status": "needs_input"
+    },
+    "none": {
+      "actualLane": "bg",
+      "card": true,
+      "density": "compact",
+      "lane": "bg",
+      "project": "other",
+      "status": "none"
+    },
+    "parked": {
+      "actualLane": "parked",
+      "card": true,
+      "density": "row",
+      "lane": "parked",
+      "project": "other",
+      "status": "working"
+    },
+    "quiet": {
+      "actualLane": "main",
+      "card": true,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "status": "working"
+    },
+    "ready": {
+      "actualLane": "main",
+      "card": true,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "status": "idle"
+    },
+    "selected": {
+      "actualLane": "main",
+      "card": true,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "status": "working"
+    },
+    "untimed": {
+      "actualLane": "main",
+      "card": true,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "status": "idle"
+    },
+    "waiting": {
+      "actualLane": "bg",
+      "card": true,
+      "density": "compact",
+      "lane": "bg",
+      "project": "other",
+      "status": "idle"
+    },
+    "working": {
+      "actualLane": "main",
+      "card": true,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "status": "working"
+    }
+  },
+  "projectEntries": [
+    { "id": "p:/dev/app-one", "kind": "header", "project": "/dev/app-one" },
+    { "id": "loose@p", "kind": "ws", "wsId": "loose" },
+    { "id": "p:other", "kind": "header", "project": "other" },
+    { "id": "needs@g", "kind": "ghost", "wsId": "needs" },
+    { "id": "asking@g", "kind": "ghost", "wsId": "asking" },
+    { "id": "working@p", "kind": "ws", "wsId": "working" },
+    { "id": "quiet@p", "kind": "ws", "wsId": "quiet" },
+    { "id": "ready@p", "kind": "ws", "wsId": "ready" },
+    { "id": "merged@p", "kind": "ws", "wsId": "merged" },
+    { "id": "untimed@p", "kind": "ws", "wsId": "untimed" },
+    { "id": "selected@p", "kind": "ws", "wsId": "selected" },
+    { "id": "ended@p", "kind": "ws", "wsId": "ended" },
+    { "id": "idle@p", "kind": "ws", "wsId": "idle" },
+    { "id": "none@p", "kind": "ws", "wsId": "none" },
+    { "id": "waiting@p", "kind": "ws", "wsId": "waiting" },
+    { "id": "parked@p", "kind": "ws", "wsId": "parked" },
+    { "id": "loose-merged@p", "kind": "ws", "wsId": "loose-merged" },
+    { "id": "new", "kind": "newRow" },
+    { "id": "quiet", "kind": "quietHeader" },
+    { "id": "q:/dev/app-two", "kind": "quietRow", "project": "/dev/app-two" },
+    { "id": "q:/dev/app-three", "kind": "quietRow", "project": "/dev/app-three" }
+  ],
+  "quietProjects": ["/dev/app-two", "/dev/app-three"]
+}

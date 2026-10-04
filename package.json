@@ -18,6 +18,7 @@
     "validate": "node scripts/validate.ts",
     "pr-body": "node scripts/pr-body.ts",
     "snapshots": "UPDATE_SNAPSHOTS=1 node --test 'test/snapshot-*.test.ts'",
+    "golden": "UPDATE_GOLDEN=1 node --test 'test/golden-*.test.ts'",
     "preview": "node scripts/preview.ts",
     "pr-visuals": "node scripts/pr-visuals.ts",
     "rust": "cd native && cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked",

@@ -1,0 +1,92 @@
+{
+  "data": {
+    "epoch": 1000000,
+    "groups": [],
+    "selectedId": null,
+    "workspaces": [
+      {
+        "agents": [
+          { "id": "s-n1", "kind": "claude", "lastActivityAt": 998200, "sinceEpoch": 998200, "status": "needs_input" }
+        ],
+        "id": "n1",
+        "latestAt": 998080,
+        "latestMessage": "Should the strip cap at four?",
+        "title": "Oldest question"
+      },
+      {
+        "agents": [
+          { "id": "s-ask", "kind": "claude", "lastActivityAt": 999940, "sinceEpoch": 999940, "status": "needs_input" }
+        ],
+        "id": "ask",
+        "latestAt": 999820,
+        "title": "Publish"
+      },
+      {
+        "agents": [
+          { "id": "s-n2", "kind": "claude", "lastActivityAt": 999100, "sinceEpoch": 999100, "status": "needs_input" }
+        ],
+        "id": "n2",
+        "latestAt": 998980,
+        "latestMessage": "Tests pass. Merge now?",
+        "title": "Second"
+      },
+      {
+        "agents": [
+          { "id": "s-n3", "kind": "claude", "lastActivityAt": 999400, "sinceEpoch": 999400, "status": "needs_input" }
+        ],
+        "id": "n3",
+        "latestAt": 999280,
+        "title": "Third"
+      },
+      {
+        "agents": [
+          { "id": "s-n4", "kind": "claude", "lastActivityAt": 999970, "sinceEpoch": 999970, "status": "needs_input" }
+        ],
+        "id": "n4",
+        "latestAt": 999850,
+        "latestMessage": "One more thing",
+        "title": "Fifth, past the cap"
+      },
+      {
+        "agents": [{ "id": "a6", "lastActivityAt": 999760, "sinceEpoch": 999760, "status": "idle" }],
+        "id": "ready",
+        "title": "Finished while away",
+        "unread": 3
+      },
+      {
+        "agents": [{ "id": "a7", "lastActivityAt": 999995, "sinceEpoch": 999900, "status": "working" }],
+        "id": "busy",
+        "title": "Busy"
+      }
+    ]
+  },
+  "projects": [
+    { "color": "#D97757", "icon": "star.fill", "match": "/dev/app-one", "name": "App One", "root": "~/dev/app-one" },
+    { "color": "#6A9BCC", "icon": "cube.fill", "match": ["/dev/app-two", "/.config/app-two"], "name": "App Two" },
+    { "color": "#788C5D", "icon": "leaf.fill", "match": "/dev/app-three", "name": "App Three" }
+  ],
+  "state": {
+    "asking": { "ask": { "epoch": 999940, "reason": "allow npm publish?" } },
+    "dismissed": {},
+    "mergeKept": {},
+    "moves": {
+      "n2": {
+        "decisions": 2,
+        "epoch": 999100,
+        "leans": "1b 2a",
+        "session": "s-n2",
+        "text": "reply \"1b 2a\" on the bridge and the store."
+      },
+      "n3": { "epoch": 999400, "session": "s-n3", "text": "the work is finished. Run /clear now." }
+    },
+    "names": {},
+    "ownPrs": {},
+    "prOrigins": {},
+    "projectOverride": {},
+    "projects": {},
+    "prs": {},
+    "published": {},
+    "subagents": {},
+    "ui": {}
+  }
+}

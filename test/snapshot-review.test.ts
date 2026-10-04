@@ -1,49 +1,19 @@
 // Scene: the For review lane with a card for each merge verdict, and its
 // header's "N ready to merge", under a Main activity card whose PR is ready:
-// it stays there, offering a green "To review →". Fixture data only; see test/support/snapshot.ts.
+// it stays there, offering a green "To review →".
+// Fixture data in test/support/scenes.ts, shared with its golden test;
+// see test/support/snapshot.ts.
 
 import { it } from "node:test";
-import type { SavedPr } from "../scripts/state-config.ts";
+import { SCENES } from "./support/scenes.ts";
 import { seed, snapshotScene } from "./support/snapshot.ts";
 
-const pass = [{ name: "build", state: "pass" as const }];
-const pr = (number: number, extra: Partial<SavedPr> = {}): SavedPr => ({
-  url: `https://github.com/o/r/pull/${number}`,
-  number,
-  status: "open",
-  branch: `feat-${number}`,
-  title: `Feature ${number}`,
-  checks: pass,
-  ...extra,
-});
-
-const PRS: Record<string, SavedPr> = {
-  ready: pr(1, { mergeable: true, additions: 120, deletions: 8 }),
-  draft: pr(2, { mergeable: true, draft: true, additions: 1234, deletions: 56 }),
-  failing: pr(3, { mergeable: true, checks: [{ name: "build", state: "fail" }] }),
-  running: pr(4, { checks: [{ name: "build", state: "pending" }] }),
-  conflicts: pr(5, { conflicts: true }),
-  blocked: pr(6),
-  merged: pr(7, { status: "merged" }),
-  closed: pr(8, { status: "closed" }),
-  waiting: pr(9, { mergeable: true }),
-};
-const r = seed({ state: { prs: PRS } });
-const { group, ws } = await import("./support/fixtures.ts");
+const scene = SCENES["review-verdicts"];
+const r = seed(scene.seed());
 await import("../src/cockpit/index.ts");
 const { C } = await import("../src/cockpit/theme.ts");
 
 it("for review: merge verdicts", () => {
-  r.data.groups = [
-    group("g-main", "Main activity", { anchorId: "anchor-main" }),
-    group("g-review", "For review", { anchorId: "anchor-review" }),
-  ];
-  const { waiting: _, ...verdicts } = PRS;
-  r.data.workspaces = [
-    ws("anchor-main", { title: "Main activity", group: "g-main" }),
-    ws("waiting", { title: "waiting card", group: "g-main", branch: "feat-9" }),
-    ws("anchor-review", { title: "For review", group: "g-review" }),
-    ...Object.entries(verdicts).map(([id, p]) => ws(id, { title: `${id} card`, group: "g-review", branch: p.branch })),
-  ];
+  scene.data(r);
   snapshotScene("review-verdicts", r, C, "cockpit");
 });
