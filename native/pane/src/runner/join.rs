@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 
 use cockpit_core::data::{Agent, Data, Workspace};
-use cockpit_core::hooks::{Hooked, status_from_hook, status_without_hooks};
+use cockpit_core::hooks::{Hooked, moves_activity, status_from_hook, status_without_hooks};
 use serde_json::Value;
 
 use super::parse::{AgentView, iso_epoch};
@@ -69,14 +69,13 @@ pub struct Join {
     absent: HashMap<u32, u8>,
 }
 
-/// A workspace event that can change the list: anything but a prompt or
-/// a selection, which the join applies itself.
+/// A workspace event that can change the list: anything but a
+/// selection, which the join applies itself. A prompt counts, since the
+/// list carries the latest prompt and its time.
 pub fn changes_workspaces(e: &Value) -> bool {
-    e["name"].as_str().is_some_and(|n| {
-        n.starts_with("workspace.")
-            && n != "workspace.prompt.submitted"
-            && n != "workspace.selected"
-    })
+    e["name"]
+        .as_str()
+        .is_some_and(|n| n.starts_with("workspace.") && n != "workspace.selected")
 }
 
 impl Join {
@@ -88,11 +87,18 @@ impl Join {
     /// The stream's ack: replay runs to `latest_seq`. A connection that
     /// asked from 0 is a fresh start, so what was joined before goes.
     pub fn ack(&mut self, ack: &Value) {
-        if ack["resume"]["requested_after_seq"] == 0 {
+        let after = ack["resume"]["requested_after_seq"]
+            .as_u64()
+            .unwrap_or_default();
+        if after == 0 {
             self.tab_of.clear();
             self.sessions.clear();
             self.absent.clear();
             self.health.last_seq = 0;
+        } else {
+            // Nothing before `after` will come, so a start with --after
+            // is caught up once it reaches the ack's latest.
+            self.health.last_seq = self.health.last_seq.max(after);
         }
         self.health.replay_to = ack["resume"]["latest_seq"].as_u64();
         self.health.down = None;
@@ -179,7 +185,7 @@ impl Join {
             return (false, None);
         };
         let at = e["occurred_at"].as_str().and_then(iso_epoch);
-        let (changed, status_changed) = self.hook(hook, p, at.unwrap_or_default());
+        let (changed, status_changed) = self.hook(hook, p, at);
         let change = status_changed.then(|| Change {
             seq,
             hook: hook.to_string(),
@@ -212,7 +218,9 @@ impl Join {
     /// Whether the hook changed the session at all (a repeated status
     /// still moves its last activity, which picks the workspace's most
     /// active agent), and whether it changed its status or workspace.
-    fn hook(&mut self, hook: &str, p: &Value, at: f64) -> (bool, bool) {
+    /// A hook with no readable time keeps the session's last activity
+    /// rather than wiping it.
+    fn hook(&mut self, hook: &str, p: &Value, at: Option<f64>) -> (bool, bool) {
         let Some(ws) = p["workspace_id"].as_str() else {
             return (false, false);
         };
@@ -224,7 +232,8 @@ impl Join {
         };
         let prev = self.sessions.get(&pid);
         let moved = prev.is_none_or(|s| s.status != status || s.workspace != ws);
-        let next = Hooked::after(prev, status, at, ws);
+        let at = at.or(prev.map(|s| s.last_activity)).unwrap_or_default();
+        let next = Hooked::after(prev, status, at, moves_activity(hook), ws);
         let changed = prev != Some(&next);
         self.sessions.insert(pid, next);
         (changed, moved)
@@ -245,8 +254,9 @@ impl Join {
             .or_else(|| self.sessions.get(&pid).map(|s| s.workspace.as_str()))
     }
 
-    fn agent(&self, pid: u32) -> Option<Agent> {
+    fn agent(&self, pid: u32, now: f64) -> Option<Agent> {
         let view = self.agents.as_ref();
+        let busy = view.and_then(|v| v.busy.get(&pid).copied());
         let id = view
             .and_then(|a| a.session.get(&pid).cloned())
             .unwrap_or_else(|| format!("pid:{pid}"));
@@ -257,12 +267,12 @@ impl Join {
         };
         match self.sessions.get(&pid) {
             Some(s) => {
-                a.status = Some(s.status.clone());
-                a.since_epoch = Some(s.since).filter(|t| *t > 0.0);
+                let (status, since) = s.with_agent_view(busy, now);
+                a.status = Some(status);
+                a.since_epoch = Some(since).filter(|t| *t > 0.0);
                 a.last_activity_at = Some(s.last_activity).filter(|t| *t > 0.0);
             }
             None => {
-                let busy = view.and_then(|v| v.busy.get(&pid).copied());
                 a.status = Some(status_without_hooks(busy)?);
             }
         }
@@ -271,7 +281,7 @@ impl Join {
 
     /// Every live session, grouped by workspace, oldest pid first so the
     /// order holds still between frames.
-    fn agents_by_workspace(&self) -> HashMap<&str, Vec<Agent>> {
+    fn agents_by_workspace(&self, now: f64) -> HashMap<&str, Vec<Agent>> {
         let mut pids: Vec<u32> = self
             .sessions
             .keys()
@@ -289,7 +299,7 @@ impl Join {
             if ended || !self.alive(pid) {
                 continue;
             }
-            let (Some(ws), Some(agent)) = (self.placed(pid), self.agent(pid)) else {
+            let (Some(ws), Some(agent)) = (self.placed(pid), self.agent(pid, now)) else {
                 continue;
             };
             out.entry(ws).or_default().push(agent);
@@ -300,7 +310,7 @@ impl Join {
     /// One frame of the core's data at epoch `now`. A session placed in a
     /// workspace the list does not have is left out.
     pub fn frame(&self, now: f64) -> Data {
-        let mut by_ws = self.agents_by_workspace();
+        let mut by_ws = self.agents_by_workspace(now);
         let workspaces = self.workspaces.as_ref().map(|list| {
             list.iter()
                 .map(|w| {
@@ -602,11 +612,11 @@ mod tests {
     }
 
     #[test]
-    fn workspace_events_other_than_prompts_and_selections_change_the_list() {
+    fn workspace_events_other_than_selections_change_the_list() {
         assert!(changes_workspaces(&json!({"name": "workspace.reordered"})));
         assert!(changes_workspaces(&json!({"name": "workspace.action"})));
         assert!(!changes_workspaces(&json!({"name": "workspace.selected"})));
-        assert!(!changes_workspaces(
+        assert!(changes_workspaces(
             &json!({"name": "workspace.prompt.submitted"})
         ));
         assert!(!changes_workspaces(&json!({"name": "agent.hook.Stop"})));
@@ -620,5 +630,43 @@ mod tests {
         let d = j.frame(0.0);
         assert_eq!(d.workspace_list().len(), 1);
         assert_eq!(d.ws_by_id("A").unwrap().agent_list().count(), 0);
+    }
+
+    #[test]
+    fn a_start_with_after_is_caught_up_when_nothing_is_left_to_replay() {
+        let mut j = Join::default();
+        j.event(&ack(500, 500));
+        assert!(j.health.caught_up());
+        assert!(!j.health.replaying());
+    }
+
+    #[test]
+    fn a_hook_without_a_time_keeps_the_last_activity() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")]);
+        j.event(&hook(1, "PreToolUse", 7, "A", Some("Bash")));
+        let untimed = json!({"type": "event", "seq": 2, "name": "agent.hook.Stop",
+                             "payload": {"_ppid": 7, "workspace_id": "A"}});
+        j.event(&untimed);
+        let d = j.frame(0.0);
+        let a = d.ws_by_id("A").unwrap().agent_list().next().unwrap();
+        assert_eq!(a.status, Some(AgentStatus::Idle));
+        assert_eq!(
+            (a.since_epoch, a.last_activity_at),
+            (Some(100.0), Some(100.0))
+        );
+    }
+
+    #[test]
+    fn agent_view_idle_retires_a_working_status_its_hooks_left_behind() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")]);
+        j.agents(view(&[(7, false, "s7")]));
+        j.event(&hook(1, "PreToolUse", 7, "A", Some("Bash")));
+        assert_eq!(
+            statuses(&j.frame(102.0))[0].1[0].1,
+            Some(AgentStatus::Working)
+        );
+        assert_eq!(statuses(&j.frame(200.0))[0].1[0].1, Some(AgentStatus::Idle));
     }
 }

@@ -18,9 +18,12 @@ pub mod stream;
 pub mod text;
 pub mod watch;
 
+use std::io::Read;
 use std::ops::ControlFlow;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -40,6 +43,8 @@ pub const WORKSPACES_EVERY: Duration = Duration::from_secs(30);
 pub const FILES_EVERY: Duration = Duration::from_secs(2);
 /// A fresh frame at least this often, so ages move on with nothing new.
 pub const CLOCK_EVERY: Duration = Duration::from_secs(30);
+/// The longest a poll's command may run before it is killed.
+pub const COMMAND_LIMIT: Duration = Duration::from_secs(10);
 /// While a replay streams in, a frame waits for this much quiet, so a
 /// burst builds one frame rather than one per batch.
 pub const REPLAY_SETTLE: Duration = Duration::from_millis(300);
@@ -153,19 +158,40 @@ pub fn now_epoch() -> f64 {
         .map_or(0.0, |d| d.as_secs_f64())
 }
 
-/// Runs a command and returns its output when it succeeded.
-fn output(program: &str, args: &[&str]) -> Option<Vec<u8>> {
-    let out = Command::new(program)
+/// Runs a command and returns its output when it succeeded within
+/// `limit`; one that hangs is killed, so a stuck cmux cannot stop a poll
+/// for good. The output is read on its own thread, so a large one never
+/// fills the pipe.
+fn output_within(program: &str, args: &[&str], limit: Duration) -> Option<Vec<u8>> {
+    let mut child = Command::new(program)
         .args(args)
         .stdin(Stdio::null())
+        .stdout(Stdio::piped())
         .stderr(Stdio::null())
-        .output()
+        .spawn()
         .ok()?;
-    out.status.success().then_some(out.stdout)
+    let mut stdout = child.stdout.take()?;
+    let (done_tx, done_rx) = mpsc::channel();
+    thread::spawn(move || {
+        let mut buf = Vec::new();
+        let read = stdout.read_to_end(&mut buf).map(|_| buf);
+        let _ = done_tx.send(read);
+    });
+    let read = done_rx.recv_timeout(limit);
+    if read.is_err() {
+        let _ = child.kill();
+    }
+    let status = child.wait().ok()?;
+    let out = read.ok()?.ok()?;
+    status.success().then_some(out)
 }
 
-fn poll_agents(tx: &Sender<Input>) {
-    loop {
+fn output(program: &str, args: &[&str]) -> Option<Vec<u8>> {
+    output_within(program, args, COMMAND_LIMIT)
+}
+
+fn poll_agents(tx: &Sender<Input>, stop: &AtomicBool) {
+    while !stop.load(Ordering::SeqCst) {
         let view = output("claude", &["agents", "--json"]).and_then(|o| parse::agents(&o));
         if let Some(view) = view
             && tx.send(Input::Agents(view)).is_err()
@@ -252,9 +278,11 @@ pub fn run(
         let after = opts.after;
         thread::spawn(move || stream::follow(&mut source, after, &tx));
     }
+    let stop = Arc::new(AtomicBool::new(false));
     {
         let tx = tx.clone();
-        thread::spawn(move || poll_agents(&tx));
+        let stop = Arc::clone(&stop);
+        thread::spawn(move || poll_agents(&tx, &stop));
     }
     thread::spawn(move || poll_workspaces(&tx, &nudge_rx));
 
@@ -271,6 +299,9 @@ pub fn run(
     // The core has heard of a change it has no frame for yet.
     let mut pending = true;
     let mut latest: Option<Latency> = None;
+    // Quiet is measured from the last input, not from any timeout, so a
+    // check falling due mid-burst does not frame a half-read replay.
+    let mut last_input = start;
 
     loop {
         let due = wake_due.map_or(files_due.min(clock_due), |w| {
@@ -278,18 +309,19 @@ pub fn run(
         });
         let mut wait = due.saturating_duration_since(Instant::now());
         if pending && feed.join.health.replaying() {
-            wait = wait.min(REPLAY_SETTLE);
+            let settled = (last_input + REPLAY_SETTLE).saturating_duration_since(Instant::now());
+            wait = wait.min(settled);
         }
         let mut batch = Vec::new();
-        let quiet = match rx.recv_timeout(wait) {
-            Ok(first) => {
-                batch.push(first);
-                false
-            }
-            Err(RecvTimeoutError::Timeout) => true,
+        match rx.recv_timeout(wait) {
+            Ok(first) => batch.push(first),
+            Err(RecvTimeoutError::Timeout) => {}
             Err(RecvTimeoutError::Disconnected) => break,
-        };
+        }
         batch.extend(rx.try_iter());
+        if !batch.is_empty() {
+            last_input = Instant::now();
+        }
 
         let mut poked = false;
         for input in batch {
@@ -306,6 +338,7 @@ pub fn run(
             }
         }
         let now = Instant::now();
+        let quiet = now.duration_since(last_input) >= REPLAY_SETTLE;
         if now >= files_due {
             files_due = now + FILES_EVERY;
             pending |= files.check(&mut feed, &mut log);
@@ -334,6 +367,7 @@ pub fn run(
             break;
         }
     }
+    stop.store(true, Ordering::SeqCst);
     events.shut_down();
 }
 
@@ -394,6 +428,19 @@ mod tests {
         assert!(frame_now(true, false, false), "live: at once");
         assert!(!frame_now(true, true, false), "mid-burst: wait");
         assert!(frame_now(true, true, true), "a quiet replay frames anyway");
+    }
+
+    #[test]
+    fn a_poll_command_that_hangs_is_killed_at_its_limit() {
+        let started = Instant::now();
+        let out = output_within("sleep", &["5"], Duration::from_millis(100));
+        assert_eq!(out, None);
+        assert!(started.elapsed() < Duration::from_secs(2));
+        assert_eq!(
+            output_within("echo", &["hi"], Duration::from_secs(5)),
+            Some(b"hi\n".to_vec())
+        );
+        assert_eq!(output_within("false", &[], Duration::from_secs(5)), None);
     }
 
     #[test]

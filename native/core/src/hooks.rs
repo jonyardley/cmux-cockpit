@@ -39,6 +39,18 @@ pub fn status_without_hooks(busy: Option<bool>) -> Option<AgentStatus> {
     })
 }
 
+/// Whether a hook counts as the agent doing something. A Notification
+/// does not: the idle nudge comes about 60 seconds after a Stop, and the
+/// core tells it from a real ask by that gap since the last activity.
+pub fn moves_activity(name: &str) -> bool {
+    name != "Notification"
+}
+
+/// How long a working status may sit with no hook while Agent View says
+/// the session is idle, before Agent View wins. An Esc mid-turn sends no
+/// Stop, so without this the card would say working until the next turn.
+pub const STALE_WORKING_SECS: f64 = 5.0;
+
 /// One session as its hooks left it.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Hooked {
@@ -55,17 +67,40 @@ impl Hooked {
     /// The session after a hook at epoch `at` that sets `status`. A status
     /// that does not change keeps its start, so an agent working through
     /// many tool calls counts from the first one.
-    pub fn after(prev: Option<&Hooked>, status: AgentStatus, at: f64, workspace: &str) -> Hooked {
+    /// `activity` is false for a hook that is no sign of work
+    /// (`moves_activity`), which keeps the last activity where it was.
+    pub fn after(
+        prev: Option<&Hooked>,
+        status: AgentStatus,
+        at: f64,
+        activity: bool,
+        workspace: &str,
+    ) -> Hooked {
         let since = match prev {
             Some(p) if p.status == status => p.since,
+            _ => at,
+        };
+        let last_activity = match prev {
+            Some(p) if !activity => p.last_activity,
             _ => at,
         };
         Hooked {
             status,
             since,
-            last_activity: at,
+            last_activity,
             workspace: workspace.to_string(),
         }
+    }
+
+    /// The status and its start once Agent View has had its say: working
+    /// with no hook for `STALE_WORKING_SECS` while Agent View says idle
+    /// reads as idle since the last hook. Everything else is the hook's.
+    pub fn with_agent_view(&self, busy: Option<bool>, now: f64) -> (AgentStatus, f64) {
+        let stale = now - self.last_activity >= STALE_WORKING_SECS;
+        if self.status == AgentStatus::Working && busy == Some(false) && stale {
+            return (AgentStatus::Idle, self.last_activity);
+        }
+        (self.status.clone(), self.since)
     }
 }
 
@@ -134,11 +169,53 @@ mod tests {
 
     #[test]
     fn an_unchanged_status_keeps_its_start_and_a_new_one_starts_now() {
-        let first = Hooked::after(None, AgentStatus::Working, 100.0, "w");
+        let first = Hooked::after(None, AgentStatus::Working, 100.0, true, "w");
         assert_eq!((first.since, first.last_activity), (100.0, 100.0));
-        let again = Hooked::after(Some(&first), AgentStatus::Working, 160.0, "w");
+        let again = Hooked::after(Some(&first), AgentStatus::Working, 160.0, true, "w");
         assert_eq!((again.since, again.last_activity), (100.0, 160.0));
-        let asked = Hooked::after(Some(&again), AgentStatus::NeedsInput, 170.0, "w");
+        let asked = Hooked::after(Some(&again), AgentStatus::NeedsInput, 170.0, true, "w");
         assert_eq!(asked.since, 170.0);
+    }
+
+    #[test]
+    fn a_notification_keeps_the_last_activity_so_the_idle_nudge_shows_its_gap() {
+        assert!(!moves_activity("Notification"));
+        assert!(moves_activity("PermissionRequest"));
+        let stopped = Hooked::after(None, AgentStatus::Idle, 100.0, true, "w");
+        let nudge = Hooked::after(Some(&stopped), AgentStatus::NeedsInput, 160.0, false, "w");
+        assert_eq!((nudge.since, nudge.last_activity), (160.0, 100.0));
+        let first = Hooked::after(None, AgentStatus::NeedsInput, 50.0, false, "w");
+        assert_eq!(
+            first.last_activity, 50.0,
+            "with nothing before, the hook's own time"
+        );
+    }
+
+    #[test]
+    fn agent_view_idle_retires_a_stale_working_status_only() {
+        let working = Hooked::after(None, AgentStatus::Working, 100.0, true, "w");
+        assert_eq!(
+            working.with_agent_view(Some(false), 104.0),
+            (AgentStatus::Working, 100.0),
+            "too soon: Agent View may lag the hook"
+        );
+        assert_eq!(
+            working.with_agent_view(Some(false), 105.0),
+            (AgentStatus::Idle, 100.0)
+        );
+        assert_eq!(
+            working.with_agent_view(Some(true), 500.0),
+            (AgentStatus::Working, 100.0)
+        );
+        assert_eq!(
+            working.with_agent_view(None, 500.0),
+            (AgentStatus::Working, 100.0)
+        );
+        let asking = Hooked::after(None, AgentStatus::NeedsInput, 100.0, true, "w");
+        assert_eq!(
+            asking.with_agent_view(Some(false), 500.0),
+            (AgentStatus::NeedsInput, 100.0),
+            "an ask waits while Claude idles"
+        );
     }
 }

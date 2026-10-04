@@ -90,7 +90,13 @@ fn read(
         };
         if v.get("resume").is_some() {
             let this_boot = v["boot_id"].as_str().unwrap_or_default().to_string();
-            if *after > 0 && boot.as_ref().is_some_and(|b| *b != this_boot) {
+            let new_boot = boot.as_ref().is_some_and(|b| *b != this_boot);
+            // cmux's latest below what we asked after: it restarted before
+            // this process ever saw its old boot id.
+            let behind = v["resume"]["latest_seq"]
+                .as_u64()
+                .is_some_and(|latest| latest < *after);
+            if *after > 0 && (new_boot || behind) {
                 return End::Restarted;
             }
             *boot = Some(this_boot);
@@ -311,5 +317,15 @@ mod tests {
             "no reconnect once nobody listens"
         );
         assert_eq!(fake.ended, 1, "the stream it opened is stopped");
+    }
+
+    #[test]
+    fn a_first_connection_asking_past_cmuxs_latest_replays_from_zero() {
+        let restarted = [ack("NEW", 800, 40), ev(40)].join("\n");
+        let fresh = [ack("NEW", 0, 40), ev(40)].join("\n");
+        let mut fake = Fake::new(vec![Ok(&restarted), Ok(&fresh)]);
+        let got = run(&mut fake, 800);
+        assert_eq!(fake.opened_after, vec![800, 0]);
+        assert_eq!(got, vec!["ack", "40", "down: killed"]);
     }
 }

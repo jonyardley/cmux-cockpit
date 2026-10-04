@@ -18,7 +18,7 @@ pub fn health_line(h: &Health) -> String {
     match (&h.down, h.replay_to) {
         (Some(why), _) => format!("EVENT STREAM DOWN, statuses may be stale: {why}"),
         (None, None) => "cmux events: connecting".to_string(),
-        (None, Some(to)) if h.last_seq < to => {
+        (None, Some(to)) if !h.caught_up() => {
             format!("cmux events: replaying, seq {} of {to}", h.last_seq)
         }
         (None, Some(_)) => format!("cmux events: live, seq {}", h.last_seq),
