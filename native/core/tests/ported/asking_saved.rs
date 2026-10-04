@@ -1,7 +1,6 @@
 //! test/asking-saved.test.ts: asking or your turn (issue #81), from the
-//! saved asks the notification hook writes. The Needs you list and the
-//! agents panel cases test strip.ts and the agents sidebar, left for
-//! their lanes.
+//! saved asks the notification hook writes. The agents panel cases test
+//! the agents sidebar, left for its lane.
 
 use cockpit_core::data::{Agent, Data};
 use cockpit_core::needs::ask_reason;
@@ -194,5 +193,20 @@ mod cockpit {
         assert_eq!(s.placeholder_text(Some(&turn)), "your turn");
         let bare = ws("x").agents(vec![waiting(&mut fx, 1100.0)]);
         assert_eq!(s.needs_detail(Some(&bare)), "Waiting for your reply");
+    }
+
+    #[test]
+    fn lists_asking_and_your_turn_workspaces_alike_in_needs_you() {
+        let (mut s, _, mut fx) = setup();
+        let data = frame(
+            1060.0,
+            vec![],
+            vec![
+                ws("wA").agents(vec![waiting(&mut fx, 1000.0)]),
+                ws("other").agents(vec![waiting(&mut fx, 1010.0)]),
+            ],
+        );
+        let list: Vec<&str> = s.needs_list(&data).iter().map(|w| w.id.as_str()).collect();
+        assert_eq!(list, ["wA", "other"]);
     }
 }

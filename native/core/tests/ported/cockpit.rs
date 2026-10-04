@@ -1,14 +1,17 @@
-//! test/cockpit.test.ts: the cases that test model.rs, status.rs and the
-//! project-of-a-workspace slice. Cases that test the strip, lane entries,
-//! the Projects rows, drops, Next, the card menu or new projects are left
-//! for the lanes that port those modules.
+//! test/cockpit.test.ts: the cases that test model.rs, status.rs, strip.rs
+//! and the project-of-a-workspace slice. Cases that test lane entries, the
+//! Projects rows, drops, Next, the card menu or new projects are left for
+//! the lanes that port those modules.
 
 use cockpit_core::data::{Data, Workspace, WorkspaceGroup};
 use cockpit_core::lanes::{LANES, LaneKey, lane_by_key};
 use cockpit_core::model::{PanelHeight, actual_lane_of, card_density};
 use cockpit_core::persist::ViewMode;
 use cockpit_core::session::Session;
+use cockpit_core::state::DragState;
 use cockpit_core::status::Status;
+use cockpit_core::strip::NEEDS_LATE_SECS;
+use cockpit_core::time::now_epoch;
 use serde_json::Value;
 
 use crate::support::*;
@@ -103,7 +106,7 @@ mod lanes {
 mod a_real_workspace_anchoring_a_single_member_group {
     use super::*;
 
-    /// Partly ported: the Needs you list and the lane's count are strip.ts's and lane-entries.ts's.
+    /// Partly ported: the lane's count is lane-entries.ts's.
     #[test]
     fn hides_the_generated_anchor_but_shows_the_real_one_in_needs_you_and_counted_in_its_lane() {
         let (mut s, _, mut fx) = setup();
@@ -134,6 +137,7 @@ mod a_real_workspace_anchoring_a_single_member_group {
             s.lane_of(&data, by_id(&data, "real-parked")),
             LaneKey::Parked
         );
+        assert_eq!(ids(&s.needs_list(&data)), ["real-parked"]);
     }
 }
 
@@ -346,6 +350,83 @@ mod a_lanes_generated_anchor {
         assert!(calls(&s).is_empty());
         assert_eq!(s.lane_of(&data, anchor), LaneKey::Review);
     }
+
+    #[test]
+    fn still_lists_a_waiting_anchor_in_needs_you() {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "anchor-review").agents =
+            Some(vec![Some(fx.agent(NeedsInput).since(1.0))]);
+        assert_eq!(ids(&s.needs_list(&data)), ["anchor-review"]);
+    }
+}
+
+/// Issue #153: the Needs you header says how long the oldest ask has waited.
+mod needs_you_clock {
+    use super::*;
+
+    /// Gives `id` an agent that has asked for `waited` seconds.
+    fn ask(data: &mut Data, fx: &mut Fx, id: &str, waited: f64) {
+        let since = now_epoch(data) - waited;
+        ws_mut(data, id).agents = Some(vec![Some(fx.agent(NeedsInput).since(since))]);
+    }
+
+    #[test]
+    fn is_blank_with_nothing_waiting_or_no_clock() {
+        let (mut s, mut data, mut fx) = setup();
+        assert_eq!(s.needs_wait_text(&data), "");
+        assert!(!s.needs_wait_late(&data));
+        ask(&mut data, &mut fx, "a", 45.0 * 60.0);
+        data.epoch = Some(0.0);
+        assert_eq!(s.needs_wait_text(&data), "");
+        assert!(!s.needs_wait_late(&data));
+    }
+
+    #[test]
+    fn skips_an_untimed_ask_rather_than_blanking_the_clock() {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "b").agents = Some(vec![Some(fx.agent(NeedsInput))]);
+        ask(&mut data, &mut fx, "a", 45.0 * 60.0);
+        assert_eq!(
+            s.needs_list(&data).first().map(|w| w.id.as_str()),
+            Some("b")
+        );
+        assert_eq!(s.needs_wait_text(&data), "45m");
+        assert!(s.needs_wait_late(&data));
+    }
+
+    #[test]
+    fn times_the_oldest_ask_wherever_it_sits_in_the_data() {
+        let (mut s, mut data, mut fx) = setup();
+        ask(&mut data, &mut fx, "a", 5.0 * 60.0);
+        ask(&mut data, &mut fx, "u", 12.0 * 60.0);
+        ask(&mut data, &mut fx, "c", 60.0);
+        assert_eq!(s.needs_wait_text(&data), "12m");
+        assert!(!s.needs_wait_late(&data));
+    }
+
+    #[test]
+    fn turns_late_at_30_minutes_not_before() {
+        let (mut s, mut data, mut fx) = setup();
+        ask(&mut data, &mut fx, "a", NEEDS_LATE_SECS - 1.0);
+        assert_eq!(s.needs_wait_text(&data), "29m");
+        assert!(!s.needs_wait_late(&data));
+        ask(&mut data, &mut fx, "a", NEEDS_LATE_SECS);
+        assert_eq!(s.needs_wait_text(&data), "30m");
+        assert!(s.needs_wait_late(&data));
+        ask(&mut data, &mut fx, "a", 3.0 * 3600.0);
+        assert_eq!(s.needs_wait_text(&data), "3h");
+        assert!(s.needs_wait_late(&data));
+    }
+
+    #[test]
+    fn stops_counting_an_ask_once_it_is_dismissed() {
+        let (mut s, mut data, mut fx) = setup();
+        ask(&mut data, &mut fx, "a", 45.0 * 60.0);
+        ask(&mut data, &mut fx, "b", 2.0 * 60.0);
+        s.dismiss_waiting(&data, Some(by_id(&data, "a")));
+        assert_eq!(s.needs_wait_text(&data), "2m");
+        assert!(!s.needs_wait_late(&data));
+    }
 }
 
 mod needs_you {
@@ -359,6 +440,56 @@ mod needs_you {
         assert_eq!(s.status_of(Some(by_id(&data, "a"))), Status::Idle);
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(900.0))]);
         assert_eq!(s.status_of(Some(by_id(&data, "a"))), Status::NeedsInput);
+    }
+
+    #[test]
+    fn lists_waiting_workspaces_longest_waiting_first() {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(200.0))]);
+        ws_mut(&mut data, "c").agents = Some(vec![Some(fx.agent(NeedsInput).since(100.0))]);
+        assert_eq!(ids(&s.needs_list(&data)), ["c", "a"]);
+    }
+
+    /// Partly ported: the lane's rows are lane-entries.ts's; here the hold itself.
+    #[test]
+    fn holds_a_dismissed_card_in_its_placeholders_spot_until_its_status_changes() {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "b").agents = Some(vec![Some(fx.agent(Working).since(400.0))]);
+        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
+        assert!(has(&s.in_strip(&data).into_iter().collect::<Vec<_>>(), "a"));
+        s.dismiss_waiting(&data, Some(by_id(&data, "a")));
+        assert!(s.in_strip(&data).is_empty());
+        assert!(s.held_at_top(by_id(&data, "a")));
+        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(Working).since(600.0))]);
+        assert!(!s.held_at_top(by_id(&data, "a")));
+        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(Idle).since(700.0))]);
+        assert!(!s.held_at_top(by_id(&data, "a")));
+    }
+
+    /// Partly ported: the lane's rows are lane-entries.ts's; here the hold itself.
+    #[test]
+    fn holds_nothing_when_the_menu_dismisses_a_card_that_is_not_waiting() {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "b").agents = Some(vec![Some(fx.agent(Working).since(400.0))]);
+        s.dismiss_waiting(&data, Some(by_id(&data, "a")));
+        assert!(!s.held_at_top(by_id(&data, "a")));
+        assert!(s.outbox().is_empty(), "nothing to dismiss, nothing saved");
+    }
+
+    /// Partly ported: the lane's rows are lane-entries.ts's; here the strip's side.
+    #[test]
+    fn keeps_a_card_being_dragged_in_its_lane_when_it_starts_asking_and_takes_it_out_once_dropped()
+    {
+        let (mut s, mut data, mut fx) = setup();
+        s.set_drag(Some(DragState {
+            id: "w:a".into(),
+            index: 1.0,
+        }));
+        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
+        assert!(has(&ids(&s.needs_shown(&data)), "a"));
+        assert!(!s.in_strip(&data).contains("a"));
+        s.set_drag(None);
+        assert!(s.in_strip(&data).contains("a"));
     }
 }
 

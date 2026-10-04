@@ -1,8 +1,9 @@
-//! The lanes and placement match the TypeScript model's golden JSON
-//! (test/golden/README.md) for every cockpit scene. Only the fields model.rs
-//! and status.rs answer are compared: the view mode, every workspace's
-//! placement, and whether each lane is folded. A lane header's cards and
-//! merge line, Needs you, the lane and project entries and Next belong to
+//! The lanes, placement and Needs you strip match the TypeScript model's
+//! golden JSON (test/golden/README.md) for every cockpit scene. Only the
+//! fields model.rs, status.rs and strip.rs answer are compared: the view
+//! mode, every workspace's placement, whether each lane is folded, and the
+//! strip's list, rows, placeholders, "+N more" and clock. A lane header's
+//! cards and merge line, the lane and project entries and Next belong to
 //! the modules later lanes port.
 
 #![cfg(test)]
@@ -54,8 +55,21 @@ fn computed(input: &Value) -> Value {
             Value::from(s.is_collapsed(&data, lane)),
         );
     }
+    let strip = s.needs(&data);
+    let ids = |list: &[&cockpit_core::data::Workspace]| -> Vec<String> {
+        list.iter().map(|w| w.id.clone()).collect()
+    };
+    let needs = json!({
+        "inStrip": strip.in_strip.iter().collect::<Vec<_>>(),
+        "late": strip.late,
+        "list": ids(&strip.list),
+        "more": strip.more,
+        "shown": ids(&strip.shown),
+        "waitText": strip.wait_text,
+    });
     json!({
         "mode": s.mode().as_str(),
+        "needs": needs,
         "placement": placement,
         "collapsed": collapsed,
     })
@@ -68,6 +82,7 @@ fn check(scene: &str) {
 
     assert_eq!(got["mode"], want["mode"], "{scene}: mode");
     assert_eq!(got["placement"], want["placement"], "{scene}: placement");
+    assert_eq!(got["needs"], want["needs"], "{scene}: needs");
     let headers = want["laneHeaders"].as_object().unwrap();
     assert_eq!(headers.len(), LANES.len(), "{scene}: one header per lane");
     for (lane, header) in headers {
@@ -79,21 +94,21 @@ fn check(scene: &str) {
 }
 
 #[test]
-fn lanes_scene_matches_the_golden_lanes_and_placement() {
+fn lanes_scene_matches_the_golden_lanes_placement_and_needs() {
     check("lanes");
 }
 
 #[test]
-fn needs_and_next_scene_matches_the_golden_lanes_and_placement() {
+fn needs_and_next_scene_matches_the_golden_lanes_placement_and_needs() {
     check("needs-and-next");
 }
 
 #[test]
-fn projects_scene_matches_the_golden_lanes_and_placement() {
+fn projects_scene_matches_the_golden_lanes_placement_and_needs() {
     check("projects");
 }
 
 #[test]
-fn review_verdicts_scene_matches_the_golden_lanes_and_placement() {
+fn review_verdicts_scene_matches_the_golden_lanes_placement_and_needs() {
     check("review-verdicts");
 }

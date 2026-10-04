@@ -8,7 +8,7 @@
 //! reads here take `&mut self` where theirs do. The data itself is passed
 //! in on each call, never held.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use indexmap::IndexMap;
 use serde_json::Value;
@@ -16,6 +16,8 @@ use serde_json::Value;
 use crate::lanes::{LANES, LaneKey};
 use crate::persist::{SavedState, ViewMode, persist_url};
 use crate::projects::{Project, is_project_key};
+use crate::state::DragState;
+use crate::status::Status;
 use crate::text::PromptMemory;
 
 /// A value in a cmux request's parameters.
@@ -80,6 +82,11 @@ pub struct Session {
     pub(crate) quiet_collapsed: bool,
     pub(crate) collapsed_projects: Vec<String>,
     pub(crate) select_override: Option<(String, f64)>,
+    pub(crate) drag: Option<DragState>,
+
+    // cockpit/strip.ts: a card dismissed from Needs you, held at the top of
+    // its lane until its status moves on from the one it was dismissed in.
+    pub(crate) dismissed_hold: HashMap<String, Status>,
 
     // cockpit/model.ts: optimistic lane moves, order and folds.
     pub(crate) lane_override: IndexMap<String, LaneMove>,

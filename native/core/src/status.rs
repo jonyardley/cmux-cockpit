@@ -241,6 +241,13 @@ fn own_description(w: Option<&Workspace>) -> String {
     }
 }
 
+/// When the status of `a`, the workspace's agent as shown, began.
+fn since_from(a: Option<&Agent>, w: Option<&Workspace>) -> f64 {
+    a.and_then(|a| truthy(a.since_epoch).or(truthy(a.last_activity_at)))
+        .or(truthy(w.and_then(|w| w.latest_at)))
+        .unwrap_or(0.0)
+}
+
 impl Session {
     /// The workspace's most active agent, as the sidebars show it.
     pub fn agent_of(&mut self, w: Option<&Workspace>) -> Option<Agent> {
@@ -255,10 +262,14 @@ impl Session {
     /// When the current status began: agent start, else its activity, else the workspace's.
     pub fn since_of(&mut self, w: Option<&Workspace>) -> f64 {
         let a = self.agent_of(w);
-        a.as_ref()
-            .and_then(|a| truthy(a.since_epoch).or(truthy(a.last_activity_at)))
-            .or(truthy(w.and_then(|w| w.latest_at)))
-            .unwrap_or(0.0)
+        since_from(a.as_ref(), w)
+    }
+
+    /// The status and when it began, from one read of the agents, for a
+    /// caller that needs both for every workspace each frame.
+    pub fn status_and_since(&mut self, w: Option<&Workspace>) -> (Status, f64) {
+        let a = self.agent_of(w);
+        (Status::of(a.as_ref()), since_from(a.as_ref(), w))
     }
 
     /// How long the status has held, "12m".
