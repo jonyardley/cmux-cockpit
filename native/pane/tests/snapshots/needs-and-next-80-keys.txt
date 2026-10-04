@@ -1,0 +1,35 @@
+  All  Projects                                                          ? keys
+ Next  Oldest question                                                   1 of 6
+
+ Needs you  5                                                        oldest 30m
+   ● Oldest question
+     Your turn: Should the strip cap at four?
+   ● Second
+     Your turn: reply "1b 2a" on the bridge and the store.
+   ● Third
+     Your turn: the work is finished. Run /clear now.
+   ● Publish
+     Asking: allow npm publish?
+   +1 more
+
+   Main activity  0
+
+   For review  0
+
+   Background  0
+
+   Parked  0
+
+ ▾ Unsorted  7
+   ◌ Oldest question · your turn
+   ◌ Publish · is asking
+   ◌ Second · your turn
+   ◌ Third · your turn
+   ● Fifth, past the cap                                          Your turn <1m
+   ● Finished while away                                            Finished 4m
+   ● Busy             ┌ Keys ────────────────────────────┐           Working 1m
+                      │ ↑ ↓  move between cards          │
+                      │ ?    show or hide the keys       │
+                      │ q    quit                        │
+                      │ Esc  close this                  │
+                      └──────────────────────────────────┘

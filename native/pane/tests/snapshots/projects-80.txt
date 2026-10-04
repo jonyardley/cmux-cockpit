@@ -1,0 +1,21 @@
+  All  Projects                                                          ? keys
+ Next  One: docs                                                         1 of 2
+
+ Needs you  1                                                         oldest 1m
+   ● One: docs
+     Your turn: Read the draft in #142 and say go.
+
+   Main activity  0
+
+   For review  0
+
+   Background  0
+
+   Parked  0
+
+ ▾ Unsorted  5
+   ◌ One: docs · your turn
+   ● Two: release                                                  Finished 10m
+   ● One: parser rewrite for the streaming tokeniser                 Working 7m
+   ○ Two: changelog                                                    Idle 15m
+   ○ Scratch                                                           No agent

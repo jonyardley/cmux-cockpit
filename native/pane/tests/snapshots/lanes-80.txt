@@ -1,0 +1,35 @@
+  All  Projects                                                          ? keys
+ Next  Chip colours                                                      1 of 3
+
+ Needs you  2                                                         oldest 5m
+   ● Chip colours
+     Your turn: Which green should the ready chip use?
+   ● Release notes
+     Asking: allow git push?
+
+ ▾ Main activity  8
+   ◌ Chip colours · your turn
+   ◌ Release notes · is asking
+   ● Tidy strip                                                     Finished 6m
+     Done: the strip now groups by repo.
+   ● Snapshot tests                                                 Working 14m
+     Recording the view tree as text.
+   ○ Long build                                         Working 40m · quiet 17m
+   ● Selected card                                                   Working 1m
+   ○ Card layout fit                                                   Idle 15m
+   ○ Untimed card                                                          Idle
+
+ ▾ For review  2
+   ● Ended agent                                                   Finished 15m
+   ○ Left off                                                           Idle 1h
+
+ ▾ Background  2
+   ● Iteration timings                                     Waiting 4m · 1 shell
+     The batch resumes by itself once load drops.
+   ○ No agent                                                          No agent
+
+ ▸ Parked  1
+
+ ▾ Unsorted  2
+   ● Loose workspace                                                 Working 3m
+   ○ Merged elsewhere                                                  No agent
