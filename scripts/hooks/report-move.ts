@@ -36,6 +36,7 @@ import {
   type SavedMove,
   validateState,
 } from "../state-config.ts";
+import { logLine } from "../state-log.ts";
 import { readApplyWrite } from "../state-url.ts";
 import { cmux } from "./cmux-cli.ts";
 import { field } from "./gh-command.ts";
@@ -237,28 +238,39 @@ function record(event: unknown, wsId: string | undefined, now: number, attended:
   return { note: deliver(wsId, moveFrom(reply, now, session), REAL_DELIVERY), sendBack: false };
 }
 
+/**
+ * What cmux says the workspace's description is: the text, "" for none, or
+ * why it could not say. "unlisted" is a workspace cmux's list does not hold,
+ * which asking again will not change; "silent" is cmux failing to answer at
+ * all, which a busy cmux may do once.
+ */
+export type DescriptionRead = { ok: true; text: string } | { ok: false; why: "unlisted" | "silent" };
+
 /** Where a move goes: cmux's description, else the saved map and a rebuild. */
 export interface Delivery {
-  /** The workspace's description, "" for none, or null when cmux could not say. */
-  read: (wsId: string) => string | null;
+  read: (wsId: string) => DescriptionRead;
   /** Sets the description, or clears it for null; false when cmux refused. */
   write: (wsId: string, description: string | null) => boolean;
   hasSaved: (wsId: string) => boolean;
   save: (wsId: string, move: SavedMove | null) => { ok: true; changed: boolean } | { ok: false; error: string };
   build: () => void;
+  /** Says in the state log why a move went to the saved map, since a hook's stderr is not kept. */
+  log: (line: string) => void;
 }
 
-function readDescription(wsId: string): string | null {
+const SILENT: DescriptionRead = { ok: false, why: "silent" };
+
+function readDescription(wsId: string): DescriptionRead {
   const res = cmux(["--json", "workspace", "list"]);
-  if (!res.ok) return null;
+  if (!res.ok) return SILENT;
   try {
     const list = field(JSON.parse(res.out), "workspaces");
     const ws = Array.isArray(list) ? list.find((w) => field(w, "id") === wsId) : undefined;
-    if (ws === undefined) return null;
+    if (ws === undefined) return { ok: false, why: "unlisted" };
     const d = field(ws, "description");
-    return typeof d === "string" ? d : "";
+    return { ok: true, text: typeof d === "string" ? d : "" };
   } catch {
-    return null;
+    return SILENT;
   }
 }
 
@@ -279,17 +291,58 @@ const REAL_DELIVERY: Delivery = {
   hasSaved,
   save: (wsId, move) => readApplyWrite(STATE_PATH, `moves.${wsId}`, move ? JSON.stringify(move) : null),
   build: () => scheduleBuild("report-move"),
+  log: (line) => logLine(`report-move ${line}`),
 };
+
+// Asks again once when cmux does not answer, since a busy cmux's one missed
+// answer would otherwise cost a rebuild of both sidebars. A workspace cmux
+// does not list is not asked about again: the answer would be the same.
+function readTwice(wsId: string, d: Delivery): DescriptionRead {
+  const first = d.read(wsId);
+  return !first.ok && first.why === "silent" ? d.read(wsId) : first;
+}
+
+// Why a read gave no description, for the state log; `what` names the read.
+const unread = (r: { why: "unlisted" | "silent" }, what: string): string =>
+  r.why === "unlisted" ? "cmux does not list the workspace" : `cmux did not answer the ${what}, twice`;
 
 // Sets the move's description, then reads it back: a description cmux cut
 // or changed would read as no move and show a broken tail, so it is cleared
-// and the caller falls back to the saved map.
-function describeMove(wsId: string, move: SavedMove, d: Delivery): boolean {
+// and the caller falls back to the saved map. The read-back is asked twice
+// too, so one missed answer never clears a description that landed. Null
+// when it landed, else why not.
+function describeMove(wsId: string, move: SavedMove, d: Delivery): string | null {
   const description = moveDescription(move);
-  if (!d.write(wsId, description)) return false;
-  if (d.read(wsId) === description) return true;
+  if (!d.write(wsId, description)) return "cmux refused the description";
+  const back = readTwice(wsId, d);
+  if (back.ok && back.text === description) return null;
   d.write(wsId, null);
-  return false;
+  return back.ok ? "cmux changed the description" : unread(back, "read-back");
+}
+
+// Why a move cannot go in the description, or null when it went: the
+// description holds Jon's words, cmux could not say what it holds, or
+// describeMove's reason.
+function described(wsId: string, move: SavedMove, d: Delivery): string | null {
+  const current = readTwice(wsId, d);
+  if (!current.ok) return unread(current, "read");
+  if (current.text !== "" && !isMoveDescription(current.text)) return "the description holds other words";
+  return describeMove(wsId, move, d);
+}
+
+// Saves (or drops, for null) the workspace's move in the saved map and
+// rebuilds when that changed it; `why` is the reason a move went there, for
+// the state log, which says so only once the save has run.
+function save(wsId: string, move: SavedMove | null, d: Delivery, why?: string): string | null {
+  const result = d.save(wsId, move);
+  const id = wsId.slice(0, 8);
+  if (!result.ok) {
+    if (why) d.log(`could not save the move for ${id} (${why}): ${result.error}`);
+    return result.error;
+  }
+  if (why) d.log(`saved the move for ${id}: ${why}`);
+  if (result.changed) d.build();
+  return null;
 }
 
 /**
@@ -298,18 +351,18 @@ function describeMove(wsId: string, move: SavedMove, d: Delivery): boolean {
  * live and nothing is rebuilt, but only while it is empty or already holds a
  * move: Jon's own words are never overwritten. Otherwise, or when cmux
  * refuses or alters it, the move goes to the saved map, at the cost of a
- * rebuild. Returns a note for stderr, or null. Exported for testing.
+ * rebuild, and the state log says why. A turn with no move reads the
+ * description once: it only gates an optional clear. Returns a note for
+ * stderr, or null. Exported for testing.
  */
 export function deliver(wsId: string, move: SavedMove | null, d: Delivery): string | null {
+  if (move) {
+    const why = described(wsId, move, d);
+    return why === null ? null : save(wsId, move, d, why);
+  }
   const current = d.read(wsId);
-  const ours = current !== null && (current === "" || isMoveDescription(current));
-  if (move && ours && describeMove(wsId, move, d)) return null;
-  if (!move && current !== null && isMoveDescription(current)) d.write(wsId, null);
-  if (!move && !d.hasSaved(wsId)) return null;
-  const result = d.save(wsId, move);
-  if (!result.ok) return result.error;
-  if (result.changed) d.build();
-  return null;
+  if (current.ok && isMoveDescription(current.text)) d.write(wsId, null);
+  return d.hasSaved(wsId) ? save(wsId, null, d) : null;
 }
 
 if (import.meta.main) {

@@ -316,6 +316,52 @@ export function findPrs(workspaces: WorkspaceDir[], previous: State["prs"], look
   return out;
 }
 
+// The fields that differ between two saved PRs, in key order.
+function fieldsChanged(was: SavedPr, now: SavedPr): string[] {
+  const text = (pr: SavedPr): Map<string, string> =>
+    new Map(Object.entries(pr).map(([k, v]) => [k, JSON.stringify(v)]));
+  const a = text(was);
+  const b = text(now);
+  return [...new Set([...a.keys(), ...b.keys()])].sort().filter((k) => a.get(k) !== b.get(k));
+}
+
+// One workspace's change for prChanges, or null when its PR is the same.
+function prChange(tag: string, was: SavedPr | undefined, now: SavedPr | undefined): string | null {
+  if (!was || !now) return was || now ? `${tag} ${now ? "found" : "dropped"}` : null;
+  const moved = fieldsChanged(was, now);
+  return moved.length ? `${tag} ${moved.join(", ")}` : null;
+}
+
+/**
+ * What a poll changed in the `prs` map, for its log line: each workspace
+ * whose PR changed, by the first 8 characters of its id, with the fields
+ * that differ ("05B6A0B0 checks, draft"), or "found" and "dropped" for a
+ * PR that appeared or went. Sorted by workspace id, so the same change
+ * logs the same words; empty when nothing changed.
+ */
+export function prChanges(before: State["prs"], after: State["prs"]): string[] {
+  const ids = [...new Set([...Object.keys(before), ...Object.keys(after)])].sort();
+  const pick = (map: State["prs"], id: string) => (Object.hasOwn(map, id) ? map[id] : undefined);
+  return ids.flatMap((id) => prChange(id.slice(0, 8), pick(before, id), pick(after, id)) ?? []);
+}
+
+/** The most PR changes movedTag names before it counts the rest. */
+const MAX_TAGGED = 5;
+
+/**
+ * The poll's log tag: the maps that moved, then the PR fields that did
+ * (prChanges), so the log can tell a check turning green from a freshness
+ * restamp, and real progress from a field going back and forth. Past
+ * MAX_TAGGED changes the rest are counted ("+3 more"), so a first poll over
+ * many workspaces keeps one short line.
+ */
+export function movedTag(maps: string[], fields: string[]): string {
+  if (!maps.length) return "";
+  const shown = fields.slice(0, MAX_TAGGED);
+  if (fields.length > MAX_TAGGED) shown.push(`+${fields.length - MAX_TAGGED} more`);
+  return ` [${maps.join(", ")}]` + (shown.length ? " " + shown.join("; ") : "");
+}
+
 export interface OwnLookups {
   /**
    * The repo a directory belongs to (git's common dir, so every worktree of
@@ -587,9 +633,7 @@ function poll(root: string): number {
     log(`ok, unchanged (${counts})`);
     return 0;
   }
-  // Which maps moved, so the log can tell a check turning green from a
-  // freshness restamp when it is set against cmux's hang reports.
-  const moved = applied.maps.length ? ` [${applied.maps.join(", ")}]` : "";
+  const moved = movedTag(applied.maps, prChanges(previous, prs));
 
   // Through hook-build.ts's lock, so this build never races a hook's and
   // lands an older bundle last. It waits briefly for a build in flight,

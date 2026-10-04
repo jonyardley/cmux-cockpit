@@ -19,6 +19,17 @@ Every reload redraws the whole panel, which shows as a flicker, so the
 build keeps them to real changes: each sidebar is baked with only the maps
 it reads (`scripts/bundle.ts`), and a bundle whose bytes did not change is
 not rewritten (`scripts/write-if-changed.ts`), so cmux does not reload it.
+The cockpit's PRs are also cut to what its card shows (`cockpitPr`): their
+checks and merge flags only as the chip's health, rebuilt on the chip's own
+rule (`healthOf` in `src/shared/pr-health.ts`) as the fewest that keep it
+(one nameless check per failure, one running, one passed with the merge
+verdict for ready, the conflicts flag alone, nothing for quiet), and a PR
+that is not open keeps only its number, link, status, branch and title. A
+check passing while another still runs, or a merge verdict flipping while
+the chip says running, then redraws the agents panel, which lists each
+check, and leaves the cockpit as it was. On 2026-10-04 one PR pushed ten
+times in seventy minutes, and those check steps drove over half the
+redraws, nearly every one redrawing both panels.
 
 Redraws also cost cmux memory: it aborted twice on 2026-09-30 when
 SwiftUI's view graph ran out of room, the second time after 48 redraws in
@@ -148,7 +159,10 @@ is still on the branch it was found for. Two polls never overlap: a
 is already going (a lock older than five minutes is a crashed run's, and is
 cleared and retaken). Every run logs a line, whether it changed anything,
 found nothing new, was skipped, or hit an error; a run that changed
-something names the maps it changed, such as `[poll, prs]`. Every build in
+something names the maps it changed, such as `[poll, prs]`, then each
+workspace whose PR changed and the fields that did, such as
+`[prs] 05B6A0B0 checks; 8064D819 found` (`prChanges`), so the log can tell
+real progress from a field going back and forth. Every build in
 the main checkout logs `build: redrew agents, cockpit`, naming each sidebar
 it rewrote (`nothing` when it rewrote none), since each rewrite is a full
 redraw in cmux. The line goes on to say what drove it:
@@ -668,8 +682,15 @@ Moves drove about half the redraws on 2026-10-04 before this. The hook
 writes only over an empty description or an earlier move's, never Jon's
 own words, and reads the description back afterwards: one cmux cut or
 changed would read as no move, so it is cleared. In each of those cases,
-and when cmux refuses the write, the move is saved per workspace in the
-`moves` map instead, which rebuilds the sidebars as before. The sidebar
+and when cmux refuses the write, does not answer the read or the read-back
+(each asked twice), or does not list the workspace (asked once), the move
+is saved per workspace in the `moves` map instead, which rebuilds the
+sidebars as before, and once the save has run the state log says why:
+`report-move saved the move for 05B6A0B0: cmux refused the description`,
+or `report-move could not save the move for 05B6A0B0 (...): <error>`. A
+turn with no move reads the description once, since that read only gates
+clearing an earlier move.
+A hook's own stderr is not kept, so before this the log could not say. The sidebar
 reads whichever of the two is newer. A "Your move"
 line inside a code fence (a handoff opener) is not the reply's. `decisions`
 counts the reply's bold numbered headings with at least one lettered
