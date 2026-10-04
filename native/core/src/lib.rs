@@ -9,6 +9,7 @@ pub mod activity;
 pub mod anchors;
 pub mod app;
 pub mod data;
+pub mod hooks;
 pub mod js;
 pub mod lane_entries;
 pub mod lanes;
