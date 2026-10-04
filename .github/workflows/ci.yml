@@ -37,8 +37,11 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             native/target
-          key: rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'native/Cargo.lock') }}
-          restore-keys: rust-${{ runner.os }}-
+          # The source hash makes a fresh save after each change; the
+          # fallback only restores a cache built by the same toolchain and
+          # lock file, so a toolchain bump starts clean.
+          key: rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'native/Cargo.lock') }}-${{ hashFiles('native/**/Cargo.toml', 'native/**/*.rs') }}
+          restore-keys: rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'native/Cargo.lock') }}-
       - run: cp config/projects.example.json config/projects.json
       # Lint, types, dead code, build, tests with a coverage floor, then
       # rustfmt, clippy and the Rust tests under native/.
