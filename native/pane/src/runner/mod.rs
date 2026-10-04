@@ -52,6 +52,18 @@ pub enum Input {
     StreamDown(String),
     Agents(AgentView),
     Workspaces(Vec<Workspace>),
+    /// From the caller's own thread (a key press, say): call `on_frame`
+    /// now, with or without a new frame.
+    Poke,
+}
+
+/// What `on_frame` is called with besides the feed.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Call<'a> {
+    /// A new frame went into the core.
+    pub fresh: bool,
+    /// The latest live status change since the last frame.
+    pub latency: Option<&'a Latency>,
 }
 
 /// A status change the latest frame carries, for the latency log.
@@ -64,13 +76,13 @@ pub struct Latency {
 
 /// The core and the join that feeds it.
 #[derive(Debug, Default)]
-pub struct Pane {
+pub struct Feed {
     app: Cockpit,
     pub model: Model,
     pub join: Join,
 }
 
-impl Pane {
+impl Feed {
     fn send(&mut self, event: Event) {
         let mut cmd = self.app.update(event, &mut self.model);
         // R1.2's only effect is a render request; the caller draws after
@@ -97,6 +109,7 @@ impl Pane {
             }
             Input::Agents(view) => (self.join.agents(view), false, None),
             Input::Workspaces(list) => (self.join.workspaces(list), false, None),
+            Input::Poke => (false, false, None),
         }
     }
 
@@ -191,12 +204,12 @@ impl Files {
     /// state's overrides are checked against the new table. A file that
     /// will not read (half written, say) is logged and the core keeps the
     /// last good one until the file changes again.
-    fn check(&mut self, pane: &mut Pane, log: &mut dyn FnMut(String)) -> bool {
+    fn check(&mut self, feed: &mut Feed, log: &mut dyn FnMut(String)) -> bool {
         let mut changed = false;
         if self.projects.changed() {
             match read_projects(&self.projects.path) {
                 Ok(projects) => {
-                    pane.projects(projects);
+                    feed.projects(projects);
                     changed = true;
                 }
                 Err(e) => log(e),
@@ -205,7 +218,7 @@ impl Files {
         if self.state.changed() {
             match read_state(&self.state.path) {
                 Ok(saved) => {
-                    pane.state(saved);
+                    feed.state(saved);
                     changed = true;
                 }
                 Err(e) => log(e),
@@ -215,16 +228,22 @@ impl Files {
     }
 }
 
+/// The runner's input channel. A caller keeps a clone of the sender to
+/// send `Input::Poke`, and hands both ends to `run`.
+pub fn channel() -> (Sender<Input>, Receiver<Input>) {
+    mpsc::channel()
+}
+
 /// Runs until `on_frame` breaks, calling it after each new frame with
-/// the latest status change since the last one, and every `opts.wake`
-/// with none. A replay builds its frame once it has caught up or gone
-/// quiet. `log` takes lines for stderr.
+/// the latest status change since the last one, every `opts.wake`, and
+/// on each `Input::Poke`. A replay builds its frame once it has caught up
+/// or gone quiet. `log` takes lines for stderr.
 pub fn run(
     opts: &Options,
-    mut on_frame: impl FnMut(&Pane, Option<&Latency>) -> ControlFlow<()>,
+    (tx, rx): (Sender<Input>, Receiver<Input>),
+    mut on_frame: impl FnMut(&mut Feed, Call<'_>) -> ControlFlow<()>,
     mut log: impl FnMut(String),
 ) {
-    let (tx, rx) = mpsc::channel();
     let (nudge_tx, nudge_rx) = mpsc::channel();
     let events = CmuxEvents::default();
     {
@@ -239,12 +258,12 @@ pub fn run(
     }
     thread::spawn(move || poll_workspaces(&tx, &nudge_rx));
 
-    let mut pane = Pane::default();
+    let mut feed = Feed::default();
     let mut files = Files {
         state: Watched::new(opts.config.join("state.json")),
         projects: Watched::new(opts.config.join("projects.json")),
     };
-    files.check(&mut pane, &mut log);
+    files.check(&mut feed, &mut log);
     let start = Instant::now();
     let mut files_due = start + FILES_EVERY;
     let mut clock_due = start + CLOCK_EVERY;
@@ -258,7 +277,7 @@ pub fn run(
             w.min(files_due).min(clock_due)
         });
         let mut wait = due.saturating_duration_since(Instant::now());
-        if pending && pane.join.health.replaying() {
+        if pending && feed.join.health.replaying() {
             wait = wait.min(REPLAY_SETTLE);
         }
         let mut batch = Vec::new();
@@ -272,10 +291,12 @@ pub fn run(
         };
         batch.extend(rx.try_iter());
 
+        let mut poked = false;
         for input in batch {
+            poked |= matches!(input, Input::Poke);
             // A replayed status change is history, not latency.
-            let live = !pane.join.health.replaying();
-            let (changed, nudge, latency) = pane.input(input);
+            let live = !feed.join.health.replaying();
+            let (changed, nudge, latency) = feed.input(input);
             pending |= changed;
             if nudge {
                 let _ = nudge_tx.send(());
@@ -287,20 +308,25 @@ pub fn run(
         let now = Instant::now();
         if now >= files_due {
             files_due = now + FILES_EVERY;
-            pending |= files.check(&mut pane, &mut log);
+            pending |= files.check(&mut feed, &mut log);
         }
         pending |= now >= clock_due;
         let woke = wake_due.is_some_and(|w| now >= w);
         if woke {
             wake_due = opts.wake.map(|w| now + w);
         }
-        let flow = if frame_now(pending, pane.join.health.replaying(), quiet) {
+        let flow = if frame_now(pending, feed.join.health.replaying(), quiet) {
             pending = false;
             clock_due = now + CLOCK_EVERY;
-            pane.frame(now_epoch());
-            on_frame(&pane, latest.take().as_ref())
-        } else if woke {
-            on_frame(&pane, None)
+            feed.frame(now_epoch());
+            let latency = latest.take();
+            let call = Call {
+                fresh: true,
+                latency: latency.as_ref(),
+            };
+            on_frame(&mut feed, call)
+        } else if woke || poked {
+            on_frame(&mut feed, Call::default())
         } else {
             ControlFlow::Continue(())
         };
@@ -333,33 +359,33 @@ mod tests {
 
     #[test]
     fn a_status_change_reaches_the_view_model() {
-        let mut pane = Pane::default();
-        pane.state(cockpit_core::persist::SavedState::default());
-        pane.input(Input::Workspaces(vec![ws("A"), ws("B")]));
-        pane.input(hook(1, "UserPromptSubmit", 7, "B"));
-        pane.frame(1_791_127_100.0);
-        assert!(pane.model.view.needs.list.is_empty());
+        let mut feed = Feed::default();
+        feed.state(cockpit_core::persist::SavedState::default());
+        feed.input(Input::Workspaces(vec![ws("A"), ws("B")]));
+        feed.input(hook(1, "UserPromptSubmit", 7, "B"));
+        feed.frame(1_791_127_100.0);
+        assert!(feed.model.view.needs.list.is_empty());
 
-        let (changed, nudge, latency) = pane.input(hook(2, "PermissionRequest", 7, "B"));
+        let (changed, nudge, latency) = feed.input(hook(2, "PermissionRequest", 7, "B"));
         assert!(changed && !nudge);
         let latency = latency.unwrap();
         assert_eq!(
             (latency.change.seq, latency.change.hook.as_str()),
             (2, "PermissionRequest")
         );
-        pane.frame(1_791_127_100.0);
-        assert_eq!(pane.model.view.needs.list, vec!["B".to_string()]);
+        feed.frame(1_791_127_100.0);
+        assert_eq!(feed.model.view.needs.list, vec!["B".to_string()]);
     }
 
     #[test]
     fn a_dead_stream_shows_in_the_join_until_the_next_ack() {
-        let mut pane = Pane::default();
-        let (changed, _, _) = pane.input(Input::StreamDown("cmux events exited".into()));
+        let mut feed = Feed::default();
+        let (changed, _, _) = feed.input(Input::StreamDown("cmux events exited".into()));
         assert!(changed);
-        assert_eq!(pane.join.health.down.as_deref(), Some("cmux events exited"));
+        assert_eq!(feed.join.health.down.as_deref(), Some("cmux events exited"));
         let ack = json!({"boot_id": "B", "resume": {"requested_after_seq": 4, "latest_seq": 9}});
-        pane.input(Input::Event(Box::new(ack), Instant::now()));
-        assert_eq!(pane.join.health.down, None);
+        feed.input(Input::Event(Box::new(ack), Instant::now()));
+        assert_eq!(feed.join.health.down, None);
     }
 
     #[test]
@@ -372,9 +398,9 @@ mod tests {
 
     #[test]
     fn workspace_events_ask_for_the_list_again() {
-        let mut pane = Pane::default();
+        let mut feed = Feed::default();
         let e = json!({"type": "event", "seq": 1, "name": "workspace.reordered", "payload": {}});
-        let (_, nudge, _) = pane.input(Input::Event(Box::new(e), Instant::now()));
+        let (_, nudge, _) = feed.input(Input::Event(Box::new(e), Instant::now()));
         assert!(nudge);
     }
 }

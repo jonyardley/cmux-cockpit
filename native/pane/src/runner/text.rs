@@ -10,7 +10,7 @@ use cockpit_core::data::Data;
 use cockpit_core::lane_entries::LaneEntry;
 use cockpit_core::time::age_since;
 
-use super::Pane;
+use super::Feed;
 use super::join::Health;
 
 /// The stream's line: live, replaying or down.
@@ -61,14 +61,14 @@ fn clip(s: &str) -> String {
 
 /// The whole view as text. Everything but the stream line depends only
 /// on the view model and the frame, so a reprint means something moved.
-pub fn render(pane: &Pane) -> String {
+pub fn render(feed: &Feed) -> String {
     let mut out = String::new();
-    let _ = writeln!(out, "{}", health_line(&pane.join.health));
-    let Some(data) = &pane.model.data else {
+    let _ = writeln!(out, "{}", health_line(&feed.join.health));
+    let Some(data) = &feed.model.data else {
         out.push_str("no data yet\n");
         return out;
     };
-    let v = &pane.model.view;
+    let v = &feed.model.view;
     let _ = writeln!(out, "mode: {}", v.mode);
 
     let wait = if v.needs.late {
@@ -151,8 +151,8 @@ mod tests {
 
     #[test]
     fn prints_needs_you_and_the_lanes_by_title_with_status_and_age() {
-        let mut pane = Pane::default();
-        pane.state(cockpit_core::persist::SavedState::default());
+        let mut feed = Feed::default();
+        feed.state(cockpit_core::persist::SavedState::default());
         let list = ["A", "B"]
             .map(|id| Workspace {
                 id: id.to_string(),
@@ -160,13 +160,13 @@ mod tests {
                 ..Workspace::default()
             })
             .to_vec();
-        pane.input(Input::Workspaces(list));
+        feed.input(Input::Workspaces(list));
         let e = json!({"type": "event", "seq": 1, "name": "agent.hook.PermissionRequest",
                        "occurred_at": "1970-01-01T00:00:01Z",
                        "payload": {"_ppid": 7, "workspace_id": "B"}});
-        pane.input(Input::Event(Box::new(e), Instant::now()));
-        pane.frame(600.0);
-        let text = render(&pane);
+        feed.input(Input::Event(Box::new(e), Instant::now()));
+        feed.frame(600.0);
+        let text = render(&feed);
         assert!(text.contains("NEEDS YOU (1)"), "{text}");
         assert!(text.contains("Title B"), "{text}");
         assert!(text.contains("needs_input 9m"), "{text}");
@@ -176,8 +176,8 @@ mod tests {
 
     #[test]
     fn says_so_before_the_first_frame() {
-        let pane = Pane::default();
-        assert!(render(&pane).contains("no data yet"));
+        let feed = Feed::default();
+        assert!(render(&feed).contains("no data yet"));
     }
 
     #[test]
