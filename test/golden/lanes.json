@@ -48,7 +48,6 @@
       "density": "compact",
       "lane": "bg",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "anchor-main": {
@@ -57,7 +56,6 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "anchor-parked": {
@@ -66,7 +64,6 @@
       "density": "row",
       "lane": "parked",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "anchor-review": {
@@ -75,7 +72,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "asking": {
@@ -84,7 +80,6 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "stateRank": 0,
       "status": "needs_input"
     },
     "ended": {
@@ -93,7 +88,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "ended"
     },
     "idle": {
@@ -102,7 +96,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "idle"
     },
     "loose": {
@@ -111,7 +104,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "/dev/app-one",
-      "stateRank": 2,
       "status": "working"
     },
     "loose-merged": {
@@ -120,7 +112,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "merged": {
@@ -129,7 +120,6 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "stateRank": 3,
       "status": "idle"
     },
     "needs": {
@@ -138,7 +128,6 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "stateRank": 0,
       "status": "needs_input"
     },
     "none": {
@@ -147,7 +136,6 @@
       "density": "compact",
       "lane": "bg",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "parked": {
@@ -156,7 +144,6 @@
       "density": "row",
       "lane": "parked",
       "project": "other",
-      "stateRank": 2,
       "status": "working"
     },
     "quiet": {
@@ -165,7 +152,6 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "stateRank": 2,
       "status": "working"
     },
     "ready": {
@@ -174,7 +160,6 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "stateRank": 1,
       "status": "idle"
     },
     "selected": {
@@ -183,7 +168,6 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "stateRank": 2,
       "status": "working"
     },
     "untimed": {
@@ -192,7 +176,6 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "stateRank": 3,
       "status": "idle"
     },
     "waiting": {
@@ -201,7 +184,6 @@
       "density": "compact",
       "lane": "bg",
       "project": "other",
-      "stateRank": 2,
       "status": "idle"
     },
     "working": {
@@ -210,7 +192,6 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "stateRank": 2,
       "status": "working"
     }
   },

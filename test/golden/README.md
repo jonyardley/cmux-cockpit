@@ -7,7 +7,10 @@ dropped here is a breaking change there.
 
 - Recorded by `npm run golden` (test/support/golden.ts, one
   `test/golden-<scene>.test.ts` per scene). `npm run check` fails when a file
-  here is stale, missing, or has no scene behind it.
+  here is stale, missing, or has no scene behind it, and when a scene in
+  test/support/scenes.ts has no golden test.
+- The JSON is laid out by the repo's Biome, as every JSON file here is, so
+  compare parsed values, never the text.
 - Scenes come from test/support/scenes.ts, the same fixtures the text
   snapshots in test/__snapshots__/ print.
 - Keys are sorted at every level; arrays keep their order, which is
@@ -70,12 +73,13 @@ What the scene starts from: the three things the sidebar reads.
 | `projects[].color` | string | Its colour, hex. |
 | `projects[].icon` | string | Its SF Symbol name. |
 | `projects[].root` | string | The folder a new session opens in; absent when it has none. |
-| `state` | object | The saved state the build bakes in (scripts/state-config.ts `State`), every field present. |
+| `state` | object | The saved state the build bakes in (scripts/state-config.ts `State`). Every required field is present, as an empty object when nothing is saved. The optional ones (`shells`, `poll`, and `ui.mode` and `ui.collapsed` inside `ui`) are left out when unset: read a missing one as empty, and a missing `ui.mode` as "all". |
 | `state.asking` | object | wsId to `{ reason, epoch }`: why its agent last stopped to ask. |
 | `state.moves` | object | wsId to the "Your move" line its chat last ended on: `text`, `epoch`, `session`, optionally `decisions`, `leans`. |
 | `state.prs` | object | wsId to the poller's PR for its branch: `url`, `number`, `status`, `branch`, `title`, `checks` (`{ name, state }`, state "pass", "fail" or "pending"), optionally `mergeable`, `conflicts`, `draft`, `additions`, `deletions`. |
-| `state.shells` | object | wsId to its running background shells: `id`, `session` (the agent id that started it), `startedEpoch`. |
-| `state.ui` | object | `mode` ("all" or "projects") and saved folds. |
+| `state.shells` | object, optional | wsId to its running background shells: `id`, `session` (the agent id that started it), `startedEpoch`. |
+| `state.ui` | object | `mode` ("all" or "projects", optional) and `collapsed` (optional: "lane:<key>" or "project:<key>" to 1 folded, 0 unfolded). |
+| `state.poll` | object, optional | How the PR poller's last runs went: `okEpoch` (its last success) and `error` ("unavailable", "signed-out" or "missing"). Unset in every scene here. |
 | `state.dismissed` | object | wsId to agent id to the start of a dismissed ask. |
 | `state.projectOverride` | object | wsId to the project key chosen by "Move to project". |
 | `state.projects` | object | Project key to a project made or edited in the sidebar. |
@@ -95,7 +99,6 @@ What the model computes, at the scene's clock.
 | `placement.<id>.density` | string | How big its card draws: "full", "compact" or "row". |
 | `placement.<id>.card` | boolean | Whether it is a card; false for a lane's generated anchor. |
 | `placement.<id>.status` | string | Its agent status: "working", "needs_input", "idle", "ended" or "none". |
-| `placement.<id>.stateRank` | number | Its sort rank in its lane: 0 needs you, 1 Ready, 2 working or Waiting, 3 the rest. |
 | `placement.<id>.project` | string | Its project key, "other" when none matches. |
 | `laneHeaders` | object | Lane key to its header. |
 | `laneHeaders.<lane>.collapsed` | boolean | Folded or not. |

@@ -36,7 +36,6 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "anchor-review": {
@@ -45,7 +44,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "blocked": {
@@ -54,7 +52,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "closed": {
@@ -63,7 +60,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "conflicts": {
@@ -72,7 +68,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "draft": {
@@ -81,7 +76,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "failing": {
@@ -90,7 +84,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "merged": {
@@ -99,7 +92,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "ready": {
@@ -108,7 +100,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "running": {
@@ -117,7 +108,6 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "waiting": {
@@ -126,7 +116,6 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     }
   },

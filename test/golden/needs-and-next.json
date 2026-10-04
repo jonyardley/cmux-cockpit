@@ -37,7 +37,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "stateRank": 0,
       "status": "needs_input"
     },
     "busy": {
@@ -46,7 +45,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "stateRank": 2,
       "status": "working"
     },
     "n1": {
@@ -55,7 +53,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "stateRank": 0,
       "status": "needs_input"
     },
     "n2": {
@@ -64,7 +61,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "stateRank": 0,
       "status": "needs_input"
     },
     "n3": {
@@ -73,7 +69,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "stateRank": 0,
       "status": "needs_input"
     },
     "n4": {
@@ -82,7 +77,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "stateRank": 0,
       "status": "needs_input"
     },
     "ready": {
@@ -91,7 +85,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "stateRank": 1,
       "status": "idle"
     }
   },

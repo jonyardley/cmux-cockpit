@@ -32,7 +32,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "stateRank": 3,
       "status": "none"
     },
     "one-a": {
@@ -41,7 +40,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "/dev/app-one",
-      "stateRank": 2,
       "status": "working"
     },
     "one-b": {
@@ -50,7 +48,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "/dev/app-one",
-      "stateRank": 0,
       "status": "needs_input"
     },
     "two": {
@@ -59,7 +56,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "/dev/app-two",
-      "stateRank": 1,
       "status": "idle"
     },
     "two-merged": {
@@ -68,7 +64,6 @@
       "density": "row",
       "lane": "unsorted",
       "project": "/dev/app-two",
-      "stateRank": 3,
       "status": "idle"
     }
   },

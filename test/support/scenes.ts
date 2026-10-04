@@ -2,9 +2,9 @@
 // before the sidebar loads (saved state, project table) and the cmux data it
 // sets after. The snapshot tests print each scene's view tree from these, and
 // the golden tests write what the model computes for them, so both read the
-// one copy. Every fixture is built inside data(), never at load, so the
-// fixture ids (a1, a2, ...) run in the same order however a file imports
-// this.
+// one copy. Every fixture is built inside seed() and data(), never at load,
+// so the fixture ids (a1, a2, ...) run in the same order however a file
+// imports this, and nothing the sidebar holds by reference is shared.
 
 import type { SavedPr } from "../../scripts/state-config.ts";
 import { agent, group, ws } from "./fixtures.ts";
@@ -12,8 +12,8 @@ import type { Renderer } from "./renderer.ts";
 import { ago, EPOCH, type Seed } from "./snapshot.ts";
 
 export interface Scene {
-  /** What seed() takes: the saved state and project table, read at load. */
-  seed: Seed;
+  /** What seed() takes: the saved state and project table, read at load. Fresh on each call. */
+  seed: () => Seed;
   /** Sets the scene's cmux data on the fake renderer, after the sidebar loads. */
   data: (r: Renderer) => void;
 }
@@ -24,13 +24,13 @@ export interface Scene {
 // merged card in Main activity and in Unsorted, a working card under the
 // folded Parked header, and one waiting on a background shell.
 const lanes: Scene = {
-  seed: {
+  seed: () => ({
     state: {
       asking: { asking: { reason: "allow git push?", epoch: EPOCH - 120 } },
       subagents: {},
       shells: { waiting: [{ id: "b1", session: "shell-chat", startedEpoch: EPOCH - 300 }] },
     },
-  },
+  }),
   data: (r) => {
     r.data.groups = [
       group("g-main", "Main activity", { anchorId: "anchor-main" }),
@@ -172,7 +172,7 @@ const waiting = (id: string, title: string, secs: number, latestMessage?: string
 // The Next button and the Needs you strip, capped at four rows with
 // "+N more", one of them asking and two quoting their saved move.
 const needsAndNext: Scene = {
-  seed: {
+  seed: () => ({
     state: {
       asking: { ask: { reason: "allow npm publish?", epoch: EPOCH - 60 } },
       moves: {
@@ -186,7 +186,7 @@ const needsAndNext: Scene = {
         n3: { text: "the work is finished. Run /clear now.", epoch: EPOCH - 600, session: "s-n3" },
       },
     },
-  },
+  }),
   data: (r) => {
     r.data.workspaces = [
       waiting("n1", "Oldest question", 1800, "Should the strip cap at four?"),
@@ -210,12 +210,12 @@ const needsAndNext: Scene = {
 // any project, one card quoting its saved move, a merged card offering Park
 // and Close, and the third project folded into the quiet list.
 const projects: Scene = {
-  seed: {
+  seed: () => ({
     state: {
       ui: { mode: "projects" },
       moves: { "one-b": { text: "Read the draft in #142 and say go.", epoch: ago(90), session: "s-one-b" } },
     },
-  },
+  }),
   data: (r) => {
     r.data.workspaces = [
       ws("one-a", {
@@ -272,7 +272,7 @@ const pr = (number: number, extra: Partial<SavedPr> = {}): SavedPr => ({
   ...extra,
 });
 
-const PRS: Record<string, SavedPr> = {
+const prs = (): Record<string, SavedPr> => ({
   ready: pr(1, { mergeable: true, additions: 120, deletions: 8 }),
   draft: pr(2, { mergeable: true, draft: true, additions: 1234, deletions: 56 }),
   failing: pr(3, { mergeable: true, checks: [{ name: "build", state: "fail" }] }),
@@ -282,19 +282,19 @@ const PRS: Record<string, SavedPr> = {
   merged: pr(7, { status: "merged" }),
   closed: pr(8, { status: "closed" }),
   waiting: pr(9, { mergeable: true }),
-};
+});
 
 // The For review lane with a card for each merge verdict, and its header's
 // "N ready to merge", under a Main activity card whose PR is ready: it stays
 // there, offering a green "To review →".
 const reviewVerdicts: Scene = {
-  seed: { state: { prs: PRS } },
+  seed: () => ({ state: { prs: prs() } }),
   data: (r) => {
     r.data.groups = [
       group("g-main", "Main activity", { anchorId: "anchor-main" }),
       group("g-review", "For review", { anchorId: "anchor-review" }),
     ];
-    const { waiting: _, ...verdicts } = PRS;
+    const { waiting: _, ...verdicts } = prs();
     r.data.workspaces = [
       ws("anchor-main", { title: "Main activity", group: "g-main" }),
       ws("waiting", { title: "waiting card", group: "g-main", branch: "feat-9" }),

@@ -15,11 +15,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { it } from "node:test";
 import type { Renderer } from "./renderer.ts";
-import { lineDiff } from "./snapshot.ts";
+import { SCENES, type SceneName } from "./scenes.ts";
+import { lineDiff, seed } from "./snapshot.ts";
 
 const DIR = "test/golden";
 const UPDATE = process.env.UPDATE_GOLDEN === "1";
+// The repo's own Biome, found from here rather than the working directory.
+const BIOME = join(import.meta.dirname, "..", "..", "node_modules", ".bin", "biome");
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
@@ -38,7 +43,7 @@ function sortKeys(v: unknown): unknown {
  */
 export function stableJson(v: unknown, file: string): string {
   const raw = JSON.stringify(sortKeys(v));
-  const out = spawnSync("node_modules/.bin/biome", ["format", `--stdin-file-path=${file}`], {
+  const out = spawnSync(BIOME, ["format", `--stdin-file-path=${file}`], {
     input: raw,
     encoding: "utf8",
   });
@@ -48,8 +53,8 @@ export function stableJson(v: unknown, file: string): string {
 
 // Read once per call, after the sidebar loaded: a static import here would
 // load the model before the test seeds the saved state it reads at import.
-async function model() {
-  const [lanes, m, entries, strip, next, byProject, status, state] = await Promise.all([
+async function cockpit() {
+  const [lanes, model, entries, strip, next, byProject, status, state] = await Promise.all([
     import("../../src/cockpit/lanes.ts"),
     import("../../src/cockpit/model.ts"),
     import("../../src/cockpit/lane-entries.ts"),
@@ -59,15 +64,21 @@ async function model() {
     import("../../src/cockpit/status.ts"),
     import("../../src/cockpit/state.ts"),
   ]);
-  return { ...lanes, ...m, ...entries, ...strip, ...next, ...byProject, ...status, ...state };
+  return { lanes, model, entries, strip, next, byProject, status, state };
 }
 
-type Model = Awaited<ReturnType<typeof model>>;
+// Each module kept apart, so a name two of them export cannot shadow the other.
+type Model = Awaited<ReturnType<typeof cockpit>>;
 
 const ids = (ws: readonly Workspace[]): string[] => ws.map((w) => w.id);
 
-/** Each workspace's lane, size, status and project, keyed by id. */
-function placement(m: Model): Record<string, Json> {
+/**
+ * Each workspace's lane, size, status and project, keyed by id. Its rank
+ * within the lane is left out: the order of laneEntries already says it,
+ * and the selected card's rank remembers earlier renders, which no input
+ * file could carry.
+ */
+function placement({ model: m, byProject, status }: Model): Record<string, Json> {
   const cardIds = new Set(ids(m.cards()));
   return Object.fromEntries(
     m.allWorkspaces().map((w) => [
@@ -77,64 +88,64 @@ function placement(m: Model): Record<string, Json> {
         card: cardIds.has(w.id),
         density: m.cardDensity(w),
         lane: m.laneOf(w),
-        project: m.projectKey(w),
-        stateRank: m.stateRank(w),
-        status: m.statusOf(w),
+        project: byProject.projectKey(w),
+        status: status.statusOf(w),
       },
     ]),
   );
 }
 
 /** Each lane header: folded or not, the cards it counts, its merge line. */
-function laneHeaders(m: Model): Record<string, Json> {
+function laneHeaders({ lanes, model, entries }: Model): Record<string, Json> {
   return Object.fromEntries(
-    m.LANES.map((lane) => [
+    lanes.LANES.map((lane) => [
       lane.key,
       {
-        collapsed: m.isCollapsed(lane),
-        mergeReady: m.mergeReadyText(lane.key),
-        workspaces: ids(m.laneWorkspaces(lane.key)),
+        collapsed: model.isCollapsed(lane),
+        mergeReady: entries.mergeReadyText(lane.key),
+        workspaces: ids(entries.laneWorkspaces(lane.key)),
       },
     ]),
   );
 }
 
-function needs(m: Model): Json {
+function needs({ strip }: Model): Json {
   return {
-    inStrip: [...m.inStrip()],
-    late: m.needsWaitLate(),
-    list: ids(m.needsList()),
-    more: m.needsMore(),
-    shown: ids(m.needsShown()),
-    waitText: m.needsWaitText(),
+    inStrip: [...strip.inStrip()],
+    late: strip.needsWaitLate(),
+    list: ids(strip.needsList()),
+    more: strip.needsMore(),
+    shown: ids(strip.needsShown()),
+    waitText: strip.needsWaitText(),
   };
 }
 
-function nextOut(m: Model): Json {
-  const step = m.nextStep();
+function nextOut({ next }: Model): Json {
+  const step = next.nextStep();
   return {
-    queue: ids(m.nextQueue()),
+    queue: ids(next.nextQueue()),
     step: step ? { position: step.position, target: step.target.id, total: step.total } : null,
   };
 }
 
 /** What the model computes for the scene now on the fake renderer. */
 async function outputs(): Promise<Json> {
-  const m = await model();
+  const m = await cockpit();
   return {
-    laneEntries: m.flatEntries(),
+    laneEntries: m.entries.flatEntries(),
     laneHeaders: laneHeaders(m),
-    mode: m.mode(),
+    mode: m.state.mode(),
     needs: needs(m),
     next: nextOut(m),
     placement: placement(m),
-    projectEntries: m.projectEntries(),
-    quietProjects: m.quietProjects(),
+    projectEntries: m.byProject.projectEntries(),
+    quietProjects: m.byProject.quietProjects(),
   };
 }
 
 /** What the scene starts from: the cmux data, and what the build bakes in. */
 function inputs(r: Renderer): unknown {
+  // The build's defines, which seed() and renderer.ts set on globalThis.
   const g = globalThis as Record<string, unknown>;
   return { data: r.data, projects: g.__PROJECTS__, state: g.__STATE__ };
 }
@@ -152,13 +163,20 @@ function match(file: string, text: string): void {
 }
 
 /**
- * Checks the scene's input and output JSON against test/golden/; with
- * UPDATE_GOLDEN=1 re-records them instead. Call after the scene's data is
- * set on `r`.
+ * A scene's golden test: seeds it, loads the cockpit, sets its data, then
+ * checks its input and output JSON against test/golden/, or with
+ * UPDATE_GOLDEN=1 re-records them. One scene per test file, since the
+ * sidebar reads the saved state once, at load.
  */
-export async function goldenScene(scene: string, r: Renderer): Promise<void> {
-  const input = `${DIR}/${scene}.input.json`;
-  const output = `${DIR}/${scene}.json`;
-  match(input, stableJson(inputs(r), input));
-  match(output, stableJson(await outputs(), output));
+export async function goldenTest(scene: SceneName): Promise<void> {
+  const s = SCENES[scene];
+  const r = seed(s.seed());
+  await import("../../src/cockpit/index.ts");
+  it(`${scene}: the model's answers match test/golden/`, async () => {
+    s.data(r);
+    const input = `${DIR}/${scene}.input.json`;
+    const output = `${DIR}/${scene}.json`;
+    match(input, stableJson(inputs(r), input));
+    match(output, stableJson(await outputs(), output));
+  });
 }

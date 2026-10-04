@@ -10,7 +10,7 @@ import { SCENES } from "./support/scenes.ts";
 import { seed, snapshotScene } from "./support/snapshot.ts";
 
 const scene = SCENES.lanes;
-const r = seed(scene.seed);
+const r = seed(scene.seed());
 await import("../src/cockpit/index.ts");
 const { C } = await import("../src/cockpit/theme.ts");
 
