@@ -3,11 +3,14 @@
 //!
 //! - `cmux events`: replay, then live, reconnecting itself (stream.rs).
 //! - `claude agents --json` every 2 seconds.
-//! - `cmux --json workspace list` on start, every 30 seconds, and when a
-//!   workspace event says the list may have changed.
+//! - `cmux --json workspace list` and `cmux rpc workspace.group.list`
+//!   (read only) on start, every 30 seconds, and when a workspace event
+//!   says either may have changed. Any `workspace.` event but a selection
+//!   counts, which takes in `workspace.reordered`, sent when a card is
+//!   dragged between lanes, and any `workspace.group.` name.
 //! - config/state.json and config/projects.json, checked every 2 seconds.
 //!
-//! The join (join.rs) turns the first three into one frame of the core's
+//! The join (join.rs) turns the first four into one frame of the core's
 //! data; a fresh frame goes in when any of them changed, and every 30
 //! seconds anyway so the ages move on. The core asks for no effects that
 //! write in R1.2; its render request is the cue to draw.
@@ -34,7 +37,7 @@ use crux_core::App;
 use serde_json::Value;
 
 use join::{Change, Join, changes_workspaces};
-use parse::AgentView;
+use parse::{AgentView, Groups};
 use stream::CmuxEvents;
 use watch::{Watched, read_projects, read_state};
 
@@ -57,6 +60,7 @@ pub enum Input {
     StreamDown(String),
     Agents(AgentView),
     Workspaces(Vec<Workspace>),
+    Groups(Groups),
     /// From the caller's own thread (a key press, say): call `on_frame`
     /// now, with or without a new frame.
     Poke,
@@ -114,6 +118,7 @@ impl Feed {
             }
             Input::Agents(view) => (self.join.agents(view), false, None),
             Input::Workspaces(list) => (self.join.workspaces(list), false, None),
+            Input::Groups(groups) => (self.join.groups(groups), false, None),
             Input::Poke => (false, false, None),
         }
     }
@@ -202,16 +207,34 @@ fn poll_agents(tx: &Sender<Input>, stop: &AtomicBool) {
     }
 }
 
-fn poll_workspaces(tx: &Sender<Input>, nudge: &Receiver<()>) {
+/// One read of cmux's layout: the workspace list and the groups, each
+/// None when its command failed or printed something else.
+type Layout = (Option<Vec<Workspace>>, Option<Groups>);
+
+fn read_layout() -> Layout {
+    let list = output("cmux", &["--json", "workspace", "list"]).and_then(|o| parse::workspaces(&o));
+    let groups = output("cmux", &["rpc", "workspace.group.list"]).and_then(|o| parse::groups(&o));
+    (list, groups)
+}
+
+/// Reads the layout on start, every `every`, and on each nudge. The
+/// groups go first, so the workspace list that makes the join loaded
+/// never lands without them; a read that failed keeps the last good one.
+fn poll_layout(
+    tx: &Sender<Input>,
+    nudge: &Receiver<()>,
+    every: Duration,
+    read: impl Fn() -> Layout,
+) {
     loop {
-        let list =
-            output("cmux", &["--json", "workspace", "list"]).and_then(|o| parse::workspaces(&o));
-        if let Some(list) = list
-            && tx.send(Input::Workspaces(list)).is_err()
-        {
-            return;
+        let (list, groups) = read();
+        let inputs = [groups.map(Input::Groups), list.map(Input::Workspaces)];
+        for input in inputs.into_iter().flatten() {
+            if tx.send(input).is_err() {
+                return;
+            }
         }
-        if let Err(RecvTimeoutError::Disconnected) = nudge.recv_timeout(WORKSPACES_EVERY) {
+        if let Err(RecvTimeoutError::Disconnected) = nudge.recv_timeout(every) {
             return;
         }
         // A burst of workspace events reads the list once.
@@ -284,7 +307,7 @@ pub fn run(
         let stop = Arc::clone(&stop);
         thread::spawn(move || poll_agents(&tx, &stop));
     }
-    thread::spawn(move || poll_workspaces(&tx, &nudge_rx));
+    thread::spawn(move || poll_layout(&tx, &nudge_rx, WORKSPACES_EVERY, read_layout));
 
     let mut feed = Feed::default();
     let mut files = Files {
@@ -374,6 +397,9 @@ pub fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cockpit_core::data::WorkspaceGroup;
+    use cockpit_core::lane_entries::LaneEntry;
+    use cockpit_core::lanes::LaneKey;
     use serde_json::json;
 
     fn ws(id: &str) -> Workspace {
@@ -441,6 +467,180 @@ mod tests {
             Some(b"hi\n".to_vec())
         );
         assert_eq!(output_within("false", &[], Duration::from_secs(5)), None);
+    }
+
+    fn group(
+        id: &str,
+        name: &str,
+        anchor: &str,
+        members: &[&str],
+    ) -> (WorkspaceGroup, Vec<String>) {
+        let g = WorkspaceGroup {
+            id: id.to_string(),
+            name: Some(name.to_string()),
+            anchor_id: Some(anchor.to_string()),
+            collapsed: Some(false),
+        };
+        (g, members.iter().map(|m| m.to_string()).collect())
+    }
+
+    fn groups(list: &[(WorkspaceGroup, Vec<String>)]) -> Groups {
+        let mut out = Groups::default();
+        for (g, members) in list {
+            for m in members {
+                out.member_of.insert(m.clone(), g.id.clone());
+            }
+            out.list.push(g.clone());
+        }
+        out
+    }
+
+    /// Each card in the view model with its lane, and each lane header's
+    /// anchor, in view order.
+    type Placed = (Vec<(LaneKey, String)>, Vec<(LaneKey, Option<String>)>);
+
+    fn placed(feed: &Feed) -> Placed {
+        let (mut cards, mut headers): Placed = (Vec::new(), Vec::new());
+        for e in &feed.model.view.lane_entries {
+            match e {
+                LaneEntry::Ws { ws_id, lane, .. } => cards.push((*lane, ws_id.clone())),
+                LaneEntry::Header {
+                    lane, anchor_id, ..
+                } => headers.push((*lane, anchor_id.clone())),
+                LaneEntry::Zone { .. } | LaneEntry::Ghost { .. } => {}
+            }
+        }
+        (cards, headers)
+    }
+
+    fn titled(id: &str, title: &str) -> Workspace {
+        Workspace {
+            title: Some(title.to_string()),
+            ..ws(id)
+        }
+    }
+
+    // Background rather than Parked, which starts folded and so draws no
+    // cards until it is opened.
+    #[test]
+    fn groups_put_cards_in_lanes_and_anchors_in_headers() {
+        let mut feed = Feed::default();
+        feed.state(cockpit_core::persist::SavedState::default());
+        feed.input(Input::Workspaces(vec![
+            titled("M", "real card anchoring Main"),
+            titled("C", "a card"),
+            titled("P", "Background"),
+            titled("Q", "background card"),
+            titled("U", "loose"),
+        ]));
+        feed.input(Input::Groups(groups(&[
+            group("gm", "Main activity", "M", &["M", "C"]),
+            group("gb", "Background", "P", &["P", "Q"]),
+        ])));
+        feed.frame(1_791_127_100.0);
+        let (cards, headers) = placed(&feed);
+        let card = |l: LaneKey, id: &str| (l, id.to_string());
+        assert_eq!(
+            cards,
+            vec![
+                card(LaneKey::Main, "M"),
+                card(LaneKey::Main, "C"),
+                card(LaneKey::Bg, "Q"),
+                card(LaneKey::Unsorted, "U"),
+            ],
+            "a generated anchor (P) is no card; a real one (M) is"
+        );
+        // A generated anchor names its header only while it has an agent
+        // or unread messages; either way it is never a card.
+        assert_eq!(
+            headers,
+            vec![
+                (LaneKey::Main, None),
+                (LaneKey::Bg, None),
+                (LaneKey::Unsorted, None)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_group_event_moves_the_card_in_the_view_model() {
+        let mut feed = Feed::default();
+        feed.state(cockpit_core::persist::SavedState::default());
+        feed.input(Input::Workspaces(vec![
+            titled("P", "Background"),
+            titled("Q", "q"),
+        ]));
+        feed.input(Input::Groups(groups(&[group(
+            "gb",
+            "Background",
+            "P",
+            &["P"],
+        )])));
+        feed.frame(1_791_127_100.0);
+        assert_eq!(placed(&feed).0, vec![(LaneKey::Unsorted, "Q".to_string())]);
+
+        // The event asks for the layout again; the poll's reply is the move.
+        for name in ["workspace.reordered", "workspace.group.add"] {
+            let e = json!({"type": "event", "seq": 1, "name": name, "payload": {}});
+            let (_, nudge, _) = feed.input(Input::Event(Box::new(e), Instant::now()));
+            assert!(nudge, "{name}");
+        }
+        let (changed, _, _) = feed.input(Input::Groups(groups(&[group(
+            "gb",
+            "Background",
+            "P",
+            &["P", "Q"],
+        )])));
+        assert!(changed);
+        feed.frame(1_791_127_101.0);
+        assert_eq!(placed(&feed).0, vec![(LaneKey::Bg, "Q".to_string())]);
+    }
+
+    #[test]
+    fn the_layout_poll_reads_again_at_once_on_a_nudge() {
+        let (tx, rx) = mpsc::channel();
+        let (nudge_tx, nudge_rx) = mpsc::channel();
+        let reads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = Arc::clone(&reads);
+        let read = move || {
+            let n = counter.fetch_add(1, Ordering::SeqCst);
+            let g = groups(&[group("g", "Parked", "P", &["P"])][..n.min(1)]);
+            (Some(vec![ws("P")]), Some(g))
+        };
+        // A long period, so only the nudge can explain a second read.
+        let poll =
+            thread::spawn(move || poll_layout(&tx, &nudge_rx, Duration::from_secs(600), read));
+        let next = || rx.recv_timeout(Duration::from_secs(1));
+        assert!(
+            matches!(next(), Ok(Input::Groups(g)) if g.list.is_empty()),
+            "groups first"
+        );
+        assert!(matches!(next(), Ok(Input::Workspaces(_))));
+
+        let nudged = Instant::now();
+        let _ = nudge_tx.send(());
+        assert!(matches!(next(), Ok(Input::Groups(g)) if g.list.len() == 1));
+        assert!(matches!(next(), Ok(Input::Workspaces(_))));
+        assert!(nudged.elapsed() < Duration::from_secs(1));
+        assert_eq!(reads.load(Ordering::SeqCst), 2);
+
+        drop(nudge_tx);
+        assert!(poll.join().is_ok(), "a closed nudge ends the poll");
+    }
+
+    #[test]
+    fn a_failed_group_read_keeps_the_last_good_one() {
+        let (tx, rx) = mpsc::channel();
+        let (nudge_tx, nudge_rx) = mpsc::channel::<()>();
+        drop(nudge_tx);
+        poll_layout(&tx, &nudge_rx, Duration::from_secs(600), || {
+            (Some(vec![ws("A")]), None)
+        });
+        let sent: Vec<Input> = rx.try_iter().collect();
+        assert!(
+            matches!(sent.as_slice(), [Input::Workspaces(_)]),
+            "{sent:?}"
+        );
     }
 
     #[test]

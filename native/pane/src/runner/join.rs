@@ -1,5 +1,7 @@
 //! The join from the R1.0 spike, without its printing: cmux events, Agent
-//! View and the workspace list in, one frame of the core's data out.
+//! View, the workspace list and the workspace groups in, one frame of the
+//! core's data out. The groups give each workspace its `group`, as the
+//! sidebar's data has it, so cards land in their lanes.
 //!
 //! A Claude process id ties a session to a workspace two ways: `--pid=`
 //! and `--tab=` on a `sidebar.metadata.updated` status write (this wins),
@@ -15,7 +17,7 @@ use cockpit_core::data::{Agent, Data, Workspace};
 use cockpit_core::hooks::{Hooked, moves_activity, status_from_hook, status_without_hooks};
 use serde_json::Value;
 
-use super::parse::{AgentView, iso_epoch};
+use super::parse::{AgentView, Groups, iso_epoch};
 
 /// How many Agent Views running may leave a pid out before the join
 /// forgets it. More than one, so a new session's first hook is not lost
@@ -59,6 +61,7 @@ pub struct Change {
 pub struct Join {
     pub health: Health,
     workspaces: Option<Vec<Workspace>>,
+    groups: Option<Groups>,
     selected: Option<String>,
     /// pid to workspace, from a status write.
     tab_of: HashMap<u32, String>,
@@ -79,9 +82,11 @@ pub fn changes_workspaces(e: &Value) -> bool {
 }
 
 impl Join {
-    /// Both polls have answered at least once.
+    /// Every poll has answered at least once: Agent View, the workspace
+    /// list and the groups, so no frame that counts puts every card in
+    /// Unsorted.
     pub fn loaded(&self) -> bool {
-        self.agents.is_some() && self.workspaces.is_some()
+        self.agents.is_some() && self.workspaces.is_some() && self.groups.is_some()
     }
 
     /// The stream's ack: replay runs to `latest_seq`. A connection that
@@ -128,6 +133,15 @@ impl Join {
             .find(|w| w.selected == Some(true))
             .map(|w| w.id.clone());
         self.workspaces = Some(list);
+        true
+    }
+
+    /// Takes a fresh group list; false when nothing changed.
+    pub fn groups(&mut self, groups: Groups) -> bool {
+        if self.groups.as_ref() == Some(&groups) {
+            return false;
+        }
+        self.groups = Some(groups);
         true
     }
 
@@ -315,6 +329,10 @@ impl Join {
             list.iter()
                 .map(|w| {
                     let mut w = w.clone();
+                    w.group = self
+                        .groups
+                        .as_ref()
+                        .and_then(|g| g.member_of.get(&w.id).cloned());
                     w.selected = Some(self.selected.as_deref() == Some(w.id.as_str()));
                     let agents = by_ws.remove(w.id.as_str()).unwrap_or_default();
                     w.agents = Some(agents.into_iter().map(Some).collect());
@@ -324,7 +342,7 @@ impl Join {
         });
         Data {
             epoch: Some(now),
-            groups: None,
+            groups: self.groups.as_ref().map(|g| g.list.clone()),
             selected_id: self.selected.clone(),
             workspaces,
         }
@@ -599,7 +617,39 @@ mod tests {
         assert!(!j.agents(view(&[(1, true, "s")])));
         assert!(j.workspaces(vec![ws("A")]));
         assert!(!j.workspaces(vec![ws("A")]));
+        assert!(!j.loaded(), "no groups yet");
+        assert!(j.groups(Groups::default()));
+        assert!(!j.groups(Groups::default()));
         assert!(j.loaded());
+    }
+
+    #[test]
+    fn groups_give_each_member_its_group() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A"), ws("B"), ws("C")]);
+        let d = j.frame(0.0);
+        assert_eq!(d.groups, None, "no group list read yet");
+        assert_eq!(d.ws_by_id("A").unwrap().group, None);
+
+        let g = cockpit_core::data::WorkspaceGroup {
+            id: "g".into(),
+            name: Some("Parked".into()),
+            anchor_id: Some("A".into()),
+            collapsed: Some(false),
+        };
+        let member_of = [("A", "g"), ("B", "g")]
+            .map(|(w, g)| (w.to_string(), g.to_string()))
+            .into();
+        assert!(j.groups(Groups {
+            list: vec![g.clone()],
+            member_of,
+        }));
+        let d = j.frame(0.0);
+        assert_eq!(d.groups, Some(vec![g]));
+        let group_of = |id: &str| d.ws_by_id(id).unwrap().group.clone();
+        assert_eq!(group_of("A").as_deref(), Some("g"));
+        assert_eq!(group_of("B").as_deref(), Some("g"));
+        assert_eq!(group_of("C"), None);
     }
 
     #[test]

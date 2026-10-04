@@ -5,7 +5,7 @@
 //! move between cards, `?` shows the keys, `q` quits). `--print` runs
 //! headless: it prints the view model as text whenever it
 //! changes, and logs on stderr how long each status change took to reach
-//! it. `--once` prints once replay has caught up and both polls have
+//! it. `--once` prints once replay has caught up and every poll has
 //! answered, then exits. `--config <dir>` reads state.json and
 //! projects.json from another folder; `--after <seq>` replays from a
 //! later sequence.
@@ -106,8 +106,9 @@ fn clock() -> String {
     )
 }
 
-/// `--print --once`: prints once replay has caught up and both polls
-/// have answered, or after `ONCE_LIMIT` whatever it has.
+/// `--print --once`: prints once replay has caught up and every poll
+/// (Agent View, the workspace list and the groups) has answered, or after
+/// `ONCE_LIMIT` whatever it has.
 fn print_once(opts: &Options) {
     let started = Instant::now();
     runner::run(
