@@ -1,0 +1,7 @@
+# The Rust toolchain for native/. Rustup finds this file from the current
+# directory upwards, so cargo run from native/ picks it up, and CI installs
+# exactly this version. Bump it on purpose, in its own PR.
+[toolchain]
+channel = "1.98.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

@@ -1,0 +1,9 @@
+[package]
+name = "cockpit_core"
+version = "0.0.0"
+edition = "2024"
+publish = false
+description = "The cockpit's shared core: a Crux app the pane and the Swift shell drive"
+
+[dependencies]
+crux_core = "0.20"
