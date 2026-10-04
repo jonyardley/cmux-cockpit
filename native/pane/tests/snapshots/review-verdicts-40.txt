@@ -1,10 +1,10 @@
   All  Projects                  ? keys
  Next  nothing waiting
 
- ▾ Main activity  1    1 ready to merge
+ ▾ ■ MAIN ACTIVITY  1  1 ready to merge
    ○ waiting card              No agent
 
- ▾ For review  8       1 ready to merge
+ ▾ ■ FOR REVIEW  8     1 ready to merge
    ○ ready card                No agent
    ○ draft card                No agent
    ○ failing card              No agent
@@ -14,8 +14,8 @@
    ○ merged card               No agent
    ○ closed card               No agent
 
-   Background  0
+   ■ BACKGROUND  0
 
-   Parked  0
+   ■ PARKED  0
 
-   Unsorted  0
+   ■ UNSORTED  0

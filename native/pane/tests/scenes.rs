@@ -17,7 +17,7 @@ use cockpit_pane::{Outcome, Pane, PaneModel, theme};
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
-use ratatui::crossterm::event::{Event, KeyCode, KeyEvent};
+use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
 use ratatui::style::Color;
 
 use support::golden::{SCENES, scene_model};
@@ -27,7 +27,9 @@ const WIDTHS: [u16; 2] = [40, 80];
 const HEIGHT: u16 = 64;
 
 /// Glyphs the pane draws that are not words.
-const MARKS: &str = "▌▸▾●○◌─│┌┐└┘";
+const MARKS: &str = "▌▸▾■●○◌─│┌┐└┘";
+/// Narrow splits the snapshots do not cover, checked for cut words only.
+const NARROW: [u16; 3] = [16, 24, 32];
 
 fn pane_for(scene: &str) -> Pane {
     let mut core = scene_model(scene).unwrap();
@@ -109,9 +111,9 @@ fn cut_words(model: &PaneModel, screen: &str) -> Vec<String> {
 }
 
 #[test]
-fn never_cuts_a_word_mid_line_in_any_scene_at_either_width() {
+fn never_cuts_a_word_mid_line_in_any_scene_at_any_width() {
     for scene in SCENES {
-        for width in WIDTHS {
+        for width in WIDTHS.into_iter().chain(NARROW) {
             let mut pane = pane_for(scene);
             let mut term = terminal(width);
             let screen = draw(&mut pane, &mut term);
@@ -228,6 +230,62 @@ fn keeps_the_cursor_card_in_sight_in_a_short_pane() {
         screen.contains('▌'),
         "the cursor's card is on screen:\n{screen}"
     );
+}
+
+/// A short pane, with the cursor pressed down `presses` times.
+fn short_screen(pane: &mut Pane, presses: usize) -> String {
+    for _ in 0..presses {
+        press(pane, KeyCode::Down);
+    }
+    let mut term = Terminal::new(TestBackend::new(40, 12)).unwrap();
+    draw(pane, &mut term)
+}
+
+#[test]
+fn shows_the_lanes_below_the_last_card_in_a_short_pane() {
+    let mut pane = pane_for("review-verdicts");
+    let cards = pane.model().card_ids().len();
+    let screen = short_screen(&mut pane, cards);
+    assert!(
+        screen.contains("UNSORTED"),
+        "the last lane is reachable:\n{screen}"
+    );
+}
+
+#[test]
+fn scrolls_a_line_at_a_time_when_there_are_no_cards() {
+    let mut model = pane_for("lanes").model().clone();
+    for lane in &mut model.lanes {
+        lane.rows
+            .retain(|r| matches!(r, cockpit_pane::model::Row::Ghost { .. }));
+    }
+    let mut pane = Pane::new(model);
+    assert!(pane.model().card_ids().is_empty());
+    let top = short_screen(&mut pane, 0);
+    assert!(!top.contains("UNSORTED"));
+    let bottom = short_screen(&mut pane, 40);
+    assert!(
+        bottom.contains("UNSORTED"),
+        "scrolled to the end:\n{bottom}"
+    );
+    assert_eq!(
+        press(&mut pane, KeyCode::Up),
+        Outcome::Redraw,
+        "held at the end, so Up moves at once"
+    );
+}
+
+#[test]
+fn quits_on_q_alone_and_ignores_arrows_under_the_keys() {
+    let mut pane = pane_for("lanes");
+    let alt_q = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::ALT);
+    assert_eq!(pane.handle_key(alt_q), Outcome::Nothing);
+    let ctrl_c = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL);
+    assert_eq!(pane.handle_key(ctrl_c), Outcome::Quit);
+
+    press(&mut pane, KeyCode::Char('?'));
+    assert_eq!(press(&mut pane, KeyCode::Down), Outcome::Nothing);
+    assert_eq!(pane.cursor(), None, "the cursor stays put under the keys");
 }
 
 #[test]

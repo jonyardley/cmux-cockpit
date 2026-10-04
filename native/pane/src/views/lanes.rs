@@ -1,15 +1,16 @@
-//! The lanes: each header with its fold mark, name, count pill and merge
-//! line, then its cards (dot, title, status with its age, detail) and the
+//! The lanes: each header with its fold mark, marker, name, anchor, count
+//! pill, folded dot and merge line, then its cards (dot, title, status with
+//! its age, where you left off, detail) and the
 //! placeholders of cards waiting in Needs you. An empty lane is its header
 //! alone, faint, with no fold mark.
 
 use std::ops::Range;
 
-use ratatui::style::Style;
+use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::parts::{pill, spans_width, spread};
-use crate::model::{Card, FOLDED_MARK, GHOST, GHOST_GAP, Lane, OPEN_MARK, Row};
+use crate::model::{Card, FOLDED_MARK, GHOST, GHOST_GAP, LANE_MARK, Lane, OPEN_MARK, Row};
 use crate::text::{fit, width, wrap};
 use crate::theme;
 use cockpit_core::theme::Token;
@@ -54,25 +55,33 @@ pub fn lines(
 }
 
 fn header(lane: &Lane, inner: usize) -> Line<'static> {
-    let (mark, name_ink, tint) = if lane.empty {
-        (" ", theme::ink(Token::Faint), EMPTY_PILL)
+    let chevron = if lane.empty {
+        " "
     } else if lane.collapsed {
-        (FOLDED_MARK, theme::strong(Token::Heading), lane.pill)
+        FOLDED_MARK
     } else {
-        (OPEN_MARK, theme::strong(Token::Heading), lane.pill)
+        OPEN_MARK
     };
-    let count = pill(lane.count, tint);
-    let fixed = width(mark) + 1 + 1 + width(&count.content);
-    let merge_room = inner.saturating_sub(fixed + MIN_TITLE + 1);
-    let merge = fit(&lane.merge_ready, merge_room);
-    let name_room = inner.saturating_sub(fixed + width(&merge) + 1);
-    let left = vec![
-        Span::styled(mark, theme::ink(lane.marker)),
+    let name_ink = if lane.faint {
+        theme::strong(Token::Faint)
+    } else {
+        theme::plain(theme::SECONDARY).add_modifier(Modifier::BOLD)
+    };
+    let lead = vec![
+        Span::styled(chevron, theme::ink(Token::Faint)),
         Span::raw(" "),
-        Span::styled(fit(lane.name, name_room), name_ink),
+        Span::styled(LANE_MARK, theme::ink(lane.marker)),
         Span::raw(" "),
-        count,
     ];
+    let tail = header_tail(lane);
+    let fixed = spans_width(&lead) + spans_width(&tail);
+    let keep = width(&lane.name).min(MIN_TITLE);
+    let merge = fit(&lane.merge_ready, inner.saturating_sub(fixed + keep + 1));
+    let gap = usize::from(!merge.is_empty());
+    let name_room = inner.saturating_sub(fixed + width(&merge) + gap);
+    let mut left = lead;
+    left.push(Span::styled(fit(&lane.name, name_room), name_ink));
+    left.extend(tail);
     let right = if merge.is_empty() {
         Vec::new()
     } else {
@@ -81,23 +90,51 @@ fn header(lane: &Lane, inner: usize) -> Line<'static> {
     spread(left, right, inner, false)
 }
 
+/// After a lane's name: its anchor's dot and unread badge, the count, and
+/// while folded the dot of its most urgent session.
+fn header_tail(lane: &Lane) -> Vec<Span<'static>> {
+    let tint = if lane.empty { EMPTY_PILL } else { lane.pill };
+    let mut tail = Vec::new();
+    if let Some(a) = &lane.anchor {
+        tail.push(Span::raw(" "));
+        tail.push(Span::styled(a.icon.glyph, theme::icon(a.icon.ink)));
+        if !a.unread.is_empty() {
+            tail.push(Span::raw(" "));
+            tail.push(Span::styled(format!(" {} ", a.unread), theme::badge()));
+        }
+    }
+    tail.push(Span::raw(" "));
+    tail.push(pill(lane.count, tint));
+    if let Some(dot) = &lane.dot {
+        tail.push(Span::raw(" "));
+        tail.push(Span::styled(dot.glyph, theme::icon(dot.ink)));
+    }
+    tail
+}
+
 fn card(c: &Card, inner: usize, on: bool) -> Vec<Line<'static>> {
     let status = fit(&c.status, inner.saturating_sub(CARD_LEAD + MIN_TITLE + 1));
-    let title_room = inner.saturating_sub(CARD_LEAD + width(&status) + 1);
+    let gap = usize::from(!status.is_empty());
+    let title_room = inner.saturating_sub(CARD_LEAD + width(&status) + gap);
     let left = vec![
         Span::raw("  "),
-        Span::styled(c.icon.glyph, theme::ink(c.icon.ink)),
+        Span::styled(c.icon.glyph, theme::icon(c.icon.ink)),
         Span::raw(" "),
         Span::styled(fit(&c.title, title_room), theme::title()),
     ];
     let right = vec![Span::styled(status, theme::ink(c.status_ink))];
     let mut out = vec![spread(left, right, inner, on)];
-    let detail_room = inner.saturating_sub(CARD_LEAD);
-    for line in wrap(&c.detail, detail_room, c.detail_lines) {
+    let room = inner.saturating_sub(CARD_LEAD);
+    let indent = || Span::raw(" ".repeat(CARD_LEAD));
+    if !c.left_off.is_empty() {
         let spans = vec![
-            Span::raw(" ".repeat(CARD_LEAD)),
-            Span::styled(line, theme::ink(Token::MetaText)),
+            indent(),
+            Span::styled(fit(&c.left_off, room), theme::plain(theme::TERTIARY)),
         ];
+        out.push(spread(spans, Vec::new(), inner, on));
+    }
+    for line in wrap(&c.detail, room, c.detail_lines) {
+        let spans = vec![indent(), Span::styled(line, theme::plain(theme::SECONDARY))];
         out.push(spread(spans, Vec::new(), inner, on));
     }
     if on {

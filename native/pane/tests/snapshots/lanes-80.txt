@@ -7,7 +7,7 @@
    ● Release notes
      Asking: allow git push?
 
- ▾ Main activity  8
+ ▾ ■ MAIN ACTIVITY  8
    ◌ Chip colours · your turn
    ◌ Release notes · is asking
    ● Tidy strip                                                     Finished 6m
@@ -19,17 +19,18 @@
    ○ Card layout fit                                                   Idle 15m
    ○ Untimed card                                                          Idle
 
- ▾ For review  2
+ ▾ ■ FOR REVIEW  2
    ● Ended agent                                                   Finished 15m
    ○ Left off                                                           Idle 1h
 
- ▾ Background  2
+ ▾ ■ BACKGROUND  2
    ● Iteration timings                                     Waiting 4m · 1 shell
+     You: hi
      The batch resumes by itself once load drops.
    ○ No agent                                                          No agent
 
- ▸ Parked  1
+ ▸ ■ PARKED  1  ●
 
- ▾ Unsorted  2
-   ● Loose workspace                                                 Working 3m
-   ○ Merged elsewhere                                                  No agent
+ ▾ ■ UNSORTED  2
+   ● Loose workspace                                                         3m
+   ○ Merged elsewhere

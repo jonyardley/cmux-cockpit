@@ -5,17 +5,17 @@
    ● One: docs
      Your turn: Read the draft in #142 and say go.
 
-   Main activity  0
+   ■ MAIN ACTIVITY  0
 
-   For review  0
+   ■ FOR REVIEW  0
 
-   Background  0
+   ■ BACKGROUND  0
 
-   Parked  0
+   ■ PARKED  0
 
- ▾ Unsorted  5
+ ▾ ■ UNSORTED  5
    ◌ One: docs · your turn
-   ● Two: release                                                  Finished 10m
-   ● One: parser rewrite for the streaming tokeniser                 Working 7m
-   ○ Two: changelog                                                    Idle 15m
-   ○ Scratch                                                           No agent
+   ● Two: release                                                           10m
+   ● One: parser rewrite for the streaming tokeniser                         7m
+   ○ Two: changelog                                                         15m
+   ○ Scratch

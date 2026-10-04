@@ -12,19 +12,20 @@
      Asking: allow npm publish?
    +1 more
 
-   Main activity  0
+   ■ MAIN ACTIVITY  0
 
-   For review  0
+   ■ FOR REVIEW  0
 
-   Background  0
+   ■ BACKGROUND  0
 
-   Parked  0
+   ■ PARKED  0
 
- ▾ Unsorted  7
+ ▾ ■ UNSORTED  7
    ◌ Oldest question · your turn
    ◌ Publish · is asking
    ◌ Second · your turn
    ◌ Third · your turn
-   ● Fifth, past the cap                                          Your turn <1m
-   ● Finished while away                                            Finished 4m
-   ● Busy                                                            Working 1m
+   ● Fifth, past the cap                                                    <1m
+     One more thing
+   ● Finished while away                                                     4m
+   ● Busy                                                                    1m

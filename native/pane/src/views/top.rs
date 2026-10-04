@@ -16,10 +16,12 @@ pub fn switch(inner: usize) -> Line<'static> {
         .fg(theme::rgb(theme::GROUND))
         .bg(theme::colour(Token::Select))
         .add_modifier(Modifier::BOLD);
+    let all = Span::styled(format!(" {ALL_LABEL} "), lit);
+    let projects_room = inner.saturating_sub(width(&all.content) + 1);
     let left = vec![
-        Span::styled(format!(" {ALL_LABEL} "), lit),
+        all,
         Span::raw(" "),
-        Span::styled(PROJECTS_LABEL, theme::ink(Token::Faint)),
+        Span::styled(fit(PROJECTS_LABEL, projects_room), theme::ink(Token::Faint)),
     ];
     let room = inner.saturating_sub(spans_width(&left) + 1);
     let right = vec![Span::styled(fit(KEYS_HINT, room), theme::ink(Token::Faint))];
@@ -27,11 +29,11 @@ pub fn switch(inner: usize) -> Line<'static> {
 }
 
 /// Next: its label, the workspace it goes to, and its place in the queue.
-pub fn next(line: Option<&NextLine>, inner: usize) -> Line<'static> {
+pub fn next(line: &NextLine, inner: usize) -> Line<'static> {
     let label = Span::styled(NEXT_LABEL, theme::strong(Token::Heading));
     let room = inner.saturating_sub(width(NEXT_LABEL) + 2);
     match line {
-        Some(NextLine::Step { title, place }) => {
+        NextLine::Step { title, place } => {
             let place = fit(place, room);
             let title_room = room.saturating_sub(width(&place) + 1);
             let left = vec![
@@ -42,7 +44,7 @@ pub fn next(line: Option<&NextLine>, inner: usize) -> Line<'static> {
             let right = vec![Span::styled(place, theme::ink(Token::MetaText))];
             spread(left, right, inner, false)
         }
-        Some(NextLine::Nothing) | None => {
+        NextLine::Nothing => {
             let left = vec![
                 label,
                 Span::raw("  "),

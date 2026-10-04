@@ -38,6 +38,23 @@ pub fn fit(text: &str, max: usize) -> String {
     out
 }
 
+/// Text the core already cut with an ellipsis, which may have landed
+/// mid-word: the part word goes, so the ellipsis follows a whole one.
+/// Text without the ellipsis comes back with its spaces folded.
+pub fn whole_words(text: &str) -> String {
+    let folded = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let Some(head) = folded.strip_suffix(ELLIPSIS) else {
+        return folded;
+    };
+    if head.ends_with(' ') || head.is_empty() {
+        return format!("{}{ELLIPSIS}", head.trim_end());
+    }
+    match head.rfind(' ') {
+        Some(i) => format!("{}{ELLIPSIS}", &head[..i]),
+        None => ELLIPSIS.to_string(),
+    }
+}
+
 /// `text` wrapped onto at most `lines` lines of `max` cells, between
 /// words; the last line ends in an ellipsis when words were left over.
 pub fn wrap(text: &str, max: usize, lines: usize) -> Vec<String> {
@@ -113,6 +130,14 @@ mod tests {
     #[test]
     fn never_cuts_a_word_too_wide_for_a_line() {
         assert_eq!(wrap("a enormousword b", 6, 3), vec!["a", "…"]);
+    }
+
+    #[test]
+    fn drops_the_part_word_the_core_cut() {
+        assert_eq!(whole_words("the batch resum…"), "the batch…");
+        assert_eq!(whole_words("the batch …"), "the batch…");
+        assert_eq!(whole_words("resum…"), "…");
+        assert_eq!(whole_words("the  batch"), "the batch");
     }
 
     #[test]

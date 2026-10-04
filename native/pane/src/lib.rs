@@ -38,6 +38,8 @@ pub enum Outcome {
 pub struct Pane {
     model: PaneModel,
     cursor: Cursor,
+    /// The line scroll Up and Down set when there is no card to move to.
+    manual: usize,
     keys: bool,
     /// Something changed since the last draw.
     dirty: bool,
@@ -93,27 +95,31 @@ impl Pane {
     pub fn handle_event(&mut self, event: &Event) -> Outcome {
         match event {
             Event::Key(key) => self.handle_key(*key),
-            Event::Resize(..) => {
-                self.dirty = true;
-                Outcome::Redraw
-            }
+            // The next draw sees the new size and draws.
+            Event::Resize(..) => Outcome::Redraw,
             _ => Outcome::Nothing,
         }
     }
 
-    /// Handles a key: up and down move the cursor, `?` shows or hides the
-    /// keys, Esc hides them, `q` or Ctrl-C quits.
+    /// Handles a key: up and down move the cursor (or scroll a line when
+    /// there are no cards), `?` shows or hides the keys, Esc hides them, `q`
+    /// or Ctrl-C quits. While the keys are up, up and down do nothing.
     pub fn handle_key(&mut self, key: KeyEvent) -> Outcome {
         if key.kind == KeyEventKind::Release {
             return Outcome::Nothing;
         }
+        let chord = key.modifiers.intersects(
+            KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER | KeyModifiers::META,
+        );
         let changed = match key.code {
-            KeyCode::Char('q') => return Outcome::Quit,
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 return Outcome::Quit;
             }
-            KeyCode::Up => self.cursor.step(&self.model.card_ids(), -1),
-            KeyCode::Down => self.cursor.step(&self.model.card_ids(), 1),
+            _ if chord => false,
+            KeyCode::Char('q') => return Outcome::Quit,
+            KeyCode::Up | KeyCode::Down if self.keys => false,
+            KeyCode::Up => self.step(-1),
+            KeyCode::Down => self.step(1),
             KeyCode::Char('?') => {
                 self.keys = !self.keys;
                 true
@@ -132,6 +138,18 @@ impl Pane {
         }
     }
 
+    /// Moves the cursor a card, or with no cards scrolls a line.
+    fn step(&mut self, by: isize) -> bool {
+        let cards = self.model.card_ids();
+        if !cards.is_empty() {
+            return self.cursor.step(&cards, by);
+        }
+        let next = self.manual.saturating_add_signed(by);
+        let moved = next != self.manual;
+        self.manual = next;
+        moved
+    }
+
     /// Draws when something changed or the terminal was resized; true when
     /// it drew.
     pub fn draw<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<bool, B::Error> {
@@ -139,12 +157,20 @@ impl Pane {
         if !self.needs_draw(size) {
             return Ok(false);
         }
+        let cursor = self.cursor.on();
         let shown = views::Shown {
             model: &self.model,
-            cursor: self.cursor.on(),
+            cursor,
+            last: cursor.is_some() && cursor == self.model.card_ids().last().copied(),
+            manual: self.manual,
             keys: self.keys,
         };
-        terminal.draw(|frame| views::draw(frame, shown))?;
+        let mut scrolled = 0;
+        terminal.draw(|frame| scrolled = views::draw(frame, shown))?;
+        if cursor.is_none() {
+            // Held at the end, so Up after too many Downs moves at once.
+            self.manual = scrolled;
+        }
         self.dirty = false;
         self.drawn_at = Some(size);
         Ok(true)

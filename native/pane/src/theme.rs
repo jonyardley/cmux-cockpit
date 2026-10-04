@@ -16,6 +16,14 @@ pub const TEXT: u32 = 0x141413;
 pub const NEEDS_BG: u32 = 0xFBECE4;
 /// The face of the card under the cursor: the link hover, a chip-strength step.
 pub const CURSOR_BG: u32 = 0xECEAE3;
+/// The second ink: a card's detail and a lane's heading.
+pub const SECONDARY: u32 = 0x5E5D59;
+/// The third ink: where you left off.
+pub const TERTIARY: u32 = 0x73726C;
+/// The outline of a dot with no colour of its own.
+pub const GREY: u32 = 0xA09E95;
+/// The unread badge's words, on the second ink.
+pub const ON_BADGE: u32 = 0xFFFFFF;
 
 const CLAY: u32 = 0xD97757;
 const BLUE: u32 = 0x3B6FB6;
@@ -99,6 +107,27 @@ pub fn title() -> Style {
     Style::new().fg(rgb(TEXT))
 }
 
+/// Words in one of the pane's own inks.
+pub fn plain(hex: u32) -> Style {
+    Style::new().fg(rgb(hex))
+}
+
+/// A dot's ink: its token, or the grey outline with none.
+pub fn icon(ink: Option<Token>) -> Style {
+    match ink {
+        Some(t) => self::ink(t),
+        None => plain(GREY),
+    }
+}
+
+/// The unread badge: white on the second ink.
+pub fn badge() -> Style {
+    Style::new()
+        .fg(rgb(ON_BADGE))
+        .bg(rgb(SECONDARY))
+        .add_modifier(Modifier::BOLD)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -114,6 +143,12 @@ mod tests {
     #[test]
     fn maps_hex_to_red_green_and_blue() {
         assert_eq!(rgb(0xD97757), Color::Rgb(0xD9, 0x77, 0x57));
+    }
+
+    #[test]
+    fn outlines_a_dot_with_no_colour_in_grey() {
+        assert_eq!(icon(None).fg, Some(rgb(GREY)));
+        assert_eq!(icon(Some(Token::Blue)).fg, Some(colour(Token::Blue)));
     }
 
     #[test]

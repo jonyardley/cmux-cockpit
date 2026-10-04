@@ -24,7 +24,7 @@ pub fn lines(needs: &Needs, inner: usize) -> Vec<Line<'static>> {
     for row in &needs.rows {
         let left = vec![
             Span::raw("  "),
-            Span::styled(row.icon.glyph, theme::ink(row.icon.ink)),
+            Span::styled(row.icon.glyph, theme::icon(row.icon.ink)),
             Span::raw(" "),
             Span::styled(
                 fit(&row.title, inner.saturating_sub(ROW_LEAD)),
@@ -60,10 +60,12 @@ fn heading(needs: &Needs, inner: usize) -> Line<'static> {
         bg: Token::ClayCount,
         fg: Token::ClayText,
     };
+    let count = pill(needs.count, tint);
+    let label_room = inner.saturating_sub(width(&count.content) + 1);
     let left = vec![
-        Span::styled(NEEDS_LABEL, theme::strong(Token::ClayText)),
+        Span::styled(fit(NEEDS_LABEL, label_room), theme::strong(Token::ClayText)),
         Span::raw(" "),
-        pill(needs.count, tint),
+        count,
     ];
     let room = inner.saturating_sub(spans_width(&left) + 1);
     let wait = fit(&needs.wait, room);

@@ -4,13 +4,29 @@
 
 use std::ops::Range;
 
-/// How many lines the body scrolls so the lines `focus` covers sit inside
-/// `height`: none until the card would fall off the bottom, then just
-/// enough, and never past the card's first line.
-pub fn scroll_for(focus: Option<&Range<usize>>, height: usize) -> usize {
-    match focus {
-        Some(r) if r.end > height => (r.end - height).min(r.start),
-        _ => 0,
+/// Where the body's view sits: the lines the cursor's card covers, whether
+/// it is the last card, the line scroll keys set with no card to move to,
+/// and the body's and the pane's heights.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Scroll {
+    pub focus: Option<Range<usize>>,
+    pub last: bool,
+    pub manual: usize,
+    pub total: usize,
+    pub height: usize,
+}
+
+/// How many lines the body scrolls. With a card under the cursor: none
+/// until it would fall off the bottom, then just enough, never past its
+/// first line, and on the last card as far as the body goes, so what is
+/// below it comes into sight. With none: the line scroll, held at the end.
+pub fn scroll_for(s: &Scroll) -> usize {
+    let most = s.total.saturating_sub(s.height);
+    match &s.focus {
+        Some(r) if s.last => most.min(r.start),
+        Some(r) if r.end > s.height => (r.end - s.height).min(r.start),
+        Some(_) => 0,
+        None => s.manual.min(most),
     }
 }
 
@@ -126,20 +142,38 @@ mod tests {
         assert_eq!(c.on(), None);
     }
 
+    fn at(focus: Option<Range<usize>>, last: bool, manual: usize) -> usize {
+        scroll_for(&Scroll {
+            focus,
+            last,
+            manual,
+            total: 30,
+            height: 10,
+        })
+    }
+
     #[test]
     fn scrolls_only_as_far_as_the_card_needs() {
-        assert_eq!(scroll_for(None, 10), 0);
-        assert_eq!(scroll_for(Some(&(2..5)), 10), 0, "already in sight");
+        assert_eq!(at(Some(2..5), false, 0), 0, "already in sight");
+        assert_eq!(at(Some(12..15), false, 0), 5, "its last line at the bottom");
         assert_eq!(
-            scroll_for(Some(&(12..15)), 10),
-            5,
-            "its last line at the bottom"
-        );
-        assert_eq!(
-            scroll_for(Some(&(4..20)), 10),
+            at(Some(4..20), false, 0),
             4,
             "taller than the pane: its top stays"
         );
+    }
+
+    #[test]
+    fn shows_what_is_below_the_last_card() {
+        assert_eq!(at(Some(15..18), true, 0), 15, "never past its top");
+        assert_eq!(at(Some(22..25), true, 0), 20, "to the end of the body");
+    }
+
+    #[test]
+    fn scrolls_by_line_with_no_card_and_holds_at_the_end() {
+        assert_eq!(at(None, false, 0), 0);
+        assert_eq!(at(None, false, 7), 7);
+        assert_eq!(at(None, false, 99), 20);
     }
 
     #[test]
