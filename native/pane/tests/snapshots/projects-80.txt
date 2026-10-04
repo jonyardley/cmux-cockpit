@@ -1,0 +1,21 @@
+  All  Projects                                                          ? keys
+ Next  One: docs                                                         1 of 2
+
+ Needs you  1                                                         oldest 1m
+   ● One: docs
+     Your turn: Read the draft in #142 and say go.
+
+   ■ MAIN ACTIVITY  0
+
+   ■ FOR REVIEW  0
+
+   ■ BACKGROUND  0
+
+   ■ PARKED  0
+
+ ▾ ■ UNSORTED  5
+   ◌ One: docs · your turn
+   ● Two: release                                                           10m
+   ● One: parser rewrite for the streaming tokeniser                         7m
+   ○ Two: changelog                                                         15m
+   ○ Scratch
