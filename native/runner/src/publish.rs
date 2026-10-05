@@ -13,15 +13,20 @@
 //!   runner is ready (`ready`), so a restart never blanks the sidebar.
 //! - In: each file in outbox/ is one action (action.rs). The writer
 //!   writes it under a name that starts with "." or does not end in
-//!   ".json", then renames it to `<name>.json`; names sort in the order
-//!   sent (`<epoch ms>-<counter>.json`, say). Each one is claimed by an
+//!   ".json", then renames it to `<name>.json`. Files are taken in byte
+//!   order of their names, so a name must sort in the order sent: a
+//!   fixed width, zero padded `<13 digit epoch ms>-<6 digit counter>.json`
+//!   (`1791229864123-000042.json`), never a bare counter, where "10"
+//!   sorts before "9". Each one is claimed by an
 //!   atomic rename before it is read, so it is applied at most once even
 //!   with two publishers running, then deleted. One that will not parse
 //!   is deleted and logged, never retried.
 
+use std::collections::HashSet;
 use std::fs;
 use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cockpit_core::{Model, Panel};
@@ -36,8 +41,10 @@ pub const GROUP_ID: &str = "9S5FG4LQAF.dev.jonyardley.cockpit";
 pub const ROOT_ENV: &str = "COCKPIT_GROUP_DIR";
 pub const PANEL_FILE: &str = "panel.json";
 pub const OUTBOX_DIR: &str = "outbox";
-/// Before an outbox file's name once claimed.
+/// Before an outbox file's name once claimed, then its claimer's pid.
 const TAKEN: &str = ".taken-";
+/// Before panel.json's temp file's pid.
+const PANEL_TMP: &str = ".panel.json.";
 /// The longest the publisher waits for the runner to be ready before it
 /// writes whatever it has, as `cockpit-pane --once` does.
 pub const READY_LIMIT: Duration = Duration::from_secs(10);
@@ -64,6 +71,7 @@ pub fn ready(feed: &Feed, started: Instant) -> bool {
 /// Writes `bytes` to `dir/name` through a temp file in the same folder,
 /// so a reader sees the old file or the new one, never half of either.
 pub fn write_atomic(dir: &Path, name: &str, bytes: &[u8]) -> io::Result<()> {
+    // `PANEL_TMP` is this name for panel.json, so a crash's is swept.
     let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));
     let written = fs::write(&tmp, bytes).and_then(|()| fs::rename(&tmp, dir.join(name)));
     if written.is_err() {
@@ -119,9 +127,45 @@ pub fn claim(path: &Path) -> Result<Option<String>, String> {
     Ok(Some(text))
 }
 
+/// The pid in a leftover's name: the digits after `prefix`.
+fn pid_in(name: &str, prefix: &str) -> Option<u32> {
+    let rest = name.strip_prefix(prefix)?;
+    let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+    digits.parse().ok()
+}
+
+/// Whether a process with this pid is running, asked of `kill -0` (std
+/// has no signal call). Only asked on start, of a leftover file.
+fn alive(pid: u32) -> bool {
+    Command::new("/bin/kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|s| s.success())
+}
+
+/// Deletes the files in `dir` whose names start with `prefix` and a pid
+/// no longer running: a claim or a temp file a crash left. A live
+/// publisher's own are left alone, so two can run at once.
+fn sweep(dir: &Path, prefix: &str, alive: &dyn Fn(u32) -> bool) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if pid_in(&name, prefix).is_some_and(|pid| !alive(pid)) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
 /// Writes the panel model out and takes actions in, in one shared folder.
 pub struct Publisher {
     root: PathBuf,
+    /// Outbox files that could not be claimed, each logged once rather
+    /// than on every wake.
+    stuck: HashSet<PathBuf>,
     /// The panel last written, so an unchanged one is not written again.
     last: Option<Panel>,
     seq: u64,
@@ -131,18 +175,24 @@ pub struct Publisher {
 
 impl Publisher {
     /// A publisher writing into `root`, which it makes with its outbox
-    /// when missing. Claims a crash left behind are cleared: at most once
-    /// means never applying them.
+    /// when missing. Claims and temp files a crashed publisher left are
+    /// cleared: at most once means never applying its claims.
     pub fn new(root: PathBuf, signal: Box<dyn FnMut() -> bool>) -> io::Result<Publisher> {
+        Publisher::new_with(root, signal, &alive)
+    }
+
+    fn new_with(
+        root: PathBuf,
+        signal: Box<dyn FnMut() -> bool>,
+        alive: &dyn Fn(u32) -> bool,
+    ) -> io::Result<Publisher> {
         let outbox = root.join(OUTBOX_DIR);
         fs::create_dir_all(&outbox)?;
-        for entry in fs::read_dir(&outbox)?.flatten() {
-            if entry.file_name().to_string_lossy().starts_with(TAKEN) {
-                let _ = fs::remove_file(entry.path());
-            }
-        }
+        sweep(&outbox, TAKEN, alive);
+        sweep(&root, PANEL_TMP, alive);
         Ok(Publisher {
             root,
+            stuck: HashSet::new(),
             last: None,
             seq: 0,
             signal,
@@ -162,7 +212,9 @@ impl Publisher {
                 Ok(Some(text)) => text,
                 Ok(None) => continue,
                 Err(e) => {
-                    log(format!("outbox: {e}"));
+                    if self.stuck.insert(path.clone()) {
+                        log(format!("outbox: {e}"));
+                    }
                     continue;
                 }
             };
@@ -202,7 +254,8 @@ impl Publisher {
         }
         self.seq += 1;
         self.last = Some(panel);
-        if !(self.signal)() {
+        // Off macOS there is no centre to post to, so no news in that.
+        if !(self.signal)() && cfg!(target_os = "macos") {
             log("changed signal not posted".to_string());
         }
         true
@@ -232,16 +285,24 @@ const ORPHANAGE: u32 = 1;
 impl Parent {
     /// The process to stop with: `named` (the helper app passes its own
     /// pid, which also catches it going before this process got going),
-    /// else whoever started this one. None when that is already gone: a
-    /// process started from launchd's own hand has nothing to stop with,
-    /// and one whose starter has gone was orphaned before it could look.
-    pub fn of(named: Option<u32>) -> Option<Parent> {
+    /// else whoever started this one. An error when there is none to
+    /// stop with: a process started from launchd's own hand, one whose
+    /// starter went before it could look, or a named pid that is not its
+    /// parent (a wrapper such as /usr/bin/env between them).
+    pub fn of(named: Option<u32>) -> Result<Parent, String> {
         Parent::given(named, std::os::unix::process::parent_id())
     }
 
-    fn given(named: Option<u32>, now: u32) -> Option<Parent> {
-        let parent = Parent(named.unwrap_or(now));
-        (parent.0 != ORPHANAGE && !parent.gone_given(now)).then_some(parent)
+    fn given(named: Option<u32>, now: u32) -> Result<Parent, String> {
+        if now == ORPHANAGE {
+            return Err("its parent has already gone".to_string());
+        }
+        match named {
+            Some(pid) if pid != now => Err(format!(
+                "--parent {pid} is not its parent ({now}): start it directly"
+            )),
+            _ => Ok(Parent(now)),
+        }
     }
 
     /// Gone when this process now has another parent: once it exits, the
@@ -449,13 +510,55 @@ mod tests {
     }
 
     #[test]
-    fn a_claim_left_by_a_crash_is_cleared_not_applied() {
+    fn what_a_crash_left_is_cleared_and_a_live_publishers_kept() {
         let root = temp_root("crash");
         let outbox = root.join(OUTBOX_DIR);
         fs::create_dir_all(&outbox).unwrap();
-        fs::write(outbox.join(".taken-1-a.json"), r#""FlipView""#).unwrap();
-        let p = Publisher::new(root.clone(), Box::new(|| true)).unwrap();
-        assert_eq!(fs::read_dir(p.outbox()).unwrap().count(), 0);
+        fs::write(outbox.join(".taken-7-a.json"), r#""FlipView""#).unwrap();
+        fs::write(outbox.join(".taken-8-b.json"), r#""FlipView""#).unwrap();
+        fs::write(root.join(".panel.json.7.tmp"), "{").unwrap();
+        fs::write(root.join(".panel.json.8.tmp"), "{").unwrap();
+        // 7 crashed; 8 is another publisher, mid-claim and mid-write.
+        let p = Publisher::new_with(root.clone(), Box::new(|| true), &|pid| pid == 8).unwrap();
+        assert!(
+            !p.outbox().join(".taken-7-a.json").exists(),
+            "never applied"
+        );
+        assert!(!root.join(".panel.json.7.tmp").exists());
+        assert!(p.outbox().join(".taken-8-b.json").exists());
+        assert!(root.join(".panel.json.8.tmp").exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_pid_is_read_from_a_leftovers_name_and_asked_after() {
+        assert_eq!(pid_in(".taken-123-a.json", TAKEN), Some(123));
+        assert_eq!(pid_in(".panel.json.45.tmp", PANEL_TMP), Some(45));
+        assert_eq!(pid_in(".taken-x.json", TAKEN), None);
+        assert_eq!(pid_in("a.json", TAKEN), None);
+        assert!(alive(std::process::id()));
+        let mut child = Command::new("/usr/bin/true").spawn().unwrap();
+        let dead = child.id();
+        child.wait().unwrap();
+        assert!(!alive(dead));
+    }
+
+    #[test]
+    fn a_file_that_cannot_be_claimed_is_logged_once() {
+        use std::os::unix::fs::PermissionsExt;
+        let (mut p, root, _) = publisher("stuck");
+        let mut feed = fed("lanes");
+        let outbox = p.outbox();
+        fs::write(outbox.join("1.json"), r#""FlipView""#).unwrap();
+        // A folder it cannot rename in: every claim fails the same way.
+        fs::set_permissions(&outbox, fs::Permissions::from_mode(0o555)).unwrap();
+        let mut lines = Vec::new();
+        for _ in 0..3 {
+            assert_eq!(p.take_actions(&mut feed, &mut |l| lines.push(l)), 0);
+        }
+        fs::set_permissions(&outbox, fs::Permissions::from_mode(0o755)).unwrap();
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(lines[0].starts_with("outbox: 1.json"), "{lines:?}");
         fs::remove_dir_all(&root).unwrap();
     }
 
@@ -496,17 +599,19 @@ mod tests {
         let p = Parent(4242);
         assert!(!p.gone_given(4242));
         assert!(p.gone_given(1));
-        assert!(Parent::of(None).is_some_and(|p| !p.gone()));
+        assert!(Parent::of(None).is_ok_and(|p| !p.gone()));
     }
 
     #[test]
     fn starts_only_with_a_parent_to_stop_with() {
-        assert_eq!(Parent::given(None, 4242), Some(Parent(4242)));
-        assert_eq!(Parent::given(Some(4242), 4242), Some(Parent(4242)));
-        assert_eq!(Parent::given(None, 1), None, "orphaned before it looked");
-        assert_eq!(Parent::given(Some(4242), 1), None, "the named one went");
-        assert_eq!(Parent::given(Some(4242), 99), None, "not its parent");
-        assert_eq!(Parent::given(Some(1), 1), None, "launchd is never one");
+        assert_eq!(Parent::given(None, 4242), Ok(Parent(4242)));
+        assert_eq!(Parent::given(Some(4242), 4242), Ok(Parent(4242)));
+        let gone = Err("its parent has already gone".to_string());
+        assert_eq!(Parent::given(None, 1), gone, "orphaned before it looked");
+        assert_eq!(Parent::given(Some(4242), 1), gone, "the named one went");
+        assert_eq!(Parent::given(Some(1), 1), gone, "launchd is never one");
+        let wrapped = Parent::given(Some(4242), 99);
+        assert!(wrapped.is_err_and(|e| e.contains("not its parent")));
     }
 
     #[test]

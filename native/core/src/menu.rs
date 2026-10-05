@@ -85,6 +85,7 @@ pub struct MenuView {
 
 /// What Jon does with a menu, as the core's events carry it.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub enum MenuEvent {
     /// Opens the card's menu; nothing for a workspace not in the frame.
     OpenCard { id: String },

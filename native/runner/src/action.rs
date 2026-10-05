@@ -168,6 +168,8 @@ mod tests {
             r#""Refresh""#,
             r#"{"MoveCard": {"id": "W1", "lane": "nowhere", "before": null}}"#,
             r#"{"SwitchTo": {"id": "W1", "extra": 1}}"#,
+            r#"{"Menu": {"OpenCard": {"id": "W1", "typo": 1}}}"#,
+            r#"{"Edit": {"AddSuggested": {"dir": "/a", "typo": 1}}}"#,
             r#"{"MoveCard": {"id": "W1", "#,
             "",
         ] {

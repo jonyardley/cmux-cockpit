@@ -32,7 +32,9 @@ fn temp(name: &str) -> PathBuf {
     dir
 }
 
-/// Starts cockpit-publish from a shell that lives a second and exits,
+/// Starts cockpit-publish from a shell that lives a second, and until
+/// the publisher has made its folder (a cold first launch can be slow),
+/// then exits,
 /// with `parent` after `--parent` (the shell's pid, `$$`) or none, and
 /// returns its pid once the shell has gone.
 fn orphan(name: &str, parent: bool) -> (String, PathBuf, PathBuf) {
@@ -42,8 +44,9 @@ fn orphan(name: &str, parent: bool) -> (String, PathBuf, PathBuf) {
     let flag = if parent { "--parent $$" } else { "" };
     // Its output goes nowhere, so the shell's pipe closes with the shell
     // and this read returns, whether or not the publisher is still up.
-    let script =
-        format!(r#""$0" --root "$1" --config "$2" {flag} >/dev/null 2>&1 & echo $!; /bin/sleep 1"#);
+    let script = format!(
+        r#""$0" --root "$1" --config "$2" {flag} >/dev/null 2>&1 & echo $!; /bin/sleep 1; n=0; while [ ! -d "$1/outbox" ] && [ $n -lt 200 ]; do /bin/sleep 0.05; n=$((n+1)); done"#
+    );
     let out = Command::new("/bin/sh")
         .args([
             "-c",

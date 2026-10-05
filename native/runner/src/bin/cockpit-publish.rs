@@ -89,9 +89,12 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let Some(parent) = Parent::of(args.parent) else {
-        log("its parent has already gone, so not starting".to_string());
-        return ExitCode::FAILURE;
+    let parent = match Parent::of(args.parent) {
+        Ok(p) => p,
+        Err(e) => {
+            log(format!("{e}, so not starting"));
+            return ExitCode::FAILURE;
+        }
     };
     let home = std::env::var("HOME")
         .ok()
