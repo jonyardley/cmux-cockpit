@@ -51,11 +51,13 @@ jobs:
       # Network bound, so CI only rather than the pre-commit hook.
       - run: npm audit --audit-level=high
 
-  # The docked panel window in native/mac: a SwiftPM app, so it needs a
-  # macOS runner. The pure layout module carries the tests.
+  # The helper app and the Cockpit sidebar extension in native/mac: an
+  # XcodeGen project, so it needs a macOS runner. Builds both targets
+  # unsigned (building the app builds and embeds the extension); there is
+  # no Swift test target yet.
   mac:
     runs-on: macos-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: native/mac
@@ -63,5 +65,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - run: swift build
-      - run: swift test
+      - run: xcodebuild -version
+      - run: brew install xcodegen
+      - run: ./build.sh
+        env:
+          UNSIGNED: "1"
+      - run: test -d build/Build/Products/Debug/Cockpit.app/Contents/Extensions/CockpitSidebar.appex
