@@ -861,7 +861,7 @@ fn a_click_or_a_drag_back_to_where_it_was_places_nothing() {
 }
 
 #[test]
-fn a_press_on_a_needs_you_row_puts_the_cursor_there_and_the_wheel_moves_it() {
+fn a_press_on_a_needs_you_row_puts_the_cursor_there_and_the_wheel_moves_it_with_the_finger() {
     let mut pane = pane_for("lanes");
     let mut term = terminal(40);
     draw(&mut pane, &mut term);
@@ -872,13 +872,15 @@ fn a_press_on_a_needs_you_row_puts_the_cursor_there_and_the_wheel_moves_it() {
     assert_eq!(pane.handle_event(&mouse(down, row)), Outcome::Redraw);
     assert_eq!(pane.cursor(), Some(release.as_str()));
 
+    // A swipe up, which natural scrolling reports as the wheel turning down,
+    // moves the cursor to the card above; a swipe down brings it back.
     assert_eq!(
-        pane.handle_event(&mouse(MouseEventKind::ScrollUp, 0)),
+        pane.handle_event(&mouse(MouseEventKind::ScrollDown, 0)),
         Outcome::Redraw
     );
     assert_eq!(pane.cursor(), Some(id_of(&pane, "Chip colours").as_str()));
     assert_eq!(
-        pane.handle_event(&mouse(MouseEventKind::ScrollDown, 0)),
+        pane.handle_event(&mouse(MouseEventKind::ScrollUp, 0)),
         Outcome::Redraw
     );
     assert_eq!(pane.cursor(), Some(release.as_str()));

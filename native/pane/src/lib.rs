@@ -330,9 +330,11 @@ impl Pane {
             }
             return redraw_if(moved);
         }
+        // The cursor follows the finger: macOS natural scrolling reports a
+        // swipe up as the wheel turning down, so down steps the cursor up.
         let outcome = match mouse.kind {
-            MouseEventKind::ScrollUp => redraw_if(self.step(-1)),
-            MouseEventKind::ScrollDown => redraw_if(self.step(1)),
+            MouseEventKind::ScrollDown => redraw_if(self.step(-1)),
+            MouseEventKind::ScrollUp => redraw_if(self.step(1)),
             MouseEventKind::Down(MouseButton::Left) => self.press(mouse.row),
             MouseEventKind::Drag(MouseButton::Left) => self.drag_over(mouse.row),
             MouseEventKind::Up(MouseButton::Left) => self.let_go(mouse.row),
