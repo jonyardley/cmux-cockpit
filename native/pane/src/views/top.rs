@@ -9,7 +9,7 @@ use crate::model::{
 };
 use crate::text::{fit, width};
 use crate::theme;
-use cockpit_core::theme::Token;
+use cockpit_core::panel::Token;
 use ratatui::style::{Modifier, Style};
 
 /// The view switch: the view on screen lit, the other faint, and the hint.

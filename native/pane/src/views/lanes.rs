@@ -19,9 +19,9 @@ use crate::model::{
 use crate::placing::{Place, Spot};
 use crate::text::{ELLIPSIS, fit, fit_ranked, width, wrap};
 use crate::theme;
-use cockpit_core::lanes::LaneKey;
-use cockpit_core::theme::Token;
-use cockpit_core::ui::PillColors;
+use cockpit_core::panel::LaneKey;
+use cockpit_core::panel::PillColors;
+use cockpit_core::panel::Token;
 
 /// Before a card's title: indent, the dot and a space.
 pub(super) const CARD_LEAD: usize = 4;

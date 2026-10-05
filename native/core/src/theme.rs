@@ -2,8 +2,11 @@
 //! src/cockpit/theme.ts and src/shared/palette.ts. The core says which
 //! token; the hex values stay with whoever draws.
 
+use serde::Serialize;
+
 /// A colour token.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum Token {
     /// No colour: "clear".
     Clear,
@@ -53,4 +56,29 @@ pub enum Token {
     LaneBackground,
     LaneParked,
     LaneUnsorted,
+}
+
+/// A project's own colour, "#D97757" as the table writes it; None for
+/// anything but six hex digits after a "#".
+pub fn parse_hex(s: &str) -> Option<u32> {
+    let digits = s.strip_prefix('#')?;
+    if digits.len() != 6 || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    u32::from_str_radix(digits, 16).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_a_projects_colour_and_refuses_anything_else() {
+        assert_eq!(parse_hex("#D97757"), Some(0xD97757));
+        assert_eq!(parse_hex("#d97757"), Some(0xD97757));
+        assert_eq!(parse_hex("D97757"), None);
+        assert_eq!(parse_hex("#D9775"), None);
+        assert_eq!(parse_hex("#D9775G"), None);
+        assert_eq!(parse_hex("#+97757"), None);
+    }
 }

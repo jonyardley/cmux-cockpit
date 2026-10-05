@@ -1,11 +1,12 @@
 //! The open card or project menu's keys: Up and Down move between its
 //! items, past the dividers, Enter picks the one lit and Esc closes it.
-//! The core holds which menu is open and its items (cockpit_core::menu);
+//! The core holds which menu is open and its items (cockpit_core::panel);
 //! the pane holds only which item is lit, as it holds the editor's field.
 
 use std::ops::Range;
 
-use cockpit_core::menu::{MenuAction, MenuEvent, MenuItem, MenuTarget, MenuView};
+use cockpit_core::MenuEvent;
+use cockpit_core::panel::{MenuAction, MenuItem, MenuTarget, MenuView};
 use ratatui::crossterm::event::KeyCode;
 
 /// A card menu's title.
@@ -127,7 +128,7 @@ pub fn window(len: usize, at: usize, room: usize, top: usize) -> Range<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cockpit_core::menu::MenuAction;
+    use cockpit_core::panel::MenuAction;
 
     fn item(label: &str, action: MenuAction) -> MenuItem {
         MenuItem::Item {

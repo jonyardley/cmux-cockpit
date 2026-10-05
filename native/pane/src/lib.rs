@@ -22,10 +22,11 @@ pub mod text;
 pub mod theme;
 mod views;
 
+use cockpit_core::EditEvent;
 use cockpit_core::Event as CoreEvent;
-use cockpit_core::edit::EditEvent;
-use cockpit_core::lanes::LaneKey;
-use cockpit_core::menu::{MenuAction, MenuEvent, MenuTarget};
+use cockpit_core::MenuEvent;
+use cockpit_core::panel::LaneKey;
+use cockpit_core::panel::{MenuAction, MenuTarget};
 use ratatui::Terminal;
 use ratatui::backend::Backend;
 use ratatui::crossterm::event::{

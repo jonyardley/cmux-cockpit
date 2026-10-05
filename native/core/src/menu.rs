@@ -15,7 +15,7 @@ use crate::session::{Outbound, Param, Session};
 use crate::status::{PrRef, open_pr_label};
 
 /// What a menu is open on.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum MenuTarget {
     /// A card's menu, by workspace id.
     Card { id: String },
@@ -25,7 +25,7 @@ pub enum MenuTarget {
 }
 
 /// What picking an item does.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum MenuAction {
     /// A new session in the card's project folder.
     NewSession,
@@ -52,7 +52,7 @@ pub enum MenuAction {
 }
 
 /// One line of a menu: an item, or a divider between groups.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum MenuItem {
     Item { label: String, action: MenuAction },
     Divider,
@@ -76,7 +76,7 @@ impl MenuItem {
 }
 
 /// The open menu: what it is on and its items, top to bottom.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct MenuView {
     pub target: MenuTarget,
     pub items: Vec<MenuItem>,

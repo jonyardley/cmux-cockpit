@@ -146,9 +146,42 @@ impl PromptMemory {
     }
 }
 
+/// Text the core may have cut to `cap` characters (UTF-16 units, as its
+/// `clip` counts) with an ellipsis, which can land mid-word: when it is at
+/// the cap and ends on the ellipsis, the part word goes, so the ellipsis
+/// follows a whole one. Shorter text ending in an ellipsis was written that
+/// way ("Running tests…") and is kept. Spaces are folded either way.
+pub fn whole_words(text: &str, cap: usize) -> String {
+    let at_cap = text.encode_utf16().count() == cap;
+    let folded = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    let Some(head) = folded.strip_suffix('…').filter(|_| at_cap) else {
+        return folded;
+    };
+    if head.ends_with(' ') || head.is_empty() {
+        return format!("{}…", head.trim_end());
+    }
+    match head.rfind(' ') {
+        Some(i) => format!("{}…", &head[..i]),
+        None => "…".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drops_the_part_word_the_core_cut() {
+        assert_eq!(whole_words("the batch resum…", 16), "the batch…");
+        assert_eq!(whole_words("the batch …", 11), "the batch…");
+        assert_eq!(whole_words("resum…", 6), "…");
+        assert_eq!(whole_words("the  batch", 10), "the batch");
+    }
+
+    #[test]
+    fn keeps_an_ellipsis_the_agent_wrote_under_the_cap() {
+        assert_eq!(whole_words("Running tests…", 140), "Running tests…");
+    }
 
     #[test]
     fn every_pattern_compiles() {

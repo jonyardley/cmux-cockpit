@@ -21,7 +21,7 @@ use crate::editor::Field;
 use crate::model::{KEYS, KEYS_TITLE, PICK_TITLE, PaneModel, PaneView, pick_rows};
 use crate::placing::{Place, Spot};
 use crate::theme;
-use cockpit_core::menu::MenuView;
+use cockpit_core::panel::MenuView;
 
 /// The fixed lines above the body: the view switch and Next.
 const TOP_LINES: u16 = 2;

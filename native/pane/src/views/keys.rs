@@ -9,7 +9,7 @@ use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use crate::model::fit_rows;
 use crate::text::{fit, width};
 use crate::theme;
-use cockpit_core::theme::Token;
+use cockpit_core::panel::Token;
 
 /// The box's widest, borders included.
 const MAX_WIDTH: u16 = 38;
