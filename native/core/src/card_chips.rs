@@ -1,8 +1,7 @@
 //! A card's chips (src/cockpit/card-chips.ts): what answering the chat
 //! takes, the PR, the branch and the ports, in that order, and the card's
-//! To review action. A merged card's Park and Close, and the chips row's
-//! fit on one line (merged.ts, chips.ts), are not ported: the second is
-//! the sidebar's estimate of its own point widths.
+//! To review action. What a card draws of them, and how they fit, is
+//! chips.rs; a merged card's Park and Close are merged.rs.
 
 use serde::Serialize;
 

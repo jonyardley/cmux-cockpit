@@ -20,7 +20,7 @@
    ○ Long build Working 40m · quiet 17m
    ● Selected card           Working 1m
    ○ Card layout fit           Idle 15m
-     #176 merged  card-layout-fit
+     #176 merged
    ○ Untimed card                  Idle
 
  ▾ ■ FOR REVIEW  2            drop here

@@ -1,11 +1,12 @@
 //! test/card.test.ts: the status line with its time and helper count, the
-//! agent's message, the progress fraction, the outline, and chipsFor. The
-//! cases for showsChipsRow, cardChips, chipsFitOneLine, chipsSplit and
-//! secondLineFits test chips.ts, which estimates the sidebar's widths
-//! from character counts and reads merged.ts; neither is ported.
+//! agent's message, the progress fraction, the outline, chipsFor, and
+//! chips.ts: showsChipsRow, cardChips, chipsFitOneLine, chipsSplit and
+//! secondLineFits.
 
 use cockpit_core::card_chips::Chip;
-use cockpit_core::data::{Data, PrStatus, Progress, PullRequest};
+use cockpit_core::chips::{FULL_LINE_CHARS, PROJECT_LINE_CHARS};
+use cockpit_core::data::{Data, PrStatus, Progress, PullRequest, Workspace};
+use cockpit_core::session::Session;
 use cockpit_core::status::{
     DETAIL_MAX, OUTLINE_MAX, Outline, PrRef, open_pr_label, outline, progress_fraction,
 };
@@ -289,10 +290,11 @@ mod chips_for {
         chips
             .iter()
             .map(|c| match c {
-                Chip::Size { text, .. } => ("size", text.clone(), false),
-                Chip::Pr { tag, .. } => ("pr", tag.clone(), false),
-                Chip::Branch { text, dirty } => ("br", text.clone(), *dirty),
-                Chip::Port { text, .. } => ("port", text.clone(), false),
+                Chip::Pr { tag, .. } => (chip_id(c), tag.clone(), false),
+                Chip::Branch { text, dirty } => (chip_id(c), text.clone(), *dirty),
+                Chip::Size { text, .. } | Chip::Port { text, .. } => {
+                    (chip_id(c), text.clone(), false)
+                }
             })
             .collect()
     }
@@ -391,5 +393,340 @@ mod chips_for {
             .map(|(id, ..)| id)
             .collect();
         assert_eq!(ids, ["pr", "br", "port"]);
+    }
+}
+
+/// A chip's id, as the TypeScript names it.
+fn chip_id(c: &Chip) -> &'static str {
+    match c {
+        Chip::Size { .. } => "size",
+        Chip::Pr { .. } => "pr",
+        Chip::Branch { .. } => "br",
+        Chip::Port { .. } => "port",
+    }
+}
+
+/// Each chip's id, in order.
+fn ids(chips: &[Chip]) -> Vec<&'static str> {
+    chips.iter().map(chip_id).collect()
+}
+
+fn sized(number: f64, draft: bool, additions: f64, deletions: f64) -> PullRequest {
+    PullRequest {
+        draft: Some(draft),
+        additions: Some(additions),
+        deletions: Some(deletions),
+        ..pr(number, Some(PrStatus::Open))
+    }
+}
+
+/// chipsFor with the branch, fitted to a project card's line.
+fn fits(s: &mut Session, data: &Data, w: &Workspace) -> bool {
+    let chips = s.chips_for(Some(w), true);
+    s.chips_fit_one_line(data, &chips, Some(w), PROJECT_LINE_CHARS)
+}
+
+/// cardChips with the branch, as a full card draws them.
+fn full_chips(s: &mut Session, data: &Data, w: &Workspace) -> Vec<Chip> {
+    s.card_chips(data, Some(w), true)
+}
+
+mod shows_chips_row {
+    use super::*;
+
+    fn shows(s: &mut Session, w: Option<&Workspace>, with_branch: bool) -> bool {
+        let chips = s.chips_for(w, with_branch);
+        s.shows_chips_row(&data(), &chips, w)
+    }
+
+    #[test]
+    fn has_no_row_with_no_chips() {
+        let mut s = fresh();
+        assert!(!shows(&mut s, Some(&ws("x")), true));
+        assert!(!shows(&mut s, None, true));
+    }
+
+    #[test]
+    fn keeps_the_row_for_a_pr_alone_which_sits_in_it_on_every_card() {
+        let mut s = fresh();
+        let w = ws("x").pr(pr(7.0, Some(PrStatus::Open)));
+        assert!(shows(&mut s, Some(&w), true));
+    }
+
+    #[test]
+    fn keeps_the_row_for_a_branch_or_ports_chip() {
+        let mut s = fresh();
+        assert!(shows(&mut s, Some(&ws("x").branch("feat")), true));
+        assert!(shows(&mut s, Some(&ws("x").ports(&[5173.0])), true));
+    }
+
+    #[test]
+    fn leaves_the_branch_out_when_the_card_does() {
+        let mut s = fresh();
+        assert!(!shows(&mut s, Some(&ws("x").branch("feat")), false));
+    }
+
+    #[test]
+    fn agrees_with_has_chips_row_when_the_pr_chip_is_in_the_row() {
+        let mut s = fresh();
+        let all = [
+            ws("a"),
+            ws("b").pr(pr(7.0, None)),
+            ws("c").branch("feat"),
+            ws("d").ports(&[80.0]),
+        ];
+        for w in &all {
+            let has = s.has_chips_row(&data(), Some(w), true);
+            assert_eq!(shows(&mut s, Some(w), true), has, "{}", w.id);
+        }
+    }
+}
+
+mod card_chips {
+    use super::*;
+
+    fn merged() -> PullRequest {
+        pr(7.0, Some(PrStatus::Merged))
+    }
+
+    #[test]
+    fn leaves_a_merged_cards_clean_branch_out_while_park_or_close_takes_its_room() {
+        let mut s = fresh();
+        let w = ws("x").pr(merged()).branch("feat");
+        assert_eq!(ids(&full_chips(&mut s, &data(), &w)), ["pr"]);
+        let open = ws("x").pr(pr(7.0, Some(PrStatus::Open))).branch("feat");
+        assert_eq!(ids(&full_chips(&mut s, &data(), &open)), ["pr", "br"]);
+    }
+
+    #[test]
+    fn keeps_a_branch_with_uncommitted_changes_its_dot_is_the_only_sign_of_work_left() {
+        let mut s = fresh();
+        let w = ws("x").pr(merged()).branch("feat").dirty();
+        assert_eq!(ids(&full_chips(&mut s, &data(), &w)), ["pr", "br"]);
+    }
+
+    #[test]
+    fn keeps_the_branch_when_no_merged_button_shows() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        let data = frame(
+            NOW,
+            vec![group("g-parked", "Parked").anchor("anchor-parked")],
+            vec![],
+        );
+        let busy = ws("x")
+            .pr(merged())
+            .branch("feat")
+            .group("g-parked")
+            .agents(vec![fx.agent(Working)]);
+        assert_eq!(
+            ids(&full_chips(&mut s, &data, &busy)),
+            ["pr", "br"],
+            "in Parked with an agent working: no Park, no Close"
+        );
+    }
+}
+
+mod chips_fit_one_line {
+    use super::*;
+
+    #[test]
+    fn counts_a_merged_cards_park_and_close_towards_the_line() {
+        let mut s = fresh();
+        let d = data();
+        let merged = pr(174.0, Some(PrStatus::Merged));
+        let closed = pr(174.0, Some(PrStatus::Closed));
+        let ports = [5173.0, 3000.0];
+        assert!(
+            fits(&mut s, &d, &ws("x").pr(merged.clone())),
+            "#174 merged, Park and Close fit"
+        );
+        assert!(
+            fits(&mut s, &d, &ws("x").pr(closed).ports(&ports)),
+            "a closed PR has no buttons"
+        );
+        assert!(
+            !fits(&mut s, &d, &ws("x").pr(merged.clone()).ports(&ports)),
+            "Park and Close push it over"
+        );
+        assert!(
+            fits(&mut s, &d, &ws("x").pr(merged).ports(&ports).pinned()),
+            "a pinned card offers Park alone"
+        );
+    }
+
+    #[test]
+    fn fits_a_merged_full_cards_park_and_close_beside_its_pr_but_not_beside_ports_too() {
+        let mut s = fresh();
+        let d = data();
+        let merged = pr(1234.0, Some(PrStatus::Merged));
+        let mut full = |w: &Workspace| {
+            let chips = full_chips(&mut s, &d, w);
+            s.chips_fit_one_line(&d, &chips, Some(w), FULL_LINE_CHARS)
+        };
+        assert!(full(&ws("x").pr(merged.clone()).branch("feat")));
+        assert!(
+            !full(&ws("x").pr(merged).branch("feat").ports(&[5173.0])),
+            "so the full card splits"
+        );
+    }
+
+    #[test]
+    fn keeps_a_short_pr_and_branch_on_one_line() {
+        let mut s = fresh();
+        let w = ws("x").branch("main").pr(pr(12.0, Some(PrStatus::Open)));
+        assert!(fits(&mut s, &data(), &w));
+    }
+
+    #[test]
+    fn splits_a_draft_pr_with_its_diff_size_and_a_long_branch() {
+        let mut s = fresh();
+        let w = ws("x")
+            .branch("parser-streaming-tokeniser")
+            .pr(sized(148.0, true, 342.0, 17.0));
+        assert!(!fits(&mut s, &data(), &w));
+    }
+
+    #[test]
+    fn counts_the_diff_size_towards_the_line() {
+        let mut s = fresh();
+        let d = data();
+        let branch = "draft-pages-b";
+        let bare = ws("x").branch(branch).pr(pr(148.0, Some(PrStatus::Open)));
+        assert!(fits(&mut s, &d, &bare));
+        let w = ws("x").branch(branch).pr(sized(148.0, false, 342.0, 17.0));
+        assert!(!fits(&mut s, &d, &w));
+    }
+
+    #[test]
+    fn counts_the_to_review_button_towards_the_line() {
+        let (mut fx, mut s) = (Fx::default(), fresh());
+        let open = || pr(12.0, Some(PrStatus::Open));
+        let w = ws("x").branch("fix-card-layout").pr(open());
+        assert!(fits(&mut s, &data(), &w));
+        let idle = fx.agent(Idle).since(NOW - 600.0).activity(NOW - 600.0);
+        let ready = ws("y")
+            .branch("fix-card-layout")
+            .pr(open())
+            .unread(1.0)
+            .agents(vec![idle]);
+        let d = frame(NOW, vec![], vec![ready.clone()]);
+        assert!(s.can_file_for_review(&d, Some(&ready)));
+        assert!(!fits(&mut s, &d, &ready));
+    }
+
+    #[test]
+    fn fits_a_card_with_nothing_in_its_chips_row() {
+        let mut s = fresh();
+        assert!(fits(&mut s, &data(), &ws("x")));
+    }
+
+    #[test]
+    fn counts_the_uncommitted_changes_dot_on_the_branch() {
+        let mut s = fresh();
+        let d = data();
+        let open = || pr(148.0, Some(PrStatus::Open));
+        assert!(fits(
+            &mut s,
+            &d,
+            &ws("x").branch("fix-card-layout-a").pr(open())
+        ));
+        let dirty = ws("x").branch("fix-card-layout-a").dirty().pr(open());
+        assert!(!fits(&mut s, &d, &dirty));
+    }
+}
+
+mod chips_split {
+    use super::*;
+
+    fn splits(s: &mut Session, w: &Workspace) -> bool {
+        let chips = s.chips_for(Some(w), true);
+        s.chips_split(&data(), &chips, Some(w), PROJECT_LINE_CHARS)
+    }
+
+    fn long() -> PullRequest {
+        sized(148.0, true, 342.0, 17.0)
+    }
+
+    #[test]
+    fn splits_a_pr_and_branch_that_do_not_fit_on_one_line() {
+        let mut s = fresh();
+        let w = ws("x").branch("parser-streaming-tokeniser").pr(long());
+        assert!(splits(&mut s, &w));
+    }
+
+    #[test]
+    fn keeps_a_pair_that_fits_on_one_line() {
+        let mut s = fresh();
+        let w = ws("x").branch("main").pr(pr(12.0, Some(PrStatus::Open)));
+        assert!(!splits(&mut s, &w));
+    }
+
+    #[test]
+    fn never_splits_with_nothing_for_the_second_line() {
+        let mut s = fresh();
+        assert!(!splits(&mut s, &ws("x").pr(long())));
+    }
+
+    #[test]
+    fn never_splits_with_no_pr_for_the_first_line() {
+        let mut s = fresh();
+        let w = ws("x").branch("a-very-long-branch-name-that-cannot-fit-on-one-line");
+        assert!(!splits(&mut s, &w));
+    }
+
+    #[test]
+    fn splits_sooner_on_the_full_cards_narrower_line() {
+        let mut s = fresh();
+        let d = data();
+        let w = ws("x")
+            .branch("fix-card-layout")
+            .pr(pr(148.0, Some(PrStatus::Open)));
+        assert!(!splits(&mut s, &w), "fits a project card");
+        let mut full = |w: &Workspace| {
+            let chips = full_chips(&mut s, &d, w);
+            s.chips_split(&d, &chips, Some(w), FULL_LINE_CHARS)
+        };
+        assert!(full(&w), "too wide for a full card");
+        let short = ws("x").branch("main").pr(pr(12.0, Some(PrStatus::Open)));
+        assert!(!full(&short));
+    }
+}
+
+mod second_line_fits {
+    use super::*;
+
+    fn second(s: &mut Session, w: &Workspace) -> bool {
+        let d = data();
+        let chips = full_chips(s, &d, w);
+        s.second_line_fits(&d, &chips, Some(w), FULL_LINE_CHARS)
+    }
+
+    fn merged() -> PullRequest {
+        pr(178.0, Some(PrStatus::Merged))
+    }
+
+    #[test]
+    fn keeps_a_merged_cards_park_and_close_beside_its_port() {
+        let mut s = fresh();
+        let w = ws("x").pr(merged()).branch("feat").ports(&[5173.0]);
+        assert!(second(&mut s, &w));
+    }
+
+    #[test]
+    fn drops_them_under_a_long_uncommitted_branch_and_ports() {
+        let mut s = fresh();
+        let w = ws("x")
+            .pr(merged())
+            .branch("all-view-card-fit")
+            .dirty()
+            .ports(&[5173.0]);
+        assert!(!second(&mut s, &w));
+    }
+
+    #[test]
+    fn fits_a_second_line_with_no_park_or_close() {
+        let mut s = fresh();
+        let w = ws("x").pr(pr(178.0, Some(PrStatus::Open))).branch("feat");
+        assert!(second(&mut s, &w));
     }
 }

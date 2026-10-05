@@ -106,6 +106,7 @@ pub trait WsExt {
     fn dirty(self) -> Self;
     fn pr(self, pr: PullRequest) -> Self;
     fn ports(self, ports: &[f64]) -> Self;
+    fn pinned(self) -> Self;
 }
 
 impl WsExt for Workspace {
@@ -167,6 +168,10 @@ impl WsExt for Workspace {
     }
     fn ports(mut self, ports: &[f64]) -> Self {
         self.ports = Some(ports.to_vec());
+        self
+    }
+    fn pinned(mut self) -> Self {
+        self.pinned = Some(true);
         self
     }
 }
