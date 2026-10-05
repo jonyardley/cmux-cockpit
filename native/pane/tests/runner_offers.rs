@@ -1,11 +1,11 @@
-//! The runner's feed seen through the pane's view model: the Projects
-//! view offers a folder as a project only once the shell says where home
-//! is. It lives here, not in cockpit_runner, because the offer is built by
-//! the pane's model, and the runner cannot depend on the pane.
+//! The runner's feed seen through the panel model the pane draws: the
+//! Projects view offers a folder as a project only once the shell says
+//! where home is. It lives here, not in cockpit_runner or the core,
+//! because it needs both the runner's feed and the panel, and neither of
+//! those crates depends on the other.
 
-use cockpit_core::Event;
-use cockpit_core::data::Workspace;
-use cockpit_pane::model::{PaneModel, ProjectRow};
+use cockpit_core::panel::ProjectRow;
+use cockpit_core::{Event, Panel, SavedState, Workspace};
 use cockpit_runner::{Feed, Input};
 
 fn ws(id: &str) -> Workspace {
@@ -21,7 +21,7 @@ fn ws(id: &str) -> Workspace {
 /// folder under home, one in home itself. Sorted by workspace id.
 fn project_offers(home: Option<&str>) -> Vec<(String, Option<String>)> {
     let mut feed = Feed::with_home(home.map(str::to_string));
-    feed.state(cockpit_core::persist::SavedState::default());
+    feed.state(SavedState::default());
     let in_dir = |id: &str, dir: &str| Workspace {
         directory: Some(dir.to_string()),
         ..ws(id)
@@ -32,7 +32,7 @@ fn project_offers(home: Option<&str>) -> Vec<(String, Option<String>)> {
     ]));
     feed.act(Event::FlipView);
     feed.frame(1_791_127_100.0);
-    let pane = PaneModel::from_core(&mut feed.model);
+    let pane = Panel::from_core(&mut feed.model);
     let mut cards: Vec<(String, Option<String>)> = pane
         .projects
         .iter()

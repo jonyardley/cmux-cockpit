@@ -53,6 +53,10 @@ pub mod ui;
 pub mod words;
 
 pub use app::{CmuxCall, Cockpit, Effect, Event, Model, OpenUrl, PrAsk, StateSet, ViewModel};
+pub use data::{Data, Workspace};
 pub use edit::EditEvent;
+pub use home::trim_slash;
 pub use menu::MenuEvent;
 pub use panel::Panel;
+pub use persist::SavedState;
+pub use projects::Project;
