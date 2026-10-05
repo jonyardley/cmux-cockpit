@@ -80,6 +80,7 @@ fn asked(app: &Cockpit, model: &mut Model, event: Event) -> Vec<String> {
                     .map_or("delete".to_string(), |v| v.to_string());
                 format!("set {} {value}", r.operation.key)
             }
+            Effect::PrPoll(r) => format!("pr {}", r.operation.directory),
         })
         .collect()
 }

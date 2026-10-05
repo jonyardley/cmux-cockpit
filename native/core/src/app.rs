@@ -22,6 +22,7 @@ use crate::js::json_num;
 use crate::lane_entries::LaneEntry;
 use crate::lanes::LaneKey;
 use crate::persist::{SavedState, ViewMode, persist_url};
+use crate::pr_poll::{PrPolled, shown_in};
 use crate::projects::Project;
 use crate::session::{Outbound, Param, Session};
 
@@ -57,6 +58,12 @@ pub enum Event {
     /// (refused, or past its time limit): the pane stops holding the card
     /// where Jon moved it, and shows it where cmux has it.
     CmuxFailed { id: String },
+    /// The shell can run `git` and `gh`: from now on the core asks it for
+    /// each directory's PR (`Effect::PrPoll`), as scripts/pr-poll.ts would.
+    PrPollOn,
+    /// What the shell found for one directory's PR. It redraws only when
+    /// what a card shows of a PR changed (pr_poll::Shown).
+    PrPolled(Box<PrPolled>),
 }
 
 /// Everything the core knows: the session, the latest frame, and the view
@@ -169,12 +176,28 @@ impl Operation for StateSet {
     type Output = ();
 }
 
+/// Asks the shell for the PR of the branch `directory` is on: it runs
+/// `git` and `gh` there off the frame thread, as scripts/pr-poll.ts does
+/// (pr_poll::git_args, pr_poll::gh_args), reads them with
+/// pr_poll::answer, and sends the result back as `Event::PrPolled`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrAsk {
+    pub directory: String,
+    /// When it was asked, in epoch seconds: the answer carries it back.
+    pub asked: f64,
+}
+
+impl Operation for PrAsk {
+    type Output = ();
+}
+
 /// What the core can ask the shell to do.
 #[effect]
 pub enum Effect {
     Render(RenderOperation),
     Cmux(CmuxCall),
     Persist(StateSet),
+    PrPoll(PrAsk),
 }
 
 /// A request from the session's outbox as the command that hands it to the shell.
@@ -261,6 +284,56 @@ impl Model {
         }
     }
 
+    /// Makes the poll's answers over the saved PRs, so a new frame or
+    /// state file never hides a fresher answer.
+    fn overlay(&mut self) {
+        if let Some(data) = &self.data {
+            let s = &mut self.session;
+            s.pr_poll.overlay(&mut s.saved.prs, data);
+        }
+    }
+
+    /// The PR asks now due, at epoch `now`.
+    fn asks(&mut self, now: Option<f64>) -> Vec<Command<Effect, Event>> {
+        let (Some(data), Some(now)) = (&self.data, now) else {
+            return Vec::new();
+        };
+        let due = self.session.pr_poll.due(data, now);
+        due.into_iter()
+            .map(|directory| {
+                let ask = PrAsk {
+                    directory,
+                    asked: now,
+                };
+                Command::notify_shell(ask).into()
+            })
+            .collect()
+    }
+
+    /// An answer: held, then a redraw only when what a card shows of a
+    /// PR in that directory changed, then any asks it makes room for.
+    fn polled(&mut self, polled: PrPolled) -> Command<Effect, Event> {
+        let directory = polled.directory.clone();
+        let now = polled.epoch;
+        let shown = |m: &Model| {
+            m.data
+                .as_ref()
+                .map(|d| shown_in(&m.session.saved.prs, d, &directory))
+        };
+        let before = shown(self);
+        self.session.pr_poll.record(polled);
+        self.overlay();
+        let moved = before != shown(self);
+        let mut out = self.asks(Some(now));
+        if moved {
+            self.rebuild();
+            // A rebuild can file a card whose lane group has appeared.
+            out.extend(self.session.take_outbox().into_iter().map(send_out));
+            out.push(render());
+        }
+        Command::all(out)
+    }
+
     fn rebuild(&mut self) {
         self.view = match &self.data {
             Some(data) => build_view(&mut self.session, data),
@@ -281,14 +354,23 @@ impl App for Cockpit {
     fn update(&self, event: Event, model: &mut Model) -> Command<Effect, Event> {
         match event {
             Event::Data(data) => model.data = Some(data),
-            Event::State(saved) => model.session.reseed(*saved),
+            Event::State(saved) => {
+                let s = &mut model.session;
+                s.pr_poll.file_read(&saved.prs, model.data.as_ref());
+                s.reseed(*saved);
+            }
             Event::Projects(projects) => model.session.set_projects(projects),
             Event::Refresh => {}
+            Event::PrPollOn => model.session.pr_poll.turn_on(),
+            Event::PrPolled(polled) => return model.polled(*polled),
             action => model.act(action),
         }
+        model.overlay();
         model.rebuild();
+        let now = model.data.as_ref().and_then(|d| d.epoch);
+        let asks = model.asks(now);
         let out = model.session.take_outbox().into_iter().map(send_out);
-        Command::all(out.chain(std::iter::once(render())))
+        Command::all(out.chain(asks).chain(std::iter::once(render())))
     }
 
     fn view(&self, model: &Model) -> ViewModel {
@@ -358,5 +440,114 @@ mod tests {
         // Once a file has shown it, a later file's own word wins.
         let _ = app.update(Event::State(Box::default()), &mut model);
         assert_eq!(app.view(&model).mode, "all");
+    }
+
+    /// The effects of one event, in words: `render` or `pr <directory>`.
+    fn asked(app: &Cockpit, model: &mut Model, event: Event) -> Vec<String> {
+        let mut cmd = app.update(event, model);
+        cmd.effects()
+            .map(|e| match e {
+                Effect::Render(_) => "render".to_string(),
+                Effect::PrPoll(r) => format!("pr {}", r.operation.directory),
+                Effect::Cmux(_) | Effect::Persist(_) => "other".to_string(),
+            })
+            .collect()
+    }
+
+    fn frame(epoch: f64) -> Event {
+        let data = serde_json::json!({ "epoch": epoch, "workspaces": [
+            { "id": "a", "directory": "/a" }, { "id": "b", "directory": "/a" },
+        ]});
+        Event::Data(serde_json::from_value(data).unwrap())
+    }
+
+    fn found(checks: &[(&str, &str)], epoch: f64) -> Event {
+        let checks: Vec<Value> = checks
+            .iter()
+            .map(|(name, state)| serde_json::json!({ "name": name, "state": state }))
+            .collect();
+        let pr = serde_json::json!({ "number": 4, "url": "https://github.com/o/r/pull/4",
+            "status": "open", "branch": "feat", "checks": checks });
+        Event::PrPolled(Box::new(PrPolled {
+            directory: "/a".into(),
+            asked: epoch - 1.0,
+            answer: crate::pr_poll::PollAnswer::Answered {
+                branch: "feat".into(),
+                pr: Some(serde_json::from_value(pr).unwrap()),
+            },
+            epoch,
+        }))
+    }
+
+    #[test]
+    fn asks_for_each_directorys_pr_once_the_shell_turns_the_poll_on() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        assert_eq!(asked(&app, &mut model, frame(100.0)), ["render"]);
+        assert_eq!(
+            asked(&app, &mut model, Event::PrPollOn),
+            ["pr /a", "render"],
+            "two workspaces, one directory, one ask"
+        );
+        assert_eq!(asked(&app, &mut model, frame(102.0)), ["render"]);
+    }
+
+    #[test]
+    fn a_poll_result_redraws_only_when_a_chip_would_change() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(Event::PrPollOn, &mut model);
+        let _ = app.update(frame(100.0), &mut model);
+        let first = found(&[("build", "pending"), ("lint", "pass")], 101.0);
+        assert_eq!(asked(&app, &mut model, first), ["render"], "a PR appeared");
+        assert_eq!(
+            model.session.saved.prs.len(),
+            2,
+            "both workspaces in /a have it"
+        );
+
+        let _ = app.update(frame(131.0), &mut model);
+        let same_chip = found(&[("build", "pending"), ("lint2", "pending")], 132.0);
+        assert!(
+            asked(&app, &mut model, same_chip).is_empty(),
+            "a check renamed and another running: the chip still says running"
+        );
+        let checks = |m: &Model| m.session.saved.prs.get("a").and_then(|p| p.checks.clone());
+        assert_eq!(
+            checks(&model).map(|c| c.len()),
+            Some(2),
+            "held all the same"
+        );
+
+        let _ = app.update(frame(162.0), &mut model);
+        let failing = found(&[("build", "fail")], 163.0);
+        assert_eq!(asked(&app, &mut model, failing), ["render"]);
+    }
+
+    #[test]
+    fn a_new_state_file_never_hides_a_fresher_answer() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(Event::PrPollOn, &mut model);
+        let _ = app.update(frame(100.0), &mut model);
+        let _ = app.update(found(&[("build", "fail")], 101.0), &mut model);
+        let _ = app.update(Event::State(Box::default()), &mut model);
+        assert_eq!(model.session.saved.prs.len(), 2);
+
+        // The TypeScript poll then writes something newer for one of them.
+        let newer = r#"{"prs": {"a": {"number": 4, "url": "https://github.com/o/r/pull/4",
+            "status": "merged", "branch": "feat"}}}"#;
+        let file = SavedState::from_json(newer).unwrap();
+        let _ = app.update(Event::State(Box::new(file)), &mut model);
+        let status = model.session.saved.prs.get("a").map(|p| p.status);
+        assert_eq!(
+            status,
+            Some(crate::data::PrStatus::Merged),
+            "the file is fresher"
+        );
+        assert!(
+            !model.session.saved.prs.contains_key("b"),
+            "the file has none for b"
+        );
     }
 }

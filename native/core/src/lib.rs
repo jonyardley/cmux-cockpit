@@ -21,6 +21,7 @@ pub mod needs;
 pub mod next;
 pub mod persist;
 pub mod placement;
+pub mod pr_poll;
 pub mod projects;
 pub mod prs;
 pub mod quiet;
@@ -37,4 +38,4 @@ pub mod time;
 pub mod ui;
 pub mod words;
 
-pub use app::{CmuxCall, Cockpit, Effect, Event, Model, StateSet, ViewModel};
+pub use app::{CmuxCall, Cockpit, Effect, Event, Model, PrAsk, StateSet, ViewModel};
