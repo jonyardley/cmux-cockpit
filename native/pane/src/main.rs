@@ -221,10 +221,16 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
         opts,
         (tx, rx),
         |feed, call| {
-            if call.fresh {
-                pane.set_view_model(PaneModel::from_core(&mut feed.model));
+            // Each new model is drawn before the next event, so a click
+            // maps to the cards on screen, not to where they were.
+            let mut flow = Ok(());
+            if call.fresh && pane.set_view_model(PaneModel::from_core(&mut feed.model)) {
+                flow = pane.draw(&mut term).map(drop);
             }
             for e in keys_rx.try_iter() {
+                if flow.is_err() {
+                    break;
+                }
                 match pane.handle_event(&e) {
                     Outcome::Quit => return ControlFlow::Break(()),
                     // The core takes the action at once and holds its
@@ -234,12 +240,13 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
                     Outcome::Act(action) => {
                         feed.act(action.into());
                         pane.set_view_model(PaneModel::from_core(&mut feed.model));
+                        flow = pane.draw(&mut term).map(drop);
                     }
                     Outcome::Nothing | Outcome::Redraw => {}
                 }
             }
-            match pane.draw(&mut term) {
-                Ok(_) => ControlFlow::Continue(()),
+            match flow.and_then(|()| pane.draw(&mut term).map(drop)) {
+                Ok(()) => ControlFlow::Continue(()),
                 Err(e) => {
                     failed = Some(format!("drawing failed: {e}"));
                     ControlFlow::Break(())

@@ -88,7 +88,7 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
 
     if shown.keys {
         keys::draw(frame, area, KEYS_TITLE, &KEYS);
-    } else if shown.picking {
+    } else if shown.picking && shown.view == PaneView::All {
         let rows = pick_rows();
         let rows: Vec<(&str, &str)> = rows.iter().map(|(k, w)| (k.as_str(), *w)).collect();
         keys::draw(frame, area, PICK_TITLE, &rows);

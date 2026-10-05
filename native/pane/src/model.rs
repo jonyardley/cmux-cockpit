@@ -13,6 +13,7 @@ use cockpit_core::lane_entries::{LaneEntry, shows_left_off};
 use cockpit_core::lanes::{Density, LANES, LaneKey};
 use cockpit_core::model::card_density;
 use cockpit_core::persist::ViewMode;
+use cockpit_core::placement::is_foreign_anchor;
 use cockpit_core::session::Session;
 use cockpit_core::status::StatusStyle;
 use cockpit_core::theme::Token;
@@ -93,6 +94,24 @@ pub enum PaneView {
     Projects,
 }
 
+/// The rows of a keys box that fit `room` lines: all of them, or as many
+/// from the top as fit with the last kept, since it says how to close the
+/// box.
+pub fn fit_rows<T: Copy>(rows: &[T], room: usize) -> Vec<T> {
+    if rows.len() <= room {
+        return rows.to_vec();
+    }
+    let Some((last, rest)) = rows.split_last() else {
+        return Vec::new();
+    };
+    if room == 0 {
+        return Vec::new();
+    }
+    let mut out: Vec<T> = rest.iter().take(room - 1).copied().collect();
+    out.push(*last);
+    out
+}
+
 /// The lane a digit picks after `m`: 1 is the first lane, in display order.
 pub fn lane_for_digit(c: char) -> Option<LaneKey> {
     let n = c.to_digit(10)?;
@@ -142,6 +161,8 @@ pub struct NeedsRow {
     /// The lane its card is filed in, drawn or not (a folded lane draws
     /// no rows).
     pub lane: Option<LaneKey>,
+    /// Whether the core will move it: not when it anchors another group.
+    pub movable: bool,
 }
 
 /// The Needs you strip; empty when nothing waits.
@@ -177,6 +198,9 @@ pub struct Card {
     /// lane sorts by state, and a card keeps its place only among cards
     /// in its own state.
     pub rank: u8,
+    /// Whether the core will move it: a card that anchors another cmux
+    /// group is that group, so it stays put (drop.ts isForeignAnchor).
+    pub movable: bool,
 }
 
 /// A row under a lane header.
@@ -298,6 +322,35 @@ impl PaneModel {
                 .iter()
                 .flat_map(|l| &l.rows)
                 .any(|r| matches!(r, Row::Card(c) if c.ws_id == id && c.waiting))
+    }
+
+    /// Whether `id` is a card in a lane, not a placeholder.
+    pub fn is_lane_card(&self, id: &str) -> bool {
+        self.lanes
+            .iter()
+            .flat_map(|l| &l.rows)
+            .any(|r| matches!(r, Row::Card(c) if c.ws_id == id))
+    }
+
+    /// Whether the core will move `id`'s card: false for one that anchors
+    /// another group, and for an id the pane does not show.
+    pub fn movable(&self, id: &str) -> bool {
+        let card = self
+            .lanes
+            .iter()
+            .flat_map(|l| &l.rows)
+            .find_map(|r| match r {
+                Row::Card(c) if c.ws_id == id => Some(c.movable),
+                _ => None,
+            });
+        let strip = || {
+            self.needs
+                .rows
+                .iter()
+                .find(|r| r.ws_id == id)
+                .map(|r| r.movable)
+        };
+        card.or_else(strip).unwrap_or(false)
     }
 
     /// The lane `id`'s card or placeholder sits in, or for a Needs you
@@ -487,6 +540,7 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
                 line: needs_line(session, data, w),
                 ink: session.needs_ink(w),
                 lane: w.map(|w| session.lane_of(data, w)),
+                movable: !is_foreign_anchor(session, data, id),
             }
         })
         .collect();
@@ -551,6 +605,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         detail_lines: detail_lines(density),
         waiting: view.needs.list.iter().any(|w| w == id),
         rank: session.state_rank(data, w),
+        movable: !is_foreign_anchor(session, data, id),
     }
 }
 
@@ -739,6 +794,15 @@ mod tests {
     }
 
     #[test]
+    fn keeps_a_keys_boxs_last_row_when_the_pane_is_short() {
+        let rows = [1, 2, 3, 4];
+        assert_eq!(fit_rows(&rows, 9), [1, 2, 3, 4]);
+        assert_eq!(fit_rows(&rows, 3), [1, 2, 4]);
+        assert_eq!(fit_rows(&rows, 1), [4]);
+        assert!(fit_rows(&rows, 0).is_empty());
+    }
+
+    #[test]
     fn takes_the_view_from_the_cores_mode() {
         let mut view = ViewModel::default();
         assert_eq!(view_of(&view), PaneView::All, "before any mode");
@@ -828,6 +892,7 @@ pub(crate) mod fixtures {
             detail_lines: 1,
             waiting,
             rank,
+            movable: true,
         })
     }
 
@@ -874,6 +939,7 @@ pub(crate) mod fixtures {
             line: String::new(),
             ink: Token::ClayText,
             lane,
+            movable: true,
         }
     }
 }

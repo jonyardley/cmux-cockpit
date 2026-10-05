@@ -152,15 +152,22 @@ impl Pane {
             return false;
         }
         self.model = model;
-        self.cursor.settle(&self.model.card_ids());
-        // The card `m` was pressed on went: nothing left to move.
-        if let Some(id) = &self.picking
-            && !self.model.card_ids().contains(&id.as_str())
+        let cards = self.model.card_ids();
+        self.cursor.settle(&cards);
+        // The card `m` was pressed on went, or the view left All (flipped
+        // from the sidebar, say): nothing left to move.
+        let all = self.model.view == PaneView::All;
+        if self
+            .picking
+            .as_deref()
+            .is_some_and(|id| !all || !cards.contains(&id))
         {
             self.picking = None;
         }
         if let Some(d) = &mut self.drag {
-            if self.model.lane_of(&d.id).is_none() {
+            // A card that went, or turned into a placeholder as its session
+            // started asking, is no longer dragged (drop.ts).
+            if !all || !self.model.is_lane_card(&d.id) {
                 self.drag = None;
             } else if let Some(over) = &d.over {
                 // The card it would land above may have gone.
@@ -272,7 +279,7 @@ impl Pane {
                 Some(id) if self.model.is_waiting(&id) => Outcome::Act(Action::Dismiss { id }),
                 _ => Outcome::Nothing,
             },
-            KeyCode::Char('m') if on.is_some() => {
+            KeyCode::Char('m') if on.as_deref().is_some_and(|id| self.model.movable(id)) => {
                 self.picking = on;
                 self.drag = None;
                 Outcome::Redraw
@@ -330,8 +337,13 @@ impl Pane {
             _ => return Outcome::Nothing,
         };
         let moved = self.cursor.jump(&self.model.card_ids(), &id);
-        // A placeholder or a Needs you row is not dragged (drop.ts).
-        if card {
+        if moved {
+            // As a step does: the line scroll past the last card starts over.
+            self.manual = 0;
+        }
+        // A placeholder or a Needs you row is not dragged (drop.ts), nor a
+        // card that anchors another group, which the core will not move.
+        if card && self.model.movable(&id) {
             self.drag = Some(Drag { id, over: None });
         }
         redraw_if(moved)

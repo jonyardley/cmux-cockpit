@@ -6,6 +6,7 @@ use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
+use crate::model::fit_rows;
 use crate::text::{fit, width};
 use crate::theme;
 use cockpit_core::theme::Token;
@@ -19,6 +20,9 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, title: &str, rows: &[(&str, &str)
     let box_width = MAX_WIDTH.min(area.width);
     // Borders and a space each side of the words.
     let room = usize::from(box_width).saturating_sub(4);
+    // Borders take two lines; a short pane keeps the last row, Esc.
+    let tall = usize::from(area.height).saturating_sub(2);
+    let rows = fit_rows(rows, tall);
     let lines: Vec<Line<'static>> = rows
         .iter()
         .map(|(key, what)| {

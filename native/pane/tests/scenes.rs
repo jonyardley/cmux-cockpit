@@ -893,3 +893,107 @@ fn the_keys_or_the_lane_picker_drop_a_drag_under_way() {
         );
     }
 }
+
+/// The lanes scene's model with `f` applied to the card titled `title`.
+fn with_card(pane: &Pane, title: &str, f: impl Fn(&mut cockpit_pane::model::Card)) -> PaneModel {
+    let mut model = pane.model().clone();
+    for row in model.lanes.iter_mut().flat_map(|l| &mut l.rows) {
+        if let cockpit_pane::model::Row::Card(c) = row
+            && c.title == title
+        {
+            f(c);
+        }
+    }
+    model
+}
+
+#[test]
+fn a_flip_from_outside_drops_the_lane_picker_and_a_drag() {
+    let mut pane = pane_for("lanes");
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    cursor_to(&mut pane, "Tidy strip");
+    press(&mut pane, KeyCode::Char('m'));
+    let mut projects = pane.model().clone();
+    projects.view = PaneView::Projects;
+    pane.set_view_model(projects.clone());
+    assert!(!pane.picking(), "the picker closes");
+
+    let mut back = projects;
+    back.view = PaneView::All;
+    pane.set_view_model(back.clone());
+    let from = row_of(&buffer, "Snapshot tests");
+    pane.handle_event(&mouse(MouseEventKind::Down(MouseButton::Left), from));
+    let onto = row_of(&buffer, "Ended agent");
+    pane.handle_event(&mouse(MouseEventKind::Drag(MouseButton::Left), onto));
+    assert!(pane.drop_target().is_some());
+    back.view = PaneView::Projects;
+    pane.set_view_model(back);
+    assert_eq!(pane.drop_target(), None, "the drag ends");
+}
+
+#[test]
+fn a_drag_ends_when_its_card_becomes_a_placeholder() {
+    let mut pane = pane_for("lanes");
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    let snapshot = id_of(&pane, "Snapshot tests");
+    let from = row_of(&buffer, "Snapshot tests");
+    let onto = row_of(&buffer, "Ended agent");
+    pane.handle_event(&mouse(MouseEventKind::Down(MouseButton::Left), from));
+    pane.handle_event(&mouse(MouseEventKind::Drag(MouseButton::Left), onto));
+    let mut asking = pane.model().clone();
+    for row in asking.lanes.iter_mut().flat_map(|l| &mut l.rows) {
+        if row.ws_id() == snapshot {
+            *row = cockpit_pane::model::Row::Ghost {
+                ws_id: snapshot.clone(),
+                title: "Snapshot tests".into(),
+                text: "is asking".into(),
+                rank: 0,
+            };
+        }
+    }
+    pane.set_view_model(asking);
+    assert_eq!(pane.drop_target(), None);
+    let up = mouse(MouseEventKind::Up(MouseButton::Left), onto);
+    assert_eq!(pane.handle_event(&up), Outcome::Nothing, "nothing to place");
+}
+
+#[test]
+fn a_card_that_anchors_another_group_is_not_moved() {
+    let mut pane = pane_for("lanes");
+    let model = with_card(&pane, "Snapshot tests", |c| c.movable = false);
+    pane.set_view_model(model);
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    cursor_to(&mut pane, "Snapshot tests");
+    assert_eq!(press(&mut pane, KeyCode::Char('m')), Outcome::Nothing);
+    assert_eq!(shift(&mut pane, KeyCode::Down), Outcome::Nothing);
+    let from = row_of(&buffer, "Snapshot tests");
+    let onto = row_of(&buffer, "Ended agent");
+    pane.handle_event(&mouse(MouseEventKind::Down(MouseButton::Left), from));
+    assert_eq!(
+        pane.handle_event(&mouse(MouseEventKind::Drag(MouseButton::Left), onto)),
+        Outcome::Nothing,
+        "no drag starts"
+    );
+    assert_eq!(
+        press(&mut pane, KeyCode::Enter),
+        Outcome::Act(Action::SwitchTo {
+            id: id_of(&pane, "Snapshot tests")
+        }),
+        "it can still be switched to"
+    );
+}
+
+#[test]
+fn a_short_pane_keeps_the_way_to_close_the_keys() {
+    let mut pane = pane_for("lanes");
+    let mut term = Terminal::new(TestBackend::new(40, 8)).unwrap();
+    press(&mut pane, KeyCode::Char('?'));
+    let screen = draw(&mut pane, &mut term);
+    assert!(screen.contains("close this"), "{screen}");
+}

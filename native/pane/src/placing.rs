@@ -106,7 +106,7 @@ fn rank_of(model: &PaneModel, id: &str) -> Option<u8> {
 /// state: None at either end of that run, for a card in no lane, or for
 /// a Needs you row, which is not in a lane's order on screen.
 pub fn reorder(model: &PaneModel, id: &str, up: bool) -> Option<Place> {
-    if model.in_strip(id) {
+    if model.in_strip(id) || !model.movable(id) {
         return None;
     }
     let lane = model.lane_of(id)?;
@@ -131,9 +131,9 @@ pub fn reorder(model: &PaneModel, id: &str, up: bool) -> Option<Place> {
 }
 
 /// Where `m` and a lane puts `id`: the end of that lane. None when it is
-/// already there.
+/// already there, or anchors another group.
 pub fn to_lane(model: &PaneModel, id: &str, lane: LaneKey) -> Option<Place> {
-    if model.lane_of(id) == Some(lane) {
+    if model.lane_of(id) == Some(lane) || !model.movable(id) {
         return None;
     }
     Some(Place { lane, before: None })
