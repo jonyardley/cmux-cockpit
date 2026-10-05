@@ -31,8 +31,10 @@ pub enum Event {
     /// A new frame of cmux data.
     Data(Data),
     /// A new config/state.json. The session is seeded from it afresh, as
-    /// a reload seeds the sidebar, so local overrides start over; requests
-    /// not yet taken from the outbox are kept.
+    /// a reload seeds the sidebar, so local state starts over, except the
+    /// optimistic lane, order and selection (they live in cmux's data, not
+    /// the file, so a card moved a moment ago stays put). Requests not yet
+    /// taken from the outbox are kept.
     State(Box<SavedState>),
     /// A new project table. Only the table changes: the view, folds,
     /// dismissals and overrides Jon set since the state file was read stay.
