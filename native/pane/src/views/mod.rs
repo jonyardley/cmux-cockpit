@@ -5,6 +5,7 @@
 mod editor;
 mod keys;
 mod lanes;
+mod menu;
 mod needs;
 mod parts;
 mod projects;
@@ -20,6 +21,7 @@ use crate::editor::Field;
 use crate::model::{KEYS, KEYS_TITLE, PICK_TITLE, PaneModel, PaneView, pick_rows};
 use crate::placing::{Place, Spot};
 use crate::theme;
+use cockpit_core::menu::MenuView;
 
 /// The fixed lines above the body: the view switch and Next.
 const TOP_LINES: u16 = 2;
@@ -39,6 +41,8 @@ pub struct Shown<'a> {
     pub drop: Option<&'a Place>,
     /// The editor's focused field, while one is open in Projects.
     pub field: Field,
+    /// The open menu and the index of its lit item.
+    pub menu: Option<(&'a MenuView, usize)>,
 }
 
 /// Where a draw put the body: its first row on screen, how far it
@@ -116,6 +120,8 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
 
     if shown.keys {
         keys::draw(frame, area, KEYS_TITLE, &KEYS);
+    } else if let Some((view, at)) = shown.menu {
+        menu::draw(frame, area, view, at);
     } else if shown.picking && shown.view == PaneView::All {
         let rows = pick_rows();
         let rows: Vec<(&str, &str)> = rows.iter().map(|(k, w)| (k.as_str(), *w)).collect();

@@ -1,12 +1,12 @@
 //! test/cockpit.test.ts: the cases that test model.rs, status.rs, strip.rs,
-//! lane_entries.rs, next.rs, by_project.rs and pr_colors.rs. Cases that
-//! test drops or the card menu are left for the lanes that port those
-//! modules; a case that also reads the card menu keeps its other asserts.
+//! lane_entries.rs, next.rs, by_project.rs, menu.rs and pr_colors.rs.
+//! Cases that test drops are left for the lane that ports them.
 
 use cockpit_core::by_project::ProjectEntry;
 use cockpit_core::data::{Data, Workspace, WorkspaceGroup};
 use cockpit_core::lane_entries::LaneEntry;
 use cockpit_core::lanes::{LANES, LaneKey, lane_by_key};
+use cockpit_core::menu::MenuItem;
 use cockpit_core::model::{PanelHeight, actual_lane_of, card_density};
 use cockpit_core::next::{Colour, Origin};
 use cockpit_core::persist::ViewMode;
@@ -43,6 +43,16 @@ fn setup() -> (Session, Data, Fx) {
         ],
     );
     (fresh(), data, Fx::default())
+}
+
+/// The card menu's items in words, as the sidebar test's `r.menu` lists
+/// them: "button:<label>", dividers left out.
+fn card_menu(s: &mut Session, data: &Data, w: Option<&Workspace>) -> Vec<String> {
+    s.card_menu(data, w)
+        .iter()
+        .filter(|i| **i != MenuItem::Divider)
+        .map(|i| format!("button:{}", i.label()))
+        .collect()
 }
 
 fn ids(list: &[&Workspace]) -> Vec<String> {
@@ -916,7 +926,6 @@ mod move_to_project_override_issue_8 {
         assert!(calls(&s).is_empty());
     }
 
-    /// Partly ported: the card menu's first item is the menu's, a view.
     #[test]
     fn labels_the_card_menus_new_session_by_project_or_says_why_it_cannot() {
         let (mut s, data, _) = setup();
@@ -948,6 +957,46 @@ mod move_to_project_override_issue_8 {
                 ]
             )]
         );
+        let menu = card_menu(&mut s, &data, Some(&one));
+        assert_eq!(
+            menu.first().map(String::as_str),
+            Some("button:New session in App One")
+        );
+    }
+}
+
+// cmux drops submenus from a context menu, so every item must sit at the
+// top level (issue #8's "Move to project" never showed).
+mod card_menu {
+    use super::*;
+
+    #[test]
+    fn offers_every_lane_and_project_at_the_top_level_ticking_the_current_ones() {
+        let (mut s, data, _) = setup();
+        s.clear_project_override(Some(by_id(&data, "a")));
+        let menu = card_menu(&mut s, &data, Some(by_id(&data, "a")));
+        assert!(has(&menu, "button:✓ Lane: Main activity"));
+        for lane in LANES.iter().filter(|l| l.key != LaneKey::Main) {
+            assert!(has(&menu, &format!("button:Lane: {}", lane.name)));
+        }
+        for p in example_projects() {
+            assert!(has(&menu, &format!("button:Project: {}", p.name)));
+        }
+        // "a" has no directory, so it falls in Other: only its lane is ticked.
+        let ticked: Vec<&String> = menu.iter().filter(|m| m.starts_with("button:✓ ")).collect();
+        assert_eq!(ticked, ["button:✓ Lane: Main activity"]);
+        assert!(has(&menu, "button:No project override set"));
+    }
+
+    #[test]
+    fn offers_to_clear_an_override_once_one_is_set() {
+        let (mut s, data, _) = setup();
+        let first = example_projects()[0].clone();
+        s.move_to_project(Some(by_id(&data, "a")), first.id());
+        let menu = card_menu(&mut s, &data, Some(by_id(&data, "a")));
+        assert!(has(&menu, &format!("button:✓ Project: {}", first.name)));
+        assert!(has(&menu, "button:Clear project override"));
+        s.clear_project_override(Some(by_id(&data, "a")));
     }
 }
 
@@ -1406,7 +1455,6 @@ mod new_project_from_a_card_issue_9 {
             .unwrap_or(Value::Null)
     }
 
-    /// Partly ported: the card menu's item is the menu's, a view.
     #[test]
     fn offers_it_on_a_card_whose_folder_matches_no_project_and_sends_the_new_project() {
         let (mut s, mut data, _) = setup();
@@ -1415,6 +1463,8 @@ mod new_project_from_a_card_issue_9 {
             .directory("/Users/jon/dev/scratch");
         data.workspaces.get_or_insert_with(Vec::new).push(loose);
         let loose = by_id(&data, "loose");
+        let menu = card_menu(&mut s, &data, Some(loose));
+        assert!(has(&menu, "button:New project from this folder"));
         s.create_project_from(Some(loose));
         assert_eq!(
             sent(&s).first().map(|(k, _)| k.as_str()),
@@ -1451,10 +1501,9 @@ mod new_project_from_a_card_issue_9 {
         assert!(s.can_create_project(Some(moved)));
     }
 
-    /// Partly ported: the card menu's item is the menu's, a view.
     #[test]
     fn does_nothing_for_a_card_already_in_a_project_or_with_no_folder() {
-        let (mut s, _, _) = setup();
+        let (mut s, data, _) = setup();
         let first = example_projects()[0].id().to_string();
         let matched = ws("matched").directory(&format!("/Users/jon{first}"));
         let no_folder = ws("nofolder");
@@ -1463,5 +1512,7 @@ mod new_project_from_a_card_issue_9 {
             s.create_project_from(w);
         }
         assert!(opened(&s).is_empty());
+        let menu = card_menu(&mut s, &data, Some(&matched));
+        assert!(has(&menu, "button:New project (folder has one, or none)"));
     }
 }

@@ -15,6 +15,7 @@ use serde_json::Value;
 
 use crate::edit::Editor;
 use crate::lanes::{LANES, LaneKey};
+use crate::menu::MenuTarget;
 use crate::persist::{ProjectSpec, SavedState, ViewMode, persist_url};
 use crate::pr_poll::PrPoll;
 use crate::projects::{Project, is_project_key};
@@ -41,6 +42,8 @@ pub enum Outbound {
     },
     /// One entry set (or, with no value, deleted) in config/state.json, as `persistSet`.
     Persist { key: String, value: Option<Value> },
+    /// A link opened in the browser, as the sidebar's `openURL`.
+    OpenUrl { url: String },
 }
 
 impl Outbound {
@@ -48,7 +51,7 @@ impl Outbound {
     pub fn persist_url(&self, token: &str) -> Option<String> {
         match self {
             Outbound::Persist { key, value } => Some(persist_url(key, value.as_ref(), token)),
-            Outbound::Cmux { .. } => None,
+            Outbound::Cmux { .. } | Outbound::OpenUrl { .. } => None,
         }
     }
 }
@@ -145,6 +148,8 @@ pub struct Session {
     // cockpit/edit.ts: the open editor's draft, Remove's first tap and the
     // icon search's words.
     pub(crate) editor: Editor,
+    // The card or project menu open in a shell (menu.rs).
+    pub(crate) menu: Option<MenuTarget>,
     /// The home folder (`__HOME__`), so a "~" root expands and the home
     /// folder itself is never offered as a project. None until the shell
     /// sets it.

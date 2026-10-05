@@ -22,6 +22,7 @@ use crate::edit::EditEvent;
 use crate::js::json_num;
 use crate::lane_entries::LaneEntry;
 use crate::lanes::LaneKey;
+use crate::menu::MenuEvent;
 use crate::persist::{SavedState, ViewMode, persist_url};
 use crate::pr_poll::{PrPolled, shown_in};
 use crate::projects::Project;
@@ -72,6 +73,8 @@ pub enum Event {
     OpenProject { key: String },
     /// A card's "To review →": files it into For review, when it offers it.
     FileForReview { id: String },
+    /// Something done with the card menu or a project's menu (menu.rs).
+    Menu(MenuEvent),
 }
 
 /// Everything the core knows: the session, the latest frame, and the view
@@ -199,6 +202,17 @@ impl Operation for PrAsk {
     type Output = ();
 }
 
+/// A link for the shell to open in the browser, as the sidebar's
+/// `openURL`: the card menu's Open PR.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenUrl {
+    pub url: String,
+}
+
+impl Operation for OpenUrl {
+    type Output = ();
+}
+
 /// What the core can ask the shell to do.
 #[effect]
 pub enum Effect {
@@ -206,6 +220,7 @@ pub enum Effect {
     Cmux(CmuxCall),
     Persist(StateSet),
     PrPoll(PrAsk),
+    OpenUrl(OpenUrl),
 }
 
 /// A request from the session's outbox as the command that hands it to the shell.
@@ -215,6 +230,7 @@ fn send_out(o: Outbound) -> Command<Effect, Event> {
             Command::notify_shell(CmuxCall { method, params }).into()
         }
         Outbound::Persist { key, value } => Command::notify_shell(StateSet { key, value }).into(),
+        Outbound::OpenUrl { url } => Command::notify_shell(OpenUrl { url }).into(),
     }
 }
 
@@ -289,6 +305,7 @@ impl Model {
             Event::SwitchTo { id } => s.select_workspace(data, Some(&id)),
             Event::Dismiss { id } => s.dismiss_waiting(data, data.ws_by_id(&id)),
             Event::Edit(e) => s.edit(data, e),
+            Event::Menu(e) => s.menu(data, e),
             Event::OpenProject { key } => s.open_project_workspace(data, &key, None),
             // Only a card that offers it: the pane's key reaches every card.
             Event::FileForReview { id } => {
@@ -498,7 +515,7 @@ mod tests {
             .map(|e| match e {
                 Effect::Render(_) => "render".to_string(),
                 Effect::PrPoll(r) => format!("pr {}", r.operation.directory),
-                Effect::Cmux(_) | Effect::Persist(_) => "other".to_string(),
+                Effect::Cmux(_) | Effect::Persist(_) | Effect::OpenUrl(_) => "other".to_string(),
             })
             .collect()
     }

@@ -81,6 +81,7 @@ fn asked(app: &Cockpit, model: &mut Model, event: Event) -> Vec<String> {
                 format!("set {} {value}", r.operation.key)
             }
             Effect::PrPoll(r) => format!("pr {}", r.operation.directory),
+            Effect::OpenUrl(r) => format!("open {}", r.operation.url),
         })
         .collect()
 }
@@ -431,6 +432,64 @@ mod switch_to {
         assert_eq!(asked, ["render"]);
         let mut empty = Model::default();
         let asked = super::asked(&app, &mut empty, Event::SwitchTo { id: "c".into() });
+        assert_eq!(asked, ["render"]);
+    }
+}
+
+/// The card menu and a project's menu, opened and picked from as the
+/// pane sends them.
+mod menu {
+    use super::*;
+    use cockpit_core::menu::{MenuAction, MenuEvent, MenuTarget};
+
+    fn open(id: &str) -> Event {
+        Event::Menu(MenuEvent::OpenCard { id: id.into() })
+    }
+
+    fn pick(action: MenuAction) -> Event {
+        Event::Menu(MenuEvent::Pick(action))
+    }
+
+    #[test]
+    fn a_lane_picked_from_a_cards_menu_moves_it_and_closes_the_menu() {
+        let (app, mut model) = started();
+        let _ = app.update(open("a"), &mut model);
+        assert_eq!(
+            model.session.menu_target(),
+            Some(&MenuTarget::Card { id: "a".into() })
+        );
+        let _ = app.update(pick(MenuAction::Lane(LaneKey::Review)), &mut model);
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Review));
+        assert_eq!(model.session.menu_target(), None);
+    }
+
+    #[test]
+    fn pin_and_mark_read_go_to_cmux_as_workspace_actions() {
+        let (app, mut model) = started();
+        let _ = app.update(open("a"), &mut model);
+        let asked = asked(&app, &mut model, pick(MenuAction::TogglePin));
+        assert_eq!(
+            asked,
+            [
+                r#"cmux workspace.action {"action":"pin","workspace_id":"a"}"#,
+                "render"
+            ]
+        );
+        let _ = app.update(open("a"), &mut model);
+        let asked = super::asked(&app, &mut model, pick(MenuAction::MarkRead));
+        assert_eq!(
+            asked,
+            [
+                r#"cmux workspace.action {"action":"mark_read","workspace_id":"a"}"#,
+                "render"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_pick_with_no_menu_open_asks_for_nothing_but_a_render() {
+        let (app, mut model) = started();
+        let asked = asked(&app, &mut model, pick(MenuAction::MarkRead));
         assert_eq!(asked, ["render"]);
     }
 }

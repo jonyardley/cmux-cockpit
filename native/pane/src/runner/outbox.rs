@@ -7,7 +7,8 @@
 //!   install's token (config/url-token), as the sidebar's `persistSet`
 //!   does. The installed handler (scripts/state-set.ts) does the locked
 //!   read-modify-write on config/state.json; the pane sees the result on
-//!   its next check of the file.
+//!   its next check of the file;
+//! - a link, such as the card menu's Open PR, opened in the browser.
 //!
 //! One worker thread takes them in the order asked, so a reorder always
 //! reaches cmux before the group join that follows it, and a slow cmux
@@ -25,6 +26,8 @@ use cockpit_core::session::Param;
 pub enum Outgoing {
     Cmux(CmuxCall),
     Persist(StateSet),
+    /// A link to open in the browser.
+    OpenUrl(String),
 }
 
 /// The program and arguments that carry out a request, or why it cannot
@@ -52,6 +55,8 @@ pub fn command_for(o: &Outgoing, token: Option<&str>) -> Result<(String, Vec<Str
                 vec!["-g".to_string(), set.url(token)],
             ))
         }
+        // In the foreground: Jon asked to see the page.
+        Outgoing::OpenUrl(url) => Ok(("/usr/bin/open".to_string(), vec![url.clone()])),
     }
 }
 
@@ -60,6 +65,7 @@ fn describe(o: &Outgoing) -> String {
     match o {
         Outgoing::Cmux(call) => format!("cmux rpc {}", call.method),
         Outgoing::Persist(set) => format!("state write {:?}", set.key),
+        Outgoing::OpenUrl(_) => "opening a link".to_string(),
     }
 }
 
@@ -100,7 +106,7 @@ pub fn perform<L: Fn(String), F: Fn(String)>(
     while let Ok(o) = rx.recv() {
         let token = match o {
             Outgoing::Persist(_) => read_token(config),
-            Outgoing::Cmux(_) => None,
+            Outgoing::Cmux(_) | Outgoing::OpenUrl(_) => None,
         };
         match command_for(&o, token.as_deref()) {
             Ok((program, args)) => {
@@ -152,6 +158,16 @@ mod tests {
                 r#"{"workspace_id":"a","index":4}"#
             ]
         );
+    }
+
+    #[test]
+    fn a_link_opens_in_the_foreground_and_its_log_line_leaves_the_url_out() {
+        let link = Outgoing::OpenUrl("https://example.com/pr/7".into());
+        let (program, args) = command_for(&link, None).unwrap();
+        assert_eq!(program, "/usr/bin/open");
+        assert_eq!(args, ["https://example.com/pr/7"]);
+        assert_eq!(describe(&link), "opening a link");
+        assert_eq!(workspace_of(&link), None);
     }
 
     #[test]

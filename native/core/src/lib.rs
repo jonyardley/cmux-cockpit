@@ -22,6 +22,7 @@ pub mod js;
 pub mod lane_entries;
 pub mod lanes;
 pub mod lenient;
+pub mod menu;
 pub mod merged;
 pub mod model;
 pub mod moves;
@@ -50,4 +51,4 @@ pub mod time;
 pub mod ui;
 pub mod words;
 
-pub use app::{CmuxCall, Cockpit, Effect, Event, Model, PrAsk, StateSet, ViewModel};
+pub use app::{CmuxCall, Cockpit, Effect, Event, Model, OpenUrl, PrAsk, StateSet, ViewModel};
