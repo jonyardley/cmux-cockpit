@@ -18,7 +18,6 @@
 
  ▾ ■ Other  1
    ○ Scratch                                                           No agent
-     Make "Scratch" a project
 
    + New project
 

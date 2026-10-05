@@ -276,12 +276,14 @@ impl Session {
         std::mem::take(&mut self.outbox)
     }
 
-    /// Swaps in a new project table, keeping everything else. A Move to
-    /// project override naming a key the table no longer has is dropped,
-    /// as the seed drops it.
+    /// Swaps in a new project table. A Move to project override naming a
+    /// key the table no longer has is dropped, as the seed drops it, and
+    /// so are the projects sent from here: the sidebar starts afresh on
+    /// each rebuild, and the new table carries what it sent.
     pub fn set_projects(&mut self, projects: Vec<Project>) {
         self.project_override
             .retain(|_, key| is_project_key(&projects, key));
+        self.sent_specs.clear();
         self.projects = projects;
     }
 

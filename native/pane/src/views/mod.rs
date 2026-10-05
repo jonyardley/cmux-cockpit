@@ -77,8 +77,8 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
             }
         }
         PaneView::Projects => {
-            // The card keys and the mouse rest here, so nothing scrolls
-            // and no line is a spot.
+            // Up, down and the wheel scroll it a line at a time; the card
+            // keys rest here, so no line is a spot.
             let mut body: Vec<Line<'static>> = Vec::new();
             let needs = needs::lines(&shown.model.needs, inner, None);
             if !needs.lines.is_empty() {
@@ -86,10 +86,15 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
             }
             body.extend(needs.lines);
             body.extend(projects::lines(&shown.model.projects, inner));
-            frame.render_widget(Paragraph::new(body), body_area);
+            let most = body.len().saturating_sub(usize::from(body_area.height));
+            let scroll = shown.manual.min(most);
+            let offset = u16::try_from(scroll).unwrap_or(u16::MAX);
+            frame.render_widget(Paragraph::new(body).scroll((offset, 0)), body_area);
             Drawn {
                 top: body_area.y,
-                ..Drawn::default()
+                scroll,
+                most,
+                spots: Vec::new(),
             }
         }
     };

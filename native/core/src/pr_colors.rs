@@ -2,7 +2,9 @@
 //! state words take its health's ink (green ready, red failing or in
 //! conflict, blue running, grey for the rest), and a state chip on its own
 //! a faint face and edge of that hue. Also status.ts's prTextColor, the
-//! one reading of it a card's PR words make.
+//! one reading of it a card's PR words make. The pane inks words only, so
+//! the chip faces (pr_chip_colors) and the stale reading (shown_health)
+//! wait for a shell that draws faces, and for the agents sidebar's port.
 
 use crate::prs::{PrHealth, PrSummary};
 use crate::theme::Token;

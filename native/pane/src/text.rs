@@ -79,6 +79,35 @@ pub fn fit_items(widths: &[usize], gap: usize, room: usize) -> (usize, bool) {
     (widths.len(), false)
 }
 
+/// Which items show on a line of `room` cells, `gap` cells apart, and
+/// whether some were left off. Every one when all fit; else the ones that
+/// give way (a long branch) go first, so the rest keep their room, and
+/// then fit_items drops from the end.
+pub fn fit_ranked(
+    widths: &[usize],
+    gives_way: &[bool],
+    gap: usize,
+    room: usize,
+) -> (Vec<bool>, bool) {
+    let (all, cut) = fit_items(widths, gap, room);
+    if !cut {
+        return (vec![true; all], false);
+    }
+    let keep: Vec<usize> = (0..widths.len())
+        .filter(|i| !gives_way.get(*i).copied().unwrap_or(false))
+        .collect();
+    // The ellipsis rides as one more item, so whatever is kept leaves it room.
+    let mut kept: Vec<usize> = keep.iter().map(|i| widths[*i]).collect();
+    kept.push(width(ELLIPSIS));
+    let (n, _) = fit_items(&kept, gap, room);
+    let n = n.min(keep.len());
+    let mut shown = vec![false; widths.len()];
+    for i in keep.iter().take(n) {
+        shown[*i] = true;
+    }
+    (shown, true)
+}
+
 /// `text` wrapped onto at most `lines` lines of `max` cells, between
 /// words; the last line ends in an ellipsis when words were left over.
 pub fn wrap(text: &str, max: usize, lines: usize) -> Vec<String> {
@@ -127,6 +156,26 @@ mod tests {
         );
         assert_eq!(fit_items(&[3, 4], 2, 5), (0, true));
         assert_eq!(fit_items(&[], 2, 0), (0, false));
+    }
+
+    #[test]
+    fn lets_a_long_branch_go_first_so_the_chips_after_it_keep_their_room() {
+        let ways = [false, true, false];
+        assert_eq!(fit_ranked(&[3, 4, 2], &ways, 2, 20), (vec![true; 3], false));
+        // 3 + 2 + 2, then a gap and the ellipsis.
+        assert_eq!(
+            fit_ranked(&[3, 20, 2], &ways, 2, 10),
+            (vec![true, false, true], true)
+        );
+        assert_eq!(
+            fit_ranked(&[3, 20, 2], &ways, 2, 6),
+            (vec![true, false, false], true)
+        );
+        // 3 + 2 + 2 fits 7 exactly, but the ellipsis needs a gap and a cell more.
+        assert_eq!(
+            fit_ranked(&[3, 20, 2], &ways, 2, 7),
+            (vec![true, false, false], true)
+        );
     }
 
     #[test]

@@ -17,7 +17,7 @@ use crate::model::{
     Row,
 };
 use crate::placing::{Place, Spot};
-use crate::text::{ELLIPSIS, fit, fit_items, width, wrap};
+use crate::text::{ELLIPSIS, fit, fit_ranked, width, wrap};
 use crate::theme;
 use cockpit_core::lanes::LaneKey;
 use cockpit_core::theme::Token;
@@ -150,13 +150,20 @@ fn header_tail(lane: &Lane) -> Vec<Span<'static>> {
     tail
 }
 
-/// A card's chips on one line, each whole: the chips that fit, then an
-/// ellipsis when some were left off, so a chip is never cut.
+/// A card's chips on one line, each whole: the chips that fit, a long
+/// branch giving way first, then an ellipsis when some were left off, so
+/// a chip is never cut.
 fn chips_line(chips: &[Chip], room: usize) -> Vec<Span<'static>> {
     let widths: Vec<usize> = chips.iter().map(chip_width).collect();
-    let (shown, cut) = fit_items(&widths, width(CHIP_GAP), room);
+    let ways: Vec<bool> = chips.iter().map(|c| c.gives_way).collect();
+    let (shown, cut) = fit_ranked(&widths, &ways, width(CHIP_GAP), room);
     let mut out: Vec<Span<'static>> = Vec::new();
-    for (i, chip) in chips.iter().take(shown).enumerate() {
+    let kept = chips
+        .iter()
+        .zip(&shown)
+        .filter(|(_, s)| **s)
+        .map(|(c, _)| c);
+    for (i, chip) in kept.enumerate() {
         if i > 0 {
             out.push(Span::raw(CHIP_GAP));
         }
@@ -168,7 +175,7 @@ fn chips_line(chips: &[Chip], room: usize) -> Vec<Span<'static>> {
         }
     }
     if cut && width(ELLIPSIS) <= room {
-        if shown > 0 {
+        if shown.contains(&true) {
             out.push(Span::raw(CHIP_GAP));
         }
         out.push(Span::styled(ELLIPSIS, theme::ink(Token::Faint)));

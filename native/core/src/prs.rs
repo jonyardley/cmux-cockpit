@@ -11,7 +11,8 @@ use crate::js::{non_empty, num_text, truthy};
 use crate::persist::{SavedCheck, SavedPr, SavedState};
 
 /// What a PR's chip says about it: its worst state, or quiet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PrHealth {
     Failing,
     Conflicts,
@@ -218,8 +219,10 @@ fn lines(n: f64) -> String {
     format!("{}{unit}", num_text(shown))
 }
 
-/// An open PR's diff size as "+120 −8" (a true minus sign): "" once it
-/// is merged or closed, unless both counts are known, and for an empty diff.
+/// An open PR's diff size as "+120 −8" (a true minus sign). "" for a PR
+/// that is not open, since the size is a cue for review; "" unless both
+/// counts are known, so a missing one never shows as 0; and "" for an
+/// empty diff.
 pub fn diff_text(pr: &PullRequest) -> String {
     let (Some(add), Some(del)) = (pr.additions, pr.deletions) else {
         return String::new();

@@ -6,7 +6,7 @@
 //! Collapse is local only: projects are not cmux groups. A project with
 //! several paths is one group, keyed by its first match.
 
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use serde::Serialize;
 
 use crate::data::{Data, Workspace};
@@ -362,11 +362,11 @@ impl Session {
     /// A project's header, its editor, then its cards, each in the Needs
     /// you strip leaving a placeholder in its place.
     fn push_group(
-        &mut self,
-        data: &Data,
+        &self,
         entries: &mut Vec<ProjectEntry>,
         k: &str,
         rows: &[&Workspace],
+        waiting: &IndexSet<String>,
     ) {
         entries.push(ProjectEntry::Header {
             id: format!("p:{k}"),
@@ -376,7 +376,6 @@ impl Session {
         if self.is_project_collapsed(k) {
             return;
         }
-        let waiting = self.in_strip(data);
         for w in rows {
             let ws_id = w.id.clone();
             entries.push(if waiting.contains(&w.id) {
@@ -399,6 +398,8 @@ impl Session {
     /// loses its header at once; its cards wait in Other.
     pub fn project_entries(&mut self, data: &Data) -> Vec<ProjectEntry> {
         let groups = self.cards_by_project(data);
+        // Read once: the strip sorts every waiting session.
+        let waiting = self.in_strip(data);
         let keys: Vec<String> = self.projects.iter().map(|p| p.id().to_string()).collect();
         let gone: Vec<&String> = keys.iter().filter(|k| self.is_removed_project(k)).collect();
         let mut entries = Vec::new();
@@ -406,7 +407,7 @@ impl Session {
             if let Some(rows) = groups.get(k)
                 && !gone.contains(&k)
             {
-                self.push_group(data, &mut entries, k, rows);
+                self.push_group(&mut entries, k, rows, &waiting);
             }
         }
         let other_keys = std::iter::once(OTHER_KEY).chain(gone.iter().map(|k| k.as_str()));
@@ -415,7 +416,7 @@ impl Session {
             .flat_map(|k| groups.get(k).into_iter().flatten().copied())
             .collect();
         if other_keys.into_iter().any(|k| groups.contains_key(k)) {
-            self.push_group(data, &mut entries, OTHER_KEY, &other);
+            self.push_group(&mut entries, OTHER_KEY, &other, &waiting);
         }
         entries.push(ProjectEntry::NewRow { id: "new".into() });
         self.push_editor(&mut entries, NEW_PROJECT);
@@ -466,6 +467,33 @@ mod tests {
         assert_eq!(s.editing_project(), Some(NEW_PROJECT));
         assert!(s.is_removed_project("/dev/app"));
         assert_eq!(s.spec_of("/dev/app"), None);
+    }
+
+    #[test]
+    fn opens_a_folder_once_whatever_its_case_or_trailing_slash() {
+        let mut s = Session::new(table(), SavedState::default());
+        let data: Data = serde_json::from_str(
+            r#"{"epoch": 1, "workspaces": [{"id": "w", "directory": "/Users/X/dev/App/"}]}"#,
+        )
+        .unwrap();
+        s.open_folder_once(&data, "/users/x/dev/app");
+        assert!(s.take_outbox().is_empty(), "one is open there already");
+        s.open_folder_once(&data, "/users/x/dev/other");
+        let out = s.take_outbox();
+        assert!(
+            matches!(out.as_slice(), [crate::session::Outbound::Cmux { method, .. }] if method == "workspace.create"),
+            "{out:?}"
+        );
+    }
+
+    #[test]
+    fn forgets_what_it_sent_once_a_rebuild_brings_a_new_table() {
+        let mut s = Session::new(table(), SavedState::default());
+        s.remove_project("/dev/app");
+        assert!(s.is_removed_project("/dev/app"));
+        s.set_projects(table());
+        assert!(!s.is_removed_project("/dev/app"));
+        assert!(s.spec_of("/dev/app").is_some());
     }
 
     #[test]

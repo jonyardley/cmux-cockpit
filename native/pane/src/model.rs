@@ -231,6 +231,18 @@ pub struct Piece {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chip {
     pub pieces: Vec<Piece>,
+    /// It goes first when the line is too narrow: the branch, as the
+    /// sidebar's branch chip gives way to the PR, ports and actions.
+    pub gives_way: bool,
+}
+
+impl Chip {
+    fn of(pieces: Vec<Piece>) -> Chip {
+        Chip {
+            pieces,
+            gives_way: false,
+        }
+    }
 }
 
 fn piece(text: impl Into<String>, ink: Token) -> Piece {
@@ -281,7 +293,10 @@ pub fn chip_view(c: &CoreChip) -> Chip {
         }
         CoreChip::Port { text, .. } => vec![piece(text, quiet)],
     };
-    Chip { pieces }
+    Chip {
+        pieces,
+        gives_way: matches!(c, CoreChip::Branch { .. }),
+    }
 }
 
 /// The To review action: green while its PR is ready to merge.
@@ -291,9 +306,7 @@ pub fn review_chip(green: bool) -> Chip {
     } else {
         Token::Secondary
     };
-    Chip {
-        pieces: vec![piece(TO_REVIEW, ink)],
-    }
+    Chip::of(vec![piece(TO_REVIEW, ink)])
 }
 
 /// Which card a chips row is for: the sidebar's full card and its
@@ -710,10 +723,13 @@ fn chips_row(
     if session.can_file_for_review(data, w) {
         out.push(review_chip(session.review_is_green(w)));
     }
-    if kind == ChipsFor::Project && session.can_create_project(w) {
-        out.push(Chip {
-            pieces: vec![piece(session.make_project_label(w), Token::Secondary)],
-        });
+    // Only once the shell has said where home is: until then the home
+    // folder itself would be offered as a project.
+    if kind == ChipsFor::Project && session.home.is_some() && session.can_create_project(w) {
+        out.push(Chip::of(vec![piece(
+            session.make_project_label(w),
+            Token::Secondary,
+        )]));
     }
     out
 }
@@ -730,7 +746,7 @@ fn compact_pr(session: &Session, w: Option<&Workspace>) -> Option<Chip> {
     if !pr.diff.is_empty() {
         pieces.push(piece(pr.diff.clone(), Token::Faint));
     }
-    Some(Chip { pieces })
+    Some(Chip::of(pieces))
 }
 
 /// Which chips a card in All carries, by its density.
@@ -1152,6 +1168,7 @@ mod tests {
         });
         let words: Vec<&str> = br.pieces.iter().map(|p| p.text.as_str()).collect();
         assert_eq!(words, ["feat", DIRTY_MARK]);
+        assert!(br.gives_way, "the branch goes first on a narrow line");
         let size = chip_view(&CoreChip::Size {
             text: "Decide".into(),
             size: MoveSize::Decide,

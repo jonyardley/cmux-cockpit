@@ -39,22 +39,6 @@ pub enum Chip {
     Port { text: String, url: String },
 }
 
-impl Serialize for MoveSize {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(match self {
-            MoveSize::Quick => "quick",
-            MoveSize::Decide => "decide",
-            MoveSize::Review => "review",
-        })
-    }
-}
-
-impl Serialize for PrHealth {
-    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        s.serialize_str(self.as_str())
-    }
-}
-
 /// A real port number: whole, and from 1 to 65535.
 fn is_port(p: f64) -> bool {
     p.fract() == 0.0 && p > 0.0 && p < 65536.0

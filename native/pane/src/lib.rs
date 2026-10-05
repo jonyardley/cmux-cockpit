@@ -1,7 +1,8 @@
 //! The cockpit in a terminal: a ratatui pane that draws the core's All
 //! view (Next, Needs you and the lanes, each card with its chips) and its
-//! Projects view (Needs you and the cards grouped by project, where the
-//! card keys rest for now), lets up and down walk the cards,
+//! Projects view (Needs you and the cards grouped by project, where up,
+//! down and the wheel scroll and the card keys rest for now), lets up and
+//! down walk the cards,
 //! and turns keys and drags into actions on them: place a card in a lane,
 //! switch to it, dismiss it from Needs you, flip the view. It writes
 //! nothing itself; the runner hands each action to the core.
@@ -153,6 +154,10 @@ impl Pane {
         if model == self.model {
             return false;
         }
+        if model.view != self.model.view {
+            // A new view starts at its top.
+            self.manual = 0;
+        }
         self.model = model;
         let cards = self.model.card_ids();
         self.cursor.settle(&cards);
@@ -207,7 +212,8 @@ impl Pane {
     /// Handles a key. `q` or Ctrl-C quits, `?` shows or hides the keys and
     /// Esc hides them; while they are up nothing else answers. After `m`
     /// the next key picks a lane (Esc, or any other key, cancels). Tab
-    /// flips the view; in Projects the card keys rest. Up and down move
+    /// flips the view; in Projects up and down scroll a line and the card
+    /// keys rest. Up and down move
     /// the cursor (or scroll a line when there are no cards), with shift
     /// they reorder its card in its lane, Enter switches to it, and `d`
     /// dismisses it from Needs you.
@@ -251,6 +257,8 @@ impl Pane {
                 self.drag = None;
                 Outcome::Act(Action::FlipView)
             }
+            KeyCode::Up if self.model.view == PaneView::Projects => redraw_if(self.scroll(-1)),
+            KeyCode::Down if self.model.view == PaneView::Projects => redraw_if(self.scroll(1)),
             _ if self.model.view != PaneView::All => Outcome::Nothing,
             code => self.card_key(code, key.modifiers.contains(KeyModifiers::SHIFT)),
         };
@@ -307,8 +315,20 @@ impl Pane {
     /// card puts the cursor there and picks it up, a drag shows where it
     /// would land, and letting go places it. The wheel moves the cursor.
     pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Outcome {
-        if self.keys || self.picking.is_some() || self.model.view != PaneView::All {
+        if self.keys || self.picking.is_some() {
             return Outcome::Nothing;
+        }
+        if self.model.view == PaneView::Projects {
+            // The wheel scrolls the Projects view; nothing there is dragged.
+            let moved = match mouse.kind {
+                MouseEventKind::ScrollUp => self.scroll(-1),
+                MouseEventKind::ScrollDown => self.scroll(1),
+                _ => false,
+            };
+            if moved {
+                self.dirty = true;
+            }
+            return redraw_if(moved);
         }
         let outcome = match mouse.kind {
             MouseEventKind::ScrollUp => redraw_if(self.step(-1)),
@@ -375,6 +395,14 @@ impl Pane {
         }
     }
 
+    /// Scrolls a line, as far as the last draw's body goes; true when it moved.
+    fn scroll(&mut self, by: isize) -> bool {
+        let next = self.manual.saturating_add_signed(by).min(self.drawn.most);
+        let moved = next != self.manual;
+        self.manual = next;
+        moved
+    }
+
     /// Moves the cursor a card, or with no cards scrolls a line. Down on
     /// the last card scrolls a line too, so the lanes below it (empty ones,
     /// or only placeholders) come into sight.
@@ -385,10 +413,7 @@ impl Pane {
             self.manual = 0;
             return self.cursor.step(&cards, by);
         }
-        let next = self.manual.saturating_add_signed(by).min(self.drawn.most);
-        let moved = next != self.manual;
-        self.manual = next;
-        moved
+        self.scroll(by)
     }
 
     /// Draws when something changed or the terminal was resized; true when
@@ -411,7 +436,7 @@ impl Pane {
         };
         let mut drawn = views::Drawn::default();
         terminal.draw(|frame| drawn = views::draw(frame, shown))?;
-        if cursor.is_none() || shown.last {
+        if cursor.is_none() || shown.last || shown.view == PaneView::Projects {
             // Held at the end, so Up after too many Downs moves at once.
             self.manual = drawn.scroll;
         }
