@@ -147,6 +147,9 @@ pub struct NeedsRow {
     /// "Asking: allow git push?"
     pub line: String,
     pub ink: Token,
+    /// The lane its card is filed in, drawn or not (a folded lane draws
+    /// no rows).
+    pub lane: Option<LaneKey>,
 }
 
 /// The Needs you strip; empty when nothing waits.
@@ -178,6 +181,10 @@ pub struct Card {
     pub detail_lines: usize,
     /// Its session waits in Needs you, past the strip's cap.
     pub waiting: bool,
+    /// Its state's place in the lane's sort (the core's state rank): a
+    /// lane sorts by state, and a card keeps its place only among cards
+    /// in its own state.
+    pub rank: u8,
 }
 
 /// A row under a lane header.
@@ -189,6 +196,8 @@ pub enum Row {
         ws_id: String,
         title: String,
         text: String,
+        /// As a card's: a placeholder is its card, waiting.
+        rank: u8,
     },
 }
 
@@ -198,6 +207,14 @@ impl Row {
         match self {
             Row::Card(c) => &c.ws_id,
             Row::Ghost { ws_id, .. } => ws_id,
+        }
+    }
+
+    /// Its state's place in the lane's sort.
+    pub fn rank(&self) -> u8 {
+        match self {
+            Row::Card(c) => c.rank,
+            Row::Ghost { rank, .. } => *rank,
         }
     }
 }
@@ -286,23 +303,27 @@ impl PaneModel {
                 .any(|r| matches!(r, Row::Card(c) if c.ws_id == id && c.waiting))
     }
 
-    /// The lane `id`'s card or placeholder sits in.
+    /// The lane `id`'s card or placeholder sits in, or for a Needs you
+    /// row the lane its card is filed in, even folded.
     pub fn lane_of(&self, id: &str) -> Option<LaneKey> {
         self.lanes
             .iter()
             .find(|l| l.rows.iter().any(|r| r.ws_id() == id))
             .map(|l| l.key)
+            .or_else(|| {
+                let row = self.needs.rows.iter().find(|r| r.ws_id == id)?;
+                row.lane
+            })
     }
 
-    /// A lane's rows top to bottom, cards and placeholders, by workspace
-    /// id. A placeholder stands for a real tab in its lane (drop.ts), so a
-    /// card can land above one.
-    pub fn lane_rows(&self, key: LaneKey) -> Vec<&str> {
+    /// A lane's rows top to bottom, cards and placeholders. A placeholder
+    /// stands for a real tab in its lane (drop.ts), so a card can land
+    /// above one.
+    pub fn lane_rows(&self, key: LaneKey) -> Vec<&Row> {
         self.lanes
             .iter()
             .filter(|l| l.key == key)
             .flat_map(|l| &l.rows)
-            .map(Row::ws_id)
             .collect()
     }
 
@@ -458,6 +479,7 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
                 title: title_of(w, id),
                 line: needs_line(session, data, w),
                 ink: session.needs_ink(w),
+                lane: w.map(|w| session.lane_of(data, w)),
             }
         })
         .collect();
@@ -521,6 +543,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         detail: whole_words(&session.card_detail(w), DETAIL_MAX),
         detail_lines: detail_lines(density),
         waiting: view.needs.list.iter().any(|w| w == id),
+        rank: session.state_rank(data, w),
     }
 }
 
@@ -550,6 +573,7 @@ fn lanes(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Lane> {
                     ws_id: ws_id.clone(),
                     title: title_of(w, ws_id),
                     text: session.placeholder_text(w),
+                    rank: session.state_rank(data, w),
                 };
                 push_row(&mut out, row);
             }
@@ -713,7 +737,74 @@ mod tests {
         assert_eq!(PaneView::Projects.flipped(), PaneView::All);
     }
 
-    fn card_row(id: &str, waiting: bool) -> Row {
+    /// A strip row "n" whose placeholder sits in Main beside card "a", and
+    /// card "w" past the strip's cap in Parked.
+    /// Card "f" waiting in Needs you with its card filed in folded Review.
+    fn walked() -> PaneModel {
+        use fixtures::{card, ghost, lane, needs_row};
+        PaneModel {
+            needs: Needs {
+                count: 3,
+                rows: vec![
+                    needs_row("n", Some(LaneKey::Main)),
+                    needs_row("f", Some(LaneKey::Review)),
+                ],
+                ..Needs::default()
+            },
+            lanes: vec![
+                lane(LaneKey::Main, vec![ghost("n", 0), card("a", 2, false)]),
+                lane(LaneKey::Review, Vec::new()),
+                lane(LaneKey::Parked, vec![card("w", 0, true)]),
+            ],
+            ..PaneModel::default()
+        }
+    }
+
+    #[test]
+    fn walks_the_strip_then_the_lanes_cards() {
+        assert_eq!(walked().card_ids(), ["n", "f", "a", "w"]);
+    }
+
+    #[test]
+    fn knows_who_waits_and_which_lane_holds_each_card() {
+        let m = walked();
+        assert!(m.in_strip("n"));
+        assert!(!m.in_strip("w"));
+        assert!(m.is_waiting("n"));
+        assert!(m.is_waiting("w"), "past the cap");
+        assert!(!m.is_waiting("a"));
+        assert_eq!(m.lane_of("n"), Some(LaneKey::Main), "by its placeholder");
+        assert_eq!(
+            m.lane_of("f"),
+            Some(LaneKey::Review),
+            "filed in a folded lane"
+        );
+        assert_eq!(m.lane_of("w"), Some(LaneKey::Parked));
+        assert_eq!(m.lane_of("z"), None);
+        let main: Vec<&str> = m
+            .lane_rows(LaneKey::Main)
+            .into_iter()
+            .map(Row::ws_id)
+            .collect();
+        assert_eq!(main, ["n", "a"]);
+        assert!(m.lane_rows(LaneKey::Review).is_empty());
+    }
+
+    #[test]
+    fn files_rows_under_the_lane_headed_last() {
+        let mut lanes = Vec::new();
+        push_row(&mut lanes, fixtures::ghost("a", 0));
+        assert!(lanes.is_empty(), "a row before any header is dropped");
+    }
+}
+
+/// Small rows, lanes and strip rows for the pane's unit tests.
+#[cfg(test)]
+pub(crate) mod fixtures {
+    use super::*;
+
+    /// A card with `id` as its title, in state `rank`.
+    pub fn card(id: &str, rank: u8, waiting: bool) -> Row {
         Row::Card(Card {
             ws_id: id.into(),
             icon: Icon {
@@ -727,16 +818,26 @@ mod tests {
             detail: String::new(),
             detail_lines: 1,
             waiting,
+            rank,
         })
     }
 
-    /// A strip row "n" whose placeholder sits in Main beside card "a", and
-    /// card "w" past the strip's cap in Parked.
-    fn walked() -> PaneModel {
-        let lane = |key, rows: Vec<Row>| Lane {
+    /// A placeholder for `id`.
+    pub fn ghost(id: &str, rank: u8) -> Row {
+        Row::Ghost {
+            ws_id: id.into(),
+            title: id.into(),
+            text: "your turn".into(),
+            rank,
+        }
+    }
+
+    /// An open lane holding `rows`.
+    pub fn lane(key: LaneKey, rows: Vec<Row>) -> Lane {
+        Lane {
             key,
             empty: rows.is_empty(),
-            name: String::new(),
+            name: key.as_str().into(),
             faint: false,
             marker: Token::LaneMain,
             anchor: None,
@@ -749,64 +850,21 @@ mod tests {
             collapsed: false,
             merge_ready: String::new(),
             rows,
-        };
-        let ghost = Row::Ghost {
-            ws_id: "n".into(),
-            title: "n".into(),
-            text: "your turn".into(),
-        };
-        PaneModel {
-            needs: Needs {
-                count: 2,
-                rows: vec![NeedsRow {
-                    ws_id: "n".into(),
-                    icon: Icon {
-                        glyph: DOT,
-                        ink: None,
-                    },
-                    title: "n".into(),
-                    line: String::new(),
-                    ink: Token::ClayText,
-                }],
-                ..Needs::default()
-            },
-            lanes: vec![
-                lane(LaneKey::Main, vec![ghost, card_row("a", false)]),
-                lane(LaneKey::Parked, vec![card_row("w", true)]),
-            ],
-            ..PaneModel::default()
         }
     }
 
-    #[test]
-    fn walks_the_strip_then_the_lanes_cards() {
-        assert_eq!(walked().card_ids(), ["n", "a", "w"]);
-    }
-
-    #[test]
-    fn knows_who_waits_and_which_lane_holds_each_card() {
-        let m = walked();
-        assert!(m.in_strip("n"));
-        assert!(!m.in_strip("w"));
-        assert!(m.is_waiting("n"));
-        assert!(m.is_waiting("w"), "past the cap");
-        assert!(!m.is_waiting("a"));
-        assert_eq!(m.lane_of("n"), Some(LaneKey::Main), "by its placeholder");
-        assert_eq!(m.lane_of("w"), Some(LaneKey::Parked));
-        assert_eq!(m.lane_of("z"), None);
-        assert_eq!(m.lane_rows(LaneKey::Main), ["n", "a"]);
-        assert!(m.lane_rows(LaneKey::Review).is_empty());
-    }
-
-    #[test]
-    fn files_rows_under_the_lane_headed_last() {
-        let mut lanes = Vec::new();
-        let row = Row::Ghost {
-            ws_id: "a".into(),
-            title: "a".into(),
-            text: "your turn".into(),
-        };
-        push_row(&mut lanes, row);
-        assert!(lanes.is_empty(), "a row before any header is dropped");
+    /// A Needs you row for `id`, its card filed in `lane`.
+    pub fn needs_row(id: &str, lane: Option<LaneKey>) -> NeedsRow {
+        NeedsRow {
+            ws_id: id.into(),
+            icon: Icon {
+                glyph: DOT,
+                ink: None,
+            },
+            title: id.into(),
+            line: String::new(),
+            ink: Token::ClayText,
+            lane,
+        }
     }
 }
