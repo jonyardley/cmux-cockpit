@@ -66,9 +66,12 @@ again, or the switch shows on while the permission does nothing.
 ## How it decides
 
 - Docks outside cmux's left edge, same top and height, when the screen
-  cmux is on has room; otherwise (cmux at the screen's left edge, or full
-  screen) it overlaps cmux's left strip. In full screen it floats above
-  cmux, since nothing else shares that Space.
+  cmux is on has room clear of the Dock; otherwise (cmux at the screen's
+  left edge, or full screen) it overlaps cmux's left strip. When it overlaps, it floats above
+  cmux while cmux is the frontmost app, so a click inside cmux cannot
+  cover it, and drops back to the normal level when another app comes to
+  the front. In full screen it always floats, since nothing else shares
+  that Space.
 - Hides when cmux quits, is hidden, has no standard window, its main
   window is minimised, or that window is not on the Space being shown
   (checked against the window list, which needs no Screen Recording

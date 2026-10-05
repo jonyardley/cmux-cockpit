@@ -33,9 +33,10 @@ enum AX {
 
     static func element(_ element: AXUIElement, _ name: String) -> Result<AXUIElement, AXFailure> {
         value(element, name).flatMap { raw in
-            guard CFGetTypeID(raw) == AXUIElementGetTypeID() else { return .failure(.wrongType(name)) }
-            // The type ID check above is what makes this cast hold.
-            return .success(raw as! AXUIElement)
+            guard let found: AXUIElement = cfCast(raw, typeID: AXUIElementGetTypeID()) else {
+                return .failure(.wrongType(name))
+            }
+            return .success(found)
         }
     }
 
@@ -62,9 +63,19 @@ enum AX {
 
     private static func axValue(_ element: AXUIElement, _ name: String) -> Result<AXValue, AXFailure> {
         value(element, name).flatMap { raw in
-            guard CFGetTypeID(raw) == AXValueGetTypeID() else { return .failure(.wrongType(name)) }
-            // The type ID check above is what makes this cast hold.
-            return .success(raw as! AXValue)
+            guard let found: AXValue = cfCast(raw, typeID: AXValueGetTypeID()) else {
+                return .failure(.wrongType(name))
+            }
+            return .success(found)
         }
     }
+}
+
+/// A Core Foundation value as the type its type ID says, or nil. A cast to
+/// a Core Foundation type does not check the type itself (it always
+/// succeeds), so the type ID guard is the real check. The cast is generic
+/// only so the compiler accepts `as?` in place of a force cast.
+private func cfCast<T>(_ raw: CFTypeRef, typeID: CFTypeID) -> T? {
+    guard CFGetTypeID(raw) == typeID else { return nil }
+    return raw as? T
 }

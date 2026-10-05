@@ -65,6 +65,9 @@ final class CmuxWatcher {
         if app.isHidden { return .hidden }
         let element = AXUIElementCreateApplication(app.processIdentifier)
         let windows = (try? AX.elements(element, kAXWindowsAttribute).get()) ?? []
+        // Also the quick way out when cmux stops answering: one timed out
+        // read per poll, not one for every attribute below.
+        guard !windows.isEmpty else { return .noWindow }
         let main = try? AX.element(element, kAXMainWindowAttribute).get()
         let focused = try? AX.element(element, kAXFocusedWindowAttribute).get()
         let read = windows.compactMap { window -> (AXUIElement, WindowCandidate)? in
@@ -84,7 +87,8 @@ final class CmuxWatcher {
             frame: candidate.frame,
             isMinimised: (try? AX.bool(window, kAXMinimizedAttribute).get()) ?? false,
             isFullScreen: (try? AX.bool(window, "AXFullScreen").get()) ?? false,
-            isOnCurrentSpace: isOnCurrentSpace(candidate.frame, onScreen: onScreenFrames(pid: app.processIdentifier))
+            isOnCurrentSpace: isOnCurrentSpace(candidate.frame, onScreen: onScreenFrames(pid: app.processIdentifier)),
+            isActive: app.isActive
         ))
     }
 

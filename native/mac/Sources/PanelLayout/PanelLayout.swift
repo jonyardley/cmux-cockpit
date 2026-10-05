@@ -77,10 +77,16 @@ public func pickMainWindow(_ candidates: [WindowCandidate]) -> Int? {
 }
 
 /// Whether the window is on the Space being shown: the window list's
-/// on-screen windows for cmux include one with this frame. Both are
-/// top-left, y-down, so they compare directly.
+/// on-screen windows for cmux include one covering nine tenths of it.
+/// Both are top-left, y-down, so they compare directly. Most, not the
+/// the same to the point: mid drag or resize, Accessibility and the
+/// window list can be read a frame apart, and an exact match would hide
+/// the panel while it should follow. Nine tenths, not half, so another
+/// cmux window on this Space that only partly covers it does not count.
 public func isOnCurrentSpace(_ frame: Rect, onScreen: [Rect]) -> Bool {
-    onScreen.contains { $0.isClose(to: frame) }
+    let area = frame.width * frame.height
+    guard area > 0 else { return onScreen.contains { $0.isClose(to: frame) } }
+    return onScreen.contains { $0.overlapArea(frame) >= area * 0.9 }
 }
 
 /// cmux's main window, as the glue read it.
@@ -90,12 +96,15 @@ public struct CmuxWindow: Equatable, Sendable {
     public var isMinimised: Bool
     public var isFullScreen: Bool
     public var isOnCurrentSpace: Bool
+    /// cmux is the frontmost app, the one taking clicks and keys.
+    public var isActive: Bool
 
-    public init(frame: Rect, isMinimised: Bool, isFullScreen: Bool, isOnCurrentSpace: Bool) {
+    public init(frame: Rect, isMinimised: Bool, isFullScreen: Bool, isOnCurrentSpace: Bool, isActive: Bool) {
         self.frame = frame
         self.isMinimised = isMinimised
         self.isFullScreen = isFullScreen
         self.isOnCurrentSpace = isOnCurrentSpace
+        self.isActive = isActive
     }
 }
 
@@ -117,7 +126,8 @@ public enum Permission: Equatable, Sendable {
 public struct Screens: Equatable, Sendable {
     /// The primary screen's full height, for converting coordinates.
     public var primaryHeight: Double
-    /// Each screen's full frame (menu bar and Dock included), primary first.
+    /// Each screen's visible frame (the menu bar and Dock left out),
+    /// primary first, so a panel outside cmux never lands under the Dock.
     public var frames: [Rect]
 
     public init(primaryHeight: Double, frames: [Rect]) {
@@ -146,7 +156,10 @@ public enum Placement: Equatable, Sendable {
     case hidden(HiddenReason)
     /// Docked to cmux. `frame` is in AppKit space. `raised` asks for a
     /// level above cmux's own window, needed only when the panel overlaps
-    /// it in full screen, where no other app's window can be covered.
+    /// it: always in full screen, where no other app's window can be
+    /// covered, and otherwise only while cmux is the frontmost app, so a
+    /// click inside cmux cannot bring its window over the panel, and the
+    /// panel drops back once another app comes to the front.
     case docked(frame: Rect, side: Side, raised: Bool)
     /// No Accessibility permission yet: a strip at the primary screen's
     /// left edge that says how to grant it.
@@ -195,5 +208,5 @@ func dock(_ window: CmuxWindow, screens: Screens, width: Double) -> Placement {
         return .docked(frame: outside, side: .outside, raised: false)
     }
     let inside = Rect(x: frame.minX, y: frame.minY, width: min(width, frame.width), height: frame.height)
-    return .docked(frame: inside, side: .inside, raised: window.isFullScreen)
+    return .docked(frame: inside, side: .inside, raised: window.isFullScreen || window.isActive)
 }

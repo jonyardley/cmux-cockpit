@@ -12,9 +12,16 @@ private func window(
     _ frame: Rect,
     minimised: Bool = false,
     fullScreen: Bool = false,
-    onSpace: Bool = true
+    onSpace: Bool = true,
+    active: Bool = false
 ) -> CmuxState {
-    .window(CmuxWindow(frame: frame, isMinimised: minimised, isFullScreen: fullScreen, isOnCurrentSpace: onSpace))
+    .window(CmuxWindow(
+        frame: frame,
+        isMinimised: minimised,
+        isFullScreen: fullScreen,
+        isOnCurrentSpace: onSpace,
+        isActive: active
+    ))
 }
 
 final class CoordinateTests: XCTestCase {
@@ -76,6 +83,14 @@ final class SpaceTests: XCTestCase {
         XCTAssertFalse(isOnCurrentSpace(frame, onScreen: [Rect(x: 0, y: 0, width: 300, height: 200)]))
         XCTAssertFalse(isOnCurrentSpace(frame, onScreen: []))
     }
+
+    func testStaysOnTheSpaceWhenTheTwoReadsDisagreeMidDrag() {
+        // The window list a frame behind Accessibility during a drag.
+        let frame = Rect(x: 400, y: 100, width: 800, height: 600)
+        XCTAssertTrue(isOnCurrentSpace(frame, onScreen: [Rect(x: 440, y: 120, width: 800, height: 600)]))
+        // Another of cmux's windows on this Space covering only part of it.
+        XCTAssertFalse(isOnCurrentSpace(frame, onScreen: [Rect(x: 600, y: 100, width: 800, height: 600)]))
+    }
 }
 
 final class PlaceTests: XCTestCase {
@@ -103,6 +118,24 @@ final class PlaceTests: XCTestCase {
         XCTAssertEqual(placement, .docked(frame: Rect(x: 100, y: 282, width: 280, height: 600), side: .inside, raised: false))
     }
 
+    func testInsideIsRaisedOnlyWhileCmuxIsFrontmost() {
+        // cmux at the screen's left edge: the panel overlaps its left strip,
+        // so while cmux takes clicks it must stay above cmux's window.
+        let atEdge = Rect(x: 0, y: 100, width: 800, height: 600)
+        let inside = Rect(x: 0, y: 282, width: 280, height: 600)
+        let active = place(permission: .granted, cmux: window(atEdge, active: true), screens: oneScreen)
+        XCTAssertEqual(active, .docked(frame: inside, side: .inside, raised: true))
+        // Another app in front: back to the normal level, so it never
+        // covers that app's windows.
+        let behind = place(permission: .granted, cmux: window(atEdge, active: false), screens: oneScreen)
+        XCTAssertEqual(behind, .docked(frame: inside, side: .inside, raised: false))
+    }
+
+    func testOutsideIsNeverRaisedEvenWhileCmuxIsFrontmost() {
+        let placement = place(permission: .granted, cmux: window(cmuxFrame, active: true), screens: oneScreen)
+        XCTAssertEqual(placement, .docked(frame: Rect(x: 120, y: 282, width: 280, height: 600), side: .outside, raised: false))
+    }
+
     func testUsesTheScreenTheWindowIsOnForRoom() {
         // On the left screen, near its left edge: no room there, although
         // the primary screen's left edge is far to the right.
@@ -113,6 +146,14 @@ final class PlaceTests: XCTestCase {
         let roomy = Rect(x: -1400, y: 50, width: 1000, height: 700)
         let docked = place(permission: .granted, cmux: window(roomy), screens: twoScreens)
         XCTAssertEqual(docked, .docked(frame: Rect(x: -1680, y: 232, width: 280, height: 700), side: .outside, raised: false))
+    }
+
+    func testDocksInsideWhenTheDockTakesTheRoomOnTheLeft() {
+        // The Dock on the left: the visible frame starts 70 points in.
+        let withDock = Screens(primaryHeight: 982, frames: [Rect(x: 70, y: 0, width: 1442, height: 957)])
+        let nearEdge = Rect(x: 300, y: 100, width: 800, height: 600)
+        let placement = place(permission: .granted, cmux: window(nearEdge), screens: withDock)
+        XCTAssertEqual(placement, .docked(frame: Rect(x: 300, y: 282, width: 280, height: 600), side: .inside, raised: false))
     }
 
     func testDocksOutsideWhenTheWindowIsOnNoKnownScreen() {

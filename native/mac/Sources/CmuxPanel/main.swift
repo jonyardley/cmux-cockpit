@@ -16,12 +16,14 @@ func accessibilityPermission() -> Permission {
     return .missing
 }
 
-/// The primary screen first, as AppKit lists it.
+/// The primary screen first, as AppKit lists it. Coordinates flip on the
+/// primary screen's full height; room is judged on each visible frame.
 func currentScreens() -> Screens {
-    let frames = NSScreen.screens.map { screen in
-        Rect(x: screen.frame.minX, y: screen.frame.minY, width: screen.frame.width, height: screen.frame.height)
+    let visible = NSScreen.screens.map { screen in
+        let area = screen.visibleFrame
+        return Rect(x: area.minX, y: area.minY, width: area.width, height: area.height)
     }
-    return Screens(primaryHeight: frames.first?.height ?? 0, frames: frames)
+    return Screens(primaryHeight: Double(NSScreen.screens.first?.frame.height ?? 0), frames: visible)
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -31,6 +33,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var activation: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // A cmux that stops answering would otherwise hold each read for
+        // the default six seconds and freeze the panel with it. This sets
+        // the timeout for this process's reads only.
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.5)
         permission = accessibilityPermission()
         let watcher = CmuxWatcher { [weak self] in self?.refresh() }
         self.watcher = watcher
@@ -44,8 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refresh() {
-        // Granted while running: picked up on the next poll, no relaunch.
-        if permission == .missing, AXIsProcessTrusted() { permission = .granted }
+        // Granted or revoked while running: picked up on the next poll, no
+        // relaunch, so turning the switch off brings the strip back.
+        permission = AXIsProcessTrusted() ? .granted : .missing
         let cmux = permission == .granted ? (watcher?.read() ?? .notRunning) : .notRunning
         panel.apply(place(permission: permission, cmux: cmux, screens: currentScreens()))
     }
