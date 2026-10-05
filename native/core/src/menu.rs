@@ -24,8 +24,9 @@ pub enum MenuTarget {
     Project { key: String, quiet: bool },
 }
 
-/// What picking an item does.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+/// What picking an item does. Deserialize lets a shell send a pick as a
+/// file (the runner's cockpit-publish outbox).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum MenuAction {
     /// A new session in the card's project folder.
     NewSession,
@@ -83,7 +84,7 @@ pub struct MenuView {
 }
 
 /// What Jon does with a menu, as the core's events carry it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub enum MenuEvent {
     /// Opens the card's menu; nothing for a workspace not in the frame.
     OpenCard { id: String },

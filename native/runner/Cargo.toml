@@ -8,7 +8,12 @@ description = "The cockpit's live-data runner: reads cmux, Agent View and the co
 [lints]
 workspace = true
 
+[[bin]]
+name = "cockpit-publish"
+path = "src/bin/cockpit-publish.rs"
+
 [dependencies]
 cockpit_core = { path = "../core" }
 crux_core = "0.20"
+serde = { version = "1.0.229", features = ["derive"] }
 serde_json = { version = "1.0.151", features = ["preserve_order"] }

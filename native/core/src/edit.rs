@@ -50,7 +50,7 @@ impl Default for Editor {
 }
 
 /// What Jon does in the editor, as the core's events carry it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 pub enum EditEvent {
     /// "+ New project": opens the editor blank, or closes it when open.
     OpenNew,
