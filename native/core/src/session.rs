@@ -58,6 +58,25 @@ pub struct LaneMove {
     pub at: f64,
     /// The lane's group is being made, so the move waits for it.
     pub awaiting: bool,
+    /// For a move made in the pane: the lane cmux had the card in when it
+    /// was moved. Such a move has no timer; it holds until cmux's data no
+    /// longer shows the card there (so it agrees, or cmux put it somewhere
+    /// else itself). A wait on a lane's group still lapses after
+    /// CREATE_SECS. None for the sidebar's own moves, which lapse after
+    /// OVERRIDE_SECS as the TypeScript's do.
+    pub held_from: Option<LaneKey>,
+}
+
+/// A reorder cmux has not reflected yet: every workspace id in the order
+/// wanted, and when it was asked for.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OrderMove {
+    pub ids: Vec<String>,
+    pub at: f64,
+    /// For a move made in the pane: cmux's tab order when it was moved. It
+    /// holds until cmux's order of those workspaces is no longer that one,
+    /// with no timer, as `LaneMove::held_from` does.
+    pub held_base: Option<Vec<String>>,
 }
 
 /// The workspace Next last opened: its id, its place in the queue then,
@@ -106,7 +125,7 @@ pub struct Session {
 
     // cockpit/model.ts: optimistic lane moves, order and folds.
     pub(crate) lane_override: IndexMap<String, LaneMove>,
-    pub(crate) order_override: Option<(Vec<String>, f64)>,
+    pub(crate) order_override: Option<OrderMove>,
     pub(crate) collapse_override: IndexMap<String, bool>,
     pub(crate) touched_lanes: Vec<LaneKey>,
 }
@@ -153,6 +172,16 @@ impl Session {
             saved,
             ..Session::default()
         }
+    }
+
+    /// Takes over the optimistic placement and selection of an earlier
+    /// session, so a card moved or tapped a moment ago stays put when a new
+    /// state file reseeds the session: lane, order and selection all live
+    /// in cmux's data, not in the file.
+    pub fn keep_overrides_of(&mut self, earlier: &mut Session) {
+        self.lane_override = std::mem::take(&mut earlier.lane_override);
+        self.order_override = earlier.order_override.take();
+        self.select_override = earlier.select_override.take();
     }
 
     /// Every request made since the last call, oldest first.
