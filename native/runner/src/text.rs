@@ -131,7 +131,7 @@ pub fn render(feed: &Feed) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::runner::Input;
+    use crate::Input;
     use cockpit_core::data::Workspace;
     use serde_json::json;
     use std::time::Instant;

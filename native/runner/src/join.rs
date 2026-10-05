@@ -546,7 +546,7 @@ mod tests {
         // workspace:14 on 2026-10-05: pid 59557 ran with
         // CLAUDE_CONFIG_DIR=~/.claude-personal, so the default Agent View
         // never listed it and its card read No agent in the pane.
-        use super::super::parse;
+        use crate::parse;
         let mut j = Join::default();
         j.workspaces(vec![ws("A"), ws("B")]);
         j.event(&status_write(1, 59557, "B"));

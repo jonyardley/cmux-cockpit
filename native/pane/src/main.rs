@@ -21,8 +21,8 @@ use std::time::{Duration, Instant};
 use std::sync::mpsc;
 use std::thread;
 
-use cockpit_pane::runner::{self, Feed, Input, Latency, Options, text};
 use cockpit_pane::{Outcome, Pane, PaneModel};
+use cockpit_runner::{self as runner, Feed, Input, Latency, Options, text};
 use ratatui::crossterm::event::{self, Event};
 
 /// In --once mode, the longest replay may take before the view prints anyway.
@@ -336,7 +336,7 @@ fn main() -> ExitCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cockpit_pane::runner::join::Change;
+    use cockpit_runner::join::Change;
 
     fn args(s: &str) -> Result<Args, String> {
         let v: Vec<String> = s.split_whitespace().map(str::to_string).collect();

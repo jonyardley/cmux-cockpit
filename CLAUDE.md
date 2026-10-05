@@ -106,8 +106,9 @@ PR with the words alone.
 
 ## Rust in native/
 
-`native/` is one Cargo workspace: `core` (the `cockpit_core` Crux app)
-and `pane` (`cockpit_pane`, the terminal pane and its live-data
+`native/` is one Cargo workspace: `core` (the `cockpit_core` Crux app),
+`runner` (`cockpit_runner`, the live-data runner, with no terminal types)
+and `pane` (`cockpit_pane`, the terminal pane, a thin loop over the
 runner). `rust-toolchain.toml` at the root pins the toolchain, and
 `npm run rust` (part of `npm run check`) runs rustfmt, clippy with
 warnings denied, and the tests, from `native/`.

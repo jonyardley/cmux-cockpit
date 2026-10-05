@@ -14,9 +14,12 @@ path = "src/main.rs"
 
 [dependencies]
 cockpit_core = { path = "../core" }
-crux_core = "0.20"
-serde_json = { version = "1.0.151", features = ["preserve_order"] }
+cockpit_runner = { path = "../runner" }
 # Only the crossterm backend: no calendar widget or macros. Key events come
 # from ratatui's own crossterm re-export, so the two never disagree.
 ratatui = { version = "0.30", default-features = false, features = ["crossterm", "layout-cache"] }
 unicode-width = "0.2.2"
+
+[dev-dependencies]
+crux_core = "0.20"
+serde_json = { version = "1.0.151", features = ["preserve_order"] }
