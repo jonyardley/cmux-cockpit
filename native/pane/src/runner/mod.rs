@@ -32,6 +32,7 @@ pub mod stream;
 pub mod text;
 pub mod watch;
 
+use std::collections::BTreeMap;
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -42,7 +43,10 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cockpit_core::data::Workspace;
 use cockpit_core::home::expand_home;
+use cockpit_core::persist::SavedProject;
 use cockpit_core::pr_poll::PrPolled;
+use cockpit_core::project_table::merge_projects;
+use cockpit_core::projects::Project;
 use cockpit_core::{Cockpit, Effect, Event, Model, PrAsk};
 use crux_core::App;
 use serde_json::Value;
@@ -415,36 +419,62 @@ fn poll_layout(
     }
 }
 
-/// The two watched files.
+/// The two watched files, and the last good read of each, which the
+/// project table is built from.
 struct Files {
     state: Watched,
     projects: Watched,
+    file_table: Vec<Project>,
+    saved_projects: BTreeMap<String, SavedProject>,
+    /// The table last sent, so a state write that leaves it as it was
+    /// does not drop the projects sent from here.
+    table: Option<Vec<Project>>,
 }
 
 impl Files {
-    /// Sends the core whichever file changed, projects first so a new
-    /// state's overrides are checked against the new table. A file that
-    /// will not read (half written, say) is logged and the core keeps the
-    /// last good one until the file changes again.
+    fn new(config: &Path) -> Self {
+        Files {
+            state: Watched::new(config.join("state.json")),
+            projects: Watched::new(config.join("projects.json")),
+            file_table: Vec::new(),
+            saved_projects: BTreeMap::new(),
+            table: None,
+        }
+    }
+
+    /// Sends the core whichever file changed, the project table first so a
+    /// new state's overrides are checked against it. The table is
+    /// projects.json with state.json's saved projects laid over it, as the
+    /// sidebars' build makes it, so a project saved here shows here. A file
+    /// that will not read (half written, say) is logged and the core keeps
+    /// the last good one until the file changes again.
     fn check(&mut self, feed: &mut Feed, log: &mut dyn FnMut(String)) -> bool {
         let mut changed = false;
         if self.projects.changed() {
             match read_projects(&self.projects.path) {
-                Ok(projects) => {
-                    feed.projects(projects);
-                    changed = true;
+                Ok(projects) => self.file_table = projects,
+                Err(e) => log(e),
+            }
+        }
+        let mut saved = None;
+        if self.state.changed() {
+            match read_state(&self.state.path) {
+                Ok(state) => {
+                    self.saved_projects = state.projects.clone();
+                    saved = Some(state);
                 }
                 Err(e) => log(e),
             }
         }
-        if self.state.changed() {
-            match read_state(&self.state.path) {
-                Ok(saved) => {
-                    feed.state(saved);
-                    changed = true;
-                }
-                Err(e) => log(e),
-            }
+        let table = merge_projects(&self.file_table, &self.saved_projects);
+        if self.table.as_ref() != Some(&table) {
+            self.table = Some(table.clone());
+            feed.projects(table);
+            changed = true;
+        }
+        if let Some(state) = saved {
+            feed.state(state);
+            changed = true;
         }
         changed
     }
@@ -517,10 +547,7 @@ pub fn run(
         poll_layout(&tx, &nudge_rx, WORKSPACES_EVERY, read_list, read_groups);
     });
 
-    let mut files = Files {
-        state: Watched::new(opts.config.join("state.json")),
-        projects: Watched::new(opts.config.join("projects.json")),
-    };
+    let mut files = Files::new(&opts.config);
     files.check(&mut feed, &mut log);
     feed.poll_prs();
     let start = Instant::now();
@@ -1006,6 +1033,50 @@ mod tests {
             [Some("~/dev/app".to_string()), Some("/opt/x".to_string())],
             "with no home the root stays as written, as the build leaves it"
         );
+    }
+
+    #[test]
+    fn a_project_saved_in_state_joins_the_table_and_leaves_it_on_removal() {
+        let dir = std::env::temp_dir().join(format!("cockpit-pane-files-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let projects = dir.join("projects.json");
+        let state = dir.join("state.json");
+        std::fs::write(
+            &projects,
+            r##"[{"match": "/dev/app", "name": "App", "color": "#000000", "icon": "star"}]"##,
+        )
+        .unwrap();
+        std::fs::write(
+            &state,
+            r##"{"projects": {"/tmp/quill/": {"name": "Quill", "color": "#6A9BCC", "icon": "folder.fill", "root": "/tmp/quill"}}}"##,
+        )
+        .unwrap();
+        let mut files = Files::new(&dir);
+        let mut feed = Feed::default();
+        assert!(files.check(&mut feed, &mut |_| {}));
+        let names = |feed: &Feed| -> Vec<String> {
+            feed.model
+                .session
+                .projects
+                .iter()
+                .map(|p| p.name.clone())
+                .collect()
+        };
+        assert_eq!(names(&feed), ["App", "Quill"]);
+
+        // A state write that leaves the table as it was sends no new table.
+        std::fs::write(
+            &state,
+            r##"{"ui": {"mode": "projects"}, "projects": {"/tmp/quill/": {"name": "Quill", "color": "#6A9BCC", "icon": "folder.fill", "root": "/tmp/quill"}}}"##,
+        )
+        .unwrap();
+        let before = files.table.clone();
+        files.check(&mut feed, &mut |_| {});
+        assert_eq!(files.table, before);
+
+        std::fs::write(&state, r#"{"projects": {"/dev/app": {"removed": true}}}"#).unwrap();
+        files.check(&mut feed, &mut |_| {});
+        assert!(names(&feed).is_empty());
     }
 
     #[test]

@@ -75,7 +75,7 @@ impl ProjectEntry {
 }
 
 /// A folder as a key: no trailing "/", any case.
-fn folder_key(dir: Option<&str>) -> String {
+pub(crate) fn folder_key(dir: Option<&str>) -> String {
     trim_slash(dir.unwrap_or_default()).to_lowercase()
 }
 

@@ -3,9 +3,11 @@
 //! does in the focused field. Nothing is typed into the pane itself: each
 //! key sends the field's whole new text to the core, which holds the draft
 //! (cockpit_core::edit), so the pane only remembers which field is focused.
+//! It holds that as the field itself, not its place, so a folder on offer
+//! leaving between frames never moves the focus onto another field.
 
 use cockpit_core::data::Data;
-use cockpit_core::edit::{EditEvent, icon_rows, search_note};
+use cockpit_core::edit::{EditEvent, icon_search};
 use cockpit_core::projects::PROJECT_COLORS;
 use cockpit_core::session::Session;
 use ratatui::crossterm::event::KeyCode;
@@ -23,11 +25,12 @@ pub const EDITOR_HINT: &str = "Enter saves · Esc cancels";
 pub const ICON_HINT: &str = "← → to pick, type to search";
 
 /// A field the keys move between.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Field {
     Folder,
     /// A folder on offer, by its place in the list.
     Suggest(usize),
+    #[default]
     Name,
     Colour,
     Icon,
@@ -43,6 +46,7 @@ pub struct EditorView {
     pub name: String,
     pub color: String,
     pub icon: String,
+    /// The folder as typed, spaces kept, so a space typed mid-path stays.
     pub root: String,
     pub search: String,
     /// The icons on offer: the common row, or the search's matches.
@@ -64,11 +68,11 @@ impl EditorView {
         let is_new = s.is_new_draft();
         let d = s.draft_spec().clone();
         let search = s.icon_search().to_string();
-        let icons = icon_rows(&d.icon, &search).concat();
+        let found = icon_search(&d.icon, &search);
         EditorView {
             key: key.to_string(),
             is_new,
-            note: search_note(&search),
+            note: found.note,
             problem: s.draft_problem(),
             remove: s.remove_label(),
             matches: if is_new {
@@ -84,9 +88,9 @@ impl EditorView {
             name: d.name,
             color: d.color,
             icon: d.icon,
-            root: d.root.unwrap_or_default(),
+            root: s.folder_text().to_string(),
             search,
-            icons,
+            icons: found.rows.concat(),
         }
     }
 
@@ -105,6 +109,20 @@ impl EditorView {
         }
         out
     }
+
+    /// The field `focus` stands for now: itself while the editor still has
+    /// it, else the folder (for a folder on offer that went), else the
+    /// first field.
+    pub fn resolve(&self, focus: Field) -> Field {
+        let fields = self.fields();
+        if fields.contains(&focus) {
+            return focus;
+        }
+        if matches!(focus, Field::Suggest(_)) && fields.contains(&Field::Folder) {
+            return Field::Folder;
+        }
+        fields.first().copied().unwrap_or_default()
+    }
 }
 
 /// What a key does in the editor.
@@ -112,16 +130,16 @@ impl EditorView {
 pub enum EditKey {
     /// Sends this to the core.
     Send(EditEvent),
-    /// Moves the focus to this field, by its place.
-    Focus(usize),
+    /// Moves the focus to this field.
+    Focus(Field),
     Nothing,
 }
 
 /// `list`'s item `by` steps from `current`, going round; the first when
-/// `current` is not in it.
+/// `current` is not in it. Case is ignored, as the colour dots ignore it.
 fn step_in(list: &[String], current: &str, by: isize) -> Option<String> {
     let n = list.len();
-    let at = match list.iter().position(|x| x == current) {
+    let at = match list.iter().position(|x| x.eq_ignore_ascii_case(current)) {
         Some(i) => (i + n).saturating_add_signed(by) % n.max(1),
         None => 0,
     };
@@ -140,21 +158,22 @@ fn typed(text: &str, code: KeyCode) -> Option<String> {
     Some(out)
 }
 
-/// What `code` does with the field at `focus` focused.
-pub fn key(view: &EditorView, focus: usize, code: KeyCode) -> EditKey {
+/// What `code` does with `focus` focused.
+pub fn key(view: &EditorView, focus: Field, code: KeyCode) -> EditKey {
     let fields = view.fields();
-    let last = fields.len().saturating_sub(1);
-    let field = fields.get(focus.min(last)).copied().unwrap_or(Field::Name);
+    let field = view.resolve(focus);
+    let at = fields.iter().position(|f| *f == field).unwrap_or(0);
+    let to = |i: usize| EditKey::Focus(fields.get(i).copied().unwrap_or(field));
     let send = |e: Option<EditEvent>| e.map_or(EditKey::Nothing, EditKey::Send);
     match code {
-        KeyCode::Tab | KeyCode::Down => EditKey::Focus((focus + 1).min(last)),
-        KeyCode::BackTab | KeyCode::Up => EditKey::Focus(focus.saturating_sub(1)),
+        KeyCode::Tab | KeyCode::Down => to((at + 1).min(fields.len().saturating_sub(1))),
+        KeyCode::BackTab | KeyCode::Up => to(at.saturating_sub(1)),
         KeyCode::Esc if field == Field::Icon => EditKey::Send(EditEvent::CancelSearch),
         KeyCode::Esc => EditKey::Send(EditEvent::Close),
         KeyCode::Enter => EditKey::Send(match field {
             Field::Suggest(i) => match view.suggestions.get(i) {
                 Some(dir) => EditEvent::AddSuggested { dir: dir.clone() },
-                None => EditEvent::Save,
+                None => return EditKey::Nothing,
             },
             Field::Remove => EditEvent::Remove,
             _ => EditEvent::Save,
@@ -231,55 +250,71 @@ mod tests {
         let v = view(false);
         let sent = |focus, code| key(&v, focus, code);
         assert_eq!(
-            sent(0, KeyCode::Char('s')),
+            sent(Field::Name, KeyCode::Char('s')),
             EditKey::Send(EditEvent::Name("Apps".into()))
         );
         assert_eq!(
-            sent(0, KeyCode::Char('q')),
+            sent(Field::Name, KeyCode::Char('q')),
             EditKey::Send(EditEvent::Name("Appq".into())),
             "q types, it does not quit"
         );
         assert_eq!(
-            sent(3, KeyCode::Backspace),
+            sent(Field::Folder, KeyCode::Backspace),
             EditKey::Send(EditEvent::Folder("~/dev/ap".into()))
         );
         assert_eq!(
-            sent(2, KeyCode::Char('p')),
+            sent(Field::Icon, KeyCode::Char('p')),
             EditKey::Send(EditEvent::Search("p".into()))
         );
-        assert_eq!(sent(1, KeyCode::Char('x')), EditKey::Nothing);
+        assert_eq!(sent(Field::Colour, KeyCode::Char('x')), EditKey::Nothing);
     }
 
     #[test]
     fn steps_the_colour_and_icon_round_with_the_arrows() {
         let v = view(false);
         assert_eq!(
-            key(&v, 1, KeyCode::Left),
+            key(&v, Field::Colour, KeyCode::Left),
             EditKey::Send(EditEvent::Color(PROJECT_COLORS[15].into()))
         );
         assert_eq!(
-            key(&v, 2, KeyCode::Right),
+            key(&v, Field::Icon, KeyCode::Right),
             EditKey::Send(EditEvent::Icon("star.fill".into()))
         );
-        assert_eq!(key(&v, 0, KeyCode::Right), EditKey::Nothing);
+        assert_eq!(key(&v, Field::Name, KeyCode::Right), EditKey::Nothing);
+    }
+
+    #[test]
+    fn steps_on_from_a_colour_written_in_another_case() {
+        let mut v = view(false);
+        v.color = PROJECT_COLORS[0].to_lowercase();
+        assert_eq!(
+            key(&v, Field::Colour, KeyCode::Right),
+            EditKey::Send(EditEvent::Color(PROJECT_COLORS[1].into()))
+        );
     }
 
     #[test]
     fn enter_saves_takes_a_folder_on_offer_or_taps_remove_and_esc_cancels() {
         let v = view(true);
         assert_eq!(
-            key(&v, 1, KeyCode::Enter),
+            key(&v, Field::Suggest(0), KeyCode::Enter),
             EditKey::Send(EditEvent::AddSuggested { dir: "/a/b".into() })
         );
-        assert_eq!(key(&v, 0, KeyCode::Enter), EditKey::Send(EditEvent::Save));
-        assert_eq!(key(&v, 0, KeyCode::Esc), EditKey::Send(EditEvent::Close));
         assert_eq!(
-            key(&v, 4, KeyCode::Esc),
+            key(&v, Field::Folder, KeyCode::Enter),
+            EditKey::Send(EditEvent::Save)
+        );
+        assert_eq!(
+            key(&v, Field::Folder, KeyCode::Esc),
+            EditKey::Send(EditEvent::Close)
+        );
+        assert_eq!(
+            key(&v, Field::Icon, KeyCode::Esc),
             EditKey::Send(EditEvent::CancelSearch)
         );
         let edit = view(false);
         assert_eq!(
-            key(&edit, 4, KeyCode::Enter),
+            key(&edit, Field::Remove, KeyCode::Enter),
             EditKey::Send(EditEvent::Remove)
         );
     }
@@ -287,8 +322,39 @@ mod tests {
     #[test]
     fn moves_between_fields_without_running_off_either_end() {
         let v = view(false);
-        assert_eq!(key(&v, 0, KeyCode::Up), EditKey::Focus(0));
-        assert_eq!(key(&v, 0, KeyCode::Tab), EditKey::Focus(1));
-        assert_eq!(key(&v, 4, KeyCode::Down), EditKey::Focus(4));
+        assert_eq!(
+            key(&v, Field::Name, KeyCode::Up),
+            EditKey::Focus(Field::Name)
+        );
+        assert_eq!(
+            key(&v, Field::Name, KeyCode::Tab),
+            EditKey::Focus(Field::Colour)
+        );
+        assert_eq!(
+            key(&v, Field::Remove, KeyCode::Down),
+            EditKey::Focus(Field::Remove)
+        );
+    }
+
+    #[test]
+    fn keeps_the_focus_on_its_field_when_a_folder_on_offer_goes() {
+        let mut v = view(true);
+        v.suggestions = vec!["/a".into(), "/b".into()];
+        assert_eq!(
+            key(&v, Field::Name, KeyCode::Char('s')),
+            EditKey::Send(EditEvent::Name("Apps".into()))
+        );
+        v.suggestions = vec!["/b".into()];
+        assert_eq!(
+            key(&v, Field::Name, KeyCode::Char('s')),
+            EditKey::Send(EditEvent::Name("Apps".into())),
+            "still on Name, not shifted onto Colour"
+        );
+        assert_eq!(v.resolve(Field::Suggest(1)), Field::Folder);
+        assert_eq!(
+            key(&v, Field::Suggest(1), KeyCode::Enter),
+            EditKey::Send(EditEvent::Save),
+            "a folder on offer that went hands the focus to Folder"
+        );
     }
 }

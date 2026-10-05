@@ -33,7 +33,7 @@ use ratatui::crossterm::event::{
 use ratatui::layout::Size;
 
 use crate::cursor::Cursor;
-use crate::editor::EditKey;
+use crate::editor::{EditKey, Field};
 pub use crate::model::PaneModel;
 use crate::model::{PaneView, ProjectTarget, lane_for_digit};
 use crate::placing::{Place, Spot, drop_on, reorder, spot_at, to_lane};
@@ -121,7 +121,7 @@ pub struct Pane {
     rows: Cursor,
     /// The open editor's key and its focused field.
     editing: Option<String>,
-    field: usize,
+    field: Field,
 }
 
 impl Pane {
@@ -180,9 +180,12 @@ impl Pane {
         self.cursor.settle(&cards);
         self.rows.settle(&self.model.project_ids());
         // A newly opened editor starts on its first field.
-        let editing = self.model.editor().map(|e| e.key.clone());
+        let editor = self.model.editor();
+        let editing = editor.map(|e| e.key.clone());
         if editing != self.editing {
-            self.field = 0;
+            self.field = editor
+                .and_then(|e| e.fields().first().copied())
+                .unwrap_or_default();
             self.editing = editing;
         }
         // The card `m` was pressed on went, or the view left All (flipped
@@ -236,11 +239,12 @@ impl Pane {
     /// Handles a key. `q` or Ctrl-C quits, `?` shows or hides the keys and
     /// Esc hides them; while they are up nothing else answers. After `m`
     /// the next key picks a lane (Esc, or any other key, cancels). Tab
-    /// flips the view; in Projects up and down scroll a line and the card
-    /// keys rest. Up and down move
-    /// the cursor (or scroll a line when there are no cards), with shift
-    /// they reorder its card in its lane, Enter switches to it, and `d`
-    /// dismisses it from Needs you.
+    /// flips the view. Up and down move the cursor (or scroll a line when
+    /// there are none): in All over the cards, where with shift they
+    /// reorder its card in its lane, and in Projects over its rows. Enter
+    /// switches to the card, and `d` dismisses it from Needs you. In
+    /// Projects `r`, `+`, `e` and `n` file for review, open a session, edit
+    /// a project and make one; an open editor takes every key.
     pub fn handle_key(&mut self, key: KeyEvent) -> Outcome {
         if key.kind == KeyEventKind::Release {
             return Outcome::Nothing;
@@ -341,8 +345,6 @@ impl Pane {
         }
     }
 
-    /// The key after `m` on card `id`: a lane's digit places that card at
-    /// the lane's end; anything else cancels.
     /// A key in Projects with no editor open: the cursor moves between the
     /// rows; Enter switches to a card, opens a session in a project
     /// (as its "+") or opens "+ New project"'s editor.
@@ -386,6 +388,8 @@ impl Pane {
         self.rows.step(&ids, by)
     }
 
+    /// The key after `m` on card `id`: a lane's digit places that card at
+    /// the lane's end; anything else cancels.
     fn pick(&mut self, id: String, code: KeyCode) -> Outcome {
         let lane = match code {
             KeyCode::Char(c) => lane_for_digit(c),
@@ -504,6 +508,19 @@ impl Pane {
         self.scroll(by)
     }
 
+    /// The last row the cursor can rest on: All's last card, or Projects'
+    /// last row while no editor is open, so resting there scrolls to the
+    /// end and the lines under it (a Quiet heading) come into view.
+    fn last_row(&self, projects: bool) -> Option<&str> {
+        if !projects {
+            return self.model.card_ids().last().copied();
+        }
+        if self.model.editor().is_some() {
+            return None;
+        }
+        self.model.project_ids().last().copied()
+    }
+
     /// Draws when something changed or the terminal was resized; true when
     /// it drew.
     pub fn draw<B: Backend>(&mut self, terminal: &mut Terminal<B>) -> Result<bool, B::Error> {
@@ -517,7 +534,7 @@ impl Pane {
         let shown = views::Shown {
             model: &self.model,
             cursor,
-            last: !projects && cursor.is_some() && cursor == self.model.card_ids().last().copied(),
+            last: cursor.is_some() && cursor == self.last_row(projects),
             manual: self.manual,
             keys: self.keys,
             picking: self.picking.is_some(),

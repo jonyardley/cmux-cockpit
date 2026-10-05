@@ -14,6 +14,7 @@ use ratatui::text::{Line, Span};
 use super::editor;
 use super::lanes::{CARD_LEAD, card, ghost};
 use super::parts::{Edge, pill, spans_width, spread};
+use crate::editor::Field;
 use crate::model::{
     FOLDED_MARK, LANE_MARK, NEW_PROJECT_LABEL, NEW_ROW, OPEN_MARK, PLUS_MARK, ProjectHead,
     ProjectRow, QUIET_LABEL,
@@ -46,7 +47,7 @@ fn edge(on: bool) -> Edge {
 
 /// Lays out the Projects view's rows, with the cursor's row and, while
 /// the editor is open, its focused field.
-pub fn lines(rows: &[ProjectRow], inner: usize, cursor: Option<&str>, field: usize) -> Laid {
+pub fn lines(rows: &[ProjectRow], inner: usize, cursor: Option<&str>, field: Field) -> Laid {
     let mut out: Vec<Line<'static>> = Vec::new();
     let mut focus = None;
     for row in rows {

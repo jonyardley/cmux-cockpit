@@ -16,6 +16,7 @@ use ratatui::text::Line;
 use ratatui::widgets::{Block, Paragraph};
 
 use crate::cursor::{Scroll, scroll_for};
+use crate::editor::Field;
 use crate::model::{KEYS, KEYS_TITLE, PICK_TITLE, PaneModel, PaneView, pick_rows};
 use crate::placing::{Place, Spot};
 use crate::theme;
@@ -37,7 +38,7 @@ pub struct Shown<'a> {
     pub view: PaneView,
     pub drop: Option<&'a Place>,
     /// The editor's focused field, while one is open in Projects.
-    pub field: usize,
+    pub field: Field,
 }
 
 /// Where a draw put the body: its first row on screen, how far it
@@ -80,8 +81,10 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
             }
         }
         PaneView::Projects => {
-            // The cursor moves between its rows and the view keeps it in
-            // sight; the wheel scrolls a line at a time. No line is a spot.
+            // The cursor moves between its rows, with the keys or the
+            // wheel, and the view keeps it in sight: an editor's focus
+            // runs to its foot line, and the last row scrolls to the end.
+            // No line is a spot.
             let mut body: Vec<Line<'static>> = Vec::new();
             let needs = needs::lines(&shown.model.needs, inner, None);
             if !needs.lines.is_empty() {
@@ -95,7 +98,7 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
             let most = body.len().saturating_sub(height);
             let scroll = scroll_for(&Scroll {
                 focus: laid.focus.map(|r| r.start + lead..r.end + lead),
-                last: false,
+                last: shown.last,
                 manual: shown.manual,
                 total: body.len(),
                 height,

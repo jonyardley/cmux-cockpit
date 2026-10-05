@@ -14,7 +14,7 @@
    ● Two: release          Finished 10m
      #12 open  main  To review →
    ○ Two: changelog            Idle 15m
-     #14 merged  changelog-for-release
+     #14 merged
 
  ▾ ■ Other  1
    ○ Scratch                   No agent

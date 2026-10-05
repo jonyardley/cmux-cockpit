@@ -97,16 +97,18 @@ fn icon_value(e: &EditorView, inner: usize, on: bool) -> Vec<Span<'static>> {
     out
 }
 
-/// The editor's lines; `focus` is the focused field's place.
-pub fn lines(e: &EditorView, inner: usize, focus: usize) -> Laid {
+/// The editor's lines. The focus runs from the focused field to the
+/// foot line, so keeping it in sight also shows the notes under the field
+/// and why Done would not save.
+pub fn lines(e: &EditorView, inner: usize, focus: Field) -> Laid {
     let fields = e.fields();
-    let focus = focus.min(fields.len().saturating_sub(1));
+    let focus = e.resolve(focus);
     let mut out = Vec::new();
     let mut at = None;
-    for (i, f) in fields.iter().enumerate() {
-        let on = i == focus;
+    for f in &fields {
+        let on = *f == focus;
         if on {
-            at = Some(out.len()..out.len() + 1);
+            at = Some(out.len());
         }
         let line = match f {
             Field::Folder => row(FOLDER_LABEL, text(&e.root, inner, on), inner, on),
@@ -143,7 +145,7 @@ pub fn lines(e: &EditorView, inner: usize, focus: usize) -> Laid {
     };
     out.push(foot);
     Laid {
+        focus: at.map(|start| start..out.len()),
         lines: out,
-        focus: at,
     }
 }

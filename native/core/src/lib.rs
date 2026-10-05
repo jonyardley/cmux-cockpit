@@ -32,6 +32,7 @@ pub mod placement;
 pub mod pr_colors;
 pub mod pr_poll;
 pub mod project_rules;
+pub mod project_table;
 pub mod projects;
 pub mod prs;
 pub mod quiet;

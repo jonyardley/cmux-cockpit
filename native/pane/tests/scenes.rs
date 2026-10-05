@@ -1128,3 +1128,52 @@ fn a_short_pane_keeps_the_way_to_close_the_keys() {
     let screen = draw(&mut pane, &mut term);
     assert!(screen.contains("close this"), "{screen}");
 }
+
+#[test]
+fn shows_the_quiet_heading_below_the_last_row_in_a_short_projects_pane() {
+    let mut live = Live::new("projects");
+    // Quiet folded, so "+ New project" is the last row and the heading
+    // sits under it with nothing to move the cursor onto.
+    let data = live.core.data.clone().unwrap_or_default();
+    live.core.session.toggle_quiet(&data);
+    live.pane
+        .set_view_model(PaneModel::from_core(&mut live.core));
+    let rows = live.pane.model().project_ids().len();
+    for _ in 0..rows + 2 {
+        live.press(KeyCode::Down);
+    }
+    let mut term = Terminal::new(TestBackend::new(40, 10)).unwrap();
+    let screen = draw(&mut live.pane, &mut term);
+    assert!(
+        screen.contains("Quiet"),
+        "the last row scrolls to the end:\n{screen}"
+    );
+}
+
+#[test]
+fn keeps_the_editors_foot_line_in_sight_on_its_last_field() {
+    let mut live = Live::new("projects");
+    live.press(KeyCode::Char('n'));
+    for _ in 0..10 {
+        live.press(KeyCode::Down);
+    }
+    let mut term = Terminal::new(TestBackend::new(40, 10)).unwrap();
+    let screen = draw(&mut live.pane, &mut term);
+    assert!(
+        screen.contains("Type the project's folder."),
+        "why Done would not save shows under the last field:\n{screen}"
+    );
+}
+
+#[test]
+fn types_a_space_in_the_middle_of_a_folder() {
+    let mut live = Live::new("projects");
+    live.press(KeyCode::Char('n'));
+    for c in "/opt/my code".chars() {
+        live.press(KeyCode::Char(c));
+    }
+    assert_eq!(
+        live.core.session.draft_spec().root.as_deref(),
+        Some("/opt/my code")
+    );
+}

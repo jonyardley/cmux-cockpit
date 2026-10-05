@@ -5,7 +5,7 @@
 //! made here; "+ New project" opens it blank to make one from a folder.
 //! The icon search's rows and the line under them are here too.
 
-use crate::by_project::NEW_PROJECT;
+use crate::by_project::{NEW_PROJECT, folder_key};
 use crate::data::Data;
 use crate::home::{expand_home, is_home, tilde_home};
 use crate::js::utf16_len;
@@ -21,12 +21,16 @@ pub const ICONS_PER_ROW: usize = 8;
 const MAX_MATCHES: usize = 2 * ICONS_PER_ROW;
 
 /// The editor's state: the draft, whether Remove has had its first tap,
-/// and the icon search's words.
+/// the icon search's words, and the folder as typed. The draft's root is
+/// that text trimmed; the text keeps its spaces, as the sidebar's field
+/// keeps its own, so a pane that sends each key as the field's whole new
+/// text can type a space mid-path.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Editor {
     draft: ProjectSpec,
     removing: bool,
     icon_query: String,
+    folder_text: String,
 }
 
 impl Default for Editor {
@@ -40,6 +44,7 @@ impl Default for Editor {
             },
             removing: false,
             icon_query: String::new(),
+            folder_text: String::new(),
         }
     }
 }
@@ -96,7 +101,7 @@ pub fn edit_label(k: &str) -> &'static str {
 /// "" without one.
 fn root_key(p: &Project, home: Option<&str>) -> String {
     match p.root.as_deref().and_then(|r| expand_home(r, home)) {
-        Some(dir) => format!("{}/", dir.to_lowercase().trim_end_matches('/')),
+        Some(dir) => format!("{}/", folder_key(Some(&dir))),
         None => String::new(),
     }
 }
@@ -116,6 +121,7 @@ impl Session {
             None
         };
         let Some(spec) = spec else { return };
+        self.editor.folder_text = spec.root.clone().unwrap_or_default();
         self.editor.draft = spec;
         self.editor.removing = false;
         // Opening the open project again keeps the search's words.
@@ -145,6 +151,7 @@ impl Session {
         };
         self.editor.removing = false;
         self.editor.icon_query.clear();
+        self.editor.folder_text.clear();
         self.set_editing_project(Some(NEW_PROJECT));
     }
 
@@ -177,6 +184,7 @@ impl Session {
     /// An empty folder clears it, so the header loses its "+". A new
     /// project takes its name from the folder.
     pub fn set_draft_folder(&mut self, text: &str) {
+        self.editor.folder_text = text.to_string();
         let root = text.trim();
         if self.is_new_draft() {
             self.editor.draft.name = self
@@ -185,6 +193,11 @@ impl Session {
                 .unwrap_or_default();
         }
         self.editor.draft.root = (!root.is_empty()).then(|| root.to_string());
+    }
+
+    /// The folder as typed, spaces kept.
+    pub fn folder_text(&self) -> &str {
+        &self.editor.folder_text
     }
 
     /// The typed folder, "~" expanded once: missing, not a full path, or home.
@@ -212,9 +225,8 @@ impl Session {
     /// The project already holding the folder, or one the folder would
     /// swallow. Known projects count those sent but not built, and not
     /// those removed.
-    fn overlap_problem(&self, made: &Made) -> Option<String> {
+    fn overlap_problem(&self, made: &Made, known: &[Project]) -> Option<String> {
         let (d, spec) = made;
-        let known = self.known_projects();
         let owner = known
             .iter()
             .find(|p| self.matches_for(p).iter().any(|m| d.contains(m.as_str())));
@@ -238,7 +250,8 @@ impl Session {
     /// project the folder would make, or why it cannot, in words.
     fn check_folder(&self, root: &str) -> Result<Made, String> {
         let dir = self.path_problem(root)?;
-        let made = new_project(Some(&dir), &self.known_projects()).ok_or_else(|| {
+        let known = self.known_projects();
+        let made = new_project(Some(&dir), &known).ok_or_else(|| {
             "Pick a folder at least two levels deep, such as ~/dev/app.".to_string()
         })?;
         if !is_match_key(&made.0) {
@@ -246,7 +259,7 @@ impl Session {
                 "Keep the folder's path under {MAX_PROJECT_KEY} characters."
             ));
         }
-        match self.overlap_problem(&made) {
+        match self.overlap_problem(&made, &known) {
             Some(problem) => Err(problem),
             None => Ok(made),
         }
@@ -481,29 +494,131 @@ pub fn icon_matches(query: &str) -> Vec<String> {
         .collect()
 }
 
+/// The picker's rows and the line under them, from one pass over the
+/// symbols.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IconSearch {
+    pub rows: Vec<Vec<String>>,
+    pub note: String,
+}
+
+/// The picker for `query`: the common row while the search is empty,
+/// else its matches eight to a row, with the note under them.
+pub fn icon_search(current: &str, query: &str) -> IconSearch {
+    if query.trim().is_empty() {
+        return IconSearch {
+            rows: rows_of(&common_icons(current), ICONS_PER_ROW),
+            note: String::new(),
+        };
+    }
+    let all = all_matches(query);
+    let shown: Vec<String> = all
+        .iter()
+        .take(MAX_MATCHES)
+        .map(|s| s.to_string())
+        .collect();
+    let n = all.len();
+    let note = if n == 0 {
+        format!("No icons match \"{}\".", query.trim())
+    } else if n > MAX_MATCHES {
+        format!("{} more: type more of the name.", n - MAX_MATCHES)
+    } else {
+        String::new()
+    };
+    IconSearch {
+        rows: rows_of(&shown, ICONS_PER_ROW),
+        note,
+    }
+}
+
 /// The picker's rows, eight to a row: the common row while the search is
 /// empty, else its matches.
 pub fn icon_rows(current: &str, query: &str) -> Vec<Vec<String>> {
-    let icons = if query.trim().is_empty() {
-        common_icons(current)
-    } else {
-        icon_matches(query)
-    };
-    rows_of(&icons, ICONS_PER_ROW)
+    icon_search(current, query).rows
 }
 
 /// The line under the rows: none found, or how many more a longer word
 /// would reach; "" otherwise.
 pub fn search_note(query: &str) -> String {
-    if query.trim().is_empty() {
-        return String::new();
+    icon_search("", query).note
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::persist::SavedState;
+
+    fn session(home: Option<&str>) -> Session {
+        let table: Vec<Project> = serde_json::from_str(
+            r##"[{"match": "/dev/app", "name": "App", "color": "#000000", "icon": "x", "root": "~/dev/App/"}]"##,
+        )
+        .unwrap();
+        let mut s = Session::new(table, SavedState::default());
+        s.home = home.map(str::to_string);
+        s
     }
-    let n = all_matches(query).len();
-    if n == 0 {
-        return format!("No icons match \"{}\".", query.trim());
+
+    #[test]
+    fn keys_a_root_lowercased_with_one_trailing_slash() {
+        let s = session(Some("/Users/me"));
+        assert_eq!(
+            root_key(&s.projects[0], Some("/Users/me")),
+            "/users/me/dev/app/"
+        );
+        let bare = Project {
+            root: None,
+            ..s.projects[0].clone()
+        };
+        assert_eq!(root_key(&bare, None), "");
     }
-    if n > MAX_MATCHES {
-        return format!("{} more: type more of the name.", n - MAX_MATCHES);
+
+    #[test]
+    fn reads_a_tilde_folder_only_once_home_is_known() {
+        let known = session(Some("/Users/me"));
+        assert_eq!(
+            known.path_problem("~/dev/quill"),
+            Ok("/Users/me/dev/quill".to_string())
+        );
+        assert!(known.path_problem("~").is_err(), "home itself is refused");
+        let unknown = session(None);
+        assert_eq!(
+            unknown.path_problem("~/dev/quill"),
+            Err("Type the folder's full path, starting with / or ~/.".to_string())
+        );
+        assert_eq!(
+            unknown.path_problem("  "),
+            Err("Type the project's folder.".to_string())
+        );
     }
-    String::new()
+
+    #[test]
+    fn keeps_a_space_typed_mid_folder_while_the_draft_takes_it_trimmed() {
+        let mut s = session(Some("/Users/me"));
+        s.open_new_project();
+        s.set_draft_folder("/Users/me/My ");
+        assert_eq!(s.folder_text(), "/Users/me/My ");
+        assert_eq!(s.draft_spec().root.as_deref(), Some("/Users/me/My"));
+        s.set_draft_folder("/Users/me/My C");
+        assert_eq!(s.draft_spec().root.as_deref(), Some("/Users/me/My C"));
+        s.open_new_project();
+        s.open_new_project();
+        assert_eq!(s.folder_text(), "", "a new editor starts blank");
+    }
+
+    #[test]
+    fn opens_an_edit_on_the_projects_folder_as_written() {
+        let mut s = session(Some("/Users/me"));
+        s.open_editor("/dev/app");
+        assert_eq!(s.folder_text(), "~/dev/App/");
+    }
+
+    #[test]
+    fn finds_the_rows_and_the_note_in_one_search() {
+        let found = icon_search("folder.fill", "zzz");
+        assert!(found.rows.is_empty());
+        assert_eq!(found.note, "No icons match \"zzz\".");
+        let common = icon_search("folder.fill", " ");
+        assert_eq!(common.rows.len(), 1);
+        assert_eq!(common.note, "");
+    }
 }
