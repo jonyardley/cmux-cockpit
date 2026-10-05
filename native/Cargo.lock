@@ -106,10 +106,20 @@ name = "cockpit_pane"
 version = "0.0.0"
 dependencies = [
  "cockpit_core",
+ "cockpit_runner",
  "crux_core",
  "ratatui",
  "serde_json",
  "unicode-width",
+]
+
+[[package]]
+name = "cockpit_runner"
+version = "0.0.0"
+dependencies = [
+ "cockpit_core",
+ "crux_core",
+ "serde_json",
 ]
 
 [[package]]

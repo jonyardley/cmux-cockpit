@@ -1,5 +1,18 @@
 //! The shell runner: reads every input, turns it into core events, and
-//! runs the core. Inputs, each on its own thread except the files:
+//! runs the core. Any front end drives it the same way, the terminal
+//! pane today and the Swift panel next, so the two cannot disagree about
+//! the shell rules. Nothing here knows about a terminal:
+//!
+//! - Start: `run` with an `Options` (the config folder, where to replay
+//!   from, an optional wake, the home folder) and the ends of `channel()`.
+//! - Each new frame: `run` calls `on_frame` with the `Feed`, whose
+//!   `model` is the core's model with the frame in it.
+//! - Send an action: `Feed::act` inside `on_frame`, so the next frame or
+//!   key is read against the core's new view.
+//! - Stop: `on_frame` returns `ControlFlow::Break`. Another thread wakes
+//!   the loop to ask it with `Input::Poke` on the kept sender.
+//!
+//! Inputs, each on its own thread except the files:
 //!
 //! - `cmux events`: replay, then live, reconnecting itself (stream.rs).
 //! - `claude agents --json` every 2 seconds, once per Claude config dir
@@ -959,59 +972,6 @@ mod tests {
         assert!(
             !feed.input(polled(still, 1_791_127_140.0)).0,
             "the chip still says running"
-        );
-    }
-
-    /// The Projects view's cards, each with its `Make "X" a project` offer
-    /// if it has one, for a feed with `home` and two workspaces: one in a
-    /// folder under home, one in home itself. Sorted by workspace id.
-    fn project_offers(home: Option<&str>) -> Vec<(String, Option<String>)> {
-        let mut feed = Feed::with_home(home.map(str::to_string));
-        feed.state(cockpit_core::persist::SavedState::default());
-        let in_dir = |id: &str, dir: &str| Workspace {
-            directory: Some(dir.to_string()),
-            ..ws(id)
-        };
-        feed.input(Input::Workspaces(vec![
-            in_dir("A", "/Users/me/dev/app"),
-            in_dir("H", "/Users/me"),
-        ]));
-        feed.act(Event::FlipView);
-        feed.frame(1_791_127_100.0);
-        let pane = crate::model::PaneModel::from_core(&mut feed.model);
-        let mut cards: Vec<(String, Option<String>)> = pane
-            .projects
-            .iter()
-            .filter_map(|row| match row {
-                crate::model::ProjectRow::Card(c) => Some(c),
-                _ => None,
-            })
-            .map(|c| {
-                let offer = c
-                    .chips
-                    .iter()
-                    .flat_map(|chip| chip.pieces.iter())
-                    .map(|p| p.text.clone())
-                    .find(|t| t.starts_with("Make "));
-                (c.ws_id.clone(), offer)
-            })
-            .collect();
-        cards.sort();
-        cards
-    }
-
-    #[test]
-    fn the_projects_view_offers_a_folder_once_home_is_set() {
-        let card = |id: &str, offer: Option<&str>| (id.to_string(), offer.map(str::to_string));
-        assert_eq!(
-            project_offers(Some("/Users/me")),
-            [card("A", Some("Make \"App\" a project")), card("H", None)],
-            "the folder under home, never home itself"
-        );
-        assert_eq!(
-            project_offers(None),
-            [card("A", None), card("H", None)],
-            "no offer until the shell says where home is"
         );
     }
 

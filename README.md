@@ -72,8 +72,10 @@ Tested on cmux 0.64.25.
   project", as its menu's "New project from this folder" does. Those edits
   live in `config/state.json` and win over the file at build.
 - `native/`: one Cargo workspace for the native rewrite: `core` (the
-  `cockpit_core` Crux app) and `pane` (`cockpit-pane`, the cockpit in a
-  terminal, fed live by its runner; `--print` prints the view as text).
+  `cockpit_core` Crux app), `runner` (`cockpit_runner`, the live-data
+  runner any front end drives) and `pane` (`cockpit-pane`, the cockpit in
+  a terminal, a thin loop over the runner; `--print` prints the view as
+  text).
   `rust-toolchain.toml` pins the Rust toolchain.
 - `helper/` and `scripts/`: the URL handler app that saves state, the
   build, the pull request poller and the Claude Code hooks

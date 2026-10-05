@@ -18,7 +18,6 @@ pub mod editor;
 pub mod menu;
 pub mod model;
 pub mod placing;
-pub mod runner;
 pub mod text;
 pub mod theme;
 mod views;
