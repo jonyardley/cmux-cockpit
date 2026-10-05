@@ -13,10 +13,13 @@
 //!
 //! The join (join.rs) turns the first four into one frame of the core's
 //! data; a fresh frame goes in when any of them changed, and every 30
-//! seconds anyway so the ages move on. The core asks for no effects that
-//! write in R1.2; its render request is the cue to draw.
+//! seconds anyway so the ages move on. The core's render request is the
+//! cue to draw; its cmux calls and state writes go to one worker thread
+//! (outbox.rs), which carries them out in order. Jon's actions reach the
+//! core through `Feed::act`.
 
 pub mod join;
+pub mod outbox;
 pub mod parse;
 pub mod stream;
 pub mod text;
@@ -33,11 +36,12 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cockpit_core::data::Workspace;
-use cockpit_core::{Cockpit, Event, Model};
+use cockpit_core::{Cockpit, Effect, Event, Model};
 use crux_core::App;
 use serde_json::Value;
 
 use join::{Change, Join, changes_workspaces};
+use outbox::Outgoing;
 use parse::{AgentView, Groups};
 use stream::CmuxEvents;
 use watch::{Watched, read_projects, read_state};
@@ -65,6 +69,8 @@ pub enum Input {
     /// From the caller's own thread (a key press, say): call `on_frame`
     /// now, with or without a new frame.
     Poke,
+    /// A line for the log, from the outbox worker.
+    Log(String),
 }
 
 /// What `on_frame` is called with besides the feed.
@@ -90,14 +96,40 @@ pub struct Feed {
     app: Cockpit,
     pub model: Model,
     pub join: Join,
+    /// The outbox worker, while `run` drives the feed.
+    worker: Option<Sender<Outgoing>>,
+    /// Requests made with no worker to take them (a feed driven by hand,
+    /// as the tests do), oldest first.
+    pub unsent: Vec<Outgoing>,
 }
 
 impl Feed {
     fn send(&mut self, event: Event) {
         let mut cmd = self.app.update(event, &mut self.model);
-        // R1.2's only effect is a render request; the caller draws after
-        // every batch anyway.
-        for _ in cmd.effects() {}
+        for effect in cmd.effects() {
+            let out = match effect {
+                // The caller draws after every batch anyway.
+                Effect::Render(_) => continue,
+                Effect::Cmux(r) => Outgoing::Cmux(r.operation),
+                Effect::Persist(r) => Outgoing::Persist(r.operation),
+            };
+            // A worker gone (only once the run ends) keeps what it missed.
+            match &self.worker {
+                Some(w) => {
+                    if let Err(mpsc::SendError(out)) = w.send(out) {
+                        self.unsent.push(out);
+                    }
+                }
+                None => self.unsent.push(out),
+            }
+        }
+    }
+
+    /// One of Jon's actions (`Event::MoveCard`, `SwitchTo`, `Dismiss` or
+    /// `FlipView`): the core takes it at once and the cmux calls and state
+    /// writes it asks for go to the outbox worker. The caller draws after.
+    pub fn act(&mut self, event: Event) {
+        self.send(event);
     }
 
     /// Takes one input. Returns whether the join changed, whether the
@@ -120,7 +152,7 @@ impl Feed {
             Input::Agents(view) => (self.join.agents(view), false, None),
             Input::Workspaces(list) => (self.join.workspaces(list), false, None),
             Input::Groups(groups) => (self.join.groups(groups), false, None),
-            Input::Poke => (false, false, None),
+            Input::Poke | Input::Log(_) => (false, false, None),
         }
     }
 
@@ -194,6 +226,12 @@ fn output_within(program: &str, args: &[&str], limit: Duration) -> Option<Vec<u8
 
 fn output(program: &str, args: &[&str]) -> Option<Vec<u8>> {
     output_within(program, args, COMMAND_LIMIT)
+}
+
+/// Runs an outbox request's command; true when it succeeded in time.
+fn run_ok(program: &str, args: &[String]) -> bool {
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    output(program, &args).is_some()
 }
 
 fn poll_agents(tx: &Sender<Input>, stop: &AtomicBool) {
@@ -322,11 +360,23 @@ pub fn run(
         let stop = Arc::clone(&stop);
         thread::spawn(move || poll_agents(&tx, &stop));
     }
+    let mut feed = Feed::default();
+    {
+        let (out_tx, out_rx) = mpsc::channel();
+        let config = opts.config.clone();
+        let tx = tx.clone();
+        thread::spawn(move || {
+            let log = |line| {
+                let _ = tx.send(Input::Log(line));
+            };
+            outbox::perform(&out_rx, &config, run_ok, log);
+        });
+        feed.worker = Some(out_tx);
+    }
     thread::spawn(move || {
         poll_layout(&tx, &nudge_rx, WORKSPACES_EVERY, read_list, read_groups);
     });
 
-    let mut feed = Feed::default();
     let mut files = Files {
         state: Watched::new(opts.config.join("state.json")),
         projects: Watched::new(opts.config.join("projects.json")),
@@ -365,6 +415,10 @@ pub fn run(
 
         let mut poked = false;
         for input in batch {
+            if let Input::Log(line) = input {
+                log(line);
+                continue;
+            }
             poked |= matches!(input, Input::Poke);
             // A replayed status change is history, not latency.
             let live = !feed.join.health.replaying();
@@ -577,6 +631,88 @@ mod tests {
                 (LaneKey::Unsorted, None)
             ]
         );
+    }
+
+    /// A feed with Q loose and Background's group made, framed once.
+    fn moving_feed() -> Feed {
+        let mut feed = Feed::default();
+        feed.state(cockpit_core::persist::SavedState::default());
+        feed.input(Input::Workspaces(vec![
+            titled("P", "Background"),
+            titled("Q", "q"),
+        ]));
+        feed.input(Input::Groups(groups(&[group(
+            "gb",
+            "Background",
+            "P",
+            &["P"],
+        )])));
+        feed.frame(1_791_127_100.0);
+        feed
+    }
+
+    fn move_q() -> Event {
+        Event::MoveCard {
+            id: "Q".into(),
+            lane: LaneKey::Bg,
+            before: None,
+        }
+    }
+
+    fn methods(out: &[Outgoing]) -> Vec<String> {
+        out.iter()
+            .map(|o| match o {
+                Outgoing::Cmux(c) => c.method.clone(),
+                Outgoing::Persist(p) => format!("set {}", p.key),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn an_action_lands_at_once_and_its_requests_go_to_the_worker_in_order() {
+        let mut feed = moving_feed();
+        let (tx, rx) = mpsc::channel();
+        feed.worker = Some(tx);
+        feed.act(move_q());
+        assert_eq!(placed(&feed).0, vec![(LaneKey::Bg, "Q".to_string())]);
+        feed.act(Event::FlipView);
+        let sent: Vec<Outgoing> = rx.try_iter().collect();
+        assert_eq!(
+            methods(&sent),
+            ["workspace.reorder", "workspace.group.add", "set ui.mode"]
+        );
+        assert!(feed.unsent.is_empty());
+    }
+
+    #[test]
+    fn a_moved_card_holds_through_stale_layout_reads_and_a_new_state_file() {
+        let mut feed = moving_feed();
+        feed.act(move_q());
+        // The 30 second poll answers before cmux has made the move.
+        feed.input(Input::Groups(groups(&[group(
+            "gb",
+            "Background",
+            "P",
+            &["P"],
+        )])));
+        feed.state(cockpit_core::persist::SavedState::default());
+        feed.frame(1_791_127_160.0);
+        assert_eq!(placed(&feed).0, vec![(LaneKey::Bg, "Q".to_string())]);
+        assert_eq!(
+            methods(&feed.unsent),
+            ["workspace.reorder", "workspace.group.add"],
+            "the move's own requests, once"
+        );
+    }
+
+    #[test]
+    fn a_request_the_gone_worker_missed_is_kept() {
+        let mut feed = moving_feed();
+        let (tx, rx) = mpsc::channel();
+        drop(rx);
+        feed.worker = Some(tx);
+        feed.act(Event::FlipView);
+        assert_eq!(methods(&feed.unsent), ["set ui.mode"]);
     }
 
     #[test]
