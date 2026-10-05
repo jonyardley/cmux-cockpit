@@ -26,7 +26,9 @@
         { "dirty": false, "id": "br", "text": "feat-6" }
       ],
       "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "keepLabel": "Keep: for a merged PR's buttons",
       "offersClose": false,
+      "offersMergedActions": false,
       "offersPark": false,
       "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
       "reviewIsGreen": false,
@@ -58,7 +60,9 @@
         { "dirty": false, "id": "br", "text": "feat-8" }
       ],
       "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "keepLabel": "Keep: for a merged PR's buttons",
       "offersClose": false,
+      "offersMergedActions": false,
       "offersPark": false,
       "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
       "reviewIsGreen": false,
@@ -90,7 +94,9 @@
         { "dirty": false, "id": "br", "text": "feat-5" }
       ],
       "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "keepLabel": "Keep: for a merged PR's buttons",
       "offersClose": false,
+      "offersMergedActions": false,
       "offersPark": false,
       "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
       "reviewIsGreen": false,
@@ -122,7 +128,9 @@
         { "dirty": false, "id": "br", "text": "feat-2" }
       ],
       "fullLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
+      "keepLabel": "Keep: for a merged PR's buttons",
       "offersClose": false,
+      "offersMergedActions": false,
       "offersPark": false,
       "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
       "reviewIsGreen": false,
@@ -154,7 +162,9 @@
         { "dirty": false, "id": "br", "text": "feat-3" }
       ],
       "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "keepLabel": "Keep: for a merged PR's buttons",
       "offersClose": false,
+      "offersMergedActions": false,
       "offersPark": false,
       "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
       "reviewIsGreen": false,
@@ -185,7 +195,9 @@
         { "dirty": false, "id": "br", "text": "feat-7" }
       ],
       "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "keepLabel": "Keep, hide Park and Close",
       "offersClose": true,
+      "offersMergedActions": true,
       "offersPark": true,
       "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
       "reviewIsGreen": false,
@@ -217,7 +229,9 @@
         { "dirty": false, "id": "br", "text": "feat-1" }
       ],
       "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "keepLabel": "Keep: for a merged PR's buttons",
       "offersClose": false,
+      "offersMergedActions": false,
       "offersPark": false,
       "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
       "reviewIsGreen": true,
@@ -249,7 +263,9 @@
         { "dirty": false, "id": "br", "text": "feat-4" }
       ],
       "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "keepLabel": "Keep: for a merged PR's buttons",
       "offersClose": false,
+      "offersMergedActions": false,
       "offersPark": false,
       "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
       "reviewIsGreen": false,
@@ -281,7 +297,9 @@
         { "dirty": false, "id": "br", "text": "feat-9" }
       ],
       "fullLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
+      "keepLabel": "Keep: for a merged PR's buttons",
       "offersClose": false,
+      "offersMergedActions": false,
       "offersPark": false,
       "projectLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
       "reviewIsGreen": true,

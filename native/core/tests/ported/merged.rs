@@ -3,7 +3,7 @@
 //! seeded as the TypeScript seeds __STATE__, so a Keep saved before the
 //! last reload holds.
 
-use cockpit_core::data::{Data, Workspace, WorkspaceGroup};
+use cockpit_core::data::{Data, WorkspaceGroup};
 use cockpit_core::lanes::LaneKey;
 use cockpit_core::merged::MERGED_OPACITY;
 use cockpit_core::persist::SavedState;
@@ -44,13 +44,6 @@ fn setup() -> (Session, Data, Fx) {
         frame(NOW, groups(), vec![]),
         Fx::default(),
     )
-}
-
-fn pinned(w: Workspace) -> Workspace {
-    Workspace {
-        pinned: Some(true),
-        ..w
-    }
 }
 
 /// The workspaces closed, in order.
@@ -112,7 +105,7 @@ mod merged_cards {
             "closing it would take the lane's anchor"
         );
         assert!(
-            !s.offers_merged_actions(&data, Some(&pinned(ws("done")))),
+            !s.offers_merged_actions(&data, Some(&ws("done").pinned())),
             "cmux will not close a pinned one"
         );
         assert!(!s.offers_merged_actions(&data, None));
@@ -237,7 +230,7 @@ mod merged_cards {
             "Kept, Park and Close hidden"
         );
         assert_eq!(
-            s.keep_label(&data, Some(&pinned(ws("done")))),
+            s.keep_label(&data, Some(&ws("done").pinned())),
             "Keep, hide Park",
             "a pinned card shows Park alone"
         );
@@ -258,9 +251,9 @@ mod merged_cards {
     #[test]
     fn keep_hides_park_on_a_pinned_card_too() {
         let (mut s, data, _) = setup();
-        s.keep_merged(&data, Some(&pinned(ws("pinKept"))));
+        s.keep_merged(&data, Some(&ws("pinKept").pinned()));
         assert_eq!(saves(&s), ["mergeKept.pinKept=1"]);
-        assert!(!s.offers_park(&data, Some(&pinned(ws("pinKept")))));
+        assert!(!s.offers_park(&data, Some(&ws("pinKept").pinned())));
     }
 
     #[test]
@@ -268,7 +261,7 @@ mod merged_cards {
         let (mut s, data, mut fx) = setup();
         assert!(s.offers_merged_chip(&data, Some(&ws("done"))));
         assert!(
-            s.offers_merged_chip(&data, Some(&pinned(ws("done")))),
+            s.offers_merged_chip(&data, Some(&ws("done").pinned())),
             "Park alone"
         );
         let parked_busy = ws("done").group("g-parked").agents(vec![fx.agent(Working)]);
@@ -279,7 +272,7 @@ mod merged_cards {
     #[test]
     fn offers_park_alone_on_a_pinned_card_and_none_once_keep_is_tapped() {
         let (mut s, data, _) = setup();
-        let pin = pinned(ws("parks"));
+        let pin = ws("parks").pinned();
         assert!(!s.offers_merged_actions(&data, Some(&pin)));
         assert!(
             s.offers_park(&data, Some(&pin)),

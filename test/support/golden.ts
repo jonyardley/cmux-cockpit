@@ -128,7 +128,7 @@ function needs({ strip }: Model): Json {
  * Each card's chips (chipsFor with the branch, as the full and project
  * cards ask for it), what the card draws of them (cardChips) and how they
  * fit each card's line, its To review action and a merged card's Park,
- * Close and dimming, keyed by id.
+ * Close, Keep and dimming, keyed by id.
  */
 function chipsOut({ model, chips, row, merged }: Model): Record<string, Json> {
   const fit = (drawn: Chip[], w: Workspace, chars: number): Json => ({
@@ -148,7 +148,9 @@ function chipsOut({ model, chips, row, merged }: Model): Record<string, Json> {
           cardOpacity: merged.cardOpacity(w, false),
           chips: chips.chipsFor(w, true).map((c) => ({ ...c })),
           fullLine: fit(drawn, w, row.FULL_LINE_CHARS),
+          keepLabel: merged.keepLabel(w),
           offersClose: merged.offersClose(w),
+          offersMergedActions: merged.offersMergedActions(w),
           offersPark: merged.offersPark(w),
           projectLine: fit(drawn, w, row.PROJECT_LINE_CHARS),
           reviewIsGreen: chips.reviewIsGreen(w),

@@ -290,10 +290,11 @@ mod chips_for {
         chips
             .iter()
             .map(|c| match c {
-                Chip::Size { text, .. } => ("size", text.clone(), false),
-                Chip::Pr { tag, .. } => ("pr", tag.clone(), false),
-                Chip::Branch { text, dirty } => ("br", text.clone(), *dirty),
-                Chip::Port { text, .. } => ("port", text.clone(), false),
+                Chip::Pr { tag, .. } => (chip_id(c), tag.clone(), false),
+                Chip::Branch { text, dirty } => (chip_id(c), text.clone(), *dirty),
+                Chip::Size { text, .. } | Chip::Port { text, .. } => {
+                    (chip_id(c), text.clone(), false)
+                }
             })
             .collect()
     }
@@ -395,24 +396,19 @@ mod chips_for {
     }
 }
 
-/// Each chip's id, in order.
-fn ids(chips: &[Chip]) -> Vec<&'static str> {
-    chips
-        .iter()
-        .map(|c| match c {
-            Chip::Size { .. } => "size",
-            Chip::Pr { .. } => "pr",
-            Chip::Branch { .. } => "br",
-            Chip::Port { .. } => "port",
-        })
-        .collect()
+/// A chip's id, as the TypeScript names it.
+fn chip_id(c: &Chip) -> &'static str {
+    match c {
+        Chip::Size { .. } => "size",
+        Chip::Pr { .. } => "pr",
+        Chip::Branch { .. } => "br",
+        Chip::Port { .. } => "port",
+    }
 }
 
-fn pinned(w: Workspace) -> Workspace {
-    Workspace {
-        pinned: Some(true),
-        ..w
-    }
+/// Each chip's id, in order.
+fn ids(chips: &[Chip]) -> Vec<&'static str> {
+    chips.iter().map(chip_id).collect()
 }
 
 fn sized(number: f64, draft: bool, additions: f64, deletions: f64) -> PullRequest {
@@ -553,7 +549,7 @@ mod chips_fit_one_line {
             "Park and Close push it over"
         );
         assert!(
-            fits(&mut s, &d, &pinned(ws("x").pr(merged).ports(&ports))),
+            fits(&mut s, &d, &ws("x").pr(merged).ports(&ports).pinned()),
             "a pinned card offers Park alone"
         );
     }

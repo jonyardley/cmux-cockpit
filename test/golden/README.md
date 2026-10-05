@@ -137,6 +137,8 @@ What the model computes, at the scene's clock.
 | `chips.<id>.showsChipsRow` | boolean | Whether the card has a chips row: a drawn chip, To review, or Park or Close. |
 | `chips.<id>.offersPark` | boolean | Whether a merged card offers Park. |
 | `chips.<id>.offersClose` | boolean | Whether a merged card offers Close. |
+| `chips.<id>.offersMergedActions` | boolean | Whether a merged card offers Keep: not kept for this PR, not an anchor, not pinned. |
+| `chips.<id>.keepLabel` | string | The card menu's Keep item, named by what tapping it would do. |
 | `chips.<id>.cardOpacity` | number | How faint the card sits when not selected or dragged: 0.6 for a merged card nothing in which wants Jon, else 1. |
 | `chips.<id>.fullLine` | object | How `cardChips` fit a full card's line (`FULL_LINE_CHARS`): `fitsOneLine`, `splits` (over two lines) and `secondLineFits` (Park and Close stay on the split's second line). |
 | `chips.<id>.projectLine` | object | The same on a project card's line (`PROJECT_LINE_CHARS`). |
