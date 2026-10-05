@@ -8,6 +8,8 @@ state file.
   word and colour token the pane draws. The core's view model names
   workspaces by id, and a card's title, status and detail come from the
   core's session reads, so the pane builds from the whole model.
+- `src/placing.rs` works out where `m`, shift with Up or Down, and a
+  drag would place a card: a lane and the card it lands above.
 - `src/cursor.rs` holds the card cursor and how far the lanes scroll to
   keep it in sight; `src/text.rs` fits words into columns, only ever
   cutting between words.
@@ -23,10 +25,20 @@ state file.
 
 | Key | Does |
 | --- | --- |
-| Up, Down | Move the cursor between cards |
+| Up, Down, the wheel | Move the cursor between the Needs you rows and the cards |
+| Shift with Up or Down | Reorder the card in its lane |
+| `m`, then 1 to 5 | Move the card to the end of that lane (Esc cancels) |
+| Drag a card | Move it to a lane, or above another card |
+| Enter | Switch to the card's workspace |
+| `d` | Dismiss the card from Needs you |
+| Tab | Flip between All and Projects (Projects is a placeholder for now) |
 | `?` | Show or hide the keys |
-| Esc | Hide the keys |
+| Esc | Hide the keys, or drop a drag |
 | `q`, Ctrl-C | Quit |
+
+The pane only asks for these: each comes back to the runner as an
+`Outcome::Act`, and nothing happens on screen in cmux until the runner
+hands it to the core.
 
 ## Opening it in a cmux split
 

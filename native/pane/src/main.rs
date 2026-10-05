@@ -2,7 +2,8 @@
 //! runner.
 //!
 //! With no options it draws the All view in the terminal (up and down
-//! move between cards, `?` shows the keys, `q` quits). `--print` runs
+//! move between cards, `?` shows the keys, `q` quits), with the mouse
+//! captured so a card can be dragged. `--print` runs
 //! headless: it prints the view model as text whenever it
 //! changes, and logs on stderr how long each status change took to reach
 //! it. `--once` prints once replay has caught up and every poll has
@@ -21,7 +22,8 @@ use std::thread;
 
 use cockpit_pane::runner::{self, Feed, Input, Latency, Options, text};
 use cockpit_pane::{Outcome, Pane, PaneModel};
-use ratatui::crossterm::event::{self, Event};
+use ratatui::crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event};
+use ratatui::crossterm::execute;
 
 /// In --once mode, the longest replay may take before the view prints anyway.
 const ONCE_LIMIT: Duration = Duration::from_secs(10);
@@ -159,6 +161,27 @@ fn print_follow(opts: &Options) {
     );
 }
 
+/// Holds the mouse captured, so the pane sees presses and drags, and lets
+/// it go when dropped: on a clean exit, a failed draw or an early return.
+/// A panic restores the screen through ratatui's hook but leaves the
+/// mouse captured; the pane's logic does not panic.
+struct Mouse;
+
+impl Mouse {
+    fn capture() -> Result<Mouse, String> {
+        execute!(std::io::stdout(), EnableMouseCapture)
+            .map(|()| Mouse)
+            .map_err(|e| format!("no mouse: {e}"))
+    }
+}
+
+impl Drop for Mouse {
+    fn drop(&mut self) {
+        // Nothing to do if it fails: the terminal is going away.
+        let _ = execute!(std::io::stdout(), DisableMouseCapture);
+    }
+}
+
 /// The terminal view: draws each new frame, and hands every key and
 /// resize to the pane. A thread reads the terminal and pokes the runner,
 /// so a key is answered at once without the runner waking on a timer.
@@ -175,6 +198,13 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
         }
     });
     let mut term = ratatui::try_init().map_err(|e| format!("no terminal: {e}"))?;
+    let mouse = match Mouse::capture() {
+        Ok(m) => m,
+        Err(e) => {
+            ratatui::restore();
+            return Err(e);
+        }
+    };
     let mut pane = Pane::new(PaneModel::default());
     let mut logged = Vec::new();
     let mut failed = None;
@@ -186,8 +216,13 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
                 pane.set_view_model(PaneModel::from_core(&mut feed.model));
             }
             for e in keys_rx.try_iter() {
-                if pane.handle_event(&e) == Outcome::Quit {
-                    return ControlFlow::Break(());
+                match pane.handle_event(&e) {
+                    Outcome::Quit => return ControlFlow::Break(()),
+                    // STITCH: hand the action to the runner here once the
+                    // core takes card actions (#209, #210). Until then the
+                    // pane asks and nothing happens.
+                    Outcome::Act(_action) => {}
+                    Outcome::Nothing | Outcome::Redraw => {}
                 }
             }
             match pane.draw(&mut term) {
@@ -200,6 +235,7 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
         },
         |line| logged.push(line),
     );
+    drop(mouse);
     ratatui::restore();
     failed.map_or(Ok(logged), Err)
 }
