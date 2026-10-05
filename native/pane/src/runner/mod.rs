@@ -30,10 +30,8 @@ pub mod stream;
 pub mod text;
 pub mod watch;
 
-use std::io::Read;
 use std::ops::ControlFlow;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -42,7 +40,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cockpit_core::data::Workspace;
 use cockpit_core::pr_poll::PrPolled;
-use cockpit_core::{Cockpit, Effect, Event, Model};
+use cockpit_core::{Cockpit, Effect, Event, Model, PrAsk};
 use crux_core::App;
 use serde_json::Value;
 
@@ -59,6 +57,8 @@ pub const FILES_EVERY: Duration = Duration::from_secs(2);
 pub const CLOCK_EVERY: Duration = Duration::from_secs(30);
 /// The longest a poll's command may run before it is killed.
 pub const COMMAND_LIMIT: Duration = Duration::from_secs(10);
+/// The soonest the runner wakes for a PR ask falling due.
+pub const PR_DUE_MIN: Duration = Duration::from_secs(1);
 /// While a replay streams in, a frame waits for this much quiet, so a
 /// burst builds one frame rather than one per batch.
 pub const REPLAY_SETTLE: Duration = Duration::from_millis(300);
@@ -112,9 +112,9 @@ pub struct Feed {
     /// as the tests do), oldest first.
     pub unsent: Vec<Outgoing>,
     /// Where the core's PR asks go, while `run` drives the feed.
-    asker: Option<Sender<String>>,
+    asker: Option<Sender<PrAsk>>,
     /// PR asks made with no asker to take them, oldest first.
-    pub unasked: Vec<String>,
+    pub unasked: Vec<PrAsk>,
 }
 
 impl Feed {
@@ -131,7 +131,7 @@ impl Feed {
                     continue;
                 }
                 Effect::PrPoll(r) => {
-                    self.ask(r.operation.directory);
+                    self.ask(r.operation);
                     continue;
                 }
                 Effect::Cmux(r) => Outgoing::Cmux(r.operation),
@@ -150,14 +150,14 @@ impl Feed {
         render
     }
 
-    fn ask(&mut self, directory: String) {
+    fn ask(&mut self, ask: PrAsk) {
         match &self.asker {
             Some(a) => {
-                if let Err(mpsc::SendError(d)) = a.send(directory) {
+                if let Err(mpsc::SendError(d)) = a.send(ask) {
                     self.unasked.push(d);
                 }
             }
-            None => self.unasked.push(directory),
+            None => self.unasked.push(ask),
         }
     }
 
@@ -256,30 +256,11 @@ pub fn now_epoch() -> f64 {
 
 /// Runs a command and returns its output when it succeeded within
 /// `limit`; one that hangs is killed, so a stuck cmux cannot stop a poll
-/// for good. The output is read on its own thread, so a large one never
-/// fills the pipe.
+/// for good (pr_ask::ran_within, which the PR poll shares).
 fn output_within(program: &str, args: &[&str], limit: Duration) -> Option<Vec<u8>> {
-    let mut child = Command::new(program)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .ok()?;
-    let mut stdout = child.stdout.take()?;
-    let (done_tx, done_rx) = mpsc::channel();
-    thread::spawn(move || {
-        let mut buf = Vec::new();
-        let read = stdout.read_to_end(&mut buf).map(|_| buf);
-        let _ = done_tx.send(read);
-    });
-    let read = done_rx.recv_timeout(limit);
-    if read.is_err() {
-        let _ = child.kill();
-    }
-    let status = child.wait().ok()?;
-    let out = read.ok()?.ok()?;
-    status.success().then_some(out)
+    let args: Vec<String> = args.iter().map(|a| (*a).to_string()).collect();
+    let ran = pr_ask::ran_within(program, &args, None, &[], limit);
+    (ran.status == Some(0)).then(|| ran.stdout.into_bytes())
 }
 
 fn output(program: &str, args: &[&str]) -> Option<Vec<u8>> {
@@ -388,6 +369,15 @@ impl Files {
     }
 }
 
+/// When the core's next PR ask falls due, at least a second from now so
+/// a due ask the core has no room for yet never spins the loop.
+fn pr_due_at(feed: &Feed) -> Option<Instant> {
+    let now = now_epoch();
+    let due = feed.model.session.pr_poll.next_due(now)?;
+    let wait = (due - now).max(PR_DUE_MIN.as_secs_f64());
+    Some(Instant::now() + Duration::from_secs_f64(wait.min(CLOCK_EVERY.as_secs_f64())))
+}
+
 /// The runner's input channel. A caller keeps a clone of the sender to
 /// send `Input::Poke`, and hands both ends to `run`.
 pub fn channel() -> (Sender<Input>, Receiver<Input>) {
@@ -464,9 +454,12 @@ pub fn run(
     let mut last_input = start;
 
     loop {
+        // A PR ask falling due brings a frame then, not at the next clock tick.
+        let pr_due = pr_due_at(&feed);
         let due = wake_due.map_or(files_due.min(clock_due), |w| {
             w.min(files_due).min(clock_due)
         });
+        let due = pr_due.map_or(due, |p| p.min(due));
         let mut wait = due.saturating_duration_since(Instant::now());
         if pending && feed.join.health.replaying() {
             let settled = (last_input + REPLAY_SETTLE).saturating_duration_since(Instant::now());
@@ -509,7 +502,7 @@ pub fn run(
             files_due = now + FILES_EVERY;
             pending |= files.check(&mut feed, &mut log);
         }
-        pending |= now >= clock_due;
+        pending |= now >= clock_due || pr_due.is_some_and(|p| now >= p);
         let woke = wake_due.is_some_and(|w| now >= w);
         if woke {
             wake_due = opts.wake.map(|w| now + w);
@@ -815,7 +808,8 @@ mod tests {
         feed.frame(1_791_127_100.0);
         assert!(feed.unasked.is_empty(), "off until the runner turns it on");
         feed.poll_prs();
-        assert_eq!(feed.unasked, ["/repo"]);
+        let asked: Vec<&str> = feed.unasked.iter().map(|a| a.directory.as_str()).collect();
+        assert_eq!(asked, ["/repo"]);
 
         let polled = |checks: &str, epoch| {
             let pr = format!(
@@ -824,6 +818,7 @@ mod tests {
             );
             Input::PrPolled(Box::new(PrPolled {
                 directory: "/repo".into(),
+                asked: 1_791_127_100.0,
                 answer: PollAnswer::Answered {
                     branch: "feat".into(),
                     pr: serde_json::from_str(&pr).ok(),

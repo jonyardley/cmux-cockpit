@@ -13,6 +13,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use cockpit_core::PrAsk;
 use cockpit_core::pr_poll::{PollAnswer, PrPolled, Ran, answer, gh_args, git_args};
 
 use super::{Input, now_epoch};
@@ -21,6 +22,8 @@ use super::{Input, now_epoch};
 pub const LIMIT: Duration = Duration::from_secs(15);
 /// How often a running command is checked on.
 const CHECK_EVERY: Duration = Duration::from_millis(50);
+/// What every poll command runs with, as the TypeScript's spawn sets it.
+pub const QUIET: [(&str, &str); 2] = [("CMUX_QUIET", "1"), ("GH_PROMPT_DISABLED", "1")];
 /// How long the output may take to drain once the command has ended.
 const DRAIN: Duration = Duration::from_secs(1);
 
@@ -62,16 +65,22 @@ fn wait_within(child: &mut Child, limit: Duration) -> Option<i32> {
     }
 }
 
-/// Runs a command with gh's prompts off, as the TypeScript's spawn does,
-/// and gives back what it said. A program that is not there is `missing`.
-pub fn ran_within(program: &str, args: &[String], cwd: Option<&str>, limit: Duration) -> Ran {
+/// Runs a command with `env` added, killed past `limit`, and gives back
+/// what it said. A program that is not there is `missing`. The runner's
+/// other commands run through it too (output_within).
+pub fn ran_within(
+    program: &str,
+    args: &[String],
+    cwd: Option<&str>,
+    env: &[(&str, &str)],
+    limit: Duration,
+) -> Ran {
     let mut cmd = Command::new(program);
     cmd.args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .env("CMUX_QUIET", "1")
-        .env("GH_PROMPT_DISABLED", "1");
+        .envs(env.iter().copied());
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
@@ -101,9 +110,9 @@ pub fn ran_within(program: &str, args: &[String], cwd: Option<&str>, limit: Dura
 pub fn ask(directory: &str) -> PollAnswer {
     let git = tool("git", &["/opt/homebrew/bin/git", "/usr/bin/git"]);
     let gh = tool("gh", &["/opt/homebrew/bin/gh", "/usr/local/bin/gh"]);
-    let branch = ran_within(&git, &git_args(directory), Some(directory), LIMIT);
+    let branch = ran_within(&git, &git_args(directory), Some(directory), &QUIET, LIMIT);
     answer(&branch, |b| {
-        ran_within(&gh, &gh_args(b), Some(directory), LIMIT)
+        ran_within(&gh, &gh_args(b), Some(directory), &QUIET, LIMIT)
     })
 }
 
@@ -117,14 +126,15 @@ pub fn log_line(a: &PollAnswer) -> String {
 /// Takes each directory from `asks` and answers it on a thread of its
 /// own (the core keeps at most two out), sending the answer and its log
 /// line back as inputs. Ends once the feed lets go of `asks`.
-pub fn serve(asks: &Receiver<String>, tx: &Sender<Input>, ask: fn(&str) -> PollAnswer) {
-    for directory in asks {
+pub fn serve(asks: &Receiver<PrAsk>, tx: &Sender<Input>, ask: fn(&str) -> PollAnswer) {
+    for PrAsk { directory, asked } in asks {
         let tx = tx.clone();
         thread::spawn(move || {
             let answer = ask(&directory);
             let _ = tx.send(Input::Log(log_line(&answer)));
             let polled = PrPolled {
                 directory,
+                asked,
                 answer,
                 epoch: now_epoch(),
             };
@@ -145,16 +155,18 @@ mod tests {
             "sleep",
             &["5".to_string()],
             None,
+            &[],
             Duration::from_millis(100),
         );
         assert_eq!(hung.status, None);
         assert!(start.elapsed() < Duration::from_secs(3));
-        let gone = ran_within("no-such-tool-here", &[], None, LIMIT);
+        let gone = ran_within("no-such-tool-here", &[], None, &[], LIMIT);
         assert!(gone.missing);
         let said = ran_within(
             "sh",
             &["-c".into(), "echo out; echo err >&2; exit 3".into()],
             None,
+            &[],
             LIMIT,
         );
         assert_eq!(
@@ -177,7 +189,12 @@ mod tests {
     fn each_ask_comes_back_as_its_answer() {
         let (ask_tx, ask_rx) = mpsc::channel();
         let (tx, rx) = mpsc::channel();
-        ask_tx.send("/a".to_string()).unwrap();
+        ask_tx
+            .send(PrAsk {
+                directory: "/a".into(),
+                asked: 5.0,
+            })
+            .unwrap();
         drop(ask_tx);
         serve(&ask_rx, &tx, |_| PollAnswer::GitFailed);
         let mut got = Vec::new();
@@ -186,7 +203,7 @@ mod tests {
         }
         assert!(matches!(&got[0], Input::Log(l) if l == "pr-poll git failed"));
         assert!(
-            matches!(&got[1], Input::PrPolled(p) if p.directory == "/a" && p.answer == PollAnswer::GitFailed)
+            matches!(&got[1], Input::PrPolled(p) if p.directory == "/a" && p.asked == 5.0 && p.answer == PollAnswer::GitFailed)
         );
     }
 }

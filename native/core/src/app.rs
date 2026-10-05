@@ -180,9 +180,11 @@ impl Operation for StateSet {
 /// `git` and `gh` there off the frame thread, as scripts/pr-poll.ts does
 /// (pr_poll::git_args, pr_poll::gh_args), reads them with
 /// pr_poll::answer, and sends the result back as `Event::PrPolled`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PrAsk {
     pub directory: String,
+    /// When it was asked, in epoch seconds: the answer carries it back.
+    pub asked: f64,
 }
 
 impl Operation for PrAsk {
@@ -298,7 +300,13 @@ impl Model {
         };
         let due = self.session.pr_poll.due(data, now);
         due.into_iter()
-            .map(|directory| Command::notify_shell(PrAsk { directory }).into())
+            .map(|directory| {
+                let ask = PrAsk {
+                    directory,
+                    asked: now,
+                };
+                Command::notify_shell(ask).into()
+            })
             .collect()
     }
 
@@ -319,6 +327,8 @@ impl Model {
         let mut out = self.asks(Some(now));
         if moved {
             self.rebuild();
+            // A rebuild can file a card whose lane group has appeared.
+            out.extend(self.session.take_outbox().into_iter().map(send_out));
             out.push(render());
         }
         Command::all(out)
@@ -344,7 +354,11 @@ impl App for Cockpit {
     fn update(&self, event: Event, model: &mut Model) -> Command<Effect, Event> {
         match event {
             Event::Data(data) => model.data = Some(data),
-            Event::State(saved) => model.session.reseed(*saved),
+            Event::State(saved) => {
+                let s = &mut model.session;
+                s.pr_poll.file_read(&saved.prs, model.data.as_ref());
+                s.reseed(*saved);
+            }
             Event::Projects(projects) => model.session.set_projects(projects),
             Event::Refresh => {}
             Event::PrPollOn => model.session.pr_poll.turn_on(),
@@ -456,6 +470,7 @@ mod tests {
             "status": "open", "branch": "feat", "checks": checks });
         Event::PrPolled(Box::new(PrPolled {
             directory: "/a".into(),
+            asked: epoch - 1.0,
             answer: crate::pr_poll::PollAnswer::Answered {
                 branch: "feat".into(),
                 pr: Some(serde_json::from_value(pr).unwrap()),
@@ -518,5 +533,21 @@ mod tests {
         let _ = app.update(found(&[("build", "fail")], 101.0), &mut model);
         let _ = app.update(Event::State(Box::default()), &mut model);
         assert_eq!(model.session.saved.prs.len(), 2);
+
+        // The TypeScript poll then writes something newer for one of them.
+        let newer = r#"{"prs": {"a": {"number": 4, "url": "https://github.com/o/r/pull/4",
+            "status": "merged", "branch": "feat"}}}"#;
+        let file = SavedState::from_json(newer).unwrap();
+        let _ = app.update(Event::State(Box::new(file)), &mut model);
+        let status = model.session.saved.prs.get("a").map(|p| p.status);
+        assert_eq!(
+            status,
+            Some(crate::data::PrStatus::Merged),
+            "the file is fresher"
+        );
+        assert!(
+            !model.session.saved.prs.contains_key("b"),
+            "the file has none for b"
+        );
     }
 }

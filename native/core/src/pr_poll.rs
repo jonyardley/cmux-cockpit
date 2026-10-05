@@ -24,10 +24,7 @@ mod gh;
 
 use std::collections::BTreeMap;
 
-pub use gh::{
-    Branch, MAX_CHECKS, PR_FIELDS, Ran, answer, branch_from_git, checks_from, clean_title, gh_args,
-    gh_outcome, git_args, pick_pr,
-};
+pub use gh::{Ran, answer, gh_args, git_args};
 
 use crate::data::{Data, PrStatus, PullRequest, Workspace};
 use crate::js::non_empty;
@@ -102,6 +99,9 @@ impl PollAnswer {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PrPolled {
     pub directory: String,
+    /// When the ask it answers was made (`PrAsk::asked`), so a late
+    /// answer to an ask already made again is told from the current one.
+    pub asked: f64,
     pub answer: PollAnswer,
     /// When the shell had the answer, in epoch seconds.
     pub epoch: f64,
@@ -185,6 +185,8 @@ struct Target {
     waiting: bool,
     /// Failed asks in a row.
     failures: u32,
+    /// Its repo has no GitHub remote: it waits the cap, stirred or not.
+    no_remote: bool,
     /// The wait after the last answer while nothing stirs.
     rest: f64,
     /// Its workspaces as last seen, to tell when they stir.
@@ -207,7 +209,7 @@ impl Target {
         if self.waiting {
             return at + ANSWER_SECS;
         }
-        if self.stirred && self.failures == 0 {
+        if self.stirred && self.failures == 0 && !self.no_remote {
             return at + FLOOR_SECS;
         }
         at + self.rest.max(FLOOR_SECS)
@@ -223,30 +225,40 @@ impl Target {
         match answer {
             PollAnswer::NoBranch => self.settle(Some(None)),
             PollAnswer::Answered { pr, .. } => self.settle(Some(pr)),
-            PollAnswer::Failed {
-                why: GhFailure::Repo,
-                ..
-            } => {
-                self.failures = 0;
-                self.rest = BACKOFF_CAP_SECS;
+            PollAnswer::Failed { branch, why } => {
+                // As findPrs: what was known stays only while on its branch.
+                if matches!(&self.known, Some(Some(pr)) if pr.branch != branch) {
+                    self.known = None;
+                }
+                if why == GhFailure::Repo {
+                    self.failures = 0;
+                    self.no_remote = true;
+                    self.rest = BACKOFF_CAP_SECS;
+                } else {
+                    self.fail();
+                }
             }
-            PollAnswer::Failed { .. } | PollAnswer::GitFailed => {
-                self.failures = self.failures.saturating_add(1);
-                self.rest = backoff(self.failures);
-            }
+            PollAnswer::GitFailed => self.fail(),
         }
+    }
+
+    fn fail(&mut self) {
+        self.failures = self.failures.saturating_add(1);
+        self.no_remote = false;
+        self.rest = backoff(self.failures);
     }
 
     fn settle(&mut self, known: Option<Option<SavedPr>>) {
         self.known = known;
         self.failures = 0;
+        self.no_remote = false;
         self.rest = if self.lively() { FLOOR_SECS } else { IDLE_SECS };
     }
 }
 
 /// The wait after `failures` failed asks in a row: FLOOR_SECS doubled
 /// each time, up to BACKOFF_CAP_SECS.
-pub fn backoff(failures: u32) -> f64 {
+fn backoff(failures: u32) -> f64 {
     let doubled = FLOOR_SECS * 2f64.powi(i32::try_from(failures).unwrap_or(i32::MAX));
     doubled.min(BACKOFF_CAP_SECS)
 }
@@ -270,6 +282,9 @@ fn stir_of(data: &Data, w: &Workspace) -> String {
 pub struct PrPoll {
     on: bool,
     targets: BTreeMap<String, Target>,
+    /// The state file's `prs` as last read, to tell when the TypeScript
+    /// poll wrote something newer than an answer held here.
+    file: BTreeMap<String, SavedPr>,
 }
 
 impl PrPoll {
@@ -278,12 +293,9 @@ impl PrPoll {
         self.on = true;
     }
 
-    pub fn is_on(&self) -> bool {
-        self.on
-    }
-
     /// Notes what each directory's workspaces show now, dropping the
-    /// directories no workspace is in any more.
+    /// directories no workspace is in any more once no ask for them is
+    /// out, so a frame that briefly lacks one never asks it twice.
     fn observe(&mut self, data: &Data) {
         let mut seen: BTreeMap<&str, String> = BTreeMap::new();
         for w in data.workspace_list() {
@@ -292,7 +304,7 @@ impl PrPoll {
             }
         }
         self.targets
-            .retain(|dir, _| seen.contains_key(dir.as_str()));
+            .retain(|dir, t| t.waiting || seen.contains_key(dir.as_str()));
         for (dir, stir) in seen {
             let t = self.targets.entry(dir.to_string()).or_default();
             if t.stir != stir {
@@ -332,11 +344,43 @@ impl PrPoll {
         picked
     }
 
-    /// Takes an answer. One for a directory no workspace is in any more is dropped.
+    /// The soonest a directory falls due, when there is room to ask, so
+    /// the shell can bring a frame then rather than wait for its clock.
+    pub fn next_due(&self, now: f64) -> Option<f64> {
+        let out = self.targets.values().filter(|t| t.in_flight(now)).count();
+        if !self.on || out >= MAX_IN_FLIGHT {
+            return None;
+        }
+        self.targets
+            .values()
+            .filter(|t| !t.in_flight(now))
+            .map(Target::due_at)
+            .min_by(f64::total_cmp)
+    }
+
+    /// Takes an answer. One for a directory no workspace is in any more,
+    /// or a late one to an ask already made again, is dropped.
     pub fn record(&mut self, polled: PrPolled) {
-        if let Some(t) = self.targets.get_mut(&polled.directory) {
+        if let Some(t) = self.targets.get_mut(&polled.directory)
+            && t.asked == Some(polled.asked)
+        {
             t.record(polled.answer);
         }
+    }
+
+    /// A new state file: where it changed a workspace's PR since it was
+    /// last read, the TypeScript poll saw it later than any answer held
+    /// here, so its directory's answer is let go until the next one.
+    pub fn file_read(&mut self, file: &BTreeMap<String, SavedPr>, data: Option<&Data>) {
+        for w in data.map(Data::workspace_list).unwrap_or_default() {
+            if file.get(&w.id) == self.file.get(&w.id) {
+                continue;
+            }
+            if let Some(t) = dir_of(w).and_then(|d| self.targets.get_mut(d)) {
+                t.known = None;
+            }
+        }
+        self.file = file.clone();
     }
 
     /// Makes the answers over the saved `prs` map, for each workspace in
@@ -403,25 +447,28 @@ mod tests {
         }
     }
 
-    fn answered(dir: &str, pr: Option<SavedPr>, epoch: f64) -> PrPolled {
+    /// The answer to the ask made at `asked`.
+    fn answered(dir: &str, pr: Option<SavedPr>, asked: f64) -> PrPolled {
         PrPolled {
             directory: dir.into(),
+            asked,
             answer: PollAnswer::Answered {
                 branch: "feat".into(),
                 pr,
             },
-            epoch,
+            epoch: asked,
         }
     }
 
-    fn failed(dir: &str, why: GhFailure, epoch: f64) -> PrPolled {
+    fn failed(dir: &str, why: GhFailure, asked: f64) -> PrPolled {
         PrPolled {
             directory: dir.into(),
+            asked,
             answer: PollAnswer::Failed {
                 branch: "feat".into(),
                 why,
             },
-            epoch,
+            epoch: asked,
         }
     }
 
@@ -458,7 +505,7 @@ mod tests {
         let d = data(vec![ws("a", "/a")]);
         let mut p = on();
         assert_eq!(p.due(&d, 0.0), ["/a"]);
-        p.record(answered("/a", Some(pr(&["pending"])), 1.0));
+        p.record(answered("/a", Some(pr(&["pending"])), 0.0));
         // Checks running and the workspace stirring: still the floor.
         let mut busy = ws("a", "/a");
         busy.branch = Some("feat".into());
@@ -472,13 +519,13 @@ mod tests {
         let d = data(vec![ws("a", "/a")]);
         let mut p = on();
         assert_eq!(p.due(&d, 0.0), ["/a"]);
-        p.record(answered("/a", Some(pr(&["pass"])), 1.0));
+        p.record(answered("/a", Some(pr(&["pass"])), 0.0));
         assert!(
             p.due(&d, 299.0).is_empty(),
             "nothing moved and nothing runs"
         );
         assert_eq!(p.due(&d, 300.0), ["/a"]);
-        p.record(answered("/a", None, 301.0));
+        p.record(answered("/a", None, 300.0));
 
         let mut turned = ws("a", "/a");
         turned.agents = Some(vec![Some(Agent {
@@ -495,7 +542,7 @@ mod tests {
         let d = data(vec![ws("a", "/a")]);
         let mut p = on();
         let _ = p.due(&d, 0.0);
-        p.record(answered("/a", Some(pr(&["pass", "pending"])), 1.0));
+        p.record(answered("/a", Some(pr(&["pass", "pending"])), 0.0));
         assert_eq!(p.due(&d, 30.0), ["/a"]);
     }
 
@@ -527,13 +574,76 @@ mod tests {
     }
 
     #[test]
-    fn a_repo_with_no_github_remote_waits_the_cap() {
+    fn a_repo_with_no_github_remote_waits_the_cap_even_when_stirred() {
         let d = data(vec![ws("a", "/a")]);
         let mut p = on();
         let _ = p.due(&d, 0.0);
         p.record(failed("/a", GhFailure::Repo, 0.0));
-        assert!(p.due(&d, 599.0).is_empty());
-        assert_eq!(p.due(&d, 600.0), ["/a"]);
+        let mut busy = ws("a", "/a");
+        busy.branch = Some("feat".into());
+        let stirred = data(vec![busy]);
+        assert!(p.due(&stirred, 30.0).is_empty());
+        assert!(p.due(&stirred, 599.0).is_empty());
+        assert_eq!(p.due(&stirred, 600.0), ["/a"]);
+    }
+
+    #[test]
+    fn a_failure_on_another_branch_lets_the_held_pr_go() {
+        let d = data(vec![ws("a", "/a")]);
+        let mut p = on();
+        let _ = p.due(&d, 0.0);
+        p.record(answered("/a", Some(pr(&[])), 0.0));
+        let _ = p.due(&d, 300.0);
+        let mut moved = failed("/a", GhFailure::SignedOut, 300.0);
+        moved.answer = PollAnswer::Failed {
+            branch: "feat2".into(),
+            why: GhFailure::SignedOut,
+        };
+        p.record(moved);
+        let mut prs = BTreeMap::new();
+        prs.insert("a".to_string(), pr(&["fail"]));
+        p.overlay(&mut prs, &d);
+        assert_eq!(
+            prs.get("a").map(|p| p.checks.as_ref().map(Vec::len)),
+            Some(Some(1)),
+            "the state file's own entry shows"
+        );
+    }
+
+    #[test]
+    fn a_late_answer_to_an_ask_made_again_is_dropped() {
+        let d = data(vec![ws("a", "/a")]);
+        let mut p = on();
+        let _ = p.due(&d, 0.0);
+        assert_eq!(p.due(&d, 60.0), ["/a"], "the first was lost");
+        p.record(answered("/a", Some(pr(&[])), 0.0));
+        assert!(p.due(&d, 61.0).is_empty(), "the second is still out");
+        let mut prs = BTreeMap::new();
+        p.overlay(&mut prs, &d);
+        assert!(prs.is_empty());
+    }
+
+    #[test]
+    fn a_frame_that_briefly_lacks_a_directory_never_asks_it_twice() {
+        let d = data(vec![ws("a", "/a")]);
+        let mut p = on();
+        let _ = p.due(&d, 0.0);
+        assert!(p.due(&data(vec![]), 1.0).is_empty());
+        assert!(p.due(&d, 2.0).is_empty(), "the first ask is still out");
+        p.record(answered("/a", None, 0.0));
+        assert!(p.due(&data(vec![]), 3.0).is_empty());
+        assert_eq!(p.due(&d, 4.0), ["/a"], "gone, then new");
+    }
+
+    #[test]
+    fn says_when_the_next_ask_falls_due_while_there_is_room() {
+        let d = data(vec![ws("a", "/a"), ws("b", "/b")]);
+        let mut p = on();
+        assert_eq!(p.next_due(0.0), None, "nothing seen yet");
+        let _ = p.due(&d, 0.0);
+        assert_eq!(p.next_due(1.0), None, "no room: two are out");
+        p.record(answered("/a", Some(pr(&["pending"])), 0.0));
+        assert_eq!(p.next_due(1.0), Some(30.0));
     }
 
     #[test]
@@ -542,7 +652,7 @@ mod tests {
         let mut p = on();
         assert_eq!(p.due(&d, 0.0), ["/a", "/b"]);
         assert!(p.due(&d, 10.0).is_empty());
-        p.record(answered("/a", None, 11.0));
+        p.record(answered("/a", None, 0.0));
         assert_eq!(p.due(&d, 11.0), ["/c"], "the one never asked goes first");
         assert_eq!(p.due(&d, 60.0), ["/b"], "its answer never came");
     }
@@ -552,7 +662,7 @@ mod tests {
         let d = data(vec![ws("a", "/a"), ws("b", "/a"), ws("c", "/c")]);
         let mut p = on();
         let _ = p.due(&d, 0.0);
-        p.record(answered("/a", Some(pr(&[])), 1.0));
+        p.record(answered("/a", Some(pr(&[])), 0.0));
         let mut prs = BTreeMap::new();
         prs.insert("c".to_string(), pr(&["fail"]));
         p.overlay(&mut prs, &d);
@@ -571,6 +681,7 @@ mod tests {
         let _ = p.due(&d, 2000.0);
         p.record(PrPolled {
             directory: "/a".into(),
+            asked: 2000.0,
             answer: PollAnswer::NoBranch,
             epoch: 2000.0,
         });
