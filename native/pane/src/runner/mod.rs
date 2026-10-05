@@ -71,6 +71,8 @@ pub enum Input {
     Poke,
     /// A line for the log, from the outbox worker.
     Log(String),
+    /// From the outbox worker: a cmux call about this workspace failed.
+    CmuxFailed(String),
 }
 
 /// What `on_frame` is called with besides the feed.
@@ -128,8 +130,17 @@ impl Feed {
     /// One of Jon's actions (`Event::MoveCard`, `SwitchTo`, `Dismiss` or
     /// `FlipView`): the core takes it at once and the cmux calls and state
     /// writes it asks for go to the outbox worker. The caller draws after.
+    /// Any other event is ignored: the feed's inputs bring those.
     pub fn act(&mut self, event: Event) {
-        self.send(event);
+        if matches!(
+            event,
+            Event::MoveCard { .. }
+                | Event::SwitchTo { .. }
+                | Event::Dismiss { .. }
+                | Event::FlipView
+        ) {
+            self.send(event);
+        }
     }
 
     /// Takes one input. Returns whether the join changed, whether the
@@ -152,6 +163,11 @@ impl Feed {
             Input::Agents(view) => (self.join.agents(view), false, None),
             Input::Workspaces(list) => (self.join.workspaces(list), false, None),
             Input::Groups(groups) => (self.join.groups(groups), false, None),
+            Input::CmuxFailed(id) => {
+                self.send(Event::CmuxFailed { id });
+                (true, false, None)
+            }
+            // `run` logs these itself before they reach the feed.
             Input::Poke | Input::Log(_) => (false, false, None),
         }
     }
@@ -361,18 +377,23 @@ pub fn run(
         thread::spawn(move || poll_agents(&tx, &stop));
     }
     let mut feed = Feed::default();
-    {
+    let worker = {
         let (out_tx, out_rx) = mpsc::channel();
         let config = opts.config.clone();
         let tx = tx.clone();
-        thread::spawn(move || {
-            let log = |line| {
-                let _ = tx.send(Input::Log(line));
-            };
-            outbox::perform(&out_rx, &config, run_ok, log);
-        });
         feed.worker = Some(out_tx);
-    }
+        thread::spawn(move || {
+            let reports = outbox::Reports {
+                log: |line| {
+                    let _ = tx.send(Input::Log(line));
+                },
+                failed: |id| {
+                    let _ = tx.send(Input::CmuxFailed(id));
+                },
+            };
+            outbox::perform(&out_rx, &config, run_ok, &reports);
+        })
+    };
     thread::spawn(move || {
         poll_layout(&tx, &nudge_rx, WORKSPACES_EVERY, read_list, read_groups);
     });
@@ -409,7 +430,9 @@ pub fn run(
             Err(RecvTimeoutError::Disconnected) => break,
         }
         batch.extend(rx.try_iter());
-        if !batch.is_empty() {
+        // A log line from the worker is not news, so it never holds off a
+        // replay's quiet.
+        if batch.iter().any(|i| !matches!(i, Input::Log(_))) {
             last_input = Instant::now();
         }
 
@@ -463,6 +486,11 @@ pub fn run(
     }
     stop.store(true, Ordering::SeqCst);
     events.shut_down();
+    // Let the worker finish what was asked, so a quit straight after a move
+    // never splits a reorder from the group join behind it. Each request is
+    // bounded by COMMAND_LIMIT.
+    feed.worker = None;
+    let _ = worker.join();
 }
 
 #[cfg(test)]
@@ -703,6 +731,26 @@ mod tests {
             ["workspace.reorder", "workspace.group.add"],
             "the move's own requests, once"
         );
+    }
+
+    #[test]
+    fn a_failed_cmux_call_lets_the_card_go_back_to_where_cmux_has_it() {
+        let mut feed = moving_feed();
+        feed.act(move_q());
+        let (changed, _, _) = feed.input(Input::CmuxFailed("Q".into()));
+        assert!(changed, "the view must draw again");
+        feed.frame(1_791_127_101.0);
+        assert_eq!(placed(&feed).0, vec![(LaneKey::Unsorted, "Q".to_string())]);
+    }
+
+    #[test]
+    fn act_takes_only_jons_actions() {
+        let mut feed = moving_feed();
+        feed.act(Event::State(Box::default()));
+        feed.act(Event::Refresh);
+        assert!(feed.unsent.is_empty());
+        feed.act(Event::SwitchTo { id: "Q".into() });
+        assert_eq!(methods(&feed.unsent), ["workspace.select"]);
     }
 
     #[test]

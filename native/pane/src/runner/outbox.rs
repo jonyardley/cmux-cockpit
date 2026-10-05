@@ -18,6 +18,7 @@ use std::path::Path;
 use std::sync::mpsc::Receiver;
 
 use cockpit_core::app::{CmuxCall, StateSet};
+use cockpit_core::session::Param;
 
 /// A request the core made of the shell.
 #[derive(Debug, Clone, PartialEq)]
@@ -70,15 +71,32 @@ pub fn read_token(config: &Path) -> Option<String> {
         .map(|t| t.trim().to_string())
 }
 
+/// The workspace a cmux call is about, from its `workspace_id` param.
+fn workspace_of(o: &Outgoing) -> Option<&str> {
+    let Outgoing::Cmux(call) = o else { return None };
+    call.params.iter().find_map(|(k, v)| match v {
+        Param::Str(id) if k == "workspace_id" => Some(id.as_str()),
+        _ => None,
+    })
+}
+
+/// Where the worker reports back.
+pub struct Reports<L: Fn(String), F: Fn(String)> {
+    /// A line for each request that could not go or failed.
+    pub log: L,
+    /// The workspace of each cmux call about one that failed.
+    pub failed: F,
+}
+
 /// Carries out each request as it arrives, in order, until the sending
-/// side goes. `exec` runs a program and says whether it succeeded; `log`
-/// takes a line for each one that could not go or failed.
-pub fn perform(
+/// side goes. `exec` runs a program and says whether it succeeded.
+pub fn perform<L: Fn(String), F: Fn(String)>(
     rx: &Receiver<Outgoing>,
     config: &Path,
     exec: impl Fn(&str, &[String]) -> bool,
-    log: impl Fn(String),
+    reports: &Reports<L, F>,
 ) {
+    let log = &reports.log;
     while let Ok(o) = rx.recv() {
         let token = match o {
             Outgoing::Persist(_) => read_token(config),
@@ -88,6 +106,9 @@ pub fn perform(
             Ok((program, args)) => {
                 if !exec(&program, &args) {
                     log(format!("{} failed or timed out", describe(&o)));
+                    if let Some(id) = workspace_of(&o) {
+                        (reports.failed)(id.to_string());
+                    }
                 }
             }
             Err(why) => log(why),
@@ -98,7 +119,6 @@ pub fn perform(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cockpit_core::session::Param;
     use serde_json::json;
     use std::cell::RefCell;
     use std::sync::mpsc;
@@ -157,29 +177,35 @@ mod tests {
     }
 
     #[test]
-    fn performs_each_request_in_the_order_asked_and_logs_the_failures() {
+    fn performs_each_request_in_the_order_asked_and_reports_the_failures() {
         let dir = std::env::temp_dir().join(format!("cockpit-outbox-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("url-token"), "t0k\n").unwrap();
         let (tx, rx) = mpsc::channel();
         tx.send(reorder()).unwrap();
         tx.send(dismissal()).unwrap();
+        let select = CmuxCall {
+            method: "workspace.select".into(),
+            params: vec![("workspace_id".into(), Param::Str("b".into()))],
+        };
+        tx.send(Outgoing::Cmux(select)).unwrap();
         drop(tx);
         let ran = RefCell::new(Vec::new());
         let logged = RefCell::new(Vec::new());
-        perform(
-            &rx,
-            &dir,
-            |program, args| {
-                ran.borrow_mut()
-                    .push(format!("{program} {}", args.join(" ")));
-                program == "cmux"
-            },
-            |line| logged.borrow_mut().push(line),
-        );
+        let failed = RefCell::new(Vec::new());
+        let reports = Reports {
+            log: |line| logged.borrow_mut().push(line),
+            failed: |id| failed.borrow_mut().push(id),
+        };
+        let exec = |program: &str, args: &[String]| {
+            ran.borrow_mut()
+                .push(format!("{program} {}", args.join(" ")));
+            program == "cmux" && args[1] != "workspace.select"
+        };
+        perform(&rx, &dir, exec, &reports);
         fs::remove_dir_all(&dir).unwrap();
         let ran = ran.into_inner();
-        assert_eq!(ran.len(), 2);
+        assert_eq!(ran.len(), 3);
         assert!(ran[0].starts_with("cmux rpc workspace.reorder"));
         assert!(
             ran[1].ends_with("&token=t0k"),
@@ -188,7 +214,15 @@ mod tests {
         );
         assert_eq!(
             logged.into_inner(),
-            [r#"state write "dismissed.c" failed or timed out"#]
+            [
+                r#"state write "dismissed.c" failed or timed out"#,
+                "cmux rpc workspace.select failed or timed out"
+            ]
+        );
+        assert_eq!(
+            failed.into_inner(),
+            ["b"],
+            "a failed cmux call names its workspace"
         );
     }
 }
