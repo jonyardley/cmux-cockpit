@@ -200,13 +200,19 @@ public func place(
 func dock(_ window: CmuxWindow, screens: Screens, width: Double) -> Placement {
     let frame = toAppKit(window.frame, primaryScreenHeight: screens.primaryHeight)
     let outside = Rect(x: frame.minX - width, y: frame.minY, width: width, height: frame.height)
-    let screen = screens.frames
-        .filter { frame.overlapArea($0) > 0 }
-        .max { frame.overlapArea($0) < frame.overlapArea($1) }
+    let screen = screenFor(frame, screens: screens)
     let roomOutside = screen.map { outside.minX >= $0.minX } ?? true
     if !window.isFullScreen && roomOutside {
         return .docked(frame: outside, side: .outside, raised: false)
     }
     let inside = Rect(x: frame.minX, y: frame.minY, width: min(width, frame.width), height: frame.height)
     return .docked(frame: inside, side: .inside, raised: window.isFullScreen || window.isActive)
+}
+
+/// The visible frame of the screen an AppKit space frame mostly sits on,
+/// or nil when it is on none of them.
+func screenFor(_ frame: Rect, screens: Screens) -> Rect? {
+    screens.frames
+        .filter { frame.overlapArea($0) > 0 }
+        .max { frame.overlapArea($0) < frame.overlapArea($1) }
 }

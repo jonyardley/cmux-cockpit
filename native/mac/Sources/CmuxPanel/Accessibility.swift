@@ -6,6 +6,8 @@ import PanelLayout
 enum AXFailure: Error, Equatable {
     case attribute(String, AXError)
     case wrongType(String)
+    /// A set the window turned down, or one that landed somewhere else.
+    case refused(String, AXError)
 }
 
 /// Thin, failure-modelled reads of Accessibility attributes.
@@ -59,6 +61,39 @@ enum AX {
                 return .success(Rect(x: origin.x, y: origin.y, width: extent.width, height: extent.height))
             }
         }
+    }
+
+    /// Sets a window's frame, top-left and y down, and returns the frame it
+    /// reports afterwards. Narrowing sizes first and widening moves first,
+    /// so the window never pokes past its far edge part way through.
+    static func setFrame(_ window: AXUIElement, to target: Rect, from current: Rect) -> Result<Rect, AXFailure> {
+        let steps = target.width < current.width
+            ? [setSize(window, target), setPosition(window, target)]
+            : [setPosition(window, target), setSize(window, target)]
+        for step in steps {
+            if case let .failure(failure) = step() { return .failure(failure) }
+        }
+        return frame(window)
+    }
+
+    private static func setPosition(_ window: AXUIElement, _ target: Rect) -> () -> Result<Void, AXFailure> {
+        {
+            var point = CGPoint(x: target.x, y: target.y)
+            return set(window, kAXPositionAttribute, AXValueCreate(.cgPoint, &point))
+        }
+    }
+
+    private static func setSize(_ window: AXUIElement, _ target: Rect) -> () -> Result<Void, AXFailure> {
+        {
+            var size = CGSize(width: target.width, height: target.height)
+            return set(window, kAXSizeAttribute, AXValueCreate(.cgSize, &size))
+        }
+    }
+
+    private static func set(_ element: AXUIElement, _ name: String, _ value: AXValue?) -> Result<Void, AXFailure> {
+        guard let value else { return .failure(.wrongType(name)) }
+        let error = AXUIElementSetAttributeValue(element, name as CFString, value)
+        return error == .success ? .success(()) : .failure(.refused(name, error))
     }
 
     private static func axValue(_ element: AXUIElement, _ name: String) -> Result<AXValue, AXFailure> {
