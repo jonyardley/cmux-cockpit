@@ -6,7 +6,8 @@ hides when cmux is hidden, minimised, on another Space or quits, and comes
 back with it. The content is a placeholder for now.
 
 - `Sources/PanelLayout/`: the pure rules. Given cmux's window frame, the
-  screens and cmux's state, it returns the panel's frame or why it hides.
+  screens and cmux's state, it returns the panel's frame or why it hides,
+  and when and where to push cmux to make room (`Push.swift`).
   No AppKit, no Accessibility; `swift test` covers it.
 - `Sources/CmuxPanel/`: the thin glue. Finds cmux (`com.cmuxterm.app`)
   and its main window by Accessibility, watches it, and moves the panel.
@@ -66,12 +67,24 @@ again, or the switch shows on while the permission does nothing.
 ## How it decides
 
 - Docks outside cmux's left edge, same top and height, when the screen
-  cmux is on has room clear of the Dock; otherwise (cmux at the screen's
-  left edge, or full screen) it overlaps cmux's left strip. When it overlaps, it floats above
-  cmux while cmux is the frontmost app, so a click inside cmux cannot
-  cover it, and drops back to the normal level when another app comes to
-  the front. In full screen it always floats, since nothing else shares
-  that Space.
+  cmux is on has room clear of the Dock.
+- When it has no room (cmux at or near the screen's left edge, say
+  maximised), it makes room: cmux's main window moves right and narrows
+  by the shortfall, keeping its right edge, so the panel fits flush to its
+  left. It waits until cmux's frame has been still for half a second with
+  no mouse button held, so a drag is never fought, and pushes again
+  whenever cmux is dragged back to the edge or maximised. It never pushes
+  cmux narrower than 640 points or off the screen, and stops asking for a
+  frame cmux refused until cmux moves.
+- On quit (Quit, `pkill -x CmuxPanel` or Control C) it gives cmux back the
+  frame it had before the latest push, but only if cmux still has the
+  frame the push left it at; a move or resize since is left alone.
+- Where it cannot push (full screen, too narrow, or cmux refused the
+  frame) it overlaps cmux's left strip, as before. When it overlaps, it
+  floats above cmux while cmux is the frontmost app, so a click inside
+  cmux cannot cover it, and drops back to the normal level when another
+  app comes to the front. In full screen it always floats, since nothing
+  else shares that Space.
 - Hides when cmux quits, is hidden, has no standard window, its main
   window is minimised, or that window is not on the Space being shown
   (checked against the window list, which needs no Screen Recording

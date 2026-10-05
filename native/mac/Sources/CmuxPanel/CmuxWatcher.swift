@@ -15,6 +15,8 @@ final class CmuxWatcher {
     private var observedPID: pid_t?
     private var tokens: [NSObjectProtocol] = []
     private var timer: Timer?
+    /// The main window the last read found, for the push to move.
+    private(set) var mainWindow: AXUIElement?
 
     init(onChange: @escaping () -> Void) {
         self.onChange = onChange
@@ -61,6 +63,7 @@ final class CmuxWatcher {
 
     /// Reads cmux's state as the pure layout module wants it.
     func read() -> CmuxState {
+        mainWindow = nil
         guard let app = Self.runningCmux() else { return .notRunning }
         if app.isHidden { return .hidden }
         let element = AXUIElementCreateApplication(app.processIdentifier)
@@ -83,6 +86,7 @@ final class CmuxWatcher {
         }
         guard let index = pickMainWindow(read.map(\.1)) else { return .noWindow }
         let (window, candidate) = read[index]
+        mainWindow = window
         return .window(CmuxWindow(
             frame: candidate.frame,
             isMinimised: (try? AX.bool(window, kAXMinimizedAttribute).get()) ?? false,
