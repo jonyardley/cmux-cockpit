@@ -107,9 +107,10 @@ PR with the words alone.
 ## Rust in native/
 
 `native/` is one Cargo workspace: `core` (the `cockpit_core` Crux app)
-and `spike` (the R1.0 throwaway). `rust-toolchain.toml` at the root pins
-the toolchain, and `npm run rust` (part of `npm run check`) runs rustfmt,
-clippy with warnings denied, and the tests, from `native/`.
+and `pane` (`cockpit_pane`, the terminal pane and its live-data
+runner). `rust-toolchain.toml` at the root pins the toolchain, and
+`npm run rust` (part of `npm run check`) runs rustfmt, clippy with
+warnings denied, and the tests, from `native/`.
 
 - No `unwrap`, `expect` or `panic!` in core logic: model the failure
   and return it. Tests may unwrap. Clippy enforces this in every crate

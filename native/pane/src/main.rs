@@ -5,7 +5,7 @@
 //! move between cards, `?` shows the keys, `q` quits). `--print` runs
 //! headless: it prints the view model as text whenever it
 //! changes, and logs on stderr how long each status change took to reach
-//! it. `--once` prints once replay has caught up and both polls have
+//! it. `--once` prints once replay has caught up and every poll has
 //! answered, then exits. `--config <dir>` reads state.json and
 //! projects.json from another folder; `--after <seq>` replays from a
 //! later sequence.
@@ -106,8 +106,9 @@ fn clock() -> String {
     )
 }
 
-/// `--print --once`: prints once replay has caught up and both polls
-/// have answered, or after `ONCE_LIMIT` whatever it has.
+/// `--print --once`: prints once replay has caught up and every poll
+/// (Agent View, the workspace list and the groups) has answered, or after
+/// `ONCE_LIMIT` whatever it has.
 fn print_once(opts: &Options) {
     let started = Instant::now();
     runner::run(
@@ -121,13 +122,27 @@ fn print_once(opts: &Options) {
             let note = if ready {
                 format!("replayed in {:.1}s", started.elapsed().as_secs_f32())
             } else {
-                format!("NOT fully replayed after {}s", ONCE_LIMIT.as_secs())
+                not_ready(feed)
             };
             println!("{}{note}", text::render(feed));
             ControlFlow::Break(())
         },
         |line| eprintln!("cockpit-pane: {line}"),
     );
+}
+
+/// Why `--print --once` printed before it was ready: whichever of the
+/// replay and the polls had not answered within `ONCE_LIMIT`.
+fn not_ready(feed: &runner::Feed) -> String {
+    let mut waiting = feed.join.missing();
+    if !feed.join.health.caught_up() {
+        waiting.insert(0, "replay");
+    }
+    format!(
+        "NOT ready after {}s, no answer from: {}",
+        ONCE_LIMIT.as_secs(),
+        waiting.join(", ")
+    )
 }
 
 /// `--print`: reprints the text on every change, with timings on stderr.

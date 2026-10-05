@@ -1,10 +1,11 @@
 //! Reads what the runner's commands print: `claude agents --json`,
-//! `cmux --json workspace list`, and the timestamps on `cmux events`.
+//! `cmux --json workspace list`, `cmux rpc workspace.group.list`, and the
+//! timestamps on `cmux events`.
 //! Plain functions over bytes and JSON, so the tests need no processes.
 
 use std::collections::HashMap;
 
-use cockpit_core::data::Workspace;
+use cockpit_core::data::{Workspace, WorkspaceGroup};
 use serde_json::Value;
 
 /// Claude's own view of its sessions, from `claude agents --json`.
@@ -31,6 +32,12 @@ pub fn agents(out: &[u8]) -> Option<AgentView> {
         }
     }
     Some(view)
+}
+
+/// The window a reply answers for (`window:1`), from its `window_ref`.
+pub fn window_ref(out: &[u8]) -> Option<String> {
+    let v: Value = serde_json::from_slice(out).ok()?;
+    v["window_ref"].as_str().map(str::to_string)
 }
 
 /// `cmux --json workspace list` as the core's workspaces, in cmux's
@@ -62,6 +69,49 @@ fn workspace(w: &Value) -> Option<Workspace> {
         ports: Some(ports),
         ..Workspace::default()
     })
+}
+
+/// cmux's workspace groups, from `cmux rpc workspace.group.list`.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Groups {
+    /// Each group as the sidebar's `data.groups()` has it, in cmux's order.
+    pub list: Vec<WorkspaceGroup>,
+    /// Workspace id to the id of the group listing it as a member, which
+    /// the sidebar's data has as each workspace's `group`. A workspace two
+    /// groups list keeps the first.
+    pub member_of: HashMap<String, String>,
+}
+
+/// `cmux rpc workspace.group.list` as the core's groups and each
+/// workspace's group, or None when the reply has no list, or answers for
+/// a window other than `window` (when given). A group with no id is
+/// skipped, as are its members.
+pub fn groups(out: &[u8], window: Option<&str>) -> Option<Groups> {
+    let v: Value = serde_json::from_slice(out).ok()?;
+    if window.is_some_and(|w| v["window_ref"].as_str() != Some(w)) {
+        return None;
+    }
+    let list = v["groups"].as_array()?;
+    let mut groups = Groups::default();
+    for g in list {
+        let Some(id) = g["id"].as_str() else {
+            continue;
+        };
+        let members = g["member_workspace_ids"].as_array().into_iter().flatten();
+        for ws in members.filter_map(Value::as_str) {
+            groups
+                .member_of
+                .entry(ws.to_string())
+                .or_insert_with(|| id.to_string());
+        }
+        groups.list.push(WorkspaceGroup {
+            id: id.to_string(),
+            name: g["name"].as_str().map(str::to_string),
+            anchor_id: g["anchor_workspace_id"].as_str().map(str::to_string),
+            collapsed: g["is_collapsed"].as_bool(),
+        });
+    }
+    Some(groups)
 }
 
 /// Epoch seconds from cmux's `2026-10-04T15:17:37.889Z`; None for any
@@ -151,6 +201,77 @@ mod tests {
         assert_eq!(a.ports, Some(vec![3000.0]));
         assert_eq!(list[1].title, None);
         assert_eq!(workspaces(b"{}"), None);
+    }
+
+    /// A real `cmux rpc workspace.group.list` reply, captured 2026-10-04,
+    /// less its `idempotency_key`s, which gitleaks reads as secrets. They
+    /// repeat each `external_id`, and the parser reads neither.
+    const GROUP_LIST: &[u8] = include_bytes!("fixtures/workspace-group-list.json");
+
+    #[test]
+    fn maps_a_captured_group_list_to_the_sidebars_groups() {
+        let g = groups(GROUP_LIST, Some("window:1")).unwrap();
+        assert_eq!(window_ref(GROUP_LIST).as_deref(), Some("window:1"));
+        let names: Vec<_> = g.list.iter().filter_map(|g| g.name.as_deref()).collect();
+        assert_eq!(
+            names,
+            ["Main activity", "Background", "For review", "Parked"]
+        );
+        let main = &g.list[0];
+        assert_eq!(main.id, "889939BC-2C0F-4361-9C96-AA3246A61413");
+        assert_eq!(
+            main.anchor_id.as_deref(),
+            Some("D42ABC88-C998-4828-A567-3DA107F32601")
+        );
+        assert_eq!(main.collapsed, Some(false));
+        assert_eq!(g.member_of.len(), 6);
+        let group_of = |ws: &str| g.member_of.get(ws).map(String::as_str);
+        assert_eq!(
+            group_of("E6302E5A-02BA-472A-8CFB-831601964AC8"),
+            Some(main.id.as_str())
+        );
+        assert_eq!(
+            group_of("06FC078B-815B-4BF7-8222-DA1DB68899C6"),
+            Some("2E5C7EC0-B9BA-4365-85C0-60CAEDB3B3FA"),
+            "a Parked card"
+        );
+        assert_eq!(
+            group_of("F9725AB1-2F85-4BCB-84DD-A3BB998B4007"),
+            Some("2E5C7EC0-B9BA-4365-85C0-60CAEDB3B3FA"),
+            "an anchor is a member of its own group"
+        );
+    }
+
+    #[test]
+    fn a_group_list_keeps_what_it_can_read() {
+        let out = br#"{"groups": [
+            {"name": "no id, skipped", "member_workspace_ids": ["X"]},
+            {"id": "g1", "name": 7, "is_collapsed": "yes", "member_workspace_ids": ["A", 3]},
+            {"id": "g2", "member_workspace_ids": ["A", "B"]},
+            {"id": "g3"}
+        ]}"#;
+        let g = groups(out, None).unwrap();
+        let ids: Vec<_> = g.list.iter().map(|g| g.id.as_str()).collect();
+        assert_eq!(ids, ["g1", "g2", "g3"]);
+        assert_eq!(
+            (g.list[0].name.as_deref(), g.list[0].collapsed),
+            (None, None)
+        );
+        assert_eq!(g.member_of.get("A").map(String::as_str), Some("g1"));
+        assert_eq!(g.member_of.get("B").map(String::as_str), Some("g2"));
+        assert_eq!(g.member_of.get("X"), None);
+        assert_eq!(groups(br#"{"groups": []}"#, None), Some(Groups::default()));
+        assert_eq!(groups(b"{}", None), None);
+        assert_eq!(groups(b"Error: method not found", None), None);
+    }
+
+    #[test]
+    fn a_group_list_for_another_window_reads_as_none() {
+        assert_eq!(groups(GROUP_LIST, Some("window:2")), None);
+        let unmarked = br#"{"groups": []}"#;
+        assert_eq!(groups(unmarked, Some("window:1")), None);
+        assert_eq!(groups(unmarked, None), Some(Groups::default()));
+        assert_eq!(window_ref(b"{}"), None);
     }
 
     #[test]
