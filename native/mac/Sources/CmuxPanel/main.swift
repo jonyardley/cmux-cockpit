@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import ApplicationServices
 import PanelLayout
 
@@ -32,6 +33,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var watcher: CmuxWatcher?
     private var permission: Permission = .missing
     private var activation: NSObjectProtocol?
+    private var screens = currentScreens()
+    /// cmux's window as the last full read found it, the base that fast
+    /// tracking moves.
+    private var lastWindow: CmuxWindow?
+    private var tracker = FrameTracker()
+    /// Ticks at the display's refresh rate while cmux moves; paused
+    /// otherwise.
+    private var displayLink: CADisplayLink?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // A cmux that stops answering would otherwise hold each read for
@@ -39,7 +48,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // the timeout for this process's reads only.
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), 0.5)
         permission = accessibilityPermission()
-        let watcher = CmuxWatcher { [weak self] in self?.refresh() }
+        let watcher = CmuxWatcher(
+            onChange: { [weak self] in self?.refresh() },
+            onMove: { [weak self] in self?.startTracking() }
+        )
         self.watcher = watcher
         activation = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -56,15 +68,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Granted or revoked while running: picked up on the next poll, no
         // relaunch, so turning the switch off brings the strip back.
         permission = AXIsProcessTrusted() ? .granted : .missing
-        let screens = currentScreens()
+        screens = currentScreens()
         let cmux = permission == .granted ? (watcher?.read() ?? .notRunning) : .notRunning
         var cmuxNumber: Int?
-        if case let .window(window) = cmux { cmuxNumber = window.windowNumber }
+        lastWindow = nil
+        if case let .window(window) = cmux {
+            cmuxNumber = window.windowNumber
+            lastWindow = window
+        }
+        // The poll seeing a change (a divider drag sends no notification)
+        // starts fast tracking as well.
+        let now = ProcessInfo.processInfo.systemUptime
+        if tracker.observe(frame: lastWindow?.frame, sidebar: lastWindow?.sidebar, now: now) {
+            startTracking()
+        }
         panel.apply(
             place(permission: permission, cmux: cmux, screens: screens),
             frontToBack: watcher?.frontToBack ?? [],
             cmuxNumber: cmuxNumber
         )
+    }
+
+    /// A move or resize under way: follow cmux on every display refresh.
+    private func startTracking() {
+        tracker.kick(now: ProcessInfo.processInfo.systemUptime)
+        if displayLink == nil {
+            let link = panel.displayLink(target: self, selector: #selector(tick))
+            link.add(to: .main, forMode: .common)
+            displayLink = link
+        }
+        displayLink?.isPaused = false
+    }
+
+    /// One display refresh while tracking: cmux's frame from the window
+    /// list (that one window only) and the sidebar's frame from its cached
+    /// element, then the panel moved to match. Once the tracker settles,
+    /// the link pauses and a full refresh puts everything else right.
+    @objc private func tick() {
+        guard let base = lastWindow, let number = base.windowNumber else { return settle() }
+        let frame = windowBounds(number)
+        let sidebar = watcher?.sidebarElement.flatMap { try? AX.frame($0).get() }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard tracker.observe(frame: frame, sidebar: sidebar, now: now), let frame else { return settle() }
+        let moved = base.following(frame: frame, sidebar: sidebar)
+        panel.follow(place(permission: permission, cmux: .window(moved), screens: screens))
+    }
+
+    private func settle() {
+        displayLink?.isPaused = true
+        refresh()
     }
 }
 

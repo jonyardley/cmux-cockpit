@@ -9,7 +9,8 @@ placeholder for now.
 
 - `Sources/PanelLayout/`: the pure rules. Given cmux's window frame, the
   sidebar and cmux's state, it returns the panel's frame or why it hides,
-  and whether the panel needs ordering above cmux's window. No AppKit, no
+  whether the panel needs ordering above cmux's window, and when to
+  follow cmux at the display's refresh rate. No AppKit, no
   Accessibility; `swift test` covers it.
 - `Sources/CmuxPanel/`: the thin glue. Finds cmux (`com.cmuxterm.app`)
   its main window and that window's sidebar by Accessibility, watches it,
@@ -108,6 +109,15 @@ again, or the switch shows on while the permission does nothing.
   window is minimised, or that window is not on the Space being shown
   (no on-screen window in the window list covers nine tenths of it, which
   needs no Screen Recording permission).
-- Accessibility notifications move it promptly; a 0.25 second poll
-  catches what they miss, such as full screen animations, Space changes
-  and the divider being dragged.
+- While cmux moves or resizes, the panel follows at the display's
+  refresh rate: a display link reads cmux's frame from the window list
+  (that one window only, which is cheap) and the sidebar's frame from
+  its cached Accessibility element on every tick, and moves the panel to
+  match. Tracking starts on an Accessibility moved or resized
+  notification, or when the poll sees the frame or the sidebar change,
+  and stops once both have been still for 0.3 seconds (`Tracking.swift`
+  holds the rule). A sidebar divider drag sends no notification, so it
+  starts with the poll: up to a quarter of a second of lag, then smooth.
+- Otherwise Accessibility notifications refresh it promptly; a 0.25
+  second poll catches what they miss, such as full screen animations
+  and Space changes.

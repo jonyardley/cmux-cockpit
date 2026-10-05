@@ -87,6 +87,14 @@ final class PanelWindow: NSPanel {
         shown = placement.isShown
     }
 
+    /// Moves a docked panel mid drag, at the display's refresh rate. Only
+    /// the frame: the full refresh that follows handles level, corner and
+    /// ordering.
+    func follow(_ placement: Placement) {
+        guard shown, case let .docked(frame, _, _) = placement else { return }
+        move(to: frame)
+    }
+
     private func move(to frame: Rect) {
         let target = NSRect(x: frame.x, y: frame.y, width: frame.width, height: frame.height)
         if self.frame != target { setFrame(target, display: true) }
