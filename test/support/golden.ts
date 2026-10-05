@@ -4,7 +4,7 @@
 // (test/golden/<scene>.input.json: the cmux data, the saved state and the
 // project table) and what the TypeScript model computes from it
 // (test/golden/<scene>.json: lanes and placement, Needs you, lane entries,
-// Projects entries and Next). Plain values only, no view tree; workspaces
+// Projects entries and headers, each card's chips, and Next). Plain values only, no view tree; workspaces
 // are named by id. Keys are sorted at every level and the clock is the
 // scene's fixed EPOCH, so a file changes only when the model's answer does.
 // Biome lays the text out, as it does every JSON file here. Any drift
@@ -54,7 +54,7 @@ export function stableJson(v: unknown, file: string): string {
 // Read once per call, after the sidebar loaded: a static import here would
 // load the model before the test seeds the saved state it reads at import.
 async function cockpit() {
-  const [lanes, model, entries, strip, next, byProject, status, state] = await Promise.all([
+  const [lanes, model, entries, strip, next, byProject, status, state, chips] = await Promise.all([
     import("../../src/cockpit/lanes.ts"),
     import("../../src/cockpit/model.ts"),
     import("../../src/cockpit/lane-entries.ts"),
@@ -63,8 +63,9 @@ async function cockpit() {
     import("../../src/cockpit/by-project.ts"),
     import("../../src/cockpit/status.ts"),
     import("../../src/cockpit/state.ts"),
+    import("../../src/cockpit/card-chips.ts"),
   ]);
-  return { lanes, model, entries, strip, next, byProject, status, state };
+  return { lanes, model, entries, strip, next, byProject, status, state, chips };
 }
 
 // Each module kept apart, so a name two of them export cannot shadow the other.
@@ -120,6 +121,41 @@ function needs({ strip }: Model): Json {
   };
 }
 
+/**
+ * Each card's chips (chipsFor with the branch, as the full and project
+ * cards ask for it) and its To review action, keyed by id.
+ */
+function chipsOut({ model, chips }: Model): Record<string, Json> {
+  return Object.fromEntries(
+    model.cards().map((w) => [
+      w.id,
+      {
+        canFileForReview: chips.canFileForReview(w),
+        // Copied to plain objects, which Json takes and the Chip interfaces are not.
+        chips: chips.chipsFor(w, true).map((c) => ({ ...c })),
+        reviewIsGreen: chips.reviewIsGreen(w),
+      },
+    ]),
+  );
+}
+
+/** Each project the Projects view heads, busy or quiet: its name, the cards it counts, and its "+". */
+function projectHeaders({ byProject }: Model): Record<string, Json> {
+  const keys = byProject
+    .projectEntries()
+    .flatMap((e) => (e.kind === "header" || e.kind === "quietRow" ? [e.project] : []));
+  return Object.fromEntries(
+    keys.map((k) => [
+      k,
+      {
+        canOpen: byProject.canOpenProject(k),
+        name: byProject.projectByKey(k).name,
+        workspaces: ids(byProject.projectWorkspaces(k)),
+      },
+    ]),
+  );
+}
+
 function nextOut({ next }: Model): Json {
   const step = next.nextStep();
   return {
@@ -132,6 +168,7 @@ function nextOut({ next }: Model): Json {
 async function outputs(): Promise<Json> {
   const m = await cockpit();
   return {
+    chips: chipsOut(m),
     laneEntries: m.entries.flatEntries(),
     laneHeaders: laneHeaders(m),
     mode: m.state.mode(),
@@ -139,6 +176,7 @@ async function outputs(): Promise<Json> {
     next: nextOut(m),
     placement: placement(m),
     projectEntries: m.byProject.projectEntries(),
+    projectHeaders: projectHeaders(m),
     quietProjects: m.byProject.quietProjects(),
   };
 }

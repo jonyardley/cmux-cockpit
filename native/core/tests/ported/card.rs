@@ -1,8 +1,11 @@
 //! test/card.test.ts: the status line with its time and helper count, the
-//! agent's message, the progress fraction and the outline. The chips cases
-//! test card-chips.ts and chips.ts, left for their lane.
+//! agent's message, the progress fraction, the outline, and chipsFor. The
+//! cases for showsChipsRow, cardChips, chipsFitOneLine, chipsSplit and
+//! secondLineFits test chips.ts, which estimates the sidebar's widths
+//! from character counts and reads merged.ts; neither is ported.
 
-use cockpit_core::data::{Data, Progress};
+use cockpit_core::card_chips::Chip;
+use cockpit_core::data::{Data, PrStatus, Progress, PullRequest};
 use cockpit_core::status::{
     DETAIL_MAX, OUTLINE_MAX, Outline, PrRef, open_pr_label, outline, progress_fraction,
 };
@@ -275,5 +278,118 @@ mod outline {
                 assert!(outline(selected, dragged, Token::Clear).width <= OUTLINE_MAX);
             }
         }
+    }
+}
+
+mod chips_for {
+    use super::*;
+
+    /// Each chip's id and words, and the branch's dirty flag.
+    fn shape(chips: &[Chip]) -> Vec<(&'static str, String, bool)> {
+        chips
+            .iter()
+            .map(|c| match c {
+                Chip::Size { text, .. } => ("size", text.clone(), false),
+                Chip::Pr { tag, .. } => ("pr", tag.clone(), false),
+                Chip::Branch { text, dirty } => ("br", text.clone(), *dirty),
+                Chip::Port { text, .. } => ("port", text.clone(), false),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn shows_the_pr_then_the_branch_with_its_dirty_flag() {
+        let mut s = fresh();
+        let seven = PullRequest {
+            url: Some("https://x/7".into()),
+            ..pr(7.0, Some(PrStatus::Open))
+        };
+        let chips = s.chips_for(Some(&ws("x").pr(seven).branch("feat").dirty()), true);
+        assert_eq!(
+            shape(&chips),
+            [
+                ("pr", "#7".to_string(), false),
+                ("br", "feat".to_string(), true)
+            ]
+        );
+        // The number and the state words ride apart, so the chip inks each its own way.
+        let Some(Chip::Pr {
+            tag,
+            state,
+            url,
+            diff,
+            ..
+        }) = chips.first()
+        else {
+            panic!("no PR chip: {chips:?}");
+        };
+        assert_eq!((tag.as_str(), state.as_str()), ("#7", "open"));
+        assert_eq!(url.as_deref(), Some("https://x/7"));
+        assert_eq!(diff, "");
+        let draft = PullRequest {
+            draft: Some(true),
+            ..pr(8.0, Some(PrStatus::Open))
+        };
+        let chips = s.chips_for(Some(&ws("d").pr(draft)), false);
+        assert!(
+            matches!(chips.first(), Some(Chip::Pr { tag, state, .. }) if tag == "#8" && state == "draft")
+        );
+        let sized = PullRequest {
+            additions: Some(40.0),
+            deletions: Some(2.0),
+            ..pr(9.0, Some(PrStatus::Open))
+        };
+        let chips = s.chips_for(Some(&ws("s").pr(sized)), false);
+        assert!(matches!(chips.first(), Some(Chip::Pr { diff, .. }) if diff == "+40 \u{2212}2"));
+        assert!(s.chips_for(Some(&ws("y").branch("feat")), false).is_empty());
+        let chips = s.chips_for(Some(&ws("y").branch("feat")), true);
+        assert!(matches!(
+            chips.first(),
+            Some(Chip::Branch { dirty: false, .. })
+        ));
+    }
+
+    #[test]
+    fn adds_a_ports_chip_that_opens_the_first_port_on_localhost() {
+        let mut s = fresh();
+        let chips = s.chips_for(Some(&ws("x").ports(&[5173.0])), true);
+        assert_eq!(
+            chips,
+            [Chip::Port {
+                text: ":5173 \u{2197}".into(),
+                url: "http://localhost:5173".into()
+            }]
+        );
+    }
+
+    #[test]
+    fn shows_the_first_port_and_how_many_more() {
+        let mut s = fresh();
+        let w = ws("x").ports(&[5173.0, 3000.0, 5173.0, 8080.0]);
+        let chips = s.chips_for(Some(&w), true);
+        assert!(matches!(chips.first(), Some(Chip::Port { text, url })
+            if text == ":5173 +2 \u{2197}" && url == "http://localhost:5173"));
+    }
+
+    #[test]
+    fn skips_ports_that_are_not_real_port_numbers() {
+        let mut s = fresh();
+        assert!(
+            s.chips_for(Some(&ws("x").ports(&[0.0, 70000.0, 1.5])), true)
+                .is_empty()
+        );
+        assert!(s.chips_for(Some(&ws("x").ports(&[])), true).is_empty());
+        assert!(s.chips_for(None, true).is_empty());
+    }
+
+    #[test]
+    fn orders_the_chips_pr_branch_ports() {
+        let mut s = fresh();
+        let w = ws("x").pr(pr(7.0, None)).branch("main").ports(&[5173.0]);
+        let ids: Vec<&str> = shape(&s.chips_for(Some(&w), true))
+            .into_iter()
+            .map(|(id, ..)| id)
+            .collect();
+        assert_eq!(ids, ["pr", "br", "port"]);
     }
 }

@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use std::sync::LazyLock;
 
 use regex::Regex;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::data::PrStatus;
@@ -48,12 +48,12 @@ pub struct UiState {
 }
 
 /// A project made or edited in the sidebar.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct ProjectSpec {
     pub name: String,
     pub color: String,
     pub icon: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root: Option<String>,
 }
 

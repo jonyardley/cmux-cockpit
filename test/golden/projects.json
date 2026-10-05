@@ -1,4 +1,57 @@
 {
+  "chips": {
+    "elsewhere": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
+    "one-a": {
+      "canFileForReview": false,
+      "chips": [
+        {
+          "diff": "+342 −17",
+          "health": "quiet",
+          "id": "pr",
+          "state": "draft",
+          "tag": "#148",
+          "url": "https://github.com/o/r/pull/148"
+        },
+        { "dirty": false, "id": "br", "text": "parser-streaming-tokeniser" }
+      ],
+      "reviewIsGreen": false
+    },
+    "one-b": {
+      "canFileForReview": false,
+      "chips": [{ "id": "size", "size": "review", "text": "Review" }],
+      "reviewIsGreen": false
+    },
+    "two": {
+      "canFileForReview": true,
+      "chips": [
+        {
+          "diff": "",
+          "health": "quiet",
+          "id": "pr",
+          "state": "open",
+          "tag": "#12",
+          "url": "https://github.com/o/r/pull/12"
+        },
+        { "dirty": false, "id": "br", "text": "main" }
+      ],
+      "reviewIsGreen": false
+    },
+    "two-merged": {
+      "canFileForReview": false,
+      "chips": [
+        {
+          "diff": "",
+          "health": "quiet",
+          "id": "pr",
+          "state": "merged",
+          "tag": "#14",
+          "url": "https://github.com/o/r/pull/14"
+        },
+        { "dirty": false, "id": "br", "text": "changelog-for-release" }
+      ],
+      "reviewIsGreen": false
+    }
+  },
   "laneEntries": [
     { "id": "z:main", "kind": "zone", "lane": "main" },
     { "id": "z:review", "kind": "zone", "lane": "review" },
@@ -80,5 +133,11 @@
     { "id": "quiet", "kind": "quietHeader" },
     { "id": "q:/dev/app-three", "kind": "quietRow", "project": "/dev/app-three" }
   ],
+  "projectHeaders": {
+    "/dev/app-one": { "canOpen": true, "name": "App One", "workspaces": ["one-a", "one-b"] },
+    "/dev/app-three": { "canOpen": false, "name": "App Three", "workspaces": [] },
+    "/dev/app-two": { "canOpen": false, "name": "App Two", "workspaces": ["two", "two-merged"] },
+    "other": { "canOpen": false, "name": "Other", "workspaces": ["elsewhere"] }
+  },
   "quietProjects": ["/dev/app-three"]
 }

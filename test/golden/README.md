@@ -116,6 +116,23 @@ What the model computes, at the scene's clock.
 | `projectEntries[].project` | string | On a header, quiet row or editor: its project key. |
 | `projectEntries[].wsId` | string | On a card or placeholder: its workspace. |
 | `quietProjects` | string[] | Project keys with no sessions, in table order. |
+| `projectHeaders` | object | Project key to what its header or quiet row shows, for every `header` and `quietRow` in `projectEntries`. |
+| `projectHeaders.<key>.name` | string | The project's name; "Other" for `other`. |
+| `projectHeaders.<key>.workspaces` | string[] | The cards it counts, placeholders included, in tab order. |
+| `projectHeaders.<key>.canOpen` | boolean | Whether it has a folder, so its "+" opens a new session there. |
+| `chips` | object | Card id to its chips row, for every card (not a lane's generated anchor). |
+| `chips.<id>.chips` | array | `chipsFor` with the branch, as the full and project cards ask for it, in order: `size`, `pr`, `br`, `port`, each only when it has something to show. |
+| `chips.<id>.chips[].id` | string | "size" (what answering the chat takes), "pr", "br" (the branch) or "port". |
+| `chips.<id>.chips[].text` | string | On size, br and port: the chip's words ("Decide · 2", "feat", ":5173 +1 ↗"). |
+| `chips.<id>.chips[].size` | string | On size: "quick", "review" or "decide". |
+| `chips.<id>.chips[].dirty` | boolean | On br: uncommitted changes. |
+| `chips.<id>.chips[].url` | string | On pr (absent with no link) and port: what a tap opens. |
+| `chips.<id>.chips[].tag` | string | On pr: the number, "#12". |
+| `chips.<id>.chips[].state` | string | On pr: the words after the number ("draft · running", "1 failing", "open", "merged"). |
+| `chips.<id>.chips[].health` | string | On pr: "failing", "conflicts", "running", "ready" or "quiet". |
+| `chips.<id>.chips[].diff` | string | On pr: an open PR's diff size, "+120 −8", or "". |
+| `chips.<id>.canFileForReview` | boolean | Whether the card offers "To review". |
+| `chips.<id>.reviewIsGreen` | boolean | Whether its PR is ready to merge, so "To review" shows green. |
 | `needs` | object | The Needs you strip. |
 | `needs.list` | string[] | Every workspace waiting on you, longest waiting first. |
 | `needs.shown` | string[] | The ones the strip lists (at most four). |
