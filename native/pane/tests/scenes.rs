@@ -14,6 +14,7 @@ use std::path::PathBuf;
 
 use cockpit_core::edit::EditEvent;
 use cockpit_core::lanes::LaneKey;
+use cockpit_core::menu::{MenuAction, MenuEvent, MenuTarget};
 use cockpit_core::theme::Token;
 use cockpit_pane::model::{PaneView, ProjectTarget};
 use cockpit_pane::{Action, Outcome, Pane, PaneModel, theme};
@@ -615,7 +616,12 @@ fn esc_closes_the_editor_and_e_opens_it_on_the_project_under_the_cursor() {
         .first()
         .map(|s| s.to_string());
     let target = on.and_then(|id| live.pane.model().project_target(&id));
-    let Some(ProjectTarget::Project { key, can_open }) = target else {
+    let Some(ProjectTarget::Project {
+        key,
+        can_open,
+        quiet: false,
+    }) = target
+    else {
         panic!("the first row is a project's header: {target:?}");
     };
     let plus = live.press(KeyCode::Char('+'));
@@ -646,6 +652,160 @@ fn r_sends_the_card_under_the_cursor_to_for_review() {
         live.press(KeyCode::Char('r')),
         Outcome::Act(Action::FileForReview { id })
     );
+}
+
+/// Presses Down until the open menu lights `label`.
+fn light(live: &mut Live, label: &str) {
+    for _ in 0..40 {
+        if live.pane.menu_lit() == Some(label) {
+            return;
+        }
+        live.press(KeyCode::Down);
+    }
+    assert_eq!(live.pane.menu_lit(), Some(label), "not in the menu");
+}
+
+#[test]
+fn space_opens_a_cards_menu_which_takes_every_key_and_picks_with_enter() {
+    let mut live = Live::new("lanes");
+    let id = cursor_to(&mut live.pane, "Tidy strip");
+    assert_eq!(
+        live.press(KeyCode::Char(' ')),
+        Outcome::Act(Action::Menu(MenuEvent::OpenCard { id: id.clone() }))
+    );
+    let target = live.pane.model().menu.as_ref().map(|m| m.target.clone());
+    assert_eq!(target, Some(MenuTarget::Card { id: id.clone() }));
+    assert!(
+        live.pane
+            .menu_lit()
+            .is_some_and(|l| l.starts_with("New session")),
+        "starts on its first item: {:?}",
+        live.pane.menu_lit()
+    );
+    let mut term = terminal(40);
+    check_snapshot("lanes-40-menu", &draw(&mut live.pane, &mut term));
+    assert_eq!(
+        live.press(KeyCode::Char('q')),
+        Outcome::Nothing,
+        "q does not quit"
+    );
+    assert_eq!(live.press(KeyCode::Up), Outcome::Nothing, "the top item");
+    assert_eq!(live.press(KeyCode::Down), Outcome::Redraw);
+    assert_eq!(
+        live.pane.menu_lit(),
+        Some("✓ Lane: Main activity"),
+        "past the rule"
+    );
+    light(&mut live, "Mark read");
+    assert_eq!(
+        live.press(KeyCode::Enter),
+        Outcome::Act(Action::Menu(MenuEvent::Pick(MenuAction::MarkRead)))
+    );
+    assert!(live.pane.model().menu.is_none(), "a pick closes it");
+    assert_eq!(live.pane.cursor(), Some(id.as_str()), "the cursor stays");
+}
+
+#[test]
+fn a_lane_picked_from_the_menu_moves_the_card_and_esc_closes_with_nothing_picked() {
+    let mut live = Live::new("lanes");
+    let id = cursor_to(&mut live.pane, "Tidy strip");
+    live.press(KeyCode::Char(' '));
+    assert_eq!(
+        live.press(KeyCode::Esc),
+        Outcome::Act(Action::Menu(MenuEvent::Close))
+    );
+    assert!(live.pane.model().menu.is_none());
+    live.press(KeyCode::Char(' '));
+    light(&mut live, "Lane: For review");
+    live.press(KeyCode::Enter);
+    assert!(
+        live.lane(LaneKey::Review).contains(&id),
+        "moved to For review"
+    );
+}
+
+#[test]
+fn the_mouse_rests_while_a_menu_is_open() {
+    let mut live = Live::new("lanes");
+    let mut term = terminal(40);
+    draw(&mut live.pane, &mut term);
+    let row = row_of(term.backend().buffer(), "Snapshot tests");
+    cursor_to(&mut live.pane, "Tidy strip");
+    live.press(KeyCode::Char(' '));
+    let down = mouse(MouseEventKind::Down(MouseButton::Left), row);
+    assert_eq!(live.handle(&down), Outcome::Nothing);
+}
+
+#[test]
+fn a_menu_opened_mid_drag_drops_the_drag() {
+    let mut live = Live::new("lanes");
+    let mut term = terminal(40);
+    draw(&mut live.pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    let from = row_of(&buffer, "Snapshot tests");
+    let onto = row_of(&buffer, "Ended agent");
+    live.handle(&mouse(MouseEventKind::Down(MouseButton::Left), from));
+    live.handle(&mouse(MouseEventKind::Drag(MouseButton::Left), onto));
+    assert!(live.pane.drop_target().is_some());
+    live.press(KeyCode::Char(' '));
+    assert!(live.pane.model().menu.is_some());
+    assert_eq!(live.pane.drop_target(), None, "the menu drops it");
+    live.press(KeyCode::Esc);
+    let up = mouse(MouseEventKind::Up(MouseButton::Left), onto);
+    assert_eq!(live.handle(&up), Outcome::Nothing, "nothing to let go");
+}
+
+#[test]
+fn space_on_a_project_header_opens_its_menu_and_edit_opens_the_editor() {
+    let mut live = Live::new("projects");
+    live.press(KeyCode::Down);
+    let on = live
+        .pane
+        .model()
+        .project_ids()
+        .first()
+        .map(|s| s.to_string());
+    let target = on.and_then(|id| live.pane.model().project_target(&id));
+    let Some(ProjectTarget::Project {
+        key, quiet: false, ..
+    }) = target
+    else {
+        panic!("the first row is a project's header: {target:?}");
+    };
+    assert_eq!(
+        live.press(KeyCode::Char(' ')),
+        Outcome::Act(Action::Menu(MenuEvent::OpenProject {
+            key: key.clone(),
+            quiet: false
+        }))
+    );
+    let mut term = terminal(40);
+    check_snapshot("projects-40-menu", &draw(&mut live.pane, &mut term));
+    light(&mut live, "Edit project");
+    live.press(KeyCode::Enter);
+    assert!(live.pane.model().menu.is_none());
+    let editor = live.pane.model().editor().map(|e| e.key.clone());
+    assert_eq!(editor.as_deref(), Some(key.as_str()));
+}
+
+#[test]
+fn space_on_a_card_in_projects_opens_the_card_menu() {
+    let mut live = Live::new("projects");
+    let rows = live.pane.model().project_ids().len();
+    // Down the rows: Space on each opens its menu, a project's closed again,
+    // until one is a card's.
+    for _ in 0..rows {
+        live.press(KeyCode::Down);
+        live.press(KeyCode::Char(' '));
+        match live.pane.model().menu.as_ref().map(|m| m.target.clone()) {
+            Some(MenuTarget::Card { .. }) => return,
+            Some(MenuTarget::Project { .. }) => {
+                live.press(KeyCode::Esc);
+            }
+            None => {}
+        }
+    }
+    panic!("no card in Projects opened the card menu");
 }
 
 #[test]

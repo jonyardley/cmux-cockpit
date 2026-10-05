@@ -33,6 +33,7 @@
                      │ +          session in project      │
                      │ e          edit project            │
                      │ n          new project             │
+                     │ Space      card or project menu    │
                      │ Tab        All or Projects         │
                      │ ?          show or hide the keys   │
                      │ q          quit                    │

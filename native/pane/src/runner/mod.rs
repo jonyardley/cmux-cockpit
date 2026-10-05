@@ -143,6 +143,7 @@ impl Feed {
                 }
                 Effect::Cmux(r) => Outgoing::Cmux(r.operation),
                 Effect::Persist(r) => Outgoing::Persist(r.operation),
+                Effect::OpenUrl(r) => Outgoing::OpenUrl(r.operation.url),
             };
             // A worker gone (only once the run ends) keeps what it missed.
             match &self.worker {
@@ -174,18 +175,13 @@ impl Feed {
         self.send(Event::PrPollOn);
     }
 
-    /// One of Jon's actions (`Event::MoveCard`, `SwitchTo`, `Dismiss` or
-    /// `FlipView`): the core takes it at once and the cmux calls and state
-    /// writes it asks for go to the outbox worker. The caller draws after.
-    /// Any other event is ignored: the feed's inputs bring those.
+    /// One of Jon's actions (`Event::is_action`): the core takes it at
+    /// once and the cmux calls, state writes and links it asks for go to
+    /// the outbox worker. The caller draws after. The feed's own inputs
+    /// are ignored: the inputs bring those, and one sent from here would
+    /// be a frame or a state file no input saw.
     pub fn act(&mut self, event: Event) {
-        if matches!(
-            event,
-            Event::MoveCard { .. }
-                | Event::SwitchTo { .. }
-                | Event::Dismiss { .. }
-                | Event::FlipView
-        ) {
+        if event.is_action() {
             self.send(event);
         }
     }
@@ -846,6 +842,7 @@ mod tests {
             .map(|o| match o {
                 Outgoing::Cmux(c) => c.method.clone(),
                 Outgoing::Persist(p) => format!("set {}", p.key),
+                Outgoing::OpenUrl(u) => format!("open {u}"),
             })
             .collect()
     }
@@ -905,6 +902,22 @@ mod tests {
         assert!(feed.unsent.is_empty());
         feed.act(Event::SwitchTo { id: "Q".into() });
         assert_eq!(methods(&feed.unsent), ["workspace.select"]);
+    }
+
+    /// #234's editor keys were dropped here before they reached the core.
+    #[test]
+    fn act_takes_the_editor_and_the_menus_too() {
+        use cockpit_core::edit::EditEvent;
+        use cockpit_core::menu::{MenuAction, MenuEvent};
+        let mut feed = moving_feed();
+        feed.act(Event::Edit(EditEvent::OpenNew));
+        assert!(feed.model.session.editing_project().is_some());
+        feed.act(Event::Edit(EditEvent::Close));
+        feed.act(Event::Menu(MenuEvent::OpenCard { id: "Q".into() }));
+        assert!(feed.model.session.menu_target().is_some());
+        feed.act(Event::Menu(MenuEvent::Pick(MenuAction::MarkRead)));
+        assert_eq!(methods(&feed.unsent), ["workspace.action"]);
+        assert!(feed.model.session.menu_target().is_none());
     }
 
     #[test]

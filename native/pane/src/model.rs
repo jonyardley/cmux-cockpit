@@ -13,6 +13,7 @@ use cockpit_core::card_chips::Chip as CoreChip;
 use cockpit_core::data::{Data, Workspace};
 use cockpit_core::lane_entries::{LaneEntry, shows_left_off};
 use cockpit_core::lanes::{Density, LANES, LaneKey};
+use cockpit_core::menu::MenuView;
 use cockpit_core::model::card_density;
 use cockpit_core::moves::MoveSize;
 use cockpit_core::persist::ViewMode;
@@ -64,7 +65,7 @@ pub const HOLLOW: &str = "○";
 pub const GHOST: &str = "◌";
 
 /// The keys the `?` overlay lists: the key, then what it does.
-pub const KEYS: [(&str, &str); 14] = [
+pub const KEYS: [(&str, &str); 15] = [
     ("↑ ↓", "move between cards"),
     ("shift ↑ ↓", "reorder in its lane"),
     ("m 1-5", "move to a lane"),
@@ -75,6 +76,7 @@ pub const KEYS: [(&str, &str); 14] = [
     ("+", "session in project"),
     ("e", "edit project"),
     ("n", "new project"),
+    ("Space", "card or project menu"),
     ("Tab", "All or Projects"),
     ("?", "show or hide the keys"),
     ("q", "quit"),
@@ -363,10 +365,12 @@ pub enum ProjectRow {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProjectTarget {
     Card(String),
-    /// A project's header or quiet row: "+" opens a session when it can.
+    /// A project's header or (`quiet`) quiet row: "+" opens a session
+    /// when it can.
     Project {
         key: String,
         can_open: bool,
+        quiet: bool,
     },
     New,
 }
@@ -461,6 +465,8 @@ pub struct PaneModel {
     pub lanes: Vec<Lane>,
     /// The Projects view's rows; empty while All is on.
     pub projects: Vec<ProjectRow>,
+    /// The open card or project menu, with its items' words for this frame.
+    pub menu: Option<MenuView>,
 }
 
 impl PaneModel {
@@ -505,6 +511,7 @@ impl PaneModel {
             ProjectRow::Header(h) if h.id == id => Some(ProjectTarget::Project {
                 key: h.key.clone(),
                 can_open: h.can_open,
+                quiet: false,
             }),
             ProjectRow::Quiet {
                 key,
@@ -514,6 +521,7 @@ impl PaneModel {
             } if row == id => Some(ProjectTarget::Project {
                 key: key.clone(),
                 can_open: *can_open,
+                quiet: true,
             }),
             ProjectRow::Card(c) if c.ws_id == id => Some(ProjectTarget::Card(c.ws_id.clone())),
             ProjectRow::NewProject if id == NEW_ROW => Some(ProjectTarget::New),
@@ -784,6 +792,7 @@ fn build(session: &mut Session, data: &Data, view: &ViewModel) -> PaneModel {
         needs: needs(session, data, view),
         lanes: lanes(session, data, view),
         projects,
+        menu: session.menu_view(data),
     }
 }
 

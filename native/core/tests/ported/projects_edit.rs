@@ -1,15 +1,15 @@
 //! test/projects-edit.test.ts: editing and removing a project through
-//! the editor (edit.rs), its icon search, and the project menu's words.
-//! What a case asserts of the sidebar's view nodes (which menu items a
-//! header builds, the fields' handlers and placeholders, the picker's
-//! Images and Rectangles) is the views', so it is left out; the case keeps
-//! what the same taps do to the draft and what they save. "The card menu"
-//! is left for the card menu's port.
+//! the editor (edit.rs), its icon search, and the card and project menus
+//! (menu.rs). What a case asserts of the sidebar's view nodes (the fields'
+//! handlers and placeholders, the picker's Images and Rectangles) is the
+//! views', so it is left out; the case keeps what the same taps do to the
+//! draft and what they save.
 
 use cockpit_core::data::Data;
 use cockpit_core::edit::{
     ICONS_PER_ROW, can_save_project, edit_label, icon_matches, icon_rows, rows_of, search_note,
 };
+use cockpit_core::menu::MenuItem;
 use cockpit_core::persist::{ProjectSpec, SavedState};
 use cockpit_core::projects::{PROJECT_COLORS, PROJECT_ICONS, Project};
 use cockpit_core::session::Session;
@@ -80,14 +80,49 @@ fn last_cwd(s: &Session) -> Option<String> {
     params.into_iter().find(|(k, _)| k == "cwd").map(|(_, v)| v)
 }
 
+mod the_card_menu {
+    use super::*;
+
+    #[test]
+    fn keeps_only_making_a_project_editing_moved_to_the_header() {
+        let w = ws("w1").directory("/Users/jon/dev/scratch/src");
+        let (mut s, data) = setup(vec![w.clone()]);
+        let items = menu_words(&s.card_menu(&data, Some(&w)));
+        assert!(items.contains(&"button:New project (folder has one, or none)".to_string()));
+        assert!(
+            !items
+                .iter()
+                .any(|i| ["Next colour", "Next icon", "Remove project"]
+                    .iter()
+                    .any(|x| i.contains(x))),
+            "{items:?}"
+        );
+    }
+}
+
 mod the_project_menu {
     use super::*;
 
-    /// Partly ported: which menu items a header builds is the views'; here
-    /// the edit item's words, and that it opens nothing.
+    fn has(items: &[MenuItem], word: &str) -> bool {
+        menu_words(items).iter().any(|i| i == word)
+    }
+
+    #[test]
+    fn offers_edit_on_a_file_project_and_a_sidebar_made_one_not_on_other() {
+        let (s, _) = setup(vec![]);
+        let edit = "button:Edit project";
+        assert!(has(&s.project_menu(APP_ONE), edit));
+        assert!(has(&s.project_menu(KEY), edit));
+        assert!(has(&s.quiet_menu(APP_THREE), edit));
+        assert!(!has(&s.project_menu("other"), edit));
+    }
+
     #[test]
     fn says_why_a_project_whose_first_match_is_too_short_cannot_be_edited_and_opens_nothing() {
         let (mut s, _) = setup(vec![]);
+        let why = "button:Edit project (its first match is too short to save)";
+        assert!(has(&s.quiet_menu("applet"), why));
+        assert!(has(&s.project_menu("applet"), why));
         assert_eq!(
             edit_label("applet"),
             "Edit project (its first match is too short to save)"
@@ -99,10 +134,13 @@ mod the_project_menu {
         assert_eq!(s.editing_project(), None);
     }
 
-    /// Partly ported: the item's words, without the menu around them.
     #[test]
     fn says_why_a_project_with_no_folder_opens_no_session() {
         let (s, _) = setup(vec![]);
+        assert!(has(
+            &s.project_menu(APP_THREE),
+            "button:New session (project has no folder)"
+        ));
         assert_eq!(
             s.project_new_label(APP_THREE),
             "New session (project has no folder)"

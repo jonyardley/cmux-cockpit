@@ -1,0 +1,43 @@
+  All  Projects                  ? keys
+ Next  Chip colours              1 of 3
+
+ Needs you  2                 oldest 5m
+   ● Chip colours
+     Your turn: Which green should the…
+   ● Release notes
+     Asking: allow git push?
+
+ ▾ ■ MAIN ACTIVITY  8
+   ◌ Chip colours · your turn
+   ◌ Release notes · is asking
+▌  ● Tidy strip             Finished 6m
+▌    To review →
+▌    Done: the strip now groups by
+▌    repo.
+   ● Snapshot tests         Working 14m
+     #130 draft +342 −17  …
+     Recording the view tree as text.
+   ○ Long build Working 40m · quiet 17m
+   ● Selected card           Working 1m
+┌ Card ────────────────────────────────┐
+│▌New session (project has no folder)  │
+│──────────────────────────────────────│
+│ ✓ Lane: Main activity                │
+│ Lane: For review                     │
+│ Lane: Background                     │
+│ Lane: Parked                         │
+│ Lane: Unsorted                       │
+│──────────────────────────────────────│
+│ Project: App One                     │
+│ Project: App Two                     │
+│ Project: App Three                   │
+│ No project override set              │
+│──────────────────────────────────────│
+│ New project (folder has one, or…     │
+│──────────────────────────────────────│
+│ Pin                                  │
+│ Mark read                            │
+│ No PR to open                        │
+│ Keep: for a merged PR's buttons      │
+│ Dismiss needs you                    │
+└ Enter picks · Esc closes ────────────┘

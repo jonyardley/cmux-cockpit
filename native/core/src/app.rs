@@ -22,6 +22,7 @@ use crate::edit::EditEvent;
 use crate::js::json_num;
 use crate::lane_entries::LaneEntry;
 use crate::lanes::LaneKey;
+use crate::menu::MenuEvent;
 use crate::persist::{SavedState, ViewMode, persist_url};
 use crate::pr_poll::{PrPolled, shown_in};
 use crate::projects::Project;
@@ -72,6 +73,36 @@ pub enum Event {
     OpenProject { key: String },
     /// A card's "To review →": files it into For review, when it offers it.
     FileForReview { id: String },
+    /// Something done with the card menu or a project's menu (menu.rs).
+    Menu(MenuEvent),
+}
+
+impl Event {
+    /// Whether this is one of Jon's actions (a card moved, switched to or
+    /// dismissed, the view flipped, the editor, a project's "+", To
+    /// review, a menu) rather than one of the shell's own inputs (a frame,
+    /// a state file, the project table, a redraw, the PR poll, or its
+    /// report that a cmux call failed). No arm is a catch-all, so a new
+    /// event has to be sorted here before the core builds.
+    pub fn is_action(&self) -> bool {
+        match self {
+            Event::Data(_)
+            | Event::State(_)
+            | Event::Projects(_)
+            | Event::Refresh
+            | Event::PrPollOn
+            | Event::PrPolled(_)
+            | Event::CmuxFailed { .. } => false,
+            Event::MoveCard { .. }
+            | Event::SwitchTo { .. }
+            | Event::Dismiss { .. }
+            | Event::FlipView
+            | Event::Edit(_)
+            | Event::OpenProject { .. }
+            | Event::FileForReview { .. }
+            | Event::Menu(_) => true,
+        }
+    }
 }
 
 /// Everything the core knows: the session, the latest frame, and the view
@@ -199,6 +230,17 @@ impl Operation for PrAsk {
     type Output = ();
 }
 
+/// A link for the shell to open in the browser, as the sidebar's
+/// `openURL`: the card menu's Open PR.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OpenUrl {
+    pub url: String,
+}
+
+impl Operation for OpenUrl {
+    type Output = ();
+}
+
 /// What the core can ask the shell to do.
 #[effect]
 pub enum Effect {
@@ -206,6 +248,7 @@ pub enum Effect {
     Cmux(CmuxCall),
     Persist(StateSet),
     PrPoll(PrAsk),
+    OpenUrl(OpenUrl),
 }
 
 /// A request from the session's outbox as the command that hands it to the shell.
@@ -215,6 +258,7 @@ fn send_out(o: Outbound) -> Command<Effect, Event> {
             Command::notify_shell(CmuxCall { method, params }).into()
         }
         Outbound::Persist { key, value } => Command::notify_shell(StateSet { key, value }).into(),
+        Outbound::OpenUrl { url } => Command::notify_shell(OpenUrl { url }).into(),
     }
 }
 
@@ -289,6 +333,7 @@ impl Model {
             Event::SwitchTo { id } => s.select_workspace(data, Some(&id)),
             Event::Dismiss { id } => s.dismiss_waiting(data, data.ws_by_id(&id)),
             Event::Edit(e) => s.edit(data, e),
+            Event::Menu(e) => s.menu(data, e),
             Event::OpenProject { key } => s.open_project_workspace(data, &key, None),
             // Only a card that offers it: the pane's key reaches every card.
             Event::FileForReview { id } => {
@@ -352,6 +397,9 @@ impl Model {
     }
 
     fn rebuild(&mut self) {
+        if let Some(data) = &self.data {
+            self.session.close_stale_menu(data);
+        }
         self.view = match &self.data {
             Some(data) => build_view(&mut self.session, data),
             None => ViewModel {
@@ -398,6 +446,16 @@ impl App for Cockpit {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sorts_jons_actions_from_the_shells_inputs() {
+        assert!(Event::FlipView.is_action());
+        assert!(Event::Menu(MenuEvent::Close).is_action());
+        assert!(Event::Edit(EditEvent::Close).is_action());
+        assert!(!Event::Refresh.is_action());
+        assert!(!Event::CmuxFailed { id: "a".into() }.is_action());
+        assert!(!Event::Projects(Vec::new()).is_action());
+    }
 
     #[test]
     fn refresh_asks_the_shell_to_render() {
@@ -498,7 +556,7 @@ mod tests {
             .map(|e| match e {
                 Effect::Render(_) => "render".to_string(),
                 Effect::PrPoll(r) => format!("pr {}", r.operation.directory),
-                Effect::Cmux(_) | Effect::Persist(_) => "other".to_string(),
+                Effect::Cmux(_) | Effect::Persist(_) | Effect::OpenUrl(_) => "other".to_string(),
             })
             .collect()
     }

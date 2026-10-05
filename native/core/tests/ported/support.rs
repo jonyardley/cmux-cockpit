@@ -7,6 +7,7 @@ use cockpit_core::data::{
     Agent, AgentStatus, Data, PrStatus, Progress, PullRequest, SubagentRun, Workspace,
     WorkspaceGroup,
 };
+use cockpit_core::menu::MenuItem;
 use cockpit_core::persist::SavedState;
 use cockpit_core::projects::Project;
 use cockpit_core::session::{Outbound, Param, Session};
@@ -269,7 +270,7 @@ pub fn calls(s: &Session) -> Vec<(String, Vec<(String, String)>)> {
                     .map(|(k, v)| (k.clone(), param_text(v)))
                     .collect(),
             )),
-            Outbound::Persist { .. } => None,
+            Outbound::Persist { .. } | Outbound::OpenUrl { .. } => None,
         })
         .collect()
 }
@@ -283,6 +284,16 @@ pub fn call(method: &str, params: &[(&str, &str)]) -> (String, Vec<(String, Stri
             .map(|(k, v)| (k.to_string(), v.to_string()))
             .collect(),
     )
+}
+
+/// A menu's items as the sidebar tests list them: dividers dropped, each
+/// item as `button:<label>`.
+pub fn menu_words(items: &[MenuItem]) -> Vec<String> {
+    items
+        .iter()
+        .filter(|i| **i != MenuItem::Divider)
+        .map(|i| format!("button:{}", i.label()))
+        .collect()
 }
 
 /// The cmux methods called, in order.
@@ -304,7 +315,7 @@ pub fn sent(s: &Session) -> Vec<(String, Option<serde_json::Value>)> {
         .iter()
         .filter_map(|o| match o {
             Outbound::Persist { key, value } => Some((key.clone(), value.clone())),
-            Outbound::Cmux { .. } => None,
+            Outbound::Cmux { .. } | Outbound::OpenUrl { .. } => None,
         })
         .collect()
 }

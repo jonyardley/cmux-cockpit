@@ -33,9 +33,14 @@ runner's outbox.
 | Drag a card | Move it to a lane, or above another card |
 | Enter | Switch to the card's workspace |
 | `d` | Dismiss the card from Needs you |
-| Tab | Flip between All and Projects, in the pane and the sidebar (the pane draws a placeholder for Projects for now) |
+| `r` | Send a card showing "To review →" to For review |
+| `+` | Open a new session in the project's folder (in Projects) |
+| `e` | Edit the project under the cursor (in Projects) |
+| `n` | Make a new project (in Projects) |
+| Space | Open the card's menu, or a project's on its header or quiet row; Up and Down move, Enter picks |
+| Tab | Flip between All and Projects, in the pane and the sidebar |
 | `?` | Show or hide the keys |
-| Esc | Hide the keys, or drop a drag |
+| Esc | Hide the keys, close a menu or the editor, or drop a drag |
 | `q`, Ctrl-C | Quit |
 
 Each of these comes back to the runner as an `Outcome::Act`; the live

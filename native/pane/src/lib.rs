@@ -15,6 +15,7 @@
 
 pub mod cursor;
 pub mod editor;
+pub mod menu;
 pub mod model;
 pub mod placing;
 pub mod runner;
@@ -25,6 +26,7 @@ mod views;
 use cockpit_core::Event as CoreEvent;
 use cockpit_core::edit::EditEvent;
 use cockpit_core::lanes::LaneKey;
+use cockpit_core::menu::{MenuAction, MenuEvent, MenuTarget};
 use ratatui::Terminal;
 use ratatui::backend::Backend;
 use ratatui::crossterm::event::{
@@ -34,6 +36,7 @@ use ratatui::layout::Size;
 
 use crate::cursor::Cursor;
 use crate::editor::{EditKey, Field};
+use crate::menu::MenuKey;
 pub use crate::model::PaneModel;
 use crate::model::{PaneView, ProjectTarget, lane_for_digit};
 use crate::placing::{Place, Spot, drop_on, reorder, spot_at, to_lane};
@@ -61,6 +64,8 @@ pub enum Action {
     OpenProject { key: String },
     /// A card's "To review →".
     FileForReview { id: String },
+    /// Something done with the card menu or a project's menu.
+    Menu(MenuEvent),
 }
 
 impl From<Action> for CoreEvent {
@@ -73,6 +78,7 @@ impl From<Action> for CoreEvent {
             Action::Edit(e) => CoreEvent::Edit(e),
             Action::OpenProject { key } => CoreEvent::OpenProject { key },
             Action::FileForReview { id } => CoreEvent::FileForReview { id },
+            Action::Menu(e) => CoreEvent::Menu(e),
         }
     }
 }
@@ -122,6 +128,12 @@ pub struct Pane {
     /// The open editor's key and its focused field.
     editing: Option<String>,
     field: Field,
+    /// What the open menu is on, which of its items is lit and what that
+    /// item does, and the item its list started at last draw.
+    menu_on: Option<MenuTarget>,
+    menu_at: usize,
+    menu_lit: Option<MenuAction>,
+    menu_top: usize,
 }
 
 impl Pane {
@@ -147,6 +159,12 @@ impl Pane {
     /// Whether the keys overlay is up.
     pub fn keys_shown(&self) -> bool {
         self.keys
+    }
+
+    /// The open menu's lit item, in its words.
+    pub fn menu_lit(&self) -> Option<&str> {
+        let view = self.model.menu.as_ref()?;
+        view.items.get(self.menu_at).map(|i| i.label())
     }
 
     /// Whether `m` is waiting for a lane.
@@ -188,6 +206,22 @@ impl Pane {
                 .unwrap_or_default();
             self.editing = editing;
         }
+        // A newly opened menu starts on its first item; one still open
+        // keeps the light on the same action as its items change. An open
+        // menu takes the mouse, so a drag under it is dropped.
+        let menu = self.model.menu.as_ref();
+        let menu_on = menu.map(|m| m.target.clone());
+        if let Some(m) = menu {
+            self.menu_at = if menu_on == self.menu_on {
+                menu::settle(&m.items, self.menu_at, self.menu_lit.as_ref())
+            } else {
+                self.menu_top = 0;
+                menu::first(&m.items)
+            };
+            self.menu_lit = menu::action_at(&m.items, self.menu_at);
+            self.drag = None;
+        }
+        self.menu_on = menu_on;
         // The card `m` was pressed on went, or the view left All (flipped
         // from the sidebar, say): nothing left to move.
         let all = self.model.view == PaneView::All;
@@ -242,9 +276,10 @@ impl Pane {
     /// flips the view. Up and down move the cursor (or scroll a line when
     /// there are none): in All over the cards, where with shift they
     /// reorder its card in its lane, and in Projects over its rows. Enter
-    /// switches to the card, and `d` dismisses it from Needs you. In
-    /// Projects `r`, `+`, `e` and `n` file for review, open a session, edit
-    /// a project and make one; an open editor takes every key.
+    /// switches to the card, `d` dismisses it from Needs you, `r` files
+    /// it for review and Space opens its menu. In Projects `+`, `e` and
+    /// `n` open a session, edit a project and make one, and Space opens a
+    /// card's or a project's menu. An open menu or editor takes every key.
     pub fn handle_key(&mut self, key: KeyEvent) -> Outcome {
         if key.kind == KeyEventKind::Release {
             return Outcome::Nothing;
@@ -261,6 +296,24 @@ impl Pane {
         if let Some(id) = self.picking.take() {
             self.dirty = true;
             return self.pick(id, key.code);
+        }
+        // An open menu takes every key: Up, Down, Enter and Esc.
+        if !self.keys
+            && let Some(view) = &self.model.menu
+        {
+            return match menu::key(view, self.menu_at, key.code) {
+                MenuKey::Send(e) => {
+                    self.dirty = true;
+                    Outcome::Act(Action::Menu(e))
+                }
+                MenuKey::Move(at) => {
+                    self.menu_at = at;
+                    self.menu_lit = menu::action_at(&view.items, at);
+                    self.dirty = true;
+                    Outcome::Redraw
+                }
+                MenuKey::Nothing => Outcome::Nothing,
+            };
         }
         // An open editor takes every key, so a "q" or "?" in a name types.
         if !self.keys
@@ -336,6 +389,9 @@ impl Pane {
                 Some(id) if self.model.is_waiting(&id) => Outcome::Act(Action::Dismiss { id }),
                 _ => Outcome::Nothing,
             },
+            KeyCode::Char(' ') => on.map_or(Outcome::Nothing, |id| {
+                Outcome::Act(Action::Menu(MenuEvent::OpenCard { id }))
+            }),
             KeyCode::Char('m') if on.as_deref().is_some_and(|id| self.model.movable(id)) => {
                 self.picking = on;
                 self.drag = None;
@@ -362,9 +418,15 @@ impl Pane {
             (KeyCode::Char('r'), Some(ProjectTarget::Card(id))) => {
                 Outcome::Act(Action::FileForReview { id })
             }
+            (KeyCode::Char(' '), Some(ProjectTarget::Card(id))) => {
+                Outcome::Act(Action::Menu(MenuEvent::OpenCard { id }))
+            }
+            (KeyCode::Char(' '), Some(ProjectTarget::Project { key, quiet, .. })) => {
+                Outcome::Act(Action::Menu(MenuEvent::OpenProject { key, quiet }))
+            }
             (
                 KeyCode::Enter | KeyCode::Char('+'),
-                Some(ProjectTarget::Project { key, can_open }),
+                Some(ProjectTarget::Project { key, can_open, .. }),
             ) => {
                 if can_open {
                     Outcome::Act(Action::OpenProject { key })
@@ -405,7 +467,7 @@ impl Pane {
     /// card puts the cursor there and picks it up, a drag shows where it
     /// would land, and letting go places it. The wheel moves the cursor.
     pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Outcome {
-        if self.keys || self.picking.is_some() {
+        if self.keys || self.picking.is_some() || self.model.menu.is_some() {
             return Outcome::Nothing;
         }
         if self.model.view == PaneView::Projects {
@@ -541,6 +603,11 @@ impl Pane {
             view: self.model.view,
             drop: self.drag.as_ref().and_then(|d| d.over.as_ref()),
             field: self.field,
+            menu: self
+                .model
+                .menu
+                .as_ref()
+                .map(|m| (m, self.menu_at, self.menu_top)),
         };
         let mut drawn = views::Drawn::default();
         terminal.draw(|frame| drawn = views::draw(frame, shown))?;
@@ -548,6 +615,7 @@ impl Pane {
             // Held at the end, so Up after too many Downs moves at once.
             self.manual = drawn.scroll;
         }
+        self.menu_top = drawn.menu_top;
         self.drawn = drawn;
         self.dirty = false;
         self.drawn_at = Some(size);
