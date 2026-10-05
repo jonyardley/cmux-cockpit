@@ -35,23 +35,49 @@ pub fn agents(out: &[u8]) -> Option<AgentView> {
     Some(view)
 }
 
-/// Agent Views read from several Claude config dirs, as one. None when
-/// any read failed, so a dir that missed one poll keeps the last view
-/// rather than having its sessions counted absent and forgotten.
-pub fn merged(views: impl IntoIterator<Item = Option<AgentView>>) -> Option<AgentView> {
+/// Agent Views read from several Claude config dirs, as one.
+pub fn merged(views: impl IntoIterator<Item = AgentView>) -> AgentView {
     let mut all = AgentView::default();
     for v in views {
-        let v = v?;
         all.busy.extend(v.busy);
         all.session.extend(v.session);
     }
-    Some(all)
+    all
+}
+
+/// Each config dir's last good Agent View, keyed by the dir the read was
+/// made with (None for the runner's own, read with nothing set).
+#[derive(Debug, Default)]
+pub struct AgentViews(HashMap<Option<PathBuf>, AgentView>);
+
+impl AgentViews {
+    /// Takes one poll's reads and returns every dir's latest view as one.
+    /// A failed read keeps that dir's last view, so a dir that missed one
+    /// poll does not have its sessions counted absent and forgotten, and
+    /// one that never read contributes nothing without holding the others
+    /// up. A dir no longer polled is dropped. None until some dir has read.
+    pub fn update(
+        &mut self,
+        reads: impl IntoIterator<Item = (Option<PathBuf>, Option<AgentView>)>,
+    ) -> Option<AgentView> {
+        let mut polled = HashMap::new();
+        for (dir, view) in reads {
+            let last = self.0.remove(&dir);
+            if let Some(v) = view.or(last) {
+                polled.insert(dir, v);
+            }
+        }
+        self.0 = polled;
+        (!self.0.is_empty()).then(|| merged(self.0.values().cloned()))
+    }
 }
 
 /// The Claude config dirs besides the default one that Agent View must
 /// also read: each `.claude-<name>` folder in `home` holding a `sessions`
-/// folder, which only a Claude config dir has, other than `inherited`
-/// (the runner's own CLAUDE_CONFIG_DIR, which the default read covers).
+/// folder, which only a Claude config dir has, and `.claude` itself when
+/// the runner inherited a CLAUDE_CONFIG_DIR (`inherited`), since the
+/// default read then covers that dir instead. The inherited dir is never
+/// read twice: both sides are compared as `canonical` gives them.
 /// `claude agents --json` lists one config dir's sessions only, so a
 /// session started with another CLAUDE_CONFIG_DIR would read as gone.
 pub fn other_config_dirs(
@@ -59,15 +85,20 @@ pub fn other_config_dirs(
     names: impl IntoIterator<Item = String>,
     has_sessions: impl Fn(&Path) -> bool,
     inherited: Option<&Path>,
+    canonical: impl Fn(&Path) -> PathBuf,
 ) -> Vec<PathBuf> {
+    let inherited = inherited.map(&canonical);
     let mut dirs: Vec<PathBuf> = names
         .into_iter()
-        .filter(|n| {
-            n.strip_prefix(".claude-")
-                .is_some_and(|rest| !rest.is_empty())
+        .filter_map(|n| {
+            let default = n == ".claude" && inherited.is_some();
+            let named = n
+                .strip_prefix(".claude-")
+                .is_some_and(|rest| !rest.is_empty());
+            let d = home.join(n);
+            (default || (named && has_sessions(&d))).then_some(d)
         })
-        .map(|n| home.join(n))
-        .filter(|d| Some(d.as_path()) != inherited && has_sessions(d))
+        .filter(|d| inherited.as_ref() != Some(&canonical(d)))
         .collect();
     dirs.sort();
     dirs
@@ -201,14 +232,41 @@ mod tests {
     fn agent_views_from_every_config_dir_read_as_one() {
         let main = agents(br#"[{"pid": 9533, "sessionId": "20a0", "status": "busy"}]"#);
         let personal = agents(br#"[{"pid": 59557, "sessionId": "0407", "status": "busy"}]"#);
-        let v = merged([main.clone(), personal]).unwrap();
+        let v = merged(main.into_iter().chain(personal));
         assert_eq!(v.busy.get(&59557), Some(&true));
         assert_eq!(v.session.get(&9533).map(String::as_str), Some("20a0"));
-        assert_eq!(
-            merged([main, None]),
-            None,
-            "one failed read keeps the last view"
-        );
+    }
+
+    fn view(pid: u32) -> Option<AgentView> {
+        agents(format!(r#"[{{"pid": {pid}, "sessionId": "s{pid}", "status": "busy"}}]"#).as_bytes())
+    }
+
+    #[test]
+    fn a_failed_read_keeps_that_dirs_last_view() {
+        let personal = Some(PathBuf::from("/Users/me/.claude-personal"));
+        let mut views = AgentViews::default();
+        let v = views
+            .update([(None, view(1)), (personal.clone(), view(2))])
+            .unwrap();
+        assert_eq!(v.busy.len(), 2);
+        let v = views
+            .update([(None, view(3)), (personal.clone(), None)])
+            .unwrap();
+        assert_eq!(v.busy.get(&1), None, "a good read replaces the last");
+        assert_eq!(v.busy.get(&3), Some(&true));
+        assert_eq!(v.busy.get(&2), Some(&true), "a missed poll keeps the last");
+        let v = views.update([(None, view(3))]).unwrap();
+        assert_eq!(v.busy.get(&2), None, "a dir no longer polled is dropped");
+    }
+
+    #[test]
+    fn a_dir_that_never_read_does_not_hold_the_others_up() {
+        let broken = Some(PathBuf::from("/Users/me/.claude-broken"));
+        let mut views = AgentViews::default();
+        assert_eq!(views.update([(None, None), (broken.clone(), None)]), None);
+        let v = views.update([(None, view(1)), (broken, None)]).unwrap();
+        assert_eq!(v.session.get(&1).map(String::as_str), Some("s1"));
+        assert_eq!(v.busy.len(), 1);
     }
 
     #[test]
@@ -225,15 +283,47 @@ mod tests {
         ]
         .map(String::from);
         let has = |d: &Path| !d.ends_with(".claude-empty");
+        let raw = Path::to_path_buf;
         assert_eq!(
-            other_config_dirs(home, names.clone(), has, None),
+            other_config_dirs(home, names.clone(), has, None, raw),
             vec![home.join(".claude-personal"), home.join(".claude-work")]
         );
         let inherited = home.join(".claude-work");
         assert_eq!(
-            other_config_dirs(home, names, has, Some(&inherited)),
-            vec![home.join(".claude-personal")],
-            "the runner's own dir is the default read already"
+            other_config_dirs(home, names, has, Some(&inherited), raw),
+            vec![home.join(".claude"), home.join(".claude-personal")],
+            "the runner's own dir is the default read already, so .claude is not"
+        );
+    }
+
+    #[test]
+    fn the_inherited_dir_is_never_read_twice_however_it_is_spelt() {
+        let home = Path::new("/Users/me");
+        let names = [".claude", ".claude-work"].map(String::from);
+        // A symlink, say: ~/.claude-work points at ~/.claude.
+        let canonical = |d: &Path| {
+            if d.ends_with(".claude-work") {
+                home.join(".claude")
+            } else {
+                d.to_path_buf()
+            }
+        };
+        let inherited = PathBuf::from("/Users/me/./.claude");
+        let tidy = |d: &Path| canonical(&d.components().collect::<PathBuf>());
+        assert_eq!(
+            other_config_dirs(home, names.clone(), |_| true, Some(&inherited), tidy),
+            Vec::<PathBuf>::new()
+        );
+        assert_eq!(
+            other_config_dirs(
+                home,
+                [".claude-other"].map(String::from),
+                |_| true,
+                Some(&inherited),
+                tidy
+            ),
+            vec![home.join(".claude-other")],
+            "with no .claude folder, only the named ones"
         );
     }
 

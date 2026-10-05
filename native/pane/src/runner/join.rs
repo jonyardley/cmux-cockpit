@@ -555,13 +555,15 @@ mod tests {
             || parse::agents(br#"[{"pid": 9533, "sessionId": "s9533", "status": "busy"}]"#);
         let personal_dir =
             || parse::agents(br#"[{"pid": 59557, "sessionId": "s59557", "status": "busy"}]"#);
-        j.agents(parse::merged([default_dir()]).unwrap_or_default());
+        j.agents(parse::merged(default_dir()));
         assert_eq!(
             statuses(&j.frame(200.0))[1].1,
             vec![],
             "one dir's view hides it"
         );
-        j.agents(parse::merged([default_dir(), personal_dir()]).unwrap_or_default());
+        j.agents(parse::merged(
+            default_dir().into_iter().chain(personal_dir()),
+        ));
         assert_eq!(
             statuses(&j.frame(200.0))[1].1,
             vec![("s59557".into(), Some(AgentStatus::Working))]

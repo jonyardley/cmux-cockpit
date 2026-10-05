@@ -11,6 +11,7 @@
 //! projects.json from another folder; `--after <seq>` replays from a
 //! later sequence.
 
+use std::collections::HashMap;
 use std::io::Write;
 use std::ops::ControlFlow;
 use std::path::PathBuf;
@@ -196,7 +197,9 @@ impl Drop for Mouse {
 /// so a key is answered at once without the runner waking on a timer.
 /// Log lines would tear the screen, so they wait until it is restored,
 /// tallied so a long session's polls print once each, not once a poll.
-fn terminal(opts: &Options) -> Result<Vec<String>, String> {
+/// The held lines come back with the outcome, a failed draw included, so
+/// they print either way.
+fn terminal(opts: &Options) -> (Vec<String>, Result<(), String>) {
     let (tx, rx) = runner::channel();
     let (keys_tx, keys_rx) = mpsc::channel::<Event>();
     let poke = tx.clone();
@@ -207,12 +210,15 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
             }
         }
     });
-    let mut term = ratatui::try_init().map_err(|e| format!("no terminal: {e}"))?;
+    let mut term = match ratatui::try_init() {
+        Ok(t) => t,
+        Err(e) => return (Vec::new(), Err(format!("no terminal: {e}"))),
+    };
     let mouse = match Mouse::capture() {
         Ok(m) => m,
         Err(e) => {
             ratatui::restore();
-            return Err(e);
+            return (Vec::new(), Err(e));
         }
     };
     let mut pane = Pane::new(PaneModel::default());
@@ -258,25 +264,31 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
     );
     drop(mouse);
     ratatui::restore();
-    failed.map_or_else(|| Ok(logged.lines()), Err)
+    (logged.lines(), failed.map_or(Ok(()), Err))
 }
 
 /// Log lines held back while the pane draws: each distinct line once, in
-/// the order first seen, with how many times it came.
+/// the order first seen, with how many times it came. `at` indexes each
+/// line's place in `seen`, so a push costs the same however many came.
 #[derive(Default)]
-struct Tally(Vec<(String, usize)>);
+struct Tally {
+    seen: Vec<(String, usize)>,
+    at: HashMap<String, usize>,
+}
 
 impl Tally {
     fn push(&mut self, line: String) {
-        match self.0.iter_mut().find(|(l, _)| *l == line) {
-            Some((_, n)) => *n += 1,
-            None => self.0.push((line, 1)),
+        if let Some((_, n)) = self.at.get(&line).and_then(|&i| self.seen.get_mut(i)) {
+            *n += 1;
+            return;
         }
+        self.at.insert(line.clone(), self.seen.len());
+        self.seen.push((line, 1));
     }
 
     /// The lines to print: a repeated one ends with its count, "(x412)".
     fn lines(self) -> Vec<String> {
-        self.0
+        self.seen
             .into_iter()
             .map(|(l, n)| if n > 1 { format!("{l} (x{n})") } else { l })
             .collect()
@@ -300,13 +312,14 @@ fn main() -> ExitCode {
     match (args.print, args.once) {
         (true, true) => print_once(&opts),
         (true, false) => print_follow(&opts),
-        (false, _) => match terminal(&opts) {
-            Ok(logged) => logged.iter().for_each(|l| eprintln!("cockpit-pane: {l}")),
-            Err(e) => {
+        (false, _) => {
+            let (logged, outcome) = terminal(&opts);
+            logged.iter().for_each(|l| eprintln!("cockpit-pane: {l}"));
+            if let Err(e) = outcome {
                 eprintln!("cockpit-pane: {e}");
                 return ExitCode::FAILURE;
             }
-        },
+        }
     }
     ExitCode::SUCCESS
 }
