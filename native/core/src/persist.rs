@@ -223,6 +223,46 @@ impl SavedState {
     pub fn from_json(text: &str) -> Result<SavedState, serde_json::Error> {
         serde_json::from_str(text)
     }
+
+    /// Makes one of the cockpit's own writes here, as the handler's
+    /// applySet makes it in the file: `dismissed.<ws>`, `projectOverride.<ws>`,
+    /// `ui.mode` or `ui.collapsed`, set, or deleted with no value. False
+    /// for any other key or a value of the wrong shape, leaving the state
+    /// as it was.
+    pub fn set_entry(&mut self, key: &str, value: Option<&Value>) -> bool {
+        fn parse<T: serde::de::DeserializeOwned>(v: Option<&Value>) -> Result<Option<T>, ()> {
+            v.map(|v| serde_json::from_value(v.clone()).map_err(|_| ()))
+                .transpose()
+        }
+        let Some((map, id)) = key.split_once('.') else {
+            return false;
+        };
+        fn put<T>(entries: &mut BTreeMap<String, T>, id: &str, v: Option<T>) {
+            match v {
+                Some(v) => entries.insert(id.to_string(), v),
+                None => entries.remove(id),
+            };
+        }
+        match (map, id) {
+            ("dismissed", _) => parse(value)
+                .map(|v| put(&mut self.dismissed, id, v))
+                .is_ok(),
+            ("projectOverride", _) => parse(value)
+                .map(|v| put(&mut self.project_override, id, v))
+                .is_ok(),
+            ("ui", "mode") => parse(value).map(|v| self.ui.mode = v).is_ok(),
+            ("ui", "collapsed") => parse(value)
+                .map(|v| self.ui.collapsed = v.unwrap_or_default())
+                .is_ok(),
+            _ => false,
+        }
+    }
+
+    /// Whether the state already holds this write.
+    pub fn shows_entry(&self, key: &str, value: Option<&Value>) -> bool {
+        let mut after = self.clone();
+        after.set_entry(key, value) && after == *self
+    }
 }
 
 /// The URL that asks the (separately installed) handler to set or delete

@@ -17,7 +17,7 @@ use crate::js::num_text;
 use crate::lanes::{Density, LANES, Lane, LaneKey, lane_by_key};
 use crate::persist::ViewMode;
 use crate::projects::{OTHER_KEY, is_project_key};
-use crate::session::{LaneMove, PROJECT_FOLD, Param, Session};
+use crate::session::{LaneMove, OrderMove, PROJECT_FOLD, Param, Session};
 use crate::state::OVERRIDE_SECS;
 use crate::time::now_epoch;
 
@@ -84,6 +84,22 @@ fn expired(o: &LaneMove, now: f64) -> bool {
         }
 }
 
+/// Whether cmux has the workspaces in `order` in that order. One that came
+/// or went since does not count.
+fn same_order(ws: &[&Workspace], order: &[String]) -> bool {
+    let now: Vec<&str> = ws
+        .iter()
+        .map(|w| w.id.as_str())
+        .filter(|id| order.iter().any(|b| b == id))
+        .collect();
+    let then: Vec<&str> = order
+        .iter()
+        .map(String::as_str)
+        .filter(|id| ws.iter().any(|w| w.id == *id))
+        .collect();
+    now == then
+}
+
 /// The tab index, among the other tabs, just after the group's last member.
 fn index_after_group(data: &Data, ws_id: &str, g: &WorkspaceGroup) -> Option<usize> {
     let others: Vec<&Workspace> = data
@@ -137,7 +153,13 @@ impl Session {
         let actual = actual_lane_of(data, Some(w));
         let now = now_epoch(data);
         if let Some(o) = self.lane_override.get(&w.id).copied() {
-            if o.lane == actual || expired(&o, now) {
+            let done = match o.held_from {
+                Some(from) => {
+                    actual == o.lane || !from.contains(actual) || (o.awaiting && expired(&o, now))
+                }
+                None => o.lane == actual || expired(&o, now),
+            };
+            if done {
                 self.lane_override.shift_remove(&w.id);
             } else {
                 return o.lane;
@@ -180,6 +202,7 @@ impl Session {
                 lane: key,
                 at,
                 awaiting,
+                held_from: None,
             },
         );
     }
@@ -242,6 +265,7 @@ impl Session {
                     lane: o.lane,
                     at: now,
                     awaiting: false,
+                    held_from: o.held_from,
                 },
             );
         }
@@ -249,7 +273,11 @@ impl Session {
 
     /// Records a reorder the app has not reflected yet.
     pub fn override_order(&mut self, data: &Data, ids: Vec<String>) {
-        self.order_override = Some((ids, now_epoch(data)));
+        self.order_override = Some(OrderMove {
+            ids,
+            at: now_epoch(data),
+            held_bases: Vec::new(),
+        });
     }
 
     /// Every workspace in tab order, a pending reorder applied. The read
@@ -257,13 +285,20 @@ impl Session {
     pub fn all_workspaces<'d>(&mut self, data: &'d Data) -> Vec<&'d Workspace> {
         self.file_awaiting_cards(data);
         let mut ws: Vec<&Workspace> = data.workspace_list().iter().collect();
-        if let Some((order, at)) = self.order_override.clone() {
-            let ids: Vec<String> = order
+        if let Some(o) = self.order_override.clone() {
+            let ids: Vec<String> = o
+                .ids
                 .into_iter()
                 .filter(|id| ws.iter().any(|w| w.id == *id))
                 .collect();
-            let caught_up = ws.len() == ids.len() && ws.iter().zip(&ids).all(|(w, id)| w.id == *id);
-            if caught_up || now_epoch(data) - at > OVERRIDE_SECS {
+            let done = if o.held_bases.is_empty() {
+                let caught_up =
+                    ws.len() == ids.len() && ws.iter().zip(&ids).all(|(w, id)| w.id == *id);
+                caught_up || now_epoch(data) - o.at > OVERRIDE_SECS
+            } else {
+                same_order(&ws, &ids) || !o.held_bases.iter().any(|b| same_order(&ws, b))
+            };
+            if done {
                 self.order_override = None;
             } else {
                 // A Map from the ids keeps the last index of a repeated one.
