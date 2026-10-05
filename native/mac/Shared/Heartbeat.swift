@@ -11,8 +11,8 @@ enum Shared {
     /// looks in the group folder for the news.
     static let changed = Notification.Name("dev.jonyardley.cockpit.changed")
 
-    /// The group folder, or nil when this process is not entitled to it
-    /// (an unsigned build, say).
+    /// The group folder. Nil only if macOS refuses the group outright; an
+    /// unsandboxed process gets a path even without the entitlement.
     static var folder: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group)
     }
@@ -25,8 +25,11 @@ enum Shared {
 enum Heartbeat {
     static let fileName = "heartbeat"
     static let interval: TimeInterval = 1
+    /// How often the extension looks, besides on the "changed" signal.
+    static let pollInterval: TimeInterval = 2
     /// A few missed beats before the extension says the helper is down, so
-    /// a busy second never flickers the panel.
+    /// a busy second never flickers the panel. With the poll, a helper that
+    /// dies without a word shows as down within about seven seconds.
     static let staleAfter: TimeInterval = 5
 
     /// Whether a beat at `beat` still counts as alive at `now`. No beat, or

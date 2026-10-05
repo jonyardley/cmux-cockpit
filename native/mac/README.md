@@ -9,6 +9,7 @@ parts, built together from `project.yml` with XcodeGen:
 - `CockpitSidebar.appex` (`Sidebar/`), embedded in the app: the sandboxed
   extension cmux draws in its left sidebar.
 - `Shared/`: the names and the heartbeat rule both targets compile.
+  `Tests/main.swift` checks the rule; `native/mac/test.sh` runs it.
 
 The two talk through the App Group `9S5FG4LQAF.dev.jonyardley.cockpit`:
 a folder only they can reach, plus a bare distributed notification
@@ -17,16 +18,17 @@ a folder only they can reach, plus a bare distributed notification
 ## How the extension knows the helper is running
 
 The helper writes the time into `heartbeat` in the group folder every
-second and posts the notification. The extension reads the file when the
-notification arrives and every two seconds besides, and calls the helper
-running while the latest beat is under five seconds old. A clean quit
-(Quit, `pkill -x Cockpit` or Control C) deletes the file and posts the
+second, and posts the notification when it starts and when it stops. The
+extension reads the file when the notification arrives and every two
+seconds besides, and calls the helper running while the latest beat is
+under five seconds old. Stopping it with `pkill -x Cockpit` (or Control C
+when the binary runs in a terminal) deletes the file and posts the
 notification, so the sidebar changes at once; a crash shows within about
-five seconds.
+seven seconds.
 
 ## Build
 
-Needs Xcode 26 or later and XcodeGen (`brew install xcodegen`).
+Needs Xcode 16 or later (the SDK needs Swift tools 6.0) and XcodeGen (`brew install xcodegen`).
 
 ```sh
 native/mac/build.sh
@@ -36,14 +38,15 @@ It fetches cmux's sidebar SDK (`fetch-sdk.sh`), generates
 `Cockpit.xcodeproj` and builds into `build/`. All three are gitignored.
 The SDK is GPL-3.0-or-later, so it is fetched into `.sdk/`, never
 committed, pinned to the cmux release tag in `fetch-sdk.sh`; bump that tag
-when cmux updates. The sparse checkout is no-cone on purpose, so cmux's
+when cmux updates, with the commit it points at (the script refuses a
+moved tag). The sparse checkout is no-cone on purpose, so cmux's
 root files (its `biome.json` above all) stay out of this repo's tree.
 
 Signing is automatic with team `9S5FG4LQAF`: the App Group needs a real
 signature, and the first build may register the app IDs and the group
 with Apple. `UNSIGNED=1 native/mac/build.sh` builds without signing, as CI
-does; that build compiles but cannot reach the group, so its sidebar only
-ever says Cockpit isn't running.
+does. That is a compile check only: cmux will not list an unsigned
+extension.
 
 To work in Xcode instead: `./fetch-sdk.sh && xcodegen`, then open
 `Cockpit.xcodeproj`.
@@ -54,8 +57,16 @@ To work in Xcode instead: `./fetch-sdk.sh && xcodegen`, then open
 open native/mac/build/Build/Products/Debug/Cockpit.app
 ```
 
-One launch registers the extension with macOS. To stop the helper:
-`pkill -x Cockpit`.
+One launch registers the extension with macOS, at that app's path. Run it
+from the main checkout's build: a copy built in a worktree registers from
+there, and goes stale when the worktree is removed. To see which copy is
+registered:
+
+```sh
+pluginkit -mAvvv -i dev.jonyardley.cockpit.sidebar
+```
+
+To stop the helper: `pkill -x Cockpit`.
 
 ## Switch it on in cmux
 

@@ -20,7 +20,7 @@ final class HelperStatus {
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.read() }
         }
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: Heartbeat.pollInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.read() }
         }
         read()
@@ -35,7 +35,8 @@ final class HelperStatus {
 }
 
 @main
-final class CockpitSidebar: @MainActor CmuxSidebarExtension {
+@MainActor
+final class CockpitSidebar: CmuxSidebarExtension {
     // The scopes the panel will need. Asking for them now is what makes
     // cmux show its "Limited extension access" banner on first use.
     static let manifest = CmuxExtensionManifest(

@@ -53,8 +53,8 @@ jobs:
 
   # The helper app and the Cockpit sidebar extension in native/mac: an
   # XcodeGen project, so it needs a macOS runner. Builds both targets
-  # unsigned (building the app builds and embeds the extension); there is
-  # no Swift test target yet.
+  # unsigned (building the app builds and embeds the extension), and runs
+  # the heartbeat rule's checks.
   mac:
     runs-on: macos-latest
     timeout-minutes: 20
@@ -67,6 +67,9 @@ jobs:
           persist-credentials: false
       - run: xcodebuild -version
       - run: brew install xcodegen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+      - run: ./test.sh
       - run: ./build.sh
         env:
           UNSIGNED: "1"

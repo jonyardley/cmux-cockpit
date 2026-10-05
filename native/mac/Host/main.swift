@@ -44,10 +44,6 @@ for number in [SIGTERM, SIGINT] {
     signalSources.append(source)
 }
 
-if Shared.folder == nil {
-    print("No App Group folder: this build is not signed with the group entitlement.")
-}
-
 let delegate = AppDelegate()
 NSApplication.shared.delegate = delegate
 beat()
