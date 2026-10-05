@@ -64,6 +64,20 @@ impl Cursor {
         }
     }
 
+    /// Puts the cursor on `id`, as a click does. True when it moved; a
+    /// card not in `cards` leaves it where it is.
+    pub fn jump(&mut self, cards: &[&str], id: &str) -> bool {
+        let Some(i) = cards.iter().position(|c| *c == id) else {
+            return false;
+        };
+        if self.on() == Some(id) {
+            return false;
+        }
+        self.on = Some(id.to_string());
+        self.index = i;
+        true
+    }
+
     /// Moves `step` cards down (up when negative), held at either end.
     /// The first move lands on the first card. True when it moved.
     pub fn step(&mut self, cards: &[&str], step: isize) -> bool {
@@ -174,6 +188,18 @@ mod tests {
         assert_eq!(at(None, false, 0), 0);
         assert_eq!(at(None, false, 7), 7);
         assert_eq!(at(None, false, 99), 20);
+    }
+
+    #[test]
+    fn jumps_to_a_clicked_card_and_steps_on_from_there() {
+        let cards = ["a", "b", "c"];
+        let mut c = Cursor::default();
+        assert!(c.jump(&cards, "b"));
+        assert!(!c.jump(&cards, "b"), "already there");
+        assert!(!c.jump(&cards, "z"), "not a card");
+        assert_eq!(c.on(), Some("b"));
+        assert!(c.step(&cards, 1));
+        assert_eq!(c.on(), Some("c"));
     }
 
     #[test]

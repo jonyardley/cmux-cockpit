@@ -1,12 +1,14 @@
 //! The Needs you strip: its heading with the count and the oldest wait,
 //! a row per listed session with why it waits, and "+N more". Nothing at
-//! all while nobody waits.
+//! all while nobody waits. The cursor walks the rows before the lanes.
 
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
-use super::parts::{pill, spans_width, spread};
+use super::lanes::Laid;
+use super::parts::{Edge, pill, spans_width, spread};
 use crate::model::{NEEDS_LABEL, Needs};
+use crate::placing::Spot;
 use crate::text::{fit, width};
 use crate::theme;
 use cockpit_core::theme::Token;
@@ -15,13 +17,25 @@ use cockpit_core::ui::PillColors;
 /// Before a row's title: indent, then the dot and a space.
 const ROW_LEAD: usize = 4;
 
-/// The strip's lines, on its own face.
-pub fn lines(needs: &Needs, inner: usize) -> Vec<Line<'static>> {
+/// The strip's lines on its own face, what each is for the mouse, and
+/// which the row under the cursor takes.
+pub fn lines(needs: &Needs, inner: usize, cursor: Option<&str>) -> Laid {
     if needs.count == 0 {
-        return Vec::new();
+        return Laid {
+            lines: Vec::new(),
+            spots: Vec::new(),
+            focus: None,
+        };
     }
     let mut out = vec![heading(needs, inner)];
+    let mut spots = vec![Spot::Blank];
+    let mut focus = None;
     for row in &needs.rows {
+        let on = cursor == Some(row.ws_id.as_str());
+        let edge = if on { Edge::Cursor } else { Edge::Plain };
+        if on {
+            focus = Some(out.len()..out.len() + 2);
+        }
         let left = vec![
             Span::raw("  "),
             Span::styled(row.icon.glyph, theme::icon(row.icon.ink)),
@@ -31,7 +45,7 @@ pub fn lines(needs: &Needs, inner: usize) -> Vec<Line<'static>> {
                 theme::title(),
             ),
         ];
-        out.push(spread(left, Vec::new(), inner, false));
+        out.push(spread(left, Vec::new(), inner, edge));
         let why = vec![
             Span::raw(" ".repeat(ROW_LEAD)),
             Span::styled(
@@ -39,7 +53,8 @@ pub fn lines(needs: &Needs, inner: usize) -> Vec<Line<'static>> {
                 theme::ink(row.ink),
             ),
         ];
-        out.push(spread(why, Vec::new(), inner, false));
+        out.push(spread(why, Vec::new(), inner, edge));
+        spots.resize(out.len(), Spot::Needs(row.ws_id.clone()));
     }
     if !needs.more.is_empty() {
         let more = vec![
@@ -49,10 +64,15 @@ pub fn lines(needs: &Needs, inner: usize) -> Vec<Line<'static>> {
                 theme::ink(Token::MetaText),
             ),
         ];
-        out.push(spread(more, Vec::new(), inner, false));
+        out.push(spread(more, Vec::new(), inner, Edge::Plain));
+        spots.push(Spot::Blank);
     }
     let face = Style::new().bg(theme::rgb(theme::NEEDS_BG));
-    out.into_iter().map(|l| l.patch_style(face)).collect()
+    Laid {
+        lines: out.into_iter().map(|l| l.patch_style(face)).collect(),
+        spots,
+        focus,
+    }
 }
 
 fn heading(needs: &Needs, inner: usize) -> Line<'static> {
@@ -79,5 +99,5 @@ fn heading(needs: &Needs, inner: usize) -> Line<'static> {
     } else {
         vec![Span::styled(wait, ink)]
     };
-    spread(left, right, inner, false)
+    spread(left, right, inner, Edge::Plain)
 }

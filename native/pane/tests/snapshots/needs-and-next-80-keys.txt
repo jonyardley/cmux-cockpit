@@ -24,12 +24,15 @@
    ◌ Oldest question · your turn
    ◌ Publish · is asking
    ◌ Second · your turn
-   ◌ Third · your turn
-   ● Fifth, past the cap                                                    <1m
-     One more thing
-   ● Finished while aw┌ Keys ────────────────────────────┐                   4m
-   ● Busy             │ ↑ ↓  move between cards          │                   1m
-                      │ ?    show or hide the keys       │
-                      │ q    quit                        │
-                      │ Esc  close this                  │
-                      └──────────────────────────────────┘
+   ◌ Third · your tur┌ Keys ──────────────────────────────┐
+   ● Fifth, past the │ ↑ ↓        move between cards      │                 <1m
+     One more thing  │ shift ↑ ↓  reorder in its lane     │
+   ● Finished while a│ m 1-5      move to a lane          │                  4m
+   ● Busy            │ drag       move to a lane or spot  │                  1m
+                     │ Enter      switch to it            │
+                     │ d          dismiss from Needs you  │
+                     │ Tab        All or Projects         │
+                     │ ?          show or hide the keys   │
+                     │ q          quit                    │
+                     │ Esc        close this              │
+                     └────────────────────────────────────┘

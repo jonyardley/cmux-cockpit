@@ -56,14 +56,68 @@ pub const HOLLOW: &str = "○";
 pub const GHOST: &str = "◌";
 
 /// The keys the `?` overlay lists: the key, then what it does.
-pub const KEYS: [(&str, &str); 4] = [
+pub const KEYS: [(&str, &str); 10] = [
     ("↑ ↓", "move between cards"),
+    ("shift ↑ ↓", "reorder in its lane"),
+    ("m 1-5", "move to a lane"),
+    ("drag", "move to a lane or spot"),
+    ("Enter", "switch to it"),
+    ("d", "dismiss from Needs you"),
+    ("Tab", "All or Projects"),
     ("?", "show or hide the keys"),
     ("q", "quit"),
     ("Esc", "close this"),
 ];
 /// The overlay's title.
 pub const KEYS_TITLE: &str = "Keys";
+/// The lane picker's title, after `m`.
+pub const PICK_TITLE: &str = "Move to lane";
+/// The lane picker's last line: how to leave it.
+pub const PICK_CANCEL: (&str, &str) = ("Esc", "cancel");
+/// Where the Projects view will be, until it is drawn.
+pub const PROJECTS_SOON: &str = "Projects arrives in R1.4. Tab goes back to All.";
+/// On the header of the lane a drag would drop into: above a card in it,
+/// or at its end.
+pub const DROP_HERE: &str = "drop here";
+pub const DROP_AT_END: &str = "drop at the end";
+/// In the margin of the card a drag would land above.
+pub const DROP_MARK: &str = "▔";
+
+/// Which view the pane draws; Tab flips between them.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PaneView {
+    #[default]
+    All,
+    Projects,
+}
+
+impl PaneView {
+    /// The other view.
+    pub fn flipped(self) -> PaneView {
+        match self {
+            PaneView::All => PaneView::Projects,
+            PaneView::Projects => PaneView::All,
+        }
+    }
+}
+
+/// The lane a digit picks after `m`: 1 is the first lane, in display order.
+pub fn lane_for_digit(c: char) -> Option<LaneKey> {
+    let n = c.to_digit(10)?;
+    let i = usize::try_from(n).ok()?.checked_sub(1)?;
+    LANES.get(i).map(|l| l.key)
+}
+
+/// The lane picker's rows: each digit and the lane it picks, then Esc.
+pub fn pick_rows() -> Vec<(String, &'static str)> {
+    let mut rows: Vec<(String, &'static str)> = LANES
+        .iter()
+        .enumerate()
+        .map(|(i, l)| ((i + 1).to_string(), l.name))
+        .collect();
+    rows.push((PICK_CANCEL.0.to_string(), PICK_CANCEL.1));
+    rows
+}
 
 /// The glyph before a title and its colour; None is the grey outline the
 /// sidebar draws round a dot with no colour of its own.
@@ -122,6 +176,8 @@ pub struct Card {
     pub detail: String,
     /// How many detail lines it draws: two on a full card, else one.
     pub detail_lines: usize,
+    /// Its session waits in Needs you, past the strip's cap.
+    pub waiting: bool,
 }
 
 /// A row under a lane header.
@@ -134,6 +190,16 @@ pub enum Row {
         title: String,
         text: String,
     },
+}
+
+impl Row {
+    /// The workspace the row stands for.
+    pub fn ws_id(&self) -> &str {
+        match self {
+            Row::Card(c) => &c.ws_id,
+            Row::Ghost { ws_id, .. } => ws_id,
+        }
+    }
 }
 
 /// A lane's generated anchor on its header: its dot and unread count.
@@ -189,15 +255,54 @@ impl PaneModel {
         }
     }
 
-    /// The cards the cursor moves between, top to bottom, by workspace id.
+    /// The cards the cursor moves between, top to bottom, by workspace id:
+    /// the Needs you rows, then the lanes' cards.
     pub fn card_ids(&self) -> Vec<&str> {
-        self.lanes
+        let needs = self.needs.rows.iter().map(|r| r.ws_id.as_str());
+        let cards = self
+            .lanes
             .iter()
             .flat_map(|l| &l.rows)
             .filter_map(|r| match r {
                 Row::Card(c) => Some(c.ws_id.as_str()),
-                _ => None,
-            })
+                Row::Ghost { .. } => None,
+            });
+        needs.chain(cards).collect()
+    }
+
+    /// Whether `id` is a row in the Needs you strip.
+    pub fn in_strip(&self, id: &str) -> bool {
+        self.needs.rows.iter().any(|r| r.ws_id == id)
+    }
+
+    /// Whether `id`'s session waits in Needs you: a row in the strip, or a
+    /// card past its cap.
+    pub fn is_waiting(&self, id: &str) -> bool {
+        self.in_strip(id)
+            || self
+                .lanes
+                .iter()
+                .flat_map(|l| &l.rows)
+                .any(|r| matches!(r, Row::Card(c) if c.ws_id == id && c.waiting))
+    }
+
+    /// The lane `id`'s card or placeholder sits in.
+    pub fn lane_of(&self, id: &str) -> Option<LaneKey> {
+        self.lanes
+            .iter()
+            .find(|l| l.rows.iter().any(|r| r.ws_id() == id))
+            .map(|l| l.key)
+    }
+
+    /// A lane's rows top to bottom, cards and placeholders, by workspace
+    /// id. A placeholder stands for a real tab in its lane (drop.ts), so a
+    /// card can land above one.
+    pub fn lane_rows(&self, key: LaneKey) -> Vec<&str> {
+        self.lanes
+            .iter()
+            .filter(|l| l.key == key)
+            .flat_map(|l| &l.rows)
+            .map(Row::ws_id)
             .collect()
     }
 
@@ -214,12 +319,22 @@ impl PaneModel {
             OLDEST_WORD,
             GHOST_GAP,
             KEYS_TITLE,
+            PICK_TITLE,
+            PICK_CANCEL.0,
+            PICK_CANCEL.1,
+            PROJECTS_SOON,
+            DROP_HERE,
+            DROP_AT_END,
         ]
         .iter()
         .map(|s| (*s).to_string())
         .collect();
         for (key, what) in KEYS {
             out.push(key.to_string());
+            out.push(what.to_string());
+        }
+        for (key, what) in pick_rows() {
+            out.push(key);
             out.push(what.to_string());
         }
         if let NextLine::Step { title, place } = &self.next {
@@ -380,7 +495,7 @@ fn left_off(text: &str) -> String {
     }
 }
 
-fn card(session: &mut Session, data: &Data, id: &str) -> Card {
+fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card {
     let w = data.ws_by_id(id);
     let style = session.status_info(data, w);
     let density = card_density(data, w);
@@ -405,6 +520,7 @@ fn card(session: &mut Session, data: &Data, id: &str) -> Card {
         left_off,
         detail: whole_words(&session.card_detail(w), DETAIL_MAX),
         detail_lines: detail_lines(density),
+        waiting: view.needs.list.iter().any(|w| w == id),
     }
 }
 
@@ -425,7 +541,7 @@ fn lanes(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Lane> {
                 out.push(lane_head(session, data, *lane, header, true));
             }
             LaneEntry::Ws { ws_id, .. } => {
-                let c = card(session, data, ws_id);
+                let c = card(session, data, view, ws_id);
                 push_row(&mut out, Row::Card(c));
             }
             LaneEntry::Ghost { ws_id, .. } => {
@@ -576,6 +692,110 @@ mod tests {
     fn is_empty_before_the_first_frame() {
         let mut core = Model::default();
         assert_eq!(PaneModel::from_core(&mut core), PaneModel::default());
+    }
+
+    #[test]
+    fn picks_lanes_by_digit_in_display_order() {
+        assert_eq!(lane_for_digit('1'), Some(LaneKey::Main));
+        assert_eq!(lane_for_digit('4'), Some(LaneKey::Parked));
+        assert_eq!(lane_for_digit('5'), Some(LaneKey::Unsorted));
+        assert_eq!(lane_for_digit('0'), None);
+        assert_eq!(lane_for_digit('6'), None);
+        assert_eq!(lane_for_digit('m'), None);
+        let rows = pick_rows();
+        assert_eq!(rows.first(), Some(&("1".to_string(), "Main activity")));
+        assert_eq!(rows.last(), Some(&("Esc".to_string(), "cancel")));
+    }
+
+    #[test]
+    fn flips_between_all_and_projects() {
+        assert_eq!(PaneView::All.flipped(), PaneView::Projects);
+        assert_eq!(PaneView::Projects.flipped(), PaneView::All);
+    }
+
+    fn card_row(id: &str, waiting: bool) -> Row {
+        Row::Card(Card {
+            ws_id: id.into(),
+            icon: Icon {
+                glyph: DOT,
+                ink: None,
+            },
+            title: id.into(),
+            status: String::new(),
+            status_ink: Token::MetaText,
+            left_off: String::new(),
+            detail: String::new(),
+            detail_lines: 1,
+            waiting,
+        })
+    }
+
+    /// A strip row "n" whose placeholder sits in Main beside card "a", and
+    /// card "w" past the strip's cap in Parked.
+    fn walked() -> PaneModel {
+        let lane = |key, rows: Vec<Row>| Lane {
+            key,
+            empty: rows.is_empty(),
+            name: String::new(),
+            faint: false,
+            marker: Token::LaneMain,
+            anchor: None,
+            count: rows.len(),
+            pill: PillColors {
+                bg: Token::CountBg,
+                fg: Token::MetaText,
+            },
+            dot: None,
+            collapsed: false,
+            merge_ready: String::new(),
+            rows,
+        };
+        let ghost = Row::Ghost {
+            ws_id: "n".into(),
+            title: "n".into(),
+            text: "your turn".into(),
+        };
+        PaneModel {
+            needs: Needs {
+                count: 2,
+                rows: vec![NeedsRow {
+                    ws_id: "n".into(),
+                    icon: Icon {
+                        glyph: DOT,
+                        ink: None,
+                    },
+                    title: "n".into(),
+                    line: String::new(),
+                    ink: Token::ClayText,
+                }],
+                ..Needs::default()
+            },
+            lanes: vec![
+                lane(LaneKey::Main, vec![ghost, card_row("a", false)]),
+                lane(LaneKey::Parked, vec![card_row("w", true)]),
+            ],
+            ..PaneModel::default()
+        }
+    }
+
+    #[test]
+    fn walks_the_strip_then_the_lanes_cards() {
+        assert_eq!(walked().card_ids(), ["n", "a", "w"]);
+    }
+
+    #[test]
+    fn knows_who_waits_and_which_lane_holds_each_card() {
+        let m = walked();
+        assert!(m.in_strip("n"));
+        assert!(!m.in_strip("w"));
+        assert!(m.is_waiting("n"));
+        assert!(m.is_waiting("w"), "past the cap");
+        assert!(!m.is_waiting("a"));
+        assert_eq!(m.lane_of("n"), Some(LaneKey::Main), "by its placeholder");
+        assert_eq!(m.lane_of("w"), Some(LaneKey::Parked));
+        assert_eq!(m.lane_of("z"), None);
+        assert_eq!(m.lane_rows(LaneKey::Main), ["n", "a"]);
+        assert!(m.lane_rows(LaneKey::Review).is_empty());
     }
 
     #[test]

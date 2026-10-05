@@ -1,40 +1,78 @@
 //! The cockpit in a terminal: a ratatui pane that draws the core's All
-//! view (Next, Needs you and the lanes) and lets up and down walk the
-//! cards. It reads only; nothing here writes to cmux or the state file.
+//! view (Next, Needs you and the lanes), lets up and down walk the cards,
+//! and turns keys and drags into actions on them: place a card in a lane,
+//! switch to it, dismiss it from Needs you, flip the view. It writes
+//! nothing itself; the runner hands each action to the core.
 //!
 //! A runner owns the terminal and the core. Each frame it builds a
 //! `PaneModel` from the core and hands it to `Pane::set_view_model`, passes
 //! each terminal event to `Pane::handle_event`, and calls `Pane::draw`,
-//! which only draws when something changed: a new model, a key that moved
-//! the cursor or the keys overlay, or a new terminal size.
+//! which only draws when something changed: a new model, a key or a drag
+//! that changed what shows, or a new terminal size.
 
 pub mod cursor;
 pub mod model;
+pub mod placing;
 pub mod runner;
 pub mod text;
 pub mod theme;
 mod views;
 
+use cockpit_core::lanes::LaneKey;
 use ratatui::Terminal;
 use ratatui::backend::Backend;
-use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use ratatui::crossterm::event::{
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 use ratatui::layout::Size;
 
 use crate::cursor::Cursor;
 pub use crate::model::PaneModel;
+use crate::model::{PaneView, lane_for_digit};
+use crate::placing::{Place, Spot, drop_on, reorder, spot_at, to_lane};
+
+/// Something the pane asks the core to do. Plain data: the runner turns
+/// each into a core event.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Action {
+    /// Place card `id` in `lane`, above card `before`, or at the lane's
+    /// end when None.
+    MoveCard {
+        id: String,
+        lane: LaneKey,
+        before: Option<String>,
+    },
+    /// Switch cmux to workspace `id`.
+    SwitchTo { id: String },
+    /// Dismiss `id` from Needs you.
+    Dismiss { id: String },
+    /// Flip between the All and Projects views.
+    FlipView,
+}
 
 /// What an event asks of the runner.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Outcome {
     /// Nothing changed.
     Nothing,
     /// Something on screen changed; `draw` will draw it.
     Redraw,
+    /// Hand this action to the core. `draw` draws whatever it changed on
+    /// screen meanwhile.
+    Act(Action),
     /// Leave the pane.
     Quit,
 }
 
-/// The pane: the model it draws, the card cursor and the keys overlay.
+/// A card being dragged: which, and where it would land if let go now.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct Drag {
+    id: String,
+    over: Option<Place>,
+}
+
+/// The pane: the model it draws, the card cursor, the keys overlay, the
+/// lane picker, a drag under way and which view shows.
 #[derive(Debug, Clone, Default)]
 pub struct Pane {
     model: PaneModel,
@@ -42,6 +80,12 @@ pub struct Pane {
     /// The line scroll Up and Down set when there is no card to move to.
     manual: usize,
     keys: bool,
+    /// `m` was pressed: the next key picks the lane.
+    picking: bool,
+    view: PaneView,
+    drag: Option<Drag>,
+    /// Where the last draw put the body, for the mouse.
+    drawn: views::Drawn,
     /// Something changed since the last draw.
     dirty: bool,
     /// The size the last draw filled; None before the first.
@@ -73,15 +117,44 @@ impl Pane {
         self.keys
     }
 
+    /// Whether `m` is waiting for a lane.
+    pub fn picking(&self) -> bool {
+        self.picking
+    }
+
+    /// Which view it draws.
+    pub fn view(&self) -> PaneView {
+        self.view
+    }
+
+    /// Where the card being dragged would land if let go now.
+    pub fn drop_target(&self) -> Option<&Place> {
+        self.drag.as_ref().and_then(|d| d.over.as_ref())
+    }
+
     /// Takes a new frame's model. Only a model that differs from the one on
     /// screen asks for a draw; the cursor stays on its card if it is still
-    /// there. True when it changed.
+    /// there, and a drag whose card went is dropped. True when it changed.
     pub fn set_view_model(&mut self, model: PaneModel) -> bool {
         if model == self.model {
             return false;
         }
         self.model = model;
         self.cursor.settle(&self.model.card_ids());
+        if let Some(d) = &mut self.drag {
+            if self.model.lane_of(&d.id).is_none() {
+                self.drag = None;
+            } else if let Some(over) = &d.over {
+                // The card it would land above may have gone.
+                let gone = over
+                    .before
+                    .as_deref()
+                    .is_some_and(|b| self.model.lane_of(b).is_none());
+                if gone {
+                    d.over = None;
+                }
+            }
+        }
         self.dirty = true;
         true
     }
@@ -92,50 +165,180 @@ impl Pane {
         self.dirty || self.drawn_at != Some(size)
     }
 
-    /// Handles a terminal event: keys, and a resize, which asks for a draw.
+    /// Handles a terminal event: keys, the mouse, and a resize, which asks
+    /// for a draw.
     pub fn handle_event(&mut self, event: &Event) -> Outcome {
         match event {
             Event::Key(key) => self.handle_key(*key),
+            Event::Mouse(mouse) => self.handle_mouse(*mouse),
             // The next draw sees the new size and draws.
             Event::Resize(..) => Outcome::Redraw,
             _ => Outcome::Nothing,
         }
     }
 
-    /// Handles a key: up and down move the cursor (or scroll a line when
-    /// there are no cards), `?` shows or hides the keys, Esc hides them, `q`
-    /// or Ctrl-C quits. While the keys are up, up and down do nothing.
+    /// Handles a key. `q` or Ctrl-C quits, `?` shows or hides the keys and
+    /// Esc hides them; while they are up nothing else answers. After `m`
+    /// the next key picks a lane (Esc, or any other key, cancels). Tab
+    /// flips the view; in Projects the card keys rest. Up and down move
+    /// the cursor (or scroll a line when there are no cards), with shift
+    /// they reorder its card in its lane, Enter switches to it, and `d`
+    /// dismisses it from Needs you.
     pub fn handle_key(&mut self, key: KeyEvent) -> Outcome {
         if key.kind == KeyEventKind::Release {
             return Outcome::Nothing;
         }
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return Outcome::Quit;
+        }
         let chord = key.modifiers.intersects(
             KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER | KeyModifiers::META,
         );
-        let changed = match key.code {
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Outcome::Quit;
-            }
-            _ if chord => false,
+        if chord {
+            return Outcome::Nothing;
+        }
+        if self.picking {
+            return self.pick(key.code);
+        }
+        let outcome = match key.code {
             KeyCode::Char('q') => return Outcome::Quit,
-            KeyCode::Up | KeyCode::Down if self.keys => false,
-            KeyCode::Up => self.step(-1),
-            KeyCode::Down => self.step(1),
             KeyCode::Char('?') => {
                 self.keys = !self.keys;
-                true
+                Outcome::Redraw
             }
             KeyCode::Esc if self.keys => {
                 self.keys = false;
-                true
+                Outcome::Redraw
             }
-            _ => false,
+            _ if self.keys => Outcome::Nothing,
+            KeyCode::Esc if self.drag.is_some() => {
+                self.drag = None;
+                Outcome::Redraw
+            }
+            KeyCode::Tab | KeyCode::BackTab => {
+                self.view = self.view.flipped();
+                self.drag = None;
+                Outcome::Act(Action::FlipView)
+            }
+            _ if self.view != PaneView::All => Outcome::Nothing,
+            code => self.card_key(code, key.modifiers.contains(KeyModifiers::SHIFT)),
         };
-        if changed {
+        if outcome != Outcome::Nothing {
             self.dirty = true;
-            Outcome::Redraw
-        } else {
-            Outcome::Nothing
+        }
+        outcome
+    }
+
+    /// The keys that act on the cards, in All with nothing over them.
+    fn card_key(&mut self, code: KeyCode, shift: bool) -> Outcome {
+        let on = self.cursor.on().map(str::to_string);
+        match code {
+            KeyCode::Up | KeyCode::Down if shift => {
+                let up = code == KeyCode::Up;
+                let place = on.and_then(|id| {
+                    let place = reorder(&self.model, &id, up)?;
+                    Some((id, place))
+                });
+                place.map_or(Outcome::Nothing, |(id, p)| move_card(id, p))
+            }
+            KeyCode::Up => redraw_if(self.step(-1)),
+            KeyCode::Down => redraw_if(self.step(1)),
+            KeyCode::Enter => {
+                on.map_or(Outcome::Nothing, |id| Outcome::Act(Action::SwitchTo { id }))
+            }
+            KeyCode::Char('d') => match on {
+                Some(id) if self.model.is_waiting(&id) => Outcome::Act(Action::Dismiss { id }),
+                _ => Outcome::Nothing,
+            },
+            KeyCode::Char('m') if on.is_some() => {
+                self.picking = true;
+                Outcome::Redraw
+            }
+            _ => Outcome::Nothing,
+        }
+    }
+
+    /// The key after `m`: a lane's digit places the card at that lane's
+    /// end; anything else cancels.
+    fn pick(&mut self, code: KeyCode) -> Outcome {
+        self.picking = false;
+        self.dirty = true;
+        let lane = match code {
+            KeyCode::Char(c) => lane_for_digit(c),
+            _ => None,
+        };
+        let place = lane.and_then(|lane| {
+            let id = self.cursor.on()?.to_string();
+            let place = to_lane(&self.model, &id, lane)?;
+            Some((id, place))
+        });
+        place.map_or(Outcome::Redraw, |(id, p)| move_card(id, p))
+    }
+
+    /// Handles the mouse in All, with nothing over the lanes: a press on a
+    /// card puts the cursor there and picks it up, a drag shows where it
+    /// would land, and letting go places it. The wheel moves the cursor.
+    pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Outcome {
+        if self.keys || self.picking || self.view != PaneView::All {
+            return Outcome::Nothing;
+        }
+        let outcome = match mouse.kind {
+            MouseEventKind::ScrollUp => redraw_if(self.step(-1)),
+            MouseEventKind::ScrollDown => redraw_if(self.step(1)),
+            MouseEventKind::Down(MouseButton::Left) => self.press(mouse.row),
+            MouseEventKind::Drag(MouseButton::Left) => self.drag_over(mouse.row),
+            MouseEventKind::Up(MouseButton::Left) => self.let_go(mouse.row),
+            _ => Outcome::Nothing,
+        };
+        if outcome != Outcome::Nothing {
+            self.dirty = true;
+        }
+        outcome
+    }
+
+    /// What is under screen row `row`, as the last draw laid it out.
+    fn spot(&self, row: u16) -> Spot {
+        match row.checked_sub(self.drawn.top) {
+            Some(y) => spot_at(&self.drawn.spots, usize::from(y) + self.drawn.scroll),
+            None => Spot::Blank,
+        }
+    }
+
+    fn press(&mut self, row: u16) -> Outcome {
+        let (id, card) = match self.spot(row) {
+            Spot::Card { id, .. } => (id, true),
+            Spot::Needs(id) => (id, false),
+            _ => return Outcome::Nothing,
+        };
+        let moved = self.cursor.jump(&self.model.card_ids(), &id);
+        // A placeholder or a Needs you row is not dragged (drop.ts).
+        if card {
+            self.drag = Some(Drag { id, over: None });
+        }
+        redraw_if(moved)
+    }
+
+    fn drag_over(&mut self, row: u16) -> Outcome {
+        let spot = self.spot(row);
+        let Some(d) = &mut self.drag else {
+            return Outcome::Nothing;
+        };
+        let over = drop_on(&self.model, &d.id, &spot);
+        if over == d.over {
+            return Outcome::Nothing;
+        }
+        d.over = over;
+        Outcome::Redraw
+    }
+
+    fn let_go(&mut self, row: u16) -> Outcome {
+        self.drag_over(row);
+        let Some(d) = self.drag.take() else {
+            return Outcome::Nothing;
+        };
+        match d.over {
+            Some(place) => move_card(d.id, place),
+            None => Outcome::Redraw,
         }
     }
 
@@ -165,15 +368,36 @@ impl Pane {
             last: cursor.is_some() && cursor == self.model.card_ids().last().copied(),
             manual: self.manual,
             keys: self.keys,
+            picking: self.picking,
+            view: self.view,
+            drop: self.drag.as_ref().and_then(|d| d.over.as_ref()),
         };
-        let mut scrolled = 0;
-        terminal.draw(|frame| scrolled = views::draw(frame, shown))?;
+        let mut drawn = views::Drawn::default();
+        terminal.draw(|frame| drawn = views::draw(frame, shown))?;
         if cursor.is_none() {
             // Held at the end, so Up after too many Downs moves at once.
-            self.manual = scrolled;
+            self.manual = drawn.scroll;
         }
+        self.drawn = drawn;
         self.dirty = false;
         self.drawn_at = Some(size);
         Ok(true)
     }
+}
+
+/// Redraw when something moved, else nothing.
+fn redraw_if(changed: bool) -> Outcome {
+    if changed {
+        Outcome::Redraw
+    } else {
+        Outcome::Nothing
+    }
+}
+
+fn move_card(id: String, place: Place) -> Outcome {
+    Outcome::Act(Action::MoveCard {
+        id,
+        lane: place.lane,
+        before: place.before,
+    })
 }
