@@ -227,10 +227,14 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
             for e in keys_rx.try_iter() {
                 match pane.handle_event(&e) {
                     Outcome::Quit => return ControlFlow::Break(()),
-                    // STITCH: hand the action to the runner here once the
-                    // core takes card actions (#209, #210). Until then the
-                    // pane asks and nothing happens.
-                    Outcome::Act(_action) => {}
+                    // The core takes the action at once and holds its
+                    // placement, so the pane redraws from the core's new
+                    // view before the next key: a second quick Shift press
+                    // works from where the first put the card.
+                    Outcome::Act(action) => {
+                        feed.act(action.into());
+                        pane.set_view_model(PaneModel::from_core(&mut feed.model));
+                    }
                     Outcome::Nothing | Outcome::Redraw => {}
                 }
             }

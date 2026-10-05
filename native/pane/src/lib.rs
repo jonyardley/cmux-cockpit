@@ -18,6 +18,7 @@ pub mod text;
 pub mod theme;
 mod views;
 
+use cockpit_core::Event as CoreEvent;
 use cockpit_core::lanes::LaneKey;
 use ratatui::Terminal;
 use ratatui::backend::Backend;
@@ -32,7 +33,7 @@ use crate::model::{PaneView, lane_for_digit};
 use crate::placing::{Place, Spot, drop_on, reorder, spot_at, to_lane};
 
 /// Something the pane asks the core to do. Plain data: the runner turns
-/// each into a core event.
+/// each into its core event (`From<Action> for cockpit_core::Event`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Action {
     /// Place card `id` in `lane`, above card `before`, or at the lane's
@@ -48,6 +49,17 @@ pub enum Action {
     Dismiss { id: String },
     /// Flip between the All and Projects views.
     FlipView,
+}
+
+impl From<Action> for CoreEvent {
+    fn from(action: Action) -> CoreEvent {
+        match action {
+            Action::MoveCard { id, lane, before } => CoreEvent::MoveCard { id, lane, before },
+            Action::SwitchTo { id } => CoreEvent::SwitchTo { id },
+            Action::Dismiss { id } => CoreEvent::Dismiss { id },
+            Action::FlipView => CoreEvent::FlipView,
+        }
+    }
 }
 
 /// What an event asks of the runner.
@@ -72,7 +84,8 @@ struct Drag {
 }
 
 /// The pane: the model it draws, the card cursor, the keys overlay, the
-/// lane picker, a drag under way and which view shows.
+/// lane picker and a drag under way. Which view shows comes with the
+/// model, from the core.
 #[derive(Debug, Clone, Default)]
 pub struct Pane {
     model: PaneModel,
@@ -82,7 +95,6 @@ pub struct Pane {
     keys: bool,
     /// `m` was pressed on this card: the next key picks its lane.
     picking: Option<String>,
-    view: PaneView,
     drag: Option<Drag>,
     /// Where the last draw put the body, for the mouse.
     drawn: views::Drawn,
@@ -124,7 +136,7 @@ impl Pane {
 
     /// Which view it draws.
     pub fn view(&self) -> PaneView {
-        self.view
+        self.model.view
     }
 
     /// Where the card being dragged would land if let go now.
@@ -226,11 +238,11 @@ impl Pane {
                 Outcome::Redraw
             }
             KeyCode::Tab | KeyCode::BackTab => {
-                self.view = self.view.flipped();
+                // The core flips the view; the model it sends next draws it.
                 self.drag = None;
                 Outcome::Act(Action::FlipView)
             }
-            _ if self.view != PaneView::All => Outcome::Nothing,
+            _ if self.model.view != PaneView::All => Outcome::Nothing,
             code => self.card_key(code, key.modifiers.contains(KeyModifiers::SHIFT)),
         };
         if outcome != Outcome::Nothing {
@@ -286,7 +298,7 @@ impl Pane {
     /// card puts the cursor there and picks it up, a drag shows where it
     /// would land, and letting go places it. The wheel moves the cursor.
     pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Outcome {
-        if self.keys || self.picking.is_some() || self.view != PaneView::All {
+        if self.keys || self.picking.is_some() || self.model.view != PaneView::All {
             return Outcome::Nothing;
         }
         let outcome = match mouse.kind {
@@ -380,7 +392,7 @@ impl Pane {
             manual: self.manual,
             keys: self.keys,
             picking: self.picking.is_some(),
-            view: self.view,
+            view: self.model.view,
             drop: self.drag.as_ref().and_then(|d| d.over.as_ref()),
         };
         let mut drawn = views::Drawn::default();
@@ -411,4 +423,46 @@ fn move_card(id: String, place: Place) -> Outcome {
         lane: place.lane,
         before: place.before,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The core's Event has no PartialEq, so each is matched field by field.
+    #[test]
+    fn turns_each_action_into_its_core_event() {
+        let moved = CoreEvent::from(Action::MoveCard {
+            id: "a".into(),
+            lane: LaneKey::Review,
+            before: Some("b".into()),
+        });
+        assert!(
+            matches!(&moved, CoreEvent::MoveCard { id, lane: LaneKey::Review, before: Some(b) }
+                if id == "a" && b == "b"),
+            "{moved:?}"
+        );
+        let to_end = CoreEvent::from(Action::MoveCard {
+            id: "a".into(),
+            lane: LaneKey::Parked,
+            before: None,
+        });
+        assert!(
+            matches!(&to_end, CoreEvent::MoveCard { id, lane: LaneKey::Parked, before: None }
+                if id == "a"),
+            "{to_end:?}"
+        );
+        let switch = CoreEvent::from(Action::SwitchTo { id: "s".into() });
+        assert!(
+            matches!(&switch, CoreEvent::SwitchTo { id } if id == "s"),
+            "{switch:?}"
+        );
+        let dismiss = CoreEvent::from(Action::Dismiss { id: "d".into() });
+        assert!(
+            matches!(&dismiss, CoreEvent::Dismiss { id } if id == "d"),
+            "{dismiss:?}"
+        );
+        let flip = CoreEvent::from(Action::FlipView);
+        assert!(matches!(flip, CoreEvent::FlipView), "{flip:?}");
+    }
 }

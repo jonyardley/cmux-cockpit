@@ -1,8 +1,10 @@
 # cockpit_pane
 
 The cockpit in a terminal: a ratatui pane that draws the core's All view,
-the way the sidebar looks. Read only; nothing here writes to cmux or the
-state file.
+the way the sidebar looks, and takes keys and drags for acting on its
+cards. The pane itself writes nothing: the runner hands each action to
+the core, and the core's cmux calls and state writes go out through the
+runner's outbox.
 
 - `src/model.rs` builds the `PaneModel` from the core's `Model`: every
   word and colour token the pane draws. The core's view model names
@@ -31,14 +33,15 @@ state file.
 | Drag a card | Move it to a lane, or above another card |
 | Enter | Switch to the card's workspace |
 | `d` | Dismiss the card from Needs you |
-| Tab | Flip between All and Projects (Projects is a placeholder for now) |
+| Tab | Flip between All and Projects, in the pane and the sidebar (the pane draws a placeholder for Projects for now) |
 | `?` | Show or hide the keys |
 | Esc | Hide the keys, or drop a drag |
 | `q`, Ctrl-C | Quit |
 
-The pane only asks for these: each comes back to the runner as an
-`Outcome::Act`, and nothing happens on screen in cmux until the runner
-hands it to the core.
+Each of these comes back to the runner as an `Outcome::Act`; the live
+pane hands it to the core straight away, which makes the cmux calls and
+state writes, and draws the core's new view before the next key. Tab
+flips the view in the core, so the sidebar flips with it.
 
 ## Opening it in a cmux split
 

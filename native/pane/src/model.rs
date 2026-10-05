@@ -12,6 +12,7 @@ use cockpit_core::data::{Data, Workspace};
 use cockpit_core::lane_entries::{LaneEntry, shows_left_off};
 use cockpit_core::lanes::{Density, LANES, LaneKey};
 use cockpit_core::model::card_density;
+use cockpit_core::persist::ViewMode;
 use cockpit_core::session::Session;
 use cockpit_core::status::StatusStyle;
 use cockpit_core::theme::Token;
@@ -83,22 +84,13 @@ pub const DROP_AT_END: &str = "drop at the end";
 /// In the margin of the card a drag would land above.
 pub const DROP_MARK: &str = "▔";
 
-/// Which view the pane draws; Tab flips between them.
+/// Which view the pane draws, as the core has it; Tab asks the core to
+/// flip it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum PaneView {
     #[default]
     All,
     Projects,
-}
-
-impl PaneView {
-    /// The other view.
-    pub fn flipped(self) -> PaneView {
-        match self {
-            PaneView::All => PaneView::Projects,
-            PaneView::Projects => PaneView::All,
-        }
-    }
 }
 
 /// The lane a digit picks after `m`: 1 is the first lane, in display order.
@@ -252,6 +244,8 @@ pub struct Lane {
 /// Everything the pane draws.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PaneModel {
+    /// Which view the core has on: Tab asks it to flip.
+    pub view: PaneView,
     pub next: NextLine,
     pub needs: Needs,
     pub lanes: Vec<Lane>,
@@ -268,7 +262,10 @@ impl PaneModel {
         } = core;
         match data {
             Some(data) => build(session, data, view),
-            None => PaneModel::default(),
+            None => PaneModel {
+                view: view_of(view),
+                ..PaneModel::default()
+            },
         }
     }
 
@@ -447,8 +444,18 @@ pub fn unread_text(n: Option<f64>) -> String {
     }
 }
 
+/// The core's view mode as the pane's view; anything but Projects is All.
+pub fn view_of(view: &ViewModel) -> PaneView {
+    if view.mode == ViewMode::Projects.as_str() {
+        PaneView::Projects
+    } else {
+        PaneView::All
+    }
+}
+
 fn build(session: &mut Session, data: &Data, view: &ViewModel) -> PaneModel {
     PaneModel {
+        view: view_of(view),
         next: next_line(data, view),
         needs: needs(session, data, view),
         lanes: lanes(session, data, view),
@@ -732,13 +739,15 @@ mod tests {
     }
 
     #[test]
-    fn flips_between_all_and_projects() {
-        assert_eq!(PaneView::All.flipped(), PaneView::Projects);
-        assert_eq!(PaneView::Projects.flipped(), PaneView::All);
+    fn takes_the_view_from_the_cores_mode() {
+        let mut view = ViewModel::default();
+        assert_eq!(view_of(&view), PaneView::All, "before any mode");
+        view.mode = ViewMode::Projects.as_str().into();
+        assert_eq!(view_of(&view), PaneView::Projects);
+        view.mode = ViewMode::All.as_str().into();
+        assert_eq!(view_of(&view), PaneView::All);
     }
 
-    /// A strip row "n" whose placeholder sits in Main beside card "a", and
-    /// card "w" past the strip's cap in Parked.
     /// Card "f" waiting in Needs you with its card filed in folded Review.
     fn walked() -> PaneModel {
         use fixtures::{card, ghost, lane, needs_row};
