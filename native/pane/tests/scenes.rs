@@ -907,6 +907,34 @@ fn the_wheel_moves_the_projects_cursor_with_the_finger() {
 }
 
 #[test]
+fn the_wheel_leaves_the_projects_cursor_alone_while_the_editor_is_open() {
+    let mut live = Live::new("projects");
+    assert_eq!(live.press(KeyCode::Down), Outcome::Redraw);
+    let open = live.press(KeyCode::Char('e'));
+    let Outcome::Act(Action::Edit(EditEvent::Open { key })) = open else {
+        panic!("e opens the editor on the first project: {open:?}");
+    };
+    for kind in [MouseEventKind::ScrollDown, MouseEventKind::ScrollUp] {
+        for _ in 0..3 {
+            assert_eq!(
+                live.pane.handle_event(&mouse(kind, 3)),
+                Outcome::Nothing,
+                "the wheel does nothing under the editor"
+            );
+        }
+    }
+    assert_eq!(
+        live.press(KeyCode::Esc),
+        Outcome::Act(Action::Edit(EditEvent::Close))
+    );
+    assert_eq!(
+        live.press(KeyCode::Char('e')),
+        Outcome::Act(Action::Edit(EditEvent::Open { key })),
+        "the cursor is still on the project it was on"
+    );
+}
+
+#[test]
 fn tab_alone_does_not_flip_the_pane_until_the_core_says_so() {
     let mut pane = pane_for("lanes");
     assert_eq!(

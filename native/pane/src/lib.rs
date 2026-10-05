@@ -450,17 +450,6 @@ impl Pane {
         self.rows.step(&ids, by)
     }
 
-    /// The wheel in Projects, `by` in the terminal's direction. The cursor
-    /// follows the finger as in All, so it steps against `by`; with no rows
-    /// to move to, the page scrolls the terminal's way.
-    fn row_wheel(&mut self, by: isize) -> bool {
-        let ids = self.model.project_ids();
-        if ids.is_empty() {
-            return self.scroll(by);
-        }
-        self.rows.step(&ids, -by)
-    }
-
     /// The key after `m` on card `id`: a lane's digit places that card at
     /// the lane's end; anything else cancels.
     fn pick(&mut self, id: String, code: KeyCode) -> Outcome {
@@ -482,10 +471,15 @@ impl Pane {
             return Outcome::Nothing;
         }
         if self.model.view == PaneView::Projects {
-            // The wheel moves the Projects cursor; nothing there is dragged.
+            // The wheel moves the Projects cursor with the finger, as in All
+            // below; nothing there is dragged. An open editor takes every key,
+            // so the wheel leaves the cursor where the editor opened it.
+            if self.model.editor().is_some() {
+                return Outcome::Nothing;
+            }
             let moved = match mouse.kind {
-                MouseEventKind::ScrollUp => self.row_wheel(-1),
-                MouseEventKind::ScrollDown => self.row_wheel(1),
+                MouseEventKind::ScrollDown => self.row_step(-1),
+                MouseEventKind::ScrollUp => self.row_step(1),
                 _ => false,
             };
             if moved {
