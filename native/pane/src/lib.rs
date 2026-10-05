@@ -80,8 +80,8 @@ pub struct Pane {
     /// The line scroll Up and Down set when there is no card to move to.
     manual: usize,
     keys: bool,
-    /// `m` was pressed: the next key picks the lane.
-    picking: bool,
+    /// `m` was pressed on this card: the next key picks its lane.
+    picking: Option<String>,
     view: PaneView,
     drag: Option<Drag>,
     /// Where the last draw put the body, for the mouse.
@@ -119,7 +119,7 @@ impl Pane {
 
     /// Whether `m` is waiting for a lane.
     pub fn picking(&self) -> bool {
-        self.picking
+        self.picking.is_some()
     }
 
     /// Which view it draws.
@@ -141,6 +141,12 @@ impl Pane {
         }
         self.model = model;
         self.cursor.settle(&self.model.card_ids());
+        // The card `m` was pressed on went: nothing left to move.
+        if let Some(id) = &self.picking
+            && !self.model.card_ids().contains(&id.as_str())
+        {
+            self.picking = None;
+        }
         if let Some(d) = &mut self.drag {
             if self.model.lane_of(&d.id).is_none() {
                 self.drag = None;
@@ -197,13 +203,17 @@ impl Pane {
         if chord {
             return Outcome::Nothing;
         }
-        if self.picking {
-            return self.pick(key.code);
+        if let Some(id) = self.picking.take() {
+            self.dirty = true;
+            return self.pick(id, key.code);
         }
         let outcome = match key.code {
             KeyCode::Char('q') => return Outcome::Quit,
             KeyCode::Char('?') => {
                 self.keys = !self.keys;
+                // The mouse rests under the keys, so a drag would never
+                // hear its button let go.
+                self.drag = None;
                 Outcome::Redraw
             }
             KeyCode::Esc if self.keys => {
@@ -251,35 +261,32 @@ impl Pane {
                 _ => Outcome::Nothing,
             },
             KeyCode::Char('m') if on.is_some() => {
-                self.picking = true;
+                self.picking = on;
+                self.drag = None;
                 Outcome::Redraw
             }
             _ => Outcome::Nothing,
         }
     }
 
-    /// The key after `m`: a lane's digit places the card at that lane's
-    /// end; anything else cancels.
-    fn pick(&mut self, code: KeyCode) -> Outcome {
-        self.picking = false;
-        self.dirty = true;
+    /// The key after `m` on card `id`: a lane's digit places that card at
+    /// the lane's end; anything else cancels.
+    fn pick(&mut self, id: String, code: KeyCode) -> Outcome {
         let lane = match code {
             KeyCode::Char(c) => lane_for_digit(c),
             _ => None,
         };
-        let place = lane.and_then(|lane| {
-            let id = self.cursor.on()?.to_string();
-            let place = to_lane(&self.model, &id, lane)?;
-            Some((id, place))
-        });
-        place.map_or(Outcome::Redraw, |(id, p)| move_card(id, p))
+        match lane.and_then(|lane| to_lane(&self.model, &id, lane)) {
+            Some(place) => move_card(id, place),
+            None => Outcome::Redraw,
+        }
     }
 
     /// Handles the mouse in All, with nothing over the lanes: a press on a
     /// card puts the cursor there and picks it up, a drag shows where it
     /// would land, and letting go places it. The wheel moves the cursor.
     pub fn handle_mouse(&mut self, mouse: MouseEvent) -> Outcome {
-        if self.keys || self.picking || self.view != PaneView::All {
+        if self.keys || self.picking.is_some() || self.view != PaneView::All {
             return Outcome::Nothing;
         }
         let outcome = match mouse.kind {
@@ -342,13 +349,17 @@ impl Pane {
         }
     }
 
-    /// Moves the cursor a card, or with no cards scrolls a line.
+    /// Moves the cursor a card, or with no cards scrolls a line. Down on
+    /// the last card scrolls a line too, so the lanes below it (empty ones,
+    /// or only placeholders) come into sight.
     fn step(&mut self, by: isize) -> bool {
         let cards = self.model.card_ids();
-        if !cards.is_empty() {
+        let last = !cards.is_empty() && self.cursor.on() == cards.last().copied();
+        if !cards.is_empty() && !(last && by > 0) {
+            self.manual = 0;
             return self.cursor.step(&cards, by);
         }
-        let next = self.manual.saturating_add_signed(by);
+        let next = self.manual.saturating_add_signed(by).min(self.drawn.most);
         let moved = next != self.manual;
         self.manual = next;
         moved
@@ -368,13 +379,13 @@ impl Pane {
             last: cursor.is_some() && cursor == self.model.card_ids().last().copied(),
             manual: self.manual,
             keys: self.keys,
-            picking: self.picking,
+            picking: self.picking.is_some(),
             view: self.view,
             drop: self.drag.as_ref().and_then(|d| d.over.as_ref()),
         };
         let mut drawn = views::Drawn::default();
         terminal.draw(|frame| drawn = views::draw(frame, shown))?;
-        if cursor.is_none() {
+        if cursor.is_none() || shown.last {
             // Held at the end, so Up after too many Downs moves at once.
             self.manual = drawn.scroll;
         }

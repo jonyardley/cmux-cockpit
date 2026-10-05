@@ -22,8 +22,7 @@ use std::thread;
 
 use cockpit_pane::runner::{self, Feed, Input, Latency, Options, text};
 use cockpit_pane::{Outcome, Pane, PaneModel};
-use ratatui::crossterm::event::{self, DisableMouseCapture, EnableMouseCapture, Event};
-use ratatui::crossterm::execute;
+use ratatui::crossterm::event::{self, Event};
 
 /// In --once mode, the longest replay may take before the view prints anyway.
 const ONCE_LIMIT: Duration = Duration::from_secs(10);
@@ -161,15 +160,22 @@ fn print_follow(opts: &Options) {
     );
 }
 
+/// Asks the terminal for presses, releases, drags and the wheel, in SGR
+/// form, but not bare movement: crossterm's own capture also reports
+/// every move of the pointer, which would wake the runner for nothing.
+const MOUSE_ON: &str = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
+const MOUSE_OFF: &str = "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
+
 /// Holds the mouse captured, so the pane sees presses and drags, and lets
-/// it go when dropped: on a clean exit, a failed draw or an early return.
-/// A panic restores the screen through ratatui's hook but leaves the
-/// mouse captured; the pane's logic does not panic.
+/// it go when dropped: on a clean exit, a failed draw, an early return,
+/// or a panic as it unwinds.
 struct Mouse;
 
 impl Mouse {
     fn capture() -> Result<Mouse, String> {
-        execute!(std::io::stdout(), EnableMouseCapture)
+        let mut out = std::io::stdout();
+        out.write_all(MOUSE_ON.as_bytes())
+            .and_then(|()| out.flush())
             .map(|()| Mouse)
             .map_err(|e| format!("no mouse: {e}"))
     }
@@ -178,7 +184,10 @@ impl Mouse {
 impl Drop for Mouse {
     fn drop(&mut self) {
         // Nothing to do if it fails: the terminal is going away.
-        let _ = execute!(std::io::stdout(), DisableMouseCapture);
+        let mut out = std::io::stdout();
+        let _ = out
+            .write_all(MOUSE_OFF.as_bytes())
+            .and_then(|()| out.flush());
     }
 }
 

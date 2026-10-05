@@ -21,11 +21,7 @@ const ROW_LEAD: usize = 4;
 /// which the row under the cursor takes.
 pub fn lines(needs: &Needs, inner: usize, cursor: Option<&str>) -> Laid {
     if needs.count == 0 {
-        return Laid {
-            lines: Vec::new(),
-            spots: Vec::new(),
-            focus: None,
-        };
+        return Laid::default();
     }
     let mut out = vec![heading(needs, inner)];
     let mut spots = vec![Spot::Blank];

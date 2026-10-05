@@ -19,11 +19,12 @@ pub struct Scroll {
 /// How many lines the body scrolls. With a card under the cursor: none
 /// until it would fall off the bottom, then just enough, never past its
 /// first line, and on the last card as far as the body goes, so what is
-/// below it comes into sight. With none: the line scroll, held at the end.
+/// below it comes into sight, or further by the line scroll Down sets
+/// past it. With none: the line scroll, held at the end.
 pub fn scroll_for(s: &Scroll) -> usize {
     let most = s.total.saturating_sub(s.height);
     match &s.focus {
-        Some(r) if s.last => most.min(r.start),
+        Some(r) if s.last => most.min(r.start.max(s.manual)),
         Some(r) if r.end > s.height => (r.end - s.height).min(r.start),
         Some(_) => 0,
         None => s.manual.min(most),
@@ -181,6 +182,8 @@ mod tests {
     fn shows_what_is_below_the_last_card() {
         assert_eq!(at(Some(15..18), true, 0), 15, "never past its top");
         assert_eq!(at(Some(22..25), true, 0), 20, "to the end of the body");
+        assert_eq!(at(Some(2..5), true, 9), 9, "on by line past the last card");
+        assert_eq!(at(Some(2..5), true, 99), 20, "held at the end");
     }
 
     #[test]

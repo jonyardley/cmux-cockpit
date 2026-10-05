@@ -42,6 +42,8 @@ pub struct Shown<'a> {
 pub struct Drawn {
     pub top: u16,
     pub scroll: usize,
+    /// The furthest the body can scroll.
+    pub most: usize,
     pub spots: Vec<Spot>,
 }
 
@@ -61,12 +63,15 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
 
     let drawn = match shown.view {
         PaneView::All => {
-            let (body, spots, scroll) = all(shown, inner, usize::from(body_area.height));
+            let height = usize::from(body_area.height);
+            let (body, spots, scroll) = all(shown, inner, height);
+            let most = body.len().saturating_sub(height);
             let offset = u16::try_from(scroll).unwrap_or(u16::MAX);
             frame.render_widget(Paragraph::new(body).scroll((offset, 0)), body_area);
             Drawn {
                 top: body_area.y,
                 scroll,
+                most,
                 spots,
             }
         }

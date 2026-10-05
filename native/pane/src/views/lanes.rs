@@ -34,6 +34,7 @@ const EMPTY_PILL: PillColors = PillColors {
 
 /// The lanes laid out: their lines, what each line is for the mouse, and
 /// which lines the card under the cursor takes.
+#[derive(Default)]
 pub struct Laid {
     pub lines: Vec<Line<'static>>,
     pub spots: Vec<Spot>,
@@ -42,11 +43,7 @@ pub struct Laid {
 
 /// Lays out the lanes, with the cursor's card and a drag's drop target.
 pub fn lines(lanes: &[Lane], inner: usize, cursor: Option<&str>, drop: Option<&Place>) -> Laid {
-    let mut out = Laid {
-        lines: Vec::new(),
-        spots: Vec::new(),
-        focus: None,
-    };
+    let mut out = Laid::default();
     let mut above: Option<LaneKey> = None;
     for lane in lanes {
         out.lines.push(Line::default());
