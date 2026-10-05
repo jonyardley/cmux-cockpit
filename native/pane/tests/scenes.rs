@@ -25,7 +25,7 @@ use ratatui::buffer::Buffer;
 use ratatui::crossterm::event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier};
 
 use support::golden::{SCENES, scene_model};
 
@@ -1336,4 +1336,146 @@ fn types_a_space_in_the_middle_of_a_folder() {
         live.core.session.draft_spec().root.as_deref(),
         Some("/opt/my code")
     );
+}
+
+/// The card `id` as the pane's lanes hold it.
+fn card_of(pane: &Pane, id: &str) -> Option<cockpit_pane::model::Card> {
+    pane.model()
+        .lanes
+        .iter()
+        .flat_map(|l| &l.rows)
+        .find_map(|r| match r {
+            cockpit_pane::model::Row::Card(c) if c.ws_id == id => Some(c.clone()),
+            _ => None,
+        })
+}
+
+/// The words of a card's chips, in order.
+fn chip_words(pane: &Pane, id: &str) -> Vec<String> {
+    card_of(pane, id)
+        .map(|c| {
+            c.chips
+                .iter()
+                .flat_map(|chip| chip.pieces.iter().map(|p| p.text.clone()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Whether the cell where `needle` starts is drawn dim.
+fn is_dim(buffer: &Buffer, needle: &str) -> bool {
+    let w = usize::from(buffer.area.width);
+    for row in buffer.content.chunks(w) {
+        let line: String = row.iter().map(|c| c.symbol()).collect();
+        if let Some(byte) = line.find(needle) {
+            let x = line[..byte].chars().count();
+            return row[x].modifier.contains(Modifier::DIM);
+        }
+    }
+    panic!("{needle} is not on screen");
+}
+
+#[test]
+fn a_merged_card_offers_park_and_close_in_the_sidebars_inks_and_a_row_does_too() {
+    let pane = pane_for("lanes");
+    let full = id_of(&pane, "Card layout fit");
+    assert_eq!(
+        chip_words(&pane, &full),
+        ["#176", "merged", "Park", "Close"]
+    );
+    let row = id_of(&pane, "Merged elsewhere");
+    assert_eq!(chip_words(&pane, &row), ["Park", "Close"]);
+    let inks: Vec<Token> = card_of(&pane, &full)
+        .map(|c| {
+            c.chips
+                .iter()
+                .skip(1)
+                .map(|chip| chip.pieces[0].ink)
+                .collect()
+        })
+        .unwrap_or_default();
+    assert_eq!(inks, [Token::Secondary, Token::Text], "Close reads first");
+    let open = id_of(&pane, "Snapshot tests");
+    assert!(!chip_words(&pane, &open).contains(&"Park".to_string()));
+}
+
+#[test]
+fn a_merged_card_draws_dim_until_the_cursor_is_on_it() {
+    let mut pane = pane_for("lanes");
+    let id = id_of(&pane, "Card layout fit");
+    assert!(card_of(&pane, &id).is_some_and(|c| c.dimmed));
+    let mut term = terminal(80);
+    pane.draw(&mut term).unwrap();
+    assert!(is_dim(term.backend().buffer(), "Card layout fit"));
+    assert!(is_dim(term.backend().buffer(), "Park"));
+    assert!(!is_dim(term.backend().buffer(), "Snapshot tests"));
+    cursor_to(&mut pane, "Card layout fit");
+    pane.draw(&mut term).unwrap();
+    assert!(!is_dim(term.backend().buffer(), "Card layout fit"));
+}
+
+#[test]
+fn p_x_and_k_send_park_close_and_keep_for_the_card_under_the_cursor() {
+    let mut pane = pane_for("lanes");
+    let id = cursor_to(&mut pane, "Card layout fit");
+    assert_eq!(
+        press(&mut pane, KeyCode::Char('p')),
+        Outcome::Act(Action::ParkMerged { id: id.clone() })
+    );
+    assert_eq!(
+        press(&mut pane, KeyCode::Char('x')),
+        Outcome::Act(Action::CloseMerged { id: id.clone() })
+    );
+    assert_eq!(
+        press(&mut pane, KeyCode::Char('k')),
+        Outcome::Act(Action::KeepMerged { id })
+    );
+}
+
+#[test]
+fn k_hides_park_and_close_and_the_card_stays_dim() {
+    let mut live = Live::new("lanes");
+    let id = cursor_to(&mut live.pane, "Card layout fit");
+    live.press(KeyCode::Char('k'));
+    // Its branch comes back once Park and Close no longer take its room.
+    assert_eq!(
+        chip_words(&live.pane, &id),
+        ["#176", "merged", "card-layout-fit"]
+    );
+    assert!(card_of(&live.pane, &id).is_some_and(|c| c.dimmed));
+}
+
+#[test]
+fn p_parks_a_merged_card_and_an_open_card_ignores_it() {
+    let mut live = Live::new("lanes");
+    let open = cursor_to(&mut live.pane, "Snapshot tests");
+    live.press(KeyCode::Char('p'));
+    assert_eq!(live.pane.model().lane_of(&open), Some(LaneKey::Main));
+    let id = cursor_to(&mut live.pane, "Card layout fit");
+    live.press(KeyCode::Char('p'));
+    // Parked is folded in this scene, so the card leaves the drawn lanes.
+    assert!(card_of(&live.pane, &id).is_none());
+    let Some(data) = live.core.data.clone() else {
+        panic!("no frame")
+    };
+    let lane = data
+        .ws_by_id(&id)
+        .map(|w| live.core.session.lane_of(&data, w));
+    assert_eq!(lane, Some(LaneKey::Parked));
+}
+
+#[test]
+fn p_on_a_card_in_projects_sends_park_and_nothing_on_a_project() {
+    let mut pane = pane_for("projects");
+    let rows = pane.model().project_ids().len();
+    // Down the rows until `p` asks for a card's Park; on a project it is nothing.
+    for _ in 0..rows {
+        press(&mut pane, KeyCode::Down);
+        match press(&mut pane, KeyCode::Char('p')) {
+            Outcome::Act(Action::ParkMerged { .. }) => return,
+            Outcome::Nothing => {}
+            other => panic!("p asked for {other:?}"),
+        }
+    }
+    panic!("no card in Projects sent Park");
 }

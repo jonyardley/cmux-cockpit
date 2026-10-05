@@ -225,6 +225,10 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
     if on {
         let face = Style::new().bg(theme::rgb(theme::CURSOR_BG));
         out = out.into_iter().map(|l| l.patch_style(face)).collect();
+    } else if c.dimmed {
+        // The sidebar's lit card shows at full strength; here the cursor lights it.
+        let faint = Style::new().add_modifier(Modifier::DIM);
+        out = out.into_iter().map(|l| l.patch_style(faint)).collect();
     }
     out
 }

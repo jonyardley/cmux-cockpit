@@ -20,7 +20,7 @@
    ○ Long build Working 40m · quiet 17m
    ● Selected card           Working 1m
    ○ Card layout fit           Idle 15m
-     #176 merged
+     #176 merged  Park  Close
    ○ Untimed card                  Idle
 
  ▾ ■ FOR REVIEW  2            drop here
@@ -38,3 +38,4 @@
  ▾ ■ UNSORTED  2
    ● Loose workspace                 3m
    ○ Merged elsewhere
+     Park  Close
