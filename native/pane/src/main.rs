@@ -11,6 +11,7 @@
 //! projects.json from another folder; `--after <seq>` replays from a
 //! later sequence.
 
+use std::collections::HashMap;
 use std::io::Write;
 use std::ops::ControlFlow;
 use std::path::PathBuf;
@@ -194,8 +195,11 @@ impl Drop for Mouse {
 /// The terminal view: draws each new frame, and hands every key and
 /// resize to the pane. A thread reads the terminal and pokes the runner,
 /// so a key is answered at once without the runner waking on a timer.
-/// Log lines would tear the screen, so they wait until it is restored.
-fn terminal(opts: &Options) -> Result<Vec<String>, String> {
+/// Log lines would tear the screen, so they wait until it is restored,
+/// tallied so a long session's polls print once each, not once a poll.
+/// The held lines come back with the outcome, a failed draw included, so
+/// they print either way.
+fn terminal(opts: &Options) -> (Vec<String>, Result<(), String>) {
     let (tx, rx) = runner::channel();
     let (keys_tx, keys_rx) = mpsc::channel::<Event>();
     let poke = tx.clone();
@@ -206,16 +210,19 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
             }
         }
     });
-    let mut term = ratatui::try_init().map_err(|e| format!("no terminal: {e}"))?;
+    let mut term = match ratatui::try_init() {
+        Ok(t) => t,
+        Err(e) => return (Vec::new(), Err(format!("no terminal: {e}"))),
+    };
     let mouse = match Mouse::capture() {
         Ok(m) => m,
         Err(e) => {
             ratatui::restore();
-            return Err(e);
+            return (Vec::new(), Err(e));
         }
     };
     let mut pane = Pane::new(PaneModel::default());
-    let mut logged = Vec::new();
+    let mut logged = Tally::default();
     let mut failed = None;
     runner::run(
         opts,
@@ -257,7 +264,35 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
     );
     drop(mouse);
     ratatui::restore();
-    failed.map_or(Ok(logged), Err)
+    (logged.lines(), failed.map_or(Ok(()), Err))
+}
+
+/// Log lines held back while the pane draws: each distinct line once, in
+/// the order first seen, with how many times it came. `at` indexes each
+/// line's place in `seen`, so a push costs the same however many came.
+#[derive(Default)]
+struct Tally {
+    seen: Vec<(String, usize)>,
+    at: HashMap<String, usize>,
+}
+
+impl Tally {
+    fn push(&mut self, line: String) {
+        if let Some((_, n)) = self.at.get(&line).and_then(|&i| self.seen.get_mut(i)) {
+            *n += 1;
+            return;
+        }
+        self.at.insert(line.clone(), self.seen.len());
+        self.seen.push((line, 1));
+    }
+
+    /// The lines to print: a repeated one ends with its count, "(x412)".
+    fn lines(self) -> Vec<String> {
+        self.seen
+            .into_iter()
+            .map(|(l, n)| if n > 1 { format!("{l} (x{n})") } else { l })
+            .collect()
+    }
 }
 
 fn main() -> ExitCode {
@@ -277,13 +312,14 @@ fn main() -> ExitCode {
     match (args.print, args.once) {
         (true, true) => print_once(&opts),
         (true, false) => print_follow(&opts),
-        (false, _) => match terminal(&opts) {
-            Ok(logged) => logged.iter().for_each(|l| eprintln!("cockpit-pane: {l}")),
-            Err(e) => {
+        (false, _) => {
+            let (logged, outcome) = terminal(&opts);
+            logged.iter().for_each(|l| eprintln!("cockpit-pane: {l}"));
+            if let Err(e) = outcome {
                 eprintln!("cockpit-pane: {e}");
                 return ExitCode::FAILURE;
             }
-        },
+        }
     }
     ExitCode::SUCCESS
 }
@@ -296,6 +332,21 @@ mod tests {
     fn args(s: &str) -> Result<Args, String> {
         let v: Vec<String> = s.split_whitespace().map(str::to_string).collect();
         parse_args(&v)
+    }
+
+    #[test]
+    fn tallies_held_log_lines_once_each_in_the_order_first_seen() {
+        let mut t = Tally::default();
+        for l in [
+            "pr-poll gh none",
+            "pr-poll no branch",
+            "pr-poll gh none",
+            "pr-poll gh none",
+        ] {
+            t.push(l.to_string());
+        }
+        assert_eq!(t.lines(), ["pr-poll gh none (x3)", "pr-poll no branch"]);
+        assert!(Tally::default().lines().is_empty());
     }
 
     #[test]

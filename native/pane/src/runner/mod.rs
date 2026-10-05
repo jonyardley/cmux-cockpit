@@ -2,7 +2,9 @@
 //! runs the core. Inputs, each on its own thread except the files:
 //!
 //! - `cmux events`: replay, then live, reconnecting itself (stream.rs).
-//! - `claude agents --json` every 2 seconds.
+//! - `claude agents --json` every 2 seconds, once per Claude config dir
+//!   (parse::other_config_dirs), read at once and merged into one Agent
+//!   View, each dir keeping its last good view (parse::AgentViews).
 //! - `cmux --json workspace list`, then `cmux rpc workspace.group.list`
 //!   (read only) for the list's window, on start, every 30 seconds, and
 //!   when an event says either may have changed: any `workspace.` event
@@ -31,7 +33,7 @@ pub mod text;
 pub mod watch;
 
 use std::ops::ControlFlow;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -254,17 +256,23 @@ pub fn now_epoch() -> f64 {
         .map_or(0.0, |d| d.as_secs_f64())
 }
 
-/// Runs a command and returns its output when it succeeded within
-/// `limit`; one that hangs is killed, so a stuck cmux cannot stop a poll
-/// for good (pr_ask::ran_within, which the PR poll shares).
-fn output_within(program: &str, args: &[&str], limit: Duration) -> Option<Vec<u8>> {
+/// Runs a command, with `env` set, and returns its output when it
+/// succeeded within `limit`; one that hangs is killed, so a stuck cmux
+/// cannot stop a poll for good (pr_ask::ran_within, which the PR poll
+/// shares).
+fn output_within(
+    program: &str,
+    args: &[&str],
+    env: &[(&str, &str)],
+    limit: Duration,
+) -> Option<Vec<u8>> {
     let args: Vec<String> = args.iter().map(|a| (*a).to_string()).collect();
-    let ran = pr_ask::ran_within(program, &args, None, &[], limit);
+    let ran = pr_ask::ran_within(program, &args, None, env, limit);
     (ran.status == Some(0)).then(|| ran.stdout.into_bytes())
 }
 
 fn output(program: &str, args: &[&str]) -> Option<Vec<u8>> {
-    output_within(program, args, COMMAND_LIMIT)
+    output_within(program, args, &[], COMMAND_LIMIT)
 }
 
 /// Runs an outbox request's command; true when it succeeded in time.
@@ -273,10 +281,57 @@ fn run_ok(program: &str, args: &[String]) -> bool {
     output(program, &args).is_some()
 }
 
+/// Agent View in the runner's own config dir (keyed None) and in each
+/// other one (parse::other_config_dirs), read at once so a slow dir does
+/// not hold the others up. A session Jon started with another
+/// CLAUDE_CONFIG_DIR is listed only by a read made with it.
+fn read_agents() -> Vec<(Option<PathBuf>, Option<AgentView>)> {
+    let read = |dir: Option<&Path>| {
+        let dir = dir.map(Path::to_string_lossy);
+        let env: Vec<(&str, &str)> = dir
+            .as_deref()
+            .map(|d| ("CLAUDE_CONFIG_DIR", d))
+            .into_iter()
+            .collect();
+        output_within("claude", &["agents", "--json"], &env, COMMAND_LIMIT)
+            .and_then(|out| parse::agents(&out))
+    };
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let inherited = std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from);
+    let others = home.map_or_else(Vec::new, |home| {
+        let names = std::fs::read_dir(&home)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| e.file_name().into_string().ok());
+        parse::other_config_dirs(
+            &home,
+            names,
+            |d| d.join("sessions").is_dir(),
+            inherited.as_deref(),
+            |d| std::fs::canonicalize(d).unwrap_or_else(|_| d.to_path_buf()),
+        )
+    });
+    let dirs: Vec<Option<PathBuf>> = std::iter::once(None)
+        .chain(others.into_iter().map(Some))
+        .collect();
+    thread::scope(|s| {
+        let reads: Vec<_> = dirs
+            .iter()
+            .map(|dir| s.spawn(|| read(dir.as_deref())))
+            .collect();
+        dirs.iter()
+            .cloned()
+            .zip(reads)
+            .map(|(dir, r)| (dir, r.join().ok().flatten()))
+            .collect()
+    })
+}
+
 fn poll_agents(tx: &Sender<Input>, stop: &AtomicBool) {
+    let mut views = parse::AgentViews::default();
     while !stop.load(Ordering::SeqCst) {
-        let view = output("claude", &["agents", "--json"]).and_then(|o| parse::agents(&o));
-        if let Some(view) = view
+        if let Some(view) = views.update(read_agents())
             && tx.send(Input::Agents(view)).is_err()
         {
             return;
@@ -601,14 +656,17 @@ mod tests {
     #[test]
     fn a_poll_command_that_hangs_is_killed_at_its_limit() {
         let started = Instant::now();
-        let out = output_within("sleep", &["5"], Duration::from_millis(100));
+        let out = output_within("sleep", &["5"], &[], Duration::from_millis(100));
         assert_eq!(out, None);
         assert!(started.elapsed() < Duration::from_secs(2));
         assert_eq!(
-            output_within("echo", &["hi"], Duration::from_secs(5)),
+            output_within("echo", &["hi"], &[], Duration::from_secs(5)),
             Some(b"hi\n".to_vec())
         );
-        assert_eq!(output_within("false", &[], Duration::from_secs(5)), None);
+        assert_eq!(
+            output_within("false", &[], &[], Duration::from_secs(5)),
+            None
+        );
     }
 
     fn group(
