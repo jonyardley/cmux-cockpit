@@ -50,3 +50,18 @@ jobs:
       - run: npm run check
       # Network bound, so CI only rather than the pre-commit hook.
       - run: npm audit --audit-level=high
+
+  # The docked panel window in native/mac: a SwiftPM app, so it needs a
+  # macOS runner. The pure layout module carries the tests.
+  mac:
+    runs-on: macos-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: native/mac
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: swift build
+      - run: swift test

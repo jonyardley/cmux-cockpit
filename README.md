@@ -75,6 +75,9 @@ Tested on cmux 0.64.25.
   `cockpit_core` Crux app) and `pane` (`cockpit-pane`, the cockpit in a
   terminal, fed live by its runner; `--print` prints the view as text).
   `rust-toolchain.toml` pins the Rust toolchain.
+- `native/mac/`: the docked panel window, a SwiftPM app that sits flush
+  with cmux's left edge. Build, sign, run and grant its permission with
+  [native/mac/README.md](native/mac/README.md).
 - `helper/` and `scripts/`: the URL handler app that saves state, the
   build, the pull request poller and the Claude Code hooks
   ([docs/state-loop.md](docs/state-loop.md)).

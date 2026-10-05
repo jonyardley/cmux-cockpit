@@ -40,3 +40,8 @@ CLAUDE.local.md
 
 # Rust build output under native/.
 native/**/target/
+
+# Swift build output under native/mac/, and the signed app bundle.sh makes.
+native/mac/.build/
+native/mac/.swiftpm/
+native/mac/build/
