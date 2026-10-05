@@ -2,6 +2,18 @@
   "chips": {
     "blocked": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "",
+          "health": "quiet",
+          "id": "pr",
+          "state": "open",
+          "tag": "#6",
+          "url": "https://github.com/o/r/pull/6"
+        },
+        { "dirty": false, "id": "br", "text": "feat-6" }
+      ],
+      "cardOpacity": 1,
       "chips": [
         {
           "diff": "",
@@ -13,10 +25,27 @@
         },
         { "dirty": false, "id": "br", "text": "feat-6" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "closed": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "",
+          "health": "quiet",
+          "id": "pr",
+          "state": "closed",
+          "tag": "#8",
+          "url": "https://github.com/o/r/pull/8"
+        },
+        { "dirty": false, "id": "br", "text": "feat-8" }
+      ],
+      "cardOpacity": 1,
       "chips": [
         {
           "diff": "",
@@ -28,10 +57,27 @@
         },
         { "dirty": false, "id": "br", "text": "feat-8" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "conflicts": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "",
+          "health": "conflicts",
+          "id": "pr",
+          "state": "conflicts",
+          "tag": "#5",
+          "url": "https://github.com/o/r/pull/5"
+        },
+        { "dirty": false, "id": "br", "text": "feat-5" }
+      ],
+      "cardOpacity": 1,
       "chips": [
         {
           "diff": "",
@@ -43,10 +89,27 @@
         },
         { "dirty": false, "id": "br", "text": "feat-5" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "draft": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "+1.2k −56",
+          "health": "quiet",
+          "id": "pr",
+          "state": "draft",
+          "tag": "#2",
+          "url": "https://github.com/o/r/pull/2"
+        },
+        { "dirty": false, "id": "br", "text": "feat-2" }
+      ],
+      "cardOpacity": 1,
       "chips": [
         {
           "diff": "+1.2k −56",
@@ -58,10 +121,27 @@
         },
         { "dirty": false, "id": "br", "text": "feat-2" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "failing": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "",
+          "health": "failing",
+          "id": "pr",
+          "state": "1 failing",
+          "tag": "#3",
+          "url": "https://github.com/o/r/pull/3"
+        },
+        { "dirty": false, "id": "br", "text": "feat-3" }
+      ],
+      "cardOpacity": 1,
       "chips": [
         {
           "diff": "",
@@ -73,10 +153,26 @@
         },
         { "dirty": false, "id": "br", "text": "feat-3" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "merged": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "",
+          "health": "quiet",
+          "id": "pr",
+          "state": "merged",
+          "tag": "#7",
+          "url": "https://github.com/o/r/pull/7"
+        }
+      ],
+      "cardOpacity": 0.6,
       "chips": [
         {
           "diff": "",
@@ -88,10 +184,27 @@
         },
         { "dirty": false, "id": "br", "text": "feat-7" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": true,
+      "offersPark": true,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "ready": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "+120 −8",
+          "health": "ready",
+          "id": "pr",
+          "state": "ready",
+          "tag": "#1",
+          "url": "https://github.com/o/r/pull/1"
+        },
+        { "dirty": false, "id": "br", "text": "feat-1" }
+      ],
+      "cardOpacity": 1,
       "chips": [
         {
           "diff": "+120 −8",
@@ -103,10 +216,27 @@
         },
         { "dirty": false, "id": "br", "text": "feat-1" }
       ],
-      "reviewIsGreen": true
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": true,
+      "showsChipsRow": true
     },
     "running": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "",
+          "health": "running",
+          "id": "pr",
+          "state": "running",
+          "tag": "#4",
+          "url": "https://github.com/o/r/pull/4"
+        },
+        { "dirty": false, "id": "br", "text": "feat-4" }
+      ],
+      "cardOpacity": 1,
       "chips": [
         {
           "diff": "",
@@ -118,10 +248,27 @@
         },
         { "dirty": false, "id": "br", "text": "feat-4" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "waiting": {
       "canFileForReview": true,
+      "cardChips": [
+        {
+          "diff": "",
+          "health": "ready",
+          "id": "pr",
+          "state": "ready",
+          "tag": "#9",
+          "url": "https://github.com/o/r/pull/9"
+        },
+        { "dirty": false, "id": "br", "text": "feat-9" }
+      ],
+      "cardOpacity": 1,
       "chips": [
         {
           "diff": "",
@@ -133,7 +280,12 @@
         },
         { "dirty": false, "id": "br", "text": "feat-9" }
       ],
-      "reviewIsGreen": true
+      "fullLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
+      "reviewIsGreen": true,
+      "showsChipsRow": true
     }
   },
   "laneEntries": [

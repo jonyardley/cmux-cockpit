@@ -226,6 +226,7 @@ impl SavedState {
 
     /// Makes one of the cockpit's own writes here, as the handler's
     /// applySet makes it in the file: `dismissed.<ws>`, `projectOverride.<ws>`,
+    /// `mergeKept.<ws>`,
     /// `ui.mode` or `ui.collapsed`, set, or deleted with no value. False
     /// for any other key or a value of the wrong shape, leaving the state
     /// as it was.
@@ -249,6 +250,9 @@ impl SavedState {
                 .is_ok(),
             ("projectOverride", _) => parse(value)
                 .map(|v| put(&mut self.project_override, id, v))
+                .is_ok(),
+            ("mergeKept", _) => parse(value)
+                .map(|v| put(&mut self.merge_kept, id, v))
                 .is_ok(),
             ("ui", "mode") => parse(value).map(|v| self.ui.mode = v).is_ok(),
             ("ui", "collapsed") => parse(value)

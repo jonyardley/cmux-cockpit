@@ -1,11 +1,66 @@
 {
   "chips": {
-    "asking": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
-    "ended": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
-    "idle": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
-    "loose": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
+    "asking": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
+    "ended": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
+    "idle": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
+    "loose": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
     "loose-merged": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "",
+          "health": "quiet",
+          "id": "pr",
+          "state": "merged",
+          "tag": "#171",
+          "url": "https://github.com/o/r/pull/171"
+        }
+      ],
+      "cardOpacity": 0.6,
       "chips": [
         {
           "diff": "",
@@ -17,10 +72,26 @@
         },
         { "dirty": false, "id": "br", "text": "tidy-strip" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": true,
+      "offersPark": true,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "merged": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "",
+          "health": "quiet",
+          "id": "pr",
+          "state": "merged",
+          "tag": "#176",
+          "url": "https://github.com/o/r/pull/176"
+        }
+      ],
+      "cardOpacity": 0.6,
       "chips": [
         {
           "diff": "",
@@ -32,22 +103,123 @@
         },
         { "dirty": false, "id": "br", "text": "card-layout-fit" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": true,
+      "offersPark": true,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
-    "needs": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
+    "needs": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
     "none": {
       "canFileForReview": false,
+      "cardChips": [{ "dirty": false, "id": "br", "text": "main" }],
+      "cardOpacity": 1,
       "chips": [{ "dirty": false, "id": "br", "text": "main" }],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
-    "parked": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
-    "quiet": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
-    "ready": { "canFileForReview": true, "chips": [], "reviewIsGreen": false },
-    "selected": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
-    "untimed": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
-    "waiting": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
+    "parked": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
+    "quiet": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
+    "ready": {
+      "canFileForReview": true,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
+    },
+    "selected": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
+    "untimed": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
+    "waiting": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
     "working": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "+342 −17",
+          "health": "quiet",
+          "id": "pr",
+          "state": "draft",
+          "tag": "#130",
+          "url": "https://github.com/o/r/pull/130"
+        },
+        { "dirty": true, "id": "br", "text": "snapshot-tests" }
+      ],
+      "cardOpacity": 1,
       "chips": [
         {
           "diff": "+342 −17",
@@ -59,7 +231,12 @@
         },
         { "dirty": true, "id": "br", "text": "snapshot-tests" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     }
   },
   "laneEntries": [

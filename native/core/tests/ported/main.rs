@@ -1,8 +1,8 @@
 //! The TypeScript cases that exercise model.ts, status.ts, strip.ts,
-//! lane-entries.ts, next.ts, drop.ts, card-chips.ts, by-project.ts and the
-//! shared helpers they read, one Rust test per case, named after it. A
-//! module per TypeScript test file, a module inside per `describe`. Cases
-//! that test another module (chips.ts, merged.ts, edit.ts, the agents
+//! lane-entries.ts, next.ts, drop.ts, card-chips.ts, chips.ts, merged.ts,
+//! by-project.ts and the shared helpers they read, one Rust test per case,
+//! named after it. A module per TypeScript test file, a module inside per
+//! `describe`. Cases that test another module (edit.ts, the agents
 //! sidebar, views) are left for the lanes that port those; the pull
 //! request lists each one.
 

@@ -1,8 +1,31 @@
 {
   "chips": {
-    "elsewhere": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
+    "elsewhere": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
     "one-a": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "+342 −17",
+          "health": "quiet",
+          "id": "pr",
+          "state": "draft",
+          "tag": "#148",
+          "url": "https://github.com/o/r/pull/148"
+        },
+        { "dirty": false, "id": "br", "text": "parser-streaming-tokeniser" }
+      ],
+      "cardOpacity": 1,
       "chips": [
         {
           "diff": "+342 −17",
@@ -14,15 +37,39 @@
         },
         { "dirty": false, "id": "br", "text": "parser-streaming-tokeniser" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "one-b": {
       "canFileForReview": false,
+      "cardChips": [{ "id": "size", "size": "review", "text": "Review" }],
+      "cardOpacity": 1,
       "chips": [{ "id": "size", "size": "review", "text": "Review" }],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "two": {
       "canFileForReview": true,
+      "cardChips": [
+        {
+          "diff": "",
+          "health": "quiet",
+          "id": "pr",
+          "state": "open",
+          "tag": "#12",
+          "url": "https://github.com/o/r/pull/12"
+        },
+        { "dirty": false, "id": "br", "text": "main" }
+      ],
+      "cardOpacity": 1,
       "chips": [
         {
           "diff": "",
@@ -34,10 +81,26 @@
         },
         { "dirty": false, "id": "br", "text": "main" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "two-merged": {
       "canFileForReview": false,
+      "cardChips": [
+        {
+          "diff": "",
+          "health": "quiet",
+          "id": "pr",
+          "state": "merged",
+          "tag": "#14",
+          "url": "https://github.com/o/r/pull/14"
+        }
+      ],
+      "cardOpacity": 0.6,
       "chips": [
         {
           "diff": "",
@@ -49,7 +112,12 @@
         },
         { "dirty": false, "id": "br", "text": "changelog-for-release" }
       ],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": true,
+      "offersPark": true,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     }
   },
   "laneEntries": [

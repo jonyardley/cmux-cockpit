@@ -715,9 +715,12 @@ fn chips_row(
 ) -> Vec<Chip> {
     let mut out: Vec<Chip> = match kind {
         ChipsFor::Row => return Vec::new(),
-        ChipsFor::Full | ChipsFor::Project => {
-            session.chips_for(w, true).iter().map(chip_view).collect()
-        }
+        // card_chips, so a merged card drops its clean branch as the sidebar does.
+        ChipsFor::Full | ChipsFor::Project => session
+            .card_chips(data, w, true)
+            .iter()
+            .map(chip_view)
+            .collect(),
         ChipsFor::Compact => compact_pr(session, w).into_iter().collect(),
     };
     if session.can_file_for_review(data, w) {

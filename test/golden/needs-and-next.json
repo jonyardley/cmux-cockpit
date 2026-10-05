@@ -1,20 +1,89 @@
 {
   "chips": {
-    "ask": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
-    "busy": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
-    "n1": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
+    "ask": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
+    "busy": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
+    "n1": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
     "n2": {
       "canFileForReview": false,
+      "cardChips": [{ "id": "size", "size": "decide", "text": "Decide · 2" }],
+      "cardOpacity": 1,
       "chips": [{ "id": "size", "size": "decide", "text": "Decide · 2" }],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
     "n3": {
       "canFileForReview": false,
+      "cardChips": [{ "id": "size", "size": "quick", "text": "Quick" }],
+      "cardOpacity": 1,
       "chips": [{ "id": "size", "size": "quick", "text": "Quick" }],
-      "reviewIsGreen": false
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
     },
-    "n4": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
-    "ready": { "canFileForReview": true, "chips": [], "reviewIsGreen": false }
+    "n4": {
+      "canFileForReview": false,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": false
+    },
+    "ready": {
+      "canFileForReview": true,
+      "cardChips": [],
+      "cardOpacity": 1,
+      "chips": [],
+      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "offersClose": false,
+      "offersPark": false,
+      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
+      "reviewIsGreen": false,
+      "showsChipsRow": true
+    }
   },
   "laneEntries": [
     { "id": "z:main", "kind": "zone", "lane": "main" },

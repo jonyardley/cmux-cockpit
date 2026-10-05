@@ -17,6 +17,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { it } from "node:test";
+import type { Chip } from "../../src/cockpit/card-chips.ts";
 import type { Renderer } from "./renderer.ts";
 import { SCENES, type SceneName } from "./scenes.ts";
 import { lineDiff, seed } from "./snapshot.ts";
@@ -54,7 +55,7 @@ export function stableJson(v: unknown, file: string): string {
 // Read once per call, after the sidebar loaded: a static import here would
 // load the model before the test seeds the saved state it reads at import.
 async function cockpit() {
-  const [lanes, model, entries, strip, next, byProject, status, state, chips] = await Promise.all([
+  const [lanes, model, entries, strip, next, byProject, status, state, chips, row, merged] = await Promise.all([
     import("../../src/cockpit/lanes.ts"),
     import("../../src/cockpit/model.ts"),
     import("../../src/cockpit/lane-entries.ts"),
@@ -64,8 +65,10 @@ async function cockpit() {
     import("../../src/cockpit/status.ts"),
     import("../../src/cockpit/state.ts"),
     import("../../src/cockpit/card-chips.ts"),
+    import("../../src/cockpit/chips.ts"),
+    import("../../src/cockpit/merged.ts"),
   ]);
-  return { lanes, model, entries, strip, next, byProject, status, state, chips };
+  return { lanes, model, entries, strip, next, byProject, status, state, chips, row, merged };
 }
 
 // Each module kept apart, so a name two of them export cannot shadow the other.
@@ -123,19 +126,36 @@ function needs({ strip }: Model): Json {
 
 /**
  * Each card's chips (chipsFor with the branch, as the full and project
- * cards ask for it) and its To review action, keyed by id.
+ * cards ask for it), what the card draws of them (cardChips) and how they
+ * fit each card's line, its To review action and a merged card's Park,
+ * Close and dimming, keyed by id.
  */
-function chipsOut({ model, chips }: Model): Record<string, Json> {
+function chipsOut({ model, chips, row, merged }: Model): Record<string, Json> {
+  const fit = (drawn: Chip[], w: Workspace, chars: number): Json => ({
+    fitsOneLine: row.chipsFitOneLine(drawn, w, chars),
+    secondLineFits: row.secondLineFits(drawn, w, chars),
+    splits: row.chipsSplit(drawn, w, chars),
+  });
   return Object.fromEntries(
-    model.cards().map((w) => [
-      w.id,
-      {
-        canFileForReview: chips.canFileForReview(w),
-        // Copied to plain objects, which Json takes and the Chip interfaces are not.
-        chips: chips.chipsFor(w, true).map((c) => ({ ...c })),
-        reviewIsGreen: chips.reviewIsGreen(w),
-      },
-    ]),
+    model.cards().map((w) => {
+      const drawn = row.cardChips(w, true);
+      return [
+        w.id,
+        {
+          canFileForReview: chips.canFileForReview(w),
+          // Copied to plain objects, which Json takes and the Chip interfaces are not.
+          cardChips: drawn.map((c) => ({ ...c })),
+          cardOpacity: merged.cardOpacity(w, false),
+          chips: chips.chipsFor(w, true).map((c) => ({ ...c })),
+          fullLine: fit(drawn, w, row.FULL_LINE_CHARS),
+          offersClose: merged.offersClose(w),
+          offersPark: merged.offersPark(w),
+          projectLine: fit(drawn, w, row.PROJECT_LINE_CHARS),
+          reviewIsGreen: chips.reviewIsGreen(w),
+          showsChipsRow: row.showsChipsRow(drawn, w),
+        },
+      ];
+    }),
   );
 }
 

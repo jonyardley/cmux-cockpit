@@ -1,7 +1,5 @@
 //! test/ready.test.ts: the Ready state on cockpit cards (issue #53), its
-//! PR words, and To review. The asserts on hasChipsRow and showsChipsRow
-//! test chips.ts, which is not ported, so "still counts a chip as a chips
-//! row" is left out and two cases keep their other asserts.
+//! PR words, and To review, with the chips row it keeps (chips.ts).
 
 use cockpit_core::data::{Agent, AgentStatus, Data, PrStatus, Workspace, WorkspaceGroup};
 use cockpit_core::prs::pr_summary;
@@ -285,15 +283,17 @@ mod to_review {
         ]
     }
 
-    /// Partly ported: hasChipsRow and showsChipsRow are chips.ts's.
     #[test]
     fn offers_to_review_on_a_ready_card_outside_for_review_and_files_it_there() {
         let (mut s, _, mut fx) = setup();
         let w = ready_ws(&mut fx, "w").group("g-main");
         let data = frame(NOW, lanes(), vec![w.clone()]);
         assert!(s.can_file_for_review(&data, Some(&w)));
+        assert!(s.has_chips_row(&data, Some(&w), true));
         // The action alone keeps the row, with no chip at all.
-        assert!(s.chips_for(Some(&w), true).is_empty());
+        let chips = s.chips_for(Some(&w), true);
+        assert!(chips.is_empty());
+        assert!(s.shows_chips_row(&data, &chips, Some(&w)));
         s.file_for_review(&data, Some(&w));
         assert_eq!(
             calls(&s).last(),
@@ -334,7 +334,6 @@ mod to_review {
         }
     }
 
-    /// Partly ported: hasChipsRow is chips.ts's.
     #[test]
     fn is_not_offered_in_for_review_off_a_ready_card_or_with_no_workspace() {
         let (mut s, _, mut fx) = setup();
@@ -343,6 +342,7 @@ mod to_review {
         let data = frame(NOW, lanes(), vec![in_review.clone(), read.clone()]);
         assert!(!s.can_file_for_review(&data, Some(&in_review)));
         assert!(!s.can_file_for_review(&data, Some(&read)));
+        assert!(!s.has_chips_row(&data, Some(&read), true));
         assert!(!s.can_file_for_review(&data, None));
     }
 
@@ -369,5 +369,13 @@ mod to_review {
         let data = frame(NOW, groups, vec![anchor.clone()]);
         assert!(s.is_ready(&data, Some(&anchor)));
         assert!(!s.can_file_for_review(&data, Some(&anchor)));
+    }
+
+    #[test]
+    fn still_counts_a_chip_as_a_chips_row() {
+        let (mut s, data, _) = setup();
+        let w = ws("b").branch("feat");
+        assert!(s.has_chips_row(&data, Some(&w), true));
+        assert!(!s.has_chips_row(&data, Some(&w), false));
     }
 }
