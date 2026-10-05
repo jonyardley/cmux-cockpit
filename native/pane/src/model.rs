@@ -222,6 +222,10 @@ pub struct Card {
     /// actions, as the sidebar's card of this kind shows them; empty for
     /// a row.
     pub chips: Vec<Chip>,
+    /// A merged card's Park and Close. The view puts them at the end of
+    /// the chips line when every chip fits whole, else on a line of their
+    /// own under it, as the sidebar's mergedBelow does, so neither is cut.
+    pub merged: Vec<Chip>,
     /// The latest message, or what the waiting chat wants.
     pub detail: String,
     /// How many detail lines it draws: two on a full card, else one.
@@ -744,7 +748,7 @@ fn card_words(c: &Card, out: &mut Vec<String>) {
     out.push(c.status.clone());
     out.push(c.left_off.clone());
     out.push(c.detail.clone());
-    for chip in &c.chips {
+    for chip in c.chips.iter().chain(&c.merged) {
         out.extend(chip.pieces.iter().map(|p| p.text.clone()));
     }
 }
@@ -834,9 +838,8 @@ fn chips_row(
     kind: ChipsFor,
 ) -> Vec<Chip> {
     let mut out: Vec<Chip> = match kind {
-        // A row has no chips row, but carries Park and Close on a line of
-        // their own, as the sidebar's mergedActions does.
-        ChipsFor::Row => return merged_chips(session, data, w),
+        // A row has no chips row; its Park and Close are in `merged`.
+        ChipsFor::Row => return Vec::new(),
         // card_chips, so a merged card drops its clean branch as the sidebar does.
         ChipsFor::Full | ChipsFor::Project => session
             .card_chips(data, w, true)
@@ -848,7 +851,6 @@ fn chips_row(
     if session.can_file_for_review(data, w) {
         out.push(review_chip(session.review_is_green(w)));
     }
-    out.extend(merged_chips(session, data, w));
     // Only once the shell has said where home is: until then the home
     // folder itself would be offered as a project.
     if kind == ChipsFor::Project && session.home.is_some() && session.can_create_project(w) {
@@ -972,6 +974,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         status_ink,
         left_off,
         chips,
+        merged: merged_chips(session, data, w),
         detail: whole_words(&session.card_detail(w), DETAIL_MAX),
         detail_lines: detail_lines(density),
         waiting: view.needs.list.iter().any(|w| w == id),
@@ -1077,6 +1080,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         status_ink: style.text,
         left_off: String::new(),
         chips: chips_row(session, data, w, ChipsFor::Project),
+        merged: merged_chips(session, data, w),
         detail: whole_words(&wanted, 0),
         detail_lines: 2,
         waiting: view.needs.list.iter().any(|w| w == id),
@@ -1416,6 +1420,7 @@ pub(crate) mod fixtures {
             status_ink: Token::MetaText,
             left_off: String::new(),
             chips: Vec::new(),
+            merged: Vec::new(),
             detail: String::new(),
             detail_lines: 1,
             waiting,

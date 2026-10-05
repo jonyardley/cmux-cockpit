@@ -21,7 +21,7 @@ use cockpit_pane::{Action, Outcome, Pane, PaneModel, theme};
 use crux_core::App;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
-use ratatui::buffer::Buffer;
+use ratatui::buffer::{Buffer, Cell};
 use ratatui::crossterm::event::{
     Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
 };
@@ -312,14 +312,19 @@ fn shows_and_hides_the_keys_and_quits_on_q() {
 }
 
 fn cell_colours(buffer: &Buffer, needle: &str) -> (Color, Color) {
+    let cell = cell_at(buffer, needle);
+    (cell.fg, cell.bg)
+}
+
+/// The cell where `needle` first starts on screen.
+fn cell_at<'b>(buffer: &'b Buffer, needle: &str) -> &'b Cell {
     let w = usize::from(buffer.area.width);
     for (y, row) in buffer.content.chunks(w).enumerate() {
         let line: String = row.iter().map(|c| c.symbol()).collect();
         if let Some(byte) = line.find(needle) {
             let x = line[..byte].chars().count();
-            let cell = &row[x];
             assert!(y < usize::from(buffer.area.height));
-            return (cell.fg, cell.bg);
+            return &row[x];
         }
     }
     panic!("{needle} is not on screen");
@@ -1350,12 +1355,13 @@ fn card_of(pane: &Pane, id: &str) -> Option<cockpit_pane::model::Card> {
         })
 }
 
-/// The words of a card's chips, in order.
+/// The words of a card's chips, then its Park and Close, in order.
 fn chip_words(pane: &Pane, id: &str) -> Vec<String> {
     card_of(pane, id)
         .map(|c| {
             c.chips
                 .iter()
+                .chain(&c.merged)
                 .flat_map(|chip| chip.pieces.iter().map(|p| p.text.clone()))
                 .collect()
         })
@@ -1364,15 +1370,7 @@ fn chip_words(pane: &Pane, id: &str) -> Vec<String> {
 
 /// Whether the cell where `needle` starts is drawn dim.
 fn is_dim(buffer: &Buffer, needle: &str) -> bool {
-    let w = usize::from(buffer.area.width);
-    for row in buffer.content.chunks(w) {
-        let line: String = row.iter().map(|c| c.symbol()).collect();
-        if let Some(byte) = line.find(needle) {
-            let x = line[..byte].chars().count();
-            return row[x].modifier.contains(Modifier::DIM);
-        }
-    }
-    panic!("{needle} is not on screen");
+    cell_at(buffer, needle).modifier.contains(Modifier::DIM)
 }
 
 #[test]
@@ -1386,13 +1384,7 @@ fn a_merged_card_offers_park_and_close_in_the_sidebars_inks_and_a_row_does_too()
     let row = id_of(&pane, "Merged elsewhere");
     assert_eq!(chip_words(&pane, &row), ["Park", "Close"]);
     let inks: Vec<Token> = card_of(&pane, &full)
-        .map(|c| {
-            c.chips
-                .iter()
-                .skip(1)
-                .map(|chip| chip.pieces[0].ink)
-                .collect()
-        })
+        .map(|c| c.merged.iter().map(|chip| chip.pieces[0].ink).collect())
         .unwrap_or_default();
     assert_eq!(inks, [Token::Secondary, Token::Text], "Close reads first");
     let open = id_of(&pane, "Snapshot tests");
@@ -1468,14 +1460,47 @@ fn p_parks_a_merged_card_and_an_open_card_ignores_it() {
 fn p_on_a_card_in_projects_sends_park_and_nothing_on_a_project() {
     let mut pane = pane_for("projects");
     let rows = pane.model().project_ids().len();
-    // Down the rows until `p` asks for a card's Park; on a project it is nothing.
-    for _ in 0..rows {
-        press(&mut pane, KeyCode::Down);
-        match press(&mut pane, KeyCode::Char('p')) {
-            Outcome::Act(Action::ParkMerged { .. }) => return,
-            Outcome::Nothing => {}
-            other => panic!("p asked for {other:?}"),
+    let (mut cards, mut others) = (0, 0);
+    // Every row from the first: Enter says what the row is, a card
+    // switching to its workspace and anything else not.
+    for i in 0..rows {
+        if i > 0 {
+            press(&mut pane, KeyCode::Down);
+        }
+        let park = press(&mut pane, KeyCode::Char('p'));
+        match press(&mut pane, KeyCode::Enter) {
+            Outcome::Act(Action::SwitchTo { id }) => {
+                assert_eq!(park, Outcome::Act(Action::ParkMerged { id }));
+                cards += 1;
+            }
+            other => {
+                assert_eq!(
+                    park,
+                    Outcome::Nothing,
+                    "p on a row where Enter gives {other:?}"
+                );
+                others += 1;
+            }
         }
     }
-    panic!("no card in Projects sent Park");
+    assert!(cards > 0, "no card in Projects");
+    assert!(others > 0, "no project row in Projects");
+}
+
+#[test]
+fn a_narrow_card_moves_park_and_close_to_a_line_of_their_own_not_cut() {
+    let mut pane = pane_for("lanes");
+    let mut term = terminal(26);
+    pane.draw(&mut term).unwrap();
+    let text = text_of(term.backend().buffer());
+    let lines: Vec<&str> = text.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.contains("#176 merged"))
+        .unwrap_or_else(|| panic!("no merged chip at 26 columns:\n{text}"));
+    assert!(!lines[at].contains('\u{2026}'), "a chip is cut:\n{text}");
+    assert!(
+        lines[at + 1].contains("Park  Close"),
+        "Park and Close are not whole:\n{text}"
+    );
 }

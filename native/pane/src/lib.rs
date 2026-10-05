@@ -92,14 +92,15 @@ impl From<Action> for CoreEvent {
     }
 }
 
-/// A merged card's key as its action: `p` Park, `x` Close, else Keep.
-/// Like `r`, the key reaches every card; the core acts only on a card
-/// that offers it.
-fn merged_action(key: char, id: String) -> Action {
+/// A merged card's key as its action: `p` Park, `x` Close, `k` Keep, and
+/// any other key none. Like `r`, the key reaches every card; the core
+/// acts only on a card that offers it.
+fn merged_action(key: char, id: String) -> Option<Action> {
     match key {
-        'p' => Action::ParkMerged { id },
-        'x' => Action::CloseMerged { id },
-        _ => Action::KeepMerged { id },
+        'p' => Some(Action::ParkMerged { id }),
+        'x' => Some(Action::CloseMerged { id }),
+        'k' => Some(Action::KeepMerged { id }),
+        _ => None,
     }
 }
 
@@ -405,9 +406,9 @@ impl Pane {
             KeyCode::Char('r') => on.map_or(Outcome::Nothing, |id| {
                 Outcome::Act(Action::FileForReview { id })
             }),
-            KeyCode::Char(c @ ('p' | 'x' | 'k')) => {
-                on.map_or(Outcome::Nothing, |id| Outcome::Act(merged_action(c, id)))
-            }
+            KeyCode::Char(c @ ('p' | 'x' | 'k')) => on
+                .and_then(|id| merged_action(c, id))
+                .map_or(Outcome::Nothing, Outcome::Act),
             KeyCode::Char('d') => match on {
                 Some(id) if self.model.is_waiting(&id) => Outcome::Act(Action::Dismiss { id }),
                 _ => Outcome::Nothing,
@@ -442,7 +443,7 @@ impl Pane {
                 Outcome::Act(Action::FileForReview { id })
             }
             (KeyCode::Char(c @ ('p' | 'x' | 'k')), Some(ProjectTarget::Card(id))) => {
-                Outcome::Act(merged_action(c, id))
+                merged_action(c, id).map_or(Outcome::Nothing, Outcome::Act)
             }
             (KeyCode::Char(' '), Some(ProjectTarget::Card(id))) => {
                 Outcome::Act(Action::Menu(MenuEvent::OpenCard { id }))
