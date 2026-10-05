@@ -13,6 +13,7 @@ use std::collections::{BTreeMap, HashMap};
 use indexmap::IndexMap;
 use serde_json::Value;
 
+use crate::edit::Editor;
 use crate::lanes::{LANES, LaneKey};
 use crate::persist::{ProjectSpec, SavedState, ViewMode, persist_url};
 use crate::pr_poll::PrPoll;
@@ -141,6 +142,9 @@ pub struct Session {
     pub(crate) sent_specs: IndexMap<String, Option<ProjectSpec>>,
     // cockpit/state.ts: the project whose editor is open, or NEW_PROJECT.
     pub(crate) editing_project: Option<String>,
+    // cockpit/edit.ts: the open editor's draft, Remove's first tap and the
+    // icon search's words.
+    pub(crate) editor: Editor,
     /// The home folder (`__HOME__`), so a "~" root expands and the home
     /// folder itself is never offered as a project. None until the shell
     /// sets it.

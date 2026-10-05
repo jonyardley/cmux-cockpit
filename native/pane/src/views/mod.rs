@@ -2,6 +2,7 @@
 //! word and colour comes from the model and the theme; a decision a view
 //! would need goes in the model (model.rs, cursor.rs, text.rs) with a test.
 
+mod editor;
 mod keys;
 mod lanes;
 mod needs;
@@ -15,6 +16,7 @@ use ratatui::text::Line;
 use ratatui::widgets::{Block, Paragraph};
 
 use crate::cursor::{Scroll, scroll_for};
+use crate::editor::Field;
 use crate::model::{KEYS, KEYS_TITLE, PICK_TITLE, PaneModel, PaneView, pick_rows};
 use crate::placing::{Place, Spot};
 use crate::theme;
@@ -35,6 +37,8 @@ pub struct Shown<'a> {
     pub picking: bool,
     pub view: PaneView,
     pub drop: Option<&'a Place>,
+    /// The editor's focused field, while one is open in Projects.
+    pub field: Field,
 }
 
 /// Where a draw put the body: its first row on screen, how far it
@@ -77,17 +81,28 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
             }
         }
         PaneView::Projects => {
-            // Up, down and the wheel scroll it a line at a time; the card
-            // keys rest here, so no line is a spot.
+            // The cursor moves between its rows, with the keys or the
+            // wheel, and the view keeps it in sight: an editor's focus
+            // runs to its foot line, and the last row scrolls to the end.
+            // No line is a spot.
             let mut body: Vec<Line<'static>> = Vec::new();
             let needs = needs::lines(&shown.model.needs, inner, None);
             if !needs.lines.is_empty() {
                 body.push(Line::default());
             }
             body.extend(needs.lines);
-            body.extend(projects::lines(&shown.model.projects, inner));
-            let most = body.len().saturating_sub(usize::from(body_area.height));
-            let scroll = shown.manual.min(most);
+            let lead = body.len();
+            let laid = projects::lines(&shown.model.projects, inner, shown.cursor, shown.field);
+            body.extend(laid.lines);
+            let height = usize::from(body_area.height);
+            let most = body.len().saturating_sub(height);
+            let scroll = scroll_for(&Scroll {
+                focus: laid.focus.map(|r| r.start + lead..r.end + lead),
+                last: shown.last,
+                manual: shown.manual,
+                total: body.len(),
+                height,
+            });
             let offset = u16::try_from(scroll).unwrap_or(u16::MAX);
             frame.render_widget(Paragraph::new(body).scroll((offset, 0)), body_area);
             Drawn {

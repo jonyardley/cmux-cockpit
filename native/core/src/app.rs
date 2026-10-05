@@ -18,6 +18,7 @@ use serde::Serialize;
 use serde_json::{Map, Value};
 
 use crate::data::{Data, Workspace};
+use crate::edit::EditEvent;
 use crate::js::json_num;
 use crate::lane_entries::LaneEntry;
 use crate::lanes::LaneKey;
@@ -64,6 +65,13 @@ pub enum Event {
     /// What the shell found for one directory's PR. It redraws only when
     /// what a card shows of a PR changed (pr_poll::Shown).
     PrPolled(Box<PrPolled>),
+    /// Something done in the project editor (edit.rs). A save goes out as
+    /// a `projects.<key>` state write, which the next build reads.
+    Edit(EditEvent),
+    /// A project's "+": a new session in its folder.
+    OpenProject { key: String },
+    /// A card's "To review →": files it into For review, when it offers it.
+    FileForReview { id: String },
 }
 
 /// Everything the core knows: the session, the latest frame, and the view
@@ -280,6 +288,15 @@ impl Model {
             Event::MoveCard { id, lane, before } => s.move_card(data, &id, lane, before.as_deref()),
             Event::SwitchTo { id } => s.select_workspace(data, Some(&id)),
             Event::Dismiss { id } => s.dismiss_waiting(data, data.ws_by_id(&id)),
+            Event::Edit(e) => s.edit(data, e),
+            Event::OpenProject { key } => s.open_project_workspace(data, &key, None),
+            // Only a card that offers it: the pane's key reaches every card.
+            Event::FileForReview { id } => {
+                let w = data.ws_by_id(&id);
+                if s.can_file_for_review(data, w) {
+                    s.file_for_review(data, w);
+                }
+            }
             _ => {}
         }
     }
@@ -440,6 +457,38 @@ mod tests {
         // Once a file has shown it, a later file's own word wins.
         let _ = app.update(Event::State(Box::default()), &mut model);
         assert_eq!(app.view(&model).mode, "all");
+    }
+
+    #[test]
+    fn a_new_project_saved_in_the_editor_goes_out_as_a_state_write_then_its_workspace() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        model.session.home = Some("/Users/jon".into());
+        let _ = app.update(frame(100.0), &mut model);
+        let _ = app.update(Event::Edit(EditEvent::OpenNew), &mut model);
+        let typed = EditEvent::Folder("~/dev/pianola".into());
+        let _ = app.update(Event::Edit(typed), &mut model);
+        let mut cmd = app.update(Event::Edit(EditEvent::Save), &mut model);
+        let effects: Vec<Effect> = cmd.effects().collect();
+        let key = "projects./users/jon/dev/pianola/".to_string();
+        let saved = writes(&effects);
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].0, key);
+        assert!(
+            matches!(&effects[1], Effect::Cmux(c) if c.operation.method == "workspace.create"),
+            "then a workspace opens there"
+        );
+        assert!(matches!(effects.last(), Some(Effect::Render(_))));
+
+        // Once a state file shows the write, it is no longer made over the next one.
+        let shown = serde_json::json!({ "projects": { "/users/jon/dev/pianola/": saved[0].1 } });
+        let file = SavedState::from_json(&shown.to_string()).unwrap();
+        let _ = app.update(Event::State(Box::new(file)), &mut model);
+        let _ = app.update(Event::State(Box::default()), &mut model);
+        assert!(
+            model.session.saved.projects.is_empty(),
+            "the write was seen"
+        );
     }
 
     /// The effects of one event, in words: `render` or `pr <directory>`.

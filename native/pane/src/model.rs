@@ -26,6 +26,7 @@ use cockpit_core::ui::PillColors;
 
 use cockpit_core::status::DETAIL_MAX;
 
+use crate::editor::EditorView;
 use crate::text::whole_words;
 use crate::theme;
 
@@ -63,13 +64,17 @@ pub const HOLLOW: &str = "○";
 pub const GHOST: &str = "◌";
 
 /// The keys the `?` overlay lists: the key, then what it does.
-pub const KEYS: [(&str, &str); 10] = [
+pub const KEYS: [(&str, &str); 14] = [
     ("↑ ↓", "move between cards"),
     ("shift ↑ ↓", "reorder in its lane"),
     ("m 1-5", "move to a lane"),
     ("drag", "move to a lane or spot"),
     ("Enter", "switch to it"),
     ("d", "dismiss from Needs you"),
+    ("r", "send to For review"),
+    ("+", "session in project"),
+    ("e", "edit project"),
+    ("n", "new project"),
     ("Tab", "All or Projects"),
     ("?", "show or hide the keys"),
     ("q", "quit"),
@@ -87,6 +92,10 @@ pub const TO_REVIEW: &str = "To review →";
 pub const DIRTY_MARK: &str = "●";
 /// The row under the busy projects, as the sidebar's "+ New project".
 pub const NEW_PROJECT_LABEL: &str = "+ New project";
+/// The cursor's ids for a project's header, a quiet row and "+ New project".
+pub const PROJECT_ROW: &str = "p:";
+pub const QUIET_ROW: &str = "q:";
+pub const NEW_ROW: &str = "new";
 /// The heading over the projects with no sessions.
 pub const QUIET_LABEL: &str = "Quiet";
 /// On a project that has a folder to open a session in.
@@ -331,24 +340,44 @@ pub enum ProjectRow {
         title: String,
         text: String,
     },
-    /// "+ New project", which only the sidebar opens.
+    /// "+ New project": Enter opens the editor under it.
     NewProject,
+    /// The open project editor, under its project's row or "+ New project".
+    Editor(EditorView),
     QuietHeader {
         count: usize,
         collapsed: bool,
     },
     /// A project with no sessions: its name, and "+" when it has a folder.
     Quiet {
+        /// Its key in the core, and its row's id for the cursor.
+        key: String,
+        id: String,
         name: String,
         color: Option<u32>,
         can_open: bool,
     },
 }
 
+/// What a Projects row the cursor is on stands for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectTarget {
+    Card(String),
+    /// A project's header or quiet row: "+" opens a session when it can.
+    Project {
+        key: String,
+        can_open: bool,
+    },
+    New,
+}
+
 /// A project's header: its name in its own colour's mark, the cards it
 /// counts, and "+" when it has a folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProjectHead {
+    /// Its key in the core, and its row's id for the cursor.
+    pub key: String,
+    pub id: String,
     pub name: String,
     /// The table's colour; None draws the grey of a dot with no colour.
     pub color: Option<u32>,
@@ -450,6 +479,54 @@ impl PaneModel {
                 ..PaneModel::default()
             },
         }
+    }
+
+    /// The rows the cursor moves between in Projects, top to bottom: each
+    /// project's header, its cards by workspace id, "+ New project" and
+    /// each quiet project.
+    pub fn project_ids(&self) -> Vec<&str> {
+        self.projects
+            .iter()
+            .filter_map(|r| match r {
+                ProjectRow::Header(h) => Some(h.id.as_str()),
+                ProjectRow::Card(c) => Some(c.ws_id.as_str()),
+                ProjectRow::NewProject => Some(NEW_ROW),
+                ProjectRow::Quiet { id, .. } => Some(id.as_str()),
+                ProjectRow::Ghost { .. }
+                | ProjectRow::QuietHeader { .. }
+                | ProjectRow::Editor(_) => None,
+            })
+            .collect()
+    }
+
+    /// What the Projects row with cursor id `id` stands for.
+    pub fn project_target(&self, id: &str) -> Option<ProjectTarget> {
+        self.projects.iter().find_map(|r| match r {
+            ProjectRow::Header(h) if h.id == id => Some(ProjectTarget::Project {
+                key: h.key.clone(),
+                can_open: h.can_open,
+            }),
+            ProjectRow::Quiet {
+                key,
+                id: row,
+                can_open,
+                ..
+            } if row == id => Some(ProjectTarget::Project {
+                key: key.clone(),
+                can_open: *can_open,
+            }),
+            ProjectRow::Card(c) if c.ws_id == id => Some(ProjectTarget::Card(c.ws_id.clone())),
+            ProjectRow::NewProject if id == NEW_ROW => Some(ProjectTarget::New),
+            _ => None,
+        })
+    }
+
+    /// The open project editor, while Projects shows one.
+    pub fn editor(&self) -> Option<&EditorView> {
+        self.projects.iter().find_map(|r| match r {
+            ProjectRow::Editor(e) => Some(e),
+            _ => None,
+        })
     }
 
     /// The cards the cursor moves between, top to bottom, by workspace id:
@@ -613,6 +690,10 @@ impl PaneModel {
                 ProjectRow::QuietHeader { count, .. } => out.push(count.to_string()),
                 ProjectRow::Quiet { name, .. } => out.push(name.clone()),
                 ProjectRow::NewProject => {}
+                ProjectRow::Editor(e) => {
+                    out.push(e.name.clone());
+                    out.push(e.root.clone());
+                }
             }
         }
         out
@@ -971,6 +1052,8 @@ fn project_head(session: &mut Session, data: &Data, k: &str) -> ProjectHead {
         .dot
         .map(|w| icon_of(&session.status_info(data, Some(w))));
     ProjectHead {
+        key: k.to_string(),
+        id: format!("{PROJECT_ROW}{k}"),
         name: p.name.clone(),
         color: theme::parse_hex(&p.color),
         count: ws.len(),
@@ -1009,14 +1092,16 @@ fn projects(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Project
             ProjectEntry::QuietRow { project, .. } => {
                 let p = session.project_by_key(project);
                 ProjectRow::Quiet {
+                    key: project.clone(),
+                    id: format!("{QUIET_ROW}{project}"),
                     name: p.name.clone(),
                     color: theme::parse_hex(&p.color),
                     can_open: session.can_open_project(project),
                 }
             }
-            // The editor is the sidebar's; the pane only ever reads its
-            // own session, where none is open.
-            ProjectEntry::Editor { .. } => continue,
+            ProjectEntry::Editor { project, .. } => {
+                ProjectRow::Editor(EditorView::from_session(session, data, project))
+            }
         };
         out.push(row);
     }

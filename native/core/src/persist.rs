@@ -226,8 +226,8 @@ impl SavedState {
 
     /// Makes one of the cockpit's own writes here, as the handler's
     /// applySet makes it in the file: `dismissed.<ws>`, `projectOverride.<ws>`,
-    /// `mergeKept.<ws>`,
-    /// `ui.mode` or `ui.collapsed`, set, or deleted with no value. False
+    /// `mergeKept.<ws>`, `projects.<key>`, `ui.mode` or `ui.collapsed`,
+    /// set, or deleted with no value. False
     /// for any other key or a value of the wrong shape, leaving the state
     /// as it was.
     pub fn set_entry(&mut self, key: &str, value: Option<&Value>) -> bool {
@@ -254,6 +254,7 @@ impl SavedState {
             ("mergeKept", _) => parse(value)
                 .map(|v| put(&mut self.merge_kept, id, v))
                 .is_ok(),
+            ("projects", _) => parse(value).map(|v| put(&mut self.projects, id, v)).is_ok(),
             ("ui", "mode") => parse(value).map(|v| self.ui.mode = v).is_ok(),
             ("ui", "collapsed") => parse(value)
                 .map(|v| self.ui.collapsed = v.unwrap_or_default())
@@ -298,7 +299,7 @@ pub const MAX_MOVE: usize = 200;
 pub const MAX_DECISIONS: f64 = 9.0;
 
 /// Plain, single-line text with no leading, trailing or control characters, up to `max` long.
-fn is_text(v: &str, max: usize) -> bool {
+pub(crate) fn is_text(v: &str, max: usize) -> bool {
     let len = utf16_len(v);
     v.trim() == v && len > 0 && len <= max && v.chars().all(|c| c >= ' ' && c != '\u{7f}')
 }
