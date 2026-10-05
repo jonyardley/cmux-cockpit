@@ -84,21 +84,20 @@ fn expired(o: &LaneMove, now: f64) -> bool {
         }
 }
 
-/// Whether cmux's order of the workspaces in `base` is no longer `base`'s:
-/// it has taken a reorder, ours or its own. One that came or went since
-/// does not count.
-fn order_moved_on(ws: &[&Workspace], base: &[String]) -> bool {
+/// Whether cmux has the workspaces in `order` in that order. One that came
+/// or went since does not count.
+fn same_order(ws: &[&Workspace], order: &[String]) -> bool {
     let now: Vec<&str> = ws
         .iter()
         .map(|w| w.id.as_str())
-        .filter(|id| base.iter().any(|b| b == id))
+        .filter(|id| order.iter().any(|b| b == id))
         .collect();
-    let then: Vec<&str> = base
+    let then: Vec<&str> = order
         .iter()
         .map(String::as_str)
         .filter(|id| ws.iter().any(|w| w.id == *id))
         .collect();
-    now != then
+    now == then
 }
 
 /// The tab index, among the other tabs, just after the group's last member.
@@ -155,7 +154,9 @@ impl Session {
         let now = now_epoch(data);
         if let Some(o) = self.lane_override.get(&w.id).copied() {
             let done = match o.held_from {
-                Some(from) => actual != from || (o.awaiting && expired(&o, now)),
+                Some(from) => {
+                    actual == o.lane || !from.contains(actual) || (o.awaiting && expired(&o, now))
+                }
                 None => o.lane == actual || expired(&o, now),
             };
             if done {
@@ -275,7 +276,7 @@ impl Session {
         self.order_override = Some(OrderMove {
             ids,
             at: now_epoch(data),
-            held_base: None,
+            held_bases: Vec::new(),
         });
     }
 
@@ -290,12 +291,14 @@ impl Session {
                 .into_iter()
                 .filter(|id| ws.iter().any(|w| w.id == *id))
                 .collect();
-            let caught_up = ws.len() == ids.len() && ws.iter().zip(&ids).all(|(w, id)| w.id == *id);
-            let lapsed = match &o.held_base {
-                Some(base) => order_moved_on(&ws, base),
-                None => now_epoch(data) - o.at > OVERRIDE_SECS,
+            let done = if o.held_bases.is_empty() {
+                let caught_up =
+                    ws.len() == ids.len() && ws.iter().zip(&ids).all(|(w, id)| w.id == *id);
+                caught_up || now_epoch(data) - o.at > OVERRIDE_SECS
+            } else {
+                same_order(&ws, &ids) || !o.held_bases.iter().any(|b| same_order(&ws, b))
             };
-            if caught_up || lapsed {
+            if done {
                 self.order_override = None;
             } else {
                 // A Map from the ids keeps the last index of a repeated one.

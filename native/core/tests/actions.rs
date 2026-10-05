@@ -55,8 +55,8 @@ fn frame(epoch: f64, groups: &[(&str, &str)]) -> Event {
 }
 
 /// The same frame in a different tab order.
-fn reordered(epoch: f64, order: &[&str]) -> Event {
-    let Event::Data(mut data) = frame(epoch, &[]) else {
+fn reordered(epoch: f64, groups: &[(&str, &str)], order: &[&str]) -> Event {
+    let Event::Data(mut data) = frame(epoch, groups) else {
         unreachable!()
     };
     if let Some(list) = data.workspaces.as_mut() {
@@ -283,7 +283,7 @@ mod the_moved_card_holds {
             "p",
             "u",
         ];
-        let _ = app.update(reordered(NOW + 61.0, &order), &mut model);
+        let _ = app.update(reordered(NOW + 61.0, &[], &order), &mut model);
         assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["b", "a"]);
         // The override is gone: cmux's own later order shows at once.
         let _ = app.update(frame(NOW + 90.0, &[]), &mut model);
@@ -291,12 +291,122 @@ mod the_moved_card_holds {
     }
 
     #[test]
-    fn but_a_card_moved_back_to_where_cmux_has_it_cancels_the_move() {
+    fn but_a_card_moved_back_before_cmux_shows_the_move_asks_for_its_lane_again() {
         let (app, mut model) = started();
         let _ = app.update(move_card("a", LaneKey::Review, None), &mut model);
         let asked = asked(&app, &mut model, move_card("a", LaneKey::Main, None));
-        assert!(asked.iter().all(|a| !a.contains("group.")), "{asked:?}");
+        // The Review join is already on its way, so cmux is asked to put it back.
+        assert!(
+            asked.contains(
+                &r#"cmux workspace.group.add {"group_id":"g-main","workspace_id":"a"}"#.to_string()
+            ),
+            "{asked:?}"
+        );
         assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Main));
+    }
+
+    #[test]
+    fn until_a_cmux_call_for_it_fails() {
+        let (app, mut model) = started();
+        let _ = app.update(move_card("a", LaneKey::Review, None), &mut model);
+        let _ = app.update(Event::CmuxFailed { id: "a".into() }, &mut model);
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Main));
+        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["a", "b"]);
+    }
+
+    #[test]
+    fn through_a_second_move_while_cmux_shows_only_the_first() {
+        let (app, mut model) = started();
+        let _ = app.update(move_card("a", LaneKey::Review, None), &mut model);
+        let _ = app.update(move_card("a", LaneKey::Unsorted, None), &mut model);
+        // cmux has made the first move but not the second yet.
+        let _ = app.update(frame(NOW + 2.0, &[("a", "g-review")]), &mut model);
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Unsorted));
+        let _ = app.update(frame(NOW + 3.0, &[("a", "")]), &mut model);
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Unsorted));
+    }
+
+    #[test]
+    fn in_order_through_a_second_reorder_while_cmux_shows_only_the_first() {
+        let (app, mut model) = started();
+        let _ = app.update(move_card("c", LaneKey::Main, Some("a")), &mut model);
+        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["c", "a", "b"]);
+        let asked = asked(&app, &mut model, move_card("b", LaneKey::Main, Some("c")));
+        // Counted in the order the first move asked for, which cmux will
+        // have by the time this one reaches it.
+        assert_eq!(
+            asked[0],
+            r#"cmux workspace.reorder {"workspace_id":"b","index":1}"#
+        );
+        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["b", "c", "a"]);
+        let first = [
+            "anchor-main",
+            "c",
+            "a",
+            "b",
+            "anchor-review",
+            "anchor-parked",
+            "p",
+            "u",
+        ];
+        let _ = app.update(reordered(NOW + 2.0, &[("c", "g-main")], &first), &mut model);
+        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["b", "c", "a"]);
+        let both = [
+            "anchor-main",
+            "b",
+            "c",
+            "a",
+            "anchor-review",
+            "anchor-parked",
+            "p",
+            "u",
+        ];
+        let _ = app.update(reordered(NOW + 3.0, &[("c", "g-main")], &both), &mut model);
+        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["b", "c", "a"]);
+    }
+}
+
+/// A new state file reseeds only what the file holds.
+mod a_new_state_file {
+    use super::*;
+
+    #[test]
+    fn keeps_an_undated_dismissal_which_is_never_saved() {
+        let (app, mut model) = started();
+        let data = json!({
+            "epoch": NOW,
+            "groups": [],
+            "workspaces": [{ "id": "c", "agents": [{ "id": "s1", "status": "needs_input" }] }],
+        });
+        let _ = app.update(
+            Event::Data(serde_json::from_value(data).unwrap()),
+            &mut model,
+        );
+        assert_eq!(app.view(&model).needs.list, ["c"]);
+        let asked = asked(&app, &mut model, Event::Dismiss { id: "c".into() });
+        assert_eq!(asked, ["set dismissed.c delete", "render"]);
+        let _ = app.update(Event::State(Box::default()), &mut model);
+        assert!(app.view(&model).needs.list.is_empty());
+    }
+
+    #[test]
+    fn does_not_undo_a_second_flip_with_the_first_flips_write() {
+        let (app, mut model) = started();
+        let _ = app.update(Event::FlipView, &mut model);
+        let _ = app.update(Event::FlipView, &mut model);
+        let first = SavedState::from_json(r#"{"ui":{"mode":"projects"}}"#).unwrap();
+        let _ = app.update(Event::State(Box::new(first)), &mut model);
+        assert_eq!(app.view(&model).mode, "all");
+    }
+
+    #[test]
+    fn keeps_a_dated_dismissal_until_the_handler_has_written_it() {
+        let (app, mut model) = started();
+        let _ = app.update(asking_frame(), &mut model);
+        let _ = app.update(Event::Dismiss { id: "c".into() }, &mut model);
+        // A hook's write lands first, without the dismissal.
+        let _ = app.update(Event::State(Box::default()), &mut model);
+        assert!(app.view(&model).needs.list.is_empty());
     }
 }
 

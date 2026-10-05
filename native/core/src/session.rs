@@ -58,13 +58,39 @@ pub struct LaneMove {
     pub at: f64,
     /// The lane's group is being made, so the move waits for it.
     pub awaiting: bool,
-    /// For a move made in the pane: the lane cmux had the card in when it
-    /// was moved. Such a move has no timer; it holds until cmux's data no
-    /// longer shows the card there (so it agrees, or cmux put it somewhere
-    /// else itself). A wait on a lane's group still lapses after
-    /// CREATE_SECS. None for the sidebar's own moves, which lapse after
-    /// OVERRIDE_SECS as the TypeScript's do.
-    pub held_from: Option<LaneKey>,
+    /// For a move made in the pane: the lanes cmux may still show the card
+    /// in while the move is on its way (where it was, and any lane an
+    /// earlier move still in flight sent it to). Such a move has no timer;
+    /// it holds until cmux's data shows it in its lane, or somewhere none
+    /// of these (cmux's own answer), or a request for it failed. A wait on
+    /// a lane's group still lapses after CREATE_SECS. None for the
+    /// sidebar's own moves, which lapse after OVERRIDE_SECS as the
+    /// TypeScript's do.
+    pub held_from: Option<LaneSet>,
+}
+
+/// A set of lanes, small enough to copy.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct LaneSet(u8);
+
+impl LaneSet {
+    fn bit(k: LaneKey) -> u8 {
+        LANES.iter().position(|l| l.key == k).map_or(0, |i| 1 << i)
+    }
+
+    /// The set holding only `k`.
+    pub fn of(k: LaneKey) -> LaneSet {
+        LaneSet(Self::bit(k))
+    }
+
+    /// This set with `k` added.
+    pub fn with(self, k: LaneKey) -> LaneSet {
+        LaneSet(self.0 | Self::bit(k))
+    }
+
+    pub fn contains(self, k: LaneKey) -> bool {
+        self.0 & Self::bit(k) != 0
+    }
 }
 
 /// A reorder cmux has not reflected yet: every workspace id in the order
@@ -73,10 +99,13 @@ pub struct LaneMove {
 pub struct OrderMove {
     pub ids: Vec<String>,
     pub at: f64,
-    /// For a move made in the pane: cmux's tab order when it was moved. It
-    /// holds until cmux's order of those workspaces is no longer that one,
-    /// with no timer, as `LaneMove::held_from` does.
-    pub held_base: Option<Vec<String>>,
+    /// For a move made in the pane: the tab orders cmux may still show
+    /// while the move is on its way (cmux's when it was made, and each
+    /// order an earlier move still in flight asked for). It holds, with no
+    /// timer, until cmux shows the order wanted, or one none of these, or
+    /// a request for it failed. Empty for the sidebar's own reorders,
+    /// which lapse after OVERRIDE_SECS.
+    pub held_bases: Vec<Vec<String>>,
 }
 
 /// The workspace Next last opened: its id, its place in the queue then,
@@ -96,6 +125,9 @@ pub struct Session {
     /// config/state.json as the build read it (`__STATE__`).
     pub saved: SavedState,
     pub(crate) outbox: Vec<Outbound>,
+    /// State writes sent but not yet seen in a state file, oldest first,
+    /// one per key: a new file has them made over it until it shows them.
+    pub(crate) pending: Vec<(String, Option<Value>)>,
 
     // shared/needs.ts: wsId to agent id to the start of a dismissed spell.
     pub(crate) dismissed: IndexMap<String, IndexMap<String, f64>>,
@@ -174,25 +206,60 @@ impl Session {
         }
     }
 
-    /// Takes over the optimistic placement and selection of an earlier
-    /// session, so a card moved or tapped a moment ago stays put when a new
-    /// state file reseeds the session: lane, order and selection all live
-    /// in cmux's data, not in the file.
-    pub fn keep_overrides_of(&mut self, earlier: &mut Session) {
-        self.lane_override = std::mem::take(&mut earlier.lane_override);
-        self.order_override = earlier.order_override.take();
-        self.select_override = earlier.select_override.take();
+    /// Seeds again from a new state file, as a reload seeds the sidebar,
+    /// but only what the file holds: the view, folds, dismissals and
+    /// project choices. Everything held only in memory (optimistic moves,
+    /// folds and selection, holds, ranks, Next's place, requests not yet
+    /// taken) stays. A write sent but not in the file yet is made over it,
+    /// so the pane's own writes never undo each other on the way, and an
+    /// undated dismissal, which is never saved, stays for the session.
+    pub fn reseed(&mut self, mut saved: SavedState) {
+        self.pending
+            .retain(|(key, value)| !saved.shows_entry(key, value.as_ref()));
+        for (key, value) in &self.pending {
+            saved.set_entry(key, value.as_ref());
+        }
+        let mut fresh = Session::new(std::mem::take(&mut self.projects), saved);
+        for (ws, starts) in &self.dismissed {
+            for (agent, start) in starts.iter().filter(|(_, s)| **s <= 0.0) {
+                fresh
+                    .dismissed
+                    .entry(ws.clone())
+                    .or_default()
+                    .entry(agent.clone())
+                    .or_insert(*start);
+            }
+        }
+        self.projects = fresh.projects;
+        self.saved = fresh.saved;
+        self.dismissed = fresh.dismissed;
+        self.project_override = fresh.project_override;
+        self.mode = fresh.mode;
+        self.unsorted_collapsed = fresh.unsorted_collapsed;
+        self.quiet_collapsed = fresh.quiet_collapsed;
+        self.collapsed_projects = fresh.collapsed_projects;
+        self.touched_lanes = fresh.touched_lanes;
+    }
+
+    /// A request for this workspace failed in cmux: lets go of the pane's
+    /// hold on it, so the card shows where cmux has it.
+    pub fn request_failed(&mut self, ws_id: &str) {
+        let held = |o: &LaneMove| o.held_from.is_some();
+        if self.lane_override.get(ws_id).is_some_and(held) {
+            self.lane_override.shift_remove(ws_id);
+        }
+        if self
+            .order_override
+            .as_ref()
+            .is_some_and(|o| !o.held_bases.is_empty())
+        {
+            self.order_override = None;
+        }
     }
 
     /// Every request made since the last call, oldest first.
     pub fn take_outbox(&mut self) -> Vec<Outbound> {
         std::mem::take(&mut self.outbox)
-    }
-
-    /// Puts requests taken earlier back at the front of the outbox, oldest first.
-    pub fn requeue(&mut self, mut earlier: Vec<Outbound>) {
-        earlier.append(&mut self.outbox);
-        self.outbox = earlier;
     }
 
     /// Swaps in a new project table, keeping everything else. A Move to
@@ -220,6 +287,8 @@ impl Session {
     }
 
     pub(crate) fn persist_set(&mut self, key: String, value: Option<Value>) {
+        self.pending.retain(|(k, _)| *k != key);
+        self.pending.push((key.clone(), value.clone()));
         self.outbox.push(Outbound::Persist { key, value });
     }
 }

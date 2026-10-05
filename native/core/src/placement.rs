@@ -12,7 +12,7 @@ use crate::lane_entries::LaneEntry;
 use crate::lanes::{FIRST_LANE, LaneKey, lane_by_key};
 use crate::model::{actual_lane_of, group_for_lane};
 use crate::persist::ViewMode;
-use crate::session::{Param, Session};
+use crate::session::{LaneSet, Param, Session};
 
 /// Where a drop lands.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,28 +77,23 @@ fn target_index(
     index_of(&last.id).map(|p| p + 1)
 }
 
-impl Session {
-    /// All's rows without the dragged one, the slot clamped into them, and
-    /// the lane of the row above it (the first lane above every row).
-    fn slot_of(
-        &mut self,
-        data: &Data,
-        key: &str,
-        index: usize,
-    ) -> (Vec<LaneEntry>, usize, LaneKey) {
-        let entries: Vec<LaneEntry> = self
-            .lane_entries(data)
-            .into_iter()
-            .filter(|e| e.id() != key)
-            .collect();
-        let at = index.min(entries.len());
-        let lane = at
-            .checked_sub(1)
-            .and_then(|i| entries.get(i))
-            .map_or(FIRST_LANE, LaneEntry::lane);
-        (entries, at, lane)
-    }
+/// All's rows without the dragged one, the slot clamped into them, and the
+/// lane of the row above it (the first lane above every row).
+fn slot_in(all: &[LaneEntry], key: &str, index: usize) -> (Vec<LaneEntry>, usize, LaneKey) {
+    let entries: Vec<LaneEntry> = all.iter().filter(|e| e.id() != key).cloned().collect();
+    let at = index.min(entries.len());
+    let lane = at
+        .checked_sub(1)
+        .and_then(|i| entries.get(i))
+        .map_or(FIRST_LANE, LaneEntry::lane);
+    (entries, at, lane)
+}
 
+fn ids_of(ws: &[&Workspace]) -> Vec<String> {
+    ws.iter().map(|w| w.id.clone()).collect()
+}
+
+impl Session {
     /// Where a drop of the row `key` at `index` (its slot in the flat list
     /// with the row removed) lands. Cards sort by state inside a lane, and
     /// the drag order only holds among cards in the same state, so a drop
@@ -107,10 +102,21 @@ impl Session {
     /// above it. With no peer in the lane it falls back to the neighbours:
     /// before the card below, else after the card above.
     pub fn resolve_drop(&mut self, data: &Data, key: &str, index: usize) -> DropTarget {
-        let (entries, at, lane) = self.slot_of(data, key, index);
-        let dragged = self.lane_entries(data).into_iter().find(|e| e.id() == key);
+        let all = self.lane_entries(data);
+        self.resolve_in(data, &all, key, index)
+    }
+
+    fn resolve_in(
+        &mut self,
+        data: &Data,
+        all: &[LaneEntry],
+        key: &str,
+        index: usize,
+    ) -> DropTarget {
+        let (entries, at, lane) = slot_in(all, key, index);
+        let dragged = all.iter().find(|e| e.id() == key);
         // Above every row the slot is outside any lane, so it keeps the header rule below.
-        let rank = match &dragged {
+        let rank = match dragged {
             Some(LaneEntry::Ws { ws_id, .. }) if at > 0 => {
                 Some(self.state_rank(data, data.ws_by_id(ws_id)))
             }
@@ -165,23 +171,32 @@ impl Session {
         if !self.is_mode(ViewMode::All) {
             return;
         }
-        let entries = self.lane_entries(data);
-        let Some(LaneEntry::Ws { ws_id, .. }) = entries.iter().find(|e| e.id() == key) else {
+        let all = self.lane_entries(data);
+        let order: Vec<String> = data.workspace_list().iter().map(|w| w.id.clone()).collect();
+        self.move_in(data, &all, &order, key, index);
+    }
+
+    /// The drop itself, against All's rows and the tab order the reorder
+    /// index counts in.
+    fn move_in(
+        &mut self,
+        data: &Data,
+        all: &[LaneEntry],
+        order: &[String],
+        key: &str,
+        index: usize,
+    ) {
+        let Some(LaneEntry::Ws { ws_id, .. }) = all.iter().find(|e| e.id() == key) else {
             return;
         };
         let Some(w) = data.ws_by_id(ws_id) else {
             return;
         };
-        let target = self.resolve_drop(data, key, index);
+        let target = self.resolve_in(data, all, key, index);
         // Against the lane on screen, so dragging a card back out of a lane
         // it is still waiting to join cancels that move.
         let changes_lane = self.lane_of(data, w) != target.lane;
-        let others: Vec<String> = data
-            .workspace_list()
-            .iter()
-            .map(|x| x.id.clone())
-            .filter(|id| *id != w.id)
-            .collect();
+        let others: Vec<String> = order.iter().filter(|id| **id != w.id).cloned().collect();
         // Position first, then membership, so the tab is already inside the
         // group's run when it joins.
         if let Some(at) = target_index(data, w, &others, &target, changes_lane) {
@@ -204,15 +219,20 @@ impl Session {
     /// The pane's move: the card `id` lands in `lane` just above the card
     /// `before`, or at the end of the lane when that is None or not in it.
     /// It goes through the sidebar's drop, at the slot that position is,
-    /// so the same peer rule places it. Its lane and order then hold until
-    /// cmux's data stops showing the card where it was, with no timer, so
-    /// a slow cmux never snaps the card back.
+    /// so the same peer rule places it. Its lane and order then hold, with
+    /// no timer, until cmux's data shows them, or shows something else of
+    /// its own, or a request fails (LaneMove::held_from), so a slow cmux
+    /// never snaps the card back. A move made before cmux has shown the
+    /// last one builds on it: its reorder counts in the order the last
+    /// one asked for, and the hold lets either show on the way.
     pub fn move_card(&mut self, data: &Data, id: &str, lane: LaneKey, before: Option<&str>) {
-        if is_foreign_anchor(self, data, id) {
+        self.drag = None;
+        if !self.is_mode(ViewMode::All) || is_foreign_anchor(self, data, id) {
             return;
         }
         let key = format!("w:{id}");
-        let (entries, _, _) = self.slot_of(data, &key, 0);
+        let all = self.lane_entries(data);
+        let (entries, _, _) = slot_in(&all, &key, 0);
         let above = |b: &str| {
             entries
                 .iter()
@@ -225,20 +245,57 @@ impl Session {
                 .map(|i| i + 1)
         });
         let Some(index) = index else { return };
-        let from = actual_lane_of(data, data.ws_by_id(id));
-        let base: Vec<String> = data.workspace_list().iter().map(|w| w.id.clone()).collect();
+
         let lane_before = self.lane_override.get(id).copied();
+        let lanes = match lane_before {
+            Some(o) => o.held_from.map(|set| set.with(o.lane)),
+            None => None,
+        };
+        let lanes = lanes.unwrap_or_else(|| LaneSet::of(actual_lane_of(data, data.ws_by_id(id))));
         let order_before = self.order_override.clone();
-        self.handle_move(data, &key, index);
-        if let Some(o) = self.lane_override.get_mut(id)
-            && Some(*o) != lane_before
-        {
-            o.held_from = Some(from);
+        let (order, bases) = match order_before.as_ref().filter(|o| !o.held_bases.is_empty()) {
+            Some(o) => {
+                let mut bases = o.held_bases.clone();
+                bases.push(o.ids.clone());
+                (ids_of(&self.all_workspaces(data)), bases)
+            }
+            None => {
+                let now: Vec<String> = data.workspace_list().iter().map(|w| w.id.clone()).collect();
+                (now.clone(), vec![now])
+            }
+        };
+
+        self.move_in(data, &all, &order, &key, index);
+
+        match self.lane_override.get_mut(id) {
+            Some(o) if Some(*o) != lane_before => o.held_from = Some(lanes),
+            Some(_) => {}
+            // Moved back to where cmux still has it while an earlier move's
+            // join is on its way: ask for this lane again, so cmux ends
+            // where Jon left it rather than where the earlier move sent it.
+            None if lane_before.is_some_and(|o| o.held_from.is_some()) => {
+                self.rejoin(data, id, lane);
+            }
+            None => {}
         }
         if let Some(o) = self.order_override.as_mut()
             && Some(&*o) != order_before.as_ref()
         {
-            o.held_base = Some(base);
+            o.held_bases = bases;
+        }
+    }
+
+    /// Asks cmux to put the workspace back in the lane it has it in now.
+    fn rejoin(&mut self, data: &Data, id: &str, lane: LaneKey) {
+        let ws_id = Param::Str(id.to_string());
+        if lane == LaneKey::Unsorted {
+            self.cmux("workspace.group.remove", vec![("workspace_id", ws_id)]);
+        } else if let Some(g) = group_for_lane(data, &lane_by_key(lane)) {
+            let group = Param::Str(g.id.clone());
+            self.cmux(
+                "workspace.group.add",
+                vec![("group_id", group), ("workspace_id", ws_id)],
+            );
         }
     }
 }

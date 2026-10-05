@@ -30,11 +30,10 @@ use crate::session::{Outbound, Param, Session};
 pub enum Event {
     /// A new frame of cmux data.
     Data(Data),
-    /// A new config/state.json. The session is seeded from it afresh, as
-    /// a reload seeds the sidebar, so local state starts over, except the
-    /// optimistic lane, order and selection (they live in cmux's data, not
-    /// the file, so a card moved a moment ago stays put). Requests not yet
-    /// taken from the outbox are kept.
+    /// A new config/state.json. What the file holds is seeded from it
+    /// again, as a reload seeds the sidebar, with the pane's own writes not
+    /// in it yet made over it; everything held only in memory stays
+    /// (Session::reseed).
     State(Box<SavedState>),
     /// A new project table. Only the table changes: the view, folds,
     /// dismissals and overrides Jon set since the state file was read stay.
@@ -54,6 +53,10 @@ pub enum Event {
     Dismiss { id: String },
     /// Flips the view between All and Projects.
     FlipView,
+    /// The shell could not carry out a cmux call about this workspace
+    /// (refused, or past its time limit): the pane stops holding the card
+    /// where Jon moved it, and shows it where cmux has it.
+    CmuxFailed { id: String },
 }
 
 /// Everything the core knows: the session, the latest frame, and the view
@@ -235,6 +238,10 @@ pub fn build_view(s: &mut Session, data: &Data) -> ViewModel {
 impl Model {
     /// One of Jon's actions, against the latest frame; none before the first.
     fn act(&mut self, event: Event) {
+        if let Event::CmuxFailed { id } = &event {
+            self.session.request_failed(id);
+            return;
+        }
         if let Event::FlipView = event {
             let other = if self.session.projects_mode() {
                 ViewMode::All
@@ -274,14 +281,7 @@ impl App for Cockpit {
     fn update(&self, event: Event, model: &mut Model) -> Command<Effect, Event> {
         match event {
             Event::Data(data) => model.data = Some(data),
-            Event::State(saved) => {
-                let projects = std::mem::take(&mut model.session.projects);
-                let outbox = model.session.take_outbox();
-                let mut earlier = std::mem::take(&mut model.session);
-                model.session = Session::new(projects, *saved);
-                model.session.keep_overrides_of(&mut earlier);
-                model.session.requeue(outbox);
-            }
+            Event::State(saved) => model.session.reseed(*saved),
             Event::Projects(projects) => model.session.set_projects(projects),
             Event::Refresh => {}
             action => model.act(action),
@@ -339,12 +339,12 @@ mod tests {
     }
 
     #[test]
-    fn keeps_requests_not_yet_sent_when_a_new_state_file_arrives() {
+    fn keeps_a_write_a_new_state_file_does_not_show_yet_until_one_does() {
         let app = Cockpit;
         let mut model = Model::default();
         model.session.choose_mode(ViewMode::Projects);
         let mut cmd = app.update(Event::State(Box::default()), &mut model);
-        assert_eq!(app.view(&model).mode, "all", "reseeded from the file");
+        assert_eq!(app.view(&model).mode, "projects", "the write is on its way");
         let effects: Vec<Effect> = cmd.effects().collect();
         assert_eq!(writes(&effects).len(), 1, "the mode's save still goes out");
         assert!(
@@ -352,5 +352,11 @@ mod tests {
             "the render comes after the requests"
         );
         assert!(model.session.outbox().is_empty(), "nothing is left waiting");
+
+        let shown = SavedState::from_json(r#"{"ui":{"mode":"projects"}}"#).unwrap();
+        let _ = app.update(Event::State(Box::new(shown)), &mut model);
+        // Once a file has shown it, a later file's own word wins.
+        let _ = app.update(Event::State(Box::default()), &mut model);
+        assert_eq!(app.view(&model).mode, "all");
     }
 }
