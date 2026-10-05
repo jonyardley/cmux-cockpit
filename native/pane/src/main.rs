@@ -194,7 +194,8 @@ impl Drop for Mouse {
 /// The terminal view: draws each new frame, and hands every key and
 /// resize to the pane. A thread reads the terminal and pokes the runner,
 /// so a key is answered at once without the runner waking on a timer.
-/// Log lines would tear the screen, so they wait until it is restored.
+/// Log lines would tear the screen, so they wait until it is restored,
+/// tallied so a long session's polls print once each, not once a poll.
 fn terminal(opts: &Options) -> Result<Vec<String>, String> {
     let (tx, rx) = runner::channel();
     let (keys_tx, keys_rx) = mpsc::channel::<Event>();
@@ -215,7 +216,7 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
         }
     };
     let mut pane = Pane::new(PaneModel::default());
-    let mut logged = Vec::new();
+    let mut logged = Tally::default();
     let mut failed = None;
     runner::run(
         opts,
@@ -257,7 +258,29 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
     );
     drop(mouse);
     ratatui::restore();
-    failed.map_or(Ok(logged), Err)
+    failed.map_or_else(|| Ok(logged.lines()), Err)
+}
+
+/// Log lines held back while the pane draws: each distinct line once, in
+/// the order first seen, with how many times it came.
+#[derive(Default)]
+struct Tally(Vec<(String, usize)>);
+
+impl Tally {
+    fn push(&mut self, line: String) {
+        match self.0.iter_mut().find(|(l, _)| *l == line) {
+            Some((_, n)) => *n += 1,
+            None => self.0.push((line, 1)),
+        }
+    }
+
+    /// The lines to print: a repeated one ends with its count, "(x412)".
+    fn lines(self) -> Vec<String> {
+        self.0
+            .into_iter()
+            .map(|(l, n)| if n > 1 { format!("{l} (x{n})") } else { l })
+            .collect()
+    }
 }
 
 fn main() -> ExitCode {
@@ -296,6 +319,21 @@ mod tests {
     fn args(s: &str) -> Result<Args, String> {
         let v: Vec<String> = s.split_whitespace().map(str::to_string).collect();
         parse_args(&v)
+    }
+
+    #[test]
+    fn tallies_held_log_lines_once_each_in_the_order_first_seen() {
+        let mut t = Tally::default();
+        for l in [
+            "pr-poll gh none",
+            "pr-poll no branch",
+            "pr-poll gh none",
+            "pr-poll gh none",
+        ] {
+            t.push(l.to_string());
+        }
+        assert_eq!(t.lines(), ["pr-poll gh none (x3)", "pr-poll no branch"]);
+        assert!(Tally::default().lines().is_empty());
     }
 
     #[test]
