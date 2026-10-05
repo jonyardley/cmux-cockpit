@@ -6,6 +6,7 @@ mod keys;
 mod lanes;
 mod needs;
 mod parts;
+mod projects;
 mod top;
 
 use ratatui::Frame;
@@ -76,12 +77,24 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
             }
         }
         PaneView::Projects => {
-            let mut body = vec![Line::default()];
-            body.extend(top::projects_soon(inner));
-            frame.render_widget(Paragraph::new(body), body_area);
+            // Up, down and the wheel scroll it a line at a time; the card
+            // keys rest here, so no line is a spot.
+            let mut body: Vec<Line<'static>> = Vec::new();
+            let needs = needs::lines(&shown.model.needs, inner, None);
+            if !needs.lines.is_empty() {
+                body.push(Line::default());
+            }
+            body.extend(needs.lines);
+            body.extend(projects::lines(&shown.model.projects, inner));
+            let most = body.len().saturating_sub(usize::from(body_area.height));
+            let scroll = shown.manual.min(most);
+            let offset = u16::try_from(scroll).unwrap_or(u16::MAX);
+            frame.render_widget(Paragraph::new(body).scroll((offset, 0)), body_area);
             Drawn {
                 top: body_area.y,
-                ..Drawn::default()
+                scroll,
+                most,
+                spots: Vec::new(),
             }
         }
     };

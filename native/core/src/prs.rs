@@ -1,17 +1,18 @@
 //! A workspace's pull requests and their health (src/shared/prs.ts and
 //! src/shared/pr-health.ts): cmux's own when it sends any, else the one
-//! the poller saved in config/state.json. Only the slice a lane header's
-//! merge line needs is here; the chips' words, summaries and colours come
-//! with the chips port.
+//! the poller saved in config/state.json, and the summary a chip shows.
+//! The agents sidebar's slice (Jon's own PRs, which chat opened a PR, a
+//! PR's title) waits for that sidebar's port.
 
 use std::borrow::Cow;
 
 use crate::data::{PrStatus, PullRequest, Workspace};
-use crate::js::{non_empty, truthy};
+use crate::js::{non_empty, num_text, truthy};
 use crate::persist::{SavedCheck, SavedPr, SavedState};
 
 /// What a PR's chip says about it: its worst state, or quiet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum PrHealth {
     Failing,
     Conflicts,
@@ -138,6 +139,139 @@ pub fn pr_health(saved: &SavedState, w: Option<&Workspace>) -> PrHealth {
     }
 }
 
+impl PrStatus {
+    /// The status as cmux writes it; None for a word the core does not
+    /// know, which the TypeScript would echo as it came.
+    pub fn word(self) -> Option<&'static str> {
+        match self {
+            PrStatus::Open => Some("open"),
+            PrStatus::Merged => Some("merged"),
+            PrStatus::Closed => Some("closed"),
+            PrStatus::Unknown => None,
+        }
+    }
+}
+
+/// A merged PR: the card dims and offers Park and Close.
+pub fn is_merged_pr(pr: Option<&PullRequest>) -> bool {
+    pr.is_some_and(|p| truthy(p.number).is_some() && p.status == Some(PrStatus::Merged))
+}
+
+/// Everything a view shows of a PR.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PrSummary {
+    pub number: f64,
+    pub status: Option<PrStatus>,
+    pub url: Option<String>,
+    pub health: PrHealth,
+    /// The number alone, "#12".
+    pub tag: String,
+    /// The full words: "#35 · 1 failing", "#9 · draft · running", "#11 · merged".
+    pub text: String,
+    /// The words without the number: "1 failing", "draft · running", a
+    /// quiet open PR's "open".
+    pub state: String,
+    /// Its diff size, "+120 −8"; "" when it has none.
+    pub diff: String,
+}
+
+/// The chip's words after the number: a draft keeps its marker whatever
+/// its health, and a PR that is not open says its status.
+fn words_of(pr: &PullRequest, health: PrHealth, failing: usize) -> Vec<String> {
+    if pr.status != Some(PrStatus::Open) {
+        return pr
+            .status
+            .and_then(PrStatus::word)
+            .map(str::to_string)
+            .into_iter()
+            .collect();
+    }
+    let mut words = Vec::new();
+    if pr.draft == Some(true) {
+        words.push("draft".to_string());
+    }
+    match health {
+        PrHealth::Failing => words.push(format!("{failing} failing")),
+        PrHealth::Quiet => {}
+        h => words.push(h.as_str().to_string()),
+    }
+    words
+}
+
+/// A count in at most four characters, never rounded up: 950, 1.2k, 12k, 3.4M.
+fn lines(n: f64) -> String {
+    if n < 1000.0 {
+        return num_text(n);
+    }
+    let (scaled, unit) = if n < 1e6 {
+        (n / 1e3, "k")
+    } else {
+        (n / 1e6, "M")
+    };
+    if scaled >= 1000.0 {
+        return "999M".to_string();
+    }
+    let shown = if scaled < 10.0 {
+        (scaled * 10.0).floor() / 10.0
+    } else {
+        scaled.floor()
+    };
+    format!("{}{unit}", num_text(shown))
+}
+
+/// An open PR's diff size as "+120 −8" (a true minus sign). "" for a PR
+/// that is not open, since the size is a cue for review; "" unless both
+/// counts are known, so a missing one never shows as 0; and "" for an
+/// empty diff.
+pub fn diff_text(pr: &PullRequest) -> String {
+    let (Some(add), Some(del)) = (pr.additions, pr.deletions) else {
+        return String::new();
+    };
+    if pr.status != Some(PrStatus::Open) || (add == 0.0 && del == 0.0) {
+        return String::new();
+    }
+    format!("+{} \u{2212}{}", lines(add), lines(del))
+}
+
+/// A PR as a view shows it, with the checks saved for it; None without a number.
+pub fn summary_of(pr: &PullRequest, checks: &[SavedCheck]) -> Option<PrSummary> {
+    let number = truthy(pr.number)?;
+    let failing = checks.iter().filter(|c| c.state == "fail").count();
+    let health = health_of(pr, checks);
+    let words = words_of(pr, health, failing);
+    let tag = format!("#{}", num_text(number));
+    let text = std::iter::once(tag.clone())
+        .chain(words.iter().cloned())
+        .collect::<Vec<_>>()
+        .join(" · ");
+    let joined = words.join(" · ");
+    let state = if joined.is_empty() {
+        pr.status
+            .and_then(PrStatus::word)
+            .unwrap_or_default()
+            .to_string()
+    } else {
+        joined
+    };
+    Some(PrSummary {
+        number,
+        status: pr.status,
+        url: pr.url.clone(),
+        health,
+        tag,
+        text,
+        state,
+        diff: diff_text(pr),
+    })
+}
+
+/// The workspace's first PR as a view shows it; None without a numbered PR.
+pub fn pr_summary(saved: &SavedState, w: Option<&Workspace>) -> Option<PrSummary> {
+    let w = w?;
+    let pr = pr_of(saved, Some(w))?;
+    summary_of(&pr, checks_of(saved, w))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -210,5 +344,75 @@ mod tests {
         assert_eq!(health_of(&clean, &[check("pending")]), PrHealth::Running);
         assert_eq!(health_of(&clean, &[]), PrHealth::Quiet);
         assert_eq!(PrHealth::Ready.as_str(), "ready");
+    }
+
+    #[test]
+    fn counts_lines_in_four_characters_never_rounding_up() {
+        assert_eq!(lines(950.0), "950");
+        assert_eq!(lines(1000.0), "1k");
+        assert_eq!(lines(1290.0), "1.2k");
+        assert_eq!(lines(12_999.0), "12k");
+        assert_eq!(lines(3_450_000.0), "3.4M");
+        assert_eq!(lines(2e9), "999M");
+    }
+
+    #[test]
+    fn sizes_only_an_open_diff_with_both_counts() {
+        let open = PullRequest {
+            number: Some(1.0),
+            status: Some(PrStatus::Open),
+            additions: Some(120.0),
+            deletions: Some(8.0),
+            ..PullRequest::default()
+        };
+        assert_eq!(diff_text(&open), "+120 \u{2212}8");
+        let merged = PullRequest {
+            status: Some(PrStatus::Merged),
+            ..open.clone()
+        };
+        assert_eq!(diff_text(&merged), "");
+        let half = PullRequest {
+            deletions: None,
+            ..open.clone()
+        };
+        assert_eq!(diff_text(&half), "");
+        let empty = PullRequest {
+            additions: Some(0.0),
+            deletions: Some(0.0),
+            ..open
+        };
+        assert_eq!(diff_text(&empty), "");
+    }
+
+    #[test]
+    fn words_a_pr_by_its_status_and_health() {
+        let pr = |status: PrStatus, draft: bool| PullRequest {
+            number: Some(9.0),
+            status: Some(status),
+            draft: Some(draft),
+            ..PullRequest::default()
+        };
+        let pending = [SavedCheck {
+            name: "b".into(),
+            state: "pending".into(),
+        }];
+        let s = summary_of(&pr(PrStatus::Open, true), &pending).unwrap();
+        assert_eq!(
+            (s.text.as_str(), s.state.as_str()),
+            ("#9 · draft · running", "draft · running")
+        );
+        let s = summary_of(&pr(PrStatus::Open, false), &[]).unwrap();
+        assert_eq!((s.text.as_str(), s.state.as_str()), ("#9", "open"));
+        let s = summary_of(&pr(PrStatus::Merged, false), &[]).unwrap();
+        assert_eq!(
+            (s.text.as_str(), s.state.as_str()),
+            ("#9 · merged", "merged")
+        );
+        let s = summary_of(&pr(PrStatus::Unknown, false), &[]).unwrap();
+        assert_eq!((s.text.as_str(), s.state.as_str()), ("#9", ""));
+        assert!(summary_of(&PullRequest::default(), &[]).is_none());
+        assert!(is_merged_pr(Some(&pr(PrStatus::Merged, false))));
+        assert!(!is_merged_pr(Some(&pr(PrStatus::Open, false))));
+        assert!(!is_merged_pr(None));
     }
 }

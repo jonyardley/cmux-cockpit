@@ -135,7 +135,8 @@ pub fn quiet_move(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Optio
 }
 
 /// How big answering a move is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
 pub enum MoveSize {
     Quick,
     Decide,

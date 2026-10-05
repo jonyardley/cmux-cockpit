@@ -24,6 +24,20 @@ pub enum Token {
     Heading,
     /// palette.ts's greenDeep: pr-colors.ts's READY_INK, a PR GitHub would merge.
     GreenDeep,
+    /// The second ink: the quiet chip's words.
+    Secondary,
+    /// A failing or conflicting PR in words.
+    RedText,
+    /// The quiet chip's face and edge: the branch, the ports, a PR's pill.
+    ChipFace,
+    ChipEdge,
+    /// A PR state's own chip: a faint face of its health's hue and an edge.
+    RedChipFace,
+    RedChipEdge,
+    BlueChipFace,
+    BlueChipEdge,
+    GreenChipFace,
+    GreenChipEdge,
     CountBg,
     BlueCount,
     ClayCount,

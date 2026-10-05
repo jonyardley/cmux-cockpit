@@ -582,6 +582,68 @@ fn tab_asks_the_core_to_flip_and_draws_the_view_the_core_sends() {
 }
 
 #[test]
+fn builds_the_projects_rows_from_the_core_only_while_projects_is_on() {
+    use cockpit_pane::model::ProjectRow;
+    let pane = pane_for("projects");
+    let rows = &pane.model().projects;
+    let heads: Vec<&str> = rows
+        .iter()
+        .filter_map(|r| match r {
+            ProjectRow::Header(h) => Some(h.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(heads, ["App One", "App Two", "Other"]);
+    let quiet: Vec<&str> = rows
+        .iter()
+        .filter_map(|r| match r {
+            ProjectRow::Quiet { name, .. } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(quiet, ["App Three"]);
+    assert!(rows.contains(&ProjectRow::NewProject));
+    assert!(
+        rows.iter()
+            .any(|r| matches!(r, ProjectRow::Ghost { title, .. } if title == "One: docs")),
+        "the waiting card leaves its placeholder"
+    );
+    assert!(
+        pane_for("lanes").model().projects.is_empty(),
+        "All builds no Projects rows"
+    );
+}
+
+#[test]
+fn scrolls_the_projects_view_in_a_short_pane_with_the_keys_and_the_wheel() {
+    let mut pane = pane_for("projects");
+    let mut term = Terminal::new(TestBackend::new(40, 12)).unwrap();
+    let top = draw(&mut pane, &mut term);
+    assert!(!top.contains("App Three"), "below the fold:\n{top}");
+    for _ in 0..40 {
+        press(&mut pane, KeyCode::Down);
+    }
+    let bottom = draw(&mut pane, &mut term);
+    assert!(
+        bottom.contains("App Three"),
+        "the last quiet row is reachable:\n{bottom}"
+    );
+    assert_eq!(
+        press(&mut pane, KeyCode::Down),
+        Outcome::Nothing,
+        "at the end"
+    );
+    for _ in 0..40 {
+        pane.handle_event(&mouse(MouseEventKind::ScrollUp, 3));
+    }
+    let back = draw(&mut pane, &mut term);
+    assert!(
+        back.contains("Needs you"),
+        "the wheel goes back up:\n{back}"
+    );
+}
+
+#[test]
 fn tab_alone_does_not_flip_the_pane_until_the_core_says_so() {
     let mut pane = pane_for("lanes");
     assert_eq!(

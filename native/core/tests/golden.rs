@@ -2,14 +2,15 @@
 //! (test/golden/README.md) for every cockpit scene: the view mode, every
 //! workspace's placement, and the All view as the app builds it (Needs
 //! you, Next, All's rows, and each lane header's fold, cards and merge
-//! line). The Projects rows and quiet projects belong to the by-project
-//! port and are not compared.
+//! line), the Projects rows, quiet projects and headers, and every card's
+//! chips and To review action.
 
 #![cfg(test)]
 
 use std::path::PathBuf;
 
 use cockpit_core::app::build_view;
+use cockpit_core::by_project::ProjectEntry;
 use cockpit_core::data::Data;
 use cockpit_core::lanes::LANES;
 use cockpit_core::model::{actual_lane_of, card_density};
@@ -48,10 +49,43 @@ fn computed(input: &Value) -> Value {
         });
         placement.insert(w.id.clone(), place);
     }
+    let mut chips = Map::new();
+    for w in s.card_workspaces(&data) {
+        let row = json!({
+            "canFileForReview": s.can_file_for_review(&data, Some(w)),
+            "chips": s.chips_for(Some(w), true),
+            "reviewIsGreen": s.review_is_green(Some(w)),
+        });
+        chips.insert(w.id.clone(), row);
+    }
+    let entries = s.project_entries(&data);
+    let mut headers = Map::new();
+    for e in &entries {
+        let (ProjectEntry::Header { project, .. } | ProjectEntry::QuietRow { project, .. }) = e
+        else {
+            continue;
+        };
+        let workspaces: Vec<String> = s
+            .project_workspaces(&data, project)
+            .iter()
+            .map(|w| w.id.clone())
+            .collect();
+        let header = json!({
+            "canOpen": s.can_open_project(project),
+            "name": s.project_by_key(project).name,
+            "workspaces": workspaces,
+        });
+        headers.insert(project.clone(), header);
+    }
+    let quiet = s.quiet_projects(&data);
     let view = serde_json::to_value(build_view(&mut s, &data)).unwrap();
     json!({
+        "chips": chips,
         "mode": s.mode().as_str(),
         "placement": placement,
+        "projectEntries": entries,
+        "projectHeaders": headers,
+        "quietProjects": quiet,
         "view": view,
     })
 }
@@ -63,6 +97,9 @@ fn check(scene: &str) {
 
     assert_eq!(got["mode"], want["mode"], "{scene}: mode");
     assert_eq!(got["placement"], want["placement"], "{scene}: placement");
+    for field in ["projectEntries", "projectHeaders", "quietProjects", "chips"] {
+        assert_eq!(got[field], want[field], "{scene}: {field}");
+    }
     let view = &got["view"];
     assert_eq!(view["mode"], want["mode"], "{scene}: the view's mode");
     for field in ["needs", "next", "laneEntries"] {

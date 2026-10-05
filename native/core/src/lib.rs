@@ -2,14 +2,18 @@
 //! the Crux app the shells drive (app.rs). So far the cockpit's lanes and
 //! placement (model.rs), what an agent's status means (status.rs), the
 //! Needs you strip (strip.rs), All's rows (lane_entries.rs) and Next
-//! (next.rs), drops and the pane's card moves (placement.rs), with the
+//! (next.rs), drops and the pane's card moves (placement.rs), the card
+//! chips (card_chips.rs) and the Projects view (by_project.rs), with the
 //! shared helpers they need. Session holds the state
 //! between frames; each call takes the frame's cmux data.
 
 pub mod activity;
 pub mod anchors;
 pub mod app;
+pub mod by_project;
+pub mod card_chips;
 pub mod data;
+pub mod home;
 pub mod hooks;
 pub mod js;
 pub mod lane_entries;
@@ -21,6 +25,7 @@ pub mod needs;
 pub mod next;
 pub mod persist;
 pub mod placement;
+pub mod pr_colors;
 pub mod pr_poll;
 pub mod projects;
 pub mod prs;

@@ -1,4 +1,21 @@
 {
+  "chips": {
+    "ask": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
+    "busy": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
+    "n1": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
+    "n2": {
+      "canFileForReview": false,
+      "chips": [{ "id": "size", "size": "decide", "text": "Decide · 2" }],
+      "reviewIsGreen": false
+    },
+    "n3": {
+      "canFileForReview": false,
+      "chips": [{ "id": "size", "size": "quick", "text": "Quick" }],
+      "reviewIsGreen": false
+    },
+    "n4": { "canFileForReview": false, "chips": [], "reviewIsGreen": false },
+    "ready": { "canFileForReview": true, "chips": [], "reviewIsGreen": false }
+  },
   "laneEntries": [
     { "id": "z:main", "kind": "zone", "lane": "main" },
     { "id": "z:review", "kind": "zone", "lane": "review" },
@@ -103,5 +120,11 @@
     { "id": "q:/dev/app-two", "kind": "quietRow", "project": "/dev/app-two" },
     { "id": "q:/dev/app-three", "kind": "quietRow", "project": "/dev/app-three" }
   ],
+  "projectHeaders": {
+    "/dev/app-one": { "canOpen": true, "name": "App One", "workspaces": [] },
+    "/dev/app-three": { "canOpen": false, "name": "App Three", "workspaces": [] },
+    "/dev/app-two": { "canOpen": false, "name": "App Two", "workspaces": [] },
+    "other": { "canOpen": false, "name": "Other", "workspaces": ["n1", "ask", "n2", "n3", "n4", "ready", "busy"] }
+  },
   "quietProjects": ["/dev/app-one", "/dev/app-two", "/dev/app-three"]
 }

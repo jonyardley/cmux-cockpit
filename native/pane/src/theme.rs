@@ -32,6 +32,8 @@ const GREEN: u32 = 0x788C5D;
 const CLAY_TEXT: u32 = 0xA34A2A;
 const AMBER_TEXT: u32 = 0x8A5A0B;
 const INK_HEADING: u32 = 0x3D3D3A;
+const RED: u32 = 0xC0453A;
+const GREEN_DEEP: u32 = 0x3F5A2B;
 
 /// `rgb` at `alpha` (0 to 255) laid over `under`, per channel, rounded.
 pub fn blend(rgb: u32, alpha: u8, under: u32) -> u32 {
@@ -68,7 +70,17 @@ pub fn hex(t: Token) -> u32 {
         Token::MetaText => 0x6B6A64,
         Token::Faint | Token::LaneBackground => 0x8A8880,
         Token::Heading | Token::Select | Token::LaneMain => INK_HEADING,
-        Token::GreenDeep => 0x3F5A2B,
+        Token::GreenDeep => GREEN_DEEP,
+        Token::Secondary => SECONDARY,
+        Token::RedText => 0x9E2F27,
+        Token::ChipFace => 0xF1EFE8,
+        Token::ChipEdge => 0xE2DFD3,
+        Token::RedChipFace => blend(RED, 0x1A, GROUND),
+        Token::RedChipEdge => blend(RED, 0x38, GROUND),
+        Token::BlueChipFace => blend(BLUE, 0x1A, GROUND),
+        Token::BlueChipEdge => blend(BLUE, 0x38, GROUND),
+        Token::GreenChipFace => blend(GREEN, 0x29, GROUND),
+        Token::GreenChipEdge => blend(GREEN_DEEP, 0x59, GROUND),
         Token::CountBg => 0xE5E2D6,
         Token::BlueCount => blend(BLUE, 0x1F, GROUND),
         Token::ClayCount => blend(CLAY, 0x29, GROUND),
@@ -80,6 +92,16 @@ pub fn hex(t: Token) -> u32 {
         Token::LaneParked => 0xB0AEA5,
         Token::LaneUnsorted => 0xC9C6BB,
     }
+}
+
+/// A project's own colour, "#D97757" as the table writes it; None for
+/// anything but six hex digits after a "#".
+pub fn parse_hex(s: &str) -> Option<u32> {
+    let digits = s.strip_prefix('#')?;
+    if digits.len() != 6 || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    u32::from_str_radix(digits, 16).ok()
 }
 
 /// A token as a terminal colour.
@@ -149,6 +171,16 @@ mod tests {
     fn outlines_a_dot_with_no_colour_in_grey() {
         assert_eq!(icon(None).fg, Some(rgb(GREY)));
         assert_eq!(icon(Some(Token::Blue)).fg, Some(colour(Token::Blue)));
+    }
+
+    #[test]
+    fn reads_a_projects_colour_and_refuses_anything_else() {
+        assert_eq!(parse_hex("#D97757"), Some(0xD97757));
+        assert_eq!(parse_hex("#d97757"), Some(0xD97757));
+        assert_eq!(parse_hex("D97757"), None);
+        assert_eq!(parse_hex("#D9775"), None);
+        assert_eq!(parse_hex("#D9775G"), None);
+        assert_eq!(parse_hex("#+97757"), None);
     }
 
     #[test]

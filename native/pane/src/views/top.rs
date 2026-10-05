@@ -1,15 +1,13 @@
 //! The two fixed lines at the top: the view switch with the keys hint,
-//! then Next with where it goes and "1 of N"; and the line the Projects
-//! view shows until it is drawn.
+//! then Next with where it goes and "1 of N".
 
 use ratatui::text::{Line, Span};
 
 use super::parts::{Edge, spans_width, spread};
 use crate::model::{
-    ALL_LABEL, KEYS_HINT, NEXT_LABEL, NEXT_NOTHING, NextLine, PROJECTS_LABEL, PROJECTS_SOON,
-    PaneView,
+    ALL_LABEL, KEYS_HINT, NEXT_LABEL, NEXT_NOTHING, NextLine, PROJECTS_LABEL, PaneView,
 };
-use crate::text::{fit, width, wrap};
+use crate::text::{fit, width};
 use crate::theme;
 use cockpit_core::theme::Token;
 use ratatui::style::{Modifier, Style};
@@ -35,17 +33,6 @@ pub fn switch(inner: usize, view: PaneView) -> Line<'static> {
     let room = inner.saturating_sub(spans_width(&left) + 1);
     let right = vec![Span::styled(fit(KEYS_HINT, room), theme::ink(Token::Faint))];
     spread(left, right, inner, Edge::Plain)
-}
-
-/// The Projects view's body until it is drawn: a few faint lines.
-pub fn projects_soon(inner: usize) -> Vec<Line<'static>> {
-    wrap(PROJECTS_SOON, inner, 3)
-        .into_iter()
-        .map(|l| {
-            let words = Span::styled(l, theme::ink(Token::Faint));
-            spread(vec![words], Vec::new(), inner, Edge::Plain)
-        })
-        .collect()
 }
 
 /// Next: its label, the workspace it goes to, and its place in the queue.

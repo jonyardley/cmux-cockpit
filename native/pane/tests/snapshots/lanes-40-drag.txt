@@ -11,13 +11,16 @@
    ◌ Chip colours · your turn
    ◌ Release notes · is asking
    ● Tidy strip             Finished 6m
+     To review →
      Done: the strip now groups by
      repo.
 ▌  ● Snapshot tests         Working 14m
+▌    #130 draft +342 −17  …
 ▌    Recording the view tree as text.
    ○ Long build Working 40m · quiet 17m
    ● Selected card           Working 1m
    ○ Card layout fit           Idle 15m
+     #176 merged  card-layout-fit
    ○ Untimed card                  Idle
 
  ▾ ■ FOR REVIEW  2            drop here

@@ -14,7 +14,7 @@ use indexmap::IndexMap;
 use serde_json::Value;
 
 use crate::lanes::{LANES, LaneKey};
-use crate::persist::{SavedState, ViewMode, persist_url};
+use crate::persist::{ProjectSpec, SavedState, ViewMode, persist_url};
 use crate::pr_poll::PrPoll;
 use crate::projects::{Project, is_project_key};
 use crate::state::DragState;
@@ -136,6 +136,15 @@ pub struct Session {
     pub(crate) prompts: PromptMemory,
     // cockpit/by-project.ts: wsId to the project key chosen by Move to project.
     pub(crate) project_override: IndexMap<String, String>,
+    // cockpit/by-project.ts: the last spec sent for each project made or
+    // edited here, None once removed, until a rebuild carries it.
+    pub(crate) sent_specs: IndexMap<String, Option<ProjectSpec>>,
+    // cockpit/state.ts: the project whose editor is open, or NEW_PROJECT.
+    pub(crate) editing_project: Option<String>,
+    /// The home folder (`__HOME__`), so a "~" root expands and the home
+    /// folder itself is never offered as a project. None until the shell
+    /// sets it.
+    pub home: Option<String>,
 
     // cockpit/state.ts: the view, the local folds and the selection.
     pub(crate) mode: ViewMode,
@@ -267,12 +276,14 @@ impl Session {
         std::mem::take(&mut self.outbox)
     }
 
-    /// Swaps in a new project table, keeping everything else. A Move to
-    /// project override naming a key the table no longer has is dropped,
-    /// as the seed drops it.
+    /// Swaps in a new project table. A Move to project override naming a
+    /// key the table no longer has is dropped, as the seed drops it, and
+    /// so are the projects sent from here: the sidebar starts afresh on
+    /// each rebuild, and the new table carries what it sent.
     pub fn set_projects(&mut self, projects: Vec<Project>) {
         self.project_override
             .retain(|_, key| is_project_key(&projects, key));
+        self.sent_specs.clear();
         self.projects = projects;
     }
 

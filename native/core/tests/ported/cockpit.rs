@@ -1,8 +1,9 @@
 //! test/cockpit.test.ts: the cases that test model.rs, status.rs, strip.rs,
-//! lane_entries.rs, next.rs and the project-of-a-workspace slice. Cases
-//! that test the Projects rows, drops, the card menu or new projects are
-//! left for the lanes that port those modules.
+//! lane_entries.rs, next.rs, by_project.rs and pr_colors.rs. Cases that
+//! test drops or the card menu are left for the lanes that port those
+//! modules; a case that also reads the card menu keeps its other asserts.
 
+use cockpit_core::by_project::ProjectEntry;
 use cockpit_core::data::{Data, Workspace, WorkspaceGroup};
 use cockpit_core::lane_entries::LaneEntry;
 use cockpit_core::lanes::{LANES, LaneKey, lane_by_key};
@@ -70,6 +71,20 @@ fn header(s: &mut Session, data: &Data, lane: LaneKey) -> Option<LaneEntry> {
     s.lane_entries(data)
         .into_iter()
         .find(|e| matches!(e, LaneEntry::Header { .. }) && e.lane() == lane)
+}
+
+/// The Projects view's rows by key.
+fn project_ids(s: &mut Session, data: &Data) -> Vec<String> {
+    s.project_entries(data)
+        .iter()
+        .map(|e| e.id().to_string())
+        .collect()
+}
+
+/// The key of the row after `id`, if any.
+fn after(list: &[String], id: &str) -> Option<String> {
+    let at = position(list, id)?;
+    list.get(at + 1).cloned()
 }
 
 fn position(list: &[String], id: &str) -> Option<usize> {
@@ -760,6 +775,30 @@ mod needs_you {
         s.set_drag(None);
         assert!(!has(&entry_ids(&mut s, &data), "a@main"));
     }
+
+    #[test]
+    fn leaves_a_placeholder_for_a_card_it_lists_in_its_project_whose_header_stays() {
+        let (mut s, mut data, mut fx) = setup();
+        ws_mut(&mut data, "a").directory = Some("/Users/coder/dev/app-two".into());
+        ws_mut(&mut data, "c").directory = Some("/Users/coder/dev/app-one".into());
+        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
+        s.set_mode(ViewMode::Projects);
+        assert!(!has(&project_ids(&mut s, &data), "a@p"));
+        // Its header stays over the placeholder, counting it, so its "+" is
+        // still there; not quiet, as it has a session, waiting in Needs you.
+        let rows = project_ids(&mut s, &data);
+        assert_eq!(after(&rows, "p:/dev/app-two").as_deref(), Some("a@g"));
+        assert!(!has(&rows, "q:/dev/app-two"));
+        assert_eq!(s.project_workspaces(&data, "/dev/app-two").len(), 1);
+        // An editor open on it stays open.
+        s.set_editing_project(Some("/dev/app-two"));
+        assert!(has(&project_ids(&mut s, &data), "e:/dev/app-two"));
+        s.set_editing_project(None);
+        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(Working).since(500.0))]);
+        let rows = project_ids(&mut s, &data);
+        assert!(has(&rows, "p:/dev/app-two"));
+        assert!(has(&rows, "a@p"));
+    }
 }
 
 mod move_to_project_override_issue_8 {
@@ -838,6 +877,77 @@ mod move_to_project_override_issue_8 {
         assert_eq!(s.project_key(u), "other");
         s.move_to_project(Some(u), "/dev/app-three");
         assert_eq!(s.project_key(u), "/dev/app-three");
+    }
+
+    #[test]
+    fn regroups_project_entries_by_the_override_not_the_path() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "a").directory = Some("/Users/coder/dev/app-one".into());
+        s.move_to_project(Some(by_id(&data, "a")), "/dev/app-two");
+        s.set_mode(ViewMode::Projects);
+        let rows = project_ids(&mut s, &data);
+        assert_eq!(after(&rows, "p:/dev/app-two").as_deref(), Some("a@p"));
+        // a moved out of app-one, so app-one has no header and joins the quiet rows.
+        assert!(!has(&rows, "p:/dev/app-one"));
+        assert!(has(&s.quiet_projects(&data), "/dev/app-one"));
+    }
+
+    #[test]
+    fn offers_plus_only_for_a_project_with_a_root_and_opens_a_workspace_there() {
+        let (mut s, data, _) = setup();
+        // The example table gives App One a root; App Two and Other have none.
+        assert!(s.can_open_project("/dev/app-one"));
+        assert!(!s.can_open_project("/dev/app-two"));
+        assert!(!s.can_open_project("other"));
+        s.open_project_workspace(&data, "/dev/app-one", None);
+        assert_eq!(
+            calls(&s),
+            [call(
+                "workspace.create",
+                &[("cwd", "~/dev/app-one"), ("focus", "true")]
+            )]
+        );
+    }
+
+    #[test]
+    fn does_nothing_when_the_project_has_no_root() {
+        let (mut s, data, _) = setup();
+        s.open_project_workspace(&data, "/dev/app-two", None);
+        assert!(calls(&s).is_empty());
+    }
+
+    /// Partly ported: the card menu's first item is the menu's, a view.
+    #[test]
+    fn labels_the_card_menus_new_session_by_project_or_says_why_it_cannot() {
+        let (mut s, data, _) = setup();
+        let one = ws("one").directory("/Users/coder/dev/app-one");
+        let two = ws("two").directory("/Users/coder/dev/app-two");
+        assert_eq!(s.new_session_label(Some(&one)), "New session in App One");
+        assert_eq!(
+            s.new_session_label(Some(&two)),
+            "New session (project has no folder)"
+        );
+        assert_eq!(
+            s.new_session_label(Some(by_id(&data, "u"))),
+            "New session (project has no folder)"
+        );
+        assert_eq!(s.new_session_label(None), "New session (no workspace)");
+        s.new_session_for(&data, Some(&two));
+        s.new_session_for(&data, None);
+        assert!(calls(&s).is_empty());
+        s.new_session_for(&data, Some(&one));
+        assert_eq!(
+            calls(&s),
+            [call(
+                "workspace.create",
+                &[
+                    ("cwd", "~/dev/app-one"),
+                    ("focus", "true"),
+                    ("group_id", "g-main"),
+                    ("group_placement", "top")
+                ]
+            )]
+        );
     }
 }
 
@@ -982,5 +1092,376 @@ mod data_fields_cmux_may_leave_out_issue_7 {
         let plain = s.status_line(&data, Some(&ws("v")));
         assert_eq!(s.status_line(&data, Some(&v)), plain);
         assert!(s.agents_of(Some(&v)).is_empty());
+    }
+}
+
+mod projects_mode {
+    use super::*;
+
+    #[test]
+    fn groups_by_project_in_projects_order_then_other_with_the_quiet_rows_last() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "a").directory = Some("/Users/coder/dev/app-two".into());
+        ws_mut(&mut data, "c").directory = Some("/Users/coder/dev/app-one".into());
+        s.set_mode(ViewMode::Projects);
+        assert_eq!(
+            project_ids(&mut s, &data),
+            [
+                "p:/dev/app-one",
+                "c@p",
+                "p:/dev/app-two",
+                "a@p",
+                // app-three has no sessions: no header, it waits under Quiet.
+                "p:other",
+                "b@p",
+                "p@p",
+                "u@p",
+                // "+ New project", above the quiet ones.
+                "new",
+                "quiet",
+                "q:/dev/app-three",
+            ]
+        );
+    }
+
+    #[test]
+    fn keeps_a_project_with_several_matches_in_one_group_keyed_by_its_first_match() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "a").directory = Some("/Users/coder/dev/app-two/src".into());
+        ws_mut(&mut data, "b").directory = Some("/Users/coder/.config/app-two".into());
+        s.set_mode(ViewMode::Projects);
+        let entries = s.project_entries(&data);
+        let headers = entries
+            .iter()
+            .filter(
+                |e| matches!(e, ProjectEntry::Header { project, .. } if project == "/dev/app-two"),
+            )
+            .count();
+        assert_eq!(headers, 1);
+        let rows: Vec<String> = entries.iter().map(|e| e.id().to_string()).collect();
+        let at = position(&rows, "p:/dev/app-two").unwrap();
+        assert_eq!(rows[at..at + 3], ["p:/dev/app-two", "a@p", "b@p"]);
+        assert_eq!(s.project_workspaces(&data, "/dev/app-two").len(), 2);
+        assert_eq!(s.project_by_key("/dev/app-two").name, "App Two");
+    }
+
+    #[test]
+    fn collapses_a_multi_match_project_as_one_group() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "a").directory = Some("/Users/coder/dev/app-two".into());
+        ws_mut(&mut data, "b").directory = Some("/Users/coder/.config/app-two".into());
+        s.set_mode(ViewMode::Projects);
+        s.toggle_project(&data, "/dev/app-two");
+        let rows = project_ids(&mut s, &data);
+        assert!(!has(&rows, "a@p"));
+        assert!(!has(&rows, "b@p"));
+        assert_eq!(after(&rows, "p:/dev/app-two").as_deref(), Some("p:other"));
+    }
+
+    #[test]
+    fn puts_projects_with_no_sessions_under_one_quiet_header_a_row_each_in_table_order_issue_54() {
+        let (mut s, data, _) = setup();
+        s.set_mode(ViewMode::Projects);
+        // No fixture directory matches a project, so all three are quiet.
+        assert_eq!(
+            s.quiet_projects(&data),
+            ["/dev/app-one", "/dev/app-two", "/dev/app-three"]
+        );
+        let entries = s.project_entries(&data);
+        assert!(
+            !entries
+                .iter()
+                .any(|e| matches!(e, ProjectEntry::Header { project, .. } if project != "other"))
+        );
+        let quiet_headers = entries
+            .iter()
+            .filter(|e| matches!(e, ProjectEntry::QuietHeader { .. }))
+            .count();
+        assert_eq!(quiet_headers, 1);
+        let quiet_row = |k: &str| ProjectEntry::QuietRow {
+            id: format!("q:{k}"),
+            project: k.to_string(),
+        };
+        assert_eq!(
+            entries[entries.len() - 4..],
+            [
+                ProjectEntry::QuietHeader { id: "quiet".into() },
+                quiet_row("/dev/app-one"),
+                quiet_row("/dev/app-two"),
+                quiet_row("/dev/app-three"),
+            ]
+        );
+    }
+
+    #[test]
+    fn folds_the_quiet_rows_under_their_header_and_unfolds_them_again() {
+        let (mut s, data, _) = setup();
+        s.set_mode(ViewMode::Projects);
+        assert!(!s.quiet_collapsed());
+        s.toggle_quiet(&data);
+        assert!(s.quiet_collapsed());
+        let rows = project_ids(&mut s, &data);
+        assert_eq!(rows.last().map(String::as_str), Some("quiet"));
+        assert!(!rows.iter().any(|id| id.starts_with("q:")));
+        // The fold does not touch a project's own fold.
+        assert!(!s.is_project_collapsed("/dev/app-one"));
+        s.toggle_quiet(&data);
+        let rows = project_ids(&mut s, &data);
+        assert_eq!(rows.last().map(String::as_str), Some("q:/dev/app-three"));
+    }
+
+    #[test]
+    fn drops_the_quiet_header_once_every_project_has_a_session() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "a").directory = Some("/Users/coder/dev/app-one".into());
+        ws_mut(&mut data, "b").directory = Some("/Users/coder/dev/app-two".into());
+        ws_mut(&mut data, "c").directory = Some("/Users/coder/dev/app-three".into());
+        s.set_mode(ViewMode::Projects);
+        assert!(s.quiet_projects(&data).is_empty());
+        assert!(!s.project_entries(&data).iter().any(|e| matches!(
+            e,
+            ProjectEntry::QuietHeader { .. } | ProjectEntry::QuietRow { .. }
+        )));
+    }
+
+    #[test]
+    fn keeps_a_folded_project_with_no_sessions_as_a_quiet_row_not_a_header() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "a").directory = Some("/Users/coder/dev/app-one".into());
+        s.set_mode(ViewMode::Projects);
+        s.toggle_project(&data, "/dev/app-three");
+        let rows = project_ids(&mut s, &data);
+        assert!(!has(&rows, "p:/dev/app-three"));
+        assert!(has(&rows, "q:/dev/app-three"));
+        assert_eq!(s.quiet_projects(&data), ["/dev/app-two", "/dev/app-three"]);
+    }
+
+    #[test]
+    fn labels_a_quiet_row_by_what_a_tap_does_or_why_it_does_nothing() {
+        let (mut s, data, _) = setup();
+        // The example table gives App One a root; App Two has none.
+        assert_eq!(s.quiet_label("/dev/app-one"), "New session in App One");
+        assert_eq!(
+            s.quiet_label("/dev/app-two"),
+            "App Two has no folder to open"
+        );
+        s.open_project_workspace(&data, "/dev/app-two", None);
+        assert!(calls(&s).is_empty());
+        s.open_project_workspace(&data, "/dev/app-one", None);
+        assert_eq!(
+            calls(&s),
+            [call(
+                "workspace.create",
+                &[("cwd", "~/dev/app-one"), ("focus", "true")]
+            )]
+        );
+    }
+
+    #[test]
+    fn unfolds_a_folded_quiet_project_when_a_session_opens_there_so_the_new_card_shows() {
+        let (mut s, mut data, _) = setup();
+        s.set_mode(ViewMode::Projects);
+        s.toggle_project(&data, "/dev/app-one");
+        assert!(s.is_project_collapsed("/dev/app-one"));
+        s.open_project_workspace(&data, "/dev/app-one", None);
+        assert!(!s.is_project_collapsed("/dev/app-one"));
+        ws_mut(&mut data, "a").directory = Some("/Users/coder/dev/app-one".into());
+        let rows = project_ids(&mut s, &data);
+        assert_eq!(after(&rows, "p:/dev/app-one").as_deref(), Some("a@p"));
+    }
+
+    #[test]
+    fn never_shows_other_as_a_header_when_nothing_falls_into_it() {
+        let (mut s, mut data, _) = setup();
+        for w in data.workspaces.iter_mut().flatten() {
+            w.directory = Some("/Users/coder/dev/app-one".into());
+        }
+        s.set_mode(ViewMode::Projects);
+        assert!(
+            !s.project_entries(&data)
+                .iter()
+                .any(|e| matches!(e, ProjectEntry::Header { project, .. } if project == "other"))
+        );
+    }
+}
+
+mod new_session_from_a_card {
+    use super::*;
+
+    fn one() -> Workspace {
+        ws("one").directory("/Users/coder/dev/app-one")
+    }
+
+    /// Main activity's group folded, as cmux has it.
+    fn main_folded(data: &mut Data) {
+        for g in data.groups.iter_mut().flatten() {
+            if g.name.as_deref() == Some("Main activity") {
+                g.collapsed = Some(true);
+            }
+        }
+    }
+
+    #[test]
+    fn opens_ungrouped_while_there_is_no_main_activity_group() {
+        let (mut s, mut data, _) = setup();
+        if let Some(groups) = data.groups.as_mut() {
+            groups.retain(|g: &WorkspaceGroup| g.name.as_deref() != Some("Main activity"));
+        }
+        s.new_session_for(&data, Some(&one()));
+        assert_eq!(
+            calls(&s),
+            [call(
+                "workspace.create",
+                &[("cwd", "~/dev/app-one"), ("focus", "true")]
+            )]
+        );
+    }
+
+    #[test]
+    fn unfolds_a_folded_main_activity_first_so_the_new_card_is_not_hidden() {
+        let (mut s, mut data, _) = setup();
+        main_folded(&mut data);
+        s.new_session_for(&data, Some(&one()));
+        assert_eq!(methods(&s), ["workspace.group.expand", "workspace.create"]);
+        assert_eq!(
+            calls(&s).first().map(|(_, p)| p.clone()),
+            Some(vec![("group_id".to_string(), "g-main".to_string())])
+        );
+        assert!(!s.is_collapsed(&data, &lane_by_key(LaneKey::Main)));
+    }
+
+    #[test]
+    fn leaves_the_lanes_alone_when_the_project_has_no_folder() {
+        let (mut s, mut data, _) = setup();
+        main_folded(&mut data);
+        let two = ws("two").directory("/Users/coder/dev/app-two");
+        s.new_session_for(&data, Some(&two));
+        assert!(calls(&s).is_empty());
+    }
+
+    #[test]
+    fn leaves_the_project_headers_plus_ungrouped() {
+        let (mut s, data, _) = setup();
+        s.open_project_workspace(&data, "/dev/app-one", None);
+        assert_eq!(
+            calls(&s),
+            [call(
+                "workspace.create",
+                &[("cwd", "~/dev/app-one"), ("focus", "true")]
+            )]
+        );
+    }
+}
+
+mod pr_text_color {
+    use super::*;
+    use cockpit_core::data::PrStatus;
+    use cockpit_core::pr_colors::{READY_INK, pr_text_color};
+    use cockpit_core::prs::{PrHealth, PrSummary};
+
+    /// The density's own colour, as the TypeScript's "#111111".
+    const QUIET: Token = Token::Faint;
+
+    fn pr(health: PrHealth, status: PrStatus) -> PrSummary {
+        PrSummary {
+            number: 1.0,
+            status: Some(status),
+            url: None,
+            health,
+            tag: "#1".into(),
+            text: "#1".into(),
+            state: String::new(),
+            diff: String::new(),
+        }
+    }
+
+    #[test]
+    fn keeps_the_densitys_colour_while_the_pr_is_quiet_or_absent() {
+        assert_eq!(pr_text_color(None, QUIET), QUIET);
+        let quiet = pr(PrHealth::Quiet, PrStatus::Open);
+        assert_eq!(pr_text_color(Some(&quiet), QUIET), QUIET);
+        let merged = pr(PrHealth::Quiet, PrStatus::Merged);
+        assert_eq!(pr_text_color(Some(&merged), QUIET), QUIET);
+    }
+
+    #[test]
+    fn takes_the_healths_chip_colour_otherwise_running_in_blue() {
+        let failing = pr(PrHealth::Failing, PrStatus::Open);
+        assert_eq!(pr_text_color(Some(&failing), QUIET), Token::RedText);
+        let running = pr(PrHealth::Running, PrStatus::Open);
+        assert_eq!(pr_text_color(Some(&running), QUIET), Token::BlueText);
+        let ready = pr(PrHealth::Ready, PrStatus::Open);
+        assert_eq!(pr_text_color(Some(&ready), QUIET), READY_INK);
+    }
+}
+
+mod new_project_from_a_card_issue_9 {
+    use super::*;
+
+    /// The value of the state write at `i`, as JSON.
+    fn value_at(s: &Session, i: usize) -> Value {
+        sent(s)
+            .get(i)
+            .and_then(|(_, v)| v.clone())
+            .unwrap_or(Value::Null)
+    }
+
+    /// Partly ported: the card menu's item is the menu's, a view.
+    #[test]
+    fn offers_it_on_a_card_whose_folder_matches_no_project_and_sends_the_new_project() {
+        let (mut s, mut data, _) = setup();
+        let loose = ws("loose")
+            .group("g-main")
+            .directory("/Users/jon/dev/scratch");
+        data.workspaces.get_or_insert_with(Vec::new).push(loose);
+        let loose = by_id(&data, "loose");
+        s.create_project_from(Some(loose));
+        assert_eq!(
+            sent(&s).first().map(|(k, _)| k.as_str()),
+            Some("projects./users/jon/dev/scratch/")
+        );
+        // Waiting on the rebuild: a second tap must not resend it under "Scratch 2".
+        assert!(!s.can_create_project(Some(loose)));
+        s.create_project_from(Some(loose));
+        assert_eq!(sent(&s).len(), 1);
+        assert_eq!(value_at(&s, 0)["name"], "Scratch");
+    }
+
+    #[test]
+    fn counts_a_project_sent_but_not_built_yet_so_a_second_folder_gets_a_fresh_name_and_colour() {
+        let (mut s, _, _) = setup();
+        s.create_project_from(Some(&ws("one").directory("/a/app")));
+        s.create_project_from(Some(&ws("two").directory("/b/app")));
+        let (a, b) = (value_at(&s, 0), value_at(&s, 1));
+        assert_eq!(a["name"], "App");
+        assert_eq!(b["name"], "App 2");
+        assert_ne!(a["color"], b["color"]);
+    }
+
+    #[test]
+    fn is_not_offered_to_a_card_moved_into_a_project_by_hand() {
+        let (mut s, mut data, _) = setup();
+        let first = example_projects()[0].id().to_string();
+        let moved = ws("moved").directory("/Users/jon/dev/elsewhere");
+        data.workspaces.get_or_insert_with(Vec::new).push(moved);
+        let moved = by_id(&data, "moved");
+        s.move_to_project(Some(moved), &first);
+        assert!(!s.can_create_project(Some(moved)));
+        s.clear_project_override(Some(moved));
+        assert!(s.can_create_project(Some(moved)));
+    }
+
+    /// Partly ported: the card menu's item is the menu's, a view.
+    #[test]
+    fn does_nothing_for_a_card_already_in_a_project_or_with_no_folder() {
+        let (mut s, _, _) = setup();
+        let first = example_projects()[0].id().to_string();
+        let matched = ws("matched").directory(&format!("/Users/jon{first}"));
+        let no_folder = ws("nofolder");
+        for w in [Some(&matched), Some(&no_folder), None] {
+            assert!(!s.can_create_project(w));
+            s.create_project_from(w);
+        }
+        assert!(opened(&s).is_empty());
     }
 }

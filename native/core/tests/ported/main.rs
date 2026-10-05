@@ -1,9 +1,10 @@
 //! The TypeScript cases that exercise model.ts, status.ts, strip.ts,
-//! lane-entries.ts, next.ts, drop.ts and the shared helpers they read, one Rust test
-//! per case, named after it. A module per TypeScript test file, a module
-//! inside per `describe`. Cases that test another module (the Projects
-//! rows, chips, the agents sidebar, views) are left for the lanes
-//! that port those; the pull request lists each one.
+//! lane-entries.ts, next.ts, drop.ts, card-chips.ts, by-project.ts and the
+//! shared helpers they read, one Rust test per case, named after it. A
+//! module per TypeScript test file, a module inside per `describe`. Cases
+//! that test another module (chips.ts, merged.ts, edit.ts, the agents
+//! sidebar, views) are left for the lanes that port those; the pull
+//! request lists each one.
 
 #![cfg(test)]
 
@@ -21,7 +22,10 @@ mod merge_ready;
 mod merged;
 mod move_saved;
 mod needs;
+mod new_project;
 mod next;
+mod projects_edit;
+mod ready;
 mod reveal;
 mod shells_saved;
 mod state_seed;

@@ -4,7 +4,8 @@
 use std::path::PathBuf;
 
 use cockpit_core::data::{
-    Agent, AgentStatus, Data, Progress, SubagentRun, Workspace, WorkspaceGroup,
+    Agent, AgentStatus, Data, PrStatus, Progress, PullRequest, SubagentRun, Workspace,
+    WorkspaceGroup,
 };
 use cockpit_core::persist::SavedState;
 use cockpit_core::projects::Project;
@@ -101,6 +102,10 @@ pub trait WsExt {
     fn message(self, m: &str) -> Self;
     fn prompt(self, p: &str) -> Self;
     fn progress(self, p: Option<Progress>) -> Self;
+    fn branch(self, b: &str) -> Self;
+    fn dirty(self) -> Self;
+    fn pr(self, pr: PullRequest) -> Self;
+    fn ports(self, ports: &[f64]) -> Self;
 }
 
 impl WsExt for Workspace {
@@ -147,6 +152,31 @@ impl WsExt for Workspace {
     fn progress(mut self, p: Option<Progress>) -> Self {
         self.progress = p;
         self
+    }
+    fn branch(mut self, b: &str) -> Self {
+        self.branch = Some(b.to_string());
+        self
+    }
+    fn dirty(mut self) -> Self {
+        self.dirty = Some(true);
+        self
+    }
+    fn pr(mut self, pr: PullRequest) -> Self {
+        self.pr = Some(pr);
+        self
+    }
+    fn ports(mut self, ports: &[f64]) -> Self {
+        self.ports = Some(ports.to_vec());
+        self
+    }
+}
+
+/// cmux's own PR: its number and status, the rest unset.
+pub fn pr(number: f64, status: Option<PrStatus>) -> PullRequest {
+    PullRequest {
+        number: Some(number),
+        status,
+        ..PullRequest::default()
     }
 }
 
