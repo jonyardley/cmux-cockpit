@@ -1,5 +1,7 @@
 //! The cockpit in a terminal: a ratatui pane that draws the core's All
-//! view (Next, Needs you and the lanes), lets up and down walk the cards,
+//! view (Next, Needs you and the lanes, each card with its chips) and its
+//! Projects view (Needs you and the cards grouped by project, where the
+//! card keys rest for now), lets up and down walk the cards,
 //! and turns keys and drags into actions on them: place a card in a lane,
 //! switch to it, dismiss it from Needs you, flip the view. It writes
 //! nothing itself; the runner hands each action to the core.

@@ -582,6 +582,39 @@ fn tab_asks_the_core_to_flip_and_draws_the_view_the_core_sends() {
 }
 
 #[test]
+fn builds_the_projects_rows_from_the_core_only_while_projects_is_on() {
+    use cockpit_pane::model::ProjectRow;
+    let pane = pane_for("projects");
+    let rows = &pane.model().projects;
+    let heads: Vec<&str> = rows
+        .iter()
+        .filter_map(|r| match r {
+            ProjectRow::Header(h) => Some(h.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(heads, ["App One", "App Two", "Other"]);
+    let quiet: Vec<&str> = rows
+        .iter()
+        .filter_map(|r| match r {
+            ProjectRow::Quiet { name, .. } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(quiet, ["App Three"]);
+    assert!(rows.contains(&ProjectRow::NewProject));
+    assert!(
+        rows.iter()
+            .any(|r| matches!(r, ProjectRow::Ghost { title, .. } if title == "One: docs")),
+        "the waiting card leaves its placeholder"
+    );
+    assert!(
+        pane_for("lanes").model().projects.is_empty(),
+        "All builds no Projects rows"
+    );
+}
+
+#[test]
 fn tab_alone_does_not_flip_the_pane_until_the_core_says_so() {
     let mut pane = pane_for("lanes");
     assert_eq!(

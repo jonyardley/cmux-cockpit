@@ -58,6 +58,27 @@ pub fn whole_words(text: &str, cap: usize) -> String {
     }
 }
 
+/// How many items of these widths fit whole on a line of `room` cells,
+/// `gap` cells apart, and whether some were left off: then an ellipsis
+/// after the last one that fits takes its place, a gap before it when
+/// any item fits. An item is never cut.
+pub fn fit_items(widths: &[usize], gap: usize, room: usize) -> (usize, bool) {
+    let all: usize = widths.iter().sum::<usize>() + gap * widths.len().saturating_sub(1);
+    if all <= room {
+        return (widths.len(), false);
+    }
+    let tail = width(ELLIPSIS);
+    let mut used = 0;
+    for (i, w) in widths.iter().enumerate() {
+        let lead = if i == 0 { 0 } else { gap };
+        if used + lead + w + gap + tail > room {
+            return (i, true);
+        }
+        used += lead + w;
+    }
+    (widths.len(), false)
+}
+
 /// `text` wrapped onto at most `lines` lines of `max` cells, between
 /// words; the last line ends in an ellipsis when words were left over.
 pub fn wrap(text: &str, max: usize, lines: usize) -> Vec<String> {
@@ -95,6 +116,18 @@ pub fn wrap(text: &str, max: usize, lines: usize) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fits_whole_items_and_leaves_room_for_the_ellipsis_when_some_go() {
+        assert_eq!(fit_items(&[3, 4], 2, 9), (2, false));
+        assert_eq!(
+            fit_items(&[3, 4], 2, 8),
+            (1, true),
+            "3, a gap, the ellipsis"
+        );
+        assert_eq!(fit_items(&[3, 4], 2, 5), (0, true));
+        assert_eq!(fit_items(&[], 2, 0), (0, false));
+    }
 
     #[test]
     fn keeps_text_that_fits() {

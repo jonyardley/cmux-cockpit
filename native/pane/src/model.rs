@@ -8,12 +8,17 @@
 
 use cockpit_core::Model;
 use cockpit_core::app::{LaneHeaderView, ViewModel};
+use cockpit_core::by_project::ProjectEntry;
+use cockpit_core::card_chips::Chip as CoreChip;
 use cockpit_core::data::{Data, Workspace};
 use cockpit_core::lane_entries::{LaneEntry, shows_left_off};
 use cockpit_core::lanes::{Density, LANES, LaneKey};
 use cockpit_core::model::card_density;
+use cockpit_core::moves::MoveSize;
 use cockpit_core::persist::ViewMode;
 use cockpit_core::placement::is_foreign_anchor;
+use cockpit_core::pr_colors::{pr_ink, pr_text_color};
+use cockpit_core::prs::pr_summary;
 use cockpit_core::session::Session;
 use cockpit_core::status::StatusStyle;
 use cockpit_core::theme::Token;
@@ -22,6 +27,7 @@ use cockpit_core::ui::PillColors;
 use cockpit_core::status::DETAIL_MAX;
 
 use crate::text::whole_words;
+use crate::theme;
 
 /// The core's caps on a Needs you row's detail and the left-off prompt
 /// (status.rs `needs_detail` and `LEFT_OFF_MAX`, private there), so a cut
@@ -31,9 +37,8 @@ const LEFT_OFF_MAX: usize = 90;
 /// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
 const LEFT_OFF_LEAD: &str = "You: ";
 
-/// The view switch's one live view for now.
+/// The view switch's two views.
 pub const ALL_LABEL: &str = "All";
-/// Shown faint until the Projects view is drawn.
 pub const PROJECTS_LABEL: &str = "Projects";
 /// The hint at the top right.
 pub const KEYS_HINT: &str = "? keys";
@@ -76,8 +81,16 @@ pub const KEYS_TITLE: &str = "Keys";
 pub const PICK_TITLE: &str = "Move to lane";
 /// The lane picker's last line: how to leave it.
 pub const PICK_CANCEL: (&str, &str) = ("Esc", "cancel");
-/// Where the Projects view will be, until it is drawn.
-pub const PROJECTS_SOON: &str = "Projects arrives in R1.4. Tab goes back to All.";
+/// A card's To review action, as the sidebar words it.
+pub const TO_REVIEW: &str = "To review →";
+/// After a branch with uncommitted changes.
+pub const DIRTY_MARK: &str = "●";
+/// The row under the busy projects, as the sidebar's "+ New project".
+pub const NEW_PROJECT_LABEL: &str = "+ New project";
+/// The heading over the projects with no sessions.
+pub const QUIET_LABEL: &str = "Quiet";
+/// On a project that has a folder to open a session in.
+pub const PLUS_MARK: &str = "+";
 /// On the header of the lane a drag would drop into: above a card in it,
 /// or at its end.
 pub const DROP_HERE: &str = "drop here";
@@ -188,6 +201,10 @@ pub struct Card {
     pub status_ink: Token,
     /// "You: " and the last prompt, in lanes you come back to; else "".
     pub left_off: String,
+    /// Its chips row: the size, the PR, the branch, the ports and its
+    /// actions, as the sidebar's card of this kind shows them; empty for
+    /// a row.
+    pub chips: Vec<Chip>,
     /// The latest message, or what the waiting chat wants.
     pub detail: String,
     /// How many detail lines it draws: two on a full card, else one.
@@ -201,6 +218,133 @@ pub struct Card {
     /// Whether the core will move it: a card that anchors another cmux
     /// group is that group, so it stays put (drop.ts isForeignAnchor).
     pub movable: bool,
+}
+
+/// A run of a chip's words in one ink.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Piece {
+    pub text: String,
+    pub ink: Token,
+}
+
+/// One chip: its pieces, a space apart.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Chip {
+    pub pieces: Vec<Piece>,
+}
+
+fn piece(text: impl Into<String>, ink: Token) -> Piece {
+    Piece {
+        text: text.into(),
+        ink,
+    }
+}
+
+/// The size chip's ink: the state ink that fits what answering takes.
+pub fn size_ink(size: MoveSize) -> Token {
+    match size {
+        MoveSize::Quick => Token::GreenText,
+        MoveSize::Decide => Token::ClayText,
+        MoveSize::Review => Token::BlueText,
+    }
+}
+
+/// A core chip as the pane draws it: the PR's number in the quiet chip's
+/// ink, its state in its health's and its diff size faint; the branch with
+/// its dirty dot, and the ports, in the quiet chip's ink.
+pub fn chip_view(c: &CoreChip) -> Chip {
+    let quiet = Token::Secondary;
+    let pieces = match c {
+        CoreChip::Size { text, size } => vec![piece(text, size_ink(*size))],
+        CoreChip::Pr {
+            tag,
+            state,
+            health,
+            diff,
+            ..
+        } => {
+            let mut out = vec![piece(tag, quiet)];
+            if !state.is_empty() {
+                out.push(piece(state, pr_ink(*health)));
+            }
+            if !diff.is_empty() {
+                out.push(piece(diff, Token::Faint));
+            }
+            out
+        }
+        CoreChip::Branch { text, dirty } => {
+            let mut out = vec![piece(text, quiet)];
+            if *dirty {
+                out.push(piece(DIRTY_MARK, quiet));
+            }
+            out
+        }
+        CoreChip::Port { text, .. } => vec![piece(text, quiet)],
+    };
+    Chip { pieces }
+}
+
+/// The To review action: green while its PR is ready to merge.
+pub fn review_chip(green: bool) -> Chip {
+    let ink = if green {
+        Token::GreenDeep
+    } else {
+        Token::Secondary
+    };
+    Chip {
+        pieces: vec![piece(TO_REVIEW, ink)],
+    }
+}
+
+/// Which card a chips row is for: the sidebar's full card and its
+/// Projects card carry a chips row, a compact card its PR in words, and
+/// a row none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChipsFor {
+    Full,
+    Compact,
+    Row,
+    Project,
+}
+
+/// A row of the Projects view.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProjectRow {
+    Header(ProjectHead),
+    Card(Card),
+    /// A card whose session sits in Needs you: its title and why.
+    Ghost {
+        ws_id: String,
+        title: String,
+        text: String,
+    },
+    /// "+ New project", which only the sidebar opens.
+    NewProject,
+    QuietHeader {
+        count: usize,
+        collapsed: bool,
+    },
+    /// A project with no sessions: its name, and "+" when it has a folder.
+    Quiet {
+        name: String,
+        color: Option<u32>,
+        can_open: bool,
+    },
+}
+
+/// A project's header: its name in its own colour's mark, the cards it
+/// counts, and "+" when it has a folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProjectHead {
+    pub name: String,
+    /// The table's colour; None draws the grey of a dot with no colour.
+    pub color: Option<u32>,
+    pub count: usize,
+    pub pill: PillColors,
+    /// While folded: the dot of its most urgent session.
+    pub dot: Option<Icon>,
+    pub collapsed: bool,
+    pub can_open: bool,
 }
 
 /// A row under a lane header.
@@ -273,6 +417,8 @@ pub struct PaneModel {
     pub next: NextLine,
     pub needs: Needs,
     pub lanes: Vec<Lane>,
+    /// The Projects view's rows; empty while All is on.
+    pub projects: Vec<ProjectRow>,
 }
 
 impl PaneModel {
@@ -393,9 +539,13 @@ impl PaneModel {
             PICK_TITLE,
             PICK_CANCEL.0,
             PICK_CANCEL.1,
-            PROJECTS_SOON,
             DROP_HERE,
             DROP_AT_END,
+            TO_REVIEW,
+            DIRTY_MARK,
+            NEW_PROJECT_LABEL,
+            QUIET_LABEL,
+            PLUS_MARK,
         ]
         .iter()
         .map(|s| (*s).to_string())
@@ -428,12 +578,7 @@ impl PaneModel {
             out.push(lane.merge_ready.clone());
             for row in &lane.rows {
                 match row {
-                    Row::Card(c) => {
-                        out.push(c.title.clone());
-                        out.push(c.status.clone());
-                        out.push(c.left_off.clone());
-                        out.push(c.detail.clone());
-                    }
+                    Row::Card(c) => card_words(c, &mut out),
                     Row::Ghost { title, text, .. } => {
                         out.push(title.clone());
                         out.push(text.clone());
@@ -441,7 +586,34 @@ impl PaneModel {
                 }
             }
         }
+        for row in &self.projects {
+            match row {
+                ProjectRow::Header(h) => {
+                    out.push(h.name.clone());
+                    out.push(h.count.to_string());
+                }
+                ProjectRow::Card(c) => card_words(c, &mut out),
+                ProjectRow::Ghost { title, text, .. } => {
+                    out.push(title.clone());
+                    out.push(text.clone());
+                }
+                ProjectRow::QuietHeader { count, .. } => out.push(count.to_string()),
+                ProjectRow::Quiet { name, .. } => out.push(name.clone()),
+                ProjectRow::NewProject => {}
+            }
+        }
         out
+    }
+}
+
+/// A card's words, for `words`.
+fn card_words(c: &Card, out: &mut Vec<String>) {
+    out.push(c.title.clone());
+    out.push(c.status.clone());
+    out.push(c.left_off.clone());
+    out.push(c.detail.clone());
+    for chip in &c.chips {
+        out.extend(chip.pieces.iter().map(|p| p.text.clone()));
     }
 }
 
@@ -507,11 +679,66 @@ pub fn view_of(view: &ViewModel) -> PaneView {
 }
 
 fn build(session: &mut Session, data: &Data, view: &ViewModel) -> PaneModel {
+    let shown = view_of(view);
+    let projects = match shown {
+        PaneView::Projects => projects(session, data, view),
+        PaneView::All => Vec::new(),
+    };
     PaneModel {
-        view: view_of(view),
+        view: shown,
         next: next_line(data, view),
         needs: needs(session, data, view),
         lanes: lanes(session, data, view),
+        projects,
+    }
+}
+
+/// A card's chips row, for the kind of card it is.
+fn chips_row(
+    session: &mut Session,
+    data: &Data,
+    w: Option<&Workspace>,
+    kind: ChipsFor,
+) -> Vec<Chip> {
+    let mut out: Vec<Chip> = match kind {
+        ChipsFor::Row => return Vec::new(),
+        ChipsFor::Full | ChipsFor::Project => {
+            session.chips_for(w, true).iter().map(chip_view).collect()
+        }
+        ChipsFor::Compact => compact_pr(session, w).into_iter().collect(),
+    };
+    if session.can_file_for_review(data, w) {
+        out.push(review_chip(session.review_is_green(w)));
+    }
+    if kind == ChipsFor::Project && session.can_create_project(w) {
+        out.push(Chip {
+            pieces: vec![piece(session.make_project_label(w), Token::Secondary)],
+        });
+    }
+    out
+}
+
+/// A compact card's PR in words, "#45 · ready", in its health's ink,
+/// then its diff size, faint. The sidebar runs it on from the status
+/// line after a "·"; here it has a line of its own, so it has none.
+fn compact_pr(session: &Session, w: Option<&Workspace>) -> Option<Chip> {
+    let pr = pr_summary(&session.saved, w)?;
+    let mut pieces = vec![piece(
+        pr.text.clone(),
+        pr_text_color(Some(&pr), Token::Secondary),
+    )];
+    if !pr.diff.is_empty() {
+        pieces.push(piece(pr.diff.clone(), Token::Faint));
+    }
+    Some(Chip { pieces })
+}
+
+/// Which chips a card in All carries, by its density.
+pub fn chips_for_density(d: Density) -> ChipsFor {
+    match d {
+        Density::Full => ChipsFor::Full,
+        Density::Compact => ChipsFor::Compact,
+        Density::Row => ChipsFor::Row,
     }
 }
 
@@ -594,6 +821,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
     } else {
         String::new()
     };
+    let chips = chips_row(session, data, w, chips_for_density(density));
     Card {
         ws_id: id.to_string(),
         icon: icon_of(&style),
@@ -601,6 +829,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         status,
         status_ink,
         left_off,
+        chips,
         detail: whole_words(&session.card_detail(w), DETAIL_MAX),
         detail_lines: detail_lines(density),
         waiting: view.needs.list.iter().any(|w| w == id),
@@ -689,6 +918,90 @@ fn lane_head(
         merge_ready: header.map(|h| h.merge_ready.clone()).unwrap_or_default(),
         rows: Vec::new(),
     }
+}
+
+/// A card in the Projects view, as the sidebar's project card: its title
+/// and status, what a waiting chat wants, and its chips with the branch.
+fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card {
+    let w = data.ws_by_id(id);
+    let style = session.status_info(data, w);
+    let wanted = session.move_of(w).map(|m| m.text).unwrap_or_default();
+    Card {
+        ws_id: id.to_string(),
+        icon: icon_of(&style),
+        title: title_of(w, id),
+        status: session.status_line(data, w),
+        status_ink: style.text,
+        left_off: String::new(),
+        chips: chips_row(session, data, w, ChipsFor::Project),
+        detail: whole_words(&wanted, 0),
+        detail_lines: 2,
+        waiting: view.needs.list.iter().any(|w| w == id),
+        rank: session.state_rank(data, w),
+        movable: !is_foreign_anchor(session, data, id),
+    }
+}
+
+/// A project's header: its look from the table, and the cards it counts.
+fn project_head(session: &mut Session, data: &Data, k: &str) -> ProjectHead {
+    let p = session.project_by_key(k);
+    let collapsed = session.is_project_collapsed(k);
+    let ws = session.project_workspaces(data, k);
+    let status = session.header_status(data, &ws, collapsed);
+    let dot = status
+        .dot
+        .map(|w| icon_of(&session.status_info(data, Some(w))));
+    ProjectHead {
+        name: p.name.clone(),
+        color: theme::parse_hex(&p.color),
+        count: ws.len(),
+        pill: status.tint,
+        dot,
+        collapsed,
+        can_open: session.can_open_project(k),
+    }
+}
+
+fn projects(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<ProjectRow> {
+    let entries = session.project_entries(data);
+    let quiet = session.quiet_projects(data).len();
+    let mut out = Vec::new();
+    for entry in &entries {
+        let row = match entry {
+            ProjectEntry::Header { project, .. } => {
+                ProjectRow::Header(project_head(session, data, project))
+            }
+            ProjectEntry::Ws { ws_id, .. } => {
+                ProjectRow::Card(project_card(session, data, view, ws_id))
+            }
+            ProjectEntry::Ghost { ws_id, .. } => {
+                let w = data.ws_by_id(ws_id);
+                ProjectRow::Ghost {
+                    ws_id: ws_id.clone(),
+                    title: title_of(w, ws_id),
+                    text: session.placeholder_text(w),
+                }
+            }
+            ProjectEntry::NewRow { .. } => ProjectRow::NewProject,
+            ProjectEntry::QuietHeader { .. } => ProjectRow::QuietHeader {
+                count: quiet,
+                collapsed: session.quiet_collapsed(),
+            },
+            ProjectEntry::QuietRow { project, .. } => {
+                let p = session.project_by_key(project);
+                ProjectRow::Quiet {
+                    name: p.name.clone(),
+                    color: theme::parse_hex(&p.color),
+                    can_open: session.can_open_project(project),
+                }
+            }
+            // The editor is the sidebar's; the pane only ever reads its
+            // own session, where none is open.
+            ProjectEntry::Editor { .. } => continue,
+        };
+        out.push(row);
+    }
+    out
 }
 
 #[cfg(test)]
@@ -803,6 +1116,71 @@ mod tests {
     }
 
     #[test]
+    fn inks_a_prs_number_quietly_its_state_by_health_and_its_diff_faint() {
+        use cockpit_core::prs::PrHealth;
+        let c = chip_view(&CoreChip::Pr {
+            tag: "#3".into(),
+            state: "1 failing".into(),
+            health: PrHealth::Failing,
+            diff: "+1 \u{2212}2".into(),
+            url: None,
+        });
+        let inks: Vec<(&str, Token)> = c.pieces.iter().map(|p| (p.text.as_str(), p.ink)).collect();
+        assert_eq!(
+            inks,
+            [
+                ("#3", Token::Secondary),
+                ("1 failing", Token::RedText),
+                ("+1 \u{2212}2", Token::Faint)
+            ]
+        );
+        let bare = chip_view(&CoreChip::Pr {
+            tag: "#6".into(),
+            state: String::new(),
+            health: PrHealth::Quiet,
+            diff: String::new(),
+            url: None,
+        });
+        assert_eq!(bare.pieces.len(), 1, "no state, no diff");
+    }
+
+    #[test]
+    fn marks_a_dirty_branch_and_inks_a_size_by_what_answering_takes() {
+        let br = chip_view(&CoreChip::Branch {
+            text: "feat".into(),
+            dirty: true,
+        });
+        let words: Vec<&str> = br.pieces.iter().map(|p| p.text.as_str()).collect();
+        assert_eq!(words, ["feat", DIRTY_MARK]);
+        let size = chip_view(&CoreChip::Size {
+            text: "Decide".into(),
+            size: MoveSize::Decide,
+        });
+        assert_eq!(size.pieces[0].ink, Token::ClayText);
+        assert_eq!(size_ink(MoveSize::Quick), Token::GreenText);
+        assert_eq!(size_ink(MoveSize::Review), Token::BlueText);
+        let port = chip_view(&CoreChip::Port {
+            text: ":5173 \u{2197}".into(),
+            url: "http://localhost:5173".into(),
+        });
+        assert_eq!(port.pieces[0].ink, Token::Secondary);
+    }
+
+    #[test]
+    fn greens_to_review_only_while_its_pr_is_ready() {
+        assert_eq!(review_chip(true).pieces[0].ink, Token::GreenDeep);
+        assert_eq!(review_chip(false).pieces[0].ink, Token::Secondary);
+        assert_eq!(review_chip(false).pieces[0].text, TO_REVIEW);
+    }
+
+    #[test]
+    fn gives_a_full_card_its_chips_a_compact_one_its_pr_and_a_row_none() {
+        assert_eq!(chips_for_density(Density::Full), ChipsFor::Full);
+        assert_eq!(chips_for_density(Density::Compact), ChipsFor::Compact);
+        assert_eq!(chips_for_density(Density::Row), ChipsFor::Row);
+    }
+
+    #[test]
     fn takes_the_view_from_the_cores_mode() {
         let mut view = ViewModel::default();
         assert_eq!(view_of(&view), PaneView::All, "before any mode");
@@ -888,6 +1266,7 @@ pub(crate) mod fixtures {
             status: String::new(),
             status_ink: Token::MetaText,
             left_off: String::new(),
+            chips: Vec::new(),
             detail: String::new(),
             detail_lines: 1,
             waiting,

@@ -3,16 +3,25 @@
 
  ▾ ■ MAIN ACTIVITY  1                                          1 ready to merge
    ○ waiting card                                                      No agent
+     #9 ready  feat-9  To review →
 
  ▾ ■ FOR REVIEW  8                                             1 ready to merge
    ○ ready card                                                        No agent
+     #1 · ready +120 −8
    ○ draft card                                                        No agent
+     #2 · draft +1.2k −56
    ○ failing card                                                      No agent
+     #3 · 1 failing
    ○ running card                                                      No agent
+     #4 · running
    ○ conflicts card                                                    No agent
+     #5 · conflicts
    ○ blocked card                                                      No agent
+     #6
    ○ merged card                                                       No agent
+     #7 · merged
    ○ closed card                                                       No agent
+     #8 · closed
 
    ■ BACKGROUND  0
 

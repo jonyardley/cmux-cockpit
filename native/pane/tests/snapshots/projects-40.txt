@@ -1,5 +1,26 @@
  All  Projects                   ? keys
  Next  One: docs                 1 of 2
 
- Projects arrives in R1.4. Tab goes
- back to All.
+ Needs you  1                 oldest 1m
+   ● One: docs
+     Your turn: Read the draft in #142…
+
+ ▾ ■ App One  2                       +
+   ● One: parser rewrite…    Working 7m
+     #148 draft +342 −17  …
+   ◌ One: docs · your turn
+
+ ▾ ■ App Two  2
+   ● Two: release          Finished 10m
+     #12 open  main  To review →
+   ○ Two: changelog            Idle 15m
+     #14 merged  changelog-for-release
+
+ ▾ ■ Other  1
+   ○ Scratch                   No agent
+     Make "Scratch" a project
+
+   + New project
+
+ ▾ Quiet  1
+   ■ App Three

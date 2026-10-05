@@ -1,6 +1,6 @@
 //! The lanes: each header with its fold mark, marker, name, anchor, count
 //! pill, folded dot and merge line, then its cards (dot, title, status with
-//! its age, where you left off, detail) and the
+//! its age, chips, where you left off, detail) and the
 //! placeholders of cards waiting in Needs you. An empty lane is its header
 //! alone, faint, with no fold mark. While a card is dragged, the lane it
 //! would drop into says so on its header, and the card it would land above
@@ -13,17 +13,20 @@ use ratatui::text::{Line, Span};
 
 use super::parts::{Edge, pill, spans_width, spread};
 use crate::model::{
-    Card, DROP_AT_END, DROP_HERE, FOLDED_MARK, GHOST, GHOST_GAP, LANE_MARK, Lane, OPEN_MARK, Row,
+    Card, Chip, DROP_AT_END, DROP_HERE, FOLDED_MARK, GHOST, GHOST_GAP, LANE_MARK, Lane, OPEN_MARK,
+    Row,
 };
 use crate::placing::{Place, Spot};
-use crate::text::{fit, width, wrap};
+use crate::text::{ELLIPSIS, fit, fit_items, width, wrap};
 use crate::theme;
 use cockpit_core::lanes::LaneKey;
 use cockpit_core::theme::Token;
 use cockpit_core::ui::PillColors;
 
 /// Before a card's title: indent, the dot and a space.
-const CARD_LEAD: usize = 4;
+pub(super) const CARD_LEAD: usize = 4;
+/// Between two chips on a card's chips line.
+const CHIP_GAP: &str = "  ";
 /// A title keeps at least this many cells before the status takes the rest.
 const MIN_TITLE: usize = 10;
 /// An empty lane's count: faint on the quiet face.
@@ -147,9 +150,40 @@ fn header_tail(lane: &Lane) -> Vec<Span<'static>> {
     tail
 }
 
+/// A card's chips on one line, each whole: the chips that fit, then an
+/// ellipsis when some were left off, so a chip is never cut.
+fn chips_line(chips: &[Chip], room: usize) -> Vec<Span<'static>> {
+    let widths: Vec<usize> = chips.iter().map(chip_width).collect();
+    let (shown, cut) = fit_items(&widths, width(CHIP_GAP), room);
+    let mut out: Vec<Span<'static>> = Vec::new();
+    for (i, chip) in chips.iter().take(shown).enumerate() {
+        if i > 0 {
+            out.push(Span::raw(CHIP_GAP));
+        }
+        for (j, p) in chip.pieces.iter().enumerate() {
+            if j > 0 {
+                out.push(Span::raw(" "));
+            }
+            out.push(Span::styled(p.text.clone(), theme::ink(p.ink)));
+        }
+    }
+    if cut && width(ELLIPSIS) <= room {
+        if shown > 0 {
+            out.push(Span::raw(CHIP_GAP));
+        }
+        out.push(Span::styled(ELLIPSIS, theme::ink(Token::Faint)));
+    }
+    out
+}
+
+/// The cells a chip takes: its pieces, a space apart.
+fn chip_width(c: &Chip) -> usize {
+    c.pieces.iter().map(|p| width(&p.text)).sum::<usize>() + c.pieces.len().saturating_sub(1)
+}
+
 /// A card's lines; `on` under the cursor, `landing` when a drag would land
 /// above it.
-fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<'static>> {
+pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<'static>> {
     let edge = if on { Edge::Cursor } else { Edge::Plain };
     let first = if landing { Edge::Drop } else { edge };
     let status = fit(&c.status, inner.saturating_sub(CARD_LEAD + MIN_TITLE + 1));
@@ -165,6 +199,11 @@ fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<'static>> {
     let mut out = vec![spread(left, right, inner, first)];
     let room = inner.saturating_sub(CARD_LEAD);
     let indent = || Span::raw(" ".repeat(CARD_LEAD));
+    if !c.chips.is_empty() {
+        let mut spans = vec![indent()];
+        spans.extend(chips_line(&c.chips, room));
+        out.push(spread(spans, Vec::new(), inner, edge));
+    }
     if !c.left_off.is_empty() {
         let spans = vec![
             indent(),
@@ -183,7 +222,7 @@ fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<'static>> {
     out
 }
 
-fn ghost(title: &str, text: &str, inner: usize, landing: bool) -> Line<'static> {
+pub(super) fn ghost(title: &str, text: &str, inner: usize, landing: bool) -> Line<'static> {
     let left = vec![
         Span::raw("  "),
         Span::styled(GHOST, theme::ink(Token::Faint)),
