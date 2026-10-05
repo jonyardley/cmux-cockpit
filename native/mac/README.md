@@ -1,16 +1,19 @@
 # CmuxPanel: the docked panel window
 
-A small macOS app whose window sits flush with the left edge of cmux's
-main window and follows it: moves, resizes, full screen and Spaces. It
-hides when cmux is hidden, minimised, on another Space or quits, and comes
-back with it. The content is a placeholder for now.
+A small macOS app whose window sits inside cmux's main window, over
+cmux's left sidebar, so cmux's own shadow and rounded corners frame it and
+it reads as cmux's sidebar. It follows cmux: moves, resizes, the sidebar
+divider, full screen and Spaces. It hides when cmux is hidden, minimised,
+on another Space or quits, and comes back with it. The content is a
+placeholder for now.
 
 - `Sources/PanelLayout/`: the pure rules. Given cmux's window frame, the
-  screens and cmux's state, it returns the panel's frame or why it hides,
-  and when and where to push cmux to make room (`Push.swift`).
-  No AppKit, no Accessibility; `swift test` covers it.
+  sidebar and cmux's state, it returns the panel's frame or why it hides,
+  and whether the panel needs ordering above cmux's window. No AppKit, no
+  Accessibility; `swift test` covers it.
 - `Sources/CmuxPanel/`: the thin glue. Finds cmux (`com.cmuxterm.app`)
-  and its main window by Accessibility, watches it, and moves the panel.
+  its main window and that window's sidebar by Accessibility, watches it,
+  and moves the panel. It never moves or resizes cmux.
 - `Support/Info.plist` and `bundle.sh`: the app bundle and its signing.
 
 ## Build and test
@@ -66,29 +69,45 @@ again, or the switch shows on while the permission does nothing.
 
 ## How it decides
 
-- Docks outside cmux's left edge, same top and height, when the screen
-  cmux is on has room clear of the Dock.
-- When it has no room (cmux at or near the screen's left edge, say
-  maximised), it makes room: cmux's main window moves right and narrows
-  by the shortfall, keeping its right edge, so the panel fits flush to its
-  left. It waits until cmux's frame has been still for half a second with
-  no mouse button held, so a drag is never fought, and pushes again
-  whenever cmux is dragged back to the edge or maximised. It never pushes
-  cmux narrower than 640 points or off the screen, and stops asking for a
-  frame cmux refused until cmux moves.
-- On quit (Quit, `pkill -x CmuxPanel` or Control C) it gives cmux back the
-  frame it had before the latest push, but only if cmux still has the
-  frame the push left it at; a move or resize since is left alone.
-- Where it cannot push (full screen, too narrow, or cmux refused the
-  frame) it overlaps cmux's left strip, as before. When it overlaps, it
-  floats above cmux while cmux is the frontmost app, so a click inside
-  cmux cannot cover it, and drops back to the normal level when another
-  app comes to the front. In full screen it always floats, since nothing
-  else shares that Space.
+- Covers cmux's sidebar inside cmux's window: cmux's left edge, from the
+  bottom of the title bar row (so the traffic lights and title bar
+  buttons stay clear) down to cmux's bottom edge.
+- Width: the right edge of cmux's sidebar list, found by Accessibility as
+  the scroll area cmux tags `Sidebar`, so it follows when the divider is
+  dragged. If that is missing, where cmux's split view of panes starts.
+  If neither is found (a cmux update changed its layout), a fixed 280
+  points. Never wider than cmux's window.
+- Top: where cmux's split view of panes starts, 28 points below the
+  window's top today; 28 points when it is not found.
+- Hides when cmux's sidebar is closed (its list gone and the panes
+  starting within 40 points of the window's edge), so it never covers a
+  terminal.
+- Looks like part of cmux: borderless, no shadow, clear and non opaque so
+  the bottom left corner can round to match cmux's window corner (16
+  points, judged by eye; square in full screen). The background is the
+  stock sidebar material for now, not cmux's exact sidebar colour.
+- Stacking: at the normal window level, ordered directly above cmux's main
+  window by its window number. Floating above everything would cover
+  other apps; the normal level, just above cmux, lets any app that comes
+  in front of cmux cover the panel too. When cmux comes forward (it is
+  activated, or a click in it brings its windows up) its window lands
+  over the panel, so the panel checks the window list's on-screen order on
+  every refresh and, if anything sits between it and cmux's window or
+  cmux is above it, orders itself back directly above. It refreshes at
+  once when cmux is activated; otherwise the poll catches it within a
+  quarter of a second.
+- Full screen: the panel joins every Space, full screen ones included as
+  an auxiliary window. It floats there, since only cmux shares that
+  Space, and is ordered to the front whenever it is not yet on screen.
+  The panel used to go missing in full screen because it was only ordered
+  front when it first appeared; one already showing was moved but never
+  ordered onto cmux's new full screen Space. It is now ordered on every
+  refresh that finds it out of place. This cause is read from the code,
+  not reproduced.
 - Hides when cmux quits, is hidden, has no standard window, its main
   window is minimised, or that window is not on the Space being shown
-  (checked against the window list, which needs no Screen Recording
-  permission).
+  (no on-screen window in the window list covers nine tenths of it, which
+  needs no Screen Recording permission).
 - Accessibility notifications move it promptly; a 0.25 second poll
-  catches what they miss, such as full screen animations and Space
-  changes.
+  catches what they miss, such as full screen animations, Space changes
+  and the divider being dragged.

@@ -17,7 +17,8 @@ func accessibilityPermission() -> Permission {
 }
 
 /// The primary screen first, as AppKit lists it. Coordinates flip on the
-/// primary screen's full height; room is judged on each visible frame.
+/// primary screen's full height; the permission strip uses the first
+/// visible frame.
 func currentScreens() -> Screens {
     let visible = NSScreen.screens.map { screen in
         let area = screen.visibleFrame
@@ -31,8 +32,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var watcher: CmuxWatcher?
     private var permission: Permission = .missing
     private var activation: NSObjectProtocol?
-    private let roomMaker = RoomMaker()
-    private var signalSources: [DispatchSourceSignal] = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // A cmux that stops answering would otherwise hold each read for
@@ -46,26 +45,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
         ) { [weak self] note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            if app?.bundleIdentifier == cmuxBundleID { self?.panel.raiseWithCmux() }
+            // cmux coming forward brings its windows over the panel: refresh
+            // now rather than on the next poll, which orders it back on top.
+            if app?.bundleIdentifier == cmuxBundleID { self?.refresh() }
         }
-        watchQuitSignals()
         watcher.start()
-    }
-
-    func applicationWillTerminate(_ notification: Notification) {
-        roomMaker.restore()
-    }
-
-    /// `pkill -x CmuxPanel` (SIGTERM) and Control C (SIGINT) quit through
-    /// the normal terminate path, so cmux gets its room back either way.
-    private func watchQuitSignals() {
-        signalSources = [SIGTERM, SIGINT].map { number in
-            signal(number, SIG_IGN)
-            let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
-            source.setEventHandler { NSApp.terminate(nil) }
-            source.resume()
-            return source
-        }
     }
 
     private func refresh() {
@@ -73,11 +57,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // relaunch, so turning the switch off brings the strip back.
         permission = AXIsProcessTrusted() ? .granted : .missing
         let screens = currentScreens()
-        var cmux = permission == .granted ? (watcher?.read() ?? .notRunning) : .notRunning
-        if roomMaker.update(cmux: cmux, window: watcher?.mainWindow, screens: screens) {
-            cmux = watcher?.read() ?? .notRunning
-        }
-        panel.apply(place(permission: permission, cmux: cmux, screens: screens))
+        let cmux = permission == .granted ? (watcher?.read() ?? .notRunning) : .notRunning
+        var cmuxNumber: Int?
+        if case let .window(window) = cmux { cmuxNumber = window.windowNumber }
+        panel.apply(
+            place(permission: permission, cmux: cmux, screens: screens),
+            frontToBack: watcher?.frontToBack ?? [],
+            cmuxNumber: cmuxNumber
+        )
     }
 }
 

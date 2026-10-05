@@ -15,8 +15,9 @@ final class CmuxWatcher {
     private var observedPID: pid_t?
     private var tokens: [NSObjectProtocol] = []
     private var timer: Timer?
-    /// The main window the last read found, for the push to move.
-    private(set) var mainWindow: AXUIElement?
+    /// Every on-screen window's number, front to back, as of the last
+    /// read, for keeping the panel just above cmux.
+    private(set) var frontToBack: [Int] = []
 
     init(onChange: @escaping () -> Void) {
         self.onChange = onChange
@@ -63,7 +64,8 @@ final class CmuxWatcher {
 
     /// Reads cmux's state as the pure layout module wants it.
     func read() -> CmuxState {
-        mainWindow = nil
+        let list = readWindowList()
+        frontToBack = list.map(\.number)
         guard let app = Self.runningCmux() else { return .notRunning }
         if app.isHidden { return .hidden }
         let element = AXUIElementCreateApplication(app.processIdentifier)
@@ -86,13 +88,15 @@ final class CmuxWatcher {
         }
         guard let index = pickMainWindow(read.map(\.1)) else { return .noWindow }
         let (window, candidate) = read[index]
-        mainWindow = window
+        let cmuxWindows = list.filter { $0.pid == app.processIdentifier }.map(\.listed)
+        let layout = sidebarLayout(window)
         return .window(CmuxWindow(
             frame: candidate.frame,
             isMinimised: (try? AX.bool(window, kAXMinimizedAttribute).get()) ?? false,
             isFullScreen: (try? AX.bool(window, "AXFullScreen").get()) ?? false,
-            isOnCurrentSpace: isOnCurrentSpace(candidate.frame, onScreen: onScreenFrames(pid: app.processIdentifier)),
-            isActive: app.isActive
+            windowNumber: matchWindow(candidate.frame, onScreen: cmuxWindows),
+            sidebar: layout.sidebar,
+            content: layout.content
         ))
     }
 
@@ -144,17 +148,49 @@ final class CmuxWatcher {
     }
 }
 
-/// cmux's windows that are on screen on the current Space, top-left and
-/// y down. The window list gives bounds and owners without the Screen
-/// Recording permission.
-private func onScreenFrames(pid: pid_t) -> [Rect] {
+/// One on-screen window from the window list, with its owner.
+private struct OnScreenWindow {
+    var pid: pid_t
+    var listed: ListedWindow
+    var number: Int { listed.number }
+}
+
+/// Every window on screen on the current Space, front to back, top-left
+/// and y down. Read once per refresh: it gives cmux's Space check, its
+/// window number and the stacking order. The window list gives numbers,
+/// bounds and owners without the Screen Recording permission.
+private func readWindowList() -> [OnScreenWindow] {
     let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
     guard let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else { return [] }
     return list.compactMap { info in
-        guard (info[kCGWindowOwnerPID as String] as? pid_t) == pid,
+        guard let pid = info[kCGWindowOwnerPID as String] as? pid_t,
+              let number = info[kCGWindowNumber as String] as? Int,
               let bounds = info[kCGWindowBounds as String] as? NSDictionary,
               let rect = CGRect(dictionaryRepresentation: bounds)
         else { return nil }
-        return Rect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
+        let frame = Rect(x: rect.minX, y: rect.minY, width: rect.width, height: rect.height)
+        return OnScreenWindow(pid: pid, listed: ListedWindow(number: number, frame: frame))
     }
+}
+
+/// Where cmux's sidebar list and the content beside it sit, found by
+/// Accessibility: within the window's top views, the scroll area cmux
+/// tags `Sidebar` and the split view of panes. Either is nil when cmux's
+/// layout no longer has it (the sidebar closed, or a cmux update moved
+/// things), and the pure rules fall back.
+private func sidebarLayout(_ window: AXUIElement) -> (sidebar: Rect?, content: Rect?) {
+    let top = (try? AX.elements(window, kAXChildrenAttribute).get()) ?? []
+    let views = top + top.flatMap { (try? AX.elements($0, kAXChildrenAttribute).get()) ?? [] }
+    var sidebar: Rect?
+    var content: Rect?
+    for view in views where sidebar == nil || content == nil {
+        let role = try? AX.string(view, kAXRoleAttribute).get()
+        if content == nil, role == kAXSplitGroupRole {
+            content = try? AX.frame(view).get()
+        } else if sidebar == nil, role == kAXScrollAreaRole,
+                  (try? AX.string(view, kAXIdentifierAttribute).get()) == "Sidebar" {
+            sidebar = try? AX.frame(view).get()
+        }
+    }
+    return (sidebar, content)
 }
