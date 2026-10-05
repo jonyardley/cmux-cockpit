@@ -1,0 +1,48 @@
+# Spike: the smallest cmux sidebar extension, plus a host app that feeds it
+# through a shared App Group. Generate with `xcodegen` after ./fetch-sdk.sh.
+name: CockpitSidebar
+options:
+  deploymentTarget:
+    macOS: "14.0"
+settings:
+  base:
+    DEVELOPMENT_TEAM: 9S5FG4LQAF
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "5.0"
+    ENABLE_HARDENED_RUNTIME: YES
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+packages:
+  CmuxExtensionKit:
+    path: .sdk/Packages/macOS/CmuxExtensionKit
+targets:
+  CockpitHost:
+    type: application
+    platform: macOS
+    sources: [Host]
+    dependencies:
+      - target: CockpitSidebarExtension
+        embed: true
+        codeSign: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.jonyardley.cockpit
+        PRODUCT_NAME: CockpitHost
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSUIElement: YES
+        CODE_SIGN_ENTITLEMENTS: Host/Host.entitlements
+  CockpitSidebarExtension:
+    type: extensionkit-extension
+    platform: macOS
+    sources: [Sidebar]
+    dependencies:
+      - package: CmuxExtensionKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.jonyardley.cockpit.sidebar
+        PRODUCT_NAME: CockpitSidebar
+        INFOPLIST_FILE: Sidebar/Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        ENABLE_APP_SANDBOX: YES
+        CODE_SIGN_ENTITLEMENTS: Sidebar/Sidebar.entitlements
+        CMUX_SIDEBAR_EXTENSION_POINT_ID: com.cmuxterm.app.cmux.sidebar
