@@ -2,7 +2,8 @@
 //! runs the core. Inputs, each on its own thread except the files:
 //!
 //! - `cmux events`: replay, then live, reconnecting itself (stream.rs).
-//! - `claude agents --json` every 2 seconds.
+//! - `claude agents --json` every 2 seconds, once per Claude config dir
+//!   (parse::other_config_dirs), merged into one Agent View.
 //! - `cmux --json workspace list`, then `cmux rpc workspace.group.list`
 //!   (read only) for the list's window, on start, every 30 seconds, and
 //!   when an event says either may have changed: any `workspace.` event
@@ -273,9 +274,42 @@ fn run_ok(program: &str, args: &[String]) -> bool {
     output(program, &args).is_some()
 }
 
+/// Agent View in the runner's own config dir, then in each other one
+/// (parse::other_config_dirs), as one view. A session Jon started with
+/// another CLAUDE_CONFIG_DIR is listed only by a read made with it.
+fn read_agents() -> Option<AgentView> {
+    let read = |env: &[(&str, &str)]| {
+        let args = ["agents".to_string(), "--json".to_string()];
+        let ran = pr_ask::ran_within("claude", &args, None, env, COMMAND_LIMIT);
+        (ran.status == Some(0))
+            .then(|| parse::agents(ran.stdout.as_bytes()))
+            .flatten()
+    };
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let inherited = std::env::var_os("CLAUDE_CONFIG_DIR").map(PathBuf::from);
+    let others = home.map_or_else(Vec::new, |home| {
+        let names = std::fs::read_dir(&home)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| e.file_name().into_string().ok());
+        parse::other_config_dirs(
+            &home,
+            names,
+            |d| d.join("sessions").is_dir(),
+            inherited.as_deref(),
+        )
+    });
+    let views = std::iter::once(read(&[])).chain(others.iter().map(|dir| {
+        let dir = dir.to_string_lossy();
+        read(&[("CLAUDE_CONFIG_DIR", dir.as_ref())])
+    }));
+    parse::merged(views)
+}
+
 fn poll_agents(tx: &Sender<Input>, stop: &AtomicBool) {
     while !stop.load(Ordering::SeqCst) {
-        let view = output("claude", &["agents", "--json"]).and_then(|o| parse::agents(&o));
+        let view = read_agents();
         if let Some(view) = view
             && tx.send(Input::Agents(view)).is_err()
         {

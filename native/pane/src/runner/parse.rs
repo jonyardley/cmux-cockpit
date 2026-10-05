@@ -4,6 +4,7 @@
 //! Plain functions over bytes and JSON, so the tests need no processes.
 
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 
 use cockpit_core::data::{Workspace, WorkspaceGroup};
 use serde_json::Value;
@@ -32,6 +33,44 @@ pub fn agents(out: &[u8]) -> Option<AgentView> {
         }
     }
     Some(view)
+}
+
+/// Agent Views read from several Claude config dirs, as one. None when
+/// any read failed, so a dir that missed one poll keeps the last view
+/// rather than having its sessions counted absent and forgotten.
+pub fn merged(views: impl IntoIterator<Item = Option<AgentView>>) -> Option<AgentView> {
+    let mut all = AgentView::default();
+    for v in views {
+        let v = v?;
+        all.busy.extend(v.busy);
+        all.session.extend(v.session);
+    }
+    Some(all)
+}
+
+/// The Claude config dirs besides the default one that Agent View must
+/// also read: each `.claude-<name>` folder in `home` holding a `sessions`
+/// folder, which only a Claude config dir has, other than `inherited`
+/// (the runner's own CLAUDE_CONFIG_DIR, which the default read covers).
+/// `claude agents --json` lists one config dir's sessions only, so a
+/// session started with another CLAUDE_CONFIG_DIR would read as gone.
+pub fn other_config_dirs(
+    home: &Path,
+    names: impl IntoIterator<Item = String>,
+    has_sessions: impl Fn(&Path) -> bool,
+    inherited: Option<&Path>,
+) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = names
+        .into_iter()
+        .filter(|n| {
+            n.strip_prefix(".claude-")
+                .is_some_and(|rest| !rest.is_empty())
+        })
+        .map(|n| home.join(n))
+        .filter(|d| Some(d.as_path()) != inherited && has_sessions(d))
+        .collect();
+    dirs.sort();
+    dirs
 }
 
 /// The window a reply answers for (`window:1`), from its `window_ref`.
@@ -157,6 +196,46 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn agent_views_from_every_config_dir_read_as_one() {
+        let main = agents(br#"[{"pid": 9533, "sessionId": "20a0", "status": "busy"}]"#);
+        let personal = agents(br#"[{"pid": 59557, "sessionId": "0407", "status": "busy"}]"#);
+        let v = merged([main.clone(), personal]).unwrap();
+        assert_eq!(v.busy.get(&59557), Some(&true));
+        assert_eq!(v.session.get(&9533).map(String::as_str), Some("20a0"));
+        assert_eq!(
+            merged([main, None]),
+            None,
+            "one failed read keeps the last view"
+        );
+    }
+
+    #[test]
+    fn other_config_dirs_are_the_claude_folders_with_sessions() {
+        let home = Path::new("/Users/me");
+        let names = [
+            ".claude",
+            ".claude-personal",
+            ".claude-empty",
+            ".claude-",
+            ".claude.json",
+            ".claude-work",
+            "Dev",
+        ]
+        .map(String::from);
+        let has = |d: &Path| !d.ends_with(".claude-empty");
+        assert_eq!(
+            other_config_dirs(home, names.clone(), has, None),
+            vec![home.join(".claude-personal"), home.join(".claude-work")]
+        );
+        let inherited = home.join(".claude-work");
+        assert_eq!(
+            other_config_dirs(home, names, has, Some(&inherited)),
+            vec![home.join(".claude-personal")],
+            "the runner's own dir is the default read already"
+        );
+    }
 
     #[test]
     fn reads_agent_view_skipping_background_sessions() {
