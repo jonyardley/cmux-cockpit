@@ -21,8 +21,8 @@ use crate::model::{
 };
 use crate::text::fit;
 use crate::theme;
-use cockpit_core::theme::Token;
-use cockpit_core::ui::QUIET_PILL;
+use cockpit_core::panel::QUIET_PILL;
+use cockpit_core::panel::Token;
 
 /// The Projects view laid out: its lines, and the lines to keep in sight
 /// (the cursor's row, or the editor's focused field).

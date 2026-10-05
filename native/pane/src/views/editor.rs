@@ -15,8 +15,8 @@ use crate::editor::{
 use crate::model::{DOT, HOLLOW};
 use crate::text::{fit, width};
 use crate::theme;
-use cockpit_core::projects::PROJECT_COLORS;
-use cockpit_core::theme::Token;
+use cockpit_core::panel::PROJECT_COLORS;
+use cockpit_core::panel::Token;
 
 /// The label column's width, labels included.
 const LABEL: usize = 9;

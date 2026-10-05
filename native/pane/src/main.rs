@@ -69,7 +69,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 /// go (as the core trims it), so the pane never offers home itself as a
 /// project.
 fn home_folder(raw: Option<String>) -> Option<String> {
-    raw.filter(|h| !cockpit_core::home::trim_slash(h).is_empty())
+    raw.filter(|h| !cockpit_core::trim_slash(h).is_empty())
 }
 
 /// The main checkout's config folder, where the sidebars' build reads.

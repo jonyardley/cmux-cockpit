@@ -8,7 +8,7 @@ use ratatui::text::{Line, Span};
 use crate::model::DROP_MARK;
 use crate::text::width;
 use crate::theme;
-use cockpit_core::ui::PillColors;
+use cockpit_core::panel::PillColors;
 
 /// Cells kept clear at each side.
 pub const MARGIN: usize = 1;
@@ -65,7 +65,7 @@ pub fn spread(
 
 /// The left margin: the cursor's bar, a drop's mark, or blank.
 fn margin(edge: Edge) -> Span<'static> {
-    let select = theme::ink(cockpit_core::theme::Token::Select);
+    let select = theme::ink(cockpit_core::panel::Token::Select);
     match edge {
         Edge::Plain => Span::raw(" ".repeat(MARGIN)),
         Edge::Cursor => Span::styled(CURSOR_BAR, select),

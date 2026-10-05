@@ -37,7 +37,7 @@ pub const URGENCY_RANK: [Urgency; 4] = [
 ];
 
 /// A count pill's colours.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub struct PillColors {
     pub bg: Token,
     pub fg: Token,

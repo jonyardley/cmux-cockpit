@@ -75,7 +75,9 @@ Tested on cmux 0.64.25.
   `cockpit_core` Crux app), `runner` (`cockpit_runner`, the live-data
   runner any front end drives) and `pane` (`cockpit-pane`, the cockpit in
   a terminal, a thin loop over the runner; `--print` prints the view as
-  text).
+  text). The core builds the panel model every shell draws
+  (`cockpit_core::panel`), and `native/fixtures/` holds it as JSON for
+  each scene; the core's tests fail when a fixture is stale.
   `rust-toolchain.toml` pins the Rust toolchain.
 - `native/mac/`: the docked panel window, a SwiftPM app that sits flush
   with cmux's left edge. Build, sign, run and grant its permission with
@@ -91,6 +93,7 @@ npm run dev                         # rebuild sidebars/*.js on every save
 npm run check                       # lint, types, dead code (knip), build fresh, tests with a coverage floor, validate, then npm run rust
 npm run rust                        # rustfmt, clippy with warnings denied, and the Rust tests under native/
 npm run snapshots                   # re-record the text snapshots after a change on screen
+UPDATE_SNAPSHOTS=1 cargo test --manifest-path native/Cargo.toml -p cockpit_core --test panel && npx biome format --write native/fixtures   # re-record the panel fixtures after a meant change
 npm run preview                     # every snapshot scene as a PNG in preview/ (needs Google Chrome)
 npm run pr-visuals                  # before/after PNGs of the scenes this branch changes, pushed to pr-images, as markdown for the PR
 cmux sidebar reload cockpit         # show the change

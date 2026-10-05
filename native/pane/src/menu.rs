@@ -5,7 +5,8 @@
 
 use std::ops::Range;
 
-use cockpit_core::menu::{MenuAction, MenuEvent, MenuItem, MenuTarget, MenuView};
+use cockpit_core::MenuEvent;
+use cockpit_core::panel::{MenuAction, MenuItem, MenuTarget, MenuView};
 use ratatui::crossterm::event::KeyCode;
 
 /// A card menu's title.
@@ -127,7 +128,7 @@ pub fn window(len: usize, at: usize, room: usize, top: usize) -> Range<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cockpit_core::menu::MenuAction;
+    use cockpit_core::panel::MenuAction;
 
     fn item(label: &str, action: MenuAction) -> MenuItem {
         MenuItem::Item {

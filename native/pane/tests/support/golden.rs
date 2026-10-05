@@ -6,10 +6,7 @@
 use std::error::Error;
 use std::path::PathBuf;
 
-use cockpit_core::data::Data;
-use cockpit_core::persist::SavedState;
-use cockpit_core::projects::Project;
-use cockpit_core::{Cockpit, Event, Model};
+use cockpit_core::{Cockpit, Data, Event, Model, Project, SavedState};
 use crux_core::App;
 use serde_json::Value;
 

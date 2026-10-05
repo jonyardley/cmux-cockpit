@@ -186,7 +186,10 @@ pub const OUTLINE_MAX: f64 = 2.0;
 pub const DETAIL_MAX: usize = 140;
 
 /// About one line of a compact card's text.
-const LEFT_OFF_MAX: usize = 90;
+pub const LEFT_OFF_MAX: usize = 90;
+
+/// About one line of a Needs you row's detail.
+pub const NEEDS_DETAIL_MAX: usize = 80;
 
 /// The outline of a card, row or needs-you row: ink at the widest on the
 /// selected workspace, ink just under it while dragged, the row's own
@@ -430,11 +433,14 @@ impl Session {
         if let Some(ask) = self.ask_of(w) {
             return ask;
         }
-        let wanted = clip(&self.move_of(w).map(|m| m.text).unwrap_or_default(), 80);
+        let wanted = clip(
+            &self.move_of(w).map(|m| m.text).unwrap_or_default(),
+            NEEDS_DETAIL_MAX,
+        );
         if !wanted.is_empty() {
             return wanted;
         }
-        let message = one_line(Some(&card_message(w)), 80);
+        let message = one_line(Some(&card_message(w)), NEEDS_DETAIL_MAX);
         if !message.is_empty() {
             return message;
         }

@@ -5,7 +5,7 @@
 //! (a hue at an alpha) is blended onto the ground, since a terminal cell
 //! has no alpha. Every colour literal in the pane lives here.
 
-use cockpit_core::theme::Token;
+use cockpit_core::panel::Token;
 use ratatui::style::{Color, Modifier, Style};
 
 /// The sidebars' ground, under the whole pane.
@@ -95,15 +95,7 @@ pub fn hex(t: Token) -> u32 {
     }
 }
 
-/// A project's own colour, "#D97757" as the table writes it; None for
-/// anything but six hex digits after a "#".
-pub fn parse_hex(s: &str) -> Option<u32> {
-    let digits = s.strip_prefix('#')?;
-    if digits.len() != 6 || !digits.chars().all(|c| c.is_ascii_hexdigit()) {
-        return None;
-    }
-    u32::from_str_radix(digits, 16).ok()
-}
+pub use cockpit_core::panel::parse_hex;
 
 /// A token as a terminal colour.
 pub fn colour(t: Token) -> Color {

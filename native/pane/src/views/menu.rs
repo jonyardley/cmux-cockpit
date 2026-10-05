@@ -12,8 +12,8 @@ use super::parts::CURSOR_BAR;
 use crate::menu::{MENU_HINT, title, window};
 use crate::text::fit;
 use crate::theme;
-use cockpit_core::menu::{MenuItem, MenuView};
-use cockpit_core::theme::Token;
+use cockpit_core::panel::Token;
+use cockpit_core::panel::{MenuItem, MenuView};
 
 /// The box's widest, borders included.
 const MAX_WIDTH: u16 = 44;

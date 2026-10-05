@@ -11,8 +11,8 @@ use crate::model::{NEEDS_LABEL, Needs};
 use crate::placing::Spot;
 use crate::text::{fit, width};
 use crate::theme;
-use cockpit_core::theme::Token;
-use cockpit_core::ui::PillColors;
+use cockpit_core::panel::PillColors;
+use cockpit_core::panel::Token;
 
 /// Before a row's title: indent, then the dot and a space.
 const ROW_LEAD: usize = 4;

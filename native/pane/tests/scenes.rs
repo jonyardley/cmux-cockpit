@@ -12,11 +12,12 @@ mod support;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
-use cockpit_core::edit::EditEvent;
-use cockpit_core::lanes::LaneKey;
-use cockpit_core::menu::{MenuAction, MenuEvent, MenuTarget};
-use cockpit_core::theme::Token;
-use cockpit_pane::model::{PaneView, ProjectTarget};
+use cockpit_core::EditEvent;
+use cockpit_core::MenuEvent;
+use cockpit_core::panel::LaneKey;
+use cockpit_core::panel::Token;
+use cockpit_core::panel::{MenuAction, MenuTarget};
+use cockpit_pane::model::{PaneView, ProjectTarget, words};
 use cockpit_pane::{Action, Outcome, Pane, PaneModel, theme};
 use crux_core::App;
 use ratatui::Terminal;
@@ -98,8 +99,7 @@ fn draws_each_scene_as_its_snapshot_at_40_and_80_columns() {
 /// Every whitespace-separated run on screen is a whole word of the model's
 /// text, or one followed by the ellipsis a fitted line ends on, or marks.
 fn cut_words(model: &PaneModel, screen: &str) -> Vec<String> {
-    let words: HashSet<String> = model
-        .words()
+    let words: HashSet<String> = words(model)
         .iter()
         .flat_map(|t| t.split_whitespace().map(str::to_string).collect::<Vec<_>>())
         .collect();
@@ -136,7 +136,7 @@ fn never_cuts_a_word_mid_line_in_any_scene_at_any_width() {
 #[test]
 fn the_cut_word_check_catches_half_a_word() {
     let pane = pane_for("lanes");
-    let words = pane.model().words();
+    let words = words(pane.model());
     let longest = words
         .iter()
         .flat_map(|t| t.split_whitespace())

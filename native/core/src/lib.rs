@@ -28,6 +28,7 @@ pub mod model;
 pub mod moves;
 pub mod needs;
 pub mod next;
+pub mod panel;
 pub mod persist;
 pub mod placement;
 pub mod pr_colors;
@@ -52,3 +53,10 @@ pub mod ui;
 pub mod words;
 
 pub use app::{CmuxCall, Cockpit, Effect, Event, Model, OpenUrl, PrAsk, StateSet, ViewModel};
+pub use data::{Data, Workspace};
+pub use edit::EditEvent;
+pub use home::trim_slash;
+pub use menu::MenuEvent;
+pub use panel::Panel;
+pub use persist::SavedState;
+pub use projects::Project;

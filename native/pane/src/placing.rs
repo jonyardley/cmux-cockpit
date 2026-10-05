@@ -3,7 +3,7 @@
 //! the pane's model, so the keys and the mouse share them and the tests
 //! cover them. The core works out the tab order from that (drop.ts).
 
-use cockpit_core::lanes::LaneKey;
+use cockpit_core::panel::LaneKey;
 
 use crate::model::{PaneModel, Row};
 
