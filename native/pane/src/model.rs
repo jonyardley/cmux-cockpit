@@ -12,6 +12,8 @@ use cockpit_core::data::{Data, Workspace};
 use cockpit_core::lane_entries::{LaneEntry, shows_left_off};
 use cockpit_core::lanes::{Density, LANES, LaneKey};
 use cockpit_core::model::card_density;
+use cockpit_core::persist::ViewMode;
+use cockpit_core::placement::is_foreign_anchor;
 use cockpit_core::session::Session;
 use cockpit_core::status::StatusStyle;
 use cockpit_core::theme::Token;
@@ -56,14 +58,77 @@ pub const HOLLOW: &str = "○";
 pub const GHOST: &str = "◌";
 
 /// The keys the `?` overlay lists: the key, then what it does.
-pub const KEYS: [(&str, &str); 4] = [
+pub const KEYS: [(&str, &str); 10] = [
     ("↑ ↓", "move between cards"),
+    ("shift ↑ ↓", "reorder in its lane"),
+    ("m 1-5", "move to a lane"),
+    ("drag", "move to a lane or spot"),
+    ("Enter", "switch to it"),
+    ("d", "dismiss from Needs you"),
+    ("Tab", "All or Projects"),
     ("?", "show or hide the keys"),
     ("q", "quit"),
     ("Esc", "close this"),
 ];
 /// The overlay's title.
 pub const KEYS_TITLE: &str = "Keys";
+/// The lane picker's title, after `m`.
+pub const PICK_TITLE: &str = "Move to lane";
+/// The lane picker's last line: how to leave it.
+pub const PICK_CANCEL: (&str, &str) = ("Esc", "cancel");
+/// Where the Projects view will be, until it is drawn.
+pub const PROJECTS_SOON: &str = "Projects arrives in R1.4. Tab goes back to All.";
+/// On the header of the lane a drag would drop into: above a card in it,
+/// or at its end.
+pub const DROP_HERE: &str = "drop here";
+pub const DROP_AT_END: &str = "drop at the end";
+/// In the margin of the card a drag would land above.
+pub const DROP_MARK: &str = "▔";
+
+/// Which view the pane draws, as the core has it; Tab asks the core to
+/// flip it.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum PaneView {
+    #[default]
+    All,
+    Projects,
+}
+
+/// The rows of a keys box that fit `room` lines: all of them, or as many
+/// from the top as fit with the last kept, since it says how to close the
+/// box.
+pub fn fit_rows<T: Copy>(rows: &[T], room: usize) -> Vec<T> {
+    if rows.len() <= room {
+        return rows.to_vec();
+    }
+    let Some((last, rest)) = rows.split_last() else {
+        return Vec::new();
+    };
+    if room == 0 {
+        return Vec::new();
+    }
+    let mut out: Vec<T> = rest.iter().take(room - 1).copied().collect();
+    out.push(*last);
+    out
+}
+
+/// The lane a digit picks after `m`: 1 is the first lane, in display order.
+pub fn lane_for_digit(c: char) -> Option<LaneKey> {
+    let n = c.to_digit(10)?;
+    let i = usize::try_from(n).ok()?.checked_sub(1)?;
+    LANES.get(i).map(|l| l.key)
+}
+
+/// The lane picker's rows: each digit and the lane it picks, then Esc.
+pub fn pick_rows() -> Vec<(String, &'static str)> {
+    let mut rows: Vec<(String, &'static str)> = LANES
+        .iter()
+        .enumerate()
+        .map(|(i, l)| ((i + 1).to_string(), l.name))
+        .collect();
+    rows.push((PICK_CANCEL.0.to_string(), PICK_CANCEL.1));
+    rows
+}
 
 /// The glyph before a title and its colour; None is the grey outline the
 /// sidebar draws round a dot with no colour of its own.
@@ -93,6 +158,11 @@ pub struct NeedsRow {
     /// "Asking: allow git push?"
     pub line: String,
     pub ink: Token,
+    /// The lane its card is filed in, drawn or not (a folded lane draws
+    /// no rows).
+    pub lane: Option<LaneKey>,
+    /// Whether the core will move it: not when it anchors another group.
+    pub movable: bool,
 }
 
 /// The Needs you strip; empty when nothing waits.
@@ -122,6 +192,15 @@ pub struct Card {
     pub detail: String,
     /// How many detail lines it draws: two on a full card, else one.
     pub detail_lines: usize,
+    /// Its session waits in Needs you, past the strip's cap.
+    pub waiting: bool,
+    /// Its state's place in the lane's sort (the core's state rank): a
+    /// lane sorts by state, and a card keeps its place only among cards
+    /// in its own state.
+    pub rank: u8,
+    /// Whether the core will move it: a card that anchors another cmux
+    /// group is that group, so it stays put (drop.ts isForeignAnchor).
+    pub movable: bool,
 }
 
 /// A row under a lane header.
@@ -133,7 +212,27 @@ pub enum Row {
         ws_id: String,
         title: String,
         text: String,
+        /// As a card's: a placeholder is its card, waiting.
+        rank: u8,
     },
+}
+
+impl Row {
+    /// The workspace the row stands for.
+    pub fn ws_id(&self) -> &str {
+        match self {
+            Row::Card(c) => &c.ws_id,
+            Row::Ghost { ws_id, .. } => ws_id,
+        }
+    }
+
+    /// Its state's place in the lane's sort.
+    pub fn rank(&self) -> u8 {
+        match self {
+            Row::Card(c) => c.rank,
+            Row::Ghost { rank, .. } => *rank,
+        }
+    }
 }
 
 /// A lane's generated anchor on its header: its dot and unread count.
@@ -169,6 +268,8 @@ pub struct Lane {
 /// Everything the pane draws.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct PaneModel {
+    /// Which view the core has on: Tab asks it to flip.
+    pub view: PaneView,
     pub next: NextLine,
     pub needs: Needs,
     pub lanes: Vec<Lane>,
@@ -185,19 +286,94 @@ impl PaneModel {
         } = core;
         match data {
             Some(data) => build(session, data, view),
-            None => PaneModel::default(),
+            None => PaneModel {
+                view: view_of(view),
+                ..PaneModel::default()
+            },
         }
     }
 
-    /// The cards the cursor moves between, top to bottom, by workspace id.
+    /// The cards the cursor moves between, top to bottom, by workspace id:
+    /// the Needs you rows, then the lanes' cards.
     pub fn card_ids(&self) -> Vec<&str> {
-        self.lanes
+        let needs = self.needs.rows.iter().map(|r| r.ws_id.as_str());
+        let cards = self
+            .lanes
             .iter()
             .flat_map(|l| &l.rows)
             .filter_map(|r| match r {
                 Row::Card(c) => Some(c.ws_id.as_str()),
+                Row::Ghost { .. } => None,
+            });
+        needs.chain(cards).collect()
+    }
+
+    /// Whether `id` is a row in the Needs you strip.
+    pub fn in_strip(&self, id: &str) -> bool {
+        self.needs.rows.iter().any(|r| r.ws_id == id)
+    }
+
+    /// Whether `id`'s session waits in Needs you: a row in the strip, or a
+    /// card past its cap.
+    pub fn is_waiting(&self, id: &str) -> bool {
+        self.in_strip(id)
+            || self
+                .lanes
+                .iter()
+                .flat_map(|l| &l.rows)
+                .any(|r| matches!(r, Row::Card(c) if c.ws_id == id && c.waiting))
+    }
+
+    /// Whether `id` is a card in a lane, not a placeholder.
+    pub fn is_lane_card(&self, id: &str) -> bool {
+        self.lanes
+            .iter()
+            .flat_map(|l| &l.rows)
+            .any(|r| matches!(r, Row::Card(c) if c.ws_id == id))
+    }
+
+    /// Whether the core will move `id`'s card: false for one that anchors
+    /// another group, and for an id the pane does not show.
+    pub fn movable(&self, id: &str) -> bool {
+        let card = self
+            .lanes
+            .iter()
+            .flat_map(|l| &l.rows)
+            .find_map(|r| match r {
+                Row::Card(c) if c.ws_id == id => Some(c.movable),
                 _ => None,
+            });
+        let strip = || {
+            self.needs
+                .rows
+                .iter()
+                .find(|r| r.ws_id == id)
+                .map(|r| r.movable)
+        };
+        card.or_else(strip).unwrap_or(false)
+    }
+
+    /// The lane `id`'s card or placeholder sits in, or for a Needs you
+    /// row the lane its card is filed in, even folded.
+    pub fn lane_of(&self, id: &str) -> Option<LaneKey> {
+        self.lanes
+            .iter()
+            .find(|l| l.rows.iter().any(|r| r.ws_id() == id))
+            .map(|l| l.key)
+            .or_else(|| {
+                let row = self.needs.rows.iter().find(|r| r.ws_id == id)?;
+                row.lane
             })
+    }
+
+    /// A lane's rows top to bottom, cards and placeholders. A placeholder
+    /// stands for a real tab in its lane (drop.ts), so a card can land
+    /// above one.
+    pub fn lane_rows(&self, key: LaneKey) -> Vec<&Row> {
+        self.lanes
+            .iter()
+            .filter(|l| l.key == key)
+            .flat_map(|l| &l.rows)
             .collect()
     }
 
@@ -214,12 +390,22 @@ impl PaneModel {
             OLDEST_WORD,
             GHOST_GAP,
             KEYS_TITLE,
+            PICK_TITLE,
+            PICK_CANCEL.0,
+            PICK_CANCEL.1,
+            PROJECTS_SOON,
+            DROP_HERE,
+            DROP_AT_END,
         ]
         .iter()
         .map(|s| (*s).to_string())
         .collect();
         for (key, what) in KEYS {
             out.push(key.to_string());
+            out.push(what.to_string());
+        }
+        for (key, what) in pick_rows() {
+            out.push(key);
             out.push(what.to_string());
         }
         if let NextLine::Step { title, place } = &self.next {
@@ -311,8 +497,18 @@ pub fn unread_text(n: Option<f64>) -> String {
     }
 }
 
+/// The core's view mode as the pane's view; anything but Projects is All.
+pub fn view_of(view: &ViewModel) -> PaneView {
+    if view.mode == ViewMode::Projects.as_str() {
+        PaneView::Projects
+    } else {
+        PaneView::All
+    }
+}
+
 fn build(session: &mut Session, data: &Data, view: &ViewModel) -> PaneModel {
     PaneModel {
+        view: view_of(view),
         next: next_line(data, view),
         needs: needs(session, data, view),
         lanes: lanes(session, data, view),
@@ -343,6 +539,8 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
                 title: title_of(w, id),
                 line: needs_line(session, data, w),
                 ink: session.needs_ink(w),
+                lane: w.map(|w| session.lane_of(data, w)),
+                movable: !is_foreign_anchor(session, data, id),
             }
         })
         .collect();
@@ -380,7 +578,7 @@ fn left_off(text: &str) -> String {
     }
 }
 
-fn card(session: &mut Session, data: &Data, id: &str) -> Card {
+fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card {
     let w = data.ws_by_id(id);
     let style = session.status_info(data, w);
     let density = card_density(data, w);
@@ -405,6 +603,9 @@ fn card(session: &mut Session, data: &Data, id: &str) -> Card {
         left_off,
         detail: whole_words(&session.card_detail(w), DETAIL_MAX),
         detail_lines: detail_lines(density),
+        waiting: view.needs.list.iter().any(|w| w == id),
+        rank: session.state_rank(data, w),
+        movable: !is_foreign_anchor(session, data, id),
     }
 }
 
@@ -425,7 +626,7 @@ fn lanes(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Lane> {
                 out.push(lane_head(session, data, *lane, header, true));
             }
             LaneEntry::Ws { ws_id, .. } => {
-                let c = card(session, data, ws_id);
+                let c = card(session, data, view, ws_id);
                 push_row(&mut out, Row::Card(c));
             }
             LaneEntry::Ghost { ws_id, .. } => {
@@ -434,6 +635,7 @@ fn lanes(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Lane> {
                     ws_id: ws_id.clone(),
                     title: title_of(w, ws_id),
                     text: session.placeholder_text(w),
+                    rank: session.state_rank(data, w),
                 };
                 push_row(&mut out, row);
             }
@@ -579,14 +781,165 @@ mod tests {
     }
 
     #[test]
+    fn picks_lanes_by_digit_in_display_order() {
+        assert_eq!(lane_for_digit('1'), Some(LaneKey::Main));
+        assert_eq!(lane_for_digit('4'), Some(LaneKey::Parked));
+        assert_eq!(lane_for_digit('5'), Some(LaneKey::Unsorted));
+        assert_eq!(lane_for_digit('0'), None);
+        assert_eq!(lane_for_digit('6'), None);
+        assert_eq!(lane_for_digit('m'), None);
+        let rows = pick_rows();
+        assert_eq!(rows.first(), Some(&("1".to_string(), "Main activity")));
+        assert_eq!(rows.last(), Some(&("Esc".to_string(), "cancel")));
+    }
+
+    #[test]
+    fn keeps_a_keys_boxs_last_row_when_the_pane_is_short() {
+        let rows = [1, 2, 3, 4];
+        assert_eq!(fit_rows(&rows, 9), [1, 2, 3, 4]);
+        assert_eq!(fit_rows(&rows, 3), [1, 2, 4]);
+        assert_eq!(fit_rows(&rows, 1), [4]);
+        assert!(fit_rows(&rows, 0).is_empty());
+    }
+
+    #[test]
+    fn takes_the_view_from_the_cores_mode() {
+        let mut view = ViewModel::default();
+        assert_eq!(view_of(&view), PaneView::All, "before any mode");
+        view.mode = ViewMode::Projects.as_str().into();
+        assert_eq!(view_of(&view), PaneView::Projects);
+        view.mode = ViewMode::All.as_str().into();
+        assert_eq!(view_of(&view), PaneView::All);
+    }
+
+    /// Card "f" waiting in Needs you with its card filed in folded Review.
+    fn walked() -> PaneModel {
+        use fixtures::{card, ghost, lane, needs_row};
+        PaneModel {
+            needs: Needs {
+                count: 3,
+                rows: vec![
+                    needs_row("n", Some(LaneKey::Main)),
+                    needs_row("f", Some(LaneKey::Review)),
+                ],
+                ..Needs::default()
+            },
+            lanes: vec![
+                lane(LaneKey::Main, vec![ghost("n", 0), card("a", 2, false)]),
+                lane(LaneKey::Review, Vec::new()),
+                lane(LaneKey::Parked, vec![card("w", 0, true)]),
+            ],
+            ..PaneModel::default()
+        }
+    }
+
+    #[test]
+    fn walks_the_strip_then_the_lanes_cards() {
+        assert_eq!(walked().card_ids(), ["n", "f", "a", "w"]);
+    }
+
+    #[test]
+    fn knows_who_waits_and_which_lane_holds_each_card() {
+        let m = walked();
+        assert!(m.in_strip("n"));
+        assert!(!m.in_strip("w"));
+        assert!(m.is_waiting("n"));
+        assert!(m.is_waiting("w"), "past the cap");
+        assert!(!m.is_waiting("a"));
+        assert_eq!(m.lane_of("n"), Some(LaneKey::Main), "by its placeholder");
+        assert_eq!(
+            m.lane_of("f"),
+            Some(LaneKey::Review),
+            "filed in a folded lane"
+        );
+        assert_eq!(m.lane_of("w"), Some(LaneKey::Parked));
+        assert_eq!(m.lane_of("z"), None);
+        let main: Vec<&str> = m
+            .lane_rows(LaneKey::Main)
+            .into_iter()
+            .map(Row::ws_id)
+            .collect();
+        assert_eq!(main, ["n", "a"]);
+        assert!(m.lane_rows(LaneKey::Review).is_empty());
+    }
+
+    #[test]
     fn files_rows_under_the_lane_headed_last() {
         let mut lanes = Vec::new();
-        let row = Row::Ghost {
-            ws_id: "a".into(),
-            title: "a".into(),
-            text: "your turn".into(),
-        };
-        push_row(&mut lanes, row);
+        push_row(&mut lanes, fixtures::ghost("a", 0));
         assert!(lanes.is_empty(), "a row before any header is dropped");
+    }
+}
+
+/// Small rows, lanes and strip rows for the pane's unit tests.
+#[cfg(test)]
+pub(crate) mod fixtures {
+    use super::*;
+
+    /// A card with `id` as its title, in state `rank`.
+    pub fn card(id: &str, rank: u8, waiting: bool) -> Row {
+        Row::Card(Card {
+            ws_id: id.into(),
+            icon: Icon {
+                glyph: DOT,
+                ink: None,
+            },
+            title: id.into(),
+            status: String::new(),
+            status_ink: Token::MetaText,
+            left_off: String::new(),
+            detail: String::new(),
+            detail_lines: 1,
+            waiting,
+            rank,
+            movable: true,
+        })
+    }
+
+    /// A placeholder for `id`.
+    pub fn ghost(id: &str, rank: u8) -> Row {
+        Row::Ghost {
+            ws_id: id.into(),
+            title: id.into(),
+            text: "your turn".into(),
+            rank,
+        }
+    }
+
+    /// An open lane holding `rows`.
+    pub fn lane(key: LaneKey, rows: Vec<Row>) -> Lane {
+        Lane {
+            key,
+            empty: rows.is_empty(),
+            name: key.as_str().into(),
+            faint: false,
+            marker: Token::LaneMain,
+            anchor: None,
+            count: rows.len(),
+            pill: PillColors {
+                bg: Token::CountBg,
+                fg: Token::MetaText,
+            },
+            dot: None,
+            collapsed: false,
+            merge_ready: String::new(),
+            rows,
+        }
+    }
+
+    /// A Needs you row for `id`, its card filed in `lane`.
+    pub fn needs_row(id: &str, lane: Option<LaneKey>) -> NeedsRow {
+        NeedsRow {
+            ws_id: id.into(),
+            icon: Icon {
+                glyph: DOT,
+                ink: None,
+            },
+            title: id.into(),
+            line: String::new(),
+            ink: Token::ClayText,
+            lane,
+            movable: true,
+        }
     }
 }

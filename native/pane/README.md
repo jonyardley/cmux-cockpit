@@ -1,13 +1,17 @@
 # cockpit_pane
 
 The cockpit in a terminal: a ratatui pane that draws the core's All view,
-the way the sidebar looks. Read only; nothing here writes to cmux or the
-state file.
+the way the sidebar looks, and takes keys and drags for acting on its
+cards. The pane itself writes nothing: the runner hands each action to
+the core, and the core's cmux calls and state writes go out through the
+runner's outbox.
 
 - `src/model.rs` builds the `PaneModel` from the core's `Model`: every
   word and colour token the pane draws. The core's view model names
   workspaces by id, and a card's title, status and detail come from the
   core's session reads, so the pane builds from the whole model.
+- `src/placing.rs` works out where `m`, shift with Up or Down, and a
+  drag would place a card: a lane and the card it lands above.
 - `src/cursor.rs` holds the card cursor and how far the lanes scroll to
   keep it in sight; `src/text.rs` fits words into columns, only ever
   cutting between words.
@@ -23,10 +27,21 @@ state file.
 
 | Key | Does |
 | --- | --- |
-| Up, Down | Move the cursor between cards |
+| Up, Down, the wheel | Move the cursor between the Needs you rows and the cards |
+| Shift with Up or Down | Reorder the card in its lane |
+| `m`, then 1 to 5 | Move the card to the end of that lane (Esc cancels) |
+| Drag a card | Move it to a lane, or above another card |
+| Enter | Switch to the card's workspace |
+| `d` | Dismiss the card from Needs you |
+| Tab | Flip between All and Projects, in the pane and the sidebar (the pane draws a placeholder for Projects for now) |
 | `?` | Show or hide the keys |
-| Esc | Hide the keys |
+| Esc | Hide the keys, or drop a drag |
 | `q`, Ctrl-C | Quit |
+
+Each of these comes back to the runner as an `Outcome::Act`; the live
+pane hands it to the core straight away, which makes the cmux calls and
+state writes, and draws the core's new view before the next key. Tab
+flips the view in the core, so the sidebar flips with it.
 
 ## Opening it in a cmux split
 

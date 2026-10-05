@@ -2,7 +2,8 @@
 //! runner.
 //!
 //! With no options it draws the All view in the terminal (up and down
-//! move between cards, `?` shows the keys, `q` quits). `--print` runs
+//! move between cards, `?` shows the keys, `q` quits), with the mouse
+//! captured so a card can be dragged. `--print` runs
 //! headless: it prints the view model as text whenever it
 //! changes, and logs on stderr how long each status change took to reach
 //! it. `--once` prints once replay has caught up and every poll has
@@ -159,6 +160,37 @@ fn print_follow(opts: &Options) {
     );
 }
 
+/// Asks the terminal for presses, releases, drags and the wheel, in SGR
+/// form, but not bare movement: crossterm's own capture also reports
+/// every move of the pointer, which would wake the runner for nothing.
+const MOUSE_ON: &str = "\x1b[?1000h\x1b[?1002h\x1b[?1006h";
+const MOUSE_OFF: &str = "\x1b[?1006l\x1b[?1002l\x1b[?1000l";
+
+/// Holds the mouse captured, so the pane sees presses and drags, and lets
+/// it go when dropped: on a clean exit, a failed draw, an early return,
+/// or a panic as it unwinds.
+struct Mouse;
+
+impl Mouse {
+    fn capture() -> Result<Mouse, String> {
+        let mut out = std::io::stdout();
+        out.write_all(MOUSE_ON.as_bytes())
+            .and_then(|()| out.flush())
+            .map(|()| Mouse)
+            .map_err(|e| format!("no mouse: {e}"))
+    }
+}
+
+impl Drop for Mouse {
+    fn drop(&mut self) {
+        // Nothing to do if it fails: the terminal is going away.
+        let mut out = std::io::stdout();
+        let _ = out
+            .write_all(MOUSE_OFF.as_bytes())
+            .and_then(|()| out.flush());
+    }
+}
+
 /// The terminal view: draws each new frame, and hands every key and
 /// resize to the pane. A thread reads the terminal and pokes the runner,
 /// so a key is answered at once without the runner waking on a timer.
@@ -175,6 +207,13 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
         }
     });
     let mut term = ratatui::try_init().map_err(|e| format!("no terminal: {e}"))?;
+    let mouse = match Mouse::capture() {
+        Ok(m) => m,
+        Err(e) => {
+            ratatui::restore();
+            return Err(e);
+        }
+    };
     let mut pane = Pane::new(PaneModel::default());
     let mut logged = Vec::new();
     let mut failed = None;
@@ -182,16 +221,32 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
         opts,
         (tx, rx),
         |feed, call| {
-            if call.fresh {
-                pane.set_view_model(PaneModel::from_core(&mut feed.model));
+            // Each new model is drawn before the next event, so a click
+            // maps to the cards on screen, not to where they were.
+            let mut flow = Ok(());
+            if call.fresh && pane.set_view_model(PaneModel::from_core(&mut feed.model)) {
+                flow = pane.draw(&mut term).map(drop);
             }
             for e in keys_rx.try_iter() {
-                if pane.handle_event(&e) == Outcome::Quit {
-                    return ControlFlow::Break(());
+                if flow.is_err() {
+                    break;
+                }
+                match pane.handle_event(&e) {
+                    Outcome::Quit => return ControlFlow::Break(()),
+                    // The core takes the action at once and holds its
+                    // placement, so the pane redraws from the core's new
+                    // view before the next key: a second quick Shift press
+                    // works from where the first put the card.
+                    Outcome::Act(action) => {
+                        feed.act(action.into());
+                        pane.set_view_model(PaneModel::from_core(&mut feed.model));
+                        flow = pane.draw(&mut term).map(drop);
+                    }
+                    Outcome::Nothing | Outcome::Redraw => {}
                 }
             }
-            match pane.draw(&mut term) {
-                Ok(_) => ControlFlow::Continue(()),
+            match flow.and_then(|()| pane.draw(&mut term).map(drop)) {
+                Ok(()) => ControlFlow::Continue(()),
                 Err(e) => {
                     failed = Some(format!("drawing failed: {e}"));
                     ControlFlow::Break(())
@@ -200,6 +255,7 @@ fn terminal(opts: &Options) -> Result<Vec<String>, String> {
         },
         |line| logged.push(line),
     );
+    drop(mouse);
     ratatui::restore();
     failed.map_or(Ok(logged), Err)
 }

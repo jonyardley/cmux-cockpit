@@ -12,12 +12,17 @@ mod support;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use cockpit_core::lanes::LaneKey;
 use cockpit_core::theme::Token;
-use cockpit_pane::{Outcome, Pane, PaneModel, theme};
+use cockpit_pane::model::PaneView;
+use cockpit_pane::{Action, Outcome, Pane, PaneModel, theme};
+use crux_core::App;
 use ratatui::Terminal;
 use ratatui::backend::TestBackend;
 use ratatui::buffer::Buffer;
-use ratatui::crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
+use ratatui::crossterm::event::{
+    Event, KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
+};
 use ratatui::style::Color;
 
 use support::golden::{SCENES, scene_model};
@@ -27,7 +32,7 @@ const WIDTHS: [u16; 2] = [40, 80];
 const HEIGHT: u16 = 64;
 
 /// Glyphs the pane draws that are not words.
-const MARKS: &str = "▌▸▾■●○◌─│┌┐└┘";
+const MARKS: &str = "▌▔▸▾■●○◌─│┌┐└┘";
 /// Narrow splits the snapshots do not cover, checked for cut words only.
 const NARROW: [u16; 3] = [16, 24, 32];
 
@@ -255,6 +260,7 @@ fn shows_the_lanes_below_the_last_card_in_a_short_pane() {
 #[test]
 fn scrolls_a_line_at_a_time_when_there_are_no_cards() {
     let mut model = pane_for("lanes").model().clone();
+    model.needs.rows.clear();
     for lane in &mut model.lanes {
         lane.rows
             .retain(|r| matches!(r, cockpit_pane::model::Row::Ghost { .. }));
@@ -329,4 +335,665 @@ fn paints_the_ground_and_takes_colours_from_the_theme() {
     assert_eq!(bg, theme::rgb(theme::NEEDS_BG));
     let (fg, _) = cell_colours(buffer, "Next");
     assert_eq!(fg, theme::colour(Token::Heading));
+}
+
+/// Presses Down until the cursor is on the card titled `title`.
+fn cursor_to(pane: &mut Pane, title: &str) -> String {
+    let id = id_of(pane, title);
+    for _ in 0..pane.model().card_ids().len() {
+        if pane.cursor() == Some(id.as_str()) {
+            return id;
+        }
+        press(pane, KeyCode::Down);
+    }
+    assert_eq!(pane.cursor(), Some(id.as_str()), "{title} is not a card");
+    id
+}
+
+/// The workspace id of the card, placeholder or Needs you row titled `title`.
+fn id_of(pane: &Pane, title: &str) -> String {
+    let m = pane.model();
+    let needs = m.needs.rows.iter().map(|r| (&r.title, &r.ws_id));
+    let rows = m.lanes.iter().flat_map(|l| &l.rows).map(|r| match r {
+        cockpit_pane::model::Row::Card(c) => (&c.title, &c.ws_id),
+        cockpit_pane::model::Row::Ghost { title, ws_id, .. } => (title, ws_id),
+    });
+    needs
+        .chain(rows)
+        .find(|(t, _)| t.as_str() == title)
+        .map(|(_, id)| id.clone())
+        .unwrap_or_else(|| panic!("no row titled {title}"))
+}
+
+fn shift(pane: &mut Pane, code: KeyCode) -> Outcome {
+    pane.handle_key(KeyEvent::new(code, KeyModifiers::SHIFT))
+}
+
+fn move_card(id: &str, lane: LaneKey, before: Option<&str>) -> Outcome {
+    Outcome::Act(Action::MoveCard {
+        id: id.to_string(),
+        lane,
+        before: before.map(str::to_string),
+    })
+}
+
+#[test]
+fn shift_up_and_down_reorder_the_card_among_its_lanes_cards_in_its_state() {
+    let mut pane = pane_for("lanes");
+    // Main sorts Tidy strip (finished) above the working Snapshot tests,
+    // Long build and Selected card, then the idle ones.
+    let snapshot = cursor_to(&mut pane, "Snapshot tests");
+    let selected = id_of(&pane, "Selected card");
+    assert_eq!(
+        shift(&mut pane, KeyCode::Up),
+        Outcome::Nothing,
+        "the finished card above sorts first"
+    );
+    assert_eq!(
+        shift(&mut pane, KeyCode::Down),
+        move_card(&snapshot, LaneKey::Main, Some(&selected)),
+        "above the card two below"
+    );
+    assert_eq!(
+        pane.cursor(),
+        Some(snapshot.as_str()),
+        "the cursor stays on it"
+    );
+
+    let long = cursor_to(&mut pane, "Long build");
+    assert_eq!(
+        shift(&mut pane, KeyCode::Up),
+        move_card(&long, LaneKey::Main, Some(&snapshot)),
+        "above the card above"
+    );
+    cursor_to(&mut pane, "Selected card");
+    assert_eq!(
+        shift(&mut pane, KeyCode::Down),
+        Outcome::Nothing,
+        "the idle card below sorts after"
+    );
+}
+
+#[test]
+fn shift_with_up_or_down_does_nothing_on_a_needs_you_row() {
+    let mut pane = pane_for("lanes");
+    cursor_to(&mut pane, "Release notes");
+    assert_eq!(shift(&mut pane, KeyCode::Up), Outcome::Nothing);
+    assert_eq!(shift(&mut pane, KeyCode::Down), Outcome::Nothing);
+}
+
+#[test]
+fn m_shows_the_lanes_and_a_digit_moves_the_card_to_that_lanes_end() {
+    let mut pane = pane_for("lanes");
+    assert_eq!(
+        press(&mut pane, KeyCode::Char('m')),
+        Outcome::Nothing,
+        "no card"
+    );
+    let tidy = cursor_to(&mut pane, "Tidy strip");
+
+    assert_eq!(press(&mut pane, KeyCode::Char('m')), Outcome::Redraw);
+    assert!(pane.picking());
+    let mut term = terminal(40);
+    check_snapshot("lanes-40-pick", &draw(&mut pane, &mut term));
+    assert_eq!(
+        press(&mut pane, KeyCode::Char('4')),
+        move_card(&tidy, LaneKey::Parked, None)
+    );
+    assert!(!pane.picking());
+
+    press(&mut pane, KeyCode::Char('m'));
+    assert_eq!(
+        press(&mut pane, KeyCode::Char('1')),
+        Outcome::Redraw,
+        "its own lane"
+    );
+    press(&mut pane, KeyCode::Char('m'));
+    assert_eq!(press(&mut pane, KeyCode::Esc), Outcome::Redraw);
+    assert!(!pane.picking(), "Esc cancels");
+    press(&mut pane, KeyCode::Char('m'));
+    assert_eq!(
+        press(&mut pane, KeyCode::Char('q')),
+        Outcome::Redraw,
+        "any other key cancels"
+    );
+    assert!(!pane.picking());
+}
+
+#[test]
+fn m_moves_a_needs_you_row_out_of_its_cards_lane() {
+    let mut pane = pane_for("lanes");
+    let chip = cursor_to(&mut pane, "Chip colours");
+    press(&mut pane, KeyCode::Char('m'));
+    assert_eq!(
+        press(&mut pane, KeyCode::Char('1')),
+        Outcome::Redraw,
+        "already in Main"
+    );
+    press(&mut pane, KeyCode::Char('m'));
+    assert_eq!(
+        press(&mut pane, KeyCode::Char('2')),
+        move_card(&chip, LaneKey::Review, None)
+    );
+}
+
+#[test]
+fn enter_switches_to_the_card_under_the_cursor() {
+    let mut pane = pane_for("lanes");
+    assert_eq!(
+        press(&mut pane, KeyCode::Enter),
+        Outcome::Nothing,
+        "no card"
+    );
+    let chip = cursor_to(&mut pane, "Chip colours");
+    assert_eq!(
+        press(&mut pane, KeyCode::Enter),
+        Outcome::Act(Action::SwitchTo { id: chip }),
+        "a Needs you row"
+    );
+    let tidy = cursor_to(&mut pane, "Tidy strip");
+    assert_eq!(
+        press(&mut pane, KeyCode::Enter),
+        Outcome::Act(Action::SwitchTo { id: tidy })
+    );
+}
+
+#[test]
+fn d_dismisses_only_a_session_waiting_in_needs_you() {
+    let mut pane = pane_for("needs-and-next");
+    let oldest = cursor_to(&mut pane, "Oldest question");
+    assert_eq!(
+        press(&mut pane, KeyCode::Char('d')),
+        Outcome::Act(Action::Dismiss { id: oldest })
+    );
+    let fifth = cursor_to(&mut pane, "Fifth, past the cap");
+    assert_eq!(
+        press(&mut pane, KeyCode::Char('d')),
+        Outcome::Act(Action::Dismiss { id: fifth }),
+        "a card past the strip's cap waits too"
+    );
+    cursor_to(&mut pane, "Busy");
+    assert_eq!(press(&mut pane, KeyCode::Char('d')), Outcome::Nothing);
+}
+
+/// A pane wired to its core as the live runner wires it: each action goes
+/// to the core at once, and the pane takes the core's new view before the
+/// next event.
+struct Live {
+    core: cockpit_core::Model,
+    pane: Pane,
+}
+
+impl Live {
+    fn new(scene: &str) -> Live {
+        let mut core = scene_model(scene).unwrap();
+        let pane = Pane::new(PaneModel::from_core(&mut core));
+        Live { core, pane }
+    }
+
+    fn handle(&mut self, event: &Event) -> Outcome {
+        let out = self.pane.handle_event(event);
+        if let Outcome::Act(action) = &out {
+            let _ = cockpit_core::Cockpit.update(action.clone().into(), &mut self.core);
+            self.pane
+                .set_view_model(PaneModel::from_core(&mut self.core));
+        }
+        out
+    }
+
+    fn press(&mut self, code: KeyCode) -> Outcome {
+        self.handle(&Event::Key(KeyEvent::from(code)))
+    }
+
+    fn shift(&mut self, code: KeyCode) -> Outcome {
+        self.handle(&Event::Key(KeyEvent::new(code, KeyModifiers::SHIFT)))
+    }
+
+    /// The ids of a lane's rows in the pane, top to bottom.
+    fn lane(&self, key: LaneKey) -> Vec<String> {
+        self.pane
+            .model()
+            .lane_rows(key)
+            .iter()
+            .map(|r| r.ws_id().to_string())
+            .collect()
+    }
+}
+
+#[test]
+fn tab_asks_the_core_to_flip_and_draws_the_view_the_core_sends() {
+    let mut live = Live::new("lanes");
+    cursor_to(&mut live.pane, "Tidy strip");
+    assert_eq!(live.press(KeyCode::Tab), Outcome::Act(Action::FlipView));
+    assert_eq!(live.pane.view(), PaneView::Projects, "from the core's mode");
+    let mut term = terminal(40);
+    check_snapshot("lanes-40-projects", &draw(&mut live.pane, &mut term));
+    for code in [
+        KeyCode::Down,
+        KeyCode::Enter,
+        KeyCode::Char('d'),
+        KeyCode::Char('m'),
+    ] {
+        assert_eq!(live.press(code), Outcome::Nothing, "{code:?} in Projects");
+    }
+    assert_eq!(live.shift(KeyCode::Up), Outcome::Nothing);
+    assert_eq!(live.press(KeyCode::BackTab), Outcome::Act(Action::FlipView));
+    assert_eq!(live.pane.view(), PaneView::All);
+}
+
+#[test]
+fn tab_alone_does_not_flip_the_pane_until_the_core_says_so() {
+    let mut pane = pane_for("lanes");
+    assert_eq!(
+        press(&mut pane, KeyCode::Tab),
+        Outcome::Act(Action::FlipView)
+    );
+    assert_eq!(pane.view(), PaneView::All, "no second copy of the view");
+}
+
+#[test]
+fn two_quick_shift_downs_move_the_card_two_places_not_one() {
+    let mut live = Live::new("lanes");
+    let working = cursor_to(&mut live.pane, "Snapshot tests");
+    let quiet = id_of(&live.pane, "Long build");
+    let selected = id_of(&live.pane, "Selected card");
+    let merged = id_of(&live.pane, "Card layout fit");
+    let first = live.shift(KeyCode::Down);
+    assert_eq!(first, move_card(&working, LaneKey::Main, Some(&selected)));
+    let second = live.shift(KeyCode::Down);
+    assert_eq!(
+        second,
+        move_card(&working, LaneKey::Main, Some(&merged)),
+        "worked out from where the core holds it after the first"
+    );
+    let main = live.lane(LaneKey::Main);
+    let at = |id: &str| main.iter().position(|r| r == id).unwrap();
+    assert!(at(&quiet) < at(&selected) && at(&selected) < at(&working));
+    assert_eq!(live.pane.cursor(), Some(working.as_str()));
+}
+
+#[test]
+fn a_move_a_dismissal_and_a_drag_show_in_the_pane_from_the_core() {
+    let mut live = Live::new("lanes");
+    let tidy = cursor_to(&mut live.pane, "Tidy strip");
+    live.press(KeyCode::Char('m'));
+    live.press(KeyCode::Char('4'));
+    let parked = &live.core.view.lane_headers[&LaneKey::Parked].workspaces;
+    assert!(
+        parked.contains(&tidy),
+        "filed in Parked, which draws folded"
+    );
+    assert!(!live.lane(LaneKey::Main).contains(&tidy));
+
+    let mut term = terminal(40);
+    draw(&mut live.pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    let snapshot = id_of(&live.pane, "Snapshot tests");
+    let from = row_of(&buffer, "Snapshot tests");
+    let onto = row_of(&buffer, "UNSORTED");
+    live.handle(&mouse(MouseEventKind::Down(MouseButton::Left), from));
+    live.handle(&mouse(MouseEventKind::Drag(MouseButton::Left), onto));
+    live.handle(&mouse(MouseEventKind::Up(MouseButton::Left), onto));
+    assert!(live.lane(LaneKey::Unsorted).contains(&snapshot));
+
+    let mut live = Live::new("needs-and-next");
+    let oldest = cursor_to(&mut live.pane, "Oldest question");
+    assert!(live.pane.model().in_strip(&oldest));
+    live.press(KeyCode::Char('d'));
+    assert!(!live.pane.model().in_strip(&oldest), "gone from Needs you");
+}
+
+#[test]
+fn the_card_keys_and_the_mouse_rest_under_the_keys_overlay() {
+    let mut pane = pane_for("lanes");
+    cursor_to(&mut pane, "Tidy strip");
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    press(&mut pane, KeyCode::Char('?'));
+    for code in [
+        KeyCode::Tab,
+        KeyCode::Enter,
+        KeyCode::Char('d'),
+        KeyCode::Char('m'),
+        KeyCode::Char('1'),
+    ] {
+        assert_eq!(
+            press(&mut pane, code),
+            Outcome::Nothing,
+            "{code:?} under the keys"
+        );
+    }
+    assert_eq!(shift(&mut pane, KeyCode::Up), Outcome::Nothing);
+    assert!(!pane.picking());
+    let row = row_of(term.backend().buffer(), "Snapshot tests");
+    assert_eq!(
+        pane.handle_event(&mouse(MouseEventKind::Down(MouseButton::Left), row)),
+        Outcome::Nothing
+    );
+    assert_eq!(pane.view(), PaneView::All);
+}
+
+fn mouse(kind: MouseEventKind, row: u16) -> Event {
+    Event::Mouse(MouseEvent {
+        kind,
+        column: 10,
+        row,
+        modifiers: KeyModifiers::NONE,
+    })
+}
+
+/// The screen row `needle` first shows on.
+fn row_of(buffer: &Buffer, needle: &str) -> u16 {
+    let w = usize::from(buffer.area.width);
+    let y = buffer
+        .content
+        .chunks(w)
+        .position(|row| {
+            row.iter()
+                .map(|c| c.symbol())
+                .collect::<String>()
+                .contains(needle)
+        })
+        .unwrap_or_else(|| panic!("{needle} is not on screen"));
+    u16::try_from(y).unwrap()
+}
+
+#[test]
+fn a_drag_shows_where_the_card_would_land_and_letting_go_places_it() {
+    let mut pane = pane_for("lanes");
+    let mut term = terminal(40);
+    let screen = draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    let snapshot = id_of(&pane, "Snapshot tests");
+    let ended = id_of(&pane, "Ended agent");
+
+    let from = row_of(&buffer, "Snapshot tests");
+    assert_eq!(
+        pane.handle_event(&mouse(MouseEventKind::Down(MouseButton::Left), from)),
+        Outcome::Redraw
+    );
+    assert_eq!(
+        pane.cursor(),
+        Some(snapshot.as_str()),
+        "a press puts the cursor there"
+    );
+
+    let onto = row_of(&buffer, "Ended agent");
+    let drag = MouseEventKind::Drag(MouseButton::Left);
+    assert_eq!(pane.handle_event(&mouse(drag, onto)), Outcome::Redraw);
+    assert_eq!(
+        pane.handle_event(&mouse(drag, onto)),
+        Outcome::Nothing,
+        "same spot"
+    );
+    check_snapshot("lanes-40-drag", &draw(&mut pane, &mut term));
+
+    assert_eq!(
+        pane.handle_event(&mouse(MouseEventKind::Up(MouseButton::Left), onto)),
+        move_card(&snapshot, LaneKey::Review, Some(&ended))
+    );
+    assert_eq!(pane.drop_target(), None);
+    assert!(!screen.is_empty());
+}
+
+#[test]
+fn a_drag_onto_a_header_or_past_the_end_lands_at_the_top_or_the_end() {
+    let mut pane = pane_for("lanes");
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    let snapshot = id_of(&pane, "Snapshot tests");
+    let loose = id_of(&pane, "Loose workspace");
+    let merged = id_of(&pane, "Merged elsewhere");
+    let from = row_of(&buffer, "Snapshot tests");
+    let down = MouseEventKind::Down(MouseButton::Left);
+    let up = MouseEventKind::Up(MouseButton::Left);
+
+    pane.handle_event(&mouse(down, from));
+    let header = row_of(&buffer, "UNSORTED");
+    assert_eq!(
+        pane.handle_event(&mouse(up, header)),
+        move_card(&snapshot, LaneKey::Unsorted, Some(&loose))
+    );
+
+    pane.handle_event(&mouse(down, from));
+    assert_eq!(
+        pane.handle_event(&mouse(up, HEIGHT - 1)),
+        move_card(&snapshot, LaneKey::Unsorted, Some(&merged)),
+        "below every lane is the last lane's end: after the working card there"
+    );
+}
+
+#[test]
+fn a_click_or_a_drag_back_to_where_it_was_places_nothing() {
+    let mut pane = pane_for("lanes");
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    let from = row_of(&buffer, "Snapshot tests");
+    let down = MouseEventKind::Down(MouseButton::Left);
+    let up = MouseEventKind::Up(MouseButton::Left);
+
+    pane.handle_event(&mouse(down, from));
+    assert_eq!(
+        pane.handle_event(&mouse(up, from)),
+        Outcome::Redraw,
+        "a click"
+    );
+
+    pane.handle_event(&mouse(down, from));
+    let needs = row_of(&buffer, "Needs you");
+    assert_eq!(
+        pane.handle_event(&mouse(up, needs)),
+        Outcome::Redraw,
+        "onto the strip"
+    );
+
+    let ghost = row_of(&buffer, "Chip colours · your turn");
+    pane.handle_event(&mouse(down, ghost));
+    assert_eq!(
+        pane.handle_event(&mouse(up, row_of(&buffer, "UNSORTED"))),
+        Outcome::Nothing,
+        "a placeholder is not dragged"
+    );
+}
+
+#[test]
+fn a_press_on_a_needs_you_row_puts_the_cursor_there_and_the_wheel_moves_it() {
+    let mut pane = pane_for("lanes");
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    let release = id_of(&pane, "Release notes");
+    let row = row_of(&buffer, "Asking: allow git push?");
+    let down = MouseEventKind::Down(MouseButton::Left);
+    assert_eq!(pane.handle_event(&mouse(down, row)), Outcome::Redraw);
+    assert_eq!(pane.cursor(), Some(release.as_str()));
+
+    assert_eq!(
+        pane.handle_event(&mouse(MouseEventKind::ScrollUp, 0)),
+        Outcome::Redraw
+    );
+    assert_eq!(pane.cursor(), Some(id_of(&pane, "Chip colours").as_str()));
+    assert_eq!(
+        pane.handle_event(&mouse(MouseEventKind::ScrollDown, 0)),
+        Outcome::Redraw
+    );
+    assert_eq!(pane.cursor(), Some(release.as_str()));
+}
+
+#[test]
+fn the_mouse_rests_while_the_lane_picker_is_up_or_in_projects() {
+    let mut live = Live::new("lanes");
+    let mut term = terminal(40);
+    draw(&mut live.pane, &mut term);
+    let row = row_of(term.backend().buffer(), "Snapshot tests");
+    let down = mouse(MouseEventKind::Down(MouseButton::Left), row);
+    cursor_to(&mut live.pane, "Tidy strip");
+    live.press(KeyCode::Char('m'));
+    assert_eq!(live.handle(&down), Outcome::Nothing, "picking");
+    live.press(KeyCode::Esc);
+    live.press(KeyCode::Tab);
+    assert_eq!(live.handle(&down), Outcome::Nothing, "in Projects");
+}
+
+#[test]
+fn down_past_the_last_needs_you_row_scrolls_to_the_lanes_below() {
+    let mut model = pane_for("lanes").model().clone();
+    for lane in &mut model.lanes {
+        lane.rows
+            .retain(|r| matches!(r, cockpit_pane::model::Row::Ghost { .. }));
+    }
+    let mut pane = Pane::new(model);
+    assert_eq!(pane.model().card_ids().len(), 2, "only the strip's rows");
+    short_screen(&mut pane, 0);
+    let bottom = short_screen(&mut pane, 40);
+    assert!(
+        bottom.contains("UNSORTED"),
+        "scrolled to the end:\n{bottom}"
+    );
+    assert_eq!(press(&mut pane, KeyCode::Up), Outcome::Redraw);
+}
+
+#[test]
+fn the_lane_picker_moves_the_card_m_was_pressed_on_or_nothing_once_it_goes() {
+    let mut pane = pane_for("lanes");
+    let tidy = cursor_to(&mut pane, "Tidy strip");
+    press(&mut pane, KeyCode::Char('m'));
+    let mut gone = pane.model().clone();
+    for lane in &mut gone.lanes {
+        lane.rows.retain(|r| r.ws_id() != tidy);
+    }
+    pane.set_view_model(gone);
+    assert!(!pane.picking(), "its card went");
+    assert_ne!(pane.cursor(), Some(tidy.as_str()));
+    assert_eq!(press(&mut pane, KeyCode::Char('4')), Outcome::Nothing);
+}
+
+#[test]
+fn the_keys_or_the_lane_picker_drop_a_drag_under_way() {
+    let mut pane = pane_for("lanes");
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    let from = row_of(&buffer, "Snapshot tests");
+    let onto = row_of(&buffer, "Ended agent");
+    for key in ['?', 'm'] {
+        pane.handle_event(&mouse(MouseEventKind::Down(MouseButton::Left), from));
+        pane.handle_event(&mouse(MouseEventKind::Drag(MouseButton::Left), onto));
+        assert!(pane.drop_target().is_some());
+        press(&mut pane, KeyCode::Char(key));
+        assert_eq!(pane.drop_target(), None, "{key} drops it");
+        press(&mut pane, KeyCode::Esc);
+        let up = mouse(MouseEventKind::Up(MouseButton::Left), onto);
+        assert_eq!(
+            pane.handle_event(&up),
+            Outcome::Nothing,
+            "nothing to let go"
+        );
+    }
+}
+
+/// The lanes scene's model with `f` applied to the card titled `title`.
+fn with_card(pane: &Pane, title: &str, f: impl Fn(&mut cockpit_pane::model::Card)) -> PaneModel {
+    let mut model = pane.model().clone();
+    for row in model.lanes.iter_mut().flat_map(|l| &mut l.rows) {
+        if let cockpit_pane::model::Row::Card(c) = row
+            && c.title == title
+        {
+            f(c);
+        }
+    }
+    model
+}
+
+#[test]
+fn a_flip_from_outside_drops_the_lane_picker_and_a_drag() {
+    let mut pane = pane_for("lanes");
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    cursor_to(&mut pane, "Tidy strip");
+    press(&mut pane, KeyCode::Char('m'));
+    let mut projects = pane.model().clone();
+    projects.view = PaneView::Projects;
+    pane.set_view_model(projects.clone());
+    assert!(!pane.picking(), "the picker closes");
+
+    let mut back = projects;
+    back.view = PaneView::All;
+    pane.set_view_model(back.clone());
+    let from = row_of(&buffer, "Snapshot tests");
+    pane.handle_event(&mouse(MouseEventKind::Down(MouseButton::Left), from));
+    let onto = row_of(&buffer, "Ended agent");
+    pane.handle_event(&mouse(MouseEventKind::Drag(MouseButton::Left), onto));
+    assert!(pane.drop_target().is_some());
+    back.view = PaneView::Projects;
+    pane.set_view_model(back);
+    assert_eq!(pane.drop_target(), None, "the drag ends");
+}
+
+#[test]
+fn a_drag_ends_when_its_card_becomes_a_placeholder() {
+    let mut pane = pane_for("lanes");
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    let snapshot = id_of(&pane, "Snapshot tests");
+    let from = row_of(&buffer, "Snapshot tests");
+    let onto = row_of(&buffer, "Ended agent");
+    pane.handle_event(&mouse(MouseEventKind::Down(MouseButton::Left), from));
+    pane.handle_event(&mouse(MouseEventKind::Drag(MouseButton::Left), onto));
+    let mut asking = pane.model().clone();
+    for row in asking.lanes.iter_mut().flat_map(|l| &mut l.rows) {
+        if row.ws_id() == snapshot {
+            *row = cockpit_pane::model::Row::Ghost {
+                ws_id: snapshot.clone(),
+                title: "Snapshot tests".into(),
+                text: "is asking".into(),
+                rank: 0,
+            };
+        }
+    }
+    pane.set_view_model(asking);
+    assert_eq!(pane.drop_target(), None);
+    let up = mouse(MouseEventKind::Up(MouseButton::Left), onto);
+    assert_eq!(pane.handle_event(&up), Outcome::Nothing, "nothing to place");
+}
+
+#[test]
+fn a_card_that_anchors_another_group_is_not_moved() {
+    let mut pane = pane_for("lanes");
+    let model = with_card(&pane, "Snapshot tests", |c| c.movable = false);
+    pane.set_view_model(model);
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    cursor_to(&mut pane, "Snapshot tests");
+    assert_eq!(press(&mut pane, KeyCode::Char('m')), Outcome::Nothing);
+    assert_eq!(shift(&mut pane, KeyCode::Down), Outcome::Nothing);
+    let from = row_of(&buffer, "Snapshot tests");
+    let onto = row_of(&buffer, "Ended agent");
+    pane.handle_event(&mouse(MouseEventKind::Down(MouseButton::Left), from));
+    assert_eq!(
+        pane.handle_event(&mouse(MouseEventKind::Drag(MouseButton::Left), onto)),
+        Outcome::Nothing,
+        "no drag starts"
+    );
+    assert_eq!(
+        press(&mut pane, KeyCode::Enter),
+        Outcome::Act(Action::SwitchTo {
+            id: id_of(&pane, "Snapshot tests")
+        }),
+        "it can still be switched to"
+    );
+}
+
+#[test]
+fn a_short_pane_keeps_the_way_to_close_the_keys() {
+    let mut pane = pane_for("lanes");
+    let mut term = Terminal::new(TestBackend::new(40, 8)).unwrap();
+    press(&mut pane, KeyCode::Char('?'));
+    let screen = draw(&mut pane, &mut term);
+    assert!(screen.contains("close this"), "{screen}");
 }

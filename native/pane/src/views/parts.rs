@@ -1,9 +1,11 @@
-//! Small pieces every section lays out with: the side margin, the cursor's
-//! bar, a count pill, and a line with words at both ends.
+//! Small pieces every section lays out with: the side margin with the
+//! cursor's bar or a drop's mark, a count pill, and a line with words at
+//! both ends.
 
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 
+use crate::model::DROP_MARK;
 use crate::text::width;
 use crate::theme;
 use cockpit_core::ui::PillColors;
@@ -12,6 +14,16 @@ use cockpit_core::ui::PillColors;
 pub const MARGIN: usize = 1;
 /// The bar at the left edge of the card under the cursor.
 pub const CURSOR_BAR: &str = "▌";
+
+/// What the left margin of a line carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Edge {
+    Plain,
+    /// The card under the cursor.
+    Cursor,
+    /// The first line of the card a drag would land above.
+    Drop,
+}
 
 /// The columns between the margins.
 pub fn inner(total: u16) -> usize {
@@ -34,16 +46,16 @@ pub fn pill(count: usize, colours: PillColors) -> Span<'static> {
 }
 
 /// `left` at the start and `right` against the end of `inner` cells, inside
-/// the margins; the left margin carries the cursor's bar when `cursor`.
-/// Callers fit both ends first, so the two never overlap.
+/// the margins; the left margin carries `edge`. Callers fit both ends
+/// first, so the two never overlap.
 pub fn spread(
     left: Vec<Span<'static>>,
     right: Vec<Span<'static>>,
     inner: usize,
-    cursor: bool,
+    edge: Edge,
 ) -> Line<'static> {
     let gap = inner.saturating_sub(spans_width(&left) + spans_width(&right));
-    let mut spans = vec![margin(cursor)];
+    let mut spans = vec![margin(edge)];
     spans.extend(left);
     spans.push(Span::raw(" ".repeat(gap)));
     spans.extend(right);
@@ -51,11 +63,12 @@ pub fn spread(
     Line::from(spans)
 }
 
-/// The left margin: the cursor's bar, or blank.
-fn margin(cursor: bool) -> Span<'static> {
-    if cursor {
-        Span::styled(CURSOR_BAR, theme::ink(cockpit_core::theme::Token::Select))
-    } else {
-        Span::raw(" ".repeat(MARGIN))
+/// The left margin: the cursor's bar, a drop's mark, or blank.
+fn margin(edge: Edge) -> Span<'static> {
+    let select = theme::ink(cockpit_core::theme::Token::Select);
+    match edge {
+        Edge::Plain => Span::raw(" ".repeat(MARGIN)),
+        Edge::Cursor => Span::styled(CURSOR_BAR, select),
+        Edge::Drop => Span::styled(DROP_MARK, select),
     }
 }
