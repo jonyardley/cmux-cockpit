@@ -1,0 +1,504 @@
+{
+  "view": "Projects",
+  "next": {
+    "Step": {
+      "title": "One: docs",
+      "place": "1 of 2"
+    }
+  },
+  "needs": {
+    "count": 1,
+    "wait": "oldest 1m",
+    "late": false,
+    "rows": [
+      {
+        "ws_id": "one-b",
+        "icon": {
+          "glyph": "●",
+          "ink": "clay"
+        },
+        "title": "One: docs",
+        "line": "Your turn: Read the draft in #142 and say go.",
+        "ink": "clayText",
+        "lane": "unsorted",
+        "movable": true
+      }
+    ],
+    "more": ""
+  },
+  "lanes": [
+    {
+      "key": "main",
+      "empty": true,
+      "name": "MAIN ACTIVITY",
+      "faint": true,
+      "marker": "laneMain",
+      "anchor": null,
+      "count": 0,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": []
+    },
+    {
+      "key": "review",
+      "empty": true,
+      "name": "FOR REVIEW",
+      "faint": true,
+      "marker": "laneReview",
+      "anchor": null,
+      "count": 0,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": []
+    },
+    {
+      "key": "bg",
+      "empty": true,
+      "name": "BACKGROUND",
+      "faint": true,
+      "marker": "laneBackground",
+      "anchor": null,
+      "count": 0,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": []
+    },
+    {
+      "key": "parked",
+      "empty": true,
+      "name": "PARKED",
+      "faint": true,
+      "marker": "laneParked",
+      "anchor": null,
+      "count": 0,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": []
+    },
+    {
+      "key": "unsorted",
+      "empty": false,
+      "name": "UNSORTED",
+      "faint": false,
+      "marker": "laneUnsorted",
+      "anchor": null,
+      "count": 5,
+      "pill": {
+        "bg": "clayCount",
+        "fg": "clayText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": [
+        {
+          "Ghost": {
+            "ws_id": "one-b",
+            "title": "One: docs",
+            "text": "your turn",
+            "rank": 0
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "two",
+            "icon": {
+              "glyph": "●",
+              "ink": "green"
+            },
+            "title": "Two: release",
+            "status": "10m",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 1,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "one-a",
+            "icon": {
+              "glyph": "●",
+              "ink": "blue"
+            },
+            "title": "One: parser rewrite for the streaming tokeniser",
+            "status": "7m",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 2,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "two-merged",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "Two: changelog",
+            "status": "15m",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [],
+            "merged": [
+              {
+                "pieces": [
+                  {
+                    "text": "Park",
+                    "ink": "secondary"
+                  }
+                ],
+                "gives_way": false
+              },
+              {
+                "pieces": [
+                  {
+                    "text": "Close",
+                    "ink": "text"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": true
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "elsewhere",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "Scratch",
+            "status": "",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        }
+      ]
+    }
+  ],
+  "projects": [
+    {
+      "Header": {
+        "key": "/dev/app-one",
+        "id": "p:/dev/app-one",
+        "name": "App One",
+        "color": 14251863,
+        "count": 2,
+        "pill": {
+          "bg": "clayCount",
+          "fg": "clayText"
+        },
+        "dot": null,
+        "collapsed": false,
+        "can_open": true
+      }
+    },
+    {
+      "Editor": {
+        "key": "/dev/app-one",
+        "is_new": false,
+        "name": "App One",
+        "color": "#D97757",
+        "icon": "star.fill",
+        "root": "~/dev/app-one",
+        "search": "",
+        "icons": [
+          "folder.fill",
+          "chevron.left.forwardslash.chevron.right",
+          "terminal.fill",
+          "music.note",
+          "house.fill",
+          "bag.fill",
+          "star.fill",
+          "bolt.fill"
+        ],
+        "note": "",
+        "problem": null,
+        "remove": "Remove project",
+        "matches": "Sessions in /dev/app-one",
+        "suggestions": []
+      }
+    },
+    {
+      "Card": {
+        "ws_id": "one-a",
+        "icon": {
+          "glyph": "●",
+          "ink": "blue"
+        },
+        "title": "One: parser rewrite for the streaming tokeniser",
+        "status": "Working 7m",
+        "status_ink": "blueText",
+        "left_off": "",
+        "chips": [
+          {
+            "pieces": [
+              {
+                "text": "#148",
+                "ink": "secondary"
+              },
+              {
+                "text": "draft",
+                "ink": "metaText"
+              },
+              {
+                "text": "+342 −17",
+                "ink": "faint"
+              }
+            ],
+            "gives_way": false
+          },
+          {
+            "pieces": [
+              {
+                "text": "parser-streaming-tokeniser",
+                "ink": "secondary"
+              }
+            ],
+            "gives_way": true
+          }
+        ],
+        "merged": [],
+        "detail": "",
+        "detail_lines": 2,
+        "waiting": false,
+        "rank": 2,
+        "movable": true,
+        "dimmed": false
+      }
+    },
+    {
+      "Ghost": {
+        "ws_id": "one-b",
+        "title": "One: docs",
+        "text": "your turn"
+      }
+    },
+    {
+      "Header": {
+        "key": "/dev/app-two",
+        "id": "p:/dev/app-two",
+        "name": "App Two",
+        "color": 6986700,
+        "count": 2,
+        "pill": {
+          "bg": "countBg",
+          "fg": "metaText"
+        },
+        "dot": null,
+        "collapsed": false,
+        "can_open": false
+      }
+    },
+    {
+      "Card": {
+        "ws_id": "two",
+        "icon": {
+          "glyph": "●",
+          "ink": "green"
+        },
+        "title": "Two: release",
+        "status": "Finished 10m",
+        "status_ink": "greenText",
+        "left_off": "",
+        "chips": [
+          {
+            "pieces": [
+              {
+                "text": "#12",
+                "ink": "secondary"
+              },
+              {
+                "text": "open",
+                "ink": "metaText"
+              }
+            ],
+            "gives_way": false
+          },
+          {
+            "pieces": [
+              {
+                "text": "main",
+                "ink": "secondary"
+              }
+            ],
+            "gives_way": true
+          },
+          {
+            "pieces": [
+              {
+                "text": "To review →",
+                "ink": "secondary"
+              }
+            ],
+            "gives_way": false
+          }
+        ],
+        "merged": [],
+        "detail": "",
+        "detail_lines": 2,
+        "waiting": false,
+        "rank": 1,
+        "movable": true,
+        "dimmed": false
+      }
+    },
+    {
+      "Card": {
+        "ws_id": "two-merged",
+        "icon": {
+          "glyph": "○",
+          "ink": null
+        },
+        "title": "Two: changelog",
+        "status": "Idle 15m",
+        "status_ink": "metaText",
+        "left_off": "",
+        "chips": [
+          {
+            "pieces": [
+              {
+                "text": "#14",
+                "ink": "secondary"
+              },
+              {
+                "text": "merged",
+                "ink": "metaText"
+              }
+            ],
+            "gives_way": false
+          }
+        ],
+        "merged": [
+          {
+            "pieces": [
+              {
+                "text": "Park",
+                "ink": "secondary"
+              }
+            ],
+            "gives_way": false
+          },
+          {
+            "pieces": [
+              {
+                "text": "Close",
+                "ink": "text"
+              }
+            ],
+            "gives_way": false
+          }
+        ],
+        "detail": "",
+        "detail_lines": 2,
+        "waiting": false,
+        "rank": 3,
+        "movable": true,
+        "dimmed": true
+      }
+    },
+    {
+      "Header": {
+        "key": "other",
+        "id": "p:other",
+        "name": "Other",
+        "color": 10526357,
+        "count": 1,
+        "pill": {
+          "bg": "countBg",
+          "fg": "metaText"
+        },
+        "dot": null,
+        "collapsed": false,
+        "can_open": false
+      }
+    },
+    {
+      "Card": {
+        "ws_id": "elsewhere",
+        "icon": {
+          "glyph": "○",
+          "ink": null
+        },
+        "title": "Scratch",
+        "status": "No agent",
+        "status_ink": "faint",
+        "left_off": "",
+        "chips": [],
+        "merged": [],
+        "detail": "",
+        "detail_lines": 2,
+        "waiting": false,
+        "rank": 3,
+        "movable": true,
+        "dimmed": false
+      }
+    },
+    "NewProject",
+    {
+      "QuietHeader": {
+        "count": 1,
+        "collapsed": false
+      }
+    },
+    {
+      "Quiet": {
+        "key": "/dev/app-three",
+        "id": "q:/dev/app-three",
+        "name": "App Three",
+        "color": 7900253,
+        "can_open": false
+      }
+    }
+  ],
+  "menu": null
+}

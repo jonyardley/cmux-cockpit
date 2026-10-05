@@ -1,0 +1,430 @@
+{
+  "view": "All",
+  "next": "Nothing",
+  "needs": {
+    "count": 0,
+    "wait": "",
+    "late": false,
+    "rows": [],
+    "more": ""
+  },
+  "lanes": [
+    {
+      "key": "main",
+      "empty": false,
+      "name": "MAIN ACTIVITY",
+      "faint": false,
+      "marker": "laneMain",
+      "anchor": null,
+      "count": 1,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "1 ready to merge",
+      "rows": [
+        {
+          "Card": {
+            "ws_id": "waiting",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "waiting card",
+            "status": "No agent",
+            "status_ink": "faint",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "#9",
+                    "ink": "secondary"
+                  },
+                  {
+                    "text": "ready",
+                    "ink": "greenDeep"
+                  }
+                ],
+                "gives_way": false
+              },
+              {
+                "pieces": [
+                  {
+                    "text": "feat-9",
+                    "ink": "secondary"
+                  }
+                ],
+                "gives_way": true
+              },
+              {
+                "pieces": [
+                  {
+                    "text": "To review →",
+                    "ink": "greenDeep"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 2,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        }
+      ]
+    },
+    {
+      "key": "review",
+      "empty": false,
+      "name": "FOR REVIEW",
+      "faint": false,
+      "marker": "laneReview",
+      "anchor": null,
+      "count": 8,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "1 ready to merge",
+      "rows": [
+        {
+          "Card": {
+            "ws_id": "ready",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "ready card",
+            "status": "No agent",
+            "status_ink": "faint",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "#1 · ready",
+                    "ink": "greenDeep"
+                  },
+                  {
+                    "text": "+120 −8",
+                    "ink": "faint"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "draft",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "draft card",
+            "status": "No agent",
+            "status_ink": "faint",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "#2 · draft",
+                    "ink": "secondary"
+                  },
+                  {
+                    "text": "+1.2k −56",
+                    "ink": "faint"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "failing",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "failing card",
+            "status": "No agent",
+            "status_ink": "faint",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "#3 · 1 failing",
+                    "ink": "redText"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "running",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "running card",
+            "status": "No agent",
+            "status_ink": "faint",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "#4 · running",
+                    "ink": "blueText"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "conflicts",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "conflicts card",
+            "status": "No agent",
+            "status_ink": "faint",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "#5 · conflicts",
+                    "ink": "redText"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "blocked",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "blocked card",
+            "status": "No agent",
+            "status_ink": "faint",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "#6",
+                    "ink": "secondary"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "merged",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "merged card",
+            "status": "No agent",
+            "status_ink": "faint",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "#7 · merged",
+                    "ink": "secondary"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "merged": [
+              {
+                "pieces": [
+                  {
+                    "text": "Park",
+                    "ink": "secondary"
+                  }
+                ],
+                "gives_way": false
+              },
+              {
+                "pieces": [
+                  {
+                    "text": "Close",
+                    "ink": "text"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": true
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "closed",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "closed card",
+            "status": "No agent",
+            "status_ink": "faint",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "#8 · closed",
+                    "ink": "secondary"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        }
+      ]
+    },
+    {
+      "key": "bg",
+      "empty": true,
+      "name": "BACKGROUND",
+      "faint": true,
+      "marker": "laneBackground",
+      "anchor": null,
+      "count": 0,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": []
+    },
+    {
+      "key": "parked",
+      "empty": true,
+      "name": "PARKED",
+      "faint": true,
+      "marker": "laneParked",
+      "anchor": null,
+      "count": 0,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": []
+    },
+    {
+      "key": "unsorted",
+      "empty": true,
+      "name": "UNSORTED",
+      "faint": true,
+      "marker": "laneUnsorted",
+      "anchor": null,
+      "count": 0,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": []
+    }
+  ],
+  "projects": [],
+  "menu": null
+}

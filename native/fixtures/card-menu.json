@@ -1,0 +1,622 @@
+{
+  "view": "All",
+  "next": {
+    "Step": {
+      "title": "Chip colours",
+      "place": "1 of 3"
+    }
+  },
+  "needs": {
+    "count": 2,
+    "wait": "oldest 5m",
+    "late": false,
+    "rows": [
+      {
+        "ws_id": "needs",
+        "icon": {
+          "glyph": "●",
+          "ink": "clay"
+        },
+        "title": "Chip colours",
+        "line": "Your turn: Which green should the ready chip use?",
+        "ink": "clayText",
+        "lane": "main",
+        "movable": true
+      },
+      {
+        "ws_id": "asking",
+        "icon": {
+          "glyph": "●",
+          "ink": "amber"
+        },
+        "title": "Release notes",
+        "line": "Asking: allow git push?",
+        "ink": "amberText",
+        "lane": "main",
+        "movable": true
+      }
+    ],
+    "more": ""
+  },
+  "lanes": [
+    {
+      "key": "main",
+      "empty": false,
+      "name": "MAIN ACTIVITY",
+      "faint": false,
+      "marker": "laneMain",
+      "anchor": null,
+      "count": 8,
+      "pill": {
+        "bg": "clayCount",
+        "fg": "clayText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": [
+        {
+          "Ghost": {
+            "ws_id": "needs",
+            "title": "Chip colours",
+            "text": "your turn",
+            "rank": 0
+          }
+        },
+        {
+          "Ghost": {
+            "ws_id": "asking",
+            "title": "Release notes",
+            "text": "is asking",
+            "rank": 0
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "ready",
+            "icon": {
+              "glyph": "●",
+              "ink": "green"
+            },
+            "title": "Tidy strip",
+            "status": "Finished 6m",
+            "status_ink": "greenText",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "To review →",
+                    "ink": "secondary"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "merged": [],
+            "detail": "Done: the strip now groups by repo.",
+            "detail_lines": 2,
+            "waiting": false,
+            "rank": 1,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "working",
+            "icon": {
+              "glyph": "●",
+              "ink": "blue"
+            },
+            "title": "Snapshot tests",
+            "status": "Working 14m",
+            "status_ink": "blueText",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "#130",
+                    "ink": "secondary"
+                  },
+                  {
+                    "text": "draft",
+                    "ink": "metaText"
+                  },
+                  {
+                    "text": "+342 −17",
+                    "ink": "faint"
+                  }
+                ],
+                "gives_way": false
+              },
+              {
+                "pieces": [
+                  {
+                    "text": "snapshot-tests",
+                    "ink": "secondary"
+                  },
+                  {
+                    "text": "●",
+                    "ink": "secondary"
+                  }
+                ],
+                "gives_way": true
+              }
+            ],
+            "merged": [],
+            "detail": "Recording the view tree as text.",
+            "detail_lines": 2,
+            "waiting": false,
+            "rank": 2,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "quiet",
+            "icon": {
+              "glyph": "○",
+              "ink": "blue"
+            },
+            "title": "Long build",
+            "status": "Working 40m · quiet 17m",
+            "status_ink": "blueText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 2,
+            "waiting": false,
+            "rank": 2,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "selected",
+            "icon": {
+              "glyph": "●",
+              "ink": "blue"
+            },
+            "title": "Selected card",
+            "status": "Working 1m",
+            "status_ink": "blueText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 2,
+            "waiting": false,
+            "rank": 2,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "merged",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "Card layout fit",
+            "status": "Idle 15m",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [
+              {
+                "pieces": [
+                  {
+                    "text": "#176",
+                    "ink": "secondary"
+                  },
+                  {
+                    "text": "merged",
+                    "ink": "metaText"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "merged": [
+              {
+                "pieces": [
+                  {
+                    "text": "Park",
+                    "ink": "secondary"
+                  }
+                ],
+                "gives_way": false
+              },
+              {
+                "pieces": [
+                  {
+                    "text": "Close",
+                    "ink": "text"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "detail": "",
+            "detail_lines": 2,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": true
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "untimed",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "Untimed card",
+            "status": "Idle",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 2,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        }
+      ]
+    },
+    {
+      "key": "review",
+      "empty": false,
+      "name": "FOR REVIEW",
+      "faint": false,
+      "marker": "laneReview",
+      "anchor": null,
+      "count": 2,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": [
+        {
+          "Card": {
+            "ws_id": "ended",
+            "icon": {
+              "glyph": "●",
+              "ink": "green"
+            },
+            "title": "Ended agent",
+            "status": "Finished 15m",
+            "status_ink": "greenText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "idle",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "Left off",
+            "status": "Idle 1h",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        }
+      ]
+    },
+    {
+      "key": "bg",
+      "empty": false,
+      "name": "BACKGROUND",
+      "faint": false,
+      "marker": "laneBackground",
+      "anchor": null,
+      "count": 2,
+      "pill": {
+        "bg": "blueCount",
+        "fg": "blueText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": [
+        {
+          "Card": {
+            "ws_id": "waiting",
+            "icon": {
+              "glyph": "●",
+              "ink": "blue"
+            },
+            "title": "Iteration timings",
+            "status": "Waiting 4m · 1 shell",
+            "status_ink": "blueText",
+            "left_off": "You: hi",
+            "chips": [],
+            "merged": [],
+            "detail": "The batch resumes by itself once load drops.",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 2,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "none",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "No agent",
+            "status": "No agent",
+            "status_ink": "faint",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false
+          }
+        }
+      ]
+    },
+    {
+      "key": "parked",
+      "empty": false,
+      "name": "PARKED",
+      "faint": true,
+      "marker": "laneParked",
+      "anchor": null,
+      "count": 1,
+      "pill": {
+        "bg": "blueCount",
+        "fg": "blueText"
+      },
+      "dot": {
+        "glyph": "●",
+        "ink": "blue"
+      },
+      "collapsed": true,
+      "merge_ready": "",
+      "rows": []
+    },
+    {
+      "key": "unsorted",
+      "empty": false,
+      "name": "UNSORTED",
+      "faint": false,
+      "marker": "laneUnsorted",
+      "anchor": null,
+      "count": 2,
+      "pill": {
+        "bg": "blueCount",
+        "fg": "blueText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": [
+        {
+          "Card": {
+            "ws_id": "loose",
+            "icon": {
+              "glyph": "●",
+              "ink": "blue"
+            },
+            "title": "Loose workspace",
+            "status": "3m",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 2,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "loose-merged",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "Merged elsewhere",
+            "status": "",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [],
+            "merged": [
+              {
+                "pieces": [
+                  {
+                    "text": "Park",
+                    "ink": "secondary"
+                  }
+                ],
+                "gives_way": false
+              },
+              {
+                "pieces": [
+                  {
+                    "text": "Close",
+                    "ink": "text"
+                  }
+                ],
+                "gives_way": false
+              }
+            ],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 3,
+            "movable": true,
+            "dimmed": true
+          }
+        }
+      ]
+    }
+  ],
+  "projects": [],
+  "menu": {
+    "target": {
+      "Card": {
+        "id": "needs"
+      }
+    },
+    "items": [
+      {
+        "Item": {
+          "label": "New session (project has no folder)",
+          "action": "NewSession"
+        }
+      },
+      "Divider",
+      {
+        "Item": {
+          "label": "✓ Lane: Main activity",
+          "action": {
+            "Lane": "main"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Lane: For review",
+          "action": {
+            "Lane": "review"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Lane: Background",
+          "action": {
+            "Lane": "bg"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Lane: Parked",
+          "action": {
+            "Lane": "parked"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Lane: Unsorted",
+          "action": {
+            "Lane": "unsorted"
+          }
+        }
+      },
+      "Divider",
+      {
+        "Item": {
+          "label": "Project: App One",
+          "action": {
+            "Project": "/dev/app-one"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Project: App Two",
+          "action": {
+            "Project": "/dev/app-two"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Project: App Three",
+          "action": {
+            "Project": "/dev/app-three"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "No project override set",
+          "action": "ClearProjectOverride"
+        }
+      },
+      "Divider",
+      {
+        "Item": {
+          "label": "New project (folder has one, or none)",
+          "action": "NewProjectFromFolder"
+        }
+      },
+      "Divider",
+      {
+        "Item": {
+          "label": "Pin",
+          "action": "TogglePin"
+        }
+      },
+      {
+        "Item": {
+          "label": "Mark read",
+          "action": "MarkRead"
+        }
+      },
+      {
+        "Item": {
+          "label": "No PR to open",
+          "action": "OpenPr"
+        }
+      },
+      {
+        "Item": {
+          "label": "Keep: for a merged PR's buttons",
+          "action": "KeepMerged"
+        }
+      },
+      {
+        "Item": {
+          "label": "Dismiss needs you",
+          "action": "ToggleNeeds"
+        }
+      }
+    ]
+  }
+}

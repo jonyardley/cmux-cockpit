@@ -1,0 +1,250 @@
+{
+  "view": "All",
+  "next": {
+    "Step": {
+      "title": "Oldest question",
+      "place": "1 of 6"
+    }
+  },
+  "needs": {
+    "count": 5,
+    "wait": "oldest 30m",
+    "late": true,
+    "rows": [
+      {
+        "ws_id": "n1",
+        "icon": {
+          "glyph": "●",
+          "ink": "clay"
+        },
+        "title": "Oldest question",
+        "line": "Your turn: Should the strip cap at four?",
+        "ink": "clayText",
+        "lane": "unsorted",
+        "movable": true
+      },
+      {
+        "ws_id": "n2",
+        "icon": {
+          "glyph": "●",
+          "ink": "clay"
+        },
+        "title": "Second",
+        "line": "Your turn: reply \"1b 2a\" on the bridge and the store.",
+        "ink": "clayText",
+        "lane": "unsorted",
+        "movable": true
+      },
+      {
+        "ws_id": "n3",
+        "icon": {
+          "glyph": "●",
+          "ink": "clay"
+        },
+        "title": "Third",
+        "line": "Your turn: the work is finished. Run /clear now.",
+        "ink": "clayText",
+        "lane": "unsorted",
+        "movable": true
+      },
+      {
+        "ws_id": "ask",
+        "icon": {
+          "glyph": "●",
+          "ink": "amber"
+        },
+        "title": "Publish",
+        "line": "Asking: allow npm publish?",
+        "ink": "amberText",
+        "lane": "unsorted",
+        "movable": true
+      }
+    ],
+    "more": "+1 more"
+  },
+  "lanes": [
+    {
+      "key": "main",
+      "empty": true,
+      "name": "MAIN ACTIVITY",
+      "faint": true,
+      "marker": "laneMain",
+      "anchor": null,
+      "count": 0,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": []
+    },
+    {
+      "key": "review",
+      "empty": true,
+      "name": "FOR REVIEW",
+      "faint": true,
+      "marker": "laneReview",
+      "anchor": null,
+      "count": 0,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": []
+    },
+    {
+      "key": "bg",
+      "empty": true,
+      "name": "BACKGROUND",
+      "faint": true,
+      "marker": "laneBackground",
+      "anchor": null,
+      "count": 0,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": []
+    },
+    {
+      "key": "parked",
+      "empty": true,
+      "name": "PARKED",
+      "faint": true,
+      "marker": "laneParked",
+      "anchor": null,
+      "count": 0,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": []
+    },
+    {
+      "key": "unsorted",
+      "empty": false,
+      "name": "UNSORTED",
+      "faint": false,
+      "marker": "laneUnsorted",
+      "anchor": null,
+      "count": 7,
+      "pill": {
+        "bg": "clayCount",
+        "fg": "clayText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "rows": [
+        {
+          "Ghost": {
+            "ws_id": "n1",
+            "title": "Oldest question",
+            "text": "your turn",
+            "rank": 0
+          }
+        },
+        {
+          "Ghost": {
+            "ws_id": "ask",
+            "title": "Publish",
+            "text": "is asking",
+            "rank": 0
+          }
+        },
+        {
+          "Ghost": {
+            "ws_id": "n2",
+            "title": "Second",
+            "text": "your turn",
+            "rank": 0
+          }
+        },
+        {
+          "Ghost": {
+            "ws_id": "n3",
+            "title": "Third",
+            "text": "your turn",
+            "rank": 0
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "n4",
+            "icon": {
+              "glyph": "●",
+              "ink": "clay"
+            },
+            "title": "Fifth, past the cap",
+            "status": "<1m",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "One more thing",
+            "detail_lines": 1,
+            "waiting": true,
+            "rank": 0,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "ready",
+            "icon": {
+              "glyph": "●",
+              "ink": "green"
+            },
+            "title": "Finished while away",
+            "status": "4m",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 1,
+            "movable": true,
+            "dimmed": false
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "busy",
+            "icon": {
+              "glyph": "●",
+              "ink": "blue"
+            },
+            "title": "Busy",
+            "status": "1m",
+            "status_ink": "metaText",
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": false,
+            "rank": 2,
+            "movable": true,
+            "dimmed": false
+          }
+        }
+      ]
+    }
+  ],
+  "projects": [],
+  "menu": null
+}
