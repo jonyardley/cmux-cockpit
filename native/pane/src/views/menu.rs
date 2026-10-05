@@ -48,14 +48,16 @@ fn line(item: &MenuItem, room: usize, lit: bool) -> Line<'static> {
     }
 }
 
-/// Draws `view` in the middle of `area`, the item at `at` lit.
-pub fn draw(frame: &mut Frame<'_>, area: Rect, view: &MenuView, at: usize) {
+/// Draws `view` in the middle of `area`, the item at `at` lit, its list
+/// from `top` while that keeps `at` in sight. Returns where the list
+/// started, for the next draw.
+pub fn draw(frame: &mut Frame<'_>, area: Rect, view: &MenuView, at: usize, top: usize) -> usize {
     let box_width = MAX_WIDTH.min(area.width);
     // Borders, and the bar's column and a space after the words.
     let room = usize::from(box_width).saturating_sub(4);
     // Borders take two lines.
     let tall = usize::from(area.height).saturating_sub(2);
-    let shown = window(view.items.len(), at, tall);
+    let shown = window(view.items.len(), at, tall, top);
     let lines: Vec<Line<'static>> = view
         .items
         .iter()
@@ -86,4 +88,5 @@ pub fn draw(frame: &mut Frame<'_>, area: Rect, view: &MenuView, at: usize) {
         .style(theme::base());
     frame.render_widget(Clear, spot);
     frame.render_widget(Paragraph::new(lines).block(block), spot);
+    shown.start
 }

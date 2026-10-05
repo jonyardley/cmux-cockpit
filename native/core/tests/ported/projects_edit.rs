@@ -80,16 +80,6 @@ fn last_cwd(s: &Session) -> Option<String> {
     params.into_iter().find(|(k, _)| k == "cwd").map(|(_, v)| v)
 }
 
-/// A menu's items in words, as the sidebar test's `menuOf` lists them
-/// (dividers left out).
-fn menu_words(items: &[MenuItem]) -> Vec<String> {
-    items
-        .iter()
-        .filter(|i| **i != MenuItem::Divider)
-        .map(|i| format!("button:{}", i.label()))
-        .collect()
-}
-
 mod the_card_menu {
     use super::*;
 

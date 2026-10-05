@@ -77,6 +77,34 @@ pub enum Event {
     Menu(MenuEvent),
 }
 
+impl Event {
+    /// Whether this is one of Jon's actions (a card moved, switched to or
+    /// dismissed, the view flipped, the editor, a project's "+", To
+    /// review, a menu) rather than one of the shell's own inputs (a frame,
+    /// a state file, the project table, a redraw, the PR poll, or its
+    /// report that a cmux call failed). No arm is a catch-all, so a new
+    /// event has to be sorted here before the core builds.
+    pub fn is_action(&self) -> bool {
+        match self {
+            Event::Data(_)
+            | Event::State(_)
+            | Event::Projects(_)
+            | Event::Refresh
+            | Event::PrPollOn
+            | Event::PrPolled(_)
+            | Event::CmuxFailed { .. } => false,
+            Event::MoveCard { .. }
+            | Event::SwitchTo { .. }
+            | Event::Dismiss { .. }
+            | Event::FlipView
+            | Event::Edit(_)
+            | Event::OpenProject { .. }
+            | Event::FileForReview { .. }
+            | Event::Menu(_) => true,
+        }
+    }
+}
+
 /// Everything the core knows: the session, the latest frame, and the view
 /// built from them. The view is built in `update`, since reading the
 /// session tidies it and `view` only borrows the model.
@@ -369,6 +397,9 @@ impl Model {
     }
 
     fn rebuild(&mut self) {
+        if let Some(data) = &self.data {
+            self.session.close_stale_menu(data);
+        }
         self.view = match &self.data {
             Some(data) => build_view(&mut self.session, data),
             None => ViewModel {
@@ -415,6 +446,16 @@ impl App for Cockpit {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sorts_jons_actions_from_the_shells_inputs() {
+        assert!(Event::FlipView.is_action());
+        assert!(Event::Menu(MenuEvent::Close).is_action());
+        assert!(Event::Edit(EditEvent::Close).is_action());
+        assert!(!Event::Refresh.is_action());
+        assert!(!Event::CmuxFailed { id: "a".into() }.is_action());
+        assert!(!Event::Projects(Vec::new()).is_action());
+    }
 
     #[test]
     fn refresh_asks_the_shell_to_render() {

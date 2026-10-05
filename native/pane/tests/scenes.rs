@@ -737,6 +737,25 @@ fn the_mouse_rests_while_a_menu_is_open() {
 }
 
 #[test]
+fn a_menu_opened_mid_drag_drops_the_drag() {
+    let mut live = Live::new("lanes");
+    let mut term = terminal(40);
+    draw(&mut live.pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    let from = row_of(&buffer, "Snapshot tests");
+    let onto = row_of(&buffer, "Ended agent");
+    live.handle(&mouse(MouseEventKind::Down(MouseButton::Left), from));
+    live.handle(&mouse(MouseEventKind::Drag(MouseButton::Left), onto));
+    assert!(live.pane.drop_target().is_some());
+    live.press(KeyCode::Char(' '));
+    assert!(live.pane.model().menu.is_some());
+    assert_eq!(live.pane.drop_target(), None, "the menu drops it");
+    live.press(KeyCode::Esc);
+    let up = mouse(MouseEventKind::Up(MouseButton::Left), onto);
+    assert_eq!(live.handle(&up), Outcome::Nothing, "nothing to let go");
+}
+
+#[test]
 fn space_on_a_project_header_opens_its_menu_and_edit_opens_the_editor() {
     let mut live = Live::new("projects");
     live.press(KeyCode::Down);

@@ -487,6 +487,20 @@ mod menu {
     }
 
     #[test]
+    fn a_frame_without_the_card_closes_its_menu_in_the_core() {
+        let (app, mut model) = started();
+        let _ = app.update(open("b"), &mut model);
+        let Event::Data(mut data) = frame(NOW + 1.0, &[]) else {
+            unreachable!()
+        };
+        if let Some(list) = data.workspaces.as_mut() {
+            list.retain(|w| w.id != "b");
+        }
+        let _ = app.update(Event::Data(data), &mut model);
+        assert_eq!(model.session.menu_target(), None);
+    }
+
+    #[test]
     fn a_pick_with_no_menu_open_asks_for_nothing_but_a_render() {
         let (app, mut model) = started();
         let asked = asked(&app, &mut model, pick(MenuAction::MarkRead));

@@ -41,8 +41,9 @@ pub struct Shown<'a> {
     pub drop: Option<&'a Place>,
     /// The editor's focused field, while one is open in Projects.
     pub field: Field,
-    /// The open menu and the index of its lit item.
-    pub menu: Option<(&'a MenuView, usize)>,
+    /// The open menu, the index of its lit item, and the item its list
+    /// started at last draw.
+    pub menu: Option<(&'a MenuView, usize, usize)>,
 }
 
 /// Where a draw put the body: its first row on screen, how far it
@@ -54,6 +55,8 @@ pub struct Drawn {
     /// The furthest the body can scroll.
     pub most: usize,
     pub spots: Vec<Spot>,
+    /// The item the open menu's list started at.
+    pub menu_top: usize,
 }
 
 /// Draws the whole pane into the frame.
@@ -70,7 +73,7 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
     ];
     frame.render_widget(Paragraph::new(top), top_area);
 
-    let drawn = match shown.view {
+    let mut drawn = match shown.view {
         PaneView::All => {
             let height = usize::from(body_area.height);
             let (body, spots, scroll) = all(shown, inner, height);
@@ -82,6 +85,7 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
                 scroll,
                 most,
                 spots,
+                menu_top: 0,
             }
         }
         PaneView::Projects => {
@@ -114,14 +118,15 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
                 scroll,
                 most,
                 spots: Vec::new(),
+                menu_top: 0,
             }
         }
     };
 
     if shown.keys {
         keys::draw(frame, area, KEYS_TITLE, &KEYS);
-    } else if let Some((view, at)) = shown.menu {
-        menu::draw(frame, area, view, at);
+    } else if let Some((view, at, top)) = shown.menu {
+        drawn.menu_top = menu::draw(frame, area, view, at, top);
     } else if shown.picking && shown.view == PaneView::All {
         let rows = pick_rows();
         let rows: Vec<(&str, &str)> = rows.iter().map(|(k, w)| (k.as_str(), *w)).collect();

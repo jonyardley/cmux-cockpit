@@ -9,7 +9,7 @@
 use crate::data::{Data, Workspace};
 use crate::edit::edit_label;
 use crate::lanes::{LANES, LaneKey};
-use crate::projects::is_project_key;
+use crate::projects::{OTHER_KEY, is_project_key};
 use crate::prs::pr_summary;
 use crate::session::{Outbound, Param, Session};
 use crate::status::{PrRef, open_pr_label};
@@ -187,18 +187,40 @@ impl Session {
         self.menu.as_ref()
     }
 
-    /// The open menu with its items for this frame. A card's menu whose
-    /// workspace left the frame closes.
+    /// Whether a menu can stay open on `target` in this frame: a card's
+    /// while its workspace is in the frame, a project's while the project
+    /// is in the table, or it is Other.
+    fn menu_holds(&self, data: &Data, target: &MenuTarget) -> bool {
+        match target {
+            MenuTarget::Card { id } => data.ws_by_id(id).is_some(),
+            MenuTarget::Project { key, .. } => {
+                key == OTHER_KEY || is_project_key(&self.projects, key)
+            }
+        }
+    }
+
+    /// Closes the open menu once what it is open on has gone: a card's
+    /// workspace left the frame, or a project left the table. The core
+    /// runs this after every event, before any shell reads the menu.
+    pub(crate) fn close_stale_menu(&mut self, data: &Data) {
+        if self
+            .menu
+            .as_ref()
+            .is_some_and(|t| !self.menu_holds(data, t))
+        {
+            self.menu = None;
+        }
+    }
+
+    /// The open menu with its items for this frame; none while what it is
+    /// open on has gone.
     pub fn menu_view(&mut self, data: &Data) -> Option<MenuView> {
         let target = self.menu.clone()?;
+        if !self.menu_holds(data, &target) {
+            return None;
+        }
         let items = match &target {
-            MenuTarget::Card { id } => match data.ws_by_id(id) {
-                Some(w) => self.card_menu(data, Some(w)),
-                None => {
-                    self.menu = None;
-                    return None;
-                }
-            },
+            MenuTarget::Card { id } => self.card_menu(data, data.ws_by_id(id)),
             MenuTarget::Project { key, quiet: false } => self.project_menu(key),
             MenuTarget::Project { key, quiet: true } => self.quiet_menu(key),
         };
@@ -214,7 +236,10 @@ impl Session {
                 }
             }
             MenuEvent::OpenProject { key, quiet } => {
-                self.menu = Some(MenuTarget::Project { key, quiet });
+                let target = MenuTarget::Project { key, quiet };
+                if self.menu_holds(data, &target) {
+                    self.menu = Some(target);
+                }
             }
             MenuEvent::Close => self.menu = None,
             MenuEvent::Pick(action) => {
@@ -253,7 +278,9 @@ impl Session {
             MenuAction::OpenPr => {
                 let url = pr_summary(&self.saved, w)
                     .and_then(|p| p.url)
-                    .filter(|u| !u.is_empty());
+                    // Only a web link: a file path, or a word `open` would
+                    // read as a flag, is never handed to the shell.
+                    .filter(|u| u.starts_with("https://") || u.starts_with("http://"));
                 if let Some(url) = url {
                     self.outbox.push(Outbound::OpenUrl { url });
                 }
@@ -441,7 +468,35 @@ mod tests {
             list.retain(|w| w.id != "p");
         }
         assert_eq!(s.menu_view(&later), None);
+        s.close_stale_menu(&later);
         assert_eq!(s.menu_target(), None);
+    }
+
+    #[test]
+    fn a_project_menu_opens_only_on_a_project_or_other_and_closes_when_its_project_goes() {
+        let (mut s, d) = (session(), data());
+        let open = |key: &str| MenuEvent::OpenProject {
+            key: key.into(),
+            quiet: false,
+        };
+        s.menu(&d, open("/dev/gone"));
+        assert_eq!(s.menu_target(), None);
+        s.menu(&d, open(OTHER_KEY));
+        assert!(s.menu_view(&d).is_some());
+        s.menu(&d, open("applet"));
+        assert!(s.menu_view(&d).is_some());
+        // The table rebuilt without Applet: its menu shows nothing and closes,
+        // so a late Edit project picks nothing.
+        let only_app = serde_json::from_str(
+            r##"[{"match": "/dev/app", "name": "App", "color": "#000000", "icon": "x", "root": "/r/app"}]"##,
+        )
+        .unwrap();
+        s.set_projects(only_app);
+        assert_eq!(s.menu_view(&d), None);
+        s.close_stale_menu(&d);
+        assert_eq!(s.menu_target(), None);
+        s.menu(&d, MenuEvent::Pick(MenuAction::EditProject));
+        assert_eq!(s.editing_project(), None);
     }
 
     #[test]
@@ -497,6 +552,24 @@ mod tests {
         open_card(&mut s, &d, "p");
         s.menu(&d, MenuEvent::Pick(MenuAction::OpenPr));
         assert!(s.outbox().is_empty());
+    }
+
+    #[test]
+    fn open_pr_opens_only_a_web_link() {
+        for url in ["file:///Applications/Calculator.app", "-a", "u"] {
+            let mut s = session();
+            let d: Data = serde_json::from_value(serde_json::json!({
+                "epoch": 1000.0,
+                "workspaces": [
+                    { "id": "a", "directory": "/x/dev/app",
+                      "pr": { "number": 7, "status": "open", "url": url } },
+                ],
+            }))
+            .unwrap();
+            open_card(&mut s, &d, "a");
+            s.menu(&d, MenuEvent::Pick(MenuAction::OpenPr));
+            assert!(s.outbox().is_empty(), "{url}");
+        }
     }
 
     #[test]

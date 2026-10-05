@@ -5,7 +5,7 @@
 
 use std::ops::Range;
 
-use cockpit_core::menu::{MenuEvent, MenuItem, MenuTarget, MenuView};
+use cockpit_core::menu::{MenuAction, MenuEvent, MenuItem, MenuTarget, MenuView};
 use ratatui::crossterm::event::KeyCode;
 
 /// A card menu's title.
@@ -53,9 +53,27 @@ pub fn step(items: &[MenuItem], at: usize, by: isize) -> usize {
     found.unwrap_or(at)
 }
 
-/// `at` kept on an item after the items changed: held to the last one,
-/// and off a divider onto the item above it, or the first.
-pub fn settle(items: &[MenuItem], at: usize) -> usize {
+/// What the item at `at` does, when it is an item.
+pub fn action_at(items: &[MenuItem], at: usize) -> Option<MenuAction> {
+    match items.get(at) {
+        Some(MenuItem::Item { action, .. }) => Some(action.clone()),
+        _ => None,
+    }
+}
+
+/// Where the lit item is after the items changed: on the item that does
+/// what the lit one did (`lit`), so a project added above it never moves
+/// the light onto another action. When that has gone, `at` held to the
+/// last item, and off a divider onto the item above it, or the first.
+pub fn settle(items: &[MenuItem], at: usize, lit: Option<&MenuAction>) -> usize {
+    let same = lit.and_then(|lit| {
+        items
+            .iter()
+            .position(|i| matches!(i, MenuItem::Item { action, .. } if action == lit))
+    });
+    if let Some(i) = same {
+        return i;
+    }
     let at = at.min(items.len().saturating_sub(1));
     if is_item(items, at) {
         return at;
@@ -88,12 +106,21 @@ pub fn key(view: &MenuView, at: usize, code: KeyCode) -> MenuKey {
 }
 
 /// The items a box `room` lines tall shows of `len`, keeping `at` in sight:
-/// from the top while it fits there, else with `at` on the last line.
-pub fn window(len: usize, at: usize, room: usize) -> Range<usize> {
+/// from `top`, the line the last draw started at, until `at` would leave
+/// the window, then moved only as far as it takes. So Up from the bottom
+/// moves the light, not the list.
+pub fn window(len: usize, at: usize, room: usize, top: usize) -> Range<usize> {
     if len <= room {
         return 0..len;
     }
-    let start = (at + 1).saturating_sub(room).min(len - room);
+    let top = top.min(len - room);
+    let start = if at < top {
+        at
+    } else if at >= top + room {
+        at + 1 - room
+    } else {
+        top
+    };
     start..start + room
 }
 
@@ -136,13 +163,25 @@ mod tests {
     #[test]
     fn settles_onto_an_item_when_the_items_change() {
         let items = view().items;
-        assert_eq!(settle(&items, 9), 4, "held to the last");
-        assert_eq!(settle(&items, 3), 2, "off a divider, upwards");
+        assert_eq!(settle(&items, 9, None), 4, "held to the last");
+        assert_eq!(settle(&items, 3, None), 2, "off a divider, upwards");
         assert_eq!(
             first(&[MenuItem::Divider, item("x", MenuAction::MarkRead)]),
             1
         );
-        assert_eq!(settle(&[], 3), 0);
+        assert_eq!(settle(&[], 3, None), 0);
+    }
+
+    #[test]
+    fn keeps_the_light_on_the_same_action_when_items_move() {
+        // Mark read lit at 2; an item arrives at the top and it moves to 3.
+        let mut items = view().items;
+        items.insert(0, item("New session", MenuAction::NewSession));
+        assert_eq!(settle(&items, 2, Some(&MenuAction::MarkRead)), 3);
+        assert_eq!(action_at(&items, 3), Some(MenuAction::MarkRead));
+        assert_eq!(action_at(&items, 2), None, "a divider");
+        // Gone: falls back to where it was.
+        assert_eq!(settle(&items, 3, Some(&MenuAction::KeepMerged)), 3);
     }
 
     #[test]
@@ -161,10 +200,16 @@ mod tests {
 
     #[test]
     fn a_window_keeps_the_lit_item_in_sight() {
-        assert_eq!(window(5, 4, 9), 0..5);
-        assert_eq!(window(20, 3, 6), 0..6);
-        assert_eq!(window(20, 10, 6), 5..11);
-        assert_eq!(window(20, 19, 6), 14..20);
+        assert_eq!(window(5, 4, 9, 0), 0..5);
+        assert_eq!(window(20, 3, 6, 0), 0..6);
+        assert_eq!(window(20, 10, 6, 0), 5..11);
+        assert_eq!(window(20, 19, 6, 0), 14..20);
+        // Up from the bottom keeps the window until the light leaves it.
+        assert_eq!(window(20, 18, 6, 14), 14..20);
+        assert_eq!(window(20, 14, 6, 14), 14..20);
+        assert_eq!(window(20, 13, 6, 14), 13..19);
+        // A start past the end (the menu shrank) is held in range.
+        assert_eq!(window(8, 2, 6, 14), 2..8);
     }
 
     #[test]

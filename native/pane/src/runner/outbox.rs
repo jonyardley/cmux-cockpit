@@ -56,7 +56,11 @@ pub fn command_for(o: &Outgoing, token: Option<&str>) -> Result<(String, Vec<Str
             ))
         }
         // In the foreground: Jon asked to see the page.
-        Outgoing::OpenUrl(url) => Ok(("/usr/bin/open".to_string(), vec![url.clone()])),
+        // `-u` reads it as a link, never a file or a flag.
+        Outgoing::OpenUrl(url) => Ok((
+            "/usr/bin/open".to_string(),
+            vec!["-u".to_string(), url.clone()],
+        )),
     }
 }
 
@@ -165,7 +169,7 @@ mod tests {
         let link = Outgoing::OpenUrl("https://example.com/pr/7".into());
         let (program, args) = command_for(&link, None).unwrap();
         assert_eq!(program, "/usr/bin/open");
-        assert_eq!(args, ["https://example.com/pr/7"]);
+        assert_eq!(args, ["-u", "https://example.com/pr/7"]);
         assert_eq!(describe(&link), "opening a link");
         assert_eq!(workspace_of(&link), None);
     }

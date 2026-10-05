@@ -6,7 +6,6 @@ use cockpit_core::by_project::ProjectEntry;
 use cockpit_core::data::{Data, Workspace, WorkspaceGroup};
 use cockpit_core::lane_entries::LaneEntry;
 use cockpit_core::lanes::{LANES, LaneKey, lane_by_key};
-use cockpit_core::menu::MenuItem;
 use cockpit_core::model::{PanelHeight, actual_lane_of, card_density};
 use cockpit_core::next::{Colour, Origin};
 use cockpit_core::persist::ViewMode;
@@ -48,11 +47,7 @@ fn setup() -> (Session, Data, Fx) {
 /// The card menu's items in words, as the sidebar test's `r.menu` lists
 /// them: "button:<label>", dividers left out.
 fn card_menu(s: &mut Session, data: &Data, w: Option<&Workspace>) -> Vec<String> {
-    s.card_menu(data, w)
-        .iter()
-        .filter(|i| **i != MenuItem::Divider)
-        .map(|i| format!("button:{}", i.label()))
-        .collect()
+    menu_words(&s.card_menu(data, w))
 }
 
 fn ids(list: &[&Workspace]) -> Vec<String> {
@@ -997,6 +992,9 @@ mod card_menu {
         assert!(has(&menu, &format!("button:✓ Project: {}", first.name)));
         assert!(has(&menu, "button:Clear project override"));
         s.clear_project_override(Some(by_id(&data, "a")));
+        let menu = card_menu(&mut s, &data, Some(by_id(&data, "a")));
+        assert!(has(&menu, "button:No project override set"));
+        assert!(!menu.iter().any(|m| m.starts_with("button:✓ Project:")));
     }
 }
 

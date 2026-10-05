@@ -175,25 +175,13 @@ impl Feed {
         self.send(Event::PrPollOn);
     }
 
-    /// One of Jon's actions (a card moved, switched to or dismissed, the
-    /// view flipped, the editor, a project's "+", To review, a menu): the
-    /// core takes it at once and the cmux calls, state writes and links
-    /// it asks for go to the outbox worker. The caller draws after. The
-    /// feed's own inputs (a frame, a state file, the project table, a
-    /// redraw, the PR poll, a failed call) are ignored: the inputs bring
-    /// those. Only those are named, so a new action is never dropped.
+    /// One of Jon's actions (`Event::is_action`): the core takes it at
+    /// once and the cmux calls, state writes and links it asks for go to
+    /// the outbox worker. The caller draws after. The feed's own inputs
+    /// are ignored: the inputs bring those, and one sent from here would
+    /// be a frame or a state file no input saw.
     pub fn act(&mut self, event: Event) {
-        let input = matches!(
-            event,
-            Event::Data(_)
-                | Event::State(_)
-                | Event::Projects(_)
-                | Event::Refresh
-                | Event::PrPollOn
-                | Event::PrPolled(_)
-                | Event::CmuxFailed { .. }
-        );
-        if !input {
+        if event.is_action() {
             self.send(event);
         }
     }
