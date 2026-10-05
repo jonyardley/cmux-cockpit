@@ -65,14 +65,19 @@ enum AX {
 
     /// Sets a window's frame, top-left and y down, and returns the frame it
     /// reports afterwards. Narrowing sizes first and widening moves first,
-    /// so the window never pokes past its far edge part way through.
+    /// so the window never pokes past its far edge part way through. Both
+    /// steps are always tried, so a refused move still gets its size set
+    /// (an undo that stopped half way would leave cmux narrowed); the
+    /// first refusal is what it returns.
     static func setFrame(_ window: AXUIElement, to target: Rect, from current: Rect) -> Result<Rect, AXFailure> {
         let steps = target.width < current.width
             ? [setSize(window, target), setPosition(window, target)]
             : [setPosition(window, target), setSize(window, target)]
-        for step in steps {
-            if case let .failure(failure) = step() { return .failure(failure) }
+        let failures = steps.compactMap { step -> AXFailure? in
+            if case let .failure(failure) = step() { return failure }
+            return nil
         }
+        if let first = failures.first { return .failure(first) }
         return frame(window)
     }
 

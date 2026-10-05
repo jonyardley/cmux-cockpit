@@ -11,6 +11,12 @@ public let minimumCmuxWidth: Double = 640
 /// drag in progress is never fought.
 public let pushSettleSeconds: Double = 0.5
 
+/// How far, in points, a frame cmux reports may sit from the one asked for
+/// and still count as it. The push trigger, the landed check, the restore
+/// and the dock rule all use it, so a window a fraction of a point short
+/// of the panel's edge is never pushed over and over.
+public let pushTolerance: Double = 1
+
 /// One push: cmux's new frame and the panel's frame beside it.
 public struct Push: Equatable, Sendable {
     /// cmux's frame to set, top-left and y down, as Accessibility takes it.
@@ -39,7 +45,7 @@ public func makeRoom(
     let frame = toAppKit(window.frame, primaryScreenHeight: screens.primaryHeight)
     guard let screen = screenFor(frame, screens: screens) else { return nil }
     let left = screen.minX + width
-    guard frame.minX < left else { return nil }
+    guard frame.minX < left - pushTolerance else { return nil }
     let newWidth = min(frame.maxX, screen.maxX) - left
     guard newWidth >= minimumWidth else { return nil }
     return Push(
@@ -53,7 +59,7 @@ public func makeRoom(
 /// right than asked (a window that refused to narrow would otherwise hang
 /// off the screen). A narrower result, such as one rounded to whole
 /// terminal cells, still counts.
-public func pushLanded(_ landed: Rect, for target: Rect, tolerance: Double = 1) -> Bool {
+public func pushLanded(_ landed: Rect, for target: Rect, tolerance: Double = pushTolerance) -> Bool {
     abs(landed.minX - target.minX) <= tolerance && landed.maxX <= target.maxX + tolerance
 }
 
@@ -70,6 +76,8 @@ public struct PushTracker: Equatable, Sendable {
     private var lastFrame: Rect?
     private var stillSince: Double = 0
     private var refused: Rect?
+    /// A refusal was just recorded: the next frame seen is the refused one.
+    private var refusalPending = false
 
     public init() {}
 
@@ -87,35 +95,55 @@ public struct PushTracker: Equatable, Sendable {
         width: Double = defaultPanelWidth,
         settle: Double = pushSettleSeconds
     ) -> Push? {
+        noteRefusal(at: window.frame)
         if lastFrame != window.frame {
             lastFrame = window.frame
             stillSince = now
         }
         guard !mouseDown, now - stillSince >= settle else { return nil }
-        if let record = pushed, !record.after.isClose(to: window.frame, tolerance: 1) {
+        if let record = pushed, !record.after.isClose(to: window.frame, tolerance: pushTolerance) {
             pushed = nil
         }
-        if refused == window.frame { return nil }
+        if refused != nil { return nil }
         return makeRoom(window: window, screens: screens, width: width)
     }
 
     /// The push landed: cmux went from `before` to `after`.
+    /// Pushing again from the frame the last push left (the Dock moved,
+    /// say) keeps the first push's `before`, so quitting still gives cmux
+    /// the frame it had before the panel touched it.
     public mutating func recordPush(before: Rect, after: Rect) {
-        pushed = Record(before: before, after: after)
+        let original = pushed.flatMap { $0.after.isClose(to: before, tolerance: pushTolerance) ? $0.before : nil }
+        pushed = Record(before: original ?? before, after: after)
+        refusalPending = false
         refused = nil
         lastFrame = after
     }
 
-    /// cmux refused the push at this frame; try again only once it moves.
-    public mutating func recordRefusal(at frame: Rect) {
-        refused = frame
+    /// cmux refused the push. Whatever frame it is seen at next (back where
+    /// it was, or part way if the undo was refused too) is not pushed again
+    /// until cmux moves off it, so a half applied push never compounds.
+    public mutating func recordRefusal() {
+        refused = nil
+        refusalPending = true
+    }
+
+    /// Takes the first frame seen after a refusal as the refused one, and
+    /// forgets the refusal once cmux moves off it.
+    private mutating func noteRefusal(at frame: Rect) {
+        if refusalPending {
+            refused = frame
+            refusalPending = false
+        } else if let refusedFrame = refused, refusedFrame != frame {
+            refused = nil
+        }
     }
 
     /// The frame to give cmux back on quit: its frame before the push, but
     /// only while it still has the frame the push left (to within a point,
     /// for rounding), so a move or resize since is never undone.
     public func restoreTarget(current: Rect) -> Rect? {
-        guard let pushed, pushed.after.isClose(to: current, tolerance: 1) else { return nil }
+        guard let pushed, pushed.after.isClose(to: current, tolerance: pushTolerance) else { return nil }
         return pushed.before
     }
 }

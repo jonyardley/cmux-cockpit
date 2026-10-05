@@ -131,11 +131,53 @@ final class PushTrackerTests: XCTestCase {
     func testDoesNotRetryARefusedFrameUntilItMoves() {
         var tracker = PushTracker()
         _ = tracker.next(window: cmux(filling), screens: screen, now: 0, mouseDown: false)
-        tracker.recordRefusal(at: filling)
+        tracker.recordRefusal()
         XCTAssertNil(tracker.next(window: cmux(filling), screens: screen, now: 1, mouseDown: false))
         let other = Rect(x: 0, y: 33, width: 1400, height: 949)
         _ = tracker.next(window: cmux(other), screens: screen, now: 2, mouseDown: false)
         XCTAssertNotNil(tracker.next(window: cmux(other), screens: screen, now: 3, mouseDown: false))
+    }
+
+    func testARefusalIsForgottenOnceCmuxMovesEvenBackToTheSameFrame() {
+        var tracker = PushTracker()
+        _ = tracker.next(window: cmux(filling), screens: screen, now: 0, mouseDown: false)
+        tracker.recordRefusal()
+        XCTAssertNil(tracker.next(window: cmux(filling), screens: screen, now: 1, mouseDown: false))
+        let middle = Rect(x: 400, y: 100, width: 800, height: 600)
+        _ = tracker.next(window: cmux(middle), screens: screen, now: 2, mouseDown: false)
+        _ = tracker.next(window: cmux(filling), screens: screen, now: 3, mouseDown: false)
+        XCTAssertEqual(tracker.next(window: cmux(filling), screens: screen, now: 3.5, mouseDown: false)?.cmuxFrame, pushed)
+    }
+
+    func testAHalfUndonePushIsNotPushedAgain() {
+        // cmux took the narrowing but refused the move, and the undo was
+        // refused too: it sits narrowed at the left edge.
+        var tracker = PushTracker()
+        _ = tracker.next(window: cmux(filling), screens: screen, now: 0, mouseDown: false)
+        tracker.recordRefusal()
+        let narrowed = Rect(x: 0, y: 33, width: 1232, height: 949)
+        XCTAssertNil(tracker.next(window: cmux(narrowed), screens: screen, now: 1, mouseDown: false))
+        XCTAssertNil(tracker.next(window: cmux(narrowed), screens: screen, now: 5, mouseDown: false))
+    }
+
+    func testAPushThatLandsAFractionShortIsNotPushedAgain() {
+        var tracker = PushTracker()
+        let short = Rect(x: 279.5, y: 33, width: 1232.5, height: 949)
+        tracker.recordPush(before: filling, after: short)
+        XCTAssertNil(tracker.next(window: cmux(short), screens: screen, now: 0, mouseDown: false))
+        XCTAssertNil(tracker.next(window: cmux(short), screens: screen, now: 1, mouseDown: false))
+        XCTAssertEqual(tracker.restoreTarget(current: short), filling)
+        let after = place(permission: .granted, cmux: .window(cmux(short)), screens: screen)
+        guard case let .docked(_, side, _) = after else { return XCTFail("not docked") }
+        XCTAssertEqual(side, .outside)
+    }
+
+    func testPushingAgainFromThePushedFrameKeepsTheOriginalForTheRestore() {
+        var tracker = PushTracker()
+        tracker.recordPush(before: filling, after: pushed)
+        let further = Rect(x: 344, y: 33, width: 1168, height: 949)
+        tracker.recordPush(before: pushed, after: further)
+        XCTAssertEqual(tracker.restoreTarget(current: further), filling)
     }
 
     func testNoPushOnceTheRoomIsMade() {

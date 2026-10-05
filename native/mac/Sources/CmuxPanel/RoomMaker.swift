@@ -27,10 +27,11 @@ final class RoomMaker {
             pushedWindow = element
         case .success, .failure:
             // Refused or landed wrong: put cmux back as it was, as far as
-            // it lets us, and stop asking until it moves.
+            // it lets us, and stop asking until it moves off wherever it
+            // ends up (the tracker takes that from the next read).
             let now = (try? AX.frame(element).get()) ?? push.cmuxFrame
-            let reverted = (try? AX.setFrame(element, to: window.frame, from: now).get()) ?? window.frame
-            tracker.recordRefusal(at: reverted)
+            _ = AX.setFrame(element, to: window.frame, from: now)
+            tracker.recordRefusal()
         }
         return true
     }

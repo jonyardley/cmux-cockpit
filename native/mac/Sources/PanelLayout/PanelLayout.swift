@@ -201,7 +201,9 @@ func dock(_ window: CmuxWindow, screens: Screens, width: Double) -> Placement {
     let frame = toAppKit(window.frame, primaryScreenHeight: screens.primaryHeight)
     let outside = Rect(x: frame.minX - width, y: frame.minY, width: width, height: frame.height)
     let screen = screenFor(frame, screens: screens)
-    let roomOutside = screen.map { outside.minX >= $0.minX } ?? true
+    // Within the push tolerance counts as room, so a push that lands a
+    // fraction of a point short still docks outside.
+    let roomOutside = screen.map { outside.minX >= $0.minX - pushTolerance } ?? true
     if !window.isFullScreen && roomOutside {
         return .docked(frame: outside, side: .outside, raised: false)
     }
