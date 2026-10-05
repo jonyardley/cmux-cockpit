@@ -865,13 +865,77 @@ fn scrolls_the_projects_view_in_a_short_pane_with_the_keys_and_the_wheel() {
         Outcome::Nothing,
         "at the end"
     );
+    // A swipe up, which natural scrolling reports as the wheel turning down.
     for _ in 0..40 {
-        pane.handle_event(&mouse(MouseEventKind::ScrollUp, 3));
+        pane.handle_event(&mouse(MouseEventKind::ScrollDown, 3));
     }
     let back = draw(&mut pane, &mut term);
     assert!(
         back.contains("Needs you"),
         "the wheel goes back up:\n{back}"
+    );
+}
+
+#[test]
+fn the_wheel_moves_the_projects_cursor_with_the_finger() {
+    let screen_after = |steps: &[Event]| {
+        let mut pane = pane_for("projects");
+        let mut term = terminal(40);
+        for step in steps {
+            pane.handle_event(step);
+        }
+        draw(&mut pane, &mut term)
+    };
+    let key = |code| Event::Key(KeyEvent::new(code, KeyModifiers::NONE));
+    let down = key(KeyCode::Down);
+    let start = [down.clone(), down.clone(), down.clone()];
+    let with = |last: Event| {
+        let mut steps = start.to_vec();
+        steps.push(last);
+        screen_after(&steps)
+    };
+    assert_ne!(
+        with(key(KeyCode::Up)),
+        with(down.clone()),
+        "the cursor shows on screen"
+    );
+    assert_eq!(
+        with(mouse(MouseEventKind::ScrollDown, 3)),
+        with(key(KeyCode::Up)),
+        "a swipe up moves the cursor up"
+    );
+    assert_eq!(
+        with(mouse(MouseEventKind::ScrollUp, 3)),
+        with(down.clone()),
+        "a swipe down moves the cursor down"
+    );
+}
+
+#[test]
+fn the_wheel_leaves_the_projects_cursor_alone_while_the_editor_is_open() {
+    let mut live = Live::new("projects");
+    assert_eq!(live.press(KeyCode::Down), Outcome::Redraw);
+    let open = live.press(KeyCode::Char('e'));
+    let Outcome::Act(Action::Edit(EditEvent::Open { key })) = open else {
+        panic!("e opens the editor on the first project: {open:?}");
+    };
+    for kind in [MouseEventKind::ScrollDown, MouseEventKind::ScrollUp] {
+        for _ in 0..3 {
+            assert_eq!(
+                live.pane.handle_event(&mouse(kind, 3)),
+                Outcome::Nothing,
+                "the wheel does nothing under the editor"
+            );
+        }
+    }
+    assert_eq!(
+        live.press(KeyCode::Esc),
+        Outcome::Act(Action::Edit(EditEvent::Close))
+    );
+    assert_eq!(
+        live.press(KeyCode::Char('e')),
+        Outcome::Act(Action::Edit(EditEvent::Open { key })),
+        "the cursor is still on the project it was on"
     );
 }
 

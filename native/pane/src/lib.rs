@@ -498,10 +498,15 @@ impl Pane {
             return Outcome::Nothing;
         }
         if self.model.view == PaneView::Projects {
-            // The wheel scrolls the Projects view; nothing there is dragged.
+            // The wheel moves the Projects cursor with the finger, as in All
+            // below; nothing there is dragged. An open editor takes every key,
+            // so the wheel leaves the cursor where the editor opened it.
+            if self.model.editor().is_some() {
+                return Outcome::Nothing;
+            }
             let moved = match mouse.kind {
-                MouseEventKind::ScrollUp => self.row_step(-1),
-                MouseEventKind::ScrollDown => self.row_step(1),
+                MouseEventKind::ScrollDown => self.row_step(-1),
+                MouseEventKind::ScrollUp => self.row_step(1),
                 _ => false,
             };
             if moved {
