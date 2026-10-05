@@ -2,7 +2,7 @@
 //! core's session, the fields the keys move between, and what each key
 //! does in the focused field. Nothing is typed into the pane itself: each
 //! key sends the field's whole new text to the core, which holds the draft
-//! (cockpit_core::panel), so the pane only remembers which field is focused.
+//! (cockpit_core::edit), so the pane only remembers which field is focused.
 //! It holds that as the field itself, not its place, so a folder on offer
 //! leaving between frames never moves the focus onto another field.
 
@@ -117,30 +117,6 @@ mod tests {
             matches: String::new(),
             suggestions: vec!["/a/b".into()],
         }
-    }
-
-    #[test]
-    fn a_new_project_starts_on_its_folder_and_an_edit_on_its_name() {
-        assert_eq!(
-            view(true).fields(),
-            [
-                Field::Folder,
-                Field::Suggest(0),
-                Field::Name,
-                Field::Colour,
-                Field::Icon
-            ]
-        );
-        assert_eq!(
-            view(false).fields(),
-            [
-                Field::Name,
-                Field::Colour,
-                Field::Icon,
-                Field::Folder,
-                Field::Remove
-            ]
-        );
     }
 
     #[test]

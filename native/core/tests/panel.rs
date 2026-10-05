@@ -119,6 +119,9 @@ fn every_fixture_has_a_scene() {
     assert_eq!(names.len(), 7);
     for entry in std::fs::read_dir(&dir).unwrap() {
         let file = entry.unwrap().file_name().to_string_lossy().to_string();
+        if !file.ends_with(".json") {
+            continue; // A .DS_Store or an editor's swap file is no fixture.
+        }
         assert!(names.contains(&file), "{file} has no scene behind it");
     }
 }
@@ -132,4 +135,41 @@ fn opens_the_menu_and_the_editors_the_fixtures_name() {
     let editor = panel("editor").editor().unwrap();
     assert!(!editor.is_new);
     assert!(panel("new-project").editor().unwrap().is_new);
+}
+
+#[test]
+fn answers_the_cursors_questions_from_the_panel_alone() {
+    let s = scenes();
+    let panel = |n: &str| &s.iter().find(|(name, _)| *name == n).unwrap().1;
+
+    let lanes = panel("lanes");
+    let ids = lanes.card_ids();
+    assert!(!ids.is_empty());
+    for id in &ids {
+        assert!(lanes.lane_of(id).is_some(), "{id} sits in no lane");
+        assert!(lanes.in_strip(id) || lanes.is_lane_card(id));
+        if lanes.in_strip(id) {
+            assert!(lanes.is_waiting(id));
+        }
+    }
+    for lane in &lanes.lanes {
+        assert_eq!(lanes.lane_rows(lane.key).len(), lane.rows.len());
+    }
+
+    let projects = panel("projects");
+    let rows = projects.project_ids();
+    assert!(!rows.is_empty());
+    for id in rows {
+        assert!(
+            projects.project_target(id).is_some(),
+            "{id} stands for nothing"
+        );
+    }
+
+    for p in [lanes, projects] {
+        assert!(!p.movable("nobody"));
+        assert!(!p.is_waiting("nobody"));
+        assert!(p.lane_of("nobody").is_none());
+        assert!(p.project_target("nobody").is_none());
+    }
 }

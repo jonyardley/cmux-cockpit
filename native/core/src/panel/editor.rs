@@ -108,3 +108,62 @@ impl EditorView {
         fields.first().copied().unwrap_or_default()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn view(is_new: bool, suggestions: &[&str]) -> EditorView {
+        EditorView {
+            key: "k".into(),
+            is_new,
+            name: "App".into(),
+            color: crate::projects::PROJECT_COLORS[0].into(),
+            icon: "folder.fill".into(),
+            root: "~/dev/app".into(),
+            search: String::new(),
+            icons: vec!["folder.fill".into()],
+            note: String::new(),
+            problem: None,
+            remove: "Remove project",
+            matches: String::new(),
+            suggestions: suggestions.iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn a_new_project_starts_on_its_folder_and_an_edit_on_its_name() {
+        assert_eq!(
+            view(true, &["/a/b"]).fields(),
+            [
+                Field::Folder,
+                Field::Suggest(0),
+                Field::Name,
+                Field::Colour,
+                Field::Icon
+            ]
+        );
+        assert_eq!(
+            view(false, &[]).fields(),
+            [
+                Field::Name,
+                Field::Colour,
+                Field::Icon,
+                Field::Folder,
+                Field::Remove
+            ]
+        );
+    }
+
+    #[test]
+    fn keeps_a_field_it_has_and_hands_a_gone_one_on() {
+        let new = view(true, &["/a"]);
+        assert_eq!(new.resolve(Field::Suggest(0)), Field::Suggest(0));
+        assert_eq!(new.resolve(Field::Suggest(1)), Field::Folder);
+        assert_eq!(new.resolve(Field::Remove), Field::Folder);
+        let edit = view(false, &[]);
+        assert_eq!(edit.resolve(Field::Remove), Field::Remove);
+        assert_eq!(edit.resolve(Field::Suggest(0)), Field::Folder);
+        assert_eq!(view(true, &[]).resolve(Field::Remove), Field::Folder);
+    }
+}

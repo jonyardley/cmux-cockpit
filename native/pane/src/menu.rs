@@ -1,6 +1,6 @@
 //! The open card or project menu's keys: Up and Down move between its
 //! items, past the dividers, Enter picks the one lit and Esc closes it.
-//! The core holds which menu is open and its items (cockpit_core::panel);
+//! The core holds which menu is open and its items (cockpit_core::menu);
 //! the pane holds only which item is lit, as it holds the editor's field.
 
 use std::ops::Range;
