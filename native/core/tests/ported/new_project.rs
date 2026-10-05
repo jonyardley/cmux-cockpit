@@ -1,16 +1,15 @@
 //! test/new-project.test.ts: the home folder, the next colour, where
 //! "+ New project" and its editor sit, the folders on offer, the card
-//! chip's words and a project's "+". Every case that drives the editor's
-//! draft (edit.ts: openNewProject, setDraftFolder, draftProblem,
-//! saveDraft, addSuggested) is left out: the editor is not ported, and
-//! the pane has none.
+//! chip's words and a project's "+", with the editor's draft driven
+//! through edit.rs. "Reads its words live" keeps only its label half: that
+//! the chip's Text takes a closure is the sidebar view's.
 
-use cockpit_core::by_project::NEW_PROJECT;
 use cockpit_core::data::Data;
 use cockpit_core::home::{expand_home, is_home, tilde_home};
 use cockpit_core::persist::{ProjectSpec, ViewMode};
 use cockpit_core::projects::{PROJECT_COLORS, Project, next_color};
 use cockpit_core::session::Session;
+use serde_json::json;
 
 use crate::support::*;
 
@@ -23,6 +22,21 @@ fn setup(workspaces: Vec<cockpit_core::data::Workspace>) -> (Session, Data) {
     s.home = Some(HOME.into());
     s.set_mode(ViewMode::Projects);
     (s, frame(NOW, vec![], workspaces))
+}
+
+const HOME_PROBLEM: &str = "That is your home folder: pick one inside it, such as ~/dev/app.";
+
+fn problem(s: &Session) -> Option<String> {
+    s.draft_problem()
+}
+
+/// The folders new workspaces opened in.
+fn creates(s: &Session) -> Vec<String> {
+    calls(s)
+        .into_iter()
+        .filter(|(m, _)| m == "workspace.create")
+        .filter_map(|(_, p)| p.into_iter().find(|(k, _)| k == "cwd").map(|(_, v)| v))
+        .collect()
 }
 
 /// A project sent from the sidebar and not yet built, as a save leaves it.
@@ -109,11 +123,10 @@ mod the_next_colour {
 mod plus_new_project {
     use super::*;
 
-    /// Partly ported: openNewProject is edit.ts's; here the editor is set open.
     #[test]
     fn sits_after_the_busy_projects_and_before_the_quiet_ones_its_editor_under_it() {
         let (mut s, data) = setup(vec![ws("a").directory("/Users/jon/dev/app-one")]);
-        s.set_editing_project(Some(NEW_PROJECT));
+        s.open_new_project();
         let ids: Vec<String> = s
             .project_entries(&data)
             .iter()
@@ -121,6 +134,158 @@ mod plus_new_project {
             .collect();
         let at = ids.iter().position(|id| id == "new").unwrap();
         assert_eq!(ids[at..at + 3], ["new", "e:+new", "quiet"]);
+    }
+
+    #[test]
+    fn opens_blank_in_the_next_free_colour_and_a_second_tap_closes_it() {
+        let (mut s, _) = setup(vec![]);
+        s.open_new_project();
+        assert!(s.is_new_draft());
+        assert_eq!(s.draft_spec().name, "");
+        assert_eq!(s.draft_spec().color, next_color(&s.known_projects()));
+        s.open_new_project();
+        assert_eq!(s.editing_project(), None);
+    }
+
+    #[test]
+    fn names_the_project_after_the_folder_as_it_is_typed() {
+        let (mut s, _) = setup(vec![]);
+        s.open_new_project();
+        s.set_draft_folder("~/dev/pianola-roll");
+        assert_eq!(s.draft_spec().name, "Pianola-roll");
+        s.set_draft_folder("~");
+        assert_eq!(s.draft_spec().name, "");
+    }
+
+    #[test]
+    fn says_what_is_wrong_with_the_folder_in_words() {
+        let (mut s, _) = setup(vec![]);
+        s.open_new_project();
+        assert_eq!(problem(&s).as_deref(), Some("Type the project's folder."));
+        s.set_draft_folder("~");
+        assert_eq!(problem(&s).as_deref(), Some(HOME_PROBLEM));
+        s.set_draft_folder("/opt");
+        assert_eq!(
+            problem(&s).as_deref(),
+            Some("Pick a folder at least two levels deep, such as ~/dev/app.")
+        );
+        s.set_draft_folder("/opt/tools");
+        assert_eq!(problem(&s).as_deref(), None);
+        s.set_draft_folder("~/dev/app-one/web");
+        assert_eq!(
+            problem(&s).as_deref(),
+            Some("That folder is already in App One.")
+        );
+    }
+
+    #[test]
+    fn wants_a_full_path_not_a_relative_one_or_another_users_tilde() {
+        let (mut s, _) = setup(vec![]);
+        s.open_new_project();
+        for typed in ["dev/app", "~bob/app"] {
+            s.set_draft_folder(typed);
+            assert_eq!(
+                problem(&s).as_deref(),
+                Some("Type the folder's full path, starting with / or ~/."),
+                "{typed}"
+            );
+        }
+    }
+
+    #[test]
+    fn calls_the_home_folder_home_in_any_case() {
+        let (mut s, _) = setup(vec![]);
+        s.open_new_project();
+        s.set_draft_folder("/USERS/jon/");
+        assert_eq!(problem(&s).as_deref(), Some(HOME_PROBLEM));
+    }
+
+    #[test]
+    fn says_when_a_folder_is_too_long_once_its_tilde_is_expanded() {
+        let (mut s, _) = setup(vec![]);
+        s.open_new_project();
+        s.set_draft_folder(&format!("~/{}", "x".repeat(505)));
+        assert_eq!(
+            problem(&s).as_deref(),
+            Some("Keep the folder's path under 512 characters.")
+        );
+        assert_eq!(s.draft_spec().name, "");
+    }
+
+    #[test]
+    fn counts_a_project_sent_but_not_yet_built() {
+        let (mut s, _) = setup(vec![]);
+        send_project(&mut s, "Sent Only", "/Users/jon/dev/sent-only");
+        s.open_new_project();
+        s.set_draft_folder("~/dev/sent-only/src");
+        assert_eq!(
+            problem(&s).as_deref(),
+            Some("That folder is already in Sent Only.")
+        );
+    }
+
+    #[test]
+    fn refuses_a_folder_that_holds_other_projects() {
+        let (mut s, _) = setup(vec![]);
+        s.open_new_project();
+        s.set_draft_folder("~/dev");
+        assert_eq!(
+            problem(&s).as_deref(),
+            Some("~/dev holds other projects, such as App One: pick a folder inside it.")
+        );
+    }
+
+    #[test]
+    fn takes_a_removed_projects_folder_again() {
+        let (mut s, _) = setup(vec![]);
+        let k = send_project(&mut s, "Gone Soon", "/Users/jon/dev/gone-soon");
+        s.remove_project(&k);
+        s.open_new_project();
+        s.set_draft_folder("~/dev/gone-soon");
+        assert_eq!(problem(&s).as_deref(), None);
+        assert_eq!(s.draft_spec().name, "Gone-soon");
+    }
+
+    #[test]
+    fn saves_under_the_expanded_folder_and_opens_a_workspace_there() {
+        let (mut s, data) = setup(vec![]);
+        let color = next_color(&s.known_projects()).to_string();
+        s.open_new_project();
+        s.set_draft_folder("~/dev/fresh-1");
+        s.set_draft_icon("music.note");
+        s.save_draft(&data);
+        let dir = "/Users/jon/dev/fresh-1";
+        assert_eq!(
+            sent(&s),
+            [(
+                format!("projects.{}/", dir.to_lowercase()),
+                Some(
+                    json!({ "name": "Fresh-1", "color": color, "icon": "music.note", "root": dir })
+                )
+            )]
+        );
+        assert_eq!(creates(&s), [dir]);
+        assert_eq!(s.editing_project(), None);
+    }
+
+    #[test]
+    fn opens_no_second_workspace_in_a_folder_that_has_one() {
+        let (mut s, data) = setup(vec![ws("s").directory("/Users/jon/dev/sketch/")]);
+        s.open_new_project();
+        s.set_draft_folder("~/dev/sketch");
+        s.save_draft(&data);
+        assert_eq!(sent(&s).len(), 1);
+        assert!(creates(&s).is_empty());
+    }
+
+    #[test]
+    fn saves_nothing_while_the_folder_has_a_problem() {
+        let (mut s, data) = setup(vec![]);
+        s.open_new_project();
+        s.set_draft_folder("~");
+        s.save_draft(&data);
+        assert!(sent(&s).is_empty());
+        assert!(s.is_new_draft());
     }
 }
 
@@ -135,6 +300,35 @@ mod the_folders_on_offer {
             ws("z").directory("/Users/jon/dev/app-one"),
         ]);
         assert_eq!(s.folder_suggestions(&data), ["/Users/jon/dev/offer-one"]);
+    }
+
+    #[test]
+    fn makes_one_a_project_in_a_tap_and_it_leaves_the_list() {
+        let (mut s, data) = setup(vec![ws("x").directory("/Users/jon/dev/offer-two")]);
+        s.open_new_project();
+        s.add_suggested("/Users/jon/dev/offer-two");
+        assert_eq!(
+            sent(&s).first().map(|(k, _)| k.as_str()),
+            Some("projects./users/jon/dev/offer-two/")
+        );
+        assert!(creates(&s).is_empty());
+        assert!(s.folder_suggestions(&data).is_empty());
+        assert_eq!(s.editing_project(), None);
+    }
+
+    #[test]
+    fn ignores_a_folder_that_is_already_a_project_or_the_home_folder() {
+        let (mut s, _) = setup(vec![]);
+        send_project(&mut s, "Owned", "/Users/jon/dev/owned");
+        for dir in [
+            "/Users/jon",
+            "/Users/jon/dev/owned",
+            "/Users/jon/dev/app-one",
+            "/x",
+        ] {
+            s.add_suggested(dir);
+        }
+        assert!(sent(&s).is_empty());
     }
 
     #[test]

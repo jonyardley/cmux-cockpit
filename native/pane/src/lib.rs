@@ -14,6 +14,7 @@
 //! that changed what shows, or a new terminal size.
 
 pub mod cursor;
+pub mod editor;
 pub mod model;
 pub mod placing;
 pub mod runner;
@@ -22,6 +23,7 @@ pub mod theme;
 mod views;
 
 use cockpit_core::Event as CoreEvent;
+use cockpit_core::edit::EditEvent;
 use cockpit_core::lanes::LaneKey;
 use ratatui::Terminal;
 use ratatui::backend::Backend;
@@ -31,8 +33,9 @@ use ratatui::crossterm::event::{
 use ratatui::layout::Size;
 
 use crate::cursor::Cursor;
+use crate::editor::EditKey;
 pub use crate::model::PaneModel;
-use crate::model::{PaneView, lane_for_digit};
+use crate::model::{PaneView, ProjectTarget, lane_for_digit};
 use crate::placing::{Place, Spot, drop_on, reorder, spot_at, to_lane};
 
 /// Something the pane asks the core to do. Plain data: the runner turns
@@ -52,6 +55,12 @@ pub enum Action {
     Dismiss { id: String },
     /// Flip between the All and Projects views.
     FlipView,
+    /// Something done in the project editor.
+    Edit(EditEvent),
+    /// A project's "+": a new session in its folder.
+    OpenProject { key: String },
+    /// A card's "To review →".
+    FileForReview { id: String },
 }
 
 impl From<Action> for CoreEvent {
@@ -61,6 +70,9 @@ impl From<Action> for CoreEvent {
             Action::SwitchTo { id } => CoreEvent::SwitchTo { id },
             Action::Dismiss { id } => CoreEvent::Dismiss { id },
             Action::FlipView => CoreEvent::FlipView,
+            Action::Edit(e) => CoreEvent::Edit(e),
+            Action::OpenProject { key } => CoreEvent::OpenProject { key },
+            Action::FileForReview { id } => CoreEvent::FileForReview { id },
         }
     }
 }
@@ -105,6 +117,11 @@ pub struct Pane {
     dirty: bool,
     /// The size the last draw filled; None before the first.
     drawn_at: Option<Size>,
+    /// The cursor among the Projects view's rows.
+    rows: Cursor,
+    /// The open editor's key and its focused field.
+    editing: Option<String>,
+    field: usize,
 }
 
 impl Pane {
@@ -161,6 +178,13 @@ impl Pane {
         self.model = model;
         let cards = self.model.card_ids();
         self.cursor.settle(&cards);
+        self.rows.settle(&self.model.project_ids());
+        // A newly opened editor starts on its first field.
+        let editing = self.model.editor().map(|e| e.key.clone());
+        if editing != self.editing {
+            self.field = 0;
+            self.editing = editing;
+        }
         // The card `m` was pressed on went, or the view left All (flipped
         // from the sidebar, say): nothing left to move.
         let all = self.model.view == PaneView::All;
@@ -234,6 +258,22 @@ impl Pane {
             self.dirty = true;
             return self.pick(id, key.code);
         }
+        // An open editor takes every key, so a "q" or "?" in a name types.
+        if !self.keys
+            && self.model.view == PaneView::Projects
+            && let Some(editor) = self.model.editor()
+        {
+            self.dirty = true;
+            return match editor::key(editor, self.field, key.code) {
+                EditKey::Send(e) => Outcome::Act(Action::Edit(e)),
+                EditKey::Focus(f) => {
+                    self.field = f;
+                    Outcome::Redraw
+                }
+                EditKey::Nothing => Outcome::Nothing,
+            };
+        }
+        let shift = key.modifiers.contains(KeyModifiers::SHIFT);
         let outcome = match key.code {
             KeyCode::Char('q') => return Outcome::Quit,
             KeyCode::Char('?') => {
@@ -257,10 +297,10 @@ impl Pane {
                 self.drag = None;
                 Outcome::Act(Action::FlipView)
             }
-            KeyCode::Up if self.model.view == PaneView::Projects => redraw_if(self.scroll(-1)),
-            KeyCode::Down if self.model.view == PaneView::Projects => redraw_if(self.scroll(1)),
-            _ if self.model.view != PaneView::All => Outcome::Nothing,
-            code => self.card_key(code, key.modifiers.contains(KeyModifiers::SHIFT)),
+            // Shift's reorder is All's; Projects has no lanes to reorder in.
+            _ if self.model.view == PaneView::Projects && shift => Outcome::Nothing,
+            _ if self.model.view == PaneView::Projects => self.row_key(key.code),
+            code => self.card_key(code, shift),
         };
         if outcome != Outcome::Nothing {
             self.dirty = true;
@@ -285,6 +325,9 @@ impl Pane {
             KeyCode::Enter => {
                 on.map_or(Outcome::Nothing, |id| Outcome::Act(Action::SwitchTo { id }))
             }
+            KeyCode::Char('r') => on.map_or(Outcome::Nothing, |id| {
+                Outcome::Act(Action::FileForReview { id })
+            }),
             KeyCode::Char('d') => match on {
                 Some(id) if self.model.is_waiting(&id) => Outcome::Act(Action::Dismiss { id }),
                 _ => Outcome::Nothing,
@@ -300,6 +343,49 @@ impl Pane {
 
     /// The key after `m` on card `id`: a lane's digit places that card at
     /// the lane's end; anything else cancels.
+    /// A key in Projects with no editor open: the cursor moves between the
+    /// rows; Enter switches to a card, opens a session in a project
+    /// (as its "+") or opens "+ New project"'s editor.
+    fn row_key(&mut self, code: KeyCode) -> Outcome {
+        let target = self.rows.on().and_then(|id| self.model.project_target(id));
+        match (code, target) {
+            (KeyCode::Up, _) => redraw_if(self.row_step(-1)),
+            (KeyCode::Down, _) => redraw_if(self.row_step(1)),
+            (KeyCode::Char('n'), _) | (KeyCode::Enter, Some(ProjectTarget::New)) => {
+                Outcome::Act(Action::Edit(EditEvent::OpenNew))
+            }
+            (KeyCode::Enter, Some(ProjectTarget::Card(id))) => {
+                Outcome::Act(Action::SwitchTo { id })
+            }
+            (KeyCode::Char('r'), Some(ProjectTarget::Card(id))) => {
+                Outcome::Act(Action::FileForReview { id })
+            }
+            (
+                KeyCode::Enter | KeyCode::Char('+'),
+                Some(ProjectTarget::Project { key, can_open }),
+            ) => {
+                if can_open {
+                    Outcome::Act(Action::OpenProject { key })
+                } else {
+                    Outcome::Nothing
+                }
+            }
+            (KeyCode::Char('e'), Some(ProjectTarget::Project { key, .. })) => {
+                Outcome::Act(Action::Edit(EditEvent::Open { key }))
+            }
+            _ => Outcome::Nothing,
+        }
+    }
+
+    /// Moves the Projects cursor, or scrolls a line with no rows to move to.
+    fn row_step(&mut self, by: isize) -> bool {
+        let ids = self.model.project_ids();
+        if ids.is_empty() {
+            return self.scroll(by);
+        }
+        self.rows.step(&ids, by)
+    }
+
     fn pick(&mut self, id: String, code: KeyCode) -> Outcome {
         let lane = match code {
             KeyCode::Char(c) => lane_for_digit(c),
@@ -321,8 +407,8 @@ impl Pane {
         if self.model.view == PaneView::Projects {
             // The wheel scrolls the Projects view; nothing there is dragged.
             let moved = match mouse.kind {
-                MouseEventKind::ScrollUp => self.scroll(-1),
-                MouseEventKind::ScrollDown => self.scroll(1),
+                MouseEventKind::ScrollUp => self.row_step(-1),
+                MouseEventKind::ScrollDown => self.row_step(1),
                 _ => false,
             };
             if moved {
@@ -426,15 +512,18 @@ impl Pane {
             return Ok(false);
         }
         let cursor = self.cursor.on();
+        let projects = self.model.view == PaneView::Projects;
+        let cursor = if projects { self.rows.on() } else { cursor };
         let shown = views::Shown {
             model: &self.model,
             cursor,
-            last: cursor.is_some() && cursor == self.model.card_ids().last().copied(),
+            last: !projects && cursor.is_some() && cursor == self.model.card_ids().last().copied(),
             manual: self.manual,
             keys: self.keys,
             picking: self.picking.is_some(),
             view: self.model.view,
             drop: self.drag.as_ref().and_then(|d| d.over.as_ref()),
+            field: self.field,
         };
         let mut drawn = views::Drawn::default();
         terminal.draw(|frame| drawn = views::draw(frame, shown))?;

@@ -12,9 +12,10 @@ mod support;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+use cockpit_core::edit::EditEvent;
 use cockpit_core::lanes::LaneKey;
 use cockpit_core::theme::Token;
-use cockpit_pane::model::PaneView;
+use cockpit_pane::model::{PaneView, ProjectTarget};
 use cockpit_pane::{Action, Outcome, Pane, PaneModel, theme};
 use crux_core::App;
 use ratatui::Terminal;
@@ -568,17 +569,83 @@ fn tab_asks_the_core_to_flip_and_draws_the_view_the_core_sends() {
     assert_eq!(live.pane.view(), PaneView::Projects, "from the core's mode");
     let mut term = terminal(40);
     check_snapshot("lanes-40-projects", &draw(&mut live.pane, &mut term));
-    for code in [
-        KeyCode::Down,
-        KeyCode::Enter,
-        KeyCode::Char('d'),
-        KeyCode::Char('m'),
-    ] {
+    assert_eq!(
+        live.press(KeyCode::Down),
+        Outcome::Redraw,
+        "the rows' cursor"
+    );
+    for code in [KeyCode::Char('d'), KeyCode::Char('m')] {
         assert_eq!(live.press(code), Outcome::Nothing, "{code:?} in Projects");
     }
     assert_eq!(live.shift(KeyCode::Up), Outcome::Nothing);
     assert_eq!(live.press(KeyCode::BackTab), Outcome::Act(Action::FlipView));
     assert_eq!(live.pane.view(), PaneView::All);
+}
+
+#[test]
+fn makes_a_project_from_the_projects_view_with_the_keys() {
+    let mut live = Live::new("projects");
+    assert_eq!(
+        live.press(KeyCode::Char('n')),
+        Outcome::Act(Action::Edit(EditEvent::OpenNew))
+    );
+    assert!(live.pane.model().editor().is_some(), "the editor opens");
+    for c in "/opt/quill".chars() {
+        assert_ne!(live.press(KeyCode::Char(c)), Outcome::Quit, "q types");
+    }
+    let mut term = terminal(40);
+    check_snapshot("projects-40-editor", &draw(&mut live.pane, &mut term));
+    assert_eq!(
+        live.press(KeyCode::Enter),
+        Outcome::Act(Action::Edit(EditEvent::Save))
+    );
+    assert!(live.pane.model().editor().is_none(), "Done closes it");
+    let made = live.core.session.spec_of("/opt/quill/").map(|p| p.name);
+    assert_eq!(made.as_deref(), Some("Quill"), "sent, waiting on the build");
+}
+
+#[test]
+fn esc_closes_the_editor_and_e_opens_it_on_the_project_under_the_cursor() {
+    let mut live = Live::new("projects");
+    assert_eq!(live.press(KeyCode::Down), Outcome::Redraw);
+    let on = live
+        .pane
+        .model()
+        .project_ids()
+        .first()
+        .map(|s| s.to_string());
+    let target = on.and_then(|id| live.pane.model().project_target(&id));
+    let Some(ProjectTarget::Project { key, can_open }) = target else {
+        panic!("the first row is a project's header: {target:?}");
+    };
+    let plus = live.press(KeyCode::Char('+'));
+    if can_open {
+        assert_eq!(plus, Outcome::Act(Action::OpenProject { key: key.clone() }));
+    } else {
+        assert_eq!(plus, Outcome::Nothing);
+    }
+    assert_eq!(
+        live.press(KeyCode::Char('e')),
+        Outcome::Act(Action::Edit(EditEvent::Open { key: key.clone() }))
+    );
+    let editor = live.pane.model().editor().map(|e| e.key.clone());
+    assert_eq!(editor.as_deref(), Some(key.as_str()));
+    assert_eq!(
+        live.press(KeyCode::Esc),
+        Outcome::Act(Action::Edit(EditEvent::Close))
+    );
+    assert!(live.pane.model().editor().is_none());
+}
+
+#[test]
+fn r_sends_the_card_under_the_cursor_to_for_review() {
+    let mut live = Live::new("lanes");
+    cursor_to(&mut live.pane, "Tidy strip");
+    let id = live.pane.cursor().map(str::to_string).unwrap();
+    assert_eq!(
+        live.press(KeyCode::Char('r')),
+        Outcome::Act(Action::FileForReview { id })
+    );
 }
 
 #[test]
