@@ -64,6 +64,14 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     Ok(out)
 }
 
+/// The home folder from `HOME`, as the sidebars' build reads it; None
+/// when it is unset, not UTF-8, or empty or "/" once trailing slashes
+/// go (as the core trims it), so the pane never offers home itself as a
+/// project.
+fn home_folder(raw: Option<String>) -> Option<String> {
+    raw.filter(|h| !cockpit_core::home::trim_slash(h).is_empty())
+}
+
 /// The main checkout's config folder, where the sidebars' build reads.
 fn default_config() -> PathBuf {
     let home = std::env::var_os("HOME").unwrap_or_default();
@@ -308,6 +316,7 @@ fn main() -> ExitCode {
         config: args.config.unwrap_or_else(default_config),
         after: args.after,
         wake: args.once.then_some(Duration::from_secs(1)),
+        home: home_folder(std::env::var("HOME").ok()),
     };
     match (args.print, args.once) {
         (true, true) => print_once(&opts),
@@ -362,6 +371,16 @@ mod tests {
             }
         );
         assert!(!args("").unwrap().print);
+    }
+
+    #[test]
+    fn home_is_known_only_when_it_names_a_folder() {
+        let home = |h: Option<&str>| home_folder(h.map(str::to_string));
+        assert_eq!(home(Some("/Users/me")), Some("/Users/me".to_string()));
+        assert_eq!(home(None), None);
+        assert_eq!(home(Some("")), None);
+        assert_eq!(home(Some("/")), None, "the core would trim it to nothing");
+        assert_eq!(home(Some("//")), None);
     }
 
     #[test]
