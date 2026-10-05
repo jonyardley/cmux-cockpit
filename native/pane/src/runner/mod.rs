@@ -229,6 +229,12 @@ impl Feed {
     pub fn projects(&mut self, projects: Vec<cockpit_core::projects::Project>) {
         self.send(Event::Projects(projects));
     }
+
+    /// Tells the core where home is. Until it knows, it never offers to
+    /// make a folder a project, since that could be home itself.
+    pub fn home(&mut self, home: Option<String>) {
+        self.model.session.home = home;
+    }
 }
 
 /// Where the runner reads from.
@@ -241,6 +247,9 @@ pub struct Options {
     /// Also call `on_frame` at least this often with no new frame, for a
     /// caller with a deadline of its own.
     pub wake: Option<Duration>,
+    /// The home folder, as the sidebars' build bakes it in (`__HOME__`),
+    /// so a "~" root expands and a folder can be offered as a project.
+    pub home: Option<String>,
 }
 
 /// Whether a frame goes in now: something changed, and no replay is
@@ -464,6 +473,7 @@ pub fn run(
         thread::spawn(move || poll_agents(&tx, &stop));
     }
     let mut feed = Feed::default();
+    feed.home(opts.home.clone());
     let worker = {
         let (out_tx, out_rx) = mpsc::channel();
         let config = opts.config.clone();
@@ -893,6 +903,53 @@ mod tests {
         assert!(
             !feed.input(polled(still, 1_791_127_140.0)).0,
             "the chip still says running"
+        );
+    }
+
+    /// The Projects view's chip words, card by card, for a feed with `home`
+    /// and two workspaces: one in a folder under home, one in home itself.
+    fn project_chips(home: Option<&str>) -> Vec<String> {
+        let mut feed = Feed::default();
+        feed.home(home.map(str::to_string));
+        feed.state(cockpit_core::persist::SavedState::default());
+        let in_dir = |id: &str, dir: &str| Workspace {
+            directory: Some(dir.to_string()),
+            ..ws(id)
+        };
+        feed.input(Input::Workspaces(vec![
+            in_dir("A", "/Users/me/dev/app"),
+            in_dir("H", "/Users/me"),
+        ]));
+        feed.act(Event::FlipView);
+        feed.frame(1_791_127_100.0);
+        let pane = crate::model::PaneModel::from_core(&mut feed.model);
+        pane.projects
+            .iter()
+            .filter_map(|row| match row {
+                crate::model::ProjectRow::Card(c) => Some(c),
+                _ => None,
+            })
+            .flat_map(|c| c.chips.iter())
+            .flat_map(|chip| chip.pieces.iter().map(|p| p.text.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn the_projects_view_offers_a_folder_once_home_is_set() {
+        let offers = |chips: Vec<String>| -> Vec<String> {
+            chips
+                .into_iter()
+                .filter(|t| t.starts_with("Make "))
+                .collect()
+        };
+        assert_eq!(
+            offers(project_chips(Some("/Users/me"))),
+            ["Make \"App\" a project"],
+            "the folder under home, never home itself"
+        );
+        assert!(
+            offers(project_chips(None)).is_empty(),
+            "no offer until the shell says where home is"
         );
     }
 

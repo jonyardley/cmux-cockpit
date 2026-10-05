@@ -64,6 +64,12 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     Ok(out)
 }
 
+/// The home folder, as the sidebars' build reads it; None when `HOME` is
+/// unset or empty, so the pane never offers home itself as a project.
+fn home_folder() -> Option<String> {
+    std::env::var("HOME").ok().filter(|h| !h.is_empty())
+}
+
 /// The main checkout's config folder, where the sidebars' build reads.
 fn default_config() -> PathBuf {
     let home = std::env::var_os("HOME").unwrap_or_default();
@@ -308,6 +314,7 @@ fn main() -> ExitCode {
         config: args.config.unwrap_or_else(default_config),
         after: args.after,
         wake: args.once.then_some(Duration::from_secs(1)),
+        home: home_folder(),
     };
     match (args.print, args.once) {
         (true, true) => print_once(&opts),
