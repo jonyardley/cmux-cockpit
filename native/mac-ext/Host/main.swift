@@ -23,6 +23,31 @@ func publish() {
     )
 }
 
+// The way back: the sidebar drops an action file into the group container
+// and posts a bare notification. The host counts the files it finds, which
+// the sidebar shows, so one tap proves the round trip.
+let actionName = Notification.Name("dev.jonyardley.cockpit.action")
+var actionsSeen = 0
+
+func collectActions() {
+    guard let dir = container?.appendingPathComponent("actions") else { return }
+    let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+    for file in files {
+        actionsSeen += 1
+        try? FileManager.default.removeItem(at: file)
+    }
+    defaults?.set(actionsSeen, forKey: "actionsSeen")
+}
+
+var notifiedActions = 0
+DistributedNotificationCenter.default().addObserver(forName: actionName, object: nil, queue: .main) { _ in
+    notifiedActions += 1
+    defaults?.set(notifiedActions, forKey: "actionNotifications")
+    collectActions()
+}
+
 print("container:", container?.path ?? "none")
+// Also sweep each second, in case the sandbox drops the notification.
+Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in collectActions() }
 Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in publish() }
 NSApplication.shared.run()
