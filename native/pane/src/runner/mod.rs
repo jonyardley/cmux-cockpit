@@ -10,6 +10,10 @@
 //!   card is dragged between lanes) and `workspace.group.` names, and any
 //!   `workspace_group.` one.
 //! - config/state.json and config/projects.json, checked every 2 seconds.
+//! - Each directory's PR, when the core asks (pr_ask.rs): `git` then `gh`
+//!   on a thread per ask, the answer coming back as an input. The core
+//!   decides when (cockpit_core::pr_poll), and only an answer that moves
+//!   what a card shows asks for a new frame.
 //!
 //! The join (join.rs) turns the first four into one frame of the core's
 //! data; a fresh frame goes in when any of them changed, and every 30
@@ -21,6 +25,7 @@
 pub mod join;
 pub mod outbox;
 pub mod parse;
+pub mod pr_ask;
 pub mod stream;
 pub mod text;
 pub mod watch;
@@ -36,6 +41,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cockpit_core::data::Workspace;
+use cockpit_core::pr_poll::PrPolled;
 use cockpit_core::{Cockpit, Effect, Event, Model};
 use crux_core::App;
 use serde_json::Value;
@@ -73,6 +79,8 @@ pub enum Input {
     Log(String),
     /// From the outbox worker: a cmux call about this workspace failed.
     CmuxFailed(String),
+    /// A directory's PR, as the core asked for it.
+    PrPolled(Box<PrPolled>),
 }
 
 /// What `on_frame` is called with besides the feed.
@@ -103,15 +111,29 @@ pub struct Feed {
     /// Requests made with no worker to take them (a feed driven by hand,
     /// as the tests do), oldest first.
     pub unsent: Vec<Outgoing>,
+    /// Where the core's PR asks go, while `run` drives the feed.
+    asker: Option<Sender<String>>,
+    /// PR asks made with no asker to take them, oldest first.
+    pub unasked: Vec<String>,
 }
 
 impl Feed {
-    fn send(&mut self, event: Event) {
+    /// Sends the core an event and hands its requests on. True when the
+    /// core asked for a render.
+    fn send(&mut self, event: Event) -> bool {
         let mut cmd = self.app.update(event, &mut self.model);
+        let mut render = false;
         for effect in cmd.effects() {
             let out = match effect {
                 // The caller draws after every batch anyway.
-                Effect::Render(_) => continue,
+                Effect::Render(_) => {
+                    render = true;
+                    continue;
+                }
+                Effect::PrPoll(r) => {
+                    self.ask(r.operation.directory);
+                    continue;
+                }
                 Effect::Cmux(r) => Outgoing::Cmux(r.operation),
                 Effect::Persist(r) => Outgoing::Persist(r.operation),
             };
@@ -125,6 +147,24 @@ impl Feed {
                 None => self.unsent.push(out),
             }
         }
+        render
+    }
+
+    fn ask(&mut self, directory: String) {
+        match &self.asker {
+            Some(a) => {
+                if let Err(mpsc::SendError(d)) = a.send(directory) {
+                    self.unasked.push(d);
+                }
+            }
+            None => self.unasked.push(directory),
+        }
+    }
+
+    /// Tells the core the shell can run `git` and `gh`, so it starts
+    /// asking for each directory's PR.
+    pub fn poll_prs(&mut self) {
+        self.send(Event::PrPollOn);
     }
 
     /// One of Jon's actions (`Event::MoveCard`, `SwitchTo`, `Dismiss` or
@@ -167,6 +207,8 @@ impl Feed {
                 self.send(Event::CmuxFailed { id });
                 (true, false, None)
             }
+            // Only an answer that moves what a card shows is news.
+            Input::PrPolled(polled) => (self.send(Event::PrPolled(polled)), false, None),
             // `run` logs these itself before they reach the feed.
             Input::Poke | Input::Log(_) => (false, false, None),
         }
@@ -394,6 +436,12 @@ pub fn run(
             outbox::perform(&out_rx, &config, run_ok, &reports);
         })
     };
+    {
+        let (ask_tx, ask_rx) = mpsc::channel();
+        let tx = tx.clone();
+        feed.asker = Some(ask_tx);
+        thread::spawn(move || pr_ask::serve(&ask_rx, &tx, pr_ask::ask));
+    }
     thread::spawn(move || {
         poll_layout(&tx, &nudge_rx, WORKSPACES_EVERY, read_list, read_groups);
     });
@@ -403,6 +451,7 @@ pub fn run(
         projects: Watched::new(opts.config.join("projects.json")),
     };
     files.check(&mut feed, &mut log);
+    feed.poll_prs();
     let start = Instant::now();
     let mut files_due = start + FILES_EVERY;
     let mut clock_due = start + CLOCK_EVERY;
@@ -490,6 +539,7 @@ pub fn run(
     // never splits a reorder from the group join behind it. Each request is
     // bounded by COMMAND_LIMIT.
     feed.worker = None;
+    feed.asker = None;
     let _ = worker.join();
 }
 
@@ -751,6 +801,46 @@ mod tests {
         assert!(feed.unsent.is_empty());
         feed.act(Event::SwitchTo { id: "Q".into() });
         assert_eq!(methods(&feed.unsent), ["workspace.select"]);
+    }
+
+    #[test]
+    fn the_core_asks_for_prs_and_only_a_chip_change_is_news() {
+        use cockpit_core::pr_poll::{PollAnswer, PrPolled};
+        let mut feed = Feed::default();
+        feed.state(cockpit_core::persist::SavedState::default());
+        let mut q = titled("Q", "q");
+        q.directory = Some("/repo".into());
+        feed.input(Input::Workspaces(vec![q]));
+        feed.input(Input::Groups(groups(&[])));
+        feed.frame(1_791_127_100.0);
+        assert!(feed.unasked.is_empty(), "off until the runner turns it on");
+        feed.poll_prs();
+        assert_eq!(feed.unasked, ["/repo"]);
+
+        let polled = |checks: &str, epoch| {
+            let pr = format!(
+                r#"{{"number": 2, "url": "https://github.com/o/r/pull/2", "status": "open",
+                    "branch": "feat", "checks": {checks}}}"#
+            );
+            Input::PrPolled(Box::new(PrPolled {
+                directory: "/repo".into(),
+                answer: PollAnswer::Answered {
+                    branch: "feat".into(),
+                    pr: serde_json::from_str(&pr).ok(),
+                },
+                epoch,
+            }))
+        };
+        let running = r#"[{"name": "a", "state": "pending"}]"#;
+        let still = r#"[{"name": "b", "state": "pending"}, {"name": "c", "state": "pass"}]"#;
+        assert!(
+            feed.input(polled(running, 1_791_127_101.0)).0,
+            "a PR appeared"
+        );
+        assert!(
+            !feed.input(polled(still, 1_791_127_140.0)).0,
+            "the chip still says running"
+        );
     }
 
     #[test]

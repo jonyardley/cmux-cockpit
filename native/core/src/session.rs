@@ -15,6 +15,7 @@ use serde_json::Value;
 
 use crate::lanes::{LANES, LaneKey};
 use crate::persist::{SavedState, ViewMode, persist_url};
+use crate::pr_poll::PrPoll;
 use crate::projects::{Project, is_project_key};
 use crate::state::DragState;
 use crate::status::Status;
@@ -160,6 +161,10 @@ pub struct Session {
     pub(crate) order_override: Option<OrderMove>,
     pub(crate) collapse_override: IndexMap<String, bool>,
     pub(crate) touched_lanes: Vec<LaneKey>,
+
+    /// The pane's own PR poll and the answers it holds, made over
+    /// `saved.prs` on every read; a new state file never resets it.
+    pub pr_poll: PrPoll,
 }
 
 impl Session {
