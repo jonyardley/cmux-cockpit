@@ -65,7 +65,7 @@ pub const HOLLOW: &str = "○";
 pub const GHOST: &str = "◌";
 
 /// The keys the `?` overlay lists: the key, then what it does.
-pub const KEYS: [(&str, &str); 15] = [
+pub const KEYS: [(&str, &str); 18] = [
     ("↑ ↓", "move between cards"),
     ("shift ↑ ↓", "reorder in its lane"),
     ("m 1-5", "move to a lane"),
@@ -73,6 +73,9 @@ pub const KEYS: [(&str, &str); 15] = [
     ("Enter", "switch to it"),
     ("d", "dismiss from Needs you"),
     ("r", "send to For review"),
+    ("p", "park a merged card"),
+    ("x", "close a merged card"),
+    ("k", "keep: hide its buttons"),
     ("+", "session in project"),
     ("e", "edit project"),
     ("n", "new project"),
@@ -90,6 +93,9 @@ pub const PICK_TITLE: &str = "Move to lane";
 pub const PICK_CANCEL: (&str, &str) = ("Esc", "cancel");
 /// A card's To review action, as the sidebar words it.
 pub const TO_REVIEW: &str = "To review →";
+/// A merged card's Park and Close, as the sidebar words them.
+pub const PARK: &str = "Park";
+pub const CLOSE: &str = "Close";
 /// After a branch with uncommitted changes.
 pub const DIRTY_MARK: &str = "●";
 /// The row under the busy projects, as the sidebar's "+ New project".
@@ -216,6 +222,10 @@ pub struct Card {
     /// actions, as the sidebar's card of this kind shows them; empty for
     /// a row.
     pub chips: Vec<Chip>,
+    /// A merged card's Park and Close. The view puts them at the end of
+    /// the chips line when every chip fits whole, else on a line of their
+    /// own under it, as the sidebar's mergedBelow does, so neither is cut.
+    pub merged: Vec<Chip>,
     /// The latest message, or what the waiting chat wants.
     pub detail: String,
     /// How many detail lines it draws: two on a full card, else one.
@@ -229,6 +239,9 @@ pub struct Card {
     /// Whether the core will move it: a card that anchors another cmux
     /// group is that group, so it stays put (drop.ts isForeignAnchor).
     pub movable: bool,
+    /// Faint, as the sidebar dims a merged card while nothing in it wants
+    /// Jon. The view draws it at full strength under the cursor.
+    pub dimmed: bool,
 }
 
 /// A run of a chip's words in one ink.
@@ -318,6 +331,27 @@ pub fn review_chip(green: bool) -> Chip {
         Token::Secondary
     };
     Chip::of(vec![piece(TO_REVIEW, ink)])
+}
+
+/// A merged card's Park, in the second ink, and Close, in the first, so
+/// the one that acts reads first (parts.ts mergedChips). Keep lives in
+/// the card menu.
+fn merged_chips(session: &mut Session, data: &Data, w: Option<&Workspace>) -> Vec<Chip> {
+    let mut out = Vec::new();
+    if session.offers_park(data, w) {
+        out.push(Chip::of(vec![piece(PARK, Token::Secondary)]));
+    }
+    if session.offers_close(data, w) {
+        out.push(Chip::of(vec![piece(CLOSE, Token::Text)]));
+    }
+    out
+}
+
+/// Whether a card sits dimmed: merged, not cmux's selected workspace, and
+/// nothing in it wants Jon (merged.rs card_opacity).
+fn is_dimmed(session: &mut Session, data: &Data, w: Option<&Workspace>) -> bool {
+    let lit = session.is_selected(data, w);
+    session.card_opacity(w, lit) < 1.0
 }
 
 /// Which card a chips row is for: the sidebar's full card and its
@@ -714,7 +748,7 @@ fn card_words(c: &Card, out: &mut Vec<String>) {
     out.push(c.status.clone());
     out.push(c.left_off.clone());
     out.push(c.detail.clone());
-    for chip in &c.chips {
+    for chip in c.chips.iter().chain(&c.merged) {
         out.extend(chip.pieces.iter().map(|p| p.text.clone()));
     }
 }
@@ -804,6 +838,7 @@ fn chips_row(
     kind: ChipsFor,
 ) -> Vec<Chip> {
     let mut out: Vec<Chip> = match kind {
+        // A row has no chips row; its Park and Close are in `merged`.
         ChipsFor::Row => return Vec::new(),
         // card_chips, so a merged card drops its clean branch as the sidebar does.
         ChipsFor::Full | ChipsFor::Project => session
@@ -939,11 +974,13 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         status_ink,
         left_off,
         chips,
+        merged: merged_chips(session, data, w),
         detail: whole_words(&session.card_detail(w), DETAIL_MAX),
         detail_lines: detail_lines(density),
         waiting: view.needs.list.iter().any(|w| w == id),
         rank: session.state_rank(data, w),
         movable: !is_foreign_anchor(session, data, id),
+        dimmed: is_dimmed(session, data, w),
     }
 }
 
@@ -1043,11 +1080,13 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         status_ink: style.text,
         left_off: String::new(),
         chips: chips_row(session, data, w, ChipsFor::Project),
+        merged: merged_chips(session, data, w),
         detail: whole_words(&wanted, 0),
         detail_lines: 2,
         waiting: view.needs.list.iter().any(|w| w == id),
         rank: session.state_rank(data, w),
         movable: !is_foreign_anchor(session, data, id),
+        dimmed: is_dimmed(session, data, w),
     }
 }
 
@@ -1381,11 +1420,13 @@ pub(crate) mod fixtures {
             status_ink: Token::MetaText,
             left_off: String::new(),
             chips: Vec::new(),
+            merged: Vec::new(),
             detail: String::new(),
             detail_lines: 1,
             waiting,
             rank,
             movable: true,
+            dimmed: false,
         })
     }
 

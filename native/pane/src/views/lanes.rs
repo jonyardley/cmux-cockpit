@@ -183,6 +183,12 @@ fn chips_line(chips: &[Chip], room: usize) -> Vec<Span<'static>> {
     out
 }
 
+/// The cells a run of chips takes on one line, each whole.
+fn chips_width(chips: &[Chip]) -> usize {
+    let gaps = chips.len().saturating_sub(1) * width(CHIP_GAP);
+    chips.iter().map(chip_width).sum::<usize>() + gaps
+}
+
 /// The cells a chip takes: its pieces, a space apart.
 fn chip_width(c: &Chip) -> usize {
     c.pieces.iter().map(|p| width(&p.text)).sum::<usize>() + c.pieces.len().saturating_sub(1)
@@ -206,10 +212,25 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
     let mut out = vec![spread(left, right, inner, first)];
     let room = inner.saturating_sub(CARD_LEAD);
     let indent = || Span::raw(" ".repeat(CARD_LEAD));
-    if !c.chips.is_empty() {
+    let chips_at = |chips: &[Chip]| {
         let mut spans = vec![indent()];
-        spans.extend(chips_line(&c.chips, room));
-        out.push(spread(spans, Vec::new(), inner, edge));
+        spans.extend(chips_line(chips, room));
+        spread(spans, Vec::new(), inner, edge)
+    };
+    // Park and Close end the chips line while every chip fits whole, else
+    // take a line of their own, so a button `x` acts on is never cut.
+    let together: Vec<Chip> = c.chips.iter().chain(&c.merged).cloned().collect();
+    if chips_width(&together) <= room {
+        if !together.is_empty() {
+            out.push(chips_at(&together));
+        }
+    } else {
+        if !c.chips.is_empty() {
+            out.push(chips_at(&c.chips));
+        }
+        if !c.merged.is_empty() {
+            out.push(chips_at(&c.merged));
+        }
     }
     if !c.left_off.is_empty() {
         let spans = vec![
@@ -225,6 +246,16 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
     if on {
         let face = Style::new().bg(theme::rgb(theme::CURSOR_BG));
         out = out.into_iter().map(|l| l.patch_style(face)).collect();
+    } else if c.dimmed {
+        // The sidebar's lit card shows at full strength; here the cursor
+        // lights it. The margin keeps its strength, so a drop mark there
+        // reads as it does above any other card.
+        let faint = Style::new().add_modifier(Modifier::DIM);
+        for line in &mut out {
+            for span in line.spans.iter_mut().skip(1) {
+                span.style = span.style.patch(faint);
+            }
+        }
     }
     out
 }
@@ -241,4 +272,23 @@ pub(super) fn ghost(title: &str, text: &str, inner: usize, landing: bool) -> Lin
     spans.push(Span::styled(words, theme::ink(Token::Faint)));
     let edge = if landing { Edge::Drop } else { Edge::Plain };
     spread(spans, Vec::new(), inner, edge)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Row, fixtures};
+
+    #[test]
+    fn a_dimmed_card_keeps_its_drop_mark_at_full_strength() {
+        let Row::Card(mut c) = fixtures::card("merged", 0, false) else {
+            panic!("the fixture is a card")
+        };
+        c.dimmed = true;
+        let lines = card(&c, 30, false, true);
+        let dim = |s: Style| s.add_modifier.contains(Modifier::DIM);
+        assert!(!dim(lines[0].style), "the line itself is not dimmed");
+        assert!(!dim(lines[0].spans[0].style), "the drop mark is not dimmed");
+        assert!(dim(lines[0].spans[1].style), "the card's words are");
+    }
 }

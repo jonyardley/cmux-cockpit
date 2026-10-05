@@ -71,6 +71,7 @@ pub fn hex(t: Token) -> u32 {
         Token::Faint | Token::LaneBackground => 0x8A8880,
         Token::Heading | Token::Select | Token::LaneMain => INK_HEADING,
         Token::GreenDeep => GREEN_DEEP,
+        Token::Text => TEXT,
         Token::Secondary => SECONDARY,
         Token::RedText => 0x9E2F27,
         Token::ChipFace => 0xF1EFE8,

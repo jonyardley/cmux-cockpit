@@ -19,7 +19,7 @@
    ○ blocked card                                                      No agent
      #6
    ○ merged card                                                       No agent
-     #7 · merged
+     #7 · merged  Park  Close
    ○ closed card                                                       No agent
      #8 · closed
 

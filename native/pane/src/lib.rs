@@ -64,6 +64,12 @@ pub enum Action {
     OpenProject { key: String },
     /// A card's "To review →".
     FileForReview { id: String },
+    /// A merged card's Park.
+    ParkMerged { id: String },
+    /// A merged card's Close.
+    CloseMerged { id: String },
+    /// Keep: hides a merged card's Park and Close.
+    KeepMerged { id: String },
     /// Something done with the card menu or a project's menu.
     Menu(MenuEvent),
 }
@@ -78,8 +84,23 @@ impl From<Action> for CoreEvent {
             Action::Edit(e) => CoreEvent::Edit(e),
             Action::OpenProject { key } => CoreEvent::OpenProject { key },
             Action::FileForReview { id } => CoreEvent::FileForReview { id },
+            Action::ParkMerged { id } => CoreEvent::ParkMerged { id },
+            Action::CloseMerged { id } => CoreEvent::CloseMerged { id },
+            Action::KeepMerged { id } => CoreEvent::KeepMerged { id },
             Action::Menu(e) => CoreEvent::Menu(e),
         }
+    }
+}
+
+/// A merged card's key as its action: `p` Park, `x` Close, `k` Keep, and
+/// any other key none. Like `r`, the key reaches every card; the core
+/// acts only on a card that offers it.
+fn merged_action(key: char, id: String) -> Option<Action> {
+    match key {
+        'p' => Some(Action::ParkMerged { id }),
+        'x' => Some(Action::CloseMerged { id }),
+        'k' => Some(Action::KeepMerged { id }),
+        _ => None,
     }
 }
 
@@ -385,6 +406,9 @@ impl Pane {
             KeyCode::Char('r') => on.map_or(Outcome::Nothing, |id| {
                 Outcome::Act(Action::FileForReview { id })
             }),
+            KeyCode::Char(c @ ('p' | 'x' | 'k')) => on
+                .and_then(|id| merged_action(c, id))
+                .map_or(Outcome::Nothing, Outcome::Act),
             KeyCode::Char('d') => match on {
                 Some(id) if self.model.is_waiting(&id) => Outcome::Act(Action::Dismiss { id }),
                 _ => Outcome::Nothing,
@@ -417,6 +441,9 @@ impl Pane {
             }
             (KeyCode::Char('r'), Some(ProjectTarget::Card(id))) => {
                 Outcome::Act(Action::FileForReview { id })
+            }
+            (KeyCode::Char(c @ ('p' | 'x' | 'k')), Some(ProjectTarget::Card(id))) => {
+                merged_action(c, id).map_or(Outcome::Nothing, Outcome::Act)
             }
             (KeyCode::Char(' '), Some(ProjectTarget::Card(id))) => {
                 Outcome::Act(Action::Menu(MenuEvent::OpenCard { id }))
