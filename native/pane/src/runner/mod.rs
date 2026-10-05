@@ -41,6 +41,7 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cockpit_core::data::Workspace;
+use cockpit_core::home::expand_home;
 use cockpit_core::pr_poll::PrPolled;
 use cockpit_core::{Cockpit, Effect, Event, Model, PrAsk};
 use crux_core::App;
@@ -226,14 +227,30 @@ impl Feed {
         self.send(Event::State(Box::new(saved)));
     }
 
+    /// The project table, each "~" root expanded against home as the
+    /// sidebars' build does (scripts/build.ts), so "+" opens a real folder.
     pub fn projects(&mut self, projects: Vec<cockpit_core::projects::Project>) {
+        let home = self.model.session.home.clone();
+        let projects = projects
+            .into_iter()
+            .map(|mut p| {
+                p.root = p
+                    .root
+                    .map(|r| expand_home(&r, home.as_deref()).unwrap_or(r));
+                p
+            })
+            .collect();
         self.send(Event::Projects(projects));
     }
 
-    /// Tells the core where home is. Until it knows, it never offers to
-    /// make a folder a project, since that could be home itself.
-    pub fn home(&mut self, home: Option<String>) {
-        self.model.session.home = home;
+    /// A feed that knows where home is from the start, before any input,
+    /// so every frame and every project table is read against it. With
+    /// None the core never offers to make a folder a project, since that
+    /// could be home itself, and "~" roots stay as written.
+    pub fn with_home(home: Option<String>) -> Self {
+        let mut feed = Self::default();
+        feed.model.session.home = home;
+        feed
     }
 }
 
@@ -472,8 +489,7 @@ pub fn run(
         let stop = Arc::clone(&stop);
         thread::spawn(move || poll_agents(&tx, &stop));
     }
-    let mut feed = Feed::default();
-    feed.home(opts.home.clone());
+    let mut feed = Feed::with_home(opts.home.clone());
     let worker = {
         let (out_tx, out_rx) = mpsc::channel();
         let config = opts.config.clone();
@@ -906,11 +922,11 @@ mod tests {
         );
     }
 
-    /// The Projects view's chip words, card by card, for a feed with `home`
-    /// and two workspaces: one in a folder under home, one in home itself.
-    fn project_chips(home: Option<&str>) -> Vec<String> {
-        let mut feed = Feed::default();
-        feed.home(home.map(str::to_string));
+    /// The Projects view's cards, each with its `Make "X" a project` offer
+    /// if it has one, for a feed with `home` and two workspaces: one in a
+    /// folder under home, one in home itself. Sorted by workspace id.
+    fn project_offers(home: Option<&str>) -> Vec<(String, Option<String>)> {
+        let mut feed = Feed::with_home(home.map(str::to_string));
         feed.state(cockpit_core::persist::SavedState::default());
         let in_dir = |id: &str, dir: &str| Workspace {
             directory: Some(dir.to_string()),
@@ -923,33 +939,72 @@ mod tests {
         feed.act(Event::FlipView);
         feed.frame(1_791_127_100.0);
         let pane = crate::model::PaneModel::from_core(&mut feed.model);
-        pane.projects
+        let mut cards: Vec<(String, Option<String>)> = pane
+            .projects
             .iter()
             .filter_map(|row| match row {
                 crate::model::ProjectRow::Card(c) => Some(c),
                 _ => None,
             })
-            .flat_map(|c| c.chips.iter())
-            .flat_map(|chip| chip.pieces.iter().map(|p| p.text.clone()))
-            .collect()
+            .map(|c| {
+                let offer = c
+                    .chips
+                    .iter()
+                    .flat_map(|chip| chip.pieces.iter())
+                    .map(|p| p.text.clone())
+                    .find(|t| t.starts_with("Make "));
+                (c.ws_id.clone(), offer)
+            })
+            .collect();
+        cards.sort();
+        cards
     }
 
     #[test]
     fn the_projects_view_offers_a_folder_once_home_is_set() {
-        let offers = |chips: Vec<String>| -> Vec<String> {
-            chips
-                .into_iter()
-                .filter(|t| t.starts_with("Make "))
+        let card = |id: &str, offer: Option<&str>| (id.to_string(), offer.map(str::to_string));
+        assert_eq!(
+            project_offers(Some("/Users/me")),
+            [card("A", Some("Make \"App\" a project")), card("H", None)],
+            "the folder under home, never home itself"
+        );
+        assert_eq!(
+            project_offers(None),
+            [card("A", None), card("H", None)],
+            "no offer until the shell says where home is"
+        );
+    }
+
+    #[test]
+    fn a_tilde_root_expands_against_home_as_the_build_does() {
+        let table = || -> Vec<cockpit_core::projects::Project> {
+            serde_json::from_value(json!([
+                {"match": "/dev/app", "name": "App", "color": "#000", "icon": "star", "root": "~/dev/app"},
+                {"match": "/opt/x", "name": "X", "color": "#000", "icon": "star", "root": "/opt/x"}
+            ]))
+            .unwrap()
+        };
+        let roots = |home: Option<&str>| -> Vec<Option<String>> {
+            let mut feed = Feed::with_home(home.map(str::to_string));
+            feed.projects(table());
+            feed.model
+                .session
+                .projects
+                .iter()
+                .map(|p| p.root.clone())
                 .collect()
         };
         assert_eq!(
-            offers(project_chips(Some("/Users/me"))),
-            ["Make \"App\" a project"],
-            "the folder under home, never home itself"
+            roots(Some("/Users/me/")),
+            [
+                Some("/Users/me/dev/app".to_string()),
+                Some("/opt/x".to_string())
+            ]
         );
-        assert!(
-            offers(project_chips(None)).is_empty(),
-            "no offer until the shell says where home is"
+        assert_eq!(
+            roots(None),
+            [Some("~/dev/app".to_string()), Some("/opt/x".to_string())],
+            "with no home the root stays as written, as the build leaves it"
         );
     }
 
