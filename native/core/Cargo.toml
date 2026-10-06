@@ -8,6 +8,11 @@ description = "The cockpit's shared core: a Crux app the pane and the Swift shel
 [lints]
 workspace = true
 
+# crux's effect macro reads it; the bridge needs the serde form whatever
+# it is set to.
+[features]
+typegen = []
+
 [dependencies]
 crux_core = "0.20"
 # The panel model's shape for native/typegen. Pinned to the exact version
