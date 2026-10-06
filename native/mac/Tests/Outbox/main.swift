@@ -4,7 +4,10 @@ import Foundation
 // Sidebar/Model/SidebarAction.swift): every action encodes to the JSON in
 // native/runner/tests/actions.json, the file the runner's own test parses
 // as its Action, and a send lands as a file the runner picks up in order.
-// test.sh builds and runs it with that file's path as its argument.
+// It also writes what Swift encoded, each event alone and then wrapped in
+// `.at(now:event:)`, as one JSON array to the second path, which
+// native/typegen's check-events then decodes as the core's Event.
+// test.sh builds and runs it with those two paths as its arguments.
 
 var failures = 0
 
@@ -14,8 +17,8 @@ func check(_ ok: Bool, _ what: String) {
 }
 
 let args = CommandLine.arguments
-guard args.count == 2 else {
-    print("usage: outbox-check <actions.json>")
+guard args.count == 3 else {
+    print("usage: outbox-check <actions.json> <swift-events.json out>")
     exit(2)
 }
 
@@ -85,6 +88,14 @@ for (action, want) in zip(every, expected) {
     let text = data.map { String(decoding: $0, as: UTF8.self) } ?? "nothing"
     check(got.map { ($0 as AnyObject).isEqual(want) } ?? false, "\(action) encodes as \(text)")
 }
+
+// MARK: What Swift encoded, for Rust to decode
+
+let stamped = every.map { Event.at(now: 1_791_229_864.123, event: $0) }
+let encoded = (every + stamped).compactMap { try? JSONEncoder().encode($0) }
+let array = Data("[".utf8) + encoded.joined(separator: Data(",".utf8)) + Data("]".utf8)
+let out = URL(fileURLWithPath: args[2])
+check(encoded.count == every.count * 2 && (try? array.write(to: out)) != nil, "wrote \(encoded.count) events for the Rust check")
 
 // MARK: Sending
 

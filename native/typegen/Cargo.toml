@@ -3,7 +3,8 @@ name = "cockpit_typegen"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
-description = "Writes the panel model's Swift types, with a Decodable that reads serde_json's shapes"
+default-run = "cockpit_typegen"
+description = "Writes the panel model's and the core events' Swift types, reading and writing serde_json's shapes"
 
 [lints]
 workspace = true
@@ -14,6 +15,4 @@ cockpit_core = { path = "../core" }
 facet = "=0.46.5"
 facet_generate = { version = "0.19", default-features = false, features = ["swift"] }
 heck = "0.5"
-
-[dev-dependencies]
 serde_json = "1.0.151"
