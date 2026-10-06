@@ -46,7 +46,7 @@ let sceneOf: [String: String] = [
 /// tabs above the first lane or project header are left out, as are
 /// headers. Each card's words are its whitespace runs, its mark dropped.
 func snapshotCards(_ text: String) -> [[String]] {
-    let marks: Set<String> = ["●", "○", "◌"]
+    let marks: Set<String> = ["●", "○", Words.ghost]
     var cards: [[String]] = []
     var inLanes = false
     var current: [String]?
@@ -155,6 +155,46 @@ if let panel = load("lanes") {
 }
 
 // MARK: Chips that fit
+
+/// The pane's fit_ranked by width, for the test only: the view lets
+/// ViewThatFits pick from ChipFit.candidates, and the checks below hold
+/// that its first fitting line is this one.
+extension ChipFit {
+    struct Fit: Equatable {
+        /// One per chip: whether it shows.
+        let shown: [Bool]
+        /// Whether some were left off, so the ellipsis shows.
+        let cut: Bool
+    }
+
+    /// The width of `widths` on one line, `gap` apart.
+    static func width(_ widths: [Double], gap: Double) -> Double {
+        widths.reduce(0, +) + gap * Double(max(0, widths.count - 1))
+    }
+
+    /// How many of `widths` fit whole in `room`, `gap` apart, leaving room
+    /// for an ellipsis of `tail` after them when some are left off.
+    static func count(_ widths: [Double], gap: Double, room: Double, tail: Double) -> (Int, Bool) {
+        if width(widths, gap: gap) <= room { return (widths.count, false) }
+        var used = 0.0
+        for (i, w) in widths.enumerated() {
+            let lead = i == 0 ? 0 : gap
+            if used + lead + w + gap + tail > room { return (i, true) }
+            used += lead + w
+        }
+        return (widths.count, false)
+    }
+
+    static func fit(_ widths: [Double], givesWay: [Bool], gap: Double, room: Double, tail: Double) -> Fit {
+        let (all, cut) = count(widths, gap: gap, room: room, tail: tail)
+        if !cut { return Fit(shown: Array(repeating: true, count: all), cut: false) }
+        let keep = widths.indices.filter { !(givesWay.indices.contains($0) && givesWay[$0]) }
+        let (n, _) = count(keep.map { widths[$0] } + [tail], gap: gap, room: room, tail: tail)
+        var shown = Array(repeating: false, count: widths.count)
+        for i in keep.prefix(min(n, keep.count)) { shown[i] = true }
+        return Fit(shown: shown, cut: true)
+    }
+}
 
 let none = [false, false, false]
 check(ChipFit.fit([10, 10, 10], givesWay: none, gap: 2, room: 34, tail: 4) == .init(shown: [true, true, true], cut: false), "all chips fit")

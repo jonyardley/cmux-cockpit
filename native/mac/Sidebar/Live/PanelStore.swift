@@ -43,9 +43,11 @@ final class PanelStore {
         guard let file = folder?.appendingPathComponent(PanelFile.fileName) else { return }
         let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         guard modified != seen else { return }
-        seen = modified
-        // A file that will not decode keeps the last panel on screen.
+        // A file that will not read or decode keeps the last panel on
+        // screen, and is tried again at the next poll rather than marked
+        // seen, so a read that fails once is not lost until the next write.
         guard let data = try? Data(contentsOf: file), let next = PanelFile.decode(data)?.panel else { return }
+        seen = modified
         if next != panel { panel = next }
     }
 }
