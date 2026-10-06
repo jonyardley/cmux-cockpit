@@ -46,12 +46,16 @@ fn event(v: &Value) -> Result<Event, String> {
     serde_json::from_value(v.clone()).map_err(|e| e.to_string())
 }
 
+/// The time native/mac/Tests/Outbox stamps each event with, in seconds.
+const NOW: f64 = 1_791_229_864.123;
+
 /// Whether Swift's `got` decodes as the same action as `want`, alone or
-/// (`stamped`) inside `At`.
+/// (`stamped`) inside `At` at `NOW`.
 fn same(got: &Value, want: &Value, stamped: bool) -> Result<(), String> {
     let want = event(want)?;
     let got = match (event(got)?, stamped) {
-        (Event::At { event, .. }, true) => *event,
+        (Event::At { now, event }, true) if now.to_bits() == NOW.to_bits() => *event,
+        (Event::At { now, .. }, true) => return Err(format!("stamped {now}, not {NOW}")),
         (e, false) => e,
         (e, true) => return Err(format!("{e:?} is not stamped")),
     };
