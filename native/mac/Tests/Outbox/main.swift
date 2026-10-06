@@ -4,7 +4,10 @@ import Foundation
 // Sidebar/Model/SidebarAction.swift): every action encodes to the JSON in
 // native/runner/tests/actions.json, the file the runner's own test parses
 // as its Action, and a send lands as a file the runner picks up in order.
-// test.sh builds and runs it with that file's path as its argument.
+// It also writes what Swift encoded, each event alone and then wrapped in
+// `.at(now:event:)`, as one JSON array to the second path, which
+// native/typegen's check-events then decodes as the core's Event.
+// test.sh builds and runs it with those two paths as its arguments.
 
 var failures = 0
 
@@ -14,8 +17,8 @@ func check(_ ok: Bool, _ what: String) {
 }
 
 let args = CommandLine.arguments
-guard args.count == 2 else {
-    print("usage: outbox-check <actions.json>")
+guard args.count == 3 else {
+    print("usage: outbox-check <actions.json> <swift-events.json out>")
     exit(2)
 }
 
@@ -86,6 +89,29 @@ for (action, want) in zip(every, expected) {
     check(got.map { ($0 as AnyObject).isEqual(want) } ?? false, "\(action) encodes as \(text)")
 }
 
+// MARK: What Swift encoded, for Rust to decode
+
+let stamped = every.map { Event.at(now: 1_791_229_864.123, event: $0) }
+let encoded = (every + stamped).compactMap { event -> Data? in
+    do { return try JSONEncoder().encode(event) } catch {
+        check(false, "\(event) encodes: \(error)")
+        return nil
+    }
+}
+let array = Data("[".utf8) + encoded.joined(separator: Data(",".utf8)) + Data("]".utf8)
+let out = URL(fileURLWithPath: args[2])
+check(encoded.count == every.count * 2 && (try? array.write(to: out)) != nil, "wrote \(encoded.count) events for the Rust check")
+
+// MARK: Only actions go out
+
+check(every.allSatisfy(\.isAction), "every action in actions.json is one the runner takes")
+let refused: [SidebarAction] = [
+    .refresh, .cmuxFailed(id: "W1"), .prPollOn, .panelOn, .at(now: 1, event: .flipView),
+]
+for event in refused {
+    check(!event.isAction, "\(event) is not sent: the runner refuses it")
+}
+
 // MARK: Sending
 
 let folder = FileManager.default.temporaryDirectory
@@ -93,6 +119,9 @@ let folder = FileManager.default.temporaryDirectory
 let now = Date(timeIntervalSince1970: 1_791_229_864.123)
 let first = try? Outbox.write(.flipView, into: folder, now: now)
 let second = try? Outbox.write(.menu(.close), into: folder, now: now)
+for event in refused {
+    check((try? Outbox.write(event, into: folder, now: now)) == nil, "\(event) is refused, never written")
+}
 let outbox = folder.appendingPathComponent(Outbox.dirName)
 let names = ((try? FileManager.default.contentsOfDirectory(atPath: outbox.path)) ?? []).sorted()
 let pattern = try! NSRegularExpression(pattern: "^[0-9]{13}-[0-9]{6}\\.json$")

@@ -8,9 +8,11 @@
 #    decode with them.
 # 3. The sidebar's logic in Sidebar/Model/, with the words on each card
 #    checked against the terminal pane's snapshot of the same scene.
-# 4. The outbox: every action the sidebar sends encodes to the JSON the
-#    runner's own test parses (native/runner/tests/actions.json), and a
-#    send lands as a file named as the runner takes it.
+# 4. The outbox: every action the sidebar sends, as the generated Event,
+#    encodes to the JSON the runner's own test parses
+#    (native/runner/tests/actions.json) and decodes in Rust as the core's
+#    Event, alone and inside At; a send lands as a file named as the
+#    runner takes it.
 # 5. The effect files: native/runner/tests/effects.json, which the
 #    runner's own test matches against the bridge, has one entry per
 #    effect the runner takes from outbox/.
@@ -32,7 +34,8 @@ build/decode-check ../fixtures
 swiftc -swift-version 6 -o build/views-check Generated/PanelTypes.swift Sidebar/Model/*.swift Tests/Views/main.swift
 build/views-check ../fixtures ../pane/tests/snapshots
 swiftc -swift-version 6 -o build/outbox-check Generated/PanelTypes.swift Shared/Heartbeat.swift Sidebar/Model/SidebarAction.swift Sidebar/Live/Outbox.swift Tests/Outbox/main.swift
-build/outbox-check ../runner/tests/actions.json
+build/outbox-check ../runner/tests/actions.json build/swift-events.json
+(cd .. && cargo run -q -p cockpit_typegen --bin check_events -- runner/tests/actions.json mac/build/swift-events.json)
 swiftc -swift-version 6 -o build/effects-check Tests/Effects/main.swift
 build/effects-check ../runner/tests/effects.json
 swiftc -swift-version 6 -o build/drag-check Generated/PanelTypes.swift Sidebar/Model/*.swift Sidebar/Live/PendingMove.swift Sidebar/Views/DragItem.swift Tests/Drag/main.swift
