@@ -19,6 +19,20 @@ extension Event {
 
     /// A click on a lane's heading, unlabelled as the views spell it.
     static func toggleLane(_ lane: LaneKey) -> Event { .toggleLane(lane: lane) }
+
+    /// Whether the runner takes it from the outbox: its `Action`
+    /// (native/runner/src/action.rs) holds Jon's clicks only, and refuses
+    /// the core's other events, `At` among them. A switch with no default,
+    /// so a new event fails to compile here until it is sorted.
+    var isAction: Bool {
+        switch self {
+        case .refresh, .cmuxFailed, .prPollOn, .panelOn, .at: false
+        case .moveCard, .switchTo, .selected, .dismiss, .flipView, .edit, .openProject,
+             .fileForReview, .parkMerged, .closeMerged, .keepMerged, .menu, .next,
+             .messageAgent, .toggleLane, .toggleProject, .toggleQuiet:
+            true
+        }
+    }
 }
 
 extension SidebarAction {

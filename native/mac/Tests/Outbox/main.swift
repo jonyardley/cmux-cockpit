@@ -92,10 +92,25 @@ for (action, want) in zip(every, expected) {
 // MARK: What Swift encoded, for Rust to decode
 
 let stamped = every.map { Event.at(now: 1_791_229_864.123, event: $0) }
-let encoded = (every + stamped).compactMap { try? JSONEncoder().encode($0) }
+let encoded = (every + stamped).compactMap { event -> Data? in
+    do { return try JSONEncoder().encode(event) } catch {
+        check(false, "\(event) encodes: \(error)")
+        return nil
+    }
+}
 let array = Data("[".utf8) + encoded.joined(separator: Data(",".utf8)) + Data("]".utf8)
 let out = URL(fileURLWithPath: args[2])
 check(encoded.count == every.count * 2 && (try? array.write(to: out)) != nil, "wrote \(encoded.count) events for the Rust check")
+
+// MARK: Only actions go out
+
+check(every.allSatisfy(\.isAction), "every action in actions.json is one the runner takes")
+let refused: [SidebarAction] = [
+    .refresh, .cmuxFailed(id: "W1"), .prPollOn, .panelOn, .at(now: 1, event: .flipView),
+]
+for event in refused {
+    check(!event.isAction, "\(event) is not sent: the runner refuses it")
+}
 
 // MARK: Sending
 
@@ -104,6 +119,9 @@ let folder = FileManager.default.temporaryDirectory
 let now = Date(timeIntervalSince1970: 1_791_229_864.123)
 let first = try? Outbox.write(.flipView, into: folder, now: now)
 let second = try? Outbox.write(.menu(.close), into: folder, now: now)
+for event in refused {
+    check((try? Outbox.write(event, into: folder, now: now)) == nil, "\(event) is refused, never written")
+}
 let outbox = folder.appendingPathComponent(Outbox.dirName)
 let names = ((try? FileManager.default.contentsOfDirectory(atPath: outbox.path)) ?? []).sorted()
 let pattern = try! NSRegularExpression(pattern: "^[0-9]{13}-[0-9]{6}\\.json$")

@@ -15,17 +15,23 @@ enum Outbox {
     /// their order.
     private static var counter: UInt32 = 0
 
-    /// Sends one action. False when it could not be written (no group
-    /// folder, or the disk refused); the action is then dropped.
+    /// Sends one action. False when it could not be written (an event the
+    /// runner refuses, no group folder, or the disk refused); the action is
+    /// then dropped.
     @discardableResult
     static func send(_ action: SidebarAction) -> Bool {
         guard let folder = Shared.folder else { return false }
         return (try? write(action, into: folder, now: Date())) != nil
     }
 
+    /// An event the runner refuses, so it is never written.
+    struct Refused: Error {}
+
     /// Writes one action file into `folder`'s outbox/, making it when
-    /// missing, and returns the file's URL.
+    /// missing, and returns the file's URL. Throws `Refused` for any of the
+    /// core's events that is not one of Jon's actions.
     static func write(_ action: SidebarAction, into folder: URL, now: Date) throws -> URL {
+        guard action.isAction else { throw Refused() }
         let outbox = folder.appendingPathComponent(dirName, isDirectory: true)
         try FileManager.default.createDirectory(at: outbox, withIntermediateDirectories: true)
         let data = try JSONEncoder().encode(action)
