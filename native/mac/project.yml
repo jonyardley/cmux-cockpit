@@ -25,9 +25,33 @@ targets:
       - target: CockpitSidebar
         embed: true
         codeSign: true
+    postBuildScripts:
+      - name: Embed cockpit-publish
+        # The helper starts it from Contents/MacOS. Built with cargo in the
+        # configuration's profile, copied in, and signed with the app's
+        # identity and entitlements (the App Group) when the build signs:
+        # an unsigned binary inside would break the app's seal. Unsandboxed
+        # (below): cargo writes native/target and codesign reads the
+        # keychain.
+        script: |
+          set -eu
+          export PATH="$HOME/.cargo/bin:$PATH"
+          if [ "$CONFIGURATION" = Release ]; then profile=release; flag=--release; else profile=debug; flag=; fi
+          (cd "$SRCROOT/.." && cargo build -q $flag -p cockpit_runner --bin cockpit-publish)
+          out="$TARGET_BUILD_DIR/$EXECUTABLE_FOLDER_PATH/cockpit-publish"
+          cp "$SRCROOT/../target/$profile/cockpit-publish" "$out"
+          if [ "${CODE_SIGNING_ALLOWED:-NO}" = YES ] && [ -n "${EXPANDED_CODE_SIGN_IDENTITY:-}" ]; then
+            codesign --force --options runtime --timestamp=none \
+              --entitlements "$SRCROOT/Host/Host.entitlements" \
+              --sign "$EXPANDED_CODE_SIGN_IDENTITY" "$out"
+          fi
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(EXECUTABLE_FOLDER_PATH)/cockpit-publish
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.jonyardley.cockpit
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
         PRODUCT_NAME: Cockpit
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_LSUIElement: YES

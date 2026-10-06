@@ -4,10 +4,16 @@ cmux hosts compiled SwiftUI sidebars through ExtensionKit. Cockpit is two
 parts, built together from `project.yml` with XcodeGen:
 
 - `Cockpit.app` (`Host/`): the helper app. Unsandboxed, no Dock icon, no
-  window. For now it only writes a heartbeat; later it starts the runner
-  and publishes the panel model.
+  window. It writes a heartbeat and keeps `cockpit-publish` (the runner,
+  headless, built by cargo and copied into `Contents/MacOS`) running: it
+  starts it with a full PATH and its own pid as the parent, starts it
+  again after a backoff if it dies (`Host/Restart.swift`), and stops it
+  on quit. The publisher's log is `~/Library/Logs/Cockpit/cockpit-publish.log`.
 - `CockpitSidebar.appex` (`Sidebar/`), embedded in the app: the sandboxed
-  extension cmux draws in its left sidebar.
+  extension cmux draws in its left sidebar. `Sidebar/Model/` decides what
+  to show (card words, which chips fit, the palette) in plain Swift that
+  `test.sh` checks; `Sidebar/Views/` lays it out in SwiftUI;
+  `Sidebar/Live/` reads the App Group folder.
 - `Shared/`: the names and the heartbeat rule both targets compile.
   `Tests/main.swift` checks the rule; `native/mac/test.sh` runs it.
 - `Generated/PanelTypes.swift`: the panel model's Swift types, which the
@@ -66,9 +72,15 @@ To work in Xcode instead: `./fetch-sdk.sh && xcodegen`, then open
 native/mac/test.sh
 ```
 
-Needs only the Swift compiler and cargo. It runs the heartbeat checks,
-writes the panel types, then decodes each fixture and checks what it
-holds; every line reads `ok:`, and any `FAIL:` line fails the run.
+Needs only the Swift compiler and cargo. It runs the heartbeat and
+restart checks, writes the panel types, decodes each fixture and checks
+what it holds, then checks the sidebar's logic: for every fixture, the
+words on each card are the words the terminal pane draws for that card in
+its snapshot of the same scene (`native/pane/tests/snapshots/*-80.txt`).
+Every line reads `ok:`, and any `FAIL:` line fails the run.
+
+Xcode previews: `Sidebar/Views/Previews.swift` has one per fixture, plus
+dark and narrow lanes and the two empty states.
 
 ## Run
 
@@ -85,7 +97,22 @@ registered:
 pluginkit -mAvvv -i dev.jonyardley.cockpit.sidebar
 ```
 
-To stop the helper: `pkill -x Cockpit`.
+To stop the helper: `pkill -x Cockpit`. To run it without the
+publisher, so a fixture stays on screen:
+
+```sh
+open native/mac/build/Build/Products/Debug/Cockpit.app --args --no-publish
+```
+
+## Show a fixture
+
+```sh
+native/mac/dev-fixture.sh lanes
+```
+
+It wraps `native/fixtures/lanes.json` as `panel.json` in the group folder
+and posts the "changed" signal. A running publisher replaces it at its
+next change, so stop the helper first or start it with `--no-publish`.
 
 ## Switch it on in cmux
 
@@ -96,9 +123,9 @@ Once per machine:
 3. Open the command palette and run "Sidebar: Extension Sidebar".
 4. A "Limited extension access" banner appears once: grant access.
 
-The sidebar then shows one of two states:
-
-- Helper running: "Cockpit", then "Connected. The panel arrives here in a
-  later release."
-- Helper not running: "Cockpit isn't running", then "Open Cockpit.app to
-  start it."
+The sidebar then shows the panel in `panel.json` whenever one decodes:
+the view switch, Next, Needs you while something waits, and the five
+lanes in All; Projects is a placeholder until R2.8. While the helper is
+down a line on top says "Cockpit isn't running". With no panel yet it
+says "Waiting for the panel" (helper up) or "Cockpit isn't running"
+(helper down).
