@@ -49,8 +49,7 @@ struct AnchorBadge: View {
 
     var body: some View {
         Button {
-            SelectState.shared.select(anchor.id)
-            Outbox.send(.switchTo(id: anchor.id))
+            if Outbox.send(.switchTo(id: anchor.id)) { SelectState.shared.select(anchor.id) }
         } label: {
             HStack(spacing: 5) {
                 Text(anchor.icon.glyph).foregroundStyle(Color(dot: anchor.icon.ink))

@@ -38,18 +38,20 @@ final class HostLink {
     /// not a UUID, or when cmux refuses, the core's SwitchTo goes through
     /// the outbox instead, so a click is never lost. Built once, so each
     /// republish hands the views the same value.
+    /// Each answer is logged with its id, timed from its own click.
     lazy var switchWorkspace = SwitchWorkspace { [weak self] id in
+        let at = Date()
         guard let host = self?.host, let uuid = UUID(uuidString: id) else {
-            SelectLog.note("no cmux host, sent through the outbox")
+            Timeline.select.note("no cmux host, sent through the outbox: \(id)", since: at)
             SwitchWorkspace.outbox.run(id)
             return
         }
         Task { @MainActor in
             do {
                 try await host.selectWorkspace(uuid)
-                SelectLog.note("cmux took the select")
+                Timeline.select.note("cmux took the select: \(id)", since: at)
             } catch {
-                SelectLog.note("cmux refused the select, sent through the outbox")
+                Timeline.select.note("cmux refused the select, sent through the outbox: \(id)", since: at)
                 SwitchWorkspace.outbox.run(id)
             }
         }

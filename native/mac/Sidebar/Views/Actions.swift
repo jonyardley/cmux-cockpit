@@ -11,7 +11,10 @@ import SwiftUI
 struct SwitchWorkspace: Sendable {
     let run: @MainActor @Sendable (String) -> Void
 
-    static let outbox = SwitchWorkspace { _ = Outbox.send(.switchTo(id: $0)) }
+    /// A click drawn selected stops being drawn if the outbox cannot take it.
+    static let outbox = SwitchWorkspace { id in
+        if !Outbox.send(.switchTo(id: id)) { SelectState.shared.drop(id) }
+    }
 }
 
 extension EnvironmentValues {

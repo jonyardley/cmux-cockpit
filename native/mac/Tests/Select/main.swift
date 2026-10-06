@@ -1,8 +1,8 @@
 import Foundation
 
 // Checks the click waiting for panel.json (Sidebar/Live/PendingSelect.swift):
-// what draws selected while it waits, which panel shows it done, and when
-// it lapses. test.sh builds and runs it with native/fixtures/ as its
+// what draws selected while it waits, and which panel shows it done or
+// overtaken. test.sh builds and runs it with native/fixtures/ as its
 // argument, for a panel to build the scenes on.
 
 var failures = 0
@@ -42,8 +42,14 @@ func panel(selected: String?, projects: [ProjectRow] = []) -> Panel {
     return next
 }
 
-let now = Date()
-let clickB = PendingSelect(id: "B", until: now.addingTimeInterval(PendingSelect.lasts))
+let clickB = PendingSelect(id: "B", was: ["A"])
+
+// MARK: The click
+
+check(PendingSelect.clicked("B", selected: ["A"]) == clickB, "a click on B while A is selected waits for B")
+check(PendingSelect.clicked("A", selected: ["A"]) == nil, "a click on the card already selected waits for nothing")
+check(PendingSelect.clicked("B", selected: []) == PendingSelect(id: "B", was: []),
+      "a click with nothing drawn selected still waits")
 
 // MARK: What draws selected
 
@@ -52,26 +58,26 @@ check(!PendingSelect.shows("B", selected: false, pending: nil), "with no click w
 check(PendingSelect.shows("B", selected: false, pending: clickB), "the clicked card draws selected before the panel shows it")
 check(!PendingSelect.shows("A", selected: true, pending: clickB), "the card the panel still has selected loses its outline on the click")
 
-// MARK: Which panel shows it done
+// MARK: What the panel drew
 
-check(!clickB.confirmed(by: panel(selected: "A")), "a panel still on A keeps the click waiting")
-check(clickB.confirmed(by: panel(selected: "B")), "a panel with B selected shows the click done")
-check(!clickB.confirmed(by: panel(selected: nil)), "a panel with nothing selected keeps the click waiting")
-check(clickB.confirmed(by: panel(selected: nil, projects: [.card(card("B", selected: true))])),
-      "B selected in the Projects view shows the click done")
+check(PendingSelect.selected(in: panel(selected: "A")) == ["A"], "the panel's selected set is the one card cmux has")
+check(PendingSelect.selected(in: panel(selected: nil, projects: [.card(card("B", selected: true))])) == ["B"],
+      "a card selected in the Projects view counts")
 let anchored = { () -> Panel in
     var next = panel(selected: nil)
     next.lanes = [lane([], anchor: Anchor(id: "B", selected: true, icon: Icon(glyph: "o", ink: nil), unread: ""))]
     return next
 }()
-check(clickB.confirmed(by: anchored), "a lane anchor with B selected shows the click done")
-check(PendingSelect.selected(in: panel(selected: "A")) == ["A"], "the panel's selected set is the one card cmux has")
+check(PendingSelect.selected(in: anchored) == ["B"], "a lane anchor selected counts")
 
-// MARK: When it lapses
+// MARK: What a fresh panel makes of the click
 
-check(clickB.live(at: now), "the click is drawn as it lands")
-check(clickB.live(at: now.addingTimeInterval(PendingSelect.lasts - 0.1)), "the click is still drawn just inside its time")
-check(!clickB.live(at: now.addingTimeInterval(PendingSelect.lasts)), "the click lapses once its time is up")
+check(clickB.outcome(["A"]) == .waiting, "a panel still on A keeps the click waiting")
+check(clickB.outcome(["B"]) == .shown, "a panel with B selected shows the click done")
+check(clickB.outcome([]) == .waiting, "a panel with nothing drawn selected keeps the click waiting")
+check(clickB.outcome(["C"]) == .movedOn, "a panel that moved on to C (Next, or a switch in cmux) ends the click")
+check(PendingSelect(id: "B", was: []).outcome(["A"]) == .movedOn,
+      "a click made with nothing drawn selected ends when the panel shows another")
 check(PendingSelect.lasts == 4, "a click holds four seconds, as the TypeScript sidebar's tap does")
 
 if failures > 0 {

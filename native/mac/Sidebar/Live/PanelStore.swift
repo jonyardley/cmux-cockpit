@@ -48,6 +48,8 @@ final class PanelStore {
         // seen, so a read that fails once is not lost until the next write.
         guard let data = try? Data(contentsOf: file), let next = PanelFile.decode(data)?.panel else { return }
         seen = modified
+        // Every fresh file, so a click is let go as soon as it shows.
+        SelectState.shared.reconcile(next)
         if next != panel { panel = next }
     }
 }
