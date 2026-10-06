@@ -100,6 +100,20 @@ check(names.first?.hasPrefix("1791229864123-") ?? false, "the name starts with t
 check(names == [first, second].compactMap { $0?.lastPathComponent }, "they sort in the order sent")
 let sent = first.flatMap { try? Data(contentsOf: $0) }.flatMap(json)
 check((sent as AnyObject?)?.isEqual("FlipView") ?? false, "the file holds the action's JSON")
+
+// Another sidebar process, counting from 1 as well, sent in the same
+// millisecond: the next name is taken, so this send takes the one after.
+let taken = second.map { name in
+    let n = Int(name.deletingPathExtension().lastPathComponent.suffix(6))! + 1
+    return outbox.appendingPathComponent(String(format: "1791229864123-%06d.json", n))
+}
+if let taken { try? Data("\"FlipView\"".utf8).write(to: taken) }
+let third = try? Outbox.write(.menu(.close), into: folder, now: now)
+check(third != nil && third != taken, "a send whose name another process holds takes the next one")
+let kept = taken.flatMap { try? Data(contentsOf: $0) }.flatMap(json)
+check((kept as AnyObject?)?.isEqual("FlipView") ?? false, "and leaves the other process's file as it was")
+let left = ((try? FileManager.default.contentsOfDirectory(atPath: outbox.path)) ?? [])
+check(left.count == 4 && !left.contains { $0.hasPrefix(".") }, "no temp file is left: \(left.sorted())")
 try? FileManager.default.removeItem(at: folder)
 
 if failures > 0 {

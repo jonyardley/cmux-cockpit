@@ -143,24 +143,102 @@ mod tests {
         }
     }
 
-    /// The actions the Swift sidebar's outbox check encodes, one per
-    /// variant of every nested event too: each must parse here.
+    /// Every variant a file names, down through the nested events, as
+    /// (group, its number, how many the group has). Each match lists every
+    /// variant with no catch all, so a new one in Rust fails to compile
+    /// here until it has a number, then fails the test below until
+    /// actions.json has it, and so the Swift outbox check, which encodes
+    /// one action per entry of that file.
+    fn variants(a: &Action) -> Vec<(&'static str, usize, usize)> {
+        let top = match a {
+            Action::MoveCard { .. } => 0,
+            Action::SwitchTo { .. } => 1,
+            Action::Dismiss { .. } => 2,
+            Action::FlipView => 3,
+            Action::Edit(_) => 4,
+            Action::OpenProject { .. } => 5,
+            Action::FileForReview { .. } => 6,
+            Action::ParkMerged { .. } => 7,
+            Action::CloseMerged { .. } => 8,
+            Action::KeepMerged { .. } => 9,
+            Action::Menu(_) => 10,
+            Action::Next => 11,
+            Action::MessageAgent { .. } => 12,
+        };
+        let mut out = vec![("Action", top, 13)];
+        if let Action::Edit(e) = a {
+            let n = match e {
+                EditEvent::OpenNew => 0,
+                EditEvent::Open { .. } => 1,
+                EditEvent::Close => 2,
+                EditEvent::Name(_) => 3,
+                EditEvent::Color(_) => 4,
+                EditEvent::Icon(_) => 5,
+                EditEvent::Folder(_) => 6,
+                EditEvent::Search(_) => 7,
+                EditEvent::CancelSearch => 8,
+                EditEvent::Save => 9,
+                EditEvent::AddSuggested { .. } => 10,
+                EditEvent::Remove => 11,
+            };
+            out.push(("Edit", n, 12));
+        }
+        if let Action::Menu(m) = a {
+            let n = match m {
+                MenuEvent::OpenCard { .. } => 0,
+                MenuEvent::OpenProject { .. } => 1,
+                MenuEvent::Close => 2,
+                MenuEvent::Pick(_) => 3,
+            };
+            out.push(("Menu", n, 4));
+        }
+        if let Action::Menu(MenuEvent::Pick(p)) = a {
+            let n = match p {
+                MenuAction::NewSession => 0,
+                MenuAction::Lane(_) => 1,
+                MenuAction::Project(_) => 2,
+                MenuAction::ClearProjectOverride => 3,
+                MenuAction::NewProjectFromFolder => 4,
+                MenuAction::TogglePin => 5,
+                MenuAction::MarkRead => 6,
+                MenuAction::OpenPr => 7,
+                MenuAction::KeepMerged => 8,
+                MenuAction::ToggleNeeds => 9,
+                MenuAction::OpenProject => 10,
+                MenuAction::EditProject => 11,
+            };
+            out.push(("Pick", n, 12));
+        }
+        out
+    }
+
+    /// The actions the Swift sidebar's outbox check encodes: each must
+    /// parse here, and together they name every variant of the action and
+    /// of each nested event.
     #[test]
     fn every_file_the_swift_sidebar_sends_parses() {
         let files: Vec<serde_json::Value> =
             serde_json::from_str(include_str!("../tests/actions.json")).unwrap();
-        let mut names: Vec<&str> = files
-            .iter()
-            .map(|v| {
-                let action = Action::parse(&v.to_string()).unwrap_or_else(|e| panic!("{v}: {e}"));
-                let name = action.name();
-                assert!(Event::from(action).is_action(), "{v} is not an action");
-                name
-            })
-            .collect();
-        names.sort_unstable();
-        names.dedup();
-        assert_eq!(names.len(), EVERY.len(), "actions.json misses a variant");
+        let mut seen = std::collections::BTreeSet::new();
+        let mut sizes = std::collections::BTreeMap::new();
+        for v in &files {
+            let action = Action::parse(&v.to_string()).unwrap_or_else(|e| panic!("{v}: {e}"));
+            for (group, n, of) in variants(&action) {
+                assert!(n < of, "{group} numbers {n} of {of}");
+                seen.insert((group, n));
+                sizes.insert(group, of);
+            }
+            assert!(Event::from(action).is_action(), "{v} is not an action");
+        }
+        assert_eq!(sizes.len(), 4, "actions.json misses a nested event");
+        for (group, of) in sizes {
+            for n in 0..of {
+                assert!(
+                    seen.contains(&(group, n)),
+                    "actions.json misses {group} variant {n}"
+                );
+            }
+        }
     }
 
     #[test]
