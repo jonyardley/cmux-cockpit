@@ -312,4 +312,86 @@ if let theme = try? String(contentsOf: themeRs, encoding: .utf8) {
 }
 check(Palette.rgba(Token.clayHalo, dark: false).hex == Palette.rgba(Token.clay, dark: false).hex, "a halo is its hue at an alpha")
 
+// MARK: Projects
+
+/// A line's words, one space apart.
+func squeezed(_ line: Substring) -> String {
+    line.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+}
+
+// Each Projects row that is not a card reads as the pane draws it, in the
+// pane's order: the headers, "+ New project", Quiet and the quiet rows.
+if let panel = load("projects"),
+    let text = try? String(contentsOf: snapshots.appendingPathComponent("projects-80.txt"), encoding: .utf8) {
+    let lines = text.split(separator: "\n").map(squeezed)
+    let rows = panel.projects.compactMap(ProjectText.words).map { $0.joined(separator: " ") }
+    check(rows.count >= 4, "projects: has headers, + New project, Quiet and a quiet row")
+    var at = 0
+    for row in rows {
+        let found = lines[at...].firstIndex(of: row)
+        check(found != nil, "projects: \"\(row)\" reads as the pane's, in its order")
+        if let found { at = found + 1 }
+    }
+    let heads = panel.projects.compactMap { r -> ProjectHead? in
+        if case .header(let h) = r { return h }
+        return nil
+    }
+    check(heads.allSatisfy { !$0.menu.isEmpty }, "projects: every header has its menu")
+    check(Set(panel.projects.map(\.id)).count == panel.projects.count, "projects: each row has its own id")
+    check(ProjectText.editor(panel) == nil, "projects: no editor open")
+}
+if let projects = load("projects") {
+    let words = { (p: Panel) in p.projects.compactMap(ProjectText.words) }
+    for name in ["editor", "new-project"] {
+        if let other = load(name) {
+            check(words(other) == words(projects), "\(name) lists the projects scene's rows")
+            check(ProjectText.listed(other).count == other.projects.count - 1, "\(name): the editor is the sheet, not a row")
+            let e = ProjectText.editor(other)
+            check(e != nil, "\(name): the editor is open")
+            check(e.map { $0.colors.count == 16 && $0.colors.allSatisfy { ProjectText.hex($0) != nil } } == true, "\(name): sixteen colours, each a hex")
+        }
+    }
+    check(load("new-project").flatMap(ProjectText.editor)?.isNew == true, "new-project's editor is new")
+}
+
+// The words the sidebar keeps for itself are the core's and the pane's.
+let native = snapshots.appendingPathComponent("../../..").standardizedFileURL
+func source(_ path: String) -> String {
+    (try? String(contentsOf: native.appendingPathComponent(path), encoding: .utf8)) ?? ""
+}
+let panelRs = source("core/src/panel/mod.rs")
+for (name, word) in [("NEW_PROJECT_LABEL", Words.newProject), ("QUIET_LABEL", Words.quiet), ("PLUS_MARK", Words.plus)] {
+    check(panelRs.contains("pub const \(name): &str = \"\(word)\";"), "\(name) is \"\(word)\"")
+}
+let editorRs = source("pane/src/editor.rs")
+for (name, word) in [("FOLDER_LABEL", Words.folder), ("NAME_LABEL", Words.name), ("COLOUR_LABEL", Words.colour), ("ICON_LABEL", Words.icon), ("USE_WORD", Words.use)] {
+    check(editorRs.contains("pub const \(name): &str = \"\(word)\";"), "the editor's \(name) is \"\(word)\"")
+}
+check(source("core/src/ui.rs").contains("QUIET_PILL: PillColors = PillColors {\n    bg: Token::CountBg,\n    fg: Token::MetaText,"), "the Quiet pill is the core's")
+
+// A pick opens the menu it was made from, then picks, in that order.
+check(ProjectMenu.pick(.editProject, key: "k", quiet: true) == [.menu(.openProject(key: "k", quiet: true)), .menu(.pick(.editProject))], "a project menu pick opens its menu first")
+
+// Typing in the sheet only ever edits: each change is one edit, and the
+// sheet's source sends through nothing but its edit-only `send`.
+if let e = load("editor").flatMap(ProjectText.editor) {
+    let before = EditorDraft(e)
+    var after = before
+    after.name += "x"
+    check(before.changes(to: after) == [.name(e.name + "x")], "typing a name sends the name")
+    after = before
+    after.folder = "/tmp/a"
+    after.search = "star"
+    check(before.changes(to: after) == [.folder("/tmp/a"), .search("star")], "the folder and the search send themselves")
+    check(before.changes(to: before).isEmpty, "nothing typed sends nothing")
+}
+let sheet = URL(fileURLWithPath: #filePath).appendingPathComponent("../../../Sidebar/Views/EditorSheet.swift").standardizedFileURL
+if let code = try? String(contentsOf: sheet, encoding: .utf8) {
+    let named = code.components(separatedBy: "SidebarAction.").dropFirst()
+    check(!code.contains("Outbox") && named.allSatisfy { $0.hasPrefix("Edit") }, "the sheet sends nothing but edits")
+    check(!code.contains("onKeyPress") && !code.contains(".menu(") && !code.contains("switchTo"), "the sheet has no card action")
+} else {
+    check(false, "read \(sheet.path)")
+}
+
 exit(failures == 0 ? 0 : 1)

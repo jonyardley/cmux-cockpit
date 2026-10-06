@@ -125,7 +125,11 @@ Once per machine:
 
 The sidebar then shows the panel in `panel.json` whenever one decodes:
 the view switch, Next, Needs you while something waits, and the five
-lanes in All; Projects is a placeholder until R2.8. While the helper is
+lanes in All, or the projects in Projects: each busy project with its
+cards, "+ New project" and Quiet. Right-click a project for its menu; "+"
+opens a session in it; "+ New project" and "Edit project" open the editor
+as a sheet, which saves through `outbox/` (the sandboxed sidebar cannot
+write the project table itself). While the helper is
 down a line on top says "Cockpit isn't running". With no panel yet it
 says "Waiting for the panel" (helper up) or "Cockpit isn't running"
 (helper down).

@@ -239,7 +239,22 @@
         },
         "dot": null,
         "collapsed": false,
-        "can_open": true
+        "can_open": true,
+        "menu": [
+          {
+            "Item": {
+              "label": "New session in App One",
+              "action": "OpenProject"
+            }
+          },
+          "Divider",
+          {
+            "Item": {
+              "label": "Edit project",
+              "action": "EditProject"
+            }
+          }
+        ]
       }
     },
     {
@@ -310,7 +325,22 @@
         },
         "dot": null,
         "collapsed": false,
-        "can_open": false
+        "can_open": false,
+        "menu": [
+          {
+            "Item": {
+              "label": "New session (project has no folder)",
+              "action": "OpenProject"
+            }
+          },
+          "Divider",
+          {
+            "Item": {
+              "label": "Edit project",
+              "action": "EditProject"
+            }
+          }
+        ]
       }
     },
     {
@@ -433,7 +463,15 @@
         },
         "dot": null,
         "collapsed": false,
-        "can_open": false
+        "can_open": false,
+        "menu": [
+          {
+            "Item": {
+              "label": "New session (project has no folder)",
+              "action": "OpenProject"
+            }
+          }
+        ]
       }
     },
     {
@@ -465,6 +503,24 @@
         "name": "",
         "color": "#C2A83E",
         "icon": "folder.fill",
+        "colors": [
+          "#D97757",
+          "#6A9BCC",
+          "#788C5D",
+          "#C2A83E",
+          "#9B6FB0",
+          "#CC6B8E",
+          "#4F9C94",
+          "#8A7F72",
+          "#B8503C",
+          "#E0934A",
+          "#98AE4E",
+          "#3E7FA8",
+          "#6C74C9",
+          "#8E4F7E",
+          "#5D8A6A",
+          "#5E6670"
+        ],
         "root": "",
         "search": "",
         "icons": [
@@ -496,7 +552,22 @@
         "id": "q:/dev/app-three",
         "name": "App Three",
         "color": 7900253,
-        "can_open": false
+        "can_open": false,
+        "menu": [
+          {
+            "Item": {
+              "label": "App Three has no folder to open",
+              "action": "OpenProject"
+            }
+          },
+          "Divider",
+          {
+            "Item": {
+              "label": "Edit project",
+              "action": "EditProject"
+            }
+          }
+        ]
       }
     }
   ],

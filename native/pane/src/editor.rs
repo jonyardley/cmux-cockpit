@@ -108,6 +108,7 @@ mod tests {
             name: "App".into(),
             color: PROJECT_COLORS[0].into(),
             icon: "folder.fill".into(),
+            colors: Vec::new(),
             root: "~/dev/app".into(),
             search: String::new(),
             icons: vec!["folder.fill".into(), "star.fill".into()],

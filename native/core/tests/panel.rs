@@ -173,3 +173,36 @@ fn answers_the_cursors_questions_from_the_panel_alone() {
         assert!(p.project_target("nobody").is_none());
     }
 }
+
+#[test]
+fn each_project_row_carries_the_menu_the_core_opens_on_it() {
+    let mut model = loaded("projects");
+    let panel = Panel::from_core(&mut model);
+    let mut seen = 0;
+    for row in &panel.projects {
+        let (key, quiet, menu) = match row {
+            ProjectRow::Header(h) => (h.key.clone(), false, h.menu.clone()),
+            ProjectRow::Quiet { key, menu, .. } => (key.clone(), true, menu.clone()),
+            _ => continue,
+        };
+        send(
+            &mut model,
+            Event::Menu(MenuEvent::OpenProject { key, quiet }),
+        );
+        let open = Panel::from_core(&mut model).menu.unwrap();
+        assert_eq!(open.items, menu);
+        send(&mut model, Event::Menu(MenuEvent::Close));
+        seen += 1;
+    }
+    assert!(seen > 1, "the scene has headers and quiet rows");
+}
+
+#[test]
+fn the_editor_offers_the_tables_colours() {
+    let mut model = loaded("projects");
+    send(&mut model, Event::Edit(EditEvent::OpenNew));
+    let panel = Panel::from_core(&mut model);
+    let colors = &panel.editor().unwrap().colors;
+    assert_eq!(colors.len(), cockpit_core::panel::PROJECT_COLORS.len());
+    assert_eq!(colors[0], cockpit_core::panel::PROJECT_COLORS[0]);
+}
