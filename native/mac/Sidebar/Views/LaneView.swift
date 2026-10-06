@@ -63,9 +63,7 @@ struct LaneView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             LaneHeader(lane: lane)
-            ForEach(lane.rows, id: \.self) { row in
-                RowView(row: row).id(CardText.id(row))
-            }
+            ForEach(lane.rows) { RowView(row: $0) }
         }
     }
 }

@@ -149,6 +149,11 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("review-v
     check(text.contains("\(Words.next)  \(Words.nextNothing)"), "Next with nowhere to go reads as the pane's")
 }
 
+if let panel = load("lanes") {
+    let rows = panel.lanes.flatMap(\.rows)
+    check(Set(rows.map(\.id)).count == rows.count, "each lane row has its own id, a card apart from its placeholder")
+}
+
 // MARK: Chips that fit
 
 let none = [false, false, false]

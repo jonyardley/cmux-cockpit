@@ -93,3 +93,9 @@ enum LaneText {
         lane.empty ? PillColors(bg: .countBg, fg: .faint) : lane.pill
     }
 }
+
+/// A lane row's identity is its workspace, so a card keeps its view as its
+/// status changes, and a drag can follow it.
+extension Row: Identifiable {
+    public var id: String { CardText.id(self) }
+}
