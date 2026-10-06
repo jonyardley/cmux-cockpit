@@ -79,9 +79,9 @@ Tested on cmux 0.64.25.
   (`cockpit_core::panel`), and `native/fixtures/` holds it as JSON for
   each scene; the core's tests fail when a fixture is stale.
   `rust-toolchain.toml` pins the Rust toolchain.
-- `native/mac/`: the docked panel window, a SwiftPM app that sits flush
-  with cmux's left edge. Build, sign, run and grant its permission with
-  [native/mac/README.md](native/mac/README.md).
+- `native/mac/`: the macOS helper app with the Cockpit sidebar extension
+  embedded, which cmux draws in its left sidebar. Build it, run it and
+  switch it on in cmux with [native/mac/README.md](native/mac/README.md).
 - `helper/` and `scripts/`: the URL handler app that saves state, the
   build, the pull request poller and the Claude Code hooks
   ([docs/state-loop.md](docs/state-loop.md)).
