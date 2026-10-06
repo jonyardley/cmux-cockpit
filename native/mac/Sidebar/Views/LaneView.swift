@@ -113,6 +113,11 @@ struct LaneView: View {
     let lane: Lane
     /// The drops waiting for panel.json, already checked against it.
     var moves: [PendingMove] = []
+    /// The lane's top in the lanes' space, for the floating card.
+    var top: CGFloat = 0
+    /// The space under the lane before the next one. It is part of the
+    /// lane's drop area, so lanes meet and the pointer is always over one.
+    var gap: CGFloat = 0
     private let drag = DragState.shared
     @State private var frames: [String: CGRect] = [:]
 
@@ -134,7 +139,12 @@ struct LaneView: View {
         .onPreferenceChange(RowFrames.self) { next in
             MainActor.assumeIsolated { if next != frames { frames = next } }
         }
-        .onDrop(of: [.plainText], delegate: LaneDrop(lane: lane, rows: shown.rows, frames: frames, state: drag))
+        .padding(.bottom, gap)
+        .contentShape(.rect)
+        .background(GeometryReader { geo in
+            Color.clear.preference(key: LaneTops.self, value: [String(describing: lane.key): geo.frame(in: .named(FloatingCard.space)).minY])
+        })
+        .onDrop(of: [.plainText], delegate: LaneDrop(lane: lane, rows: shown.rows, frames: frames, top: top, state: drag))
         // Hover never fires while a drag is in flight, so a hover with a
         // card still lifted means the drag ended without a drop: Escape,
         // or let go outside every lane.
