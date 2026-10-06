@@ -117,7 +117,8 @@ struct LaneView: View {
     @State private var frames: [String: CGRect] = [:]
 
     var body: some View {
-        let shown = PendingMove.show(lane, moves)
+        let settled = PendingMove.show(lane, moves)
+        let shown = drag.preview.map { PendingMove.show(settled, [$0]) } ?? settled
         let space = "lane:" + String(describing: lane.key)
         VStack(alignment: .leading, spacing: 4) {
             LaneHeader(lane: shown)
@@ -134,7 +135,7 @@ struct LaneView: View {
         .onPreferenceChange(RowFrames.self) { next in
             MainActor.assumeIsolated { if next != frames { frames = next } }
         }
-        .onDrop(of: [.plainText], delegate: LaneDrop(lane: lane, rows: shown.rows, frames: frames, state: drag))
+        .onDrop(of: [.plainText], delegate: LaneDrop(lane: lane, rows: shown.rows, settled: settled.rows, frames: frames, state: drag))
         // Hover never fires while a drag is in flight, so a hover with a
         // card still lifted means the drag ended without a drop: Escape,
         // or let go outside every lane.
@@ -143,10 +144,12 @@ struct LaneView: View {
         }
     }
 
+    /// The landing line, only on a folded lane: an open lane draws the
+    /// card itself where it would land.
     @ViewBuilder
     private func landing(_ shown: Lane) -> some View {
-        if let over = drag.over, over.lane == lane.key,
-           let y = LandingSpot.y(before: shown.collapsed ? nil : over.before, rows: shown.collapsed ? [] : shown.rows, frames: frames) {
+        if shown.collapsed, let over = drag.over, over.lane == lane.key,
+           let y = LandingSpot.y(before: nil, rows: [], frames: frames) {
             LandingLine().offset(y: y - 1).allowsHitTesting(false)
         }
     }

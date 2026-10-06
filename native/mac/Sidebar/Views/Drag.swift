@@ -54,6 +54,12 @@ final class DragState {
         watch = Task { [weak self] in await self?.settleOnRelease() }
     }
 
+    /// The drop the pointer is over, drawn in place while the drag lasts.
+    var preview: PendingMove? {
+        guard let lifted, let from, let over else { return nil }
+        return PendingMove.preview(lifted, from: from, lane: over.lane, before: over.before)
+    }
+
     /// The card a drop carries: the one lifted, else the one the release
     /// watch let go of moments ago.
     var carried: Card? {
@@ -194,18 +200,31 @@ private struct Liftable: ViewModifier {
 
     func body(content: Content) -> some View {
         if case .card(let card) = row, card.movable {
-            let gap = state.lifted?.wsId == card.wsId
+            let lifted = state.lifted?.wsId == card.wsId
+            // The lifted card is drawn where it would land: in the lane under
+            // the pointer, else back in its own. A copy left behind in its
+            // own lane is the gap it would leave.
+            let here = (state.over?.lane ?? state.from) == lane
+            let gap = lifted && !here
             content
                 .opacity(gap ? 0 : 1)
                 .overlay {
                     if gap {
                         RoundedRectangle(cornerRadius: Metrics.corner)
                             .strokeBorder(Color(Token.cardEdge), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                    } else if lifted {
+                        RoundedRectangle(cornerRadius: Metrics.corner)
+                            .strokeBorder(Color(Token.blue), lineWidth: 1.5)
                     }
                 }
                 .onDrag {
                     state.lift(card, from: lane)
                     return DragItem.provider(card)
+                } preview: {
+                    // No picture under the pointer: the card itself moves to
+                    // where it would land, so nothing is left to clear while
+                    // macOS hands the drop over.
+                    Color.clear.frame(width: 1, height: 1)
                 }
         } else {
             content
@@ -225,7 +244,11 @@ struct LandingLine: View {
 /// the card at its end.
 struct LaneDrop: DropDelegate {
     let lane: Lane
+    /// The rows as drawn, the hover preview included, which the frames
+    /// measure and the landing slot is read against.
     let rows: [Row]
+    /// The rows without the preview, which the drop is judged against.
+    let settled: [Row]
     let frames: [String: CGRect]
     let state: DragState
 
@@ -256,7 +279,7 @@ struct LaneDrop: DropDelegate {
             return false
         }
         if state.lifted != nil {
-            state.drop(card.wsId, in: lane.key, before: before, rows: rows)
+            state.drop(card.wsId, in: lane.key, before: before, rows: settled)
             return true
         }
         // A late drop: the release watch has let go, so this could be text
@@ -267,7 +290,7 @@ struct LaneDrop: DropDelegate {
             state.settle("late drop refused")
             return false
         }
-        let (key, rows, state) = (lane.key, rows, state)
+        let (key, rows, state) = (lane.key, settled, state)
         Task { @MainActor in
             guard await DragItem.read(provider) == DragItem.text(card) else {
                 DragLog.note("late drop refused: not the card let go of")

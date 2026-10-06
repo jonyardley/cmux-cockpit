@@ -130,6 +130,21 @@ check(PendingMove.unconfirmed([toParked], lanes: [lane(.main, [row("B")]), lane(
 check(PendingMove.live(lapsing, now: now).map(\.card.wsId) == ["B"], "a drop past its time is no longer drawn")
 check(PendingMove.lasts == 4, "a drop is drawn for four seconds, as the TypeScript sidebar's override")
 
+// MARK: The hover preview
+
+let fromBg = lane(.bg, [row("A"), row("B"), row("C")])
+let toMain = lane(.main, [row("D"), row("E")])
+let across = PendingMove.preview(card("B"), from: .bg, lane: .main, before: "E")
+check(ids(PendingMove.show(toMain, [across])) == ["D", "B", "E"], "a preview into another lane draws the card where it would land")
+check(ids(PendingMove.show(fromBg, [across])) == ["A", "B", "C"], "and leaves its own slot open in the lane it came from")
+check(PendingMove.show(fromBg, [across]).count == 3, "so that lane's count holds while the pointer is elsewhere")
+check(PendingMove.show(toMain, [across]).count == 3, "and the lane under the pointer counts it")
+let within = PendingMove.preview(card("A"), from: .bg, lane: .bg, before: nil)
+check(!within.holdsSlot, "a preview in its own lane moves the card, with no gap left")
+check(ids(PendingMove.show(fromBg, [within])) == ["B", "C", "A"], "so the card is drawn once, at its new place")
+let held = PendingMove.show(fromBg, [across])
+check(DropRule.before(rows: held.rows, dragged: card("B"), slot: 1) == "C", "over its own gap, the card lands where it was")
+
 if failures > 0 {
     print("\(failures) failed")
     exit(1)
