@@ -1,0 +1,19 @@
+[package]
+name = "cockpit_ffi"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "The cockpit core as a static library for the Swift sidebar: crux's JSON bridge behind three C-convention calls"
+
+[lints]
+workspace = true
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+cockpit_core = { path = "../core" }
+crux_core = "0.20"
+
+[dev-dependencies]
+serde_json = "1.0.151"
