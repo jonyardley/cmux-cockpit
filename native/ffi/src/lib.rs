@@ -20,7 +20,7 @@
 //! no call here.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, PoisonError};
 
 use cockpit_core::Cockpit;
 use crux_core::Core;
@@ -139,7 +139,7 @@ struct DataFile {
 }
 
 /// What the last load sent, so the next sends only what differs.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Loaded {
     started: bool,
     home: Option<Option<String>>,
@@ -173,7 +173,12 @@ fn send_part(
 
 fn load_into(file: &[u8], out: &mut Out) -> Result<(), i32> {
     let file: DataFile = serde_json::from_slice(file).map_err(|_| COCKPIT_BAD_EVENT)?;
-    let mut last = loaded().lock().map_err(|_| COCKPIT_FAILED)?;
+    // A panic caught mid-load leaves `Loaded` as the last whole load set
+    // it, so a poisoned lock is still sound to read.
+    let mut kept = loaded().lock().unwrap_or_else(PoisonError::into_inner);
+    // Worked on a copy and kept only when every part went in, so a load
+    // the core refuses part of is sent whole again, never half.
+    let mut last = kept.clone();
     let first = !last.started;
     if first {
         send(b"\"PanelOn\"", out)?;
@@ -197,6 +202,7 @@ fn load_into(file: &[u8], out: &mut Out) -> Result<(), i32> {
         send(b"\"PrPollOn\"", out)?;
         last.started = true;
     }
+    *kept = last;
     Ok(())
 }
 

@@ -30,7 +30,8 @@ enum SidebarCore {
     }
 
     /// Sends one of Jon's actions, stamped now. False when it is not one
-    /// (`isAction`) or the core refused it; nothing is drawn then.
+    /// (`isAction`), the core refused it (nothing is drawn then), or an
+    /// effect it asked for could not be written to the outbox.
     @discardableResult
     static func send(_ action: SidebarAction, now: Date = Date()) -> Bool {
         guard action.isAction,
@@ -83,11 +84,16 @@ enum SidebarCore {
             return false
         }
         let now = Date()
+        var lost = 0
         for effect in out.effects {
             let written = folder().flatMap { try? Outbox.write(Data(effect.utf8), into: $0, now: now) }
-            if written == nil { log.error("an effect was not written to the outbox") }
+            if written == nil { lost += 1 }
         }
+        if lost > 0 { log.error("\(lost) effects not written to the outbox") }
         if out.redraw, let panel = panel() { changed?(panel) }
-        return true
+        // A click whose effects did not all go out reports so, as a send
+        // the outbox would not take did before, so the view can keep
+        // Jon's words or let a guess go.
+        return lost == 0
     }
 }

@@ -557,7 +557,16 @@ impl App for Cockpit {
             return self.update(*event, model);
         }
         match event {
-            Event::Data(data) => model.data = Some(data),
+            Event::Data(mut data) => {
+                // A frame's clock never takes the core's back past a
+                // click's or a tick's (#279): the sidebar moves it to its
+                // own now between frames.
+                let last = model.data.as_ref().and_then(|d| d.epoch);
+                if let (Some(last), Some(now)) = (last, data.epoch) {
+                    data.epoch = Some(now.max(last));
+                }
+                model.data = Some(data);
+            }
             Event::State(saved) => {
                 let s = &mut model.session;
                 s.pr_poll.file_read(&saved.prs, model.data.as_ref());
@@ -829,6 +838,22 @@ mod tests {
             { "id": "a", "directory": "/a" }, { "id": "b", "directory": "/a" },
         ]});
         Event::Data(serde_json::from_value(data).unwrap())
+    }
+
+    #[test]
+    fn a_frame_older_than_the_last_tick_leaves_the_clock_where_it_was() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(frame(1000.0), &mut model);
+        let tick = Event::At {
+            now: 1010.0,
+            event: Box::new(Event::Refresh),
+        };
+        let _ = app.update(tick, &mut model);
+        let _ = app.update(frame(1005.0), &mut model);
+        assert_eq!(model.data.as_ref().and_then(|d| d.epoch), Some(1010.0));
+        let _ = app.update(frame(1020.0), &mut model);
+        assert_eq!(model.data.as_ref().and_then(|d| d.epoch), Some(1020.0));
     }
 
     fn found(checks: &[(&str, &str)], epoch: f64) -> Event {
