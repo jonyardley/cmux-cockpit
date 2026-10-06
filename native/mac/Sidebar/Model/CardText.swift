@@ -67,8 +67,7 @@ enum NextText {
     }
 
     static func isNothing(_ next: NextLine) -> Bool {
-        if case .nothing = next { return true }
-        return false
+        targetId(next) == nil
     }
 
     /// The workspace the next press selects, or nil when nothing waits.
