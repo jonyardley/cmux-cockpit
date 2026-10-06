@@ -327,8 +327,13 @@ impl Row {
 }
 
 /// A lane's generated anchor on its header: its dot and unread count.
+/// It has no card, so its badge is the click that opens it (headers.ts
+/// anchorStatus), shaded while it is cmux's selected workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Anchor {
+    /// The anchor's workspace, for the badge's click.
+    pub id: String,
+    pub selected: bool,
     pub icon: Icon,
     /// "3", or "" with nothing unread.
     pub unread: String,

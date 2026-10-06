@@ -106,10 +106,7 @@ enum SidebarAction: Encodable, Equatable {
         case let .menu(m): try newtype(encoder, "Menu", m)
         case .next: try unit(encoder, "Next")
         case let .messageAgent(id, text): try tagged(encoder, "MessageAgent", ["id": id, "text": text])
-        case let .toggleLane(lane):
-            var c = encoder.container(keyedBy: Key.self)
-            var f = c.nestedContainer(keyedBy: Key.self, forKey: Key("ToggleLane"))
-            try f.encode(lane, forKey: Key("lane"))
+        case let .toggleLane(lane): try newtype(encoder, "ToggleLane", ["lane": lane])
         case let .toggleProject(key): try tagged(encoder, "ToggleProject", ["key": key])
         case .toggleQuiet: try unit(encoder, "ToggleQuiet")
         }

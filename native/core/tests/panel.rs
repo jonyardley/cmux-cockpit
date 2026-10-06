@@ -222,3 +222,27 @@ fn only_cmuxs_selected_workspace_carries_the_outline() {
         .collect();
     assert_eq!(selected, ["selected"]);
 }
+
+#[test]
+fn a_lane_anchor_carries_its_id_and_its_selection_for_the_badge() {
+    let data: Data = serde_json::from_value(serde_json::json!({
+        "epoch": 1_000_000.0,
+        "groups": [{ "id": "g-main", "name": "Main activity", "anchorId": "anchor-main" }],
+        "workspaces": [
+            { "id": "anchor-main", "title": "Main activity", "group": "g-main", "unread": 2, "selected": true },
+            { "id": "a", "group": "g-main" },
+        ],
+    }))
+    .unwrap();
+    let mut model = Model::default();
+    send(&mut model, Event::Data(data));
+    let panel = Panel::from_core(&mut model);
+    let anchor = panel
+        .lanes
+        .iter()
+        .find_map(|l| l.anchor.as_ref())
+        .expect("Main's header shows its anchor");
+    assert_eq!(anchor.id, "anchor-main");
+    assert!(anchor.selected);
+    assert_eq!(anchor.unread, "2");
+}
