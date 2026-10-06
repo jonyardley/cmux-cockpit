@@ -22,10 +22,17 @@ parts, built together from `project.yml` with XcodeGen:
   `Sidebar/Live/` reads the App Group folder.
 - `Shared/`: the names and the heartbeat rule both targets compile.
   `Tests/main.swift` checks the rule; `native/mac/test.sh` runs it.
-- `Generated/PanelTypes.swift`: the panel model's Swift types, which the
-  extension compiles. `native/typegen` writes them from the Rust types in
-  `native/core`, with an `init(from:)` on each that reads the JSON the
-  core writes, so a plain `JSONDecoder()` decodes `panel.json`. They are
+- `Generated/PanelTypes.swift`: the panel model's Swift types and the
+  core's `Event`, which the extension compiles. `native/typegen` writes
+  them from the Rust types in `native/core`, with an `init(from:)` on each
+  that reads the JSON the core writes, so a plain `JSONDecoder()` decodes
+  `panel.json`. `Event` and the types it reaches also get an
+  `encode(to:)` in the shapes serde reads, so the sidebar's clicks go to
+  the outbox as the core's own events (`Sidebar/Model/SidebarAction.swift`
+  names them). The core's own inputs (a frame, the state file, the
+  project table, a PR answer) are left out until a shell sends them
+  (#270). `Tests/Outbox/main.swift` and typegen's `check_events` check
+  each action against `native/runner/tests/actions.json`. They are
   gitignored and rebuilt every time: by a step in the Xcode build, and by
   `test.sh`, which then decodes every fixture in `native/fixtures/` with
   them (`Tests/Decode/main.swift`).
