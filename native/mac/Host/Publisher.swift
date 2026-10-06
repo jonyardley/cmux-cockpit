@@ -20,6 +20,14 @@ final class Publisher {
         log = Publisher.openLog()
     }
 
+    /// Writes a line to the publisher's log from outside it: why there is
+    /// no publisher at all.
+    static func noteMissing() {
+        guard let log = openLog() else { return }
+        try? log.write(contentsOf: Data("Cockpit: no \(PublishLaunch.binary) inside the app, so no panel is written; rebuild with native/mac/build.sh\n".utf8))
+        try? log.close()
+    }
+
     func start() {
         guard !stopping, process == nil else { return }
         let p = Process()
@@ -67,7 +75,7 @@ final class Publisher {
     }
 
     private func note(_ line: String) {
-        log?.write(Data("Cockpit: \(line)\n".utf8))
+        try? log?.write(contentsOf: Data("Cockpit: \(line)\n".utf8))
     }
 
     /// ~/Library/Logs/Cockpit/cockpit-publish.log, appended to: the

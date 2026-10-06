@@ -10,9 +10,13 @@ enum ChipFit {
     /// The lines a card may draw its chips as, widest first, as indices
     /// into `givesWay`: every chip; then, with an ellipsis after, the
     /// chips that do not give way, dropping from the end down to none. A
-    /// view draws the first that fits.
+    /// view draws the first that fits. When no chip gives way, every chip
+    /// with an ellipsis could never fit where every chip did not, so that
+    /// line is left out.
     static func candidates(givesWay: [Bool]) -> [[Int]] {
         let keep = givesWay.indices.filter { !givesWay[$0] }
-        return [Array(givesWay.indices)] + (0...keep.count).reversed().map { Array(keep.prefix($0)) }
+        let longest = keep.count == givesWay.count ? keep.count - 1 : keep.count
+        guard longest >= 0 else { return [[]] }
+        return [Array(givesWay.indices)] + (0...longest).reversed().map { Array(keep.prefix($0)) }
     }
 }

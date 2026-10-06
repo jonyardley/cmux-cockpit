@@ -16,6 +16,9 @@ if [ $# -ne 1 ] || [ ! -f "$fixtures/$1.json" ]; then
   ls "$fixtures" | sed -n 's/\.json$//p' | sed 's/^/  /' >&2
   exit 2
 fi
+if [ -n "${COCKPIT_GROUP_DIR:-}" ]; then
+  echo "note: COCKPIT_GROUP_DIR is set; the sidebar reads only the App Group folder, so it will not show this" >&2
+fi
 group="${COCKPIT_GROUP_DIR:-$HOME/Library/Group Containers/9S5FG4LQAF.dev.jonyardley.cockpit}"
 mkdir -p "$group"
 tmp="$group/.panel.json.dev.tmp"

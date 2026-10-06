@@ -38,12 +38,16 @@ enum PublishLaunch {
         ["--parent", String(parent)]
     }
 
-    /// The child's environment: the helper's own, PATH replaced.
+    /// The child's environment: the helper's own, with the fixed folders
+    /// first on PATH and whatever PATH the helper had after them, so a
+    /// tool only on the user's own PATH is still found.
     static func environment(_ base: [String: String]) -> [String: String] {
         var env = base
         let home = base["HOME"].map { [$0 + "/.local/bin", $0 + "/.cargo/bin"] } ?? []
-        env["PATH"] = (["/opt/homebrew/bin", "/usr/local/bin"] + home + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"])
-            .joined(separator: ":")
+        let fixed = ["/opt/homebrew/bin", "/usr/local/bin"] + home + ["/usr/bin", "/bin", "/usr/sbin", "/sbin"]
+        let inherited = (base["PATH"] ?? "").split(separator: ":").map(String.init).filter { !fixed.contains($0) }
+        var seen = Set<String>()
+        env["PATH"] = (fixed + inherited).filter { seen.insert($0).inserted }.joined(separator: ":")
         return env
     }
 }

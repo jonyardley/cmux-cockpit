@@ -37,5 +37,7 @@ check(path.contains("/opt/homebrew/bin") && path.contains("/usr/local/bin") && p
 check((path.firstIndex(of: "/opt/homebrew/bin") ?? 99) < (path.firstIndex(of: "/usr/bin") ?? 0), "Homebrew comes before the system's tools")
 check(env["LANG"] == "en_GB.UTF-8" && env["HOME"] == "/Users/j", "the rest of the environment is kept")
 check(PublishLaunch.environment([:])["PATH"]?.hasPrefix("/opt/homebrew/bin:") == true, "no HOME still gives a PATH")
+let own = PublishLaunch.environment(["HOME": "/Users/j", "PATH": "/Users/j/.bun/bin:/usr/bin"])["PATH"]?.split(separator: ":").map(String.init) ?? []
+check(own.last == "/Users/j/.bun/bin" && own.filter { $0 == "/usr/bin" }.count == 1, "the helper's own PATH follows the fixed folders, each folder once")
 
 exit(failures == 0 ? 0 : 1)

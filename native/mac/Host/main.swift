@@ -19,6 +19,9 @@ func announce() {
 }
 
 let publisher = CommandLine.arguments.contains(PublishLaunch.noPublish) ? nil : MainActor.assumeIsolated { Publisher() }
+if publisher == nil, !CommandLine.arguments.contains(PublishLaunch.noPublish) {
+    Publisher.noteMissing()
+}
 
 /// Stops the publisher, deletes the heartbeat and tells the extension, so
 /// a clean quit shows "Cockpit isn't running" at once rather than after

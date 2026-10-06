@@ -114,7 +114,7 @@ enum Palette {
     private static func pair(_ own: Own) -> Pair {
         switch own {
         case .ground: Pair(RGBA(0xF4F2EA), RGBA(0x262624))
-        case .needsFace: faint(clay, 0x1C)
+        case .needsFace: Pair(RGBA(0xFBECE4), RGBA(clay.dark.hex, 0x1C))
         case .cardFace: Pair(RGBA(0xFFFFFF, 0x99), RGBA(0x30302D, 0x99))
         case .tertiary: Pair(RGBA(0x73726C), RGBA(0x9C9A92))
         case .grey: Pair(RGBA(0xA09E95), RGBA(0x77756D))

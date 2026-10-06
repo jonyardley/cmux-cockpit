@@ -205,7 +205,8 @@ check(ChipFit.fit([], givesWay: [], gap: 2, room: 0, tail: 4) == .init(shown: []
 check(ChipFit.width([10, 10], gap: 2) == 22 && ChipFit.width([], gap: 2) == 0, "a line's width counts the gaps between")
 
 check(ChipFit.candidates(givesWay: [false, true, false]) == [[0, 1, 2], [0, 2], [0], []], "the lines to try: all, then the branch gone, then from the end")
-check(ChipFit.candidates(givesWay: []) == [[], []], "no chips, nothing to try but nothing")
+check(ChipFit.candidates(givesWay: [false, false]) == [[0, 1], [0], []], "with nothing to give way, every chip is tried once, not again with an ellipsis")
+check(ChipFit.candidates(givesWay: []) == [[]], "no chips, nothing to try but nothing")
 
 /// The first candidate that fits by width, as ViewThatFits picks it.
 func firstFitting(_ widths: [Double], givesWay: [Bool], gap: Double, room: Double, tail: Double) -> ChipFit.Fit? {
@@ -294,6 +295,21 @@ for dark in [false, true] {
     check(Palette.rgba(.clear, dark: dark).alpha == 0, "\(scheme): clear is no colour")
 }
 check(Palette.rgba(.ground, dark: false) != Palette.rgba(.ground, dark: true), "light and dark grounds differ")
+
+// The light side of the extension's own colours is the pane's, read from
+// native/pane/src/theme.rs beside the snapshots.
+let themeRs = snapshots.appendingPathComponent("../../src/theme.rs").standardizedFileURL
+if let theme = try? String(contentsOf: themeRs, encoding: .utf8) {
+    func paneHex(_ name: String) -> UInt32? {
+        let line = theme.split(separator: "\n").first { $0.hasPrefix("pub const \(name): u32 = 0x") }
+        return line.flatMap { UInt32($0.split(separator: "0x").last?.prefix(6) ?? "", radix: 16) }
+    }
+    for (own, name) in [(Palette.Own.ground, "GROUND"), (.needsFace, "NEEDS_BG"), (.tertiary, "TERTIARY"), (.grey, "GREY")] {
+        check(paneHex(name) == Palette.rgba(own, dark: false).hex && Palette.rgba(own, dark: false).alpha == 0xFF, "light \(own) is the pane's \(name)")
+    }
+} else {
+    check(false, "the pane's theme.rs is at \(themeRs.path)")
+}
 check(Palette.rgba(Token.clayHalo, dark: false).hex == Palette.rgba(Token.clay, dark: false).hex, "a halo is its hue at an alpha")
 
 exit(failures == 0 ? 0 : 1)

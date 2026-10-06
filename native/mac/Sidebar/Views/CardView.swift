@@ -13,13 +13,14 @@ struct CardView: View {
                     .foregroundStyle(Color(Token.text))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                    .layoutPriority(1)
                 Spacer(minLength: 6)
                 if !card.status.isEmpty {
+                    // The pane fits the status first and gives the title
+                    // what is left, so the status keeps its room here too.
                     Text(card.status)
                         .foregroundStyle(Color(card.statusInk))
                         .lineLimit(1)
-                        .truncationMode(.tail)
+                        .layoutPriority(1)
                 }
             }
             VStack(alignment: .leading, spacing: 3) {

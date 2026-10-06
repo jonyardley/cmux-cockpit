@@ -37,7 +37,12 @@ struct NextView: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 4)
-            Text(target.place).foregroundStyle(Color(Token.metaText))
+            // The pane fits the place first, on one line, and gives the
+            // title what is left.
+            Text(target.place)
+                .foregroundStyle(Color(Token.metaText))
+                .lineLimit(1)
+                .layoutPriority(1)
         }
         .font(.system(size: Metrics.body))
     }
