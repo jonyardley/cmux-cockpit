@@ -4,7 +4,7 @@ import os
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The drag in flight and the drops waiting for panel.json, shared by
+/// The drag in flight and the drops waiting for the panel, shared by
 /// every lane: a card leaves one lane's view and lands in another's.
 @Observable
 @MainActor
@@ -115,7 +115,7 @@ final class DragState {
 
     /// Lets go of `id` in `lane` above `before`, among the lane's rows as
     /// drawn: sends the move to cockpit-publish and draws the card there
-    /// until panel.json shows it.
+    /// until the panel shows it.
     func drop(_ id: String, in lane: LaneKey, before: String?, rows: [Row]) {
         defer {
             released = nil
@@ -124,7 +124,7 @@ final class DragState {
         guard let card = carried, card.wsId == id, let from = from ?? released?.from else { return }
         if PendingMove.staysPut(rows, from: from, card: card, lane: lane, before: before) { return }
         let move = PendingMove(card: card, from: from, lane: lane, before: before, until: Date().addingTimeInterval(PendingMove.lasts))
-        guard Outbox.send(move.action) else { return }
+        guard SidebarCore.send(move.action) else { return }
         pending.removeAll { $0.card.wsId == id }
         pending.append(move)
         Timeline.drag.note("move sent to \(lane)")
@@ -134,7 +134,7 @@ final class DragState {
         }
     }
 
-    /// Drops the moves a fresh panel.json's `lanes` show done, and draws
+    /// Drops the moves a fresh panel's `lanes` show done, and draws
     /// the rest with the panel's copy of their cards.
     func reconcile(_ lanes: [Lane]) {
         let next = PendingMove.unconfirmed(pending, lanes: lanes)
@@ -210,7 +210,7 @@ struct FloatingCard: View {
     nonisolated static let space = "lanes"
 
     let state: DragState
-    /// The lanes as panel.json has them, for the card's latest words.
+    /// The lanes as the panel has them, for the card's latest words.
     let lanes: [Lane]
 
     var body: some View {

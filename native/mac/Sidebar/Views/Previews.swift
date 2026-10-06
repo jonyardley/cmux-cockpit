@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A fixture from native/fixtures/, read from beside this file, for the
-/// previews only: the extension itself reads panel.json.
+/// previews only: the extension itself draws its own core's panel.
 private func fixture(_ name: String, file: String = #filePath) -> Showing {
     let url = URL(fileURLWithPath: file)
         .deletingLastPathComponent()

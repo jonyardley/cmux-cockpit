@@ -31,7 +31,7 @@ struct AllView: View {
 /// The whole panel: the view switch and Next, then the view the core has
 /// on, and the project editor as a sheet over it while the core has one
 /// open. Closing the sheet asks the core to close the editor; the sheet
-/// goes when panel.json says it has.
+/// goes when the panel says it has.
 struct PanelBody: View {
     let panel: Panel
 
@@ -55,7 +55,7 @@ struct PanelBody: View {
         }
         .sheet(item: editorKey) { _ in
             if let editor = ProjectText.editor(panel) {
-                EditorSheet(editor: editor) { Outbox.send(.edit($0)) }
+                EditorSheet(editor: editor) { SidebarCore.send(.edit($0)) }
             }
         }
     }
@@ -65,7 +65,7 @@ struct PanelBody: View {
             get: { ProjectText.editor(panel).map { EditorKey(id: $0.key) } },
             // Only while the core still has it open: a sheet going because
             // the core closed it (Save, Remove) sends nothing.
-            set: { if $0 == nil, ProjectText.editor(panel) != nil { Outbox.send(.edit(.close)) } }
+            set: { if $0 == nil, ProjectText.editor(panel) != nil { SidebarCore.send(.edit(.close)) } }
         )
     }
 }

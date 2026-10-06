@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The view switch, as the core has it on. Tapping the other view asks
-/// the core to flip to it, through outbox/.
+/// the sidebar's core to flip to it.
 struct ViewSwitch: View {
     let view: PanelView
 

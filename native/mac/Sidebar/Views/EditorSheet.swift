@@ -3,11 +3,11 @@ import SwiftUI
 /// The project editor as a sheet, over the panel while the core has an
 /// editor open. What it shows (the colours, the icons on offer, why Save
 /// would not save, the folders on offer, Remove's words) is the core's
-/// editor state in panel.json; the text Jon types is the sheet's own
+/// editor state in the panel; the text Jon types is the sheet's own
 /// (EditorDraft). It sends only edits: `send` takes nothing else, so no key
 /// typed here can reach a card.
 struct EditorSheet: View {
-    /// The core's editor as panel.json has it now.
+    /// The core's editor as the panel has it now.
     let editor: EditorView
     let send: (SidebarAction.Edit) -> Void
 
@@ -57,8 +57,8 @@ struct EditorSheet: View {
                     .frame(width: 0, height: 0)
                     .accessibilityHidden(true)
                 Button(Words.cancel) { send(.close) }
-                // Not disabled on the problem: that is panel.json's, a round
-                // trip behind the keys, and the core saves only a draft
+                // Not disabled on the problem: that is the core's, a
+                // step behind the keys, and the core saves only a draft
                 // with no problem anyway.
                 Button(editor.isNew ? Words.add : Words.done) { send(.save) }
                     .keyboardShortcut(.defaultAction)

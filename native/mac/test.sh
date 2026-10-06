@@ -8,10 +8,10 @@
 #    decode with them.
 # 3. The sidebar's logic in Sidebar/Model/, with the words on each card
 #    checked against the terminal pane's snapshot of the same scene.
-# 4. The outbox: every action the sidebar sends, as the generated Event,
-#    encodes to the JSON the runner's own test parses
-#    (native/runner/tests/actions.json) and decodes in Rust as the core's
-#    Event, alone and inside At; a send lands as a file named as the
+# 4. The clicks and the outbox: every action the sidebar sends its core,
+#    as the generated Event, encodes to the JSON the runner's own test
+#    parses (native/runner/tests/actions.json) and decodes in Rust as the
+#    core's Event, alone and inside At; an effect file lands named as the
 #    runner takes it.
 # 5. The effect files: native/runner/tests/effects.json, which the
 #    runner's own test matches against the bridge, has one entry per
@@ -21,8 +21,12 @@
 #    declared in Sidebar/Info.plist as data, not text.
 # 7. The panel's clicks and menus: what each merged chip and menu pick
 #    sends, over every fixture.
-# 8. A click's selection: drawn on the click, until panel.json shows it
+# 8. A click's selection: drawn on the click, until the panel shows it
 #    or it lapses.
+# 9. The sidebar's own core, linked to native/ffi as the extension links
+#    it: a golden scene's data.json draws, a click redraws on the click,
+#    its effects land in outbox/, an inbox/ answer goes in, and a move
+#    cmux refuses snaps back.
 set -eu
 cd "$(dirname "$0")"
 mkdir -p build
@@ -44,3 +48,7 @@ swiftc -swift-version 6 -o build/actions-check Generated/PanelTypes.swift Sideba
 build/actions-check ../fixtures
 swiftc -swift-version 6 -o build/select-check Generated/PanelTypes.swift Sidebar/Model/*.swift Sidebar/Live/PendingMove.swift Sidebar/Live/PendingSelect.swift Tests/Select/main.swift
 build/select-check ../fixtures
+(cd .. && cargo build -q -p cockpit_ffi)
+swiftc -swift-version 6 -o build/core-check -import-objc-header ../ffi/include/cockpit_ffi.h -L ../target/debug -lcockpit_ffi \
+  Generated/PanelTypes.swift Shared/Heartbeat.swift Sidebar/Model/SidebarAction.swift Sidebar/Live/Outbox.swift Sidebar/Live/Inbox.swift Sidebar/Live/SidebarCore.swift Tests/Core/main.swift
+build/core-check ../../test/golden/lanes.input.json

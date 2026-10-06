@@ -26,7 +26,7 @@ struct ProjectMenuItems: View {
                 Divider()
             case .item(let label, let action):
                 Button(label) {
-                    for a in ProjectMenu.pick(action, key: key, quiet: quiet) { Outbox.send(a) }
+                    for a in ProjectMenu.pick(action, key: key, quiet: quiet) { SidebarCore.send(a) }
                 }
             }
         }
@@ -40,7 +40,7 @@ struct PlusButton: View {
 
     var body: some View {
         Button {
-            Outbox.send(.openProject(key: key))
+            SidebarCore.send(.openProject(key: key))
         } label: {
             Text(Words.plus).foregroundStyle(Color(Token.faint)).padding(.horizontal, 4)
         }
@@ -116,7 +116,7 @@ struct ProjectRowView: View {
             GhostRow(title: title, text: text)
         case .newProject:
             Button {
-                Outbox.send(.edit(.openNew))
+                SidebarCore.send(.edit(.openNew))
             } label: {
                 Text(Words.newProject)
                     .font(.system(size: Metrics.body))

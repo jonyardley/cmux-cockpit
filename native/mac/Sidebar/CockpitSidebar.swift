@@ -29,33 +29,33 @@ final class CockpitSidebar: CmuxSidebarExtension {
 }
 
 /// cmux's command channel, as the latest context brings it, so a click
-/// switches workspace straight through the SDK rather than the runner.
+/// switches workspace straight through the SDK rather than the helper.
 @MainActor
 final class HostLink {
     var host: CmuxSidebarHost?
 
     /// Selects the workspace in cmux. Without a host yet, or an id that is
-    /// not a UUID, or when cmux refuses, the core's SwitchTo goes through
-    /// the outbox instead, so a click is never lost. Built once, so each
+    /// not a UUID, or when cmux refuses, the core's SwitchTo goes to the
+    /// helper instead, so a click is never lost. Built once, so each
     /// republish hands the views the same value.
     /// Each answer is logged with its id, timed from its own click.
     lazy var switchWorkspace = SwitchWorkspace { [weak self] id in
         let at = Date()
         guard let host = self?.host, let uuid = UUID(uuidString: id) else {
-            Timeline.select.note("no cmux host, sent through the outbox: \(id)", since: at)
-            SwitchWorkspace.outbox.run(id)
+            Timeline.select.note("no cmux host, sent to the core: \(id)", since: at)
+            SwitchWorkspace.core.run(id)
             return
         }
         // The core hears of it on the click, so the card stops drawing as
         // Ready before cmux publishes the selection.
-        Outbox.send(.selected(id: id))
+        SidebarCore.send(.selected(id: id))
         Task { @MainActor in
             do {
                 try await host.selectWorkspace(uuid)
                 Timeline.select.note("cmux took the select: \(id)", since: at)
             } catch {
-                Timeline.select.note("cmux refused the select, sent through the outbox: \(id)", since: at)
-                SwitchWorkspace.outbox.run(id)
+                Timeline.select.note("cmux refused the select, sent to the core: \(id)", since: at)
+                SwitchWorkspace.core.run(id)
             }
         }
     }
