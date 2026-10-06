@@ -53,9 +53,10 @@ enum DropRule {
     }
 }
 
-/// A card Jon dropped whose move the next panel.json has not shown yet.
+/// A card Jon dropped whose move the next panel has not shown yet.
 /// Until it does, the lanes draw the card where he let it go, so it does
-/// not jump back while cockpit-publish takes the move from the outbox. A
+/// not jump back before the core's panel shows it (R3.5 hands this to the
+/// core's move hold). A
 /// move the core turns down (an anchor of another cmux group) or never
 /// shows lapses at `until`, and the card goes back to where the panel has
 /// it, as the TypeScript sidebar's four second override does.
@@ -78,7 +79,7 @@ struct PendingMove: Equatable {
         return next == before
     }
 
-    /// The moves `lanes`, the whole of a fresh panel.json, has not shown
+    /// The moves `lanes`, the whole of a fresh panel, has not shown
     /// done yet, each drawing the panel's own copy of its card when the
     /// panel still has it, so a status that changed since the drag shows.
     static func unconfirmed(_ moves: [PendingMove], lanes: [Lane]) -> [PendingMove] {
@@ -124,7 +125,7 @@ struct PendingMove: Equatable {
         return shown
     }
 
-    /// Whether `lane`, as panel.json now has it, shows this move done:
+    /// Whether `lane`, as the panel now has it, shows this move done:
     /// the card sits in its new lane (above `before` when it stayed in
     /// its own lane), or it has left the lane it came from.
     func confirmed(by lane: Lane) -> Bool {

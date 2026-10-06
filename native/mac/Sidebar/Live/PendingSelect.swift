@@ -1,6 +1,6 @@
 import Foundation
 
-/// A workspace Jon clicked whose selection the next panel.json has not
+/// A workspace Jon clicked whose selection the next panel has not
 /// shown yet. The click goes straight to cmux, past the core, so nothing
 /// on the panel says it happened until cmux publishes the change and
 /// cockpit-publish writes it out. Until then the clicked one draws as
@@ -32,7 +32,7 @@ struct PendingSelect: Equatable {
         selected.contains(id) ? nil : PendingSelect(id: id, was: selected)
     }
 
-    /// Whether the workspace `id`, which panel.json has as `selected` or
+    /// Whether the workspace `id`, which the panel has as `selected` or
     /// not, draws selected: while a click waits, the clicked one alone.
     static func shows(_ id: String, selected: Bool, pending: PendingSelect?) -> Bool {
         pending.map { $0.id == id } ?? selected

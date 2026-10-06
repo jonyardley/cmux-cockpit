@@ -80,6 +80,17 @@ targets:
         outputFiles:
           - $(SRCROOT)/Generated/PanelTypes.swift
         basedOnDependencyAnalysis: false
+      - name: Build the core library
+        # native/ffi as a static library, linked in below: the sidebar
+        # runs its own core (#270). Built in the configuration's profile.
+        script: |
+          set -eu
+          export PATH="$HOME/.cargo/bin:$PATH"
+          if [ "$CARGO_PROFILE" = release ]; then flag=--release; else flag=; fi
+          cd "$SRCROOT/.." && cargo build -q $flag -p cockpit_ffi
+        outputFiles:
+          - $(SRCROOT)/../target/$(CARGO_PROFILE)/libcockpit_ffi.a
+        basedOnDependencyAnalysis: false
     dependencies:
       - package: CmuxExtensionKit
     settings:
@@ -92,3 +103,14 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Sidebar/Sidebar.entitlements
         CMUX_SIDEBAR_EXTENSION_POINT_ID: com.cmuxterm.app.cmux.sidebar
         ENABLE_USER_SCRIPT_SANDBOXING: YES
+        # The core library is built for this Mac's architecture only, the
+        # one Rust target rust-toolchain.toml installs.
+        ARCHS: arm64
+        SWIFT_OBJC_BRIDGING_HEADER: ../ffi/include/cockpit_ffi.h
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/../target/$(CARGO_PROFILE)
+        OTHER_LDFLAGS: -lcockpit_ffi
+      configs:
+        Debug:
+          CARGO_PROFILE: debug
+        Release:
+          CARGO_PROFILE: release

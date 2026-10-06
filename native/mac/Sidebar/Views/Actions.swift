@@ -2,23 +2,24 @@ import SwiftUI
 
 // What Jon does to the panel by click and right-click (R2.7), kept apart
 // from the drag (R2.6). A click on a card switches cmux straight through
-// its SDK; everything else goes to cockpit-publish through the outbox, and
+// its SDK; everything else goes to the sidebar's own core (SidebarCore), and
 // the menus are the core's own, in its words and order.
 
 /// Switches cmux to a workspace by its id. The live sidebar sets it to
 /// cmux's SDK (CockpitSidebar.swift); previews and anything without a
-/// host send the core's SwitchTo through the outbox instead.
+/// host send the core's SwitchTo, which it hands cockpit-publish through
+/// the outbox.
 struct SwitchWorkspace: Sendable {
     let run: @MainActor @Sendable (String) -> Void
 
-    /// A click drawn selected stops being drawn if the outbox cannot take it.
-    static let outbox = SwitchWorkspace { id in
-        if !Outbox.send(.switchTo(id: id)) { SelectState.shared.drop(id) }
+    /// A click drawn selected stops being drawn if the core refuses it.
+    static let core = SwitchWorkspace { id in
+        if !SidebarCore.send(.switchTo(id: id)) { SelectState.shared.drop(id) }
     }
 }
 
 extension EnvironmentValues {
-    @Entry var switchWorkspace: SwitchWorkspace = .outbox
+    @Entry var switchWorkspace: SwitchWorkspace = .core
 }
 
 /// The words the panel adds of its own.
@@ -73,7 +74,7 @@ struct CardMenu: View {
                 Button(label) {
                     // In order, stopping at the first that cannot be
                     // written, so a pick never lands without its card.
-                    for sent in SidebarAction.pick(action, on: card.wsId) where !Outbox.send(sent) { break }
+                    for sent in SidebarAction.pick(action, on: card.wsId) where !SidebarCore.send(sent) { break }
                 }
             }
         }
@@ -124,8 +125,8 @@ struct MessageAgent: View {
 
     private func send() {
         guard let action = SidebarAction.message(text, to: id) else { return }
-        // Kept open with the words in it when the outbox cannot take them.
-        failed = !Outbox.send(action)
+        // Kept open with the words in it when the core refuses them.
+        failed = !SidebarCore.send(action)
         guard !failed else { return }
         text = ""
         shown = false
@@ -161,7 +162,7 @@ struct ActionChips: View {
     private var mergedButtons: some View {
         ForEach(Array(merged.enumerated()), id: \.offset) { _, chip in
             Button {
-                if let action = SidebarAction.merged(chip, id: id) { Outbox.send(action) }
+                if let action = SidebarAction.merged(chip, id: id) { SidebarCore.send(action) }
             } label: {
                 ChipView(chip: chip)
             }
@@ -177,7 +178,7 @@ struct SwitchTab: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contentShape(.rect)
-            .onTapGesture { if !on { Outbox.send(.flipView) } }
+            .onTapGesture { if !on { SidebarCore.send(.flipView) } }
     }
 }
 
@@ -193,7 +194,7 @@ struct NextTap: ViewModifier {
             .onTapGesture {
                 guard let id = NextText.targetId(next) else { return }
                 SelectState.shared.select(id)
-                if !Outbox.send(.next) { SelectState.shared.drop(id) }
+                if !SidebarCore.send(.next) { SelectState.shared.drop(id) }
             }
     }
 }
@@ -219,7 +220,7 @@ struct DismissCross: View {
 
     var body: some View {
         Button {
-            Outbox.send(.dismiss(id: id))
+            SidebarCore.send(.dismiss(id: id))
         } label: {
             Image(systemName: "xmark")
                 .font(.system(size: Metrics.small, weight: .semibold))

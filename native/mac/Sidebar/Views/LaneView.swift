@@ -34,7 +34,7 @@ extension View {
     @ViewBuilder
     func foldsOnClick(_ action: SidebarAction?) -> some View {
         if let action {
-            contentShape(.rect).onTapGesture { Outbox.send(action) }
+            contentShape(.rect).onTapGesture { SidebarCore.send(action) }
         } else {
             self
         }
@@ -49,7 +49,7 @@ struct AnchorBadge: View {
 
     var body: some View {
         Button {
-            if Outbox.send(.switchTo(id: anchor.id)) { SelectState.shared.select(anchor.id) }
+            if SidebarCore.send(.switchTo(id: anchor.id)) { SelectState.shared.select(anchor.id) }
         } label: {
             HStack(spacing: 5) {
                 Text(anchor.icon.glyph).foregroundStyle(Color(dot: anchor.icon.ink))
@@ -108,13 +108,13 @@ struct LaneHeader: View {
 
 /// A lane: its header, then its rows (none while folded). Its cards drag
 /// within it and to other lanes, and the whole lane takes a drop
-/// (Drag.swift); a drop waiting for panel.json is drawn where it landed.
+/// (Drag.swift); a drop waiting for the panel is drawn where it landed.
 struct LaneView: View {
     /// The header's key among the lane's frames.
     nonisolated static let header = "header"
 
     let lane: Lane
-    /// The drops waiting for panel.json, already checked against it.
+    /// The drops waiting for the panel, already checked against it.
     var moves: [PendingMove] = []
     /// The lane's top in the lanes' space, for the floating card.
     var top: CGFloat = 0

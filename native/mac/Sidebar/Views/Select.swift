@@ -36,7 +36,7 @@ final class Timeline {
     }
 }
 
-/// The click waiting for panel.json to show its selection, shared by
+/// The click waiting for the panel to show its selection, shared by
 /// every card, Needs you row and lane anchor. The rules are
 /// PendingSelect's; this holds the one click and its clock.
 @Observable
@@ -77,12 +77,12 @@ final class SelectState {
         pending = nil
     }
 
-    /// Whether `id`, selected or not in panel.json, draws selected.
+    /// Whether `id`, selected or not in the panel, draws selected.
     func shows(_ id: String, selected: Bool) -> Bool {
         PendingSelect.shows(id, selected: selected, pending: pending)
     }
 
-    /// A fresh panel.json: the click it shows done, or shows overtaken,
+    /// A fresh the panel: the click it shows done, or shows overtaken,
     /// stops being drawn over it.
     func reconcile(_ panel: Panel) {
         selected = PendingSelect.selected(in: panel)

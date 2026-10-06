@@ -107,7 +107,9 @@ name = "cockpit_ffi"
 version = "0.0.0"
 dependencies = [
  "cockpit_core",
+ "cockpit_runner",
  "crux_core",
+ "serde",
  "serde_json",
 ]
 

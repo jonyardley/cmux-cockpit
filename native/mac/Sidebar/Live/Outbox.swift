@@ -1,8 +1,9 @@
 import Foundation
 
-/// Sends Jon's actions to cockpit-publish: each one a file in the App Group
-/// folder's outbox/, in the format and naming native/runner/src/publish.rs
-/// sets out. The file is written under a name starting with "." (which the
+/// Sends what the sidebar's core asks of the world (SidebarCore.swift) to
+/// cockpit-publish: each effect a file in the App Group folder's outbox/,
+/// in the format and naming native/runner/src/effect.rs and publish.rs set
+/// out. The file is written under a name starting with "." (which the
 /// runner skips), then renamed to `<13 digit epoch ms>-<6 digit
 /// counter>.json`, so the runner never reads half a file and takes them in
 /// the order sent. The runner polls the outbox every 100 ms, so no signal
@@ -15,30 +16,16 @@ enum Outbox {
     /// their order.
     private static var counter: UInt32 = 0
 
-    /// Sends one action. False when it could not be written (an event the
-    /// runner refuses, no group folder, or the disk refused); the action is
-    /// then dropped.
-    @discardableResult
-    static func send(_ action: SidebarAction) -> Bool {
-        guard let folder = Shared.folder else { return false }
-        return (try? write(action, into: folder, now: Date())) != nil
-    }
-
-    /// An event the runner refuses, so it is never written.
-    struct Refused: Error {}
-
-    /// Writes one action file into `folder`'s outbox/, making it when
-    /// missing, and returns the file's URL. Throws `Refused` for any of the
-    /// core's events that is not one of Jon's actions.
-    static func write(_ action: SidebarAction, into folder: URL, now: Date) throws -> URL {
-        guard action.isAction else { throw Refused() }
+    /// Writes one effect file, `effect` as the core gave it, into
+    /// `folder`'s outbox/, making it when missing, and returns the file's
+    /// URL.
+    static func write(_ effect: Data, into folder: URL, now: Date) throws -> URL {
         let outbox = folder.appendingPathComponent(dirName, isDirectory: true)
         try FileManager.default.createDirectory(at: outbox, withIntermediateDirectories: true)
-        let data = try JSONEncoder().encode(action)
         let ms = UInt64(max(0, now.timeIntervalSince1970 * 1000))
         let tmp = outbox.appendingPathComponent(".\(ProcessInfo.processInfo.processIdentifier)-\(ms).tmp")
         defer { try? FileManager.default.removeItem(at: tmp) }
-        try data.write(to: tmp)
+        try effect.write(to: tmp)
         // Another sidebar process counts from 1 too, so its send in the
         // same millisecond can hold this name: take the next number.
         var tries = 0

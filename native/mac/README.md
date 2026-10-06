@@ -8,18 +8,21 @@ parts, built together from `project.yml` with XcodeGen:
   headless, built by cargo and copied into `Contents/MacOS`) running: it
   starts it with a full PATH and its own pid as the parent, starts it
   again after a backoff if it dies (`Host/Restart.swift`), and stops it
-  on quit. The publisher writes `panel.json` and, beside it, the core's
-  inputs as `data.json` (for a core in the sidebar, issue #269; nothing
-  reads it yet). Run with `--no-core`, it writes `data.json` alone,
-  carries out the effects a sidebar core drops into `outbox/` (one per
-  effect in `native/runner/tests/effects.json`) and writes their answers,
-  a refused cmux call or a PR, into `inbox/`; nothing starts it that way
-  yet. Its log is `~/Library/Logs/Cockpit/cockpit-publish.log`.
+  on quit. The helper starts it with `--no-core` (issue #270): it writes
+  the core's inputs as `data.json`, carries out the effects the
+  sidebar's core drops into `outbox/` (one per effect in
+  `native/runner/tests/effects.json`) and writes their answers, a refused
+  cmux call or a PR, into `inbox/`. Run by hand without the flag, it runs
+  its own core and writes `panel.json` too, which nothing reads now. Its
+  log is `~/Library/Logs/Cockpit/cockpit-publish.log`.
 - `CockpitSidebar.appex` (`Sidebar/`), embedded in the app: the sandboxed
-  extension cmux draws in its left sidebar. `Sidebar/Model/` decides what
-  to show (card words, which chips fit, the palette) in plain Swift that
-  `test.sh` checks; `Sidebar/Views/` lays it out in SwiftUI;
-  `Sidebar/Live/` reads the App Group folder.
+  extension cmux draws in its left sidebar. It runs the core itself:
+  `native/ffi` built as a static library and linked in, so a click
+  redraws the panel on the click (`Sidebar/Live/SidebarCore.swift`).
+  `Sidebar/Model/` decides what to show (card words, which chips fit, the
+  palette) in plain Swift that `test.sh` checks; `Sidebar/Views/` lays it
+  out in SwiftUI; `Sidebar/Live/` runs the core and reads and writes the
+  App Group folder.
 - `Shared/`: the names and the heartbeat rule both targets compile.
   `Tests/main.swift` checks the rule; `native/mac/test.sh` runs it.
 - `Generated/PanelTypes.swift`: the panel model's Swift types and the
@@ -28,10 +31,10 @@ parts, built together from `project.yml` with XcodeGen:
   that reads the JSON the core writes, so a plain `JSONDecoder()` decodes
   `panel.json`. `Event` and the types it reaches also get an
   `encode(to:)` in the shapes serde reads, so the sidebar's clicks go to
-  the outbox as the core's own events (`Sidebar/Model/SidebarAction.swift`
+  its core as the core's own events (`Sidebar/Model/SidebarAction.swift`
   names them). The core's own inputs (a frame, the state file, the
-  project table, a PR answer) are left out until a shell sends them
-  (#270). `Tests/Outbox/main.swift` and typegen's `check_events` check
+  project table, a PR answer) are left out: the sidebar hands them to
+  its core as the bytes the helper wrote, never as Swift values. `Tests/Outbox/main.swift` and typegen's `check_events` check
   each action against `native/runner/tests/actions.json`. They are
   gitignored and rebuilt every time: by a step in the Xcode build, and by
   `test.sh`, which then decodes every fixture in `native/fixtures/` with
@@ -56,7 +59,8 @@ seven seconds.
 
 Needs Xcode 16 or later (the SDK needs Swift tools 6.0), XcodeGen
 (`brew install xcodegen`) and the Rust toolchain (rustup; the build runs
-cargo to write the panel types).
+cargo to write the panel types and build the core library). The
+extension builds for arm64 only, the Rust target rustup installs here.
 
 ```sh
 native/mac/build.sh
@@ -90,6 +94,9 @@ restart checks, writes the panel types, decodes each fixture and checks
 what it holds, then checks the sidebar's logic: for every fixture, the
 words on each card are the words the terminal pane draws for that card in
 its snapshot of the same scene (`native/pane/tests/snapshots/*-80.txt`).
+Last it links the core library and drives it as the sidebar does: a
+golden scene's `data.json` draws, a click redraws, effects land in
+`outbox/`, an `inbox/` answer goes in, and a refused move snaps back.
 Every line reads `ok:`, and any `FAIL:` line fails the run.
 
 Xcode previews: `Sidebar/Views/Previews.swift` has one per fixture, plus
@@ -123,9 +130,12 @@ open native/mac/build/Build/Products/Debug/Cockpit.app --args --no-publish
 native/mac/dev-fixture.sh lanes
 ```
 
-It wraps `native/fixtures/lanes.json` as `panel.json` in the group folder
-and posts the "changed" signal. A running publisher replaces it at its
+It writes the golden scene `test/golden/lanes.input.json` as `data.json`
+in the group folder and posts the "changed" signal; the sidebar's core
+draws it, and clicks work on it. A running publisher replaces it at its
 next change, so stop the helper first or start it with `--no-publish`.
+The scene's ages read from today, since the sidebar moves the core's
+clock on every two seconds.
 
 ## Switch it on in cmux
 
@@ -136,13 +146,13 @@ Once per machine:
 3. Open the command palette and run "Sidebar: Extension Sidebar".
 4. A "Limited extension access" banner appears once: grant access.
 
-The sidebar then shows the panel in `panel.json` whenever one decodes:
+The sidebar then shows its core's panel once `data.json` has loaded:
 the view switch, Next, Needs you while something waits, and the five
 lanes in All, or the projects in Projects: each busy project with its
 cards, "+ New project" and Quiet. Right-click a project for its menu; "+"
 opens a session in it; "+ New project" and "Edit project" open the editor
 as a sheet, which saves through `outbox/` (the sandboxed sidebar cannot
-write the project table itself). While the helper is
+write the state file itself). While the helper is
 down a line on top says "Cockpit isn't running". With no panel yet it
 says "Waiting for the panel" (helper up) or "Cockpit isn't running"
 (helper down).
