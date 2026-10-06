@@ -4,7 +4,7 @@
 //! that overrides the path match (the project-of-a-workspace part of
 //! src/cockpit/by-project.ts; by_project.rs has the rest).
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::data::Workspace;
@@ -34,7 +34,7 @@ pub const PROJECT_ICONS: [&str; 8] = [
 pub const MAX_NAME: usize = 64;
 
 /// A project's path fragment, or several.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum Match {
     One(String),
@@ -42,7 +42,7 @@ pub enum Match {
 }
 
 /// One row of the project table.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct Project {
     /// Path fragment, or several, any of which puts a directory in this project.
     #[serde(rename = "match")]
