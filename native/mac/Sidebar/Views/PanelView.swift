@@ -9,7 +9,10 @@ struct AllView: View {
             if NeedsText.shows(panel.needs) {
                 NeedsView(needs: panel.needs)
             }
-            ForEach(panel.lanes, id: \.key) { LaneView(lane: $0) }
+            // Checked against this panel as it draws, so a drop the panel
+            // already shows is not drawn twice for a frame.
+            let moves = PendingMove.unconfirmed(DragState.shared.pending, lanes: panel.lanes)
+            ForEach(panel.lanes, id: \.key) { LaneView(lane: $0, moves: moves) }
         }
     }
 }
@@ -40,6 +43,9 @@ struct PanelBody: View {
             }
             .padding(Metrics.gutter)
         }
+        // Here, not in a lane, so a drop is confirmed in the Projects
+        // view too, when no lane is drawn.
+        .onChange(of: panel.lanes) { _, now in DragState.shared.reconcile(now) }
     }
 }
 
