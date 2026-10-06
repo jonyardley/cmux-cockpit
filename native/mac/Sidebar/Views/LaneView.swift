@@ -147,7 +147,7 @@ struct LaneView: View {
         .background(GeometryReader { geo in
             Color.clear.preference(key: LaneTops.self, value: [String(describing: lane.key): geo.frame(in: .named(FloatingCard.space)).minY])
         })
-        .onDrop(of: [.plainText], delegate: LaneDrop(lane: lane, rows: shown.rows, frames: frames, top: top, state: drag))
+        .onDrop(of: [DragItem.type], delegate: LaneDrop(lane: lane, rows: shown.rows, frames: frames, top: top, state: drag))
         // Hover never fires while a drag is in flight, so a hover with a
         // card still lifted means the drag ended without a drop: Escape,
         // or let go outside every lane.

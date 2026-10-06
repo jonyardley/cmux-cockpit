@@ -147,27 +147,6 @@ final class DragState {
     }
 }
 
-/// What a card's drag carries: its workspace as text. A drop reads the
-/// lifted card from DragState, not this, so text dragged in from another
-/// app (with nothing lifted) is turned away by validateDrop; a late drop,
-/// after the release watch, checks this text against the card let go of.
-enum DragItem {
-    static func text(_ card: Card) -> String { "cockpit-card:" + card.wsId }
-
-    static func provider(_ card: Card) -> NSItemProvider {
-        NSItemProvider(object: text(card) as NSString)
-    }
-
-    /// The text a drop carries, or nil for none.
-    @MainActor static func read(_ provider: NSItemProvider) async -> String? {
-        await withCheckedContinuation { done in
-            _ = provider.loadObject(ofClass: NSString.self) { text, _ in
-                done.resume(returning: text as? String)
-            }
-        }
-    }
-}
-
 /// Where each row of a lane sits in the lane's own space, by row id, with
 /// the header under "header".
 struct RowFrames: PreferenceKey {
@@ -290,7 +269,7 @@ struct LaneDrop: DropDelegate {
     let state: DragState
 
     func validateDrop(info: DropInfo) -> Bool {
-        state.carried != nil && info.hasItemsConforming(to: [.plainText])
+        state.carried != nil && info.hasItemsConforming(to: [DragItem.type])
     }
 
     func dropEntered(info: DropInfo) {
@@ -302,8 +281,8 @@ struct LaneDrop: DropDelegate {
         track(info)
         guard let before = before(info) else { return DropProposal(operation: .forbidden) }
         state.hover(lane.key, before: before)
-        // Copy, to match the provider: a plain string, which the drag
-        // source has no way to give up as a move would ask.
+        // Copy, to match the provider: data of our own type, which the
+        // drag source has no way to give up as a move would ask.
         return DropProposal(operation: .copy)
     }
 
@@ -321,10 +300,10 @@ struct LaneDrop: DropDelegate {
             state.drop(card.wsId, in: lane.key, before: before, rows: rows)
             return true
         }
-        // A late drop: the release watch has let go, so this could be text
-        // from another app dragged in during the grace. It lands only if it
+        // A late drop: the release watch has let go, so this could be a
+        // drag from another app during the grace. It lands only if it
         // carries the card let go of.
-        guard let provider = info.itemProviders(for: [.plainText]).first else {
+        guard let provider = info.itemProviders(for: [DragItem.type]).first else {
             Timeline.drag.note("late drop refused: nothing carried")
             state.settle("late drop refused")
             return false
