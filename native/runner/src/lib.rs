@@ -131,28 +131,51 @@ pub struct Latency {
     pub read_at: Instant,
 }
 
-/// What the core was last fed from the shell's own inputs: the home
-/// folder, the project table (each "~" root expanded), the state file and
-/// cmux's frame. Written out as data.json, so a core elsewhere fed these
-/// in this order (projects, state, data) builds the same panel. Home has
-/// no event of its own: a shell sets it on the model before the first.
+/// What the core was last fed from the shell's own inputs: the project
+/// table (each "~" root expanded), the state file and cmux's frame.
+/// Written out as data.json, so a core elsewhere fed these in this order
+/// (projects, state, data), with the home folder set on its model first,
+/// builds the same panel. Each is None until first fed (a file that would
+/// not read, say), and is written as null then: a reader skips it.
+///
+/// Each input carries a count of the times it was fed, so a reader of a
+/// later data.json sends its core only those that moved: the project
+/// table and the state reset parts of the session, so a core sent them
+/// again on every frame would lose its local edits and folds.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Inputs {
-    pub home: Option<String>,
     pub projects: Option<Vec<Project>>,
+    pub projects_seq: u64,
     pub state: Option<SavedState>,
+    pub state_seq: u64,
     pub data: Option<Data>,
+    pub data_seq: u64,
 }
 
 impl Inputs {
     /// Keeps a copy of the event, when it is one of these inputs.
     fn note(&mut self, event: &Event) {
         match event {
-            Event::Projects(p) => self.projects = Some(p.clone()),
-            Event::State(s) => self.state = Some(SavedState::clone(s)),
-            Event::Data(d) => self.data = Some(d.clone()),
+            Event::Projects(p) => {
+                self.projects = Some(p.clone());
+                self.projects_seq += 1;
+            }
+            Event::State(s) => {
+                self.state = Some(SavedState::clone(s));
+                self.state_seq += 1;
+            }
+            Event::Data(d) => {
+                self.data = Some(d.clone());
+                self.data_seq += 1;
+            }
             _ => {}
         }
+    }
+
+    /// Moves whenever any input was fed, so an unchanged set is not
+    /// written again.
+    pub fn generation(&self) -> u64 {
+        self.projects_seq + self.state_seq + self.data_seq
     }
 }
 
@@ -311,8 +334,7 @@ impl Feed {
     /// could be home itself, and "~" roots stay as written.
     pub fn with_home(home: Option<String>) -> Self {
         let mut feed = Self::default();
-        feed.model.session.home = home.clone();
-        feed.inputs.home = home;
+        feed.model.session.home = home;
         feed
     }
 
@@ -998,16 +1020,22 @@ mod tests {
     #[test]
     fn the_feed_keeps_what_the_core_was_fed_for_data_json() {
         let feed = Feed::with_home(Some("/Users/jon".into()));
-        assert_eq!(feed.inputs.home.as_deref(), Some("/Users/jon"));
-        assert_eq!(feed.inputs.data, None);
+        assert_eq!(feed.inputs, Inputs::default());
         let mut feed = moving_feed();
         let data = feed.inputs.data.clone().unwrap();
         assert_eq!(feed.model.data.as_ref(), Some(&data));
         assert_eq!(data.workspace_list().len(), 2);
         assert_eq!(feed.inputs.state, Some(SavedState::default()));
+        let fed = (feed.inputs.projects_seq, feed.inputs.state_seq);
+        let generation = feed.inputs.generation();
         // An action is no input: what goes out stays what came in.
         feed.act(move_q());
         assert_eq!(feed.inputs.data, Some(data));
+        assert_eq!(feed.inputs.generation(), generation);
+        // A frame moves only the data's count, so a reader resends only that.
+        feed.frame(1_791_127_200.0);
+        assert_eq!((feed.inputs.projects_seq, feed.inputs.state_seq), fed);
+        assert_eq!(feed.inputs.generation(), generation + 1);
     }
 
     #[test]

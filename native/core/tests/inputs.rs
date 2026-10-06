@@ -3,6 +3,7 @@
 //! got: cmux's data, the saved state and the project table, for every
 //! golden scene and for a saved state with every entry filled.
 
+// Not redundant: clippy lets a test unwrap only inside cfg(test).
 #![cfg(test)]
 
 use std::path::PathBuf;

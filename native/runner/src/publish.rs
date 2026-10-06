@@ -13,10 +13,15 @@
 //!   runner is ready (`ready`), so a restart never blanks the sidebar.
 //! - Beside it, data.json: what the core was fed (crate::Inputs), as
 //!   `{"seq": 9, "written_at_ms": ..., "home": "/Users/jon", "projects":
-//!   [...], "state": {...}, "data": {...}}`, written the same way when it
-//!   changed, with its own `seq`. A core fed `projects`, `state`, then
-//!   `data`, with `home` set on its model first, builds the same panel.
-//!   One signal covers both files. Without a core only data.json goes.
+//!   [...], "projects_seq": 1, "state": {...}, "state_seq": 2, "data":
+//!   {...}, "data_seq": 40}`, written the same way when any input was fed
+//!   again, with its own `seq`. A core fed `projects`, `state`, then
+//!   `data`, with `home` set on its model first, builds the same panel; a
+//!   later file is read by sending only the inputs whose `_seq` moved, and
+//!   an input still null is skipped. With a core the signal follows
+//!   panel.json alone, as before, since every frame's new clock rewrites
+//!   data.json and nothing reads it yet; without a core only data.json
+//!   goes, and the signal follows it.
 //! - Once a minute, when anything was written, a log line gives each
 //!   file's writes per minute and size (`Tally`).
 //! - In: each file in outbox/ is one action (action.rs). The writer
@@ -52,10 +57,6 @@ pub const DATA_FILE: &str = "data.json";
 pub const OUTBOX_DIR: &str = "outbox";
 /// Before an outbox file's name once claimed, then its claimer's pid.
 const TAKEN: &str = ".taken-";
-/// Before panel.json's temp file's pid.
-const PANEL_TMP: &str = ".panel.json.";
-/// Before data.json's temp file's pid.
-const DATA_TMP: &str = ".data.json.";
 /// How often the write tally is logged.
 pub const TALLY_EVERY: Duration = Duration::from_secs(60);
 /// The longest the publisher waits for the runner to be ready before it
@@ -75,11 +76,13 @@ pub struct Published<'a> {
     pub panel: &'a Panel,
 }
 
-/// What data.json holds: the core's inputs, beside the same envelope.
+/// What data.json holds: the core's inputs, beside the same envelope and
+/// the home folder the core's model was given.
 #[derive(Debug, Serialize)]
 pub struct PublishedData<'a> {
     pub seq: u64,
     pub written_at_ms: u64,
+    pub home: Option<&'a str>,
     #[serde(flatten)]
     pub inputs: &'a Inputs,
 }
@@ -152,13 +155,18 @@ pub fn ready(feed: &Feed, started: Instant) -> bool {
 /// Writes `bytes` to `dir/name` through a temp file in the same folder,
 /// so a reader sees the old file or the new one, never half of either.
 pub fn write_atomic(dir: &Path, name: &str, bytes: &[u8]) -> io::Result<()> {
-    // `PANEL_TMP` is this name for panel.json, so a crash's is swept.
-    let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));
+    // Named by `tmp_prefix`, so a crash's is swept.
+    let tmp = dir.join(format!("{}{}.tmp", tmp_prefix(name), std::process::id()));
     let written = fs::write(&tmp, bytes).and_then(|()| fs::rename(&tmp, dir.join(name)));
     if written.is_err() {
         let _ = fs::remove_file(&tmp);
     }
     written
+}
+
+/// Before the pid in `name`'s temp file, as `write_atomic` names it.
+fn tmp_prefix(name: &str) -> String {
+    format!(".{name}.")
 }
 
 fn epoch_ms() -> u64 {
@@ -250,8 +258,8 @@ pub struct Publisher {
     /// The panel last written, so an unchanged one is not written again.
     last: Option<Panel>,
     seq: u64,
-    /// The inputs last written to data.json, likewise.
-    last_inputs: Option<Inputs>,
+    /// The inputs' generation last written to data.json, likewise.
+    last_inputs: Option<u64>,
     data_seq: u64,
     tally: Tally,
     /// Posts the "changed" signal; true when it went.
@@ -274,8 +282,8 @@ impl Publisher {
         let outbox = root.join(OUTBOX_DIR);
         fs::create_dir_all(&outbox)?;
         sweep(&outbox, TAKEN, alive);
-        sweep(&root, PANEL_TMP, alive);
-        sweep(&root, DATA_TMP, alive);
+        sweep(&root, &tmp_prefix(PANEL_FILE), alive);
+        sweep(&root, &tmp_prefix(DATA_FILE), alive);
         Ok(Publisher {
             root,
             stuck: HashSet::new(),
@@ -324,16 +332,6 @@ impl Publisher {
         applied
     }
 
-    /// Writes the core's panel to panel.json and posts the signal, when it
-    /// differs from the one last written. True when it wrote.
-    pub fn publish(&mut self, model: &mut Model, log: &mut dyn FnMut(String)) -> bool {
-        let wrote = self.write_panel(model, log);
-        if wrote {
-            self.post(log);
-        }
-        wrote
-    }
-
     /// Writes the panel to panel.json, when it differs from the one last
     /// written. True when it wrote.
     fn write_panel(&mut self, model: &mut Model, log: &mut dyn FnMut(String)) -> bool {
@@ -355,22 +353,24 @@ impl Publisher {
         true
     }
 
-    /// Writes the core's inputs to data.json, when they differ from those
-    /// last written. True when it wrote.
-    fn write_data(&mut self, inputs: &Inputs, log: &mut dyn FnMut(String)) -> bool {
-        if self.last_inputs.as_ref() == Some(inputs) {
+    /// Writes the core's inputs to data.json, when any was fed since they
+    /// were last written. True when it wrote.
+    fn write_data(&mut self, feed: &Feed, log: &mut dyn FnMut(String)) -> bool {
+        let inputs = &feed.inputs;
+        if self.last_inputs == Some(inputs.generation()) {
             return false;
         }
         let out = PublishedData {
             seq: self.data_seq + 1,
             written_at_ms: epoch_ms(),
+            home: feed.model.session.home.as_deref(),
             inputs,
         };
         let Some(bytes) = self.write(DATA_FILE, &out, log) else {
             return false;
         };
         self.data_seq += 1;
-        self.last_inputs = Some(inputs.clone());
+        self.last_inputs = Some(inputs.generation());
         self.tally.data.add(bytes);
         true
     }
@@ -405,17 +405,17 @@ impl Publisher {
 
     /// One turn of the runner: the outbox's actions go in, then the panel
     /// and the inputs go out when a frame came, an action went in, or a
-    /// file has not been written yet (or its last write failed), with one
-    /// signal for both. Without a core only the inputs go out. The tally
-    /// is logged when it is due.
+    /// file has not been written yet (or its first write failed). The
+    /// signal follows the panel, or without a core (when only the inputs
+    /// go out) the inputs. The tally is logged when it is due.
     pub fn step(&mut self, feed: &mut Feed, fresh: bool, log: &mut dyn FnMut(String)) {
         let applied = self.take_actions(feed, log);
         let core = feed.has_core();
         let unwritten = (core && self.last.is_none()) || self.last_inputs.is_none();
         if fresh || applied > 0 || unwritten {
             let panel = core && self.write_panel(&mut feed.model, log);
-            let data = self.write_data(&feed.inputs, log);
-            if panel || data {
+            let data = self.write_data(feed, log);
+            if panel || (!core && data) {
                 self.post(log);
             }
         }
@@ -578,14 +578,13 @@ mod tests {
     fn core_from(file: &Value) -> Model {
         let mut model = Model::default();
         model.session.home = serde_json::from_value(file["home"].clone()).unwrap();
-        let projects: Vec<Project> = serde_json::from_value(file["projects"].clone()).unwrap();
-        let saved: SavedState = serde_json::from_value(file["state"].clone()).unwrap();
-        let data: Data = serde_json::from_value(file["data"].clone()).unwrap();
-        for event in [
-            Event::Projects(projects),
-            Event::State(Box::new(saved)),
-            Event::Data(data),
-        ] {
+        let read = |key: &str| (!file[key].is_null()).then(|| file[key].clone());
+        let events = [
+            read("projects").map(|v| Event::Projects(serde_json::from_value(v).unwrap())),
+            read("state").map(|v| Event::State(Box::new(serde_json::from_value(v).unwrap()))),
+            read("data").map(|v| Event::Data(serde_json::from_value(v).unwrap())),
+        ];
+        for event in events.into_iter().flatten() {
             let _effects = Cockpit.update(event, &mut model);
         }
         model
@@ -678,15 +677,23 @@ mod tests {
         p.step(&mut feed, true, &mut quiet());
         assert_eq!(json(&root.join(PANEL_FILE))["seq"], 2);
         assert_eq!(json(&root.join(DATA_FILE))["seq"], 1);
-        // A new frame moves the inputs, not the panel.
+        // A new frame moves the inputs, not the panel: data.json goes
+        // with only the data's count moved, and with a core no signal.
         let mut data = feed.inputs.data.clone().unwrap();
         data.epoch = data.epoch.map(|e| e + 1.0);
         feed.send(Event::Data(data));
         p.step(&mut feed, true, &mut quiet());
-        assert_eq!(json(&root.join(DATA_FILE))["seq"], 2);
-        assert_eq!(posted.get(), 3);
+        let file = json(&root.join(DATA_FILE));
+        assert_eq!(file["seq"], 2);
+        assert_eq!(
+            (&file["projects_seq"], &file["state_seq"], &file["data_seq"]),
+            (&1.into(), &1.into(), &2.into())
+        );
+        assert_eq!(json(&root.join(PANEL_FILE))["seq"], 2);
+        assert_eq!(posted.get(), 2, "the signal follows panel.json");
         p.step(&mut feed, true, &mut quiet());
-        assert_eq!(posted.get(), 3, "nothing new, no signal");
+        assert_eq!(json(&root.join(DATA_FILE))["seq"], 2, "nothing new");
+        assert_eq!(posted.get(), 2);
         fs::remove_dir_all(&root).unwrap();
     }
 
@@ -708,10 +715,20 @@ mod tests {
             (1.into(), "/h".into())
         );
         assert_eq!(file["data"]["epoch"], 1_791_127_100.0);
+        // No table was read, so a reader has none to send.
+        assert_eq!(
+            (&file["projects"], &file["projects_seq"]),
+            (&Value::Null, &0.into())
+        );
         assert_eq!(posted.get(), 1);
         // Written, so a wake with nothing new writes nothing.
         p.step(&mut feed, false, &mut quiet());
         assert_eq!(posted.get(), 1);
+        // Without a core the signal follows data.json.
+        feed.frame(1_791_127_130.0);
+        p.step(&mut feed, true, &mut quiet());
+        assert_eq!(json(&root.join(DATA_FILE))["seq"], 2);
+        assert_eq!(posted.get(), 2);
         fs::remove_dir_all(&root).unwrap();
     }
 
@@ -742,18 +759,21 @@ mod tests {
     fn writes_and_signals_only_when_the_panel_changed() {
         let (mut p, root, posted) = publisher("unchanged");
         let mut feed = fed("lanes");
-        assert!(p.publish(&mut feed.model, &mut quiet()));
-        assert!(!p.publish(&mut feed.model, &mut quiet()));
+        p.step(&mut feed, true, &mut quiet());
         assert_eq!(posted.get(), 1);
-        // The same panel again: only data.json, its first write, is news.
+        // The same panel again: nothing written, no signal.
         p.step(&mut feed, true, &mut quiet());
         assert_eq!(json(&root.join(PANEL_FILE))["seq"], 1);
-        assert_eq!(posted.get(), 2);
+        assert_eq!(posted.get(), 1);
+        feed.act(Event::FlipView);
+        p.step(&mut feed, false, &mut quiet());
+        assert_eq!(
+            posted.get(),
+            1,
+            "no frame and no action file: not looked at"
+        );
         p.step(&mut feed, true, &mut quiet());
         assert_eq!(posted.get(), 2);
-        feed.act(Event::FlipView);
-        assert!(p.publish(&mut feed.model, &mut quiet()));
-        assert_eq!(posted.get(), 3);
         assert_eq!(json(&root.join(PANEL_FILE))["seq"], 2);
         fs::remove_dir_all(&root).unwrap();
     }
@@ -857,6 +877,7 @@ mod tests {
         fs::write(outbox.join(".taken-8-b.json"), r#""FlipView""#).unwrap();
         fs::write(root.join(".panel.json.7.tmp"), "{").unwrap();
         fs::write(root.join(".panel.json.8.tmp"), "{").unwrap();
+        fs::write(root.join(".data.json.7.tmp"), "{").unwrap();
         // 7 crashed; 8 is another publisher, mid-claim and mid-write.
         let p = Publisher::new_with(root.clone(), Box::new(|| true), &|pid| pid == 8).unwrap();
         assert!(
@@ -864,6 +885,7 @@ mod tests {
             "never applied"
         );
         assert!(!root.join(".panel.json.7.tmp").exists());
+        assert!(!root.join(".data.json.7.tmp").exists());
         assert!(p.outbox().join(".taken-8-b.json").exists());
         assert!(root.join(".panel.json.8.tmp").exists());
         fs::remove_dir_all(&root).unwrap();
@@ -872,7 +894,10 @@ mod tests {
     #[test]
     fn a_pid_is_read_from_a_leftovers_name_and_asked_after() {
         assert_eq!(pid_in(".taken-123-a.json", TAKEN), Some(123));
-        assert_eq!(pid_in(".panel.json.45.tmp", PANEL_TMP), Some(45));
+        assert_eq!(
+            pid_in(".panel.json.45.tmp", &tmp_prefix(PANEL_FILE)),
+            Some(45)
+        );
         assert_eq!(pid_in(".taken-x.json", TAKEN), None);
         assert_eq!(pid_in("a.json", TAKEN), None);
         assert!(alive(std::process::id()));
@@ -908,8 +933,9 @@ mod tests {
         // A folder where the file should be: the rename cannot replace it.
         fs::create_dir(root.join(PANEL_FILE)).unwrap();
         let mut lines = Vec::new();
-        assert!(!p.publish(&mut feed.model, &mut |l| lines.push(l)));
+        p.step(&mut feed, true, &mut |l| lines.push(l));
         assert!(lines[0].starts_with("panel.json not written"), "{lines:?}");
+        assert!(root.join(DATA_FILE).exists(), "data.json still goes");
         assert_eq!(posted.get(), 0, "no signal without a file");
         let tmps = fs::read_dir(&root)
             .unwrap()
