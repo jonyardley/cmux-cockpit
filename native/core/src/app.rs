@@ -215,26 +215,57 @@ pub struct ViewModel {
 pub struct CmuxCall {
     pub method: String,
     /// In the order the TypeScript writes them.
+    /// Crosses the bridge as the object cmux reads (`params_json`).
+    #[serde(serialize_with = "params_out", deserialize_with = "params_in")]
     pub params: Vec<(String, Param)>,
 }
 
 impl CmuxCall {
     /// The params as the JSON object cmux reads, in order.
     pub fn params_json(&self) -> Value {
-        let map: Map<String, Value> = self
-            .params
-            .iter()
-            .map(|(k, v)| {
-                let v = match v {
-                    Param::Str(s) => Value::from(s.as_str()),
-                    Param::Num(n) => json_num(*n),
-                    Param::Bool(b) => Value::from(*b),
-                };
-                (k.clone(), v)
-            })
-            .collect();
-        Value::Object(map)
+        params_value(&self.params)
     }
+}
+
+fn params_value(params: &[(String, Param)]) -> Value {
+    let map: Map<String, Value> = params
+        .iter()
+        .map(|(k, v)| {
+            let v = match v {
+                Param::Str(s) => Value::from(s.as_str()),
+                Param::Num(n) => json_num(*n),
+                Param::Bool(b) => Value::from(*b),
+            };
+            (k.clone(), v)
+        })
+        .collect();
+    Value::Object(map)
+}
+
+fn params_out<S: serde::Serializer>(params: &[(String, Param)], s: S) -> Result<S::Ok, S::Error> {
+    params_value(params).serialize(s)
+}
+
+fn params_in<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<(String, Param)>, D::Error> {
+    let map = Map::<String, Value>::deserialize(d)?;
+    map.into_iter()
+        .map(|(k, v)| {
+            let p = match v {
+                Value::String(s) => Param::Str(s),
+                Value::Bool(b) => Param::Bool(b),
+                Value::Number(n) => n
+                    .as_f64()
+                    .map(Param::Num)
+                    .ok_or_else(|| serde::de::Error::custom("a cmux param number out of range"))?,
+                _ => {
+                    return Err(serde::de::Error::custom(
+                        "a cmux param is a string, number or bool",
+                    ));
+                }
+            };
+            Ok((k, p))
+        })
+        .collect()
 }
 
 impl Operation for CmuxCall {
@@ -718,6 +749,23 @@ mod tests {
         let mut model = Model::default();
         let _ = app.update(frame(100.0), &mut model);
         assert_eq!(asked(&app, &mut model, Event::Next), ["render"]);
+    }
+
+    #[test]
+    fn a_cmux_call_crosses_the_bridge_as_the_object_cmux_reads() {
+        let call = CmuxCall {
+            method: "workspace.reorder".into(),
+            params: vec![
+                ("workspace_id".into(), Param::Str("W1".into())),
+                ("index".into(), Param::Num(3.0)),
+                ("focus".into(), Param::Bool(false)),
+            ],
+        };
+        let json = serde_json::to_value(&call).unwrap();
+        let params = serde_json::json!({ "workspace_id": "W1", "index": 3, "focus": false });
+        assert_eq!(json["params"], params);
+        assert_eq!(json["params"], call.params_json());
+        assert_eq!(serde_json::from_value::<CmuxCall>(json).unwrap(), call);
     }
 
     /// A switch at `now`, as the sidebar sends a click.

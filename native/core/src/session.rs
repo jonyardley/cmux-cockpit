@@ -11,7 +11,6 @@
 use std::collections::{BTreeMap, HashMap};
 
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::edit::Editor;
@@ -25,8 +24,7 @@ use crate::status::Status;
 use crate::text::PromptMemory;
 
 /// A value in a cmux request's parameters.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Param {
     Str(String),
     Num(f64),

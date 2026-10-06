@@ -12,6 +12,7 @@
 //! No effect the core asks for has an answer it waits on (each is a
 //! notification), so crux's `resolve` has no call here yet.
 
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::OnceLock;
 
 use cockpit_core::Cockpit;
@@ -62,67 +63,71 @@ fn shell() -> &'static Shell {
     SHELL.get_or_init(|| Bridge::new(Core::new()))
 }
 
-/// The event's effects as JSON, or the code to report.
+/// The event's effects as JSON, or the code to report. A panic in the
+/// core is reported, never let out across the C boundary.
 pub fn update(event: &[u8]) -> Result<Vec<u8>, i32> {
-    let mut out = Vec::new();
-    match shell().update(event, &mut out) {
-        Ok(()) => Ok(out),
-        Err(crux_core::bridge::BridgeError::DeserializeEvent(_)) => Err(COCKPIT_BAD_EVENT),
-        Err(_) => Err(COCKPIT_FAILED),
-    }
+    let run = || {
+        let mut out = Vec::new();
+        match shell().update(event, &mut out) {
+            Ok(()) => Ok(out),
+            Err(crux_core::bridge::BridgeError::DeserializeEvent(_)) => Err(COCKPIT_BAD_EVENT),
+            Err(_) => Err(COCKPIT_FAILED),
+        }
+    };
+    catch_unwind(AssertUnwindSafe(run)).unwrap_or(Err(COCKPIT_FAILED))
 }
 
 /// The view as JSON, or the code to report.
 pub fn view() -> Result<Vec<u8>, i32> {
-    let mut out = Vec::new();
-    shell()
-        .view(&mut out)
-        .map(|()| out)
-        .map_err(|_| COCKPIT_FAILED)
+    let run = || {
+        let mut out = Vec::new();
+        shell()
+            .view(&mut out)
+            .map(|()| out)
+            .map_err(|_| COCKPIT_FAILED)
+    };
+    catch_unwind(AssertUnwindSafe(run)).unwrap_or(Err(COCKPIT_FAILED))
 }
 
-/// Writes `result` to `out`; returns the code.
+/// Writes `result` to `out`, which may hold anything beforehand; returns
+/// the code.
 ///
 /// # Safety
 ///
-/// `out` is null or points at a `CockpitBytes` the caller owns.
+/// `out` is non-null and valid for a write of one `CockpitBytes`.
 unsafe fn hand_out(result: Result<Vec<u8>, i32>, out: *mut CockpitBytes) -> i32 {
-    // SAFETY: the caller's promise above; a null `out` was refused by `as_mut`.
-    let Some(out) = (unsafe { out.as_mut() }) else {
-        return COCKPIT_NULL;
+    let (bytes, code) = match result {
+        Ok(bytes) => (CockpitBytes::from_vec(bytes), COCKPIT_OK),
+        Err(code) => (CockpitBytes::empty(), code),
     };
-    match result {
-        Ok(bytes) => {
-            *out = CockpitBytes::from_vec(bytes);
-            COCKPIT_OK
-        }
-        Err(code) => {
-            *out = CockpitBytes::empty();
-            code
-        }
-    }
+    // SAFETY: the caller's promise; a write never reads what was there.
+    unsafe { out.write(bytes) };
+    code
 }
 
 /// Sends one event, `len` bytes of JSON at `event`; the effects it asks
-/// for land in `out`.
+/// for land in `out`. Nothing runs unless both pointers are there.
 ///
 /// # Safety
 ///
-/// `event` points at `len` readable bytes (or is null with `len` 0), and
-/// `out` points at a `CockpitBytes` the caller owns.
+/// `event` points at `len` readable bytes or is null, and `out` is null
+/// or valid for a write of one `CockpitBytes`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cockpit_update(
     event: *const u8,
     len: usize,
     out: *mut CockpitBytes,
 ) -> i32 {
+    if out.is_null() {
+        return COCKPIT_NULL;
+    }
     if event.is_null() {
-        // SAFETY: the caller's promise about `out`.
+        // SAFETY: `out` is non-null, and the caller's promise covers it.
         return unsafe { hand_out(Err(COCKPIT_NULL), out) };
     }
     // SAFETY: the caller's promise about `event` and `len`.
     let event = unsafe { std::slice::from_raw_parts(event, len) };
-    // SAFETY: the caller's promise about `out`.
+    // SAFETY: as above.
     unsafe { hand_out(update(event), out) }
 }
 
@@ -130,10 +135,13 @@ pub unsafe extern "C" fn cockpit_update(
 ///
 /// # Safety
 ///
-/// `out` points at a `CockpitBytes` the caller owns.
+/// `out` is null or valid for a write of one `CockpitBytes`.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn cockpit_view(out: *mut CockpitBytes) -> i32 {
-    // SAFETY: the caller's promise about `out`.
+    if out.is_null() {
+        return COCKPIT_NULL;
+    }
+    // SAFETY: `out` is non-null, and the caller's promise covers it.
     unsafe { hand_out(view(), out) }
 }
 
@@ -190,6 +198,9 @@ mod tests {
         let mut out = CockpitBytes::empty();
         // SAFETY: `out` is ours; null event is the case under test.
         let code = unsafe { cockpit_update(std::ptr::null(), 0, &mut out) };
+        assert_eq!(code, COCKPIT_NULL);
+        // SAFETY: a null `out` is the case under test.
+        let code = unsafe { cockpit_update(b"\"Refresh\"".as_ptr(), 9, std::ptr::null_mut()) };
         assert_eq!(code, COCKPIT_NULL);
         // SAFETY: `out` is ours.
         assert_eq!(unsafe { cockpit_view(&mut out) }, COCKPIT_OK);
