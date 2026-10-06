@@ -14,6 +14,9 @@
 //! {"Edit": {"Name": "Cockpit"}}
 //! "Next"
 //! {"MessageAgent": {"id": "W1", "text": "Rebase when free."}}
+//! {"ToggleLane": {"lane": "main"}}
+//! {"ToggleProject": {"key": "/dev/cockpit"}}
+//! "ToggleQuiet"
 //! ```
 //!
 //! Only actions parse: a frame, a state file or a PR answer cannot come
@@ -63,6 +66,13 @@ pub enum Action {
         id: String,
         text: String,
     },
+    ToggleLane {
+        lane: LaneKey,
+    },
+    ToggleProject {
+        key: String,
+    },
+    ToggleQuiet,
 }
 
 impl Action {
@@ -88,6 +98,9 @@ impl Action {
             Action::Menu(_) => "Menu",
             Action::Next => "Next",
             Action::MessageAgent { .. } => "MessageAgent",
+            Action::ToggleLane { .. } => "ToggleLane",
+            Action::ToggleProject { .. } => "ToggleProject",
+            Action::ToggleQuiet => "ToggleQuiet",
         }
     }
 }
@@ -108,6 +121,9 @@ impl From<Action> for Event {
             Action::Menu(m) => Event::Menu(m),
             Action::Next => Event::Next,
             Action::MessageAgent { id, text } => Event::MessageAgent { id, text },
+            Action::ToggleLane { lane } => Event::ToggleLane { lane },
+            Action::ToggleProject { key } => Event::ToggleProject { key },
+            Action::ToggleQuiet => Event::ToggleQuiet,
         }
     }
 }
@@ -118,7 +134,7 @@ mod tests {
     use cockpit_core::menu::MenuAction;
 
     /// One file per variant, as the module's head documents them.
-    const EVERY: [&str; 13] = [
+    const EVERY: [&str; 16] = [
         r#"{"MoveCard": {"id": "W1", "lane": "review", "before": null}}"#,
         r#"{"SwitchTo": {"id": "W1"}}"#,
         r#"{"Dismiss": {"id": "W1"}}"#,
@@ -132,6 +148,9 @@ mod tests {
         r#"{"Menu": {"Pick": {"Lane": "parked"}}}"#,
         r#""Next""#,
         r#"{"MessageAgent": {"id": "W1", "text": "Rebase when free."}}"#,
+        r#"{"ToggleLane": {"lane": "main"}}"#,
+        r#"{"ToggleProject": {"key": "/dev/cockpit"}}"#,
+        r#""ToggleQuiet""#,
     ];
 
     #[test]
@@ -164,8 +183,11 @@ mod tests {
             Action::Menu(_) => 10,
             Action::Next => 11,
             Action::MessageAgent { .. } => 12,
+            Action::ToggleLane { .. } => 13,
+            Action::ToggleProject { .. } => 14,
+            Action::ToggleQuiet => 15,
         };
-        let mut out = vec![("Action", top, 13)];
+        let mut out = vec![("Action", top, 16)];
         if let Action::Edit(e) = a {
             let n = match e {
                 EditEvent::OpenNew => 0,

@@ -55,9 +55,7 @@ struct ProjectHeader: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Text(head.collapsed ? Words.folded : Words.open)
-                .foregroundStyle(Color(Token.faint))
-                .frame(width: 10)
+            FoldMark(folded: head.collapsed)
             Text(Words.laneMark).foregroundStyle(Color(project: head.color))
             Text(head.name)
                 .font(.system(size: Metrics.small, weight: .semibold))
@@ -72,7 +70,7 @@ struct ProjectHeader: View {
             if head.canOpen { PlusButton(key: head.key) }
         }
         .font(.system(size: Metrics.small))
-        .contentShape(Rectangle())
+        .foldsOnClick(.toggleProject(key: head.key))
         .contextMenu { ProjectMenuItems(items: head.menu, key: head.key, quiet: false) }
     }
 }
@@ -131,14 +129,13 @@ struct ProjectRowView: View {
             .padding(.top, 6)
         case .quietHeader(let count, let collapsed):
             HStack(spacing: 5) {
-                Text(collapsed ? Words.folded : Words.open)
-                    .foregroundStyle(Color(Token.faint))
-                    .frame(width: 10)
+                FoldMark(folded: collapsed)
                 Text(Words.quiet).fontWeight(.semibold).foregroundStyle(Color(Token.faint))
                 CountPill(count: count, colors: ProjectText.quietPill)
                 Spacer(minLength: 4)
             }
             .font(.system(size: Metrics.small))
+            .foldsOnClick(.toggleQuiet)
             .padding(.top, 6)
         case .quiet(let key, _, let name, let color, let canOpen, let menu):
             QuietRow(key: key, name: name, color: color, canOpen: canOpen, menu: menu)

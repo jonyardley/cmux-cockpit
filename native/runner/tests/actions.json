@@ -41,5 +41,8 @@
   { "Menu": { "Pick": "OpenProject" } },
   { "Menu": { "Pick": "EditProject" } },
   "Next",
-  { "MessageAgent": { "id": "W1", "text": "Rebase when free." } }
+  { "MessageAgent": { "id": "W1", "text": "Rebase when free." } },
+  { "ToggleLane": { "lane": "main" } },
+  { "ToggleProject": { "key": "/dev/cockpit" } },
+  "ToggleQuiet"
 ]

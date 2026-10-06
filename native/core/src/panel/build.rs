@@ -332,6 +332,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         rank: session.state_rank(data, w),
         movable: !is_foreign_anchor(session, data, id),
         dimmed: is_dimmed(session, data, w),
+        selected: session.is_selected(data, w),
         menu: session.card_menu(data, w),
     }
 }
@@ -382,6 +383,8 @@ fn push_row(lanes: &mut [Lane], row: Row) {
 fn anchor(session: &mut Session, data: &Data, id: &str) -> Anchor {
     let w = data.ws_by_id(id);
     Anchor {
+        id: id.to_string(),
+        selected: session.is_selected(data, w),
         icon: icon_of(&session.status_info(data, w)),
         unread: unread_text(w.and_then(|w| w.unread)),
     }
@@ -439,6 +442,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         rank: session.state_rank(data, w),
         movable: !is_foreign_anchor(session, data, id),
         dimmed: is_dimmed(session, data, w),
+        selected: session.is_selected(data, w),
         menu: session.card_menu(data, w),
     }
 }

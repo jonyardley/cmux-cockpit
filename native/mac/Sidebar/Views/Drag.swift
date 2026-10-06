@@ -1,7 +1,26 @@
 import AppKit
 import Observation
+import os
 import SwiftUI
 import UniformTypeIdentifiers
+
+/// The drag's timeline for Console or `log stream`: lift, the button
+/// coming up, each change of landing slot, the drop and the move drawn,
+/// each with the milliseconds since the lift.
+enum DragLog {
+    static let log = Logger(subsystem: "dev.jonyardley.cockpit.sidebar", category: "drag")
+    @MainActor private static var start = Date()
+
+    @MainActor static func lifted() {
+        start = Date()
+        log.info("lift")
+    }
+
+    @MainActor static func note(_ what: String) {
+        let ms = Int(Date().timeIntervalSince(start) * 1000)
+        log.info("\(what, privacy: .public) +\(ms)ms")
+    }
+}
 
 /// The drag in flight and the drops waiting for panel.json, shared by
 /// every lane: a card leaves one lane's view and lands in another's.
@@ -19,35 +38,56 @@ final class DragState {
     private(set) var pending: [PendingMove] = []
     /// Watches for the mouse button coming up while a card is lifted.
     @ObservationIgnored private var watch: Task<Void, Never>?
+    /// The card the release watch let go of, and when: cmux can hand the
+    /// drop over after the watch has given up on it, and the drop still
+    /// lands for `late` after that.
+    @ObservationIgnored private var released: (card: Card, from: LaneKey, at: Date)?
+    private static let late: TimeInterval = 2
 
     func lift(_ card: Card, from lane: LaneKey) {
         lifted = card
         from = lane
         over = nil
+        released = nil
+        DragLog.lifted()
         watch?.cancel()
         watch = Task { [weak self] in await self?.settleOnRelease() }
+    }
+
+    /// The card a drop carries: the one lifted, else the one the release
+    /// watch let go of moments ago.
+    var carried: Card? {
+        if let lifted { return lifted }
+        guard let released, Date().timeIntervalSince(released.at) < Self.late else { return nil }
+        return released.card
     }
 
     /// SwiftUI says nothing when a drag ends without a drop on a lane
     /// (Escape, or let go over another app or a gap), so this settles the
     /// drag once the button has been up for three looks in a row, about
-    /// 300 to 450 ms: long after a drop on a lane has run, which happens
-    /// as the button comes up.
+    /// 300 to 450 ms. A drop on a lane usually runs as the button comes up,
+    /// but cmux can pass it on later than that, so the card stays
+    /// `carried` for a moment after.
     private func settleOnRelease() async {
         var up = 0
         while lifted != nil {
             try? await Task.sleep(for: .milliseconds(150))
             if Task.isCancelled { return }
             up = NSEvent.pressedMouseButtons & 1 == 0 ? up + 1 : 0
+            if up == 1 { DragLog.note("button up seen") }
             if up >= 3 {
-                settle()
+                if let lifted, let from { released = (lifted, from, Date()) }
+                settle("release watch, no drop yet")
                 return
             }
         }
     }
 
     func hover(_ lane: LaneKey, before: String?) {
-        if over?.lane != lane || over?.before != before { over = (lane, before) }
+        if over?.lane != lane || over?.before != before {
+            over = (lane, before)
+            DragLog.note("over \(lane) before \(before ?? "end")")
+        }
     }
 
     func leave(_ lane: LaneKey) {
@@ -55,27 +95,34 @@ final class DragState {
     }
 
     /// The drag is over without a drop (Escape, or let go outside a lane):
-    /// the gap closes and the card is drawn where it was.
-    func settle() {
+    /// the gap closes and the card is drawn where it was. The landing line
+    /// goes too even with nothing lifted: a late drop hovers after the
+    /// release watch has settled, and its line must not outlive it.
+    func settle(_ why: String) {
         watch?.cancel()
         watch = nil
+        if over != nil { over = nil }
         guard lifted != nil else { return }
+        DragLog.note("settled: \(why)")
         lifted = nil
         from = nil
-        over = nil
     }
 
     /// Lets go of `id` in `lane` above `before`, among the lane's rows as
     /// drawn: sends the move to cockpit-publish and draws the card there
     /// until panel.json shows it.
     func drop(_ id: String, in lane: LaneKey, before: String?, rows: [Row]) {
-        defer { settle() }
-        guard let card = lifted, card.wsId == id, let from else { return }
+        defer {
+            released = nil
+            settle("drop")
+        }
+        guard let card = carried, card.wsId == id, let from = from ?? released?.from else { return }
         if PendingMove.staysPut(rows, from: from, card: card, lane: lane, before: before) { return }
         let move = PendingMove(card: card, from: from, lane: lane, before: before, until: Date().addingTimeInterval(PendingMove.lasts))
         guard Outbox.send(move.action) else { return }
         pending.removeAll { $0.card.wsId == id }
         pending.append(move)
+        DragLog.note("move sent to \(lane)")
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(PendingMove.lasts))
             self?.lapse()
@@ -97,10 +144,22 @@ final class DragState {
 
 /// What a card's drag carries: its workspace as text. A drop reads the
 /// lifted card from DragState, not this, so text dragged in from another
-/// app (with nothing lifted) is turned away by validateDrop.
+/// app (with nothing lifted) is turned away by validateDrop; a late drop,
+/// after the release watch, checks this text against the card let go of.
 enum DragItem {
+    static func text(_ card: Card) -> String { "cockpit-card:" + card.wsId }
+
     static func provider(_ card: Card) -> NSItemProvider {
-        NSItemProvider(object: ("cockpit-card:" + card.wsId) as NSString)
+        NSItemProvider(object: text(card) as NSString)
+    }
+
+    /// The text a drop carries, or nil for none.
+    @MainActor static func read(_ provider: NSItemProvider) async -> String? {
+        await withCheckedContinuation { done in
+            _ = provider.loadObject(ofClass: NSString.self) { text, _ in
+                done.resume(returning: text as? String)
+            }
+        }
     }
 }
 
@@ -171,7 +230,7 @@ struct LaneDrop: DropDelegate {
     let state: DragState
 
     func validateDrop(info: DropInfo) -> Bool {
-        state.lifted != nil && info.hasItemsConforming(to: [.plainText])
+        state.carried != nil && info.hasItemsConforming(to: [.plainText])
     }
 
     func dropEntered(info: DropInfo) {
@@ -181,7 +240,9 @@ struct LaneDrop: DropDelegate {
     func dropUpdated(info: DropInfo) -> DropProposal? {
         guard let before = before(info) else { return DropProposal(operation: .forbidden) }
         state.hover(lane.key, before: before)
-        return DropProposal(operation: .move)
+        // Copy, to match the provider: a plain string, which the drag
+        // source has no way to give up as a move would ask.
+        return DropProposal(operation: .copy)
     }
 
     func dropExited(info: DropInfo) {
@@ -189,18 +250,39 @@ struct LaneDrop: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        guard let before = before(info), let card = state.lifted else {
-            state.settle()
+        DragLog.note("performDrop on \(lane.key)")
+        guard let before = before(info), let card = state.carried else {
+            state.settle("drop refused")
             return false
         }
-        state.drop(card.wsId, in: lane.key, before: before, rows: rows)
+        if state.lifted != nil {
+            state.drop(card.wsId, in: lane.key, before: before, rows: rows)
+            return true
+        }
+        // A late drop: the release watch has let go, so this could be text
+        // from another app dragged in during the grace. It lands only if it
+        // carries the card let go of.
+        guard let provider = info.itemProviders(for: [.plainText]).first else {
+            DragLog.note("late drop refused: nothing carried")
+            state.settle("late drop refused")
+            return false
+        }
+        let (key, rows, state) = (lane.key, rows, state)
+        Task { @MainActor in
+            guard await DragItem.read(provider) == DragItem.text(card) else {
+                DragLog.note("late drop refused: not the card let go of")
+                state.settle("late drop refused")
+                return
+            }
+            state.drop(card.wsId, in: key, before: before, rows: rows)
+        }
         return true
     }
 
     /// The card the drop goes above, or .some(nil) for the lane's end;
     /// nil when nothing of ours is lifted.
     private func before(_ info: DropInfo) -> String?? {
-        guard let card = state.lifted else { return nil }
+        guard let card = state.carried else { return nil }
         if lane.collapsed || rows.isEmpty { return .some(nil) }
         // A row not laid out yet counts as below the pointer, never above.
         let mids = rows.map { frames[$0.id].map { Double($0.midY) } ?? .infinity }

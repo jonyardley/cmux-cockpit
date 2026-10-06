@@ -138,6 +138,7 @@
             "rank": 1,
             "movable": true,
             "dimmed": false,
+            "selected": false,
             "menu": [
               {
                 "Item": {
@@ -277,6 +278,7 @@
             "rank": 2,
             "movable": true,
             "dimmed": false,
+            "selected": false,
             "menu": [
               {
                 "Item": {
@@ -435,6 +437,7 @@
             "rank": 3,
             "movable": true,
             "dimmed": true,
+            "selected": false,
             "menu": [
               {
                 "Item": {
@@ -574,6 +577,7 @@
             "rank": 3,
             "movable": true,
             "dimmed": false,
+            "selected": false,
             "menu": [
               {
                 "Item": {
@@ -819,6 +823,7 @@
         "rank": 2,
         "movable": true,
         "dimmed": false,
+        "selected": false,
         "menu": [
           {
             "Item": {
@@ -1028,6 +1033,7 @@
         "rank": 1,
         "movable": true,
         "dimmed": false,
+        "selected": false,
         "menu": [
           {
             "Item": {
@@ -1200,6 +1206,7 @@
         "rank": 3,
         "movable": true,
         "dimmed": true,
+        "selected": false,
         "menu": [
           {
             "Item": {
@@ -1363,6 +1370,7 @@
         "rank": 3,
         "movable": true,
         "dimmed": false,
+        "selected": false,
         "menu": [
           {
             "Item": {

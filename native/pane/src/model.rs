@@ -269,6 +269,7 @@ pub(crate) mod fixtures {
             rank,
             movable: true,
             dimmed: false,
+            selected: false,
             menu: Vec::new(),
         })
     }

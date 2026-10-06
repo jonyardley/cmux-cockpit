@@ -64,6 +64,9 @@ let every: [SidebarAction] = [
     .menu(.pick(.editProject)),
     .next,
     .messageAgent(id: "W1", text: "Rebase when free."),
+    .toggleLane(.main),
+    .toggleProject(key: "/dev/cockpit"),
+    .toggleQuiet,
 ]
 
 func json(_ data: Data) -> Any? {

@@ -24,6 +24,12 @@ enum SidebarAction: Encodable, Equatable {
     case next
     /// "Message agent…": Jon's words for the agent in the workspace.
     case messageAgent(id: String, text: String)
+    /// A click on a lane's heading: folds or unfolds it.
+    case toggleLane(LaneKey)
+    /// A click on a busy project's heading: folds or unfolds it.
+    case toggleProject(key: String)
+    /// A click on the Quiet heading: folds or unfolds it.
+    case toggleQuiet
 
     /// The core's `MenuEvent`.
     enum Menu: Encodable, Equatable {
@@ -100,6 +106,9 @@ enum SidebarAction: Encodable, Equatable {
         case let .menu(m): try newtype(encoder, "Menu", m)
         case .next: try unit(encoder, "Next")
         case let .messageAgent(id, text): try tagged(encoder, "MessageAgent", ["id": id, "text": text])
+        case let .toggleLane(lane): try newtype(encoder, "ToggleLane", ["lane": lane])
+        case let .toggleProject(key): try tagged(encoder, "ToggleProject", ["key": key])
+        case .toggleQuiet: try unit(encoder, "ToggleQuiet")
         }
     }
 }

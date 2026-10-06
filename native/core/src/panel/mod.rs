@@ -172,6 +172,10 @@ pub struct Card {
     /// Faint, as the sidebar dims a merged card while nothing in it wants
     /// Jon. The view draws it at full strength under the cursor.
     pub dimmed: bool,
+    /// cmux's selected workspace, the one open in the terminal: drawn with
+    /// the select ink's outline so it is found at a glance (status.ts
+    /// outline). A card tapped through the core reads as selected at once.
+    pub selected: bool,
     /// Its card menu for this frame, in the core's words and order, so a
     /// shell can show it the moment Jon right-clicks; a pick goes back as
     /// the menu opened on this card, then the item.
@@ -323,8 +327,13 @@ impl Row {
 }
 
 /// A lane's generated anchor on its header: its dot and unread count.
+/// It has no card, so its badge is the click that opens it (headers.ts
+/// anchorStatus), shaded while it is cmux's selected workspace.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Anchor {
+    /// The anchor's workspace, for the badge's click.
+    pub id: String,
+    pub selected: bool,
     pub icon: Icon,
     /// "3", or "" with nothing unread.
     pub unread: String,

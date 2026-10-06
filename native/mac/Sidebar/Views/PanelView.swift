@@ -39,6 +39,9 @@ struct PanelBody: View {
         // Here, not in a lane, so a drop is confirmed in the Projects
         // view too, when no lane is drawn.
         .onChange(of: panel.lanes) { _, now in DragState.shared.reconcile(now) }
+        .onChange(of: DragState.shared.pending.count) { was, now in
+            if now > was { DragLog.note("move drawn") }
+        }
         .sheet(item: editorKey) { _ in
             if let editor = ProjectText.editor(panel) {
                 EditorSheet(editor: editor) { Outbox.send(.edit($0)) }

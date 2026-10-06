@@ -206,3 +206,43 @@ fn the_editor_offers_the_tables_colours() {
     assert_eq!(colors.len(), cockpit_core::panel::PROJECT_COLORS.len());
     assert_eq!(colors[0], cockpit_core::panel::PROJECT_COLORS[0]);
 }
+
+#[test]
+fn only_cmuxs_selected_workspace_carries_the_outline() {
+    let mut model = loaded("lanes");
+    let panel = Panel::from_core(&mut model);
+    let selected: Vec<&str> = panel
+        .lanes
+        .iter()
+        .flat_map(|l| &l.rows)
+        .filter_map(|r| match r {
+            cockpit_core::panel::Row::Card(c) if c.selected => Some(c.ws_id.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(selected, ["selected"]);
+}
+
+#[test]
+fn a_lane_anchor_carries_its_id_and_its_selection_for_the_badge() {
+    let data: Data = serde_json::from_value(serde_json::json!({
+        "epoch": 1_000_000.0,
+        "groups": [{ "id": "g-main", "name": "Main activity", "anchorId": "anchor-main" }],
+        "workspaces": [
+            { "id": "anchor-main", "title": "Main activity", "group": "g-main", "unread": 2, "selected": true },
+            { "id": "a", "group": "g-main" },
+        ],
+    }))
+    .unwrap();
+    let mut model = Model::default();
+    send(&mut model, Event::Data(data));
+    let panel = Panel::from_core(&mut model);
+    let anchor = panel
+        .lanes
+        .iter()
+        .find_map(|l| l.anchor.as_ref())
+        .expect("Main's header shows its anchor");
+    assert_eq!(anchor.id, "anchor-main");
+    assert!(anchor.selected);
+    assert_eq!(anchor.unread, "2");
+}
