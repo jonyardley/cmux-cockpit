@@ -22,7 +22,7 @@ pub enum Field {
 }
 
 /// The open editor, as the pane draws it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct EditorView {
     /// The project it edits, or the core's NEW_PROJECT.
     pub key: String,

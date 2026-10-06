@@ -2,11 +2,13 @@
 //! src/cockpit/theme.ts and src/shared/palette.ts. The core says which
 //! token; the hex values stay with whoever draws.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// A colour token.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, facet::Facet)]
 #[serde(rename_all = "camelCase")]
+#[repr(u8)]
+#[facet(rename_all = "camelCase")]
 pub enum Token {
     /// No colour: "clear".
     Clear,

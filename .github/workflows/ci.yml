@@ -53,8 +53,9 @@ jobs:
 
   # The helper app and the Cockpit sidebar extension in native/mac: an
   # XcodeGen project, so it needs a macOS runner. Builds both targets
-  # unsigned (building the app builds and embeds the extension), and runs
-  # the heartbeat rule's checks.
+  # unsigned (building the app builds and embeds the extension), then runs
+  # the heartbeat rule's checks and decodes every fixture with the
+  # generated panel types. Both steps run cargo to write the panel types.
   mac:
     runs-on: macos-latest
     timeout-minutes: 20
@@ -66,11 +67,25 @@ jobs:
         with:
           persist-credentials: false
       - run: xcodebuild -version
+      # The toolchain rust-toolchain.toml names, found from native/mac
+      # upwards.
+      - run: rustup toolchain install
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            native/target
+          key: rust-mac-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'native/Cargo.lock') }}-${{ hashFiles('native/**/Cargo.toml', 'native/**/*.rs') }}
+          restore-keys: rust-mac-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'native/Cargo.lock') }}-
       - run: brew install xcodegen
         env:
           HOMEBREW_NO_AUTO_UPDATE: "1"
-      - run: ./test.sh
+      # build.sh first, on the fresh checkout with no generated types, so
+      # the Xcode pre-build step is what writes them.
       - run: ./build.sh
         env:
           UNSIGNED: "1"
+      - run: ./test.sh
       - run: test -d build/Build/Products/Debug/Cockpit.app/Contents/Extensions/CockpitSidebar.appex

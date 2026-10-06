@@ -10,6 +10,9 @@ workspace = true
 
 [dependencies]
 crux_core = "0.20"
+# The panel model's shape for native/typegen. Pinned to the exact version
+# crux_core 0.20 pins, so the two never pull different facets.
+facet = "=0.46.5"
 fancy-regex = "0.19.2"
 indexmap = "2.14.2"
 regex = "1.13.1"

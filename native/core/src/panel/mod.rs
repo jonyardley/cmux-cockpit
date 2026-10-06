@@ -81,7 +81,8 @@ pub const DROP_MARK: &str = "▔";
 
 /// Which view the panel draws, as the core has it; Tab asks the core to
 /// flip it.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, facet::Facet)]
+#[repr(u8)]
 pub enum PanelView {
     #[default]
     All,
@@ -90,14 +91,15 @@ pub enum PanelView {
 
 /// The glyph before a title and its colour; None is the grey outline the
 /// sidebar draws round a dot with no colour of its own.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Icon {
     pub glyph: &'static str,
     pub ink: Option<Token>,
 }
 
 /// Next: where the next press goes, "1 of 5", or nowhere.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, facet::Facet)]
+#[repr(u8)]
 pub enum NextLine {
     #[default]
     Nothing,
@@ -108,7 +110,7 @@ pub enum NextLine {
 }
 
 /// One session in the Needs you strip.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct NeedsRow {
     pub ws_id: String,
     pub icon: Icon,
@@ -124,7 +126,7 @@ pub struct NeedsRow {
 }
 
 /// The Needs you strip; empty when nothing waits.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Needs {
     pub count: usize,
     /// "oldest 12m", or "" with nothing timed.
@@ -136,7 +138,7 @@ pub struct Needs {
 }
 
 /// A workspace's card.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Card {
     pub ws_id: String,
     pub icon: Icon,
@@ -173,14 +175,14 @@ pub struct Card {
 }
 
 /// A run of a chip's words in one ink.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Piece {
     pub text: String,
     pub ink: Token,
 }
 
 /// One chip: its pieces, a space apart.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Chip {
     pub pieces: Vec<Piece>,
     /// It goes first when the line is too narrow: the branch, as the
@@ -216,7 +218,8 @@ pub enum ChipsFor {
 }
 
 /// A row of the Projects view.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+#[repr(u8)]
 pub enum ProjectRow {
     Header(ProjectHead),
     Card(Card),
@@ -261,7 +264,7 @@ pub enum ProjectTarget {
 
 /// A project's header: its name in its own colour's mark, the cards it
 /// counts, and "+" when it has a folder.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct ProjectHead {
     /// Its key in the core, and its row's id for the cursor.
     pub key: String,
@@ -278,7 +281,8 @@ pub struct ProjectHead {
 }
 
 /// A row under a lane header.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+#[repr(u8)]
 pub enum Row {
     Card(Card),
     /// A card whose session sits in Needs you: its title and why.
@@ -310,7 +314,7 @@ impl Row {
 }
 
 /// A lane's generated anchor on its header: its dot and unread count.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Anchor {
     pub icon: Icon,
     /// "3", or "" with nothing unread.
@@ -319,7 +323,7 @@ pub struct Anchor {
 
 /// A lane: its header, then its rows (none while folded). An empty lane
 /// draws as its header alone, faint and with nothing to fold.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Lane {
     pub key: LaneKey,
     pub empty: bool,
@@ -340,7 +344,7 @@ pub struct Lane {
 }
 
 /// Everything the pane draws.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Panel {
     /// Which view the core has on: Tab asks it to flip.
     pub view: PanelView,

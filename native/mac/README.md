@@ -10,6 +10,13 @@ parts, built together from `project.yml` with XcodeGen:
   extension cmux draws in its left sidebar.
 - `Shared/`: the names and the heartbeat rule both targets compile.
   `Tests/main.swift` checks the rule; `native/mac/test.sh` runs it.
+- `Generated/PanelTypes.swift`: the panel model's Swift types, which the
+  extension compiles. `native/typegen` writes them from the Rust types in
+  `native/core`, with an `init(from:)` on each that reads the JSON the
+  core writes, so a plain `JSONDecoder()` decodes `panel.json`. They are
+  gitignored and rebuilt every time: by a step in the Xcode build, and by
+  `test.sh`, which then decodes every fixture in `native/fixtures/` with
+  them (`Tests/Decode/main.swift`).
 
 The two talk through the App Group `9S5FG4LQAF.dev.jonyardley.cockpit`:
 a folder only they can reach, plus a bare distributed notification
@@ -28,7 +35,9 @@ seven seconds.
 
 ## Build
 
-Needs Xcode 16 or later (the SDK needs Swift tools 6.0) and XcodeGen (`brew install xcodegen`).
+Needs Xcode 16 or later (the SDK needs Swift tools 6.0), XcodeGen
+(`brew install xcodegen`) and the Rust toolchain (rustup; the build runs
+cargo to write the panel types).
 
 ```sh
 native/mac/build.sh
@@ -49,7 +58,17 @@ does. That is a compile check only: cmux will not list an unsigned
 extension.
 
 To work in Xcode instead: `./fetch-sdk.sh && xcodegen`, then open
-`Cockpit.xcodeproj`.
+`Cockpit.xcodeproj`. The first build writes `Generated/PanelTypes.swift`.
+
+## Test
+
+```sh
+native/mac/test.sh
+```
+
+Needs only the Swift compiler and cargo. It runs the heartbeat checks,
+writes the panel types, then decodes each fixture and checks what it
+holds; every line reads `ok:`, and any `FAIL:` line fails the run.
 
 ## Run
 
