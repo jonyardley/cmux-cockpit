@@ -25,6 +25,7 @@ enum ActionWords {
     static let send = "Send"
     static let cancel = "Cancel"
     static let dismiss = "Dismiss"
+    static let notSent = "Not sent: the cockpit could not take it. Try again."
 }
 
 extension View {
@@ -64,7 +65,9 @@ struct CardMenu: View {
             case .divider: Divider()
             case let .item(label, action):
                 Button(label) {
-                    for sent in SidebarAction.pick(action, on: card.wsId) { Outbox.send(sent) }
+                    // In order, stopping at the first that cannot be
+                    // written, so a pick never lands without its card.
+                    for sent in SidebarAction.pick(action, on: card.wsId) where !Outbox.send(sent) { break }
                 }
             }
         }
@@ -80,6 +83,7 @@ struct MessageAgent: View {
     let title: String
     @Binding var shown: Bool
     @State private var text = ""
+    @State private var failed = false
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -93,6 +97,11 @@ struct MessageAgent: View {
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
                 .onSubmit(send)
+            if failed {
+                Text(ActionWords.notSent)
+                    .font(.system(size: Metrics.small))
+                    .foregroundStyle(Color(Token.clayText))
+            }
             HStack {
                 Spacer()
                 Button(ActionWords.cancel) { shown = false }
@@ -109,15 +118,17 @@ struct MessageAgent: View {
 
     private func send() {
         guard let action = SidebarAction.message(text, to: id) else { return }
-        Outbox.send(action)
+        // Kept open with the words in it when the outbox cannot take them.
+        failed = !Outbox.send(action)
+        guard !failed else { return }
         text = ""
         shown = false
     }
 }
 
 /// A card's chips, then Park and Close as buttons: on the same line while
-/// every chip fits whole, else on a line of their own, as CardChips lays
-/// them out.
+/// every chip fits whole, else on a line of their own, so neither is ever
+/// cut.
 struct ActionChips: View {
     let id: String
     let chips: [Chip]

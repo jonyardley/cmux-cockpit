@@ -36,16 +36,15 @@ final class HostLink {
 
     /// Selects the workspace in cmux. Without a host yet, or an id that is
     /// not a UUID, or when cmux refuses, the core's SwitchTo goes through
-    /// the outbox instead, so a click is never lost.
-    var switchWorkspace: SwitchWorkspace {
-        SwitchWorkspace { [weak self] id in
-            guard let host = self?.host, let uuid = UUID(uuidString: id) else {
-                SwitchWorkspace.outbox.run(id)
-                return
-            }
-            Task { @MainActor in
-                do { try await host.selectWorkspace(uuid) } catch { SwitchWorkspace.outbox.run(id) }
-            }
+    /// the outbox instead, so a click is never lost. Built once, so each
+    /// republish hands the views the same value.
+    lazy var switchWorkspace = SwitchWorkspace { [weak self] id in
+        guard let host = self?.host, let uuid = UUID(uuidString: id) else {
+            SwitchWorkspace.outbox.run(id)
+            return
+        }
+        Task { @MainActor in
+            do { try await host.selectWorkspace(uuid) } catch { SwitchWorkspace.outbox.run(id) }
         }
     }
 }
