@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use crate::data::Data;
 use crate::edit::icon_search;
+use crate::projects::PROJECT_COLORS;
 use crate::session::Session;
 
 /// A field the keys move between.
@@ -30,6 +31,8 @@ pub struct EditorView {
     pub name: String,
     pub color: String,
     pub icon: String,
+    /// The colours on offer, the table's, in order.
+    pub colors: Vec<String>,
     /// The folder as typed, spaces kept, so a space typed mid-path stays.
     pub root: String,
     pub search: String,
@@ -72,6 +75,7 @@ impl EditorView {
             name: d.name,
             color: d.color,
             icon: d.icon,
+            colors: PROJECT_COLORS.iter().map(|c| c.to_string()).collect(),
             root: s.folder_text().to_string(),
             search,
             icons: found.rows.concat(),
@@ -120,6 +124,7 @@ mod tests {
             name: "App".into(),
             color: crate::projects::PROJECT_COLORS[0].into(),
             icon: "folder.fill".into(),
+            colors: Vec::new(),
             root: "~/dev/app".into(),
             search: String::new(),
             icons: vec!["folder.fill".into()],
