@@ -4,24 +4,6 @@ import os
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The drag's timeline for Console or `log stream`: lift, the button
-/// coming up, each change of landing slot, the drop and the move drawn,
-/// each with the milliseconds since the lift.
-enum DragLog {
-    static let log = Logger(subsystem: "dev.jonyardley.cockpit.sidebar", category: "drag")
-    @MainActor private static var start = Date()
-
-    @MainActor static func lifted() {
-        start = Date()
-        log.info("lift")
-    }
-
-    @MainActor static func note(_ what: String) {
-        let ms = Int(Date().timeIntervalSince(start) * 1000)
-        log.info("\(what, privacy: .public) +\(ms)ms")
-    }
-}
-
 /// The drag in flight and the drops waiting for panel.json, shared by
 /// every lane: a card leaves one lane's view and lands in another's.
 @Observable
@@ -59,7 +41,7 @@ final class DragState {
         pointer = nil
         grab = nil
         released = nil
-        DragLog.lifted()
+        Timeline.drag.begin("lift")
         watch?.cancel()
         watch = Task { [weak self] in await self?.settleOnRelease() }
     }
@@ -84,7 +66,7 @@ final class DragState {
             try? await Task.sleep(for: .milliseconds(150))
             if Task.isCancelled { return }
             up = NSEvent.pressedMouseButtons & 1 == 0 ? up + 1 : 0
-            if up == 1 { DragLog.note("button up seen") }
+            if up == 1 { Timeline.drag.note("button up seen") }
             if up >= 3 {
                 if let lifted, let from { released = (lifted, from, Date()) }
                 settle("release watch, no drop yet")
@@ -96,7 +78,7 @@ final class DragState {
     func hover(_ lane: LaneKey, before: String?) {
         if over?.lane != lane || over?.before != before {
             over = (lane, before)
-            DragLog.note("over \(lane) before \(before ?? "end")")
+            Timeline.drag.note("over \(lane) before \(before ?? "end")")
         }
     }
 
@@ -126,7 +108,7 @@ final class DragState {
         if over != nil { over = nil }
         if pointer != nil { pointer = nil }
         guard lifted != nil else { return }
-        DragLog.note("settled: \(why)")
+        Timeline.drag.note("settled: \(why)")
         lifted = nil
         from = nil
     }
@@ -145,7 +127,7 @@ final class DragState {
         guard Outbox.send(move.action) else { return }
         pending.removeAll { $0.card.wsId == id }
         pending.append(move)
-        DragLog.note("move sent to \(lane)")
+        Timeline.drag.note("move sent to \(lane)")
         Task { [weak self] in
             try? await Task.sleep(for: .seconds(PendingMove.lasts))
             self?.lapse()
@@ -330,7 +312,7 @@ struct LaneDrop: DropDelegate {
     }
 
     func performDrop(info: DropInfo) -> Bool {
-        DragLog.note("performDrop on \(lane.key)")
+        Timeline.drag.note("performDrop on \(lane.key)")
         guard let before = before(info), let card = state.carried else {
             state.settle("drop refused")
             return false
@@ -343,14 +325,14 @@ struct LaneDrop: DropDelegate {
         // from another app dragged in during the grace. It lands only if it
         // carries the card let go of.
         guard let provider = info.itemProviders(for: [.plainText]).first else {
-            DragLog.note("late drop refused: nothing carried")
+            Timeline.drag.note("late drop refused: nothing carried")
             state.settle("late drop refused")
             return false
         }
         let (key, rows, state) = (lane.key, rows, state)
         Task { @MainActor in
             guard await DragItem.read(provider) == DragItem.text(card) else {
-                DragLog.note("late drop refused: not the card let go of")
+                Timeline.drag.note("late drop refused: not the card let go of")
                 state.settle("late drop refused")
                 return
             }

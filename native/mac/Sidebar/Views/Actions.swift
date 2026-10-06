@@ -11,7 +11,10 @@ import SwiftUI
 struct SwitchWorkspace: Sendable {
     let run: @MainActor @Sendable (String) -> Void
 
-    static let outbox = SwitchWorkspace { _ = Outbox.send(.switchTo(id: $0)) }
+    /// A click drawn selected stops being drawn if the outbox cannot take it.
+    static let outbox = SwitchWorkspace { id in
+        if !Outbox.send(.switchTo(id: id)) { SelectState.shared.drop(id) }
+    }
 }
 
 extension EnvironmentValues {
@@ -45,7 +48,10 @@ struct CardActions: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contentShape(.rect)
-            .onTapGesture { switchWorkspace.run(card.wsId) }
+            .onTapGesture {
+                SelectState.shared.select(card.wsId)
+                switchWorkspace.run(card.wsId)
+            }
             .contextMenu { CardMenu(card: card, messaging: $messaging) }
             .popover(isPresented: $messaging, arrowEdge: .trailing) {
                 MessageAgent(id: card.wsId, title: card.title, shown: $messaging)
@@ -194,7 +200,10 @@ struct NeedsRowTap: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contentShape(.rect)
-            .onTapGesture { switchWorkspace.run(id) }
+            .onTapGesture {
+                SelectState.shared.select(id)
+                switchWorkspace.run(id)
+            }
     }
 }
 

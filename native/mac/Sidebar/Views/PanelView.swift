@@ -51,7 +51,7 @@ struct PanelBody: View {
         // view too, when no lane is drawn.
         .onChange(of: panel.lanes) { _, now in DragState.shared.reconcile(now) }
         .onChange(of: DragState.shared.pending.count) { was, now in
-            if now > was { DragLog.note("move drawn") }
+            if now > was { Timeline.drag.note("move drawn") }
         }
         .sheet(item: editorKey) { _ in
             if let editor = ProjectText.editor(panel) {
