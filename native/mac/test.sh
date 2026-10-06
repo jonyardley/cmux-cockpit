@@ -11,6 +11,8 @@
 # 4. The outbox: every action the sidebar sends encodes to the JSON the
 #    runner's own test parses (native/runner/tests/actions.json), and a
 #    send lands as a file named as the runner takes it.
+# 5. Drag and drop: where a dropped card lands, and how a drop is drawn
+#    until panel.json shows it.
 set -eu
 cd "$(dirname "$0")"
 mkdir -p build
@@ -23,3 +25,5 @@ swiftc -swift-version 6 -o build/views-check Generated/PanelTypes.swift Sidebar/
 build/views-check ../fixtures ../pane/tests/snapshots
 swiftc -swift-version 6 -o build/outbox-check Generated/PanelTypes.swift Shared/Heartbeat.swift Sidebar/Model/SidebarAction.swift Sidebar/Live/Outbox.swift Tests/Outbox/main.swift
 build/outbox-check ../runner/tests/actions.json
+swiftc -swift-version 6 -o build/drag-check Generated/PanelTypes.swift Sidebar/Model/*.swift Sidebar/Live/PendingMove.swift Tests/Drag/main.swift
+build/drag-check
