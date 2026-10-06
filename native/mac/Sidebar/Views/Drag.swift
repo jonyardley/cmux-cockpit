@@ -96,8 +96,14 @@ final class DragState {
         }
     }
 
+    /// The pointer left a lane. While a card is lifted it stays drawn
+    /// where it last would land: the lane can be told the pointer left as
+    /// the button comes up, before the drop, and clearing then snaps the
+    /// card back to its old slot for the 0.4 s the drop takes to arrive.
     func leave(_ lane: LaneKey) {
-        if over?.lane == lane { over = nil }
+        guard over?.lane == lane else { return }
+        DragLog.note("left \(lane)")
+        if lifted == nil { over = nil }
     }
 
     /// The drag is over without a drop (Escape, or let go outside a lane):
