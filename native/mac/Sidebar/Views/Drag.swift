@@ -95,15 +95,17 @@ final class DragState {
     }
 
     /// The drag is over without a drop (Escape, or let go outside a lane):
-    /// the gap closes and the card is drawn where it was.
+    /// the gap closes and the card is drawn where it was. The landing line
+    /// goes too even with nothing lifted: a late drop hovers after the
+    /// release watch has settled, and its line must not outlive it.
     func settle(_ why: String) {
         watch?.cancel()
         watch = nil
+        if over != nil { over = nil }
         guard lifted != nil else { return }
         DragLog.note("settled: \(why)")
         lifted = nil
         from = nil
-        over = nil
     }
 
     /// Lets go of `id` in `lane` above `before`, among the lane's rows as
@@ -142,10 +144,22 @@ final class DragState {
 
 /// What a card's drag carries: its workspace as text. A drop reads the
 /// lifted card from DragState, not this, so text dragged in from another
-/// app (with nothing lifted) is turned away by validateDrop.
+/// app (with nothing lifted) is turned away by validateDrop; a late drop,
+/// after the release watch, checks this text against the card let go of.
 enum DragItem {
+    static func text(_ card: Card) -> String { "cockpit-card:" + card.wsId }
+
     static func provider(_ card: Card) -> NSItemProvider {
-        NSItemProvider(object: ("cockpit-card:" + card.wsId) as NSString)
+        NSItemProvider(object: text(card) as NSString)
+    }
+
+    /// The text a drop carries, or nil for none.
+    @MainActor static func read(_ provider: NSItemProvider) async -> String? {
+        await withCheckedContinuation { done in
+            _ = provider.loadObject(ofClass: NSString.self) { text, _ in
+                done.resume(returning: text as? String)
+            }
+        }
     }
 }
 
@@ -241,7 +255,27 @@ struct LaneDrop: DropDelegate {
             state.settle("drop refused")
             return false
         }
-        state.drop(card.wsId, in: lane.key, before: before, rows: rows)
+        if state.lifted != nil {
+            state.drop(card.wsId, in: lane.key, before: before, rows: rows)
+            return true
+        }
+        // A late drop: the release watch has let go, so this could be text
+        // from another app dragged in during the grace. It lands only if it
+        // carries the card let go of.
+        guard let provider = info.itemProviders(for: [.plainText]).first else {
+            DragLog.note("late drop refused: nothing carried")
+            state.settle("late drop refused")
+            return false
+        }
+        let (key, rows, state) = (lane.key, rows, state)
+        Task { @MainActor in
+            guard await DragItem.read(provider) == DragItem.text(card) else {
+                DragLog.note("late drop refused: not the card let go of")
+                state.settle("late drop refused")
+                return
+            }
+            state.drop(card.wsId, in: key, before: before, rows: rows)
+        }
         return true
     }
 
