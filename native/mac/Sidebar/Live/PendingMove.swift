@@ -78,6 +78,21 @@ struct PendingMove: Equatable {
         return next == before
     }
 
+    /// The moves `lanes`, the whole of a fresh panel.json, has not shown
+    /// done yet, each drawing the panel's own copy of its card when the
+    /// panel still has it, so a status that changed since the drag shows.
+    static func unconfirmed(_ moves: [PendingMove], lanes: [Lane]) -> [PendingMove] {
+        moves.compactMap { move in
+            if lanes.contains(where: move.confirmed(by:)) { return nil }
+            let fresh = lanes.lazy.flatMap(\.rows).compactMap { row -> Card? in
+                if case .card(let card) = row, card.wsId == move.card.wsId { return card }
+                return nil
+            }.first
+            guard let fresh, fresh != move.card else { return move }
+            return PendingMove(card: fresh, from: move.from, lane: move.lane, before: move.before, until: move.until)
+        }
+    }
+
     /// The moves still drawn at `now`.
     static func live(_ moves: [PendingMove], now: Date) -> [PendingMove] {
         moves.filter { $0.until > now }

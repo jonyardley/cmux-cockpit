@@ -17,11 +17,33 @@ final class DragState {
     /// the end), for the landing line.
     private(set) var over: (lane: LaneKey, before: String?)?
     private(set) var pending: [PendingMove] = []
+    /// Watches for the mouse button coming up while a card is lifted.
+    @ObservationIgnored private var watch: Task<Void, Never>?
 
     func lift(_ card: Card, from lane: LaneKey) {
         lifted = card
         from = lane
         over = nil
+        watch?.cancel()
+        watch = Task { [weak self] in await self?.settleOnRelease() }
+    }
+
+    /// SwiftUI says nothing when a drag ends without a drop on a lane
+    /// (Escape, or let go over another app or a gap), so this settles the
+    /// drag once the button has been up for three looks in a row, about
+    /// 300 to 450 ms: long after a drop on a lane has run, which happens
+    /// as the button comes up.
+    private func settleOnRelease() async {
+        var up = 0
+        while lifted != nil {
+            try? await Task.sleep(for: .milliseconds(150))
+            if Task.isCancelled { return }
+            up = NSEvent.pressedMouseButtons & 1 == 0 ? up + 1 : 0
+            if up >= 3 {
+                settle()
+                return
+            }
+        }
     }
 
     func hover(_ lane: LaneKey, before: String?) {
@@ -35,6 +57,8 @@ final class DragState {
     /// The drag is over without a drop (Escape, or let go outside a lane):
     /// the gap closes and the card is drawn where it was.
     func settle() {
+        watch?.cancel()
+        watch = nil
         guard lifted != nil else { return }
         lifted = nil
         from = nil
@@ -58,11 +82,11 @@ final class DragState {
         }
     }
 
-    /// Drops the moves `lane`, fresh from panel.json, shows done.
-    func confirm(_ lane: Lane) {
-        if pending.contains(where: { $0.confirmed(by: lane) }) {
-            pending.removeAll { $0.confirmed(by: lane) }
-        }
+    /// Drops the moves a fresh panel.json's `lanes` show done, and draws
+    /// the rest with the panel's copy of their cards.
+    func reconcile(_ lanes: [Lane]) {
+        let next = PendingMove.unconfirmed(pending, lanes: lanes)
+        if next != pending { pending = next }
     }
 
     private func lapse() {
@@ -178,7 +202,8 @@ struct LaneDrop: DropDelegate {
     private func before(_ info: DropInfo) -> String?? {
         guard let card = state.lifted else { return nil }
         if lane.collapsed || rows.isEmpty { return .some(nil) }
-        let mids = rows.map { Double(frames[$0.id]?.midY ?? 0) }
+        // A row not laid out yet counts as below the pointer, never above.
+        let mids = rows.map { frames[$0.id].map { Double($0.midY) } ?? .infinity }
         let slot = DropRule.slot(y: Double(info.location.y), mids: mids)
         return .some(DropRule.before(rows: rows, dragged: card, slot: slot))
     }

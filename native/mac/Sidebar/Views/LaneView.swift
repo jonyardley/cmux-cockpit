@@ -64,11 +64,13 @@ struct LaneView: View {
     nonisolated static let header = "header"
 
     let lane: Lane
+    /// The drops waiting for panel.json, already checked against it.
+    var moves: [PendingMove] = []
     private let drag = DragState.shared
     @State private var frames: [String: CGRect] = [:]
 
     var body: some View {
-        let shown = PendingMove.show(lane, drag.pending)
+        let shown = PendingMove.show(lane, moves)
         let space = "lane:" + String(describing: lane.key)
         VStack(alignment: .leading, spacing: 4) {
             LaneHeader(lane: shown).reportsFrame(Self.header, in: space)
@@ -90,7 +92,6 @@ struct LaneView: View {
         .onContinuousHover { phase in
             if case .active = phase { drag.settle() }
         }
-        .onChange(of: lane) { _, now in drag.confirm(now) }
     }
 
     @ViewBuilder

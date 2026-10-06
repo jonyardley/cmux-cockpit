@@ -115,6 +115,18 @@ check(move("A", from: .main, to: .main, before: nil).confirmed(by: lane(.main, [
 
 let now = Date()
 let lapsing = [move("A", from: .main, to: .review, before: nil, until: now), move("B", from: .main, to: .review, before: nil, until: now.addingTimeInterval(1))]
+// MARK: A whole panel.json against the drops waiting
+
+let panelMain = lane(.main, [row("B")])
+let panelReview = lane(.review, [row("R1"), row("A"), row("R2")])
+check(PendingMove.unconfirmed([toReview], lanes: [panelMain, panelReview]).isEmpty,
+      "a panel that shows the move done clears it")
+let lagging = lane(.main, [.card(card("A", rank: 2)), row("B")])
+let kept = PendingMove.unconfirmed([toReview], lanes: [lagging, review])
+check(kept.count == 1 && kept.first?.card.rank == 2, "a panel that lags keeps the move, drawn with its fresh card")
+check(PendingMove.unconfirmed([toParked], lanes: [lane(.main, [row("B")]), lane(.parked, [], collapsed: true)]).isEmpty,
+      "a drop on a folded lane clears once the panel has it gone from its source")
+
 check(PendingMove.live(lapsing, now: now).map(\.card.wsId) == ["B"], "a drop past its time is no longer drawn")
 check(PendingMove.lasts == 4, "a drop is drawn for four seconds, as the TypeScript sidebar's override")
 
