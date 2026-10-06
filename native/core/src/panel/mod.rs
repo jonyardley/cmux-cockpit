@@ -82,7 +82,7 @@ pub const DROP_MARK: &str = "▔";
 /// Which view the panel draws, as the core has it; Tab asks the core to
 /// flip it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, facet::Facet)]
-#[repr(C)]
+#[repr(u8)]
 pub enum PanelView {
     #[default]
     All,
@@ -99,7 +99,7 @@ pub struct Icon {
 
 /// Next: where the next press goes, "1 of 5", or nowhere.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, facet::Facet)]
-#[repr(C)]
+#[repr(u8)]
 pub enum NextLine {
     #[default]
     Nothing,
@@ -219,7 +219,7 @@ pub enum ChipsFor {
 
 /// A row of the Projects view.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
-#[repr(C)]
+#[repr(u8)]
 pub enum ProjectRow {
     Header(ProjectHead),
     Card(Card),
@@ -282,7 +282,7 @@ pub struct ProjectHead {
 
 /// A row under a lane header.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
-#[repr(C)]
+#[repr(u8)]
 pub enum Row {
     Card(Card),
     /// A card whose session sits in Needs you: its title and why.

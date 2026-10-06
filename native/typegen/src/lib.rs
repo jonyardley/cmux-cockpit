@@ -10,6 +10,8 @@ mod decodable;
 use std::io;
 
 use cockpit_core::panel::Panel;
+use facet::Facet;
+use facet_generate::Registry;
 use facet_generate::generation::CodeGeneratorConfig;
 use facet_generate::generation::swift::SwiftCodeGenerator;
 use facet_generate::reflection::RegistryBuilder;
@@ -51,10 +53,20 @@ impl From<io::Error> for Error {
 /// The whole Swift file for the panel model: every type `Panel` reaches,
 /// each with its `init(from:)`, then their `Decodable` conformances.
 pub fn swift() -> Result<String, Error> {
-    let registry = RegistryBuilder::new()
-        .add_type::<Panel>()
+    swift_of::<Panel>()
+}
+
+/// Every type `T` reaches, as facet reflects them.
+fn registry<'a, T: Facet<'a>>() -> Result<Registry, Error> {
+    RegistryBuilder::new()
+        .add_type::<T>()
         .and_then(RegistryBuilder::build)
-        .map_err(|e| Error::Reflect(e.to_string()))?;
+        .map_err(|e| Error::Reflect(e.to_string()))
+}
+
+/// The Swift file for `T` and every type it reaches.
+fn swift_of<'a, T: Facet<'a>>() -> Result<String, Error> {
+    let registry = registry::<T>()?;
     let config = CodeGeneratorConfig::new("PanelTypes".to_string());
     let mut out = Vec::new();
     SwiftCodeGenerator::new(&config)
@@ -74,6 +86,9 @@ pub fn swift() -> Result<String, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cockpit_core::lanes::LaneKey;
+    use cockpit_core::theme::Token;
+    use facet_generate::reflection::format::ContainerFormat;
 
     /// Every type the panel reaches, as the Swift names them.
     const TYPES: [&str; 22] = [
@@ -164,5 +179,76 @@ mod tests {
     #[test]
     fn it_starts_with_the_header() {
         assert!(generated().starts_with(HEADER));
+    }
+
+    /// The JSON names facet gives `name`'s variants, which the Swift reads.
+    fn variant_names(name: &str) -> Vec<String> {
+        let registry = match registry::<Panel>() {
+            Ok(r) => r,
+            Err(e) => panic!("{e}"),
+        };
+        let found = registry.iter().find(|(k, _)| k.name == name);
+        match found {
+            Some((_, ContainerFormat::Enum(variants, _, _))) => {
+                variants.values().map(|v| v.name.clone()).collect()
+            }
+            _ => panic!("{name} is not an enum the panel reaches"),
+        }
+    }
+
+    /// Token and LaneKey carry their rename twice, for serde and for facet.
+    /// serde must accept every name facet hands the Swift, or a frame with
+    /// that token would fail to decode.
+    #[test]
+    fn facet_and_serde_rename_alike() {
+        let tokens = variant_names("Token");
+        assert!(tokens.len() > 30, "{tokens:?}");
+        for v in tokens {
+            let read: Result<Token, _> = serde_json::from_str(&format!("\"{v}\""));
+            assert!(read.is_ok(), "serde has no Token named {v}");
+        }
+        let lanes = variant_names("LaneKey");
+        assert_eq!(lanes.len(), 5);
+        for v in lanes {
+            let read: Result<LaneKey, _> = serde_json::from_str(&format!("\"{v}\""));
+            assert!(read.is_ok(), "serde has no LaneKey named {v}");
+        }
+    }
+
+    #[derive(facet::Facet)]
+    struct Wrapped(String);
+
+    #[derive(facet::Facet)]
+    struct HoldsWrapped {
+        id: Wrapped,
+    }
+
+    #[derive(facet::Facet)]
+    #[repr(u8)]
+    enum HasTuple {
+        Pair(String, u8),
+    }
+
+    fn refused(r: Result<String, Error>) -> String {
+        match r {
+            Ok(_) => panic!("generated Swift for a shape it cannot read"),
+            Err(e) => e.to_string(),
+        }
+    }
+
+    #[test]
+    fn a_tuple_struct_fails_the_generator() {
+        let held = HoldsWrapped {
+            id: Wrapped("ws".into()),
+        };
+        assert_eq!(held.id.0, "ws");
+        assert!(refused(swift_of::<HoldsWrapped>()).contains("Wrapped, a tuple struct"));
+    }
+
+    #[test]
+    fn a_tuple_variant_fails_the_generator() {
+        let HasTuple::Pair(s, n) = HasTuple::Pair("a".into(), 1);
+        assert_eq!((s.as_str(), n), ("a", 1));
+        assert!(refused(swift_of::<HasTuple>()).contains("variant Pair"));
     }
 }

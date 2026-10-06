@@ -16,7 +16,7 @@ use crate::status::{PrRef, open_pr_label};
 
 /// What a menu is open on.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, facet::Facet)]
-#[repr(C)]
+#[repr(u8)]
 pub enum MenuTarget {
     /// A card's menu, by workspace id.
     Card { id: String },
@@ -28,7 +28,7 @@ pub enum MenuTarget {
 /// What picking an item does. Deserialize lets a shell send a pick as a
 /// file (the runner's cockpit-publish outbox).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, facet::Facet)]
-#[repr(C)]
+#[repr(u8)]
 pub enum MenuAction {
     /// A new session in the card's project folder.
     NewSession,
@@ -56,7 +56,7 @@ pub enum MenuAction {
 
 /// One line of a menu: an item, or a divider between groups.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, facet::Facet)]
-#[repr(C)]
+#[repr(u8)]
 pub enum MenuItem {
     Item { label: String, action: MenuAction },
     Divider,

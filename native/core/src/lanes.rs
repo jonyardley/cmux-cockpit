@@ -11,7 +11,7 @@ use crate::theme::Token;
     Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, facet::Facet,
 )]
 #[serde(rename_all = "lowercase")]
-#[repr(C)]
+#[repr(u8)]
 #[facet(rename_all = "lowercase")]
 pub enum LaneKey {
     Main,

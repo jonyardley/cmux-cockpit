@@ -1,8 +1,10 @@
 //! A facet_generate plugin that writes an `init(from:)` into each Swift
 //! type, reading serde_json's default shapes: a struct is an object keyed
-//! by the Rust field names, a unit variant a bare string, and any other
-//! variant a one-key object, `{"Name": payload}`. Every field is required
-//! except an `Option`, so a key missing from the JSON fails loudly.
+//! by the Rust field names, a unit variant a bare string, and a newtype or
+//! struct variant a one-key object, `{"Name": payload}`. Every field is
+//! required except an `Option`, so a key missing from the JSON fails
+//! loudly. Any other shape (a tuple struct or tuple variant) fails the
+//! generator instead, until something in the panel needs it.
 
 use std::io;
 
@@ -30,10 +32,6 @@ const HELPERS: &str = r#"public struct SerdeKey: CodingKey {
 extension KeyedDecodingContainer where K == SerdeKey {
     func req<T: Decodable>(_ k: String) throws -> T { try decode(T.self, forKey: SerdeKey(k)) }
     func opt<T: Decodable>(_ k: String) throws -> T? { try decodeIfPresent(T.self, forKey: SerdeKey(k)) }
-}
-
-extension UnkeyedDecodingContainer {
-    mutating func next<T: Decodable>() throws -> T { try decode(T.self) }
 }
 
 func unknownVariant(_ type: String, _ name: String, _ decoder: Decoder) -> Error {
@@ -115,15 +113,6 @@ fn write_payload_case(w: &mut dyn IndentWrite, v: &Named<VariantFormat>) -> io::
             "    case \"{json}\": self = .{case}(try c.{}(\"{json}\"))",
             getter(f)
         ),
-        VariantFormat::Tuple(fs) => {
-            writeln!(w, "    case \"{json}\":")?;
-            writeln!(
-                w,
-                "        var u = try c.nestedUnkeyedContainer(forKey: key)"
-            )?;
-            let args: Vec<&str> = fs.iter().map(|_| "try u.next()").collect();
-            writeln!(w, "        self = .{case}({})", args.join(", "))
-        }
         VariantFormat::Struct(fields) => {
             writeln!(w, "    case \"{json}\":")?;
             writeln!(
@@ -133,8 +122,18 @@ fn write_payload_case(w: &mut dyn IndentWrite, v: &Named<VariantFormat>) -> io::
             let args: Vec<String> = fields.iter().map(|f| field_arg(f, "n")).collect();
             writeln!(w, "        self = .{case}({})", args.join(", "))
         }
-        VariantFormat::Unit | VariantFormat::Variable(_) => Ok(()),
+        VariantFormat::Unit => Ok(()),
+        VariantFormat::Tuple(_) | VariantFormat::Variable(_) => Err(unsupported(&format!(
+            "variant {json}: only unit, newtype and struct variants are read"
+        ))),
     }
+}
+
+/// A shape this plugin has no reader for. Failing here, when the Swift is
+/// generated, beats a reader that compiles and then misreads the JSON:
+/// typegen's Rust tests and every build run the generator.
+fn unsupported(what: &str) -> io::Error {
+    io::Error::other(format!("cannot read {what} from serde_json's shapes yet"))
 }
 
 fn write_enum<'a>(
@@ -196,7 +195,14 @@ impl EmitterPlugin<Swift> for DecodablePlugin {
         writeln!(w, "public init(from decoder: Decoder) throws {{")?;
         match ctx.container.format {
             ContainerFormat::Enum(variants, _, _) => write_enum(w, ctx.name(), variants.values())?,
-            _ => write_struct(w, &ctx.fields())?,
+            ContainerFormat::Struct(..) | ContainerFormat::UnitStruct(_) => {
+                write_struct(w, &ctx.fields())?;
+            }
+            // serde_json writes these as the bare inner value or an array,
+            // not the keyed object write_struct reads.
+            ContainerFormat::NewTypeStruct(..) | ContainerFormat::TupleStruct(..) => {
+                return Err(unsupported(&format!("{}, a tuple struct", ctx.name())));
+            }
         }
         writeln!(w, "}}")
     }

@@ -129,8 +129,10 @@ name = "cockpit_typegen"
 version = "0.0.0"
 dependencies = [
  "cockpit_core",
+ "facet",
  "facet_generate",
  "heck",
+ "serde_json",
 ]
 
 [[package]]
