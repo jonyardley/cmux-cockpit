@@ -24,6 +24,7 @@ let every: [SidebarAction] = [
     .moveCard(id: "W1", lane: .review, before: nil),
     .moveCard(id: "W1", lane: .bg, before: "W2"),
     .switchTo(id: "W1"),
+    .selected(id: "W1"),
     .dismiss(id: "W1"),
     .flipView,
     .edit(.openNew),

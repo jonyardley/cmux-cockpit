@@ -104,7 +104,7 @@ pub fn words(model: &PaneModel) -> Vec<String> {
         out.push(key);
         out.push(what.to_string());
     }
-    if let NextLine::Step { title, place } = &model.next {
+    if let NextLine::Step { title, place, .. } = &model.next {
         out.push(title.clone());
         out.push(place.clone());
     }

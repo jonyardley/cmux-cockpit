@@ -2,6 +2,7 @@
   { "MoveCard": { "id": "W1", "lane": "review", "before": null } },
   { "MoveCard": { "id": "W1", "lane": "bg", "before": "W2" } },
   { "SwitchTo": { "id": "W1" } },
+  { "Selected": { "id": "W1" } },
   { "Dismiss": { "id": "W1" } },
   "FlipView",
   { "Edit": "OpenNew" },

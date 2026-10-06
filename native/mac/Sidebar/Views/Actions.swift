@@ -181,14 +181,20 @@ struct SwitchTab: ViewModifier {
     }
 }
 
-/// Next: a tap steps to the next workspace in its queue.
+/// Next: a tap steps to the next workspace in its queue. Its target draws
+/// selected on the tap; the core still makes the jump, so it remembers it
+/// and unfolds whatever hides the card.
 struct NextTap: ViewModifier {
     let next: NextLine
 
     func body(content: Content) -> some View {
         content
             .contentShape(.rect)
-            .onTapGesture { if !NextText.isNothing(next) { Outbox.send(.next) } }
+            .onTapGesture {
+                guard let id = NextText.targetId(next) else { return }
+                SelectState.shared.select(id)
+                if !Outbox.send(.next) { SelectState.shared.drop(id) }
+            }
     }
 }
 
