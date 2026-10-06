@@ -165,6 +165,7 @@ impl Feed {
                 Effect::Cmux(r) => Outgoing::Cmux(r.operation),
                 Effect::Persist(r) => Outgoing::Persist(r.operation),
                 Effect::OpenUrl(r) => Outgoing::OpenUrl(r.operation.url),
+                Effect::AgentMessage(r) => Outgoing::AgentMessage(r.operation),
             };
             // A worker gone (only once the run ends) keeps what it missed.
             match &self.worker {
@@ -864,6 +865,7 @@ mod tests {
                 Outgoing::Cmux(c) => c.method.clone(),
                 Outgoing::Persist(p) => format!("set {}", p.key),
                 Outgoing::OpenUrl(u) => format!("open {u}"),
+                Outgoing::AgentMessage(m) => format!("message {}", m.workspace),
             })
             .collect()
     }

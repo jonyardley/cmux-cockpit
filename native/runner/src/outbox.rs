@@ -8,7 +8,11 @@
 //!   does. The installed handler (scripts/state-set.ts) does the locked
 //!   read-modify-write on config/state.json; the pane sees the result on
 //!   its next check of the file;
-//! - a link, such as the card menu's Open PR, opened in the browser.
+//! - a link, such as the card menu's Open PR, opened in the browser;
+//! - Jon's words for the agent in a workspace, as
+//!   `cmux agent message <workspace> --from Cockpit -- <text>`. cmux
+//!   delivers them through the agent's hooks; `--from` names the sender,
+//!   since the headless publisher sits in no workspace of its own.
 //!
 //! One worker thread takes them in the order asked, so a reorder always
 //! reaches cmux before the group join that follows it, and a slow cmux
@@ -18,7 +22,7 @@ use std::fs;
 use std::path::Path;
 use std::sync::mpsc::Receiver;
 
-use cockpit_core::app::{CmuxCall, StateSet};
+use cockpit_core::app::{AgentMessage, CmuxCall, StateSet};
 use cockpit_core::session::Param;
 
 /// A request the core made of the shell.
@@ -28,7 +32,12 @@ pub enum Outgoing {
     Persist(StateSet),
     /// A link to open in the browser.
     OpenUrl(String),
+    /// Words for the agent in a workspace.
+    AgentMessage(AgentMessage),
 }
+
+/// Who a message says it is from.
+pub const MESSAGE_FROM: &str = "Cockpit";
 
 /// The program and arguments that carry out a request, or why it cannot
 /// go: a state write with no token would only be refused by the handler.
@@ -61,6 +70,19 @@ pub fn command_for(o: &Outgoing, token: Option<&str>) -> Result<(String, Vec<Str
             "/usr/bin/open".to_string(),
             vec!["-u".to_string(), url.clone()],
         )),
+        // `--` ends the flags, so words that start with a dash stay words.
+        Outgoing::AgentMessage(m) => Ok((
+            "cmux".to_string(),
+            vec![
+                "agent".to_string(),
+                "message".to_string(),
+                m.workspace.clone(),
+                "--from".to_string(),
+                MESSAGE_FROM.to_string(),
+                "--".to_string(),
+                m.text.clone(),
+            ],
+        )),
     }
 }
 
@@ -70,6 +92,8 @@ fn describe(o: &Outgoing) -> String {
         Outgoing::Cmux(call) => format!("cmux rpc {}", call.method),
         Outgoing::Persist(set) => format!("state write {:?}", set.key),
         Outgoing::OpenUrl(_) => "opening a link".to_string(),
+        // Never the words: they are Jon's.
+        Outgoing::AgentMessage(_) => "cmux agent message".to_string(),
     }
 }
 
@@ -110,7 +134,7 @@ pub fn perform<L: Fn(String), F: Fn(String)>(
     while let Ok(o) = rx.recv() {
         let token = match o {
             Outgoing::Persist(_) => read_token(config),
-            Outgoing::Cmux(_) | Outgoing::OpenUrl(_) => None,
+            Outgoing::Cmux(_) | Outgoing::OpenUrl(_) | Outgoing::AgentMessage(_) => None,
         };
         match command_for(&o, token.as_deref()) {
             Ok((program, args)) => {
@@ -172,6 +196,34 @@ mod tests {
         assert_eq!(args, ["-u", "https://example.com/pr/7"]);
         assert_eq!(describe(&link), "opening a link");
         assert_eq!(workspace_of(&link), None);
+    }
+
+    #[test]
+    fn a_message_goes_to_cmux_agent_message_with_the_words_after_the_flags() {
+        let message = Outgoing::AgentMessage(AgentMessage {
+            workspace: "W1".into(),
+            text: "--help is not a flag here".into(),
+        });
+        let (program, args) = command_for(&message, None).unwrap();
+        assert_eq!(program, "cmux");
+        assert_eq!(
+            args,
+            [
+                "agent",
+                "message",
+                "W1",
+                "--from",
+                "Cockpit",
+                "--",
+                "--help is not a flag here"
+            ]
+        );
+        assert_eq!(describe(&message), "cmux agent message");
+        assert_eq!(
+            workspace_of(&message),
+            None,
+            "a failed message never unpins a card's move"
+        );
     }
 
     #[test]

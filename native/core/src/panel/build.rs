@@ -332,6 +332,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         rank: session.state_rank(data, w),
         movable: !is_foreign_anchor(session, data, id),
         dimmed: is_dimmed(session, data, w),
+        menu: session.card_menu(data, w),
     }
 }
 
@@ -438,6 +439,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         rank: session.state_rank(data, w),
         movable: !is_foreign_anchor(session, data, id),
         dimmed: is_dimmed(session, data, w),
+        menu: session.card_menu(data, w),
     }
 }
 

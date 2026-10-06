@@ -44,6 +44,9 @@ pub enum Outbound {
     Persist { key: String, value: Option<Value> },
     /// A link opened in the browser, as the sidebar's `openURL`.
     OpenUrl { url: String },
+    /// Jon's words to the agent in a workspace, as `cmux agent message`
+    /// sends them (message.rs).
+    AgentMessage { workspace: String, text: String },
 }
 
 impl Outbound {
@@ -51,7 +54,9 @@ impl Outbound {
     pub fn persist_url(&self, token: &str) -> Option<String> {
         match self {
             Outbound::Persist { key, value } => Some(persist_url(key, value.as_ref(), token)),
-            Outbound::Cmux { .. } | Outbound::OpenUrl { .. } => None,
+            Outbound::Cmux { .. } | Outbound::OpenUrl { .. } | Outbound::AgentMessage { .. } => {
+                None
+            }
         }
     }
 }

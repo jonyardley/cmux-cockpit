@@ -82,6 +82,7 @@ fn asked(app: &Cockpit, model: &mut Model, event: Event) -> Vec<String> {
             }
             Effect::PrPoll(r) => format!("pr {}", r.operation.directory),
             Effect::OpenUrl(r) => format!("open {}", r.operation.url),
+            Effect::AgentMessage(r) => format!("message {}", r.operation.workspace),
         })
         .collect()
 }

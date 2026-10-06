@@ -20,6 +20,10 @@ enum SidebarAction: Encodable, Equatable {
     case closeMerged(id: String)
     case keepMerged(id: String)
     case menu(Menu)
+    /// The Next button: the next workspace in its queue.
+    case next
+    /// "Message agent…": Jon's words for the agent in the workspace.
+    case messageAgent(id: String, text: String)
 
     /// The core's `MenuEvent`.
     enum Menu: Encodable, Equatable {
@@ -94,6 +98,8 @@ enum SidebarAction: Encodable, Equatable {
         case let .closeMerged(id): try tagged(encoder, "CloseMerged", ["id": id])
         case let .keepMerged(id): try tagged(encoder, "KeepMerged", ["id": id])
         case let .menu(m): try newtype(encoder, "Menu", m)
+        case .next: try unit(encoder, "Next")
+        case let .messageAgent(id, text): try tagged(encoder, "MessageAgent", ["id": id, "text": text])
         }
     }
 }
