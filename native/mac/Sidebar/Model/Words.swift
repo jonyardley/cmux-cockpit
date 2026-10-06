@@ -27,14 +27,17 @@ enum Words {
     static let name = "Name"
     static let colour = "Colour"
     static let icon = "Icon"
-    static let use = "Use"
-    /// The editor sheet's own words: the pane says "Enter saves · Esc
-    /// cancels" where the sheet has buttons.
+    /// The editor sheet's words where the pane says "Enter saves · Esc
+    /// cancels": the cockpit JS sidebar's editor's
+    /// (src/cockpit/views/editor.ts), which the views check reads there.
     static let newProjectTitle = "New project"
     static let editProjectTitle = "Edit project"
-    static let save = "Save"
+    static let add = "Add"
+    static let done = "Done"
     static let cancel = "Cancel"
+    static let projectName = "Project name"
     static let searchIcons = "Search icons"
+    static let openFolders = "Or one you have open"
     static let notRunning = "Cockpit isn't running"
     static let startIt = "Open Cockpit.app to start it."
     static let waiting = "Waiting for the panel"

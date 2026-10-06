@@ -364,8 +364,12 @@ for (name, word) in [("NEW_PROJECT_LABEL", Words.newProject), ("QUIET_LABEL", Wo
     check(panelRs.contains("pub const \(name): &str = \"\(word)\";"), "\(name) is \"\(word)\"")
 }
 let editorRs = source("pane/src/editor.rs")
-for (name, word) in [("FOLDER_LABEL", Words.folder), ("NAME_LABEL", Words.name), ("COLOUR_LABEL", Words.colour), ("ICON_LABEL", Words.icon), ("USE_WORD", Words.use)] {
+for (name, word) in [("FOLDER_LABEL", Words.folder), ("NAME_LABEL", Words.name), ("COLOUR_LABEL", Words.colour), ("ICON_LABEL", Words.icon)] {
     check(editorRs.contains("pub const \(name): &str = \"\(word)\";"), "the editor's \(name) is \"\(word)\"")
+}
+let editorTs = source("../src/cockpit/views/editor.ts")
+for word in [Words.newProjectTitle, Words.add, Words.done, Words.cancel, Words.projectName, Words.searchIcons, Words.openFolders] {
+    check(editorTs.contains("\"\(word)\""), "the sheet's \"\(word)\" is the JS sidebar editor's")
 }
 check(source("core/src/ui.rs").contains("QUIET_PILL: PillColors = PillColors {\n    bg: Token::CountBg,\n    fg: Token::MetaText,"), "the Quiet pill is the core's")
 

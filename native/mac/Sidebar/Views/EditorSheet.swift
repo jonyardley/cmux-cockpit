@@ -30,7 +30,7 @@ struct EditorSheet: View {
                 .foregroundStyle(Color(Token.text))
             if editor.isNew { folder }
             field(Words.name) {
-                TextField(Words.name, text: $draft.name).textFieldStyle(.roundedBorder)
+                TextField(Words.projectName, text: $draft.name).textFieldStyle(.roundedBorder)
             }
             field(Words.colour) { colours }
             field(Words.icon) { icons }
@@ -46,7 +46,7 @@ struct EditorSheet: View {
             HStack {
                 Spacer()
                 Button(Words.cancel) { send(.close) }.keyboardShortcut(.cancelAction)
-                Button(Words.save) { send(.save) }
+                Button(editor.isNew ? Words.add : Words.done) { send(.save) }
                     .keyboardShortcut(.defaultAction)
                     .disabled(editor.problem != nil)
             }
@@ -69,12 +69,19 @@ struct EditorSheet: View {
                 if !editor.matches.isEmpty {
                     Text(editor.matches).font(.system(size: Metrics.small)).foregroundStyle(Color(Token.faint))
                 }
+                if !editor.suggestions.isEmpty {
+                    Text(Words.openFolders).font(.system(size: Metrics.small)).foregroundStyle(Color(Palette.Own.tertiary))
+                }
                 ForEach(editor.suggestions, id: \.self) { dir in
-                    Button("\(Words.use) \(dir)") { send(.addSuggested(dir: dir)) }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(Color(Token.secondary))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    Button {
+                        send(.addSuggested(dir: dir))
+                    } label: {
+                        Label(dir, systemImage: "plus")
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Color(Token.secondary))
                 }
             }
         }
