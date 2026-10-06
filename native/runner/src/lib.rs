@@ -36,11 +36,19 @@
 //! cue to draw; its cmux calls and state writes go to one worker thread
 //! (outbox.rs), which carries them out in order. Jon's actions reach the
 //! core through `Feed::act`.
+//!
+//! Headless, the `cockpit-publish` binary (src/bin) drives the runner for
+//! the Swift sidebar: it writes the panel model to a shared folder after
+//! each change, signals it, and takes actions back as files (publish.rs,
+//! action.rs, signal.rs).
 
+pub mod action;
 pub mod join;
 pub mod outbox;
 pub mod parse;
 pub mod pr_ask;
+pub mod publish;
+pub mod signal;
 pub mod stream;
 pub mod text;
 pub mod watch;

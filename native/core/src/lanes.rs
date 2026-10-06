@@ -2,12 +2,12 @@
 //! (src/cockpit/lanes.ts). Unsorted is not a group: it holds every
 //! workspace outside the others.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::theme::Token;
 
 /// A lane's key; serialised as `as_str` names it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LaneKey {
     Main,

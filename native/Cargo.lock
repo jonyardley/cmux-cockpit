@@ -119,6 +119,7 @@ version = "0.0.0"
 dependencies = [
  "cockpit_core",
  "crux_core",
+ "serde",
  "serde_json",
 ]
 
