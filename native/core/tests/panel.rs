@@ -206,3 +206,19 @@ fn the_editor_offers_the_tables_colours() {
     assert_eq!(colors.len(), cockpit_core::panel::PROJECT_COLORS.len());
     assert_eq!(colors[0], cockpit_core::panel::PROJECT_COLORS[0]);
 }
+
+#[test]
+fn only_cmuxs_selected_workspace_carries_the_outline() {
+    let mut model = loaded("lanes");
+    let panel = Panel::from_core(&mut model);
+    let selected: Vec<&str> = panel
+        .lanes
+        .iter()
+        .flat_map(|l| &l.rows)
+        .filter_map(|r| match r {
+            cockpit_core::panel::Row::Card(c) if c.selected => Some(c.ws_id.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(selected, ["selected"]);
+}

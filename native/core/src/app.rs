@@ -21,7 +21,7 @@ use crate::data::{Data, Workspace};
 use crate::edit::EditEvent;
 use crate::js::json_num;
 use crate::lane_entries::LaneEntry;
-use crate::lanes::LaneKey;
+use crate::lanes::{LaneKey, lane_by_key};
 use crate::menu::MenuEvent;
 use crate::persist::{SavedState, ViewMode, persist_url};
 use crate::pr_poll::{PrPolled, shown_in};
@@ -87,6 +87,12 @@ pub enum Event {
     /// "Message agent…": Jon's words to the agent in the workspace
     /// (message.rs).
     MessageAgent { id: String, text: String },
+    /// A click on a lane's heading: folds or unfolds it.
+    ToggleLane { lane: LaneKey },
+    /// A click on a busy project's heading: folds or unfolds it.
+    ToggleProject { key: String },
+    /// A click on the Quiet heading: folds or unfolds it.
+    ToggleQuiet,
 }
 
 impl Event {
@@ -117,7 +123,10 @@ impl Event {
             | Event::KeepMerged { .. }
             | Event::Menu(_)
             | Event::Next
-            | Event::MessageAgent { .. } => true,
+            | Event::MessageAgent { .. }
+            | Event::ToggleLane { .. }
+            | Event::ToggleProject { .. }
+            | Event::ToggleQuiet => true,
         }
     }
 }
@@ -381,6 +390,9 @@ impl Model {
             Event::KeepMerged { id } => s.keep_merged(data, data.ws_by_id(&id)),
             Event::Next => s.jump_next(data),
             Event::MessageAgent { id, text } => s.message_agent(data, &id, &text),
+            Event::ToggleLane { lane } => s.toggle_lane(data, &lane_by_key(lane)),
+            Event::ToggleProject { key } => s.toggle_project(data, &key),
+            Event::ToggleQuiet => s.toggle_quiet(data),
             _ => {}
         }
     }
@@ -495,6 +507,14 @@ mod tests {
         assert!(Event::CloseMerged { id: "a".into() }.is_action());
         assert!(Event::KeepMerged { id: "a".into() }.is_action());
         assert!(Event::Next.is_action());
+        assert!(Event::ToggleQuiet.is_action());
+        assert!(Event::ToggleProject { key: "a".into() }.is_action());
+        assert!(
+            Event::ToggleLane {
+                lane: LaneKey::Main
+            }
+            .is_action()
+        );
         let text = "hi".to_string();
         assert!(
             Event::MessageAgent {

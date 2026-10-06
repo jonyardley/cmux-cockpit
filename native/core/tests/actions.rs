@@ -695,3 +695,63 @@ mod round_trip {
         assert_eq!(saved.ui.collapsed.get("quiet"), Some(&1.0));
     }
 }
+
+mod fold {
+    use super::*;
+
+    #[test]
+    fn a_lane_heading_folds_its_cmux_group_and_saves_the_fold() {
+        let (app, mut model) = started();
+        let asked = asked(
+            &app,
+            &mut model,
+            Event::ToggleLane {
+                lane: LaneKey::Main,
+            },
+        );
+        assert_eq!(
+            asked,
+            [
+                r#"cmux workspace.group.collapse {"group_id":"g-main"}"#,
+                r#"set ui.collapsed {"lane:main":1}"#,
+                "render"
+            ]
+        );
+        assert!(lane_cards(&app, &model, LaneKey::Main).is_empty());
+    }
+
+    #[test]
+    fn the_unsorted_heading_and_the_quiet_heading_save_their_folds() {
+        let (app, mut model) = started();
+        let lane = Event::ToggleLane {
+            lane: LaneKey::Unsorted,
+        };
+        assert_eq!(
+            asked(&app, &mut model, lane),
+            [r#"set ui.collapsed {"lane:unsorted":1}"#, "render"]
+        );
+        assert_eq!(
+            asked(&app, &mut model, Event::ToggleQuiet),
+            [
+                r#"set ui.collapsed {"lane:unsorted":1,"quiet":1}"#,
+                "render"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_project_heading_saves_its_fold_and_a_second_click_unfolds_it() {
+        let (app, mut model) = started();
+        let fold = || Event::ToggleProject {
+            key: "other".into(),
+        };
+        assert_eq!(
+            asked(&app, &mut model, fold()),
+            [r#"set ui.collapsed {"project:other":1}"#, "render"]
+        );
+        assert_eq!(
+            asked(&app, &mut model, fold()),
+            ["set ui.collapsed delete", "render"]
+        );
+    }
+}

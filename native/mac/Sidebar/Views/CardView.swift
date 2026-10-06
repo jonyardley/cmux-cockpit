@@ -46,9 +46,21 @@ struct CardView: View {
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(Palette.Own.cardFace), in: .rect(cornerRadius: Metrics.corner))
-        .overlay(RoundedRectangle(cornerRadius: Metrics.corner).strokeBorder(Color(Token.cardEdge)))
+        .overlay(Outline(selected: card.selected))
         .opacity(card.dimmed ? 0.55 : 1)
         .cardActions(card)
+    }
+}
+
+/// A card's edge: the select ink at 2pt on cmux's selected workspace, the
+/// one open in the terminal, else the hairline (status.ts outline). Drawn
+/// inside the card, so the wider line moves nothing.
+struct Outline: View {
+    let selected: Bool
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: Metrics.corner)
+            .strokeBorder(Color(selected ? Token.select : Token.cardEdge), lineWidth: selected ? 2 : 1)
     }
 }
 

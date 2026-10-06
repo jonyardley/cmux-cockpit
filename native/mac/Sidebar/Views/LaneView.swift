@@ -14,6 +14,28 @@ struct CountPill: View {
     }
 }
 
+/// The fold mark on a heading: pointing right while folded, down while
+/// open, at the heading's own size and weight so it reads at a glance.
+struct FoldMark: View {
+    let folded: Bool
+
+    var body: some View {
+        Image(systemName: folded ? "chevron.right" : "chevron.down")
+            .font(.system(size: Metrics.small, weight: .semibold))
+            .foregroundStyle(Color(Token.secondary))
+            .frame(width: 12)
+    }
+}
+
+extension View {
+    /// Makes the whole heading row the click that folds it, leaving its
+    /// buttons (a project's "+") their own clicks. Nil for a heading with
+    /// nothing to fold.
+    func foldsOnClick(_ action: SidebarAction?) -> some View {
+        contentShape(.rect).onTapGesture { if let action { Outbox.send(action) } }
+    }
+}
+
 /// A lane's header: fold mark, marker, name, anchor and unread badge, the
 /// count, the folded lane's dot, and the merge line on the right.
 struct LaneHeader: View {
@@ -21,9 +43,11 @@ struct LaneHeader: View {
 
     var body: some View {
         HStack(spacing: 5) {
-            Text(LaneText.chevron(lane))
-                .foregroundStyle(Color(Token.faint))
-                .frame(width: 10)
+            if LaneText.chevron(lane).isEmpty {
+                Color.clear.frame(width: 12, height: 1)
+            } else {
+                FoldMark(folded: lane.collapsed)
+            }
             Text(Words.laneMark).foregroundStyle(Color(lane.marker))
             Text(lane.name)
                 .font(.system(size: Metrics.small, weight: .semibold))
@@ -73,7 +97,9 @@ struct LaneView: View {
         let shown = PendingMove.show(lane, moves)
         let space = "lane:" + String(describing: lane.key)
         VStack(alignment: .leading, spacing: 4) {
-            LaneHeader(lane: shown).reportsFrame(Self.header, in: space)
+            LaneHeader(lane: shown)
+                .foldsOnClick(LaneText.chevron(shown).isEmpty ? nil : .toggleLane(lane.key))
+                .reportsFrame(Self.header, in: space)
             ForEach(shown.rows) { row in
                 RowView(row: row)
                     .liftable(row, in: lane.key, state: drag)
@@ -90,7 +116,7 @@ struct LaneView: View {
         // card still lifted means the drag ended without a drop: Escape,
         // or let go outside every lane.
         .onContinuousHover { phase in
-            if case .active = phase { drag.settle() }
+            if case .active = phase { drag.settle("hover after the drag") }
         }
     }
 
