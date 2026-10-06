@@ -104,6 +104,37 @@ enum SidebarAction: Encodable, Equatable {
     }
 }
 
+extension SidebarAction {
+    /// The core's words on a merged card's two buttons (panel/mod.rs
+    /// PARK and CLOSE): the chip says which one it is.
+    static let parkWord = "Park"
+    static let closeWord = "Close"
+
+    /// What tapping one of a card's merged chips sends: Park or Close, by
+    /// its words. The core puts Close there only where it offers it, and
+    /// checks again when the action lands.
+    static func merged(_ chip: Chip, id: String) -> SidebarAction? {
+        switch chip.pieces.first?.text {
+        case parkWord: .parkMerged(id: id)
+        case closeWord: .closeMerged(id: id)
+        default: nil
+        }
+    }
+
+    /// What picking an item of a card's menu sends: the menu opened on
+    /// that card, then the item, in that order, as the pane's Space then
+    /// Enter would.
+    static func pick(_ action: MenuAction, on id: String) -> [SidebarAction] {
+        [.menu(.openCard(id: id)), .menu(.pick(action))]
+    }
+
+    /// "Message agent…" sends only words: blank text sends nothing.
+    static func message(_ text: String, to id: String) -> SidebarAction? {
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return words.isEmpty ? nil : .messageAgent(id: id, text: words)
+    }
+}
+
 // The generated panel types only decode; the outbox sends a lane and a
 // menu pick back. A switch with no default, so a new Rust variant fails
 // to compile here until it is spelt.
