@@ -15,6 +15,8 @@
 #    until panel.json shows it.
 # 6. The panel's clicks and menus: what each merged chip and menu pick
 #    sends, over every fixture.
+# 7. A click's selection: drawn on the click, until panel.json shows it
+#    or it lapses.
 set -eu
 cd "$(dirname "$0")"
 mkdir -p build
@@ -31,3 +33,5 @@ swiftc -swift-version 6 -o build/drag-check Generated/PanelTypes.swift Sidebar/M
 build/drag-check
 swiftc -swift-version 6 -o build/actions-check Generated/PanelTypes.swift Sidebar/Model/*.swift Tests/Actions/main.swift
 build/actions-check ../fixtures
+swiftc -swift-version 6 -o build/select-check Generated/PanelTypes.swift Sidebar/Model/*.swift Sidebar/Live/PendingMove.swift Sidebar/Live/PendingSelect.swift Tests/Select/main.swift
+build/select-check ../fixtures

@@ -50,6 +50,7 @@ struct PanelBody: View {
         // Here, not in a lane, so a drop is confirmed in the Projects
         // view too, when no lane is drawn.
         .onChange(of: panel.lanes) { _, now in DragState.shared.reconcile(now) }
+        .onChange(of: panel, initial: true) { _, now in SelectState.shared.reconcile(now) }
         .onChange(of: DragState.shared.pending.count) { was, now in
             if now > was { DragLog.note("move drawn") }
         }

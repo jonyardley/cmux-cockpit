@@ -45,7 +45,10 @@ struct CardActions: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contentShape(.rect)
-            .onTapGesture { switchWorkspace.run(card.wsId) }
+            .onTapGesture {
+                SelectState.shared.select(card.wsId)
+                switchWorkspace.run(card.wsId)
+            }
             .contextMenu { CardMenu(card: card, messaging: $messaging) }
             .popover(isPresented: $messaging, arrowEdge: .trailing) {
                 MessageAgent(id: card.wsId, title: card.title, shown: $messaging)
@@ -194,7 +197,10 @@ struct NeedsRowTap: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contentShape(.rect)
-            .onTapGesture { switchWorkspace.run(id) }
+            .onTapGesture {
+                SelectState.shared.select(id)
+                switchWorkspace.run(id)
+            }
     }
 }
 

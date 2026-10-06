@@ -40,11 +40,18 @@ final class HostLink {
     /// republish hands the views the same value.
     lazy var switchWorkspace = SwitchWorkspace { [weak self] id in
         guard let host = self?.host, let uuid = UUID(uuidString: id) else {
+            SelectLog.note("no cmux host, sent through the outbox")
             SwitchWorkspace.outbox.run(id)
             return
         }
         Task { @MainActor in
-            do { try await host.selectWorkspace(uuid) } catch { SwitchWorkspace.outbox.run(id) }
+            do {
+                try await host.selectWorkspace(uuid)
+                SelectLog.note("cmux took the select")
+            } catch {
+                SelectLog.note("cmux refused the select, sent through the outbox")
+                SwitchWorkspace.outbox.run(id)
+            }
         }
     }
 }
