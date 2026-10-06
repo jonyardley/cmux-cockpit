@@ -1,8 +1,10 @@
 import Foundation
+import UniformTypeIdentifiers
 
 // Checks the drop rule and the drops waiting for panel.json
 // (Sidebar/Live/PendingMove.swift): where a dropped card lands, how the
-// lanes draw it before the panel shows it, and which panel shows it done.
+// lanes draw it before the panel shows it, and which panel shows it done;
+// and what a card's drag carries (Sidebar/Views/DragItem.swift).
 // test.sh builds and runs it.
 
 var failures = 0
@@ -129,6 +131,17 @@ check(PendingMove.unconfirmed([toParked], lanes: [lane(.main, [row("B")]), lane(
 
 check(PendingMove.live(lapsing, now: now).map(\.card.wsId) == ["B"], "a drop past its time is no longer drawn")
 check(PendingMove.lasts == 4, "a drop is drawn for four seconds, as the TypeScript sidebar's override")
+
+// MARK: What a drag carries
+
+let carried = DragItem.provider(card("A"))
+check(carried.registeredTypeIdentifiers == ["dev.jonyardley.cockpit.card"], "a drag carries our own type and nothing else")
+check(!carried.hasItemConformingToTypeIdentifier(UTType.plainText.identifier), "a drag carries no text, so a terminal types nothing")
+check(!carried.hasItemConformingToTypeIdentifier(UTType.url.identifier), "a drag carries no link or file")
+check(!DragItem.type.conforms(to: .text), "our type is not text")
+check(await DragItem.read(carried) == DragItem.text(card("A")), "a drop on a lane reads the card back")
+check(await DragItem.read(NSItemProvider(object: DragItem.text(card("A")) as NSString)) == nil,
+      "text that spells a card, dragged in from elsewhere, carries no card")
 
 if failures > 0 {
     print("\(failures) failed")
