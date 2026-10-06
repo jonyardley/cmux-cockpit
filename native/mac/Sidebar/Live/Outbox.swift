@@ -30,17 +30,21 @@ enum Outbox {
         try FileManager.default.createDirectory(at: outbox, withIntermediateDirectories: true)
         let data = try JSONEncoder().encode(action)
         let ms = UInt64(max(0, now.timeIntervalSince1970 * 1000))
-        counter = (counter + 1) % 1_000_000
-        let name = String(format: "%013llu-%06u.json", ms, counter)
-        let tmp = outbox.appendingPathComponent(".\(name).tmp")
-        let file = outbox.appendingPathComponent(name)
-        do {
-            try data.write(to: tmp)
-            try FileManager.default.moveItem(at: tmp, to: file)
-        } catch {
-            try? FileManager.default.removeItem(at: tmp)
-            throw error
+        let tmp = outbox.appendingPathComponent(".\(ProcessInfo.processInfo.processIdentifier)-\(ms).tmp")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        try data.write(to: tmp)
+        // Another sidebar process counts from 1 too, so its send in the
+        // same millisecond can hold this name: take the next number.
+        var tries = 0
+        while true {
+            counter = (counter + 1) % 1_000_000
+            let file = outbox.appendingPathComponent(String(format: "%013llu-%06u.json", ms, counter))
+            do {
+                try FileManager.default.moveItem(at: tmp, to: file)
+                return file
+            } catch CocoaError.fileWriteFileExists where tries < 100 {
+                tries += 1
+            }
         }
-        return file
     }
 }
