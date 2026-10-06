@@ -29,19 +29,26 @@ use crate::pr_poll::{PrPolled, shown_in};
 use crate::projects::Project;
 use crate::session::{Outbound, Param, Session};
 
-/// What the shell can tell the core.
-#[derive(Debug, Deserialize)]
+/// What the shell can tell the core. native/typegen writes it in Swift for
+/// the sidebar to send; the core's own inputs (a frame, the state file, the
+/// project table, a PR answer) are skipped there, and opaque so their types
+/// need no Facet, until a shell sends them (#270).
+#[derive(Debug, Deserialize, facet::Facet)]
+#[repr(u8)]
 pub enum Event {
     /// A new frame of cmux data.
-    Data(Data),
+    #[facet(skip)]
+    Data(#[facet(opaque)] Data),
     /// A new config/state.json. What the file holds is seeded from it
     /// again, as a reload seeds the sidebar, with the pane's own writes not
     /// in it yet made over it; everything held only in memory stays
     /// (Session::reseed).
-    State(Box<SavedState>),
+    #[facet(skip)]
+    State(#[facet(opaque)] Box<SavedState>),
     /// A new project table. Only the table changes: the view, folds,
     /// dismissals and overrides Jon set since the state file was read stay.
-    Projects(Vec<Project>),
+    #[facet(skip)]
+    Projects(#[facet(opaque)] Vec<Project>),
     /// Asks the shell to draw the current view again.
     Refresh,
     /// Moves the card `id` into `lane`, just above the card `before`, or
@@ -69,7 +76,8 @@ pub enum Event {
     PrPollOn,
     /// What the shell found for one directory's PR. It redraws only when
     /// what a card shows of a PR changed (pr_poll::Shown).
-    PrPolled(Box<PrPolled>),
+    #[facet(skip)]
+    PrPolled(#[facet(opaque)] Box<PrPolled>),
     /// Something done in the project editor (edit.rs). A save goes out as
     /// a `projects.<key>` state write, which the next build reads.
     Edit(EditEvent),
