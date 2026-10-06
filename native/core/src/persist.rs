@@ -19,7 +19,7 @@ use crate::js::{encode_uri_component, utf16_len};
 use crate::saved::Stamped;
 
 /// The cockpit's view: "all" (lanes) or "projects".
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ViewMode {
     #[default]
@@ -37,7 +37,7 @@ impl ViewMode {
 }
 
 /// The cockpit's own view state, so a rebuild's reload keeps it.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct UiState {
     #[serde(deserialize_with = "crate::lenient::field")]
@@ -58,7 +58,7 @@ pub struct ProjectSpec {
 }
 
 /// A saved project: a spec, or a projects.json project removed in the sidebar.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum SavedProject {
     Spec(ProjectSpec),
@@ -66,14 +66,14 @@ pub enum SavedProject {
 }
 
 /// One CI check as the poller saves it.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SavedCheck {
     pub name: String,
     pub state: String,
 }
 
 /// A pull request as the poller saves it.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SavedPr {
     pub number: f64,
     pub url: String,
@@ -97,7 +97,7 @@ pub struct SavedPr {
 }
 
 /// A subagent run as the hook saves it.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedSubagent {
     pub id: String,
@@ -113,7 +113,7 @@ pub struct SavedSubagent {
 }
 
 /// A background shell a chat started.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedShell {
     pub id: String,
@@ -122,7 +122,7 @@ pub struct SavedShell {
 }
 
 /// Why an agent stopped to ask, as the notification hook saves it.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SavedAsk {
     pub reason: String,
     pub epoch: f64,
@@ -140,7 +140,7 @@ impl Stamped for SavedAsk {
 }
 
 /// What a chat last asked of Jon, as the Stop hook saves it.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 pub struct SavedMove {
     /// The line after "Your move:".
     pub text: String,
@@ -169,7 +169,7 @@ impl Stamped for SavedMove {
 }
 
 /// How the PR poller's last runs went.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SavedPoll {
     #[serde(deserialize_with = "crate::lenient::field")]
@@ -180,7 +180,7 @@ pub struct SavedPoll {
 
 /// config/state.json. The maps only the agents sidebar reads stay as plain
 /// JSON until that sidebar is ported.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SavedState {
     /// wsId to agent id to the start of the dismissed needs_input spell.

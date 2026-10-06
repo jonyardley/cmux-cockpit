@@ -6,7 +6,7 @@
 //! null in the agents or children list is kept as a hole, since the
 //! TypeScript skips each one where it reads the list.
 
-use serde::{Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// An agent's status as cmux sends it. A status this port does not know
 /// keeps cmux's own word, ranked below every known one.
@@ -32,6 +32,13 @@ impl AgentStatus {
     }
 }
 
+/// Written as cmux's own word, so it reads back as it was sent.
+impl Serialize for AgentStatus {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_str())
+    }
+}
+
 impl<'de> Deserialize<'de> for AgentStatus {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let s = String::deserialize(d)?;
@@ -46,7 +53,7 @@ impl<'de> Deserialize<'de> for AgentStatus {
 }
 
 /// A pull request's state as cmux sends it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PrStatus {
     Open,
@@ -57,7 +64,7 @@ pub enum PrStatus {
 }
 
 /// A subagent run nested under an agent session.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct SubagentRun {
     #[serde(deserialize_with = "crate::lenient::field")]
@@ -73,7 +80,7 @@ pub struct SubagentRun {
 }
 
 /// One agent session in a workspace.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Agent {
     /// For Claude Code, the session id.
@@ -110,7 +117,7 @@ impl Agent {
 }
 
 /// A pull request as cmux (or the saved state) describes it.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct PullRequest {
     #[serde(deserialize_with = "crate::lenient::field")]
@@ -140,7 +147,7 @@ pub struct PullRequest {
 }
 
 /// A progress bar.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Progress {
     #[serde(deserialize_with = "crate::lenient::field")]
@@ -150,7 +157,7 @@ pub struct Progress {
 }
 
 /// One cmux workspace.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Workspace {
     #[serde(deserialize_with = "crate::lenient::field")]
@@ -211,7 +218,7 @@ impl Workspace {
 }
 
 /// A cmux workspace group.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct WorkspaceGroup {
     #[serde(deserialize_with = "crate::lenient::field")]
@@ -225,7 +232,7 @@ pub struct WorkspaceGroup {
 }
 
 /// One frame of cmux data: what `data.*()` returns in the renderer.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Data {
     /// The app clock in epoch seconds (`data.clock().epoch`).
@@ -288,5 +295,28 @@ mod tests {
         assert_eq!(w.prs.as_ref().map(Vec::len), Some(1));
         let a = w.agent_list().next().unwrap();
         assert_eq!((a.id.as_str(), &a.status), ("", &None));
+    }
+
+    #[test]
+    fn a_frame_written_out_reads_back_the_same() {
+        let json = r#"{"epoch": 10, "selectedId": "w", "groups": [{"id": "g", "anchorId": "w"}],
+            "workspaces": [{"id": "w", "group": "g", "ports": [3000],
+            "agents": [null, {"id": "a", "status": "thinking", "children": [null, {"id": "s"}]},
+                       {"id": "b", "status": "needs_input"}],
+            "pr": {"number": 4, "status": "draft_ish"}}]}"#;
+        let data: Data = serde_json::from_str(json).unwrap();
+        let written = serde_json::to_value(&data).unwrap();
+        assert_eq!(written["workspaces"][0]["agents"][1]["status"], "thinking");
+        assert_eq!(
+            written["workspaces"][0]["agents"][2]["status"],
+            "needs_input"
+        );
+        assert_eq!(
+            written["workspaces"][0]["agents"][0],
+            serde_json::Value::Null
+        );
+        let back: Data = serde_json::from_value(written).unwrap();
+        assert_eq!(back, data);
+        assert_eq!(back.workspace_list()[0].agent_slots(), 3);
     }
 }

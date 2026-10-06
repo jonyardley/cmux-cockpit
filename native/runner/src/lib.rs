@@ -40,7 +40,9 @@
 //! Headless, the `cockpit-publish` binary (src/bin) drives the runner for
 //! the Swift sidebar: it writes the panel model to a shared folder after
 //! each change, signals it, and takes actions back as files (publish.rs,
-//! action.rs, signal.rs).
+//! action.rs, signal.rs). Beside the panel it writes the core's inputs
+//! (`Inputs`, as data.json), so a core in the sidebar can be fed the
+//! same; `run_without_core` joins and writes those with no core at all.
 
 pub mod action;
 pub mod join;
@@ -62,14 +64,15 @@ use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use cockpit_core::data::Workspace;
+use cockpit_core::data::{Data, Workspace};
 use cockpit_core::home::expand_home;
-use cockpit_core::persist::SavedProject;
+use cockpit_core::persist::{SavedProject, SavedState};
 use cockpit_core::pr_poll::PrPolled;
 use cockpit_core::project_table::merge_projects;
 use cockpit_core::projects::Project;
 use cockpit_core::{Cockpit, Effect, Event, Model, PrAsk};
 use crux_core::App;
+use serde::Serialize;
 use serde_json::Value;
 
 use join::{Change, Join, changes_workspaces};
@@ -128,12 +131,66 @@ pub struct Latency {
     pub read_at: Instant,
 }
 
-/// The core and the join that feeds it.
+/// What the core was last fed from the shell's own inputs: the project
+/// table (each "~" root expanded), the state file and cmux's frame.
+/// Written out as data.json, so a core elsewhere fed these in this order
+/// (projects, state, data), with the home folder set on its model first,
+/// builds the same panel. Each is None until first fed (a file that would
+/// not read, say), and is written as null then: a reader skips it.
+///
+/// Each input carries a count of the times it was fed, so a reader of a
+/// later data.json sends its core only those that moved: the project
+/// table and the state reset parts of the session, so a core sent them
+/// again on every frame would lose its local edits and folds.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+pub struct Inputs {
+    pub projects: Option<Vec<Project>>,
+    pub projects_seq: u64,
+    pub state: Option<SavedState>,
+    pub state_seq: u64,
+    pub data: Option<Data>,
+    pub data_seq: u64,
+}
+
+impl Inputs {
+    /// Keeps a copy of the event, when it is one of these inputs.
+    fn note(&mut self, event: &Event) {
+        match event {
+            Event::Projects(p) => {
+                self.projects = Some(p.clone());
+                self.projects_seq += 1;
+            }
+            Event::State(s) => {
+                self.state = Some(SavedState::clone(s));
+                self.state_seq += 1;
+            }
+            Event::Data(d) => {
+                self.data = Some(d.clone());
+                self.data_seq += 1;
+            }
+            _ => {}
+        }
+    }
+
+    /// Moves whenever any input was fed, so an unchanged set is not
+    /// written again.
+    pub fn generation(&self) -> u64 {
+        self.projects_seq + self.state_seq + self.data_seq
+    }
+}
+
+/// The core and the join that feeds it. Without the core
+/// (`Feed::without_core`) it only joins: the inputs are kept and nothing
+/// else happens, so the model stays empty and actions go nowhere.
 #[derive(Debug, Default)]
 pub struct Feed {
     app: Cockpit,
     pub model: Model,
     pub join: Join,
+    /// What the core was last fed, for data.json.
+    pub inputs: Inputs,
+    /// Set when there is no core to feed (`run_without_core`).
+    no_core: bool,
     /// The outbox worker, while `run` drives the feed.
     worker: Option<Sender<Outgoing>>,
     /// Requests made with no worker to take them (a feed driven by hand,
@@ -149,6 +206,10 @@ impl Feed {
     /// Sends the core an event and hands its requests on. True when the
     /// core asked for a render.
     fn send(&mut self, event: Event) -> bool {
+        self.inputs.note(&event);
+        if self.no_core {
+            return false;
+        }
         let mut cmd = self.app.update(event, &mut self.model);
         let mut render = false;
         for effect in cmd.effects() {
@@ -228,9 +289,11 @@ impl Feed {
             Input::Agents(view) => (self.join.agents(view), false, None),
             Input::Workspaces(list) => (self.join.workspaces(list), false, None),
             Input::Groups(groups) => (self.join.groups(groups), false, None),
+            // Without a core there is nothing to snap back yet: the
+            // answer is dropped until the sidebar's core can take it.
             Input::CmuxFailed(id) => {
                 self.send(Event::CmuxFailed { id });
-                (true, false, None)
+                (self.has_core(), false, None)
             }
             // Only an answer that moves what a card shows is news.
             Input::PrPolled(polled) => (self.send(Event::PrPolled(polled)), false, None),
@@ -273,6 +336,19 @@ impl Feed {
         let mut feed = Self::default();
         feed.model.session.home = home;
         feed
+    }
+
+    /// A feed with no core: it joins the inputs and keeps them for
+    /// data.json, and takes no action.
+    pub fn without_core(home: Option<String>) -> Self {
+        let mut feed = Self::with_home(home);
+        feed.no_core = true;
+        feed
+    }
+
+    /// Whether a core takes the frames and actions.
+    pub fn has_core(&self) -> bool {
+        !self.no_core
     }
 }
 
@@ -519,6 +595,41 @@ pub fn channel() -> (Sender<Input>, Receiver<Input>) {
 /// or gone quiet. `log` takes lines for stderr.
 pub fn run(
     opts: &Options,
+    channel: (Sender<Input>, Receiver<Input>),
+    on_frame: impl FnMut(&mut Feed, Call<'_>) -> ControlFlow<()>,
+    log: impl FnMut(String),
+) {
+    run_with(
+        opts,
+        Feed::with_home(opts.home.clone()),
+        channel,
+        on_frame,
+        log,
+    );
+}
+
+/// Runs as `run` does with no core: the inputs are joined and handed to
+/// `on_frame` in `Feed::inputs`, the model stays empty, and the core's
+/// PR asks never come. The outbox worker still runs, for the effects the
+/// sidebar's core will send (issue #269).
+pub fn run_without_core(
+    opts: &Options,
+    channel: (Sender<Input>, Receiver<Input>),
+    on_frame: impl FnMut(&mut Feed, Call<'_>) -> ControlFlow<()>,
+    log: impl FnMut(String),
+) {
+    run_with(
+        opts,
+        Feed::without_core(opts.home.clone()),
+        channel,
+        on_frame,
+        log,
+    );
+}
+
+fn run_with(
+    opts: &Options,
+    mut feed: Feed,
     (tx, rx): (Sender<Input>, Receiver<Input>),
     mut on_frame: impl FnMut(&mut Feed, Call<'_>) -> ControlFlow<()>,
     mut log: impl FnMut(String),
@@ -537,7 +648,6 @@ pub fn run(
         let stop = Arc::clone(&stop);
         thread::spawn(move || poll_agents(&tx, &stop));
     }
-    let mut feed = Feed::with_home(opts.home.clone());
     let worker = {
         let (out_tx, out_rx) = mpsc::channel();
         let config = opts.config.clone();
@@ -905,6 +1015,46 @@ mod tests {
             ["workspace.reorder", "workspace.group.add"],
             "the move's own requests, once"
         );
+    }
+
+    #[test]
+    fn the_feed_keeps_what_the_core_was_fed_for_data_json() {
+        let feed = Feed::with_home(Some("/Users/jon".into()));
+        assert_eq!(feed.inputs, Inputs::default());
+        let mut feed = moving_feed();
+        let data = feed.inputs.data.clone().unwrap();
+        assert_eq!(feed.model.data.as_ref(), Some(&data));
+        assert_eq!(data.workspace_list().len(), 2);
+        assert_eq!(feed.inputs.state, Some(SavedState::default()));
+        let fed = (feed.inputs.projects_seq, feed.inputs.state_seq);
+        let generation = feed.inputs.generation();
+        // An action is no input: what goes out stays what came in.
+        feed.act(move_q());
+        assert_eq!(feed.inputs.data, Some(data));
+        assert_eq!(feed.inputs.generation(), generation);
+        // A frame moves only the data's count, so a reader resends only that.
+        feed.frame(1_791_127_200.0);
+        assert_eq!((feed.inputs.projects_seq, feed.inputs.state_seq), fed);
+        assert_eq!(feed.inputs.generation(), generation + 1);
+    }
+
+    #[test]
+    fn without_a_core_the_feed_only_joins() {
+        let mut feed = Feed::without_core(Some("/h".into()));
+        assert!(!feed.has_core());
+        feed.state(SavedState::default());
+        feed.input(Input::Workspaces(vec![titled("Q", "q")]));
+        feed.frame(1_791_127_100.0);
+        feed.poll_prs();
+        feed.act(move_q());
+        let (changed, _, _) = feed.input(Input::CmuxFailed("Q".into()));
+        assert!(!changed, "no core to snap a card back");
+        let data = feed.inputs.data.as_ref().unwrap();
+        assert_eq!(data.workspace_list()[0].id, "Q");
+        assert_eq!(feed.inputs.state, Some(SavedState::default()));
+        assert_eq!(feed.model.data, None, "the model stays empty");
+        assert!(feed.unsent.is_empty() && feed.unasked.is_empty());
+        assert_eq!(pr_due_at(&feed), None);
     }
 
     #[test]

@@ -8,7 +8,9 @@ parts, built together from `project.yml` with XcodeGen:
   headless, built by cargo and copied into `Contents/MacOS`) running: it
   starts it with a full PATH and its own pid as the parent, starts it
   again after a backoff if it dies (`Host/Restart.swift`), and stops it
-  on quit. The publisher's log is `~/Library/Logs/Cockpit/cockpit-publish.log`.
+  on quit. The publisher writes `panel.json` and, beside it, the core's
+  inputs as `data.json` (for a core in the sidebar, issue #269; nothing
+  reads it yet). Its log is `~/Library/Logs/Cockpit/cockpit-publish.log`.
 - `CockpitSidebar.appex` (`Sidebar/`), embedded in the app: the sandboxed
   extension cmux draws in its left sidebar. `Sidebar/Model/` decides what
   to show (card words, which chips fit, the palette) in plain Swift that
