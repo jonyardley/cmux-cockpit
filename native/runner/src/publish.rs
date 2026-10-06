@@ -11,6 +11,14 @@
 //!   clock at the write, so the sidebar can log how late it read it. Then
 //!   it posts the bare signal (signal.rs). Nothing is written until the
 //!   runner is ready (`ready`), so a restart never blanks the sidebar.
+//! - Beside it, data.json: what the core was fed (crate::Inputs), as
+//!   `{"seq": 9, "written_at_ms": ..., "home": "/Users/jon", "projects":
+//!   [...], "state": {...}, "data": {...}}`, written the same way when it
+//!   changed, with its own `seq`. A core fed `projects`, `state`, then
+//!   `data`, with `home` set on its model first, builds the same panel.
+//!   One signal covers both files. Without a core only data.json goes.
+//! - Once a minute, when anything was written, a log line gives each
+//!   file's writes per minute and size (`Tally`).
 //! - In: each file in outbox/ is one action (action.rs). The writer
 //!   writes it under a name that starts with "." or does not end in
 //!   ".json", then renames it to `<name>.json`. Files are taken in byte
@@ -32,19 +40,24 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use cockpit_core::{Model, Panel};
 use serde::Serialize;
 
-use crate::Feed;
 use crate::action::Action;
+use crate::{Feed, Inputs};
 
 /// The App Group the helper app and the sidebar share.
 pub const GROUP_ID: &str = "9S5FG4LQAF.dev.jonyardley.cockpit";
 /// Overrides the shared folder (tests, or a run by hand).
 pub const ROOT_ENV: &str = "COCKPIT_GROUP_DIR";
 pub const PANEL_FILE: &str = "panel.json";
+pub const DATA_FILE: &str = "data.json";
 pub const OUTBOX_DIR: &str = "outbox";
 /// Before an outbox file's name once claimed, then its claimer's pid.
 const TAKEN: &str = ".taken-";
 /// Before panel.json's temp file's pid.
 const PANEL_TMP: &str = ".panel.json.";
+/// Before data.json's temp file's pid.
+const DATA_TMP: &str = ".data.json.";
+/// How often the write tally is logged.
+pub const TALLY_EVERY: Duration = Duration::from_secs(60);
 /// The longest the publisher waits for the runner to be ready before it
 /// writes whatever it has, as `cockpit-pane --once` does.
 pub const READY_LIMIT: Duration = Duration::from_secs(10);
@@ -60,6 +73,74 @@ pub struct Published<'a> {
     pub seq: u64,
     pub written_at_ms: u64,
     pub panel: &'a Panel,
+}
+
+/// What data.json holds: the core's inputs, beside the same envelope.
+#[derive(Debug, Serialize)]
+pub struct PublishedData<'a> {
+    pub seq: u64,
+    pub written_at_ms: u64,
+    #[serde(flatten)]
+    pub inputs: &'a Inputs,
+}
+
+/// One file's writes since the tally last logged.
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+struct Writes {
+    count: u32,
+    /// The size of the latest write.
+    last_bytes: usize,
+}
+
+impl Writes {
+    fn add(&mut self, bytes: usize) {
+        self.count += 1;
+        self.last_bytes = bytes;
+    }
+
+    fn describe(&self, name: &str, minutes: f64) -> String {
+        // A count and a byte size are far below f64's exact range.
+        let rate = f64::from(self.count) / minutes;
+        let kb = self.last_bytes as f64 / 1024.0;
+        format!("{name} {rate:.1} writes/min, {kb:.1} KB")
+    }
+}
+
+/// How often and how large panel.json and data.json were written, for
+/// the log: one line per `TALLY_EVERY`, none when nothing was written.
+#[derive(Debug)]
+pub struct Tally {
+    since: Instant,
+    panel: Writes,
+    data: Writes,
+}
+
+impl Tally {
+    pub fn new(now: Instant) -> Tally {
+        Tally {
+            since: now,
+            panel: Writes::default(),
+            data: Writes::default(),
+        }
+    }
+
+    /// The line to log once `TALLY_EVERY` has passed, then starts again.
+    pub fn report(&mut self, now: Instant) -> Option<String> {
+        let elapsed = now.saturating_duration_since(self.since);
+        if elapsed < TALLY_EVERY {
+            return None;
+        }
+        let minutes = elapsed.as_secs_f64() / 60.0;
+        let line = (self.panel.count > 0 || self.data.count > 0).then(|| {
+            format!(
+                "written: {}; {}",
+                self.panel.describe(PANEL_FILE, minutes),
+                self.data.describe(DATA_FILE, minutes)
+            )
+        });
+        *self = Tally::new(now);
+        line
+    }
 }
 
 /// Whether the panel is worth writing: replay has caught up and every
@@ -169,6 +250,10 @@ pub struct Publisher {
     /// The panel last written, so an unchanged one is not written again.
     last: Option<Panel>,
     seq: u64,
+    /// The inputs last written to data.json, likewise.
+    last_inputs: Option<Inputs>,
+    data_seq: u64,
+    tally: Tally,
     /// Posts the "changed" signal; true when it went.
     signal: Box<dyn FnMut() -> bool>,
 }
@@ -190,11 +275,15 @@ impl Publisher {
         fs::create_dir_all(&outbox)?;
         sweep(&outbox, TAKEN, alive);
         sweep(&root, PANEL_TMP, alive);
+        sweep(&root, DATA_TMP, alive);
         Ok(Publisher {
             root,
             stuck: HashSet::new(),
             last: None,
             seq: 0,
+            last_inputs: None,
+            data_seq: 0,
+            tally: Tally::new(Instant::now()),
             signal,
         })
     }
@@ -219,6 +308,11 @@ impl Publisher {
                 }
             };
             match Action::parse(&text) {
+                // The effects the sidebar's core will send here are not
+                // read yet (issue #269); an action has no core to go to.
+                Ok(action) if !feed.has_core() => {
+                    log(format!("outbox: {} dropped, no core", action.name()));
+                }
                 Ok(action) => {
                     log(format!("outbox: {}", action.name()));
                     feed.act(action.into());
@@ -233,6 +327,16 @@ impl Publisher {
     /// Writes the core's panel to panel.json and posts the signal, when it
     /// differs from the one last written. True when it wrote.
     pub fn publish(&mut self, model: &mut Model, log: &mut dyn FnMut(String)) -> bool {
+        let wrote = self.write_panel(model, log);
+        if wrote {
+            self.post(log);
+        }
+        wrote
+    }
+
+    /// Writes the panel to panel.json, when it differs from the one last
+    /// written. True when it wrote.
+    fn write_panel(&mut self, model: &mut Model, log: &mut dyn FnMut(String)) -> bool {
         let panel = Panel::from_core(model);
         if self.last.as_ref() == Some(&panel) {
             return false;
@@ -242,32 +346,81 @@ impl Publisher {
             written_at_ms: epoch_ms(),
             panel: &panel,
         };
-        let written = serde_json::to_vec(&out)
-            .map_err(|e| e.to_string())
-            .and_then(|bytes| {
-                write_atomic(&self.root, PANEL_FILE, &bytes).map_err(|e| e.to_string())
-            });
-        if let Err(e) = written {
-            // Kept unwritten, so the next call tries again.
-            log(format!("{PANEL_FILE} not written: {e}"));
+        let Some(bytes) = self.write(PANEL_FILE, &out, log) else {
             return false;
-        }
+        };
         self.seq += 1;
         self.last = Some(panel);
+        self.tally.panel.add(bytes);
+        true
+    }
+
+    /// Writes the core's inputs to data.json, when they differ from those
+    /// last written. True when it wrote.
+    fn write_data(&mut self, inputs: &Inputs, log: &mut dyn FnMut(String)) -> bool {
+        if self.last_inputs.as_ref() == Some(inputs) {
+            return false;
+        }
+        let out = PublishedData {
+            seq: self.data_seq + 1,
+            written_at_ms: epoch_ms(),
+            inputs,
+        };
+        let Some(bytes) = self.write(DATA_FILE, &out, log) else {
+            return false;
+        };
+        self.data_seq += 1;
+        self.last_inputs = Some(inputs.clone());
+        self.tally.data.add(bytes);
+        true
+    }
+
+    /// Writes `value` to `name` atomically; its size, or None, logged,
+    /// when it failed, so the caller tries again next time.
+    fn write(
+        &self,
+        name: &str,
+        value: &impl Serialize,
+        log: &mut dyn FnMut(String),
+    ) -> Option<usize> {
+        let written = serde_json::to_vec(value)
+            .map_err(|e| e.to_string())
+            .and_then(|bytes| {
+                write_atomic(&self.root, name, &bytes)
+                    .map(|()| bytes.len())
+                    .map_err(|e| e.to_string())
+            });
+        written
+            .map_err(|e| log(format!("{name} not written: {e}")))
+            .ok()
+    }
+
+    /// Posts the "changed" signal.
+    fn post(&mut self, log: &mut dyn FnMut(String)) {
         // Off macOS there is no centre to post to, so no news in that.
         if !(self.signal)() && cfg!(target_os = "macos") {
             log("changed signal not posted".to_string());
         }
-        true
     }
 
     /// One turn of the runner: the outbox's actions go in, then the panel
-    /// goes out when a frame came, an action went in, or nothing has been
-    /// written yet (or the last write failed).
+    /// and the inputs go out when a frame came, an action went in, or a
+    /// file has not been written yet (or its last write failed), with one
+    /// signal for both. Without a core only the inputs go out. The tally
+    /// is logged when it is due.
     pub fn step(&mut self, feed: &mut Feed, fresh: bool, log: &mut dyn FnMut(String)) {
         let applied = self.take_actions(feed, log);
-        if fresh || applied > 0 || self.last.is_none() {
-            self.publish(&mut feed.model, log);
+        let core = feed.has_core();
+        let unwritten = (core && self.last.is_none()) || self.last_inputs.is_none();
+        if fresh || applied > 0 || unwritten {
+            let panel = core && self.write_panel(&mut feed.model, log);
+            let data = self.write_data(&feed.inputs, log);
+            if panel || data {
+                self.post(log);
+            }
+        }
+        if let Some(line) = self.tally.report(Instant::now()) {
+            log(line);
         }
     }
 }
@@ -319,11 +472,13 @@ impl Parent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cockpit_core::Event;
     use cockpit_core::data::Data;
     use cockpit_core::lanes::LaneKey;
+    use cockpit_core::panel::ProjectRow;
     use cockpit_core::persist::SavedState;
     use cockpit_core::projects::Project;
+    use cockpit_core::{Cockpit, EditEvent, Event, MenuEvent};
+    use crux_core::App;
     use serde_json::Value;
     use std::cell::Cell;
     use std::rc::Rc;
@@ -397,11 +552,190 @@ mod tests {
                 .collect();
             assert_eq!(
                 leftovers.len(),
-                2,
-                "only panel.json and outbox/: {leftovers:?}"
+                3,
+                "only panel.json, data.json and outbox/: {leftovers:?}"
             );
             fs::remove_dir_all(&root).unwrap();
         }
+    }
+
+    /// A scene's feed as the runner builds it, home and all: the table
+    /// through `Feed::projects`, so "~" roots expand against home.
+    fn fed_at(scene: &str, home: Option<&str>) -> Feed {
+        let input = json(&repo(&format!("test/golden/{scene}.input.json")));
+        let projects: Vec<Project> = serde_json::from_value(input["projects"].clone()).unwrap();
+        let saved: SavedState = serde_json::from_value(input["state"].clone()).unwrap();
+        let data: Data = serde_json::from_value(input["data"].clone()).unwrap();
+        let mut feed = Feed::with_home(home.map(str::to_string));
+        feed.projects(projects);
+        feed.state(saved);
+        feed.send(Event::Data(data));
+        feed
+    }
+
+    /// A fresh core fed from data.json alone: home on the model, then the
+    /// project table, the state and cmux's data, as the file says.
+    fn core_from(file: &Value) -> Model {
+        let mut model = Model::default();
+        model.session.home = serde_json::from_value(file["home"].clone()).unwrap();
+        let projects: Vec<Project> = serde_json::from_value(file["projects"].clone()).unwrap();
+        let saved: SavedState = serde_json::from_value(file["state"].clone()).unwrap();
+        let data: Data = serde_json::from_value(file["data"].clone()).unwrap();
+        for event in [
+            Event::Projects(projects),
+            Event::State(Box::new(saved)),
+            Event::Data(data),
+        ] {
+            let _effects = Cockpit.update(event, &mut model);
+        }
+        model
+    }
+
+    /// The action that opens a fixture over its scene's panel, if any.
+    type Opens = fn(&Panel) -> Option<Event>;
+
+    /// Each fixture: the scene it loads and the action that opens it.
+    fn fixtures() -> Vec<(&'static str, &'static str, Opens)> {
+        fn none(_: &Panel) -> Option<Event> {
+            None
+        }
+        fn card_menu(p: &Panel) -> Option<Event> {
+            let id = p.card_ids()[0].to_string();
+            Some(Event::Menu(MenuEvent::OpenCard { id }))
+        }
+        fn editor(p: &Panel) -> Option<Event> {
+            p.projects.iter().find_map(|r| match r {
+                ProjectRow::Header(h) => Some(Event::Edit(EditEvent::Open { key: h.key.clone() })),
+                _ => None,
+            })
+        }
+        fn new_project(_: &Panel) -> Option<Event> {
+            Some(Event::Edit(EditEvent::OpenNew))
+        }
+        vec![
+            ("lanes", "lanes", none),
+            ("needs-and-next", "needs-and-next", none),
+            ("projects", "projects", none),
+            ("review-verdicts", "review-verdicts", none),
+            ("card-menu", "lanes", card_menu),
+            ("editor", "projects", editor),
+            ("new-project", "projects", new_project),
+        ]
+    }
+
+    #[test]
+    fn a_core_fed_from_data_json_alone_builds_the_helpers_panel() {
+        for home in [None, Some("/Users/jon")] {
+            for (fixture, scene, open) in fixtures() {
+                let name = format!("{fixture}-{}", home.is_some());
+                let (mut p, root, posted) = publisher(&name);
+                let mut feed = fed_at(scene, home);
+                if let Some(event) = open(&Panel::from_core(&mut feed.model)) {
+                    feed.act(event);
+                }
+                p.step(&mut feed, true, &mut quiet());
+                assert_eq!(posted.get(), 1, "one signal for both files");
+
+                let helpers = json(&root.join(PANEL_FILE))["panel"].clone();
+                let file = json(&root.join(DATA_FILE));
+                assert_eq!(file["seq"], 1);
+                let mut model = core_from(&file);
+                // The same action, read off this core's own panel.
+                if let Some(event) = open(&Panel::from_core(&mut model)) {
+                    let _effects = Cockpit.update(event, &mut model);
+                }
+                let built = serde_json::to_value(Panel::from_core(&mut model)).unwrap();
+                assert_eq!(built, helpers, "{name}");
+                if home.is_none() {
+                    let want = json(&repo(&format!("native/fixtures/{fixture}.json")));
+                    assert_eq!(built, want, "{name}");
+                }
+                fs::remove_dir_all(&root).unwrap();
+            }
+        }
+    }
+
+    #[test]
+    fn data_json_carries_the_expanded_table_and_is_written_only_when_it_changed() {
+        let (mut p, root, posted) = publisher("data-changed");
+        let mut feed = fed_at("lanes", Some("/Users/jon"));
+        p.step(&mut feed, true, &mut quiet());
+        let file = json(&root.join(DATA_FILE));
+        assert_eq!(file["home"], "/Users/jon");
+        let roots: Vec<&Value> = file["projects"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| &p["root"])
+            .collect();
+        assert!(
+            roots.contains(&&Value::from("/Users/jon/dev/app-one")),
+            "{roots:?}"
+        );
+
+        // An action moves the panel, not the inputs.
+        feed.act(Event::FlipView);
+        p.step(&mut feed, true, &mut quiet());
+        assert_eq!(json(&root.join(PANEL_FILE))["seq"], 2);
+        assert_eq!(json(&root.join(DATA_FILE))["seq"], 1);
+        // A new frame moves the inputs, not the panel.
+        let mut data = feed.inputs.data.clone().unwrap();
+        data.epoch = data.epoch.map(|e| e + 1.0);
+        feed.send(Event::Data(data));
+        p.step(&mut feed, true, &mut quiet());
+        assert_eq!(json(&root.join(DATA_FILE))["seq"], 2);
+        assert_eq!(posted.get(), 3);
+        p.step(&mut feed, true, &mut quiet());
+        assert_eq!(posted.get(), 3, "nothing new, no signal");
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn without_a_core_only_data_json_goes_and_actions_are_dropped() {
+        let (mut p, root, posted) = publisher("no-core");
+        let mut feed = Feed::without_core(Some("/h".into()));
+        feed.state(SavedState::default());
+        feed.frame(1_791_127_100.0);
+        fs::write(p.outbox().join("1.json"), r#""FlipView""#).unwrap();
+        let mut lines = Vec::new();
+        p.step(&mut feed, false, &mut |l| lines.push(l));
+        assert_eq!(lines, vec!["outbox: FlipView dropped, no core".to_string()]);
+        assert!(waiting(&p.outbox()).is_empty());
+        assert!(!root.join(PANEL_FILE).exists());
+        let file = json(&root.join(DATA_FILE));
+        assert_eq!(
+            (file["seq"].clone(), file["home"].clone()),
+            (1.into(), "/h".into())
+        );
+        assert_eq!(file["data"]["epoch"], 1_791_127_100.0);
+        assert_eq!(posted.get(), 1);
+        // Written, so a wake with nothing new writes nothing.
+        p.step(&mut feed, false, &mut quiet());
+        assert_eq!(posted.get(), 1);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn the_tally_logs_each_files_rate_and_size_once_a_minute() {
+        let start = Instant::now();
+        let mut t = Tally::new(start);
+        t.panel.add(10 * 1024);
+        t.panel.add(10 * 1024 + 512);
+        for _ in 0..30 {
+            t.data.add(32 * 1024);
+        }
+        assert_eq!(t.report(start + Duration::from_secs(59)), None, "not due");
+        assert_eq!(
+            t.report(start + TALLY_EVERY).as_deref(),
+            Some("written: panel.json 2.0 writes/min, 10.5 KB; data.json 30.0 writes/min, 32.0 KB")
+        );
+        // It starts again, and a quiet minute logs nothing.
+        assert_eq!(t.report(start + TALLY_EVERY * 2), None);
+        t.data.add(2048);
+        assert_eq!(
+            t.report(start + TALLY_EVERY * 4).as_deref(),
+            Some("written: panel.json 0.0 writes/min, 0.0 KB; data.json 0.5 writes/min, 2.0 KB")
+        );
     }
 
     #[test]
@@ -410,11 +744,16 @@ mod tests {
         let mut feed = fed("lanes");
         assert!(p.publish(&mut feed.model, &mut quiet()));
         assert!(!p.publish(&mut feed.model, &mut quiet()));
-        p.step(&mut feed, true, &mut quiet());
         assert_eq!(posted.get(), 1);
+        // The same panel again: only data.json, its first write, is news.
+        p.step(&mut feed, true, &mut quiet());
+        assert_eq!(json(&root.join(PANEL_FILE))["seq"], 1);
+        assert_eq!(posted.get(), 2);
+        p.step(&mut feed, true, &mut quiet());
+        assert_eq!(posted.get(), 2);
         feed.act(Event::FlipView);
         assert!(p.publish(&mut feed.model, &mut quiet()));
-        assert_eq!(posted.get(), 2);
+        assert_eq!(posted.get(), 3);
         assert_eq!(json(&root.join(PANEL_FILE))["seq"], 2);
         fs::remove_dir_all(&root).unwrap();
     }
