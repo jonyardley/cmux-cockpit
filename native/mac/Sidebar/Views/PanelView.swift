@@ -3,6 +3,7 @@ import SwiftUI
 /// The All view: Needs you while something waits, then the five lanes.
 struct AllView: View {
     let panel: Panel
+    @State private var tops: [String: CGFloat] = [:]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -12,10 +13,18 @@ struct AllView: View {
             // Checked against this panel as it draws, so a drop the panel
             // already shows is not drawn twice for a frame.
             let moves = PendingMove.unconfirmed(DragState.shared.pending, lanes: panel.lanes)
-            ForEach(panel.lanes, id: \.key) { LaneView(lane: $0, moves: moves) }
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(panel.lanes, id: \.key) { lane in
+                    let gap: CGFloat = lane.key == panel.lanes.last?.key ? 0 : 12
+                    LaneView(lane: lane, moves: moves, top: tops[String(describing: lane.key)] ?? 0, gap: gap)
+                }
+            }
+            .coordinateSpace(name: FloatingCard.space)
+            .overlay(alignment: .topLeading) { FloatingCard(state: DragState.shared, lanes: panel.lanes) }
+            .onPreferenceChange(LaneTops.self) { next in
+                MainActor.assumeIsolated { if next != tops { tops = next } }
+            }
         }
-        .coordinateSpace(name: FloatingCard.space)
-        .overlay(alignment: .topLeading) { FloatingCard(state: DragState.shared) }
     }
 }
 

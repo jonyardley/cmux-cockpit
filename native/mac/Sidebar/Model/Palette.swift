@@ -40,6 +40,8 @@ enum Palette {
         /// The unread badge's face, and its words.
         case badge
         case onBadge
+        /// The shadow under a card being dragged.
+        case lift
     }
 
     private struct Pair {
@@ -120,6 +122,7 @@ enum Palette {
         case .grey: Pair(RGBA(0xA09E95), RGBA(0x77756D))
         case .badge: secondary
         case .onBadge: Pair(RGBA(0xFFFFFF), RGBA(0x1F1E1D))
+        case .lift: Pair(RGBA(0x000000, 0x2E), RGBA(0x000000, 0x66))
         }
     }
 

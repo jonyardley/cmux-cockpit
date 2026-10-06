@@ -41,6 +41,9 @@ final class DragState {
     /// picture itself is see-through, so nothing of macOS's lingers while
     /// it hands the drop over.
     private(set) var pointer: CGFloat?
+    /// How far below the lifted card's middle it was grabbed, so the
+    /// floating copy keeps that hold rather than centring on the pointer.
+    private(set) var grab: CGFloat?
     /// Watches for the mouse button coming up while a card is lifted.
     @ObservationIgnored private var watch: Task<Void, Never>?
     /// The card the release watch let go of, and when: cmux can hand the
@@ -54,6 +57,7 @@ final class DragState {
         from = lane
         over = nil
         pointer = nil
+        grab = nil
         released = nil
         DragLog.lifted()
         watch?.cancel()
@@ -96,13 +100,20 @@ final class DragState {
         }
     }
 
-    /// The pointer is at `y` down the All view.
-    func point(_ y: CGFloat) {
+    /// The pointer is at `y` down the All view; `mid` is the lifted card's
+    /// middle there when its lane can see it, which fixes the hold once.
+    func point(_ y: CGFloat, mid: CGFloat?) {
+        if grab == nil, let mid { grab = y - mid }
         if pointer != y { pointer = y }
     }
 
+    /// The pointer left a lane. Lanes meet with no gap between them, so
+    /// this is the pointer leaving the lanes altogether, and the floating
+    /// copy goes until it is back.
     func leave(_ lane: LaneKey) {
-        if over?.lane == lane { over = nil }
+        guard over?.lane == lane else { return }
+        over = nil
+        pointer = nil
     }
 
     /// The drag is over without a drop (Escape, or let go outside a lane):
@@ -230,27 +241,51 @@ private struct Liftable: ViewModifier {
     }
 }
 
-/// The lifted card, drawn over the All view at the pointer's height while
-/// it is over a lane, in place of macOS's drag picture. An overlay, so the
+/// The lifted card, drawn over the lanes at the pointer's height while it
+/// is over them, in place of macOS's drag picture. An overlay, so the
 /// lanes under it never move.
 struct FloatingCard: View {
-    /// The All view's coordinate space, which lanes measure their tops in.
-    nonisolated static let space = "all"
+    /// The lanes' coordinate space, which they measure their tops in.
+    nonisolated static let space = "lanes"
 
     let state: DragState
+    /// The lanes as panel.json has them, for the card's latest words.
+    let lanes: [Lane]
 
     var body: some View {
-        if let card = state.lifted, let y = state.pointer {
+        if let lifted = state.lifted, let y = state.pointer {
+            let card = Self.fresh(lifted, in: lanes)
             GeometryReader { geo in
                 RowView(row: .card(card))
+                    .background(Color(Palette.Own.ground), in: .rect(cornerRadius: Metrics.corner))
                     .frame(width: geo.size.width)
                     .fixedSize(horizontal: false, vertical: true)
                     .opacity(0.9)
-                    .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
-                    .position(x: geo.size.width / 2, y: y)
+                    .shadow(color: Color(Palette.Own.lift), radius: 6, y: 2)
+                    .position(x: geo.size.width / 2, y: y - (state.grab ?? 0))
             }
             .allowsHitTesting(false)
         }
+    }
+
+    /// The panel's own copy of the card when it still has it, so a status
+    /// that changed mid-drag shows on the copy too.
+    private static func fresh(_ card: Card, in lanes: [Lane]) -> Card {
+        for lane in lanes {
+            for row in lane.rows {
+                if case .card(let now) = row, now.wsId == card.wsId { return now }
+            }
+        }
+        return card
+    }
+}
+
+/// Each lane's top in the lanes' space, by lane key written out (the
+/// generated LaneKey is not Sendable, which a preference default must be).
+struct LaneTops: PreferenceKey {
+    static let defaultValue: [String: CGFloat] = [:]
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue()) { $1 }
     }
 }
 
@@ -277,12 +312,12 @@ struct LaneDrop: DropDelegate {
     }
 
     func dropEntered(info: DropInfo) {
-        state.point(top + info.location.y)
+        track(info)
         if let before = before(info) { state.hover(lane.key, before: before) }
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
-        state.point(top + info.location.y)
+        track(info)
         guard let before = before(info) else { return DropProposal(operation: .forbidden) }
         state.hover(lane.key, before: before)
         // Copy, to match the provider: a plain string, which the drag
@@ -322,6 +357,14 @@ struct LaneDrop: DropDelegate {
             state.drop(card.wsId, in: key, before: before, rows: rows)
         }
         return true
+    }
+
+    /// Moves the floating copy to the pointer, with the lifted card's
+    /// middle when it is drawn in this lane.
+    private func track(_ info: DropInfo) {
+        let own = state.lifted.flatMap { card in rows.first { DropRule.isCard($0, card.wsId) } }
+        let mid = own.flatMap { frames[$0.id] }.map { top + $0.midY }
+        state.point(top + info.location.y, mid: mid)
     }
 
     /// The card the drop goes above, or .some(nil) for the lane's end;
