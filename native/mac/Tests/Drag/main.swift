@@ -139,6 +139,16 @@ check(carried.registeredTypeIdentifiers == ["dev.jonyardley.cockpit.card"], "a d
 check(!carried.hasItemConformingToTypeIdentifier(UTType.plainText.identifier), "a drag carries no text, so a terminal types nothing")
 check(!carried.hasItemConformingToTypeIdentifier(UTType.url.identifier), "a drag carries no link or file")
 check(!DragItem.type.conforms(to: .text), "our type is not text")
+
+// The shipped declaration, which the code's own fallback above cannot see:
+// the identifier the code asks for, conforming to data and nothing textual.
+let plist = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "Sidebar/Info.plist"
+let declared = (NSDictionary(contentsOfFile: plist)?["UTExportedTypeDeclarations"] as? [[String: Any]])?
+    .first { $0["UTTypeIdentifier"] as? String == DragItem.type.identifier }
+check(declared != nil, "Info.plist declares the type the drag carries")
+let conforms = declared?["UTTypeConformsTo"] as? [String] ?? []
+check(conforms == [UTType.data.identifier], "Info.plist declares it as plain data")
+check(conforms.allSatisfy { UTType($0)?.conforms(to: .text) != true }, "Info.plist declares nothing textual")
 check(await DragItem.read(carried) == DragItem.text(card("A")), "a drop on a lane reads the card back")
 check(await DragItem.read(NSItemProvider(object: DragItem.text(card("A")) as NSString)) == nil,
       "text that spells a card, dragged in from elsewhere, carries no card")

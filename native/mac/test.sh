@@ -15,7 +15,8 @@
 #    runner's own test matches against the bridge, has one entry per
 #    effect the runner takes from outbox/.
 # 6. Drag and drop: where a dropped card lands, how a drop is drawn
-#    until panel.json shows it, and that a drag carries only our own type.
+#    until panel.json shows it, and that a drag carries only our own type,
+#    declared in Sidebar/Info.plist as data, not text.
 # 7. The panel's clicks and menus: what each merged chip and menu pick
 #    sends, over every fixture.
 # 8. A click's selection: drawn on the click, until panel.json shows it
@@ -35,7 +36,7 @@ build/outbox-check ../runner/tests/actions.json
 swiftc -swift-version 6 -o build/effects-check Tests/Effects/main.swift
 build/effects-check ../runner/tests/effects.json
 swiftc -swift-version 6 -o build/drag-check Generated/PanelTypes.swift Sidebar/Model/*.swift Sidebar/Live/PendingMove.swift Sidebar/Views/DragItem.swift Tests/Drag/main.swift
-build/drag-check
+build/drag-check Sidebar/Info.plist
 swiftc -swift-version 6 -o build/actions-check Generated/PanelTypes.swift Sidebar/Model/*.swift Tests/Actions/main.swift
 build/actions-check ../fixtures
 swiftc -swift-version 6 -o build/select-check Generated/PanelTypes.swift Sidebar/Model/*.swift Sidebar/Live/PendingMove.swift Sidebar/Live/PendingSelect.swift Tests/Select/main.swift
