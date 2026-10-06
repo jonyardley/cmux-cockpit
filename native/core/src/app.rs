@@ -49,6 +49,11 @@ pub enum Event {
     /// dismissals and overrides Jon set since the state file was read stay.
     #[facet(skip)]
     Projects(#[facet(opaque)] Vec<Project>),
+    /// Jon's home folder, which the runner reads from its environment and
+    /// a sandboxed shell cannot: it expands a "~" root in the editor, sorts
+    /// the home folder out of Projects and offers a folder as a project.
+    /// The sidebar's core takes it from data.json (#270).
+    Home { home: Option<String> },
     /// Asks the shell to draw the current view again.
     Refresh,
     /// Moves the card `id` into `lane`, just above the card `before`, or
@@ -128,6 +133,7 @@ impl Event {
             Event::Data(_)
             | Event::State(_)
             | Event::Projects(_)
+            | Event::Home { .. }
             | Event::Refresh
             | Event::PrPollOn
             | Event::PanelOn
@@ -558,6 +564,7 @@ impl App for Cockpit {
                 s.reseed(*saved);
             }
             Event::Projects(projects) => model.session.set_projects(projects),
+            Event::Home { home } => model.session.home = home,
             Event::Refresh => {}
             Event::PrPollOn => model.session.pr_poll.turn_on(),
             Event::PanelOn => model.panel_on = true,
@@ -610,6 +617,7 @@ mod tests {
         assert!(!Event::Refresh.is_action());
         assert!(!Event::CmuxFailed { id: "a".into() }.is_action());
         assert!(!Event::Projects(Vec::new()).is_action());
+        assert!(!Event::Home { home: None }.is_action());
     }
 
     #[test]
@@ -676,7 +684,9 @@ mod tests {
     fn a_new_project_saved_in_the_editor_goes_out_as_a_state_write_then_its_workspace() {
         let app = Cockpit;
         let mut model = Model::default();
-        model.session.home = Some("/Users/jon".into());
+        // Home as the sidebar's core has it, by event (#270).
+        let home = Some("/Users/jon".to_string());
+        let _ = app.update(Event::Home { home }, &mut model);
         let _ = app.update(frame(100.0), &mut model);
         let _ = app.update(Event::Edit(EditEvent::OpenNew), &mut model);
         let typed = EditEvent::Folder("~/dev/pianola".into());
