@@ -31,8 +31,7 @@ enum DragItem {
 
     /// The card a drop carries, or nil when it carries none of our type.
     @MainActor static func read(_ provider: NSItemProvider) async -> String? {
-        guard provider.hasItemConformingToTypeIdentifier(type.identifier) else { return nil }
-        return await withCheckedContinuation { done in
+        await withCheckedContinuation { done in
             _ = provider.loadDataRepresentation(forTypeIdentifier: type.identifier) { data, _ in
                 done.resume(returning: data.flatMap { String(data: $0, encoding: .utf8) })
             }
