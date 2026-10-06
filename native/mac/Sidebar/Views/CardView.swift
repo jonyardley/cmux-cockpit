@@ -46,14 +46,15 @@ struct CardView: View {
         .padding(.vertical, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(Palette.Own.cardFace), in: .rect(cornerRadius: Metrics.corner))
-        .overlay(Outline(selected: card.selected))
+        .overlay(Outline(selected: SelectState.shared.shows(card.wsId, selected: card.selected)))
         .opacity(card.dimmed ? 0.55 : 1)
         .cardActions(card)
     }
 }
 
 /// A card's edge: the select ink at 2pt on cmux's selected workspace, the
-/// one open in the terminal, else the hairline (status.ts outline). Drawn
+/// one open in the terminal, else the hairline (status.ts outline). A
+/// click moves it at once, before cmux says so (Select.swift). Drawn
 /// inside the card, so the wider line moves nothing.
 struct Outline: View {
     let selected: Bool

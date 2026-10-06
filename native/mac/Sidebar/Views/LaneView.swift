@@ -63,10 +63,13 @@ struct AnchorBadge: View {
                 }
             }
             .padding(.horizontal, 4)
-            .background(Color(Token.select).opacity(anchor.selected ? 0.12 : 0), in: .rect(cornerRadius: 6))
+            .background(Color(Token.select).opacity(selected ? 0.12 : 0), in: .rect(cornerRadius: 6))
         }
         .buttonStyle(.plain)
     }
+
+    /// Shaded from the click, before cmux says so (Select.swift).
+    private var selected: Bool { SelectState.shared.shows(anchor.id, selected: anchor.selected) }
 }
 
 /// A lane's header: fold mark, marker, name, anchor and unread badge, the
