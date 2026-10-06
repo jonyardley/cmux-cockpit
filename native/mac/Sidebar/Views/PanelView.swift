@@ -14,6 +14,8 @@ struct AllView: View {
             let moves = PendingMove.unconfirmed(DragState.shared.pending, lanes: panel.lanes)
             ForEach(panel.lanes, id: \.key) { LaneView(lane: $0, moves: moves) }
         }
+        .coordinateSpace(name: FloatingCard.space)
+        .overlay(alignment: .topLeading) { FloatingCard(state: DragState.shared) }
     }
 }
 

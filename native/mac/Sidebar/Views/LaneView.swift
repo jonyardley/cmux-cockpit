@@ -115,10 +115,10 @@ struct LaneView: View {
     var moves: [PendingMove] = []
     private let drag = DragState.shared
     @State private var frames: [String: CGRect] = [:]
+    @State private var top: CGFloat = 0
 
     var body: some View {
-        let settled = PendingMove.show(lane, moves)
-        let shown = drag.preview.map { PendingMove.show(settled, [$0]) } ?? settled
+        let shown = PendingMove.show(lane, moves)
         let space = "lane:" + String(describing: lane.key)
         VStack(alignment: .leading, spacing: 4) {
             LaneHeader(lane: shown)
@@ -132,10 +132,14 @@ struct LaneView: View {
         }
         .coordinateSpace(name: space)
         .overlay(alignment: .topLeading) { landing(shown) }
+        .background(GeometryReader { geo in
+            let y = geo.frame(in: .named(FloatingCard.space)).minY
+            Color.clear.onAppear { top = y }.onChange(of: y) { _, now in top = now }
+        })
         .onPreferenceChange(RowFrames.self) { next in
             MainActor.assumeIsolated { if next != frames { frames = next } }
         }
-        .onDrop(of: [.plainText], delegate: LaneDrop(lane: lane, rows: shown.rows, settled: settled.rows, frames: frames, state: drag))
+        .onDrop(of: [.plainText], delegate: LaneDrop(lane: lane, rows: shown.rows, frames: frames, top: top, state: drag))
         // Hover never fires while a drag is in flight, so a hover with a
         // card still lifted means the drag ended without a drop: Escape,
         // or let go outside every lane.
@@ -144,12 +148,10 @@ struct LaneView: View {
         }
     }
 
-    /// The landing line, only on a folded lane: an open lane draws the
-    /// card itself where it would land.
     @ViewBuilder
     private func landing(_ shown: Lane) -> some View {
-        if shown.collapsed, let over = drag.over, over.lane == lane.key,
-           let y = LandingSpot.y(before: nil, rows: [], frames: frames) {
+        if let over = drag.over, over.lane == lane.key,
+           let y = LandingSpot.y(before: shown.collapsed ? nil : over.before, rows: shown.collapsed ? [] : shown.rows, frames: frames) {
             LandingLine().offset(y: y - 1).allowsHitTesting(false)
         }
     }

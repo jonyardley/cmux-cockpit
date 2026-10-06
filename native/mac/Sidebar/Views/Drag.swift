@@ -36,6 +36,11 @@ final class DragState {
     /// the end), for the landing line.
     private(set) var over: (lane: LaneKey, before: String?)?
     private(set) var pending: [PendingMove] = []
+    /// Where the pointer is, down the All view, while it is over a lane:
+    /// the floating copy of the lifted card is drawn there. The drag
+    /// picture itself is see-through, so nothing of macOS's lingers while
+    /// it hands the drop over.
+    private(set) var pointer: CGFloat?
     /// Watches for the mouse button coming up while a card is lifted.
     @ObservationIgnored private var watch: Task<Void, Never>?
     /// The card the release watch let go of, and when: cmux can hand the
@@ -48,16 +53,11 @@ final class DragState {
         lifted = card
         from = lane
         over = nil
+        pointer = nil
         released = nil
         DragLog.lifted()
         watch?.cancel()
         watch = Task { [weak self] in await self?.settleOnRelease() }
-    }
-
-    /// The drop the pointer is over, drawn in place while the drag lasts.
-    var preview: PendingMove? {
-        guard let lifted, let from, let over else { return nil }
-        return PendingMove.preview(lifted, from: from, lane: over.lane, before: over.before)
     }
 
     /// The card a drop carries: the one lifted, else the one the release
@@ -96,14 +96,13 @@ final class DragState {
         }
     }
 
-    /// The pointer left a lane. While a card is lifted it stays drawn
-    /// where it last would land: the lane can be told the pointer left as
-    /// the button comes up, before the drop, and clearing then snaps the
-    /// card back to its old slot for the 0.4 s the drop takes to arrive.
+    /// The pointer is at `y` down the All view.
+    func point(_ y: CGFloat) {
+        if pointer != y { pointer = y }
+    }
+
     func leave(_ lane: LaneKey) {
-        guard over?.lane == lane else { return }
-        DragLog.note("left \(lane)")
-        if lifted == nil { over = nil }
+        if over?.lane == lane { over = nil }
     }
 
     /// The drag is over without a drop (Escape, or let go outside a lane):
@@ -114,6 +113,7 @@ final class DragState {
         watch?.cancel()
         watch = nil
         if over != nil { over = nil }
+        if pointer != nil { pointer = nil }
         guard lifted != nil else { return }
         DragLog.note("settled: \(why)")
         lifted = nil
@@ -206,34 +206,50 @@ private struct Liftable: ViewModifier {
 
     func body(content: Content) -> some View {
         if case .card(let card) = row, card.movable {
-            let lifted = state.lifted?.wsId == card.wsId
-            // The lifted card is drawn where it would land: in the lane under
-            // the pointer, else back in its own. A copy left behind in its
-            // own lane is the gap it would leave.
-            let here = (state.over?.lane ?? state.from) == lane
-            let gap = lifted && !here
+            let gap = state.lifted?.wsId == card.wsId
             content
                 .opacity(gap ? 0 : 1)
                 .overlay {
                     if gap {
                         RoundedRectangle(cornerRadius: Metrics.corner)
                             .strokeBorder(Color(Token.cardEdge), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
-                    } else if lifted {
-                        RoundedRectangle(cornerRadius: Metrics.corner)
-                            .strokeBorder(Color(Token.blue), lineWidth: 1.5)
                     }
                 }
                 .onDrag {
                     state.lift(card, from: lane)
                     return DragItem.provider(card)
                 } preview: {
-                    // No picture under the pointer: the card itself moves to
-                    // where it would land, so nothing is left to clear while
-                    // macOS hands the drop over.
+                    // See-through: the floating card (FloatingCard) is drawn
+                    // by the panel instead, so macOS has no picture to leave
+                    // on screen while it hands the drop over.
                     Color.clear.frame(width: 1, height: 1)
                 }
         } else {
             content
+        }
+    }
+}
+
+/// The lifted card, drawn over the All view at the pointer's height while
+/// it is over a lane, in place of macOS's drag picture. An overlay, so the
+/// lanes under it never move.
+struct FloatingCard: View {
+    /// The All view's coordinate space, which lanes measure their tops in.
+    nonisolated static let space = "all"
+
+    let state: DragState
+
+    var body: some View {
+        if let card = state.lifted, let y = state.pointer {
+            GeometryReader { geo in
+                RowView(row: .card(card))
+                    .frame(width: geo.size.width)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .opacity(0.9)
+                    .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
+                    .position(x: geo.size.width / 2, y: y)
+            }
+            .allowsHitTesting(false)
         }
     }
 }
@@ -250,12 +266,10 @@ struct LandingLine: View {
 /// the card at its end.
 struct LaneDrop: DropDelegate {
     let lane: Lane
-    /// The rows as drawn, the hover preview included, which the frames
-    /// measure and the landing slot is read against.
     let rows: [Row]
-    /// The rows without the preview, which the drop is judged against.
-    let settled: [Row]
     let frames: [String: CGRect]
+    /// The lane's top, down the All view, to place the floating card.
+    let top: CGFloat
     let state: DragState
 
     func validateDrop(info: DropInfo) -> Bool {
@@ -263,10 +277,12 @@ struct LaneDrop: DropDelegate {
     }
 
     func dropEntered(info: DropInfo) {
+        state.point(top + info.location.y)
         if let before = before(info) { state.hover(lane.key, before: before) }
     }
 
     func dropUpdated(info: DropInfo) -> DropProposal? {
+        state.point(top + info.location.y)
         guard let before = before(info) else { return DropProposal(operation: .forbidden) }
         state.hover(lane.key, before: before)
         // Copy, to match the provider: a plain string, which the drag
@@ -285,7 +301,7 @@ struct LaneDrop: DropDelegate {
             return false
         }
         if state.lifted != nil {
-            state.drop(card.wsId, in: lane.key, before: before, rows: settled)
+            state.drop(card.wsId, in: lane.key, before: before, rows: rows)
             return true
         }
         // A late drop: the release watch has let go, so this could be text
@@ -296,7 +312,7 @@ struct LaneDrop: DropDelegate {
             state.settle("late drop refused")
             return false
         }
-        let (key, rows, state) = (lane.key, settled, state)
+        let (key, rows, state) = (lane.key, rows, state)
         Task { @MainActor in
             guard await DragItem.read(provider) == DragItem.text(card) else {
                 DragLog.note("late drop refused: not the card let go of")

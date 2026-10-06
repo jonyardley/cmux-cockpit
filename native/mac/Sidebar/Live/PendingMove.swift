@@ -68,10 +68,6 @@ struct PendingMove: Equatable {
     let lane: LaneKey
     let before: String?
     let until: Date
-    /// A hover preview into another lane: the card is drawn where it would
-    /// land and its own slot stays open as a gap, so the lanes above the
-    /// pointer keep their height and the slot under it does not jump.
-    var holdsSlot = false
 
     var action: SidebarAction { .moveCard(id: card.wsId, lane: lane, before: before) }
 
@@ -97,12 +93,6 @@ struct PendingMove: Equatable {
         }
     }
 
-    /// The drop the pointer is over, drawn before the button comes up so
-    /// the 0.4 s macOS takes to hand the drop over shows nothing new.
-    static func preview(_ card: Card, from: LaneKey, lane: LaneKey, before: String?) -> PendingMove {
-        PendingMove(card: card, from: from, lane: lane, before: before, until: .distantFuture, holdsSlot: from != lane)
-    }
-
     /// The moves still drawn at `now`.
     static func live(_ moves: [PendingMove], now: Date) -> [PendingMove] {
         moves.filter { $0.until > now }
@@ -117,7 +107,6 @@ struct PendingMove: Equatable {
         var shown = lane
         var count = Int(lane.count)
         for move in moves {
-            if move.holdsSlot && lane.key == move.from { continue }
             let had = lane.rows.contains { DropRule.isCard($0, move.card.wsId) }
             shown.rows.removeAll { DropRule.isCard($0, move.card.wsId) }
             if lane.key == move.lane {
