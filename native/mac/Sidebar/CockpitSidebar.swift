@@ -46,6 +46,9 @@ final class HostLink {
             SwitchWorkspace.outbox.run(id)
             return
         }
+        // The core hears of it on the click, so the card stops drawing as
+        // Ready before cmux publishes the selection.
+        Outbox.send(.selected(id: id))
         Task { @MainActor in
             do {
                 try await host.selectWorkspace(uuid)

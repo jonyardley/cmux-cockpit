@@ -2,6 +2,7 @@
   "view": "Projects",
   "next": {
     "Step": {
+      "ws_id": "one-b",
       "title": "One: docs",
       "place": "1 of 2"
     }

@@ -96,10 +96,20 @@ impl Session {
         let Some(id) = id.filter(|id| !id.is_empty()) else {
             return;
         };
-        self.select_override = Some((id.to_string(), now_epoch(data)));
+        self.mark_selected(data, id);
         self.cmux(
             "workspace.select",
             vec![("workspace_id", crate::session::Param::Str(id.to_string()))],
         );
+    }
+
+    /// Shows a workspace selected at once that the shell has already asked
+    /// cmux to select itself (the sidebar's SDK select), with no cmux call
+    /// of its own. It lapses as a select through the core does.
+    pub fn mark_selected(&mut self, data: &Data, id: &str) {
+        if id.is_empty() {
+            return;
+        }
+        self.select_override = Some((id.to_string(), now_epoch(data)));
     }
 }

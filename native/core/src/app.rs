@@ -52,6 +52,9 @@ pub enum Event {
     },
     /// Switches cmux to the workspace, as a tap on its card does.
     SwitchTo { id: String },
+    /// The shell selected the workspace itself (the sidebar's SDK select):
+    /// it draws selected at once, with no cmux call from the core.
+    Selected { id: String },
     /// Dismisses the workspace's asks from Needs you, as its cross does.
     Dismiss { id: String },
     /// Flips the view between All and Projects.
@@ -113,6 +116,7 @@ impl Event {
             | Event::CmuxFailed { .. } => false,
             Event::MoveCard { .. }
             | Event::SwitchTo { .. }
+            | Event::Selected { .. }
             | Event::Dismiss { .. }
             | Event::FlipView
             | Event::Edit(_)
@@ -373,6 +377,7 @@ impl Model {
         match event {
             Event::MoveCard { id, lane, before } => s.move_card(data, &id, lane, before.as_deref()),
             Event::SwitchTo { id } => s.select_workspace(data, Some(&id)),
+            Event::Selected { id } => s.mark_selected(data, &id),
             Event::Dismiss { id } => s.dismiss_waiting(data, data.ws_by_id(&id)),
             Event::Edit(e) => s.edit(data, e),
             Event::Menu(e) => s.menu(data, e),
@@ -507,6 +512,7 @@ mod tests {
         assert!(Event::CloseMerged { id: "a".into() }.is_action());
         assert!(Event::KeepMerged { id: "a".into() }.is_action());
         assert!(Event::Next.is_action());
+        assert!(Event::Selected { id: "a".into() }.is_action());
         assert!(Event::ToggleQuiet.is_action());
         assert!(Event::ToggleProject { key: "a".into() }.is_action());
         assert!(
@@ -656,6 +662,20 @@ mod tests {
         assert_eq!(effects.len(), 2);
         assert!(matches!(&effects[0], Effect::AgentMessage(m) if m.operation == want));
         assert!(matches!(&effects[1], Effect::Render(_)));
+    }
+
+    #[test]
+    fn a_select_the_shell_made_itself_draws_selected_with_no_cmux_call() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(frame(100.0), &mut model);
+        let selected = Event::Selected { id: "b".into() };
+        assert_eq!(asked(&app, &mut model, selected), ["render"]);
+        let Some(data) = &model.data else {
+            panic!("the frame is held")
+        };
+        let b = data.ws_by_id("b");
+        assert!(model.session.is_selected(data, b));
     }
 
     #[test]

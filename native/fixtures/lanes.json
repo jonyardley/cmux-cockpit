@@ -2,6 +2,7 @@
   "view": "All",
   "next": {
     "Step": {
+      "ws_id": "needs",
       "title": "Chip colours",
       "place": "1 of 3"
     }

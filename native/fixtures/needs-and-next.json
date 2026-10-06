@@ -2,6 +2,7 @@
   "view": "All",
   "next": {
     "Step": {
+      "ws_id": "n1",
       "title": "Oldest question",
       "place": "1 of 6"
     }

@@ -139,6 +139,7 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("needs-an
     let lines = text.split(separator: "\n").map { $0.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
     let next = NextText.target(panel.next)
     check(lines.contains("\(Words.next) \(next.title) \(next.place)"), "Next reads as the pane's")
+    check(NextText.targetId(panel.next) == "n1", "a Next click outlines the card it goes to")
     check(lines.contains("\(Words.needs) \(panel.needs.count) \(panel.needs.wait)"), "Needs you reads as the pane's")
     check(lines.contains(panel.needs.more), "the strip's more line reads as the pane's")
     for row in panel.needs.rows {
@@ -258,6 +259,7 @@ if let panel = load("lanes") {
 if let panel = load("review-verdicts") {
     check(!NeedsText.shows(panel.needs), "Needs you hides with nothing waiting")
     check(NextText.isNothing(panel.next), "Next has nowhere to go")
+    check(NextText.targetId(panel.next) == nil, "a Next click with nowhere to go outlines nothing")
 }
 
 // MARK: Colours

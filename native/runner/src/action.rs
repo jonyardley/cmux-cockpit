@@ -7,6 +7,7 @@
 //! ```json
 //! {"MoveCard": {"id": "W1", "lane": "review", "before": null}}
 //! {"SwitchTo": {"id": "W1"}}
+//! {"Selected": {"id": "W1"}}
 //! "FlipView"
 //! {"Menu": {"OpenCard": {"id": "W1"}}}
 //! {"Menu": {"Pick": {"Lane": "parked"}}}
@@ -38,6 +39,9 @@ pub enum Action {
         before: Option<String>,
     },
     SwitchTo {
+        id: String,
+    },
+    Selected {
         id: String,
     },
     Dismiss {
@@ -87,6 +91,7 @@ impl Action {
         match self {
             Action::MoveCard { .. } => "MoveCard",
             Action::SwitchTo { .. } => "SwitchTo",
+            Action::Selected { .. } => "Selected",
             Action::Dismiss { .. } => "Dismiss",
             Action::FlipView => "FlipView",
             Action::Edit(_) => "Edit",
@@ -110,6 +115,7 @@ impl From<Action> for Event {
         match a {
             Action::MoveCard { id, lane, before } => Event::MoveCard { id, lane, before },
             Action::SwitchTo { id } => Event::SwitchTo { id },
+            Action::Selected { id } => Event::Selected { id },
             Action::Dismiss { id } => Event::Dismiss { id },
             Action::FlipView => Event::FlipView,
             Action::Edit(e) => Event::Edit(e),
@@ -134,9 +140,10 @@ mod tests {
     use cockpit_core::menu::MenuAction;
 
     /// One file per variant, as the module's head documents them.
-    const EVERY: [&str; 16] = [
+    const EVERY: [&str; 17] = [
         r#"{"MoveCard": {"id": "W1", "lane": "review", "before": null}}"#,
         r#"{"SwitchTo": {"id": "W1"}}"#,
+        r#"{"Selected": {"id": "W1"}}"#,
         r#"{"Dismiss": {"id": "W1"}}"#,
         r#""FlipView""#,
         r#"{"Edit": {"Name": "Cockpit"}}"#,
@@ -172,22 +179,23 @@ mod tests {
         let top = match a {
             Action::MoveCard { .. } => 0,
             Action::SwitchTo { .. } => 1,
-            Action::Dismiss { .. } => 2,
-            Action::FlipView => 3,
-            Action::Edit(_) => 4,
-            Action::OpenProject { .. } => 5,
-            Action::FileForReview { .. } => 6,
-            Action::ParkMerged { .. } => 7,
-            Action::CloseMerged { .. } => 8,
-            Action::KeepMerged { .. } => 9,
-            Action::Menu(_) => 10,
-            Action::Next => 11,
-            Action::MessageAgent { .. } => 12,
-            Action::ToggleLane { .. } => 13,
-            Action::ToggleProject { .. } => 14,
-            Action::ToggleQuiet => 15,
+            Action::Selected { .. } => 2,
+            Action::Dismiss { .. } => 3,
+            Action::FlipView => 4,
+            Action::Edit(_) => 5,
+            Action::OpenProject { .. } => 6,
+            Action::FileForReview { .. } => 7,
+            Action::ParkMerged { .. } => 8,
+            Action::CloseMerged { .. } => 9,
+            Action::KeepMerged { .. } => 10,
+            Action::Menu(_) => 11,
+            Action::Next => 12,
+            Action::MessageAgent { .. } => 13,
+            Action::ToggleLane { .. } => 14,
+            Action::ToggleProject { .. } => 15,
+            Action::ToggleQuiet => 16,
         };
-        let mut out = vec![("Action", top, 16)];
+        let mut out = vec![("Action", top, 17)];
         if let Action::Edit(e) = a {
             let n = match e {
                 EditEvent::OpenNew => 0,
@@ -301,6 +309,7 @@ mod tests {
             r#""Refresh""#,
             r#"{"MoveCard": {"id": "W1", "lane": "nowhere", "before": null}}"#,
             r#"{"SwitchTo": {"id": "W1", "extra": 1}}"#,
+            r#"{"Selected": {}}"#,
             r#"{"Menu": {"OpenCard": {"id": "W1", "typo": 1}}}"#,
             r#"{"Edit": {"AddSuggested": {"dir": "/a", "typo": 1}}}"#,
             r#"{"MessageAgent": {"id": "W1"}}"#,

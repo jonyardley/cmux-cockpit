@@ -104,6 +104,8 @@ pub enum NextLine {
     #[default]
     Nothing,
     Step {
+        /// The target's workspace id, so a click can draw it selected at once.
+        ws_id: String,
         title: String,
         place: String,
     },

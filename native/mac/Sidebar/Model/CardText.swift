@@ -62,13 +62,18 @@ enum NextText {
     static func target(_ next: NextLine) -> (title: String, place: String) {
         switch next {
         case .nothing: (Words.nextNothing, "")
-        case .step(let title, let place): (title, place)
+        case .step(_, let title, let place): (title, place)
         }
     }
 
     static func isNothing(_ next: NextLine) -> Bool {
-        if case .nothing = next { return true }
-        return false
+        targetId(next) == nil
+    }
+
+    /// The workspace the next press selects, or nil when nothing waits.
+    static func targetId(_ next: NextLine) -> String? {
+        if case .step(let wsId, _, _) = next { return wsId }
+        return nil
     }
 }
 

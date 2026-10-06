@@ -40,7 +40,7 @@ pub fn next(line: &NextLine, inner: usize) -> Line<'static> {
     let label = Span::styled(NEXT_LABEL, theme::strong(Token::Heading));
     let room = inner.saturating_sub(width(NEXT_LABEL) + 2);
     match line {
-        NextLine::Step { title, place } => {
+        NextLine::Step { title, place, .. } => {
             let place = fit(place, room);
             let title_room = room.saturating_sub(width(&place) + 1);
             let left = vec![

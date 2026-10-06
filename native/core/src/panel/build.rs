@@ -240,6 +240,7 @@ pub fn chips_for_density(d: Density) -> ChipsFor {
 fn next_line(data: &Data, view: &ViewModel) -> NextLine {
     match &view.next.step {
         Some(step) => NextLine::Step {
+            ws_id: step.target.clone(),
             title: title_of(data.ws_by_id(&step.target), &step.target),
             place: format!("{} of {}", step.position, step.total),
         },

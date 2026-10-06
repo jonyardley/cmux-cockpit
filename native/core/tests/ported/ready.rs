@@ -83,6 +83,19 @@ mod is_ready {
     }
 
     #[test]
+    fn clears_the_moment_the_sidebar_selects_it_through_cmuxs_sdk() {
+        let (mut s, mut data, mut fx) = setup();
+        let w = ready_ws(&mut fx, "clicked");
+        s.mark_selected(&data, "clicked");
+        assert!(!s.is_ready(&data, Some(&w)));
+        assert!(s.is_ready(&data, Some(&ready_ws(&mut fx, "other"))));
+        assert!(s.take_outbox().is_empty(), "no cmux call of its own");
+        // A select cmux never publishes lapses, and the card is Ready again.
+        data.epoch = Some(NOW + 5.0);
+        assert!(s.is_ready(&data, Some(&w)));
+    }
+
+    #[test]
     fn reports_an_ended_agent_that_worked_beside_a_fresh_idle_session_that_never_did() {
         let (mut s, data, mut fx) = setup();
         let fresh = fx.agent(Idle).since(NOW - 30.0);

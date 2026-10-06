@@ -11,6 +11,9 @@ import Foundation
 enum SidebarAction: Encodable, Equatable {
     case moveCard(id: String, lane: LaneKey, before: String?)
     case switchTo(id: String)
+    /// The sidebar selected the workspace through cmux's SDK itself: the
+    /// core draws it selected with no cmux call of its own.
+    case selected(id: String)
     case dismiss(id: String)
     case flipView
     case edit(Edit)
@@ -95,6 +98,7 @@ enum SidebarAction: Encodable, Equatable {
             // null, never left out: the documented shape.
             try f.encode(before, forKey: Key("before"))
         case let .switchTo(id): try tagged(encoder, "SwitchTo", ["id": id])
+        case let .selected(id): try tagged(encoder, "Selected", ["id": id])
         case let .dismiss(id): try tagged(encoder, "Dismiss", ["id": id])
         case .flipView: try unit(encoder, "FlipView")
         case let .edit(e): try newtype(encoder, "Edit", e)
