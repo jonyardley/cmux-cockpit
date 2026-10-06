@@ -1,0 +1,7 @@
+[
+  { "Cmux": { "method": "workspace.reorder", "params": { "workspace_id": "W1", "index": 4 } } },
+  { "Persist": { "key": "dismissed.W1", "value": { "s1": 900 } } },
+  { "PrPoll": { "directory": "/dev/cockpit", "asked": 1791229864.5 } },
+  { "OpenUrl": { "url": "https://github.com/o/r/pull/1" } },
+  { "AgentMessage": { "workspace": "W1", "text": "Rebase when free." } }
+]
