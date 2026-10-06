@@ -89,3 +89,4 @@ jobs:
           UNSIGNED: "1"
       - run: ./test.sh
       - run: test -d build/Build/Products/Debug/Cockpit.app/Contents/Extensions/CockpitSidebar.appex
+      - run: test -x build/Build/Products/Debug/Cockpit.app/Contents/MacOS/cockpit-publish

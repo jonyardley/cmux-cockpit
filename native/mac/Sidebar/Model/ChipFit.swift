@@ -31,6 +31,15 @@ enum ChipFit {
         return (widths.count, false)
     }
 
+    /// The lines a card may draw its chips as, widest first, as indices
+    /// into `givesWay`: every chip; then, with an ellipsis after, the
+    /// chips that do not give way, dropping from the end down to none. A
+    /// view draws the first that fits; `fit` picks the same one by width.
+    static func candidates(givesWay: [Bool]) -> [[Int]] {
+        let keep = givesWay.indices.filter { !givesWay[$0] }
+        return [Array(givesWay.indices)] + (0...keep.count).reversed().map { Array(keep.prefix($0)) }
+    }
+
     static func fit(_ widths: [Double], givesWay: [Bool], gap: Double, room: Double, tail: Double) -> Fit {
         let (all, cut) = count(widths, gap: gap, room: room, tail: tail)
         if !cut { return Fit(shown: Array(repeating: true, count: all), cut: false) }

@@ -159,6 +159,24 @@ check(ChipFit.fit([50], givesWay: [false], gap: 2, room: 10, tail: 4) == .init(s
 check(ChipFit.fit([], givesWay: [], gap: 2, room: 0, tail: 4) == .init(shown: [], cut: false), "no chips fit nothing")
 check(ChipFit.width([10, 10], gap: 2) == 22 && ChipFit.width([], gap: 2) == 0, "a line's width counts the gaps between")
 
+check(ChipFit.candidates(givesWay: [false, true, false]) == [[0, 1, 2], [0, 2], [0], []], "the lines to try: all, then the branch gone, then from the end")
+check(ChipFit.candidates(givesWay: []) == [[], []], "no chips, nothing to try but nothing")
+
+/// The first candidate that fits by width, as ViewThatFits picks it.
+func firstFitting(_ widths: [Double], givesWay: [Bool], gap: Double, room: Double, tail: Double) -> ChipFit.Fit? {
+    for (n, shown) in ChipFit.candidates(givesWay: givesWay).enumerated() {
+        let cut = n > 0
+        let w = ChipFit.width(shown.map { widths[$0] } + (cut ? [tail] : []), gap: gap)
+        if w <= room {
+            return .init(shown: widths.indices.map(shown.contains), cut: cut)
+        }
+    }
+    return nil
+}
+for (widths, ways, room) in [([10.0, 10, 10], none, 34.0), ([10, 10, 10], none, 30), ([10, 30, 10], [false, true, false], 40), ([50], [false], 10)] {
+    check(firstFitting(widths, givesWay: ways, gap: 2, room: room, tail: 4) == ChipFit.fit(widths, givesWay: ways, gap: 2, room: room, tail: 4), "the first line that fits is the pane's at \(room)")
+}
+
 // MARK: What the sidebar shows
 
 let sample = load("lanes")
