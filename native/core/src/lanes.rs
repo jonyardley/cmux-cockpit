@@ -7,8 +7,12 @@ use serde::{Deserialize, Serialize};
 use crate::theme::Token;
 
 /// A lane's key; serialised as `as_str` names it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, facet::Facet,
+)]
 #[serde(rename_all = "lowercase")]
+#[repr(C)]
+#[facet(rename_all = "lowercase")]
 pub enum LaneKey {
     Main,
     Review,

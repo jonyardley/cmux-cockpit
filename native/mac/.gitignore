@@ -1,3 +1,5 @@
 .sdk/
 build/
 *.xcodeproj/
+# The panel types native/typegen writes on every build and test run.
+Generated/

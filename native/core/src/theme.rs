@@ -5,8 +5,10 @@
 use serde::Serialize;
 
 /// A colour token.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, facet::Facet)]
 #[serde(rename_all = "camelCase")]
+#[repr(C)]
+#[facet(rename_all = "camelCase")]
 pub enum Token {
     /// No colour: "clear".
     Clear,
