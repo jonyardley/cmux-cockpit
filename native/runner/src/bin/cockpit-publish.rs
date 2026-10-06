@@ -15,7 +15,8 @@
 //! data.json alone, for a sidebar that runs the core itself (issue #269):
 //! it carries out the effects that core drops into outbox/ and writes
 //! their answers into inbox/. An action file waits in outbox/ then, as an
-//! effect file does with a core, for a helper started the other way.
+//! effect file does with a core, for a helper started the other way, for
+//! up to a minute (`publish::STALE`).
 //!
 //! It stops when its parent does, polling for that each wake: a stdin
 //! pipe would need the helper app to wire one up, and an app's stdin is

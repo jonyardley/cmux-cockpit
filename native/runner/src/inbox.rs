@@ -15,7 +15,8 @@
 //! a name starting with "." and then linked into place, which fails rather
 //! than replace a file already there, so a second helper writing in the
 //! same millisecond takes the next number instead. Nothing waits on an
-//! answer: one the sidebar never reads harms nothing.
+//! answer: one the sidebar has not taken within `publish::STALE` is
+//! deleted.
 
 use std::fs;
 use std::io::{self, ErrorKind};
@@ -23,6 +24,8 @@ use std::path::{Path, PathBuf};
 
 use cockpit_core::pr_poll::PrPolled;
 use serde::Serialize;
+
+use crate::publish::name_ms;
 
 pub const INBOX_DIR: &str = "inbox";
 /// Before an answer's temp file's name, then the writer's pid.
@@ -57,27 +60,62 @@ pub struct Inbox {
     dir: PathBuf,
     /// The next counter to try.
     next: u32,
+    /// The time of the last answer written, so a clock stepped back never
+    /// sorts a later answer first.
+    last_ms: u64,
 }
 
 impl Inbox {
     pub fn new(dir: PathBuf) -> Inbox {
-        Inbox { dir, next: 1 }
+        Inbox {
+            dir,
+            next: 1,
+            last_ms: 0,
+        }
     }
 
     pub fn dir(&self) -> &Path {
         &self.dir
     }
 
-    /// Writes one answer at wall-clock `ms`; the file's path.
+    /// Writes one answer at wall-clock `ms`, or the last answer's time if
+    /// that is later; the file's path. A folder gone since is made again.
     pub fn write(&mut self, answer: &Answer, ms: u64) -> io::Result<PathBuf> {
         let bytes = serde_json::to_vec(answer).map_err(io::Error::other)?;
+        let ms = ms.max(self.last_ms);
         let tmp = self
             .dir
             .join(format!("{TMP}{}-{}.tmp", std::process::id(), self.next));
-        fs::write(&tmp, &bytes)?;
-        let placed = self.place(&tmp, ms);
+        let mut wrote = fs::write(&tmp, &bytes);
+        if wrote
+            .as_ref()
+            .is_err_and(|e| e.kind() == ErrorKind::NotFound)
+        {
+            wrote = fs::create_dir_all(&self.dir).and_then(|()| fs::write(&tmp, &bytes));
+        }
+        let placed = wrote.and_then(|()| self.place(&tmp, ms));
         let _ = fs::remove_file(&tmp);
+        if placed.is_ok() {
+            self.last_ms = ms;
+        }
         placed
+    }
+
+    /// Deletes the answers written before `before_ms`, by their names.
+    pub fn prune(&self, before_ms: u64) {
+        let Ok(entries) = fs::read_dir(&self.dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let written = name
+                .to_str()
+                .filter(|n| n.ends_with(".json"))
+                .and_then(name_ms);
+            if written.is_some_and(|ms| ms < before_ms) {
+                let _ = fs::remove_file(entry.path());
+            }
+        }
     }
 
     /// Links the temp file in under the first free name from the counter.
@@ -195,19 +233,64 @@ mod tests {
         assert_eq!(all.len(), 4, "no temp file is left: {all:?}");
         // The counter wraps past six digits back to 1.
         inbox.next = COUNTER - 1;
-        let d = inbox.write(&failed, 2000).unwrap();
-        let e = inbox.write(&failed, 2000).unwrap();
+        let d = inbox.write(&failed, 1_000_000).unwrap();
+        let e = inbox.write(&failed, 1_000_000).unwrap();
         assert_eq!(
             [name(&d), name(&e)],
-            ["0000000002000-999999.json", "0000000002000-000001.json"]
+            ["0000001000000-999999.json", "0000001000000-000001.json"]
         );
         fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
-    fn a_folder_it_cannot_write_in_is_an_error() {
-        let mut inbox = Inbox::new(temp_dir("gone").join("missing"));
+    fn a_folder_it_cannot_make_is_an_error_and_leaves_nothing() {
+        let dir = temp_dir("blocked");
+        fs::write(dir.join("file"), "").unwrap();
+        let mut inbox = Inbox::new(dir.join("file").join("inbox"));
         let failed = Answer::CmuxFailed { id: "W1".into() };
         assert!(inbox.write(&failed, 1).is_err());
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1, "only the file");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_folder_gone_since_is_made_again() {
+        let dir = temp_dir("gone");
+        let mut inbox = Inbox::new(dir.join("inbox"));
+        let failed = Answer::CmuxFailed { id: "W1".into() };
+        let path = inbox.write(&failed, 1000).unwrap();
+        assert!(path.starts_with(dir.join("inbox")));
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_clock_stepped_back_still_sorts_later_answers_last() {
+        let dir = temp_dir("clock");
+        let mut inbox = Inbox::new(dir.clone());
+        let failed = Answer::CmuxFailed { id: "W1".into() };
+        let a = inbox.write(&failed, 5000).unwrap();
+        let b = inbox.write(&failed, 3000).unwrap();
+        assert!(a < b, "{a:?} then {b:?}");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn prune_deletes_only_answers_written_before_the_cut() {
+        let dir = temp_dir("prune");
+        let mut inbox = Inbox::new(dir.clone());
+        let failed = Answer::CmuxFailed { id: "W1".into() };
+        let old = inbox.write(&failed, 1000).unwrap();
+        let new = inbox.write(&failed, 9000).unwrap();
+        fs::write(dir.join("notes.json"), "").unwrap();
+        fs::write(dir.join(".answer-1-1.tmp"), "").unwrap();
+        inbox.prune(5000);
+        assert!(!old.exists());
+        assert!(new.exists());
+        assert!(dir.join("notes.json").exists());
+        assert!(
+            dir.join(".answer-1-1.tmp").exists(),
+            "the sweep's, not prune's"
+        );
+        fs::remove_dir_all(&dir).unwrap();
     }
 }

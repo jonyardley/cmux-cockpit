@@ -35,11 +35,13 @@
 //!   can act on it, claimed by an atomic rename, so it is applied at most
 //!   once even with two publishers running, then deleted. One it cannot
 //!   act on yet (an action with no core, an effect with one) waits where
-//!   it is, logged once, for a helper started the other way. One that
-//!   will not parse is deleted and logged, never retried.
+//!   it is, logged once, for a helper started the other way. Any file
+//!   older than `STALE` (a minute) is deleted and logged instead, so an
+//!   old move or message is never replayed. One that will not parse is
+//!   deleted and logged, never retried.
 //! - Back, with `--no-core`: each answer to an effect (a cmux call that
 //!   failed, a PR) goes into inbox/ as a file (inbox.rs), then the signal
-//!   is posted.
+//!   is posted. Answers older than `STALE` are deleted.
 
 use std::collections::HashSet;
 use std::fs;
@@ -66,6 +68,10 @@ pub const OUTBOX_DIR: &str = "outbox";
 const TAKEN: &str = ".taken-";
 /// How often the write tally is logged.
 pub const TALLY_EVERY: Duration = Duration::from_secs(60);
+/// How long an outbox file or an answer stays good. Past this a move, a
+/// message or a link is history: the sidebar's optimistic draw lapsed long
+/// ago, so carrying it out would surprise, and it is dropped instead.
+pub const STALE: Duration = Duration::from_secs(60);
 /// The longest the publisher waits for the runner to be ready before it
 /// writes whatever it has, as `cockpit-pane --once` does.
 pub const READY_LIMIT: Duration = Duration::from_secs(10);
@@ -177,9 +183,38 @@ fn tmp_prefix(name: &str) -> String {
 }
 
 fn epoch_ms() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
+    ms_of(SystemTime::now())
+}
+
+fn ms_of(t: SystemTime) -> u64 {
+    t.duration_since(UNIX_EPOCH)
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+}
+
+/// The epoch ms an outbox or inbox name starts with: its 13 digits before
+/// the "-". None for any other name.
+pub fn name_ms(name: &str) -> Option<u64> {
+    let (ms, _) = name.split_once('-')?;
+    if ms.len() != 13 || !ms.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    ms.parse().ok()
+}
+
+pub fn stale_ms() -> u64 {
+    u64::try_from(STALE.as_millis()).unwrap_or(u64::MAX)
+}
+
+/// Whether an outbox file was written more than `STALE` before `now_ms`:
+/// by its name's time, or for another name its modified time. One whose
+/// age cannot be read counts as fresh.
+fn is_stale(path: &Path, now_ms: u64) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str());
+    let written = name.and_then(name_ms).or_else(|| {
+        let modified = fs::metadata(path).and_then(|m| m.modified()).ok()?;
+        Some(ms_of(modified))
+    });
+    written.is_some_and(|w| now_ms.saturating_sub(w) > stale_ms())
 }
 
 /// The outbox files waiting, oldest name first: files ending ".json"
@@ -259,9 +294,12 @@ fn sweep(dir: &Path, prefix: &str, alive: &dyn Fn(u32) -> bool) {
 /// Writes the panel model out and takes actions in, in one shared folder.
 pub struct Publisher {
     root: PathBuf,
-    /// Outbox files that could not be claimed, or wait for a helper
-    /// started the other way, each logged once rather than on every wake.
+    /// Outbox files that could not be claimed, each logged once rather
+    /// than on every wake.
     stuck: HashSet<PathBuf>,
+    /// Outbox files that wait for a helper started the other way, logged
+    /// once and not read again: this helper's mode never changes.
+    waits: HashSet<PathBuf>,
     /// Where effects' answers go.
     inbox: Inbox,
     /// Whether the last inbox write failed, so a failure is logged once.
@@ -298,10 +336,13 @@ impl Publisher {
         sweep(&answers, inbox::TMP, alive);
         sweep(&root, &tmp_prefix(PANEL_FILE), alive);
         sweep(&root, &tmp_prefix(DATA_FILE), alive);
+        let inbox = Inbox::new(answers);
+        inbox.prune(epoch_ms().saturating_sub(stale_ms()));
         Ok(Publisher {
             root,
             stuck: HashSet::new(),
-            inbox: Inbox::new(answers),
+            waits: HashSet::new(),
+            inbox,
             inbox_failing: false,
             last: None,
             seq: 0,
@@ -322,16 +363,29 @@ impl Publisher {
 
     /// Takes every outbox file this helper can act on, oldest first: an
     /// action goes to the core, an effect is carried out (`Feed::carry`).
-    /// One for a helper started the other way waits. Returns how many
-    /// actions went in.
+    /// One for a helper started the other way waits, until it is stale
+    /// (`STALE`), when whichever helper sees it first drops it, so an old
+    /// move or message is never replayed. Returns how many actions went in.
     pub fn take_actions(&mut self, feed: &mut Feed, log: &mut dyn FnMut(String)) -> usize {
         let core = feed.has_core();
+        let now = epoch_ms();
         let mut applied = 0;
-        for path in waiting(&self.outbox()) {
+        let listed = waiting(&self.outbox());
+        let present: HashSet<&PathBuf> = listed.iter().collect();
+        self.stuck.retain(|p| present.contains(p));
+        self.waits.retain(|p| present.contains(p));
+        for path in &listed {
+            if is_stale(path, now) {
+                self.drop_stale(path, log);
+                continue;
+            }
+            if self.waits.contains(path) {
+                continue;
+            }
             // Read before it is claimed, so one that waits stays put.
-            match fs::read_to_string(&path).map(|t| OutboxFile::parse(&t)) {
+            match fs::read_to_string(path).map(|t| OutboxFile::parse(&t)) {
                 Ok(Ok(file)) if !file.runs_with(core) => {
-                    if self.stuck.insert(path.clone()) {
+                    if self.waits.insert(path.clone()) {
                         let wants = if core { "no core" } else { "a core" };
                         log(format!(
                             "outbox: {} waits for a helper with {wants}",
@@ -343,15 +397,8 @@ impl Publisher {
                 Err(e) if e.kind() == ErrorKind::NotFound => continue,
                 _ => {}
             }
-            let text = match claim(&path) {
-                Ok(Some(text)) => text,
-                Ok(None) => continue,
-                Err(e) => {
-                    if self.stuck.insert(path.clone()) {
-                        log(format!("outbox: {e}"));
-                    }
-                    continue;
-                }
+            let Some(text) = self.claim_once(path, log) else {
+                continue;
             };
             match OutboxFile::parse(&text) {
                 Ok(OutboxFile::Action(action)) if core => {
@@ -372,9 +419,33 @@ impl Publisher {
         applied
     }
 
-    /// Writes each answer waiting in the feed to inbox/, oldest first.
-    /// One that will not write stays, with those after it, for the next
-    /// turn, and the failure is logged once. True when any was written.
+    /// Claims one outbox file and gives its text: None when another
+    /// publisher took it, or it could not be claimed (logged once).
+    fn claim_once(&mut self, path: &Path, log: &mut dyn FnMut(String)) -> Option<String> {
+        match claim(path) {
+            Ok(text) => text,
+            Err(e) => {
+                if self.stuck.insert(path.to_path_buf()) {
+                    log(format!("outbox: {e}"));
+                }
+                None
+            }
+        }
+    }
+
+    /// Claims a stale outbox file and deletes it unread but for its name.
+    fn drop_stale(&mut self, path: &Path, log: &mut dyn FnMut(String)) {
+        self.waits.remove(path);
+        if let Some(text) = self.claim_once(path, log) {
+            let name = OutboxFile::parse(&text).map_or("unreadable", |f| f.name());
+            log(format!("outbox: {name} dropped, stale"));
+        }
+    }
+
+    /// Writes each answer waiting in the feed to inbox/, oldest first,
+    /// then deletes any there older than `STALE`. One that will not write
+    /// stays, with those after it, for the next turn, and the failure is
+    /// logged once. True when any was written.
     fn write_answers(&mut self, feed: &mut Feed, log: &mut dyn FnMut(String)) -> bool {
         let mut written = 0;
         for answer in &feed.answers {
@@ -394,6 +465,10 @@ impl Publisher {
             }
         }
         feed.answers.drain(..written);
+        if written > 0 {
+            // Answers no sidebar took in time are history.
+            self.inbox.prune(epoch_ms().saturating_sub(stale_ms()));
+        }
         written > 0
     }
 
@@ -807,6 +882,95 @@ mod tests {
         fs::remove_dir_all(&root).unwrap();
     }
 
+    #[test]
+    fn a_name_gives_its_time_only_in_the_outbox_format() {
+        assert_eq!(
+            name_ms("1791229864123-000042.json"),
+            Some(1_791_229_864_123)
+        );
+        assert_eq!(name_ms("1791229864123-1.json"), Some(1_791_229_864_123));
+        for other in [
+            "1.json",
+            "179122986412-000042.json",
+            "17912298641a3-1.json",
+            "x",
+        ] {
+            assert_eq!(name_ms(other), None, "{other}");
+        }
+    }
+
+    #[test]
+    fn a_stale_outbox_file_is_dropped_in_either_mode_never_replayed() {
+        let old = format!("{:013}-000001.json", epoch_ms() - stale_ms() - 1000);
+        for (mut feed, text, want) in [
+            (
+                fed("lanes"),
+                r#""FlipView""#,
+                "outbox: FlipView dropped, stale",
+            ),
+            (
+                Feed::without_core(None),
+                SELECT_W1,
+                "outbox: Cmux dropped, stale",
+            ),
+            // One for the other mode, left waiting since: dropped, not kept.
+            (fed("lanes"), SELECT_W1, "outbox: Cmux dropped, stale"),
+            (
+                Feed::without_core(None),
+                r#""FlipView""#,
+                "outbox: FlipView dropped, stale",
+            ),
+        ] {
+            let (mut p, root, _) = publisher("stale");
+            fs::write(p.outbox().join(&old), text).unwrap();
+            let unsent = feed.unsent.len();
+            let mut lines = Vec::new();
+            assert_eq!(p.take_actions(&mut feed, &mut |l| lines.push(l)), 0);
+            assert_eq!(lines, [want]);
+            assert_eq!(fs::read_dir(p.outbox()).unwrap().count(), 0, "gone");
+            assert_eq!(feed.unsent.len(), unsent, "nothing carried out");
+            fs::remove_dir_all(&root).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_file_named_otherwise_is_aged_by_when_it_was_written() {
+        let (mut p, root, _) = publisher("mtime");
+        let mut feed = fed("lanes");
+        let path = p.outbox().join("1.json");
+        fs::write(&path, r#""FlipView""#).unwrap();
+        let file = fs::File::options().write(true).open(&path).unwrap();
+        file.set_modified(SystemTime::now() - STALE - Duration::from_secs(1))
+            .unwrap();
+        let mut lines = Vec::new();
+        assert_eq!(p.take_actions(&mut feed, &mut |l| lines.push(l)), 0);
+        assert_eq!(lines, ["outbox: FlipView dropped, stale"]);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_waiting_file_is_dropped_once_it_turns_stale() {
+        let (mut p, root, _) = publisher("turns-stale");
+        let mut feed = fed("lanes");
+        let path = p.outbox().join("1.json");
+        fs::write(&path, SELECT_W1).unwrap();
+        let mut lines = Vec::new();
+        p.take_actions(&mut feed, &mut |l| lines.push(l));
+        let file = fs::File::options().write(true).open(&path).unwrap();
+        file.set_modified(SystemTime::now() - STALE - Duration::from_secs(1))
+            .unwrap();
+        p.take_actions(&mut feed, &mut |l| lines.push(l));
+        assert_eq!(
+            lines,
+            [
+                "outbox: Cmux waits for a helper with no core",
+                "outbox: Cmux dropped, stale"
+            ]
+        );
+        assert!(p.waits.is_empty() && !path.exists());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
     /// The cmux call an effect file asks for, about workspace W1.
     const SELECT_W1: &str =
         r#"{"Cmux": {"method": "workspace.select", "params": {"workspace_id": "W1"}}}"#;
@@ -819,7 +983,8 @@ mod tests {
         p.step(&mut feed, true, &mut quiet());
         assert_eq!(posted.get(), 1, "data.json");
 
-        fs::write(p.outbox().join("1791229864123-000001.json"), SELECT_W1).unwrap();
+        let name = format!("{:013}-000001.json", epoch_ms());
+        fs::write(p.outbox().join(name), SELECT_W1).unwrap();
         let mut lines = Vec::new();
         p.step(&mut feed, false, &mut |l| lines.push(l));
         assert_eq!(lines, vec!["outbox: Cmux".to_string()]);
@@ -920,7 +1085,9 @@ mod tests {
         let mut feed = Feed::without_core(None);
         feed.frame(1_791_127_100.0);
         p.step(&mut feed, true, &mut quiet());
+        // A file where inbox/ should be: it cannot be made again.
         fs::remove_dir_all(p.inbox()).unwrap();
+        fs::write(p.inbox(), "").unwrap();
         feed.input(crate::Input::CmuxFailed("W1".into()));
         feed.input(crate::Input::CmuxFailed("W2".into()));
         let mut lines = Vec::new();
@@ -934,6 +1101,7 @@ mod tests {
         assert_eq!(feed.answers.len(), 2);
         assert_eq!(posted.get(), 1);
 
+        fs::remove_file(p.inbox()).unwrap();
         fs::create_dir(p.inbox()).unwrap();
         p.step(&mut feed, false, &mut quiet());
         assert!(feed.answers.is_empty());
@@ -1020,7 +1188,7 @@ mod tests {
         let (id, review) = main_card_and_review(&json(&root.join(PANEL_FILE))["panel"]);
         assert!(!review.contains(&id));
 
-        let file = p.outbox().join("1791229864123-1.json");
+        let file = p.outbox().join(format!("{:013}-000001.json", epoch_ms()));
         let text = format!(r#"{{"MoveCard": {{"id": "{id}", "lane": "review", "before": null}}}}"#);
         fs::write(&file, text).unwrap();
         let mut lines = Vec::new();
