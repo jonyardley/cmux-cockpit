@@ -12,6 +12,8 @@
 //! {"Menu": {"Pick": {"Lane": "parked"}}}
 //! {"Menu": "Close"}
 //! {"Edit": {"Name": "Cockpit"}}
+//! "Next"
+//! {"MessageAgent": {"id": "W1", "text": "Rebase when free."}}
 //! ```
 //!
 //! Only actions parse: a frame, a state file or a PR answer cannot come
@@ -56,6 +58,11 @@ pub enum Action {
         id: String,
     },
     Menu(MenuEvent),
+    Next,
+    MessageAgent {
+        id: String,
+        text: String,
+    },
 }
 
 impl Action {
@@ -79,6 +86,8 @@ impl Action {
             Action::CloseMerged { .. } => "CloseMerged",
             Action::KeepMerged { .. } => "KeepMerged",
             Action::Menu(_) => "Menu",
+            Action::Next => "Next",
+            Action::MessageAgent { .. } => "MessageAgent",
         }
     }
 }
@@ -97,6 +106,8 @@ impl From<Action> for Event {
             Action::CloseMerged { id } => Event::CloseMerged { id },
             Action::KeepMerged { id } => Event::KeepMerged { id },
             Action::Menu(m) => Event::Menu(m),
+            Action::Next => Event::Next,
+            Action::MessageAgent { id, text } => Event::MessageAgent { id, text },
         }
     }
 }
@@ -107,7 +118,7 @@ mod tests {
     use cockpit_core::menu::MenuAction;
 
     /// One file per variant, as the module's head documents them.
-    const EVERY: [&str; 11] = [
+    const EVERY: [&str; 13] = [
         r#"{"MoveCard": {"id": "W1", "lane": "review", "before": null}}"#,
         r#"{"SwitchTo": {"id": "W1"}}"#,
         r#"{"Dismiss": {"id": "W1"}}"#,
@@ -119,6 +130,8 @@ mod tests {
         r#"{"CloseMerged": {"id": "W1"}}"#,
         r#"{"KeepMerged": {"id": "W1"}}"#,
         r#"{"Menu": {"Pick": {"Lane": "parked"}}}"#,
+        r#""Next""#,
+        r#"{"MessageAgent": {"id": "W1", "text": "Rebase when free."}}"#,
     ];
 
     #[test]
@@ -149,8 +162,10 @@ mod tests {
             Action::CloseMerged { .. } => 8,
             Action::KeepMerged { .. } => 9,
             Action::Menu(_) => 10,
+            Action::Next => 11,
+            Action::MessageAgent { .. } => 12,
         };
-        let mut out = vec![("Action", top, 11)];
+        let mut out = vec![("Action", top, 13)];
         if let Action::Edit(e) = a {
             let n = match e {
                 EditEvent::OpenNew => 0,
@@ -266,6 +281,7 @@ mod tests {
             r#"{"SwitchTo": {"id": "W1", "extra": 1}}"#,
             r#"{"Menu": {"OpenCard": {"id": "W1", "typo": 1}}}"#,
             r#"{"Edit": {"AddSuggested": {"dir": "/a", "typo": 1}}}"#,
+            r#"{"MessageAgent": {"id": "W1"}}"#,
             r#"{"MoveCard": {"id": "W1", "#,
             "",
         ] {

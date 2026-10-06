@@ -24,6 +24,7 @@ pub mod lanes;
 pub mod lenient;
 pub mod menu;
 pub mod merged;
+pub mod message;
 pub mod model;
 pub mod moves;
 pub mod needs;
@@ -52,7 +53,9 @@ pub mod time;
 pub mod ui;
 pub mod words;
 
-pub use app::{CmuxCall, Cockpit, Effect, Event, Model, OpenUrl, PrAsk, StateSet, ViewModel};
+pub use app::{
+    AgentMessage, CmuxCall, Cockpit, Effect, Event, Model, OpenUrl, PrAsk, StateSet, ViewModel,
+};
 pub use data::{Data, Workspace};
 pub use edit::EditEvent;
 pub use home::trim_slash;

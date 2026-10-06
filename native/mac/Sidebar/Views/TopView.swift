@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The view switch, as the core has it on. Showing only: switching goes
-/// through outbox/ in R2.7.
+/// The view switch, as the core has it on. Tapping the other view asks
+/// the core to flip to it, through outbox/.
 struct ViewSwitch: View {
     let view: PanelView
 
@@ -21,10 +21,12 @@ struct ViewSwitch: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 2)
             .background(on ? Color(Palette.Own.ground) : .clear, in: .rect(cornerRadius: Metrics.corner - 2))
+            .modifier(SwitchTab(on: on))
     }
 }
 
-/// Next: where the next press goes, and its place, or nothing waiting.
+/// Next: where the next press goes, and its place, or nothing waiting. A
+/// tap steps there.
 struct NextView: View {
     let next: NextLine
 
@@ -45,11 +47,13 @@ struct NextView: View {
                 .layoutPriority(1)
         }
         .font(.system(size: Metrics.body))
+        .modifier(NextTap(next: next))
     }
 }
 
 /// The Needs you strip: its count and oldest wait, each waiting session
-/// and why, and how many more past the cap.
+/// and why, and how many more past the cap. A click on a session switches
+/// to it; its cross dismisses its asks.
 struct NeedsView: View {
     let needs: Needs
 
@@ -62,15 +66,20 @@ struct NeedsView: View {
                 Text(needs.wait).foregroundStyle(Color(needs.late ? Token.clayText : Token.metaText))
             }
             ForEach(needs.rows, id: \.wsId) { row in
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 6) {
-                        Text(row.icon.glyph).foregroundStyle(Color(dot: row.icon.ink))
-                        Text(row.title).foregroundStyle(Color(Token.text)).lineLimit(1)
+                HStack(alignment: .top, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack(spacing: 6) {
+                            Text(row.icon.glyph).foregroundStyle(Color(dot: row.icon.ink))
+                            Text(row.title).foregroundStyle(Color(Token.text)).lineLimit(1)
+                        }
+                        Text(row.line)
+                            .foregroundStyle(Color(row.ink))
+                            .lineLimit(2)
+                            .padding(.leading, Metrics.cardIndent)
                     }
-                    Text(row.line)
-                        .foregroundStyle(Color(row.ink))
-                        .lineLimit(2)
-                        .padding(.leading, Metrics.cardIndent)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .modifier(NeedsRowTap(id: row.wsId))
+                    DismissCross(id: row.wsId)
                 }
             }
             if !needs.more.isEmpty {

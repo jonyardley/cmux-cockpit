@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// A workspace's card: its dot and title with the status on the right,
-/// the chips, where you left off, then the detail.
+/// the chips, where you left off, then the detail. A click switches to it
+/// and a right-click shows its menu (Actions.swift).
 struct CardView: View {
     let card: Card
 
@@ -25,7 +26,7 @@ struct CardView: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 if !card.chips.isEmpty || !card.merged.isEmpty {
-                    CardChips(chips: card.chips, merged: card.merged)
+                    ActionChips(id: card.wsId, chips: card.chips, merged: card.merged)
                 }
                 if !card.leftOff.isEmpty {
                     Text(card.leftOff)
@@ -47,6 +48,7 @@ struct CardView: View {
         .background(Color(Palette.Own.cardFace), in: .rect(cornerRadius: Metrics.corner))
         .overlay(RoundedRectangle(cornerRadius: Metrics.corner).strokeBorder(Color(Token.cardEdge)))
         .opacity(card.dimmed ? 0.55 : 1)
+        .cardActions(card)
     }
 }
 

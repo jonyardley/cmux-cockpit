@@ -38,27 +38,3 @@ struct ChipsLine: View {
         }
     }
 }
-
-/// A card's chips, then Park and Close: on the same line while every chip
-/// fits whole, else on a line of their own, so neither is ever cut.
-struct CardChips: View {
-    let chips: [Chip]
-    let merged: [Chip]
-
-    var body: some View {
-        if merged.isEmpty {
-            ChipsLine(chips: chips)
-        } else {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Metrics.chipGap) {
-                    ForEach(Array((chips + merged).enumerated()), id: \.offset) { ChipView(chip: $0.element) }
-                }
-                .fixedSize()
-                VStack(alignment: .leading, spacing: 3) {
-                    if !chips.isEmpty { ChipsLine(chips: chips) }
-                    ChipsLine(chips: merged)
-                }
-            }
-        }
-    }
-}

@@ -39,5 +39,7 @@
   { "Menu": { "Pick": "KeepMerged" } },
   { "Menu": { "Pick": "ToggleNeeds" } },
   { "Menu": { "Pick": "OpenProject" } },
-  { "Menu": { "Pick": "EditProject" } }
+  { "Menu": { "Pick": "EditProject" } },
+  "Next",
+  { "MessageAgent": { "id": "W1", "text": "Rebase when free." } }
 ]

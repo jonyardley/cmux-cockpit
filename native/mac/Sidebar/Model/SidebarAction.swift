@@ -20,6 +20,10 @@ enum SidebarAction: Encodable, Equatable {
     case closeMerged(id: String)
     case keepMerged(id: String)
     case menu(Menu)
+    /// The Next button: the next workspace in its queue.
+    case next
+    /// "Message agent…": Jon's words for the agent in the workspace.
+    case messageAgent(id: String, text: String)
 
     /// The core's `MenuEvent`.
     enum Menu: Encodable, Equatable {
@@ -94,7 +98,40 @@ enum SidebarAction: Encodable, Equatable {
         case let .closeMerged(id): try tagged(encoder, "CloseMerged", ["id": id])
         case let .keepMerged(id): try tagged(encoder, "KeepMerged", ["id": id])
         case let .menu(m): try newtype(encoder, "Menu", m)
+        case .next: try unit(encoder, "Next")
+        case let .messageAgent(id, text): try tagged(encoder, "MessageAgent", ["id": id, "text": text])
         }
+    }
+}
+
+extension SidebarAction {
+    /// The core's words on a merged card's two buttons (panel/mod.rs
+    /// PARK and CLOSE): the chip says which one it is.
+    static let parkWord = "Park"
+    static let closeWord = "Close"
+
+    /// What tapping one of a card's merged chips sends: Park or Close, by
+    /// its words. The core puts Close there only where it offers it, and
+    /// checks again when the action lands.
+    static func merged(_ chip: Chip, id: String) -> SidebarAction? {
+        switch chip.pieces.first?.text {
+        case parkWord: .parkMerged(id: id)
+        case closeWord: .closeMerged(id: id)
+        default: nil
+        }
+    }
+
+    /// What picking an item of a card's menu sends: the menu opened on
+    /// that card, then the item, in that order, as the pane's Space then
+    /// Enter would.
+    static func pick(_ action: MenuAction, on id: String) -> [SidebarAction] {
+        [.menu(.openCard(id: id)), .menu(.pick(action))]
+    }
+
+    /// "Message agent…" sends only words: blank text sends nothing.
+    static func message(_ text: String, to id: String) -> SidebarAction? {
+        let words = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return words.isEmpty ? nil : .messageAgent(id: id, text: words)
     }
 }
 

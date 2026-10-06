@@ -14,7 +14,7 @@ func check(_ ok: Bool, _ what: String) {
 
 func card(_ id: String, rank: UInt8 = 1) -> Card {
     Card(wsId: id, icon: Icon(glyph: "o", ink: nil), title: id, status: "", statusInk: .clear, leftOff: "",
-         chips: [], merged: [], detail: "", detailLines: 1, waiting: false, rank: rank, movable: true, dimmed: false)
+         chips: [], merged: [], detail: "", detailLines: 1, waiting: false, rank: rank, movable: true, dimmed: false, menu: [])
 }
 
 func row(_ id: String, rank: UInt8 = 1) -> Row { .card(card(id, rank: rank)) }

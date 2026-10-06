@@ -13,6 +13,8 @@
 #    send lands as a file named as the runner takes it.
 # 5. Drag and drop: where a dropped card lands, and how a drop is drawn
 #    until panel.json shows it.
+# 6. The panel's clicks and menus: what each merged chip and menu pick
+#    sends, over every fixture.
 set -eu
 cd "$(dirname "$0")"
 mkdir -p build
@@ -27,3 +29,5 @@ swiftc -swift-version 6 -o build/outbox-check Generated/PanelTypes.swift Shared/
 build/outbox-check ../runner/tests/actions.json
 swiftc -swift-version 6 -o build/drag-check Generated/PanelTypes.swift Sidebar/Model/*.swift Sidebar/Live/PendingMove.swift Tests/Drag/main.swift
 build/drag-check
+swiftc -swift-version 6 -o build/actions-check Generated/PanelTypes.swift Sidebar/Model/*.swift Tests/Actions/main.swift
+build/actions-check ../fixtures

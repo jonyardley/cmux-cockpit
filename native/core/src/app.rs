@@ -82,6 +82,11 @@ pub enum Event {
     KeepMerged { id: String },
     /// Something done with the card menu or a project's menu (menu.rs).
     Menu(MenuEvent),
+    /// The Next button: switches to the next workspace in its queue.
+    Next,
+    /// "Message agent…": Jon's words to the agent in the workspace
+    /// (message.rs).
+    MessageAgent { id: String, text: String },
 }
 
 impl Event {
@@ -110,7 +115,9 @@ impl Event {
             | Event::ParkMerged { .. }
             | Event::CloseMerged { .. }
             | Event::KeepMerged { .. }
-            | Event::Menu(_) => true,
+            | Event::Menu(_)
+            | Event::Next
+            | Event::MessageAgent { .. } => true,
         }
     }
 }
@@ -251,6 +258,18 @@ impl Operation for OpenUrl {
     type Output = ();
 }
 
+/// Jon's words for the agent in a workspace, for the shell to send as
+/// `cmux agent message <workspace> -- <text>` (message.rs).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentMessage {
+    pub workspace: String,
+    pub text: String,
+}
+
+impl Operation for AgentMessage {
+    type Output = ();
+}
+
 /// What the core can ask the shell to do.
 #[effect]
 pub enum Effect {
@@ -259,6 +278,7 @@ pub enum Effect {
     Persist(StateSet),
     PrPoll(PrAsk),
     OpenUrl(OpenUrl),
+    AgentMessage(AgentMessage),
 }
 
 /// A request from the session's outbox as the command that hands it to the shell.
@@ -269,6 +289,9 @@ fn send_out(o: Outbound) -> Command<Effect, Event> {
         }
         Outbound::Persist { key, value } => Command::notify_shell(StateSet { key, value }).into(),
         Outbound::OpenUrl { url } => Command::notify_shell(OpenUrl { url }).into(),
+        Outbound::AgentMessage { workspace, text } => {
+            Command::notify_shell(AgentMessage { workspace, text }).into()
+        }
     }
 }
 
@@ -356,6 +379,8 @@ impl Model {
             Event::ParkMerged { id } => s.park_merged(data, data.ws_by_id(&id)),
             Event::CloseMerged { id } => s.close_merged(data, data.ws_by_id(&id)),
             Event::KeepMerged { id } => s.keep_merged(data, data.ws_by_id(&id)),
+            Event::Next => s.jump_next(data),
+            Event::MessageAgent { id, text } => s.message_agent(data, &id, &text),
             _ => {}
         }
     }
@@ -469,6 +494,15 @@ mod tests {
         assert!(Event::ParkMerged { id: "a".into() }.is_action());
         assert!(Event::CloseMerged { id: "a".into() }.is_action());
         assert!(Event::KeepMerged { id: "a".into() }.is_action());
+        assert!(Event::Next.is_action());
+        let text = "hi".to_string();
+        assert!(
+            Event::MessageAgent {
+                id: "a".into(),
+                text
+            }
+            .is_action()
+        );
         assert!(!Event::Refresh.is_action());
         assert!(!Event::CmuxFailed { id: "a".into() }.is_action());
         assert!(!Event::Projects(Vec::new()).is_action());
@@ -573,9 +607,43 @@ mod tests {
             .map(|e| match e {
                 Effect::Render(_) => "render".to_string(),
                 Effect::PrPoll(r) => format!("pr {}", r.operation.directory),
-                Effect::Cmux(_) | Effect::Persist(_) | Effect::OpenUrl(_) => "other".to_string(),
+                Effect::Cmux(_)
+                | Effect::Persist(_)
+                | Effect::OpenUrl(_)
+                | Effect::AgentMessage(_) => "other".to_string(),
             })
             .collect()
+    }
+
+    #[test]
+    fn a_message_for_an_agent_goes_out_as_its_own_request() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(frame(100.0), &mut model);
+        let text = "Rebase when free.".to_string();
+        let mut cmd = app.update(
+            Event::MessageAgent {
+                id: "b".into(),
+                text,
+            },
+            &mut model,
+        );
+        let effects: Vec<Effect> = cmd.effects().collect();
+        let want = AgentMessage {
+            workspace: "b".into(),
+            text: "Rebase when free.".into(),
+        };
+        assert_eq!(effects.len(), 2);
+        assert!(matches!(&effects[0], Effect::AgentMessage(m) if m.operation == want));
+        assert!(matches!(&effects[1], Effect::Render(_)));
+    }
+
+    #[test]
+    fn next_with_nothing_waiting_asks_cmux_for_nothing() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(frame(100.0), &mut model);
+        assert_eq!(asked(&app, &mut model, Event::Next), ["render"]);
     }
 
     fn frame(epoch: f64) -> Event {

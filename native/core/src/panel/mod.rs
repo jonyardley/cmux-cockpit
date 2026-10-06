@@ -172,6 +172,10 @@ pub struct Card {
     /// Faint, as the sidebar dims a merged card while nothing in it wants
     /// Jon. The view draws it at full strength under the cursor.
     pub dimmed: bool,
+    /// Its card menu for this frame, in the core's words and order, so a
+    /// shell can show it the moment Jon right-clicks; a pick goes back as
+    /// the menu opened on this card, then the item.
+    pub menu: Vec<MenuItem>,
 }
 
 /// A run of a chip's words in one ink.
