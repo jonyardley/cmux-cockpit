@@ -14,7 +14,7 @@ use crux_core::{
     macros::effect,
     render::{RenderOperation, render},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::data::{Data, Workspace};
@@ -23,13 +23,14 @@ use crate::js::json_num;
 use crate::lane_entries::LaneEntry;
 use crate::lanes::{LaneKey, lane_by_key};
 use crate::menu::MenuEvent;
+use crate::panel::Panel;
 use crate::persist::{SavedState, ViewMode, persist_url};
 use crate::pr_poll::{PrPolled, shown_in};
 use crate::projects::Project;
 use crate::session::{Outbound, Param, Session};
 
 /// What the shell can tell the core.
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
 pub enum Event {
     /// A new frame of cmux data.
     Data(Data),
@@ -96,6 +97,15 @@ pub enum Event {
     ToggleProject { key: String },
     /// A click on the Quiet heading: folds or unfolds it.
     ToggleQuiet,
+    /// An event with the shell's clock, in epoch seconds: the core's now
+    /// for it when that is later than the last frame's, so an action
+    /// between frames (up to 30 seconds apart) is stamped when it happened
+    /// (#268).
+    At { now: f64, event: Box<Event> },
+    /// The shell draws the whole panel from the view (the Swift sidebar,
+    /// #268): from now on the view carries it. The pane and the helper
+    /// never send it, so they never pay for a build they do not read.
+    PanelOn,
 }
 
 impl Event {
@@ -112,6 +122,7 @@ impl Event {
             | Event::Projects(_)
             | Event::Refresh
             | Event::PrPollOn
+            | Event::PanelOn
             | Event::PrPolled(_)
             | Event::CmuxFailed { .. } => false,
             Event::MoveCard { .. }
@@ -131,6 +142,7 @@ impl Event {
             | Event::ToggleLane { .. }
             | Event::ToggleProject { .. }
             | Event::ToggleQuiet => true,
+            Event::At { event, .. } => event.is_action(),
         }
     }
 }
@@ -143,6 +155,8 @@ pub struct Model {
     pub session: Session,
     pub data: Option<Data>,
     pub view: ViewModel,
+    /// Whether the view carries the panel (`Event::PanelOn`).
+    pub panel_on: bool,
 }
 
 /// The Needs you strip as the shell draws it, workspaces by id.
@@ -190,34 +204,68 @@ pub struct ViewModel {
     pub next: NextView,
     pub lane_entries: Vec<LaneEntry>,
     pub lane_headers: BTreeMap<LaneKey, LaneHeaderView>,
+    /// The whole panel, once the shell asks for it (`Event::PanelOn`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub panel: Option<Panel>,
 }
 
 /// A cmux socket command for the shell to send: `cmux rpc <method>
 /// <params>`, as the sidebar's `cmux(method, params)`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CmuxCall {
     pub method: String,
     /// In the order the TypeScript writes them.
+    /// Crosses the bridge as the object cmux reads (`params_json`).
+    #[serde(serialize_with = "params_out", deserialize_with = "params_in")]
     pub params: Vec<(String, Param)>,
 }
 
 impl CmuxCall {
     /// The params as the JSON object cmux reads, in order.
     pub fn params_json(&self) -> Value {
-        let map: Map<String, Value> = self
-            .params
-            .iter()
-            .map(|(k, v)| {
-                let v = match v {
-                    Param::Str(s) => Value::from(s.as_str()),
-                    Param::Num(n) => json_num(*n),
-                    Param::Bool(b) => Value::from(*b),
-                };
-                (k.clone(), v)
-            })
-            .collect();
-        Value::Object(map)
+        params_value(&self.params)
     }
+}
+
+fn params_value(params: &[(String, Param)]) -> Value {
+    let map: Map<String, Value> = params
+        .iter()
+        .map(|(k, v)| {
+            let v = match v {
+                Param::Str(s) => Value::from(s.as_str()),
+                Param::Num(n) => json_num(*n),
+                Param::Bool(b) => Value::from(*b),
+            };
+            (k.clone(), v)
+        })
+        .collect();
+    Value::Object(map)
+}
+
+fn params_out<S: serde::Serializer>(params: &[(String, Param)], s: S) -> Result<S::Ok, S::Error> {
+    params_value(params).serialize(s)
+}
+
+fn params_in<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<(String, Param)>, D::Error> {
+    let map = Map::<String, Value>::deserialize(d)?;
+    map.into_iter()
+        .map(|(k, v)| {
+            let p = match v {
+                Value::String(s) => Param::Str(s),
+                Value::Bool(b) => Param::Bool(b),
+                Value::Number(n) => n
+                    .as_f64()
+                    .map(Param::Num)
+                    .ok_or_else(|| serde::de::Error::custom("a cmux param number out of range"))?,
+                _ => {
+                    return Err(serde::de::Error::custom(
+                        "a cmux param is a string, number or bool",
+                    ));
+                }
+            };
+            Ok((k, p))
+        })
+        .collect()
 }
 
 impl Operation for CmuxCall {
@@ -227,7 +275,7 @@ impl Operation for CmuxCall {
 /// One entry for the state handler to set (or, with no value, delete) in
 /// config/state.json, as the sidebar's `persistSet`. The shell opens its
 /// URL, as the sidebar does, and the handler does the locked write.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct StateSet {
     /// `<map>.<id>`.
     pub key: String,
@@ -249,7 +297,7 @@ impl Operation for StateSet {
 /// `git` and `gh` there off the frame thread, as scripts/pr-poll.ts does
 /// (pr_poll::git_args, pr_poll::gh_args), reads them with
 /// pr_poll::answer, and sends the result back as `Event::PrPolled`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PrAsk {
     pub directory: String,
     /// When it was asked, in epoch seconds: the answer carries it back.
@@ -262,7 +310,7 @@ impl Operation for PrAsk {
 
 /// A link for the shell to open in the browser, as the sidebar's
 /// `openURL`: the card menu's Open PR.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OpenUrl {
     pub url: String,
 }
@@ -273,7 +321,7 @@ impl Operation for OpenUrl {
 
 /// Jon's words for the agent in a workspace, for the shell to send as
 /// `cmux agent message <workspace> -- <text>` (message.rs).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AgentMessage {
     pub workspace: String,
     pub text: String,
@@ -284,7 +332,7 @@ impl Operation for AgentMessage {
 }
 
 /// What the core can ask the shell to do.
-#[effect]
+#[effect(typegen)]
 pub enum Effect {
     Render(RenderOperation),
     Cmux(CmuxCall),
@@ -353,6 +401,7 @@ pub fn build_view(s: &mut Session, data: &Data) -> ViewModel {
         },
         lane_entries,
         lane_headers,
+        panel: None,
     }
 }
 
@@ -452,6 +501,13 @@ impl Model {
         Command::all(out)
     }
 
+    /// Moves the frame's clock on to `now`, never back.
+    fn advance_clock(&mut self, now: f64) {
+        if let Some(data) = &mut self.data {
+            data.epoch = Some(data.epoch.map_or(now, |e| e.max(now)));
+        }
+    }
+
     fn rebuild(&mut self) {
         if let Some(data) = &self.data {
             self.session.close_stale_menu(data);
@@ -463,6 +519,10 @@ impl Model {
                 ..ViewModel::default()
             },
         };
+        if self.panel_on {
+            let panel = Panel::from_core(self);
+            self.view.panel = Some(panel);
+        }
     }
 }
 
@@ -473,6 +533,10 @@ impl App for Cockpit {
     type Effect = Effect;
 
     fn update(&self, event: Event, model: &mut Model) -> Command<Effect, Event> {
+        if let Event::At { now, event } = event {
+            model.advance_clock(now);
+            return self.update(*event, model);
+        }
         match event {
             Event::Data(data) => model.data = Some(data),
             Event::State(saved) => {
@@ -483,6 +547,7 @@ impl App for Cockpit {
             Event::Projects(projects) => model.session.set_projects(projects),
             Event::Refresh => {}
             Event::PrPollOn => model.session.pr_poll.turn_on(),
+            Event::PanelOn => model.panel_on = true,
             Event::PrPolled(polled) => return model.polled(*polled),
             action => model.act(action),
         }
@@ -684,6 +749,56 @@ mod tests {
         let mut model = Model::default();
         let _ = app.update(frame(100.0), &mut model);
         assert_eq!(asked(&app, &mut model, Event::Next), ["render"]);
+    }
+
+    #[test]
+    fn a_cmux_call_crosses_the_bridge_as_the_object_cmux_reads() {
+        let call = CmuxCall {
+            method: "workspace.reorder".into(),
+            params: vec![
+                ("workspace_id".into(), Param::Str("W1".into())),
+                ("index".into(), Param::Num(3.0)),
+                ("focus".into(), Param::Bool(false)),
+            ],
+        };
+        let json = serde_json::to_value(&call).unwrap();
+        let params = serde_json::json!({ "workspace_id": "W1", "index": 3, "focus": false });
+        assert_eq!(json["params"], params);
+        assert_eq!(json["params"], call.params_json());
+        assert_eq!(serde_json::from_value::<CmuxCall>(json).unwrap(), call);
+    }
+
+    /// A switch at `now`, as the sidebar sends a click.
+    fn switch_at(now: f64) -> Event {
+        let event = Box::new(Event::SwitchTo { id: "b".into() });
+        Event::At { now, event }
+    }
+
+    #[test]
+    fn a_timed_event_is_whatever_it_carries() {
+        assert!(switch_at(1.0).is_action());
+        let event = Box::new(Event::Refresh);
+        assert!(!Event::At { now: 1.0, event }.is_action());
+    }
+
+    #[test]
+    fn a_click_between_frames_stamps_its_override_with_its_own_time() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(frame(1000.0), &mut model);
+        let _ = app.update(switch_at(1005.0), &mut model);
+        let stamp = model.session.select_override.clone();
+        assert_eq!(stamp, Some(("b".to_string(), 1005.0)));
+    }
+
+    #[test]
+    fn a_click_timed_before_the_frame_never_turns_the_clock_back() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(frame(1000.0), &mut model);
+        let _ = app.update(switch_at(990.0), &mut model);
+        let stamp = model.session.select_override.clone();
+        assert_eq!(stamp, Some(("b".to_string(), 1000.0)));
     }
 
     fn frame(epoch: f64) -> Event {

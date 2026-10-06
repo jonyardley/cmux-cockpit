@@ -385,6 +385,7 @@ impl Panel {
             session,
             data,
             view,
+            ..
         } = core;
         match data {
             Some(data) => build::build(session, data, view),

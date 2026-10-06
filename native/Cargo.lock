@@ -103,6 +103,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cockpit_ffi"
+version = "0.0.0"
+dependencies = [
+ "cockpit_core",
+ "crux_core",
+ "serde_json",
+]
+
+[[package]]
 name = "cockpit_pane"
 version = "0.0.0"
 dependencies = [
