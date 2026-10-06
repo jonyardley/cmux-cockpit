@@ -462,6 +462,7 @@ fn project_head(session: &mut Session, data: &Data, k: &str) -> ProjectHead {
         dot,
         collapsed,
         can_open: session.can_open_project(k),
+        menu: session.project_menu(k),
     }
 }
 
@@ -498,6 +499,7 @@ fn projects(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Project
                     name: p.name.clone(),
                     color: parse_hex(&p.color),
                     can_open: session.can_open_project(project),
+                    menu: session.quiet_menu(project),
                 }
             }
             ProjectEntry::Editor { project, .. } => {

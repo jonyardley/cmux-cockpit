@@ -249,6 +249,8 @@ pub enum ProjectRow {
         name: String,
         color: Option<u32>,
         can_open: bool,
+        /// Its right-click menu, in the core's words and order.
+        menu: Vec<MenuItem>,
     },
 }
 
@@ -282,6 +284,9 @@ pub struct ProjectHead {
     pub dot: Option<Icon>,
     pub collapsed: bool,
     pub can_open: bool,
+    /// Its right-click menu, in the core's words and order: the sidebar
+    /// cannot word it, as the first item reads the project's folder.
+    pub menu: Vec<MenuItem>,
 }
 
 /// A row under a lane header.

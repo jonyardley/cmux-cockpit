@@ -17,17 +17,10 @@ struct AllView: View {
     }
 }
 
-/// Where the Projects view goes until R2.8 (#246) draws it.
-struct ProjectsPlaceholder: View {
-    var body: some View {
-        Text(Words.projectsSoon)
-            .font(.system(size: Metrics.body))
-            .foregroundStyle(Color(Token.secondary))
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// The whole panel: the view switch and Next, then the view the core has on.
+/// The whole panel: the view switch and Next, then the view the core has
+/// on, and the project editor as a sheet over it while the core has one
+/// open. Closing the sheet asks the core to close the editor; the sheet
+/// goes when panel.json says it has.
 struct PanelBody: View {
     let panel: Panel
 
@@ -38,7 +31,7 @@ struct PanelBody: View {
                 NextView(next: panel.next)
                 switch panel.view {
                 case .all: AllView(panel: panel)
-                case .projects: ProjectsPlaceholder()
+                case .projects: ProjectsView(panel: panel)
                 }
             }
             .padding(Metrics.gutter)
@@ -46,6 +39,20 @@ struct PanelBody: View {
         // Here, not in a lane, so a drop is confirmed in the Projects
         // view too, when no lane is drawn.
         .onChange(of: panel.lanes) { _, now in DragState.shared.reconcile(now) }
+        .sheet(item: editorKey) { _ in
+            if let editor = ProjectText.editor(panel) {
+                EditorSheet(editor: editor) { Outbox.send(.edit($0)) }
+            }
+        }
+    }
+
+    private var editorKey: Binding<EditorKey?> {
+        Binding(
+            get: { ProjectText.editor(panel).map { EditorKey(id: $0.key) } },
+            // Only while the core still has it open: a sheet going because
+            // the core closed it (Save, Remove) sends nothing.
+            set: { if $0 == nil, ProjectText.editor(panel) != nil { Outbox.send(.edit(.close)) } }
+        )
     }
 }
 
