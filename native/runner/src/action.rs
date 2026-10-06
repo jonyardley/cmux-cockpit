@@ -130,6 +130,26 @@ mod tests {
         }
     }
 
+    /// The actions the Swift sidebar's outbox check encodes, one per
+    /// variant of every nested event too: each must parse here.
+    #[test]
+    fn every_file_the_swift_sidebar_sends_parses() {
+        let files: Vec<serde_json::Value> =
+            serde_json::from_str(include_str!("../tests/actions.json")).unwrap();
+        let mut names: Vec<&str> = files
+            .iter()
+            .map(|v| {
+                let action = Action::parse(&v.to_string()).unwrap_or_else(|e| panic!("{v}: {e}"));
+                let name = action.name();
+                assert!(Event::from(action).is_action(), "{v} is not an action");
+                name
+            })
+            .collect();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), EVERY.len(), "actions.json misses a variant");
+    }
+
     #[test]
     fn reads_a_move_and_the_nested_menu_and_editor_events() {
         assert_eq!(
