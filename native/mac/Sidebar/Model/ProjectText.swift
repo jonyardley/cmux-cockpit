@@ -106,6 +106,16 @@ struct EditorDraft: Equatable {
         if next.search != search { out.append(.search(next.search)) }
         return out
     }
+
+    /// The name the core gave a new project from its folder, for the Name
+    /// field to show, or nil to keep the field as it is. The core names a
+    /// new project after each folder edit, so the sheet takes that name
+    /// once the core has caught up with the folder as typed, unless a name
+    /// typed since is still on its way (the core applies it after).
+    static func derivedName(_ e: EditorView, draft: EditorDraft, namedSinceFolder: Bool) -> String? {
+        guard e.isNew, !namedSinceFolder, e.root == draft.folder, e.name != draft.name else { return nil }
+        return e.name
+    }
 }
 
 /// A Projects row's identity is its project or workspace, so a card keeps

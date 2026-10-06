@@ -43,7 +43,9 @@ struct PanelBody: View {
     private var editorKey: Binding<EditorKey?> {
         Binding(
             get: { ProjectText.editor(panel).map { EditorKey(id: $0.key) } },
-            set: { if $0 == nil { Outbox.send(.edit(.close)) } }
+            // Only while the core still has it open: a sheet going because
+            // the core closed it (Save, Remove) sends nothing.
+            set: { if $0 == nil, ProjectText.editor(panel) != nil { Outbox.send(.edit(.close)) } }
         )
     }
 }

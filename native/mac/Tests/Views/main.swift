@@ -389,6 +389,24 @@ if let e = load("editor").flatMap(ProjectText.editor) {
     check(before.changes(to: after) == [.folder("/tmp/a"), .search("star")], "the folder and the search send themselves")
     check(before.changes(to: before).isEmpty, "nothing typed sends nothing")
 }
+// A new project's Name follows the name the core gives it from the folder,
+// once the core has the folder as typed and no name typed since is pending.
+if let e = load("new-project").flatMap(ProjectText.editor) {
+    var core = e
+    core.root = "~/dev/app-one"
+    core.name = "App One"
+    var draft = EditorDraft(e)
+    draft.folder = "~/dev/app-one"
+    check(EditorDraft.derivedName(core, draft: draft, namedSinceFolder: false) == "App One", "the folder's name shows in Name")
+    check(EditorDraft.derivedName(core, draft: draft, namedSinceFolder: true) == nil, "a name typed after the folder stays")
+    draft.folder = "~/dev/app-one/x"
+    check(EditorDraft.derivedName(core, draft: draft, namedSinceFolder: false) == nil, "a stale folder names nothing")
+    core.isNew = false
+    draft.folder = core.root
+    check(EditorDraft.derivedName(core, draft: draft, namedSinceFolder: false) == nil, "an edited project keeps its typed name")
+} else {
+    check(false, "the new-project fixture has an editor")
+}
 let sheet = URL(fileURLWithPath: #filePath).appendingPathComponent("../../../Sidebar/Views/EditorSheet.swift").standardizedFileURL
 if let code = try? String(contentsOf: sheet, encoding: .utf8) {
     let named = code.components(separatedBy: "SidebarAction.").dropFirst()

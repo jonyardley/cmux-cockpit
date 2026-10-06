@@ -13,6 +13,10 @@ struct EditorSheet: View {
 
     @State private var draft: EditorDraft
     @State private var sent: EditorDraft
+    /// A name typed since the folder last changed, which the core applies
+    /// after the folder's own name, so the sheet keeps it.
+    @State private var namedSinceFolder = false
+    @FocusState private var searching: Bool
 
     init(editor: EditorView, send: @escaping (SidebarAction.Edit) -> Void) {
         self.editor = editor
@@ -45,19 +49,47 @@ struct EditorSheet: View {
                 .foregroundStyle(Color(Token.redText))
             HStack {
                 Spacer()
-                Button(Words.cancel) { send(.close) }.keyboardShortcut(.cancelAction)
+                // Esc has its own key, out of sight: in the icon search with
+                // words typed it keeps the editor open, as the pane's does.
+                Button(Words.cancel) { escape() }
+                    .keyboardShortcut(.cancelAction)
+                    .opacity(0)
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+                Button(Words.cancel) { send(.close) }
+                // Not disabled on the problem: that is panel.json's, a round
+                // trip behind the keys, and the core saves only a draft
+                // with no problem anyway.
                 Button(editor.isNew ? Words.add : Words.done) { send(.save) }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(editor.problem != nil)
             }
         }
         .font(.system(size: Metrics.body))
         .padding(14)
         .frame(width: 260)
         .onChange(of: draft) { _, next in
-            for edit in sent.changes(to: next) { send(edit) }
+            for edit in sent.changes(to: next) {
+                switch edit {
+                case .name: namedSinceFolder = true
+                case .folder: namedSinceFolder = false
+                default: break
+                }
+                send(edit)
+            }
             sent = next
         }
+        .onChange(of: [editor.root, editor.name]) {
+            if let name = EditorDraft.derivedName(editor, draft: draft, namedSinceFolder: namedSinceFolder) {
+                sent.name = name
+                draft.name = name
+            }
+        }
+    }
+
+    /// Esc: closes, except in the icon search with words typed.
+    private func escape() {
+        if searching && !draft.search.trimmingCharacters(in: .whitespaces).isEmpty { return }
+        send(.close)
     }
 
     /// The folder, the line of sessions it matches, and the folders on
@@ -109,7 +141,9 @@ struct EditorSheet: View {
     /// the note under them.
     private var icons: some View {
         VStack(alignment: .leading, spacing: 4) {
-            TextField(Words.searchIcons, text: $draft.search).textFieldStyle(.roundedBorder)
+            TextField(Words.searchIcons, text: $draft.search)
+                .textFieldStyle(.roundedBorder)
+                .focused($searching)
             LazyVGrid(columns: iconColumns, spacing: 4) {
                 ForEach(editor.icons, id: \.self) { name in
                     Button {
