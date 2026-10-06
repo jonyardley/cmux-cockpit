@@ -22,6 +22,8 @@ final class PanelStore {
 
     func start() {
         guard observer == nil else { return }
+        InProcessCore.changed = { [weak self] in self?.show(InProcessCore.panel()) }
+        Outbox.divert = { InProcessCore.on && InProcessCore.act($0) }
         observer = DistributedNotificationCenter.default().addObserver(
             forName: Shared.changed, object: nil, queue: .main
         ) { [weak self] _ in
@@ -40,6 +42,10 @@ final class PanelStore {
             .flatMap(Heartbeat.decode)
         let alive = Heartbeat.isAlive(beat: beat, now: Date())
         if alive != running { running = alive }
+        if InProcessCore.load(from: folder) {
+            show(InProcessCore.panel())
+            return
+        }
         guard let file = folder?.appendingPathComponent(PanelFile.fileName) else { return }
         let modified = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         guard modified != seen else { return }
@@ -48,7 +54,13 @@ final class PanelStore {
         // seen, so a read that fails once is not lost until the next write.
         guard let data = try? Data(contentsOf: file), let next = PanelFile.decode(data)?.panel else { return }
         seen = modified
-        // Every fresh file, so a click is let go as soon as it shows.
+        show(next)
+    }
+
+    /// Draws `next`, from panel.json or the core inside the sidebar.
+    private func show(_ next: Panel?) {
+        guard let next else { return }
+        // Every fresh panel, so a click is let go as soon as it shows.
         SelectState.shared.reconcile(next)
         if next != panel { panel = next }
     }

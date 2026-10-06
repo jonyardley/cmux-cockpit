@@ -15,10 +15,15 @@ enum Outbox {
     /// their order.
     private static var counter: UInt32 = 0
 
+    /// Takes each action instead of the outbox while set: the core inside
+    /// the sidebar (InProcessCore, issue #268). Returns whether it took it.
+    static var divert: ((SidebarAction) -> Bool)?
+
     /// Sends one action. False when it could not be written (no group
     /// folder, or the disk refused); the action is then dropped.
     @discardableResult
     static func send(_ action: SidebarAction) -> Bool {
+        if let divert, divert(action) { return true }
         guard let folder = Shared.folder else { return false }
         return (try? write(action, into: folder, now: Date())) != nil
     }
