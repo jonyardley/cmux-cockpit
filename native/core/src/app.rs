@@ -212,6 +212,7 @@ pub struct ViewModel {
 /// A cmux socket command for the shell to send: `cmux rpc <method>
 /// <params>`, as the sidebar's `cmux(method, params)`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CmuxCall {
     pub method: String,
     /// In the order the TypeScript writes them.
@@ -276,6 +277,7 @@ impl Operation for CmuxCall {
 /// config/state.json, as the sidebar's `persistSet`. The shell opens its
 /// URL, as the sidebar does, and the handler does the locked write.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StateSet {
     /// `<map>.<id>`.
     pub key: String,
@@ -298,6 +300,7 @@ impl Operation for StateSet {
 /// (pr_poll::git_args, pr_poll::gh_args), reads them with
 /// pr_poll::answer, and sends the result back as `Event::PrPolled`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PrAsk {
     pub directory: String,
     /// When it was asked, in epoch seconds: the answer carries it back.
@@ -311,6 +314,7 @@ impl Operation for PrAsk {
 /// A link for the shell to open in the browser, as the sidebar's
 /// `openURL`: the card menu's Open PR.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OpenUrl {
     pub url: String,
 }
@@ -322,6 +326,7 @@ impl Operation for OpenUrl {
 /// Jon's words for the agent in a workspace, for the shell to send as
 /// `cmux agent message <workspace> -- <text>` (message.rs).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AgentMessage {
     pub workspace: String,
     pub text: String,

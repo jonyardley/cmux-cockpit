@@ -10,7 +10,11 @@ parts, built together from `project.yml` with XcodeGen:
   again after a backoff if it dies (`Host/Restart.swift`), and stops it
   on quit. The publisher writes `panel.json` and, beside it, the core's
   inputs as `data.json` (for a core in the sidebar, issue #269; nothing
-  reads it yet). Its log is `~/Library/Logs/Cockpit/cockpit-publish.log`.
+  reads it yet). Run with `--no-core`, it writes `data.json` alone,
+  carries out the effects a sidebar core drops into `outbox/` (one per
+  effect in `native/runner/tests/effects.json`) and writes their answers,
+  a refused cmux call or a PR, into `inbox/`; nothing starts it that way
+  yet. Its log is `~/Library/Logs/Cockpit/cockpit-publish.log`.
 - `CockpitSidebar.appex` (`Sidebar/`), embedded in the app: the sandboxed
   extension cmux draws in its left sidebar. `Sidebar/Model/` decides what
   to show (card words, which chips fit, the palette) in plain Swift that

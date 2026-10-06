@@ -11,11 +11,14 @@
 # 4. The outbox: every action the sidebar sends encodes to the JSON the
 #    runner's own test parses (native/runner/tests/actions.json), and a
 #    send lands as a file named as the runner takes it.
-# 5. Drag and drop: where a dropped card lands, and how a drop is drawn
+# 5. The effect files: native/runner/tests/effects.json, which the
+#    runner's own test matches against the bridge, has one entry per
+#    effect the runner takes from outbox/.
+# 6. Drag and drop: where a dropped card lands, and how a drop is drawn
 #    until panel.json shows it.
-# 6. The panel's clicks and menus: what each merged chip and menu pick
+# 7. The panel's clicks and menus: what each merged chip and menu pick
 #    sends, over every fixture.
-# 7. A click's selection: drawn on the click, until panel.json shows it
+# 8. A click's selection: drawn on the click, until panel.json shows it
 #    or it lapses.
 set -eu
 cd "$(dirname "$0")"
@@ -29,6 +32,8 @@ swiftc -swift-version 6 -o build/views-check Generated/PanelTypes.swift Sidebar/
 build/views-check ../fixtures ../pane/tests/snapshots
 swiftc -swift-version 6 -o build/outbox-check Generated/PanelTypes.swift Shared/Heartbeat.swift Sidebar/Model/SidebarAction.swift Sidebar/Live/Outbox.swift Tests/Outbox/main.swift
 build/outbox-check ../runner/tests/actions.json
+swiftc -swift-version 6 -o build/effects-check Tests/Effects/main.swift
+build/effects-check ../runner/tests/effects.json
 swiftc -swift-version 6 -o build/drag-check Generated/PanelTypes.swift Sidebar/Model/*.swift Sidebar/Live/PendingMove.swift Tests/Drag/main.swift
 build/drag-check
 swiftc -swift-version 6 -o build/actions-check Generated/PanelTypes.swift Sidebar/Model/*.swift Tests/Actions/main.swift

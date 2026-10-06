@@ -26,7 +26,7 @@ use std::collections::BTreeMap;
 
 pub use gh::{Ran, answer, gh_args, git_args};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::data::{Data, PrStatus, PullRequest, Workspace};
 use crate::js::non_empty;
@@ -45,7 +45,7 @@ pub const ANSWER_SECS: f64 = 60.0;
 pub const MAX_IN_FLIGHT: usize = 2;
 
 /// Why gh gave no PR list.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum GhFailure {
     /// The directory's repo is the trouble (not a repo, no GitHub remote).
     Repo,
@@ -72,7 +72,7 @@ impl GhFailure {
 }
 
 /// What the shell found for one directory.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub enum PollAnswer {
     /// On no branch (a detached HEAD, or not a repo): it has no PR.
     NoBranch,
@@ -98,7 +98,7 @@ impl PollAnswer {
 }
 
 /// One answer, for the event that brings it back.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct PrPolled {
     pub directory: String,
     /// When the ask it answers was made (`PrAsk::asked`), so a late

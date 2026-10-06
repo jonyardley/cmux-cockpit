@@ -42,9 +42,13 @@
 //! each change, signals it, and takes actions back as files (publish.rs,
 //! action.rs, signal.rs). Beside the panel it writes the core's inputs
 //! (`Inputs`, as data.json), so a core in the sidebar can be fed the
-//! same; `run_without_core` joins and writes those with no core at all.
+//! same; `run_without_core` joins and writes those with no core at all,
+//! carries out the effects that core sends back as files (effect.rs,
+//! `Feed::carry`), and keeps their answers for inbox/ (inbox.rs).
 
 pub mod action;
+pub mod effect;
+pub mod inbox;
 pub mod join;
 pub mod outbox;
 pub mod parse;
@@ -75,6 +79,8 @@ use crux_core::App;
 use serde::Serialize;
 use serde_json::Value;
 
+use effect::EffectFile;
+use inbox::Answer;
 use join::{Change, Join, changes_workspaces};
 use outbox::Outgoing;
 use parse::{AgentView, Groups};
@@ -180,8 +186,10 @@ impl Inputs {
 }
 
 /// The core and the join that feeds it. Without the core
-/// (`Feed::without_core`) it only joins: the inputs are kept and nothing
-/// else happens, so the model stays empty and actions go nowhere.
+/// (`Feed::without_core`) it only joins: the inputs are kept, the model
+/// stays empty and actions go nowhere, while the effects a core elsewhere
+/// sends (`Feed::carry`) are carried out and their answers kept in
+/// `answers`.
 #[derive(Debug, Default)]
 pub struct Feed {
     app: Cockpit,
@@ -200,6 +208,9 @@ pub struct Feed {
     asker: Option<Sender<PrAsk>>,
     /// PR asks made with no asker to take them, oldest first.
     pub unasked: Vec<PrAsk>,
+    /// Without a core: the answers to the effects carried out, oldest
+    /// first, for the publisher to write to inbox/ and take.
+    pub answers: Vec<Answer>,
 }
 
 impl Feed {
@@ -225,20 +236,38 @@ impl Feed {
                 }
                 Effect::Cmux(r) => Outgoing::Cmux(r.operation),
                 Effect::Persist(r) => Outgoing::Persist(r.operation),
-                Effect::OpenUrl(r) => Outgoing::OpenUrl(r.operation.url),
+                Effect::OpenUrl(r) => Outgoing::OpenUrl(r.operation),
                 Effect::AgentMessage(r) => Outgoing::AgentMessage(r.operation),
             };
-            // A worker gone (only once the run ends) keeps what it missed.
-            match &self.worker {
-                Some(w) => {
-                    if let Err(mpsc::SendError(out)) = w.send(out) {
-                        self.unsent.push(out);
-                    }
-                }
-                None => self.unsent.push(out),
-            }
+            self.hand(out);
         }
         render
+    }
+
+    /// Hands a request to the outbox worker. A worker gone (only once the
+    /// run ends) keeps what it missed.
+    fn hand(&mut self, out: Outgoing) {
+        match &self.worker {
+            Some(w) => {
+                if let Err(mpsc::SendError(out)) = w.send(out) {
+                    self.unsent.push(out);
+                }
+            }
+            None => self.unsent.push(out),
+        }
+    }
+
+    /// Carries out an effect a core elsewhere asked for (an effect file):
+    /// a PR ask goes to the asker, the rest to the outbox worker, as the
+    /// feed's own core's would.
+    pub fn carry(&mut self, effect: EffectFile) {
+        match effect {
+            EffectFile::PrPoll(ask) => self.ask(ask),
+            EffectFile::Cmux(call) => self.hand(Outgoing::Cmux(call)),
+            EffectFile::Persist(set) => self.hand(Outgoing::Persist(set)),
+            EffectFile::OpenUrl(url) => self.hand(Outgoing::OpenUrl(url)),
+            EffectFile::AgentMessage(m) => self.hand(Outgoing::AgentMessage(m)),
+        }
     }
 
     fn ask(&mut self, ask: PrAsk) {
@@ -289,11 +318,20 @@ impl Feed {
             Input::Agents(view) => (self.join.agents(view), false, None),
             Input::Workspaces(list) => (self.join.workspaces(list), false, None),
             Input::Groups(groups) => (self.join.groups(groups), false, None),
-            // Without a core there is nothing to snap back yet: the
-            // answer is dropped until the sidebar's core can take it.
+            // Without a core an answer is kept for inbox/, for the core
+            // that asked; the caller's next turn writes it, so it is not
+            // news for a frame.
+            Input::CmuxFailed(id) if self.no_core => {
+                self.answers.push(Answer::CmuxFailed { id });
+                (false, false, None)
+            }
+            Input::PrPolled(polled) if self.no_core => {
+                self.answers.push(Answer::PrPolled(polled));
+                (false, false, None)
+            }
             Input::CmuxFailed(id) => {
                 self.send(Event::CmuxFailed { id });
-                (self.has_core(), false, None)
+                (true, false, None)
             }
             // Only an answer that moves what a card shows is news.
             Input::PrPolled(polled) => (self.send(Event::PrPolled(polled)), false, None),
@@ -609,9 +647,9 @@ pub fn run(
 }
 
 /// Runs as `run` does with no core: the inputs are joined and handed to
-/// `on_frame` in `Feed::inputs`, the model stays empty, and the core's
-/// PR asks never come. The outbox worker still runs, for the effects the
-/// sidebar's core will send (issue #269).
+/// `on_frame` in `Feed::inputs`, and the model stays empty. The outbox
+/// worker and the PR asker still run, for the effects the sidebar's core
+/// sends (`Feed::carry`); their answers wait in `Feed::answers`.
 pub fn run_without_core(
     opts: &Options,
     channel: (Sender<Input>, Receiver<Input>),
@@ -974,7 +1012,7 @@ mod tests {
             .map(|o| match o {
                 Outgoing::Cmux(c) => c.method.clone(),
                 Outgoing::Persist(p) => format!("set {}", p.key),
-                Outgoing::OpenUrl(u) => format!("open {u}"),
+                Outgoing::OpenUrl(u) => format!("open {}", u.url),
                 Outgoing::AgentMessage(m) => format!("message {}", m.workspace),
             })
             .collect()

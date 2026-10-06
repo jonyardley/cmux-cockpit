@@ -22,16 +22,18 @@ use std::fs;
 use std::path::Path;
 use std::sync::mpsc::Receiver;
 
-use cockpit_core::app::{AgentMessage, CmuxCall, StateSet};
+use cockpit_core::app::{AgentMessage, CmuxCall, OpenUrl, StateSet};
 use cockpit_core::session::Param;
+use serde::Serialize;
 
-/// A request the core made of the shell.
-#[derive(Debug, Clone, PartialEq)]
+/// A request the core made of the shell. Written out, it is the core's
+/// effect as its bridge writes it, an effect file (effect.rs).
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Outgoing {
     Cmux(CmuxCall),
     Persist(StateSet),
     /// A link to open in the browser.
-    OpenUrl(String),
+    OpenUrl(OpenUrl),
     /// Words for the agent in a workspace.
     AgentMessage(AgentMessage),
 }
@@ -66,9 +68,9 @@ pub fn command_for(o: &Outgoing, token: Option<&str>) -> Result<(String, Vec<Str
         }
         // In the foreground: Jon asked to see the page.
         // `-u` reads it as a link, never a file or a flag.
-        Outgoing::OpenUrl(url) => Ok((
+        Outgoing::OpenUrl(link) => Ok((
             "/usr/bin/open".to_string(),
-            vec!["-u".to_string(), url.clone()],
+            vec!["-u".to_string(), link.url.clone()],
         )),
         // `--` ends the flags, so words that start with a dash stay words.
         Outgoing::AgentMessage(m) => Ok((
@@ -190,7 +192,9 @@ mod tests {
 
     #[test]
     fn a_link_opens_in_the_foreground_and_its_log_line_leaves_the_url_out() {
-        let link = Outgoing::OpenUrl("https://example.com/pr/7".into());
+        let link = Outgoing::OpenUrl(OpenUrl {
+            url: "https://example.com/pr/7".into(),
+        });
         let (program, args) = command_for(&link, None).unwrap();
         assert_eq!(program, "/usr/bin/open");
         assert_eq!(args, ["-u", "https://example.com/pr/7"]);
