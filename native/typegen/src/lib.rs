@@ -2,12 +2,13 @@
 //! cannot drift. facet_generate writes the plain types; its own JSON mode
 //! does not compile in Swift and Crux's generator is binary only (#254),
 //! so `DecodablePlugin` adds an `init(from:)` to each type that reads
-//! serde_json's default shapes, and a plain `JSONDecoder()` reads
-//! the panel the sidebar's core hands back. The same file holds the core's `Event` (#274), which the
-//! sidebar sends: `EncodablePlugin` adds an `encode(to:)` to it and to
-//! every type it reaches, in the shapes serde reads back, so a plain
-//! `JSONEncoder()` writes an event the core takes. The panel's other
-//! types only decode: the Swift side never writes the model.
+//! serde_json's default shapes, and a plain `JSONDecoder()` reads the
+//! panel the sidebar's core hands back. The same file holds the core's
+//! `Event` (#274), which the sidebar sends: `EncodablePlugin` adds an
+//! `encode(to:)` to it and to every type it reaches, in the shapes serde
+//! reads back, so a plain `JSONEncoder()` writes an event the core takes.
+//! The panel's other types only decode: the Swift side never writes the
+//! model.
 
 mod decodable;
 mod encodable;

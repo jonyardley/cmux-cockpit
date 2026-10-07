@@ -9,11 +9,11 @@ parts, built together from `project.yml` with XcodeGen:
   starts it with a full PATH and its own pid as the parent, starts it
   again after a backoff if it dies (`Host/Restart.swift`), and stops it
   on quit. It runs no core of its own (issue #269): it writes the core's
-  inputs as `data.json`, carries out the effects the sidebar's core drops
-  into `outbox/` (one per effect in `native/runner/tests/effects.json`)
-  and writes their answers, a refused cmux call or a PR, into `inbox/`.
-  Its
-  log is `~/Library/Logs/Cockpit/cockpit-publish.log`.
+  inputs as `data.json`, carries out the effects the sidebar's core
+  drops into `outbox/` (one per effect in
+  `native/runner/tests/effects.json`) and writes their answers, a
+  refused cmux call or a PR, into `inbox/`. Its log is
+  `~/Library/Logs/Cockpit/cockpit-publish.log`.
 - `CockpitSidebar.appex` (`Sidebar/`), embedded in the app: the sandboxed
   extension cmux draws in its left sidebar. It runs the core itself:
   `native/ffi` built as a static library and linked in, so a click
@@ -28,16 +28,18 @@ parts, built together from `project.yml` with XcodeGen:
   core's `Event`, which the extension compiles. `native/typegen` writes
   them from the Rust types in `native/core`, with an `init(from:)` on each
   that reads the JSON the core writes, so a plain `JSONDecoder()` decodes
-  the panel the sidebar's core hands back. `Event` and the types it reaches also get an
-  `encode(to:)` in the shapes serde reads, so the sidebar's clicks go to
-  its core as the core's own events (`Sidebar/Model/SidebarAction.swift`
-  names them). The core's own inputs (a frame, the state file, the
-  project table, a PR answer) are left out: the sidebar hands them to
-  its core as the bytes the helper wrote, never as Swift values. `Tests/Outbox/main.swift` and typegen's `check_events` check
-  each action against `native/core/tests/actions.json`. They are
-  gitignored and rebuilt every time: by a step in the Xcode build, and by
-  `test.sh`, which then decodes every fixture in `native/fixtures/` with
-  them (`Tests/Decode/main.swift`).
+  the panel the sidebar's core hands back. `Event` and the types it
+  reaches also get an `encode(to:)` in the shapes serde reads, so the
+  sidebar's clicks go to its core as the core's own events
+  (`Sidebar/Model/SidebarAction.swift` names them). The core's own
+  inputs (a frame, the state file, the project table, a PR answer) are
+  left out: the sidebar hands them to its core as the bytes the helper
+  wrote, never as Swift values. `Tests/Outbox/main.swift` and typegen's
+  `check_events` check each action against
+  `native/core/tests/actions.json`. They are gitignored and rebuilt
+  every time: by a step in the Xcode build, and by `test.sh`, which then
+  decodes every fixture in `native/fixtures/` with them
+  (`Tests/Decode/main.swift`).
 
 The two talk through the App Group `9S5FG4LQAF.dev.jonyardley.cockpit`:
 a folder only they can reach, plus a bare distributed notification

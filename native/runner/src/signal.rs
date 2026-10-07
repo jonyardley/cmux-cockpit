@@ -1,9 +1,9 @@
 //! The bare "changed" signal cockpit-publish sends after each new
-//! data.json or inbox/ answer: a distributed notification with no object and no payload,
-//! as the R2 spike proved reaches the sandboxed sidebar (its observer is
-//! `DistributedNotificationCenter.default()` under this name). The
-//! sidebar reads the file on each one, and on a slow poll besides, so a
-//! dropped signal only delays a frame.
+//! data.json or inbox/ answer: a distributed notification with no object
+//! and no payload, as the R2 spike proved reaches the sandboxed sidebar
+//! (its observer is `DistributedNotificationCenter.default()` under this
+//! name). The sidebar reads the file on each one, and on a slow poll
+//! besides, so a dropped signal only delays a frame.
 //!
 //! Posting needs CoreFoundation, which std does not wrap, so this is the
 //! one foreign call in the runner: four C functions, each used as its

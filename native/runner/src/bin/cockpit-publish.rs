@@ -65,6 +65,9 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                         .map_err(|_| format!("--parent: not a process id: {n}"))?,
                 );
             }
+            // Always without a core now, but a Cockpit.app built before
+            // R3.5 still passes it, so it parses and changes nothing.
+            "--no-core" => {}
             other => return Err(format!("unknown option {other}")),
         }
     }
@@ -162,9 +165,10 @@ mod tests {
                 parent: Some(42),
             })
         );
-        assert!(
-            args(&["--no-core"]).is_err(),
-            "there is no core to leave out"
+        assert_eq!(
+            args(&["--no-core"]),
+            args(&[]),
+            "an older helper app still passes it"
         );
         assert!(args(&["--after", "x"]).is_err());
         assert!(args(&["--parent"]).is_err());

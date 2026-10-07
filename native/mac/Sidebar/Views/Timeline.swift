@@ -1,12 +1,12 @@
 import os
-import SwiftUI
+import Foundation
 
 /// A timeline for Console or `log stream`: a line that starts it, then
 /// notes with the milliseconds since, as the drag and a click log them.
 @MainActor
 final class Timeline {
     /// The drag: lift, the button coming up, each change of landing slot,
-    /// the drop and the move drawn.
+    /// the drop and the move sent.
     static let drag = Timeline(category: "drag")
     /// A click's select through cmux's SDK: cmux taking it, or refusing
     /// it and the core sending it instead.

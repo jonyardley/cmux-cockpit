@@ -8,30 +8,30 @@
 //!   again, as `{"seq": 9, "written_at_ms": 1791229864123, "home":
 //!   "/Users/jon", "projects": [...], "projects_seq": 1, "state": {...},
 //!   "state_seq": 2, "data": {...}, "data_seq": 40}`. `seq` counts this
-//!   process's writes from 1, and `written_at_ms` is the wall clock at the
-//!   write. The sidebar's core, fed `projects`, `state`, then `data`, with
-//!   `home` set on its model first, builds the panel itself; a later file
-//!   is read by sending only the inputs whose `_seq` moved, and an input
-//!   still null is skipped. Then it posts the bare signal (signal.rs).
-//!   Nothing is written until the runner is ready (`ready`), so a restart
-//!   never blanks the sidebar.
+//!   process's writes from 1, and `written_at_ms` is the wall clock at
+//!   the write. The sidebar's core, fed `projects`, `state`, then `data`,
+//!   with `home` set on its model first, builds the panel itself; a later
+//!   file is read by sending only the inputs whose `_seq` moved, and an
+//!   input still null is skipped. Then it posts the bare signal
+//!   (signal.rs). Nothing is written until the runner is ready (`ready`),
+//!   so a restart never blanks the sidebar.
 //! - Once a minute, when anything was written, a log line gives the
 //!   file's writes per minute and size (`Tally`).
 //! - In: each file in outbox/ is one effect (effect.rs) from the
-//!   sidebar's core. The writer writes it under a name that starts with "." or
-//!   does not end in ".json", then renames it to `<name>.json`. Files are
-//!   taken in byte order of their names, so a name must sort in the order
-//!   sent: a fixed width, zero padded `<13 digit epoch ms>-<6 digit
-//!   counter>.json` (`1791229864123-000042.json`), never a bare counter,
-//!   where "10" sorts before "9". Each one is claimed by an atomic rename,
-//!   so it is carried out at most once even with two publishers running,
-//!   then deleted. Any file
-//!   older than `STALE` (a minute) is deleted and logged instead, so an
-//!   old move or message is never replayed. One that will not parse is
-//!   deleted and logged, never retried.
-//! - Back: each answer to an effect (a cmux call that
-//!   failed, a PR) goes into inbox/ as a file (inbox.rs), then the signal
-//!   is posted. Answers older than `STALE` are deleted.
+//!   sidebar's core. The writer writes it under a name that starts with
+//!   "." or does not end in ".json", then renames it to `<name>.json`.
+//!   Files are taken in byte order of their names, so a name must sort in
+//!   the order sent: a fixed width, zero padded `<13 digit epoch ms>-<6
+//!   digit counter>.json` (`1791229864123-000042.json`), never a bare
+//!   counter, where "10" sorts before "9". Each one is claimed by an
+//!   atomic rename, so it is carried out at most once even with two
+//!   publishers running, then deleted. Any file older than `STALE` (a
+//!   minute) is deleted and logged instead, so an old move or message is
+//!   never replayed. One that will not parse is deleted and logged, never
+//!   retried.
+//! - Back: each answer to an effect (a cmux call that failed, a PR) goes
+//!   into inbox/ as a file (inbox.rs), then the signal is posted. Answers
+//!   older than `STALE` are deleted.
 
 use std::collections::HashSet;
 use std::fs;
