@@ -137,7 +137,7 @@ struct ProjectRowView: View {
             .font(.system(size: Metrics.small))
             .foldsOnClick(.toggleQuiet)
             .padding(.top, 6)
-        case .quiet(let key, _, let name, let color, let canOpen, let menu):
+        case .quiet(let key, _, let name, let color, _, let canOpen, let menu):
             QuietRow(key: key, name: name, color: color, canOpen: canOpen, menu: menu)
         case .editor:
             EmptyView()

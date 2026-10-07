@@ -1414,7 +1414,7 @@ fn card_of(pane: &Pane, id: &str) -> Option<cockpit_pane::model::Card> {
         .iter()
         .flat_map(|l| &l.rows)
         .find_map(|r| match r {
-            cockpit_pane::model::Row::Card(c) if c.ws_id == id => Some(c.clone()),
+            cockpit_pane::model::Row::Card(c) if c.ws_id == id => Some(c.as_ref().clone()),
             _ => None,
         })
 }

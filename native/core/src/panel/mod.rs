@@ -16,14 +16,14 @@ use serde::Serialize;
 use crate::Model;
 
 pub use build::{
-    chip_view, chips_for_density, detail_lines, faint_heading, icon_of, lane_name, review_chip,
-    size_ink, unread_text, view_of,
+    badge_of, card_unread, chip_views, chips_for_density, detail_lines, faint_heading, icon_of,
+    lane_name, review_chip, size_ink, unread_text, view_of,
 };
 pub use editor::{EditorView, Field};
 
 // The vocabulary a shell draws the panel with, so it needs none of the
 // core's inner modules.
-pub use crate::lanes::{LANES, LaneKey};
+pub use crate::lanes::{Density, LANES, LaneKey};
 pub use crate::menu::{MenuAction, MenuItem, MenuTarget, MenuView};
 pub use crate::projects::PROJECT_COLORS;
 pub use crate::text::whole_words;
@@ -139,15 +139,50 @@ pub struct Needs {
     pub more: String,
 }
 
-/// A workspace's card.
+/// A project's badge: its SF Symbol on a tile of its colour, as the
+/// sidebar's projectBadge draws it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+pub struct Badge {
+    /// The SF Symbol's name, "terminal" for Other.
+    pub icon: String,
+    /// The tile's colour from the table; None when it does not read as hex.
+    pub color: Option<u32>,
+}
+
+/// A workspace's card.
+#[derive(Debug, Clone, PartialEq, Serialize, facet::Facet)]
 pub struct Card {
     pub ws_id: String,
     pub icon: Icon,
     pub title: String,
+    /// Which of the sidebar's card shapes it takes in All, by its lane:
+    /// full, compact or row. A Projects card has one shape of its own and
+    /// says full.
+    pub density: Density,
+    /// Its project's badge, by the card's title (parts.ts glyph).
+    pub badge: Badge,
+    /// The unread count its badge shows, "" with none: none on a card
+    /// while its Ready pill stands in (badgeCount), the plain count on a
+    /// row, which has no Ready pill.
+    pub unread: String,
+    /// Ready: finished while Jon was elsewhere, with output unread; the
+    /// green pill by the title.
+    pub ready: bool,
+    /// Pinned: the faint pin at the end of the title row.
+    pub pinned: bool,
+    /// The progress bar along the bottom, 0 to 1; None draws no bar.
+    pub progress: Option<f64>,
+    /// "· 3 helpers" after the status while subagent runs are live, else "".
+    pub helpers: String,
     /// The status and its age, "Working 14m"; a row's age alone.
     pub status: String,
     pub status_ink: Token,
+    /// How long the status has held, "12m", "" before anything says. The
+    /// title row shows it only while `status_has_age` is false, so a card
+    /// never reads two times; a row always shows it.
+    pub age: String,
+    /// Whether the status line carries a time of its own.
+    pub status_has_age: bool,
     /// "You: " and the last prompt, in lanes you come back to; else "".
     pub left_off: String,
     /// Its chips row: the size, the PR, the branch, the ports and its
@@ -191,20 +226,59 @@ pub struct Piece {
     pub ink: Token,
 }
 
+/// What a chip is, so a shell can give each kind its own look: the
+/// sidebar frames the size, PR, branch and port chips as quiet pills, sets
+/// the diff size unframed and faint after the PR, and draws actions as
+/// white buttons.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, facet::Facet)]
+#[repr(u8)]
+pub enum ChipKind {
+    /// What answering the chat takes: "Quick", "Decide · 2".
+    Size,
+    /// The PR's number and state; on a compact card, its words.
+    Pr,
+    /// The PR's diff size, "+120 −8", after the PR.
+    Diff,
+    Branch,
+    /// The first port and how many more, opening it on localhost.
+    Port,
+    /// Something to press: To review, Make project, Park, Close.
+    Action,
+}
+
 /// One chip: its pieces, a space apart.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Chip {
+    pub kind: ChipKind,
     pub pieces: Vec<Piece>,
     /// It goes first when the line is too narrow: the branch, as the
     /// sidebar's branch chip gives way to the PR, ports and actions.
     pub gives_way: bool,
+    /// Where a tap opens: the PR's page, a port on localhost; None for
+    /// the rest, and for a PR with no link.
+    pub url: Option<String>,
+    /// Whether a tap acts rather than selecting the card: To review, Make
+    /// project, Park and Close.
+    pub is_action: bool,
 }
 
 impl Chip {
-    pub(crate) fn of(pieces: Vec<Piece>) -> Chip {
+    /// A chip of `kind` that opens nothing and does not act.
+    pub(crate) fn new(kind: ChipKind, pieces: Vec<Piece>) -> Chip {
         Chip {
+            kind,
             pieces,
             gives_way: false,
+            url: None,
+            is_action: false,
+        }
+    }
+
+    /// An action chip: To review, Make project, Park or Close.
+    pub(crate) fn action(pieces: Vec<Piece>) -> Chip {
+        Chip {
+            is_action: true,
+            ..Chip::new(ChipKind::Action, pieces)
         }
     }
 }
@@ -228,7 +302,7 @@ pub enum ChipsFor {
 }
 
 /// A row of the Projects view.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+#[derive(Debug, Clone, PartialEq, Serialize, facet::Facet)]
 #[repr(u8)]
 pub enum ProjectRow {
     Header(ProjectHead),
@@ -254,6 +328,8 @@ pub enum ProjectRow {
         id: String,
         name: String,
         color: Option<u32>,
+        /// Its SF Symbol's name, for the badge before its name.
+        icon: String,
         can_open: bool,
         /// Its right-click menu, in the core's words and order.
         menu: Vec<MenuItem>,
@@ -284,6 +360,8 @@ pub struct ProjectHead {
     pub name: String,
     /// The table's colour; None draws the grey of a dot with no colour.
     pub color: Option<u32>,
+    /// Its SF Symbol's name, for the badge before its name.
+    pub icon: String,
     pub count: usize,
     pub pill: PillColors,
     /// While folded: the dot of its most urgent session.
@@ -296,10 +374,11 @@ pub struct ProjectHead {
 }
 
 /// A row under a lane header.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+#[derive(Debug, Clone, PartialEq, Serialize, facet::Facet)]
 #[repr(u8)]
 pub enum Row {
-    Card(Card),
+    /// Boxed, as a card is many times a placeholder's size.
+    Card(Box<Card>),
     /// A card whose session sits in Needs you: its title and why.
     Ghost {
         ws_id: String,
@@ -343,7 +422,7 @@ pub struct Anchor {
 
 /// A lane: its header, then its rows (none while folded). An empty lane
 /// draws as its header alone, faint and with nothing to fold.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+#[derive(Debug, Clone, PartialEq, Serialize, facet::Facet)]
 pub struct Lane {
     pub key: LaneKey,
     pub empty: bool,
@@ -364,7 +443,7 @@ pub struct Lane {
 }
 
 /// Everything the pane draws.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, facet::Facet)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, facet::Facet)]
 pub struct Panel {
     /// Which view the core has on: Tab asks it to flip.
     pub view: PanelView,

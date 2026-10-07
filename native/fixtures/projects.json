@@ -128,8 +128,20 @@
               "ink": "green"
             },
             "title": "Two: release",
+            "density": "Row",
+            "badge": {
+              "icon": "cube.fill",
+              "color": 6986700
+            },
+            "unread": "1",
+            "ready": true,
+            "pinned": true,
+            "progress": null,
+            "helpers": "",
             "status": "10m",
             "status_ink": "metaText",
+            "age": "10m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -268,8 +280,20 @@
               "ink": "blue"
             },
             "title": "One: parser rewrite for the streaming tokeniser",
+            "density": "Row",
+            "badge": {
+              "icon": "star.fill",
+              "color": 14251863
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "7m",
             "status_ink": "metaText",
+            "age": "7m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -408,28 +432,46 @@
               "ink": null
             },
             "title": "Two: changelog",
+            "density": "Row",
+            "badge": {
+              "icon": "cube.fill",
+              "color": 6986700
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "15m",
             "status_ink": "metaText",
+            "age": "15m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [
               {
+                "kind": "Action",
                 "pieces": [
                   {
                     "text": "Park",
                     "ink": "secondary"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": true
               },
               {
+                "kind": "Action",
                 "pieces": [
                   {
                     "text": "Close",
                     "ink": "text"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": true
               }
             ],
             "detail": "",
@@ -567,8 +609,20 @@
               "ink": null
             },
             "title": "Scratch",
+            "density": "Row",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "",
             "status_ink": "metaText",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -709,6 +763,7 @@
         "id": "p:/dev/app-one",
         "name": "App One",
         "color": 14251863,
+        "icon": "star.fill",
         "count": 2,
         "pill": {
           "bg": "clayCount",
@@ -742,11 +797,24 @@
           "ink": "blue"
         },
         "title": "One: parser rewrite for the streaming tokeniser",
+        "density": "Full",
+        "badge": {
+          "icon": "star.fill",
+          "color": 14251863
+        },
+        "unread": "",
+        "ready": false,
+        "pinned": false,
+        "progress": null,
+        "helpers": "",
         "status": "Working 7m",
         "status_ink": "blueText",
+        "age": "7m",
+        "status_has_age": true,
         "left_off": "",
         "chips": [
           {
+            "kind": "Pr",
             "pieces": [
               {
                 "text": "#148",
@@ -755,22 +823,35 @@
               {
                 "text": "draft",
                 "ink": "metaText"
-              },
+              }
+            ],
+            "gives_way": false,
+            "url": "https://github.com/o/r/pull/148",
+            "is_action": false
+          },
+          {
+            "kind": "Diff",
+            "pieces": [
               {
                 "text": "+342 −17",
                 "ink": "faint"
               }
             ],
-            "gives_way": false
+            "gives_way": false,
+            "url": null,
+            "is_action": false
           },
           {
+            "kind": "Branch",
             "pieces": [
               {
                 "text": "parser-streaming-tokeniser",
                 "ink": "secondary"
               }
             ],
-            "gives_way": true
+            "gives_way": true,
+            "url": null,
+            "is_action": false
           }
         ],
         "merged": [],
@@ -914,6 +995,7 @@
         "id": "p:/dev/app-two",
         "name": "App Two",
         "color": 6986700,
+        "icon": "cube.fill",
         "count": 2,
         "pill": {
           "bg": "countBg",
@@ -947,11 +1029,24 @@
           "ink": "green"
         },
         "title": "Two: release",
+        "density": "Full",
+        "badge": {
+          "icon": "cube.fill",
+          "color": 6986700
+        },
+        "unread": "",
+        "ready": true,
+        "pinned": true,
+        "progress": null,
+        "helpers": "",
         "status": "Finished 10m",
         "status_ink": "greenText",
+        "age": "10m",
+        "status_has_age": true,
         "left_off": "",
         "chips": [
           {
+            "kind": "Pr",
             "pieces": [
               {
                 "text": "#12",
@@ -962,25 +1057,33 @@
                 "ink": "metaText"
               }
             ],
-            "gives_way": false
+            "gives_way": false,
+            "url": "https://github.com/o/r/pull/12",
+            "is_action": false
           },
           {
+            "kind": "Branch",
             "pieces": [
               {
                 "text": "main",
                 "ink": "secondary"
               }
             ],
-            "gives_way": true
+            "gives_way": true,
+            "url": null,
+            "is_action": false
           },
           {
+            "kind": "Action",
             "pieces": [
               {
                 "text": "To review →",
                 "ink": "secondary"
               }
             ],
-            "gives_way": false
+            "gives_way": false,
+            "url": null,
+            "is_action": true
           }
         ],
         "merged": [],
@@ -1119,11 +1222,24 @@
           "ink": null
         },
         "title": "Two: changelog",
+        "density": "Full",
+        "badge": {
+          "icon": "cube.fill",
+          "color": 6986700
+        },
+        "unread": "",
+        "ready": false,
+        "pinned": false,
+        "progress": null,
+        "helpers": "",
         "status": "Idle 15m",
         "status_ink": "metaText",
+        "age": "15m",
+        "status_has_age": true,
         "left_off": "",
         "chips": [
           {
+            "kind": "Pr",
             "pieces": [
               {
                 "text": "#14",
@@ -1134,27 +1250,35 @@
                 "ink": "metaText"
               }
             ],
-            "gives_way": false
+            "gives_way": false,
+            "url": "https://github.com/o/r/pull/14",
+            "is_action": false
           }
         ],
         "merged": [
           {
+            "kind": "Action",
             "pieces": [
               {
                 "text": "Park",
                 "ink": "secondary"
               }
             ],
-            "gives_way": false
+            "gives_way": false,
+            "url": null,
+            "is_action": true
           },
           {
+            "kind": "Action",
             "pieces": [
               {
                 "text": "Close",
                 "ink": "text"
               }
             ],
-            "gives_way": false
+            "gives_way": false,
+            "url": null,
+            "is_action": true
           }
         ],
         "detail": "",
@@ -1290,6 +1414,7 @@
         "id": "p:other",
         "name": "Other",
         "color": 10526357,
+        "icon": "terminal",
         "count": 1,
         "pill": {
           "bg": "countBg",
@@ -1316,8 +1441,20 @@
           "ink": null
         },
         "title": "Scratch",
+        "density": "Full",
+        "badge": {
+          "icon": "terminal",
+          "color": 10526357
+        },
+        "unread": "",
+        "ready": false,
+        "pinned": false,
+        "progress": null,
+        "helpers": "",
         "status": "No agent",
         "status_ink": "faint",
+        "age": "",
+        "status_has_age": false,
         "left_off": "",
         "chips": [],
         "merged": [],
@@ -1461,6 +1598,7 @@
         "id": "q:/dev/app-three",
         "name": "App Three",
         "color": 7900253,
+        "icon": "leaf.fill",
         "can_open": false,
         "menu": [
           {

@@ -26,6 +26,48 @@ func hasEditor(_ rows: [ProjectRow]) -> Bool {
     rows.contains { if case .editor = $0 { return true } else { return false } }
 }
 
+/// Every card a panel holds: the lanes' and the Projects rows'.
+func cards(_ panel: Panel) -> [Card] {
+    let lanes = panel.lanes.flatMap(\.rows).compactMap { row -> Card? in
+        if case .card(let c) = row { return c } else { return nil }
+    }
+    let projects = panel.projects.compactMap { row -> Card? in
+        if case .card(let c) = row { return c } else { return nil }
+    }
+    return lanes + projects
+}
+
+/// The card looks the fixtures between them must carry, so each new
+/// field is read with a real value, not only its default.
+var seen: Set<String> = []
+
+@MainActor
+func note(_ panel: Panel) {
+    for card in cards(panel) {
+        seen.insert("density \(card.density)")
+        if card.ready { seen.insert("ready") }
+        if card.pinned { seen.insert("pinned") }
+        if let p = card.progress, p > 0, p <= 1 { seen.insert("progress") }
+        if !card.helpers.isEmpty { seen.insert("helpers") }
+        if !card.unread.isEmpty { seen.insert("unread") }
+        if !card.age.isEmpty { seen.insert("age") }
+        if card.statusHasAge { seen.insert("status has age") }
+        if !card.badge.icon.isEmpty, card.badge.color != nil { seen.insert("badge") }
+        for chip in card.chips + card.merged {
+            seen.insert("chip \(chip.kind)")
+            if chip.url != nil { seen.insert("chip url") }
+            if chip.isAction != (chip.kind == .action) { seen.insert("action flag disagrees") }
+        }
+    }
+    for row in panel.projects {
+        switch row {
+        case .header(let head) where !head.icon.isEmpty: seen.insert("project icon")
+        case .quiet(_, _, _, _, let icon, _, _) where !icon.isEmpty: seen.insert("quiet icon")
+        default: break
+        }
+    }
+}
+
 /// What a fixture holds, read as plain JSON rather than the panel types.
 struct Raw {
     let view: String?
@@ -72,6 +114,7 @@ for name in names {
         check(panel.needs.count == raw.needs, "\(name): needs \(raw.needs.map(String.init) ?? "missing")")
         check(panel.menu?.items.count == raw.menuItems, "\(name): menu items")
         check(hasEditor(panel.projects) == raw.editor, "\(name): editor open")
+        note(panel)
         sawMenu = sawMenu || raw.menuItems != nil
         sawEditor = sawEditor || raw.editor
     } catch {
@@ -81,6 +124,12 @@ for name in names {
 // So the menu and editor shapes stay covered if a fixture goes.
 check(sawMenu, "some fixture has a menu open")
 check(sawEditor, "some fixture has an editor open")
+for look in ["density full", "density compact", "density row", "ready", "pinned", "progress", "helpers", "unread",
+             "age", "status has age", "badge", "chip pr", "chip diff", "chip branch", "chip action", "chip url",
+             "project icon", "quiet icon"] {
+    check(seen.contains(look), "some fixture's card carries \(look)")
+}
+check(!seen.contains("action flag disagrees"), "a chip is an action exactly when its kind is")
 
 // A key the Rust always writes, missing, fails rather than defaulting.
 do {

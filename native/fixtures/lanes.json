@@ -80,18 +80,33 @@
               "ink": "green"
             },
             "title": "Tidy strip",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": true,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "Finished 6m",
             "status_ink": "greenText",
+            "age": "6m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [
               {
+                "kind": "Action",
                 "pieces": [
                   {
                     "text": "To review →",
                     "ink": "secondary"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": true
               }
             ],
             "merged": [],
@@ -230,11 +245,24 @@
               "ink": "blue"
             },
             "title": "Snapshot tests",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": 0.4,
+            "helpers": "· 1 helper",
             "status": "Working 14m",
             "status_ink": "blueText",
+            "age": "14m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [
               {
+                "kind": "Pr",
                 "pieces": [
                   {
                     "text": "#130",
@@ -243,15 +271,26 @@
                   {
                     "text": "draft",
                     "ink": "metaText"
-                  },
+                  }
+                ],
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/130",
+                "is_action": false
+              },
+              {
+                "kind": "Diff",
+                "pieces": [
                   {
                     "text": "+342 −17",
                     "ink": "faint"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": false
               },
               {
+                "kind": "Branch",
                 "pieces": [
                   {
                     "text": "snapshot-tests",
@@ -262,7 +301,9 @@
                     "ink": "secondary"
                   }
                 ],
-                "gives_way": true
+                "gives_way": true,
+                "url": null,
+                "is_action": false
               }
             ],
             "merged": [],
@@ -401,8 +442,20 @@
               "ink": "blue"
             },
             "title": "Long build",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "Working 40m · quiet 17m",
             "status_ink": "blueText",
+            "age": "40m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -541,8 +594,20 @@
               "ink": "blue"
             },
             "title": "Selected card",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "Working 1m",
             "status_ink": "blueText",
+            "age": "1m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -681,11 +746,24 @@
               "ink": null
             },
             "title": "Card layout fit",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "Idle 15m",
             "status_ink": "metaText",
+            "age": "15m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [
               {
+                "kind": "Pr",
                 "pieces": [
                   {
                     "text": "#176",
@@ -696,27 +774,35 @@
                     "ink": "metaText"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/176",
+                "is_action": false
               }
             ],
             "merged": [
               {
+                "kind": "Action",
                 "pieces": [
                   {
                     "text": "Park",
                     "ink": "secondary"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": true
               },
               {
+                "kind": "Action",
                 "pieces": [
                   {
                     "text": "Close",
                     "ink": "text"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": true
               }
             ],
             "detail": "",
@@ -854,8 +940,20 @@
               "ink": null
             },
             "title": "Untimed card",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": true,
+            "progress": null,
+            "helpers": "",
             "status": "Idle",
             "status_ink": "metaText",
+            "age": "5m",
+            "status_has_age": false,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -1012,8 +1110,20 @@
               "ink": "green"
             },
             "title": "Ended agent",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": true,
+            "progress": null,
+            "helpers": "",
             "status": "Finished 15m",
             "status_ink": "greenText",
+            "age": "15m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -1152,8 +1262,20 @@
               "ink": null
             },
             "title": "Left off",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "1",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "Idle 1h",
             "status_ink": "metaText",
+            "age": "1h",
+            "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -1310,8 +1432,20 @@
               "ink": "blue"
             },
             "title": "Iteration timings",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "Waiting 4m · 1 shell",
             "status_ink": "blueText",
+            "age": "4m",
+            "status_has_age": true,
             "left_off": "You: hi",
             "chips": [],
             "merged": [],
@@ -1450,8 +1584,20 @@
               "ink": null
             },
             "title": "No agent",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "No agent",
             "status_ink": "faint",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -1628,8 +1774,20 @@
               "ink": "blue"
             },
             "title": "Loose workspace",
+            "density": "Row",
+            "badge": {
+              "icon": "star.fill",
+              "color": 14251863
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": true,
+            "progress": null,
+            "helpers": "",
             "status": "3m",
             "status_ink": "metaText",
+            "age": "3m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -1768,28 +1926,46 @@
               "ink": null
             },
             "title": "Merged elsewhere",
+            "density": "Row",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "",
             "status_ink": "metaText",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [],
             "merged": [
               {
+                "kind": "Action",
                 "pieces": [
                   {
                     "text": "Park",
                     "ink": "secondary"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": true
               },
               {
+                "kind": "Action",
                 "pieces": [
                   {
                     "text": "Close",
                     "ink": "text"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": true
               }
             ],
             "detail": "",

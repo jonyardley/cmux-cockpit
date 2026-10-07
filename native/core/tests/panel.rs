@@ -246,3 +246,58 @@ fn a_lane_anchor_carries_its_id_and_its_selection_for_the_badge() {
     assert!(anchor.selected);
     assert_eq!(anchor.unread, "2");
 }
+
+/// Every card the scenes draw, in lanes and in Projects.
+fn every_card() -> Vec<cockpit_core::panel::Card> {
+    use cockpit_core::panel::Row;
+    let mut out = Vec::new();
+    for (_, panel) in scenes() {
+        for row in panel.lanes.iter().flat_map(|l| &l.rows) {
+            if let Row::Card(c) = row {
+                out.push(c.as_ref().clone());
+            }
+        }
+        for row in &panel.projects {
+            if let ProjectRow::Card(c) = row {
+                out.push(c.clone());
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn a_ready_card_lets_its_pill_stand_in_for_the_unread_count() {
+    use cockpit_core::panel::Density;
+    let cards = every_card();
+    let ready: Vec<_> = cards.iter().filter(|c| c.ready).collect();
+    assert!(!ready.is_empty(), "some scene has a Ready card");
+    for c in ready.iter().filter(|c| c.density != Density::Row) {
+        assert_eq!(c.unread, "", "{} is Ready, so no count", c.ws_id);
+    }
+    assert!(
+        cards.iter().any(|c| !c.unread.is_empty()),
+        "some card counts"
+    );
+}
+
+#[test]
+fn a_diff_size_follows_its_pr_and_only_actions_act() {
+    use cockpit_core::panel::ChipKind;
+    let mut diffs = 0;
+    for c in every_card() {
+        let chips: Vec<_> = c.chips.iter().chain(&c.merged).collect();
+        for (i, chip) in chips.iter().enumerate() {
+            assert_eq!(chip.is_action, chip.kind == ChipKind::Action, "{}", c.ws_id);
+            if chip.kind == ChipKind::Diff {
+                diffs += 1;
+                let before = i.checked_sub(1).and_then(|j| chips.get(j));
+                assert_eq!(before.map(|b| b.kind), Some(ChipKind::Pr), "{}", c.ws_id);
+            }
+        }
+        if let Some(p) = c.progress {
+            assert!((0.0..=1.0).contains(&p), "{} progress {p}", c.ws_id);
+        }
+    }
+    assert!(diffs > 0, "some scene has a PR with a diff size");
+}

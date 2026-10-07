@@ -11,16 +11,17 @@ use crate::moves::MoveSize;
 use crate::persist::ViewMode;
 use crate::placement::is_foreign_anchor;
 use crate::pr_colors::{pr_ink, pr_text_color};
+use crate::projects::Project;
 use crate::prs::pr_summary;
 use crate::session::Session;
-use crate::status::{DETAIL_MAX, LEFT_OFF_MAX, NEEDS_DETAIL_MAX, StatusStyle};
+use crate::status::{DETAIL_MAX, LEFT_OFF_MAX, NEEDS_DETAIL_MAX, StatusStyle, progress_fraction};
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
 
 use super::{
-    Anchor, CLOSE, Card, Chip, ChipsFor, DIRTY_MARK, DOT, EditorView, HOLLOW, Icon, Lane, Needs,
-    NeedsRow, NextLine, OLDEST_WORD, PARK, PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow,
-    QUIET_ROW, Row, TO_REVIEW, piece,
+    Anchor, Badge, CLOSE, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT, EditorView, HOLLOW,
+    Icon, Lane, Needs, NeedsRow, NextLine, OLDEST_WORD, PARK, PROJECT_ROW, Panel, PanelView,
+    ProjectHead, ProjectRow, QUIET_ROW, Row, TO_REVIEW, piece,
 };
 
 /// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
@@ -35,42 +36,59 @@ pub fn size_ink(size: MoveSize) -> Token {
     }
 }
 
-/// A core chip as the pane draws it: the PR's number in the quiet chip's
-/// ink, its state in its health's and its diff size faint; the branch with
-/// its dirty dot, and the ports, in the quiet chip's ink.
-pub fn chip_view(c: &CoreChip) -> Chip {
+/// A core chip as the panel draws it: the PR's number in the quiet chip's
+/// ink and its state in its health's, then its diff size as a chip of its
+/// own, faint, as the sidebar sets it beside the PR; the branch with its
+/// dirty dot, and the ports, in the quiet chip's ink. The PR and the port
+/// carry where a tap opens.
+pub fn chip_views(c: &CoreChip) -> Vec<Chip> {
     let quiet = Token::Secondary;
-    let pieces = match c {
-        CoreChip::Size { text, size } => vec![piece(text, size_ink(*size))],
+    match c {
+        CoreChip::Size { text, size } => {
+            vec![Chip::new(
+                ChipKind::Size,
+                vec![piece(text, size_ink(*size))],
+            )]
+        }
         CoreChip::Pr {
             tag,
             state,
             health,
             diff,
-            ..
+            url,
         } => {
-            let mut out = vec![piece(tag, quiet)];
+            let mut pieces = vec![piece(tag, quiet)];
             if !state.is_empty() {
-                out.push(piece(state, pr_ink(*health)));
+                pieces.push(piece(state, pr_ink(*health)));
             }
-            if !diff.is_empty() {
-                out.push(piece(diff, Token::Faint));
-            }
+            let pr = Chip {
+                url: url.clone(),
+                ..Chip::new(ChipKind::Pr, pieces)
+            };
+            let mut out = vec![pr];
+            out.extend(diff_chip(diff));
             out
         }
         CoreChip::Branch { text, dirty } => {
-            let mut out = vec![piece(text, quiet)];
+            let mut pieces = vec![piece(text, quiet)];
             if *dirty {
-                out.push(piece(DIRTY_MARK, quiet));
+                pieces.push(piece(DIRTY_MARK, quiet));
             }
-            out
+            vec![Chip {
+                gives_way: true,
+                ..Chip::new(ChipKind::Branch, pieces)
+            }]
         }
-        CoreChip::Port { text, .. } => vec![piece(text, quiet)],
-    };
-    Chip {
-        pieces,
-        gives_way: matches!(c, CoreChip::Branch { .. }),
+        CoreChip::Port { text, url } => vec![Chip {
+            url: Some(url.clone()),
+            ..Chip::new(ChipKind::Port, vec![piece(text, quiet)])
+        }],
     }
+}
+
+/// A PR's diff size as its own chip, faint; None when it has none.
+fn diff_chip(diff: &str) -> Option<Chip> {
+    (!diff.is_empty()).then(|| Chip::new(ChipKind::Diff, vec![piece(diff, Token::Faint)]))
 }
 
 /// The To review action: green while its PR is ready to merge.
@@ -80,7 +98,7 @@ pub fn review_chip(green: bool) -> Chip {
     } else {
         Token::Secondary
     };
-    Chip::of(vec![piece(TO_REVIEW, ink)])
+    Chip::action(vec![piece(TO_REVIEW, ink)])
 }
 
 /// A merged card's Park, in the second ink, and Close, in the first, so
@@ -89,10 +107,10 @@ pub fn review_chip(green: bool) -> Chip {
 fn merged_chips(session: &mut Session, data: &Data, w: Option<&Workspace>) -> Vec<Chip> {
     let mut out = Vec::new();
     if session.offers_park(data, w) {
-        out.push(Chip::of(vec![piece(PARK, Token::Secondary)]));
+        out.push(Chip::action(vec![piece(PARK, Token::Secondary)]));
     }
     if session.offers_close(data, w) {
-        out.push(Chip::of(vec![piece(CLOSE, Token::Text)]));
+        out.push(Chip::action(vec![piece(CLOSE, Token::Text)]));
     }
     out
 }
@@ -156,6 +174,56 @@ pub fn unread_text(n: Option<f64>) -> String {
     }
 }
 
+/// A project's badge: its symbol and its colour.
+pub fn badge_of(p: &Project) -> Badge {
+    Badge {
+        icon: p.icon.clone(),
+        color: parse_hex(&p.color),
+    }
+}
+
+/// The unread count a card of `density` shows: a row the plain count, as
+/// it has no Ready pill (cards.ts denseRow); a card its badge count, none
+/// while Ready stands in (parts.ts titleRow).
+pub fn card_unread(density: Density, unread: Option<f64>, badge: f64) -> String {
+    match density {
+        Density::Row => unread_text(unread),
+        Density::Full | Density::Compact => unread_text(Some(badge)),
+    }
+}
+
+/// Whether the workspace is pinned.
+fn is_pinned(w: Option<&Workspace>) -> bool {
+    w.is_some_and(|w| w.pinned == Some(true))
+}
+
+/// The looks a card shares whatever its shape: its badge, unread count,
+/// Ready, pin, progress, helpers and age.
+struct Looks {
+    badge: Badge,
+    unread: String,
+    ready: bool,
+    pinned: bool,
+    progress: Option<f64>,
+    helpers: String,
+    age: String,
+    status_has_age: bool,
+}
+
+fn looks(session: &mut Session, data: &Data, w: Option<&Workspace>, density: Density) -> Looks {
+    let badge = session.badge_count(data, w);
+    Looks {
+        badge: badge_of(&session.project_of_workspace(w)),
+        unread: card_unread(density, w.and_then(|w| w.unread), badge),
+        ready: session.is_ready(data, w),
+        pinned: is_pinned(w),
+        progress: progress_fraction(w),
+        helpers: session.helper_text(w),
+        age: session.age_of(data, w),
+        status_has_age: session.status_has_age(data, w),
+    }
+}
+
 /// The core's view mode as the pane's view; anything but Projects is All.
 pub fn view_of(view: &ViewModel) -> PanelView {
     if view.mode == ViewMode::Projects.as_str() {
@@ -195,9 +263,9 @@ fn chips_row(
         ChipsFor::Full | ChipsFor::Project => session
             .card_chips(data, w, true)
             .iter()
-            .map(chip_view)
+            .flat_map(chip_views)
             .collect(),
-        ChipsFor::Compact => compact_pr(session, w).into_iter().collect(),
+        ChipsFor::Compact => compact_pr(session, w),
     };
     if session.can_file_for_review(data, w) {
         out.push(review_chip(session.review_is_green(w)));
@@ -205,7 +273,7 @@ fn chips_row(
     // Only once the shell has said where home is: until then the home
     // folder itself would be offered as a project.
     if kind == ChipsFor::Project && session.home.is_some() && session.can_create_project(w) {
-        out.push(Chip::of(vec![piece(
+        out.push(Chip::action(vec![piece(
             session.make_project_label(w),
             Token::Secondary,
         )]));
@@ -214,18 +282,21 @@ fn chips_row(
 }
 
 /// A compact card's PR in words, "#45 · ready", in its health's ink,
-/// then its diff size, faint. The sidebar runs it on from the status
-/// line after a "·"; here it has a line of its own, so it has none.
-fn compact_pr(session: &Session, w: Option<&Workspace>) -> Option<Chip> {
-    let pr = pr_summary(&session.saved, w)?;
-    let mut pieces = vec![piece(
-        pr.text.clone(),
-        pr_text_color(Some(&pr), Token::Secondary),
-    )];
-    if !pr.diff.is_empty() {
-        pieces.push(piece(pr.diff.clone(), Token::Faint));
-    }
-    Some(Chip::of(pieces))
+/// then its diff size, faint, as a chip of its own. The sidebar runs them
+/// on from the status line after a "·"; here they have a line of their
+/// own, so they have none.
+fn compact_pr(session: &Session, w: Option<&Workspace>) -> Vec<Chip> {
+    let Some(pr) = pr_summary(&session.saved, w) else {
+        return Vec::new();
+    };
+    let words = piece(pr.text.clone(), pr_text_color(Some(&pr), Token::Secondary));
+    let chip = Chip {
+        url: pr.url.clone(),
+        ..Chip::new(ChipKind::Pr, vec![words])
+    };
+    let mut out = vec![chip];
+    out.extend(diff_chip(&pr.diff));
+    out
 }
 
 /// Which chips a card in All carries, by its density.
@@ -318,12 +389,22 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         String::new()
     };
     let chips = chips_row(session, data, w, chips_for_density(density));
+    let looks = looks(session, data, w, density);
     Card {
         ws_id: id.to_string(),
         icon: icon_of(&style),
         title: title_of(w, id),
+        density,
+        badge: looks.badge,
+        unread: looks.unread,
+        ready: looks.ready,
+        pinned: looks.pinned,
+        progress: looks.progress,
+        helpers: looks.helpers,
         status,
         status_ink,
+        age: looks.age,
+        status_has_age: looks.status_has_age,
         left_off,
         chips,
         merged: merged_chips(session, data, w),
@@ -356,7 +437,7 @@ fn lanes(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Lane> {
             }
             LaneEntry::Ws { ws_id, .. } => {
                 let c = card(session, data, view, ws_id);
-                push_row(&mut out, Row::Card(c));
+                push_row(&mut out, Row::Card(Box::new(c)));
             }
             LaneEntry::Ghost { ws_id, .. } => {
                 let w = data.ws_by_id(ws_id);
@@ -428,12 +509,22 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
     let w = data.ws_by_id(id);
     let style = session.status_info(data, w);
     let wanted = session.move_of(w).map(|m| m.text).unwrap_or_default();
+    let looks = looks(session, data, w, Density::Full);
     Card {
         ws_id: id.to_string(),
         icon: icon_of(&style),
         title: title_of(w, id),
+        density: Density::Full,
+        badge: looks.badge,
+        unread: looks.unread,
+        ready: looks.ready,
+        pinned: looks.pinned,
+        progress: looks.progress,
+        helpers: looks.helpers,
         status: session.status_line(data, w),
         status_ink: style.text,
+        age: looks.age,
+        status_has_age: looks.status_has_age,
         left_off: String::new(),
         chips: chips_row(session, data, w, ChipsFor::Project),
         merged: merged_chips(session, data, w),
@@ -462,6 +553,7 @@ fn project_head(session: &mut Session, data: &Data, k: &str) -> ProjectHead {
         id: format!("{PROJECT_ROW}{k}"),
         name: p.name.clone(),
         color: parse_hex(&p.color),
+        icon: p.icon.clone(),
         count: ws.len(),
         pill: status.tint,
         dot,
@@ -503,6 +595,7 @@ fn projects(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Project
                     id: format!("{QUIET_ROW}{project}"),
                     name: p.name.clone(),
                     color: parse_hex(&p.color),
+                    icon: p.icon.clone(),
                     can_open: session.can_open_project(project),
                     menu: session.quiet_menu(project),
                 }
@@ -606,56 +699,116 @@ mod tests {
         assert_eq!(Panel::from_core(&mut core), Panel::default());
     }
 
+    /// Each piece's words and ink.
+    fn inks(c: &Chip) -> Vec<(&str, Token)> {
+        c.pieces.iter().map(|p| (p.text.as_str(), p.ink)).collect()
+    }
+
     #[test]
-    fn inks_a_prs_number_quietly_its_state_by_health_and_its_diff_faint() {
+    fn inks_a_prs_number_quietly_its_state_by_health_and_its_diff_faint_on_its_own() {
         use crate::prs::PrHealth;
-        let c = chip_view(&CoreChip::Pr {
+        let chips = chip_views(&CoreChip::Pr {
             tag: "#3".into(),
             state: "1 failing".into(),
             health: PrHealth::Failing,
             diff: "+1 \u{2212}2".into(),
-            url: None,
+            url: Some("https://github.com/o/r/pull/3".into()),
         });
-        let inks: Vec<(&str, Token)> = c.pieces.iter().map(|p| (p.text.as_str(), p.ink)).collect();
+        assert_eq!(chips.len(), 2, "the PR, then its diff size");
+        assert_eq!(chips[0].kind, ChipKind::Pr);
         assert_eq!(
-            inks,
-            [
-                ("#3", Token::Secondary),
-                ("1 failing", Token::RedText),
-                ("+1 \u{2212}2", Token::Faint)
-            ]
+            inks(&chips[0]),
+            [("#3", Token::Secondary), ("1 failing", Token::RedText)]
         );
-        let bare = chip_view(&CoreChip::Pr {
+        assert_eq!(
+            chips[0].url.as_deref(),
+            Some("https://github.com/o/r/pull/3")
+        );
+        assert_eq!(chips[1].kind, ChipKind::Diff);
+        assert_eq!(inks(&chips[1]), [("+1 \u{2212}2", Token::Faint)]);
+        assert_eq!(chips[1].url, None);
+        assert!(chips.iter().all(|c| !c.is_action && !c.gives_way));
+        let bare = chip_views(&CoreChip::Pr {
             tag: "#6".into(),
             state: String::new(),
             health: PrHealth::Quiet,
             diff: String::new(),
             url: None,
         });
-        assert_eq!(bare.pieces.len(), 1, "no state, no diff");
+        assert_eq!(bare.len(), 1, "no diff, no diff chip");
+        assert_eq!(bare[0].pieces.len(), 1, "no state, no state words");
+        assert_eq!(bare[0].url, None, "a PR with no link opens nothing");
     }
 
     #[test]
     fn marks_a_dirty_branch_and_inks_a_size_by_what_answering_takes() {
-        let br = chip_view(&CoreChip::Branch {
+        let br = chip_views(&CoreChip::Branch {
             text: "feat".into(),
             dirty: true,
         });
-        let words: Vec<&str> = br.pieces.iter().map(|p| p.text.as_str()).collect();
+        let words: Vec<&str> = br[0].pieces.iter().map(|p| p.text.as_str()).collect();
         assert_eq!(words, ["feat", DIRTY_MARK]);
-        assert!(br.gives_way, "the branch goes first on a narrow line");
-        let size = chip_view(&CoreChip::Size {
+        assert_eq!(br[0].kind, ChipKind::Branch);
+        assert!(br[0].gives_way, "the branch goes first on a narrow line");
+        assert_eq!(br[0].url, None);
+        let size = chip_views(&CoreChip::Size {
             text: "Decide".into(),
             size: MoveSize::Decide,
         });
-        assert_eq!(size.pieces[0].ink, Token::ClayText);
+        assert_eq!(size[0].kind, ChipKind::Size);
+        assert_eq!(size[0].pieces[0].ink, Token::ClayText);
         assert_eq!(size_ink(MoveSize::Quick), Token::GreenText);
         assert_eq!(size_ink(MoveSize::Review), Token::BlueText);
-        let port = chip_view(&CoreChip::Port {
+        let port = chip_views(&CoreChip::Port {
             text: ":5173 \u{2197}".into(),
             url: "http://localhost:5173".into(),
         });
-        assert_eq!(port.pieces[0].ink, Token::Secondary);
+        assert_eq!(port[0].kind, ChipKind::Port);
+        assert_eq!(port[0].pieces[0].ink, Token::Secondary);
+        assert_eq!(port[0].url.as_deref(), Some("http://localhost:5173"));
+        assert!(!port[0].is_action, "a port opens a page, it does not act");
+    }
+
+    #[test]
+    fn makes_the_actions_action_chips() {
+        let review = review_chip(true);
+        assert_eq!(review.kind, ChipKind::Action);
+        assert!(review.is_action);
+        assert_eq!(review.url, None);
+        assert!(!review.gives_way);
+    }
+
+    #[test]
+    fn badges_a_card_with_its_projects_symbol_and_colour() {
+        let other = crate::projects::other();
+        let b = badge_of(&other);
+        assert_eq!(b.icon, "terminal");
+        assert_eq!(b.color, Some(0xA0_9E_95));
+        let odd = Project {
+            color: "not a colour".into(),
+            ..other
+        };
+        assert_eq!(badge_of(&odd).color, None);
+    }
+
+    #[test]
+    fn counts_unread_on_a_row_plainly_and_on_a_card_as_its_badge() {
+        // Ready: the badge count is 0 while the pill stands in for it.
+        assert_eq!(card_unread(Density::Full, Some(3.0), 0.0), "");
+        assert_eq!(card_unread(Density::Compact, Some(3.0), 3.0), "3");
+        assert_eq!(card_unread(Density::Row, Some(3.0), 0.0), "3");
+        assert_eq!(card_unread(Density::Row, None, 0.0), "");
+    }
+
+    #[test]
+    fn pins_only_a_workspace_marked_pinned() {
+        assert!(!is_pinned(None));
+        assert!(!is_pinned(Some(&Workspace::default())));
+        let w = Workspace {
+            pinned: Some(true),
+            ..Workspace::default()
+        };
+        assert!(is_pinned(Some(&w)));
     }
 
     #[test]

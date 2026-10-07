@@ -60,9 +60,9 @@ for name in names {
 }
 check(mergedSeen > 0, "the fixtures hold merged chips to check (\(mergedSeen))")
 
-let park = Chip(pieces: [Piece(text: "Park", ink: .secondary)], givesWay: false)
-let close = Chip(pieces: [Piece(text: "Close", ink: .text)], givesWay: false)
-let other = Chip(pieces: [Piece(text: "#7", ink: .text)], givesWay: false)
+let park = Chip(kind: .action, pieces: [Piece(text: "Park", ink: .secondary)], givesWay: false, url: nil, isAction: true)
+let close = Chip(kind: .action, pieces: [Piece(text: "Close", ink: .text)], givesWay: false, url: nil, isAction: true)
+let other = Chip(kind: .pr, pieces: [Piece(text: "#7", ink: .text)], givesWay: false, url: nil, isAction: false)
 check(SidebarAction.merged(park, id: "W1") == .parkMerged(id: "W1"), "Park parks")
 check(SidebarAction.merged(close, id: "W1") == .closeMerged(id: "W1"), "Close closes")
 check(SidebarAction.merged(other, id: "W1") == nil, "any other chip sends nothing")

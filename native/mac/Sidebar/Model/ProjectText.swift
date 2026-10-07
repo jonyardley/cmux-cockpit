@@ -20,7 +20,7 @@ enum ProjectText {
             return [Words.newProject]
         case .quietHeader(let count, let collapsed):
             return [collapsed ? Words.folded : Words.open, Words.quiet, String(count)]
-        case .quiet(_, _, let name, _, let canOpen, _):
+        case .quiet(_, _, let name, _, _, let canOpen, _):
             return [Words.laneMark, name] + (canOpen ? [Words.plus] : [])
         case .card, .ghost, .editor:
             return nil
@@ -40,7 +40,7 @@ enum ProjectText {
         case .newProject: "new"
         case .editor: "editor"
         case .quietHeader: "quiet"
-        case .quiet(_, let id, _, _, _, _): id
+        case .quiet(_, let id, _, _, _, _, _): id
         }
     }
 

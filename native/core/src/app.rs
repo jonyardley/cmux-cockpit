@@ -210,7 +210,7 @@ pub struct LaneHeaderView {
 }
 
 /// What the shell draws: the All view.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ViewModel {
     pub mode: String,
