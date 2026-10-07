@@ -6,7 +6,7 @@
 //! Collapse is local only: projects are not cmux groups. A project with
 //! several paths is one group, keyed by its first match.
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use serde::Serialize;
 
 use crate::data::{Data, Workspace};
@@ -23,8 +23,7 @@ pub const NEW_PROJECT: &str = "+new";
 /// How many open folders the new project editor offers.
 const MAX_SUGGESTIONS: usize = 3;
 
-/// One row of the Projects view. A card's key is `<wsId>@p` and its
-/// placeholder's `<wsId>@g`; an open editor has a key of its own under its
+/// One row of the Projects view. A card's key is `<wsId>@p`; an open editor has a key of its own under its
 /// project's header or quiet row, since a row's kind is fixed by its key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -34,11 +33,6 @@ pub enum ProjectEntry {
         project: String,
     },
     Ws {
-        id: String,
-        #[serde(rename = "wsId")]
-        ws_id: String,
-    },
-    Ghost {
         id: String,
         #[serde(rename = "wsId")]
         ws_id: String,
@@ -65,7 +59,6 @@ impl ProjectEntry {
         match self {
             ProjectEntry::Header { id, .. }
             | ProjectEntry::Ws { id, .. }
-            | ProjectEntry::Ghost { id, .. }
             | ProjectEntry::QuietHeader { id }
             | ProjectEntry::QuietRow { id, .. }
             | ProjectEntry::Editor { id, .. }
@@ -359,15 +352,9 @@ impl Session {
         }
     }
 
-    /// A project's header, its editor, then its cards, each in the Needs
-    /// you strip leaving a placeholder in its place.
-    fn push_group(
-        &self,
-        entries: &mut Vec<ProjectEntry>,
-        k: &str,
-        rows: &[&Workspace],
-        waiting: &IndexSet<String>,
-    ) {
+    /// A project's header, its editor, then its cards. A card waiting on
+    /// Jon stays in its place and says so itself (issue #281).
+    fn push_group(&self, entries: &mut Vec<ProjectEntry>, k: &str, rows: &[&Workspace]) {
         entries.push(ProjectEntry::Header {
             id: format!("p:{k}"),
             project: k.to_string(),
@@ -378,16 +365,9 @@ impl Session {
         }
         for w in rows {
             let ws_id = w.id.clone();
-            entries.push(if waiting.contains(&w.id) {
-                ProjectEntry::Ghost {
-                    id: format!("{ws_id}@g"),
-                    ws_id,
-                }
-            } else {
-                ProjectEntry::Ws {
-                    id: format!("{ws_id}@p"),
-                    ws_id,
-                }
+            entries.push(ProjectEntry::Ws {
+                id: format!("{ws_id}@p"),
+                ws_id,
             });
         }
     }
@@ -398,8 +378,6 @@ impl Session {
     /// loses its header at once; its cards wait in Other.
     pub fn project_entries(&mut self, data: &Data) -> Vec<ProjectEntry> {
         let groups = self.cards_by_project(data);
-        // Read once: the strip sorts every waiting session.
-        let waiting = self.in_strip(data);
         let keys: Vec<String> = self.projects.iter().map(|p| p.id().to_string()).collect();
         let gone: Vec<&String> = keys.iter().filter(|k| self.is_removed_project(k)).collect();
         let mut entries = Vec::new();
@@ -407,7 +385,7 @@ impl Session {
             if let Some(rows) = groups.get(k)
                 && !gone.contains(&k)
             {
-                self.push_group(&mut entries, k, rows, &waiting);
+                self.push_group(&mut entries, k, rows);
             }
         }
         let other_keys = std::iter::once(OTHER_KEY).chain(gone.iter().map(|k| k.as_str()));
@@ -416,7 +394,7 @@ impl Session {
             .flat_map(|k| groups.get(k).into_iter().flatten().copied())
             .collect();
         if other_keys.into_iter().any(|k| groups.contains_key(k)) {
-            self.push_group(&mut entries, OTHER_KEY, &other, &waiting);
+            self.push_group(&mut entries, OTHER_KEY, &other);
         }
         entries.push(ProjectEntry::NewRow { id: "new".into() });
         self.push_editor(&mut entries, NEW_PROJECT);

@@ -4,6 +4,7 @@
 
 use cockpit_core::data::{Agent, Data, Workspace};
 use cockpit_core::lane_entries::LaneEntry;
+use cockpit_core::lanes::LaneKey;
 use cockpit_core::session::Session;
 
 use crate::support::*;
@@ -243,11 +244,11 @@ mod the_next_queue {
     }
 }
 
-mod the_capped_needs_you_strip {
+mod needs_you_with_no_strip {
     use super::*;
 
     #[test]
-    fn shows_four_rows_and_counts_the_rest() {
+    fn lists_every_waiting_session_oldest_first_with_no_cap() {
         let mut fx = Fx::default();
         let data = scene(
             ["a", "b", "c", "d", "e", "f"]
@@ -261,33 +262,17 @@ mod the_capped_needs_you_strip {
                 .collect(),
         );
         let mut s = fresh();
-        assert_eq!(s.needs_list(&data).len(), 6);
-        let shown: Vec<&str> = s.needs_shown(&data).iter().map(|w| w.id.as_str()).collect();
-        assert_eq!(shown, ["a", "b", "c", "d"]);
-        assert_eq!(s.needs_more(&data), 2);
-    }
-
-    #[test]
-    fn has_no_more_line_at_four_or_fewer() {
-        let mut fx = Fx::default();
-        let data = scene(
-            ["a", "b", "c", "d"]
-                .iter()
-                .map(|id| ws(id).group("g-main").agents(asking(&mut fx, 60.0)))
-                .collect(),
-        );
-        let mut s = fresh();
-        assert_eq!(s.needs_shown(&data).len(), 4);
-        assert_eq!(s.needs_more(&data), 0);
+        let listed: Vec<&str> = s.needs_list(&data).iter().map(|w| w.id.as_str()).collect();
+        assert_eq!(listed, ["a", "b", "c", "d", "e", "f"]);
     }
 }
 
 mod cards_sorted_by_state_inside_a_lane {
     use super::*;
 
-    /// Four older asks fill the Needs you strip, so n1 is past its cap and
-    /// keeps its card in the lane; the four leave placeholders in Unsorted,
-    /// which `lane` leaves out as it reads cards.
+    /// Four older asks wait in Unsorted, which `lane` leaves out as it
+    /// reads Main activity's cards. (The TypeScript lifts them into the
+    /// strip; since R4.5, issue #281, every card stays in its lane.)
     fn setup() -> (Session, Data, Fx) {
         let mut fx = Fx::default();
         let mut list = vec![
@@ -311,7 +296,11 @@ mod cards_sorted_by_state_inside_a_lane {
         s.lane_entries(data)
             .into_iter()
             .filter_map(|e| match e {
-                LaneEntry::Ws { ws_id, .. } => Some(ws_id),
+                LaneEntry::Ws {
+                    ws_id,
+                    lane: LaneKey::Main,
+                    ..
+                } => Some(ws_id),
                 _ => None,
             })
             .collect()

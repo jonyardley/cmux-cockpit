@@ -140,7 +140,6 @@ mod tests {
         "MenuTarget",
         "MenuView",
         "Needs",
-        "NeedsRow",
         "NextLine",
         "Panel",
         "PanelView",
@@ -150,6 +149,7 @@ mod tests {
         "ProjectRow",
         "Row",
         "Token",
+        "Waiting",
     ];
 
     fn generated() -> String {
@@ -269,7 +269,7 @@ mod tests {
     fn variants_with_payloads_read_one_key_objects() {
         let s = generated();
         assert!(s.contains("case \"Card\": self = .card(try c.req(\"Card\"))"));
-        assert!(s.contains("case \"Ghost\":"));
+        assert!(s.contains("case \"Quiet\":"));
         assert!(s.contains("case \"Lane\": self = .lane(try c.req(\"Lane\"))"));
     }
 

@@ -462,14 +462,13 @@ impl Session {
         }
     }
 
-    /// A placeholder's words after the title: why its card went.
-    pub fn placeholder_text(&mut self, w: Option<&Workspace>) -> String {
+    /// A waiting card's leading edge: amber while its agent asks, else
+    /// clay for Your turn (issue #281).
+    pub fn needs_edge(&mut self, w: Option<&Workspace>) -> Token {
         if self.ask_of(w).is_some() {
-            format!("is {}", ASKING_WORD.to_lowercase())
+            Token::Amber
         } else {
-            status_word(&AgentStatus::NeedsInput)
-                .unwrap_or_default()
-                .to_lowercase()
+            Token::Clay
         }
     }
 

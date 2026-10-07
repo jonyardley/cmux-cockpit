@@ -77,11 +77,8 @@ pub fn render(feed: &Feed) -> String {
         v.needs.wait_text.clone()
     };
     let _ = writeln!(out, "\nNEEDS YOU ({}) {wait}", v.needs.list.len());
-    for id in &v.needs.shown {
+    for id in &v.needs.list {
         let _ = writeln!(out, "  {}", card(data, id));
-    }
-    if v.needs.more > 0 {
-        let _ = writeln!(out, "  +{} more", v.needs.more);
     }
 
     match &v.next.step {
@@ -119,9 +116,6 @@ pub fn render(feed: &Feed) -> String {
             }
             LaneEntry::Ws { ws_id, .. } => {
                 let _ = writeln!(out, "  {}", card(data, ws_id));
-            }
-            LaneEntry::Ghost { ws_id, .. } => {
-                let _ = writeln!(out, "  ({} is in Needs you)", title(data, ws_id));
             }
         }
     }

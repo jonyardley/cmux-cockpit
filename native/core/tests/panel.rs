@@ -147,10 +147,7 @@ fn answers_the_cursors_questions_from_the_panel_alone() {
     assert!(!ids.is_empty());
     for id in &ids {
         assert!(lanes.lane_of(id).is_some(), "{id} sits in no lane");
-        assert!(lanes.in_strip(id) || lanes.is_lane_card(id));
-        if lanes.in_strip(id) {
-            assert!(lanes.is_waiting(id));
-        }
+        assert!(lanes.is_lane_card(id));
     }
     for lane in &lanes.lanes {
         assert_eq!(lanes.lane_rows(lane.key).len(), lane.rows.len());
@@ -249,13 +246,10 @@ fn a_lane_anchor_carries_its_id_and_its_selection_for_the_badge() {
 
 /// Every card the scenes draw, in lanes and in Projects.
 fn every_card() -> Vec<cockpit_core::panel::Card> {
-    use cockpit_core::panel::Row;
     let mut out = Vec::new();
     for (_, panel) in scenes() {
         for row in panel.lanes.iter().flat_map(|l| &l.rows) {
-            if let Row::Card(c) = row {
-                out.push(c.as_ref().clone());
-            }
+            out.push(row.card().clone());
         }
         for row in &panel.projects {
             if let ProjectRow::Card(c) = row {

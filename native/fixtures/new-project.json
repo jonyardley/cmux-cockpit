@@ -9,23 +9,11 @@
   },
   "needs": {
     "count": 1,
-    "wait": "oldest 1m",
+    "label": "1 needs you",
+    "wait": "1m",
     "late": false,
-    "rows": [
-      {
-        "ws_id": "one-b",
-        "icon": {
-          "glyph": "●",
-          "ink": "clay"
-        },
-        "title": "One: docs",
-        "line": "Your turn: Read the draft in #142 and say go.",
-        "ink": "clayText",
-        "lane": "unsorted",
-        "movable": true
-      }
-    ],
-    "more": ""
+    "fill": "clay",
+    "ink": "clayText"
   },
   "lanes": [
     {
@@ -113,11 +101,158 @@
       "merge_ready": "",
       "rows": [
         {
-          "Ghost": {
+          "Card": {
             "ws_id": "one-b",
+            "icon": {
+              "glyph": "●",
+              "ink": "clay"
+            },
             "title": "One: docs",
-            "text": "your turn",
-            "rank": 0
+            "density": "Row",
+            "badge": {
+              "icon": "star.fill",
+              "color": 14251863
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "1m",
+            "status_ink": "metaText",
+            "age": "1m",
+            "status_has_age": true,
+            "left_off": "",
+            "chips": [],
+            "merged": [],
+            "detail": "",
+            "detail_lines": 1,
+            "waiting": {
+              "edge": "clay",
+              "ink": "clayText"
+            },
+            "rank": 0,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session in App One",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "✓ Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Keep: for a merged PR's buttons",
+                  "action": "KeepMerged"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ]
           }
         },
         {
@@ -147,7 +282,7 @@
             "merged": [],
             "detail": "",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 1,
             "movable": true,
             "dimmed": false,
@@ -299,7 +434,7 @@
             "merged": [],
             "detail": "",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 2,
             "movable": true,
             "dimmed": false,
@@ -476,7 +611,7 @@
             ],
             "detail": "",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": true,
@@ -628,7 +763,7 @@
             "merged": [],
             "detail": "",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -857,7 +992,7 @@
         "merged": [],
         "detail": "",
         "detail_lines": 2,
-        "waiting": false,
+        "waiting": null,
         "rank": 2,
         "movable": true,
         "dimmed": false,
@@ -983,10 +1118,171 @@
       }
     },
     {
-      "Ghost": {
+      "Card": {
         "ws_id": "one-b",
+        "icon": {
+          "glyph": "●",
+          "ink": "clay"
+        },
         "title": "One: docs",
-        "text": "your turn"
+        "density": "Full",
+        "badge": {
+          "icon": "star.fill",
+          "color": 14251863
+        },
+        "unread": "",
+        "ready": false,
+        "pinned": false,
+        "progress": null,
+        "helpers": "",
+        "status": "Your turn: Read the draft in #142 and say go.",
+        "status_ink": "clayText",
+        "age": "1m",
+        "status_has_age": false,
+        "left_off": "",
+        "chips": [
+          {
+            "kind": "Size",
+            "pieces": [
+              {
+                "text": "Review",
+                "ink": "blueText"
+              }
+            ],
+            "gives_way": false,
+            "url": null,
+            "is_action": false
+          }
+        ],
+        "merged": [],
+        "detail": "",
+        "detail_lines": 2,
+        "waiting": {
+          "edge": "clay",
+          "ink": "clayText"
+        },
+        "rank": 0,
+        "movable": true,
+        "dimmed": false,
+        "selected": false,
+        "menu": [
+          {
+            "Item": {
+              "label": "New session in App One",
+              "action": "NewSession"
+            }
+          },
+          "Divider",
+          {
+            "Item": {
+              "label": "Lane: Main activity",
+              "action": {
+                "Lane": "main"
+              }
+            }
+          },
+          {
+            "Item": {
+              "label": "Lane: For review",
+              "action": {
+                "Lane": "review"
+              }
+            }
+          },
+          {
+            "Item": {
+              "label": "Lane: Background",
+              "action": {
+                "Lane": "bg"
+              }
+            }
+          },
+          {
+            "Item": {
+              "label": "Lane: Parked",
+              "action": {
+                "Lane": "parked"
+              }
+            }
+          },
+          {
+            "Item": {
+              "label": "✓ Lane: Unsorted",
+              "action": {
+                "Lane": "unsorted"
+              }
+            }
+          },
+          "Divider",
+          {
+            "Item": {
+              "label": "✓ Project: App One",
+              "action": {
+                "Project": "/dev/app-one"
+              }
+            }
+          },
+          {
+            "Item": {
+              "label": "Project: App Two",
+              "action": {
+                "Project": "/dev/app-two"
+              }
+            }
+          },
+          {
+            "Item": {
+              "label": "Project: App Three",
+              "action": {
+                "Project": "/dev/app-three"
+              }
+            }
+          },
+          {
+            "Item": {
+              "label": "No project override set",
+              "action": "ClearProjectOverride"
+            }
+          },
+          "Divider",
+          {
+            "Item": {
+              "label": "New project (folder has one, or none)",
+              "action": "NewProjectFromFolder"
+            }
+          },
+          "Divider",
+          {
+            "Item": {
+              "label": "Pin",
+              "action": "TogglePin"
+            }
+          },
+          {
+            "Item": {
+              "label": "Mark read",
+              "action": "MarkRead"
+            }
+          },
+          {
+            "Item": {
+              "label": "No PR to open",
+              "action": "OpenPr"
+            }
+          },
+          {
+            "Item": {
+              "label": "Keep: for a merged PR's buttons",
+              "action": "KeepMerged"
+            }
+          },
+          {
+            "Item": {
+              "label": "Dismiss needs you",
+              "action": "ToggleNeeds"
+            }
+          }
+        ]
       }
     },
     {
@@ -1089,7 +1385,7 @@
         "merged": [],
         "detail": "",
         "detail_lines": 2,
-        "waiting": false,
+        "waiting": null,
         "rank": 1,
         "movable": true,
         "dimmed": false,
@@ -1283,7 +1579,7 @@
         ],
         "detail": "",
         "detail_lines": 2,
-        "waiting": false,
+        "waiting": null,
         "rank": 3,
         "movable": true,
         "dimmed": true,
@@ -1460,7 +1756,7 @@
         "merged": [],
         "detail": "",
         "detail_lines": 2,
-        "waiting": false,
+        "waiting": null,
         "rank": 3,
         "movable": true,
         "dimmed": false,

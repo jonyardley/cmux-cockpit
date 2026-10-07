@@ -177,7 +177,7 @@ mod cockpit {
             "Asking: allow git push?"
         );
         assert_eq!(s.needs_ink(Some(&asking)), Token::AmberText);
-        assert_eq!(s.placeholder_text(Some(&asking)), "is asking");
+        assert_eq!(s.needs_edge(Some(&asking)), Token::Amber);
 
         let turn = ws("wA")
             .agents(vec![waiting(&mut fx, 1100.0)])
@@ -190,7 +190,7 @@ mod cockpit {
         assert_eq!(s.needs_row_edge(Some(&turn)), Token::NeedsRowEdge);
         assert_eq!(s.needs_line(&data, Some(&turn)), "Your turn: Pushed it.");
         assert_eq!(s.needs_ink(Some(&turn)), Token::ClayText);
-        assert_eq!(s.placeholder_text(Some(&turn)), "your turn");
+        assert_eq!(s.needs_edge(Some(&turn)), Token::Clay);
         let bare = ws("x").agents(vec![waiting(&mut fx, 1100.0)]);
         assert_eq!(s.needs_detail(Some(&bare)), "Waiting for your reply");
     }

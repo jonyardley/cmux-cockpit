@@ -24,13 +24,10 @@ pub struct DropTarget {
     pub prev_ref: Option<String>,
 }
 
-/// A card's or a placeholder's workspace: a placeholder stands for a real
-/// tab in its lane, so it anchors a drop as a card does.
+/// A card's workspace and lane.
 fn tab_of(e: Option<&LaneEntry>) -> Option<(&str, LaneKey)> {
     match e? {
-        LaneEntry::Ws { ws_id, lane, .. } | LaneEntry::Ghost { ws_id, lane, .. } => {
-            Some((ws_id, *lane))
-        }
+        LaneEntry::Ws { ws_id, lane, .. } => Some((ws_id, *lane)),
         _ => None,
     }
 }

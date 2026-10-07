@@ -920,7 +920,7 @@ mod tests {
                 LaneEntry::Header {
                     lane, anchor_id, ..
                 } => headers.push((*lane, anchor_id.clone())),
-                LaneEntry::Zone { .. } | LaneEntry::Ghost { .. } => {}
+                LaneEntry::Zone { .. } => {}
             }
         }
         (cards, headers)

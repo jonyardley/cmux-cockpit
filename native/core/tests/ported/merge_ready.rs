@@ -99,15 +99,15 @@ mod merge_ready_text {
     }
 
     #[test]
-    fn still_counts_a_card_the_needs_you_strip_lists_a_waiting_sessions_pr_is_still_mergeable() {
+    fn still_counts_a_waiting_card_a_waiting_sessions_pr_is_still_mergeable() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "readyMain").agents =
             Some(vec![Some(fx.agent(NeedsInput).since(NOW - 30.0))]);
-        assert!(s.needs_shown(&data).iter().any(|w| w.id == "readyMain"));
+        assert!(s.needs_list(&data).iter().any(|w| w.id == "readyMain"));
         assert!(
             s.lane_entries(&data)
                 .iter()
-                .any(|e| matches!(e, LaneEntry::Ghost { ws_id, .. } if ws_id == "readyMain"))
+                .any(|e| matches!(e, LaneEntry::Ws { ws_id, .. } if ws_id == "readyMain"))
         );
         assert_eq!(s.merge_ready_text(&data, LaneKey::Main), "1 ready to merge");
     }

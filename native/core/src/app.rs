@@ -173,14 +173,12 @@ pub struct Model {
     pub panel_on: bool,
 }
 
-/// The Needs you strip as the shell draws it, workspaces by id.
+/// Needs you as the shell draws it, workspaces by id, longest waiting
+/// first.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NeedsView {
     pub list: Vec<String>,
-    pub shown: Vec<String>,
-    pub in_strip: Vec<String>,
-    pub more: usize,
     pub wait_text: String,
     pub late: bool,
 }
@@ -388,9 +386,6 @@ pub fn build_view(s: &mut Session, data: &Data) -> ViewModel {
     let strip = s.needs(data);
     let needs = NeedsView {
         list: ids(&strip.list),
-        shown: ids(&strip.shown),
-        in_strip: strip.in_strip.iter().cloned().collect(),
-        more: strip.more,
         wait_text: strip.wait_text,
         late: strip.late,
     };
@@ -401,7 +396,7 @@ pub fn build_view(s: &mut Session, data: &Data) -> ViewModel {
         total: st.total,
     });
     let cards = s.lane_cards(data);
-    let lane_entries = s.lane_entries_from(data, &cards, &strip.in_strip);
+    let lane_entries = s.lane_entries_from(data, &cards);
     let mut lane_headers = BTreeMap::new();
     for (lane, lane_cards) in &cards {
         let header = LaneHeaderView {

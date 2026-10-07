@@ -1,8 +1,8 @@
 //! All mode's rows (src/cockpit/lane-entries.ts): lane headers, cards in
-//! state order, placeholders for the cards the Needs you strip lists, and
-//! what each header counts and says.
+//! state order, and what each header counts and says. A card waiting on
+//! Jon stays in its lane and says so itself (issue #281), so unlike the
+//! TypeScript there are no placeholders.
 
-use indexmap::IndexSet;
 use serde::Serialize;
 
 use crate::data::{Data, Workspace};
@@ -15,8 +15,7 @@ use crate::theme::Token;
 
 /// One row of All. A header's key carries the anchor it shows (issue #49);
 /// an empty lane is a zone (issue #50); a card's key is `w:` and its
-/// workspace, without its lane, so a lane move keeps its row; a session in
-/// the Needs you strip leaves a placeholder keyed `g:`.
+/// workspace, without its lane, so a lane move keeps its row.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum LaneEntry {
@@ -36,12 +35,6 @@ pub enum LaneEntry {
         ws_id: String,
         lane: LaneKey,
     },
-    Ghost {
-        id: String,
-        #[serde(rename = "wsId")]
-        ws_id: String,
-        lane: LaneKey,
-    },
 }
 
 impl LaneEntry {
@@ -50,8 +43,7 @@ impl LaneEntry {
         match self {
             LaneEntry::Header { id, .. }
             | LaneEntry::Zone { id, .. }
-            | LaneEntry::Ws { id, .. }
-            | LaneEntry::Ghost { id, .. } => id,
+            | LaneEntry::Ws { id, .. } => id,
         }
     }
 
@@ -60,8 +52,7 @@ impl LaneEntry {
         match self {
             LaneEntry::Header { lane, .. }
             | LaneEntry::Zone { lane, .. }
-            | LaneEntry::Ws { lane, .. }
-            | LaneEntry::Ghost { lane, .. } => *lane,
+            | LaneEntry::Ws { lane, .. } => *lane,
         }
     }
 }
@@ -179,18 +170,15 @@ impl Session {
     /// counts the same rows. Built in both modes: the lanes panel stays
     /// mounted under Projects.
     pub fn lane_entries(&mut self, data: &Data) -> Vec<LaneEntry> {
-        let waiting = self.in_strip(data);
         let cards = self.lane_cards(data);
-        self.lane_entries_from(data, &cards, &waiting)
+        self.lane_entries_from(data, &cards)
     }
 
-    /// All's rows from the lanes' cards and the strip's placeholders,
-    /// already worked out this frame.
+    /// All's rows from the lanes' cards, already worked out this frame.
     pub fn lane_entries_from(
         &mut self,
         data: &Data,
         cards: &[(Lane, Vec<&Workspace>)],
-        waiting: &IndexSet<String>,
     ) -> Vec<LaneEntry> {
         let mut out = Vec::new();
         for (lane, lane_cards) in cards {
@@ -221,18 +209,10 @@ impl Session {
             }
             for w in section.rows {
                 let ws_id = w.id.clone();
-                out.push(if waiting.contains(&w.id) {
-                    LaneEntry::Ghost {
-                        id: format!("g:{ws_id}"),
-                        ws_id,
-                        lane: key,
-                    }
-                } else {
-                    LaneEntry::Ws {
-                        id: format!("w:{ws_id}"),
-                        ws_id,
-                        lane: key,
-                    }
+                out.push(LaneEntry::Ws {
+                    id: format!("w:{ws_id}"),
+                    ws_id,
+                    lane: key,
                 });
             }
         }
@@ -240,7 +220,7 @@ impl Session {
     }
 
     /// The cards a lane header counts, in tab order: every card it lists,
-    /// folded or not, and the placeholders of those waiting in Needs you.
+    /// folded or not.
     pub fn lane_workspaces<'d>(&mut self, data: &'d Data, key: LaneKey) -> Vec<&'d Workspace> {
         let mut out = Vec::new();
         for w in self.card_workspaces(data) {
@@ -253,7 +233,7 @@ impl Session {
 
     /// A lane header's merge line: "2 ready to merge" when that many of its
     /// workspaces hold a PR GitHub would merge now, else "". Every card the
-    /// lane counts, placeholders too, and its generated anchor, which has
+    /// lane counts, and its generated anchor, which has
     /// no card of its own.
     pub fn merge_ready_text(&mut self, data: &Data, key: LaneKey) -> String {
         let cards = self.lane_workspaces(data, key);

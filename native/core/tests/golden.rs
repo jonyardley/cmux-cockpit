@@ -113,9 +113,33 @@ fn computed(input: &Value) -> Value {
     })
 }
 
+/// The TypeScript model with R4.5's one deliberate difference taken out
+/// (issue #281): the JS cockpit, being retired, still lifts waiting cards
+/// into a strip and leaves a placeholder; the core keeps each card in its
+/// place. So each placeholder reads as its card in the same spot, and
+/// Needs you keeps only its list and clock.
+fn without_the_strip(mut want: Value) -> Value {
+    if let Some(entries) = want["laneEntries"].as_array_mut() {
+        for e in entries.iter_mut().filter(|e| e["kind"] == "ghost") {
+            e["kind"] = json!("ws");
+            e["id"] = json!(format!("w:{}", e["wsId"].as_str().unwrap_or_default()));
+        }
+    }
+    if let Some(entries) = want["projectEntries"].as_array_mut() {
+        for e in entries.iter_mut().filter(|e| e["kind"] == "ghost") {
+            e["kind"] = json!("ws");
+            e["id"] = json!(format!("{}@p", e["wsId"].as_str().unwrap_or_default()));
+        }
+    }
+    if let Some(needs) = want["needs"].as_object_mut() {
+        needs.retain(|k, _| ["list", "waitText", "late"].contains(&k.as_str()));
+    }
+    want
+}
+
 fn check(scene: &str) {
     let input = golden(&format!("{scene}.input.json"));
-    let want = golden(&format!("{scene}.json"));
+    let want = without_the_strip(golden(&format!("{scene}.json")));
     let got = computed(&input);
 
     assert_eq!(got["mode"], want["mode"], "{scene}: mode");
