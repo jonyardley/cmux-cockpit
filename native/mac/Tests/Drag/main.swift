@@ -28,11 +28,6 @@ check(DropRule.slot(y: 5, mids: [10, 30, 50]) == 0, "above the first row's middl
 check(DropRule.slot(y: 31, mids: [10, 30, 50]) == 2, "past the second row's middle is slot 2")
 check(DropRule.slot(y: 99, mids: [10, 30, 50]) == 3, "under every row is the end")
 
-// MARK: When a hover ends the drag
-
-check(!DropRule.hoverEndsDrag(buttonDown: true), "a hover while the card is held leaves the drag alone")
-check(DropRule.hoverEndsDrag(buttonDown: false), "a hover with the button up ends it")
-
 // MARK: Where the card lands
 
 let abc = [row("A"), row("B"), row("C")]

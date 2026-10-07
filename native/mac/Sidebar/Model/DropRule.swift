@@ -21,13 +21,6 @@ enum DropRule {
         }
     }
 
-    /// Whether a hover over a lane means the drag is over. Hover can fire
-    /// while a card is still held (the log showed a lift settled 14ms in,
-    /// before any drop), so only a hover with the button up ends it.
-    static func hoverEndsDrag(buttonDown: Bool) -> Bool {
-        !buttonDown
-    }
-
     /// The slot a point at height `y` falls in, among rows whose middles
     /// sit at `mids` from the top: how many middles lie above it.
     static func slot(y: Double, mids: [Double]) -> Int {
