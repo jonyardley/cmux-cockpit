@@ -27,8 +27,11 @@ struct RGBA: Equatable, Sendable {
 enum Palette {
     /// The colours the views use that no core token names.
     enum Own: CaseIterable {
-        /// Under the whole panel.
+        /// The pane's cream: the selected tab and a card being dragged.
         case ground
+        /// Under the whole panel: the white cmux draws its header in, so
+        /// the header and the panel read as one surface.
+        case panelGround
         /// The Needs you strip's face.
         case needsFace
         /// A card's face.
@@ -116,6 +119,7 @@ enum Palette {
     private static func pair(_ own: Own) -> Pair {
         switch own {
         case .ground: Pair(RGBA(0xF4F2EA), RGBA(0x262624))
+        case .panelGround: Pair(RGBA(0xFEFEFE), RGBA(0x262624))
         case .needsFace: Pair(RGBA(0xFBECE4), RGBA(clay.dark.hex, 0x1C))
         case .cardFace: Pair(RGBA(0xFFFFFF, 0x99), RGBA(0x30302D, 0x99))
         case .tertiary: Pair(RGBA(0x73726C), RGBA(0x9C9A92))

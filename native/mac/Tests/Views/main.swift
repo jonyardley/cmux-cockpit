@@ -273,20 +273,23 @@ func contrast(_ a: RGBA, _ b: RGBA) -> Double {
 
 for dark in [false, true] {
     let scheme = dark ? "dark" : "light"
-    let ground = Palette.rgba(.ground, dark: dark)
-    // Body ink at WCAG's 4.5; the state inks at 3, as the light palette
-    // (palette.ts) holds them, the finished green the lowest.
-    for (token, name) in [(Token.text, "text"), (.secondary, "secondary"), (.heading, "heading")] {
-        check(contrast(Palette.rgba(token, dark: dark), ground) >= 4.5, "\(scheme): \(name) reads on the ground")
-    }
-    for (token, name) in [(Token.blueText, "blueText"), (.clayText, "clayText"), (.greenText, "greenText"), (.amberText, "amberText"), (.redText, "redText"), (.metaText, "metaText")] {
-        check(contrast(Palette.rgba(token, dark: dark), ground) >= 3, "\(scheme): \(name) reads on the ground")
+    // The panel's white and the cream the selected tab keeps.
+    for ground in [Palette.rgba(.panelGround, dark: dark), Palette.rgba(.ground, dark: dark)] {
+        // Body ink at WCAG's 4.5; the state inks at 3, as the light palette
+        // (palette.ts) holds them, the finished green the lowest.
+        for (token, name) in [(Token.text, "text"), (.secondary, "secondary"), (.heading, "heading")] {
+            check(contrast(Palette.rgba(token, dark: dark), ground) >= 4.5, "\(scheme): \(name) reads on the ground")
+        }
+        for (token, name) in [(Token.blueText, "blueText"), (.clayText, "clayText"), (.greenText, "greenText"), (.amberText, "amberText"), (.redText, "redText"), (.metaText, "metaText")] {
+            check(contrast(Palette.rgba(token, dark: dark), ground) >= 3, "\(scheme): \(name) reads on the ground")
+        }
     }
     let hues = [Token.blue, .clay, .green, .amber].map { Palette.rgba($0, dark: dark) }
     check(Set(hues.map(\.hex)).count == hues.count, "\(scheme): each state hue is its own")
     check(Palette.rgba(.clear, dark: dark).alpha == 0, "\(scheme): clear is no colour")
 }
 check(Palette.rgba(.ground, dark: false) != Palette.rgba(.ground, dark: true), "light and dark grounds differ")
+check(Palette.rgba(.panelGround, dark: false) != Palette.rgba(.panelGround, dark: true), "light and dark panel grounds differ")
 
 // The light side of the extension's own colours is the pane's, read from
 // native/pane/src/theme.rs beside the snapshots.

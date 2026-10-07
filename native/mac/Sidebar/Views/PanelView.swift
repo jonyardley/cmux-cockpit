@@ -99,6 +99,6 @@ struct SidebarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(Palette.Own.ground))
+        .background(Color(Palette.Own.panelGround))
     }
 }
