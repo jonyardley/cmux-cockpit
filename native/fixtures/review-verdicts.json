@@ -33,11 +33,24 @@
               "ink": null
             },
             "title": "waiting card",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "No agent",
             "status_ink": "faint",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [
               {
+                "kind": "Pr",
                 "pieces": [
                   {
                     "text": "#9",
@@ -48,25 +61,33 @@
                     "ink": "greenDeep"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/9",
+                "is_action": false
               },
               {
+                "kind": "Branch",
                 "pieces": [
                   {
                     "text": "feat-9",
                     "ink": "secondary"
                   }
                 ],
-                "gives_way": true
+                "gives_way": true,
+                "url": null,
+                "is_action": false
               },
               {
+                "kind": "Action",
                 "pieces": [
                   {
                     "text": "To review →",
                     "ink": "greenDeep"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": true
               }
             ],
             "merged": [],
@@ -223,22 +244,45 @@
               "ink": null
             },
             "title": "ready card",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "No agent",
             "status_ink": "faint",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [
               {
+                "kind": "Pr",
                 "pieces": [
                   {
                     "text": "#1 · ready",
                     "ink": "greenDeep"
-                  },
+                  }
+                ],
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/1",
+                "is_action": false
+              },
+              {
+                "kind": "Diff",
+                "pieces": [
                   {
                     "text": "+120 −8",
                     "ink": "faint"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": false
               }
             ],
             "merged": [],
@@ -377,22 +421,45 @@
               "ink": null
             },
             "title": "draft card",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "No agent",
             "status_ink": "faint",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [
               {
+                "kind": "Pr",
                 "pieces": [
                   {
                     "text": "#2 · draft",
                     "ink": "secondary"
-                  },
+                  }
+                ],
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/2",
+                "is_action": false
+              },
+              {
+                "kind": "Diff",
+                "pieces": [
                   {
                     "text": "+1.2k −56",
                     "ink": "faint"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": false
               }
             ],
             "merged": [],
@@ -531,18 +598,33 @@
               "ink": null
             },
             "title": "failing card",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "No agent",
             "status_ink": "faint",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [
               {
+                "kind": "Pr",
                 "pieces": [
                   {
                     "text": "#3 · 1 failing",
                     "ink": "redText"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/3",
+                "is_action": false
               }
             ],
             "merged": [],
@@ -681,18 +763,33 @@
               "ink": null
             },
             "title": "running card",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "No agent",
             "status_ink": "faint",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [
               {
+                "kind": "Pr",
                 "pieces": [
                   {
                     "text": "#4 · running",
                     "ink": "blueText"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/4",
+                "is_action": false
               }
             ],
             "merged": [],
@@ -831,18 +928,33 @@
               "ink": null
             },
             "title": "conflicts card",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "No agent",
             "status_ink": "faint",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [
               {
+                "kind": "Pr",
                 "pieces": [
                   {
                     "text": "#5 · conflicts",
                     "ink": "redText"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/5",
+                "is_action": false
               }
             ],
             "merged": [],
@@ -981,18 +1093,33 @@
               "ink": null
             },
             "title": "blocked card",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "No agent",
             "status_ink": "faint",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [
               {
+                "kind": "Pr",
                 "pieces": [
                   {
                     "text": "#6",
                     "ink": "secondary"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/6",
+                "is_action": false
               }
             ],
             "merged": [],
@@ -1131,38 +1258,59 @@
               "ink": null
             },
             "title": "merged card",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "No agent",
             "status_ink": "faint",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [
               {
+                "kind": "Pr",
                 "pieces": [
                   {
                     "text": "#7 · merged",
                     "ink": "secondary"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/7",
+                "is_action": false
               }
             ],
             "merged": [
               {
+                "kind": "Action",
                 "pieces": [
                   {
                     "text": "Park",
                     "ink": "secondary"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": true
               },
               {
+                "kind": "Action",
                 "pieces": [
                   {
                     "text": "Close",
                     "ink": "text"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": null,
+                "is_action": true
               }
             ],
             "detail": "",
@@ -1300,18 +1448,33 @@
               "ink": null
             },
             "title": "closed card",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "No agent",
             "status_ink": "faint",
+            "age": "",
+            "status_has_age": false,
             "left_off": "",
             "chips": [
               {
+                "kind": "Pr",
                 "pieces": [
                   {
                     "text": "#8 · closed",
                     "ink": "secondary"
                   }
                 ],
-                "gives_way": false
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/8",
+                "is_action": false
               }
             ],
             "merged": [],

@@ -13,7 +13,7 @@ enum CardText {
     /// Every run of words a card draws, top to bottom, none empty.
     static func runs(_ card: Card) -> [String] {
         var out = [card.title, card.status]
-        out += card.chips.map(chip)
+        out += ChipFit.glued(card.chips).map(chip)
         out += card.merged.map(chip)
         out += [card.leftOff, card.detail]
         return out.filter { !$0.isEmpty }

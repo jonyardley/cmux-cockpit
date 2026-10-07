@@ -13,8 +13,8 @@ use ratatui::text::{Line, Span};
 
 use super::parts::{Edge, pill, spans_width, spread};
 use crate::model::{
-    Card, Chip, DROP_AT_END, DROP_HERE, FOLDED_MARK, GHOST, GHOST_GAP, LANE_MARK, Lane, OPEN_MARK,
-    Row,
+    Card, Chip, ChipKind, DROP_AT_END, DROP_HERE, FOLDED_MARK, GHOST, GHOST_GAP, LANE_MARK, Lane,
+    OPEN_MARK, Row,
 };
 use crate::placing::{Place, Spot};
 use crate::text::{ELLIPSIS, fit, fit_ranked, width, wrap};
@@ -183,6 +183,23 @@ fn chips_line(chips: &[Chip], room: usize) -> Vec<Span<'static>> {
     out
 }
 
+/// A card's chips as the pane lays them out: a diff size joins the PR
+/// before it, a space apart, so the PR and its size fit or go together.
+/// A diff after anything else stays a chip of its own, so a change in the
+/// core's order shows rather than folding it into a branch.
+fn glued(chips: &[Chip]) -> Vec<Chip> {
+    let mut out: Vec<Chip> = Vec::new();
+    for c in chips {
+        match out.last_mut() {
+            Some(prev) if c.kind == ChipKind::Diff && prev.kind == ChipKind::Pr => {
+                prev.pieces.extend(c.pieces.iter().cloned())
+            }
+            _ => out.push(c.clone()),
+        }
+    }
+    out
+}
+
 /// The cells a run of chips takes on one line, each whole.
 fn chips_width(chips: &[Chip]) -> usize {
     let gaps = chips.len().saturating_sub(1) * width(CHIP_GAP);
@@ -219,14 +236,15 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
     };
     // Park and Close end the chips line while every chip fits whole, else
     // take a line of their own, so a button `x` acts on is never cut.
-    let together: Vec<Chip> = c.chips.iter().chain(&c.merged).cloned().collect();
+    let chips = glued(&c.chips);
+    let together: Vec<Chip> = chips.iter().chain(&c.merged).cloned().collect();
     if chips_width(&together) <= room {
         if !together.is_empty() {
             out.push(chips_at(&together));
         }
     } else {
-        if !c.chips.is_empty() {
-            out.push(chips_at(&c.chips));
+        if !chips.is_empty() {
+            out.push(chips_at(&chips));
         }
         if !c.merged.is_empty() {
             out.push(chips_at(&c.merged));
@@ -277,7 +295,37 @@ pub(super) fn ghost(title: &str, text: &str, inner: usize, landing: bool) -> Lin
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Row, fixtures};
+    use crate::model::{Piece, Row, fixtures};
+
+    #[test]
+    fn joins_a_diff_size_to_the_pr_before_it() {
+        let chip = |kind, text: &str| Chip {
+            kind,
+            pieces: vec![Piece {
+                text: text.into(),
+                ink: Token::Secondary,
+            }],
+            gives_way: false,
+            url: None,
+            is_action: false,
+        };
+        let chips = [
+            chip(ChipKind::Pr, "#3"),
+            chip(ChipKind::Diff, "+1"),
+            chip(ChipKind::Branch, "feat"),
+        ];
+        let got = glued(&chips);
+        let words: Vec<Vec<&str>> = got
+            .iter()
+            .map(|c| c.pieces.iter().map(|p| p.text.as_str()).collect())
+            .collect();
+        assert_eq!(words, [vec!["#3", "+1"], vec!["feat"]]);
+        assert_eq!(got[0].kind, ChipKind::Pr, "the PR keeps its kind");
+        let alone = glued(&[chip(ChipKind::Diff, "+1")]);
+        assert_eq!(alone.len(), 1, "a diff with nothing before it stays");
+        let after_branch = glued(&[chip(ChipKind::Branch, "feat"), chip(ChipKind::Diff, "+1")]);
+        assert_eq!(after_branch.len(), 2, "a diff joins only a PR");
+    }
 
     #[test]
     fn a_dimmed_card_keeps_its_drop_mark_at_full_strength() {

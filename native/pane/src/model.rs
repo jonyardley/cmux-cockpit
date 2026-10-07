@@ -251,15 +251,27 @@ pub(crate) mod fixtures {
 
     /// A card with `id` as its title, in state `rank`.
     pub fn card(id: &str, rank: u8, waiting: bool) -> Row {
-        Row::Card(Card {
+        Row::Card(Box::new(Card {
             ws_id: id.into(),
             icon: Icon {
                 glyph: DOT,
                 ink: None,
             },
             title: id.into(),
+            density: Density::Full,
+            badge: Badge {
+                icon: "terminal".into(),
+                color: None,
+            },
+            unread: String::new(),
+            ready: false,
+            pinned: false,
+            progress: None,
+            helpers: String::new(),
             status: String::new(),
             status_ink: Token::MetaText,
+            age: String::new(),
+            status_has_age: false,
             left_off: String::new(),
             chips: Vec::new(),
             merged: Vec::new(),
@@ -271,7 +283,7 @@ pub(crate) mod fixtures {
             dimmed: false,
             selected: false,
             menu: Vec::new(),
-        })
+        }))
     }
 
     /// A placeholder for `id`.

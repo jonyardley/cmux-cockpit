@@ -26,7 +26,7 @@ struct CardView: View {
             }
             VStack(alignment: .leading, spacing: 3) {
                 if !card.chips.isEmpty || !card.merged.isEmpty {
-                    ActionChips(id: card.wsId, chips: card.chips, merged: card.merged)
+                    ActionChips(id: card.wsId, chips: ChipFit.glued(card.chips), merged: card.merged)
                 }
                 if !card.leftOff.isEmpty {
                     Text(card.leftOff)

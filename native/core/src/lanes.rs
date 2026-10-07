@@ -33,8 +33,10 @@ impl LaneKey {
     }
 }
 
-/// How big a lane's cards draw.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// How big a lane's cards draw. The panel carries it on each card, so it
+/// serialises.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, facet::Facet)]
+#[repr(u8)]
 pub enum Density {
     Full,
     Compact,

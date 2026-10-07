@@ -188,8 +188,20 @@
               "ink": "clay"
             },
             "title": "Fifth, past the cap",
+            "density": "Row",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "<1m",
             "status_ink": "metaText",
+            "age": "<1m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -328,8 +340,20 @@
               "ink": "green"
             },
             "title": "Finished while away",
+            "density": "Row",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "3",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "4m",
             "status_ink": "metaText",
+            "age": "4m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [],
@@ -468,8 +492,20 @@
               "ink": "blue"
             },
             "title": "Busy",
+            "density": "Row",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
             "status": "1m",
             "status_ink": "metaText",
+            "age": "1m",
+            "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [],
