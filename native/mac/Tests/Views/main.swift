@@ -273,17 +273,27 @@ func contrast(_ a: RGBA, _ b: RGBA) -> Double {
 
 for dark in [false, true] {
     let scheme = dark ? "dark" : "light"
-    // The panel's white and the cream the selected tab keeps.
-    for ground in [Palette.rgba(.panelGround, dark: dark), Palette.rgba(.ground, dark: dark)] {
+    // The panel's white and the cream the selected tab keeps, each once:
+    // in dark mode they are the same colour.
+    var grounds = [("panel ground", Palette.rgba(.panelGround, dark: dark))]
+    if Palette.rgba(.ground, dark: dark) != grounds[0].1 {
+        grounds.append(("ground", Palette.rgba(.ground, dark: dark)))
+    }
+    for (where_, ground) in grounds {
         // Body ink at WCAG's 4.5; the state inks at 3, as the light palette
         // (palette.ts) holds them, the finished green the lowest.
         for (token, name) in [(Token.text, "text"), (.secondary, "secondary"), (.heading, "heading")] {
-            check(contrast(Palette.rgba(token, dark: dark), ground) >= 4.5, "\(scheme): \(name) reads on the ground")
+            check(contrast(Palette.rgba(token, dark: dark), ground) >= 4.5, "\(scheme): \(name) reads on the \(where_)")
         }
         for (token, name) in [(Token.blueText, "blueText"), (.clayText, "clayText"), (.greenText, "greenText"), (.amberText, "amberText"), (.redText, "redText"), (.metaText, "metaText")] {
-            check(contrast(Palette.rgba(token, dark: dark), ground) >= 3, "\(scheme): \(name) reads on the ground")
+            check(contrast(Palette.rgba(token, dark: dark), ground) >= 3, "\(scheme): \(name) reads on the \(where_)")
         }
     }
+    // The third ink sits on the panel; on the pane's cream it is short of
+    // 4.5 already, as it was before the panel turned white.
+    check(contrast(Palette.rgba(.tertiary, dark: dark), grounds[0].1) >= 4.5, "\(scheme): tertiary reads on the panel ground")
+    // A card's face shows as a tile on the panel, not the panel itself.
+    check(Palette.rgba(.cardFace, dark: dark) != Palette.rgba(.panelGround, dark: dark), "\(scheme): a card's face is not the panel ground")
     let hues = [Token.blue, .clay, .green, .amber].map { Palette.rgba($0, dark: dark) }
     check(Set(hues.map(\.hex)).count == hues.count, "\(scheme): each state hue is its own")
     check(Palette.rgba(.clear, dark: dark).alpha == 0, "\(scheme): clear is no colour")

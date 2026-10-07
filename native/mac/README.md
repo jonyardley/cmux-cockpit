@@ -15,7 +15,7 @@ parts, built together from `project.yml` with XcodeGen:
   refused cmux call or a PR, into `inbox/`. Its log is
   `~/Library/Logs/Cockpit/cockpit-publish.log`.
 - `CockpitSidebar.appex` (`Sidebar/`), embedded in the app: the sandboxed
-  extension cmux draws in its left sidebar. It runs the core itself:
+  extension cmux draws in its left sidebar, shown there as Cockpit. It runs the core itself:
   `native/ffi` built as a static library and linked in, so a click
   redraws the panel on the click (`Sidebar/Live/SidebarCore.swift`).
   `Sidebar/Model/` decides what to show (card words, which chips fit, the
