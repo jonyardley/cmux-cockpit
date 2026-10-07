@@ -1,15 +1,11 @@
   All  Projects                  ? keys
  Next  Chip colours              1 of 3
 
- Needs you  2                 oldest 5m
-   ● Chip colours
-     Your turn: Which green should the…
-   ● Release notes
-     Asking: allow git push?
+ 2 need you                          5m
 
  ▾ ■ MAIN ACTIVITY  8
-   ◌ Chip colours · your turn
-   ◌ Release notes · is asking
+ ▎ ● Chip…      Your turn: Which green…
+ ▎ ● Release…   Asking: allow git push?
 ▌  ● Tidy strip             Finished 6m
 ▌    To review →
 ▌    Done: the strip now groups by
@@ -19,6 +15,10 @@
      Recording the view tree as text.
    ○ Long build Working 40m · quiet 17m
    ● Selected card           Working 1m
+   ○ Card layout fit           Idle 15m
+     #176 merged  Park  Close
+   ○ Untimed card                  Idle
+
 ┌ Card ────────────────────────────────┐
 │▌New session (project has no folder)  │
 │──────────────────────────────────────│

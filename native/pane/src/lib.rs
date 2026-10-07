@@ -254,8 +254,7 @@ impl Pane {
             self.picking = None;
         }
         if let Some(d) = &mut self.drag {
-            // A card that went, or turned into a placeholder as its session
-            // started asking, is no longer dragged (drop.ts).
+            // A card that went is no longer dragged (drop.ts).
             if !all || !self.model.is_lane_card(&d.id) {
                 self.drag = None;
             } else if let Some(over) = &d.over {
@@ -539,19 +538,17 @@ impl Pane {
     }
 
     fn press(&mut self, row: u16) -> Outcome {
-        let (id, card) = match self.spot(row) {
-            Spot::Card { id, .. } => (id, true),
-            Spot::Needs(id) => (id, false),
-            _ => return Outcome::Nothing,
+        let Spot::Card { id, .. } = self.spot(row) else {
+            return Outcome::Nothing;
         };
         let moved = self.cursor.jump(&self.model.card_ids(), &id);
         if moved {
             // As a step does: the line scroll past the last card starts over.
             self.manual = 0;
         }
-        // A placeholder or a Needs you row is not dragged (drop.ts), nor a
-        // card that anchors another group, which the core will not move.
-        if card && self.model.movable(&id) {
+        // A card that anchors another group is not dragged: the core will
+        // not move it.
+        if self.model.movable(&id) {
             self.drag = Some(Drag { id, over: None });
         }
         redraw_if(moved)
@@ -590,8 +587,8 @@ impl Pane {
     }
 
     /// Moves the cursor a card, or with no cards scrolls a line. Down on
-    /// the last card scrolls a line too, so the lanes below it (empty ones,
-    /// or only placeholders) come into sight.
+    /// the last card scrolls a line too, so the lanes below it (empty
+    /// ones) come into sight.
     fn step(&mut self, by: isize) -> bool {
         let cards = self.model.card_ids();
         let last = !cards.is_empty() && self.cursor.on() == cards.last().copied();

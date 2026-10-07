@@ -1,16 +1,7 @@
   All  Projects                                                          ? keys
  Next  Oldest question                                                   1 of 6
 
- Needs you  5                                                        oldest 30m
-   ● Oldest question
-     Your turn: Should the strip cap at four?
-   ● Second
-     Your turn: reply "1b 2a" on the bridge and the store.
-   ● Third
-     Your turn: the work is finished. Run /clear now.
-   ● Publish
-     Asking: allow npm publish?
-   +1 more
+ 5 need you                                                                 30m
 
    ■ MAIN ACTIVITY  0
 
@@ -20,15 +11,24 @@
 
    ■ PARKED  0
 
- ▾ ■ UNSORTED  7     ┌ Keys ──────────────────────────────┐
-   ◌ Oldest question │ ↑ ↓        move between cards      │
-   ◌ Publish · is ask│ shift ↑ ↓  reorder in its lane     │
-   ◌ Second · your tu│ m 1-5      move to a lane          │
-   ◌ Third · your tur│ drag       move to a lane or spot  │
-   ● Fifth, past the │ Enter      switch to it            │                 <1m
-     One more thing  │ d          dismiss from Needs you  │
-   ● Finished while a│ r          send to For review      │                  4m
-   ● Busy            │ p          park a merged card      │                  1m
+ ▾ ■ UNSORTED  7
+ ▎ ● Oldest question                                                        30m
+ ▎ ● Publish                                                                 1m
+ ▎ ● Second                                                                 15m
+ ▎ ● Third                                                                  10m
+ ▎ ● Fifth, past the cap                                                    <1m
+   ● Finished while away                                                     4m
+   ● Busy                                                                    1m
+
+                     ┌ Keys ──────────────────────────────┐
+                     │ ↑ ↓        move between cards      │
+                     │ shift ↑ ↓  reorder in its lane     │
+                     │ m 1-5      move to a lane          │
+                     │ drag       move to a lane or spot  │
+                     │ Enter      switch to it            │
+                     │ d          dismiss from Needs you  │
+                     │ r          send to For review      │
+                     │ p          park a merged card      │
                      │ x          close a merged card     │
                      │ k          keep: hide its buttons  │
                      │ +          session in project      │

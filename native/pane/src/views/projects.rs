@@ -1,7 +1,7 @@
 //! The Projects view: each busy project's header (fold mark, its mark in
 //! the project's colour, name, count pill, folded dot, and "+" when it has
-//! a folder), its cards with their chips and the placeholders of cards
-//! waiting in Needs you; then "+ New project", and the Quiet header over
+//! a folder), its cards with their chips, a waiting one with its bar;
+//! then "+ New project", and the Quiet header over
 //! a row for each project with no sessions. The open editor sits under
 //! its project's row (editor.rs). The cursor's row has the bar and face a
 //! card under the cursor has.
@@ -12,7 +12,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
 use super::editor;
-use super::lanes::{CARD_LEAD, card, ghost};
+use super::lanes::{CARD_LEAD, card};
 use super::parts::{Edge, pill, spans_width, spread};
 use crate::editor::Field;
 use crate::model::{
@@ -67,7 +67,6 @@ pub fn lines(rows: &[ProjectRow], inner: usize, cursor: Option<&str>, field: Fie
                 let n = lines.len();
                 (lines, on.then_some(0..n))
             }
-            ProjectRow::Ghost { title, text, .. } => (vec![ghost(title, text, inner, false)], None),
             ProjectRow::NewProject => {
                 out.push(Line::default());
                 let on = on(NEW_ROW);

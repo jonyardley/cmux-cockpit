@@ -35,7 +35,7 @@ const WIDTHS: [u16; 2] = [40, 80];
 const HEIGHT: u16 = 64;
 
 /// Glyphs the pane draws that are not words.
-const MARKS: &str = "▌▔▸▾■●○◌─│┌┐└┘";
+const MARKS: &str = "▌▎▔▸▾■●○◌─│┌┐└┘";
 /// Narrow splits the snapshots do not cover, checked for cut words only.
 const NARROW: [u16; 3] = [16, 24, 32];
 
@@ -262,10 +262,8 @@ fn shows_the_lanes_below_the_last_card_in_a_short_pane() {
 #[test]
 fn scrolls_a_line_at_a_time_when_there_are_no_cards() {
     let mut model = pane_for("lanes").model().clone();
-    model.needs.rows.clear();
     for lane in &mut model.lanes {
-        lane.rows
-            .retain(|r| matches!(r, cockpit_pane::model::Row::Ghost { .. }));
+        lane.rows.clear();
     }
     let mut pane = Pane::new(model);
     assert!(pane.model().card_ids().is_empty());
@@ -337,9 +335,11 @@ fn paints_the_ground_and_takes_colours_from_the_theme() {
     pane.draw(&mut term).unwrap();
     let buffer = term.backend().buffer();
     assert_eq!(buffer.content[0].bg, theme::rgb(theme::GROUND));
-    let (fg, bg) = cell_colours(buffer, "Needs you");
+    let (fg, bg) = cell_colours(buffer, "5 need you");
     assert_eq!(fg, theme::colour(Token::ClayText));
-    assert_eq!(bg, theme::rgb(theme::NEEDS_BG));
+    assert_eq!(bg, theme::rgb(theme::GROUND), "a line, no face");
+    let (fg, _) = cell_colours(buffer, "▎");
+    assert_eq!(fg, theme::colour(Token::Clay), "a waiting card's edge");
     let (fg, _) = cell_colours(buffer, "Next");
     assert_eq!(fg, theme::colour(Token::Heading));
 }
@@ -357,19 +357,16 @@ fn cursor_to(pane: &mut Pane, title: &str) -> String {
     id
 }
 
-/// The workspace id of the card, placeholder or Needs you row titled `title`.
+/// The workspace id of the card titled `title`.
 fn id_of(pane: &Pane, title: &str) -> String {
-    let m = pane.model();
-    let needs = m.needs.rows.iter().map(|r| (&r.title, &r.ws_id));
-    let rows = m.lanes.iter().flat_map(|l| &l.rows).map(|r| match r {
-        cockpit_pane::model::Row::Card(c) => (&c.title, &c.ws_id),
-        cockpit_pane::model::Row::Ghost { title, ws_id, .. } => (title, ws_id),
-    });
-    needs
-        .chain(rows)
-        .find(|(t, _)| t.as_str() == title)
-        .map(|(_, id)| id.clone())
-        .unwrap_or_else(|| panic!("no row titled {title}"))
+    pane.model()
+        .lanes
+        .iter()
+        .flat_map(|l| &l.rows)
+        .map(cockpit_pane::model::Row::card)
+        .find(|c| c.title == title)
+        .map(|c| c.ws_id.clone())
+        .unwrap_or_else(|| panic!("no card titled {title}"))
 }
 
 fn shift(pane: &mut Pane, code: KeyCode) -> Outcome {
@@ -422,11 +419,20 @@ fn shift_up_and_down_reorder_the_card_among_its_lanes_cards_in_its_state() {
 }
 
 #[test]
-fn shift_with_up_or_down_does_nothing_on_a_needs_you_row() {
+fn shift_with_up_or_down_reorders_a_waiting_card_among_the_waiting() {
     let mut pane = pane_for("lanes");
-    cursor_to(&mut pane, "Release notes");
-    assert_eq!(shift(&mut pane, KeyCode::Up), Outcome::Nothing);
-    assert_eq!(shift(&mut pane, KeyCode::Down), Outcome::Nothing);
+    let chip = id_of(&pane, "Chip colours");
+    let release = cursor_to(&mut pane, "Release notes");
+    assert_eq!(
+        shift(&mut pane, KeyCode::Up),
+        move_card(&release, LaneKey::Main, Some(&chip)),
+        "above the waiting card above"
+    );
+    assert_eq!(
+        shift(&mut pane, KeyCode::Down),
+        Outcome::Nothing,
+        "the finished card below sorts after"
+    );
 }
 
 #[test]
@@ -468,7 +474,7 @@ fn m_shows_the_lanes_and_a_digit_moves_the_card_to_that_lanes_end() {
 }
 
 #[test]
-fn m_moves_a_needs_you_row_out_of_its_cards_lane() {
+fn m_moves_a_waiting_card_out_of_its_lane() {
     let mut pane = pane_for("lanes");
     let chip = cursor_to(&mut pane, "Chip colours");
     press(&mut pane, KeyCode::Char('m'));
@@ -836,9 +842,10 @@ fn builds_the_projects_rows_from_the_core_only_while_projects_is_on() {
     assert_eq!(quiet, ["App Three"]);
     assert!(rows.contains(&ProjectRow::NewProject));
     assert!(
-        rows.iter()
-            .any(|r| matches!(r, ProjectRow::Ghost { title, .. } if title == "One: docs")),
-        "the waiting card leaves its placeholder"
+        rows.iter().any(
+            |r| matches!(r, ProjectRow::Card(c) if c.title == "One: docs" && c.waiting.is_some())
+        ),
+        "the waiting card stays in its project, marked waiting"
     );
     assert!(
         pane_for("lanes").model().projects.is_empty(),
@@ -871,7 +878,7 @@ fn scrolls_the_projects_view_in_a_short_pane_with_the_keys_and_the_wheel() {
     }
     let back = draw(&mut pane, &mut term);
     assert!(
-        back.contains("Needs you"),
+        back.contains("1 needs you"),
         "the wheel goes back up:\n{back}"
     );
 }
@@ -996,9 +1003,15 @@ fn a_move_a_dismissal_and_a_drag_show_in_the_pane_from_the_core() {
 
     let mut live = Live::new("needs-and-next");
     let oldest = cursor_to(&mut live.pane, "Oldest question");
-    assert!(live.pane.model().in_strip(&oldest));
+    let count = live.pane.model().needs.count;
+    assert!(live.pane.model().is_waiting(&oldest));
     live.press(KeyCode::Char('d'));
-    assert!(!live.pane.model().in_strip(&oldest), "gone from Needs you");
+    assert!(!live.pane.model().is_waiting(&oldest), "its edge drops");
+    assert!(
+        live.pane.model().is_lane_card(&oldest),
+        "it stays in its lane"
+    );
+    assert_eq!(live.pane.model().needs.count, count - 1, "out of the count");
 }
 
 #[test]
@@ -1140,24 +1153,42 @@ fn a_click_or_a_drag_back_to_where_it_was_places_nothing() {
     );
 
     pane.handle_event(&mouse(down, from));
-    let needs = row_of(&buffer, "Needs you");
+    let needs = row_of(&buffer, "2 need you");
     assert_eq!(
         pane.handle_event(&mouse(up, needs)),
         Outcome::Redraw,
-        "onto the strip"
-    );
-
-    let ghost = row_of(&buffer, "Chip colours · your turn");
-    pane.handle_event(&mouse(down, ghost));
-    assert_eq!(
-        pane.handle_event(&mouse(up, row_of(&buffer, "UNSORTED"))),
-        Outcome::Nothing,
-        "a placeholder is not dragged"
+        "onto the Needs you line"
     );
 }
 
 #[test]
-fn a_press_on_a_needs_you_row_puts_the_cursor_there_and_the_wheel_moves_it_with_the_finger() {
+fn a_waiting_card_drags_like_any_other() {
+    let mut pane = pane_for("lanes");
+    let mut term = terminal(40);
+    draw(&mut pane, &mut term);
+    let buffer = term.backend().buffer().clone();
+    let chip = id_of(&pane, "Chip colours");
+    assert!(pane.model().is_waiting(&chip));
+    let down = MouseEventKind::Down(MouseButton::Left);
+    let drag = MouseEventKind::Drag(MouseButton::Left);
+    let up = MouseEventKind::Up(MouseButton::Left);
+    let onto = row_of(&buffer, "UNSORTED");
+    pane.handle_event(&mouse(down, row_of(&buffer, "Your turn: Which")));
+    pane.handle_event(&mouse(drag, onto));
+    assert_eq!(
+        pane.handle_event(&mouse(up, onto)),
+        move_card(
+            &chip,
+            LaneKey::Unsorted,
+            Some(&id_of(&pane, "Loose workspace"))
+        ),
+        "at the top, under the header"
+    );
+}
+
+#[test]
+fn a_press_on_a_waiting_cards_reason_puts_the_cursor_there_and_the_wheel_moves_it_with_the_finger()
+{
     let mut pane = pane_for("lanes");
     let mut term = terminal(40);
     draw(&mut pane, &mut term);
@@ -1198,14 +1229,13 @@ fn the_mouse_rests_while_the_lane_picker_is_up_or_in_projects() {
 }
 
 #[test]
-fn down_past_the_last_needs_you_row_scrolls_to_the_lanes_below() {
+fn down_past_the_last_waiting_card_scrolls_to_the_lanes_below() {
     let mut model = pane_for("lanes").model().clone();
     for lane in &mut model.lanes {
-        lane.rows
-            .retain(|r| matches!(r, cockpit_pane::model::Row::Ghost { .. }));
+        lane.rows.retain(|r| r.card().waiting.is_some());
     }
     let mut pane = Pane::new(model);
-    assert_eq!(pane.model().card_ids().len(), 2, "only the strip's rows");
+    assert_eq!(pane.model().card_ids().len(), 2, "only the waiting cards");
     short_screen(&mut pane, 0);
     let bottom = short_screen(&mut pane, 40);
     assert!(
@@ -1294,7 +1324,7 @@ fn a_flip_from_outside_drops_the_lane_picker_and_a_drag() {
 }
 
 #[test]
-fn a_drag_ends_when_its_card_becomes_a_placeholder() {
+fn a_drag_holds_when_its_card_starts_asking_and_ends_when_it_goes() {
     let mut pane = pane_for("lanes");
     let mut term = terminal(40);
     draw(&mut pane, &mut term);
@@ -1306,16 +1336,25 @@ fn a_drag_ends_when_its_card_becomes_a_placeholder() {
     pane.handle_event(&mouse(MouseEventKind::Drag(MouseButton::Left), onto));
     let mut asking = pane.model().clone();
     for row in asking.lanes.iter_mut().flat_map(|l| &mut l.rows) {
-        if row.ws_id() == snapshot {
-            *row = cockpit_pane::model::Row::Ghost {
-                ws_id: snapshot.clone(),
-                title: "Snapshot tests".into(),
-                text: "is asking".into(),
-                rank: 0,
-            };
+        if let cockpit_pane::model::Row::Card(c) = row
+            && c.ws_id == snapshot
+        {
+            c.waiting = Some(cockpit_pane::model::Waiting {
+                edge: Token::Amber,
+                ink: Token::AmberText,
+            });
         }
     }
-    pane.set_view_model(asking);
+    pane.set_view_model(asking.clone());
+    assert!(
+        pane.drop_target().is_some(),
+        "it stays in its lane, so the drag holds (issue #281)"
+    );
+    let mut gone = asking;
+    for lane in &mut gone.lanes {
+        lane.rows.retain(|r| r.ws_id() != snapshot);
+    }
+    pane.set_view_model(gone);
     assert_eq!(pane.drop_target(), None);
     let up = mouse(MouseEventKind::Up(MouseButton::Left), onto);
     assert_eq!(pane.handle_event(&up), Outcome::Nothing, "nothing to place");

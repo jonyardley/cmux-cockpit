@@ -78,9 +78,6 @@ pub fn words(model: &PaneModel) -> Vec<String> {
         KEYS_HINT,
         NEXT_LABEL,
         NEXT_NOTHING,
-        NEEDS_LABEL,
-        OLDEST_WORD,
-        GHOST_GAP,
         KEYS_TITLE,
         PICK_TITLE,
         PICK_CANCEL.0,
@@ -108,13 +105,8 @@ pub fn words(model: &PaneModel) -> Vec<String> {
         out.push(title.clone());
         out.push(place.clone());
     }
-    out.push(model.needs.count.to_string());
+    out.push(model.needs.label.clone());
     out.push(model.needs.wait.clone());
-    out.push(model.needs.more.clone());
-    for r in &model.needs.rows {
-        out.push(r.title.clone());
-        out.push(r.line.clone());
-    }
     for lane in &model.lanes {
         out.push(lane.name.clone());
         out.push(lane.count.to_string());
@@ -123,13 +115,7 @@ pub fn words(model: &PaneModel) -> Vec<String> {
         }
         out.push(lane.merge_ready.clone());
         for row in &lane.rows {
-            match row {
-                Row::Card(c) => card_words(c, &mut out),
-                Row::Ghost { title, text, .. } => {
-                    out.push(title.clone());
-                    out.push(text.clone());
-                }
-            }
+            card_words(row.card(), &mut out);
         }
     }
     for row in &model.projects {
@@ -139,10 +125,6 @@ pub fn words(model: &PaneModel) -> Vec<String> {
                 out.push(h.count.to_string());
             }
             ProjectRow::Card(c) => card_words(c, &mut out),
-            ProjectRow::Ghost { title, text, .. } => {
-                out.push(title.clone());
-                out.push(text.clone());
-            }
             ProjectRow::QuietHeader { count, .. } => out.push(count.to_string()),
             ProjectRow::Quiet { name, .. } => out.push(name.clone()),
             ProjectRow::NewProject => {}
@@ -192,20 +174,17 @@ mod tests {
         assert!(fit_rows(&rows, 0).is_empty());
     }
 
-    /// Card "f" waiting in Needs you with its card filed in folded Review.
+    /// Card "n" waiting in Main, card "w" waiting in Parked, and folded
+    /// Review, whose waiting card the pane does not show.
     fn walked() -> PaneModel {
-        use fixtures::{card, ghost, lane, needs_row};
+        use fixtures::{card, lane};
         PaneModel {
             needs: Needs {
                 count: 3,
-                rows: vec![
-                    needs_row("n", Some(LaneKey::Main)),
-                    needs_row("f", Some(LaneKey::Review)),
-                ],
                 ..Needs::default()
             },
             lanes: vec![
-                lane(LaneKey::Main, vec![ghost("n", 0), card("a", 2, false)]),
+                lane(LaneKey::Main, vec![card("n", 0, true), card("a", 2, false)]),
                 lane(LaneKey::Review, Vec::new()),
                 lane(LaneKey::Parked, vec![card("w", 0, true)]),
             ],
@@ -214,24 +193,19 @@ mod tests {
     }
 
     #[test]
-    fn walks_the_strip_then_the_lanes_cards() {
-        assert_eq!(walked().card_ids(), ["n", "f", "a", "w"]);
+    fn walks_the_lanes_cards_waiting_or_not() {
+        assert_eq!(walked().card_ids(), ["n", "a", "w"]);
     }
 
     #[test]
     fn knows_who_waits_and_which_lane_holds_each_card() {
         let m = walked();
-        assert!(m.in_strip("n"));
-        assert!(!m.in_strip("w"));
         assert!(m.is_waiting("n"));
-        assert!(m.is_waiting("w"), "past the cap");
+        assert!(m.is_waiting("w"));
         assert!(!m.is_waiting("a"));
-        assert_eq!(m.lane_of("n"), Some(LaneKey::Main), "by its placeholder");
-        assert_eq!(
-            m.lane_of("f"),
-            Some(LaneKey::Review),
-            "filed in a folded lane"
-        );
+        assert!(!m.is_waiting("f"), "in a folded lane, so not on screen");
+        assert_eq!(m.lane_of("n"), Some(LaneKey::Main));
+        assert_eq!(m.lane_of("f"), None);
         assert_eq!(m.lane_of("w"), Some(LaneKey::Parked));
         assert_eq!(m.lane_of("z"), None);
         let main: Vec<&str> = m
@@ -244,12 +218,13 @@ mod tests {
     }
 }
 
-/// Small rows, lanes and strip rows for the pane's unit tests.
+/// Small rows and lanes for the pane's unit tests.
 #[cfg(test)]
 pub(crate) mod fixtures {
     use super::*;
 
-    /// A card with `id` as its title, in state `rank`.
+    /// A card with `id` as its title, in state `rank`, waiting on Jon
+    /// (Your turn's clay) when `waiting`.
     pub fn card(id: &str, rank: u8, waiting: bool) -> Row {
         Row::Card(Box::new(Card {
             ws_id: id.into(),
@@ -277,23 +252,16 @@ pub(crate) mod fixtures {
             merged: Vec::new(),
             detail: String::new(),
             detail_lines: 1,
-            waiting,
+            waiting: waiting.then_some(Waiting {
+                edge: Token::Clay,
+                ink: Token::ClayText,
+            }),
             rank,
             movable: true,
             dimmed: false,
             selected: false,
             menu: Vec::new(),
         }))
-    }
-
-    /// A placeholder for `id`.
-    pub fn ghost(id: &str, rank: u8) -> Row {
-        Row::Ghost {
-            ws_id: id.into(),
-            title: id.into(),
-            text: "your turn".into(),
-            rank,
-        }
     }
 
     /// An open lane holding `rows`.
@@ -314,22 +282,6 @@ pub(crate) mod fixtures {
             collapsed: false,
             merge_ready: String::new(),
             rows,
-        }
-    }
-
-    /// A Needs you row for `id`, its card filed in `lane`.
-    pub fn needs_row(id: &str, lane: Option<LaneKey>) -> NeedsRow {
-        NeedsRow {
-            ws_id: id.into(),
-            icon: Icon {
-                glyph: DOT,
-                ink: None,
-            },
-            title: id.into(),
-            line: String::new(),
-            ink: Token::ClayText,
-            lane,
-            movable: true,
         }
     }
 }
