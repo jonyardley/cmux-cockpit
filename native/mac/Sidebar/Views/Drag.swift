@@ -198,7 +198,7 @@ struct FloatingCard: View {
             let card = Self.fresh(lifted, in: lanes)
             GeometryReader { geo in
                 RowView(row: .card(card))
-                    .background(Color(Palette.Own.ground), in: .rect(cornerRadius: Metrics.corner))
+                    .background(Color(Palette.Own.panelGround), in: .rect(cornerRadius: Metrics.corner))
                     .frame(width: geo.size.width)
                     .fixedSize(horizontal: false, vertical: true)
                     .opacity(0.9)

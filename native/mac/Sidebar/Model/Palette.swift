@@ -23,15 +23,22 @@ struct RGBA: Equatable, Sendable {
 /// literal in the extension lives here. The light side is the sidebars'
 /// palette (src/shared/palette.ts, as native/pane/src/theme.rs maps it);
 /// the dark side is this file's own, the same hues lifted for a dark
-/// ground, as nothing else in the repo has one yet.
+/// ground, as nothing else in the repo has one yet. Two exceptions: the
+/// panel ground is cmux's window off-white, and a card's face is the
+/// cockpit sidebar's card white (C.card in src/cockpit/theme.ts).
 enum Palette {
     /// The colours the views use that no core token names.
     enum Own: CaseIterable {
-        /// Under the whole panel.
+        /// The pane's cream: the selected tab.
         case ground
+        /// Under the whole panel (and behind a dragged card): cmux's own
+        /// off-white, which the TS sidebar and the right sidebar sit on
+        /// (sampled from a light-mode capture), so the panel matches the
+        /// rest of the window. Dark is unsampled and stays the dark ground.
+        case panelGround
         /// The Needs you strip's face.
         case needsFace
-        /// A card's face.
+        /// A card's face: white on the panel ground, as the TS sidebar's cards.
         case cardFace
         /// The third ink: where you left off.
         case tertiary
@@ -42,6 +49,24 @@ enum Palette {
         case onBadge
         /// The shadow under a card being dragged.
         case lift
+        /// A solid face: the chosen view tab, Next's pill.
+        case card
+        /// The edge round Next's pill and the Needs you strip.
+        case needsEdge
+        /// Next's pill and a Needs you row under the pointer.
+        case needsHover
+        /// A card's face under the pointer: opaque, as it replaces the face.
+        case cardHover
+        /// A header, tab or badge under the pointer.
+        case hover
+        /// The Ready pill's face: the finished green, faint.
+        case readyBg
+        /// A lane header while a card is dragged over its lane.
+        case dropTarget
+        /// An empty lane's drop zone while a card is dragged over it.
+        case zoneLit
+        /// A lane anchor's header badge while it is cmux's selected workspace.
+        case anchorSelected
     }
 
     private struct Pair {
@@ -116,13 +141,22 @@ enum Palette {
     private static func pair(_ own: Own) -> Pair {
         switch own {
         case .ground: Pair(RGBA(0xF4F2EA), RGBA(0x262624))
+        case .panelGround: Pair(RGBA(0xFAF9F5), RGBA(0x262624))
         case .needsFace: Pair(RGBA(0xFBECE4), RGBA(clay.dark.hex, 0x1C))
-        case .cardFace: Pair(RGBA(0xFFFFFF, 0x99), RGBA(0x30302D, 0x99))
+        case .cardFace: Pair(RGBA(0xFFFFFF), RGBA(0x30302D, 0x99))
         case .tertiary: Pair(RGBA(0x73726C), RGBA(0x9C9A92))
         case .grey: Pair(RGBA(0xA09E95), RGBA(0x77756D))
         case .badge: secondary
         case .onBadge: Pair(RGBA(0xFFFFFF), RGBA(0x1F1E1D))
         case .lift: Pair(RGBA(0x000000, 0x2E), RGBA(0x000000, 0x66))
+        case .card: Pair(RGBA(0xFFFFFF), RGBA(0x30302D))
+        case .needsEdge: Pair(RGBA(0xF0D2C3), RGBA(clay.dark.hex, 0x47))
+        case .needsHover: Pair(RGBA(0xFBF1EB), RGBA(0x3A3330))
+        case .cardHover: Pair(RGBA(0xF7F6F2), RGBA(0x383835))
+        case .hover: Pair(RGBA(0x7F7F7F, 0x14), RGBA(0x7F7F7F, 0x24))
+        case .readyBg: faint(green, 0x1F)
+        case .dropTarget, .anchorSelected: faint(text, 0x1F)
+        case .zoneLit: Pair(RGBA(0xE7E4D9), RGBA(0x3A3935))
         }
     }
 

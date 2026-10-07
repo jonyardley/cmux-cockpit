@@ -280,20 +280,40 @@ func contrast(_ a: RGBA, _ b: RGBA) -> Double {
 
 for dark in [false, true] {
     let scheme = dark ? "dark" : "light"
-    let ground = Palette.rgba(.ground, dark: dark)
-    // Body ink at WCAG's 4.5; the state inks at 3, as the light palette
-    // (palette.ts) holds them, the finished green the lowest.
-    for (token, name) in [(Token.text, "text"), (.secondary, "secondary"), (.heading, "heading")] {
-        check(contrast(Palette.rgba(token, dark: dark), ground) >= 4.5, "\(scheme): \(name) reads on the ground")
+    // The panel's off-white, the cream the selected tab keeps and a
+    // card's face where it is solid, each once: in dark mode the first two
+    // are the same colour and the card face is see-through.
+    var grounds = [("panel ground", Palette.rgba(.panelGround, dark: dark))]
+    if Palette.rgba(.ground, dark: dark) != grounds[0].1 {
+        grounds.append(("ground", Palette.rgba(.ground, dark: dark)))
     }
-    for (token, name) in [(Token.blueText, "blueText"), (.clayText, "clayText"), (.greenText, "greenText"), (.amberText, "amberText"), (.redText, "redText"), (.metaText, "metaText")] {
-        check(contrast(Palette.rgba(token, dark: dark), ground) >= 3, "\(scheme): \(name) reads on the ground")
+    if Palette.rgba(.cardFace, dark: dark).alpha == 0xFF {
+        grounds.append(("card face", Palette.rgba(.cardFace, dark: dark)))
     }
+    for (where_, ground) in grounds {
+        // Body ink at WCAG's 4.5; the state inks at 3, as the light palette
+        // (palette.ts) holds them, the finished green the lowest.
+        for (token, name) in [(Token.text, "text"), (.secondary, "secondary"), (.heading, "heading")] {
+            check(contrast(Palette.rgba(token, dark: dark), ground) >= 4.5, "\(scheme): \(name) reads on the \(where_)")
+        }
+        for (token, name) in [(Token.blueText, "blueText"), (.clayText, "clayText"), (.greenText, "greenText"), (.amberText, "amberText"), (.redText, "redText"), (.metaText, "metaText")] {
+            check(contrast(Palette.rgba(token, dark: dark), ground) >= 3, "\(scheme): \(name) reads on the \(where_)")
+        }
+    }
+    // The third ink sits on the panel and on cards; on the pane's cream it
+    // is short of 4.5 already, as it was before the panel changed colour.
+    for (where_, ground) in grounds where where_ != "ground" {
+        check(contrast(Palette.rgba(.tertiary, dark: dark), ground) >= 4.5, "\(scheme): tertiary reads on the \(where_)")
+    }
+    // A card's face differs from the panel; the card's hairline edge does
+    // the rest of the work of reading as a tile.
+    check(Palette.rgba(.cardFace, dark: dark) != Palette.rgba(.panelGround, dark: dark), "\(scheme): a card's face is not the panel ground")
     let hues = [Token.blue, .clay, .green, .amber].map { Palette.rgba($0, dark: dark) }
     check(Set(hues.map(\.hex)).count == hues.count, "\(scheme): each state hue is its own")
     check(Palette.rgba(.clear, dark: dark).alpha == 0, "\(scheme): clear is no colour")
 }
 check(Palette.rgba(.ground, dark: false) != Palette.rgba(.ground, dark: true), "light and dark grounds differ")
+check(Palette.rgba(.panelGround, dark: false) != Palette.rgba(.panelGround, dark: true), "light and dark panel grounds differ")
 
 // The light side of the extension's own colours is the pane's, read from
 // native/pane/src/theme.rs beside the snapshots.
@@ -370,6 +390,16 @@ let editorTs = source("../src/cockpit/views/editor.ts")
 for word in [Words.newProjectTitle, Words.add, Words.done, Words.cancel, Words.projectName, Words.searchIcons, Words.openFolders] {
     check(editorTs.contains("\"\(word)\""), "the sheet's \"\(word)\" is the JS sidebar editor's")
 }
+// The light side of the panel's own cockpit colours is the JS sidebar's,
+// read from src/cockpit/theme.ts.
+let themeTs = source("../src/cockpit/theme.ts").lowercased()
+for (own, name) in [(Palette.Own.card, "card"), (.needsEdge, "needsEdge"), (.needsHover, "needsHover"), (.cardHover, "cardHover"),
+                    (.hover, "hover"), (.dropTarget, "dropTarget"), (.zoneLit, "zoneLit"), (.anchorSelected, "anchorSelected")] {
+    let c = Palette.rgba(own, dark: false)
+    let hex = "#" + String(format: "%06x", c.hex) + (c.alpha == 0xFF ? "" : String(format: "%02x", c.alpha))
+    check(themeTs.contains("\n  \(name.lowercased()): \"\(hex)\","), "light \(own) is the cockpit's \(name)")
+}
+check(Palette.rgba(.readyBg, dark: false) == RGBA(Palette.rgba(Token.green, dark: false).hex, 0x1F), "readyBg is the finished green, faint")
 check(source("core/src/ui.rs").contains("QUIET_PILL: PillColors = PillColors {\n    bg: Token::CountBg,\n    fg: Token::MetaText,"), "the Quiet pill is the core's")
 
 // A pick opens the menu it was made from, then picks, in that order.

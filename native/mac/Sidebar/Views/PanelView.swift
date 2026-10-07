@@ -1,19 +1,20 @@
 import SwiftUI
 
 /// The All view: Needs you while something waits, then the five lanes.
+/// Each lane header carries its own section gap above it, so the lanes
+/// sit flush and their drop areas meet.
 struct AllView: View {
     let panel: Panel
     @State private var tops: [String: CGFloat] = [:]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 0) {
             if NeedsText.shows(panel.needs) {
                 NeedsView(needs: panel.needs)
             }
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(panel.lanes, id: \.key) { lane in
-                    let gap: CGFloat = lane.key == panel.lanes.last?.key ? 0 : 12
-                    LaneView(lane: lane, top: tops[String(describing: lane.key)] ?? 0, gap: gap)
+                    LaneView(lane: lane, top: tops[String(describing: lane.key)] ?? 0)
                 }
             }
             .coordinateSpace(name: FloatingCard.space)
@@ -25,22 +26,30 @@ struct AllView: View {
     }
 }
 
-/// The whole panel: the view switch and Next, then the view the core has
-/// on, and the project editor as a sheet over it while the core has one
-/// open. Closing the sheet asks the core to close the editor; the sheet
-/// goes when the panel says it has.
+/// The whole panel: the view switch and Next (only while there is a next
+/// step), then the view the core has on, spaced as the cockpit's top
+/// (headers.ts segmented, needs.ts nextButton), and the project editor
+/// as a sheet over it while the core has one open. Closing the sheet asks
+/// the core to close the editor; the sheet goes when the panel says it has.
 struct PanelBody: View {
     let panel: Panel
 
     var body: some View {
         ScrollView(.vertical) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 0) {
                 ViewSwitch(view: panel.view)
-                NextView(next: panel.next)
-                switch panel.view {
-                case .all: AllView(panel: panel)
-                case .projects: ProjectsView(panel: panel)
+                    .padding(.horizontal, Self.switchMargin)
+                    .padding(.bottom, 8)
+                if !NextText.isNothing(panel.next) {
+                    NextView(next: panel.next).padding(.top, 6)
                 }
+                Group {
+                    switch panel.view {
+                    case .all: AllView(panel: panel)
+                    case .projects: ProjectsView(panel: panel)
+                    }
+                }
+                .padding(.top, 6)
             }
             .padding(Metrics.gutter)
         }
@@ -50,6 +59,10 @@ struct PanelBody: View {
             }
         }
     }
+
+    /// The switch's outer margin: 14 in from the sidebar's edge, past the
+    /// gutter. Metrics.switchInset is the track's inner padding.
+    private static let switchMargin: CGFloat = 14 - Metrics.gutter
 
     private var editorKey: Binding<EditorKey?> {
         Binding(
@@ -99,6 +112,6 @@ struct SidebarView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(Palette.Own.ground))
+        .background(Color(Palette.Own.panelGround))
     }
 }
