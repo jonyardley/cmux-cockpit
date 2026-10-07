@@ -92,6 +92,12 @@ describe("moveLine", () => {
     assert.equal(moveLine("Your move: old\n\nYour move:\n\n"), null);
   });
 
+  it("takes no step from a rule, a heading or a decision under a bare header", () => {
+    assert.equal(moveLine("Your move:\n\n---\n\nRun it."), null);
+    assert.equal(moveLine("Your move:\n## Next\nstuff"), null);
+    assert.equal(moveLine("Your move:\n\n**1. Where**\n\n    - **a. Recommended.** foo"), null);
+  });
+
   it("skips a fenced block between a bare header and its steps", () => {
     const text = ["Your move:", "", "```", "npm run check", "```", "", "1. Paste it above.", "2. Then reload."].join(
       "\n",
@@ -122,6 +128,8 @@ describe("moveLine", () => {
       "the #288 review is running",
     );
     assert.equal(moveLine("Your move beyond that: go"), null);
+    assert.equal(moveLine("Nothing for you beyond that, I think: see below"), null);
+    assert.equal(moveLine("Nothing for you beyond the obvious: see below"), null);
   });
 
   it("takes a leading Jon, before the label", () => {

@@ -48,14 +48,14 @@ import { readTail, replyFrom, sleep } from "./transcript.ts";
 // on the agent. One word of drift may sit before the colon, inside the bold
 // or after it ("Nothing for you yet:", "**Your move** now:"), and so may a
 // short parenthetical ("Your move (optional, before merge):", inside the
-// bold or out); "Nothing for you" alone may add "beyond ..." ("Nothing for
-// you beyond that close-out:"). Only these shapes, so a sentence such as
-// "Your move to main was blocked: ..." stays prose. The text after the colon
-// may be empty: a bare header over steps, which lastMove reads from the
-// lines below.
+// bold or out); "Nothing for you" alone may add "beyond that ..." (or those,
+// this, these: "Nothing for you beyond that close-out:"). Only these
+// shapes, so a sentence such as "Your move to main was blocked: ..." stays
+// prose. The text after the colon may be empty: a bare header over steps,
+// which lastMove reads from the lines below.
 const DRIFT = String.raw`(?:\s+(?:yet|now|right now|for now|so far|at the moment|here|today))?`;
 const PAREN = String.raw`(?:\s*\([^)]{1,60}\))?`;
-const BEYOND = String.raw`(?:\s+beyond\s+[^:]{1,40})?`;
+const BEYOND = String.raw`(?:\s+beyond\s+(?:that|those|this|these)\b[^:,]{0,30})?`;
 const MOVE_LINE = new RegExp(
   String.raw`^\s*(?:>\s*)?(?:[-*]\s+)?(?:jon,\s+)?(?:\*\*|__)?(your move|nothing for you${BEYOND})${DRIFT}${PAREN}(?:\*\*|__)?${DRIFT}${PAREN}\s*:\s*(?:\*\*|__)?\s*(.*)$`,
   "i",
@@ -100,10 +100,12 @@ function unfenced(text: string): string[] {
 }
 
 // The first non-blank line after a bare label header, as a step: marker and
-// markdown stripped.
+// markdown stripped. A rule, a heading or a decision there is no step, so
+// the header reads as empty rather than putting "---" on the card.
 function stepAfter(lines: readonly string[], from: number): string {
   const next = lines.slice(from + 1).find((l) => l.trim() !== "");
-  return next === undefined ? "" : unmark(next.replace(STEP_MARKER, ""));
+  if (next === undefined || BREAK.test(next) || DECISION.test(next)) return "";
+  return unmark(next.replace(STEP_MARKER, ""));
 }
 
 // The move on one line of a reply, if the line holds one: a label with its
