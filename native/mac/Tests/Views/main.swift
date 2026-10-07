@@ -209,6 +209,13 @@ check(ChipFit.candidates(givesWay: [false, true, false]) == [[0, 1, 2], [0, 2], 
 check(ChipFit.candidates(givesWay: [false, false]) == [[0, 1], [0], []], "with nothing to give way, every chip is tried once, not again with an ellipsis")
 check(ChipFit.candidates(givesWay: []) == [[]], "no chips, nothing to try but nothing")
 
+func chipOf(_ kind: ChipKind, _ text: String) -> Chip {
+    Chip(kind: kind, pieces: [Piece(text: text, ink: .secondary)], givesWay: false, url: nil, isAction: false)
+}
+let glued = ChipFit.glued([chipOf(.pr, "#3"), chipOf(.diff, "+1"), chipOf(.branch, "feat"), chipOf(.diff, "+2")])
+check(glued.map(CardText.chip) == ["#3 +1", "feat", "+2"], "a diff size joins only the PR before it")
+check(glued.first?.kind == .pr, "the PR keeps its kind")
+
 /// The first candidate that fits by width, as ViewThatFits picks it.
 func firstFitting(_ widths: [Double], givesWay: [Bool], gap: Double, room: Double, tail: Double) -> ChipFit.Fit? {
     for (n, shown) in ChipFit.candidates(givesWay: givesWay).enumerated() {

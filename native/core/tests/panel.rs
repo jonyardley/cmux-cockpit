@@ -301,3 +301,18 @@ fn a_diff_size_follows_its_pr_and_only_actions_act() {
     }
     assert!(diffs > 0, "some scene has a PR with a diff size");
 }
+
+#[test]
+fn a_row_is_never_ready_and_its_age_is_its_status() {
+    use cockpit_core::panel::Density;
+    let rows: Vec<_> = every_card()
+        .into_iter()
+        .filter(|c| c.density == Density::Row)
+        .collect();
+    assert!(!rows.is_empty(), "some scene has a row");
+    for c in rows {
+        assert!(!c.ready, "{} is a row, which has no Ready pill", c.ws_id);
+        assert_eq!(c.age, c.status, "{} says its age once", c.ws_id);
+        assert_eq!(c.status_has_age, !c.status.is_empty(), "{}", c.ws_id);
+    }
+}

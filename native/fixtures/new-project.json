@@ -134,7 +134,7 @@
               "color": 6986700
             },
             "unread": "1",
-            "ready": true,
+            "ready": false,
             "pinned": true,
             "progress": null,
             "helpers": "",

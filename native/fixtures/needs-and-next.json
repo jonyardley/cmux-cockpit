@@ -346,7 +346,7 @@
               "color": 10526357
             },
             "unread": "3",
-            "ready": true,
+            "ready": false,
             "pinned": false,
             "progress": null,
             "helpers": "",

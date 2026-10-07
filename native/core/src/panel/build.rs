@@ -210,17 +210,32 @@ struct Looks {
     status_has_age: bool,
 }
 
-fn looks(session: &mut Session, data: &Data, w: Option<&Workspace>, density: Density) -> Looks {
+/// A card's looks beside its `status`. A row has no Ready pill
+/// (cards.ts denseRow), so it is never Ready, and its status is its age,
+/// so its age is that same string and the status carries it.
+fn looks(
+    session: &mut Session,
+    data: &Data,
+    w: Option<&Workspace>,
+    density: Density,
+    status: &str,
+) -> Looks {
+    let row = density == Density::Row;
     let badge = session.badge_count(data, w);
+    let (age, status_has_age) = if row {
+        (status.to_string(), !status.is_empty())
+    } else {
+        (session.age_of(data, w), session.status_has_age(data, w))
+    };
     Looks {
         badge: badge_of(&session.project_of_workspace(w)),
         unread: card_unread(density, w.and_then(|w| w.unread), badge),
-        ready: session.is_ready(data, w),
+        ready: !row && session.is_ready(data, w),
         pinned: is_pinned(w),
         progress: progress_fraction(w),
         helpers: session.helper_text(w),
-        age: session.age_of(data, w),
-        status_has_age: session.status_has_age(data, w),
+        age,
+        status_has_age,
     }
 }
 
@@ -389,7 +404,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         String::new()
     };
     let chips = chips_row(session, data, w, chips_for_density(density));
-    let looks = looks(session, data, w, density);
+    let looks = looks(session, data, w, density, &status);
     Card {
         ws_id: id.to_string(),
         icon: icon_of(&style),
@@ -509,7 +524,8 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
     let w = data.ws_by_id(id);
     let style = session.status_info(data, w);
     let wanted = session.move_of(w).map(|m| m.text).unwrap_or_default();
-    let looks = looks(session, data, w, Density::Full);
+    let status = session.status_line(data, w);
+    let looks = looks(session, data, w, Density::Full, &status);
     Card {
         ws_id: id.to_string(),
         icon: icon_of(&style),
@@ -521,7 +537,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         pinned: looks.pinned,
         progress: looks.progress,
         helpers: looks.helpers,
-        status: session.status_line(data, w),
+        status,
         status_ink: style.text,
         age: looks.age,
         status_has_age: looks.status_has_age,

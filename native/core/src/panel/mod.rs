@@ -166,7 +166,7 @@ pub struct Card {
     /// row, which has no Ready pill.
     pub unread: String,
     /// Ready: finished while Jon was elsewhere, with output unread; the
-    /// green pill by the title.
+    /// green pill by the title. Never on a row, which has no pill.
     pub ready: bool,
     /// Pinned: the faint pin at the end of the title row.
     pub pinned: bool,
@@ -179,7 +179,8 @@ pub struct Card {
     pub status_ink: Token,
     /// How long the status has held, "12m", "" before anything says. The
     /// title row shows it only while `status_has_age` is false, so a card
-    /// never reads two times; a row always shows it.
+    /// never reads two times. A row's status is its age, so on a row this
+    /// is the same string and `status_has_age` holds while it says one.
     pub age: String,
     /// Whether the status line carries a time of its own.
     pub status_has_age: bool,

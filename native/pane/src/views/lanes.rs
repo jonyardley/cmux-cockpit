@@ -183,13 +183,17 @@ fn chips_line(chips: &[Chip], room: usize) -> Vec<Span<'static>> {
     out
 }
 
-/// A card's chips as the pane lays them out: a diff size joins the chip
+/// A card's chips as the pane lays them out: a diff size joins the PR
 /// before it, a space apart, so the PR and its size fit or go together.
+/// A diff after anything else stays a chip of its own, so a change in the
+/// core's order shows rather than folding it into a branch.
 fn glued(chips: &[Chip]) -> Vec<Chip> {
     let mut out: Vec<Chip> = Vec::new();
     for c in chips {
         match out.last_mut() {
-            Some(prev) if c.kind == ChipKind::Diff => prev.pieces.extend(c.pieces.iter().cloned()),
+            Some(prev) if c.kind == ChipKind::Diff && prev.kind == ChipKind::Pr => {
+                prev.pieces.extend(c.pieces.iter().cloned())
+            }
             _ => out.push(c.clone()),
         }
     }
@@ -319,6 +323,8 @@ mod tests {
         assert_eq!(got[0].kind, ChipKind::Pr, "the PR keeps its kind");
         let alone = glued(&[chip(ChipKind::Diff, "+1")]);
         assert_eq!(alone.len(), 1, "a diff with nothing before it stays");
+        let after_branch = glued(&[chip(ChipKind::Branch, "feat"), chip(ChipKind::Diff, "+1")]);
+        assert_eq!(after_branch.len(), 2, "a diff joins only a PR");
     }
 
     #[test]
