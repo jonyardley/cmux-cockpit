@@ -43,16 +43,28 @@ import { field } from "./gh-command.ts";
 import { readTail, replyFrom, sleep } from "./transcript.ts";
 
 // The line's label as Jon's rules write it, after any markdown the terminal
-// would not show (a quote, bold, a list marker): "Your move:" when the turn
-// waits on Jon, "Nothing for you:" when it waits on the agent. One word of
-// drift may sit before the colon, inside the bold or after it ("Nothing for
-// you yet:", "**Your move** now:"); only these words, so a sentence such as
-// "Your move to main was blocked: ..." stays prose.
+// would not show (a quote, bold, a list marker) and an optional "Jon, ":
+// "Your move:" when the turn waits on Jon, "Nothing for you:" when it waits
+// on the agent. One word of drift may sit before the colon, inside the bold
+// or after it ("Nothing for you yet:", "**Your move** now:"), and so may a
+// short parenthetical ("Your move (optional, before merge):", inside the
+// bold or out); "Nothing for you" alone may add "beyond that ..." (or those,
+// this, these: "Nothing for you beyond that close-out:"). Only these
+// shapes, so a sentence such as "Your move to main was blocked: ..." stays
+// prose. The text after the colon may be empty: a bare header over steps,
+// which lastMove reads from the lines below.
 const DRIFT = String.raw`(?:\s+(?:yet|now|right now|for now|so far|at the moment|here|today))?`;
+const PAREN = String.raw`(?:\s*\([^)]{1,60}\))?`;
+const BEYOND = String.raw`(?:\s+beyond\s+(?:that|those|this|these)\b[^:,]{0,30})?`;
 const MOVE_LINE = new RegExp(
-  String.raw`^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)?(your move|nothing for you)${DRIFT}(?:\*\*|__)?${DRIFT}\s*:\s*(?:\*\*|__)?\s*(.+)$`,
+  String.raw`^\s*(?:>\s*)?(?:[-*]\s+)?(?:jon,\s+)?(?:\*\*|__)?(your move|nothing for you${BEYOND})${DRIFT}${PAREN}(?:\*\*|__)?${DRIFT}${PAREN}\s*:\s*(?:\*\*|__)?\s*(.*)$`,
   "i",
 );
+// The narrow full-stop form: a sentence, then "Nothing for you yet." ending
+// the line. The sentence before it is the move text.
+const IDLE_SENTENCE = new RegExp(String.raw`^(.*[.!?])\s+nothing for you${DRIFT}\.$`, "i");
+// A list or step marker at the start of a line: "1.", "2)", "-", "*", ">".
+const STEP_MARKER = /^\s*(?:>\s*)?(?:\d+[.)]|[-*])\s+/;
 // A decision's heading: "**1. Where the card gets the line**", or the same
 // as a bullet, "- **1. Where the card gets the line**".
 const DECISION = /^\s*(?:[-*]\s+)?\*\*([1-9])[.)]\s/;
@@ -87,14 +99,38 @@ function unfenced(text: string): string[] {
   });
 }
 
+// The first non-blank line after a bare label header, as a step: marker and
+// markdown stripped. A rule, a heading or a decision there is no step, so
+// the header reads as empty rather than putting "---" on the card.
+function stepAfter(lines: readonly string[], from: number): string {
+  const next = lines.slice(from + 1).find((l) => l.trim() !== "");
+  if (next === undefined || BREAK.test(next) || DECISION.test(next)) return "";
+  return unmark(next.replace(STEP_MARKER, ""));
+}
+
+// The move on one line of a reply, if the line holds one: a label with its
+// text, a bare label over the steps below (an empty line when nothing
+// follows, which ends the scan as an empty label always has), or a closing
+// "Nothing for you."
+function moveOn(lines: readonly string[], i: number): { line: string; idle: boolean } | null {
+  const text = lines[i] ?? "";
+  const hit = MOVE_LINE.exec(text);
+  if (hit?.[1]) {
+    const line = cleanMove(unmark(hit[2] ?? "") || stepAfter(lines, i)) ?? "";
+    return { line, idle: !/^your move/i.test(hit[1]) };
+  }
+  const sentence = IDLE_SENTENCE.exec(unmark(text))?.[1];
+  const last = sentence?.split(/(?<=[.!?])\s+/).pop();
+  const line = last ? cleanMove(last) : null;
+  return line ? { line, idle: true } : null;
+}
+
 /** The last move line in `text` outside a code fence, cleaned, with whether it asks nothing of Jon. */
 function lastMove(text: string): { line: string; idle: boolean } | null {
   const lines = unfenced(text);
   for (let i = lines.length - 1; i >= 0; i--) {
-    const hit = MOVE_LINE.exec(lines[i] ?? "");
-    if (!hit?.[1] || !hit[2]) continue;
-    const line = cleanMove(unmark(hit[2]));
-    return line ? { line, idle: hit[1].toLowerCase() !== "your move" } : null;
+    const found = moveOn(lines, i);
+    if (found) return found.line ? found : null;
   }
   return null;
 }
