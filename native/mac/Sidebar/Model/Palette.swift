@@ -23,14 +23,15 @@ struct RGBA: Equatable, Sendable {
 /// literal in the extension lives here. The light side is the sidebars'
 /// palette (src/shared/palette.ts, as native/pane/src/theme.rs maps it);
 /// the dark side is this file's own, the same hues lifted for a dark
-/// ground, as nothing else in the repo has one yet. The one exception is
-/// the panel ground, which is cmux's window off-white, not the palette's.
+/// ground, as nothing else in the repo has one yet. Two exceptions: the
+/// panel ground is cmux's window off-white, and a card's face is the
+/// cockpit sidebar's card white (C.card in src/cockpit/theme.ts).
 enum Palette {
     /// The colours the views use that no core token names.
     enum Own: CaseIterable {
         /// The pane's cream: the selected tab.
         case ground
-        /// Under the whole panel and a card being dragged: cmux's own
+        /// Under the whole panel (and behind a dragged card): cmux's own
         /// off-white, which the TS sidebar and the right sidebar sit on
         /// (sampled from a light-mode capture), so the panel matches the
         /// rest of the window. Dark is unsampled and stays the dark ground.
