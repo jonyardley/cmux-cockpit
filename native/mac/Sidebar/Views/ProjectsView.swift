@@ -57,12 +57,31 @@ enum ProjectMetrics {
     static let newGap: CGFloat = 6
 }
 
+extension View {
+    /// The row's hover shade in its shape, as headers.ts hoverBackground
+    /// draws it; off when the row takes no click.
+    func hoverShade(in shape: some Shape, enabled: Bool = true) -> some View {
+        modifier(HoverShade(shape: shape, enabled: enabled))
+    }
+}
+
+private struct HoverShade<S: Shape>: ViewModifier {
+    let shape: S
+    let enabled: Bool
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .background(enabled && hovering ? Color(Palette.Own.hover) : .clear, in: shape)
+            .onHover { hovering = $0 }
+    }
+}
+
 /// "+" at the right of a busy project's header, when it has a folder: a
 /// round button shaded on hover, whose click opens a new session in it
 /// (parts.ts glyphButton).
 struct PlusButton: View {
     let key: String
-    @State private var hovering = false
 
     var body: some View {
         Button {
@@ -72,21 +91,20 @@ struct PlusButton: View {
                 .font(.system(size: ProjectMetrics.plusFont, weight: .semibold))
                 .foregroundStyle(Color(Token.secondary))
                 .frame(width: ProjectMetrics.plusButton, height: ProjectMetrics.plusButton)
-                .background(hovering ? Color(Palette.Own.hover) : .clear, in: .circle)
+                .hoverShade(in: .circle)
                 .contentShape(.circle)
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
     }
 }
 
 /// A busy project's header: fold chevron, its badge, name, the count, the
 /// folded project's dot, and "+" when it has a folder (headers.ts
 /// projectHeader). The section gap sits above the face, so the hover shade
-/// hugs the row.
+/// hugs the row, but inside the fold click, so a click in the gap folds it
+/// as headers.ts headerGap does.
 struct ProjectHeader: View {
     let head: ProjectHead
-    @State private var hovering = false
 
     var body: some View {
         HStack(spacing: Metrics.headerSpacing) {
@@ -108,11 +126,10 @@ struct ProjectHeader: View {
         .font(.system(size: Metrics.small))
         .padding(.horizontal, Metrics.headerPadH)
         .padding(.vertical, Metrics.headerPadV)
-        .background(hovering ? Color(Palette.Own.hover) : .clear, in: .rect(cornerRadius: Metrics.Radius.header))
-        .onHover { hovering = $0 }
+        .hoverShade(in: .rect(cornerRadius: Metrics.Radius.header))
+        .padding(.top, Metrics.sectionGap - Metrics.headerPadV)
         .foldsOnClick(.toggleProject(key: head.key))
         .contextMenu { ProjectMenuItems(items: head.menu, key: head.key, quiet: false) }
-        .padding(.top, Metrics.sectionGap - Metrics.headerPadV)
     }
 }
 
@@ -122,7 +139,6 @@ struct ProjectHeader: View {
 struct QuietHeader: View {
     let count: UInt64
     let collapsed: Bool
-    @State private var hovering = false
 
     var body: some View {
         HStack(spacing: Metrics.headerSpacing) {
@@ -138,17 +154,16 @@ struct QuietHeader: View {
         }
         .padding(.horizontal, Metrics.headerPadH)
         .padding(.vertical, ProjectMetrics.quietPadV)
-        .background(hovering ? Color(Palette.Own.hover) : .clear, in: .rect(cornerRadius: Metrics.Radius.header))
-        .onHover { hovering = $0 }
+        .hoverShade(in: .rect(cornerRadius: Metrics.Radius.header))
         .foldsOnClick(.toggleQuiet)
         .padding(.top, ProjectMetrics.quietGap)
     }
 }
 
 /// A project with no sessions: its badge and name, and a faint "+" with a
-/// folder, when the whole row is the click that opens a session in it.
-/// With no folder it takes no click and fades, so it does not read as a
-/// button (headers.ts quietRow).
+/// folder, when the whole row is a button that opens a session in it, so
+/// the keyboard and VoiceOver reach it too. With no folder it takes no
+/// click and fades, so it does not read as a button (headers.ts quietRow).
 struct QuietRow: View {
     let key: String
     let name: String
@@ -156,9 +171,24 @@ struct QuietRow: View {
     let icon: String
     let canOpen: Bool
     let menu: [MenuItem]
-    @State private var hovering = false
 
     var body: some View {
+        Group {
+            if canOpen {
+                Button {
+                    SidebarCore.send(.openProject(key: key))
+                } label: {
+                    face
+                }
+                .buttonStyle(.plain)
+            } else {
+                face
+            }
+        }
+        .contextMenu { ProjectMenuItems(items: menu, key: key, quiet: true) }
+    }
+
+    private var face: some View {
         HStack(spacing: Metrics.headerSpacing) {
             BadgeTile(icon: icon, color: color, size: ProjectMetrics.quietBadge, font: ProjectMetrics.quietBadgeFont)
             Text(name)
@@ -176,12 +206,9 @@ struct QuietRow: View {
         }
         .padding(.horizontal, Metrics.headerPadH)
         .padding(.vertical, ProjectMetrics.rowPadV)
-        .background(canOpen && hovering ? Color(Palette.Own.hover) : .clear, in: .rect(cornerRadius: ProjectMetrics.rowRadius))
+        .hoverShade(in: .rect(cornerRadius: ProjectMetrics.rowRadius), enabled: canOpen)
         .opacity(ProjectText.quietOpacity(canOpen: canOpen))
-        .onHover { hovering = $0 }
         .contentShape(.rect)
-        .onTapGesture { if canOpen { SidebarCore.send(.openProject(key: key)) } }
-        .contextMenu { ProjectMenuItems(items: menu, key: key, quiet: true) }
     }
 }
 
@@ -189,7 +216,6 @@ struct QuietRow: View {
 /// slot and the label, styled as a quiet row so it reads as part of the
 /// list; a click opens the editor (headers.ts newProjectRow).
 struct NewProjectRow: View {
-    @State private var hovering = false
 
     var body: some View {
         Button {
@@ -208,11 +234,10 @@ struct NewProjectRow: View {
             }
             .padding(.horizontal, Metrics.headerPadH)
             .padding(.vertical, ProjectMetrics.rowPadV)
-            .background(hovering ? Color(Palette.Own.hover) : .clear, in: .rect(cornerRadius: ProjectMetrics.rowRadius))
+            .hoverShade(in: .rect(cornerRadius: ProjectMetrics.rowRadius))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .onHover { hovering = $0 }
         .padding(.top, ProjectMetrics.newGap)
     }
 }
