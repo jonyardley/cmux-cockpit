@@ -10,13 +10,10 @@ struct AllView: View {
             if NeedsText.shows(panel.needs) {
                 NeedsView(needs: panel.needs)
             }
-            // Checked against this panel as it draws, so a drop the panel
-            // already shows is not drawn twice for a frame.
-            let moves = PendingMove.unconfirmed(DragState.shared.pending, lanes: panel.lanes)
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(panel.lanes, id: \.key) { lane in
                     let gap: CGFloat = lane.key == panel.lanes.last?.key ? 0 : 12
-                    LaneView(lane: lane, moves: moves, top: tops[String(describing: lane.key)] ?? 0, gap: gap)
+                    LaneView(lane: lane, top: tops[String(describing: lane.key)] ?? 0, gap: gap)
                 }
             }
             .coordinateSpace(name: FloatingCard.space)
@@ -46,12 +43,6 @@ struct PanelBody: View {
                 }
             }
             .padding(Metrics.gutter)
-        }
-        // Here, not in a lane, so a drop is confirmed in the Projects
-        // view too, when no lane is drawn.
-        .onChange(of: panel.lanes) { _, now in DragState.shared.reconcile(now) }
-        .onChange(of: DragState.shared.pending.count) { was, now in
-            if now > was { Timeline.drag.note("move drawn") }
         }
         .sheet(item: editorKey) { _ in
             if let editor = ProjectText.editor(panel) {

@@ -82,10 +82,10 @@ enum ProjectMenu {
 }
 
 /// The editor sheet's text as Jon types it. The sheet keeps its own copy
-/// and sends each change to the core, rather than drawing what panel.json
-/// says: the round trip through the runner would lose keys typed while it
-/// is under way. Every change is an edit, so typing in the sheet can only
-/// ever reach the editor, never a card.
+/// and sends each change to the core, rather than drawing what the panel
+/// says, so a redraw never loses keys typed mid-edit. Every change is an
+/// edit, so typing in the sheet can only ever reach the editor, never a
+/// card.
 struct EditorDraft: Equatable {
     var name: String
     var folder: String

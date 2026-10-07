@@ -1,6 +1,6 @@
 import Foundation
 
-// Checks the effect files (native/runner/src/effect.rs): with --no-core the
+// Checks the effect files (native/runner/src/effect.rs): the
 // sidebar's core runs in the sidebar, and each effect it asks for goes into
 // outbox/ as the bridge hands it out. native/runner/tests/effects.json holds
 // one file per effect, the same the runner's own test parses and matches

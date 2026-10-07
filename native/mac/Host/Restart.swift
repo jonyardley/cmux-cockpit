@@ -31,15 +31,11 @@ struct Restart: Equatable {
 enum PublishLaunch {
     static let binary = "cockpit-publish"
     /// Started by hand, the helper writes the heartbeat but leaves
-    /// panel.json alone, so a fixture from dev-fixture.sh stays on screen.
+    /// data.json alone, so a fixture from dev-fixture.sh stays on screen.
     static let noPublish = "--no-publish"
 
-    /// With no core of its own: the sidebar runs the core (#270), and the
-    /// helper feeds it data.json and carries out its effects.
-    static let noCore = "--no-core"
-
     static func arguments(parent: Int32) -> [String] {
-        ["--parent", String(parent), noCore]
+        ["--parent", String(parent)]
     }
 
     /// The child's environment: the helper's own, with the fixed folders

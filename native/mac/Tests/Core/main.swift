@@ -4,7 +4,8 @@ import Foundation
 // Inbox.swift) linked to native/ffi as the extension links it: a golden
 // scene's data.json loads and draws, a click redraws on the click, the
 // effects it asks for land in outbox/ as files the runner takes, an answer
-// in inbox/ is taken once and goes in, and a move cmux refuses snaps back.
+// in inbox/ is taken once and goes in, a move cmux refuses snaps back,
+// and a card clicked draws selected on the click.
 // test.sh builds native/ffi, then builds and runs this with the scene's
 // input (test/golden/lanes.input.json) as its argument.
 
@@ -103,6 +104,22 @@ let left = (try? FileManager.default.contentsOfDirectory(atPath: inbox.path)) ??
 check(left == [".answer-1-2.tmp"], "and deletes what it gave: \(left)")
 answers.forEach(SidebarCore.answer)
 check(ids(.main).contains(card) && !ids(.review).contains(card), "the refused move snaps back")
+
+// MARK: A click's selection
+
+/// The cards the lanes draw selected.
+@MainActor func selected() -> [String] {
+    (drawn?.lanes ?? []).flatMap(\.rows).compactMap {
+        if case .card(let card) = $0, card.selected { card.wsId } else { nil }
+    }
+}
+
+let clicked = (drawn?.lanes ?? []).filter { !$0.collapsed }.map(\.key).flatMap(ids).first { !selected().contains($0) } ?? ""
+check(!clicked.isEmpty, "a lane has a card not selected to click")
+_ = sent()
+check(SidebarCore.send(.selected(id: clicked)), "the click cmux was asked for goes in")
+check(selected() == [clicked], "and draws that card alone selected on the click: \(selected())")
+check(sent().isEmpty, "with no cmux call of its own, since the SDK made it")
 
 // MARK: The clock
 

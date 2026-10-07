@@ -3,45 +3,35 @@
 //! cockpit-publish; it runs the runner headless and talks to the sidebar
 //! through the App Group folder the two share (`default_root`):
 //!
-//! - Out: after each change it writes the core's panel model to
-//!   panel.json, whole and atomically (a temp file renamed over it), as
-//!   `{"seq": 4, "written_at_ms": 1791229864123, "panel": {...}}`. The
-//!   panel is cockpit_core::Panel as native/fixtures/ hold it; `seq`
-//!   counts this process's writes from 1, and `written_at_ms` is the wall
-//!   clock at the write, so the sidebar can log how late it read it. Then
-//!   it posts the bare signal (signal.rs). Nothing is written until the
-//!   runner is ready (`ready`), so a restart never blanks the sidebar.
-//! - Beside it, data.json: what the core was fed (crate::Inputs), as
-//!   `{"seq": 9, "written_at_ms": ..., "home": "/Users/jon", "projects":
-//!   [...], "projects_seq": 1, "state": {...}, "state_seq": 2, "data":
-//!   {...}, "data_seq": 40}`, written the same way when any input was fed
-//!   again, with its own `seq`. A core fed `projects`, `state`, then
-//!   `data`, with `home` set on its model first, builds the same panel; a
-//!   later file is read by sending only the inputs whose `_seq` moved, and
-//!   an input still null is skipped. With a core the signal follows
-//!   panel.json alone, as before, since every frame's new clock rewrites
-//!   data.json and nothing reads it yet; without a core only data.json
-//!   goes, and the signal follows it.
-//! - Once a minute, when anything was written, a log line gives each
+//! - Out: data.json, what the core is fed (crate::Inputs), written whole
+//!   and atomically (a temp file renamed over it) when any input was fed
+//!   again, as `{"seq": 9, "written_at_ms": 1791229864123, "home":
+//!   "/Users/jon", "projects": [...], "projects_seq": 1, "state": {...},
+//!   "state_seq": 2, "data": {...}, "data_seq": 40}`. `seq` counts this
+//!   process's writes from 1, and `written_at_ms` is the wall clock at
+//!   the write. The sidebar's core, fed `projects`, `state`, then `data`,
+//!   with `home` set on its model first, builds the panel itself; a later
+//!   file is read by sending only the inputs whose `_seq` moved, and an
+//!   input still null is skipped. Then it posts the bare signal
+//!   (signal.rs). Nothing is written until the runner is ready (`ready`),
+//!   so a restart never blanks the sidebar.
+//! - Once a minute, when anything was written, a log line gives the
 //!   file's writes per minute and size (`Tally`).
-//! - In: each file in outbox/ is one action (action.rs) for the helper's
-//!   core, or, with `--no-core`, one effect (effect.rs) from the
-//!   sidebar's. The writer writes it under a name that starts with "." or
-//!   does not end in ".json", then renames it to `<name>.json`. Files are
-//!   taken in byte order of their names, so a name must sort in the order
-//!   sent: a fixed width, zero padded `<13 digit epoch ms>-<6 digit
-//!   counter>.json` (`1791229864123-000042.json`), never a bare counter,
-//!   where "10" sorts before "9". Each one is read, and when this helper
-//!   can act on it, claimed by an atomic rename, so it is applied at most
-//!   once even with two publishers running, then deleted. One it cannot
-//!   act on yet (an action with no core, an effect with one) waits where
-//!   it is, logged once, for a helper started the other way. Any file
-//!   older than `STALE` (a minute) is deleted and logged instead, so an
-//!   old move or message is never replayed. One that will not parse is
-//!   deleted and logged, never retried.
-//! - Back, with `--no-core`: each answer to an effect (a cmux call that
-//!   failed, a PR) goes into inbox/ as a file (inbox.rs), then the signal
-//!   is posted. Answers older than `STALE` are deleted.
+//! - In: each file in outbox/ is one effect (effect.rs) from the
+//!   sidebar's core. The writer writes it under a name that starts with
+//!   "." or does not end in ".json", then renames it to `<name>.json`.
+//!   Files are taken in byte order of their names, so a name must sort in
+//!   the order sent: a fixed width, zero padded `<13 digit epoch ms>-<6
+//!   digit counter>.json` (`1791229864123-000042.json`), never a bare
+//!   counter, where "10" sorts before "9". Each one is claimed by an
+//!   atomic rename, so it is carried out at most once even with two
+//!   publishers running, then deleted. Any file older than `STALE` (a
+//!   minute) is deleted and logged instead, so an old move or message is
+//!   never replayed. One that will not parse is deleted and logged, never
+//!   retried.
+//! - Back: each answer to an effect (a cmux call that failed, a PR) goes
+//!   into inbox/ as a file (inbox.rs), then the signal is posted. Answers
+//!   older than `STALE` are deleted.
 
 use std::collections::HashSet;
 use std::fs;
@@ -50,10 +40,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use cockpit_core::{Model, Panel};
 use serde::Serialize;
 
-use crate::effect::OutboxFile;
+use crate::effect::EffectFile;
 use crate::inbox::{self, INBOX_DIR, Inbox};
 use crate::{Feed, Inputs};
 
@@ -61,7 +50,6 @@ use crate::{Feed, Inputs};
 pub const GROUP_ID: &str = "9S5FG4LQAF.dev.jonyardley.cockpit";
 /// Overrides the shared folder (tests, or a run by hand).
 pub const ROOT_ENV: &str = "COCKPIT_GROUP_DIR";
-pub const PANEL_FILE: &str = "panel.json";
 pub const DATA_FILE: &str = "data.json";
 pub const OUTBOX_DIR: &str = "outbox";
 /// Before an outbox file's name once claimed, then its claimer's pid.
@@ -79,14 +67,6 @@ pub const READY_LIMIT: Duration = Duration::from_secs(10);
 /// The shared folder under `home`.
 pub fn default_root(home: &Path) -> PathBuf {
     home.join("Library/Group Containers").join(GROUP_ID)
-}
-
-/// What panel.json holds.
-#[derive(Debug, Serialize)]
-pub struct Published<'a> {
-    pub seq: u64,
-    pub written_at_ms: u64,
-    pub panel: &'a Panel,
 }
 
 /// What data.json holds: the core's inputs, beside the same envelope and
@@ -122,12 +102,11 @@ impl Writes {
     }
 }
 
-/// How often and how large panel.json and data.json were written, for
-/// the log: one line per `TALLY_EVERY`, none when nothing was written.
+/// How often and how large data.json was written, for the log: one
+/// line per `TALLY_EVERY`, none when nothing was written.
 #[derive(Debug)]
 pub struct Tally {
     since: Instant,
-    panel: Writes,
     data: Writes,
 }
 
@@ -135,7 +114,6 @@ impl Tally {
     pub fn new(now: Instant) -> Tally {
         Tally {
             since: now,
-            panel: Writes::default(),
             data: Writes::default(),
         }
     }
@@ -147,19 +125,14 @@ impl Tally {
             return None;
         }
         let minutes = elapsed.as_secs_f64() / 60.0;
-        let line = (self.panel.count > 0 || self.data.count > 0).then(|| {
-            format!(
-                "written: {}; {}",
-                self.panel.describe(PANEL_FILE, minutes),
-                self.data.describe(DATA_FILE, minutes)
-            )
-        });
+        let line = (self.data.count > 0)
+            .then(|| format!("written: {}", self.data.describe(DATA_FILE, minutes)));
         *self = Tally::new(now);
         line
     }
 }
 
-/// Whether the panel is worth writing: replay has caught up and every
+/// Whether the inputs are worth writing: replay has caught up and every
 /// poll has answered, or it has been `READY_LIMIT` since the start.
 pub fn ready(feed: &Feed, started: Instant) -> bool {
     (feed.join.health.caught_up() && feed.join.loaded()) || started.elapsed() >= READY_LIMIT
@@ -291,23 +264,19 @@ fn sweep(dir: &Path, prefix: &str, alive: &dyn Fn(u32) -> bool) {
     }
 }
 
-/// Writes the panel model out and takes actions in, in one shared folder.
+/// Writes the core's inputs out and takes its effects in, in one shared
+/// folder.
 pub struct Publisher {
     root: PathBuf,
     /// Outbox files that could not be claimed, each logged once rather
     /// than on every wake.
     stuck: HashSet<PathBuf>,
-    /// Outbox files that wait for a helper started the other way, logged
-    /// once and not read again: this helper's mode never changes.
-    waits: HashSet<PathBuf>,
     /// Where effects' answers go.
     inbox: Inbox,
     /// Whether the last inbox write failed, so a failure is logged once.
     inbox_failing: bool,
-    /// The panel last written, so an unchanged one is not written again.
-    last: Option<Panel>,
-    seq: u64,
-    /// The inputs' generation last written to data.json, likewise.
+    /// The inputs' generation last written to data.json, so unchanged
+    /// ones are not written again.
     last_inputs: Option<u64>,
     data_seq: u64,
     tally: Tally,
@@ -334,18 +303,14 @@ impl Publisher {
         let answers = root.join(INBOX_DIR);
         fs::create_dir_all(&answers)?;
         sweep(&answers, inbox::TMP, alive);
-        sweep(&root, &tmp_prefix(PANEL_FILE), alive);
         sweep(&root, &tmp_prefix(DATA_FILE), alive);
         let inbox = Inbox::new(answers);
         inbox.prune(epoch_ms().saturating_sub(stale_ms()));
         Ok(Publisher {
             root,
             stuck: HashSet::new(),
-            waits: HashSet::new(),
             inbox,
             inbox_failing: false,
-            last: None,
-            seq: 0,
             last_inputs: None,
             data_seq: 0,
             tally: Tally::new(Instant::now()),
@@ -361,62 +326,34 @@ impl Publisher {
         self.inbox.dir().to_path_buf()
     }
 
-    /// Takes every outbox file this helper can act on, oldest first: an
-    /// action goes to the core, an effect is carried out (`Feed::carry`).
-    /// One for a helper started the other way waits, until it is stale
-    /// (`STALE`), when whichever helper sees it first drops it, so an old
-    /// move or message is never replayed. Returns how many actions went in.
-    pub fn take_actions(&mut self, feed: &mut Feed, log: &mut dyn FnMut(String)) -> usize {
-        let core = feed.has_core();
+    /// Takes every outbox file, oldest first, and carries out its effect
+    /// (`Feed::carry`). One older than `STALE` is dropped instead, so an
+    /// old move or message is never replayed. Returns how many were
+    /// carried out.
+    pub fn take_effects(&mut self, feed: &mut Feed, log: &mut dyn FnMut(String)) -> usize {
         let now = epoch_ms();
-        let mut applied = 0;
+        let mut carried = 0;
         let listed = waiting(&self.outbox());
         let present: HashSet<&PathBuf> = listed.iter().collect();
         self.stuck.retain(|p| present.contains(p));
-        self.waits.retain(|p| present.contains(p));
         for path in &listed {
             if is_stale(path, now) {
                 self.drop_stale(path, log);
                 continue;
             }
-            if self.waits.contains(path) {
-                continue;
-            }
-            // Read before it is claimed, so one that waits stays put.
-            match fs::read_to_string(path).map(|t| OutboxFile::parse(&t)) {
-                Ok(Ok(file)) if !file.runs_with(core) => {
-                    if self.waits.insert(path.clone()) {
-                        let wants = if core { "no core" } else { "a core" };
-                        log(format!(
-                            "outbox: {} waits for a helper with {wants}",
-                            file.name()
-                        ));
-                    }
-                    continue;
-                }
-                Err(e) if e.kind() == ErrorKind::NotFound => continue,
-                _ => {}
-            }
             let Some(text) = self.claim_once(path, log) else {
                 continue;
             };
-            match OutboxFile::parse(&text) {
-                Ok(OutboxFile::Action(action)) if core => {
-                    log(format!("outbox: {}", action.name()));
-                    feed.act(action.into());
-                    applied += 1;
-                }
-                Ok(OutboxFile::Effect(effect)) if !core => {
+            match EffectFile::parse(&text) {
+                Ok(effect) => {
                     log(format!("outbox: {}", effect.name()));
                     feed.carry(effect);
+                    carried += 1;
                 }
-                // Changed between the read and the claim: never in the
-                // outbox's own use, where a file is renamed in whole.
-                Ok(file) => log(format!("outbox: {} dropped, changed", file.name())),
                 Err(e) => log(format!("outbox: dropped {}: {e}", path.display())),
             }
         }
-        applied
+        carried
     }
 
     /// Claims one outbox file and gives its text: None when another
@@ -435,9 +372,8 @@ impl Publisher {
 
     /// Claims a stale outbox file and deletes it unread but for its name.
     fn drop_stale(&mut self, path: &Path, log: &mut dyn FnMut(String)) {
-        self.waits.remove(path);
         if let Some(text) = self.claim_once(path, log) {
-            let name = OutboxFile::parse(&text).map_or("unreadable", |f| f.name());
+            let name = EffectFile::parse(&text).map_or("unreadable", |f| f.name());
             log(format!("outbox: {name} dropped, stale"));
         }
     }
@@ -470,27 +406,6 @@ impl Publisher {
             self.inbox.prune(epoch_ms().saturating_sub(stale_ms()));
         }
         written > 0
-    }
-
-    /// Writes the panel to panel.json, when it differs from the one last
-    /// written. True when it wrote.
-    fn write_panel(&mut self, model: &mut Model, log: &mut dyn FnMut(String)) -> bool {
-        let panel = Panel::from_core(model);
-        if self.last.as_ref() == Some(&panel) {
-            return false;
-        }
-        let out = Published {
-            seq: self.seq + 1,
-            written_at_ms: epoch_ms(),
-            panel: &panel,
-        };
-        let Some(bytes) = self.write(PANEL_FILE, &out, log) else {
-            return false;
-        };
-        self.seq += 1;
-        self.last = Some(panel);
-        self.tally.panel.add(bytes);
-        true
     }
 
     /// Writes the core's inputs to data.json, when any was fed since they
@@ -543,22 +458,16 @@ impl Publisher {
         }
     }
 
-    /// One turn of the runner: the outbox's actions go in and its
-    /// effects are carried out, effects' answers go to inbox/, then the
-    /// panel and the inputs go out when a frame came, an action went in,
-    /// or a file has not been written yet (or its first write failed). The
-    /// signal follows the panel, or without a core (when only the inputs
-    /// go out) the inputs and the answers. The tally is logged when it is
-    /// due.
+    /// One turn of the runner: the outbox's effects are carried out,
+    /// effects' answers go to inbox/, then the inputs go out when a frame
+    /// came or data.json has not been written yet (or its first write
+    /// failed). The signal follows the inputs and the answers. The tally
+    /// is logged when it is due.
     pub fn step(&mut self, feed: &mut Feed, fresh: bool, log: &mut dyn FnMut(String)) {
-        let applied = self.take_actions(feed, log);
-        let core = feed.has_core();
+        self.take_effects(feed, log);
         let mut changed = self.write_answers(feed, log);
-        let unwritten = (core && self.last.is_none()) || self.last_inputs.is_none();
-        if fresh || applied > 0 || unwritten {
-            let panel = core && self.write_panel(&mut feed.model, log);
-            let data = self.write_data(feed, log);
-            changed |= panel || (!core && data);
+        if fresh || self.last_inputs.is_none() {
+            changed |= self.write_data(feed, log);
         }
         if changed {
             self.post(log);
@@ -617,11 +526,10 @@ impl Parent {
 mod tests {
     use super::*;
     use cockpit_core::data::Data;
-    use cockpit_core::lanes::LaneKey;
     use cockpit_core::panel::ProjectRow;
     use cockpit_core::persist::SavedState;
     use cockpit_core::projects::Project;
-    use cockpit_core::{Cockpit, EditEvent, Event, MenuEvent};
+    use cockpit_core::{Cockpit, EditEvent, Event, MenuEvent, Model, Panel};
     use crux_core::App;
     use serde_json::Value;
     use std::cell::Cell;
@@ -675,32 +583,25 @@ mod tests {
     }
 
     #[test]
-    fn writes_each_scenes_panel_as_its_fixture() {
-        for scene in ["lanes", "needs-and-next", "projects", "review-verdicts"] {
-            let (mut p, root, posted) = publisher(scene);
-            let mut feed = fed(scene);
-            let before = epoch_ms();
-            p.step(&mut feed, true, &mut quiet());
+    fn writes_data_json_alone_with_its_seq_and_time() {
+        let (mut p, root, posted) = publisher("data-only");
+        let mut feed = fed("lanes");
+        let before = epoch_ms();
+        p.step(&mut feed, true, &mut quiet());
 
-            let got = json(&root.join(PANEL_FILE));
-            let want = json(&repo(&format!("native/fixtures/{scene}.json")));
-            assert_eq!(got["panel"], want, "{scene}");
-            assert_eq!(got["seq"], 1);
-            let at = got["written_at_ms"].as_u64().unwrap();
-            assert!(at >= before && at <= epoch_ms() + 1);
-            assert_eq!(posted.get(), 1, "one signal per write");
-            let leftovers: Vec<_> = fs::read_dir(&root)
-                .unwrap()
-                .flatten()
-                .map(|e| e.file_name().to_string_lossy().to_string())
-                .collect();
-            assert_eq!(
-                leftovers.len(),
-                4,
-                "only panel.json, data.json, outbox/ and inbox/: {leftovers:?}"
-            );
-            fs::remove_dir_all(&root).unwrap();
-        }
+        let got = json(&root.join(DATA_FILE));
+        assert_eq!(got["seq"], 1);
+        let at = got["written_at_ms"].as_u64().unwrap();
+        assert!(at >= before && at <= epoch_ms() + 1);
+        assert_eq!(posted.get(), 1, "one signal per write");
+        let mut leftovers: Vec<_> = fs::read_dir(&root)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        leftovers.sort();
+        assert_eq!(leftovers, ["data.json", "inbox", "outbox"]);
+        fs::remove_dir_all(&root).unwrap();
     }
 
     /// A scene's feed as the runner builds it, home and all: the table
@@ -767,7 +668,7 @@ mod tests {
     }
 
     #[test]
-    fn a_core_fed_from_data_json_alone_builds_the_helpers_panel() {
+    fn a_core_fed_from_data_json_alone_builds_the_runners_panel() {
         for home in [None, Some("/Users/jon")] {
             for (fixture, scene, open) in fixtures() {
                 let name = format!("{fixture}-{}", home.is_some());
@@ -777,9 +678,9 @@ mod tests {
                     feed.act(event);
                 }
                 p.step(&mut feed, true, &mut quiet());
-                assert_eq!(posted.get(), 1, "one signal for both files");
+                assert_eq!(posted.get(), 1, "one signal for data.json");
 
-                let helpers = json(&root.join(PANEL_FILE))["panel"].clone();
+                let runners = serde_json::to_value(Panel::from_core(&mut feed.model)).unwrap();
                 let file = json(&root.join(DATA_FILE));
                 assert_eq!(file["seq"], 1);
                 let mut model = core_from(&file);
@@ -788,7 +689,7 @@ mod tests {
                     let _effects = Cockpit.update(event, &mut model);
                 }
                 let built = serde_json::to_value(Panel::from_core(&mut model)).unwrap();
-                assert_eq!(built, helpers, "{name}");
+                assert_eq!(built, runners, "{name}");
                 if home.is_none() {
                     let want = json(&repo(&format!("native/fixtures/{fixture}.json")));
                     assert_eq!(built, want, "{name}");
@@ -816,13 +717,13 @@ mod tests {
             "{roots:?}"
         );
 
-        // An action moves the panel, not the inputs.
+        // An action moves the panel, not the inputs: nothing goes.
         feed.act(Event::FlipView);
         p.step(&mut feed, true, &mut quiet());
-        assert_eq!(json(&root.join(PANEL_FILE))["seq"], 2);
         assert_eq!(json(&root.join(DATA_FILE))["seq"], 1);
-        // A new frame moves the inputs, not the panel: data.json goes
-        // with only the data's count moved, and with a core no signal.
+        assert_eq!(posted.get(), 1);
+        // A new frame moves the inputs: data.json goes with only the
+        // data's count moved, and the signal follows it.
         let mut data = feed.inputs.data.clone().unwrap();
         data.epoch = data.epoch.map(|e| e + 1.0);
         feed.send(Event::Data(data));
@@ -833,8 +734,7 @@ mod tests {
             (&file["projects_seq"], &file["state_seq"], &file["data_seq"]),
             (&1.into(), &1.into(), &2.into())
         );
-        assert_eq!(json(&root.join(PANEL_FILE))["seq"], 2);
-        assert_eq!(posted.get(), 2, "the signal follows panel.json");
+        assert_eq!(posted.get(), 2, "the signal follows data.json");
         p.step(&mut feed, true, &mut quiet());
         assert_eq!(json(&root.join(DATA_FILE))["seq"], 2, "nothing new");
         assert_eq!(posted.get(), 2);
@@ -842,7 +742,7 @@ mod tests {
     }
 
     #[test]
-    fn without_a_core_only_data_json_goes_and_actions_wait() {
+    fn data_json_goes_alone_and_an_action_file_is_dropped() {
         let (mut p, root, posted) = publisher("no-core");
         let mut feed = Feed::without_core(Some("/h".into()));
         feed.state(SavedState::default());
@@ -852,13 +752,9 @@ mod tests {
         let mut lines = Vec::new();
         p.step(&mut feed, false, &mut |l| lines.push(l));
         p.step(&mut feed, false, &mut |l| lines.push(l));
-        assert_eq!(
-            lines,
-            vec!["outbox: FlipView waits for a helper with a core".to_string()],
-            "logged once"
-        );
-        assert_eq!(waiting(&p.outbox()), vec![action.clone()], "left in place");
-        assert!(!root.join(PANEL_FILE).exists());
+        assert_eq!(lines.len(), 1, "{lines:?}");
+        assert!(lines[0].starts_with("outbox: dropped"), "{lines:?}");
+        assert!(waiting(&p.outbox()).is_empty(), "not an effect, so gone");
         let file = json(&root.join(DATA_FILE));
         assert_eq!(
             (file["seq"].clone(), file["home"].clone()),
@@ -874,7 +770,7 @@ mod tests {
         // Written, so a wake with nothing new writes nothing.
         p.step(&mut feed, false, &mut quiet());
         assert_eq!(posted.get(), 1);
-        // Without a core the signal follows data.json.
+        // The signal follows data.json.
         feed.frame(1_791_127_130.0);
         p.step(&mut feed, true, &mut quiet());
         assert_eq!(json(&root.join(DATA_FILE))["seq"], 2);
@@ -900,32 +796,18 @@ mod tests {
     }
 
     #[test]
-    fn a_stale_outbox_file_is_dropped_in_either_mode_never_replayed() {
+    fn a_stale_outbox_file_is_dropped_never_replayed() {
         let old = format!("{:013}-000001.json", epoch_ms() - stale_ms() - 1000);
-        for (mut feed, text, want) in [
-            (
-                fed("lanes"),
-                r#""FlipView""#,
-                "outbox: FlipView dropped, stale",
-            ),
-            (
-                Feed::without_core(None),
-                SELECT_W1,
-                "outbox: Cmux dropped, stale",
-            ),
-            // One for the other mode, left waiting since: dropped, not kept.
-            (fed("lanes"), SELECT_W1, "outbox: Cmux dropped, stale"),
-            (
-                Feed::without_core(None),
-                r#""FlipView""#,
-                "outbox: FlipView dropped, stale",
-            ),
+        for (text, want) in [
+            (SELECT_W1, "outbox: Cmux dropped, stale"),
+            (r#""FlipView""#, "outbox: unreadable dropped, stale"),
         ] {
             let (mut p, root, _) = publisher("stale");
+            let mut feed = Feed::without_core(None);
             fs::write(p.outbox().join(&old), text).unwrap();
             let unsent = feed.unsent.len();
             let mut lines = Vec::new();
-            assert_eq!(p.take_actions(&mut feed, &mut |l| lines.push(l)), 0);
+            assert_eq!(p.take_effects(&mut feed, &mut |l| lines.push(l)), 0);
             assert_eq!(lines, [want]);
             assert_eq!(fs::read_dir(p.outbox()).unwrap().count(), 0, "gone");
             assert_eq!(feed.unsent.len(), unsent, "nothing carried out");
@@ -936,38 +818,15 @@ mod tests {
     #[test]
     fn a_file_named_otherwise_is_aged_by_when_it_was_written() {
         let (mut p, root, _) = publisher("mtime");
-        let mut feed = fed("lanes");
-        let path = p.outbox().join("1.json");
-        fs::write(&path, r#""FlipView""#).unwrap();
-        let file = fs::File::options().write(true).open(&path).unwrap();
-        file.set_modified(SystemTime::now() - STALE - Duration::from_secs(1))
-            .unwrap();
-        let mut lines = Vec::new();
-        assert_eq!(p.take_actions(&mut feed, &mut |l| lines.push(l)), 0);
-        assert_eq!(lines, ["outbox: FlipView dropped, stale"]);
-        fs::remove_dir_all(&root).unwrap();
-    }
-
-    #[test]
-    fn a_waiting_file_is_dropped_once_it_turns_stale() {
-        let (mut p, root, _) = publisher("turns-stale");
-        let mut feed = fed("lanes");
+        let mut feed = Feed::without_core(None);
         let path = p.outbox().join("1.json");
         fs::write(&path, SELECT_W1).unwrap();
-        let mut lines = Vec::new();
-        p.take_actions(&mut feed, &mut |l| lines.push(l));
         let file = fs::File::options().write(true).open(&path).unwrap();
         file.set_modified(SystemTime::now() - STALE - Duration::from_secs(1))
             .unwrap();
-        p.take_actions(&mut feed, &mut |l| lines.push(l));
-        assert_eq!(
-            lines,
-            [
-                "outbox: Cmux waits for a helper with no core",
-                "outbox: Cmux dropped, stale"
-            ]
-        );
-        assert!(p.waits.is_empty() && !path.exists());
+        let mut lines = Vec::new();
+        assert_eq!(p.take_effects(&mut feed, &mut |l| lines.push(l)), 0);
+        assert_eq!(lines, ["outbox: Cmux dropped, stale"]);
         fs::remove_dir_all(&root).unwrap();
     }
 
@@ -976,7 +835,7 @@ mod tests {
         r#"{"Cmux": {"method": "workspace.select", "params": {"workspace_id": "W1"}}}"#;
 
     #[test]
-    fn without_a_core_a_refused_cmux_call_lands_in_the_inbox_as_failed() {
+    fn a_refused_cmux_call_lands_in_the_inbox_as_failed() {
         let (mut p, root, posted) = publisher("refused");
         let mut feed = Feed::without_core(None);
         feed.frame(1_791_127_100.0);
@@ -1028,7 +887,7 @@ mod tests {
     }
 
     #[test]
-    fn without_a_core_a_pr_ask_goes_to_the_asker_and_its_answer_to_the_inbox() {
+    fn a_pr_ask_goes_to_the_asker_and_its_answer_to_the_inbox() {
         use cockpit_core::pr_poll::{PollAnswer, PrPolled};
         let (mut p, root, _) = publisher("pr-ask");
         let mut feed = Feed::without_core(None);
@@ -1049,33 +908,6 @@ mod tests {
         let file = fs::read_dir(p.inbox()).unwrap().flatten().next().unwrap();
         let event: Event = serde_json::from_str(&fs::read_to_string(file.path()).unwrap()).unwrap();
         assert!(matches!(event, Event::PrPolled(got) if *got == polled));
-        fs::remove_dir_all(&root).unwrap();
-    }
-
-    #[test]
-    fn with_a_core_an_effect_file_waits_and_actions_still_go() {
-        let (mut p, root, _) = publisher("core-effect");
-        let mut feed = fed("lanes");
-        let effect = p.outbox().join("1.json");
-        fs::write(&effect, SELECT_W1).unwrap();
-        fs::write(p.outbox().join("2.json"), r#""FlipView""#).unwrap();
-        let mut lines = Vec::new();
-        assert_eq!(p.take_actions(&mut feed, &mut |l| lines.push(l)), 1);
-        assert_eq!(
-            lines,
-            [
-                "outbox: Cmux waits for a helper with no core",
-                "outbox: FlipView"
-            ]
-        );
-        assert_eq!(waiting(&p.outbox()), vec![effect]);
-        let selects = feed.unsent.iter().filter(
-            |o| matches!(o, crate::outbox::Outgoing::Cmux(c) if c.method == "workspace.select"),
-        );
-        assert_eq!(selects.count(), 0, "the effect did not run");
-        // A cmux failure with a core goes to the core, never the inbox.
-        feed.input(crate::Input::CmuxFailed("W1".into()));
-        assert!(feed.answers.is_empty());
         fs::remove_dir_all(&root).unwrap();
     }
 
@@ -1114,36 +946,36 @@ mod tests {
     fn the_tally_logs_each_files_rate_and_size_once_a_minute() {
         let start = Instant::now();
         let mut t = Tally::new(start);
-        t.panel.add(10 * 1024);
-        t.panel.add(10 * 1024 + 512);
         for _ in 0..30 {
             t.data.add(32 * 1024);
         }
         assert_eq!(t.report(start + Duration::from_secs(59)), None, "not due");
         assert_eq!(
             t.report(start + TALLY_EVERY).as_deref(),
-            Some("written: panel.json 2.0 writes/min, 10.5 KB; data.json 30.0 writes/min, 32.0 KB")
+            Some("written: data.json 30.0 writes/min, 32.0 KB")
         );
         // It starts again, and a quiet minute logs nothing.
         assert_eq!(t.report(start + TALLY_EVERY * 2), None);
         t.data.add(2048);
         assert_eq!(
             t.report(start + TALLY_EVERY * 4).as_deref(),
-            Some("written: panel.json 0.0 writes/min, 0.0 KB; data.json 0.5 writes/min, 2.0 KB")
+            Some("written: data.json 0.5 writes/min, 2.0 KB")
         );
     }
 
     #[test]
-    fn writes_and_signals_only_when_the_panel_changed() {
+    fn writes_and_signals_only_when_the_inputs_changed() {
         let (mut p, root, posted) = publisher("unchanged");
         let mut feed = fed("lanes");
         p.step(&mut feed, true, &mut quiet());
         assert_eq!(posted.get(), 1);
-        // The same panel again: nothing written, no signal.
+        // The same inputs again: nothing written, no signal.
         p.step(&mut feed, true, &mut quiet());
-        assert_eq!(json(&root.join(PANEL_FILE))["seq"], 1);
+        assert_eq!(json(&root.join(DATA_FILE))["seq"], 1);
         assert_eq!(posted.get(), 1);
-        feed.act(Event::FlipView);
+        let mut data = feed.inputs.data.clone().unwrap();
+        data.epoch = data.epoch.map(|e| e + 1.0);
+        feed.send(Event::Data(data));
         p.step(&mut feed, false, &mut quiet());
         assert_eq!(
             posted.get(),
@@ -1152,67 +984,7 @@ mod tests {
         );
         p.step(&mut feed, true, &mut quiet());
         assert_eq!(posted.get(), 2);
-        assert_eq!(json(&root.join(PANEL_FILE))["seq"], 2);
-        fs::remove_dir_all(&root).unwrap();
-    }
-
-    /// The first card in Main the core will move, and Review's cards.
-    fn main_card_and_review(panel: &Value) -> (String, Vec<String>) {
-        let lanes = panel["lanes"].as_array().unwrap();
-        let cards = |key: &str| -> Vec<Value> {
-            lanes.iter().find(|l| l["key"] == key).unwrap()["rows"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter(|r| r["Card"].is_object())
-                .map(|r| r["Card"].clone())
-                .collect()
-        };
-        let main = cards("main");
-        let movable = main.iter().find(|c| c["movable"] == true).unwrap();
-        let review = cards("review");
-        let ids = review
-            .iter()
-            .map(|c| c["ws_id"].as_str().unwrap().to_string());
-        (
-            movable["ws_id"].as_str().unwrap().to_string(),
-            ids.collect(),
-        )
-    }
-
-    #[test]
-    fn an_action_file_moves_a_card_once_and_goes() {
-        let (mut p, root, _) = publisher("move");
-        let mut feed = fed("lanes");
-        p.step(&mut feed, true, &mut quiet());
-        let (id, review) = main_card_and_review(&json(&root.join(PANEL_FILE))["panel"]);
-        assert!(!review.contains(&id));
-
-        let file = p.outbox().join(format!("{:013}-000001.json", epoch_ms()));
-        let text = format!(r#"{{"MoveCard": {{"id": "{id}", "lane": "review", "before": null}}}}"#);
-        fs::write(&file, text).unwrap();
-        let mut lines = Vec::new();
-        p.step(&mut feed, false, &mut |l| lines.push(l));
-
-        assert!(!file.exists(), "the action file is deleted");
-        assert_eq!(
-            fs::read_dir(p.outbox()).unwrap().count(),
-            0,
-            "no claim is left"
-        );
-        assert_eq!(lines, vec!["outbox: MoveCard".to_string()]);
-        let got = json(&root.join(PANEL_FILE));
-        assert_eq!(got["seq"], 2);
-        let (_, review) = main_card_and_review(&got["panel"]);
-        assert!(review.contains(&id), "{id} moved into review");
-        let lane = Panel::from_core(&mut feed.model).lane_of(&id);
-        assert_eq!(lane, Some(LaneKey::Review));
-        let sent = feed.unsent.len();
-        assert!(sent > 0, "the move asked cmux to follow");
-
-        // Nothing left to take: a second turn applies nothing more.
-        p.step(&mut feed, false, &mut quiet());
-        assert_eq!(feed.unsent.len(), sent);
+        assert_eq!(json(&root.join(DATA_FILE))["seq"], 2);
         fs::remove_dir_all(&root).unwrap();
     }
 
@@ -1230,17 +1002,17 @@ mod tests {
         fs::write(outbox.join("b.json"), r#"{"MoveCard": "#).unwrap();
         fs::write(outbox.join(".c.json"), r#""FlipView""#).unwrap();
         fs::write(outbox.join("d.tmp"), r#""FlipView""#).unwrap();
-        fs::write(outbox.join("e.json"), r#""FlipView""#).unwrap();
+        fs::write(outbox.join("e.json"), SELECT_W1).unwrap();
         fs::create_dir(outbox.join("f.json")).unwrap();
         assert_eq!(
             waiting(&outbox),
             vec![outbox.join("b.json"), outbox.join("e.json")]
         );
-        let mut feed = fed("lanes");
+        let mut feed = Feed::without_core(None);
         let mut lines = Vec::new();
-        assert_eq!(p.take_actions(&mut feed, &mut |l| lines.push(l)), 1);
+        assert_eq!(p.take_effects(&mut feed, &mut |l| lines.push(l)), 1);
         assert!(lines[0].starts_with("outbox: dropped"), "{lines:?}");
-        assert_eq!(lines[1], "outbox: FlipView");
+        assert_eq!(lines[1], "outbox: Cmux");
         assert!(waiting(&outbox).is_empty());
         assert!(outbox.join(".c.json").exists() && outbox.join("d.tmp").exists());
         fs::remove_dir_all(&root).unwrap();
@@ -1253,9 +1025,8 @@ mod tests {
         fs::create_dir_all(&outbox).unwrap();
         fs::write(outbox.join(".taken-7-a.json"), r#""FlipView""#).unwrap();
         fs::write(outbox.join(".taken-8-b.json"), r#""FlipView""#).unwrap();
-        fs::write(root.join(".panel.json.7.tmp"), "{").unwrap();
-        fs::write(root.join(".panel.json.8.tmp"), "{").unwrap();
         fs::write(root.join(".data.json.7.tmp"), "{").unwrap();
+        fs::write(root.join(".data.json.8.tmp"), "{").unwrap();
         fs::create_dir_all(root.join(INBOX_DIR)).unwrap();
         fs::write(root.join(INBOX_DIR).join(".answer-7-1.tmp"), "{").unwrap();
         fs::write(root.join(INBOX_DIR).join(".answer-8-1.tmp"), "{").unwrap();
@@ -1265,12 +1036,11 @@ mod tests {
             !p.outbox().join(".taken-7-a.json").exists(),
             "never applied"
         );
-        assert!(!root.join(".panel.json.7.tmp").exists());
         assert!(!root.join(".data.json.7.tmp").exists());
         assert!(!root.join(INBOX_DIR).join(".answer-7-1.tmp").exists());
         assert!(root.join(INBOX_DIR).join(".answer-8-1.tmp").exists());
         assert!(p.outbox().join(".taken-8-b.json").exists());
-        assert!(root.join(".panel.json.8.tmp").exists());
+        assert!(root.join(".data.json.8.tmp").exists());
         fs::remove_dir_all(&root).unwrap();
     }
 
@@ -1278,7 +1048,7 @@ mod tests {
     fn a_pid_is_read_from_a_leftovers_name_and_asked_after() {
         assert_eq!(pid_in(".taken-123-a.json", TAKEN), Some(123));
         assert_eq!(
-            pid_in(".panel.json.45.tmp", &tmp_prefix(PANEL_FILE)),
+            pid_in(".data.json.45.tmp", &tmp_prefix(DATA_FILE)),
             Some(45)
         );
         assert_eq!(pid_in(".taken-x.json", TAKEN), None);
@@ -1294,14 +1064,14 @@ mod tests {
     fn a_file_that_cannot_be_claimed_is_logged_once() {
         use std::os::unix::fs::PermissionsExt;
         let (mut p, root, _) = publisher("stuck");
-        let mut feed = fed("lanes");
+        let mut feed = Feed::without_core(None);
         let outbox = p.outbox();
         fs::write(outbox.join("1.json"), r#""FlipView""#).unwrap();
         // A folder it cannot rename in: every claim fails the same way.
         fs::set_permissions(&outbox, fs::Permissions::from_mode(0o555)).unwrap();
         let mut lines = Vec::new();
         for _ in 0..3 {
-            assert_eq!(p.take_actions(&mut feed, &mut |l| lines.push(l)), 0);
+            assert_eq!(p.take_effects(&mut feed, &mut |l| lines.push(l)), 0);
         }
         fs::set_permissions(&outbox, fs::Permissions::from_mode(0o755)).unwrap();
         assert_eq!(lines.len(), 1, "{lines:?}");
@@ -1314,11 +1084,10 @@ mod tests {
         let (mut p, root, posted) = publisher("fail");
         let mut feed = fed("lanes");
         // A folder where the file should be: the rename cannot replace it.
-        fs::create_dir(root.join(PANEL_FILE)).unwrap();
+        fs::create_dir(root.join(DATA_FILE)).unwrap();
         let mut lines = Vec::new();
         p.step(&mut feed, true, &mut |l| lines.push(l));
-        assert!(lines[0].starts_with("panel.json not written"), "{lines:?}");
-        assert!(root.join(DATA_FILE).exists(), "data.json still goes");
+        assert!(lines[0].starts_with("data.json not written"), "{lines:?}");
         assert_eq!(posted.get(), 0, "no signal without a file");
         let tmps = fs::read_dir(&root)
             .unwrap()
@@ -1327,9 +1096,9 @@ mod tests {
             .count();
         assert_eq!(tmps, 0, "the temp file is cleared");
 
-        fs::remove_dir(root.join(PANEL_FILE)).unwrap();
+        fs::remove_dir(root.join(DATA_FILE)).unwrap();
         p.step(&mut feed, false, &mut quiet());
-        assert_eq!(json(&root.join(PANEL_FILE))["seq"], 1);
+        assert_eq!(json(&root.join(DATA_FILE))["seq"], 1);
         assert_eq!(posted.get(), 1);
         fs::remove_dir_all(&root).unwrap();
     }

@@ -30,7 +30,7 @@ for _ in 0..<10 { _ = restart.delay(after: 0) }
 check(restart.delay(after: 0) == Restart.longest, "the wait stops growing at a minute")
 check(restart.delay(after: 120) == 1 && restart.quick == 0, "a healthy run clears the backoff")
 
-check(PublishLaunch.arguments(parent: 42) == ["--parent", "42", "--no-core"], "the publisher is told its parent, and runs no core")
+check(PublishLaunch.arguments(parent: 42) == ["--parent", "42"], "the publisher is told its parent")
 let env = PublishLaunch.environment(["HOME": "/Users/j", "PATH": "/usr/bin:/bin", "LANG": "en_GB.UTF-8"])
 let path = env["PATH"]?.split(separator: ":").map(String.init) ?? []
 check(path.contains("/opt/homebrew/bin") && path.contains("/usr/local/bin") && path.contains("/Users/j/.local/bin"), "the PATH reaches Homebrew and ~/.local/bin")

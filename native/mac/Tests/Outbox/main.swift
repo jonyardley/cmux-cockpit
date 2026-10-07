@@ -2,8 +2,8 @@ import Foundation
 
 // Checks the clicks and the outbox (Sidebar/Model/SidebarAction.swift and
 // Sidebar/Live/Outbox.swift): every action encodes to the JSON in
-// native/runner/tests/actions.json, the file the runner's own test parses
-// as its Action, and an effect file lands as one the runner picks up in
+// native/core/tests/actions.json, the file the core's own test checks,
+// and an effect file lands as one the runner picks up in
 // order.
 // It also writes what Swift encoded, each event alone and then wrapped in
 // `.at(now:event:)`, as one JSON array to the second path, which
