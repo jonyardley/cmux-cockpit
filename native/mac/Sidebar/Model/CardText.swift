@@ -104,3 +104,61 @@ enum LaneText {
 extension Row: Identifiable {
     public var id: String { CardText.id(self) }
 }
+
+/// The parts of a card the cockpit's card draws round its words (parts.ts
+/// statusDot, titleRow), decided here so the views only lay them out.
+extension CardText {
+    /// The core's filled dot (panel/mod.rs DOT); a hollow one has no halo.
+    static let filledDot = "●"
+    /// The green pill's word (parts.ts readyPill).
+    static let ready = "Ready"
+
+    /// The soft halo round a status dot: working, needs and asking, the
+    /// three filled dots in blue, clay and amber, each in its own hue's
+    /// halo. Everything else, a hollow dot or finished green, is clear, so
+    /// dots with and without one still line up (ui.ts haloDot).
+    static func halo(_ icon: Icon) -> Token {
+        guard icon.glyph == filledDot else { return .clear }
+        switch icon.ink {
+        case .blue: return .blueHalo
+        case .clay: return .clayHalo
+        case .amber: return .amberHalo
+        default: return .clear
+        }
+    }
+
+    /// The age at the end of the title row: shown only while the status
+    /// line under it has no time of its own, so a card never reads two.
+    static func titleAge(_ card: Card) -> String {
+        card.statusHasAge ? "" : card.age
+    }
+
+    /// The progress bar's fraction, held to 0 to 1; nil draws no bar.
+    static func progress(_ card: Card) -> Double? {
+        card.progress.map { $0.isFinite ? min(1, max(0, $0)) : 0 }
+    }
+}
+
+/// What a tap on a chip does: opens its link, sends Jon's action, or
+/// nothing, so a tap on it selects the card as its free space does.
+enum ChipTap: Equatable {
+    case open(URL)
+    case send([SidebarAction])
+    case none
+
+    /// The core's words on the To review chip (panel/mod.rs TO_REVIEW).
+    static let toReview = "To review →"
+
+    /// A chip's tap: the PR's page or a port; an action by its words (To
+    /// review, Park, Close); the one action left, a card under Other
+    /// offering its folder as a project, by being none of those.
+    static func of(_ chip: Chip, id: String) -> ChipTap {
+        if chip.isAction {
+            if let merged = SidebarAction.merged(chip, id: id) { return .send([merged]) }
+            if chip.pieces.first?.text == toReview { return .send([.fileForReview(id: id)]) }
+            return .send(SidebarAction.pick(.newProjectFromFolder, on: id))
+        }
+        if let link = chip.url, let url = URL(string: link) { return .open(url) }
+        return .none
+    }
+}
