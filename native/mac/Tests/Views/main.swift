@@ -155,82 +155,6 @@ if let panel = load("lanes") {
     check(Set(rows.map(\.id)).count == rows.count, "each lane row has its own id, a card apart from its placeholder")
 }
 
-// MARK: Chips that fit
-
-/// The pane's fit_ranked by width, for the test only: the view lets
-/// ViewThatFits pick from ChipFit.candidates, and the checks below hold
-/// that its first fitting line is this one.
-extension ChipFit {
-    struct Fit: Equatable {
-        /// One per chip: whether it shows.
-        let shown: [Bool]
-        /// Whether some were left off, so the ellipsis shows.
-        let cut: Bool
-    }
-
-    /// The width of `widths` on one line, `gap` apart.
-    static func width(_ widths: [Double], gap: Double) -> Double {
-        widths.reduce(0, +) + gap * Double(max(0, widths.count - 1))
-    }
-
-    /// How many of `widths` fit whole in `room`, `gap` apart, leaving room
-    /// for an ellipsis of `tail` after them when some are left off.
-    static func count(_ widths: [Double], gap: Double, room: Double, tail: Double) -> (Int, Bool) {
-        if width(widths, gap: gap) <= room { return (widths.count, false) }
-        var used = 0.0
-        for (i, w) in widths.enumerated() {
-            let lead = i == 0 ? 0 : gap
-            if used + lead + w + gap + tail > room { return (i, true) }
-            used += lead + w
-        }
-        return (widths.count, false)
-    }
-
-    static func fit(_ widths: [Double], givesWay: [Bool], gap: Double, room: Double, tail: Double) -> Fit {
-        let (all, cut) = count(widths, gap: gap, room: room, tail: tail)
-        if !cut { return Fit(shown: Array(repeating: true, count: all), cut: false) }
-        let keep = widths.indices.filter { !(givesWay.indices.contains($0) && givesWay[$0]) }
-        let (n, _) = count(keep.map { widths[$0] } + [tail], gap: gap, room: room, tail: tail)
-        var shown = Array(repeating: false, count: widths.count)
-        for i in keep.prefix(min(n, keep.count)) { shown[i] = true }
-        return Fit(shown: shown, cut: true)
-    }
-}
-
-let none = [false, false, false]
-check(ChipFit.fit([10, 10, 10], givesWay: none, gap: 2, room: 34, tail: 4) == .init(shown: [true, true, true], cut: false), "all chips fit")
-check(ChipFit.fit([10, 10, 10], givesWay: none, gap: 2, room: 30, tail: 4) == .init(shown: [true, true, false], cut: true), "the last chip goes, an ellipsis after")
-check(ChipFit.fit([10, 30, 10], givesWay: [false, true, false], gap: 2, room: 40, tail: 4) == .init(shown: [true, false, true], cut: true), "the branch gives way first")
-check(ChipFit.fit([50], givesWay: [false], gap: 2, room: 10, tail: 4) == .init(shown: [false], cut: true), "a chip too wide for the line goes whole")
-check(ChipFit.fit([], givesWay: [], gap: 2, room: 0, tail: 4) == .init(shown: [], cut: false), "no chips fit nothing")
-check(ChipFit.width([10, 10], gap: 2) == 22 && ChipFit.width([], gap: 2) == 0, "a line's width counts the gaps between")
-
-check(ChipFit.candidates(givesWay: [false, true, false]) == [[0, 1, 2], [0, 2], [0], []], "the lines to try: all, then the branch gone, then from the end")
-check(ChipFit.candidates(givesWay: [false, false]) == [[0, 1], [0], []], "with nothing to give way, every chip is tried once, not again with an ellipsis")
-check(ChipFit.candidates(givesWay: []) == [[]], "no chips, nothing to try but nothing")
-
-func chipOf(_ kind: ChipKind, _ text: String) -> Chip {
-    Chip(kind: kind, pieces: [Piece(text: text, ink: .secondary)], givesWay: false, url: nil, isAction: false)
-}
-let glued = ChipFit.glued([chipOf(.pr, "#3"), chipOf(.diff, "+1"), chipOf(.branch, "feat"), chipOf(.diff, "+2")])
-check(glued.map(CardText.chip) == ["#3 +1", "feat", "+2"], "a diff size joins only the PR before it")
-check(glued.first?.kind == .pr, "the PR keeps its kind")
-
-/// The first candidate that fits by width, as ViewThatFits picks it.
-func firstFitting(_ widths: [Double], givesWay: [Bool], gap: Double, room: Double, tail: Double) -> ChipFit.Fit? {
-    for (n, shown) in ChipFit.candidates(givesWay: givesWay).enumerated() {
-        let cut = n > 0
-        let w = ChipFit.width(shown.map { widths[$0] } + (cut ? [tail] : []), gap: gap)
-        if w <= room {
-            return .init(shown: widths.indices.map(shown.contains), cut: cut)
-        }
-    }
-    return nil
-}
-for (widths, ways, room) in [([10.0, 10, 10], none, 34.0), ([10, 10, 10], none, 30), ([10, 30, 10], [false, true, false], 40), ([50], [false], 10)] {
-    check(firstFitting(widths, givesWay: ways, gap: 2, room: room, tail: 4) == ChipFit.fit(widths, givesWay: ways, gap: 2, room: room, tail: 4), "the first line that fits is the pane's at \(room)")
-}
-
 // MARK: What the sidebar shows
 
 let sample = load("lanes")
@@ -460,6 +384,107 @@ if let code = try? String(contentsOf: sheet, encoding: .utf8) {
     check(!code.contains("onKeyPress") && !code.contains(".menu(") && !code.contains("switchTo"), "the sheet has no card action")
 } else {
     check(false, "read \(sheet.path)")
+}
+
+// MARK: Chips and the card's parts
+
+func chipOf(_ kind: ChipKind, _ text: String, url: String? = nil, action: Bool = false) -> Chip {
+    Chip(kind: kind, pieces: [Piece(text: text, ink: .secondary)], givesWay: kind == .branch, url: url, isAction: action)
+}
+let glued = ChipFit.glued([chipOf(.pr, "#3"), chipOf(.diff, "+1"), chipOf(.branch, "feat"), chipOf(.diff, "+2")])
+check(glued.map(CardText.chip) == ["#3 +1", "feat", "+2"], "a diff size joins only the PR before it")
+check(glued.first?.kind == .pr, "the PR keeps its kind")
+
+// The chips row's two lines: the size, PR and diff; then the branch, ports
+// and actions, each line in the core's order.
+let row = [chipOf(.size, "Quick"), chipOf(.pr, "#3"), chipOf(.diff, "+1"), chipOf(.branch, "feat"),
+           chipOf(.port, ":5173 ↗"), chipOf(.action, "To review →", action: true)]
+let split = ChipLines(row)
+check(split.pr.map(CardText.chip) == ["Quick", "#3", "+1"], "the PR's line holds the size, the PR and its diff")
+check(split.branch.map(CardText.chip) == ["feat", ":5173 ↗", "To review →"], "the branch's line holds the branch, the ports and the actions")
+check(ChipLines([]).isEmpty && !split.isEmpty, "no chips, no lines")
+
+// A dirty branch's mark is drawn as a dot, not words.
+let dirty = Chip(kind: .branch, pieces: [Piece(text: "feat", ink: .secondary), Piece(text: ChipFit.dirtyMark, ink: .secondary)],
+                 givesWay: true, url: nil, isAction: false)
+check(ChipFit.branch(dirty).dirty && ChipFit.branch(dirty).pieces.map(\.text) == ["feat"], "a dirty branch: its name, and a dot")
+check(!ChipFit.branch(chipOf(.branch, "feat")).dirty, "a clean branch has no dot")
+
+// What a tap on each chip does.
+let pr = URL(string: "https://github.com/o/r/pull/3")
+check(ChipTap.of(chipOf(.pr, "#3", url: pr?.absoluteString), id: "W1") == pr.map(ChipTap.open), "a PR opens its page")
+check(ChipTap.of(chipOf(.port, ":5173", url: "http://localhost:5173"), id: "W1") == URL(string: "http://localhost:5173").map(ChipTap.open), "a port opens on localhost")
+check(ChipTap.of(chipOf(.pr, "#3", url: pr?.absoluteString), id: "W1", prOpens: false) == .none,
+      "a full card's PR leaves the tap to the card (issue #72)")
+check(ChipTap.of(chipOf(.port, ":5173", url: "http://localhost:5173"), id: "W1", prOpens: false) != .none, "a full card's port still opens")
+check(ChipTap.of(chipOf(.pr, "#3"), id: "W1") == .none, "a PR with no link leaves the tap to the card")
+check(ChipTap.of(chipOf(.branch, "feat"), id: "W1") == .none, "the branch leaves the tap to the card")
+check(ChipTap.of(chipOf(.action, ChipTap.toReview, action: true), id: "W1") == .send([.fileForReview(id: "W1")]), "To review files the card for review")
+check(ChipTap.of(chipOf(.action, SidebarAction.parkWord, action: true), id: "W1") == .send([.parkMerged(id: "W1")]), "Park parks")
+check(ChipTap.of(chipOf(.action, SidebarAction.closeWord, action: true), id: "W1") == .send([.closeMerged(id: "W1")]), "Close closes")
+check(ChipTap.of(chipOf(.action, "Make a project", action: true), id: "W1") == .send(SidebarAction.pick(.newProjectFromFolder, on: "W1")),
+      "Make a project, with no name, picks it too")
+check(ChipTap.of(chipOf(.action, "Keep", action: true), id: "W1") == .none, "an action it does not know does nothing")
+check(ChipTap.of(chipOf(.action, "Make \"x\" a project", action: true), id: "W1") == .send(SidebarAction.pick(.newProjectFromFolder, on: "W1")),
+      "Make project picks the card menu's own item")
+
+// A badge's glyph reads on its face (contrast.ts glyphColor, issue #2).
+check(BadgeInk.glyph(on: 0xB0AEA5) == BadgeInk.dark, "a light face (#B0AEA5) takes the dark glyph")
+// Clay reads better in dark, as contrast.ts's own glyphColor has it.
+check(BadgeInk.glyph(on: 0xD97757) == BadgeInk.dark, "clay (#D97757) takes the dark glyph, as the cockpit's does")
+check(BadgeInk.glyph(on: 0x3B6FB6) == BadgeInk.light, "blue (#3B6FB6) takes the white glyph")
+check(BadgeInk.glyph(on: 0x000000) == BadgeInk.light && BadgeInk.glyph(on: 0xFFFFFF) == BadgeInk.dark, "black takes white, white takes dark")
+check(BadgeInk.fallback == Palette.rgba(Palette.Own.grey, dark: false).hex, "no colour is the cockpit's grey")
+
+// The halo round a status dot: the three filled hues that ask for a look.
+check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .blue)) == .blueHalo, "working's blue dot has its halo")
+check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .clay)) == .clayHalo, "needs' clay dot has its halo")
+check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .amber)) == .amberHalo, "asking's amber dot has its halo")
+check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .green)) == .clear, "finished green has none")
+check(CardText.halo(Icon(glyph: "○", ink: .blue)) == .clear, "a hollow dot has none")
+check(CardText.halo(Icon(glyph: "○", ink: nil)) == .clear, "a grey outline has none")
+
+// Over the fixtures: the age on the title row only while the status line
+// has none, so no card reads two; the bar held to 0 to 1.
+for name in ["lanes", "projects"] {
+    guard let panel = load(name) else { continue }
+    let cards = panel.lanes.flatMap(\.rows).compactMap { r -> Card? in
+        if case .card(let c) = r { return c }
+        return nil
+    } + panel.projects.compactMap { r -> Card? in
+        if case .card(let c) = r { return c }
+        return nil
+    }
+    for card in cards {
+        for chip in card.chips + card.merged where chip.isAction {
+            check(ChipTap.of(chip, id: card.wsId) != .none, "\(name): \(card.title)'s \(CardText.chip(chip)) acts")
+        }
+    }
+    if name == "lanes" {
+        check(cards.contains { !CardText.titleAge($0).isEmpty }, "lanes: an untimed status puts the age on the title row")
+        check(Set(cards.map(\.density)) == [.full, .compact, .row], "lanes: has every density")
+    }
+}
+var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil), title: "t", density: .full, badge: Badge(icon: "terminal", color: nil),
+               unread: "", ready: false, pinned: false, progress: 1.5, helpers: "", status: "", statusInk: .faint, age: "",
+               statusHasAge: false, leftOff: "", chips: [], merged: [], detail: "", detailLines: 2, waiting: false, rank: 0,
+               movable: true, dimmed: false, selected: false, menu: [])
+check(CardText.progress(bar) == 1, "a bar past the end stops full")
+bar.progress = -0.5
+check(CardText.progress(bar) == 0, "a bar before the start stays empty")
+bar.progress = .nan
+check(CardText.progress(bar) == 0, "a bar with no number stays empty")
+bar.age = "3m"
+check(CardText.titleAge(bar) == "3m", "an untimed status puts the age on the title row")
+bar.statusHasAge = true
+check(CardText.titleAge(bar).isEmpty, "a timed status keeps the title row free of a second time")
+bar.progress = nil
+check(CardText.progress(bar) == nil, "no value, no bar")
+
+// The core's words the panel matches on.
+let marks = source("core/src/panel/mod.rs")
+for (name, word) in [("TO_REVIEW", ChipTap.toReview), ("DIRTY_MARK", ChipFit.dirtyMark), ("DOT", CardText.filledDot)] {
+    check(marks.contains("pub const \(name): &str = \"\(word)\";"), "\(name) is \"\(word)\"")
 }
 
 exit(failures == 0 ? 0 : 1)

@@ -129,41 +129,55 @@ struct MessageAgent: View {
     }
 }
 
-/// A card's chips, then Park and Close as buttons: on the same line while
-/// every chip fits whole, else on a line of their own, so neither is ever
-/// cut.
-struct ActionChips: View {
+/// One of a card's action chips (parts.ts actionChip): To review, Make
+/// project, Park or Close, a white button with the quiet chip's edge, its
+/// words in the ink the core gives them (Close in the first, Park in the
+/// second, To review green while its PR is ready). Its own tap, so a
+/// press never also selects the card; under the pointer its face steps
+/// darker.
+struct ActionChip: View {
+    let chip: Chip
     let id: String
-    let chips: [Chip]
-    let merged: [Chip]
+    @State private var hovering = false
+
+    private static let padH: CGFloat = 7
 
     var body: some View {
-        if merged.isEmpty {
-            ChipsLine(chips: chips)
-        } else {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: Metrics.chipGap) {
-                    ForEach(Array(chips.enumerated()), id: \.offset) { ChipView(chip: $0.element) }
-                    mergedButtons
-                }
-                .fixedSize()
-                VStack(alignment: .leading, spacing: 3) {
-                    if !chips.isEmpty { ChipsLine(chips: chips) }
-                    HStack(spacing: Metrics.chipGap) { mergedButtons }.fixedSize()
-                }
-            }
+        Button {
+            guard case .send(let actions) = ChipTap.of(chip, id: id) else { return }
+            // In order, stopping at the first that cannot be written.
+            for action in actions where !SidebarCore.send(action) { break }
+        } label: {
+            label
         }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
 
-    private var mergedButtons: some View {
-        ForEach(Array(merged.enumerated()), id: \.offset) { _, chip in
-            Button {
-                if let action = SidebarAction.merged(chip, id: id) { SidebarCore.send(action) }
-            } label: {
-                ChipView(chip: chip)
-            }
-            .buttonStyle(.plain)
+    private var label: some View {
+        Text(chip.pieces.map(\.text).joined(separator: " "))
+            .font(.system(size: Metrics.Font.meta, weight: .medium))
+            .foregroundStyle(Color(chip.pieces.first?.ink ?? .secondary))
+            .lineLimit(1)
+            .fixedSize()
+            .chipFrame(Color(hovering ? Palette.Own.cardHover : Palette.Own.card), padH: Self.padH)
+            .contentShape(.rect)
+    }
+}
+
+/// Action chips on a line of their own, for the cards with no chips row to
+/// carry them: To review, Park and Close on the compact card, Park and
+/// Close on the row (cards.ts denseRow draws only mergedActions).
+struct ActionLine: View {
+    let chips: [Chip]
+    let id: String
+
+    var body: some View {
+        HStack(spacing: ChipLook.gap) {
+            ForEach(Array(chips.enumerated()), id: \.offset) { ActionChip(chip: $0.element, id: id) }
         }
+        .fixedSize()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

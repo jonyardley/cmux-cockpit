@@ -104,3 +104,72 @@ enum LaneText {
 extension Row: Identifiable {
     public var id: String { CardText.id(self) }
 }
+
+/// The parts of a card the cockpit's card draws round its words (parts.ts
+/// statusDot, titleRow), decided here so the views only lay them out.
+extension CardText {
+    /// The core's filled dot (panel/mod.rs DOT); a hollow one has no halo.
+    static let filledDot = "●"
+    /// The green pill's word (parts.ts readyPill).
+    static let ready = "Ready"
+
+    /// The soft halo round a status dot: working, needs and asking, the
+    /// three filled dots in blue, clay and amber, each in its own hue's
+    /// halo. Everything else, a hollow dot or finished green, is clear, so
+    /// dots with and without one still line up (ui.ts haloDot).
+    static func halo(_ icon: Icon) -> Token {
+        guard icon.glyph == filledDot else { return .clear }
+        switch icon.ink {
+        case .blue: return .blueHalo
+        case .clay: return .clayHalo
+        case .amber: return .amberHalo
+        default: return .clear
+        }
+    }
+
+    /// The age at the end of the title row: shown only while the status
+    /// line under it has no time of its own, so a card never reads two.
+    static func titleAge(_ card: Card) -> String {
+        card.statusHasAge ? "" : card.age
+    }
+
+    /// The progress bar's fraction, held to 0 to 1; nil draws no bar.
+    static func progress(_ card: Card) -> Double? {
+        card.progress.map { $0.isFinite ? min(1, max(0, $0)) : 0 }
+    }
+}
+
+/// What a tap on a chip does: opens its link, sends Jon's action, or
+/// nothing, so a tap on it selects the card as its free space does.
+enum ChipTap: Equatable {
+    case open(URL)
+    case send([SidebarAction])
+    case none
+
+    /// The core's words on the To review chip (panel/mod.rs TO_REVIEW).
+    static let toReview = "To review →"
+
+    /// The core's Make project chip (by_project.rs): "Make "x" a project",
+    /// or "Make a project" with no name to offer.
+    static func isMakeProject(_ chip: Chip) -> Bool {
+        guard let words = chip.pieces.first?.text else { return false }
+        return words.hasPrefix("Make ") && words.hasSuffix(" project")
+    }
+
+    /// A chip's tap: the PR's page or a port; an action by its words (To
+    /// review, Park, Close, Make project). An action it does not know does
+    /// nothing, rather than guess at one. A full
+    /// card's PR stays still (parts.ts prChip "still", issue #72): a tap on
+    /// it selects the card, and the card menu's Open PR opens it.
+    static func of(_ chip: Chip, id: String, prOpens: Bool = true) -> ChipTap {
+        if chip.isAction {
+            if let merged = SidebarAction.merged(chip, id: id) { return .send([merged]) }
+            if chip.pieces.first?.text == toReview { return .send([.fileForReview(id: id)]) }
+            if isMakeProject(chip) { return .send(SidebarAction.pick(.newProjectFromFolder, on: id)) }
+            return .none
+        }
+        if chip.kind == .pr && !prOpens { return .none }
+        if let link = chip.url, let url = URL(string: link) { return .open(url) }
+        return .none
+    }
+}

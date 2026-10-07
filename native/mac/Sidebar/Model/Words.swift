@@ -16,7 +16,6 @@ enum Words {
     static let laneMark = "■"
     static let folded = "▸"
     static let open = "▾"
-    static let ellipsis = "…"
     /// The Projects view's rows, as the core's panel module words them.
     static let newProject = "+ New project"
     static let quiet = "Quiet"
