@@ -33,7 +33,6 @@ enum Metrics {
     static let small: CGFloat = 11
     static let gutter: CGFloat = 10
     static let cardIndent: CGFloat = 16
-    static let chipGap: CGFloat = 4
     /// Between the cards in a lane, as the cockpit's.
     static let cardGap: CGFloat = 6
     static let corner: CGFloat = 6

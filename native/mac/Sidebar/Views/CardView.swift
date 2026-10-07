@@ -76,7 +76,6 @@ struct FullCard: View {
                 TitleRow(card: card, size: Metrics.Font.cardTitle, lines: 2)
                 StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
                 if ChipsRow.shows(card) { ChipsRow(card: card, prOpens: false) }
-                LeftOff(text: card.leftOff)
                 Detail(text: card.detail, lines: CardText.detailLines(card))
                 ProgressBar(card: card)
             }

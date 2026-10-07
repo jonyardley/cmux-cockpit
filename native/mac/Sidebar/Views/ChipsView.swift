@@ -17,6 +17,22 @@ enum ChipLook {
     static let lineGap: CGFloat = 4
 }
 
+extension View {
+    /// A chip's frame (ui.ts chipFrame): the padding, the face, the 6pt
+    /// corners and the chip edge, shared by the quiet chips and the action
+    /// buttons so the two never drift apart.
+    func chipFrame(_ face: some View, padH: CGFloat = ChipLook.padH) -> some View {
+        padding(.horizontal, padH)
+            .padding(.vertical, ChipLook.padV)
+            .background(face)
+            .clipShape(.rect(cornerRadius: Metrics.Radius.chip))
+            .overlay(
+                RoundedRectangle(cornerRadius: Metrics.Radius.chip)
+                    .strokeBorder(Color(Token.chipEdge), lineWidth: Metrics.hairline)
+            )
+    }
+}
+
 /// One chip, as the cockpit draws its kind (parts.ts chips): the size in
 /// its state's ink; the PR with its glyph, its number in medium and its
 /// state in its health's ink; the branch with its glyph and a dot when it
@@ -46,16 +62,8 @@ struct ChipView: View {
     @ViewBuilder private var framed: some View {
         let face = HStack(spacing: ChipLook.inner) { inside }
             .lineLimit(1)
-            .padding(.horizontal, ChipLook.padH)
-            .padding(.vertical, ChipLook.padV)
-            .background(Color(Token.chipFace))
-            .overlay { if hovering { Color(Palette.Own.hover) } }
-            .clipShape(.rect(cornerRadius: Metrics.Radius.chip))
-            .overlay(
-                RoundedRectangle(cornerRadius: Metrics.Radius.chip)
-                    .strokeBorder(Color(Token.chipEdge), lineWidth: Metrics.hairline)
-            )
-        if case .open(let url) = ChipTap.of(chip, id: id, prOpens: prOpens) {
+            .chipFrame(Color(Token.chipFace).overlay { if lit { Color(Palette.Own.hover) } })
+        if case .open(let url) = tap {
             face
                 .contentShape(.rect)
                 .onHover { hovering = $0 }
@@ -66,11 +74,20 @@ struct ChipView: View {
         }
     }
 
+    private var tap: ChipTap { ChipTap.of(chip, id: id, prOpens: prOpens) }
+
+    /// Under the pointer, and a chip that opens: a hover left over from
+    /// before the chip went still (its link gone, or another chip now at
+    /// its place) draws nothing.
+    private var lit: Bool {
+        guard hovering, case .open = tap else { return false }
+        return true
+    }
+
     @ViewBuilder private var inside: some View {
         switch chip.kind {
         case .pr:
-            // `hovering` only turns on for a chip that opens, so a still PR keeps its glyph.
-            glyph(hovering ? "arrow.up.right" : "arrow.triangle.pull")
+            glyph(lit ? "arrow.up.right" : "arrow.triangle.pull")
             if let tag = chip.pieces.first { piece(tag, weight: .medium) }
             ForEach(Array(chip.pieces.dropFirst().enumerated()), id: \.offset) { piece($0.element, weight: .regular) }
         case .branch:

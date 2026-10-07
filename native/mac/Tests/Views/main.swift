@@ -422,6 +422,9 @@ check(ChipTap.of(chipOf(.branch, "feat"), id: "W1") == .none, "the branch leaves
 check(ChipTap.of(chipOf(.action, ChipTap.toReview, action: true), id: "W1") == .send([.fileForReview(id: "W1")]), "To review files the card for review")
 check(ChipTap.of(chipOf(.action, SidebarAction.parkWord, action: true), id: "W1") == .send([.parkMerged(id: "W1")]), "Park parks")
 check(ChipTap.of(chipOf(.action, SidebarAction.closeWord, action: true), id: "W1") == .send([.closeMerged(id: "W1")]), "Close closes")
+check(ChipTap.of(chipOf(.action, "Make a project", action: true), id: "W1") == .send(SidebarAction.pick(.newProjectFromFolder, on: "W1")),
+      "Make a project, with no name, picks it too")
+check(ChipTap.of(chipOf(.action, "Keep", action: true), id: "W1") == .none, "an action it does not know does nothing")
 check(ChipTap.of(chipOf(.action, "Make \"x\" a project", action: true), id: "W1") == .send(SidebarAction.pick(.newProjectFromFolder, on: "W1")),
       "Make project picks the card menu's own item")
 
@@ -453,8 +456,6 @@ for name in ["lanes", "projects"] {
         return nil
     }
     for card in cards {
-        check(CardText.titleAge(card).isEmpty || !card.statusHasAge, "\(name): \(card.title) reads one time")
-        check(CardText.progress(card).map { (0...1).contains($0) } ?? true, "\(name): \(card.title)'s bar is a fraction")
         for chip in card.chips + card.merged where chip.isAction {
             check(ChipTap.of(chip, id: card.wsId) != .none, "\(name): \(card.title)'s \(CardText.chip(chip)) acts")
         }
@@ -469,6 +470,14 @@ var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil), title: "t", densit
                statusHasAge: false, leftOff: "", chips: [], merged: [], detail: "", detailLines: 2, waiting: false, rank: 0,
                movable: true, dimmed: false, selected: false, menu: [])
 check(CardText.progress(bar) == 1, "a bar past the end stops full")
+bar.progress = -0.5
+check(CardText.progress(bar) == 0, "a bar before the start stays empty")
+bar.progress = .nan
+check(CardText.progress(bar) == 0, "a bar with no number stays empty")
+bar.age = "3m"
+check(CardText.titleAge(bar) == "3m", "an untimed status puts the age on the title row")
+bar.statusHasAge = true
+check(CardText.titleAge(bar).isEmpty, "a timed status keeps the title row free of a second time")
 bar.progress = nil
 check(CardText.progress(bar) == nil, "no value, no bar")
 

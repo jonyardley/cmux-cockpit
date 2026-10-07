@@ -160,20 +160,14 @@ struct ActionChip: View {
             .foregroundStyle(Color(chip.pieces.first?.ink ?? .secondary))
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, Self.padH)
-            .padding(.vertical, ChipLook.padV)
-            .background(Color(hovering ? Palette.Own.cardHover : Palette.Own.card))
-            .clipShape(.rect(cornerRadius: Metrics.Radius.chip))
-            .overlay(
-                RoundedRectangle(cornerRadius: Metrics.Radius.chip)
-                    .strokeBorder(Color(Token.chipEdge), lineWidth: Metrics.hairline)
-            )
+            .chipFrame(Color(hovering ? Palette.Own.cardHover : Palette.Own.card), padH: Self.padH)
             .contentShape(.rect)
     }
 }
 
-/// Action chips on a line of their own, for the compact card and the row,
-/// which have no chips row to carry them: To review, Park and Close.
+/// Action chips on a line of their own, for the cards with no chips row to
+/// carry them: To review, Park and Close on the compact card, Park and
+/// Close on the row (cards.ts denseRow draws only mergedActions).
 struct ActionLine: View {
     let chips: [Chip]
     let id: String
