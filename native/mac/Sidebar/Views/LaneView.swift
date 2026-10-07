@@ -192,7 +192,7 @@ struct LaneView: View {
 
     var body: some View {
         let space = "lane:" + String(describing: lane.key)
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Metrics.cardGap) {
             LaneHeader(lane: lane, target: drag.over?.lane == lane.key)
                 .foldsOnClick(lane.empty ? nil : .toggleLane(lane.key))
                 .reportsFrame(Self.header, in: space)

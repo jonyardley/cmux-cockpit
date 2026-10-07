@@ -414,6 +414,9 @@ check(!ChipFit.branch(chipOf(.branch, "feat")).dirty, "a clean branch has no dot
 let pr = URL(string: "https://github.com/o/r/pull/3")
 check(ChipTap.of(chipOf(.pr, "#3", url: pr?.absoluteString), id: "W1") == pr.map(ChipTap.open), "a PR opens its page")
 check(ChipTap.of(chipOf(.port, ":5173", url: "http://localhost:5173"), id: "W1") == URL(string: "http://localhost:5173").map(ChipTap.open), "a port opens on localhost")
+check(ChipTap.of(chipOf(.pr, "#3", url: pr?.absoluteString), id: "W1", prOpens: false) == .none,
+      "a full card's PR leaves the tap to the card (issue #72)")
+check(ChipTap.of(chipOf(.port, ":5173", url: "http://localhost:5173"), id: "W1", prOpens: false) != .none, "a full card's port still opens")
 check(ChipTap.of(chipOf(.pr, "#3"), id: "W1") == .none, "a PR with no link leaves the tap to the card")
 check(ChipTap.of(chipOf(.branch, "feat"), id: "W1") == .none, "the branch leaves the tap to the card")
 check(ChipTap.of(chipOf(.action, ChipTap.toReview, action: true), id: "W1") == .send([.fileForReview(id: "W1")]), "To review files the card for review")

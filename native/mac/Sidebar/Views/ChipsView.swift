@@ -27,6 +27,8 @@ enum ChipLook {
 struct ChipView: View {
     let chip: Chip
     let id: String
+    /// Whether a PR chip opens its PR; false on the full card (issue #72).
+    var prOpens = true
     @Environment(\.openURL) private var openURL
     @State private var hovering = false
 
@@ -53,7 +55,7 @@ struct ChipView: View {
                 RoundedRectangle(cornerRadius: Metrics.Radius.chip)
                     .strokeBorder(Color(Token.chipEdge), lineWidth: Metrics.hairline)
             )
-        if case .open(let url) = ChipTap.of(chip, id: id) {
+        if case .open(let url) = ChipTap.of(chip, id: id, prOpens: prOpens) {
             face
                 .contentShape(.rect)
                 .onHover { hovering = $0 }
@@ -67,6 +69,7 @@ struct ChipView: View {
     @ViewBuilder private var inside: some View {
         switch chip.kind {
         case .pr:
+            // `hovering` only turns on for a chip that opens, so a still PR keeps its glyph.
             glyph(hovering ? "arrow.up.right" : "arrow.triangle.pull")
             if let tag = chip.pieces.first { piece(tag, weight: .medium) }
             ForEach(Array(chip.pieces.dropFirst().enumerated()), id: \.offset) { piece($0.element, weight: .regular) }
@@ -118,6 +121,9 @@ struct ChipView: View {
 /// then the branch name, cut in the middle.
 struct ChipsRow: View {
     let card: Card
+    /// Whether the PR chip opens its PR (parts.ts PrTap): the Projects
+    /// card's does; the full card's stays still (issue #72).
+    var prOpens = true
 
     var body: some View {
         let lines = ChipLines(card.chips)
@@ -145,7 +151,7 @@ struct ChipsRow: View {
     private func line(_ chips: [Chip]) -> some View {
         HStack(spacing: ChipLook.gap) {
             ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
-                ChipView(chip: chip, id: card.wsId)
+                ChipView(chip: chip, id: card.wsId, prOpens: prOpens)
                     // The diff goes first, then the branch; the rest hold.
                     .layoutPriority(chip.kind == .diff ? -1 : chip.kind == .branch ? 0 : 2)
             }

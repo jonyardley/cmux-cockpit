@@ -151,13 +151,16 @@ enum ChipTap: Equatable {
 
     /// A chip's tap: the PR's page or a port; an action by its words (To
     /// review, Park, Close); the one action left, a card under Other
-    /// offering its folder as a project, by being none of those.
-    static func of(_ chip: Chip, id: String) -> ChipTap {
+    /// offering its folder as a project, by being none of those. A full
+    /// card's PR stays still (parts.ts prChip "still", issue #72): a tap on
+    /// it selects the card, and the card menu's Open PR opens it.
+    static func of(_ chip: Chip, id: String, prOpens: Bool = true) -> ChipTap {
         if chip.isAction {
             if let merged = SidebarAction.merged(chip, id: id) { return .send([merged]) }
             if chip.pieces.first?.text == toReview { return .send([.fileForReview(id: id)]) }
             return .send(SidebarAction.pick(.newProjectFromFolder, on: id))
         }
+        if chip.kind == .pr && !prOpens { return .none }
         if let link = chip.url, let url = URL(string: link) { return .open(url) }
         return .none
     }
