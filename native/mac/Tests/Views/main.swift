@@ -326,6 +326,23 @@ for (own, name) in [(Palette.Own.card, "card"), (.needsEdge, "needsEdge"), (.nee
 check(Palette.rgba(.readyBg, dark: false) == RGBA(Palette.rgba(Token.green, dark: false).hex, 0x1F), "readyBg is the finished green, faint")
 check(source("core/src/ui.rs").contains("QUIET_PILL: PillColors = PillColors {\n    bg: Token::CountBg,\n    fg: Token::MetaText,"), "the Quiet pill is the core's")
 
+// "+ New project" draws its plus as an icon, so its label is the words
+// alone; a quiet project with no folder fades, one with a folder does not.
+check(ProjectText.newProjectLabel == "New project", "+ New project's label drops the plus it draws as an icon")
+check(ProjectText.quietOpacity(canOpen: true) == 1, "a quiet project with a folder is whole")
+check(ProjectText.quietOpacity(canOpen: false) == 0.55, "a quiet project with no folder fades as the cockpit's")
+check(source("../src/cockpit/views/headers.ts").contains("if (!open) return row.opacity(\(ProjectText.quietFade));"), "the quiet fade is headers.ts quietRow's")
+if let panel = load("projects") {
+    let icons = panel.projects.compactMap { r -> String? in
+        switch r {
+        case .header(let h): h.icon
+        case .quiet(_, _, _, _, let icon, _, _): icon
+        default: nil
+        }
+    }
+    check(!icons.isEmpty && icons.allSatisfy { !$0.isEmpty }, "projects: every header and quiet row has an icon for its badge")
+}
+
 // A pick opens the menu it was made from, then picks, in that order.
 check(ProjectMenu.pick(.editProject, key: "k", quiet: true) == [.menu(.openProject(key: "k", quiet: true)), .menu(.pick(.editProject))], "a project menu pick opens its menu first")
 

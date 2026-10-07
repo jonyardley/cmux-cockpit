@@ -1,12 +1,15 @@
 import Foundation
 
 /// What the Projects view says and sends, decided here so the views only
-/// lay it out. The rows' words are the pane's (native/pane/src/views/
-/// projects.rs): a busy project's fold mark, mark, name, count, folded dot
-/// and "+"; "+ New project"; the Quiet heading and its count; a quiet
-/// project's mark, name and "+". Cards and placeholders are CardText's.
+/// lay it out. words() is the terminal pane's words for each row (native/
+/// pane/src/views/projects.rs): a busy project's fold mark, mark, name,
+/// count, folded dot and "+"; "+ New project"; the Quiet heading and its
+/// count; a quiet project's mark, name and "+". The sidebar draws the
+/// marks and pluses as a badge and icons instead (ProjectsView.swift), so
+/// its own labels are newProjectLabel and the views. Cards and
+/// placeholders are CardText's.
 enum ProjectText {
-    /// The words a Projects row draws that is not a card, in the pane's
+    /// The pane's words for a Projects row that is not a card, in its
     /// order; nil for a card, a placeholder and the editor, which the
     /// sidebar draws as a sheet.
     static func words(_ row: ProjectRow) -> [String]? {
@@ -26,6 +29,22 @@ enum ProjectText {
             return nil
         }
     }
+
+    /// "+ New project" as the sidebar draws it: a plus icon, then the
+    /// label without the pane's "+ " (headers.ts newProjectRow).
+    static var newProjectLabel: String {
+        let mark = Words.plus + " "
+        return Words.newProject.hasPrefix(mark) ? String(Words.newProject.dropFirst(mark.count)) : Words.newProject
+    }
+
+    /// A quiet project's row: whole while a click opens it, faded while it
+    /// has no folder, so it does not read as a button (headers.ts quietRow).
+    static func quietOpacity(canOpen: Bool) -> Double {
+        canOpen ? 1 : quietFade
+    }
+
+    /// A quiet project with no folder, faded as the cockpit fades it.
+    static let quietFade = 0.55
 
     /// The Quiet heading's pill, the core's QUIET_PILL (native/core/src/
     /// ui.rs), which the panel model does not carry.

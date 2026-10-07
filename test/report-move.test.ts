@@ -77,6 +77,77 @@ describe("moveLine", () => {
     assert.equal(moveLine("Your move #2: go"), null);
   });
 
+  it("reads a bare header from the first step below it", () => {
+    const steps = "1. Run the script. Delta quits and reopens on its own:\n2. In Delta, open a new thread.";
+    const want = "Run the script. Delta quits and reopens on its own:";
+    assert.equal(moveLine(`Done.\n\nYour move:\n\n${steps}`), want);
+    assert.equal(moveLine(`**Your move:**\n\n${steps}`), want);
+    assert.equal(moveLine(`- Your move:\n\n${steps}`), want);
+    assert.equal(moveLine("Your move:\n- **Paste** this\n- then that"), "Paste this");
+    assert.equal(moveLine("Your move:\n\n1) Open it\n2) Close it"), "Open it");
+  });
+
+  it("is null for a bare header with nothing after it", () => {
+    assert.equal(moveLine("Done.\n\nYour move:"), null);
+    assert.equal(moveLine("Your move: old\n\nYour move:\n\n"), null);
+  });
+
+  it("takes no step from a rule, a heading or a decision under a bare header", () => {
+    assert.equal(moveLine("Your move:\n\n---\n\nRun it."), null);
+    assert.equal(moveLine("Your move:\n## Next\nstuff"), null);
+    assert.equal(moveLine("Your move:\n\n**1. Where**\n\n    - **a. Recommended.** foo"), null);
+  });
+
+  it("skips a fenced block between a bare header and its steps", () => {
+    const text = ["Your move:", "", "```", "npm run check", "```", "", "1. Paste it above.", "2. Then reload."].join(
+      "\n",
+    );
+    assert.equal(moveLine(text), "Paste it above.");
+    assert.equal(moveLine("Your move:\n\n```\nnpm run check\n```"), null);
+  });
+
+  it("takes a parenthetical before the colon, inside the bold or out", () => {
+    assert.equal(
+      moveLine("Your move (optional, while those run): build drag and drop from main and try it."),
+      "build drag and drop from main and try it.",
+    );
+    assert.equal(
+      moveLine("- **Your move (optional, before merge):** paste this to see it now."),
+      "paste this to see it now.",
+    );
+    assert.equal(moveLine("**Your move** (optional): go"), "go");
+  });
+
+  it("takes beyond-wording after Nothing for you only", () => {
+    assert.equal(
+      moveLine("Nothing for you beyond those: both R1.4 lanes are running, and you'll get their PR links"),
+      "both R1.4 lanes are running, and you'll get their PR links",
+    );
+    assert.equal(
+      moveLine("Nothing for you beyond that close-out: the #288 review is running"),
+      "the #288 review is running",
+    );
+    assert.equal(moveLine("Your move beyond that: go"), null);
+    assert.equal(moveLine("Nothing for you beyond that, I think: see below"), null);
+    assert.equal(moveLine("Nothing for you beyond the obvious: see below"), null);
+  });
+
+  it("takes a leading Jon, before the label", () => {
+    assert.equal(
+      moveLine("Jon, your move: say go and I'll check what already exists"),
+      "say go and I'll check what already exists",
+    );
+  });
+
+  it("takes a closing Nothing for you sentence, and only with a sentence before it", () => {
+    assert.equal(
+      moveLine("Both lanes are running and will report. Nothing for you yet."),
+      "Both lanes are running and will report.",
+    );
+    assert.equal(moveLine("Nothing for you."), null);
+    assert.equal(moveLine("Nothing for you yet."), null);
+  });
+
   it("is null without the label, and cuts a long line with an ellipsis", () => {
     assert.equal(moveLine("Nothing to do here."), null);
     assert.equal(moveLine("I made my move: done"), null);
@@ -220,6 +291,15 @@ describe("moveFrom", () => {
     assert.equal(moveFrom("Nothing for you yet: CI runs.", 5)?.idle, true, "a drifted label is still idle");
   });
 
+  it("saves a bare Nothing for you header as idle, with the first step", () => {
+    assert.deepEqual(moveFrom("**Nothing for you:**\n\n1. CI is running on #9.", 5), {
+      text: "CI is running on #9.",
+      epoch: 5,
+      idle: true,
+    });
+    assert.equal(moveFrom("Nothing for you beyond that: CI runs.", 5)?.idle, true);
+  });
+
   it("is null when the reply has no move line", () => {
     assert.equal(moveFrom(DECISIONS.replace("Your move:", "Next:"), 1000), null);
   });
@@ -240,6 +320,11 @@ describe("shouldSendBack", () => {
   it("lets a reply with either label end, drifted wording included", () => {
     for (const reply of ["Done.\n\nYour move: go", "Nothing for you: CI runs.", "Nothing for you yet: CI runs."])
       assert.equal(shouldSendBack(stop, reply, true), false, reply);
+  });
+
+  it("lets a bare header over steps end, but sends back a header with nothing under it", () => {
+    assert.equal(shouldSendBack(stop, "Done.\n\nYour move:\n\n1. Run the script.", true), false);
+    assert.equal(shouldSendBack(stop, "Done.\n\nYour move:", true), true);
   });
 
   it("leaves a reply with decisions alone, since a one-line retry would lose them", () => {
