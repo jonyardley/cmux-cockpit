@@ -42,6 +42,24 @@ enum Palette {
         case onBadge
         /// The shadow under a card being dragged.
         case lift
+        /// A solid face: the chosen view tab, Next's pill.
+        case card
+        /// The edge round Next's pill and the Needs you strip.
+        case needsEdge
+        /// Next's pill and a Needs you row under the pointer.
+        case needsHover
+        /// A card's face under the pointer: opaque, as it replaces the face.
+        case cardHover
+        /// A header, tab or badge under the pointer.
+        case hover
+        /// The Ready pill's face: the finished green, faint.
+        case readyBg
+        /// A lane header while a card is dragged over its lane.
+        case dropTarget
+        /// An empty lane's drop zone while a card is dragged over it.
+        case zoneLit
+        /// A lane anchor's header badge while it is cmux's selected workspace.
+        case anchorSelected
     }
 
     private struct Pair {
@@ -123,6 +141,14 @@ enum Palette {
         case .badge: secondary
         case .onBadge: Pair(RGBA(0xFFFFFF), RGBA(0x1F1E1D))
         case .lift: Pair(RGBA(0x000000, 0x2E), RGBA(0x000000, 0x66))
+        case .card: Pair(RGBA(0xFFFFFF), RGBA(0x30302D))
+        case .needsEdge: Pair(RGBA(0xF0D2C3), RGBA(clay.dark.hex, 0x47))
+        case .needsHover: Pair(RGBA(0xFBF1EB), RGBA(0x3A3330))
+        case .cardHover: Pair(RGBA(0xF7F6F2), RGBA(0x383835))
+        case .hover: Pair(RGBA(0x7F7F7F, 0x14), RGBA(0x7F7F7F, 0x24))
+        case .readyBg: faint(green, 0x1F)
+        case .dropTarget, .anchorSelected: faint(text, 0x1F)
+        case .zoneLit: Pair(RGBA(0xE7E4D9), RGBA(0x3A3935))
         }
     }
 

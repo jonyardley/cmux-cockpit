@@ -1,52 +1,86 @@
 import SwiftUI
 
-/// The view switch, as the core has it on. Tapping the other view asks
-/// the sidebar's core to flip to it.
+/// The view switch, as the core has it on: two tabs on a ringed track, the
+/// chosen one a white face with an edge (headers.ts segmented). Tapping
+/// the other view asks the sidebar's core to flip to it.
 struct ViewSwitch: View {
     let view: PanelView
 
     var body: some View {
-        HStack(spacing: 2) {
-            tab(Words.all, on: view == .all)
-            tab(Words.projects, on: view == .projects)
+        HStack(spacing: 0) {
+            SwitchSegment(label: Words.all, on: view == .all)
+            SwitchSegment(label: Words.projects, on: view == .projects)
         }
-        .padding(2)
-        .background(Color(Token.countBg), in: .rect(cornerRadius: Metrics.corner))
-    }
-
-    private func tab(_ label: String, on: Bool) -> some View {
-        Text(label)
-            .font(.system(size: Metrics.small, weight: on ? .semibold : .regular))
-            .foregroundStyle(Color(on ? Token.text : Token.secondary))
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 2)
-            .background(on ? Color(Palette.Own.ground) : .clear, in: .rect(cornerRadius: Metrics.corner - 2))
-            .modifier(SwitchTab(on: on))
+        .padding(Metrics.switchInset)
+        .background(Color(Token.countBg), in: .rect(cornerRadius: Metrics.Radius.track))
+        .overlay {
+            RoundedRectangle(cornerRadius: Metrics.Radius.track)
+                .strokeBorder(Color(Token.chipEdge), lineWidth: Metrics.hairline)
+        }
     }
 }
 
-/// Next: where the next press goes, and its place, or nothing waiting. A
+/// One tab of the view switch. Only the tab not chosen lights under the
+/// pointer.
+private struct SwitchSegment: View {
+    let label: String
+    let on: Bool
+    @State private var hovering = false
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: Metrics.Font.control, weight: .medium))
+            .foregroundStyle(Color(on ? Token.text : Token.secondary))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity)
+            .frame(height: Metrics.switchHeight)
+            .background(face, in: .rect(cornerRadius: Metrics.Radius.tab))
+            .overlay {
+                RoundedRectangle(cornerRadius: Metrics.Radius.tab)
+                    .strokeBorder(Color(on ? Token.cardEdge : Token.clear), lineWidth: Metrics.hairline)
+            }
+            .onHover { hovering = $0 }
+            .modifier(SwitchTab(on: on))
+    }
+
+    private var face: Color {
+        if on { return Color(Palette.Own.card) }
+        return hovering ? Color(Palette.Own.hover) : .clear
+    }
+}
+
+/// Next: a white pill with a clay edge, "Next: <title>" in clay, cut in
+/// the middle so both ends show, and its place in the queue on the right
+/// (needs.ts nextButton). The panel leaves it out with no next step. A
 /// tap steps there.
 struct NextView: View {
     let next: NextLine
+    @State private var hovering = false
 
     var body: some View {
         let target = NextText.target(next)
         HStack(spacing: 6) {
-            Text(Words.next).fontWeight(.semibold).foregroundStyle(Color(Token.heading))
-            Text(target.title)
-                .foregroundStyle(Color(NextText.isNothing(next) ? Token.faint : Token.text))
+            Text(Words.next + ": " + target.title)
+                .font(.system(size: Metrics.Font.next, weight: .semibold))
+                .foregroundStyle(Color(Token.clayText))
                 .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: 4)
-            // The pane fits the place first, on one line, and gives the
-            // title what is left.
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
             Text(target.place)
+                .font(.system(size: Metrics.Font.meta).monospaced())
                 .foregroundStyle(Color(Token.metaText))
                 .lineLimit(1)
-                .layoutPriority(1)
+                .layoutPriority(2)
         }
-        .font(.system(size: Metrics.body))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color(hovering ? Palette.Own.needsHover : Palette.Own.card), in: .rect(cornerRadius: Metrics.Radius.tab))
+        .overlay {
+            RoundedRectangle(cornerRadius: Metrics.Radius.tab)
+                .strokeBorder(Color(Palette.Own.needsEdge), lineWidth: Metrics.hairline)
+        }
+        .onHover { hovering = $0 }
         .modifier(NextTap(next: next))
     }
 }

@@ -363,6 +363,16 @@ let editorTs = source("../src/cockpit/views/editor.ts")
 for word in [Words.newProjectTitle, Words.add, Words.done, Words.cancel, Words.projectName, Words.searchIcons, Words.openFolders] {
     check(editorTs.contains("\"\(word)\""), "the sheet's \"\(word)\" is the JS sidebar editor's")
 }
+// The light side of the panel's own cockpit colours is the JS sidebar's,
+// read from src/cockpit/theme.ts.
+let themeTs = source("../src/cockpit/theme.ts").lowercased()
+for (own, name) in [(Palette.Own.card, "card"), (.needsEdge, "needsEdge"), (.needsHover, "needsHover"), (.cardHover, "cardHover"),
+                    (.hover, "hover"), (.dropTarget, "dropTarget"), (.zoneLit, "zoneLit"), (.anchorSelected, "anchorSelected")] {
+    let c = Palette.rgba(own, dark: false)
+    let hex = "#" + String(format: "%06x", c.hex) + (c.alpha == 0xFF ? "" : String(format: "%02x", c.alpha))
+    check(themeTs.contains("\n  \(name.lowercased()): \"\(hex)\","), "light \(own) is the cockpit's \(name)")
+}
+check(Palette.rgba(.readyBg, dark: false) == RGBA(Palette.rgba(Token.green, dark: false).hex, 0x1F), "readyBg is the finished green, faint")
 check(source("core/src/ui.rs").contains("QUIET_PILL: PillColors = PillColors {\n    bg: Token::CountBg,\n    fg: Token::MetaText,"), "the Quiet pill is the core's")
 
 // A pick opens the menu it was made from, then picks, in that order.
