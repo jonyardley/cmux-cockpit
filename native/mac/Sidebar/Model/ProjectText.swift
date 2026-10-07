@@ -27,6 +27,22 @@ enum ProjectText {
         }
     }
 
+    /// "+ New project" as the sidebar draws it: a plus icon, then the
+    /// label without the pane's "+ " (headers.ts newProjectRow).
+    static var newProjectLabel: String {
+        let mark = Words.plus + " "
+        return Words.newProject.hasPrefix(mark) ? String(Words.newProject.dropFirst(mark.count)) : Words.newProject
+    }
+
+    /// A quiet project's row: whole while a click opens it, faded while it
+    /// has no folder, so it does not read as a button (headers.ts quietRow).
+    static func quietOpacity(canOpen: Bool) -> Double {
+        canOpen ? 1 : quietFade
+    }
+
+    /// A quiet project with no folder, faded as the cockpit fades it.
+    static let quietFade = 0.55
+
     /// The Quiet heading's pill, the core's QUIET_PILL (native/core/src/
     /// ui.rs), which the panel model does not carry.
     static var quietPill: PillColors { PillColors(bg: .countBg, fg: .metaText) }

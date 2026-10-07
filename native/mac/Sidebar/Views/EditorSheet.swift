@@ -34,7 +34,17 @@ struct EditorSheet: View {
                 .foregroundStyle(Color(Token.text))
             if editor.isNew { folder }
             field(Words.name) {
-                TextField(Words.projectName, text: $draft.name).textFieldStyle(.roundedBorder)
+                // The badge as the header draws it, beside the name, so a
+                // colour or icon picked shows at once.
+                HStack(spacing: 6) {
+                    BadgeTile(
+                        icon: editor.icon,
+                        color: ProjectText.hex(editor.color),
+                        size: ProjectMetrics.headerBadge,
+                        font: ProjectMetrics.headerBadgeFont
+                    )
+                    TextField(Words.projectName, text: $draft.name).textFieldStyle(.roundedBorder)
+                }
             }
             field(Words.colour) { colours }
             field(Words.icon) { icons }
