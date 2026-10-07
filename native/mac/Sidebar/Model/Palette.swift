@@ -24,20 +24,20 @@ struct RGBA: Equatable, Sendable {
 /// palette (src/shared/palette.ts, as native/pane/src/theme.rs maps it);
 /// the dark side is this file's own, the same hues lifted for a dark
 /// ground, as nothing else in the repo has one yet. The one exception is
-/// the panel ground, which is cmux's header white, not the palette's.
+/// the panel ground, which is cmux's window off-white, not the palette's.
 enum Palette {
     /// The colours the views use that no core token names.
     enum Own: CaseIterable {
         /// The pane's cream: the selected tab.
         case ground
-        /// Under the whole panel and a card being dragged: the white cmux
-        /// draws its header in (sampled from a light-mode capture), so the
-        /// header and the panel read as one surface. Dark is unsampled and
-        /// stays the dark ground.
+        /// Under the whole panel and a card being dragged: cmux's own
+        /// off-white, which the TS sidebar and the right sidebar sit on
+        /// (sampled from a light-mode capture), so the panel matches the
+        /// rest of the window. Dark is unsampled and stays the dark ground.
         case panelGround
         /// The Needs you strip's face.
         case needsFace
-        /// A card's face: a cream tile on the white panel ground.
+        /// A card's face: white on the panel ground, as the TS sidebar's cards.
         case cardFace
         /// The third ink: where you left off.
         case tertiary
@@ -122,9 +122,9 @@ enum Palette {
     private static func pair(_ own: Own) -> Pair {
         switch own {
         case .ground: Pair(RGBA(0xF4F2EA), RGBA(0x262624))
-        case .panelGround: Pair(RGBA(0xFEFEFE), RGBA(0x262624))
+        case .panelGround: Pair(RGBA(0xFAF9F5), RGBA(0x262624))
         case .needsFace: Pair(RGBA(0xFBECE4), RGBA(clay.dark.hex, 0x1C))
-        case .cardFace: Pair(RGBA(0xF4F2EA, 0x99), RGBA(0x30302D, 0x99))
+        case .cardFace: Pair(RGBA(0xFFFFFF), RGBA(0x30302D, 0x99))
         case .tertiary: Pair(RGBA(0x73726C), RGBA(0x9C9A92))
         case .grey: Pair(RGBA(0xA09E95), RGBA(0x77756D))
         case .badge: secondary
