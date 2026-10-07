@@ -97,6 +97,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.jonyardley.cockpit.sidebar
         PRODUCT_NAME: CockpitSidebar
+        # The name cmux shows in the header above the panel.
+        INFOPLIST_KEY_CFBundleDisplayName: Cockpit
         INFOPLIST_FILE: Sidebar/Info.plist
         GENERATE_INFOPLIST_FILE: YES
         ENABLE_APP_SANDBOX: YES
