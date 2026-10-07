@@ -422,6 +422,14 @@ check(ChipTap.of(chipOf(.action, SidebarAction.closeWord, action: true), id: "W1
 check(ChipTap.of(chipOf(.action, "Make \"x\" a project", action: true), id: "W1") == .send(SidebarAction.pick(.newProjectFromFolder, on: "W1")),
       "Make project picks the card menu's own item")
 
+// A badge's glyph reads on its face (contrast.ts glyphColor, issue #2).
+check(BadgeInk.glyph(on: 0xB0AEA5) == BadgeInk.dark, "a light face (#B0AEA5) takes the dark glyph")
+// Clay reads better in dark, as contrast.ts's own glyphColor has it.
+check(BadgeInk.glyph(on: 0xD97757) == BadgeInk.dark, "clay (#D97757) takes the dark glyph, as the cockpit's does")
+check(BadgeInk.glyph(on: 0x3B6FB6) == BadgeInk.light, "blue (#3B6FB6) takes the white glyph")
+check(BadgeInk.glyph(on: 0x000000) == BadgeInk.light && BadgeInk.glyph(on: 0xFFFFFF) == BadgeInk.dark, "black takes white, white takes dark")
+check(BadgeInk.fallback == Palette.rgba(Palette.Own.grey, dark: false).hex, "no colour is the cockpit's grey")
+
 // The halo round a status dot: the three filled hues that ask for a look.
 check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .blue)) == .blueHalo, "working's blue dot has its halo")
 check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .clay)) == .clayHalo, "needs' clay dot has its halo")
