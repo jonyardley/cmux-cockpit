@@ -1,8 +1,10 @@
 //! `cockpit-publish`: the runner, headless, for the Swift sidebar. The
 //! helper app starts it and it runs until that app goes: it writes the
-//! panel model to panel.json and the core's inputs to data.json in the
-//! shared folder after each change, posts the "changed" signal, and takes
-//! actions from outbox/ (the runner's publish.rs has the formats).
+//! core's inputs to data.json in the shared folder after each change,
+//! posts the "changed" signal, and carries out the effects the sidebar's
+//! core drops into outbox/, writing their answers into inbox/ (the
+//! runner's publish.rs has the formats). It runs no core of its own: the
+//! sidebar's is the only one (issue #269).
 //!
 //! Options: `--root <dir>` writes to another folder than the App Group's
 //! (so does `COCKPIT_GROUP_DIR`, the flag winning); `--config <dir>`
@@ -11,12 +13,6 @@
 //! `--parent <pid>` names the process to stop with, which must be the
 //! one that started it; the helper app passes its own, so it going before
 //! this process looked is caught too. It defaults to whoever started it.
-//! `--no-core` runs with no core: it joins the inputs and writes
-//! data.json alone, for a sidebar that runs the core itself (issue #269):
-//! it carries out the effects that core drops into outbox/ and writes
-//! their answers into inbox/. An action file waits in outbox/ then, as an
-//! effect file does with a core, for a helper started the other way, for
-//! up to a minute (`publish::STALE`).
 //!
 //! It stops when its parent does, polling for that each wake: a stdin
 //! pipe would need the helper app to wire one up, and an app's stdin is
@@ -41,7 +37,6 @@ struct Args {
     config: Option<PathBuf>,
     after: u64,
     parent: Option<u32>,
-    no_core: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<Args, String> {
@@ -50,7 +45,6 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         config: None,
         after: 0,
         parent: None,
-        no_core: false,
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -71,7 +65,6 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                         .map_err(|_| format!("--parent: not a process id: {n}"))?,
                 );
             }
-            "--no-core" => out.no_core = true,
             other => return Err(format!("unknown option {other}")),
         }
     }
@@ -131,8 +124,7 @@ fn main() -> ExitCode {
         wake: Some(WAKE),
         home,
     };
-    let without = if args.no_core { ", without a core" } else { "" };
-    log(format!("writing to {}{without}", root.display()));
+    log(format!("writing to {}", root.display()));
     let started = Instant::now();
     let on_frame = |feed: &mut runner::Feed, call: runner::Call<'_>| {
         if parent.gone() {
@@ -144,11 +136,7 @@ fn main() -> ExitCode {
         }
         ControlFlow::Continue(())
     };
-    if args.no_core {
-        runner::run_without_core(&opts, runner::channel(), on_frame, log);
-    } else {
-        runner::run(&opts, runner::channel(), on_frame, log);
-    }
+    runner::run_without_core(&opts, runner::channel(), on_frame, log);
     ExitCode::SUCCESS
 }
 
@@ -165,25 +153,19 @@ mod tests {
     fn reads_each_option() {
         assert_eq!(
             args(&[
-                "--root",
-                "/tmp/r",
-                "--config",
-                "/tmp/c",
-                "--after",
-                "7",
-                "--parent",
-                "42",
-                "--no-core"
+                "--root", "/tmp/r", "--config", "/tmp/c", "--after", "7", "--parent", "42",
             ]),
             Ok(Args {
                 root: Some(PathBuf::from("/tmp/r")),
                 config: Some(PathBuf::from("/tmp/c")),
                 after: 7,
                 parent: Some(42),
-                no_core: true,
             })
         );
-        assert_eq!(args(&[]).map(|a| a.no_core), Ok(false));
+        assert!(
+            args(&["--no-core"]).is_err(),
+            "there is no core to leave out"
+        );
         assert!(args(&["--after", "x"]).is_err());
         assert!(args(&["--parent"]).is_err());
         assert!(args(&["--loud"]).is_err());

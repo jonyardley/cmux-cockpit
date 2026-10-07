@@ -38,15 +38,14 @@
 //! core through `Feed::act`.
 //!
 //! Headless, the `cockpit-publish` binary (src/bin) drives the runner for
-//! the Swift sidebar: it writes the panel model to a shared folder after
-//! each change, signals it, and takes actions back as files (publish.rs,
-//! action.rs, signal.rs). Beside the panel it writes the core's inputs
-//! (`Inputs`, as data.json), so a core in the sidebar can be fed the
-//! same; `run_without_core` joins and writes those with no core at all,
-//! carries out the effects that core sends back as files (effect.rs,
-//! `Feed::carry`), and keeps their answers for inbox/ (inbox.rs).
+//! the Swift sidebar with no core of its own (`run_without_core`): it
+//! joins the core's inputs (`Inputs`) and writes them to a shared folder
+//! as data.json after each change, so the core in the sidebar is fed what
+//! a core here would be, and signals it (publish.rs, signal.rs). It
+//! carries out the effects that core sends back as files in outbox/
+//! (effect.rs, `Feed::carry`), and keeps their answers for inbox/
+//! (inbox.rs).
 
-pub mod action;
 pub mod effect;
 pub mod inbox;
 pub mod join;
@@ -382,11 +381,6 @@ impl Feed {
         let mut feed = Self::with_home(home);
         feed.no_core = true;
         feed
-    }
-
-    /// Whether a core takes the frames and actions.
-    pub fn has_core(&self) -> bool {
-        !self.no_core
     }
 }
 
@@ -1079,7 +1073,6 @@ mod tests {
     #[test]
     fn without_a_core_the_feed_only_joins() {
         let mut feed = Feed::without_core(Some("/h".into()));
-        assert!(!feed.has_core());
         feed.state(SavedState::default());
         feed.input(Input::Workspaces(vec![titled("Q", "q")]));
         feed.frame(1_791_127_100.0);

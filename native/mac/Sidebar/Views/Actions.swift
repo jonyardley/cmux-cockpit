@@ -12,9 +12,8 @@ import SwiftUI
 struct SwitchWorkspace: Sendable {
     let run: @MainActor @Sendable (String) -> Void
 
-    /// A click drawn selected stops being drawn if the core refuses it.
     static let core = SwitchWorkspace { id in
-        if !SidebarCore.send(.switchTo(id: id)) { SelectState.shared.drop(id) }
+        SidebarCore.send(.switchTo(id: id))
     }
 }
 
@@ -49,10 +48,7 @@ struct CardActions: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contentShape(.rect)
-            .onTapGesture {
-                SelectState.shared.select(card.wsId)
-                switchWorkspace.run(card.wsId)
-            }
+            .onTapGesture { switchWorkspace.run(card.wsId) }
             .contextMenu { CardMenu(card: card, messaging: $messaging) }
             .popover(isPresented: $messaging, arrowEdge: .trailing) {
                 MessageAgent(id: card.wsId, title: card.title, shown: $messaging)
@@ -182,9 +178,9 @@ struct SwitchTab: ViewModifier {
     }
 }
 
-/// Next: a tap steps to the next workspace in its queue. Its target draws
-/// selected on the tap; the core still makes the jump, so it remembers it
-/// and unfolds whatever hides the card.
+/// Next: a tap steps to the next workspace in its queue. The core makes
+/// the jump and draws its target selected on the tap, remembers it and
+/// unfolds whatever hides the card.
 struct NextTap: ViewModifier {
     let next: NextLine
 
@@ -192,9 +188,8 @@ struct NextTap: ViewModifier {
         content
             .contentShape(.rect)
             .onTapGesture {
-                guard let id = NextText.targetId(next) else { return }
-                SelectState.shared.select(id)
-                if !SidebarCore.send(.next) { SelectState.shared.drop(id) }
+                guard NextText.targetId(next) != nil else { return }
+                SidebarCore.send(.next)
             }
     }
 }
@@ -207,10 +202,7 @@ struct NeedsRowTap: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contentShape(.rect)
-            .onTapGesture {
-                SelectState.shared.select(id)
-                switchWorkspace.run(id)
-            }
+            .onTapGesture { switchWorkspace.run(id) }
     }
 }
 

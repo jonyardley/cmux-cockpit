@@ -1,6 +1,6 @@
 //! Decodes, as the core's `Event`, every event the Swift sidebar encoded
 //! with the generated types (native/mac/Tests/Outbox writes them), and
-//! checks each is the action native/runner/tests/actions.json spells in
+//! checks each is the action native/core/tests/actions.json spells in
 //! the same place. The file holds every action alone, then each again
 //! wrapped in `At`. native/mac/test.sh runs it:
 //!

@@ -4,8 +4,8 @@ import os
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The drag in flight and the drops waiting for the panel, shared by
-/// every lane: a card leaves one lane's view and lands in another's.
+/// The drag in flight, shared by every lane: a card leaves one lane's
+/// view and lands in another's.
 @Observable
 @MainActor
 final class DragState {
@@ -17,7 +17,6 @@ final class DragState {
     /// The lane under the drag and the card it would land above (nil for
     /// the end), for the landing line.
     private(set) var over: (lane: LaneKey, before: String?)?
-    private(set) var pending: [PendingMove] = []
     /// Where the pointer is, down the All view, while it is over a lane:
     /// the floating copy of the lifted card is drawn there. The drag
     /// picture itself is see-through, so nothing of macOS's lingers while
@@ -114,36 +113,17 @@ final class DragState {
     }
 
     /// Lets go of `id` in `lane` above `before`, among the lane's rows as
-    /// drawn: sends the move to cockpit-publish and draws the card there
-    /// until the panel shows it.
+    /// drawn: sends the move to the sidebar's core, whose move hold draws
+    /// the card there on the drop.
     func drop(_ id: String, in lane: LaneKey, before: String?, rows: [Row]) {
         defer {
             released = nil
             settle("drop")
         }
         guard let card = carried, card.wsId == id, let from = from ?? released?.from else { return }
-        if PendingMove.staysPut(rows, from: from, card: card, lane: lane, before: before) { return }
-        let move = PendingMove(card: card, from: from, lane: lane, before: before, until: Date().addingTimeInterval(PendingMove.lasts))
-        guard SidebarCore.send(move.action) else { return }
-        pending.removeAll { $0.card.wsId == id }
-        pending.append(move)
+        if DropRule.staysPut(rows, from: from, card: card, lane: lane, before: before) { return }
+        guard SidebarCore.send(.moveCard(id: id, lane: lane, before: before)) else { return }
         Timeline.drag.note("move sent to \(lane)")
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(PendingMove.lasts))
-            self?.lapse()
-        }
-    }
-
-    /// Drops the moves a fresh panel's `lanes` show done, and draws
-    /// the rest with the panel's copy of their cards.
-    func reconcile(_ lanes: [Lane]) {
-        let next = PendingMove.unconfirmed(pending, lanes: lanes)
-        if next != pending { pending = next }
-    }
-
-    private func lapse() {
-        let live = PendingMove.live(pending, now: Date())
-        if live != pending { pending = live }
     }
 }
 

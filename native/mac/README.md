@@ -8,12 +8,11 @@ parts, built together from `project.yml` with XcodeGen:
   headless, built by cargo and copied into `Contents/MacOS`) running: it
   starts it with a full PATH and its own pid as the parent, starts it
   again after a backoff if it dies (`Host/Restart.swift`), and stops it
-  on quit. The helper starts it with `--no-core` (issue #270): it writes
-  the core's inputs as `data.json`, carries out the effects the
-  sidebar's core drops into `outbox/` (one per effect in
-  `native/runner/tests/effects.json`) and writes their answers, a refused
-  cmux call or a PR, into `inbox/`. Run by hand without the flag, it runs
-  its own core and writes `panel.json` too, which nothing reads now. Its
+  on quit. It runs no core of its own (issue #269): it writes the core's
+  inputs as `data.json`, carries out the effects the sidebar's core drops
+  into `outbox/` (one per effect in `native/runner/tests/effects.json`)
+  and writes their answers, a refused cmux call or a PR, into `inbox/`.
+  Its
   log is `~/Library/Logs/Cockpit/cockpit-publish.log`.
 - `CockpitSidebar.appex` (`Sidebar/`), embedded in the app: the sandboxed
   extension cmux draws in its left sidebar. It runs the core itself:
@@ -29,13 +28,13 @@ parts, built together from `project.yml` with XcodeGen:
   core's `Event`, which the extension compiles. `native/typegen` writes
   them from the Rust types in `native/core`, with an `init(from:)` on each
   that reads the JSON the core writes, so a plain `JSONDecoder()` decodes
-  `panel.json`. `Event` and the types it reaches also get an
+  the panel the sidebar's core hands back. `Event` and the types it reaches also get an
   `encode(to:)` in the shapes serde reads, so the sidebar's clicks go to
   its core as the core's own events (`Sidebar/Model/SidebarAction.swift`
   names them). The core's own inputs (a frame, the state file, the
   project table, a PR answer) are left out: the sidebar hands them to
   its core as the bytes the helper wrote, never as Swift values. `Tests/Outbox/main.swift` and typegen's `check_events` check
-  each action against `native/runner/tests/actions.json`. They are
+  each action against `native/core/tests/actions.json`. They are
   gitignored and rebuilt every time: by a step in the Xcode build, and by
   `test.sh`, which then decodes every fixture in `native/fixtures/` with
   them (`Tests/Decode/main.swift`).

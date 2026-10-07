@@ -6,7 +6,7 @@ import Foundation
 /// tagged shapes, so `.flipView` is `"FlipView"`, `.switchTo(id:)` is
 /// `{"SwitchTo": {"id": "W1"}}` and `.menu(.close)` is `{"Menu": "Close"}`.
 /// Only the actions among them are clicks (`isAction`); the rest are the
-/// shell's own inputs. native/runner/tests/actions.json holds one file per
+/// shell's own inputs. native/core/tests/actions.json holds one file per
 /// action, which the Rust and the Swift checks both read.
 typealias SidebarAction = Event
 

@@ -1,5 +1,5 @@
 //! The bare "changed" signal cockpit-publish sends after each new
-//! panel.json: a distributed notification with no object and no payload,
+//! data.json or inbox/ answer: a distributed notification with no object and no payload,
 //! as the R2 spike proved reaches the sandboxed sidebar (its observer is
 //! `DistributedNotificationCenter.default()` under this name). The
 //! sidebar reads the file on each one, and on a slow poll besides, so a

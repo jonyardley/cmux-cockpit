@@ -1,6 +1,5 @@
-//! The answers to a sidebar core's effects, back as files. With
-//! `--no-core` the helper carries out the effects the sidebar's core asks
-//! for (effect.rs); two of them answer, and each answer goes into the
+//! The answers to a sidebar core's effects, back as files. The helper
+//! carries out the effects the sidebar's core asks for (effect.rs); two of them answer, and each answer goes into the
 //! shared folder's inbox/ as one file holding the core event it is, in the
 //! JSON the core's bridge reads, so the sidebar hands it to its core as it
 //! is and deletes it:

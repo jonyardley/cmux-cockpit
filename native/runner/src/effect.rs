@@ -1,5 +1,5 @@
-//! One effect of a core in the sidebar as a file: with `--no-core` the
-//! sidebar runs the core itself and drops what it asks of the world into
+//! One effect of the core in the sidebar as a file: the sidebar runs the
+//! core itself and drops what it asks of the world into
 //! the shared folder's outbox/, for cockpit-publish to carry out
 //! (publish.rs). The format is the core's own effect as crux's JSON bridge
 //! hands it to the shell, the `effect` of one request, so the sidebar
@@ -13,15 +13,14 @@
 //! {"AgentMessage": {"workspace": "W1", "text": "Rebase when free."}}
 //! ```
 //!
-//! `Render` is the shell's own business and never comes this way. As with
-//! an action, an unknown field is refused rather than ignored. The answers
+//! `Render` is the shell's own business and never comes this way. An
+//! unknown field is refused rather than ignored, so a typo shows in the
+//! log instead of doing something else. The answers
 //! some of these bring back (a cmux call that failed, a PR) go to inbox/
 //! (inbox.rs).
 
 use cockpit_core::{AgentMessage, CmuxCall, OpenUrl, PrAsk, StateSet};
 use serde::{Deserialize, Serialize};
-
-use crate::action::Action;
 
 /// An effect file's contents: every effect of the core but `Render`, with
 /// the names and fields the bridge writes.
@@ -49,43 +48,6 @@ impl EffectFile {
             EffectFile::PrPoll(_) => "PrPoll",
             EffectFile::OpenUrl(_) => "OpenUrl",
             EffectFile::AgentMessage(_) => "AgentMessage",
-        }
-    }
-}
-
-/// What a file in outbox/ holds: one of Jon's actions, for the helper's
-/// own core, or an effect, from the sidebar's. The two share no name.
-#[derive(Debug, Clone, PartialEq)]
-pub enum OutboxFile {
-    Action(Action),
-    Effect(EffectFile),
-}
-
-impl OutboxFile {
-    pub fn parse(text: &str) -> Result<OutboxFile, String> {
-        Action::parse(text)
-            .map(OutboxFile::Action)
-            .or_else(|action| {
-                EffectFile::parse(text)
-                    .map(OutboxFile::Effect)
-                    .map_err(|effect| format!("not an action ({action}) nor an effect ({effect})"))
-            })
-    }
-
-    pub fn name(&self) -> &'static str {
-        match self {
-            OutboxFile::Action(a) => a.name(),
-            OutboxFile::Effect(e) => e.name(),
-        }
-    }
-
-    /// Whether the helper can act on it: an action needs its core, and an
-    /// effect needs it to have none, since an effect's answer goes back to
-    /// the core that asked, the sidebar's.
-    pub fn runs_with(&self, core: bool) -> bool {
-        match self {
-            OutboxFile::Action(_) => core,
-            OutboxFile::Effect(_) => !core,
         }
     }
 }
@@ -201,23 +163,18 @@ mod tests {
     }
 
     #[test]
-    fn an_outbox_file_is_an_action_or_an_effect_and_runs_with_its_core() {
-        let action = OutboxFile::parse(r#""FlipView""#).unwrap();
-        assert_eq!(action.name(), "FlipView");
-        assert!(action.runs_with(true) && !action.runs_with(false));
-        let effect = OutboxFile::parse(r#"{"OpenUrl": {"url": "https://x/1"}}"#).unwrap();
-        assert_eq!(effect.name(), "OpenUrl");
-        assert!(effect.runs_with(false) && !effect.runs_with(true));
-        let call = OutboxFile::parse(
+    fn reads_an_effect_and_refuses_an_action() {
+        let call = EffectFile::parse(
             r#"{"Cmux": {"method": "workspace.select", "params": {"workspace_id": "W1"}}}"#,
         );
         assert_eq!(
             call,
-            Ok(OutboxFile::Effect(EffectFile::Cmux(CmuxCall {
+            Ok(EffectFile::Cmux(CmuxCall {
                 method: "workspace.select".into(),
                 params: vec![("workspace_id".into(), Param::Str("W1".into()))],
-            })))
+            }))
         );
+        assert!(EffectFile::parse(r#""FlipView""#).is_err());
     }
 
     #[test]
@@ -232,7 +189,7 @@ mod tests {
             r#"{"OpenUrl": "#,
             "",
         ] {
-            assert!(OutboxFile::parse(bad).is_err(), "{bad} parsed");
+            assert!(EffectFile::parse(bad).is_err(), "{bad} parsed");
         }
     }
 }

@@ -49,7 +49,7 @@ struct AnchorBadge: View {
 
     var body: some View {
         Button {
-            if SidebarCore.send(.switchTo(id: anchor.id)) { SelectState.shared.select(anchor.id) }
+            SidebarCore.send(.switchTo(id: anchor.id))
         } label: {
             HStack(spacing: 5) {
                 Text(anchor.icon.glyph).foregroundStyle(Color(dot: anchor.icon.ink))
@@ -62,13 +62,10 @@ struct AnchorBadge: View {
                 }
             }
             .padding(.horizontal, 4)
-            .background(Color(Token.select).opacity(selected ? 0.12 : 0), in: .rect(cornerRadius: 6))
+            .background(Color(Token.select).opacity(anchor.selected ? 0.12 : 0), in: .rect(cornerRadius: 6))
         }
         .buttonStyle(.plain)
     }
-
-    /// Shaded from the click, before cmux says so (Select.swift).
-    private var selected: Bool { SelectState.shared.shows(anchor.id, selected: anchor.selected) }
 }
 
 /// A lane's header: fold mark, marker, name, anchor and unread badge, the
@@ -108,14 +105,12 @@ struct LaneHeader: View {
 
 /// A lane: its header, then its rows (none while folded). Its cards drag
 /// within it and to other lanes, and the whole lane takes a drop
-/// (Drag.swift); a drop waiting for the panel is drawn where it landed.
+/// (Drag.swift); the core draws a drop where it landed.
 struct LaneView: View {
     /// The header's key among the lane's frames.
     nonisolated static let header = "header"
 
     let lane: Lane
-    /// The drops waiting for the panel, already checked against it.
-    var moves: [PendingMove] = []
     /// The lane's top in the lanes' space, for the floating card.
     var top: CGFloat = 0
     /// The space under the lane before the next one. It is part of the
@@ -125,20 +120,19 @@ struct LaneView: View {
     @State private var frames: [String: CGRect] = [:]
 
     var body: some View {
-        let shown = PendingMove.show(lane, moves)
         let space = "lane:" + String(describing: lane.key)
         VStack(alignment: .leading, spacing: 4) {
-            LaneHeader(lane: shown)
-                .foldsOnClick(shown.empty ? nil : .toggleLane(lane.key))
+            LaneHeader(lane: lane)
+                .foldsOnClick(lane.empty ? nil : .toggleLane(lane.key))
                 .reportsFrame(Self.header, in: space)
-            ForEach(shown.rows) { row in
+            ForEach(lane.rows) { row in
                 RowView(row: row)
                     .liftable(row, in: lane.key, state: drag)
                     .reportsFrame(row.id, in: space)
             }
         }
         .coordinateSpace(name: space)
-        .overlay(alignment: .topLeading) { landing(shown) }
+        .overlay(alignment: .topLeading) { landing }
         .onPreferenceChange(RowFrames.self) { next in
             MainActor.assumeIsolated { if next != frames { frames = next } }
         }
@@ -147,7 +141,7 @@ struct LaneView: View {
         .background(GeometryReader { geo in
             Color.clear.preference(key: LaneTops.self, value: [String(describing: lane.key): geo.frame(in: .named(FloatingCard.space)).minY])
         })
-        .onDrop(of: [DragItem.type], delegate: LaneDrop(lane: lane, rows: shown.rows, frames: frames, top: top, state: drag))
+        .onDrop(of: [DragItem.type], delegate: LaneDrop(lane: lane, rows: lane.rows, frames: frames, top: top, state: drag))
         // Hover never fires while a drag is in flight, so a hover with a
         // card still lifted means the drag ended without a drop: Escape,
         // or let go outside every lane.
@@ -157,9 +151,9 @@ struct LaneView: View {
     }
 
     @ViewBuilder
-    private func landing(_ shown: Lane) -> some View {
+    private var landing: some View {
         if let over = drag.over, over.lane == lane.key,
-           let y = LandingSpot.y(before: shown.collapsed ? nil : over.before, rows: shown.collapsed ? [] : shown.rows, frames: frames) {
+           let y = LandingSpot.y(before: lane.collapsed ? nil : over.before, rows: lane.collapsed ? [] : lane.rows, frames: frames) {
             LandingLine().offset(y: y - 1).allowsHitTesting(false)
         }
     }

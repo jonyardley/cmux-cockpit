@@ -234,16 +234,6 @@ if let sample {
     check(Showing.of(panel: sample, running: false) == .panel(sample, stale: true), "a panel with the helper down still shows, stale")
 }
 
-// panel.json is the panel inside the publisher's envelope.
-if let data = try? Data(contentsOf: fixtures.appendingPathComponent("lanes.json")),
-    let body = String(data: data, encoding: .utf8) {
-    let wrapped = Data("{\"seq\": 3, \"written_at_ms\": 1791229864123, \"panel\": \(body)}".utf8)
-    let file = PanelFile.decode(wrapped)
-    check(file?.seq == 3 && file?.writtenAtMs == 1_791_229_864_123 && file?.panel == sample, "panel.json decodes as seq, time and panel")
-    check(PanelFile.decode(data) == nil, "a bare panel is not panel.json")
-    check(PanelFile.decode(Data("{\"seq\": 1".utf8)) == nil, "half a file decodes to nothing")
-}
-
 // MARK: Lane headers, Next and Needs you
 
 if let panel = load("lanes") {

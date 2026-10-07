@@ -60,8 +60,6 @@ final class PanelStore {
 
     /// Draws the core's panel.
     private func show(_ next: Panel) {
-        // Every fresh panel, so a click is let go as soon as it shows.
-        SelectState.shared.reconcile(next)
         if next != panel { panel = next }
     }
 }
