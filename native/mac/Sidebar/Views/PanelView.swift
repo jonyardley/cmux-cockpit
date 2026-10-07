@@ -38,7 +38,7 @@ struct PanelBody: View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
                 ViewSwitch(view: panel.view)
-                    .padding(.horizontal, Self.switchInset)
+                    .padding(.horizontal, Self.switchMargin)
                     .padding(.bottom, 8)
                 if !NextText.isNothing(panel.next) {
                     NextView(next: panel.next).padding(.top, 6)
@@ -60,8 +60,9 @@ struct PanelBody: View {
         }
     }
 
-    /// The switch sits 14 in from the sidebar's edge, past the gutter.
-    private static let switchInset: CGFloat = 14 - Metrics.gutter
+    /// The switch's outer margin: 14 in from the sidebar's edge, past the
+    /// gutter. Metrics.switchInset is the track's inner padding.
+    private static let switchMargin: CGFloat = 14 - Metrics.gutter
 
     private var editorKey: Binding<EditorKey?> {
         Binding(

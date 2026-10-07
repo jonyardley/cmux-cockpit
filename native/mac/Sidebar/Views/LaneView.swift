@@ -134,6 +134,7 @@ struct LaneHeader: View {
             LaneMarker(color: Color(lane.marker)).opacity(fade)
             Text(lane.name)
                 .font(.system(size: Metrics.Font.section, weight: .semibold))
+                .textCase(.uppercase)
                 .tracking(Metrics.sectionTracking)
                 .foregroundStyle(Color(lane.faint ? Token.faint : Token.secondary))
                 .lineLimit(1)
@@ -186,9 +187,6 @@ struct LaneView: View {
     let lane: Lane
     /// The lane's top in the lanes' space, for the floating card.
     var top: CGFloat = 0
-    /// The space under the lane before the next one. It is part of the
-    /// lane's drop area, so lanes meet and the pointer is always over one.
-    var gap: CGFloat = 0
     private let drag = DragState.shared
     @State private var frames: [String: CGRect] = [:]
 
@@ -209,7 +207,6 @@ struct LaneView: View {
         .onPreferenceChange(RowFrames.self) { next in
             MainActor.assumeIsolated { if next != frames { frames = next } }
         }
-        .padding(.bottom, gap)
         .contentShape(.rect)
         .background(GeometryReader { geo in
             Color.clear.preference(key: LaneTops.self, value: [String(describing: lane.key): geo.frame(in: .named(FloatingCard.space)).minY])
