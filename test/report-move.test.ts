@@ -159,6 +159,24 @@ describe("moveLine", () => {
     assert.equal(moveLine("Your move. Merge it."), null);
   });
 
+  it("reads the full-stop label in every wrapping the colon label takes", () => {
+    for (const reply of [
+      "> - Jon, Nothing for you yet. CI runs.",
+      "*Nothing for you.* CI runs.",
+      "1. Nothing for you yet. CI runs.",
+      "Nothing for you beyond that close-out. CI runs.",
+      "Nothing for you (CI is running). CI runs.",
+      "Nothing for you yet. CI runs. Nothing for you yet.",
+      "Nothing for you right now.\n\n- CI runs.",
+    ])
+      assert.equal(moveLine(reply), "CI runs.", reply);
+  });
+
+  it("lets a Your move label after a full-stop label decide, and stops at a bare one", () => {
+    assert.equal(moveLine("Nothing for you yet. Your move: merge #307."), "merge #307.");
+    assert.equal(moveLine("Your move: merge it.\n\nLater.\n\nNothing for you right now."), null);
+  });
+
   it("is null without the label, and cuts a long line with an ellipsis", () => {
     assert.equal(moveLine("Nothing to do here."), null);
     assert.equal(moveLine("I made my move: done"), null);
@@ -331,6 +349,12 @@ describe("shouldSendBack", () => {
   it("lets a reply with either label end, drifted wording included", () => {
     for (const reply of ["Done.\n\nYour move: go", "Nothing for you: CI runs.", "Nothing for you yet: CI runs."])
       assert.equal(shouldSendBack(stop, reply, true), false, reply);
+  });
+
+  it("lets a full-stop Nothing for you end, but still sends back Done: and Next: closings", () => {
+    assert.equal(shouldSendBack(stop, "Plan.\n\nNothing for you right now. The agent reads.", true), false);
+    for (const reply of ["Filed it.\n\nDone: nothing is running.", "- **Next:** you merge.\n\n`/clear` after."])
+      assert.equal(shouldSendBack(stop, reply, true), true, reply);
   });
 
   it("lets a bare header over steps end, but sends back a header with nothing under it", () => {
