@@ -52,10 +52,10 @@ pub fn lines(lanes: &[Lane], inner: usize, cursor: Option<&str>, drop: Option<&P
     let mut above: Option<LaneKey> = None;
     for lane in lanes {
         out.lines.push(Line::default());
-        out.spots.push(above.map_or(Spot::Blank, Spot::End));
+        out.spots.push(above.take().map_or(Spot::Blank, Spot::End));
         let target = drop.filter(|p| p.lane == lane.key);
         out.lines.push(header(lane, inner, target));
-        out.spots.push(Spot::Header(lane.key));
+        out.spots.push(Spot::Header(lane.key.clone()));
         for c in lane.rows.iter().map(Row::card) {
             let id = c.ws_id.as_str();
             let landing = target.is_some_and(|p| p.before.as_deref() == Some(id));
@@ -67,11 +67,11 @@ pub fn lines(lanes: &[Lane], inner: usize, cursor: Option<&str>, drop: Option<&P
             }
             let spot = Spot::Card {
                 id: id.to_string(),
-                lane: lane.key,
+                lane: lane.key.clone(),
             };
             out.spots.resize(out.lines.len(), spot);
         }
-        above = Some(lane.key);
+        above = Some(lane.key.clone());
     }
     out
 }

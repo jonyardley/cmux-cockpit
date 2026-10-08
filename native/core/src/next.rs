@@ -5,7 +5,6 @@
 use std::cmp::Ordering;
 
 use crate::data::{Data, Workspace};
-use crate::lanes::lane_by_key;
 use crate::persist::ViewMode;
 use crate::session::{LastJump, Session};
 use crate::theme::Token;
@@ -52,9 +51,10 @@ impl Session {
                 color: Colour::Hex(p.color),
             };
         }
-        let lane = lane_by_key(self.lane_of(data, w));
+        let key = self.lane_of(data, w);
+        let lane = self.lanes.get(&key);
         Origin {
-            name: lane.name.to_string(),
+            name: lane.name.clone(),
             color: Colour::Token(lane.color),
         }
     }
@@ -178,9 +178,10 @@ impl Session {
 
     fn unfold_card_of(&mut self, data: &Data, w: &Workspace) {
         if self.is_mode(ViewMode::All) {
-            let lane = lane_by_key(self.lane_of(data, w));
+            let key = self.lane_of(data, w);
+            let lane = self.lanes.get(&key).clone();
             if self.is_collapsed(data, &lane) {
-                self.toggle_lane(data, &lane);
+                self.toggle_lane(data, &lane.key);
             }
             return;
         }

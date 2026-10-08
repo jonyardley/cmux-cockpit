@@ -2,10 +2,11 @@
 //! lane_entries.rs, next.rs, by_project.rs, menu.rs and pr_colors.rs.
 //! Cases that test drops are left for the lane that ports them.
 
+use crate::support::lane_by_key;
 use cockpit_core::by_project::ProjectEntry;
 use cockpit_core::data::{Data, Workspace, WorkspaceGroup};
 use cockpit_core::lane_entries::LaneEntry;
-use cockpit_core::lanes::{LANES, LaneKey, lane_by_key};
+use cockpit_core::lanes::{LaneKey, Lanes};
 use cockpit_core::model::{PanelHeight, actual_lane_of, card_density};
 use cockpit_core::next::{Colour, Origin};
 use cockpit_core::persist::ViewMode;
@@ -75,7 +76,7 @@ fn entry_ids(s: &mut Session, data: &Data) -> Vec<String> {
 fn header(s: &mut Session, data: &Data, lane: LaneKey) -> Option<LaneEntry> {
     s.lane_entries(data)
         .into_iter()
-        .find(|e| matches!(e, LaneEntry::Header { .. }) && e.lane() == lane)
+        .find(|e| matches!(e, LaneEntry::Header { .. }) && *e.lane() == lane)
 }
 
 /// The Projects view's rows by key.
@@ -103,19 +104,22 @@ mod lanes {
     fn maps_groups_to_lanes_by_name_and_ungrouped_to_unsorted() {
         let (_, data, _) = setup();
         assert_eq!(
-            actual_lane_of(&data, Some(by_id(&data, "a"))),
-            LaneKey::Main
+            actual_lane_of(&Lanes::default(), &data, Some(by_id(&data, "a"))),
+            LaneKey::from("main")
         );
         assert_eq!(
-            actual_lane_of(&data, Some(by_id(&data, "c"))),
-            LaneKey::Review
+            actual_lane_of(&Lanes::default(), &data, Some(by_id(&data, "c"))),
+            LaneKey::from("review")
         );
         assert_eq!(
-            actual_lane_of(&data, Some(by_id(&data, "u"))),
-            LaneKey::Unsorted
+            actual_lane_of(&Lanes::default(), &data, Some(by_id(&data, "u"))),
+            LaneKey::unsorted()
         );
         let unknown = ws("x").group("unknown");
-        assert_eq!(actual_lane_of(&data, Some(&unknown)), LaneKey::Unsorted);
+        assert_eq!(
+            actual_lane_of(&Lanes::default(), &data, Some(&unknown)),
+            LaneKey::unsorted()
+        );
     }
 
     #[test]
@@ -173,8 +177,12 @@ mod lanes {
 
     #[test]
     fn lane_by_key_falls_back_to_unsorted_and_lanes_ends_with_it() {
-        assert_eq!(LANES.last().map(|l| l.key), Some(LaneKey::Unsorted));
-        assert_eq!(lane_by_key(LaneKey::Bg).name, "Background");
+        let lanes = Lanes::default();
+        assert_eq!(
+            lanes.iter().last().map(|l| &l.key),
+            Some(&LaneKey::unsorted())
+        );
+        assert_eq!(lane_by_key(LaneKey::from("bg")).name, "Background");
     }
 }
 
@@ -209,14 +217,14 @@ mod a_real_workspace_anchoring_a_single_member_group {
         assert_eq!(ids(&s.card_workspaces(&data)), ["real-parked"]);
         assert_eq!(
             s.lane_of(&data, by_id(&data, "real-parked")),
-            LaneKey::Parked
+            LaneKey::from("parked")
         );
         assert_eq!(ids(&s.needs_list(&data)), ["real-parked"]);
         // Waiting, it shows in Needs you and its lane counts its placeholder;
         // answered, its card is back in the same count.
-        assert_eq!(s.lane_workspaces(&data, LaneKey::Parked).len(), 1);
+        assert_eq!(s.lane_workspaces(&data, &LaneKey::from("parked")).len(), 1);
         ws_mut(&mut data, "real-parked").agents = Some(vec![Some(fx.agent(Working).since(1.0))]);
-        assert_eq!(s.lane_workspaces(&data, LaneKey::Parked).len(), 1);
+        assert_eq!(s.lane_workspaces(&data, &LaneKey::from("parked")).len(), 1);
     }
 }
 
@@ -228,18 +236,18 @@ mod handle_move {
     fn changes_a_dropped_cards_size_only_once_cmuxs_data_has_it_in_the_new_lane() {
         let (mut s, mut data, _) = setup();
         assert_eq!(
-            card_density(&data, Some(by_id(&data, "a"))).as_str(),
+            card_density(&Lanes::default(), &data, Some(by_id(&data, "a"))).as_str(),
             "full"
         );
-        s.move_to_lane(&data, Some(by_id(&data, "a")), LaneKey::Review);
-        assert_eq!(s.lane_of(&data, by_id(&data, "a")), LaneKey::Review);
+        s.move_to_lane(&data, Some(by_id(&data, "a")), LaneKey::from("review"));
+        assert_eq!(s.lane_of(&data, by_id(&data, "a")), LaneKey::from("review"));
         assert_eq!(
-            card_density(&data, Some(by_id(&data, "a"))).as_str(),
+            card_density(&Lanes::default(), &data, Some(by_id(&data, "a"))).as_str(),
             "full"
         );
         ws_mut(&mut data, "a").group = Some("g-review".into());
         assert_eq!(
-            card_density(&data, Some(by_id(&data, "a"))).as_str(),
+            card_density(&Lanes::default(), &data, Some(by_id(&data, "a"))).as_str(),
             "compact"
         );
     }
@@ -266,7 +274,7 @@ mod missing_lane_groups {
     #[test]
     fn creates_the_lanes_group_then_files_the_card_once_it_appears() {
         let (mut s, mut data, _) = setup();
-        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::Bg);
+        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::from("bg"));
         let key = format!("cockpit-lane-bg-{NOW}");
         assert_eq!(
             calls(&s),
@@ -276,8 +284,8 @@ mod missing_lane_groups {
             )]
         );
         // Optimistic while cmux makes the group: the card and count move now.
-        assert_eq!(s.lane_of(&data, by_id(&data, "u")), LaneKey::Bg);
-        assert_eq!(s.lane_workspaces(&data, LaneKey::Bg).len(), 1);
+        assert_eq!(s.lane_of(&data, by_id(&data, "u")), LaneKey::from("bg"));
+        assert_eq!(s.lane_workspaces(&data, &LaneKey::from("bg")).len(), 1);
 
         s.take_outbox();
         add_bg_group(&mut data);
@@ -307,8 +315,8 @@ mod missing_lane_groups {
     #[test]
     fn asks_for_the_group_once_while_it_is_on_its_way() {
         let (mut s, mut data, _) = setup();
-        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::Bg);
-        s.move_to_lane(&data, Some(by_id(&data, "a")), LaneKey::Bg);
+        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::from("bg"));
+        s.move_to_lane(&data, Some(by_id(&data, "a")), LaneKey::from("bg"));
         assert_eq!(
             methods(&s)
                 .iter()
@@ -328,9 +336,9 @@ mod missing_lane_groups {
     #[test]
     fn asks_again_with_a_fresh_key_once_an_earlier_wait_has_run_out() {
         let (mut s, mut data, _) = setup();
-        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::Bg);
+        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::from("bg"));
         data.epoch = Some(NOW + 60.0);
-        s.move_to_lane(&data, Some(by_id(&data, "a")), LaneKey::Bg);
+        s.move_to_lane(&data, Some(by_id(&data, "a")), LaneKey::from("bg"));
         let keys = param_of(&s, "workspace.group.create", "idempotency_key");
         assert_eq!(keys.len(), 2);
         assert_ne!(keys[0], keys[1]);
@@ -340,9 +348,9 @@ mod missing_lane_groups {
     #[test]
     fn cancels_the_wait_when_the_card_is_dragged_back_to_unsorted() {
         let (mut s, mut data, _) = setup();
-        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::Bg);
-        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::Unsorted);
-        assert_eq!(s.lane_of(&data, by_id(&data, "u")), LaneKey::Unsorted);
+        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::from("bg"));
+        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::unsorted());
+        assert_eq!(s.lane_of(&data, by_id(&data, "u")), LaneKey::unsorted());
         s.take_outbox();
         add_bg_group(&mut data);
         s.card_workspaces(&data);
@@ -352,7 +360,7 @@ mod missing_lane_groups {
     #[test]
     fn hides_the_new_anchor_if_it_arrives_before_its_group() {
         let (mut s, mut data, _) = setup();
-        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::Bg);
+        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::from("bg"));
         if let Some(list) = data.workspaces.as_mut() {
             list.push(ws("anchor-bg").title("Background"));
         }
@@ -362,17 +370,17 @@ mod missing_lane_groups {
     #[test]
     fn keeps_the_card_in_its_new_lane_past_the_usual_wait_while_the_group_is_made() {
         let (mut s, mut data, _) = setup();
-        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::Bg);
+        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::from("bg"));
         data.epoch = Some(NOW + 6.0);
-        assert_eq!(s.lane_of(&data, by_id(&data, "u")), LaneKey::Bg);
+        assert_eq!(s.lane_of(&data, by_id(&data, "u")), LaneKey::from("bg"));
     }
 
     #[test]
     fn lets_the_card_fall_back_if_the_group_never_arrives() {
         let (mut s, mut data, _) = setup();
-        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::Bg);
+        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::from("bg"));
         data.epoch = Some(NOW + 60.0);
-        assert_eq!(s.lane_of(&data, by_id(&data, "u")), LaneKey::Unsorted);
+        assert_eq!(s.lane_of(&data, by_id(&data, "u")), LaneKey::unsorted());
         s.take_outbox();
         add_bg_group(&mut data);
         s.card_workspaces(&data);
@@ -383,9 +391,9 @@ mod missing_lane_groups {
     #[test]
     fn files_a_dropped_card_into_a_lane_that_has_no_group_yet() {
         let (mut s, data, _) = setup();
-        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::Bg);
+        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::from("bg"));
         assert!(methods(&s).iter().any(|m| m == "workspace.group.create"));
-        assert_eq!(s.lane_of(&data, by_id(&data, "u")), LaneKey::Bg);
+        assert_eq!(s.lane_of(&data, by_id(&data, "u")), LaneKey::from("bg"));
     }
 }
 
@@ -397,7 +405,7 @@ mod a_lanes_generated_anchor {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "anchor-review").agents = Some(vec![Some(fx.agent(Working))]);
         assert!(!has(&ids(&s.card_workspaces(&data)), "anchor-review"));
-        assert_eq!(s.lane_workspaces(&data, LaneKey::Review).len(), 1);
+        assert_eq!(s.lane_workspaces(&data, &LaneKey::from("review")).len(), 1);
         assert!(!has(&entry_ids(&mut s, &data), "anchor-review@review"));
     }
 
@@ -406,10 +414,10 @@ mod a_lanes_generated_anchor {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "anchor-review").agents = Some(vec![Some(fx.agent(Working))]);
         assert_eq!(
-            header(&mut s, &data, LaneKey::Review),
+            header(&mut s, &data, LaneKey::from("review")),
             Some(LaneEntry::Header {
                 id: "h:review:anchor-review".into(),
-                lane: LaneKey::Review,
+                lane: LaneKey::from("review"),
                 anchor_id: Some("anchor-review".into()),
             })
         );
@@ -419,10 +427,10 @@ mod a_lanes_generated_anchor {
     fn leaves_the_header_plain_when_the_anchor_has_no_agent() {
         let (mut s, data, _) = setup();
         assert_eq!(
-            header(&mut s, &data, LaneKey::Review),
+            header(&mut s, &data, LaneKey::from("review")),
             Some(LaneEntry::Header {
                 id: "h:review".into(),
-                lane: LaneKey::Review,
+                lane: LaneKey::from("review"),
                 anchor_id: None,
             })
         );
@@ -439,7 +447,7 @@ mod a_lanes_generated_anchor {
         );
         assert_eq!(ids(&s.card_workspaces(&data)), ["real"]);
         assert_eq!(
-            header(&mut s, &data, LaneKey::Bg).map(|h| h.id().to_string()),
+            header(&mut s, &data, LaneKey::from("bg")).map(|h| h.id().to_string()),
             Some("h:bg".to_string())
         );
         ws_mut(&mut data, "real").agents = Some(vec![Some(fx.agent(Working))]);
@@ -465,7 +473,7 @@ mod a_lanes_generated_anchor {
         let (mut s, mut data, _) = setup();
         ws_mut(&mut data, "anchor-review").unread = Some(3.0);
         assert_eq!(
-            header(&mut s, &data, LaneKey::Review).map(|h| h.id().to_string()),
+            header(&mut s, &data, LaneKey::from("review")).map(|h| h.id().to_string()),
             Some("h:review:anchor-review".to_string())
         );
     }
@@ -474,9 +482,9 @@ mod a_lanes_generated_anchor {
     fn never_moves_out_of_the_group_it_anchors_even_from_the_card_menu() {
         let (mut s, data, _) = setup();
         let anchor = by_id(&data, "anchor-review");
-        s.move_to_lane(&data, Some(anchor), LaneKey::Parked);
+        s.move_to_lane(&data, Some(anchor), LaneKey::from("parked"));
         assert!(calls(&s).is_empty());
-        assert_eq!(s.lane_of(&data, anchor), LaneKey::Review);
+        assert_eq!(s.lane_of(&data, anchor), LaneKey::from("review"));
     }
 
     #[test]
@@ -622,8 +630,8 @@ mod empty_lanes {
     #[test]
     fn keep_their_zone_after_a_drop_empties_a_lane_with_no_drag_running() {
         let (mut s, data, _) = setup();
-        s.move_to_lane(&data, Some(by_id(&data, "c")), LaneKey::Bg);
-        assert_eq!(s.lane_of(&data, by_id(&data, "c")), LaneKey::Bg);
+        s.move_to_lane(&data, Some(by_id(&data, "c")), LaneKey::from("bg"));
+        assert_eq!(s.lane_of(&data, by_id(&data, "c")), LaneKey::from("bg"));
         assert_eq!(
             headers_and_zones(&mut s, &data),
             ["h:main", "z:review", "h:bg", "h:parked", "h:unsorted"]
@@ -669,13 +677,16 @@ mod needs_you {
         let rows = entry_ids(&mut s, &data);
         assert!(has(&rows, "a@main"));
         assert!(!rows.iter().any(|id| id.starts_with("g:")));
-        assert_eq!(ids(&s.lane_workspaces(&data, LaneKey::Main)), ["a", "b"]);
+        assert_eq!(
+            ids(&s.lane_workspaces(&data, &LaneKey::from("main"))),
+            ["a", "b"]
+        );
         let at = position(&rows, "a@main");
         s.dismiss_waiting(&data, Some(by_id(&data, "a")));
         assert!(!has(&ids(&s.needs_list(&data)), "a"));
         let rows = entry_ids(&mut s, &data);
         assert_eq!(position(&rows, "a@main"), at);
-        assert_eq!(s.lane_workspaces(&data, LaneKey::Main).len(), 2);
+        assert_eq!(s.lane_workspaces(&data, &LaneKey::from("main")).len(), 2);
     }
 
     #[test]
@@ -743,13 +754,13 @@ mod needs_you {
     fn hides_a_folded_lanes_waiting_card_but_still_counts_it() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "c").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
-        let review = lane_by_key(LaneKey::Review);
+        let review = lane_by_key(LaneKey::from("review"));
         if !s.is_collapsed(&data, &review) {
-            s.toggle_lane(&data, &review);
+            s.toggle_lane(&data, &review.key);
         }
         assert!(!has(&entry_ids(&mut s, &data), "c@review"));
         assert!(has(&ids(&s.needs_list(&data)), "c"));
-        assert_eq!(s.lane_workspaces(&data, LaneKey::Review).len(), 1);
+        assert_eq!(s.lane_workspaces(&data, &LaneKey::from("review")).len(), 1);
     }
 
     #[test]
@@ -977,7 +988,10 @@ mod card_menu {
         s.clear_project_override(Some(by_id(&data, "a")));
         let menu = card_menu(&mut s, &data, Some(by_id(&data, "a")));
         assert!(has(&menu, "button:✓ Lane: Main activity"));
-        for lane in LANES.iter().filter(|l| l.key != LaneKey::Main) {
+        for lane in Lanes::default()
+            .iter()
+            .filter(|l| l.key != LaneKey::from("main"))
+        {
             assert!(has(&menu, &format!("button:Lane: {}", lane.name)));
         }
         for p in example_projects() {
@@ -1009,8 +1023,9 @@ mod lane_markers {
 
     #[test]
     fn are_all_distinct() {
-        let colors: std::collections::HashSet<_> = LANES.iter().map(|l| l.color).collect();
-        assert_eq!(colors.len(), LANES.len());
+        let lanes = Lanes::default();
+        let colors: std::collections::HashSet<_> = lanes.iter().map(|l| l.color).collect();
+        assert_eq!(colors.len(), lanes.iter().count());
     }
 }
 
@@ -1042,7 +1057,7 @@ mod saving_the_view_and_folds {
     #[test]
     fn saves_every_fold_at_once_when_a_lane_or_project_is_toggled() {
         let (mut s, data, _) = setup();
-        s.toggle_lane(&data, &lane_by_key(LaneKey::Unsorted));
+        s.toggle_lane(&data, &LaneKey::unsorted());
         s.toggle_project(&data, "/dev/app-two");
         let last = last_folds(&s).unwrap();
         assert_eq!(last["lane:unsorted"], 1);
@@ -1068,7 +1083,7 @@ mod saving_the_view_and_folds {
             "/dev/app-two".into(),
             "/dev/app-one".into(),
         ]);
-        s.toggle_lane(&data, &lane_by_key(LaneKey::Unsorted));
+        s.toggle_lane(&data, &LaneKey::unsorted());
         let last = last_folds(&s).unwrap();
         let keys: Vec<String> = last.as_object().unwrap().keys().cloned().collect();
         assert!(!has(&keys, "project:/dev/gone"));
@@ -1081,9 +1096,9 @@ mod saving_the_view_and_folds {
     #[test]
     fn marks_a_lane_that_starts_folded_as_touched_once_it_is_opened() {
         let (mut s, data, _) = setup();
-        let parked = lane_by_key(LaneKey::Parked);
+        let parked = lane_by_key(LaneKey::from("parked"));
         if s.is_collapsed(&data, &parked) {
-            s.toggle_lane(&data, &parked);
+            s.toggle_lane(&data, &parked.key);
         }
         assert_eq!(last_folds(&s).unwrap()["lane:parked"], 0);
     }
@@ -1380,7 +1395,7 @@ mod new_session_from_a_card {
             calls(&s).first().map(|(_, p)| p.clone()),
             Some(vec![("group_id".to_string(), "g-main".to_string())])
         );
-        assert!(!s.is_collapsed(&data, &lane_by_key(LaneKey::Main)));
+        assert!(!s.is_collapsed(&data, &lane_by_key(LaneKey::from("main"))));
     }
 
     #[test]

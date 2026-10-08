@@ -65,7 +65,7 @@ mod merge_ready_text {
     fn counts_only_the_lanes_prs_that_are_out_of_draft_passing_and_mergeable() {
         let (mut s, data, _) = setup();
         assert_eq!(
-            s.merge_ready_text(&data, LaneKey::Review),
+            s.merge_ready_text(&data, &LaneKey::from("review")),
             "2 ready to merge"
         );
     }
@@ -73,27 +73,30 @@ mod merge_ready_text {
     #[test]
     fn counts_each_lane_on_its_own() {
         let (mut s, data, _) = setup();
-        assert_eq!(s.merge_ready_text(&data, LaneKey::Main), "1 ready to merge");
+        assert_eq!(
+            s.merge_ready_text(&data, &LaneKey::from("main")),
+            "1 ready to merge"
+        );
     }
 
     #[test]
     fn says_nothing_when_the_lanes_prs_are_in_conflict_running_blocked_without_a_verdict_or_without_checks()
      {
         let (mut s, data, _) = setup();
-        assert_eq!(s.merge_ready_text(&data, LaneKey::Bg), "");
+        assert_eq!(s.merge_ready_text(&data, &LaneKey::from("bg")), "");
     }
 
     #[test]
     fn says_nothing_for_a_lane_with_no_workspaces() {
         let (mut s, data, _) = setup();
-        assert_eq!(s.merge_ready_text(&data, LaneKey::Unsorted), "");
+        assert_eq!(s.merge_ready_text(&data, &LaneKey::unsorted()), "");
     }
 
     #[test]
     fn counts_the_lanes_generated_anchor_which_has_no_card_of_its_own() {
         let (mut s, data, _) = setup();
         assert_eq!(
-            s.merge_ready_text(&data, LaneKey::Parked),
+            s.merge_ready_text(&data, &LaneKey::from("parked")),
             "1 ready to merge"
         );
     }
@@ -109,7 +112,10 @@ mod merge_ready_text {
                 .iter()
                 .any(|e| matches!(e, LaneEntry::Ws { ws_id, .. } if ws_id == "readyMain"))
         );
-        assert_eq!(s.merge_ready_text(&data, LaneKey::Main), "1 ready to merge");
+        assert_eq!(
+            s.merge_ready_text(&data, &LaneKey::from("main")),
+            "1 ready to merge"
+        );
     }
 
     #[test]
@@ -117,7 +123,7 @@ mod merge_ready_text {
         let (mut s, mut data, _) = setup();
         ws_mut(&mut data, "ready2").branch = Some("other".into());
         assert_eq!(
-            s.merge_ready_text(&data, LaneKey::Review),
+            s.merge_ready_text(&data, &LaneKey::from("review")),
             "1 ready to merge"
         );
     }
@@ -130,7 +136,7 @@ mod header_hint {
     fn says_drop_here_while_a_drag_is_over_the_lane_whatever_is_ready() {
         let (mut s, data, _) = setup();
         assert_eq!(
-            s.header_hint(&data, LaneKey::Review, true),
+            s.header_hint(&data, &LaneKey::from("review"), true),
             HeaderHint {
                 text: "Drop here".into(),
                 color: Token::Heading,
@@ -144,7 +150,7 @@ mod header_hint {
     #[test]
     fn gives_the_merge_line_in_readys_green_not_the_agents_ready_green() {
         let (mut s, data, _) = setup();
-        let hint = s.header_hint(&data, LaneKey::Review, false);
+        let hint = s.header_hint(&data, &LaneKey::from("review"), false);
         assert_eq!(hint.text, "2 ready to merge");
         assert_eq!(hint.color, Token::GreenDeep);
         assert_ne!(hint.color, Token::GreenText);
@@ -154,7 +160,7 @@ mod header_hint {
     fn keeps_parkeds_merge_line_faint() {
         let (mut s, data, _) = setup();
         assert_eq!(
-            s.header_hint(&data, LaneKey::Parked, false),
+            s.header_hint(&data, &LaneKey::from("parked"), false),
             HeaderHint {
                 text: "1 ready to merge".into(),
                 color: Token::Faint,

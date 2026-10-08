@@ -263,7 +263,8 @@ mod header_status {
 
 mod lane_and_project_count_pills {
     use super::*;
-    use cockpit_core::lanes::{LaneKey, lane_by_key};
+    use crate::support::lane_by_key;
+    use cockpit_core::lanes::LaneKey;
 
     /// Four older asks in Unsorted fill the Needs you strip, so a later
     /// one is past its cap and keeps its card, count and tint in its lane.
@@ -299,14 +300,14 @@ mod lane_and_project_count_pills {
     }
 
     fn lane_ids(s: &mut Session, data: &Data, key: LaneKey) -> Vec<String> {
-        s.lane_workspaces(data, key)
+        s.lane_workspaces(data, &key)
             .iter()
             .map(|w| w.id.clone())
             .collect()
     }
 
     fn lane_tint(s: &mut Session, data: &Data, key: LaneKey) -> PillColors {
-        let cards = s.lane_workspaces(data, key);
+        let cards = s.lane_workspaces(data, &key);
         s.count_colors(data, &cards)
     }
 
@@ -314,17 +315,23 @@ mod lane_and_project_count_pills {
     fn lists_the_same_cards_the_lane_counts_and_tints_by_them() {
         let (mut s, _, mut fx) = setup();
         let data = seed(&mut fx);
-        assert_eq!(lane_ids(&mut s, &data, LaneKey::Main), ["working", "idle"]);
-        assert_eq!(lane_tint(&mut s, &data, LaneKey::Main), blue());
-        assert_eq!(lane_tint(&mut s, &data, LaneKey::Review), QUIET_PILL);
+        assert_eq!(
+            lane_ids(&mut s, &data, LaneKey::from("main")),
+            ["working", "idle"]
+        );
+        assert_eq!(lane_tint(&mut s, &data, LaneKey::from("main")), blue());
+        assert_eq!(
+            lane_tint(&mut s, &data, LaneKey::from("review")),
+            QUIET_PILL
+        );
     }
 
     #[test]
     fn counts_and_tints_by_a_placeholder_for_a_card_the_needs_you_strip_lists() {
         let (mut s, _, mut fx) = setup();
         let data = seed(&mut fx);
-        assert_eq!(lane_ids(&mut s, &data, LaneKey::Parked), ["needs"]);
-        assert_eq!(lane_tint(&mut s, &data, LaneKey::Parked), clay());
+        assert_eq!(lane_ids(&mut s, &data, LaneKey::from("parked")), ["needs"]);
+        assert_eq!(lane_tint(&mut s, &data, LaneKey::from("parked")), clay());
     }
 
     #[test]
@@ -333,8 +340,8 @@ mod lane_and_project_count_pills {
         let mut data = seed(&mut fx);
         let strip = full_strip(&mut fx);
         data.workspaces.get_or_insert_with(Vec::new).extend(strip);
-        assert_eq!(lane_ids(&mut s, &data, LaneKey::Parked), ["needs"]);
-        assert_eq!(lane_tint(&mut s, &data, LaneKey::Parked), clay());
+        assert_eq!(lane_ids(&mut s, &data, LaneKey::from("parked")), ["needs"]);
+        assert_eq!(lane_tint(&mut s, &data, LaneKey::from("parked")), clay());
     }
 
     #[test]
@@ -343,11 +350,11 @@ mod lane_and_project_count_pills {
         let mut data = seed(&mut fx);
         let strip = full_strip(&mut fx);
         data.workspaces.get_or_insert_with(Vec::new).extend(strip);
-        let parked = lane_by_key(LaneKey::Parked);
+        let parked = lane_by_key(LaneKey::from("parked"));
         if !s.is_collapsed(&data, &parked) {
-            s.toggle_lane(&data, &parked);
+            s.toggle_lane(&data, &parked.key);
         }
         assert!(s.is_collapsed(&data, &parked));
-        assert_eq!(lane_tint(&mut s, &data, LaneKey::Parked), clay());
+        assert_eq!(lane_tint(&mut s, &data, LaneKey::from("parked")), clay());
     }
 }

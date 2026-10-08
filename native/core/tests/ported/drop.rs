@@ -63,7 +63,7 @@ mod resolve_drop {
         // Without a@main: [h:main, b@main, h:review, c@review, ...]; slot 3 is under h:review.
         assert_eq!(
             s.resolve_drop(&data, "w:a", 3),
-            target(LaneKey::Review, Some("c"), None)
+            target(LaneKey::from("review"), Some("c"), None)
         );
     }
 
@@ -72,7 +72,7 @@ mod resolve_drop {
         let (mut s, data, _) = setup();
         assert_eq!(
             s.resolve_drop(&data, "w:c", 0),
-            target(LaneKey::Main, None, None)
+            target(LaneKey::from("main"), None, None)
         );
     }
 
@@ -84,7 +84,7 @@ mod resolve_drop {
         ws_mut(&mut data, "c").agents = Some(vec![Some(ask)]);
         assert_eq!(
             s.resolve_drop(&data, "w:a", 3),
-            target(LaneKey::Review, Some("c"), None)
+            target(LaneKey::from("review"), Some("c"), None)
         );
         // A placeholder is never a drag's own row.
         s.handle_move(&data, "g:c", 0);
@@ -113,7 +113,7 @@ mod resolve_drop {
         // sits above g:a, so d lands before a, not before b further down.
         assert_eq!(
             s.resolve_drop(&data, "w:d", 1),
-            target(LaneKey::Main, Some("a"), None)
+            target(LaneKey::from("main"), Some("a"), None)
         );
     }
 
@@ -122,7 +122,7 @@ mod resolve_drop {
         let (mut s, data, _) = setup();
         // Without c@review: slot 4 sits after h:review, before h:bg.
         let t = s.resolve_drop(&data, "w:c", 4);
-        assert_eq!(t.lane, LaneKey::Review);
+        assert_eq!(t.lane, LaneKey::from("review"));
         assert_eq!(t.next_ref, None);
     }
 }
@@ -143,7 +143,7 @@ mod handle_move {
             )
         );
         // Optimistic: the card shows in its new lane before the data catches up.
-        assert_eq!(s.lane_of(&data, by_id(&data, "a")), LaneKey::Review);
+        assert_eq!(s.lane_of(&data, by_id(&data, "a")), LaneKey::from("review"));
     }
 
     #[test]
@@ -159,9 +159,9 @@ mod handle_move {
             ws_id: "a".into(),
             lane,
         };
-        assert_eq!(card(&mut s), Some(want(LaneKey::Main)));
+        assert_eq!(card(&mut s), Some(want(LaneKey::from("main"))));
         s.handle_move(&data, "w:a", 4);
-        assert_eq!(card(&mut s), Some(want(LaneKey::Review)));
+        assert_eq!(card(&mut s), Some(want(LaneKey::from("review"))));
     }
 
     #[test]

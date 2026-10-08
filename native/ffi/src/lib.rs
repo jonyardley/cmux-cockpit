@@ -133,6 +133,7 @@ pub fn update(event: &[u8]) -> Result<Vec<u8>, i32> {
 #[derive(Deserialize)]
 struct DataFile {
     home: Option<String>,
+    lanes: Option<Box<RawValue>>,
     projects: Option<Box<RawValue>>,
     state: Option<Box<RawValue>>,
     data: Option<Box<RawValue>>,
@@ -143,6 +144,7 @@ struct DataFile {
 struct Loaded {
     started: bool,
     home: Option<Option<String>>,
+    lanes: Option<String>,
     projects: Option<String>,
     state: Option<String>,
     data: Option<String>,
@@ -188,6 +190,7 @@ fn load_into(file: &[u8], out: &mut Out) -> Result<(), i32> {
         send(home.to_string().as_bytes(), out)?;
         last.home = Some(file.home);
     }
+    send_part("Lanes", file.lanes.as_deref(), &mut last.lanes, out)?;
     send_part(
         "Projects",
         file.projects.as_deref(),

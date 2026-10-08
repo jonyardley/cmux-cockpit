@@ -237,8 +237,7 @@ struct FloatingCard: View {
     }
 }
 
-/// Each lane's top in the lanes' space, by lane key written out (the
-/// generated LaneKey is not Sendable, which a preference default must be).
+/// Each lane's top in the lanes' space, by lane key.
 struct LaneTops: PreferenceKey {
     static let defaultValue: [String: CGFloat] = [:]
     static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {

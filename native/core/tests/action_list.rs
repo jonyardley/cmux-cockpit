@@ -23,6 +23,7 @@ fn variants(e: &Event) -> Option<Vec<(&'static str, usize, usize)>> {
         Event::Data(_)
         | Event::State(_)
         | Event::Projects(_)
+        | Event::Lanes(_)
         | Event::Home { .. }
         | Event::Refresh
         | Event::PrPollOn

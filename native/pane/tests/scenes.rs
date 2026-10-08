@@ -395,7 +395,7 @@ fn shift_up_and_down_reorder_the_card_among_its_lanes_cards_in_its_state() {
     );
     assert_eq!(
         shift(&mut pane, KeyCode::Down),
-        move_card(&snapshot, LaneKey::Main, Some(&selected)),
+        move_card(&snapshot, LaneKey::from("main"), Some(&selected)),
         "above the card two below"
     );
     assert_eq!(
@@ -407,7 +407,7 @@ fn shift_up_and_down_reorder_the_card_among_its_lanes_cards_in_its_state() {
     let long = cursor_to(&mut pane, "Long build");
     assert_eq!(
         shift(&mut pane, KeyCode::Up),
-        move_card(&long, LaneKey::Main, Some(&snapshot)),
+        move_card(&long, LaneKey::from("main"), Some(&snapshot)),
         "above the card above"
     );
     cursor_to(&mut pane, "Selected card");
@@ -425,7 +425,7 @@ fn shift_with_up_or_down_reorders_a_waiting_card_among_the_waiting() {
     let release = cursor_to(&mut pane, "Release notes");
     assert_eq!(
         shift(&mut pane, KeyCode::Up),
-        move_card(&release, LaneKey::Main, Some(&chip)),
+        move_card(&release, LaneKey::from("main"), Some(&chip)),
         "above the waiting card above"
     );
     assert_eq!(
@@ -451,7 +451,7 @@ fn m_shows_the_lanes_and_a_digit_moves_the_card_to_that_lanes_end() {
     check_snapshot("lanes-40-pick", &draw(&mut pane, &mut term));
     assert_eq!(
         press(&mut pane, KeyCode::Char('4')),
-        move_card(&tidy, LaneKey::Parked, None)
+        move_card(&tidy, LaneKey::from("parked"), None)
     );
     assert!(!pane.picking());
 
@@ -486,7 +486,7 @@ fn m_moves_a_waiting_card_out_of_its_lane() {
     press(&mut pane, KeyCode::Char('m'));
     assert_eq!(
         press(&mut pane, KeyCode::Char('2')),
-        move_card(&chip, LaneKey::Review, None)
+        move_card(&chip, LaneKey::from("review"), None)
     );
 }
 
@@ -574,7 +574,7 @@ impl Live {
     fn lane(&self, key: LaneKey) -> Vec<String> {
         self.pane
             .model()
-            .lane_rows(key)
+            .lane_rows(&key)
             .iter()
             .map(|r| r.ws_id().to_string())
             .collect()
@@ -742,7 +742,7 @@ fn a_lane_picked_from_the_menu_moves_the_card_and_esc_closes_with_nothing_picked
     light(&mut live, "Lane: For review");
     live.press(KeyCode::Enter);
     assert!(
-        live.lane(LaneKey::Review).contains(&id),
+        live.lane(LaneKey::from("review")).contains(&id),
         "moved to For review"
     );
 }
@@ -976,14 +976,17 @@ fn two_quick_shift_downs_move_the_card_two_places_not_one() {
     let selected = id_of(&live.pane, "Selected card");
     let merged = id_of(&live.pane, "Card layout fit");
     let first = live.shift(KeyCode::Down);
-    assert_eq!(first, move_card(&working, LaneKey::Main, Some(&selected)));
+    assert_eq!(
+        first,
+        move_card(&working, LaneKey::from("main"), Some(&selected))
+    );
     let second = live.shift(KeyCode::Down);
     assert_eq!(
         second,
-        move_card(&working, LaneKey::Main, Some(&merged)),
+        move_card(&working, LaneKey::from("main"), Some(&merged)),
         "worked out from where the core holds it after the first"
     );
-    let main = live.lane(LaneKey::Main);
+    let main = live.lane(LaneKey::from("main"));
     let at = |id: &str| main.iter().position(|r| r == id).unwrap();
     assert!(at(&quiet) < at(&selected) && at(&selected) < at(&working));
     assert_eq!(live.pane.cursor(), Some(working.as_str()));
@@ -995,12 +998,12 @@ fn a_move_a_dismissal_and_a_drag_show_in_the_pane_from_the_core() {
     let tidy = cursor_to(&mut live.pane, "Tidy strip");
     live.press(KeyCode::Char('m'));
     live.press(KeyCode::Char('4'));
-    let parked = &live.core.view.lane_headers[&LaneKey::Parked].workspaces;
+    let parked = &live.core.view.lane_headers[&LaneKey::from("parked")].workspaces;
     assert!(
         parked.contains(&tidy),
         "filed in Parked, which draws folded"
     );
-    assert!(!live.lane(LaneKey::Main).contains(&tidy));
+    assert!(!live.lane(LaneKey::from("main")).contains(&tidy));
 
     let mut term = terminal(40);
     draw(&mut live.pane, &mut term);
@@ -1011,7 +1014,7 @@ fn a_move_a_dismissal_and_a_drag_show_in_the_pane_from_the_core() {
     live.handle(&mouse(MouseEventKind::Down(MouseButton::Left), from));
     live.handle(&mouse(MouseEventKind::Drag(MouseButton::Left), onto));
     live.handle(&mouse(MouseEventKind::Up(MouseButton::Left), onto));
-    assert!(live.lane(LaneKey::Unsorted).contains(&snapshot));
+    assert!(live.lane(LaneKey::unsorted()).contains(&snapshot));
 
     let mut live = Live::new("needs-and-next");
     let oldest = cursor_to(&mut live.pane, "Oldest question");
@@ -1042,7 +1045,7 @@ fn next_unfolds_the_lane_hiding_a_waiting_card_and_the_cursor_reaches_it() {
         live.pane.model().is_waiting(&id),
         "Next goes to a waiting card"
     );
-    live.core_event(cockpit_core::Event::ToggleLane { lane });
+    live.core_event(cockpit_core::Event::ToggleLane { lane: lane.clone() });
     assert!(!live.pane.model().is_lane_card(&id), "folded away");
     live.core_event(cockpit_core::Event::Next);
     assert!(live.pane.model().is_lane_card(&id), "its lane unfolds");
@@ -1138,7 +1141,7 @@ fn a_drag_shows_where_the_card_would_land_and_letting_go_places_it() {
 
     assert_eq!(
         pane.handle_event(&mouse(MouseEventKind::Up(MouseButton::Left), onto)),
-        move_card(&snapshot, LaneKey::Review, Some(&ended))
+        move_card(&snapshot, LaneKey::from("review"), Some(&ended))
     );
     assert_eq!(pane.drop_target(), None);
     assert!(!screen.is_empty());
@@ -1161,13 +1164,13 @@ fn a_drag_onto_a_header_or_past_the_end_lands_at_the_top_or_the_end() {
     let header = row_of(&buffer, "UNSORTED");
     assert_eq!(
         pane.handle_event(&mouse(up, header)),
-        move_card(&snapshot, LaneKey::Unsorted, Some(&loose))
+        move_card(&snapshot, LaneKey::unsorted(), Some(&loose))
     );
 
     pane.handle_event(&mouse(down, from));
     assert_eq!(
         pane.handle_event(&mouse(up, HEIGHT - 1)),
-        move_card(&snapshot, LaneKey::Unsorted, Some(&merged)),
+        move_card(&snapshot, LaneKey::unsorted(), Some(&merged)),
         "below every lane is the last lane's end: after the working card there"
     );
 }
@@ -1216,7 +1219,7 @@ fn a_waiting_card_drags_like_any_other() {
         pane.handle_event(&mouse(up, onto)),
         move_card(
             &chip,
-            LaneKey::Unsorted,
+            LaneKey::unsorted(),
             Some(&id_of(&pane, "Loose workspace"))
         ),
         "at the top, under the header"

@@ -132,7 +132,11 @@ mod move_card {
     #[test]
     fn reorders_then_joins_the_new_group_as_a_drop_does() {
         let (app, mut model) = started();
-        let asked = asked(&app, &mut model, move_card("a", LaneKey::Review, None));
+        let asked = asked(
+            &app,
+            &mut model,
+            move_card("a", LaneKey::from("review"), None),
+        );
         assert_eq!(
             asked,
             [
@@ -141,25 +145,39 @@ mod move_card {
                 "render",
             ]
         );
-        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Review));
-        assert_eq!(lane_cards(&app, &model, LaneKey::Review), ["c", "a"]);
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::from("review")));
+        assert_eq!(
+            lane_cards(&app, &model, LaneKey::from("review")),
+            ["c", "a"]
+        );
     }
 
     #[test]
     fn lands_above_the_card_it_is_dropped_before() {
         let (app, mut model) = started();
-        let asked = asked(&app, &mut model, move_card("a", LaneKey::Review, Some("c")));
+        let asked = asked(
+            &app,
+            &mut model,
+            move_card("a", LaneKey::from("review"), Some("c")),
+        );
         assert_eq!(
             asked[0],
             r#"cmux workspace.reorder {"workspace_id":"a","index":3}"#
         );
-        assert_eq!(lane_cards(&app, &model, LaneKey::Review), ["a", "c"]);
+        assert_eq!(
+            lane_cards(&app, &model, LaneKey::from("review")),
+            ["a", "c"]
+        );
     }
 
     #[test]
     fn only_reorders_within_its_own_lane() {
         let (app, mut model) = started();
-        let asked = asked(&app, &mut model, move_card("b", LaneKey::Main, Some("a")));
+        let asked = asked(
+            &app,
+            &mut model,
+            move_card("b", LaneKey::from("main"), Some("a")),
+        );
         assert_eq!(
             asked,
             [
@@ -167,21 +185,25 @@ mod move_card {
                 "render",
             ]
         );
-        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["b", "a"]);
+        assert_eq!(lane_cards(&app, &model, LaneKey::from("main")), ["b", "a"]);
     }
 
     #[test]
     fn leaves_the_group_when_moved_into_unsorted() {
         let (app, mut model) = started();
-        let asked = asked(&app, &mut model, move_card("b", LaneKey::Unsorted, None));
+        let asked = asked(&app, &mut model, move_card("b", LaneKey::unsorted(), None));
         assert!(asked.contains(&r#"cmux workspace.group.remove {"workspace_id":"b"}"#.to_string()));
-        assert_eq!(lane_of(&app, &model, "b"), Some(LaneKey::Unsorted));
+        assert_eq!(lane_of(&app, &model, "b"), Some(LaneKey::unsorted()));
     }
 
     #[test]
     fn writes_nothing_to_the_state_file() {
         let (app, mut model) = started();
-        let asked = asked(&app, &mut model, move_card("a", LaneKey::Parked, None));
+        let asked = asked(
+            &app,
+            &mut model,
+            move_card("a", LaneKey::from("parked"), None),
+        );
         assert!(asked.iter().all(|a| !a.starts_with("set ")), "{asked:?}");
     }
 
@@ -189,7 +211,11 @@ mod move_card {
     fn ignores_an_unknown_card_a_lane_anchor_and_a_project_anchor() {
         let (app, mut model) = started();
         for id in ["nope", "anchor-main"] {
-            let asked = asked(&app, &mut model, move_card(id, LaneKey::Review, None));
+            let asked = asked(
+                &app,
+                &mut model,
+                move_card(id, LaneKey::from("review"), None),
+            );
             assert_eq!(asked, ["render"], "{id}");
         }
         let data = json!({
@@ -201,7 +227,11 @@ mod move_card {
             Event::Data(serde_json::from_value(data).unwrap()),
             &mut model,
         );
-        let asked = asked(&app, &mut model, move_card("real", LaneKey::Review, None));
+        let asked = asked(
+            &app,
+            &mut model,
+            move_card("real", LaneKey::from("review"), None),
+        );
         assert_eq!(
             asked,
             ["render"],
@@ -213,11 +243,19 @@ mod move_card {
     fn does_nothing_under_projects_or_before_the_first_frame() {
         let (app, mut model) = started();
         let _ = app.update(Event::FlipView, &mut model);
-        let asked = asked(&app, &mut model, move_card("a", LaneKey::Review, None));
+        let asked = asked(
+            &app,
+            &mut model,
+            move_card("a", LaneKey::from("review"), None),
+        );
         assert_eq!(asked, ["render"]);
 
         let mut empty = Model::default();
-        let asked = super::asked(&app, &mut empty, move_card("a", LaneKey::Review, None));
+        let asked = super::asked(
+            &app,
+            &mut empty,
+            move_card("a", LaneKey::from("review"), None),
+        );
         assert_eq!(asked, ["render"]);
     }
 }
@@ -230,12 +268,12 @@ mod the_moved_card_holds {
     #[test]
     fn through_frames_that_still_show_the_old_lane_past_any_expiry() {
         let (app, mut model) = started();
-        let _ = app.update(move_card("a", LaneKey::Review, None), &mut model);
+        let _ = app.update(move_card("a", LaneKey::from("review"), None), &mut model);
         for later in [1.0, 5.0, 60.0, 3600.0] {
             let _ = app.update(frame(NOW + later, &[]), &mut model);
             assert_eq!(
                 lane_of(&app, &model, "a"),
-                Some(LaneKey::Review),
+                Some(LaneKey::from("review")),
                 "{later}s on"
             );
         }
@@ -244,38 +282,38 @@ mod the_moved_card_holds {
     #[test]
     fn through_a_new_state_file() {
         let (app, mut model) = started();
-        let _ = app.update(move_card("a", LaneKey::Review, None), &mut model);
+        let _ = app.update(move_card("a", LaneKey::from("review"), None), &mut model);
         let _ = app.update(Event::State(Box::default()), &mut model);
         let _ = app.update(frame(NOW + 60.0, &[]), &mut model);
-        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Review));
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::from("review")));
     }
 
     #[test]
     fn until_the_data_shows_the_move_then_follows_cmux() {
         let (app, mut model) = started();
-        let _ = app.update(move_card("a", LaneKey::Review, None), &mut model);
+        let _ = app.update(move_card("a", LaneKey::from("review"), None), &mut model);
         let _ = app.update(frame(NOW + 2.0, &[("a", "g-review")]), &mut model);
-        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Review));
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::from("review")));
         // The override is gone: a later move in the sidebar shows at once.
         let _ = app.update(frame(NOW + 90.0, &[("a", "")]), &mut model);
-        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Unsorted));
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::unsorted()));
     }
 
     #[test]
     fn until_cmux_puts_the_card_somewhere_else_itself() {
         let (app, mut model) = started();
-        let _ = app.update(move_card("a", LaneKey::Review, None), &mut model);
+        let _ = app.update(move_card("a", LaneKey::from("review"), None), &mut model);
         // Parked starts folded, so Unsorted stands in for somewhere else.
         let _ = app.update(frame(NOW + 2.0, &[("a", "")]), &mut model);
-        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Unsorted));
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::unsorted()));
     }
 
     #[test]
     fn in_its_new_order_until_cmux_has_it() {
         let (app, mut model) = started();
-        let _ = app.update(move_card("b", LaneKey::Main, Some("a")), &mut model);
+        let _ = app.update(move_card("b", LaneKey::from("main"), Some("a")), &mut model);
         let _ = app.update(frame(NOW + 60.0, &[]), &mut model);
-        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["b", "a"]);
+        assert_eq!(lane_cards(&app, &model, LaneKey::from("main")), ["b", "a"]);
         let order = [
             "anchor-main",
             "b",
@@ -287,17 +325,21 @@ mod the_moved_card_holds {
             "u",
         ];
         let _ = app.update(reordered(NOW + 61.0, &[], &order), &mut model);
-        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["b", "a"]);
+        assert_eq!(lane_cards(&app, &model, LaneKey::from("main")), ["b", "a"]);
         // The override is gone: cmux's own later order shows at once.
         let _ = app.update(frame(NOW + 90.0, &[]), &mut model);
-        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["a", "b"]);
+        assert_eq!(lane_cards(&app, &model, LaneKey::from("main")), ["a", "b"]);
     }
 
     #[test]
     fn but_a_card_moved_back_before_cmux_shows_the_move_asks_for_its_lane_again() {
         let (app, mut model) = started();
-        let _ = app.update(move_card("a", LaneKey::Review, None), &mut model);
-        let asked = asked(&app, &mut model, move_card("a", LaneKey::Main, None));
+        let _ = app.update(move_card("a", LaneKey::from("review"), None), &mut model);
+        let asked = asked(
+            &app,
+            &mut model,
+            move_card("a", LaneKey::from("main"), None),
+        );
         // The Review join is already on its way, so cmux is asked to put it back.
         assert!(
             asked.contains(
@@ -305,43 +347,53 @@ mod the_moved_card_holds {
             ),
             "{asked:?}"
         );
-        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Main));
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::from("main")));
     }
 
     #[test]
     fn until_a_cmux_call_for_it_fails() {
         let (app, mut model) = started();
-        let _ = app.update(move_card("a", LaneKey::Review, None), &mut model);
+        let _ = app.update(move_card("a", LaneKey::from("review"), None), &mut model);
         let _ = app.update(Event::CmuxFailed { id: "a".into() }, &mut model);
-        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Main));
-        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["a", "b"]);
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::from("main")));
+        assert_eq!(lane_cards(&app, &model, LaneKey::from("main")), ["a", "b"]);
     }
 
     #[test]
     fn through_a_second_move_while_cmux_shows_only_the_first() {
         let (app, mut model) = started();
-        let _ = app.update(move_card("a", LaneKey::Review, None), &mut model);
-        let _ = app.update(move_card("a", LaneKey::Unsorted, None), &mut model);
+        let _ = app.update(move_card("a", LaneKey::from("review"), None), &mut model);
+        let _ = app.update(move_card("a", LaneKey::unsorted(), None), &mut model);
         // cmux has made the first move but not the second yet.
         let _ = app.update(frame(NOW + 2.0, &[("a", "g-review")]), &mut model);
-        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Unsorted));
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::unsorted()));
         let _ = app.update(frame(NOW + 3.0, &[("a", "")]), &mut model);
-        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Unsorted));
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::unsorted()));
     }
 
     #[test]
     fn in_order_through_a_second_reorder_while_cmux_shows_only_the_first() {
         let (app, mut model) = started();
-        let _ = app.update(move_card("c", LaneKey::Main, Some("a")), &mut model);
-        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["c", "a", "b"]);
-        let asked = asked(&app, &mut model, move_card("b", LaneKey::Main, Some("c")));
+        let _ = app.update(move_card("c", LaneKey::from("main"), Some("a")), &mut model);
+        assert_eq!(
+            lane_cards(&app, &model, LaneKey::from("main")),
+            ["c", "a", "b"]
+        );
+        let asked = asked(
+            &app,
+            &mut model,
+            move_card("b", LaneKey::from("main"), Some("c")),
+        );
         // Counted in the order the first move asked for, which cmux will
         // have by the time this one reaches it.
         assert_eq!(
             asked[0],
             r#"cmux workspace.reorder {"workspace_id":"b","index":1}"#
         );
-        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["b", "c", "a"]);
+        assert_eq!(
+            lane_cards(&app, &model, LaneKey::from("main")),
+            ["b", "c", "a"]
+        );
         let first = [
             "anchor-main",
             "c",
@@ -353,7 +405,10 @@ mod the_moved_card_holds {
             "u",
         ];
         let _ = app.update(reordered(NOW + 2.0, &[("c", "g-main")], &first), &mut model);
-        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["b", "c", "a"]);
+        assert_eq!(
+            lane_cards(&app, &model, LaneKey::from("main")),
+            ["b", "c", "a"]
+        );
         let both = [
             "anchor-main",
             "b",
@@ -365,7 +420,10 @@ mod the_moved_card_holds {
             "u",
         ];
         let _ = app.update(reordered(NOW + 3.0, &[("c", "g-main")], &both), &mut model);
-        assert_eq!(lane_cards(&app, &model, LaneKey::Main), ["b", "c", "a"]);
+        assert_eq!(
+            lane_cards(&app, &model, LaneKey::from("main")),
+            ["b", "c", "a"]
+        );
     }
 }
 
@@ -453,7 +511,7 @@ mod reveal {
             asked.contains(&r#"cmux workspace.select {"workspace_id":"p"}"#.to_string()),
             "{asked:?}"
         );
-        assert_eq!(lane_of(&app, &model, "p"), Some(LaneKey::Parked));
+        assert_eq!(lane_of(&app, &model, "p"), Some(LaneKey::from("parked")));
     }
 
     #[test]
@@ -486,8 +544,8 @@ mod menu {
             model.session.menu_target(),
             Some(&MenuTarget::Card { id: "a".into() })
         );
-        let _ = app.update(pick(MenuAction::Lane(LaneKey::Review)), &mut model);
-        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::Review));
+        let _ = app.update(pick(MenuAction::Lane(LaneKey::from("review"))), &mut model);
+        assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::from("review")));
         assert_eq!(model.session.menu_target(), None);
     }
 
@@ -733,7 +791,7 @@ mod fold {
             &app,
             &mut model,
             Event::ToggleLane {
-                lane: LaneKey::Main,
+                lane: LaneKey::from("main"),
             },
         );
         assert_eq!(
@@ -744,14 +802,14 @@ mod fold {
                 "render"
             ]
         );
-        assert!(lane_cards(&app, &model, LaneKey::Main).is_empty());
+        assert!(lane_cards(&app, &model, LaneKey::from("main")).is_empty());
     }
 
     #[test]
     fn the_unsorted_heading_and_the_quiet_heading_save_their_folds() {
         let (app, mut model) = started();
         let lane = Event::ToggleLane {
-            lane: LaneKey::Unsorted,
+            lane: LaneKey::unsorted(),
         };
         assert_eq!(
             asked(&app, &mut model, lane),

@@ -4,6 +4,7 @@
 
 use cockpit_core::data::{Data, Workspace};
 use cockpit_core::lane_entries::shows_left_off;
+use cockpit_core::lanes::Lanes;
 use cockpit_core::quiet::QUIET_SECS;
 use cockpit_core::session::Session;
 use cockpit_core::text::PromptMemory;
@@ -94,10 +95,22 @@ mod where_you_left_off {
     #[test]
     fn shows_on_background_and_parked_cards_only() {
         let d = data();
-        assert!(shows_left_off(&d, Some(&ws("a").group("g-bg"))));
-        assert!(shows_left_off(&d, Some(&ws("b").group("g-parked"))));
-        assert!(!shows_left_off(&d, Some(&ws("c").group("g-main"))));
-        assert!(!shows_left_off(&d, Some(&ws("d"))));
+        assert!(shows_left_off(
+            &Lanes::default(),
+            &d,
+            Some(&ws("a").group("g-bg"))
+        ));
+        assert!(shows_left_off(
+            &Lanes::default(),
+            &d,
+            Some(&ws("b").group("g-parked"))
+        ));
+        assert!(!shows_left_off(
+            &Lanes::default(),
+            &d,
+            Some(&ws("c").group("g-main"))
+        ));
+        assert!(!shows_left_off(&Lanes::default(), &d, Some(&ws("d"))));
     }
 
     #[test]

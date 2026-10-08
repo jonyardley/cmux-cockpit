@@ -7,6 +7,7 @@ use cockpit_core::data::{
     Agent, AgentStatus, Data, PrStatus, Progress, PullRequest, SubagentRun, Workspace,
     WorkspaceGroup,
 };
+use cockpit_core::lanes::{Lane, LaneKey, Lanes};
 use cockpit_core::menu::MenuItem;
 use cockpit_core::persist::SavedState;
 use cockpit_core::projects::Project;
@@ -317,4 +318,9 @@ pub fn sent(s: &Session) -> Vec<(String, Option<serde_json::Value>)> {
             }
         })
         .collect()
+}
+
+/// The lane with this key in the table every session starts with.
+pub fn lane_by_key(k: LaneKey) -> Lane {
+    Lanes::default().get(&k).clone()
 }

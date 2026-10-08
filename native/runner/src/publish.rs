@@ -6,10 +6,11 @@
 //! - Out: data.json, what the core is fed (crate::Inputs), written whole
 //!   and atomically (a temp file renamed over it) when any input was fed
 //!   again, as `{"seq": 9, "written_at_ms": 1791229864123, "home":
-//!   "/Users/jon", "projects": [...], "projects_seq": 1, "state": {...},
-//!   "state_seq": 2, "data": {...}, "data_seq": 40}`. `seq` counts this
-//!   process's writes from 1, and `written_at_ms` is the wall clock at
-//!   the write. The sidebar's core, fed `projects`, `state`, then `data`,
+//!   "/Users/jon", "lanes": [...], "lanes_seq": 1, "projects": [...],
+//!   "projects_seq": 1, "state": {...}, "state_seq": 2, "data": {...},
+//!   "data_seq": 40}`. `seq` counts this process's writes from 1, and
+//!   `written_at_ms` is the wall clock at the write. The sidebar's core,
+//!   fed `lanes`, `projects`, `state`, then `data`,
 //!   with `home` set on its model first, builds the panel itself; a later
 //!   file is read by sending only the inputs whose `_seq` moved, and an
 //!   input still null is skipped. Then it posts the bare signal
@@ -628,6 +629,7 @@ mod tests {
         model.session.home = serde_json::from_value(file["home"].clone()).unwrap();
         let read = |key: &str| (!file[key].is_null()).then(|| file[key].clone());
         let events = [
+            read("lanes").map(|v| Event::Lanes(serde_json::from_value(v).unwrap())),
             read("projects").map(|v| Event::Projects(serde_json::from_value(v).unwrap())),
             read("state").map(|v| Event::State(Box::new(serde_json::from_value(v).unwrap()))),
             read("data").map(|v| Event::Data(serde_json::from_value(v).unwrap())),
@@ -701,6 +703,26 @@ mod tests {
                 fs::remove_dir_all(&root).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn data_json_carries_the_lane_table_to_the_sidebars_core() {
+        let (mut p, root, _) = publisher("data-lanes");
+        let mut feed = fed_at("lanes", Some(FIXTURE_HOME));
+        let lanes = r#"[{"id": "bg", "name": "Background"}, {"name": "Main activity"}]"#;
+        feed.lanes(serde_json::from_str(lanes).unwrap());
+        p.step(&mut feed, true, &mut quiet());
+
+        let file = json(&root.join(DATA_FILE));
+        assert_eq!(file["lanes"], serde_json::from_str::<Value>(lanes).unwrap());
+        assert_eq!(file["lanes_seq"], 1);
+        let mut model = core_from(&file);
+        let built = Panel::from_core(&mut model);
+        let names: Vec<&str> = built.lanes.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, ["BACKGROUND", "MAIN ACTIVITY", "UNSORTED"]);
+        let runners = serde_json::to_value(Panel::from_core(&mut feed.model)).unwrap();
+        assert_eq!(serde_json::to_value(built).unwrap(), runners);
+        fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

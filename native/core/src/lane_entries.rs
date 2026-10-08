@@ -6,7 +6,7 @@
 use serde::Serialize;
 
 use crate::data::{Data, Workspace};
-use crate::lanes::{LANES, Lane, LaneKey, lane_by_key};
+use crate::lanes::{Lane, LaneKey, Lanes};
 use crate::model::{actual_lane_of, generated_anchor_id};
 use crate::prs::{PrHealth, pr_health};
 use crate::session::Session;
@@ -48,11 +48,11 @@ impl LaneEntry {
     }
 
     /// The lane the row is in.
-    pub fn lane(&self) -> LaneKey {
+    pub fn lane(&self) -> &LaneKey {
         match self {
             LaneEntry::Header { lane, .. }
             | LaneEntry::Zone { lane, .. }
-            | LaneEntry::Ws { lane, .. } => *lane,
+            | LaneEntry::Ws { lane, .. } => lane,
         }
     }
 }
@@ -86,13 +86,11 @@ fn header_anchor_id(data: &Data, lane: &Lane) -> Option<String> {
     (w.agent_slots() > 0 || w.unread.unwrap_or(0.0) > 0.0).then(|| w.id.clone())
 }
 
-/// Lanes you come back to after a while, where a card also says what you last asked.
-const LEFT_OFF_LANES: [LaneKey; 2] = [LaneKey::Bg, LaneKey::Parked];
-
-/// Whether the card shows your last prompt: in Background and Parked, by
-/// cmux's own data as card_density is.
-pub fn shows_left_off(data: &Data, w: Option<&Workspace>) -> bool {
-    LEFT_OFF_LANES.contains(&actual_lane_of(data, w))
+/// Whether the card shows your last prompt: in a lane you come back to
+/// after a while (Background and Parked by default), by cmux's own data
+/// as card_density is.
+pub fn shows_left_off(lanes: &Lanes, data: &Data, w: Option<&Workspace>) -> bool {
+    lanes.get(&actual_lane_of(lanes, data, w)).left_off
 }
 
 impl Session {
@@ -155,7 +153,7 @@ impl Session {
     pub fn lane_cards<'d>(&mut self, data: &'d Data) -> Vec<(Lane, Vec<&'d Workspace>)> {
         self.held_rank.retain(|id, _| data.ws_by_id(id).is_some());
         let mut out: Vec<(Lane, Vec<&Workspace>)> =
-            LANES.iter().map(|l| (*l, Vec::new())).collect();
+            self.lanes.iter().map(|l| (l.clone(), Vec::new())).collect();
         for w in self.card_workspaces(data) {
             let key = self.lane_of(data, w);
             if let Some((_, cards)) = out.iter_mut().find(|(l, _)| l.key == key) {
@@ -183,15 +181,15 @@ impl Session {
         let mut out = Vec::new();
         for (lane, lane_cards) in cards {
             let section = LaneSection {
-                lane: *lane,
+                lane: lane.clone(),
                 rows: self.by_state(data, lane_cards.clone()),
                 anchor_id: header_anchor_id(data, lane),
             };
-            let key = section.lane.key;
+            let key = section.lane.key.clone();
             if section.is_empty() {
                 out.push(LaneEntry::Zone {
                     id: format!("z:{}", key.as_str()),
-                    lane: key,
+                    lane: key.clone(),
                 });
                 continue;
             }
@@ -201,7 +199,7 @@ impl Session {
             };
             out.push(LaneEntry::Header {
                 id,
-                lane: key,
+                lane: key.clone(),
                 anchor_id: section.anchor_id.clone(),
             });
             if self.is_collapsed(data, &section.lane) {
@@ -212,7 +210,7 @@ impl Session {
                 out.push(LaneEntry::Ws {
                     id: format!("w:{ws_id}"),
                     ws_id,
-                    lane: key,
+                    lane: key.clone(),
                 });
             }
         }
@@ -221,10 +219,10 @@ impl Session {
 
     /// The cards a lane header counts, in tab order: every card it lists,
     /// folded or not.
-    pub fn lane_workspaces<'d>(&mut self, data: &'d Data, key: LaneKey) -> Vec<&'d Workspace> {
+    pub fn lane_workspaces<'d>(&mut self, data: &'d Data, key: &LaneKey) -> Vec<&'d Workspace> {
         let mut out = Vec::new();
         for w in self.card_workspaces(data) {
-            if self.lane_of(data, w) == key {
+            if &self.lane_of(data, w) == key {
                 out.push(w);
             }
         }
@@ -235,14 +233,14 @@ impl Session {
     /// workspaces hold a PR GitHub would merge now, else "". Every card the
     /// lane counts, and its generated anchor, which has
     /// no card of its own.
-    pub fn merge_ready_text(&mut self, data: &Data, key: LaneKey) -> String {
+    pub fn merge_ready_text(&mut self, data: &Data, key: &LaneKey) -> String {
         let cards = self.lane_workspaces(data, key);
         self.merge_ready_of(data, key, &cards)
     }
 
     /// The merge line from the lane's cards, already worked out this frame.
-    pub fn merge_ready_of(&self, data: &Data, key: LaneKey, cards: &[&Workspace]) -> String {
-        let anchor = generated_anchor_id(data, &lane_by_key(key));
+    pub fn merge_ready_of(&self, data: &Data, key: &LaneKey, cards: &[&Workspace]) -> String {
+        let anchor = generated_anchor_id(data, self.lanes.get(key));
         let anchor = anchor.as_deref().and_then(|id| data.ws_by_id(id));
         let n = cards
             .iter()
@@ -258,8 +256,9 @@ impl Session {
     }
 
     /// "Drop here" while a drag is over the lane, else its merge line:
-    /// faint in Parked, as its title is, else in Ready's green.
-    pub fn header_hint(&mut self, data: &Data, key: LaneKey, dropping: bool) -> HeaderHint {
+    /// faint in a faint lane (Parked by default), as its title is, else in
+    /// Ready's green.
+    pub fn header_hint(&mut self, data: &Data, key: &LaneKey, dropping: bool) -> HeaderHint {
         if dropping {
             return HeaderHint {
                 text: "Drop here".to_string(),
@@ -268,7 +267,7 @@ impl Session {
         }
         HeaderHint {
             text: self.merge_ready_text(data, key),
-            color: if key == LaneKey::Parked {
+            color: if self.lanes.get(key).faint {
                 Token::Faint
             } else {
                 Token::GreenDeep

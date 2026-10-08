@@ -8,7 +8,7 @@
 
 use crate::data::{Data, Workspace};
 use crate::edit::edit_label;
-use crate::lanes::{LANES, LaneKey};
+use crate::lanes::LaneKey;
 use crate::projects::{OTHER_KEY, is_project_key};
 use crate::prs::pr_summary;
 use crate::session::{Outbound, Param, Session};
@@ -112,9 +112,9 @@ impl Session {
             MenuItem::Divider,
         ];
         let lane = w.map(|w| self.lane_of(data, w));
-        items.extend(LANES.iter().map(|l| {
-            let label = ticked(lane == Some(l.key), format!("Lane: {}", l.name));
-            MenuItem::item(label, MenuAction::Lane(l.key))
+        items.extend(self.lanes.iter().map(|l| {
+            let label = ticked(lane.as_ref() == Some(&l.key), format!("Lane: {}", l.name));
+            MenuItem::item(label, MenuAction::Lane(l.key.clone()))
         }));
         items.push(MenuItem::Divider);
         let project = w.map(|w| self.project_key(w));

@@ -76,20 +76,20 @@ check(!SidebarCore.load(Data("[1]".utf8)), "a file that is not data.json is refu
 
 // MARK: A click
 
-check(lane(.main)?.collapsed == nil, "nothing drawn yet")
-check(SidebarCore.send(.toggleLane(.main)), "a fold goes in")
-check(lane(.main)?.collapsed == true, "and draws folded on the click")
+check(lane("main")?.collapsed == nil, "nothing drawn yet")
+check(SidebarCore.send(.toggleLane("main")), "a fold goes in")
+check(lane("main")?.collapsed == true, "and draws folded on the click")
 check(!SidebarCore.send(.refresh), "the shell's own input is not a click")
 check(!SidebarCore.send(.at(now: 1, event: .flipView)), "nor is a stamped one")
-SidebarCore.send(.toggleLane(.main))
+SidebarCore.send(.toggleLane("main"))
 
 // MARK: A move cmux refuses
 
-let card = ids(.main).first ?? ""
+let card = ids("main").first ?? ""
 check(!card.isEmpty, "Main has a card to move")
 _ = sent()
-SidebarCore.send(.moveCard(id: card, lane: .review, before: nil))
-check(ids(.review).contains(card) && !ids(.main).contains(card), "a drop draws the card in For review on the drop")
+SidebarCore.send(.moveCard(id: card, lane: "review", before: nil))
+check(ids("review").contains(card) && !ids("main").contains(card), "a drop draws the card in For review on the drop")
 let move = sent()
 check(move.contains { $0["Cmux"] != nil }, "and asks cmux to move it: \(move.map { $0.keys.sorted() })")
 
@@ -103,7 +103,7 @@ check(answers == [Data(refused.utf8)], "the inbox gives the whole answer and ski
 let left = (try? FileManager.default.contentsOfDirectory(atPath: inbox.path)) ?? []
 check(left == [".answer-1-2.tmp"], "and deletes what it gave: \(left)")
 answers.forEach(SidebarCore.answer)
-check(ids(.main).contains(card) && !ids(.review).contains(card), "the refused move snaps back")
+check(ids("main").contains(card) && !ids("review").contains(card), "the refused move snaps back")
 
 // MARK: A click's selection
 

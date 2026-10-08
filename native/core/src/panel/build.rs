@@ -5,7 +5,7 @@ use crate::by_project::ProjectEntry;
 use crate::card_chips::Chip as CoreChip;
 use crate::data::{Data, Workspace};
 use crate::lane_entries::{LaneEntry, shows_left_off};
-use crate::lanes::{Density, LANES, LaneKey};
+use crate::lanes::{self, Density, LaneKey};
 use crate::model::card_density;
 use crate::moves::MoveSize;
 use crate::persist::ViewMode;
@@ -139,9 +139,10 @@ pub fn lane_name(name: &str) -> String {
     name.to_uppercase()
 }
 
-/// Parked's heading is faint, as is every empty lane's (headers.ts).
-pub fn faint_heading(key: LaneKey, empty: bool) -> bool {
-    empty || key == LaneKey::Parked
+/// A faint lane's heading is faint (Parked's by default), as is every
+/// empty lane's (headers.ts).
+pub fn faint_heading(lane: &lanes::Lane, empty: bool) -> bool {
+    empty || lane.faint
 }
 
 /// An unread count as words: "" with none.
@@ -239,7 +240,17 @@ pub(super) fn build(session: &mut Session, data: &Data, view: &ViewModel) -> Pan
         lanes: lanes(session, data, view),
         projects,
         menu: session.menu_view(data),
+        lane_picks: lane_picks(session),
     }
+}
+
+/// Every lane's key and name, in display order (Panel::lane_picks).
+fn lane_picks(session: &Session) -> Vec<(LaneKey, String)> {
+    session
+        .lanes
+        .iter()
+        .map(|l| (l.key.clone(), l.name.clone()))
+        .collect()
 }
 
 /// A card's chips row, for the kind of card it is.
@@ -425,7 +436,7 @@ fn left_off(text: &str) -> String {
 fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card {
     let w = data.ws_by_id(id);
     let style = session.status_info(data, w);
-    let density = card_density(data, w);
+    let density = card_density(&session.lanes, data, w);
     let waiting = waiting_of(session, view, w);
     // A row carries its age alone, as the sidebar's row does, in the
     // waiting ink while it waits (its detail says why); a card says its
@@ -436,7 +447,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         (_, Some(wt)) => (needs_line(session, data, w), wt.ink),
         (_, None) => (session.status_line(data, w), style.text),
     };
-    let left_off = if shows_left_off(data, w) {
+    let left_off = if shows_left_off(&session.lanes, data, w) {
         left_off(&session.left_off_text(w))
     } else {
         String::new()
@@ -481,13 +492,13 @@ fn lanes(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Lane> {
                 lane, anchor_id, ..
             } => {
                 let header = view.lane_headers.get(lane);
-                let mut head = lane_head(session, data, *lane, header, false);
+                let mut head = lane_head(session, data, lane, header, false);
                 head.anchor = anchor_id.as_deref().map(|id| anchor(session, data, id));
                 out.push(head);
             }
             LaneEntry::Zone { lane, .. } => {
                 let header = view.lane_headers.get(lane);
-                out.push(lane_head(session, data, *lane, header, true));
+                out.push(lane_head(session, data, lane, header, true));
             }
             LaneEntry::Ws { ws_id, .. } => {
                 let c = card(session, data, view, ws_id);
@@ -519,11 +530,11 @@ fn anchor(session: &mut Session, data: &Data, id: &str) -> Anchor {
 fn lane_head(
     session: &mut Session,
     data: &Data,
-    key: LaneKey,
+    key: &LaneKey,
     header: Option<&LaneHeaderView>,
     empty: bool,
 ) -> Lane {
-    let lane = LANES.iter().find(|l| l.key == key);
+    let lane = session.lanes.get(key).clone();
     let ids: &[String] = header.map_or(&[], |h| h.workspaces.as_slice());
     let collapsed = header.is_some_and(|h| h.collapsed);
     let ws: Vec<&Workspace> = ids.iter().filter_map(|id| data.ws_by_id(id)).collect();
@@ -532,11 +543,11 @@ fn lane_head(
         .dot
         .map(|w| icon_of(&session.status_info(data, Some(w))));
     Lane {
-        key,
+        key: lane.key.clone(),
         empty,
-        name: lane_name(lane.map_or("", |l| l.name)),
-        faint: faint_heading(key, empty),
-        marker: lane.map_or(Token::LaneUnsorted, |l| l.color),
+        name: lane_name(&lane.name),
+        faint: faint_heading(&lane, empty),
+        marker: lane.color,
         anchor: None,
         count: ids.len(),
         pill: status.tint,
@@ -702,9 +713,11 @@ mod tests {
     #[test]
     fn heads_a_lane_in_upper_case_and_fades_parked_and_empty_lanes() {
         assert_eq!(lane_name("Main activity"), "MAIN ACTIVITY");
-        assert!(faint_heading(LaneKey::Parked, false));
-        assert!(faint_heading(LaneKey::Main, true));
-        assert!(!faint_heading(LaneKey::Main, false));
+        let lanes = lanes::Lanes::default();
+        let lane = |id: &str| lanes.get(&LaneKey::from(id));
+        assert!(faint_heading(lane("parked"), false));
+        assert!(faint_heading(lane("main"), true));
+        assert!(!faint_heading(lane("main"), false));
     }
 
     #[test]

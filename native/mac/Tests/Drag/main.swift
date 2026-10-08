@@ -57,10 +57,10 @@ check(DropRule.before(rows: waited, dragged: card("X"), slot: 1) == "G", "a wait
 
 // MARK: Letting go in its own place sends nothing
 
-check(DropRule.staysPut(abc, from: .main, card: card("B"), lane: .main, before: "C"), "B above C in its own lane stays put")
-check(!DropRule.staysPut(abc, from: .main, card: card("B"), lane: .main, before: "A"), "B above A is a move")
-check(DropRule.staysPut(abc, from: .main, card: card("C"), lane: .main, before: nil), "the last card at the end stays put")
-check(!DropRule.staysPut(abc, from: .main, card: card("C"), lane: .review, before: nil), "to another lane is a move")
+check(DropRule.staysPut(abc, from: "main", card: card("B"), lane: "main", before: "C"), "B above C in its own lane stays put")
+check(!DropRule.staysPut(abc, from: "main", card: card("B"), lane: "main", before: "A"), "B above A is a move")
+check(DropRule.staysPut(abc, from: "main", card: card("C"), lane: "main", before: nil), "the last card at the end stays put")
+check(!DropRule.staysPut(abc, from: "main", card: card("C"), lane: "review", before: nil), "to another lane is a move")
 
 // MARK: What a drag carries
 

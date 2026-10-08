@@ -1,35 +1,52 @@
 //! Lanes are cmux workspace groups matched by name, in display order
 //! (src/cockpit/lanes.ts). Unsorted is not a group: it holds every
-//! workspace outside the others.
+//! workspace outside the others, and is always last.
+//!
+//! The table comes from config/lanes.json, an array of `LaneConfig`; with
+//! no file, or an empty array, it is today's four lanes. A field a lane
+//! leaves out takes the value the built-in lane with the same id has, so a
+//! file that lists "Parked" by name alone, with id "parked", still draws
+//! it faint and folded.
+
+use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
 use crate::theme::Token;
 
-/// A lane's key; serialised as `as_str` names it.
+/// A lane's id: a configured lane's `id`, or its name when it has none.
+/// Saved folds are keyed by it (`lane:<id>`).
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, facet::Facet,
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, facet::Facet,
 )]
-#[serde(rename_all = "lowercase")]
-#[repr(u8)]
-#[facet(rename_all = "lowercase")]
-pub enum LaneKey {
-    Main,
-    Review,
-    Bg,
-    Parked,
-    Unsorted,
-}
+#[serde(transparent)]
+#[facet(transparent)]
+pub struct LaneKey(String);
+
+const UNSORTED_ID: &str = "unsorted";
 
 impl LaneKey {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            LaneKey::Main => "main",
-            LaneKey::Review => "review",
-            LaneKey::Bg => "bg",
-            LaneKey::Parked => "parked",
-            LaneKey::Unsorted => "unsorted",
-        }
+    pub fn new(id: impl Into<String>) -> LaneKey {
+        LaneKey(id.into())
+    }
+
+    /// Unsorted's key, which no configured lane may take.
+    pub fn unsorted() -> LaneKey {
+        LaneKey::new(UNSORTED_ID)
+    }
+
+    pub fn is_unsorted(&self) -> bool {
+        self.0 == UNSORTED_ID
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&str> for LaneKey {
+    fn from(id: &str) -> LaneKey {
+        LaneKey::new(id)
     }
 }
 
@@ -51,66 +68,236 @@ impl Density {
             Density::Row => "row",
         }
     }
+
+    fn parse(s: &str) -> Option<Density> {
+        [Density::Full, Density::Compact, Density::Row]
+            .into_iter()
+            .find(|d| d.as_str() == s)
+    }
 }
 
 /// One lane.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Lane {
     pub key: LaneKey,
     /// The cmux group name it matches.
-    pub name: &'static str,
+    pub name: String,
     pub color: Token,
     pub density: Density,
     pub starts_collapsed: bool,
+    /// Its heading and merge-ready hint draw faint.
+    pub faint: bool,
+    /// Its cards say where you left off ("You: <last prompt>").
+    pub left_off: bool,
 }
 
-const UNSORTED: Lane = Lane {
-    key: LaneKey::Unsorted,
-    name: "Unsorted",
-    color: Token::LaneUnsorted,
-    density: Density::Row,
-    starts_collapsed: false,
-};
+/// One lane as config/lanes.json writes it. Only `name` is needed.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LaneConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub name: String,
+    /// One of the lane colour tokens: laneMain, laneReview,
+    /// laneBackground, laneParked or laneUnsorted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// full, compact or row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub density: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folded: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub faint: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub left_off: Option<bool>,
+}
 
-/// Every lane, in display order, Unsorted last.
-pub const LANES: [Lane; 5] = [
-    Lane {
-        key: LaneKey::Main,
-        name: "Main activity",
-        color: Token::LaneMain,
-        density: Density::Full,
-        starts_collapsed: false,
-    },
-    Lane {
-        key: LaneKey::Review,
-        name: "For review",
-        color: Token::LaneReview,
-        density: Density::Compact,
-        starts_collapsed: false,
-    },
-    Lane {
-        key: LaneKey::Bg,
-        name: "Background",
-        color: Token::LaneBackground,
-        density: Density::Compact,
-        starts_collapsed: false,
-    },
-    Lane {
-        key: LaneKey::Parked,
-        name: "Parked",
-        color: Token::LaneParked,
-        density: Density::Row,
-        starts_collapsed: true,
-    },
-    UNSORTED,
+/// The colours a lane may take: the lane tokens, as JSON names them.
+const LANE_COLORS: [Token; 5] = [
+    Token::LaneMain,
+    Token::LaneReview,
+    Token::LaneBackground,
+    Token::LaneParked,
+    Token::LaneUnsorted,
 ];
 
-/// A drop above every row lands here.
-pub const FIRST_LANE: LaneKey = LaneKey::Main;
+fn parse_color(s: &str) -> Option<Token> {
+    let token: Token = serde_json::from_value(serde_json::Value::from(s)).ok()?;
+    LANE_COLORS.contains(&token).then_some(token)
+}
 
-/// The lane with this key.
-pub fn lane_by_key(k: LaneKey) -> Lane {
-    LANES.into_iter().find(|l| l.key == k).unwrap_or(UNSORTED)
+fn unsorted() -> Lane {
+    Lane {
+        key: LaneKey::unsorted(),
+        name: "Unsorted".to_string(),
+        color: Token::LaneUnsorted,
+        density: Density::Row,
+        starts_collapsed: false,
+        faint: false,
+        left_off: false,
+    }
+}
+
+/// A built-in lane. Parked alone starts folded, and it alone draws faint.
+fn built_in_lane(
+    id: &str,
+    name: &str,
+    color: Token,
+    density: Density,
+    folded: bool,
+    left_off: bool,
+) -> Lane {
+    Lane {
+        key: LaneKey::new(id),
+        name: name.to_string(),
+        color,
+        density,
+        starts_collapsed: folded,
+        faint: folded,
+        left_off,
+    }
+}
+
+/// Today's four lanes, which a missing or empty lanes.json gives.
+fn built_in() -> Vec<Lane> {
+    use Density::{Compact, Full, Row};
+    vec![
+        built_in_lane("main", "Main activity", Token::LaneMain, Full, false, false),
+        built_in_lane(
+            "review",
+            "For review",
+            Token::LaneReview,
+            Compact,
+            false,
+            false,
+        ),
+        built_in_lane(
+            "bg",
+            "Background",
+            Token::LaneBackground,
+            Compact,
+            false,
+            true,
+        ),
+        built_in_lane("parked", "Parked", Token::LaneParked, Row, true, true),
+    ]
+}
+
+/// The id a configured lane takes: its own, else its name.
+fn config_id(c: &LaneConfig) -> &str {
+    c.id.as_deref().unwrap_or(&c.name).trim()
+}
+
+/// A lane read from config, its gaps filled from `base`, else compact,
+/// unfolded and plain in laneUnsorted's colour.
+fn configured(c: &LaneConfig, base: Option<&Lane>) -> Result<Lane, String> {
+    let name = c.name.trim();
+    if name.is_empty() {
+        return Err("a lane has no name".to_string());
+    }
+    let id = config_id(c);
+    if id.is_empty() {
+        return Err(format!("lane \"{name}\" has an empty id"));
+    }
+    let color = match c.color.as_deref() {
+        Some(s) => {
+            parse_color(s).ok_or_else(|| format!("lane \"{name}\": unknown colour {s:?}"))?
+        }
+        None => base.map_or(Token::LaneUnsorted, |b| b.color),
+    };
+    let density = match c.density.as_deref() {
+        Some(s) => {
+            Density::parse(s).ok_or_else(|| format!("lane \"{name}\": unknown density {s:?}"))?
+        }
+        None => base.map_or(Density::Compact, |b| b.density),
+    };
+    let or_base = |v: Option<bool>, pick: fn(&Lane) -> bool| v.or(base.map(pick)).unwrap_or(false);
+    Ok(Lane {
+        key: LaneKey::new(id),
+        name: name.to_string(),
+        color,
+        density,
+        starts_collapsed: or_base(c.folded, |b| b.starts_collapsed),
+        faint: or_base(c.faint, |b| b.faint),
+        left_off: or_base(c.left_off, |b| b.left_off),
+    })
+}
+
+/// Every lane in display order, then Unsorted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Lanes {
+    groups: Vec<Lane>,
+    unsorted: Lane,
+}
+
+impl Default for Lanes {
+    fn default() -> Lanes {
+        Lanes {
+            groups: built_in(),
+            unsorted: unsorted(),
+        }
+    }
+}
+
+impl Lanes {
+    /// The table config/lanes.json describes; none or an empty list is
+    /// today's four. A lane without a name, an unknown colour or density,
+    /// an id or group name used twice, or the id "unsorted" fails it whole.
+    pub fn from_config(config: &[LaneConfig]) -> Result<Lanes, String> {
+        let defaults = built_in();
+        let mut groups = Vec::with_capacity(config.len());
+        let mut ids = HashSet::new();
+        let mut names = HashSet::new();
+        for c in config {
+            let base = defaults.iter().find(|l| l.key.as_str() == config_id(c));
+            let lane = configured(c, base)?;
+            if lane.key.is_unsorted() {
+                return Err(format!(
+                    "lane \"{}\": the id \"{UNSORTED_ID}\" is Unsorted's",
+                    lane.name
+                ));
+            }
+            if !ids.insert(lane.key.clone()) {
+                return Err(format!("two lanes have the id \"{}\"", lane.key.as_str()));
+            }
+            if !names.insert(lane.name.to_lowercase()) {
+                return Err(format!("two lanes are named \"{}\"", lane.name));
+            }
+            groups.push(lane);
+        }
+        if groups.is_empty() {
+            return Ok(Lanes::default());
+        }
+        Ok(Lanes {
+            groups,
+            unsorted: unsorted(),
+        })
+    }
+
+    /// Every lane, Unsorted last.
+    pub fn iter(&self) -> impl Iterator<Item = &Lane> {
+        self.groups.iter().chain(std::iter::once(&self.unsorted))
+    }
+
+    /// The lanes that are cmux groups: all but Unsorted.
+    pub fn groups(&self) -> &[Lane] {
+        &self.groups
+    }
+
+    /// The lane with this key; Unsorted for a key no lane has.
+    pub fn get(&self, k: &LaneKey) -> &Lane {
+        self.groups
+            .iter()
+            .find(|l| &l.key == k)
+            .unwrap_or(&self.unsorted)
+    }
+
+    /// The first lane: a drop above every row lands here, and a new
+    /// project opens here.
+    pub fn first(&self) -> &LaneKey {
+        self.groups.first().map_or(&self.unsorted.key, |l| &l.key)
+    }
 }
 
 #[cfg(test)]
@@ -118,17 +305,152 @@ mod tests {
     use super::*;
     use crate::anchors::LANE_GROUP_NAMES;
 
+    fn keys(lanes: &Lanes) -> Vec<&str> {
+        lanes.iter().map(|l| l.key.as_str()).collect()
+    }
+
+    fn named(name: &str) -> LaneConfig {
+        LaneConfig {
+            name: name.to_string(),
+            ..LaneConfig::default()
+        }
+    }
+
     #[test]
-    fn serialises_each_key_as_its_name() {
-        for lane in LANES {
-            let json = serde_json::to_value(lane.key).unwrap();
+    fn serialises_each_key_as_its_id() {
+        for lane in Lanes::default().iter() {
+            let json = serde_json::to_value(&lane.key).unwrap();
             assert_eq!(json, lane.key.as_str());
         }
     }
 
     #[test]
     fn names_the_same_groups_as_the_anchors() {
-        let names: Vec<&str> = LANES[..4].iter().map(|l| l.name).collect();
+        let lanes = Lanes::default();
+        let names: Vec<&str> = lanes.groups().iter().map(|l| l.name.as_str()).collect();
         assert_eq!(names, LANE_GROUP_NAMES);
+    }
+
+    #[test]
+    fn the_default_is_today_s_four_then_unsorted() {
+        let lanes = Lanes::default();
+        assert_eq!(keys(&lanes), ["main", "review", "bg", "parked", "unsorted"]);
+        let flags: Vec<(bool, bool, bool)> = lanes
+            .iter()
+            .map(|l| (l.starts_collapsed, l.faint, l.left_off))
+            .collect();
+        assert_eq!(
+            flags,
+            [
+                (false, false, false),
+                (false, false, false),
+                (false, false, true),
+                (true, true, true),
+                (false, false, false),
+            ]
+        );
+        assert_eq!(lanes.first().as_str(), "main");
+    }
+
+    #[test]
+    fn no_lanes_in_config_is_the_default() {
+        assert_eq!(Lanes::from_config(&[]), Ok(Lanes::default()));
+    }
+
+    #[test]
+    fn reads_a_custom_table_in_its_order() {
+        let json = r#"[
+            {"name": "Doing", "color": "laneReview", "density": "full"},
+            {"id": "later", "name": "Some day", "density": "row", "folded": true,
+             "faint": true, "leftOff": true}
+        ]"#;
+        let config: Vec<LaneConfig> = serde_json::from_str(json).unwrap();
+        let lanes = Lanes::from_config(&config).unwrap();
+        assert_eq!(keys(&lanes), ["Doing", "later", "unsorted"]);
+        assert_eq!(lanes.first().as_str(), "Doing");
+        let doing = lanes.get(&LaneKey::from("Doing"));
+        assert_eq!(
+            (doing.color, doing.density, doing.faint, doing.left_off),
+            (Token::LaneReview, Density::Full, false, false)
+        );
+        let later = lanes.get(&LaneKey::from("later"));
+        assert_eq!(later.name, "Some day");
+        assert_eq!(
+            later.color,
+            Token::LaneUnsorted,
+            "no colour: the neutral one"
+        );
+        assert!(later.starts_collapsed && later.faint && later.left_off);
+    }
+
+    #[test]
+    fn a_built_in_id_fills_what_the_lane_leaves_out() {
+        let parked = LaneConfig {
+            id: Some("parked".into()),
+            ..named("Shelf")
+        };
+        let lanes = Lanes::from_config(&[named("Background"), parked]).unwrap();
+        // "Background" has no id, so it is not "bg" and takes nothing.
+        let bg = lanes.get(&LaneKey::from("Background"));
+        assert!(!bg.left_off);
+        let shelf = lanes.get(&LaneKey::from("parked"));
+        assert_eq!(shelf.name, "Shelf");
+        assert_eq!(
+            (shelf.color, shelf.density),
+            (Token::LaneParked, Density::Row)
+        );
+        assert!(shelf.starts_collapsed && shelf.faint && shelf.left_off);
+        let unfaint = LaneConfig {
+            id: Some("parked".into()),
+            faint: Some(false),
+            ..named("Parked")
+        };
+        let lanes = Lanes::from_config(&[unfaint]).unwrap();
+        assert!(!lanes.get(&LaneKey::from("parked")).faint, "said, so kept");
+    }
+
+    #[test]
+    fn an_unknown_key_reads_as_unsorted() {
+        let lanes = Lanes::default();
+        assert!(lanes.get(&LaneKey::from("gone")).key.is_unsorted());
+        assert_eq!(
+            lanes.iter().nth(4).map(|l| l.key.as_str()),
+            Some("unsorted")
+        );
+        assert!(lanes.iter().nth(5).is_none());
+    }
+
+    #[test]
+    fn refuses_a_table_it_cannot_draw() {
+        let with = |f: fn(&mut LaneConfig)| {
+            let mut c = named("Doing");
+            f(&mut c);
+            Lanes::from_config(&[c])
+        };
+        assert!(with(|c| c.name = "  ".into()).is_err(), "no name");
+        assert!(with(|c| c.id = Some(String::new())).is_err(), "empty id");
+        assert!(
+            with(|c| c.color = Some("red".into())).is_err(),
+            "not a lane colour"
+        );
+        assert!(
+            with(|c| c.color = Some("heading".into())).is_err(),
+            "a token, not a lane's"
+        );
+        assert!(
+            with(|c| c.density = Some("huge".into())).is_err(),
+            "no such density"
+        );
+        assert!(
+            with(|c| c.id = Some("unsorted".into())).is_err(),
+            "Unsorted's id"
+        );
+        let twice = |a: LaneConfig, b: LaneConfig| Lanes::from_config(&[a, b]).is_err();
+        assert!(twice(named("A"), named("A")), "the same id");
+        let other_id = LaneConfig {
+            id: Some("b".into()),
+            ..named("a")
+        };
+        assert!(twice(named("A"), other_id), "the same group, any case");
     }
 }
