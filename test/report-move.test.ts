@@ -148,6 +148,17 @@ describe("moveLine", () => {
     assert.equal(moveLine("Nothing for you yet."), null);
   });
 
+  it("takes a Nothing for you sentence that opens the line, with the rest as the move", () => {
+    const reply = "Here's the plan.\n\nNothing for you right now. The agent is reading the eight pages.";
+    assert.equal(moveLine(reply), "The agent is reading the eight pages.");
+    assert.equal(
+      moveLine("**Nothing for you.** CI is running, and you'll hear when it lands."),
+      "CI is running, and you'll hear when it lands.",
+    );
+    assert.equal(moveLine("Nothing for you nowhere. It ran."), null);
+    assert.equal(moveLine("Your move. Merge it."), null);
+  });
+
   it("is null without the label, and cuts a long line with an ellipsis", () => {
     assert.equal(moveLine("Nothing to do here."), null);
     assert.equal(moveLine("I made my move: done"), null);

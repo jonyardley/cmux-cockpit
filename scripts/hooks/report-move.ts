@@ -63,6 +63,9 @@ const MOVE_LINE = new RegExp(
 // The narrow full-stop form: a sentence, then "Nothing for you yet." ending
 // the line. The sentence before it is the move text.
 const IDLE_SENTENCE = new RegExp(String.raw`^(.*[.!?])\s+nothing for you${DRIFT}\.$`, "i");
+// The same words opening the line instead: "Nothing for you right now. The
+// agent is reading ..." The sentences after it are the move text.
+const IDLE_LEAD = new RegExp(String.raw`^(?:[-*]\s+)?(?:jon,\s+)?nothing for you${DRIFT}\.\s+(.+)$`, "i");
 // A list or step marker at the start of a line: "1.", "2)", "-", "*", ">".
 const STEP_MARKER = /^\s*(?:>\s*)?(?:\d+[.)]|[-*])\s+/;
 // A decision's heading: "**1. Where the card gets the line**", or the same
@@ -119,8 +122,10 @@ function moveOn(lines: readonly string[], i: number): { line: string; idle: bool
     const line = cleanMove(unmark(hit[2] ?? "") || stepAfter(lines, i)) ?? "";
     return { line, idle: !/^your move/i.test(hit[1]) };
   }
-  const sentence = IDLE_SENTENCE.exec(unmark(text))?.[1];
-  const last = sentence?.split(/(?<=[.!?])\s+/).pop();
+  const plain = unmark(text.replace(/^\s*>\s*/, ""));
+  const lead = IDLE_LEAD.exec(plain)?.[1];
+  const sentence = IDLE_SENTENCE.exec(plain)?.[1];
+  const last = lead ?? sentence?.split(/(?<=[.!?])\s+/).pop();
   const line = last ? cleanMove(last) : null;
   return line ? { line, idle: true } : null;
 }
