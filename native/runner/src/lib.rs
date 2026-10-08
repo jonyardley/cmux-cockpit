@@ -108,7 +108,8 @@ pub enum Input {
     Event(Box<Value>, Instant),
     StreamDown(String),
     Agents(AgentView),
-    Workspaces(Vec<Workspace>),
+    /// The workspace list, and when it was asked for, in epoch seconds.
+    Workspaces(Vec<Workspace>, f64),
     Groups(Groups),
     /// From the caller's own thread (a key press, say): call `on_frame`
     /// now, with or without a new frame.
@@ -323,7 +324,7 @@ impl Feed {
                 (true, false, None)
             }
             Input::Agents(view) => (self.join.agents(view), false, None),
-            Input::Workspaces(list) => (self.join.workspaces(list), false, None),
+            Input::Workspaces(list, asked) => (self.join.workspaces(list, asked), false, None),
             Input::Groups(groups) => (self.join.groups(groups), false, None),
             // Without a core an answer is kept for inbox/, for the core
             // that asked; the caller's next turn writes it, so it is not
@@ -539,9 +540,10 @@ fn poll_layout(
 ) {
     let mut window: Option<String> = None;
     loop {
+        let asked = now_epoch();
         if let Some((list, win)) = read_list() {
             window = win.or(window);
-            if tx.send(Input::Workspaces(list)).is_err() {
+            if tx.send(Input::Workspaces(list, asked)).is_err() {
                 return;
             }
         }
@@ -857,7 +859,7 @@ mod tests {
     fn a_status_change_reaches_the_view_model() {
         let mut feed = Feed::default();
         feed.state(cockpit_core::persist::SavedState::default());
-        feed.input(Input::Workspaces(vec![ws("A"), ws("B")]));
+        feed.input(Input::Workspaces(vec![ws("A"), ws("B")], 0.0));
         feed.input(hook(1, "UserPromptSubmit", 7, "B"));
         feed.frame(1_791_127_100.0);
         assert!(feed.model.view.needs.list.is_empty());
@@ -965,13 +967,16 @@ mod tests {
     fn groups_put_cards_in_lanes_and_anchors_in_headers() {
         let mut feed = Feed::default();
         feed.state(cockpit_core::persist::SavedState::default());
-        feed.input(Input::Workspaces(vec![
-            titled("M", "real card anchoring Main"),
-            titled("C", "a card"),
-            titled("P", "Background"),
-            titled("Q", "background card"),
-            titled("U", "loose"),
-        ]));
+        feed.input(Input::Workspaces(
+            vec![
+                titled("M", "real card anchoring Main"),
+                titled("C", "a card"),
+                titled("P", "Background"),
+                titled("Q", "background card"),
+                titled("U", "loose"),
+            ],
+            0.0,
+        ));
         feed.input(Input::Groups(groups(&[
             group("gm", "Main activity", "M", &["M", "C"]),
             group("gb", "Background", "P", &["P", "Q"]),
@@ -1005,10 +1010,10 @@ mod tests {
     fn moving_feed() -> Feed {
         let mut feed = Feed::default();
         feed.state(cockpit_core::persist::SavedState::default());
-        feed.input(Input::Workspaces(vec![
-            titled("P", "Background"),
-            titled("Q", "q"),
-        ]));
+        feed.input(Input::Workspaces(
+            vec![titled("P", "Background"), titled("Q", "q")],
+            0.0,
+        ));
         feed.input(Input::Groups(groups(&[group(
             "gb",
             "Background",
@@ -1106,7 +1111,7 @@ mod tests {
     fn without_a_core_the_feed_only_joins() {
         let mut feed = Feed::without_core(Some("/h".into()));
         feed.state(SavedState::default());
-        feed.input(Input::Workspaces(vec![titled("Q", "q")]));
+        feed.input(Input::Workspaces(vec![titled("Q", "q")], 0.0));
         feed.frame(1_791_127_100.0);
         feed.poll_prs();
         feed.act(move_q());
@@ -1166,7 +1171,7 @@ mod tests {
         feed.state(cockpit_core::persist::SavedState::default());
         let mut q = titled("Q", "q");
         q.directory = Some("/repo".into());
-        feed.input(Input::Workspaces(vec![q]));
+        feed.input(Input::Workspaces(vec![q], 0.0));
         feed.input(Input::Groups(groups(&[])));
         feed.frame(1_791_127_100.0);
         assert!(feed.unasked.is_empty(), "off until the runner turns it on");
@@ -1339,10 +1344,10 @@ mod tests {
     fn a_group_event_moves_the_card_in_the_view_model() {
         let mut feed = Feed::default();
         feed.state(cockpit_core::persist::SavedState::default());
-        feed.input(Input::Workspaces(vec![
-            titled("P", "Background"),
-            titled("Q", "q"),
-        ]));
+        feed.input(Input::Workspaces(
+            vec![titled("P", "Background"), titled("Q", "q")],
+            0.0,
+        ));
         feed.input(Input::Groups(groups(&[group(
             "gb",
             "Background",
@@ -1396,12 +1401,12 @@ mod tests {
             poll_layout(&tx, &nudge_rx, Duration::from_secs(600), list, read_groups);
         });
         let next = || rx.recv_timeout(Duration::from_secs(1));
-        assert!(matches!(next(), Ok(Input::Workspaces(_))));
+        assert!(matches!(next(), Ok(Input::Workspaces(..))));
         assert!(matches!(next(), Ok(Input::Groups(g)) if g.list.is_empty()));
 
         let nudged = Instant::now();
         let _ = nudge_tx.send(());
-        assert!(matches!(next(), Ok(Input::Workspaces(_))));
+        assert!(matches!(next(), Ok(Input::Workspaces(..))));
         assert!(matches!(next(), Ok(Input::Groups(g)) if g.list.len() == 1));
         assert!(nudged.elapsed() < Duration::from_secs(1));
         assert_eq!(reads.load(Ordering::SeqCst), 2);
@@ -1414,6 +1419,33 @@ mod tests {
     }
 
     #[test]
+    fn the_layout_poll_stamps_a_list_with_when_it_was_asked_for() {
+        let (tx, rx) = mpsc::channel();
+        let (nudge_tx, nudge_rx) = mpsc::channel::<()>();
+        drop(nudge_tx);
+        let started = Arc::new(std::sync::Mutex::new(0.0));
+        let at_read = Arc::clone(&started);
+        // A slow read: the stamp is from before it began, not when it answered.
+        let list = move || {
+            if let Ok(mut t) = at_read.lock() {
+                *t = now_epoch();
+            }
+            thread::sleep(Duration::from_millis(50));
+            Some((vec![ws("A")], None))
+        };
+        poll_layout(&tx, &nudge_rx, Duration::from_secs(600), list, |_| None);
+        let began = started.lock().map(|t| *t).unwrap_or_default();
+        let asked = rx.try_iter().find_map(|i| match i {
+            Input::Workspaces(_, asked) => Some(asked),
+            _ => None,
+        });
+        assert!(
+            asked.is_some_and(|a| a <= began && began - a < 0.05),
+            "{asked:?} {began}"
+        );
+    }
+
+    #[test]
     fn a_failed_group_read_keeps_the_last_good_one() {
         let (tx, rx) = mpsc::channel();
         let (nudge_tx, nudge_rx) = mpsc::channel::<()>();
@@ -1422,7 +1454,7 @@ mod tests {
         poll_layout(&tx, &nudge_rx, Duration::from_secs(600), list, |_| None);
         let sent: Vec<Input> = rx.try_iter().collect();
         assert!(
-            matches!(sent.as_slice(), [Input::Workspaces(_)]),
+            matches!(sent.as_slice(), [Input::Workspaces(..)]),
             "{sent:?}"
         );
 

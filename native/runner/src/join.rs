@@ -63,6 +63,10 @@ pub struct Join {
     workspaces: Option<Vec<Workspace>>,
     groups: Option<Groups>,
     selected: Option<String>,
+    /// When `selected` was last set, in epoch seconds: a selection
+    /// event's `occurred_at`, or when the list that set it was asked for.
+    /// Word from before then gives way (issue #301).
+    selected_at: Option<f64>,
     /// pid to workspace, from a status write.
     tab_of: HashMap<u32, String>,
     /// pid to its latest status-setting hook.
@@ -110,6 +114,8 @@ impl Join {
             .as_u64()
             .unwrap_or_default();
         if after == 0 {
+            // A new cmux boot: its events and lists start the selection afresh.
+            self.selected_at = None;
             self.tab_of.clear();
             self.sessions.clear();
             self.absent.clear();
@@ -137,17 +143,29 @@ impl Join {
         true
     }
 
-    /// Takes a new workspace list; false when it matches the last one.
-    pub fn workspaces(&mut self, list: Vec<Workspace>) -> bool {
-        if self.workspaces.as_ref() == Some(&list) {
-            return false;
+    /// Takes a workspace list, asked for at `asked` (epoch seconds);
+    /// false when neither it nor the selection changed. Its selection
+    /// wins unless a selection event happened after it was asked for:
+    /// cmux answered from before that event, and the outline would jump
+    /// back to a workspace no longer on screen (issue #301). A list the
+    /// same as the last one still gives its selection, since the last one
+    /// may have been held back.
+    pub fn workspaces(&mut self, list: Vec<Workspace>, asked: f64) -> bool {
+        let mut changed = false;
+        if self.selected_at.is_none_or(|at| at < asked) {
+            let selected = list
+                .iter()
+                .find(|w| w.selected == Some(true))
+                .map(|w| w.id.clone());
+            changed = selected != self.selected;
+            self.selected = selected;
+            self.selected_at = Some(asked);
         }
-        self.selected = list
-            .iter()
-            .find(|w| w.selected == Some(true))
-            .map(|w| w.id.clone());
-        self.workspaces = Some(list);
-        true
+        if self.workspaces.as_ref() != Some(&list) {
+            self.workspaces = Some(list);
+            changed = true;
+        }
+        changed
     }
 
     /// Takes a fresh group list; false when nothing changed.
@@ -207,7 +225,8 @@ impl Join {
             );
         }
         if name == "workspace.selected" {
-            return (self.select(p), None);
+            let at = e["occurred_at"].as_str().and_then(iso_epoch);
+            return (self.select(p, at), None);
         }
         let Some(hook) = name.strip_prefix("agent.hook.") else {
             return (false, None);
@@ -222,11 +241,23 @@ impl Join {
         (changed, change)
     }
 
-    fn select(&mut self, p: &Value) -> bool {
+    fn select(&mut self, p: &Value, at: Option<f64>) -> bool {
         let Some(id) = p["workspace_id"].as_str() else {
             return false;
         };
-        if p["selected"] == false || self.selected.as_deref() == Some(id) {
+        if p["selected"] == false {
+            return false;
+        }
+        // One from before the selection was last set (a replayed event
+        // landing after the list) gives way. One with no time cmux gave
+        // counts as new and keeps the stamp it found.
+        if let Some(at) = at {
+            if self.selected_at.is_some_and(|last| at < last) {
+                return false;
+            }
+            self.selected_at = Some(at);
+        }
+        if self.selected.as_deref() == Some(id) {
             return false;
         }
         self.selected = Some(id.to_string());
@@ -432,7 +463,7 @@ mod tests {
     #[test]
     fn a_hook_places_a_session_and_sets_its_status() {
         let mut j = Join::default();
-        j.workspaces(vec![ws("A"), ws("B")]);
+        j.workspaces(vec![ws("A"), ws("B")], 0.0);
         j.agents(view(&[(7, true, "s7")]));
         let (changed, change) = j.event(&hook(5, "PermissionRequest", 7, "B", Some("Bash")));
         assert!(changed);
@@ -463,7 +494,7 @@ mod tests {
     #[test]
     fn a_status_write_beats_the_hooks_workspace() {
         let mut j = Join::default();
-        j.workspaces(vec![ws("A"), ws("B")]);
+        j.workspaces(vec![ws("A"), ws("B")], 0.0);
         j.event(&hook(1, "UserPromptSubmit", 7, "A", None));
         j.event(&status_write(2, 7, "B"));
         let d = j.frame(0.0);
@@ -503,7 +534,7 @@ mod tests {
     #[test]
     fn a_session_with_a_status_write_but_no_hook_takes_agent_view_word() {
         let mut j = Join::default();
-        j.workspaces(vec![ws("A")]);
+        j.workspaces(vec![ws("A")], 0.0);
         j.event(&status_write(1, 9, "A"));
         assert_eq!(
             statuses(&j.frame(0.0))[0].1,
@@ -520,7 +551,7 @@ mod tests {
     #[test]
     fn ended_sessions_and_pids_gone_from_agent_view_are_dropped() {
         let mut j = Join::default();
-        j.workspaces(vec![ws("A")]);
+        j.workspaces(vec![ws("A")], 0.0);
         j.event(&hook(1, "Stop", 7, "A", None));
         j.event(&hook(2, "Stop", 8, "A", None));
         assert_eq!(j.frame(0.0).ws_by_id("A").unwrap().agent_list().count(), 2);
@@ -548,7 +579,7 @@ mod tests {
         // never listed it and its card read No agent in the pane.
         use crate::parse;
         let mut j = Join::default();
-        j.workspaces(vec![ws("A"), ws("B")]);
+        j.workspaces(vec![ws("A"), ws("B")], 0.0);
         j.event(&status_write(1, 59557, "B"));
         j.event(&hook(2, "PreToolUse", 59557, "B", Some("Bash")));
         let default_dir =
@@ -573,7 +604,7 @@ mod tests {
     #[test]
     fn a_fresh_replay_from_zero_forgets_what_was_joined() {
         let mut j = Join::default();
-        j.workspaces(vec![ws("A")]);
+        j.workspaces(vec![ws("A")], 0.0);
         j.event(&ack(0, 10));
         j.event(&hook(3, "Stop", 7, "A", None));
         j.stream_down("cmux events exited".into());
@@ -599,7 +630,7 @@ mod tests {
     #[test]
     fn a_pid_agent_view_keeps_leaving_out_is_forgotten_so_a_reused_pid_starts_clean() {
         let mut j = Join::default();
-        j.workspaces(vec![ws("A"), ws("B")]);
+        j.workspaces(vec![ws("A"), ws("B")], 0.0);
         j.agents(view(&[(4242, false, "old")]));
         j.event(&status_write(1, 4242, "A"));
         j.event(&hook(2, "PermissionRequest", 4242, "A", None));
@@ -640,7 +671,7 @@ mod tests {
         let mut j = Join::default();
         let mut a = ws("A");
         a.selected = Some(true);
-        j.workspaces(vec![a, ws("B")]);
+        j.workspaces(vec![a, ws("B")], 0.0);
         assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("A"));
         let sel = json!({"type": "event", "seq": 1, "name": "workspace.selected",
                          "payload": {"workspace_id": "B", "selected": true}});
@@ -652,14 +683,116 @@ mod tests {
         assert!(!j.event(&sel).0, "selecting it again changes nothing");
     }
 
+    fn selected(id: &str) -> Workspace {
+        Workspace {
+            selected: Some(true),
+            ..ws(id)
+        }
+    }
+
+    /// A selection of `id` that cmux says happened at second `at` of 1970.
+    fn select_at(id: &str, at: u8) -> Value {
+        json!({"type": "event", "seq": 1, "name": "workspace.selected",
+               "occurred_at": format!("1970-01-01T00:00:{at:02}Z"),
+               "payload": {"workspace_id": id, "selected": true}})
+    }
+
+    #[test]
+    fn a_list_asked_for_before_a_selection_keeps_that_selection() {
+        let mut j = Join::default();
+        j.workspaces(vec![selected("A"), ws("B")], 0.0);
+        // Jon opens B at 20 s while a list asked for at 10 s is under
+        // way; it answers after the event, from before it, with an
+        // unrelated change.
+        j.event(&select_at("B", 20));
+        let mut stale_a = selected("A");
+        stale_a.unread = Some(1.0);
+        assert!(j.workspaces(vec![stale_a, ws("B")], 10.0));
+        let d = j.frame(0.0);
+        assert_eq!(
+            d.selected_id.as_deref(),
+            Some("B"),
+            "the outline stays on B"
+        );
+        assert_eq!(d.ws_by_id("A").and_then(|w| w.selected), Some(false));
+
+        // A list asked for after the event is cmux's word again.
+        j.workspaces(vec![ws("A"), ws("B"), selected("C")], 30.0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("C"));
+    }
+
+    #[test]
+    fn reselecting_the_same_workspace_still_guards_against_an_older_list() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A"), selected("B")], 0.0);
+        j.event(&select_at("B", 20));
+        assert!(j.workspaces(vec![selected("A"), ws("B")], 10.0));
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("B"));
+    }
+
+    #[test]
+    fn a_held_back_list_does_not_hide_the_next_one_like_it() {
+        let mut j = Join::default();
+        j.workspaces(vec![selected("A"), ws("B")], 0.0);
+        j.event(&select_at("B", 20));
+        j.workspaces(vec![selected("A"), ws("B")], 10.0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("B"));
+        // Jon went back to A with no event: the next list, the same as
+        // the held-back one, is the only word and must land.
+        assert!(j.workspaces(vec![selected("A"), ws("B")], 30.0));
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("A"));
+        assert!(!j.workspaces(vec![selected("A"), ws("B")], 40.0));
+    }
+
+    #[test]
+    fn a_replayed_selection_landing_after_the_list_gives_way() {
+        let mut j = Join::default();
+        j.workspaces(vec![selected("A"), ws("B")], 50.0);
+        assert!(!j.event(&select_at("B", 20)).0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("A"));
+        // A newer one still moves it.
+        assert!(j.event(&select_at("B", 55)).0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("B"));
+    }
+
+    #[test]
+    fn a_new_cmux_boot_starts_the_selection_afresh() {
+        let mut j = Join::default();
+        j.event(&select_at("B", 50));
+        j.event(&ack(0, 10));
+        j.workspaces(vec![selected("A"), ws("B")], 30.0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("A"));
+    }
+
+    #[test]
+    fn a_selection_with_no_time_moves_it_and_keeps_the_guard() {
+        let mut j = Join::default();
+        j.event(&select_at("B", 20));
+        let untimed = json!({"type": "event", "seq": 2, "name": "workspace.selected",
+                             "payload": {"workspace_id": "C", "selected": true}});
+        assert!(j.event(&untimed).0);
+        j.workspaces(vec![selected("A"), ws("B"), ws("C")], 10.0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("C"));
+    }
+
+    #[test]
+    fn a_replayed_selection_gives_way_to_the_list() {
+        let mut j = Join::default();
+        // On start cmux replays an old selection of B; the list, asked
+        // for since, has A on screen.
+        j.event(&select_at("B", 20));
+        j.workspaces(vec![selected("A"), ws("B")], 60.0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("A"));
+    }
+
     #[test]
     fn unchanged_polls_are_not_changes() {
         let mut j = Join::default();
         assert!(!j.loaded());
         assert!(j.agents(view(&[(1, true, "s")])));
         assert!(!j.agents(view(&[(1, true, "s")])));
-        assert!(j.workspaces(vec![ws("A")]));
-        assert!(!j.workspaces(vec![ws("A")]));
+        assert!(j.workspaces(vec![ws("A")], 0.0));
+        assert!(!j.workspaces(vec![ws("A")], 0.0));
         assert!(!j.loaded(), "no groups yet");
         assert_eq!(j.missing(), vec!["group list"]);
         assert!(j.groups(Groups::default()));
@@ -670,7 +803,7 @@ mod tests {
     #[test]
     fn groups_give_each_member_its_group() {
         let mut j = Join::default();
-        j.workspaces(vec![ws("A"), ws("B"), ws("C")]);
+        j.workspaces(vec![ws("A"), ws("B"), ws("C")], 0.0);
         let d = j.frame(0.0);
         assert_eq!(d.groups, None, "no group list read yet");
         assert_eq!(d.ws_by_id("A").unwrap().group, None);
@@ -725,7 +858,7 @@ mod tests {
     #[test]
     fn a_session_in_a_workspace_the_list_lacks_is_left_out() {
         let mut j = Join::default();
-        j.workspaces(vec![ws("A")]);
+        j.workspaces(vec![ws("A")], 0.0);
         j.event(&hook(1, "Stop", 7, "GONE", None));
         let d = j.frame(0.0);
         assert_eq!(d.workspace_list().len(), 1);
@@ -743,7 +876,7 @@ mod tests {
     #[test]
     fn a_hook_without_a_time_keeps_the_last_activity() {
         let mut j = Join::default();
-        j.workspaces(vec![ws("A")]);
+        j.workspaces(vec![ws("A")], 0.0);
         j.event(&hook(1, "PreToolUse", 7, "A", Some("Bash")));
         let untimed = json!({"type": "event", "seq": 2, "name": "agent.hook.Stop",
                              "payload": {"_ppid": 7, "workspace_id": "A"}});
@@ -760,7 +893,7 @@ mod tests {
     #[test]
     fn agent_view_idle_retires_a_working_status_its_hooks_left_behind() {
         let mut j = Join::default();
-        j.workspaces(vec![ws("A")]);
+        j.workspaces(vec![ws("A")], 0.0);
         j.agents(view(&[(7, false, "s7")]));
         j.event(&hook(1, "PreToolUse", 7, "A", Some("Bash")));
         assert_eq!(
