@@ -123,7 +123,7 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
     } else if let Some((view, at, top)) = shown.menu {
         drawn.menu_top = menu::draw(frame, area, view, at, top);
     } else if shown.picking && shown.view == PaneView::All {
-        let rows = pick_rows();
+        let rows = pick_rows(shown.model);
         let rows: Vec<(&str, &str)> = rows.iter().map(|(k, w)| (k.as_str(), *w)).collect();
         keys::draw(frame, area, PICK_TITLE, &rows);
     }

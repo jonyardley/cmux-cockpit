@@ -21,7 +21,7 @@ use crate::data::{Data, Workspace};
 use crate::edit::EditEvent;
 use crate::js::json_num;
 use crate::lane_entries::LaneEntry;
-use crate::lanes::{LaneKey, lane_by_key};
+use crate::lanes::{LaneConfig, LaneKey};
 use crate::menu::MenuEvent;
 use crate::panel::Panel;
 use crate::persist::{SavedState, ViewMode, persist_url};
@@ -49,6 +49,11 @@ pub enum Event {
     /// dismissals and overrides Jon set since the state file was read stay.
     #[facet(skip)]
     Projects(#[facet(opaque)] Vec<Project>),
+    /// A new lane table, as config/lanes.json lists it (lanes.rs); an
+    /// empty one is today's four. A table the core cannot draw leaves the
+    /// last one in place.
+    #[facet(skip)]
+    Lanes(#[facet(opaque)] Vec<LaneConfig>),
     /// Jon's home folder, which the runner reads from its environment and
     /// a sandboxed shell cannot: it expands a "~" root in the editor, sorts
     /// the home folder out of Projects and offers a folder as a project.
@@ -128,6 +133,7 @@ impl Event {
             Event::Data(_)
             | Event::State(_)
             | Event::Projects(_)
+            | Event::Lanes(_)
             | Event::Home { .. }
             | Event::Refresh
             | Event::PrPollOn
@@ -394,9 +400,9 @@ pub fn build_view(s: &mut Session, data: &Data) -> ViewModel {
         let header = LaneHeaderView {
             collapsed: s.is_collapsed(data, lane),
             workspaces: ids(lane_cards),
-            merge_ready: s.merge_ready_of(data, lane.key, lane_cards),
+            merge_ready: s.merge_ready_of(data, &lane.key, lane_cards),
         };
-        lane_headers.insert(lane.key, header);
+        lane_headers.insert(lane.key.clone(), header);
     }
     ViewModel {
         mode: s.mode().as_str().to_string(),
@@ -440,7 +446,7 @@ impl Model {
             Event::OpenProject { key } => s.open_project_workspace(data, &key, None),
             Event::Next => s.jump_next(data),
             Event::MessageAgent { id, text } => s.message_agent(data, &id, &text),
-            Event::ToggleLane { lane } => s.toggle_lane(data, &lane_by_key(lane)),
+            Event::ToggleLane { lane } => s.toggle_lane(data, &lane),
             Event::ToggleProject { key } => s.toggle_project(data, &key),
             Event::ToggleQuiet => s.toggle_quiet(data),
             _ => {}
@@ -550,6 +556,7 @@ impl App for Cockpit {
                 s.reseed(*saved);
             }
             Event::Projects(projects) => model.session.set_projects(projects),
+            Event::Lanes(lanes) => model.session.set_lanes(&lanes),
             Event::Home { home } => model.session.home = home,
             Event::Refresh => {}
             Event::PrPollOn => model.session.pr_poll.turn_on(),
@@ -585,7 +592,7 @@ mod tests {
         assert!(Event::ToggleProject { key: "a".into() }.is_action());
         assert!(
             Event::ToggleLane {
-                lane: LaneKey::Main
+                lane: LaneKey::from("main")
             }
             .is_action()
         );
@@ -600,6 +607,7 @@ mod tests {
         assert!(!Event::Refresh.is_action());
         assert!(!Event::CmuxFailed { id: "a".into() }.is_action());
         assert!(!Event::Projects(Vec::new()).is_action());
+        assert!(!Event::Lanes(Vec::new()).is_action());
         assert!(!Event::Home { home: None }.is_action());
     }
 

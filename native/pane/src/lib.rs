@@ -444,7 +444,7 @@ impl Pane {
     /// the lane's end; anything else cancels.
     fn pick(&mut self, id: String, code: KeyCode) -> Outcome {
         let lane = match code {
-            KeyCode::Char(c) => lane_for_digit(c),
+            KeyCode::Char(c) => lane_for_digit(&self.model, c),
             _ => None,
         };
         match lane.and_then(|lane| to_lane(&self.model, &id, lane)) {
@@ -642,22 +642,22 @@ mod tests {
     fn turns_each_action_into_its_core_event() {
         let moved = CoreEvent::from(Action::MoveCard {
             id: "a".into(),
-            lane: LaneKey::Review,
+            lane: LaneKey::from("review"),
             before: Some("b".into()),
         });
         assert!(
-            matches!(&moved, CoreEvent::MoveCard { id, lane: LaneKey::Review, before: Some(b) }
-                if id == "a" && b == "b"),
+            matches!(&moved, CoreEvent::MoveCard { id, lane, before: Some(b) }
+                if id == "a" && lane.as_str() == "review" && b == "b"),
             "{moved:?}"
         );
         let to_end = CoreEvent::from(Action::MoveCard {
             id: "a".into(),
-            lane: LaneKey::Parked,
+            lane: LaneKey::from("parked"),
             before: None,
         });
         assert!(
-            matches!(&to_end, CoreEvent::MoveCard { id, lane: LaneKey::Parked, before: None }
-                if id == "a"),
+            matches!(&to_end, CoreEvent::MoveCard { id, lane, before: None }
+                if id == "a" && lane.as_str() == "parked"),
             "{to_end:?}"
         );
         let switch = CoreEvent::from(Action::SwitchTo { id: "s".into() });

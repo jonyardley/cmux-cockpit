@@ -35,8 +35,8 @@ pub fn spot_at(spots: &[Spot], line: usize) -> Spot {
         return s.clone();
     }
     let last = spots.iter().rev().find_map(|s| match s {
-        Spot::Header(lane) | Spot::End(lane) => Some(*lane),
-        Spot::Card { lane, .. } => Some(*lane),
+        Spot::Header(lane) | Spot::End(lane) => Some(lane.clone()),
+        Spot::Card { lane, .. } => Some(lane.clone()),
         Spot::Blank => None,
     });
     last.map_or(Spot::Blank, Spot::End)
@@ -50,13 +50,13 @@ pub fn spot_at(spots: &[Spot], line: usize) -> Spot {
 /// the last one above it, else above whatever is below the spot.
 pub fn drop_on(model: &PaneModel, dragged: &str, spot: &Spot) -> Option<Place> {
     let (lane, over) = match spot {
-        Spot::Header(lane) => (*lane, None),
-        Spot::Card { id, lane } if id != dragged => (*lane, Some(id.as_str())),
-        Spot::End(lane) => (*lane, None),
+        Spot::Header(lane) => (lane.clone(), None),
+        Spot::Card { id, lane } if id != dragged => (lane.clone(), Some(id.as_str())),
+        Spot::End(lane) => (lane.clone(), None),
         Spot::Card { .. } | Spot::Blank => return None,
     };
     let rows: Vec<&Row> = model
-        .lane_rows(lane)
+        .lane_rows(&lane)
         .into_iter()
         .filter(|r| r.ws_id() != dragged)
         .collect();
@@ -103,7 +103,7 @@ pub fn reorder(model: &PaneModel, id: &str, up: bool) -> Option<Place> {
         return None;
     }
     let lane = model.lane_of(id)?;
-    let rows = model.lane_rows(lane);
+    let rows = model.lane_rows(&lane);
     let i = rows.iter().position(|r| r.ws_id() == id)?;
     let rank = rows.get(i)?.rank();
     let before = if up {
@@ -126,7 +126,7 @@ pub fn reorder(model: &PaneModel, id: &str, up: bool) -> Option<Place> {
 /// Where `m` and a lane puts `id`: the end of that lane. None when it is
 /// already there, or anchors another group.
 pub fn to_lane(model: &PaneModel, id: &str, lane: LaneKey) -> Option<Place> {
-    if model.lane_of(id) == Some(lane) || !model.movable(id) {
+    if model.lane_of(id).as_ref() == Some(&lane) || !model.movable(id) {
         return None;
     }
     Some(Place { lane, before: None })
@@ -135,10 +135,10 @@ pub fn to_lane(model: &PaneModel, id: &str, lane: LaneKey) -> Option<Place> {
 /// `place`, unless it is where `id` already sits: its own lane, above the
 /// card already below it.
 fn moves(model: &PaneModel, id: &str, place: Place) -> Option<Place> {
-    if model.lane_of(id) != Some(place.lane) {
+    if model.lane_of(id).as_ref() != Some(&place.lane) {
         return Some(place);
     }
-    let rows = model.lane_rows(place.lane);
+    let rows = model.lane_rows(&place.lane);
     let next = rows
         .iter()
         .position(|r| r.ws_id() == id)
@@ -162,7 +162,7 @@ mod tests {
         PaneModel {
             lanes: vec![
                 lane(
-                    LaneKey::Main,
+                    LaneKey::from("main"),
                     vec![
                         card("a", 2, false),
                         card("b", 2, false),
@@ -170,10 +170,10 @@ mod tests {
                     ],
                 ),
                 lane(
-                    LaneKey::Review,
+                    LaneKey::from("review"),
                     vec![card("g", 0, true), card("x", 2, false), card("y", 3, false)],
                 ),
-                lane(LaneKey::Parked, Vec::new()),
+                lane(LaneKey::from("parked"), Vec::new()),
             ],
             ..PaneModel::default()
         }
@@ -196,16 +196,19 @@ mod tests {
     #[test]
     fn reorders_up_above_the_card_above() {
         let m = model();
-        assert_eq!(reorder(&m, "c", true), at(LaneKey::Main, Some("b")));
-        assert_eq!(reorder(&m, "b", true), at(LaneKey::Main, Some("a")));
+        assert_eq!(reorder(&m, "c", true), at(LaneKey::from("main"), Some("b")));
+        assert_eq!(reorder(&m, "b", true), at(LaneKey::from("main"), Some("a")));
         assert_eq!(reorder(&m, "a", true), None, "already at the top");
     }
 
     #[test]
     fn reorders_down_above_the_card_two_below_or_to_the_end() {
         let m = model();
-        assert_eq!(reorder(&m, "a", false), at(LaneKey::Main, Some("c")));
-        assert_eq!(reorder(&m, "b", false), at(LaneKey::Main, None));
+        assert_eq!(
+            reorder(&m, "a", false),
+            at(LaneKey::from("main"), Some("c"))
+        );
+        assert_eq!(reorder(&m, "b", false), at(LaneKey::from("main"), None));
         assert_eq!(reorder(&m, "c", false), None, "already at the bottom");
     }
 
@@ -220,16 +223,23 @@ mod tests {
     #[test]
     fn moves_to_the_end_of_another_lane_only() {
         let m = model();
-        assert_eq!(to_lane(&m, "a", LaneKey::Parked), at(LaneKey::Parked, None));
-        assert_eq!(to_lane(&m, "a", LaneKey::Main), None, "already there");
+        assert_eq!(
+            to_lane(&m, "a", LaneKey::from("parked")),
+            at(LaneKey::from("parked"), None)
+        );
+        assert_eq!(
+            to_lane(&m, "a", LaneKey::from("main")),
+            None,
+            "already there"
+        );
     }
 
     #[test]
     fn drops_above_the_card_under_the_mouse_in_the_same_state() {
         let m = model();
         assert_eq!(
-            drop_on(&m, "a", &on("x", LaneKey::Review)),
-            at(LaneKey::Review, Some("x"))
+            drop_on(&m, "a", &on("x", LaneKey::from("review"))),
+            at(LaneKey::from("review"), Some("x"))
         );
     }
 
@@ -237,23 +247,23 @@ mod tests {
     fn a_drop_among_other_states_anchors_to_the_cards_own_state() {
         let m = model();
         assert_eq!(
-            drop_on(&m, "a", &on("g", LaneKey::Review)),
-            at(LaneKey::Review, Some("x")),
+            drop_on(&m, "a", &on("g", LaneKey::from("review"))),
+            at(LaneKey::from("review"), Some("x")),
             "above the waiting card: still after it, above x"
         );
         assert_eq!(
-            drop_on(&m, "a", &on("y", LaneKey::Review)),
-            at(LaneKey::Review, Some("y")),
+            drop_on(&m, "a", &on("y", LaneKey::from("review"))),
+            at(LaneKey::from("review"), Some("y")),
             "above the idle card: just after x, the last working one"
         );
         assert_eq!(
-            drop_on(&m, "a", &Spot::End(LaneKey::Review)),
-            at(LaneKey::Review, Some("y")),
+            drop_on(&m, "a", &Spot::End(LaneKey::from("review"))),
+            at(LaneKey::from("review"), Some("y")),
             "at the end: just after x"
         );
         assert_eq!(
-            drop_on(&m, "y", &on("g", LaneKey::Review)),
-            at(LaneKey::Review, Some("g")),
+            drop_on(&m, "y", &on("g", LaneKey::from("review"))),
+            at(LaneKey::from("review"), Some("g")),
             "with no other card in its state, the card below, as drop.ts does"
         );
     }
@@ -261,36 +271,39 @@ mod tests {
     #[test]
     fn drops_at_the_top_of_a_lane_on_its_header_and_the_end_below_it() {
         let m = model();
-        let main = Spot::Header(LaneKey::Main);
-        assert_eq!(drop_on(&m, "x", &main), at(LaneKey::Main, Some("a")));
-        let parked = Spot::Header(LaneKey::Parked);
-        assert_eq!(drop_on(&m, "a", &parked), at(LaneKey::Parked, None));
-        let end = Spot::End(LaneKey::Main);
-        assert_eq!(drop_on(&m, "x", &end), at(LaneKey::Main, None));
+        let main = Spot::Header(LaneKey::from("main"));
+        assert_eq!(
+            drop_on(&m, "x", &main),
+            at(LaneKey::from("main"), Some("a"))
+        );
+        let parked = Spot::Header(LaneKey::from("parked"));
+        assert_eq!(drop_on(&m, "a", &parked), at(LaneKey::from("parked"), None));
+        let end = Spot::End(LaneKey::from("main"));
+        assert_eq!(drop_on(&m, "x", &end), at(LaneKey::from("main"), None));
     }
 
     #[test]
     fn a_drop_that_leaves_the_card_where_it_is_does_nothing() {
         let m = model();
         assert_eq!(
-            drop_on(&m, "a", &on("a", LaneKey::Main)),
+            drop_on(&m, "a", &on("a", LaneKey::from("main"))),
             None,
             "onto itself"
         );
         assert_eq!(
-            drop_on(&m, "a", &on("b", LaneKey::Main)),
+            drop_on(&m, "a", &on("b", LaneKey::from("main"))),
             None,
             "above the card below it"
         );
         assert_eq!(
-            drop_on(&m, "a", &Spot::Header(LaneKey::Main)),
+            drop_on(&m, "a", &Spot::Header(LaneKey::from("main"))),
             None,
             "the top"
         );
-        assert_eq!(drop_on(&m, "c", &Spot::End(LaneKey::Main)), None);
+        assert_eq!(drop_on(&m, "c", &Spot::End(LaneKey::from("main"))), None);
         assert_eq!(
-            drop_on(&m, "c", &on("a", LaneKey::Main)),
-            at(LaneKey::Main, Some("a")),
+            drop_on(&m, "c", &on("a", LaneKey::from("main"))),
+            at(LaneKey::from("main"), Some("a")),
             "up its lane"
         );
     }
@@ -305,11 +318,11 @@ mod tests {
     fn reads_below_the_last_line_as_the_last_lanes_end() {
         let spots = vec![
             Spot::Blank,
-            Spot::Header(LaneKey::Main),
-            on("a", LaneKey::Main),
+            Spot::Header(LaneKey::from("main")),
+            on("a", LaneKey::from("main")),
         ];
-        assert_eq!(spot_at(&spots, 1), Spot::Header(LaneKey::Main));
-        assert_eq!(spot_at(&spots, 9), Spot::End(LaneKey::Main));
+        assert_eq!(spot_at(&spots, 1), Spot::Header(LaneKey::from("main")));
+        assert_eq!(spot_at(&spots, 9), Spot::End(LaneKey::from("main")));
         assert_eq!(spot_at(&[Spot::Blank], 9), Spot::Blank);
     }
 }

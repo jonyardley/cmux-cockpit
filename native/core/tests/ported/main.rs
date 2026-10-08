@@ -17,6 +17,7 @@ mod count_tint_saved;
 mod drop;
 mod halo;
 mod helpers_saved;
+mod lane_table;
 mod left_off_quiet;
 mod merge_ready;
 mod merged;

@@ -14,7 +14,9 @@ use indexmap::IndexMap;
 use serde_json::Value;
 
 use crate::edit::Editor;
-use crate::lanes::{LANES, LaneKey};
+use std::collections::BTreeSet;
+
+use crate::lanes::{LaneConfig, LaneKey, Lanes};
 use crate::menu::MenuTarget;
 use crate::persist::{ProjectSpec, SavedState, ViewMode, persist_url};
 use crate::pr_poll::PrPoll;
@@ -62,7 +64,7 @@ impl Outbound {
 }
 
 /// A lane move cmux has not reflected yet.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LaneMove {
     pub lane: LaneKey,
     pub at: f64,
@@ -79,27 +81,24 @@ pub struct LaneMove {
     pub held_from: Option<LaneSet>,
 }
 
-/// A set of lanes, small enough to copy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct LaneSet(u8);
+/// A set of lanes.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct LaneSet(BTreeSet<LaneKey>);
 
 impl LaneSet {
-    fn bit(k: LaneKey) -> u8 {
-        LANES.iter().position(|l| l.key == k).map_or(0, |i| 1 << i)
-    }
-
     /// The set holding only `k`.
     pub fn of(k: LaneKey) -> LaneSet {
-        LaneSet(Self::bit(k))
+        LaneSet(BTreeSet::from([k]))
     }
 
     /// This set with `k` added.
-    pub fn with(self, k: LaneKey) -> LaneSet {
-        LaneSet(self.0 | Self::bit(k))
+    pub fn with(mut self, k: LaneKey) -> LaneSet {
+        self.0.insert(k);
+        self
     }
 
-    pub fn contains(self, k: LaneKey) -> bool {
-        self.0 & Self::bit(k) != 0
+    pub fn contains(&self, k: &LaneKey) -> bool {
+        self.0.contains(k)
     }
 }
 
@@ -185,6 +184,10 @@ pub struct Session {
     pub(crate) collapse_override: IndexMap<String, bool>,
     pub(crate) touched_lanes: Vec<LaneKey>,
 
+    /// The lane table, from config/lanes.json; today's four until a shell
+    /// sends one.
+    pub lanes: Lanes,
+
     /// The pane's own PR poll and the answers it holds, made over
     /// `saved.prs` on every read; a new state file never resets it.
     pub pr_poll: PrPoll,
@@ -215,10 +218,10 @@ impl Session {
             .filter(|(_, flag)| **flag == 1.0)
             .filter_map(|(k, _)| k.strip_prefix(PROJECT_FOLD).map(str::to_string))
             .collect();
-        let touched_lanes = LANES
-            .iter()
-            .filter(|l| folds.contains_key(&format!("lane:{}", l.key.as_str())))
-            .map(|l| l.key)
+        // Every saved lane fold, whether or not the table has the lane now.
+        let touched_lanes = folds
+            .keys()
+            .filter_map(|k| k.strip_prefix("lane:").map(LaneKey::from))
             .collect();
         Session {
             mode: saved.ui.mode.unwrap_or_default(),
@@ -299,6 +302,19 @@ impl Session {
             .retain(|_, key| is_project_key(&projects, key));
         self.sent_specs.clear();
         self.projects = projects;
+    }
+
+    /// Swaps in the lane table config/lanes.json describes. One the core
+    /// cannot draw is ignored: the shell that read it logs why. A pending
+    /// move to a lane the new table does not hold is dropped, so the card
+    /// shows where cmux has it. Folds held by group id need nothing, and
+    /// touched lanes stay, so a lane put back keeps its saved fold.
+    pub fn set_lanes(&mut self, config: &[LaneConfig]) {
+        if let Ok(lanes) = Lanes::from_config(config) {
+            self.lane_override
+                .retain(|_, o| lanes.find(&o.lane).is_some());
+            self.lanes = lanes;
+        }
     }
 
     /// The requests made so far, without taking them.

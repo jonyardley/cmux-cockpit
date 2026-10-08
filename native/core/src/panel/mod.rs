@@ -23,7 +23,7 @@ pub use editor::{EditorView, Field};
 
 // The vocabulary a shell draws the panel with, so it needs none of the
 // core's inner modules.
-pub use crate::lanes::{Density, LANES, LaneKey};
+pub use crate::lanes::{Density, LaneKey, Lanes};
 pub use crate::menu::{MenuAction, MenuItem, MenuTarget, MenuView};
 pub use crate::projects::PROJECT_COLORS;
 pub use crate::text::whole_words;
@@ -444,6 +444,12 @@ pub struct Panel {
     pub projects: Vec<ProjectRow>,
     /// The open card or project menu, with its items' words for this frame.
     pub menu: Option<MenuView>,
+    /// Every lane's key and name as configured, in display order with
+    /// Unsorted last: the pane's lane picker. The sidebar picks from its
+    /// card menu instead, so this is never sent.
+    #[serde(skip)]
+    #[facet(skip)]
+    pub lane_picks: Vec<(LaneKey, String)>,
 }
 
 impl Panel {
@@ -547,14 +553,14 @@ impl Panel {
         self.lanes
             .iter()
             .find(|l| l.rows.iter().any(|r| r.ws_id() == id))
-            .map(|l| l.key)
+            .map(|l| l.key.clone())
     }
 
     /// A lane's rows top to bottom.
-    pub fn lane_rows(&self, key: LaneKey) -> Vec<&Row> {
+    pub fn lane_rows(&self, key: &LaneKey) -> Vec<&Row> {
         self.lanes
             .iter()
-            .filter(|l| l.key == key)
+            .filter(|l| &l.key == key)
             .flat_map(|l| &l.rows)
             .collect()
     }

@@ -47,19 +47,31 @@ pub fn fit_rows<T: Copy>(rows: &[T], room: usize) -> Vec<T> {
     out
 }
 
+/// How many lanes the picker offers: one digit each, 1 to 9. With nine or
+/// more configured lanes, the ones after the ninth (Unsorted among them)
+/// are not offered.
+const PICKABLE: usize = 9;
+
 /// The lane a digit picks after `m`: 1 is the first lane, in display order.
-pub fn lane_for_digit(c: char) -> Option<LaneKey> {
+pub fn lane_for_digit(model: &PaneModel, c: char) -> Option<LaneKey> {
     let n = c.to_digit(10)?;
     let i = usize::try_from(n).ok()?.checked_sub(1)?;
-    LANES.get(i).map(|l| l.key)
+    model
+        .lane_picks
+        .iter()
+        .take(PICKABLE)
+        .nth(i)
+        .map(|(key, _)| key.clone())
 }
 
 /// The lane picker's rows: each digit and the lane it picks, then Esc.
-pub fn pick_rows() -> Vec<(String, &'static str)> {
-    let mut rows: Vec<(String, &'static str)> = LANES
+pub fn pick_rows(model: &PaneModel) -> Vec<(String, &str)> {
+    let mut rows: Vec<(String, &str)> = model
+        .lane_picks
         .iter()
+        .take(PICKABLE)
         .enumerate()
-        .map(|(i, l)| ((i + 1).to_string(), l.name))
+        .map(|(i, (_, name))| ((i + 1).to_string(), name.as_str()))
         .collect();
     rows.push((PICK_CANCEL.0.to_string(), PICK_CANCEL.1));
     rows
@@ -92,7 +104,7 @@ pub fn words(model: &PaneModel) -> Vec<String> {
         out.push(key.to_string());
         out.push(what.to_string());
     }
-    for (key, what) in pick_rows() {
+    for (key, what) in pick_rows(model) {
         out.push(key);
         out.push(what.to_string());
     }
@@ -150,15 +162,68 @@ mod tests {
 
     #[test]
     fn picks_lanes_by_digit_in_display_order() {
-        assert_eq!(lane_for_digit('1'), Some(LaneKey::Main));
-        assert_eq!(lane_for_digit('4'), Some(LaneKey::Parked));
-        assert_eq!(lane_for_digit('5'), Some(LaneKey::Unsorted));
-        assert_eq!(lane_for_digit('0'), None);
-        assert_eq!(lane_for_digit('6'), None);
-        assert_eq!(lane_for_digit('m'), None);
-        let rows = pick_rows();
+        let mut core = cockpit_core::app::Model {
+            data: Some(cockpit_core::Data::default()),
+            ..Default::default()
+        };
+        let m = PaneModel::from_core(&mut core);
+        assert_eq!(lane_for_digit(&m, '1'), Some(LaneKey::from("main")));
+        assert_eq!(lane_for_digit(&m, '4'), Some(LaneKey::from("parked")));
+        assert_eq!(lane_for_digit(&m, '5'), Some(LaneKey::unsorted()));
+        assert_eq!(lane_for_digit(&m, '0'), None);
+        assert_eq!(lane_for_digit(&m, '6'), None);
+        assert_eq!(lane_for_digit(&m, 'm'), None);
+        let rows = pick_rows(&m);
         assert_eq!(rows.first(), Some(&("1".to_string(), "Main activity")));
         assert_eq!(rows.last(), Some(&("Esc".to_string(), "cancel")));
+    }
+
+    #[test]
+    fn picks_from_the_configured_lanes() {
+        let mut core = cockpit_core::app::Model {
+            data: Some(cockpit_core::Data::default()),
+            ..Default::default()
+        };
+        let doing = cockpit_core::lanes::LaneConfig {
+            name: "Doing".into(),
+            ..Default::default()
+        };
+        core.session.set_lanes(&[doing]);
+        let m = PaneModel::from_core(&mut core);
+        assert_eq!(lane_for_digit(&m, '1'), Some(LaneKey::from("Doing")));
+        assert_eq!(lane_for_digit(&m, '2'), Some(LaneKey::unsorted()));
+        assert_eq!(lane_for_digit(&m, '3'), None);
+        let rows = pick_rows(&m);
+        let words: Vec<&str> = rows.iter().map(|(_, w)| *w).collect();
+        assert_eq!(words, ["Doing", "Unsorted", "cancel"]);
+    }
+
+    #[test]
+    fn offers_only_the_first_nine_lanes_one_digit_each() {
+        let mut core = cockpit_core::app::Model {
+            data: Some(cockpit_core::Data::default()),
+            ..Default::default()
+        };
+        let ten: Vec<cockpit_core::lanes::LaneConfig> = (1..=10)
+            .map(|n| cockpit_core::lanes::LaneConfig {
+                name: format!("L{n}"),
+                ..Default::default()
+            })
+            .collect();
+        core.session.set_lanes(&ten);
+        let m = PaneModel::from_core(&mut core);
+        assert_eq!(m.lane_picks.len(), 11, "ten lanes and Unsorted");
+        let rows = pick_rows(&m);
+        let words: Vec<&str> = rows.iter().map(|(_, w)| *w).collect();
+        assert_eq!(
+            words,
+            [
+                "L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8", "L9", "cancel"
+            ]
+        );
+        assert_eq!(rows.get(8).map(|(d, _)| d.as_str()), Some("9"));
+        assert_eq!(lane_for_digit(&m, '9'), Some(LaneKey::from("L9")));
+        assert_eq!(lane_for_digit(&m, '0'), None);
     }
 
     #[test]
@@ -180,9 +245,12 @@ mod tests {
                 ..Needs::default()
             },
             lanes: vec![
-                lane(LaneKey::Main, vec![card("n", 0, true), card("a", 2, false)]),
-                lane(LaneKey::Review, Vec::new()),
-                lane(LaneKey::Parked, vec![card("w", 0, true)]),
+                lane(
+                    LaneKey::from("main"),
+                    vec![card("n", 0, true), card("a", 2, false)],
+                ),
+                lane(LaneKey::from("review"), Vec::new()),
+                lane(LaneKey::from("parked"), vec![card("w", 0, true)]),
             ],
             ..PaneModel::default()
         }
@@ -200,17 +268,17 @@ mod tests {
         assert!(m.is_waiting("w"));
         assert!(!m.is_waiting("a"));
         assert!(!m.is_waiting("f"), "in a folded lane, so not on screen");
-        assert_eq!(m.lane_of("n"), Some(LaneKey::Main));
+        assert_eq!(m.lane_of("n"), Some(LaneKey::from("main")));
         assert_eq!(m.lane_of("f"), None);
-        assert_eq!(m.lane_of("w"), Some(LaneKey::Parked));
+        assert_eq!(m.lane_of("w"), Some(LaneKey::from("parked")));
         assert_eq!(m.lane_of("z"), None);
         let main: Vec<&str> = m
-            .lane_rows(LaneKey::Main)
+            .lane_rows(&LaneKey::from("main"))
             .into_iter()
             .map(Row::ws_id)
             .collect();
         assert_eq!(main, ["n", "a"]);
-        assert!(m.lane_rows(LaneKey::Review).is_empty());
+        assert!(m.lane_rows(&LaneKey::from("review")).is_empty());
     }
 }
 
@@ -263,9 +331,9 @@ pub(crate) mod fixtures {
     /// An open lane holding `rows`.
     pub fn lane(key: LaneKey, rows: Vec<Row>) -> Lane {
         Lane {
+            name: key.as_str().into(),
             key,
             empty: rows.is_empty(),
-            name: key.as_str().into(),
             faint: false,
             marker: Token::LaneMain,
             anchor: None,

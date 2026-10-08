@@ -70,3 +70,79 @@ fn projects_scene_gives_the_golden_view_model() {
 fn review_verdicts_scene_gives_the_golden_view_model() {
     check("review-verdicts");
 }
+
+/// The lanes scene with a lane table of three of its groups, renamed in
+/// place by id and reordered: the panel draws those lanes in that order,
+/// Background's workspaces fall to Unsorted, and the card menu offers the
+/// table's lanes.
+#[test]
+fn a_configured_lane_table_draws_its_lanes_in_its_order() {
+    use cockpit_core::lanes::LaneConfig;
+    use cockpit_core::menu::MenuEvent;
+    use cockpit_core::panel::Panel;
+
+    let input = golden("lanes.input.json");
+    let lanes: Vec<LaneConfig> = serde_json::from_str(
+        r#"[{"id": "parked", "name": "Parked"},
+            {"name": "For review", "density": "full", "color": "laneMain"},
+            {"id": "main", "name": "Main activity", "faint": true}]"#,
+    )
+    .unwrap();
+    let projects: Vec<Project> = serde_json::from_value(input["projects"].clone()).unwrap();
+    let saved: SavedState = serde_json::from_value(input["state"].clone()).unwrap();
+    let data: Data = serde_json::from_value(input["data"].clone()).unwrap();
+    let app = Cockpit;
+    let mut model = Model::default();
+    send(&app, &mut model, Event::Lanes(lanes));
+    send(&app, &mut model, Event::Projects(projects));
+    send(&app, &mut model, Event::State(Box::new(saved)));
+    send(&app, &mut model, Event::Data(data));
+
+    let panel = Panel::from_core(&mut model);
+    let heads: Vec<(&str, &str, bool)> = panel
+        .lanes
+        .iter()
+        .map(|l| (l.key.as_str(), l.name.as_str(), l.faint))
+        .collect();
+    assert_eq!(
+        heads,
+        [
+            ("parked", "PARKED", true),
+            ("For review", "FOR REVIEW", false),
+            ("main", "MAIN ACTIVITY", true),
+            ("unsorted", "UNSORTED", false),
+        ]
+    );
+    let in_background: Vec<&str> = input["data"]["workspaces"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|w| w["group"] == "g-bg")
+        .filter_map(|w| w["id"].as_str())
+        .collect();
+    assert!(!in_background.is_empty());
+    for id in in_background {
+        let lane = panel.lane_of(id);
+        assert_eq!(lane.as_ref().map(|k| k.as_str()), Some("unsorted"), "{id}");
+    }
+
+    // Parked starts folded, so the first card drawn is in For review.
+    let id = panel.card_ids()[0].to_string();
+    send(&app, &mut model, Event::Menu(MenuEvent::OpenCard { id }));
+    let menu = Panel::from_core(&mut model).menu.unwrap();
+    let lanes: Vec<&str> = menu
+        .items
+        .iter()
+        .map(|i| i.label())
+        .filter(|l| l.contains("Lane: "))
+        .collect();
+    assert_eq!(
+        lanes,
+        [
+            "Lane: Parked",
+            "✓ Lane: For review",
+            "Lane: Main activity",
+            "Lane: Unsorted"
+        ]
+    );
+}

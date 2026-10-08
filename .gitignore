@@ -16,6 +16,7 @@ sidebars/agents.js
 sidebars/cockpit.js
 sidebars/focus.js
 config/projects.json
+config/lanes.json
 config/state.json
 config/renames/
 config/url-token

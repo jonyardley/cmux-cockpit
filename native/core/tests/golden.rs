@@ -15,7 +15,7 @@ use cockpit_core::card_chips::Chip;
 use cockpit_core::chips::{FULL_LINE_CHARS, PROJECT_LINE_CHARS, chips_fit_one_line, chips_split};
 use cockpit_core::data::Data;
 use cockpit_core::js::json_num;
-use cockpit_core::lanes::LANES;
+use cockpit_core::lanes::Lanes;
 use cockpit_core::model::{actual_lane_of, card_density};
 use cockpit_core::persist::SavedState;
 use cockpit_core::projects::Project;
@@ -54,9 +54,9 @@ fn computed(input: &Value) -> Value {
     let mut placement = Map::new();
     for w in s.all_workspaces(&data) {
         let place = json!({
-            "actualLane": actual_lane_of(&data, Some(w)).as_str(),
+            "actualLane": actual_lane_of(&s.lanes, &data, Some(w)).as_str(),
             "card": cards.contains(&w.id),
-            "density": card_density(&data, Some(w)).as_str(),
+            "density": card_density(&s.lanes, &data, Some(w)).as_str(),
             "lane": s.lane_of(&data, w).as_str(),
             "project": s.project_key(w),
             "status": s.status_of(Some(w)).as_str(),
@@ -122,7 +122,8 @@ fn check(scene: &str) {
         assert_eq!(view[field], want[field], "{scene}: {field}");
     }
     let headers = want["laneHeaders"].as_object().unwrap();
-    assert_eq!(headers.len(), LANES.len(), "{scene}: one header per lane");
+    let lanes = Lanes::default().iter().count();
+    assert_eq!(headers.len(), lanes, "{scene}: one header per lane");
     for (lane, header) in headers {
         for field in ["collapsed", "workspaces", "mergeReady"] {
             assert_eq!(

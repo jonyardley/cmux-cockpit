@@ -64,7 +64,7 @@ let park = Chip(kind: .action, pieces: [Piece(text: "Park", ink: .secondary)], g
 check(ChipTap.of(park, id: "W1") == ChipTap.none, "a Park chip from an older core sends nothing")
 
 check(
-    SidebarAction.pick(.lane(.parked), on: "W1") == [.menu(.openCard(id: "W1")), .menu(.pick(.lane(.parked)))],
+    SidebarAction.pick(.lane("parked"), on: "W1") == [.menu(.openCard(id: "W1")), .menu(.pick(.lane("parked")))],
     "a pick opens the card's menu, then picks"
 )
 

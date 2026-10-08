@@ -57,10 +57,10 @@ check(DropRule.before(rows: waited, dragged: card("X"), slot: 1) == "G", "a wait
 
 // MARK: Letting go in its own place sends nothing
 
-check(DropRule.staysPut(abc, from: .main, card: card("B"), lane: .main, before: "C"), "B above C in its own lane stays put")
-check(!DropRule.staysPut(abc, from: .main, card: card("B"), lane: .main, before: "A"), "B above A is a move")
-check(DropRule.staysPut(abc, from: .main, card: card("C"), lane: .main, before: nil), "the last card at the end stays put")
-check(!DropRule.staysPut(abc, from: .main, card: card("C"), lane: .review, before: nil), "to another lane is a move")
+check(DropRule.staysPut(abc, from: "main", card: card("B"), lane: "main", before: "C"), "B above C in its own lane stays put")
+check(!DropRule.staysPut(abc, from: "main", card: card("B"), lane: "main", before: "A"), "B above A is a move")
+check(DropRule.staysPut(abc, from: "main", card: card("C"), lane: "main", before: nil), "the last card at the end stays put")
+check(!DropRule.staysPut(abc, from: "main", card: card("C"), lane: "review", before: nil), "to another lane is a move")
 
 // MARK: Make room
 
@@ -126,18 +126,18 @@ check(DropRule.before(abc, at: 3) == nil, "the gap after the last card lands at 
 check(DropRule.place(of: "B", in: abc) == 1 && DropRule.place(of: nil, in: abc) == 3, "a drop above a card is the place before it")
 
 // Which lane draws the gap, and where.
-check(DropRule.gap(in: .main, rows: abc, collapsed: false, lifted: nil, from: nil, over: nil) == nil, "nothing lifted, no gap")
-check(DropRule.gap(in: .main, rows: abc, collapsed: false, lifted: card("B"), from: .main, over: nil) == 1,
+check(DropRule.gap(in: "main", rows: abc, collapsed: false, lifted: nil, from: nil, over: nil) == nil, "nothing lifted, no gap")
+check(DropRule.gap(in: "main", rows: abc, collapsed: false, lifted: card("B"), from: "main", over: nil) == 1,
       "just lifted, before the drag is over a lane, the gap is the slot it left")
-check(DropRule.gap(in: .main, rows: abc, collapsed: false, lifted: card("A"), from: .main, over: (.main, "C")) == 1,
+check(DropRule.gap(in: "main", rows: abc, collapsed: false, lifted: card("A"), from: "main", over: ("main", "C")) == 1,
       "A over its own lane above C: the gap is after B, the second place among B and C")
-check(DropRule.gap(in: .main, rows: abc, collapsed: false, lifted: card("B"), from: .main, over: (.review, nil)) == nil,
+check(DropRule.gap(in: "main", rows: abc, collapsed: false, lifted: card("B"), from: "main", over: ("review", nil)) == nil,
       "over another lane, the slot it left closes")
-check(DropRule.gap(in: .review, rows: abc, collapsed: false, lifted: card("X"), from: .main, over: (.review, nil)) == 3,
+check(DropRule.gap(in: "review", rows: abc, collapsed: false, lifted: card("X"), from: "main", over: ("review", nil)) == 3,
       "a card from another lane opens the gap at the end it would land")
-check(DropRule.gap(in: .review, rows: abc, collapsed: true, lifted: card("X"), from: .main, over: (.review, nil)) == nil,
+check(DropRule.gap(in: "review", rows: abc, collapsed: true, lifted: card("X"), from: "main", over: ("review", nil)) == nil,
       "a folded lane opens no gap")
-check(DropRule.gap(in: .review, rows: [], collapsed: false, lifted: card("X"), from: .main, over: (.review, nil)) == nil,
+check(DropRule.gap(in: "review", rows: [], collapsed: false, lifted: card("X"), from: "main", over: ("review", nil)) == nil,
       "an empty lane opens no gap: its header lights instead")
 
 // The rows a lane draws: the lifted row moves to the gap, never doubled.

@@ -11,7 +11,7 @@ use serde::Serialize;
 
 use crate::data::{Data, Workspace};
 use crate::home::{expand_home, is_home, trim_slash};
-use crate::lanes::{LaneKey, lane_by_key};
+use crate::lanes::LaneKey;
 use crate::model::group_for_lane;
 use crate::persist::ProjectSpec;
 use crate::projects::{OTHER_KEY, Project, new_project, other, saved_spec};
@@ -264,12 +264,13 @@ impl Session {
         if self.is_project_collapsed(k) {
             self.toggle_project(data, k);
         }
-        let lane = lane.map(lane_by_key);
+        // A lane the table does not hold opens ungrouped, as no group does.
+        let lane = lane.and_then(|k| self.lanes.find(&k).cloned());
         let group = lane.as_ref().and_then(|l| group_for_lane(data, l));
         if let (Some(l), Some(_)) = (&lane, group)
             && self.is_collapsed(data, l)
         {
-            self.toggle_lane(data, l);
+            self.toggle_lane(data, &l.key);
         }
         let mut params = vec![("cwd", Param::Str(root)), ("focus", Param::Bool(true))];
         if let Some(g) = group {
@@ -291,12 +292,13 @@ impl Session {
         }
     }
 
-    /// Opens a new session in the card's project folder, in Main
-    /// activity, a no-op without one.
+    /// Opens a new session in the card's project folder, in the first
+    /// lane, a no-op without one.
     pub fn new_session_for(&mut self, data: &Data, w: Option<&Workspace>) {
         if let Some(w) = w {
             let k = self.project_key(w);
-            self.open_project_workspace(data, &k, Some(LaneKey::Main));
+            let first = self.lanes.first().clone();
+            self.open_project_workspace(data, &k, Some(first));
         }
     }
 

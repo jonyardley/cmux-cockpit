@@ -14,7 +14,7 @@ use serde_json::{Map, Value};
 use crate::anchors::is_generated_anchor;
 use crate::data::{Data, Workspace, WorkspaceGroup};
 use crate::js::num_text;
-use crate::lanes::{Density, LANES, Lane, LaneKey, lane_by_key};
+use crate::lanes::{Density, Lane, LaneKey, Lanes};
 use crate::persist::ViewMode;
 use crate::projects::{OTHER_KEY, is_project_key};
 use crate::session::{LaneMove, OrderMove, PROJECT_FOLD, Param, Session};
@@ -26,12 +26,12 @@ pub const CREATE_SECS: f64 = 30.0;
 
 /// The group a lane matches by name; none for Unsorted.
 pub fn group_for_lane<'d>(data: &'d Data, lane: &Lane) -> Option<&'d WorkspaceGroup> {
-    if lane.key == LaneKey::Unsorted {
+    if lane.key.is_unsorted() {
         return None;
     }
     data.group_list()
         .iter()
-        .find(|g| g.name.as_deref() == Some(lane.name))
+        .find(|g| g.name.as_deref() == Some(lane.name.as_str()))
 }
 
 /// A workspace anchoring a group: it cannot leave it, and closing it would take the lane.
@@ -50,20 +50,21 @@ pub fn generated_anchor_id(data: &Data, lane: &Lane) -> Option<String> {
 }
 
 /// The lane by cmux's data alone, without a pending move.
-pub fn actual_lane_of(data: &Data, w: Option<&Workspace>) -> LaneKey {
+pub fn actual_lane_of(lanes: &Lanes, data: &Data, w: Option<&Workspace>) -> LaneKey {
     let Some(group) = w.and_then(Workspace::group_id) else {
-        return LaneKey::Unsorted;
+        return LaneKey::unsorted();
     };
-    LANES
+    lanes
+        .groups()
         .iter()
         .find(|lane| group_for_lane(data, lane).is_some_and(|g| g.id == group))
-        .map_or(LaneKey::Unsorted, |lane| lane.key)
+        .map_or_else(LaneKey::unsorted, |lane| lane.key.clone())
 }
 
 /// How big a card draws: by its lane in cmux's own data, so a drop moves
 /// the card at once but resizes it only when cmux catches up.
-pub fn card_density(data: &Data, w: Option<&Workspace>) -> Density {
-    lane_by_key(actual_lane_of(data, w)).density
+pub fn card_density(lanes: &Lanes, data: &Data, w: Option<&Workspace>) -> Density {
+    lanes.get(&actual_lane_of(lanes, data, w)).density
 }
 
 /// How the chosen and hidden view panels size themselves.
@@ -117,10 +118,10 @@ fn index_after_group(data: &Data, ws_id: &str, g: &WorkspaceGroup) -> Option<usi
 }
 
 impl Session {
-    fn awaiting_lane(&self, key: LaneKey, now: f64) -> bool {
+    fn awaiting_lane(&self, key: &LaneKey, now: f64) -> bool {
         self.lane_override
             .values()
-            .any(|o| o.awaiting && o.lane == key && !expired(o, now))
+            .any(|o| o.awaiting && &o.lane == key && !expired(o, now))
     }
 
     /// Each lane group's generated anchor, which is not a real card, plus
@@ -129,10 +130,10 @@ impl Session {
     pub fn lane_anchor_ids(&self, data: &Data) -> IndexSet<String> {
         let now = now_epoch(data);
         let mut out: IndexSet<String> = IndexSet::new();
-        for lane in &LANES {
+        for lane in self.lanes.groups() {
             if let Some(id) = generated_anchor_id(data, lane) {
                 out.insert(id);
-            } else if group_for_lane(data, lane).is_none() && self.awaiting_lane(lane.key, now) {
+            } else if group_for_lane(data, lane).is_none() && self.awaiting_lane(&lane.key, now) {
                 // cmux can publish a new group's anchor a frame before the
                 // group, so an ungrouped workspace that looks like it hides.
                 let name = lane.name.trim().to_lowercase();
@@ -150,12 +151,12 @@ impl Session {
     /// The lane a workspace shows in: a pending move's, until the data
     /// agrees or the move expires, else cmux's.
     pub fn lane_of(&mut self, data: &Data, w: &Workspace) -> LaneKey {
-        let actual = actual_lane_of(data, Some(w));
+        let actual = actual_lane_of(&self.lanes, data, Some(w));
         let now = now_epoch(data);
-        if let Some(o) = self.lane_override.get(&w.id).copied() {
-            let done = match o.held_from {
+        if let Some(o) = self.lane_override.get(&w.id).cloned() {
+            let done = match &o.held_from {
                 Some(from) => {
-                    actual == o.lane || !from.contains(actual) || (o.awaiting && expired(&o, now))
+                    actual == o.lane || !from.contains(&actual) || (o.awaiting && expired(&o, now))
                 }
                 None => o.lane == actual || expired(&o, now),
             };
@@ -171,19 +172,23 @@ impl Session {
     /// Moves a workspace into a lane (no reorder), for the card menu and
     /// drops. Moving a card back to where cmux still has it cancels the
     /// pending move. A lane's generated anchor is its group, so never moves.
+    /// A key the lane table does not hold (lanes.json changed under a menu
+    /// or a drag) does nothing.
     pub fn move_to_lane(&mut self, data: &Data, w: Option<&Workspace>, key: LaneKey) {
         let Some(w) = w else { return };
+        let Some(lane) = self.lanes.find(&key).cloned() else {
+            return;
+        };
         if self.lane_anchor_ids(data).contains(&w.id) {
             return;
         }
-        if actual_lane_of(data, Some(w)) == key {
+        if actual_lane_of(&self.lanes, data, Some(w)) == key {
             self.lane_override.shift_remove(&w.id);
             return;
         }
-        let lane = lane_by_key(key);
         let g = group_for_lane(data, &lane);
         let ws_id = Param::Str(w.id.clone());
-        if key == LaneKey::Unsorted {
+        if key.is_unsorted() {
             self.cmux("workspace.group.remove", vec![("workspace_id", ws_id)]);
         } else if let Some(g) = g {
             let group = Param::Str(g.id.clone());
@@ -194,7 +199,7 @@ impl Session {
         } else {
             self.request_lane_group(data, &lane);
         }
-        let awaiting = key != LaneKey::Unsorted && g.is_none();
+        let awaiting = !key.is_unsorted() && g.is_none();
         let at = now_epoch(data);
         self.lane_override.insert(
             w.id.clone(),
@@ -211,7 +216,7 @@ impl Session {
     /// cmux makes a generated one; the key is fresh each time.
     fn request_lane_group(&mut self, data: &Data, lane: &Lane) {
         let now = now_epoch(data);
-        if self.awaiting_lane(lane.key, now) {
+        if self.awaiting_lane(&lane.key, now) {
             return;
         }
         let key = format!("cockpit-lane-{}-{}", lane.key.as_str(), num_text(now));
@@ -233,14 +238,18 @@ impl Session {
             .lane_override
             .iter()
             .filter(|(_, o)| o.awaiting)
-            .map(|(id, o)| (id.clone(), *o))
+            .map(|(id, o)| (id.clone(), o.clone()))
             .collect();
         for (ws_id, o) in waiting {
             if expired(&o, now) {
                 self.lane_override.shift_remove(&ws_id);
                 continue;
             }
-            let Some(g) = group_for_lane(data, &lane_by_key(o.lane)) else {
+            let Some(g) = self
+                .lanes
+                .find(&o.lane)
+                .and_then(|l| group_for_lane(data, l))
+            else {
                 continue;
             };
             if let Some(at) = index_after_group(data, &ws_id, g) {
@@ -325,7 +334,7 @@ impl Session {
     /// Whether a lane is folded: Unsorted locally, a lane group by cmux,
     /// a tap applied at once. A lane that starts folded stays so until touched.
     pub fn is_collapsed(&mut self, data: &Data, lane: &Lane) -> bool {
-        if lane.key == LaneKey::Unsorted {
+        if lane.key.is_unsorted() {
             return self.unsorted_collapsed;
         }
         let Some(g) = group_for_lane(data, lane) else {
@@ -344,13 +353,17 @@ impl Session {
         g.collapsed == Some(true)
     }
 
-    /// Folds or unfolds a lane, and saves every fold.
-    pub fn toggle_lane(&mut self, data: &Data, lane: &Lane) {
+    /// Folds or unfolds a lane, and saves every fold. A key the lane table
+    /// does not hold does nothing.
+    pub fn toggle_lane(&mut self, data: &Data, key: &LaneKey) {
+        let Some(lane) = &self.lanes.find(key).cloned() else {
+            return;
+        };
         let next = !self.is_collapsed(data, lane);
         if !self.touched_lanes.contains(&lane.key) {
-            self.touched_lanes.push(lane.key);
+            self.touched_lanes.push(lane.key.clone());
         }
-        if lane.key == LaneKey::Unsorted {
+        if lane.key.is_unsorted() {
             self.unsorted_collapsed = next;
             self.save_folds(data);
             return;
@@ -386,10 +399,13 @@ impl Session {
 
     /// Sends every fold at once, so the saved copy never lags a quick
     /// second tap: touched lanes, folded projects still in the table (or
-    /// Other), and the Quiet header while folded, keys sorted.
+    /// Other), and the Quiet header while folded, keys sorted. A touched
+    /// lane the table no longer holds keeps the fold saved for it, so
+    /// taking a lane out of lanes.json for a while does not lose it.
     pub fn save_folds(&mut self, data: &Data) {
         let mut folds: Vec<(String, f64)> = Vec::new();
-        for lane in &LANES {
+        let lanes: Vec<Lane> = self.lanes.iter().cloned().collect();
+        for lane in &lanes {
             if self.touched_lanes.contains(&lane.key) {
                 let flag = if self.is_collapsed(data, lane) {
                     1.0
@@ -397,6 +413,15 @@ impl Session {
                     0.0
                 };
                 folds.push((format!("lane:{}", lane.key.as_str()), flag));
+            }
+        }
+        for key in &self.touched_lanes {
+            if self.lanes.find(key).is_some() {
+                continue;
+            }
+            let k = format!("lane:{}", key.as_str());
+            if let Some(flag) = self.saved.ui.collapsed.get(&k).copied() {
+                folds.push((k, flag));
             }
         }
         for k in &self.collapsed_projects {

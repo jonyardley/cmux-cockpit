@@ -24,7 +24,8 @@
 //!   but a selection, which takes in `workspace.reordered` (sent when a
 //!   card is dragged between lanes) and `workspace.group.` names, and any
 //!   `workspace_group.` one.
-//! - config/state.json and config/projects.json, checked every 2 seconds.
+//! - config/state.json, config/projects.json and config/lanes.json,
+//!   checked every 2 seconds.
 //! - Each directory's PR, when the core asks (pr_ask.rs): `git` then `gh`
 //!   on a thread per ask, the answer coming back as an input. The core
 //!   decides when (cockpit_core::pr_poll), and only an answer that moves
@@ -69,6 +70,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cockpit_core::data::{Data, Workspace};
 use cockpit_core::home::expand_home;
+use cockpit_core::lanes::LaneConfig;
 use cockpit_core::persist::{SavedProject, SavedState};
 use cockpit_core::pr_poll::PrPolled;
 use cockpit_core::project_table::merge_projects;
@@ -84,7 +86,7 @@ use join::{Change, Join, changes_workspaces};
 use outbox::Outgoing;
 use parse::{AgentView, Groups};
 use stream::CmuxEvents;
-use watch::{Watched, read_projects, read_state};
+use watch::{Watched, read_lanes, read_projects, read_state};
 
 pub const AGENTS_EVERY: Duration = Duration::from_secs(2);
 pub const WORKSPACES_EVERY: Duration = Duration::from_secs(30);
@@ -137,11 +139,11 @@ pub struct Latency {
     pub read_at: Instant,
 }
 
-/// What the core was last fed from the shell's own inputs: the project
-/// table (each "~" root expanded), the state file and cmux's frame.
-/// Written out as data.json, so a core elsewhere fed these in this order
-/// (projects, state, data), with the home folder set on its model first,
-/// builds the same panel. Each is None until first fed (a file that would
+/// What the core was last fed from the shell's own inputs: the lane
+/// table, the project table (each "~" root expanded), the state file and
+/// cmux's frame. Written out as data.json, so a core elsewhere fed these
+/// in this order (lanes, projects, state, data), with the home folder set
+/// on its model first, builds the same panel. Each is None until first fed (a file that would
 /// not read, say), and is written as null then: a reader skips it.
 ///
 /// Each input carries a count of the times it was fed, so a reader of a
@@ -150,6 +152,8 @@ pub struct Latency {
 /// again on every frame would lose its local edits and folds.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Inputs {
+    pub lanes: Option<Vec<LaneConfig>>,
+    pub lanes_seq: u64,
     pub projects: Option<Vec<Project>>,
     pub projects_seq: u64,
     pub state: Option<SavedState>,
@@ -162,6 +166,10 @@ impl Inputs {
     /// Keeps a copy of the event, when it is one of these inputs.
     fn note(&mut self, event: &Event) {
         match event {
+            Event::Lanes(l) => {
+                self.lanes = Some(l.clone());
+                self.lanes_seq += 1;
+            }
             Event::Projects(p) => {
                 self.projects = Some(p.clone());
                 self.projects_seq += 1;
@@ -181,7 +189,7 @@ impl Inputs {
     /// Moves whenever any input was fed, so an unchanged set is not
     /// written again.
     pub fn generation(&self) -> u64 {
-        self.projects_seq + self.state_seq + self.data_seq
+        self.lanes_seq + self.projects_seq + self.state_seq + self.data_seq
     }
 }
 
@@ -344,6 +352,11 @@ impl Feed {
     pub fn frame(&mut self, now: f64) {
         let data = self.join.frame(now);
         self.send(Event::Data(data));
+    }
+
+    /// The lane table, as config/lanes.json lists it.
+    pub fn lanes(&mut self, lanes: Vec<LaneConfig>) {
+        self.send(Event::Lanes(lanes));
     }
 
     pub fn state(&mut self, saved: cockpit_core::persist::SavedState) {
@@ -547,11 +560,12 @@ fn poll_layout(
     }
 }
 
-/// The two watched files, and the last good read of each, which the
-/// project table is built from.
+/// The watched files: the state and project files, with the last good
+/// read of each, which the project table is built from, and the lane file.
 struct Files {
     state: Watched,
     projects: Watched,
+    lanes: Watched,
     file_table: Vec<Project>,
     saved_projects: BTreeMap<String, SavedProject>,
     /// The table last sent, so a state write that leaves it as it was
@@ -564,6 +578,7 @@ impl Files {
         Files {
             state: Watched::new(config.join("state.json")),
             projects: Watched::new(config.join("projects.json")),
+            lanes: Watched::new(config.join("lanes.json")),
             file_table: Vec::new(),
             saved_projects: BTreeMap::new(),
             table: None,
@@ -578,6 +593,17 @@ impl Files {
     /// the last good one until the file changes again.
     fn check(&mut self, feed: &mut Feed, log: &mut dyn FnMut(String)) -> bool {
         let mut changed = false;
+        // First, so the first frame already has its lanes. One that will
+        // not read, or that the core could not draw, keeps the last good one.
+        if self.lanes.changed() {
+            match read_lanes(&self.lanes.path) {
+                Ok(lanes) => {
+                    feed.lanes(lanes);
+                    changed = true;
+                }
+                Err(e) => log(e),
+            }
+        }
         if self.projects.changed() {
             match read_projects(&self.projects.path) {
                 Ok(projects) => self.file_table = projects,
@@ -918,10 +944,10 @@ mod tests {
         let (mut cards, mut headers): Placed = (Vec::new(), Vec::new());
         for e in &feed.model.view.lane_entries {
             match e {
-                LaneEntry::Ws { ws_id, lane, .. } => cards.push((*lane, ws_id.clone())),
+                LaneEntry::Ws { ws_id, lane, .. } => cards.push((lane.clone(), ws_id.clone())),
                 LaneEntry::Header {
                     lane, anchor_id, ..
-                } => headers.push((*lane, anchor_id.clone())),
+                } => headers.push((lane.clone(), anchor_id.clone())),
                 LaneEntry::Zone { .. } => {}
             }
         }
@@ -961,10 +987,10 @@ mod tests {
         assert_eq!(
             cards,
             vec![
-                card(LaneKey::Main, "M"),
-                card(LaneKey::Main, "C"),
-                card(LaneKey::Bg, "Q"),
-                card(LaneKey::Unsorted, "U"),
+                card(LaneKey::from("main"), "M"),
+                card(LaneKey::from("main"), "C"),
+                card(LaneKey::from("bg"), "Q"),
+                card(LaneKey::unsorted(), "U"),
             ],
             "a generated anchor (P) is no card; a real one (M) is"
         );
@@ -973,9 +999,9 @@ mod tests {
         assert_eq!(
             headers,
             vec![
-                (LaneKey::Main, None),
-                (LaneKey::Bg, None),
-                (LaneKey::Unsorted, None)
+                (LaneKey::from("main"), None),
+                (LaneKey::from("bg"), None),
+                (LaneKey::unsorted(), None)
             ]
         );
     }
@@ -1001,7 +1027,7 @@ mod tests {
     fn move_q() -> Event {
         Event::MoveCard {
             id: "Q".into(),
-            lane: LaneKey::Bg,
+            lane: LaneKey::from("bg"),
             before: None,
         }
     }
@@ -1023,7 +1049,10 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         feed.worker = Some(tx);
         feed.act(move_q());
-        assert_eq!(placed(&feed).0, vec![(LaneKey::Bg, "Q".to_string())]);
+        assert_eq!(
+            placed(&feed).0,
+            vec![(LaneKey::from("bg"), "Q".to_string())]
+        );
         feed.act(Event::FlipView);
         let sent: Vec<Outgoing> = rx.try_iter().collect();
         assert_eq!(
@@ -1046,7 +1075,10 @@ mod tests {
         )])));
         feed.state(cockpit_core::persist::SavedState::default());
         feed.frame(1_791_127_160.0);
-        assert_eq!(placed(&feed).0, vec![(LaneKey::Bg, "Q".to_string())]);
+        assert_eq!(
+            placed(&feed).0,
+            vec![(LaneKey::from("bg"), "Q".to_string())]
+        );
         assert_eq!(
             methods(&feed.unsent),
             ["workspace.reorder", "workspace.group.add"],
@@ -1100,7 +1132,10 @@ mod tests {
         let (changed, _, _) = feed.input(Input::CmuxFailed("Q".into()));
         assert!(changed, "the view must draw again");
         feed.frame(1_791_127_101.0);
-        assert_eq!(placed(&feed).0, vec![(LaneKey::Unsorted, "Q".to_string())]);
+        assert_eq!(
+            placed(&feed).0,
+            vec![(LaneKey::unsorted(), "Q".to_string())]
+        );
     }
 
     #[test]
@@ -1249,6 +1284,53 @@ mod tests {
     }
 
     #[test]
+    fn sends_the_lane_file_and_keeps_the_last_good_one() {
+        let dir = std::env::temp_dir().join(format!("cockpit-pane-lanes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let lanes = dir.join("lanes.json");
+        let _ = std::fs::remove_file(&lanes);
+        let mut files = Files::new(&dir);
+        let mut feed = Feed::default();
+        let keys = |feed: &Feed| -> Vec<String> {
+            feed.model
+                .session
+                .lanes
+                .iter()
+                .map(|l| l.key.as_str().to_string())
+                .collect()
+        };
+        assert!(files.check(&mut feed, &mut |_| {}));
+        assert_eq!(keys(&feed), ["main", "review", "bg", "parked", "unsorted"]);
+        assert_eq!(
+            feed.inputs.lanes,
+            Some(Vec::new()),
+            "no file: none, as data.json says"
+        );
+
+        std::fs::write(
+            &lanes,
+            r#"[{"name": "Doing"}, {"id": "later", "name": "Later"}]"#,
+        )
+        .unwrap();
+        assert!(files.check(&mut feed, &mut |_| {}));
+        assert_eq!(keys(&feed), ["Doing", "later", "unsorted"]);
+
+        // A table the core cannot draw is logged, and the last one stays.
+        std::fs::write(&lanes, r#"[{"name": "Doing"}, {"name": "doing"}]"#).unwrap();
+        let mut logged = Vec::new();
+        assert!(!files.check(&mut feed, &mut |line| logged.push(line)));
+        assert_eq!(keys(&feed), ["Doing", "later", "unsorted"]);
+        assert!(
+            logged.iter().any(|l| l.contains("two lanes are named")),
+            "{logged:?}"
+        );
+
+        std::fs::remove_file(&lanes).unwrap();
+        assert!(files.check(&mut feed, &mut |_| {}));
+        assert_eq!(keys(&feed), ["main", "review", "bg", "parked", "unsorted"]);
+    }
+
+    #[test]
     fn a_request_the_gone_worker_missed_is_kept() {
         let mut feed = moving_feed();
         let (tx, rx) = mpsc::channel();
@@ -1273,7 +1355,10 @@ mod tests {
             &["P"],
         )])));
         feed.frame(1_791_127_100.0);
-        assert_eq!(placed(&feed).0, vec![(LaneKey::Unsorted, "Q".to_string())]);
+        assert_eq!(
+            placed(&feed).0,
+            vec![(LaneKey::unsorted(), "Q".to_string())]
+        );
 
         // The event asks for the layout again; the poll's reply is the move.
         for name in ["workspace.reordered", "workspace.group.add"] {
@@ -1289,7 +1374,10 @@ mod tests {
         )])));
         assert!(changed);
         feed.frame(1_791_127_101.0);
-        assert_eq!(placed(&feed).0, vec![(LaneKey::Bg, "Q".to_string())]);
+        assert_eq!(
+            placed(&feed).0,
+            vec![(LaneKey::from("bg"), "Q".to_string())]
+        );
     }
 
     #[test]

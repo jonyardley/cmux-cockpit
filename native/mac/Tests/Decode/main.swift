@@ -108,7 +108,7 @@ for name in names {
         let raw = Raw(try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:])
         let panel = try JSONDecoder().decode(Panel.self, from: data)
         check(jsonName(panel.view) == raw.view, "\(name): view \(raw.view ?? "missing")")
-        check(panel.lanes.map(\.key) == [.main, .review, .bg, .parked, .unsorted], "\(name): the five lanes in order")
+        check(panel.lanes.map(\.key) == ["main", "review", "bg", "parked", "unsorted"], "\(name): the five lanes in order")
         check(panel.lanes.reduce(0) { $0 + $1.rows.count } == raw.laneRows, "\(name): \(raw.laneRows) lane rows")
         check(panel.projects.count == raw.projectRows, "\(name): \(raw.projectRows) project rows")
         check(panel.needs.count == raw.needs, "\(name): needs \(raw.needs.map(String.init) ?? "missing")")

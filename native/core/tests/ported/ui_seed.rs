@@ -1,7 +1,8 @@
 //! test/ui-seed.test.ts: the cockpit's view and folds come back from the
 //! saved state after a rebuild's reload.
 
-use cockpit_core::lanes::{LaneKey, lane_by_key};
+use crate::support::lane_by_key;
+use cockpit_core::lanes::LaneKey;
 use cockpit_core::persist::ViewMode;
 use cockpit_core::session::Session;
 
@@ -25,7 +26,7 @@ mod state_and_model_seed_the_view_and_folds_from_the_saved_state {
     fn keeps_unsorted_and_a_project_folded() {
         let mut s = setup();
         let data = frame(1_000_000.0, vec![], vec![]);
-        assert!(s.is_collapsed(&data, &lane_by_key(LaneKey::Unsorted)));
+        assert!(s.is_collapsed(&data, &lane_by_key(LaneKey::unsorted())));
         assert!(s.is_project_collapsed("/dev/app-two"));
         assert!(!s.is_project_collapsed("/dev/app-one"));
     }
@@ -38,6 +39,6 @@ mod state_and_model_seed_the_view_and_folds_from_the_saved_state {
             vec![group("g-parked", "Parked").collapsed(false)],
             vec![],
         );
-        assert!(!s.is_collapsed(&data, &lane_by_key(LaneKey::Parked)));
+        assert!(!s.is_collapsed(&data, &lane_by_key(LaneKey::from("parked"))));
     }
 }

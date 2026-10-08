@@ -8,6 +8,7 @@ use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
+use cockpit_core::lanes::{LaneConfig, Lanes};
 use cockpit_core::persist::SavedState;
 use cockpit_core::projects::Project;
 
@@ -69,6 +70,19 @@ pub fn read_projects(path: &Path) -> Result<Vec<Project>, String> {
     }
 }
 
+/// config/lanes.json, the lane table; a missing file reads as no lanes
+/// (today's four), and one that will not read, or that the core could not
+/// draw (lanes.rs), as an error.
+pub fn read_lanes(path: &Path) -> Result<Vec<LaneConfig>, String> {
+    let Some(text) = text_of(path)? else {
+        return Ok(Vec::new());
+    };
+    let lanes: Vec<LaneConfig> =
+        serde_json::from_str(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    Lanes::from_config(&lanes).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(lanes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,6 +123,32 @@ mod tests {
         )
         .unwrap();
         assert_eq!(read_projects(&projects).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn reads_the_lane_file_and_refuses_one_the_core_cannot_draw() {
+        assert_eq!(read_lanes(&temp("missing.json")), Ok(Vec::new()));
+        let lanes = temp("lanes.json");
+        fs::write(
+            &lanes,
+            r#"[{"name": "Doing"}, {"id": "later", "name": "Later"}]"#,
+        )
+        .unwrap();
+        let read = read_lanes(&lanes).unwrap();
+        let names: Vec<&str> = read.iter().map(|l| l.name.as_str()).collect();
+        assert_eq!(names, ["Doing", "Later"]);
+        fs::write(&lanes, r#"[{"name": "Doing", "color": "red"}]"#).unwrap();
+        let refused = read_lanes(&lanes).unwrap_err();
+        assert!(refused.contains("unknown colour"), "{refused}");
+        fs::write(&lanes, r#"[{"name": "Doing", "colour": "laneMain"}]"#).unwrap();
+        let misspelt = read_lanes(&lanes).unwrap_err();
+        assert!(misspelt.contains("unknown field"), "{misspelt}");
+        fs::write(&lanes, r#"[{"name": "Doing", "left_off": true}]"#).unwrap();
+        assert!(read_lanes(&lanes).is_err(), "leftOff, not left_off");
+        fs::write(&lanes, r#"[{"name": "Unsorted"}]"#).unwrap();
+        assert!(read_lanes(&lanes).is_err(), "Unsorted's name");
+        fs::write(&lanes, r#"[{"name": "#).unwrap();
+        assert!(read_lanes(&lanes).is_err());
     }
 
     #[test]

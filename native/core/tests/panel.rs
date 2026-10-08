@@ -135,7 +135,7 @@ fn answers_the_cursors_questions_from_the_panel_alone() {
         assert!(lanes.is_lane_card(id));
     }
     for lane in &lanes.lanes {
-        assert_eq!(lanes.lane_rows(lane.key).len(), lane.rows.len());
+        assert_eq!(lanes.lane_rows(&lane.key).len(), lane.rows.len());
     }
 
     let projects = panel("projects");

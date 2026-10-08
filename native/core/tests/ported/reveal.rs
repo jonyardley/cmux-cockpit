@@ -3,9 +3,10 @@
 //! strip lists shows there, not in its lane, but its lane unfolds too, so
 //! the card is in view when it comes back after an answer.
 
+use crate::support::lane_by_key;
 use cockpit_core::data::{Agent, Data, Workspace};
 use cockpit_core::lane_entries::LaneEntry;
-use cockpit_core::lanes::{LaneKey, lane_by_key};
+use cockpit_core::lanes::LaneKey;
 use cockpit_core::persist::ViewMode;
 use cockpit_core::session::Session;
 
@@ -61,7 +62,7 @@ mod revealing_a_card_from_needs_you_or_next {
     #[test]
     fn unfolds_a_folded_lane_before_selecting_its_card() {
         let (mut s, data, _) = setup();
-        let parked = lane_by_key(LaneKey::Parked);
+        let parked = lane_by_key(LaneKey::from("parked"));
         assert!(s.is_collapsed(&data, &parked));
         assert!(!card_shown(&mut s, &data, "p"));
         s.reveal_workspace(&data, Some(by_id(&data, "p")));
@@ -83,7 +84,7 @@ mod revealing_a_card_from_needs_you_or_next {
     #[test]
     fn unfolds_the_lane_of_a_card_the_strip_lists_so_its_card_shows_once_answered() {
         let (mut s, data, _) = setup();
-        let parked = lane_by_key(LaneKey::Parked);
+        let parked = lane_by_key(LaneKey::from("parked"));
         assert!(!card_shown(&mut s, &data, "n"));
         s.reveal_workspace(&data, Some(by_id(&data, "n")));
         assert!(!s.is_collapsed(&data, &parked));
@@ -100,7 +101,7 @@ mod revealing_a_card_from_needs_you_or_next {
     #[test]
     fn only_selects_a_lanes_generated_anchor_its_status_is_on_the_header_folded_or_not() {
         let (mut s, data, _) = setup();
-        assert!(s.is_collapsed(&data, &lane_by_key(LaneKey::Parked)));
+        assert!(s.is_collapsed(&data, &lane_by_key(LaneKey::from("parked"))));
         s.reveal_workspace(&data, Some(by_id(&data, "anchor-parked")));
         assert_eq!(methods(&s), ["workspace.select"]);
     }
@@ -111,7 +112,7 @@ mod revealing_a_card_from_needs_you_or_next {
         s.set_mode(ViewMode::Projects);
         s.reveal_workspace(&data, Some(by_id(&data, "anchor-parked")));
         assert_eq!(s.mode(), ViewMode::All);
-        assert!(s.is_collapsed(&data, &lane_by_key(LaneKey::Parked)));
+        assert!(s.is_collapsed(&data, &lane_by_key(LaneKey::from("parked"))));
         assert_eq!(methods(&s), ["workspace.select"]);
     }
 
@@ -122,7 +123,7 @@ mod revealing_a_card_from_needs_you_or_next {
         s.set_mode(ViewMode::Projects);
         let k = s.project_key(by_id(&data, "p"));
         s.set_collapsed_projects(vec![k.clone()]);
-        assert!(s.is_collapsed(&data, &lane_by_key(LaneKey::Parked)));
+        assert!(s.is_collapsed(&data, &lane_by_key(LaneKey::from("parked"))));
         s.reveal_workspace(&data, Some(by_id(&data, "p")));
         assert!(!s.is_project_collapsed(&k));
         // No workspace.group.expand: the lane stays as Jon left it.

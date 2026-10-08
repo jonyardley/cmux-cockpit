@@ -25,6 +25,7 @@ fn golden() -> Value {
 fn file(seq: u64, input: &Value) -> Vec<u8> {
     let file = json!({
         "seq": seq, "written_at_ms": 1_000_000_000 + seq, "home": HOME,
+        "lanes": input["lanes"], "lanes_seq": seq,
         "projects": input["projects"], "projects_seq": seq,
         "state": input["state"], "state_seq": seq,
         "data": input["data"], "data_seq": seq,
@@ -101,6 +102,23 @@ fn data_json_loads_into_the_core_and_only_what_changed_goes_in_again() {
     assert!(loaded(&file(3, &later)).redraw);
     assert!(panel().to_string().contains("Renamed in cmux"));
     assert_eq!(panel(), by_hand(&later));
+
+    // A lane table goes in when it changes, and the panel draws its lanes.
+    let mut relaned = later.clone();
+    relaned["lanes"] = json!([{"id": "bg", "name": "Background"}, {"name": "Main activity"}]);
+    assert!(loaded(&file(4, &relaned)).redraw);
+    let names: Vec<Value> = panel()["lanes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|l| l["name"].clone())
+        .collect();
+    assert_eq!(names, ["BACKGROUND", "MAIN ACTIVITY", "UNSORTED"]);
+    assert_eq!(
+        loaded(&file(5, &relaned)),
+        Out::default(),
+        "the same table: nothing"
+    );
 
     let id = later["data"]["workspaces"][1]["id"].clone();
     let answer = json!({ "CmuxFailed": { "id": id } }).to_string();

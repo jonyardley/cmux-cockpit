@@ -4,7 +4,6 @@
 
 use cockpit_core::data::{Agent, Data, Workspace};
 use cockpit_core::lane_entries::LaneEntry;
-use cockpit_core::lanes::LaneKey;
 use cockpit_core::session::Session;
 
 use crate::support::*;
@@ -296,11 +295,7 @@ mod cards_sorted_by_state_inside_a_lane {
         s.lane_entries(data)
             .into_iter()
             .filter_map(|e| match e {
-                LaneEntry::Ws {
-                    ws_id,
-                    lane: LaneKey::Main,
-                    ..
-                } => Some(ws_id),
+                LaneEntry::Ws { ws_id, lane, .. } if lane.as_str() == "main" => Some(ws_id),
                 _ => None,
             })
             .collect()
