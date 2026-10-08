@@ -16,8 +16,10 @@ const seeded: State = { ...emptyState(), prs: { done: merged, open: base } };
 
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
-const { agent, ws } = await import("./support/fixtures.ts");
+const { agent, group, ws } = await import("./support/fixtures.ts");
 const m = await import("../src/cockpit/merged.ts");
+// The whole sidebar, so the guard below covers every path a draw runs.
+await import("../src/cockpit/index.ts");
 
 describe("merged cards", () => {
   beforeEach(() => {
@@ -44,7 +46,19 @@ describe("merged cards", () => {
   });
 
   it("never moves or closes a merged card by itself", () => {
-    m.cardOpacity(ws("done"), false);
-    assert.deepEqual(r.calls, []);
+    r.data.groups = [group("g-main", "Main activity", { anchorId: "anchor-main" })];
+    r.data.workspaces = [
+      ws("anchor-main", { title: "Main activity", group: "g-main" }),
+      ws("done", { group: "g-main", agents: [agent("idle")] }),
+    ];
+    const [root] = r.roots;
+    assert.ok(root, "the cockpit registered its sidebar");
+    // Draw it, then again an hour and a day on, past any timer or expiry.
+    for (const later of [0, 3600, 86_400]) {
+      r.data.epoch += later;
+      root();
+    }
+    assert.deepEqual(r.calls, [], "no move, group change or close");
+    assert.deepEqual(r.opened, []);
   });
 });

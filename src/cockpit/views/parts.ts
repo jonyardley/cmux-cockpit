@@ -257,7 +257,6 @@ function prById(chips: readonly Chip[]): PrChip {
 
 // A card's quiet action: a white chip with the quiet chip's edge.
 const ACTION_CHIP: ChipColors = { ...NEUTRAL_CHIP, bg: C.card };
-const actionColors = (): ChipColors => ACTION_CHIP;
 
 // A card's action chip, with its own onTap, so the tap never also selects
 // the card.
@@ -269,7 +268,9 @@ function actionChip(label: Reactive<string>, tap: () => void): View {
     .lineLimit(1)
     .paddingHorizontal(7)
     .paddingVertical(1);
-  return ring(body, ACTION_CHIP.bg, ACTION_CHIP.edge, 1, 6, { hug: true, hover: chipHover(actionColors) }).onTap(tap);
+  return ring(body, ACTION_CHIP.bg, ACTION_CHIP.edge, 1, 6, { hug: true, hover: chipHover(() => ACTION_CHIP) }).onTap(
+    tap,
+  );
 }
 
 /** Under Other, a card whose folder can become a project offers it: the card menu's item, in view. */

@@ -29,7 +29,7 @@ pub enum Token {
     Heading,
     /// palette.ts's greenDeep: pr-colors.ts's READY_INK, a PR GitHub would merge.
     GreenDeep,
-    /// The first ink: a title's words, and a merged card's Close.
+    /// The first ink: a title's words, which the shells draw with it.
     Text,
     /// The second ink: the quiet chip's words.
     Secondary,

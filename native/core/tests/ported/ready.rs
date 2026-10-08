@@ -1,5 +1,5 @@
 //! test/ready.test.ts: the Ready state on cockpit cards (issue #53), its
-//! PR words, and To review, with the chips row it keeps (chips.ts).
+//! PR words, with the chips row it keeps (chips.ts).
 
 use cockpit_core::data::{Agent, AgentStatus, Data, PrStatus, Workspace};
 use cockpit_core::prs::pr_summary;

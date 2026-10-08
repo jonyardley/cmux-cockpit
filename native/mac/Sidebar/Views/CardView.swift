@@ -91,7 +91,7 @@ struct FullCard: View {
 
 /// The compact card (cards.ts compactCard): a smaller badge and title, the
 /// PR in words on the status line with its diff size faint after it, the
-/// detail on one line, and the actions on a line of their own.
+/// detail on one line, then the progress bar. No actions: the card menu holds them.
 struct CompactCard: View {
     let card: Card
 

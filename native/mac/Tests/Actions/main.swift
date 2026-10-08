@@ -37,6 +37,7 @@ func cards(_ panel: Panel) -> [Card] {
     return inLanes + inProjects
 }
 
+var actionsSeen = 0
 for name in names {
     guard let data = try? Data(contentsOf: dir.appendingPathComponent(name)),
           let panel = try? JSONDecoder().decode(Panel.self, from: data)
@@ -48,6 +49,7 @@ for name in names {
     check(all.allSatisfy { !$0.menu.isEmpty }, "\(name): every card carries its menu")
     for card in all {
         for chip in card.chips where chip.isAction {
+            actionsSeen += 1
             check(
                 ChipTap.of(chip, id: card.wsId) == .send(SidebarAction.pick(.newProjectFromFolder, on: card.wsId)),
                 "\(name): \(card.title)'s action chip is Make project"
@@ -55,6 +57,8 @@ for name in names {
         }
     }
 }
+
+check(actionsSeen > 0, "the fixtures hold a Make project chip to check (\(actionsSeen))")
 
 let park = Chip(kind: .action, pieces: [Piece(text: "Park", ink: .secondary)], givesWay: false, url: nil, isAction: true)
 check(ChipTap.of(park, id: "W1") == ChipTap.none, "a Park chip from an older core sends nothing")

@@ -13,48 +13,17 @@
 
 use std::path::PathBuf;
 
-use cockpit_core::data::Data;
-use cockpit_core::home::expand_home;
+use cockpit_core::fixture::scene_model;
 use cockpit_core::panel::ProjectRow;
-use cockpit_core::persist::SavedState;
-use cockpit_core::projects::Project;
-use cockpit_core::{Cockpit, EditEvent, Event, MenuEvent, Model, Panel};
+use cockpit_core::{Cockpit, Data, EditEvent, Event, MenuEvent, Model, Panel};
 use crux_core::App;
 use serde_json::Value;
 
-/// The home folder every fixture loads with: not a card's own folder.
-const HOME: &str = "/Users/jon";
-
-/// The core's model after a golden scene's input went in as events, as
-/// a shell feeds it: the project table, the saved state, then cmux's data.
+/// The core's model after a golden scene's input went in as a shell
+/// feeds it, at the fixture home, so a card outside it offers Make
+/// project, the one action chip, and the fixtures carry one.
 fn loaded(scene: &str) -> Model {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join(format!("../../test/golden/{scene}.input.json"));
-    let input: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
-    let mut projects: Vec<Project> = serde_json::from_value(input["projects"].clone()).unwrap();
-    // Roots under the home, as the runner expands them (Feed::projects).
-    for p in &mut projects {
-        p.root = p
-            .root
-            .take()
-            .map(|r| expand_home(&r, Some(HOME)).unwrap_or(r));
-    }
-    let saved: SavedState = serde_json::from_value(input["state"].clone()).unwrap();
-    let data: Data = serde_json::from_value(input["data"].clone()).unwrap();
-    let mut model = Model::default();
-    for event in [
-        Event::Projects(projects),
-        Event::State(Box::new(saved)),
-        // A home, as the shell sends it, so a card outside it offers Make
-        // project, the one action chip, and the fixtures carry one.
-        Event::Home {
-            home: Some(HOME.to_string()),
-        },
-        Event::Data(data),
-    ] {
-        send(&mut model, event);
-    }
-    model
+    scene_model(scene).unwrap()
 }
 
 fn send(model: &mut Model, event: Event) {
