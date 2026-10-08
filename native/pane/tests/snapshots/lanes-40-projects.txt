@@ -17,9 +17,8 @@
      #130 draft +342 −17  …
    ○ Long build Working 40m · quiet 17m
    ● Tidy strip             Finished 6m
-     To review →
    ○ Card layout fit           Idle 15m
-     #176 merged  Park  Close
+     #176 merged  card-layout-fit
    ○ Untimed card                  Idle
    ● Selected card           Working 1m
    ● Ended agent           Finished 15m
@@ -29,7 +28,7 @@
    ● Iteration…    Waiting 4m · 1 shell
    ● Parked card             Working 5m
    ○ Merged elsewhere          No agent
-     #171 merged  Park  Close
+     #171 merged  tidy-strip
 
    + New project
 

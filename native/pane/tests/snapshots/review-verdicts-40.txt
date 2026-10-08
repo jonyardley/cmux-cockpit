@@ -3,7 +3,7 @@
 
  ▾ ■ MAIN ACTIVITY  1  1 ready to merge
    ○ waiting card              No agent
-     #9 ready  feat-9  To review →
+     #9 ready  feat-9
 
  ▾ ■ FOR REVIEW  8     1 ready to merge
    ○ ready card                No agent
@@ -19,7 +19,7 @@
    ○ blocked card              No agent
      #6
    ○ merged card               No agent
-     #7 · merged  Park  Close
+     #7 · merged
    ○ closed card               No agent
      #8 · closed
 

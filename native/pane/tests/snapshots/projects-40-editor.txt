@@ -12,12 +12,13 @@
 
  ▾ ■ App Two  2
    ● Two: release          Finished 10m
-     #12 open  main  To review →
+     #12 open  main
    ○ Two: changelog            Idle 15m
-     #14 merged  Park  Close
+     #14 merged  changelog-for-release
 
  ▾ ■ Other  1
    ○ Scratch                   No agent
+     Make "Scratch" a project
 
    + New project
 ▌  Folder /opt/quill▏

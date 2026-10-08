@@ -142,7 +142,6 @@
   "state": {
     "asking": { "asking": { "epoch": 999880, "reason": "allow git push?" } },
     "dismissed": {},
-    "mergeKept": {},
     "moves": {},
     "names": {},
     "ownPrs": {},
