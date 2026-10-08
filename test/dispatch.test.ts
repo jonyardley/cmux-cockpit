@@ -78,11 +78,17 @@ describe("scriptsFor", () => {
 });
 
 describe("sendersFor", () => {
-  it("names only Stop's report-move, and nothing for any other event", () => {
+  it("names Stop's report-move and the prompt's report-rename, and nothing for any other event", () => {
     assert.deepEqual(sendersFor("Stop", {}), ["report-move.ts"]);
+    assert.deepEqual(sendersFor("UserPromptSubmit", {}), ["report-rename.ts"]);
+    assert.deepEqual(sendersFor("SessionStart", {}), []);
     assert.deepEqual(sendersFor("PreToolUse", { tool_name: "Agent" }), []);
     const routes = { PreToolUse: [{ script: "x.ts", sendsBack: true as const }] };
-    assert.deepEqual(sendersFor("PreToolUse", {}, routes), [], "a marked route off Stop still cannot block");
+    assert.deepEqual(
+      sendersFor("PreToolUse", {}, routes),
+      [],
+      "a marked route off Stop and prompts still cannot block",
+    );
   });
 });
 

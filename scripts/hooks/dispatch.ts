@@ -7,9 +7,11 @@
 // process with the same stdin, all at once, each with its own time limit.
 // One that fails, hangs or crashes never stops the others. It always exits
 // 0 and drops the scripts' stdout, so it can never block a tool or answer
-// a permission prompt; their stderr is passed on, each line tagged. The one
-// exception is a Stop script routes.ts marks sendsBack: its block decision
-// is passed on, so the turn goes back to the chat (report-move.ts). Only
+// a permission prompt; their stderr is passed on, each line tagged. The
+// exception is a Stop or UserPromptSubmit script routes.ts marks sendsBack:
+// its block decision is passed on, so the turn goes back to the chat
+// (report-move.ts) or a `/ws` prompt never reaches the model
+// (report-rename.ts). Only
 // those scripts' stdout is read at all. Each
 // script runs in its own process group, so a time limit, or Claude Code
 // stopping this one, ends whatever the script started too.

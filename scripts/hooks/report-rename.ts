@@ -17,6 +17,14 @@
 // and would hide it. It never fails the hook: every problem is a note on
 // stderr and exit 0.
 //
+// Two prompts rename the workspace at once, on UserPromptSubmit. `/ws
+// <name>` renames it and is blocked, so it never reaches the model and
+// costs no turn; its name keeps the workspace's issue number unless it
+// brings its own. A session's first real prompt that names an issue puts
+// the number at the front of a workspace name that has none ("#123 Fix
+// reload"); no later prompt does, so the name settles once. cmux's own
+// auto-naming is a setting Jon turns off; these are the only renames left.
+//
 // The same read also names the session for the agents panel: the latest
 // `/rename`, else its first real prompt (slash commands, shell escapes and
 // harness text skipped). cmux's own agent title is the first message, which
@@ -119,6 +127,96 @@ export function withName(
   return { ...rest, [session]: name };
 }
 
+// "#123", "issue 123", "issue #123" or "issues 123", not inside a word,
+// a link or an entity; or a GitHub issue link.
+const ISSUE = /(?<![\w/#&])(?:issues?\s+#?(\d+)|#(\d+))\b|\/issues\/(\d+)\b/gi;
+// What comes right before a pull request's number: "PR #12", "PRs 12",
+// "pull request 12".
+const PR_BEFORE = /\b(?:prs?|pull requests?)\s*$/i;
+// What joins numbers in a list: "#12, #13 and #14".
+const LIST_JOIN = /^[\s,]*(?:and|or|&)?\s*$/i;
+// A colour, not an issue: "#222222", "#22222280".
+const COLOUR = /^#(?:\d{6}|\d{8})$/;
+
+/**
+ * The first issue a prompt names, or null when it names none. A pull
+ * request's number is not one, nor is a number listed straight after one,
+ * nor a colour written in digits.
+ */
+export function issueIn(prompt: string): number | null {
+  let prEnd = -1;
+  for (const m of prompt.matchAll(ISSUE)) {
+    const listedAfterPr = prEnd >= 0 && LIST_JOIN.test(prompt.slice(prEnd, m.index));
+    if (PR_BEFORE.test(prompt.slice(0, m.index)) || listedAfterPr) {
+      prEnd = m.index + m[0].length;
+      continue;
+    }
+    prEnd = -1;
+    const n = Number(m[1] ?? m[2] ?? m[3]);
+    if (n > 0 && !COLOUR.test(m[0])) return n;
+  }
+  return null;
+}
+
+const LEADING_ISSUE = /^#(\d+)(?:\s+|$)/;
+
+/** The issue number a workspace name starts with, or null when it starts with none. */
+export const leadingIssue = (title: string): number | null => {
+  const m = LEADING_ISSUE.exec(title.trim());
+  return m ? Number(m[1]) : null;
+};
+
+/** `title` led by the issue number: "#123 Fix reload". */
+export const withIssue = (title: string, issue: number): string => `#${issue} ${title.trim()}`.trim();
+
+/** `title` without the issue number it starts with. */
+export const withoutIssue = (title: string): string => title.trim().replace(LEADING_ISSUE, "");
+
+/**
+ * The words of a `/ws` prompt, on one line: "" for a bare `/ws`, null for
+ * any other prompt.
+ */
+export function wsWords(prompt: string): string | null {
+  const m = /^\s*\/ws(?:\s+([\s\S]*))?$/.exec(prompt);
+  return m ? (m[1] ?? "").replace(/\s+/g, " ").trim() : null;
+}
+
+// Only an issue number: "#45".
+const BARE_ISSUE = /^#(\d+)$/;
+
+/** Whether renaming to `words` needs the workspace's current name: always, unless they bring their own number and more. */
+export const needsCurrent = (words: string): boolean => BARE_ISSUE.test(words) || leadingIssue(words) === null;
+
+/**
+ * The name a rename to `words` (a `/ws` or a `/rename`) gives, keeping the
+ * workspace's issue number: words that bring their own number win, and
+ * words that are only a number put it on the current name. Null when the
+ * current name is needed and not known.
+ */
+export function renamedTitle(words: string, current: string | null): string | null {
+  const bare = BARE_ISSUE.exec(words);
+  if (bare) return current === null ? null : withIssue(withoutIssue(current), Number(bare[1]));
+  if (leadingIssue(words) !== null) return words;
+  if (current === null) return null;
+  const issue = leadingIssue(current);
+  return issue === null ? words : withIssue(words, issue);
+}
+
+/** A workspace's title in `cmux --json list-workspaces` output, or null when it is not there. */
+export function titleFrom(json: string, wsId: string): string | null {
+  let v: unknown;
+  try {
+    v = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  const list = field(v, "workspaces");
+  if (!Array.isArray(list)) return null;
+  const ws = list.find((w) => field(w, "id") === wsId || field(w, "ref") === wsId);
+  const title = field(ws, "title");
+  return typeof title === "string" ? title : null;
+}
+
 const fold = (s: string): string => s.trim().toLowerCase();
 
 /** Whether a cmux group already goes by `title`, whatever its case or spacing. */
@@ -160,9 +258,11 @@ export interface Stamp {
   handled: string | null;
   /** The session's first real prompt, once found. */
   prompt: string | null;
+  /** The issue that prompt named, while it is still to go on the workspace's name. */
+  issue: number | null;
 }
 
-const EMPTY: Stamp = { offset: 0, seen: null, handled: null, prompt: null };
+const EMPTY: Stamp = { offset: 0, seen: null, handled: null, prompt: null, issue: null };
 
 /** A saved stamp, or the empty one when it is missing or not the shape. */
 export function parseStamp(text: string | null): Stamp {
@@ -184,7 +284,14 @@ export function parseStamp(text: string | null): Stamp {
   // A stamp from before names were kept read past the first prompt: read
   // the transcript again from the start, keeping what was handled.
   if (!name(prompt)) return { ...EMPTY, handled };
-  return { offset, seen, handled, prompt };
+  const issue = field(v, "issue");
+  return {
+    offset,
+    seen,
+    handled,
+    prompt,
+    issue: typeof issue === "number" && Number.isInteger(issue) && issue > 0 ? issue : null,
+  };
 }
 
 function readText(path: string): string | null {
@@ -282,30 +389,129 @@ function saveName(session: string, stamp: Stamp): string | null {
   return null;
 }
 
+// A slash command as typed, "/code-review high #298": the event carries it
+// raw, not tagged as the transcript has it. A path ("/Users/jon/x") is not one.
+const SLASH_COMMAND = /^\s*\/[\w:-]+(?:\s|$)/;
+
 // UserPromptSubmit runs before Claude Code writes the prompt to the
 // transcript, so the first one is taken from the event itself.
 export function promptFromEvent(event: unknown): string | null {
   const prompt = field(event, "prompt");
-  return field(event, "hook_event_name") === "UserPromptSubmit" && typeof prompt === "string"
+  return field(event, "hook_event_name") === "UserPromptSubmit" &&
+    typeof prompt === "string" &&
+    !SLASH_COMMAND.test(prompt)
     ? promptText(prompt)
     : null;
 }
 
+// Whether a name may be given: "clash" when a group already goes by it
+// (the cockpit would hide the workspace), "unknown" when the group list
+// cannot be read, so a clash cannot be ruled out.
+function groupCheck(title: string): "ok" | "clash" | "unknown" {
+  const groups = cmux(["--json", "workspace", "group", "list"]);
+  if (!groups.ok) return "unknown";
+  return clashesWithGroup(title, groupNamesFrom(groups.out)) ? "clash" : "ok";
+}
+
+const renameTo = (wsId: string, title: string): string | null => {
+  const res = cmux(["workspace-action", "--action", "rename", "--workspace", wsId, "--title", title]);
+  return res.ok ? null : `cmux rename failed: ${res.err || "cmux refused"}`;
+};
+
+// The name a rename to `words` gives, or a note saying why it cannot be
+// worked out. The current name is read only when it matters.
+function targetTitle(wsId: string, words: string): { title: string } | { note: string } {
+  let current: string | null = null;
+  if (needsCurrent(words)) {
+    const now = currentTitle(wsId);
+    if ("note" in now) return now;
+    current = now.title;
+  }
+  const title = renamedTitle(words, current);
+  return title === null ? { note: "the current name is not known" } : { title };
+}
+
 // Renames the workspace when the session has a new name, returning a note
 // for stderr when something went wrong.
+// The `/rename` keeps the workspace's issue number, as `/ws` does.
 function renameWorkspace(wsId: string, stamp: Stamp): string | null {
-  const title = stamp.seen;
-  if (!title || title === stamp.handled) return null;
-  const groups = cmux(["--json", "workspace", "group", "list"]);
-  // Without the group list a clash cannot be ruled out, so try again next run.
-  if (!groups.ok) return `cmux group list failed: ${groups.err}`;
-  if (!clashesWithGroup(title, groupNamesFrom(groups.out))) {
-    const res = cmux(["workspace-action", "--action", "rename", "--workspace", wsId, "--title", title]);
-    if (!res.ok) return `cmux rename failed: ${res.err}`;
+  const seen = stamp.seen;
+  if (!seen || seen === stamp.handled) return null;
+  // Without the current name or the group list, try again next run.
+  const target = targetTitle(wsId, seen);
+  if ("note" in target) return target.note;
+  const check = groupCheck(target.title);
+  if (check === "unknown") return "cmux group list failed";
+  if (check === "ok") {
+    const note = renameTo(wsId, target.title);
+    if (note) return note;
   }
   // Handled when skipped too, so a name that clashes is checked once, not every run.
-  stamp.handled = title;
+  stamp.handled = seen;
   return null;
+}
+
+// The workspace's current title, or a note for stderr when cmux cannot say.
+function currentTitle(wsId: string): { title: string } | { note: string } {
+  const res = cmux(["--json", "list-workspaces"]);
+  if (!res.ok) return { note: `cmux workspace list failed: ${res.err}` };
+  const title = titleFrom(res.out, wsId);
+  return title === null ? { note: "the workspace is not in cmux's list" } : { title };
+}
+
+// Puts the issue the session's first prompt named at the front of the
+// workspace's name, unless it already starts with one, and clears it from
+// the stamp once done. Left in the stamp when cmux could not be read or
+// refused, so the next run tries again. Returns a note for stderr then.
+function prefixIssue(wsId: string, stamp: Stamp): string | null {
+  const issue = stamp.issue;
+  if (issue === null) return null;
+  const now = currentTitle(wsId);
+  if ("note" in now) return now.note;
+  if (leadingIssue(now.title) === null) {
+    const title = withIssue(now.title, issue);
+    const check = groupCheck(title);
+    if (check === "unknown") return "cmux group list failed";
+    const note = check === "ok" ? renameTo(wsId, title) : null;
+    if (note) return note;
+  }
+  stamp.issue = null;
+  return null;
+}
+
+// What to tell Jon after a `/ws`: the prompt is blocked either way, so the
+// reason is all he sees of it.
+function renameNow(wsId: string, words: string): string {
+  if (!words) return "Give the workspace a name: /ws <name>, /ws #123 <name>, or /ws #123 to change only its number.";
+  const target = targetTitle(wsId, words);
+  if ("note" in target) return `Not renamed: ${target.note}, so its issue number could be lost. Try again.`;
+  const check = groupCheck(target.title);
+  if (check === "unknown")
+    return "Not renamed: cmux's group list could not be read, so a clash cannot be ruled out. Try again.";
+  if (check === "clash") {
+    return `Not renamed: a group is already called "${target.title}", and the cockpit would hide the workspace.`;
+  }
+  const note = renameTo(wsId, target.title);
+  return note ? `Not renamed: ${note}.` : `Workspace renamed to "${target.title}".`;
+}
+
+/** The block decision for a `/ws` prompt, as a JSON line, or null for any other event. */
+function wsDecision(event: unknown, wsId: string | undefined): string | null {
+  const prompt = field(event, "prompt");
+  if (field(event, "hook_event_name") !== "UserPromptSubmit" || typeof prompt !== "string") return null;
+  const words = wsWords(prompt);
+  if (words === null) return null;
+  const reason =
+    wsId && ID.test(wsId) ? renameNow(wsId, words) : "Not renamed: this session is not in a cmux workspace.";
+  return JSON.stringify({ decision: "block", reason });
+}
+
+// The issue to put in the workspace's name: one named by the session's
+// first real prompt, when this event carries it.
+function firstIssue(event: unknown, scanned: Stamp): number | null {
+  if (scanned.prompt !== null || promptFromEvent(event) === null) return null;
+  const prompt = field(event, "prompt");
+  return typeof prompt === "string" ? issueIn(readable(prompt)) : null;
 }
 
 // Reads what the transcript added, renames the workspace and saves the
@@ -321,16 +527,24 @@ function apply(event: unknown, wsId: string | undefined): string[] {
   // A new session's transcript may not be written yet: its first prompt
   // can still come from the event.
   const stamp = scan(transcript, before) ?? { ...before };
+  stamp.issue ??= firstIssue(event, stamp);
   stamp.prompt ??= promptFromEvent(event);
-  const notes = [renameWorkspace(wsId, stamp), saveName(session, stamp)].filter((n) => n !== null);
+  const notes = [renameWorkspace(wsId, stamp), prefixIssue(wsId, stamp), saveName(session, stamp)].filter(
+    (n) => n !== null,
+  );
   if (JSON.stringify(stamp) !== JSON.stringify(before)) writeStamp(path, stamp);
   return notes;
 }
 
 if (import.meta.main) {
-  let notes: string[];
+  let notes: string[] = [];
   try {
-    notes = apply(readEvent(), process.env.CMUX_WORKSPACE_ID);
+    const event = readEvent();
+    const wsId = process.env.CMUX_WORKSPACE_ID;
+    const decision = wsDecision(event, wsId);
+    // A `/ws` is not a prompt the session is named by: nothing else to do.
+    if (decision) console.log(decision);
+    else notes = apply(event, wsId);
   } catch (err) {
     notes = [errorText(err)];
   }
