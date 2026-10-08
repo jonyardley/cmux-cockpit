@@ -156,7 +156,10 @@ impl Session {
             self.lanes.iter().map(|l| (l.clone(), Vec::new())).collect();
         for w in self.card_workspaces(data) {
             let key = self.lane_of(data, w);
-            if let Some((_, cards)) = out.iter_mut().find(|(l, _)| l.key == key) {
+            // A key the table does not hold falls to Unsorted, which is
+            // last, so no card ever drops out of All.
+            let at = out.iter().position(|(l, _)| l.key == key);
+            if let Some((_, cards)) = at.or(out.len().checked_sub(1)).and_then(|i| out.get_mut(i)) {
                 cards.push(w);
             }
         }
@@ -304,5 +307,26 @@ mod tests {
         s.lane_entries(&frame(&["b"]));
         assert!(!s.held_rank.contains_key("a"));
         assert!(s.held_rank.contains_key("b"));
+    }
+
+    #[test]
+    fn puts_a_card_whose_lane_is_not_in_the_table_in_unsorted() {
+        use crate::lanes::LaneKey;
+        use crate::session::LaneMove;
+        let mut s = Session::default();
+        let move_to_gone = LaneMove {
+            lane: LaneKey::from("gone"),
+            at: 1000.0,
+            awaiting: false,
+            held_from: None,
+        };
+        s.lane_override.insert("a".into(), move_to_gone);
+        let data = frame(&["a"]);
+        let cards = s.lane_cards(&data);
+        let unsorted = cards.iter().find(|(l, _)| l.key.is_unsorted());
+        let ids: Vec<&str> = unsorted
+            .map(|(_, ws)| ws.iter().map(|w| w.id.as_str()).collect())
+            .unwrap_or_default();
+        assert_eq!(ids, ["a"]);
     }
 }

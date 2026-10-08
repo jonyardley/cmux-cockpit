@@ -172,8 +172,13 @@ impl Session {
     /// Moves a workspace into a lane (no reorder), for the card menu and
     /// drops. Moving a card back to where cmux still has it cancels the
     /// pending move. A lane's generated anchor is its group, so never moves.
+    /// A key the lane table does not hold (lanes.json changed under a menu
+    /// or a drag) does nothing.
     pub fn move_to_lane(&mut self, data: &Data, w: Option<&Workspace>, key: LaneKey) {
         let Some(w) = w else { return };
+        let Some(lane) = self.lanes.find(&key).cloned() else {
+            return;
+        };
         if self.lane_anchor_ids(data).contains(&w.id) {
             return;
         }
@@ -181,7 +186,6 @@ impl Session {
             self.lane_override.shift_remove(&w.id);
             return;
         }
-        let lane = self.lanes.get(&key).clone();
         let g = group_for_lane(data, &lane);
         let ws_id = Param::Str(w.id.clone());
         if key.is_unsorted() {
@@ -241,7 +245,11 @@ impl Session {
                 self.lane_override.shift_remove(&ws_id);
                 continue;
             }
-            let Some(g) = group_for_lane(data, self.lanes.get(&o.lane)) else {
+            let Some(g) = self
+                .lanes
+                .find(&o.lane)
+                .and_then(|l| group_for_lane(data, l))
+            else {
                 continue;
             };
             if let Some(at) = index_after_group(data, &ws_id, g) {
@@ -345,9 +353,12 @@ impl Session {
         g.collapsed == Some(true)
     }
 
-    /// Folds or unfolds a lane, and saves every fold.
+    /// Folds or unfolds a lane, and saves every fold. A key the lane table
+    /// does not hold does nothing.
     pub fn toggle_lane(&mut self, data: &Data, key: &LaneKey) {
-        let lane = &self.lanes.get(key).clone();
+        let Some(lane) = &self.lanes.find(key).cloned() else {
+            return;
+        };
         let next = !self.is_collapsed(data, lane);
         if !self.touched_lanes.contains(&lane.key) {
             self.touched_lanes.push(lane.key.clone());
@@ -388,7 +399,9 @@ impl Session {
 
     /// Sends every fold at once, so the saved copy never lags a quick
     /// second tap: touched lanes, folded projects still in the table (or
-    /// Other), and the Quiet header while folded, keys sorted.
+    /// Other), and the Quiet header while folded, keys sorted. A touched
+    /// lane the table no longer holds keeps the fold saved for it, so
+    /// taking a lane out of lanes.json for a while does not lose it.
     pub fn save_folds(&mut self, data: &Data) {
         let mut folds: Vec<(String, f64)> = Vec::new();
         let lanes: Vec<Lane> = self.lanes.iter().cloned().collect();
@@ -400,6 +413,15 @@ impl Session {
                     0.0
                 };
                 folds.push((format!("lane:{}", lane.key.as_str()), flag));
+            }
+        }
+        for key in &self.touched_lanes {
+            if self.lanes.find(key).is_some() {
+                continue;
+            }
+            let k = format!("lane:{}", key.as_str());
+            if let Some(flag) = self.saved.ui.collapsed.get(&k).copied() {
+                folds.push((k, flag));
             }
         }
         for k in &self.collapsed_projects {

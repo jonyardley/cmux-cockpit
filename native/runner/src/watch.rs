@@ -140,6 +140,13 @@ mod tests {
         fs::write(&lanes, r#"[{"name": "Doing", "color": "red"}]"#).unwrap();
         let refused = read_lanes(&lanes).unwrap_err();
         assert!(refused.contains("unknown colour"), "{refused}");
+        fs::write(&lanes, r#"[{"name": "Doing", "colour": "laneMain"}]"#).unwrap();
+        let misspelt = read_lanes(&lanes).unwrap_err();
+        assert!(misspelt.contains("unknown field"), "{misspelt}");
+        fs::write(&lanes, r#"[{"name": "Doing", "left_off": true}]"#).unwrap();
+        assert!(read_lanes(&lanes).is_err(), "leftOff, not left_off");
+        fs::write(&lanes, r#"[{"name": "Unsorted"}]"#).unwrap();
+        assert!(read_lanes(&lanes).is_err(), "Unsorted's name");
         fs::write(&lanes, r#"[{"name": "#).unwrap();
         assert!(read_lanes(&lanes).is_err());
     }

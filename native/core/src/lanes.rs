@@ -93,7 +93,7 @@ pub struct Lane {
 
 /// One lane as config/lanes.json writes it. Only `name` is needed.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct LaneConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
@@ -139,48 +139,50 @@ fn unsorted() -> Lane {
     }
 }
 
-/// A built-in lane. Parked alone starts folded, and it alone draws faint.
-fn built_in_lane(
-    id: &str,
-    name: &str,
-    color: Token,
-    density: Density,
+/// A built-in lane's flags: whether it starts folded, draws faint and
+/// says where you left off.
+#[derive(Clone, Copy)]
+struct Flags {
     folded: bool,
+    faint: bool,
     left_off: bool,
-) -> Lane {
+}
+
+/// A built-in lane. Parked alone starts folded, and it alone draws faint.
+fn built_in_lane(id: &str, name: &str, color: Token, density: Density, flags: Flags) -> Lane {
     Lane {
         key: LaneKey::new(id),
         name: name.to_string(),
         color,
         density,
-        starts_collapsed: folded,
-        faint: folded,
-        left_off,
+        starts_collapsed: flags.folded,
+        faint: flags.faint,
+        left_off: flags.left_off,
     }
 }
 
 /// Today's four lanes, which a missing or empty lanes.json gives.
 fn built_in() -> Vec<Lane> {
     use Density::{Compact, Full, Row};
+    let plain = Flags {
+        folded: false,
+        faint: false,
+        left_off: false,
+    };
+    let left_off = Flags {
+        left_off: true,
+        ..plain
+    };
+    let shelved = Flags {
+        folded: true,
+        faint: true,
+        left_off: true,
+    };
     vec![
-        built_in_lane("main", "Main activity", Token::LaneMain, Full, false, false),
-        built_in_lane(
-            "review",
-            "For review",
-            Token::LaneReview,
-            Compact,
-            false,
-            false,
-        ),
-        built_in_lane(
-            "bg",
-            "Background",
-            Token::LaneBackground,
-            Compact,
-            false,
-            true,
-        ),
-        built_in_lane("parked", "Parked", Token::LaneParked, Row, true, true),
+        built_in_lane("main", "Main activity", Token::LaneMain, Full, plain),
+        built_in_lane("review", "For review", Token::LaneReview, Compact, plain),
+        built_in_lane("bg", "Background", Token::LaneBackground, Compact, left_off),
+        built_in_lane("parked", "Parked", Token::LaneParked, Row, shelved),
     ]
 }
 
@@ -243,7 +245,8 @@ impl Default for Lanes {
 impl Lanes {
     /// The table config/lanes.json describes; none or an empty list is
     /// today's four. A lane without a name, an unknown colour or density,
-    /// an id or group name used twice, or the id "unsorted" fails it whole.
+    /// an id or group name used twice, or an id or name "unsorted" in any
+    /// case fails it whole. A field it does not know fails it on reading.
     pub fn from_config(config: &[LaneConfig]) -> Result<Lanes, String> {
         let defaults = built_in();
         let mut groups = Vec::with_capacity(config.len());
@@ -252,9 +255,10 @@ impl Lanes {
         for c in config {
             let base = defaults.iter().find(|l| l.key.as_str() == config_id(c));
             let lane = configured(c, base)?;
-            if lane.key.is_unsorted() {
+            let taken = |s: &str| s.to_lowercase() == UNSORTED_ID;
+            if taken(lane.key.as_str()) || taken(&lane.name) {
                 return Err(format!(
-                    "lane \"{}\": the id \"{UNSORTED_ID}\" is Unsorted's",
+                    "lane \"{}\": \"{UNSORTED_ID}\" is Unsorted's, as an id or a name",
                     lane.name
                 ));
             }
@@ -285,7 +289,14 @@ impl Lanes {
         &self.groups
     }
 
-    /// The lane with this key; Unsorted for a key no lane has.
+    /// The lane with this key, Unsorted included; None for a key the table
+    /// does not hold, which an action then ignores.
+    pub fn find(&self, k: &LaneKey) -> Option<&Lane> {
+        self.iter().find(|l| &l.key == k)
+    }
+
+    /// The lane with this key; Unsorted for a key no lane has. For drawing,
+    /// where a card always needs a lane; an action uses `find`.
     pub fn get(&self, k: &LaneKey) -> &Lane {
         self.groups
             .iter()
@@ -410,6 +421,27 @@ mod tests {
     }
 
     #[test]
+    fn finds_only_a_key_the_table_holds() {
+        let lanes = Lanes::default();
+        assert_eq!(
+            lanes
+                .find(&LaneKey::from("parked"))
+                .map(|l| l.name.as_str()),
+            Some("Parked")
+        );
+        assert!(lanes.find(&LaneKey::unsorted()).is_some(), "Unsorted's own");
+        assert!(lanes.find(&LaneKey::from("gone")).is_none());
+    }
+
+    #[test]
+    fn refuses_a_field_it_does_not_know() {
+        let read = |json: &str| serde_json::from_str::<Vec<LaneConfig>>(json);
+        assert!(read(r#"[{"name": "Doing", "colour": "laneMain"}]"#).is_err());
+        assert!(read(r#"[{"name": "Doing", "left_off": true}]"#).is_err());
+        assert!(read(r#"[{"name": "Doing", "leftOff": true}]"#).is_ok());
+    }
+
+    #[test]
     fn an_unknown_key_reads_as_unsorted() {
         let lanes = Lanes::default();
         assert!(lanes.get(&LaneKey::from("gone")).key.is_unsorted());
@@ -444,6 +476,18 @@ mod tests {
         assert!(
             with(|c| c.id = Some("unsorted".into())).is_err(),
             "Unsorted's id"
+        );
+        assert!(
+            with(|c| c.id = Some("Unsorted".into())).is_err(),
+            "Unsorted's id, any case"
+        );
+        assert!(
+            with(|c| c.name = "Unsorted".into()).is_err(),
+            "Unsorted's name"
+        );
+        assert!(
+            with(|c| c.name = "UNSORTED".into()).is_err(),
+            "Unsorted's name, any case"
         );
         let twice = |a: LaneConfig, b: LaneConfig| Lanes::from_config(&[a, b]).is_err();
         assert!(twice(named("A"), named("A")), "the same id");

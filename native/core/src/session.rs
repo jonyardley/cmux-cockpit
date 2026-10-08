@@ -305,9 +305,14 @@ impl Session {
     }
 
     /// Swaps in the lane table config/lanes.json describes. One the core
-    /// cannot draw is ignored: the shell that read it logs why.
+    /// cannot draw is ignored: the shell that read it logs why. A pending
+    /// move to a lane the new table does not hold is dropped, so the card
+    /// shows where cmux has it. Folds held by group id need nothing, and
+    /// touched lanes stay, so a lane put back keeps its saved fold.
     pub fn set_lanes(&mut self, config: &[LaneConfig]) {
         if let Ok(lanes) = Lanes::from_config(config) {
+            self.lane_override
+                .retain(|_, o| lanes.find(&o.lane).is_some());
             self.lanes = lanes;
         }
     }

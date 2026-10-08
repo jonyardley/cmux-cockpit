@@ -47,11 +47,21 @@ pub fn fit_rows<T: Copy>(rows: &[T], room: usize) -> Vec<T> {
     out
 }
 
+/// How many lanes the picker offers: one digit each, 1 to 9. With nine or
+/// more configured lanes, the ones after the ninth (Unsorted among them)
+/// are not offered.
+const PICKABLE: usize = 9;
+
 /// The lane a digit picks after `m`: 1 is the first lane, in display order.
 pub fn lane_for_digit(model: &PaneModel, c: char) -> Option<LaneKey> {
     let n = c.to_digit(10)?;
     let i = usize::try_from(n).ok()?.checked_sub(1)?;
-    model.lane_picks.get(i).map(|(key, _)| key.clone())
+    model
+        .lane_picks
+        .iter()
+        .take(PICKABLE)
+        .nth(i)
+        .map(|(key, _)| key.clone())
 }
 
 /// The lane picker's rows: each digit and the lane it picks, then Esc.
@@ -59,6 +69,7 @@ pub fn pick_rows(model: &PaneModel) -> Vec<(String, &str)> {
     let mut rows: Vec<(String, &str)> = model
         .lane_picks
         .iter()
+        .take(PICKABLE)
         .enumerate()
         .map(|(i, (_, name))| ((i + 1).to_string(), name.as_str()))
         .collect();
@@ -185,6 +196,34 @@ mod tests {
         let rows = pick_rows(&m);
         let words: Vec<&str> = rows.iter().map(|(_, w)| *w).collect();
         assert_eq!(words, ["Doing", "Unsorted", "cancel"]);
+    }
+
+    #[test]
+    fn offers_only_the_first_nine_lanes_one_digit_each() {
+        let mut core = cockpit_core::app::Model {
+            data: Some(cockpit_core::Data::default()),
+            ..Default::default()
+        };
+        let ten: Vec<cockpit_core::lanes::LaneConfig> = (1..=10)
+            .map(|n| cockpit_core::lanes::LaneConfig {
+                name: format!("L{n}"),
+                ..Default::default()
+            })
+            .collect();
+        core.session.set_lanes(&ten);
+        let m = PaneModel::from_core(&mut core);
+        assert_eq!(m.lane_picks.len(), 11, "ten lanes and Unsorted");
+        let rows = pick_rows(&m);
+        let words: Vec<&str> = rows.iter().map(|(_, w)| *w).collect();
+        assert_eq!(
+            words,
+            [
+                "L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8", "L9", "cancel"
+            ]
+        );
+        assert_eq!(rows.get(8).map(|(d, _)| d.as_str()), Some("9"));
+        assert_eq!(lane_for_digit(&m, '9'), Some(LaneKey::from("L9")));
+        assert_eq!(lane_for_digit(&m, '0'), None);
     }
 
     #[test]

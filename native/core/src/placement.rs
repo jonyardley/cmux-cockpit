@@ -233,6 +233,10 @@ impl Session {
         if !self.is_mode(ViewMode::All) || is_foreign_anchor(self, data, id) {
             return;
         }
+        // A lane the table no longer holds (lanes.json changed mid-drag).
+        if self.lanes.find(&lane).is_none() {
+            return;
+        }
         let key = format!("w:{id}");
         let all = self.lane_entries(data);
         let (entries, _, _) = slot_in(&all, &key, 0, self.lanes.first());
@@ -294,7 +298,7 @@ impl Session {
         let ws_id = Param::Str(id.to_string());
         if lane.is_unsorted() {
             self.cmux("workspace.group.remove", vec![("workspace_id", ws_id)]);
-        } else if let Some(g) = group_for_lane(data, self.lanes.get(&lane)) {
+        } else if let Some(g) = self.lanes.find(&lane).and_then(|l| group_for_lane(data, l)) {
             let group = Param::Str(g.id.clone());
             self.cmux(
                 "workspace.group.add",

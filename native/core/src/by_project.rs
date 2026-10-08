@@ -264,7 +264,8 @@ impl Session {
         if self.is_project_collapsed(k) {
             self.toggle_project(data, k);
         }
-        let lane = lane.map(|k| self.lanes.get(&k).clone());
+        // A lane the table does not hold opens ungrouped, as no group does.
+        let lane = lane.and_then(|k| self.lanes.find(&k).cloned());
         let group = lane.as_ref().and_then(|l| group_for_lane(data, l));
         if let (Some(l), Some(_)) = (&lane, group)
             && self.is_collapsed(data, l)
