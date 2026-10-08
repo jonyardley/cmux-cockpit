@@ -6,17 +6,13 @@ pub use cockpit_core::panel::*;
 pub use cockpit_core::panel::{Panel as PaneModel, PanelView as PaneView};
 
 /// The keys the `?` overlay lists: the key, then what it does.
-pub const KEYS: [(&str, &str); 18] = [
+pub const KEYS: [(&str, &str); 14] = [
     ("↑ ↓", "move between cards"),
     ("shift ↑ ↓", "reorder in its lane"),
     ("m 1-5", "move to a lane"),
     ("drag", "move to a lane or spot"),
     ("Enter", "switch to it"),
     ("d", "dismiss from Needs you"),
-    ("r", "send to For review"),
-    ("p", "park a merged card"),
-    ("x", "close a merged card"),
-    ("k", "keep: hide its buttons"),
     ("+", "session in project"),
     ("e", "edit project"),
     ("n", "new project"),
@@ -87,7 +83,6 @@ pub fn words(model: &PaneModel) -> Vec<String> {
         PICK_CANCEL.1,
         DROP_HERE,
         DROP_AT_END,
-        TO_REVIEW,
         DIRTY_MARK,
         NEW_PROJECT_LABEL,
         QUIET_LABEL,
@@ -161,7 +156,7 @@ fn card_words(c: &Card, out: &mut Vec<String>) {
     out.push(c.status.clone());
     out.push(c.left_off.clone());
     out.push(c.detail.clone());
-    for chip in c.chips.iter().chain(&c.merged) {
+    for chip in &c.chips {
         out.extend(chip.pieces.iter().map(|p| p.text.clone()));
     }
 }
@@ -274,7 +269,6 @@ pub(crate) mod fixtures {
             status_has_age: false,
             left_off: String::new(),
             chips: Vec::new(),
-            merged: Vec::new(),
             detail: String::new(),
             detail_lines: 1,
             waiting,

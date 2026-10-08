@@ -44,8 +44,6 @@ pub enum MenuAction {
     MarkRead,
     /// Opens the card's PR in the browser, when it has a link.
     OpenPr,
-    /// Hides a merged card's buttons.
-    KeepMerged,
     /// Dismiss needs you, or Restore needs you when dismissed.
     ToggleNeeds,
     /// The project menu's new session in the project's folder.
@@ -152,10 +150,6 @@ impl Session {
             url: p.url.as_deref(),
         });
         items.push(MenuItem::item(open_pr_label(pr_ref), MenuAction::OpenPr));
-        items.push(MenuItem::item(
-            self.keep_label(data, w),
-            MenuAction::KeepMerged,
-        ));
         let needs = if self.is_needs_dismissed(w) {
             "Restore needs you"
         } else {
@@ -291,7 +285,6 @@ impl Session {
                     self.outbox.push(Outbound::OpenUrl { url });
                 }
             }
-            MenuAction::KeepMerged => self.keep_merged(data, w),
             MenuAction::ToggleNeeds => {
                 if self.is_needs_dismissed(w) {
                     self.restore_needs(w);
@@ -389,7 +382,6 @@ mod tests {
                 "Pin",
                 "Mark read",
                 "Open PR #7",
-                "Keep: for a merged PR's buttons",
                 "Dismiss needs you",
             ]
         );

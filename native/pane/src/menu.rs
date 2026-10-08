@@ -182,7 +182,7 @@ mod tests {
         assert_eq!(action_at(&items, 3), Some(MenuAction::MarkRead));
         assert_eq!(action_at(&items, 2), None, "a divider");
         // Gone: falls back to where it was.
-        assert_eq!(settle(&items, 3, Some(&MenuAction::KeepMerged)), 3);
+        assert_eq!(settle(&items, 3, Some(&MenuAction::EditProject)), 3);
     }
 
     #[test]

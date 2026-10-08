@@ -62,14 +62,6 @@ pub enum Action {
     Edit(EditEvent),
     /// A project's "+": a new session in its folder.
     OpenProject { key: String },
-    /// A card's "To review →".
-    FileForReview { id: String },
-    /// A merged card's Park.
-    ParkMerged { id: String },
-    /// A merged card's Close.
-    CloseMerged { id: String },
-    /// Keep: hides a merged card's Park and Close.
-    KeepMerged { id: String },
     /// Something done with the card menu or a project's menu.
     Menu(MenuEvent),
 }
@@ -83,24 +75,8 @@ impl From<Action> for CoreEvent {
             Action::FlipView => CoreEvent::FlipView,
             Action::Edit(e) => CoreEvent::Edit(e),
             Action::OpenProject { key } => CoreEvent::OpenProject { key },
-            Action::FileForReview { id } => CoreEvent::FileForReview { id },
-            Action::ParkMerged { id } => CoreEvent::ParkMerged { id },
-            Action::CloseMerged { id } => CoreEvent::CloseMerged { id },
-            Action::KeepMerged { id } => CoreEvent::KeepMerged { id },
             Action::Menu(e) => CoreEvent::Menu(e),
         }
-    }
-}
-
-/// A merged card's key as its action: `p` Park, `x` Close, `k` Keep, and
-/// any other key none. Like `r`, the key reaches every card; the core
-/// acts only on a card that offers it.
-fn merged_action(key: char, id: String) -> Option<Action> {
-    match key {
-        'p' => Some(Action::ParkMerged { id }),
-        'x' => Some(Action::CloseMerged { id }),
-        'k' => Some(Action::KeepMerged { id }),
-        _ => None,
     }
 }
 
@@ -297,8 +273,8 @@ impl Pane {
     /// flips the view. Up and down move the cursor (or scroll a line when
     /// there are none): in All over the cards, where with shift they
     /// reorder its card in its lane, and in Projects over its rows. Enter
-    /// switches to the card, `d` dismisses it from Needs you, `r` files
-    /// it for review and Space opens its menu. In Projects `+`, `e` and
+    /// switches to the card, `d` dismisses it from Needs you and Space
+    /// opens its menu. In Projects `+`, `e` and
     /// `n` open a session, edit a project and make one, and Space opens a
     /// card's or a project's menu. An open menu or editor takes every key.
     pub fn handle_key(&mut self, key: KeyEvent) -> Outcome {
@@ -403,12 +379,6 @@ impl Pane {
             KeyCode::Enter => {
                 on.map_or(Outcome::Nothing, |id| Outcome::Act(Action::SwitchTo { id }))
             }
-            KeyCode::Char('r') => on.map_or(Outcome::Nothing, |id| {
-                Outcome::Act(Action::FileForReview { id })
-            }),
-            KeyCode::Char(c @ ('p' | 'x' | 'k')) => on
-                .and_then(|id| merged_action(c, id))
-                .map_or(Outcome::Nothing, Outcome::Act),
             KeyCode::Char('d') => match on {
                 Some(id) if self.model.is_waiting(&id) => Outcome::Act(Action::Dismiss { id }),
                 _ => Outcome::Nothing,
@@ -438,12 +408,6 @@ impl Pane {
             }
             (KeyCode::Enter, Some(ProjectTarget::Card(id))) => {
                 Outcome::Act(Action::SwitchTo { id })
-            }
-            (KeyCode::Char('r'), Some(ProjectTarget::Card(id))) => {
-                Outcome::Act(Action::FileForReview { id })
-            }
-            (KeyCode::Char(c @ ('p' | 'x' | 'k')), Some(ProjectTarget::Card(id))) => {
-                merged_action(c, id).map_or(Outcome::Nothing, Outcome::Act)
             }
             (KeyCode::Char(' '), Some(ProjectTarget::Card(id))) => {
                 Outcome::Act(Action::Menu(MenuEvent::OpenCard { id }))

@@ -1,15 +1,12 @@
 //! A card's chips (src/cockpit/card-chips.ts): what answering the chat
-//! takes, the PR, the branch and the ports, in that order, and the card's
-//! To review action. What a card draws of them, and how they fit, is
-//! chips.rs; a merged card's Park and Close are merged.rs.
+//! takes, the PR, the branch and the ports, in that order. How they fit a
+//! card's line is chips.rs.
 
 use serde::Serialize;
 
-use crate::data::{Data, Workspace};
-use crate::lanes::LaneKey;
-use crate::model::is_anchor;
+use crate::data::Workspace;
 use crate::moves::{MoveSize, move_size, move_size_text};
-use crate::prs::{PrHealth, pr_health, pr_summary};
+use crate::prs::{PrHealth, pr_summary};
 use crate::session::Session;
 
 /// One chip, as the TypeScript's `Chip` writes it.
@@ -93,25 +90,6 @@ impl Session {
         }
         out.extend(port_chip(w.ports.as_deref()));
         out
-    }
-
-    /// Its PR is ready to merge (the green chip), so "To review" shows in green.
-    pub fn review_is_green(&self, w: Option<&Workspace>) -> bool {
-        pr_health(&self.saved, w) == PrHealth::Ready
-    }
-
-    /// A Ready card, or one whose PR is ready to merge, offers "To
-    /// review", unless it is already in For review or anchors a group.
-    pub fn can_file_for_review(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
-        let Some(w) = w else { return false };
-        (self.is_ready(data, Some(w)) || self.review_is_green(Some(w)))
-            && self.lane_of(data, w) != LaneKey::Review
-            && !is_anchor(data, w)
-    }
-
-    /// Files a card into For review.
-    pub fn file_for_review(&mut self, data: &Data, w: Option<&Workspace>) {
-        self.move_to_lane(data, w, LaneKey::Review);
     }
 }
 

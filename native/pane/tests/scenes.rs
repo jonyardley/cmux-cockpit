@@ -649,14 +649,18 @@ fn esc_closes_the_editor_and_e_opens_it_on_the_project_under_the_cursor() {
 }
 
 #[test]
-fn r_sends_the_card_under_the_cursor_to_for_review() {
+fn r_p_x_and_k_do_nothing_now_the_cards_have_no_buttons() {
     let mut live = Live::new("lanes");
-    cursor_to(&mut live.pane, "Tidy strip");
-    let id = live.pane.cursor().map(str::to_string).unwrap();
-    assert_eq!(
-        live.press(KeyCode::Char('r')),
-        Outcome::Act(Action::FileForReview { id })
-    );
+    for title in ["Tidy strip", "Card layout fit"] {
+        cursor_to(&mut live.pane, title);
+        for key in ['r', 'p', 'x', 'k'] {
+            assert_eq!(
+                live.press(KeyCode::Char(key)),
+                Outcome::Nothing,
+                "{key} on {title}"
+            );
+        }
+    }
 }
 
 /// Presses Down until the open menu lights `label`.
@@ -1419,13 +1423,12 @@ fn card_of(pane: &Pane, id: &str) -> Option<cockpit_pane::model::Card> {
         })
 }
 
-/// The words of a card's chips, then its Park and Close, in order.
+/// The words of a card's chips, in order.
 fn chip_words(pane: &Pane, id: &str) -> Vec<String> {
     card_of(pane, id)
         .map(|c| {
             c.chips
                 .iter()
-                .chain(&c.merged)
                 .flat_map(|chip| chip.pieces.iter().map(|p| p.text.clone()))
                 .collect()
         })
@@ -1438,21 +1441,15 @@ fn is_dim(buffer: &Buffer, needle: &str) -> bool {
 }
 
 #[test]
-fn a_merged_card_offers_park_and_close_in_the_sidebars_inks_and_a_row_does_too() {
+fn a_merged_card_shows_its_branch_as_any_card_does_and_a_row_has_no_chips() {
     let pane = pane_for("lanes");
     let full = id_of(&pane, "Card layout fit");
     assert_eq!(
         chip_words(&pane, &full),
-        ["#176", "merged", "Park", "Close"]
+        ["#176", "merged", "card-layout-fit"]
     );
     let row = id_of(&pane, "Merged elsewhere");
-    assert_eq!(chip_words(&pane, &row), ["Park", "Close"]);
-    let inks: Vec<Token> = card_of(&pane, &full)
-        .map(|c| c.merged.iter().map(|chip| chip.pieces[0].ink).collect())
-        .unwrap_or_default();
-    assert_eq!(inks, [Token::Secondary, Token::Text], "Close reads first");
-    let open = id_of(&pane, "Snapshot tests");
-    assert!(!chip_words(&pane, &open).contains(&"Park".to_string()));
+    assert!(chip_words(&pane, &row).is_empty());
 }
 
 #[test]
@@ -1463,108 +1460,9 @@ fn a_merged_card_draws_dim_until_the_cursor_is_on_it() {
     let mut term = terminal(80);
     pane.draw(&mut term).unwrap();
     assert!(is_dim(term.backend().buffer(), "Card layout fit"));
-    assert!(is_dim(term.backend().buffer(), "Park"));
+    assert!(is_dim(term.backend().buffer(), "card-layout-fit"));
     assert!(!is_dim(term.backend().buffer(), "Snapshot tests"));
     cursor_to(&mut pane, "Card layout fit");
     pane.draw(&mut term).unwrap();
     assert!(!is_dim(term.backend().buffer(), "Card layout fit"));
-}
-
-#[test]
-fn p_x_and_k_send_park_close_and_keep_for_the_card_under_the_cursor() {
-    let mut pane = pane_for("lanes");
-    let id = cursor_to(&mut pane, "Card layout fit");
-    assert_eq!(
-        press(&mut pane, KeyCode::Char('p')),
-        Outcome::Act(Action::ParkMerged { id: id.clone() })
-    );
-    assert_eq!(
-        press(&mut pane, KeyCode::Char('x')),
-        Outcome::Act(Action::CloseMerged { id: id.clone() })
-    );
-    assert_eq!(
-        press(&mut pane, KeyCode::Char('k')),
-        Outcome::Act(Action::KeepMerged { id })
-    );
-}
-
-#[test]
-fn k_hides_park_and_close_and_the_card_stays_dim() {
-    let mut live = Live::new("lanes");
-    let id = cursor_to(&mut live.pane, "Card layout fit");
-    live.press(KeyCode::Char('k'));
-    // Its branch comes back once Park and Close no longer take its room.
-    assert_eq!(
-        chip_words(&live.pane, &id),
-        ["#176", "merged", "card-layout-fit"]
-    );
-    assert!(card_of(&live.pane, &id).is_some_and(|c| c.dimmed));
-}
-
-#[test]
-fn p_parks_a_merged_card_and_an_open_card_ignores_it() {
-    let mut live = Live::new("lanes");
-    let open = cursor_to(&mut live.pane, "Snapshot tests");
-    live.press(KeyCode::Char('p'));
-    assert_eq!(live.pane.model().lane_of(&open), Some(LaneKey::Main));
-    let id = cursor_to(&mut live.pane, "Card layout fit");
-    live.press(KeyCode::Char('p'));
-    // Parked is folded in this scene, so the card leaves the drawn lanes.
-    assert!(card_of(&live.pane, &id).is_none());
-    let Some(data) = live.core.data.clone() else {
-        panic!("no frame")
-    };
-    let lane = data
-        .ws_by_id(&id)
-        .map(|w| live.core.session.lane_of(&data, w));
-    assert_eq!(lane, Some(LaneKey::Parked));
-}
-
-#[test]
-fn p_on_a_card_in_projects_sends_park_and_nothing_on_a_project() {
-    let mut pane = pane_for("projects");
-    let rows = pane.model().project_ids().len();
-    let (mut cards, mut others) = (0, 0);
-    // Every row from the first: Enter says what the row is, a card
-    // switching to its workspace and anything else not.
-    for i in 0..rows {
-        if i > 0 {
-            press(&mut pane, KeyCode::Down);
-        }
-        let park = press(&mut pane, KeyCode::Char('p'));
-        match press(&mut pane, KeyCode::Enter) {
-            Outcome::Act(Action::SwitchTo { id }) => {
-                assert_eq!(park, Outcome::Act(Action::ParkMerged { id }));
-                cards += 1;
-            }
-            other => {
-                assert_eq!(
-                    park,
-                    Outcome::Nothing,
-                    "p on a row where Enter gives {other:?}"
-                );
-                others += 1;
-            }
-        }
-    }
-    assert!(cards > 0, "no card in Projects");
-    assert!(others > 0, "no project row in Projects");
-}
-
-#[test]
-fn a_narrow_card_moves_park_and_close_to_a_line_of_their_own_not_cut() {
-    let mut pane = pane_for("lanes");
-    let mut term = terminal(26);
-    pane.draw(&mut term).unwrap();
-    let text = text_of(term.backend().buffer());
-    let lines: Vec<&str> = text.lines().collect();
-    let at = lines
-        .iter()
-        .position(|l| l.contains("#176 merged"))
-        .unwrap_or_else(|| panic!("no merged chip at 26 columns:\n{text}"));
-    assert!(!lines[at].contains('\u{2026}'), "a chip is cut:\n{text}");
-    assert!(
-        lines[at + 1].contains("Park  Close"),
-        "Park and Close are not whole:\n{text}"
-    );
 }

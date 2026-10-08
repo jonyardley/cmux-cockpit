@@ -690,7 +690,8 @@ mod tests {
                 }
                 let built = serde_json::to_value(Panel::from_core(&mut model)).unwrap();
                 assert_eq!(built, runners, "{name}");
-                if home.is_none() {
+                // The fixtures load with this home (core/tests/panel.rs).
+                if home == Some("/Users/jon") {
                     let want = json(&repo(&format!("native/fixtures/{fixture}.json")));
                     assert_eq!(built, want, "{name}");
                 }

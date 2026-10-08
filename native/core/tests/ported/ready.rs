@@ -1,7 +1,7 @@
 //! test/ready.test.ts: the Ready state on cockpit cards (issue #53), its
 //! PR words, and To review, with the chips row it keeps (chips.ts).
 
-use cockpit_core::data::{Agent, AgentStatus, Data, PrStatus, Workspace, WorkspaceGroup};
+use cockpit_core::data::{Agent, AgentStatus, Data, PrStatus, Workspace};
 use cockpit_core::prs::pr_summary;
 use cockpit_core::session::Session;
 use cockpit_core::status::{Status, compact_pr_text};
@@ -286,109 +286,23 @@ mod a_ready_cards_pr_words_issue_79 {
     }
 }
 
-mod to_review {
+mod a_ready_cards_chips_row {
     use super::*;
 
-    fn lanes() -> Vec<WorkspaceGroup> {
-        vec![
-            group("g-review", "For review"),
-            group("g-main", "Main activity"),
-        ]
-    }
-
     #[test]
-    fn offers_to_review_on_a_ready_card_outside_for_review_and_files_it_there() {
+    fn has_no_row_of_its_own_with_no_chip_a_ready_card_draws_none() {
         let (mut s, _, mut fx) = setup();
         let w = ready_ws(&mut fx, "w").group("g-main");
-        let data = frame(NOW, lanes(), vec![w.clone()]);
-        assert!(s.can_file_for_review(&data, Some(&w)));
-        assert!(s.has_chips_row(&data, Some(&w), true));
-        // The action alone keeps the row, with no chip at all.
-        let chips = s.chips_for(Some(&w), true);
-        assert!(chips.is_empty());
-        assert!(s.shows_chips_row(&data, &chips, Some(&w)));
-        s.file_for_review(&data, Some(&w));
-        assert_eq!(
-            calls(&s).last(),
-            Some(&call(
-                "workspace.group.add",
-                &[("group_id", "g-review"), ("workspace_id", "w")]
-            ))
-        );
-        // The move shows at once, so the action goes with it.
-        assert!(!s.can_file_for_review(&data, Some(&w)));
-    }
-
-    #[test]
-    fn offers_to_review_in_green_on_a_card_whose_pr_is_ready_to_merge_ready_or_not() {
-        let (mut s, _, mut fx) = setup();
-        let read = ws("green")
-            .group("g-main")
-            .branch("feat")
-            .agents(vec![fx.agent(Working)]);
-        let data = frame(NOW, lanes(), vec![read.clone()]);
-        assert!(
-            !s.is_ready(&data, Some(&read)),
-            "its agent is still working"
-        );
-        assert!(
-            s.can_file_for_review(&data, Some(&read)),
-            "the ready PR is reason enough"
-        );
-        assert!(s.review_is_green(Some(&read)));
-        assert!(
-            !s.review_is_green(Some(&ready_ws(&mut fx, "w"))),
-            "a Ready card with no PR keeps the white chip"
-        );
-        for id in ["failing", "running", "draft", "open"] {
-            let w = ws(id).group("g-main").branch("feat");
-            assert!(!s.review_is_green(Some(&w)), "{id}");
-            assert!(!s.can_file_for_review(&data, Some(&w)), "{id}");
-        }
-    }
-
-    #[test]
-    fn is_not_offered_in_for_review_off_a_ready_card_or_with_no_workspace() {
-        let (mut s, _, mut fx) = setup();
-        let in_review = ready_ws(&mut fx, "r").group("g-review");
-        let read = ready_ws(&mut fx, "x").unread(0.0);
-        let data = frame(NOW, lanes(), vec![in_review.clone(), read.clone()]);
-        assert!(!s.can_file_for_review(&data, Some(&in_review)));
-        assert!(!s.can_file_for_review(&data, Some(&read)));
-        assert!(!s.has_chips_row(&data, Some(&read), true));
-        assert!(!s.can_file_for_review(&data, None));
-    }
-
-    #[test]
-    fn is_not_offered_on_a_real_workspace_anchoring_a_group_which_cannot_leave_it() {
-        let (mut s, _, mut fx) = setup();
-        let mut groups = lanes();
-        groups.push(group("g-proj", "Some project").anchor("real"));
-        let real = ready_ws(&mut fx, "real")
-            .title("Status update")
-            .group("g-proj");
-        let data = frame(NOW, groups, vec![real.clone()]);
-        assert!(s.is_ready(&data, Some(&real)));
-        assert!(!s.can_file_for_review(&data, Some(&real)));
-    }
-
-    #[test]
-    fn is_not_offered_on_a_lanes_generated_anchor() {
-        let (mut s, _, mut fx) = setup();
-        let groups = vec![group("g-main", "Main activity").anchor("anchor")];
-        let anchor = ready_ws(&mut fx, "anchor")
-            .title("Main activity")
-            .group("g-main");
-        let data = frame(NOW, groups, vec![anchor.clone()]);
-        assert!(s.is_ready(&data, Some(&anchor)));
-        assert!(!s.can_file_for_review(&data, Some(&anchor)));
+        let data = frame(NOW, vec![group("g-main", "Main activity")], vec![w.clone()]);
+        assert!(s.is_ready(&data, Some(&w)));
+        assert!(s.chips_for(Some(&w), true).is_empty());
     }
 
     #[test]
     fn still_counts_a_chip_as_a_chips_row() {
-        let (mut s, data, _) = setup();
+        let (mut s, _, _) = setup();
         let w = ws("b").branch("feat");
-        assert!(s.has_chips_row(&data, Some(&w), true));
-        assert!(!s.has_chips_row(&data, Some(&w), false));
+        assert!(!s.chips_for(Some(&w), true).is_empty());
+        assert!(s.chips_for(Some(&w), false).is_empty());
     }
 }
