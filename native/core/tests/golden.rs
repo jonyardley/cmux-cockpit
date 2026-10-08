@@ -22,6 +22,9 @@ use cockpit_core::projects::Project;
 use cockpit_core::session::Session;
 use serde_json::{Map, Value, json};
 
+mod common;
+use common::without_the_strip;
+
 /// How a card's chips fit a line `chars` wide.
 fn fit(drawn: &[Chip], chars: usize) -> Value {
     json!({
@@ -105,7 +108,7 @@ fn computed(input: &Value) -> Value {
 
 fn check(scene: &str) {
     let input = golden(&format!("{scene}.input.json"));
-    let want = golden(&format!("{scene}.json"));
+    let want = without_the_strip(golden(&format!("{scene}.json")));
     let got = computed(&input);
 
     assert_eq!(got["mode"], want["mode"], "{scene}: mode");

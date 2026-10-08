@@ -17,7 +17,7 @@ func check(_ ok: Bool, _ what: String) {
 func card(_ id: String, rank: UInt8 = 1) -> Card {
     Card(wsId: id, icon: Icon(glyph: "o", ink: nil), title: id, density: .full, badge: Badge(icon: "terminal", color: nil),
          unread: "", ready: false, pinned: false, progress: nil, helpers: "", status: "", statusInk: .clear, age: "", statusHasAge: false, leftOff: "",
-         chips: [], detail: "", detailLines: 1, waiting: false, rank: rank, movable: true, dimmed: false, selected: false, menu: [])
+         chips: [], detail: "", detailInk: .secondary, detailLines: 1, waiting: nil, rank: rank, movable: true, dimmed: false, selected: false, menu: [])
 }
 
 func row(_ id: String, rank: UInt8 = 1) -> Row { .card(card(id, rank: rank)) }
@@ -50,8 +50,10 @@ check(DropRule.before(rows: ranked, dragged: card("X", rank: 0), slot: 4) == "R1
       "a card dropped under cards of another state goes after the last of its own")
 check(DropRule.before(rows: ranked, dragged: card("X", rank: 5), slot: 3) == "R2",
       "with none of its state in the lane it goes above the row under the slot")
-let ghosted: [Row] = [row("A"), .ghost(wsId: "G", title: "g", text: "t", rank: 1), row("C")]
-check(DropRule.before(rows: ghosted, dragged: card("X"), slot: 1) == "G", "a placeholder anchors a drop as its card does")
+var asking = card("G")
+asking.waiting = Waiting(edge: .amber, ink: .amberText)
+let waited: [Row] = [row("A"), .card(asking), row("C")]
+check(DropRule.before(rows: waited, dragged: card("X"), slot: 1) == "G", "a waiting card anchors a drop as any card does")
 
 // MARK: Letting go in its own place sends nothing
 

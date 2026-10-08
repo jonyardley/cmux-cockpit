@@ -40,17 +40,22 @@ let sceneOf: [String: String] = [
     "new-project": "projects",
 ]
 
-/// The words of each card and placeholder a snapshot draws, in order: a
-/// row that starts at the card indent with a dot, hollow dot or
-/// placeholder mark, then the rows indented under it. The strip and the
-/// tabs above the first lane or project header are left out, as are
-/// headers. Each card's words are its whitespace runs, its mark dropped.
+/// The pane's bar down the lead of a card waiting on Jon (native/pane/
+/// src/views/lanes.rs WAITING_BAR): a mark, read as the blank it stands in.
+let waitingBar: Character = "▎"
+
+/// The words of each card a snapshot draws, in order: a row that starts
+/// at the card indent with a dot or hollow dot, then the rows indented
+/// under it. The Needs you line and the tabs above the first lane or
+/// project header are left out, as are headers. Each card's words are its
+/// whitespace runs, its mark dropped.
 func snapshotCards(_ text: String) -> [[String]] {
-    let marks: Set<String> = ["●", "○", Words.ghost]
+    let marks: Set<String> = ["●", "○"]
     var cards: [[String]] = []
     var inLanes = false
     var current: [String]?
-    for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
+    for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
+        let line = String(raw.map { $0 == waitingBar ? " " : $0 })
         let tokens = line.split(whereSeparator: \.isWhitespace).map(String.init)
         let isCard = line.hasPrefix("   ") && !line.hasPrefix("    ") && tokens.first.map(marks.contains) == true
         let isMore = line.hasPrefix("     ") && current != nil
@@ -72,7 +77,7 @@ func snapshotCards(_ text: String) -> [[String]] {
     return cards
 }
 
-/// The words the sidebar draws on each card and placeholder of a panel,
+/// The words the sidebar draws on each card of a panel,
 /// in order: the lanes in All, the card rows in Projects.
 func panelCards(_ panel: Panel) -> [(title: String, words: [String])] {
     let split = { (runs: [String]) in runs.flatMap { $0.split(whereSeparator: \.isWhitespace).map(String.init) } }
@@ -140,11 +145,33 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("needs-an
     let next = NextText.target(panel.next)
     check(lines.contains("\(Words.next) \(next.title) \(next.place)"), "Next reads as the pane's")
     check(NextText.targetId(panel.next) == "n1", "a Next click outlines the card it goes to")
-    check(lines.contains("\(Words.needs) \(panel.needs.count) \(panel.needs.wait)"), "Needs you reads as the pane's")
-    check(lines.contains(panel.needs.more), "the strip's more line reads as the pane's")
-    for row in panel.needs.rows {
-        check(lines.contains("● \(row.title)") && lines.contains(row.line), "Needs you row \(row.title)")
+    check(lines.contains("\(panel.needs.label) \(panel.needs.wait)"), "Needs you reads as the pane's line")
+    check(NeedsText.count(panel.needs) == "5" && NeedsText.trail(panel.needs) == "30m ↓", "the pill reads 5, the title, then 30m ↓")
+    check(panel.needs.fill == .clay && panel.needs.ink == .clayText, "the pill is clay while one waits late")
+    check(NeedsText.title(panel.needs) == "Oldest question", "the pill names the oldest waiting session Jon is not on")
+    check(NeedsText.tap(panel.needs) == .reveal(id: "n1"), "a tap on the pill reveals the session it names")
+    // A waiting row (Unsorted's one-line rows) keeps its age as its status
+    // and says its reason on its detail line, in the waiting ink.
+    let rows = panel.lanes.flatMap(\.rows).map { r -> Card in
+        switch r { case .card(let c): c }
     }
+    let waitingRows = rows.filter { $0.density == .row && $0.waiting != nil }
+    check(!waitingRows.isEmpty, "needs-and-next has waiting rows")
+    for c in waitingRows {
+        check(c.status == c.age && c.detail.contains(": "), "\(c.title): its age as status, its reason as detail")
+        check(c.detailInk == c.waiting?.ink, "\(c.title): the reason in the waiting ink")
+        check(lines.contains { $0.hasSuffix(c.detail) }, "\(c.title): the reason reads as the pane's line")
+    }
+    for c in rows where c.waiting == nil {
+        check(c.detailInk == .secondary, "\(c.title): a detail not waiting is secondary")
+    }
+    // On the only waiting session, the pill still shows with its count,
+    // naming nothing, and a tap on it does nothing.
+    var alone = panel.needs
+    alone.count = 1
+    alone.target = nil
+    check(NeedsText.shows(alone) && NeedsText.title(alone).isEmpty && NeedsText.tap(alone) == nil,
+          "the pill shows on the only waiting session, names none and taps to nothing")
 }
 if let text = try? String(contentsOf: snapshots.appendingPathComponent("review-verdicts-80.txt"), encoding: .utf8) {
     check(text.contains("\(Words.next)  \(Words.nextNothing)"), "Next with nowhere to go reads as the pane's")
@@ -152,7 +179,29 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("review-v
 
 if let panel = load("lanes") {
     let rows = panel.lanes.flatMap(\.rows)
-    check(Set(rows.map(\.id)).count == rows.count, "each lane row has its own id, a card apart from its placeholder")
+    check(Set(rows.map(\.id)).count == rows.count, "each lane row has its own id")
+    // A waiting card stays in its lane (issue #281): it draws its edge in
+    // its waiting colour, its reason on its status line and its age on the
+    // title row in the same ink.
+    let cards = rows.map { r -> Card in
+        switch r { case .card(let c): c }
+    }
+    let waiting = cards.filter { $0.waiting != nil }
+    check(waiting.count == Int(panel.needs.count), "lanes: every waiting card is in its lane, \(waiting.count) of \(panel.needs.count)")
+    if let chip = waiting.first(where: { $0.title == "Chip colours" }) {
+        check(CardText.edge(chip) == .clay && chip.status.hasPrefix("Your turn: "), "Your turn draws a clay edge and its reason")
+        check(CardText.ageInk(chip) == .clayText && CardText.titleAge(chip) == chip.age && !chip.age.isEmpty, "its age on the title row, in clay")
+    } else {
+        check(false, "lanes: Chip colours waits")
+    }
+    if let ask = waiting.first(where: { $0.title == "Release notes" }) {
+        check(CardText.edge(ask) == .amber && ask.status == "Asking: allow git push?", "Asking draws an amber edge and its reason")
+    } else {
+        check(false, "lanes: Release notes asks")
+    }
+    for c in cards where c.waiting == nil {
+        check(CardText.edge(c) == nil && CardText.ageInk(c) == nil, "\(c.title): no edge while it waits on nobody")
+    }
 }
 
 // MARK: What the sidebar shows
@@ -247,7 +296,7 @@ if let theme = try? String(contentsOf: themeRs, encoding: .utf8) {
         let line = theme.split(separator: "\n").first { $0.hasPrefix("pub const \(name): u32 = 0x") }
         return line.flatMap { UInt32($0.split(separator: "0x").last?.prefix(6) ?? "", radix: 16) }
     }
-    for (own, name) in [(Palette.Own.ground, "GROUND"), (.needsFace, "NEEDS_BG"), (.tertiary, "TERTIARY"), (.grey, "GREY")] {
+    for (own, name) in [(Palette.Own.ground, "GROUND"), (.tertiary, "TERTIARY"), (.grey, "GREY")] {
         check(paneHex(name) == Palette.rgba(own, dark: false).hex && Palette.rgba(own, dark: false).alpha == 0xFF, "light \(own) is the pane's \(name)")
     }
 } else {
@@ -466,7 +515,7 @@ for name in ["lanes", "projects"] {
 }
 var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil), title: "t", density: .full, badge: Badge(icon: "terminal", color: nil),
                unread: "", ready: false, pinned: false, progress: 1.5, helpers: "", status: "", statusInk: .faint, age: "",
-               statusHasAge: false, leftOff: "", chips: [], detail: "", detailLines: 2, waiting: false, rank: 0,
+               statusHasAge: false, leftOff: "", chips: [], detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, rank: 0,
                movable: true, dimmed: false, selected: false, menu: [])
 check(CardText.progress(bar) == 1, "a bar past the end stops full")
 bar.progress = -0.5

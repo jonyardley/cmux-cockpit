@@ -1,7 +1,7 @@
 //! The cockpit's shared core: the sidebar logic ported from TypeScript, and
 //! the Crux app the shells drive (app.rs). So far the cockpit's lanes and
 //! placement (model.rs), what an agent's status means (status.rs), the
-//! Needs you strip (strip.rs), All's rows (lane_entries.rs) and Next
+//! Needs you (strip.rs), All's rows (lane_entries.rs) and Next
 //! (next.rs), drops and the pane's card moves (placement.rs), the card
 //! chips (card_chips.rs, chips.rs), a merged card's dimming (merged.rs)
 //! and the Projects view (by_project.rs), with the

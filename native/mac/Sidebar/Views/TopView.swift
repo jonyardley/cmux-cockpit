@@ -51,15 +51,35 @@ private struct SwitchSegment: View {
 
 /// Next: a white pill with a clay edge, "Next: <title>" in clay, cut in
 /// the middle so both ends show, and its place in the queue on the right
-/// (needs.ts nextButton). The panel leaves it out with no next step. A
-/// tap steps there.
+/// (needs.ts nextButton). While something waits it is the Needs you pill
+/// instead (issue #281), next step or not: the count on a filled badge,
+/// the title of the oldest waiting session Jon is not on in the pill's
+/// ink, and the oldest wait with an arrow down to it. A tap on the pill
+/// reveals and selects that session; a tap on the plain line steps to
+/// Next's target. The panel leaves it out with neither.
 struct NextView: View {
     let next: NextLine
+    let needs: Needs
     @State private var hovering = false
 
     var body: some View {
+        Group {
+            if NeedsText.shows(needs) { waiting } else { plain }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(Color(hovering ? Palette.Own.needsHover : Palette.Own.card), in: .rect(cornerRadius: Metrics.Radius.tab))
+        .overlay {
+            RoundedRectangle(cornerRadius: Metrics.Radius.tab)
+                .strokeBorder(Color(Palette.Own.needsEdge), lineWidth: Metrics.hairline)
+        }
+        .onHover { hovering = $0 }
+        .modifier(NextTap(next: next, needs: needs))
+    }
+
+    private var plain: some View {
         let target = NextText.target(next)
-        HStack(spacing: 6) {
+        return HStack(spacing: 6) {
             Text(Words.next + ": " + target.title)
                 .font(.system(size: Metrics.Font.next, weight: .semibold))
                 .foregroundStyle(Color(Token.clayText))
@@ -73,55 +93,30 @@ struct NextView: View {
                 .lineLimit(1)
                 .layoutPriority(2)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .background(Color(hovering ? Palette.Own.needsHover : Palette.Own.card), in: .rect(cornerRadius: Metrics.Radius.tab))
-        .overlay {
-            RoundedRectangle(cornerRadius: Metrics.Radius.tab)
-                .strokeBorder(Color(Palette.Own.needsEdge), lineWidth: Metrics.hairline)
-        }
-        .onHover { hovering = $0 }
-        .modifier(NextTap(next: next))
     }
-}
 
-/// The Needs you strip: its count and oldest wait, each waiting session
-/// and why, and how many more past the cap. A click on a session switches
-/// to it; its cross dismisses its asks.
-struct NeedsView: View {
-    let needs: Needs
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
-                Text(Words.needs).fontWeight(.semibold).foregroundStyle(Color(Token.clayText))
-                CountPill(count: needs.count, colors: PillColors(bg: .clayCount, fg: .clayText))
-                Spacer(minLength: 4)
-                Text(needs.wait).foregroundStyle(Color(needs.late ? Token.clayText : Token.metaText))
-            }
-            ForEach(needs.rows, id: \.wsId) { row in
-                HStack(alignment: .top, spacing: 4) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        HStack(spacing: 6) {
-                            Text(row.icon.glyph).foregroundStyle(Color(dot: row.icon.ink))
-                            Text(row.title).foregroundStyle(Color(Token.text)).lineLimit(1)
-                        }
-                        Text(row.line)
-                            .foregroundStyle(Color(row.ink))
-                            .lineLimit(2)
-                            .padding(.leading, Metrics.cardIndent)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .modifier(NeedsRowTap(id: row.wsId))
-                    DismissCross(id: row.wsId)
-                }
-            }
-            if !needs.more.isEmpty {
-                Text(needs.more).foregroundStyle(Color(Token.metaText)).padding(.leading, Metrics.cardIndent)
-            }
+    private var waiting: some View {
+        HStack(spacing: 6) {
+            Text(NeedsText.count(needs))
+                .font(.system(size: Metrics.Font.meta, weight: .bold).monospaced())
+                .foregroundStyle(Color(Palette.Own.onFill))
+                .fixedSize()
+                .padding(.horizontal, Metrics.pillPadH)
+                .padding(.vertical, Metrics.pillPadV)
+                .background(Color(needs.fill), in: .capsule)
+            Text(NeedsText.title(needs))
+                .font(.system(size: Metrics.Font.next, weight: .semibold))
+                .foregroundStyle(Color(needs.ink))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .layoutPriority(1)
+            Text(NeedsText.trail(needs))
+                .font(.system(size: Metrics.Font.meta).monospaced())
+                .foregroundStyle(Color(needs.ink))
+                .lineLimit(1)
+                .fixedSize()
+                .layoutPriority(2)
         }
-        .font(.system(size: Metrics.body))
-        .padding(8)
-        .background(Color(Palette.Own.needsFace), in: .rect(cornerRadius: Metrics.corner))
     }
 }

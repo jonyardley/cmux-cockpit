@@ -9,24 +9,19 @@ enum CardText {
         chip.pieces.map(\.text).joined(separator: " ")
     }
 
-    /// Every run of words a card draws, top to bottom, none empty.
+    /// Every run of words a card draws, top to bottom, none empty: the
+    /// title row's age after the status, where the pane draws it.
     static func runs(_ card: Card) -> [String] {
-        var out = [card.title, card.status]
+        var out = [card.title, card.status, titleAge(card)]
         out += ChipFit.glued(card.chips).map(chip)
         out += [card.leftOff, card.detail]
         return out.filter { !$0.isEmpty }
     }
 
-    /// A placeholder's one line: its title and why its card went.
-    static func ghost(title: String, text: String) -> String {
-        "\(title) \(Words.ghostGap) \(text)"
-    }
-
-    /// The words a lane row draws, whatever its kind.
+    /// The words a lane row draws.
     static func runs(_ row: Row) -> [String] {
         switch row {
         case .card(let card): runs(card)
-        case .ghost(_, let title, let text, _): [ghost(title: title, text: text)]
         }
     }
 
@@ -35,7 +30,6 @@ enum CardText {
     static func runs(_ row: ProjectRow) -> [String]? {
         switch row {
         case .card(let card): runs(card)
-        case .ghost(_, let title, let text): [ghost(title: title, text: text)]
         default: nil
         }
     }
@@ -44,7 +38,6 @@ enum CardText {
     static func id(_ row: Row) -> String {
         switch row {
         case .card(let card): card.wsId
-        case .ghost(let wsId, _, _, _): "ghost:" + wsId
         }
     }
 
@@ -75,11 +68,35 @@ enum NextText {
     }
 }
 
-/// The Needs you strip's words.
+/// Needs you as the Next pill draws it (issue #281): the count on its
+/// fill, the next target's title, then the oldest wait and a down arrow.
 enum NeedsText {
-    /// Whether the strip shows at all: only while something waits.
+    /// Whether Next draws as the pill: whenever something waits, with or
+    /// without a next step.
     static func shows(_ needs: Needs) -> Bool {
         needs.count > 0
+    }
+
+    /// The title the pill names: the oldest waiting session Jon is not
+    /// on, or none while the only one waiting is the one he is on.
+    static func title(_ needs: Needs) -> String {
+        needs.target?.title ?? ""
+    }
+
+    /// What a tap on the pill sends: reveal the session it names, or
+    /// nothing when it names none.
+    static func tap(_ needs: Needs) -> SidebarAction? {
+        needs.target.map { .reveal(id: $0.wsId) }
+    }
+
+    /// The count on the pill's badge.
+    static func count(_ needs: Needs) -> String {
+        String(needs.count)
+    }
+
+    /// The pill's right end: the oldest wait, then the arrow down to it.
+    static func trail(_ needs: Needs) -> String {
+        needs.wait.isEmpty ? Words.down : needs.wait + " " + Words.down
     }
 }
 
@@ -129,6 +146,18 @@ extension CardText {
     /// line under it has no time of its own, so a card never reads two.
     static func titleAge(_ card: Card) -> String {
         card.statusHasAge ? "" : card.age
+    }
+
+    /// The title row age's ink: the waiting ink while the card waits on
+    /// Jon, so the age reads with its reason; nil for the usual one.
+    static func ageInk(_ card: Card) -> Token? {
+        card.waiting?.ink
+    }
+
+    /// The leading edge's colour on a card waiting on Jon, clay for Your
+    /// turn and amber for Asking; nil while it waits on nobody.
+    static func edge(_ card: Card) -> Token? {
+        card.waiting?.edge
     }
 
     /// The progress bar's fraction, held to 0 to 1; nil draws no bar.

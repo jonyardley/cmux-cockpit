@@ -20,14 +20,10 @@ pub struct Place {
 pub enum Spot {
     /// Nothing a card can land on: the gap above the lanes, say.
     Blank,
-    /// A row in the Needs you strip.
-    Needs(String),
     /// A lane's header: a drop here lands at the top of the lane.
     Header(LaneKey),
     /// A line of a card in a lane.
     Card { id: String, lane: LaneKey },
-    /// A placeholder, standing for a card waiting in Needs you.
-    Ghost { id: String, lane: LaneKey },
     /// The gap below a lane, before the next header: its end.
     End(LaneKey),
 }
@@ -40,8 +36,8 @@ pub fn spot_at(spots: &[Spot], line: usize) -> Spot {
     }
     let last = spots.iter().rev().find_map(|s| match s {
         Spot::Header(lane) | Spot::End(lane) => Some(*lane),
-        Spot::Card { lane, .. } | Spot::Ghost { lane, .. } => Some(*lane),
-        Spot::Blank | Spot::Needs(_) => None,
+        Spot::Card { lane, .. } => Some(*lane),
+        Spot::Blank => None,
     });
     last.map_or(Spot::Blank, Spot::End)
 }
@@ -55,11 +51,9 @@ pub fn spot_at(spots: &[Spot], line: usize) -> Spot {
 pub fn drop_on(model: &PaneModel, dragged: &str, spot: &Spot) -> Option<Place> {
     let (lane, over) = match spot {
         Spot::Header(lane) => (*lane, None),
-        Spot::Card { id, lane } | Spot::Ghost { id, lane } if id != dragged => {
-            (*lane, Some(id.as_str()))
-        }
+        Spot::Card { id, lane } if id != dragged => (*lane, Some(id.as_str())),
         Spot::End(lane) => (*lane, None),
-        Spot::Card { .. } | Spot::Ghost { .. } | Spot::Blank | Spot::Needs(_) => return None,
+        Spot::Card { .. } | Spot::Blank => return None,
     };
     let rows: Vec<&Row> = model
         .lane_rows(lane)
@@ -90,7 +84,7 @@ fn landing<'a>(rows: &[&'a Row], at: usize, rank: Option<u8>) -> Option<&'a str>
     rows.get(at).map(|r| r.ws_id())
 }
 
-/// The state rank of `id`'s card or placeholder.
+/// The state rank of `id`'s card.
 fn rank_of(model: &PaneModel, id: &str) -> Option<u8> {
     model
         .lanes
@@ -103,10 +97,9 @@ fn rank_of(model: &PaneModel, id: &str) -> Option<u8> {
 /// Where shift with up (`up`) or down puts `id` in its own lane: above the
 /// card above it, or above the one two below (the end when that is the
 /// last). Only among cards in its own state, since the lane sorts by
-/// state: None at either end of that run, for a card in no lane, or for
-/// a Needs you row, which is not in a lane's order on screen.
+/// state: None at either end of that run, or for a card in no lane.
 pub fn reorder(model: &PaneModel, id: &str, up: bool) -> Option<Place> {
-    if model.in_strip(id) || !model.movable(id) {
+    if !model.movable(id) {
         return None;
     }
     let lane = model.lane_of(id)?;
@@ -161,10 +154,10 @@ fn moves(model: &PaneModel, id: &str, place: Place) -> Option<Place> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::fixtures::{card, ghost, lane};
+    use crate::model::fixtures::{card, lane};
 
-    /// Main holds a, b and c, all working; Review holds placeholder g
-    /// (waiting) above x (working) and y (idle).
+    /// Main holds a, b and c, all working; Review holds g (waiting) above
+    /// x (working) and y (idle).
     fn model() -> PaneModel {
         PaneModel {
             lanes: vec![
@@ -178,7 +171,7 @@ mod tests {
                 ),
                 lane(
                     LaneKey::Review,
-                    vec![ghost("g", 0), card("x", 2, false), card("y", 3, false)],
+                    vec![card("g", 0, true), card("x", 2, false), card("y", 3, false)],
                 ),
                 lane(LaneKey::Parked, Vec::new()),
             ],
@@ -219,11 +212,7 @@ mod tests {
     #[test]
     fn reorders_only_among_cards_in_the_same_state() {
         let m = model();
-        assert_eq!(
-            reorder(&m, "x", true),
-            None,
-            "the waiting placeholder sorts first"
-        );
+        assert_eq!(reorder(&m, "x", true), None, "the waiting card sorts first");
         assert_eq!(reorder(&m, "x", false), None, "the idle card sorts after");
         assert_eq!(reorder(&m, "nowhere", true), None);
     }
@@ -247,14 +236,10 @@ mod tests {
     #[test]
     fn a_drop_among_other_states_anchors_to_the_cards_own_state() {
         let m = model();
-        let on_g = Spot::Ghost {
-            id: "g".into(),
-            lane: LaneKey::Review,
-        };
         assert_eq!(
-            drop_on(&m, "a", &on_g),
+            drop_on(&m, "a", &on("g", LaneKey::Review)),
             at(LaneKey::Review, Some("x")),
-            "above the waiting placeholder: still after it, above x"
+            "above the waiting card: still after it, above x"
         );
         assert_eq!(
             drop_on(&m, "a", &on("y", LaneKey::Review)),
@@ -311,10 +296,9 @@ mod tests {
     }
 
     #[test]
-    fn takes_no_drop_on_the_strip_or_a_gap() {
+    fn takes_no_drop_on_a_gap() {
         let m = model();
         assert_eq!(drop_on(&m, "a", &Spot::Blank), None);
-        assert_eq!(drop_on(&m, "a", &Spot::Needs("n".into())), None);
     }
 
     #[test]

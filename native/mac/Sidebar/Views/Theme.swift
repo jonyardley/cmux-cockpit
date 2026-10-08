@@ -33,6 +33,8 @@ enum Metrics {
     static let small: CGFloat = 11
     static let gutter: CGFloat = 10
     static let cardIndent: CGFloat = 16
+    /// The leading edge down a card waiting on Jon.
+    static let waitingEdge: CGFloat = 4
     /// Between the cards in a lane, as the cockpit's.
     static let cardGap: CGFloat = 6
     static let corner: CGFloat = 6
@@ -64,10 +66,8 @@ enum Metrics {
     enum Radius {
         /// A card.
         static let card: CGFloat = 12
-        /// A Needs you row, a compact row.
+        /// A compact row, a Projects card.
         static let row: CGFloat = 9
-        /// The Needs you strip.
-        static let strip: CGFloat = 13
         /// The view switch's track.
         static let track: CGFloat = 10
         /// A view switch tab, Next's pill, the unread badge.

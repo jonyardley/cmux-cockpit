@@ -15,6 +15,9 @@ use cockpit_core::{Cockpit, Effect, Event, Model};
 use crux_core::App;
 use serde_json::Value;
 
+mod common;
+use common::without_the_strip;
+
 fn golden(name: &str) -> Value {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../test/golden/{name}"));
     let text = std::fs::read_to_string(&path).unwrap();
@@ -30,7 +33,7 @@ fn send(app: &Cockpit, model: &mut Model, event: Event) {
 
 fn check(scene: &str) {
     let input = golden(&format!("{scene}.input.json"));
-    let want = golden(&format!("{scene}.json"));
+    let want = without_the_strip(golden(&format!("{scene}.json")));
 
     let projects: Vec<Project> = serde_json::from_value(input["projects"].clone()).unwrap();
     let saved: SavedState = serde_json::from_value(input["state"].clone()).unwrap();

@@ -68,8 +68,12 @@ pub enum Event {
     /// The shell selected the workspace itself (the sidebar's SDK select):
     /// it draws selected at once, with no cmux call from the core.
     Selected { id: String },
-    /// Dismisses the workspace's asks from Needs you, as its cross does.
+    /// Dismisses the workspace's asks from Needs you, as the card menu's
+    /// Dismiss needs you and the pane's 'd' do.
     Dismiss { id: String },
+    /// A tap on Next's Needs you pill: switches to the workspace it names,
+    /// first unfolding whatever hides its card, as Next does.
+    Reveal { id: String },
     /// Flips the view between All and Projects.
     FlipView,
     /// The shell could not carry out a cmux call about this workspace
@@ -134,6 +138,7 @@ impl Event {
             | Event::SwitchTo { .. }
             | Event::Selected { .. }
             | Event::Dismiss { .. }
+            | Event::Reveal { .. }
             | Event::FlipView
             | Event::Edit(_)
             | Event::OpenProject { .. }
@@ -160,14 +165,12 @@ pub struct Model {
     pub panel_on: bool,
 }
 
-/// The Needs you strip as the shell draws it, workspaces by id.
+/// Needs you as the shell draws it, workspaces by id, longest waiting
+/// first.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NeedsView {
     pub list: Vec<String>,
-    pub shown: Vec<String>,
-    pub in_strip: Vec<String>,
-    pub more: usize,
     pub wait_text: String,
     pub late: bool,
 }
@@ -375,9 +378,6 @@ pub fn build_view(s: &mut Session, data: &Data) -> ViewModel {
     let strip = s.needs(data);
     let needs = NeedsView {
         list: ids(&strip.list),
-        shown: ids(&strip.shown),
-        in_strip: strip.in_strip.iter().cloned().collect(),
-        more: strip.more,
         wait_text: strip.wait_text,
         late: strip.late,
     };
@@ -388,7 +388,7 @@ pub fn build_view(s: &mut Session, data: &Data) -> ViewModel {
         total: st.total,
     });
     let cards = s.lane_cards(data);
-    let lane_entries = s.lane_entries_from(data, &cards, &strip.in_strip);
+    let lane_entries = s.lane_entries_from(data, &cards);
     let mut lane_headers = BTreeMap::new();
     for (lane, lane_cards) in &cards {
         let header = LaneHeaderView {
@@ -434,6 +434,7 @@ impl Model {
             Event::SwitchTo { id } => s.select_workspace(data, Some(&id)),
             Event::Selected { id } => s.mark_selected(data, &id),
             Event::Dismiss { id } => s.dismiss_waiting(data, data.ws_by_id(&id)),
+            Event::Reveal { id } => s.reveal_workspace(data, data.ws_by_id(&id)),
             Event::Edit(e) => s.edit(data, e),
             Event::Menu(e) => s.menu(data, e),
             Event::OpenProject { key } => s.open_project_workspace(data, &key, None),

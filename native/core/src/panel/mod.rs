@@ -39,21 +39,14 @@ pub const KEYS_HINT: &str = "? keys";
 pub const NEXT_LABEL: &str = "Next";
 /// Next with nowhere to go.
 pub const NEXT_NOTHING: &str = "nothing waiting";
-/// The Needs you strip's heading.
-pub const NEEDS_LABEL: &str = "Needs you";
-/// Before the oldest ask's wait.
-pub const OLDEST_WORD: &str = "oldest";
-/// Between a placeholder's title and why its card went.
-pub const GHOST_GAP: &str = "·";
 /// A folded lane's chevron, and an open one's.
 pub const FOLDED_MARK: &str = "▸";
 pub const OPEN_MARK: &str = "▾";
 /// A lane's square marker in its colour.
 pub const LANE_MARK: &str = "■";
-/// A status dot, a hollow one, and a placeholder's.
+/// A status dot, and a hollow one.
 pub const DOT: &str = "●";
 pub const HOLLOW: &str = "○";
-pub const GHOST: &str = "◌";
 
 /// After a branch with uncommitted changes.
 pub const DIRTY_MARK: &str = "●";
@@ -106,32 +99,44 @@ pub enum NextLine {
     },
 }
 
-/// One session in the Needs you strip.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
-pub struct NeedsRow {
-    pub ws_id: String,
-    pub icon: Icon,
-    pub title: String,
-    /// "Asking: allow git push?"
-    pub line: String,
-    pub ink: Token,
-    /// The lane its card is filed in, drawn or not (a folded lane draws
-    /// no rows).
-    pub lane: Option<LaneKey>,
-    /// Whether the core will move it: not when it anchors another group.
-    pub movable: bool,
-}
-
-/// The Needs you strip; empty when nothing waits.
+/// Needs you, which Next's pill carries (issue #281): how many sessions
+/// wait on Jon, how long the oldest has, and where a tap on the pill goes.
+/// Each waiting card stays in its lane and says so itself. A count of 0
+/// when nothing waits.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Needs {
     pub count: usize,
-    /// "oldest 12m", or "" with nothing timed.
+    /// "3 need you", "1 needs you", or "" when nothing waits.
+    pub label: String,
+    /// "12m", the oldest ask's wait, or "" with nothing timed.
     pub wait: String,
+    /// Whether the oldest has waited past the half hour.
     pub late: bool,
-    pub rows: Vec<NeedsRow>,
-    /// "+2 more", or "".
-    pub more: String,
+    /// The count's fill: amber while every waiting session asks and none
+    /// is late, else clay. Clear when nothing waits.
+    pub fill: Token,
+    /// The pill's words, in the fill's text ink.
+    pub ink: Token,
+    /// The oldest waiting session Jon is not on, which the pill names and
+    /// a tap on it reveals; None while the only one waiting is the one he
+    /// is on.
+    pub target: Option<NeedsTarget>,
+}
+
+/// A waiting session the pill names: its workspace and title.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+pub struct NeedsTarget {
+    pub ws_id: String,
+    pub title: String,
+}
+
+/// Why a card waits on Jon: its leading edge, clay for Your turn and
+/// amber for Asking, and the ink of its status line, which then says the
+/// reason ("Asking: allow git push?").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, facet::Facet)]
+pub struct Waiting {
+    pub edge: Token,
+    pub ink: Token,
 }
 
 /// A project's badge: its SF Symbol on a tile of its colour, as the
@@ -185,12 +190,19 @@ pub struct Card {
     /// project card, Make project, as the sidebar's card of this kind
     /// shows them; empty for a row.
     pub chips: Vec<Chip>,
-    /// The latest message, or what the waiting chat wants.
+    /// The latest message, or what the waiting chat wants; on a waiting
+    /// row, its reason ("Asking: allow git push?"), as a row's status is
+    /// its age. Empty on a waiting full or compact card, whose status line
+    /// says the reason.
     pub detail: String,
+    /// The detail's ink: the waiting ink on a waiting row, else secondary.
+    pub detail_ink: Token,
     /// How many detail lines it draws: two on a full card, else one.
     pub detail_lines: usize,
-    /// Its session waits in Needs you, past the strip's cap.
-    pub waiting: bool,
+    /// Set while its session waits on Jon: the card keeps its place and
+    /// draws the edge, its status line the reason. Its title row's age
+    /// takes the same ink.
+    pub waiting: Option<Waiting>,
     /// Its state's place in the lane's sort (the core's state rank): a
     /// lane sorts by state, and a card keeps its place only among cards
     /// in its own state.
@@ -298,12 +310,6 @@ pub enum ChipsFor {
 pub enum ProjectRow {
     Header(ProjectHead),
     Card(Card),
-    /// A card whose session sits in Needs you: its title and why.
-    Ghost {
-        ws_id: String,
-        title: String,
-        text: String,
-    },
     /// "+ New project": Enter opens the editor under it.
     NewProject,
     /// The open project editor, under its project's row or "+ New project".
@@ -364,37 +370,30 @@ pub struct ProjectHead {
     pub menu: Vec<MenuItem>,
 }
 
-/// A row under a lane header.
+/// A row under a lane header: a card. An enum still, so the shells keep
+/// one shape if a lane draws another kind of row again.
 #[derive(Debug, Clone, PartialEq, Serialize, facet::Facet)]
 #[repr(u8)]
 pub enum Row {
-    /// Boxed, as a card is many times a placeholder's size.
     Card(Box<Card>),
-    /// A card whose session sits in Needs you: its title and why.
-    Ghost {
-        ws_id: String,
-        title: String,
-        text: String,
-        /// As a card's: a placeholder is its card, waiting.
-        rank: u8,
-    },
 }
 
 impl Row {
+    /// The row's card.
+    pub fn card(&self) -> &Card {
+        match self {
+            Row::Card(c) => c,
+        }
+    }
+
     /// The workspace the row stands for.
     pub fn ws_id(&self) -> &str {
-        match self {
-            Row::Card(c) => &c.ws_id,
-            Row::Ghost { ws_id, .. } => ws_id,
-        }
+        &self.card().ws_id
     }
 
     /// Its state's place in the lane's sort.
     pub fn rank(&self) -> u8 {
-        match self {
-            Row::Card(c) => c.rank,
-            Row::Ghost { rank, .. } => *rank,
-        }
+        self.card().rank
     }
 }
 
@@ -477,9 +476,7 @@ impl Panel {
                 ProjectRow::Card(c) => Some(c.ws_id.as_str()),
                 ProjectRow::NewProject => Some(NEW_ROW),
                 ProjectRow::Quiet { id, .. } => Some(id.as_str()),
-                ProjectRow::Ghost { .. }
-                | ProjectRow::QuietHeader { .. }
-                | ProjectRow::Editor(_) => None,
+                ProjectRow::QuietHeader { .. } | ProjectRow::Editor(_) => None,
             })
             .collect()
     }
@@ -516,82 +513,44 @@ impl Panel {
         })
     }
 
-    /// The cards the cursor moves between, top to bottom, by workspace id:
-    /// the Needs you rows, then the lanes' cards.
+    /// The lanes' cards, top to bottom.
+    fn lane_cards(&self) -> impl Iterator<Item = &Card> {
+        self.lanes.iter().flat_map(|l| &l.rows).map(Row::card)
+    }
+
+    /// The cards the cursor moves between, top to bottom, by workspace id.
     pub fn card_ids(&self) -> Vec<&str> {
-        let needs = self.needs.rows.iter().map(|r| r.ws_id.as_str());
-        let cards = self
-            .lanes
-            .iter()
-            .flat_map(|l| &l.rows)
-            .filter_map(|r| match r {
-                Row::Card(c) => Some(c.ws_id.as_str()),
-                Row::Ghost { .. } => None,
-            });
-        needs.chain(cards).collect()
+        self.lane_cards().map(|c| c.ws_id.as_str()).collect()
     }
 
-    /// Whether `id` is a row in the Needs you strip.
-    pub fn in_strip(&self, id: &str) -> bool {
-        self.needs.rows.iter().any(|r| r.ws_id == id)
-    }
-
-    /// Whether `id`'s session waits in Needs you: a row in the strip, or a
-    /// card past its cap.
+    /// Whether `id`'s card waits on Jon.
     pub fn is_waiting(&self, id: &str) -> bool {
-        self.in_strip(id)
-            || self
-                .lanes
-                .iter()
-                .flat_map(|l| &l.rows)
-                .any(|r| matches!(r, Row::Card(c) if c.ws_id == id && c.waiting))
+        self.lane_cards()
+            .any(|c| c.ws_id == id && c.waiting.is_some())
     }
 
-    /// Whether `id` is a card in a lane, not a placeholder.
+    /// Whether `id` is a card in a lane.
     pub fn is_lane_card(&self, id: &str) -> bool {
-        self.lanes
-            .iter()
-            .flat_map(|l| &l.rows)
-            .any(|r| matches!(r, Row::Card(c) if c.ws_id == id))
+        self.lane_cards().any(|c| c.ws_id == id)
     }
 
     /// Whether the core will move `id`'s card: false for one that anchors
     /// another group, and for an id the pane does not show.
     pub fn movable(&self, id: &str) -> bool {
-        let card = self
-            .lanes
-            .iter()
-            .flat_map(|l| &l.rows)
-            .find_map(|r| match r {
-                Row::Card(c) if c.ws_id == id => Some(c.movable),
-                _ => None,
-            });
-        let strip = || {
-            self.needs
-                .rows
-                .iter()
-                .find(|r| r.ws_id == id)
-                .map(|r| r.movable)
-        };
-        card.or_else(strip).unwrap_or(false)
+        self.lane_cards()
+            .find(|c| c.ws_id == id)
+            .is_some_and(|c| c.movable)
     }
 
-    /// The lane `id`'s card or placeholder sits in, or for a Needs you
-    /// row the lane its card is filed in, even folded.
+    /// The lane `id`'s card sits in.
     pub fn lane_of(&self, id: &str) -> Option<LaneKey> {
         self.lanes
             .iter()
             .find(|l| l.rows.iter().any(|r| r.ws_id() == id))
             .map(|l| l.key)
-            .or_else(|| {
-                let row = self.needs.rows.iter().find(|r| r.ws_id == id)?;
-                row.lane
-            })
     }
 
-    /// A lane's rows top to bottom, cards and placeholders. A placeholder
-    /// stands for a real tab in its lane (drop.ts), so a card can land
-    /// above one.
+    /// A lane's rows top to bottom.
     pub fn lane_rows(&self, key: LaneKey) -> Vec<&Row> {
         self.lanes
             .iter()

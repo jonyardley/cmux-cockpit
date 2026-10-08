@@ -1,14 +1,13 @@
  All  Projects                                                           ? keys
  Next  One: docs                                                         1 of 2
 
- Needs you  1                                                         oldest 1m
-   ● One: docs
-     Your turn: Read the draft in #142 and say go.
+ 1 needs you                                                                 1m
 
  ▾ ■ App One  2                                                               +
    ● One: parser rewrite for the streaming tokeniser                 Working 7m
      #148 draft +342 −17  parser-streaming-tokeniser
-   ◌ One: docs · your turn
+ ▎ ● One: docs                 Your turn: Read the draft in #142 and say go. 1m
+ ▎   Review
 
  ▾ ■ App Two  2
    ● Two: release                                                  Finished 10m

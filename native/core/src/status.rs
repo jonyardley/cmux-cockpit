@@ -188,7 +188,7 @@ pub const DETAIL_MAX: usize = 140;
 /// About one line of a compact card's text.
 pub const LEFT_OFF_MAX: usize = 90;
 
-/// About one line of a Needs you row's detail.
+/// About one line of a waiting card's reason.
 pub const NEEDS_DETAIL_MAX: usize = 80;
 
 /// The outline of a card, row or needs-you row: ink at the widest on the
@@ -225,6 +225,16 @@ pub fn open_pr_label(pr: Option<PrRef<'_>>) -> String {
         None => "No PR to open".to_string(),
         Some(pr) if non_empty(pr.url).is_some() => format!("Open PR {}", pr.tag),
         Some(pr) => format!("PR {} has no link", pr.tag),
+    }
+}
+
+/// A waiting card's leading edge and the ink of its reason, from whether
+/// its agent asks: amber for Asking, else clay for Your turn (issue #281).
+pub fn waiting_tokens(asks: bool) -> (Token, Token) {
+    if asks {
+        (Token::Amber, Token::AmberText)
+    } else {
+        (Token::Clay, Token::ClayText)
     }
 }
 
@@ -427,7 +437,7 @@ impl Session {
         waiting_move(&self.saved, a.as_ref(), w, asking)
     }
 
-    /// A Needs you row's second line: why the agent asks, else what it
+    /// A waiting card's reason: why the agent asks, else what it
     /// wants, else its latest message.
     pub fn needs_detail(&mut self, w: Option<&Workspace>) -> String {
         if let Some(ask) = self.ask_of(w) {
@@ -447,39 +457,10 @@ impl Session {
         "Waiting for your reply".to_string()
     }
 
-    /// A Needs you row's detail with its status in front: "Asking: allow git push?".
+    /// A waiting card's reason with its status in front: "Asking: allow git push?".
     pub fn needs_line(&mut self, data: &Data, w: Option<&Workspace>) -> String {
         let label = self.status_info(data, w).label;
         format!("{label}: {}", self.needs_detail(w))
-    }
-
-    /// The ink of a Needs you row's detail: amber while asking, else clay.
-    pub fn needs_ink(&mut self, w: Option<&Workspace>) -> Token {
-        if self.ask_of(w).is_some() {
-            Token::AmberText
-        } else {
-            Token::ClayText
-        }
-    }
-
-    /// A placeholder's words after the title: why its card went.
-    pub fn placeholder_text(&mut self, w: Option<&Workspace>) -> String {
-        if self.ask_of(w).is_some() {
-            format!("is {}", ASKING_WORD.to_lowercase())
-        } else {
-            status_word(&AgentStatus::NeedsInput)
-                .unwrap_or_default()
-                .to_lowercase()
-        }
-    }
-
-    /// A Needs you row's edge: amber while its agent asks, else clay.
-    pub fn needs_row_edge(&mut self, w: Option<&Workspace>) -> Token {
-        if self.ask_of(w).is_some() {
-            Token::AmberRowEdge
-        } else {
-            Token::NeedsRowEdge
-        }
     }
 
     /// The unread count a card's badge shows: none while the Ready pill stands in for it.

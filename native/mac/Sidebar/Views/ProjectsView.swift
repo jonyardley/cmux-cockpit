@@ -253,8 +253,6 @@ struct ProjectRowView: View {
             ProjectHeader(head: head)
         case .card(let card):
             CardView(card: card)
-        case .ghost(_, let title, let text):
-            GhostRow(title: title, text: text)
         case .newProject:
             NewProjectRow()
         case .quietHeader(let count, let collapsed):
@@ -267,16 +265,13 @@ struct ProjectRowView: View {
     }
 }
 
-/// The Projects view: Needs you while something waits, then each busy
-/// project with its cards, "+ New project", and the quiet projects.
+/// The Projects view: each busy project with its cards, a waiting one
+/// with its leading edge, "+ New project", and the quiet projects.
 struct ProjectsView: View {
     let panel: Panel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            if NeedsText.shows(panel.needs) {
-                NeedsView(needs: panel.needs).padding(.bottom, 8)
-            }
             ForEach(ProjectText.listed(panel)) { ProjectRowView(row: $0) }
         }
     }

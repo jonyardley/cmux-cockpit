@@ -634,11 +634,11 @@ mod empty_lanes {
 mod needs_you {
     use super::*;
 
-    /// The Main activity rows: its cards and a's placeholder.
+    /// The Main activity rows: its cards.
     fn main_rows(s: &mut Session, data: &Data) -> Vec<String> {
         entry_ids(s, data)
             .into_iter()
-            .filter(|id| id.ends_with("@main") || id == "g:a")
+            .filter(|id| id.ends_with("@main"))
             .collect()
     }
 
@@ -660,29 +660,30 @@ mod needs_you {
         assert_eq!(ids(&s.needs_list(&data)), ["c", "a"]);
     }
 
+    /// Adapted for R4.5 (issue #281): the TypeScript leaves a placeholder
+    /// where a listed card was; the core keeps the card itself there.
     #[test]
-    fn leaves_a_placeholder_in_a_listed_cards_place_counted_and_puts_the_card_back_once_dismissed()
-    {
+    fn keeps_a_listed_card_in_its_place_counted_and_still_there_once_dismissed() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
         let rows = entry_ids(&mut s, &data);
-        assert!(!has(&rows, "a@main"));
-        assert!(has(&rows, "g:a"));
+        assert!(has(&rows, "a@main"));
+        assert!(!rows.iter().any(|id| id.starts_with("g:")));
         assert_eq!(ids(&s.lane_workspaces(&data, LaneKey::Main)), ["a", "b"]);
-        let at = position(&rows, "g:a");
+        let at = position(&rows, "a@main");
         s.dismiss_waiting(&data, Some(by_id(&data, "a")));
+        assert!(!has(&ids(&s.needs_list(&data)), "a"));
         let rows = entry_ids(&mut s, &data);
-        assert!(!has(&rows, "g:a"));
         assert_eq!(position(&rows, "a@main"), at);
         assert_eq!(s.lane_workspaces(&data, LaneKey::Main).len(), 2);
     }
 
     #[test]
-    fn holds_a_dismissed_card_in_its_placeholders_spot_until_its_status_changes() {
+    fn holds_a_dismissed_card_in_its_waiting_spot_until_its_status_changes() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "b").agents = Some(vec![Some(fx.agent(Working).since(400.0))]);
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
-        assert_eq!(main_rows(&mut s, &data), ["g:a", "b@main"]);
+        assert_eq!(main_rows(&mut s, &data), ["a@main", "b@main"]);
         s.dismiss_waiting(&data, Some(by_id(&data, "a")));
         // Idle now, it would sort under the working card; it keeps the top.
         assert_eq!(main_rows(&mut s, &data), ["a@main", "b@main"]);
@@ -726,7 +727,7 @@ mod needs_you {
     }
 
     #[test]
-    fn keeps_a_lane_whose_only_card_waits_with_the_placeholder_under_its_header() {
+    fn keeps_a_lane_whose_only_card_waits_with_the_card_under_its_header() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "c").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
         let rows = entry_ids(&mut s, &data);
@@ -734,19 +735,20 @@ mod needs_you {
         let at = rows.iter().position(|id| id.starts_with("h:review"));
         assert_eq!(
             at.and_then(|i| rows.get(i + 1)).map(String::as_str),
-            Some("g:c")
+            Some("c@review")
         );
     }
 
     #[test]
-    fn hides_a_folded_lanes_placeholder_but_still_counts_it() {
+    fn hides_a_folded_lanes_waiting_card_but_still_counts_it() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "c").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
         let review = lane_by_key(LaneKey::Review);
         if !s.is_collapsed(&data, &review) {
             s.toggle_lane(&data, &review);
         }
-        assert!(!has(&entry_ids(&mut s, &data), "g:c"));
+        assert!(!has(&entry_ids(&mut s, &data), "c@review"));
+        assert!(has(&ids(&s.needs_list(&data)), "c"));
         assert_eq!(s.lane_workspaces(&data, LaneKey::Review).len(), 1);
     }
 
@@ -767,32 +769,36 @@ mod needs_you {
     }
 
     #[test]
-    fn keeps_a_card_being_dragged_in_its_lane_when_it_starts_asking_and_takes_it_out_once_dropped()
-    {
+    fn keeps_a_card_in_its_lane_when_it_starts_asking_dragged_or_not() {
         let (mut s, mut data, mut fx) = setup();
         s.set_drag(Some(DragState {
             id: "w:a".into(),
             index: 1.0,
         }));
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
-        assert!(has(&ids(&s.needs_shown(&data)), "a"));
+        assert!(has(&ids(&s.needs_list(&data)), "a"));
         assert!(has(&entry_ids(&mut s, &data), "a@main"));
         s.set_drag(None);
-        assert!(!has(&entry_ids(&mut s, &data), "a@main"));
+        assert!(
+            has(&entry_ids(&mut s, &data), "a@main"),
+            "no placeholder: the card stays (issue #281)"
+        );
     }
 
+    /// Adapted for R4.5 (issue #281): the TypeScript leaves a placeholder
+    /// in the project; the core keeps the card itself under its header.
     #[test]
-    fn leaves_a_placeholder_for_a_card_it_lists_in_its_project_whose_header_stays() {
+    fn keeps_a_card_it_lists_in_its_project_under_its_header() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "a").directory = Some("/Users/coder/dev/app-two".into());
         ws_mut(&mut data, "c").directory = Some("/Users/coder/dev/app-one".into());
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
         s.set_mode(ViewMode::Projects);
-        assert!(!has(&project_ids(&mut s, &data), "a@p"));
-        // Its header stays over the placeholder, counting it, so its "+" is
-        // still there; not quiet, as it has a session, waiting in Needs you.
+        assert!(has(&ids(&s.needs_list(&data)), "a"));
+        // Its header stays over the card, counting it, so its "+" is still
+        // there; not quiet, as it has a session.
         let rows = project_ids(&mut s, &data);
-        assert_eq!(after(&rows, "p:/dev/app-two").as_deref(), Some("a@g"));
+        assert_eq!(after(&rows, "p:/dev/app-two").as_deref(), Some("a@p"));
         assert!(!has(&rows, "q:/dev/app-two"));
         assert_eq!(s.project_workspaces(&data, "/dev/app-two").len(), 1);
         // An editor open on it stays open.

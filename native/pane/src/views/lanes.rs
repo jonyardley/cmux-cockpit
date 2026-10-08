@@ -1,8 +1,8 @@
 //! The lanes: each header with its fold mark, marker, name, anchor, count
 //! pill, folded dot and merge line, then its cards (dot, title, status with
-//! its age, chips, where you left off, detail) and the
-//! placeholders of cards waiting in Needs you. An empty lane is its header
-//! alone, faint, with no fold mark. While a card is dragged, the lane it
+//! its age, chips, where you left off, detail), a card waiting on Jon
+//! marked by a bar down its lead in the waiting ink. An empty lane is its
+//! header alone, faint, with no fold mark. While a card is dragged, the lane it
 //! would drop into says so on its header, and the card it would land above
 //! carries the drop's mark.
 
@@ -13,8 +13,7 @@ use ratatui::text::{Line, Span};
 
 use super::parts::{Edge, pill, spans_width, spread};
 use crate::model::{
-    Card, Chip, ChipKind, DROP_AT_END, DROP_HERE, FOLDED_MARK, GHOST, GHOST_GAP, LANE_MARK, Lane,
-    OPEN_MARK, Row,
+    Card, Chip, ChipKind, DROP_AT_END, DROP_HERE, FOLDED_MARK, LANE_MARK, Lane, OPEN_MARK, Row,
 };
 use crate::placing::{Place, Spot};
 use crate::text::{ELLIPSIS, fit, fit_ranked, width, wrap};
@@ -25,6 +24,9 @@ use cockpit_core::panel::Token;
 
 /// Before a card's title: indent, the dot and a space.
 pub(super) const CARD_LEAD: usize = 4;
+/// Down a waiting card's lead, in its edge ink: the terminal's take on
+/// the sidebar's leading edge.
+const WAITING_BAR: &str = "▎";
 /// Between two chips on a card's chips line.
 const CHIP_GAP: &str = "  ";
 /// A title keeps at least this many cells before the status takes the rest.
@@ -54,29 +56,18 @@ pub fn lines(lanes: &[Lane], inner: usize, cursor: Option<&str>, drop: Option<&P
         let target = drop.filter(|p| p.lane == lane.key);
         out.lines.push(header(lane, inner, target));
         out.spots.push(Spot::Header(lane.key));
-        for row in &lane.rows {
-            let id = row.ws_id();
+        for c in lane.rows.iter().map(Row::card) {
+            let id = c.ws_id.as_str();
             let landing = target.is_some_and(|p| p.before.as_deref() == Some(id));
             let start = out.lines.len();
-            let spot = match row {
-                Row::Card(c) => {
-                    let on = cursor == Some(c.ws_id.as_str());
-                    out.lines.extend(card(c, inner, on, landing));
-                    if on {
-                        out.focus = Some(start..out.lines.len());
-                    }
-                    Spot::Card {
-                        id: id.to_string(),
-                        lane: lane.key,
-                    }
-                }
-                Row::Ghost { title, text, .. } => {
-                    out.lines.push(ghost(title, text, inner, landing));
-                    Spot::Ghost {
-                        id: id.to_string(),
-                        lane: lane.key,
-                    }
-                }
+            let on = cursor == Some(id);
+            out.lines.extend(card(c, inner, on, landing));
+            if on {
+                out.focus = Some(start..out.lines.len());
+            }
+            let spot = Spot::Card {
+                id: id.to_string(),
+                lane: lane.key,
             };
             out.spots.resize(out.lines.len(), spot);
         }
@@ -210,19 +201,19 @@ fn chip_width(c: &Chip) -> usize {
 pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<'static>> {
     let edge = if on { Edge::Cursor } else { Edge::Plain };
     let first = if landing { Edge::Drop } else { edge };
-    let status = fit(&c.status, inner.saturating_sub(CARD_LEAD + MIN_TITLE + 1));
-    let gap = usize::from(!status.is_empty());
-    let title_room = inner.saturating_sub(CARD_LEAD + width(&status) + gap);
+    let right = title_right(c, inner.saturating_sub(CARD_LEAD + MIN_TITLE + 1));
+    let right_width = spans_width(&right);
+    let gap = usize::from(right_width > 0);
+    let title_room = inner.saturating_sub(CARD_LEAD + right_width + gap);
     let left = vec![
-        Span::raw("  "),
+        lead(c, "  "),
         Span::styled(c.icon.glyph, theme::icon(c.icon.ink)),
         Span::raw(" "),
         Span::styled(fit(&c.title, title_room), theme::title()),
     ];
-    let right = vec![Span::styled(status, theme::ink(c.status_ink))];
     let mut out = vec![spread(left, right, inner, first)];
     let room = inner.saturating_sub(CARD_LEAD);
-    let indent = || Span::raw(" ".repeat(CARD_LEAD));
+    let indent = || lead(c, &" ".repeat(CARD_LEAD));
     let chips_at = |chips: &[Chip]| {
         let mut spans = vec![indent()];
         spans.extend(chips_line(chips, room));
@@ -240,7 +231,7 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
         out.push(spread(spans, Vec::new(), inner, edge));
     }
     for line in wrap(&c.detail, room, c.detail_lines) {
-        let spans = vec![indent(), Span::styled(line, theme::plain(theme::SECONDARY))];
+        let spans = vec![indent(), Span::styled(line, theme::ink(c.detail_ink))];
         out.push(spread(spans, Vec::new(), inner, edge));
     }
     if on {
@@ -260,24 +251,45 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
     out
 }
 
-pub(super) fn ghost(title: &str, text: &str, inner: usize, landing: bool) -> Line<'static> {
-    let left = vec![
-        Span::raw("  "),
-        Span::styled(GHOST, theme::ink(Token::Faint)),
-        Span::raw(" "),
-    ];
-    let room = inner.saturating_sub(spans_width(&left));
-    let words = fit(&format!("{title} {GHOST_GAP} {text}"), room);
-    let mut spans = left;
-    spans.push(Span::styled(words, theme::ink(Token::Faint)));
-    let edge = if landing { Edge::Drop } else { Edge::Plain };
-    spread(spans, Vec::new(), inner, edge)
+/// The right of a card's title row in at most `room` cells: its status,
+/// then its age while the status carries none (a waiting card's reason),
+/// in the waiting ink while it waits, as the sidebar's title row has it.
+/// The age is short and kept whole; the status gives way first.
+fn title_right(c: &Card, room: usize) -> Vec<Span<'static>> {
+    let age = if c.status_has_age { "" } else { c.age.as_str() };
+    let age = fit(age, room);
+    let age_room = if age.is_empty() { 0 } else { width(&age) + 1 };
+    let status = fit(&c.status, room.saturating_sub(age_room));
+    let mut out = Vec::new();
+    if !status.is_empty() {
+        out.push(Span::styled(status, theme::ink(c.status_ink)));
+    }
+    if !age.is_empty() {
+        if !out.is_empty() {
+            out.push(Span::raw(" "));
+        }
+        let ink = c.waiting.map_or(Token::MetaText, |w| w.ink);
+        out.push(Span::styled(age, theme::ink(ink)));
+    }
+    out
+}
+
+/// The blank start of a card's line, `blank` wide; on a waiting card its
+/// first cell is the waiting bar in the card's edge ink.
+fn lead(c: &Card, blank: &str) -> Span<'static> {
+    match c.waiting {
+        Some(w) => Span::styled(
+            format!("{WAITING_BAR}{}", blank.get(1..).unwrap_or_default()),
+            theme::ink(w.edge),
+        ),
+        None => Span::raw(blank.to_string()),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Piece, Row, fixtures};
+    use crate::model::{Density, Piece, Row, fixtures};
 
     #[test]
     fn joins_a_diff_size_to_the_pr_before_it() {
@@ -310,10 +322,64 @@ mod tests {
     }
 
     #[test]
+    fn a_waiting_card_carries_its_edge_down_its_lead() {
+        let Row::Card(mut c) = fixtures::card("asks", 0, true);
+        c.detail = "Allow git push?".into();
+        let lines = card(&c, 30, false, false);
+        assert_eq!(lines.len(), 2, "the title line and the detail");
+        for line in &lines {
+            let lead = &line.spans[1];
+            assert!(lead.content.starts_with(WAITING_BAR));
+            assert_eq!(lead.style.fg, theme::ink(Token::Clay).fg);
+        }
+        c.waiting = None;
+        let lines = card(&c, 30, false, false);
+        assert_eq!(lines[0].spans[1].content, "  ", "no bar once answered");
+    }
+
+    #[test]
+    fn draws_the_age_after_a_waiting_cards_reason_in_its_ink() {
+        let Row::Card(mut c) = fixtures::card("asks", 0, true);
+        c.status = "Your turn: Which green?".into();
+        c.status_ink = Token::ClayText;
+        c.age = "5m".into();
+        let right = title_right(&c, 30);
+        let words: Vec<&str> = right.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(words, ["Your turn: Which green?", " ", "5m"]);
+        assert_eq!(right[2].style.fg, theme::ink(Token::ClayText).fg);
+        let narrow = title_right(&c, 8);
+        assert_eq!(
+            narrow.last().map(|s| s.content.as_ref()),
+            Some("5m"),
+            "the age stays whole"
+        );
+        c.waiting = None;
+        let right = title_right(&c, 30);
+        assert_eq!(
+            right[2].style.fg,
+            theme::ink(Token::MetaText).fg,
+            "meta ink once answered"
+        );
+        c.status_has_age = true;
+        assert_eq!(title_right(&c, 30).len(), 1, "no second time");
+    }
+
+    #[test]
+    fn draws_a_waiting_rows_reason_in_the_waiting_ink() {
+        let Row::Card(mut c) = fixtures::card("row", 0, true);
+        c.density = Density::Row;
+        c.detail = "Asking: allow git push?".into();
+        c.detail_ink = Token::AmberText;
+        let lines = card(&c, 40, false, false);
+        assert_eq!(lines.len(), 2, "the title line and the reason");
+        let reason = &lines[1].spans[2];
+        assert_eq!(reason.content, "Asking: allow git push?");
+        assert_eq!(reason.style.fg, theme::ink(Token::AmberText).fg);
+    }
+
+    #[test]
     fn a_dimmed_card_keeps_its_drop_mark_at_full_strength() {
-        let Row::Card(mut c) = fixtures::card("merged", 0, false) else {
-            panic!("the fixture is a card")
-        };
+        let Row::Card(mut c) = fixtures::card("merged", 0, false);
         c.dimmed = true;
         let lines = card(&c, 30, false, true);
         let dim = |s: Style| s.add_modifier.contains(Modifier::DIM);

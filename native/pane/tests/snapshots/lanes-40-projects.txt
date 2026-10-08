@@ -1,25 +1,21 @@
  All  Projects                   ? keys
  Next  Chip colours              1 of 3
 
- Needs you  2                 oldest 5m
-   ● Chip colours
-     Your turn: Which green should the…
-   ● Release notes
-     Asking: allow git push?
+ 2 need you                          5m
 
  ▾ ■ App One  1                       +
    ● Loose workspace         Working 3m
 
  ▾ ■ Other  14
-   ◌ Chip colours · your turn
-   ◌ Release notes · is asking
+ ▎ ● Chip colours  Your turn: Which… 5m
+ ▎ ● Release…     Asking: allow git… 2m
    ● Snapshot tests         Working 14m
      #130 draft +342 −17  …
    ○ Long build Working 40m · quiet 17m
    ● Tidy strip             Finished 6m
    ○ Card layout fit           Idle 15m
      #176 merged  card-layout-fit
-   ○ Untimed card                  Idle
+   ○ Untimed card               Idle 5m
    ● Selected card           Working 1m
    ● Ended agent           Finished 15m
    ○ Left off                   Idle 1h

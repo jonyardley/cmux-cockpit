@@ -6,11 +6,11 @@ import Foundation
 /// count, folded dot and "+"; "+ New project"; the Quiet heading and its
 /// count; a quiet project's mark, name and "+". The sidebar draws the
 /// marks and pluses as a badge and icons instead (ProjectsView.swift), so
-/// its own labels are newProjectLabel and the views. Cards and
-/// placeholders are CardText's.
+/// its own labels are newProjectLabel and the views. Cards are
+/// CardText's.
 enum ProjectText {
     /// The pane's words for a Projects row that is not a card, in its
-    /// order; nil for a card, a placeholder and the editor, which the
+    /// order; nil for a card and the editor, which the
     /// sidebar draws as a sheet.
     static func words(_ row: ProjectRow) -> [String]? {
         switch row {
@@ -25,7 +25,7 @@ enum ProjectText {
             return [collapsed ? Words.folded : Words.open, Words.quiet, String(count)]
         case .quiet(_, _, let name, _, _, let canOpen, _):
             return [Words.laneMark, name] + (canOpen ? [Words.plus] : [])
-        case .card, .ghost, .editor:
+        case .card, .editor:
             return nil
         }
     }
@@ -55,7 +55,6 @@ enum ProjectText {
         switch row {
         case .header(let h): h.id
         case .card(let card): card.wsId
-        case .ghost(let wsId, _, _): "ghost:" + wsId
         case .newProject: "new"
         case .editor: "editor"
         case .quietHeader: "quiet"

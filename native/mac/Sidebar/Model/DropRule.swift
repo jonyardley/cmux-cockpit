@@ -3,21 +3,19 @@ import Foundation
 /// Where a dropped card lands, by the rule the TypeScript sidebar's
 /// src/cockpit/drop.ts uses: cards sort by state inside a lane, and the
 /// drag order holds only among cards in the same state, so a drop anchors
-/// to the nearest card in the dragged card's own state. A placeholder
-/// (a ghost row) stands for its card, so it anchors a drop as a card does.
+/// to the nearest card in the dragged card's own state. A card waiting
+/// on Jon stays in its lane (issue #281), so every row is a card.
 enum DropRule {
-    /// The workspace a row stands for, card or placeholder.
+    /// The workspace a row's card stands for.
     static func wsId(_ row: Row) -> String {
         switch row {
         case .card(let card): card.wsId
-        case .ghost(let wsId, _, _, _): wsId
         }
     }
 
     static func rank(_ row: Row) -> UInt8 {
         switch row {
         case .card(let card): card.rank
-        case .ghost(_, _, _, let rank): rank
         }
     }
 
@@ -56,7 +54,6 @@ enum DropRule {
     }
 
     static func isCard(_ row: Row, _ id: String) -> Bool {
-        if case .card(let card) = row { return card.wsId == id }
-        return false
+        wsId(row) == id
     }
 }

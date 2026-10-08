@@ -36,8 +36,6 @@ enum Palette {
         /// (sampled from a light-mode capture), so the panel matches the
         /// rest of the window. Dark is unsampled and stays the dark ground.
         case panelGround
-        /// The Needs you strip's face.
-        case needsFace
         /// A card's face: white on the panel ground, as the TS sidebar's cards.
         case cardFace
         /// The third ink: where you left off.
@@ -51,10 +49,13 @@ enum Palette {
         case lift
         /// A solid face: the chosen view tab, Next's pill.
         case card
-        /// The edge round Next's pill and the Needs you strip.
+        /// The edge round Next's pill.
         case needsEdge
-        /// Next's pill and a Needs you row under the pointer.
+        /// Next's pill under the pointer.
         case needsHover
+        /// The count on the Next pill's filled badge: white on clay or
+        /// amber, light and dark alike.
+        case onFill
         /// A card's face under the pointer: opaque, as it replaces the face.
         case cardHover
         /// A header, tab or badge under the pointer.
@@ -142,7 +143,6 @@ enum Palette {
         switch own {
         case .ground: Pair(RGBA(0xF4F2EA), RGBA(0x262624))
         case .panelGround: Pair(RGBA(0xFAF9F5), RGBA(0x262624))
-        case .needsFace: Pair(RGBA(0xFBECE4), RGBA(clay.dark.hex, 0x1C))
         case .cardFace: Pair(RGBA(0xFFFFFF), RGBA(0x30302D, 0x99))
         case .tertiary: Pair(RGBA(0x73726C), RGBA(0x9C9A92))
         case .grey: Pair(RGBA(0xA09E95), RGBA(0x77756D))
@@ -152,6 +152,7 @@ enum Palette {
         case .card: Pair(RGBA(0xFFFFFF), RGBA(0x30302D))
         case .needsEdge: Pair(RGBA(0xF0D2C3), RGBA(clay.dark.hex, 0x47))
         case .needsHover: Pair(RGBA(0xFBF1EB), RGBA(0x3A3330))
+        case .onFill: Pair(RGBA(0xFFFFFF), RGBA(0xFFFFFF))
         case .cardHover: Pair(RGBA(0xF7F6F2), RGBA(0x383835))
         case .hover: Pair(RGBA(0x7F7F7F, 0x14), RGBA(0x7F7F7F, 0x24))
         case .readyBg: faint(green, 0x1F)

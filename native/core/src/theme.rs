@@ -5,12 +5,15 @@
 use serde::{Deserialize, Serialize};
 
 /// A colour token.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, facet::Facet)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, facet::Facet,
+)]
 #[serde(rename_all = "camelCase")]
 #[repr(u8)]
 #[facet(rename_all = "camelCase")]
 pub enum Token {
     /// No colour: "clear".
+    #[default]
     Clear,
     Blue,
     Clay,

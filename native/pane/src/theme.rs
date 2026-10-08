@@ -12,8 +12,6 @@ use ratatui::style::{Color, Modifier, Style};
 pub const GROUND: u32 = 0xF4F2EA;
 /// The ink of titles.
 pub const TEXT: u32 = 0x141413;
-/// The Needs you strip's face.
-pub const NEEDS_BG: u32 = 0xFBECE4;
 /// The face of the card under the cursor: the link hover, a chip-strength step.
 pub const CURSOR_BG: u32 = 0xECEAE3;
 /// The second ink: a card's detail and a lane's heading.

@@ -67,6 +67,7 @@ let every: [SidebarAction] = [
     .toggleLane(.main),
     .toggleProject(key: "/dev/cockpit"),
     .toggleQuiet,
+    .reveal(id: "W1"),
 ]
 
 func json(_ data: Data) -> Any? {

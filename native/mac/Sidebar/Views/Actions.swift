@@ -27,7 +27,6 @@ enum ActionWords {
     static let messagePrompt = "Message for the agent in"
     static let send = "Send"
     static let cancel = "Cancel"
-    static let dismiss = "Dismiss"
     static let notSent = "Not sent: the cockpit could not take it. Try again."
 }
 
@@ -176,47 +175,23 @@ struct SwitchTab: ViewModifier {
 
 /// Next: a tap steps to the next workspace in its queue. The core makes
 /// the jump and draws its target selected on the tap, remembers it and
-/// unfolds whatever hides the card.
+/// unfolds whatever hides the card. While something waits, the pill's
+/// tap goes to the waiting session it names instead, revealed the same
+/// way, and does nothing when it names none.
 struct NextTap: ViewModifier {
     let next: NextLine
+    let needs: Needs
 
     func body(content: Content) -> some View {
         content
             .contentShape(.rect)
             .onTapGesture {
+                if NeedsText.shows(needs) {
+                    if let tap = NeedsText.tap(needs) { SidebarCore.send(tap) }
+                    return
+                }
                 guard NextText.targetId(next) != nil else { return }
                 SidebarCore.send(.next)
             }
-    }
-}
-
-/// A Needs you row: a click switches to its workspace.
-struct NeedsRowTap: ViewModifier {
-    let id: String
-    @Environment(\.switchWorkspace) private var switchWorkspace
-
-    func body(content: Content) -> some View {
-        content
-            .contentShape(.rect)
-            .onTapGesture { switchWorkspace.run(id) }
-    }
-}
-
-/// The cross on a Needs you row: takes its asks off the strip.
-struct DismissCross: View {
-    let id: String
-
-    var body: some View {
-        Button {
-            SidebarCore.send(.dismiss(id: id))
-        } label: {
-            Image(systemName: "xmark")
-                .font(.system(size: Metrics.small, weight: .semibold))
-                .foregroundStyle(Color(Palette.Own.tertiary))
-                .frame(width: 16, height: 16)
-                .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .help(ActionWords.dismiss)
     }
 }

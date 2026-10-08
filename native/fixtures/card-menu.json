@@ -9,35 +9,15 @@
   },
   "needs": {
     "count": 2,
-    "wait": "oldest 5m",
+    "label": "2 need you",
+    "wait": "5m",
     "late": false,
-    "rows": [
-      {
-        "ws_id": "needs",
-        "icon": {
-          "glyph": "●",
-          "ink": "clay"
-        },
-        "title": "Chip colours",
-        "line": "Your turn: Which green should the ready chip use?",
-        "ink": "clayText",
-        "lane": "main",
-        "movable": true
-      },
-      {
-        "ws_id": "asking",
-        "icon": {
-          "glyph": "●",
-          "ink": "amber"
-        },
-        "title": "Release notes",
-        "line": "Asking: allow git push?",
-        "ink": "amberText",
-        "lane": "main",
-        "movable": true
-      }
-    ],
-    "more": ""
+    "fill": "clay",
+    "ink": "clayText",
+    "target": {
+      "ws_id": "needs",
+      "title": "Chip colours"
+    }
   },
   "lanes": [
     {
@@ -57,19 +37,301 @@
       "merge_ready": "",
       "rows": [
         {
-          "Ghost": {
+          "Card": {
             "ws_id": "needs",
+            "icon": {
+              "glyph": "●",
+              "ink": "clay"
+            },
             "title": "Chip colours",
-            "text": "your turn",
-            "rank": 0
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "Your turn: Which green should the ready chip use?",
+            "status_ink": "clayText",
+            "age": "5m",
+            "status_has_age": false,
+            "left_off": "",
+            "chips": [],
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 2,
+            "waiting": {
+              "edge": "clay",
+              "ink": "clayText"
+            },
+            "rank": 0,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ]
           }
         },
         {
-          "Ghost": {
+          "Card": {
             "ws_id": "asking",
+            "icon": {
+              "glyph": "●",
+              "ink": "amber"
+            },
             "title": "Release notes",
-            "text": "is asking",
-            "rank": 0
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "Asking: allow git push?",
+            "status_ink": "amberText",
+            "age": "2m",
+            "status_has_age": false,
+            "left_off": "",
+            "chips": [],
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 2,
+            "waiting": {
+              "edge": "amber",
+              "ink": "amberText"
+            },
+            "rank": 0,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ]
           }
         },
         {
@@ -97,8 +359,9 @@
             "left_off": "",
             "chips": [],
             "detail": "Done: the strip now groups by repo.",
+            "detail_ink": "secondary",
             "detail_lines": 2,
-            "waiting": false,
+            "waiting": null,
             "rank": 1,
             "movable": true,
             "dimmed": false,
@@ -287,8 +550,9 @@
               }
             ],
             "detail": "Recording the view tree as text.",
+            "detail_ink": "secondary",
             "detail_lines": 2,
-            "waiting": false,
+            "waiting": null,
             "rank": 2,
             "movable": true,
             "dimmed": false,
@@ -432,8 +696,9 @@
             "left_off": "",
             "chips": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 2,
-            "waiting": false,
+            "waiting": null,
             "rank": 2,
             "movable": true,
             "dimmed": false,
@@ -577,8 +842,9 @@
             "left_off": "",
             "chips": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 2,
-            "waiting": false,
+            "waiting": null,
             "rank": 2,
             "movable": true,
             "dimmed": false,
@@ -751,8 +1017,9 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 2,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": true,
@@ -896,8 +1163,9 @@
             "left_off": "",
             "chips": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 2,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -1059,8 +1327,9 @@
             "left_off": "",
             "chips": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -1204,8 +1473,9 @@
             "left_off": "",
             "chips": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -1367,8 +1637,9 @@
             "left_off": "You: hi",
             "chips": [],
             "detail": "The batch resumes by itself once load drops.",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 2,
             "movable": true,
             "dimmed": false,
@@ -1512,8 +1783,9 @@
             "left_off": "",
             "chips": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -1695,8 +1967,9 @@
             "left_off": "",
             "chips": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 2,
             "movable": true,
             "dimmed": false,
@@ -1840,8 +2113,9 @@
             "left_off": "",
             "chips": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": true,

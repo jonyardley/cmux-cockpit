@@ -3,10 +3,12 @@
   "next": "Nothing",
   "needs": {
     "count": 0,
+    "label": "",
     "wait": "",
     "late": false,
-    "rows": [],
-    "more": ""
+    "fill": "clear",
+    "ink": "clear",
+    "target": null
   },
   "lanes": [
     {
@@ -79,8 +81,9 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 2,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -267,8 +270,9 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -437,8 +441,9 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -595,8 +600,9 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -753,8 +759,9 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -911,8 +918,9 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -1069,8 +1077,9 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,
@@ -1227,8 +1236,9 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": true,
@@ -1385,8 +1395,9 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
-            "waiting": false,
+            "waiting": null,
             "rank": 3,
             "movable": true,
             "dimmed": false,

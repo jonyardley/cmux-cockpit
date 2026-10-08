@@ -93,12 +93,7 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
             // wheel, and the view keeps it in sight: an editor's focus
             // runs to its foot line, and the last row scrolls to the end.
             // No line is a spot.
-            let mut body: Vec<Line<'static>> = Vec::new();
-            let needs = needs::lines(&shown.model.needs, inner, None);
-            if !needs.lines.is_empty() {
-                body.push(Line::default());
-            }
-            body.extend(needs.lines);
+            let mut body = needs_lines(shown, inner);
             let lead = body.len();
             let laid = projects::lines(&shown.model.projects, inner, shown.cursor, shown.field);
             body.extend(laid.lines);
@@ -135,26 +130,14 @@ pub fn draw(frame: &mut Frame<'_>, shown: Shown<'_>) -> Drawn {
     drawn
 }
 
-/// The All view's body: Needs you then the lanes, what each line is, and
-/// how far it scrolls to keep the cursor's card in sight.
+/// The All view's body: the Needs you line then the lanes, what each line
+/// is, and how far it scrolls to keep the cursor's card in sight.
 fn all(shown: Shown<'_>, inner: usize, height: usize) -> (Vec<Line<'static>>, Vec<Spot>, usize) {
-    let mut body: Vec<Line<'static>> = Vec::new();
-    let mut spots: Vec<Spot> = Vec::new();
-    let needs = needs::lines(&shown.model.needs, inner, shown.cursor);
-    if !needs.lines.is_empty() {
-        body.push(Line::default());
-        spots.push(Spot::Blank);
-    }
-    let mut focus = needs
-        .focus
-        .map(|r| r.start + body.len()..r.end + body.len());
-    body.extend(needs.lines);
-    spots.extend(needs.spots);
+    let mut body = needs_lines(shown, inner);
+    let mut spots: Vec<Spot> = vec![Spot::Blank; body.len()];
     let lead = body.len();
     let lanes = lanes::lines(&shown.model.lanes, inner, shown.cursor, shown.drop);
-    if let Some(r) = lanes.focus {
-        focus = Some(r.start + lead..r.end + lead);
-    }
+    let focus = lanes.focus.map(|r| r.start + lead..r.end + lead);
     body.extend(lanes.lines);
     spots.extend(lanes.spots);
     let scroll = scroll_for(&Scroll {
@@ -165,4 +148,12 @@ fn all(shown: Shown<'_>, inner: usize, height: usize) -> (Vec<Line<'static>>, Ve
         height,
     });
     (body, spots, scroll)
+}
+
+/// What heads either view's body: a blank line then the Needs you line,
+/// or nothing while nobody waits.
+fn needs_lines(shown: Shown<'_>, inner: usize) -> Vec<Line<'static>> {
+    needs::line(&shown.model.needs, inner)
+        .map(|needs| vec![Line::default(), needs])
+        .unwrap_or_default()
 }

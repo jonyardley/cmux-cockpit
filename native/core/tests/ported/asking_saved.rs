@@ -6,7 +6,7 @@ use cockpit_core::data::{Agent, Data};
 use cockpit_core::needs::ask_reason;
 use cockpit_core::saved::HOOK_SLACK;
 use cockpit_core::session::Session;
-use cockpit_core::status::StatusStyle;
+use cockpit_core::status::{StatusStyle, waiting_tokens};
 use cockpit_core::theme::Token;
 use cockpit_core::ui::Urgency;
 
@@ -171,13 +171,12 @@ mod cockpit {
         assert_eq!(s.status_info(&data, Some(&asking)), amber);
         assert_eq!(s.status_line(&data, Some(&asking)), "Asking 1m");
         assert_eq!(s.needs_detail(Some(&asking)), "allow git push?");
-        assert_eq!(s.needs_row_edge(Some(&asking)), Token::AmberRowEdge);
         assert_eq!(
             s.needs_line(&data, Some(&asking)),
             "Asking: allow git push?"
         );
-        assert_eq!(s.needs_ink(Some(&asking)), Token::AmberText);
-        assert_eq!(s.placeholder_text(Some(&asking)), "is asking");
+        let asks = s.ask_of(Some(&asking)).is_some();
+        assert_eq!(waiting_tokens(asks), (Token::Amber, Token::AmberText));
 
         let turn = ws("wA")
             .agents(vec![waiting(&mut fx, 1100.0)])
@@ -187,10 +186,9 @@ mod cockpit {
         assert_eq!(s.status_info(&data, Some(&turn)).label, "Your turn");
         assert_eq!(s.status_info(&data, Some(&turn)).dot, Some(Token::Clay));
         assert_eq!(s.needs_detail(Some(&turn)), "Pushed it.");
-        assert_eq!(s.needs_row_edge(Some(&turn)), Token::NeedsRowEdge);
         assert_eq!(s.needs_line(&data, Some(&turn)), "Your turn: Pushed it.");
-        assert_eq!(s.needs_ink(Some(&turn)), Token::ClayText);
-        assert_eq!(s.placeholder_text(Some(&turn)), "your turn");
+        let asks = s.ask_of(Some(&turn)).is_some();
+        assert_eq!(waiting_tokens(asks), (Token::Clay, Token::ClayText));
         let bare = ws("x").agents(vec![waiting(&mut fx, 1100.0)]);
         assert_eq!(s.needs_detail(Some(&bare)), "Waiting for your reply");
     }

@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// The All view: Needs you while something waits, then the five lanes.
+/// The All view: the five lanes. A card waiting on Jon stays in its lane
+/// with its leading edge (issue #281); Next's pill counts them.
 /// Each lane header carries its own section gap above it, so the lanes
 /// sit flush and their drop areas meet.
 struct AllView: View {
@@ -9,9 +10,6 @@ struct AllView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if NeedsText.shows(panel.needs) {
-                NeedsView(needs: panel.needs)
-            }
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(panel.lanes, id: \.key) { lane in
                     LaneView(lane: lane, top: tops[String(describing: lane.key)] ?? 0)
@@ -40,8 +38,8 @@ struct PanelBody: View {
                 ViewSwitch(view: panel.view)
                     .padding(.horizontal, Self.switchMargin)
                     .padding(.bottom, 8)
-                if !NextText.isNothing(panel.next) {
-                    NextView(next: panel.next).padding(.top, 6)
+                if NeedsText.shows(panel.needs) || !NextText.isNothing(panel.next) {
+                    NextView(next: panel.next, needs: panel.needs).padding(.top, 6)
                 }
                 Group {
                     switch panel.view {

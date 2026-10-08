@@ -9,10 +9,8 @@ enum Words {
     static let projects = "Projects"
     static let next = "Next"
     static let nextNothing = "nothing waiting"
-    static let needs = "Needs you"
-    /// Between a placeholder's title and why its card went.
-    static let ghostGap = "·"
-    static let ghost = "◌"
+    /// At the end of the Next pill while something waits: down to it.
+    static let down = "↓"
     static let laneMark = "■"
     static let folded = "▸"
     static let open = "▾"

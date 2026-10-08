@@ -1,7 +1,9 @@
-//! The Needs you strip (src/cockpit/strip.ts): who waits on Jon, how long
-//! the oldest has waited, the row cap and its "+N more", and the cards the
-//! strip stands in for. A dismissal from the strip holds the card at the
-//! top of its lane until its status moves on; lane entries read that hold.
+//! Needs you (src/cockpit/strip.ts): who waits on Jon and how long the
+//! oldest has waited. The TypeScript draws them as a strip with
+//! placeholders left in the lanes; here each card stays in its lane and
+//! says so itself, and Next's pill carries the count (issue #281). A
+//! dismissal holds the card at the top of its lane until its status moves
+//! on; lane entries read that hold.
 //!
 //! The TypeScript memoises the list once per change. Here `needs` builds
 //! it once and answers every field from that; the single getters are for
@@ -9,33 +11,21 @@
 
 use std::cmp::Ordering;
 
-use indexmap::IndexSet;
-
 use crate::data::{Data, Workspace};
 use crate::js::positive;
 use crate::session::Session;
 use crate::status::Status;
 use crate::time::{fmt_age, now_epoch};
 
-/// The strip lists this many rows, then "+N more" (issue #74), so a long
-/// queue never pushes the lanes off screen.
-pub const NEEDS_ROWS: usize = 4;
-
-/// The header's clock turns clay once the oldest ask has waited this long (issue #153).
+/// Next's clock turns clay once the oldest ask has waited this long (issue #153).
 pub const NEEDS_LATE_SECS: f64 = 30.0 * 60.0;
 
-/// The strip for one frame, every field from one build of the list.
+/// Needs you for one frame, every field from one build of the list.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NeedsStrip<'d> {
     /// Every workspace waiting on Jon, longest waiting first.
     pub list: Vec<&'d Workspace>,
-    /// The rows the strip lists: the first NEEDS_ROWS.
-    pub shown: Vec<&'d Workspace>,
-    /// The shown rows whose card leaves a placeholder: less a card being dragged.
-    pub in_strip: IndexSet<String>,
-    /// How many the strip leaves out, its "+N more".
-    pub more: usize,
-    /// The header's clock: "12m" for the oldest ask, "" when nothing says.
+    /// Next's clock: "12m" for the oldest ask, "" when nothing says.
     pub wait_text: String,
     /// Whether the oldest ask has waited NEEDS_LATE_SECS or more.
     pub late: bool,
@@ -58,20 +48,14 @@ impl Session {
         waiting
     }
 
-    /// The whole strip for this frame.
+    /// Needs you for this frame.
     pub fn needs<'d>(&mut self, data: &'d Data) -> NeedsStrip<'d> {
         let waiting = self.waiting(data);
         let wait = oldest_wait(data, &waiting);
-        let list: Vec<&Workspace> = waiting.into_iter().map(|(_, w)| w).collect();
-        let shown: Vec<&Workspace> = list.iter().take(NEEDS_ROWS).copied().collect();
-        let in_strip = self.placeholders(&shown);
         NeedsStrip {
-            more: list.len().saturating_sub(NEEDS_ROWS),
+            list: waiting.into_iter().map(|(_, w)| w).collect(),
             wait_text: wait.map(fmt_age).unwrap_or_default(),
             late: wait.unwrap_or(0.0) >= NEEDS_LATE_SECS,
-            list,
-            shown,
-            in_strip,
         }
     }
 
@@ -80,17 +64,7 @@ impl Session {
         self.needs(data).list
     }
 
-    /// The rows the strip lists: the first NEEDS_ROWS of the list.
-    pub fn needs_shown<'d>(&mut self, data: &'d Data) -> Vec<&'d Workspace> {
-        self.needs(data).shown
-    }
-
-    /// How many waiting workspaces the strip leaves out, its "+N more".
-    pub fn needs_more(&mut self, data: &Data) -> usize {
-        self.needs(data).more
-    }
-
-    /// The header's clock: "12m" for the oldest ask, "" when nothing says.
+    /// Next's clock: "12m" for the oldest ask, "" when nothing says.
     pub fn needs_wait_text(&mut self, data: &Data) -> String {
         self.needs(data).wait_text
     }
@@ -100,25 +74,8 @@ impl Session {
         self.needs(data).late
     }
 
-    /// The workspaces the strip lists whose card leaves its lane or project
-    /// for a placeholder in the same spot. One past the cap keeps its card,
-    /// and so does the card being dragged, so it never vanishes from under
-    /// the pointer. In the strip's order.
-    pub fn in_strip(&mut self, data: &Data) -> IndexSet<String> {
-        self.needs(data).in_strip
-    }
-
-    fn placeholders(&self, shown: &[&Workspace]) -> IndexSet<String> {
-        let dragged = self.drag.as_ref().and_then(|d| d.id.strip_prefix("w:"));
-        shown
-            .iter()
-            .filter(|w| dragged != Some(w.id.as_str()))
-            .map(|w| w.id.clone())
-            .collect()
-    }
-
-    /// Dismisses a waiting session from Needs you, holding its card where
-    /// its placeholder sat. The card menu offers this on cards that are
+    /// Dismisses a waiting session from Needs you, holding its card at the
+    /// top of its lane. The card menu offers this on cards that are
     /// not waiting too; only a real dismissal holds.
     pub fn dismiss_waiting(&mut self, data: &Data, w: Option<&Workspace>) {
         let Some(w) = w else { return };
@@ -151,7 +108,7 @@ impl Session {
     }
 }
 
-/// How long the oldest ask has waited in seconds, timed as its row is;
+/// How long the oldest ask has waited in seconds, timed as its card is;
 /// None with no timed ask or no clock. An untimed ask sorts first, so it
 /// is skipped rather than left to blank the clock.
 fn oldest_wait(data: &Data, waiting: &[(f64, &Workspace)]) -> Option<f64> {
