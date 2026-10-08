@@ -34,7 +34,7 @@ final class DragState {
     /// The card the release watch let go of, and when: cmux can hand the
     /// drop over after the watch has given up on it, and the drop still
     /// lands for `late` after that.
-    @ObservationIgnored private var released: (card: Card, from: LaneKey, at: Date)?
+    @ObservationIgnored private var released: (card: Card, from: LaneKey, at: Date, over: (lane: LaneKey, before: String?)?)?
     private static let late: TimeInterval = 2
 
     func lift(_ card: Card, from lane: LaneKey, frame: CGRect?) {
@@ -48,6 +48,14 @@ final class DragState {
         Timeline.drag.begin("lift")
         watch?.cancel()
         watch = Task { [weak self] in await self?.settleOnRelease() }
+    }
+
+    /// Where the gap was in `lane` when the release watch let go, so a
+    /// drop cmux hands over late lands where Jon saw it; nil when it was
+    /// in another lane or nowhere.
+    func lateBefore(in lane: LaneKey) -> String?? {
+        guard lifted == nil, let over = released?.over, over.lane == lane else { return nil }
+        return .some(over.before)
     }
 
     /// The card a drop carries: the one lifted, else the one the release
@@ -91,7 +99,7 @@ final class DragState {
     /// The button is up with no drop yet: the card stays `carried` for
     /// `late` in case cmux hands the drop over after this.
     private func letGo(_ why: String) {
-        if let lifted, let from { released = (lifted, from, Date()) }
+        if let lifted, let from { released = (lifted, from, Date(), over) }
         settle(why)
     }
 
@@ -313,6 +321,7 @@ struct LaneDrop: DropDelegate {
             state.settle("late drop refused")
             return false
         }
+        let lands = state.lateBefore(in: lane.key) ?? before
         let (key, rows, state) = (lane.key, rows, state)
         Task { @MainActor in
             guard await DragItem.read(provider) == DragItem.text(card) else {
@@ -320,7 +329,7 @@ struct LaneDrop: DropDelegate {
                 state.settle("late drop refused")
                 return
             }
-            state.drop(card.wsId, in: key, before: before, rows: rows)
+            state.drop(card.wsId, in: key, before: lands, rows: rows)
         }
         return true
     }

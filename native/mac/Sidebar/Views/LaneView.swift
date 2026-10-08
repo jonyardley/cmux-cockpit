@@ -227,9 +227,11 @@ struct LaneView: View {
     /// row folds away because the gap is in another lane.
     private var room: Room {
         let gap = DropRule.gap(
-            in: lane.key, rows: lane.rows, collapsed: lane.collapsed, lifted: drag.lifted, from: drag.from, over: drag.over
+            in: lane.key, rows: lane.rows, collapsed: lane.collapsed, lifted: drag.held == nil ? nil : drag.lifted, from: drag.from, over: drag.over
         )
-        let own = drag.lifted.map { card in lane.rows.contains { DropRule.isCard($0, card.wsId) } } ?? false
+        // With no height from the lift there is no gap to move: the lifted
+        // row stays in its slot and the drop takes the pointer rule.
+        let own = drag.held != nil && (drag.lifted.map { card in lane.rows.contains { DropRule.isCard($0, card.wsId) } } ?? false)
         return Room(gap: gap, folded: own && gap == nil)
     }
 

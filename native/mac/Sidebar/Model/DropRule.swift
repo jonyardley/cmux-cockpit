@@ -90,7 +90,7 @@ enum DropRule {
         var at = start
         while at < within.upperBound, at < mids.count, bottom > mids[at] + slack { at += 1 }
         if at != start { return at }
-        while at > within.lowerBound, at - 1 < mids.count, top < mids[at - 1] - slack { at -= 1 }
+        while at > within.lowerBound, at - 1 < mids.count, mids[at - 1].isFinite, top < mids[at - 1] - slack { at -= 1 }
         return at
     }
 

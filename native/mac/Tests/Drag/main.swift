@@ -100,6 +100,9 @@ check(DropRule.place(current: nil, mids: flat, top: at.top, bottom: at.bottom, w
 at = edges(81 + 40)
 check(DropRule.place(current: 1, mids: [25, .infinity, .infinity], top: at.top, bottom: at.bottom, within: all3) == 1,
       "a card not laid out yet never lets the gap past it")
+at = edges(25)
+check(DropRule.place(current: 1, mids: [.infinity, 137, 193], top: at.top, bottom: at.bottom, within: all3) == 1,
+      "nor does one above the gap: the gap never moves up past it")
 
 // The gap stays in the dragged card's own state.
 let states = [row("W1", rank: 0), row("R1", rank: 2), row("R2", rank: 2), row("D1", rank: 4)]
