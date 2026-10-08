@@ -107,8 +107,6 @@ struct CompactCard: View {
                 StatusLine(card: card, dot: 6, size: CardLook.compactStatus, weight: .regular, pr: lines.pr)
                 LeftOff(text: card.leftOff)
                 Detail(text: card.detail, lines: CardText.detailLines(card))
-                if !lines.branch.isEmpty { ActionLine(chips: lines.branch, id: card.wsId) }
-                if !card.merged.isEmpty { ActionLine(chips: card.merged, id: card.wsId) }
                 ProgressBar(card: card)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -123,8 +121,7 @@ struct CompactCard: View {
 
 /// The row (cards.ts denseRow): dot, a small badge, the title, then the
 /// unread count, the age and the pin; the detail on one line under the
-/// title, and Park and Close under that. No face of its own until it is
-/// selected.
+/// title. No face of its own until it is selected.
 struct DenseRow: View {
     let card: Card
 
@@ -149,11 +146,6 @@ struct DenseRow: View {
             }
             LeftOff(text: card.leftOff).padding(.leading, CardLook.rowIndent)
             Detail(text: card.detail, lines: CardText.detailLines(card)).padding(.leading, CardLook.rowIndent)
-            if !card.merged.isEmpty {
-                ActionLine(chips: card.merged, id: card.wsId)
-                    .padding(.leading, CardLook.rowIndent)
-                    .padding(.top, 3)
-            }
         }
         .padding(.leading, CardLook.rowPadLeading)
         .padding(.trailing, CardLook.padTrailing)
