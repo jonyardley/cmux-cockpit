@@ -1,12 +1,9 @@
-//! Whether a card's chips row has anything to show, the chips a card
-//! draws, and how they fit (src/cockpit/chips.ts). The fit is the
+//! How a card's chips fit its line (src/cockpit/chips.ts). The fit is the
 //! sidebar's estimate of its own point widths from character counts, as
 //! its renderer cannot measure; a shell that measures can ignore it.
 
 use crate::card_chips::Chip;
-use crate::data::{Data, Workspace};
 use crate::js::utf16_len;
-use crate::session::Session;
 
 /// Characters' worth of chips a project card fits on one line at the
 /// width Jon keeps the sidebar.
@@ -20,11 +17,6 @@ const FRAME_CHARS: usize = 3;
 const GLYPH_CHARS: usize = 2;
 // The branch chip's uncommitted-changes dot, with its gap.
 const DIRTY_CHARS: usize = 2;
-// "To review →" as it draws, frame included.
-const REVIEW_CHARS: usize = 14;
-// A merged card's "Park" and "Close", frames included.
-const PARK_CHARS: usize = 7;
-const CLOSE_CHARS: usize = 8;
 
 /// The words after a gap, or nothing when there are none.
 fn spaced(s: &str) -> usize {
@@ -50,103 +42,20 @@ fn second_line(c: &Chip) -> bool {
     matches!(c, Chip::Branch { .. } | Chip::Port { .. })
 }
 
-impl Session {
-    /// True when the chips row shows a chip from `chips` (a chips_for
-    /// list), the To review action or a merged card's Park or Close.
-    pub fn shows_chips_row(&mut self, data: &Data, chips: &[Chip], w: Option<&Workspace>) -> bool {
-        !chips.is_empty() || self.can_file_for_review(data, w) || self.offers_merged_chip(data, w)
-    }
+/// Whether a card's chips fit on one line `line_chars` wide.
+pub fn chips_fit_one_line(chips: &[Chip], line_chars: usize) -> bool {
+    chips.iter().map(chip_chars).sum::<usize>() <= line_chars
+}
 
-    /// The chips a card draws: chips_for, less a merged card's branch
-    /// while Park or Close takes its room. A branch with uncommitted
-    /// changes stays, since its dot is the card's only sign of work left.
-    pub fn card_chips(
-        &mut self,
-        data: &Data,
-        w: Option<&Workspace>,
-        with_branch: bool,
-    ) -> Vec<Chip> {
-        let mut chips = self.chips_for(w, with_branch);
-        if self.offers_merged_chip(data, w) {
-            chips.retain(|c| !matches!(c, Chip::Branch { dirty: false, .. }));
-        }
-        chips
-    }
-
-    /// shows_chips_row for a card that has no chip list to hand.
-    pub fn has_chips_row(&mut self, data: &Data, w: Option<&Workspace>, with_branch: bool) -> bool {
-        let chips = self.card_chips(data, w, with_branch);
-        self.shows_chips_row(data, &chips, w)
-    }
-
-    /// The action buttons that share the chips line, in characters.
-    fn action_chars(&mut self, data: &Data, w: Option<&Workspace>) -> usize {
-        let review = if self.can_file_for_review(data, w) {
-            REVIEW_CHARS
-        } else {
-            0
-        };
-        let park = if self.offers_park(data, w) {
-            PARK_CHARS
-        } else {
-            0
-        };
-        let close = if self.offers_close(data, w) {
-            CLOSE_CHARS
-        } else {
-            0
-        };
-        review + park + close
-    }
-
-    /// Whether a card's chips fit on one line `line_chars` wide.
-    pub fn chips_fit_one_line(
-        &mut self,
-        data: &Data,
-        chips: &[Chip],
-        w: Option<&Workspace>,
-        line_chars: usize,
-    ) -> bool {
-        let used = self.action_chars(data, w) + chips.iter().map(chip_chars).sum::<usize>();
-        used <= line_chars
-    }
-
-    /// Whether a card's chips split over two lines: the PR (and size) on
-    /// the first; the branch, port, To review and a merged card's Park and
-    /// Close on the second. Only when both lines have something and they
-    /// do not fit on one.
-    pub fn chips_split(
-        &mut self,
-        data: &Data,
-        chips: &[Chip],
-        w: Option<&Workspace>,
-        line_chars: usize,
-    ) -> bool {
-        let first = chips
-            .iter()
-            .any(|c| matches!(c, Chip::Pr { .. } | Chip::Size { .. }));
-        let second = chips.iter().any(second_line)
-            || self.can_file_for_review(data, w)
-            || self.offers_merged_chip(data, w);
-        first && second && !self.chips_fit_one_line(data, chips, w, line_chars)
-    }
-
-    /// Whether a split's second line fits. When it does not, Park and
-    /// Close take a line of their own under it.
-    pub fn second_line_fits(
-        &mut self,
-        data: &Data,
-        chips: &[Chip],
-        w: Option<&Workspace>,
-        line_chars: usize,
-    ) -> bool {
-        let second: usize = chips
-            .iter()
-            .filter(|c| second_line(c))
-            .map(chip_chars)
-            .sum();
-        self.action_chars(data, w) + second <= line_chars
-    }
+/// Whether a card's chips split over two lines: the PR (and size) on the
+/// first; the branch and port on the second. Only when both lines have
+/// something and they do not fit on one.
+pub fn chips_split(chips: &[Chip], line_chars: usize) -> bool {
+    let first = chips
+        .iter()
+        .any(|c| matches!(c, Chip::Pr { .. } | Chip::Size { .. }));
+    let second = chips.iter().any(second_line);
+    first && second && !chips_fit_one_line(chips, line_chars)
 }
 
 #[cfg(test)]

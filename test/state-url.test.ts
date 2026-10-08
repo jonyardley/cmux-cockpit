@@ -95,7 +95,6 @@ describe("readApplyWrite", () => {
       prOrigins: {},
       asking: {},
       moves: {},
-      mergeKept: {},
       ui: {},
     });
   });
@@ -160,17 +159,14 @@ describe("writePollMaps and the poll status", () => {
     });
   });
 
-  it("keeps a Keep only while the workspace's saved PR is the one kept", () => {
+  it("drops an old file's kept merged PRs on the next poll, and keeps the PRs", () => {
     const path = join(dir, "kept.json");
-    const pr = (n: number) => ({
-      number: n,
-      url: `https://github.com/o/r/pull/${n}`,
-      status: "merged" as const,
-      branch: "b",
-    });
-    writeFileSync(path, JSON.stringify({ mergeKept: { same: 1, next: 1, gone: 1 } }));
-    writePollMaps(path, { same: pr(1), next: pr(2) }, {}, keep);
-    assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).mergeKept, { same: 1 });
+    const pr = { number: 1, url: "https://github.com/o/r/pull/1", status: "merged" as const, branch: "b" };
+    writeFileSync(path, JSON.stringify({ mergeKept: { same: 1 } }));
+    writePollMaps(path, { same: pr }, {}, keep);
+    const after = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(Object.hasOwn(after, "mergeKept"), false);
+    assert.deepEqual(after.prs, { same: pr });
   });
 
   it("replaces the saved status whole, so a cleared error is gone", () => {

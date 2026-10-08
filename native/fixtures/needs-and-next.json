@@ -204,7 +204,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "One more thing",
             "detail_lines": 1,
             "waiting": true,
@@ -319,12 +318,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -356,7 +349,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "",
             "detail_lines": 1,
             "waiting": false,
@@ -471,12 +463,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -508,7 +494,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "",
             "detail_lines": 1,
             "waiting": false,
@@ -619,12 +604,6 @@
                 "Item": {
                   "label": "No PR to open",
                   "action": "OpenPr"
-                }
-              },
-              {
-                "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
                 }
               },
               {

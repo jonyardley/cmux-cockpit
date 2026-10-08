@@ -130,12 +130,10 @@ struct ChipView: View {
 }
 
 /// A card's chips row (parts.ts chipsRow): the size, the PR and its diff,
-/// then the branch, the ports and the actions, with a merged card's Park
-/// and Close at the end. On one line when it all fits; else the branch's
-/// line goes under the PR's, Park and Close with it while they fit and on
-/// a line of their own when they do not, so nothing is cut while it can be
-/// whole. Only where a line alone is too wide does the diff size give way,
-/// then the branch name, cut in the middle.
+/// then the branch, the ports and the actions. On one line when it all
+/// fits; else the branch's line goes under the PR's, so nothing is cut
+/// while it can be whole. Only where a line alone is too wide does the
+/// diff size give way, then the branch name, cut in the middle.
 struct ChipsRow: View {
     let card: Card
     /// Whether the PR chip opens its PR (parts.ts PrTap): the Projects
@@ -144,17 +142,15 @@ struct ChipsRow: View {
 
     var body: some View {
         let lines = ChipLines(card.chips)
-        let merged = card.merged
         ViewThatFits(in: .horizontal) {
-            line(lines.pr + lines.branch + merged).fixedSize()
+            line(lines.pr + lines.branch).fixedSize()
             VStack(alignment: .leading, spacing: ChipLook.lineGap) {
                 if !lines.pr.isEmpty { line(lines.pr).fixedSize() }
-                line(lines.branch + merged).fixedSize()
+                line(lines.branch).fixedSize()
             }
             VStack(alignment: .leading, spacing: ChipLook.lineGap) {
                 if !lines.pr.isEmpty { line(lines.pr) }
                 if !lines.branch.isEmpty { line(lines.branch) }
-                if !merged.isEmpty { line(merged) }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -162,7 +158,7 @@ struct ChipsRow: View {
 
     /// Whether a card has a chips row to draw at all.
     static func shows(_ card: Card) -> Bool {
-        !card.chips.isEmpty || !card.merged.isEmpty
+        !card.chips.isEmpty
     }
 
     private func line(_ chips: [Chip]) -> some View {

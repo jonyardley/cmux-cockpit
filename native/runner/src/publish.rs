@@ -526,6 +526,7 @@ impl Parent {
 mod tests {
     use super::*;
     use cockpit_core::data::Data;
+    use cockpit_core::fixture::{FIXTURE_HOME, Scene, scene};
     use cockpit_core::panel::ProjectRow;
     use cockpit_core::persist::SavedState;
     use cockpit_core::projects::Project;
@@ -606,11 +607,13 @@ mod tests {
 
     /// A scene's feed as the runner builds it, home and all: the table
     /// through `Feed::projects`, so "~" roots expand against home.
-    fn fed_at(scene: &str, home: Option<&str>) -> Feed {
-        let input = json(&repo(&format!("test/golden/{scene}.input.json")));
-        let projects: Vec<Project> = serde_json::from_value(input["projects"].clone()).unwrap();
-        let saved: SavedState = serde_json::from_value(input["state"].clone()).unwrap();
-        let data: Data = serde_json::from_value(input["data"].clone()).unwrap();
+    fn fed_at(scene_name: &str, home: Option<&str>) -> Feed {
+        // Roots as typed: the feed expands them itself.
+        let Scene {
+            projects,
+            saved,
+            data,
+        } = scene(scene_name, None).unwrap();
         let mut feed = Feed::with_home(home.map(str::to_string));
         feed.projects(projects);
         feed.state(saved);
@@ -669,7 +672,7 @@ mod tests {
 
     #[test]
     fn a_core_fed_from_data_json_alone_builds_the_runners_panel() {
-        for home in [None, Some("/Users/jon")] {
+        for home in [None, Some(FIXTURE_HOME)] {
             for (fixture, scene, open) in fixtures() {
                 let name = format!("{fixture}-{}", home.is_some());
                 let (mut p, root, posted) = publisher(&name);
@@ -690,7 +693,8 @@ mod tests {
                 }
                 let built = serde_json::to_value(Panel::from_core(&mut model)).unwrap();
                 assert_eq!(built, runners, "{name}");
-                if home.is_none() {
+                // The fixtures load with this home (cockpit_core::fixture).
+                if home == Some(FIXTURE_HOME) {
                     let want = json(&repo(&format!("native/fixtures/{fixture}.json")));
                     assert_eq!(built, want, "{name}");
                 }
@@ -702,10 +706,10 @@ mod tests {
     #[test]
     fn data_json_carries_the_expanded_table_and_is_written_only_when_it_changed() {
         let (mut p, root, posted) = publisher("data-changed");
-        let mut feed = fed_at("lanes", Some("/Users/jon"));
+        let mut feed = fed_at("lanes", Some(FIXTURE_HOME));
         p.step(&mut feed, true, &mut quiet());
         let file = json(&root.join(DATA_FILE));
-        assert_eq!(file["home"], "/Users/jon");
+        assert_eq!(file["home"], FIXTURE_HOME);
         let roots: Vec<&Value> = file["projects"]
             .as_array()
             .unwrap()
@@ -713,7 +717,7 @@ mod tests {
             .map(|p| &p["root"])
             .collect();
         assert!(
-            roots.contains(&&Value::from("/Users/jon/dev/app-one")),
+            roots.contains(&&Value::from(format!("{FIXTURE_HOME}/dev/app-one"))),
             "{roots:?}"
         );
 

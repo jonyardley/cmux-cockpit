@@ -33,10 +33,6 @@ runner's outbox.
 | Drag a card | Move it to a lane, or above another card |
 | Enter | Switch to the card's workspace |
 | `d` | Dismiss the card from Needs you |
-| `r` | Send a card showing "To review →" to For review |
-| `p` | Park a merged card showing Park: file it into Parked |
-| `x` | Close a merged card showing Close: close its workspace |
-| `k` | Keep a merged card: hide its Park and Close for this PR (also in its Space menu) |
 | `+` | Open a new session in the project's folder (in Projects) |
 | `e` | Edit the project under the cursor (in Projects) |
 | `n` | Make a new project (in Projects) |

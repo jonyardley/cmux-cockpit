@@ -17,7 +17,7 @@ use crate::Model;
 
 pub use build::{
     badge_of, card_unread, chip_views, chips_for_density, detail_lines, faint_heading, icon_of,
-    lane_name, review_chip, size_ink, unread_text, view_of,
+    lane_name, size_ink, unread_text, view_of,
 };
 pub use editor::{EditorView, Field};
 
@@ -55,11 +55,6 @@ pub const DOT: &str = "●";
 pub const HOLLOW: &str = "○";
 pub const GHOST: &str = "◌";
 
-/// A card's To review action, as the sidebar words it.
-pub const TO_REVIEW: &str = "To review →";
-/// A merged card's Park and Close, as the sidebar words them.
-pub const PARK: &str = "Park";
-pub const CLOSE: &str = "Close";
 /// After a branch with uncommitted changes.
 pub const DIRTY_MARK: &str = "●";
 /// The row under the busy projects, as the sidebar's "+ New project".
@@ -186,14 +181,10 @@ pub struct Card {
     pub status_has_age: bool,
     /// "You: " and the last prompt, in lanes you come back to; else "".
     pub left_off: String,
-    /// Its chips row: the size, the PR, the branch, the ports and its
-    /// actions, as the sidebar's card of this kind shows them; empty for
-    /// a row.
+    /// Its chips row: the size, the PR, the branch, the ports and, on a
+    /// project card, Make project, as the sidebar's card of this kind
+    /// shows them; empty for a row.
     pub chips: Vec<Chip>,
-    /// A merged card's Park and Close. The view puts them at the end of
-    /// the chips line when every chip fits whole, else on a line of their
-    /// own under it, as the sidebar's mergedBelow does, so neither is cut.
-    pub merged: Vec<Chip>,
     /// The latest message, or what the waiting chat wants.
     pub detail: String,
     /// How many detail lines it draws: two on a full card, else one.
@@ -243,7 +234,7 @@ pub enum ChipKind {
     Branch,
     /// The first port and how many more, opening it on localhost.
     Port,
-    /// Something to press: To review, Make project, Park, Close.
+    /// Something to press: Make project.
     Action,
 }
 
@@ -258,8 +249,7 @@ pub struct Chip {
     /// Where a tap opens: the PR's page, a port on localhost; None for
     /// the rest, and for a PR with no link.
     pub url: Option<String>,
-    /// Whether a tap acts rather than selecting the card: To review, Make
-    /// project, Park and Close.
+    /// Whether a tap acts rather than selecting the card: Make project.
     pub is_action: bool,
 }
 
@@ -275,7 +265,7 @@ impl Chip {
         }
     }
 
-    /// An action chip: To review, Make project, Park or Close.
+    /// An action chip: Make project.
     pub(crate) fn action(pieces: Vec<Piece>) -> Chip {
         Chip {
             is_action: true,

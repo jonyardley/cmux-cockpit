@@ -68,7 +68,6 @@
   "state": {
     "asking": { "ask": { "epoch": 999940, "reason": "allow npm publish?" } },
     "dismissed": {},
-    "mergeKept": {},
     "moves": {
       "n2": {
         "decisions": 2,

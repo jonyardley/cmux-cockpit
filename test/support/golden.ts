@@ -126,35 +126,25 @@ function needs({ strip }: Model): Json {
 
 /**
  * Each card's chips (chipsFor with the branch, as the full and project
- * cards ask for it), what the card draws of them (cardChips) and how they
- * fit each card's line, its To review action and a merged card's Park,
- * Close, Keep and dimming, keyed by id.
+ * cards ask for it), how they fit each card's line, and a merged card's
+ * dimming, keyed by id.
  */
 function chipsOut({ model, chips, row, merged }: Model): Record<string, Json> {
-  const fit = (drawn: Chip[], w: Workspace, chars: number): Json => ({
-    fitsOneLine: row.chipsFitOneLine(drawn, w, chars),
-    secondLineFits: row.secondLineFits(drawn, w, chars),
-    splits: row.chipsSplit(drawn, w, chars),
+  const fit = (drawn: Chip[], chars: number): Json => ({
+    fitsOneLine: row.chipsFitOneLine(drawn, chars),
+    splits: row.chipsSplit(drawn, chars),
   });
   return Object.fromEntries(
     model.cards().map((w) => {
-      const drawn = row.cardChips(w, true);
+      const drawn = chips.chipsFor(w, true);
       return [
         w.id,
         {
-          canFileForReview: chips.canFileForReview(w),
-          // Copied to plain objects, which Json takes and the Chip interfaces are not.
-          cardChips: drawn.map((c) => ({ ...c })),
           cardOpacity: merged.cardOpacity(w, false),
-          chips: chips.chipsFor(w, true).map((c) => ({ ...c })),
-          fullLine: fit(drawn, w, row.FULL_LINE_CHARS),
-          keepLabel: merged.keepLabel(w),
-          offersClose: merged.offersClose(w),
-          offersMergedActions: merged.offersMergedActions(w),
-          offersPark: merged.offersPark(w),
-          projectLine: fit(drawn, w, row.PROJECT_LINE_CHARS),
-          reviewIsGreen: chips.reviewIsGreen(w),
-          showsChipsRow: row.showsChipsRow(drawn, w),
+          // Copied to plain objects, which Json takes and the Chip interfaces are not.
+          chips: drawn.map((c) => ({ ...c })),
+          fullLine: fit(drawn, row.FULL_LINE_CHARS),
+          projectLine: fit(drawn, row.PROJECT_LINE_CHARS),
         },
       ];
     }),

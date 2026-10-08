@@ -533,23 +533,19 @@ tab, comment or upload, is not hooked, so it touches nothing.
 
 ## Ready and merged PRs
 
-Nothing moves a card by itself: it stays in the lane Jon left it in. When
-a workspace's PR turns ready to merge (the green chip, the ready test in
-src/shared/pr-health.ts), the card's "To review →" button turns green,
-and a tap files it into For review. Before 2026-09-30 the cockpit moved
-the card itself, which lost cards; a state file from then may still hold a
-`prSeen` map, which the next read drops.
+Nothing moves a card by itself: it stays in the lane Jon left it in, and
+he moves it from the card menu or by dragging it. When a workspace's PR
+turns ready to merge (the green chip, the ready test in
+src/shared/pr-health.ts), the chip says so and the lane's header counts it.
+Before 2026-09-30 the cockpit moved the card itself, which lost cards; a
+state file from then may still hold a `prSeen` map, which the next read
+drops.
 
-Once merged, the card dims (full strength again while selected) and
-offers Park, which files it into Parked (left out once it is there), Keep,
-and Close workspace, which sends the `workspace.close` socket
-command. It stays at full strength while an agent there is working or
-asking or it has unread output, and Close is left out while an agent is
-working or asking. A pinned workspace (cmux will not close one) and a
-lane's anchor offer neither. Keep sets `mergeKept.<workspace id>` to the
-kept PR's number, so the buttons stay hidden for that PR past every
-reload and come back for a later one; the poller drops an entry once the
-workspace's saved PR is another or gone. The set never rebuilds, since the sidebar hides them itself. The worktree is never
+Once merged, the card dims (full strength again while selected), and stays
+at full strength while an agent there is working or asking or it has
+unread output. Its branch shows as on any card. The card offered Park,
+Close and Keep buttons until issue #294; a state file from then may still
+hold a `mergeKept` map, which the next read drops. The worktree is never
 removed from the sidebar: that stays in the close-out command.
 src/cockpit/merged.ts has the rules.
 

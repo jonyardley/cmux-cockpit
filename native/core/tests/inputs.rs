@@ -63,7 +63,6 @@ fn a_state_with_every_entry_reads_back_the_same() {
         "asking": {"w": {"reason": "perm", "epoch": 9, "session": "a"}},
         "moves": {"w": {"text": "Do it", "epoch": 9, "decisions": 2, "leans": "1b 2a",
                         "idle": false}},
-        "mergeKept": {"w": 4},
         "ui": {"mode": "projects", "collapsed": {"quiet": 1}},
         "poll": {"okEpoch": 3, "error": "gh down"}
     });

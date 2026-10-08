@@ -19,9 +19,9 @@ use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
 
 use super::{
-    Anchor, Badge, CLOSE, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT, EditorView, HOLLOW,
-    Icon, Lane, Needs, NeedsRow, NextLine, OLDEST_WORD, PARK, PROJECT_ROW, Panel, PanelView,
-    ProjectHead, ProjectRow, QUIET_ROW, Row, TO_REVIEW, piece,
+    Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT, EditorView, HOLLOW, Icon, Lane,
+    Needs, NeedsRow, NextLine, OLDEST_WORD, PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow,
+    QUIET_ROW, Row, piece,
 };
 
 /// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
@@ -89,30 +89,6 @@ pub fn chip_views(c: &CoreChip) -> Vec<Chip> {
 /// A PR's diff size as its own chip, faint; None when it has none.
 fn diff_chip(diff: &str) -> Option<Chip> {
     (!diff.is_empty()).then(|| Chip::new(ChipKind::Diff, vec![piece(diff, Token::Faint)]))
-}
-
-/// The To review action: green while its PR is ready to merge.
-pub fn review_chip(green: bool) -> Chip {
-    let ink = if green {
-        Token::GreenDeep
-    } else {
-        Token::Secondary
-    };
-    Chip::action(vec![piece(TO_REVIEW, ink)])
-}
-
-/// A merged card's Park, in the second ink, and Close, in the first, so
-/// the one that acts reads first (parts.ts mergedChips). Keep lives in
-/// the card menu.
-fn merged_chips(session: &mut Session, data: &Data, w: Option<&Workspace>) -> Vec<Chip> {
-    let mut out = Vec::new();
-    if session.offers_park(data, w) {
-        out.push(Chip::action(vec![piece(PARK, Token::Secondary)]));
-    }
-    if session.offers_close(data, w) {
-        out.push(Chip::action(vec![piece(CLOSE, Token::Text)]));
-    }
-    out
 }
 
 /// Whether a card sits dimmed: merged, not cmux's selected workspace, and
@@ -265,26 +241,17 @@ pub(super) fn build(session: &mut Session, data: &Data, view: &ViewModel) -> Pan
 }
 
 /// A card's chips row, for the kind of card it is.
-fn chips_row(
-    session: &mut Session,
-    data: &Data,
-    w: Option<&Workspace>,
-    kind: ChipsFor,
-) -> Vec<Chip> {
+fn chips_row(session: &mut Session, w: Option<&Workspace>, kind: ChipsFor) -> Vec<Chip> {
     let mut out: Vec<Chip> = match kind {
-        // A row has no chips row; its Park and Close are in `merged`.
+        // A row has no chips row.
         ChipsFor::Row => return Vec::new(),
-        // card_chips, so a merged card drops its clean branch as the sidebar does.
         ChipsFor::Full | ChipsFor::Project => session
-            .card_chips(data, w, true)
+            .chips_for(w, true)
             .iter()
             .flat_map(chip_views)
             .collect(),
         ChipsFor::Compact => compact_pr(session, w),
     };
-    if session.can_file_for_review(data, w) {
-        out.push(review_chip(session.review_is_green(w)));
-    }
     // Only once the shell has said where home is: until then the home
     // folder itself would be offered as a project.
     if kind == ChipsFor::Project && session.home.is_some() && session.can_create_project(w) {
@@ -403,7 +370,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
     } else {
         String::new()
     };
-    let chips = chips_row(session, data, w, chips_for_density(density));
+    let chips = chips_row(session, w, chips_for_density(density));
     let looks = looks(session, data, w, density, &status);
     Card {
         ws_id: id.to_string(),
@@ -422,7 +389,6 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         status_has_age: looks.status_has_age,
         left_off,
         chips,
-        merged: merged_chips(session, data, w),
         detail: whole_words(&session.card_detail(w), DETAIL_MAX),
         detail_lines: detail_lines(density),
         waiting: view.needs.list.iter().any(|w| w == id),
@@ -542,8 +508,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         age: looks.age,
         status_has_age: looks.status_has_age,
         left_off: String::new(),
-        chips: chips_row(session, data, w, ChipsFor::Project),
-        merged: merged_chips(session, data, w),
+        chips: chips_row(session, w, ChipsFor::Project),
         detail: whole_words(&wanted, 0),
         detail_lines: 2,
         waiting: view.needs.list.iter().any(|w| w == id),
@@ -787,11 +752,11 @@ mod tests {
 
     #[test]
     fn makes_the_actions_action_chips() {
-        let review = review_chip(true);
-        assert_eq!(review.kind, ChipKind::Action);
-        assert!(review.is_action);
-        assert_eq!(review.url, None);
-        assert!(!review.gives_way);
+        let make = Chip::action(vec![piece("Make a project", Token::Secondary)]);
+        assert_eq!(make.kind, ChipKind::Action);
+        assert!(make.is_action);
+        assert_eq!(make.url, None);
+        assert!(!make.gives_way);
     }
 
     #[test]
@@ -825,13 +790,6 @@ mod tests {
             ..Workspace::default()
         };
         assert!(is_pinned(Some(&w)));
-    }
-
-    #[test]
-    fn greens_to_review_only_while_its_pr_is_ready() {
-        assert_eq!(review_chip(true).pieces[0].ink, Token::GreenDeep);
-        assert_eq!(review_chip(false).pieces[0].ink, Token::Secondary);
-        assert_eq!(review_chip(false).pieces[0].text, TO_REVIEW);
     }
 
     #[test]

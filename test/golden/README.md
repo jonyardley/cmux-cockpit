@@ -83,7 +83,6 @@ What the scene starts from: the three things the sidebar reads.
 | `state.dismissed` | object | wsId to agent id to the start of a dismissed ask. |
 | `state.projectOverride` | object | wsId to the project key chosen by "Move to project". |
 | `state.projects` | object | Project key to a project made or edited in the sidebar. |
-| `state.mergeKept` | object | wsId to the merged PR number Keep was tapped on. |
 | `state.ownPrs`, `state.subagents`, `state.names`, `state.published`, `state.prOrigins` | object | Saved for the agents sidebar; empty in every scene here. |
 
 ## `<scene>.json`
@@ -131,16 +130,8 @@ What the model computes, at the scene's clock.
 | `chips.<id>.chips[].state` | string | On pr: the words after the number ("draft · running", "1 failing", "open", "merged"). |
 | `chips.<id>.chips[].health` | string | On pr: "failing", "conflicts", "running", "ready" or "quiet". |
 | `chips.<id>.chips[].diff` | string | On pr: an open PR's diff size, "+120 −8", or "". |
-| `chips.<id>.canFileForReview` | boolean | Whether the card offers "To review". |
-| `chips.<id>.reviewIsGreen` | boolean | Whether its PR is ready to merge, so "To review" shows green. |
-| `chips.<id>.cardChips` | array | `cardChips` with the branch, what the card draws: `chips`, less a merged card's clean branch while Park or Close shows. Each chip as in `chips`. |
-| `chips.<id>.showsChipsRow` | boolean | Whether the card has a chips row: a drawn chip, To review, or Park or Close. |
-| `chips.<id>.offersPark` | boolean | Whether a merged card offers Park. |
-| `chips.<id>.offersClose` | boolean | Whether a merged card offers Close. |
-| `chips.<id>.offersMergedActions` | boolean | Whether a merged card offers Keep: not kept for this PR, not an anchor, not pinned. |
-| `chips.<id>.keepLabel` | string | The card menu's Keep item, named by what tapping it would do. |
 | `chips.<id>.cardOpacity` | number | How faint the card sits when not selected or dragged: 0.6 for a merged card nothing in which wants Jon, else 1. |
-| `chips.<id>.fullLine` | object | How `cardChips` fit a full card's line (`FULL_LINE_CHARS`): `fitsOneLine`, `splits` (over two lines) and `secondLineFits` (Park and Close stay on the split's second line). |
+| `chips.<id>.fullLine` | object | How `chips` fit a full card's line (`FULL_LINE_CHARS`): `fitsOneLine` and `splits` (over two lines). |
 | `chips.<id>.projectLine` | object | The same on a project card's line (`PROJECT_LINE_CHARS`). |
 | `needs` | object | The Needs you strip. |
 | `needs.list` | string[] | Every workspace waiting on you, longest waiting first. |

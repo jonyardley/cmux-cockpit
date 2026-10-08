@@ -27,30 +27,13 @@ extension Event {
         switch self {
         case .refresh, .home, .cmuxFailed, .prPollOn, .panelOn, .at: false
         case .moveCard, .switchTo, .selected, .dismiss, .flipView, .edit, .openProject,
-             .fileForReview, .parkMerged, .closeMerged, .keepMerged, .menu, .next,
-             .messageAgent, .toggleLane, .toggleProject, .toggleQuiet:
+             .menu, .next, .messageAgent, .toggleLane, .toggleProject, .toggleQuiet:
             true
         }
     }
 }
 
 extension SidebarAction {
-    /// The core's words on a merged card's two buttons (panel/mod.rs
-    /// PARK and CLOSE): the chip says which one it is.
-    static let parkWord = "Park"
-    static let closeWord = "Close"
-
-    /// What tapping one of a card's merged chips sends: Park or Close, by
-    /// its words. The core puts Close there only where it offers it, and
-    /// checks again when the action lands.
-    static func merged(_ chip: Chip, id: String) -> SidebarAction? {
-        switch chip.pieces.first?.text {
-        case parkWord: .parkMerged(id: id)
-        case closeWord: .closeMerged(id: id)
-        default: nil
-        }
-    }
-
     /// What picking an item of a card's menu sends: the menu opened on
     /// that card, then the item, in that order, as the pane's Space then
     /// Enter would.

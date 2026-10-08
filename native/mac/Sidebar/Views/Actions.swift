@@ -129,12 +129,10 @@ struct MessageAgent: View {
     }
 }
 
-/// One of a card's action chips (parts.ts actionChip): To review, Make
-/// project, Park or Close, a white button with the quiet chip's edge, its
-/// words in the ink the core gives them (Close in the first, Park in the
-/// second, To review green while its PR is ready). Its own tap, so a
-/// press never also selects the card; under the pointer its face steps
-/// darker.
+/// One of a card's action chips (parts.ts actionChip): Make project, a
+/// white button with the quiet chip's edge, its words in the ink the core
+/// gives them. Its own tap, so a press never also selects the card; under
+/// the pointer its face steps darker.
 struct ActionChip: View {
     let chip: Chip
     let id: String
@@ -162,22 +160,6 @@ struct ActionChip: View {
             .fixedSize()
             .chipFrame(Color(hovering ? Palette.Own.cardHover : Palette.Own.card), padH: Self.padH)
             .contentShape(.rect)
-    }
-}
-
-/// Action chips on a line of their own, for the cards with no chips row to
-/// carry them: To review, Park and Close on the compact card, Park and
-/// Close on the row (cards.ts denseRow draws only mergedActions).
-struct ActionLine: View {
-    let chips: [Chip]
-    let id: String
-
-    var body: some View {
-        HStack(spacing: ChipLook.gap) {
-            ForEach(Array(chips.enumerated()), id: \.offset) { ActionChip(chip: $0.element, id: id) }
-        }
-        .fixedSize()
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

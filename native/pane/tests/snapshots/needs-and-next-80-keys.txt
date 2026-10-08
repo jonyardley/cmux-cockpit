@@ -20,17 +20,15 @@
 
    ■ PARKED  0
 
- ▾ ■ UNSORTED  7     ┌ Keys ──────────────────────────────┐
-   ◌ Oldest question │ ↑ ↓        move between cards      │
-   ◌ Publish · is ask│ shift ↑ ↓  reorder in its lane     │
-   ◌ Second · your tu│ m 1-5      move to a lane          │
-   ◌ Third · your tur│ drag       move to a lane or spot  │
-   ● Fifth, past the │ Enter      switch to it            │                 <1m
-     One more thing  │ d          dismiss from Needs you  │
-   ● Finished while a│ r          send to For review      │                  4m
-   ● Busy            │ p          park a merged card      │                  1m
-                     │ x          close a merged card     │
-                     │ k          keep: hide its buttons  │
+ ▾ ■ UNSORTED  7
+   ◌ Oldest question · your turn
+   ◌ Publish · is ask┌ Keys ──────────────────────────────┐
+   ◌ Second · your tu│ ↑ ↓        move between cards      │
+   ◌ Third · your tur│ shift ↑ ↓  reorder in its lane     │
+   ● Fifth, past the │ m 1-5      move to a lane          │                 <1m
+     One more thing  │ drag       move to a lane or spot  │
+   ● Finished while a│ Enter      switch to it            │                  4m
+   ● Busy            │ d          dismiss from Needs you  │                  1m
                      │ +          session in project      │
                      │ e          edit project            │
                      │ n          new project             │

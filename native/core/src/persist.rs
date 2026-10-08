@@ -210,8 +210,6 @@ pub struct SavedState {
     pub asking: BTreeMap<String, SavedAsk>,
     #[serde(deserialize_with = "crate::lenient::map")]
     pub moves: BTreeMap<String, SavedMove>,
-    #[serde(deserialize_with = "crate::lenient::map")]
-    pub merge_kept: BTreeMap<String, f64>,
     #[serde(deserialize_with = "crate::lenient::field")]
     pub ui: UiState,
     #[serde(deserialize_with = "crate::lenient::field")]
@@ -226,8 +224,8 @@ impl SavedState {
 
     /// Makes one of the cockpit's own writes here, as the handler's
     /// applySet makes it in the file: `dismissed.<ws>`, `projectOverride.<ws>`,
-    /// `mergeKept.<ws>`, `projects.<key>`, `ui.mode` or `ui.collapsed`,
-    /// set, or deleted with no value. False
+    /// `projects.<key>`, `ui.mode` or `ui.collapsed`, set, or deleted with
+    /// no value. False
     /// for any other key or a value of the wrong shape, leaving the state
     /// as it was.
     pub fn set_entry(&mut self, key: &str, value: Option<&Value>) -> bool {
@@ -250,9 +248,6 @@ impl SavedState {
                 .is_ok(),
             ("projectOverride", _) => parse(value)
                 .map(|v| put(&mut self.project_override, id, v))
-                .is_ok(),
-            ("mergeKept", _) => parse(value)
-                .map(|v| put(&mut self.merge_kept, id, v))
                 .is_ok(),
             ("projects", _) => parse(value).map(|v| put(&mut self.projects, id, v)).is_ok(),
             ("ui", "mode") => parse(value).map(|v| self.ui.mode = v).is_ok(),
@@ -433,6 +428,18 @@ mod tests {
         assert_eq!(s.poll.and_then(|p| p.ok_epoch), None);
         assert!(s.own_prs.is_empty() && s.names.is_empty());
         assert_eq!(s.dismissed.len(), 1);
+    }
+
+    #[test]
+    fn reads_a_file_from_when_merged_cards_had_keep() {
+        let json = r#"{"mergeKept": {"w1": 5}, "projectOverride": {"w2": "alpha"}}"#;
+        let s = SavedState::from_json(json).unwrap();
+        assert_eq!(
+            s.project_override.get("w2").map(String::as_str),
+            Some("alpha")
+        );
+        let mut s = s;
+        assert!(!s.set_entry("mergeKept.w1", Some(&Value::from(5))));
     }
 
     #[test]

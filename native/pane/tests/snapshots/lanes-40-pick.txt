@@ -11,7 +11,6 @@
    ◌ Chip colours · your turn
    ◌ Release notes · is asking
 ▌  ● Tidy strip             Finished 6m
-▌    To review →
 ▌    Done: the strip now groups by
 ▌    repo.
    ● Snapshot tests         Working 14m
@@ -20,12 +19,13 @@
    ○ Long build Working 40m · quiet 17m
    ● Selected card           Working 1m
    ○ Card layout fit           Idle 15m
-     #176 merged  Park  Close
+     #176 merged  card-layout-fit
    ○ Untimed card                  Idle
 
  ▾ ■ FOR REVIEW  2
    ● Ended agent           Finished 15m
    ○ Left off                   Idle 1h
+
  ┌ Move to lane ──────────────────────┐
  │ 1    Main activity                 │
  │ 2    For review                    │
@@ -34,8 +34,6 @@
  │ 5    Unsorted                      │
  │ Esc  cancel                        │
  └────────────────────────────────────┘
-
  ▾ ■ UNSORTED  2
    ● Loose workspace                 3m
    ○ Merged elsewhere
-     Park  Close

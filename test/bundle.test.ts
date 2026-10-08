@@ -36,7 +36,7 @@ describe("each sidebar's saved state", () => {
   it("leaves out only the listed maps", () => {
     const state = emptyState();
     const agents = stateFor("agents", state);
-    assert.ok(!("ui" in agents) && !("mergeKept" in agents) && !("projects" in agents));
+    assert.ok(!("ui" in agents) && !("projects" in agents));
     assert.ok("prs" in agents && "poll" in stateFor("agents", { ...state, poll: { okEpoch: 1 } }));
     const cockpit = stateFor("cockpit", { ...state, poll: { okEpoch: 1 } });
     assert.ok(!("poll" in cockpit) && !("published" in cockpit) && "ui" in cockpit);
