@@ -10,9 +10,10 @@ enum CardText {
         chip.pieces.map(\.text).joined(separator: " ")
     }
 
-    /// Every run of words a card draws, top to bottom, none empty.
+    /// Every run of words a card draws, top to bottom, none empty: the
+    /// title row's age after the status, where the pane draws it.
     static func runs(_ card: Card) -> [String] {
-        var out = [card.title, card.status]
+        var out = [card.title, card.status, titleAge(card)]
         out += ChipFit.glued(card.chips).map(chip)
         out += card.merged.map(chip)
         out += [card.leftOff, card.detail]
@@ -72,9 +73,22 @@ enum NextText {
 /// Needs you as the Next pill draws it (issue #281): the count on its
 /// fill, the next target's title, then the oldest wait and a down arrow.
 enum NeedsText {
-    /// Whether Next draws as the pill: only while something waits.
+    /// Whether Next draws as the pill: whenever something waits, with or
+    /// without a next step.
     static func shows(_ needs: Needs) -> Bool {
         needs.count > 0
+    }
+
+    /// The title the pill names: the oldest waiting session Jon is not
+    /// on, or none while the only one waiting is the one he is on.
+    static func title(_ needs: Needs) -> String {
+        needs.target?.title ?? ""
+    }
+
+    /// What a tap on the pill sends: reveal the session it names, or
+    /// nothing when it names none.
+    static func tap(_ needs: Needs) -> SidebarAction? {
+        needs.target.map { .reveal(id: $0.wsId) }
     }
 
     /// The count on the pill's badge.

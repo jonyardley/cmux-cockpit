@@ -52,9 +52,11 @@ private struct SwitchSegment: View {
 /// Next: a white pill with a clay edge, "Next: <title>" in clay, cut in
 /// the middle so both ends show, and its place in the queue on the right
 /// (needs.ts nextButton). While something waits it is the Needs you pill
-/// instead (issue #281): the count on a filled badge, the next target's
-/// title in the pill's ink, and the oldest wait with an arrow down to it.
-/// The panel leaves it out with no next step. A tap steps there.
+/// instead (issue #281), next step or not: the count on a filled badge,
+/// the title of the oldest waiting session Jon is not on in the pill's
+/// ink, and the oldest wait with an arrow down to it. A tap on the pill
+/// reveals and selects that session; a tap on the plain line steps to
+/// Next's target. The panel leaves it out with neither.
 struct NextView: View {
     let next: NextLine
     let needs: Needs
@@ -72,7 +74,7 @@ struct NextView: View {
                 .strokeBorder(Color(Palette.Own.needsEdge), lineWidth: Metrics.hairline)
         }
         .onHover { hovering = $0 }
-        .modifier(NextTap(next: next))
+        .modifier(NextTap(next: next, needs: needs))
     }
 
     private var plain: some View {
@@ -102,7 +104,7 @@ struct NextView: View {
                 .padding(.horizontal, Metrics.pillPadH)
                 .padding(.vertical, Metrics.pillPadV)
                 .background(Color(needs.fill), in: .capsule)
-            Text(NextText.target(next).title)
+            Text(NeedsText.title(needs))
                 .font(.system(size: Metrics.Font.next, weight: .semibold))
                 .foregroundStyle(Color(needs.ink))
                 .lineLimit(1)

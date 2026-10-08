@@ -108,7 +108,7 @@ impl Session {
     }
 }
 
-/// How long the oldest ask has waited in seconds, timed as its row is;
+/// How long the oldest ask has waited in seconds, timed as its card is;
 /// None with no timed ask or no clock. An untimed ask sorts first, so it
 /// is skipped rather than left to blank the clock.
 fn oldest_wait(data: &Data, waiting: &[(f64, &Workspace)]) -> Option<f64> {

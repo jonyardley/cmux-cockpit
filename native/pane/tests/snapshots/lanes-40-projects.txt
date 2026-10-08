@@ -7,8 +7,8 @@
    ● Loose workspace         Working 3m
 
  ▾ ■ Other  14
- ▎ ● Chip…      Your turn: Which green…
- ▎ ● Release…   Asking: allow git push?
+ ▎ ● Chip colours  Your turn: Which… 5m
+ ▎ ● Release…     Asking: allow git… 2m
    ● Snapshot tests         Working 14m
      #130 draft +342 −17  …
    ○ Long build Working 40m · quiet 17m
@@ -16,7 +16,7 @@
      To review →
    ○ Card layout fit           Idle 15m
      #176 merged  Park  Close
-   ○ Untimed card                  Idle
+   ○ Untimed card               Idle 5m
    ● Selected card           Working 1m
    ● Ended agent           Finished 15m
    ○ Left off                   Idle 1h

@@ -148,7 +148,8 @@ struct DenseRow: View {
                 if card.pinned { PinMark() }
             }
             LeftOff(text: card.leftOff).padding(.leading, CardLook.rowIndent)
-            Detail(text: card.detail, lines: CardText.detailLines(card)).padding(.leading, CardLook.rowIndent)
+            Detail(text: card.detail, lines: CardText.detailLines(card), ink: card.detailInk)
+                .padding(.leading, CardLook.rowIndent)
             if !card.merged.isEmpty {
                 ActionLine(chips: card.merged, id: card.wsId)
                     .padding(.leading, CardLook.rowIndent)
@@ -354,12 +355,14 @@ struct LeftOff: View {
 struct Detail: View {
     let text: String
     let lines: Int
+    /// The core's ink: the waiting ink on a waiting row's reason.
+    var ink: Token = .secondary
 
     var body: some View {
         if !text.isEmpty {
             Text(text)
                 .font(.system(size: Metrics.Font.control))
-                .foregroundStyle(Color(Token.secondary))
+                .foregroundStyle(Color(ink))
                 .lineLimit(lines)
                 .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)

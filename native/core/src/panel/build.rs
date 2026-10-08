@@ -14,14 +14,16 @@ use crate::pr_colors::{pr_ink, pr_text_color};
 use crate::projects::Project;
 use crate::prs::pr_summary;
 use crate::session::Session;
-use crate::status::{DETAIL_MAX, LEFT_OFF_MAX, NEEDS_DETAIL_MAX, StatusStyle, progress_fraction};
+use crate::status::{
+    DETAIL_MAX, LEFT_OFF_MAX, NEEDS_DETAIL_MAX, StatusStyle, progress_fraction, waiting_tokens,
+};
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
 
 use super::{
     Anchor, Badge, CLOSE, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT, EditorView, HOLLOW,
-    Icon, Lane, Needs, NextLine, PARK, PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow,
-    QUIET_ROW, Row, TO_REVIEW, Waiting, piece,
+    Icon, Lane, Needs, NeedsTarget, NextLine, PARK, PROJECT_ROW, Panel, PanelView, ProjectHead,
+    ProjectRow, QUIET_ROW, Row, TO_REVIEW, Waiting, piece,
 };
 
 /// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
@@ -334,7 +336,8 @@ fn next_line(data: &Data, view: &ViewModel) -> NextLine {
     }
 }
 
-/// Needs you for Next's pill: the count, the oldest wait and its colour.
+/// Needs you for Next's pill: the count, the oldest wait and its colour,
+/// and the session a tap on it reveals.
 fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
     let n = &view.needs;
     let asking = n
@@ -349,7 +352,20 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
         late: n.late,
         fill,
         ink,
+        target: needs_target(session, data, &n.list),
     }
+}
+
+/// The oldest waiting session Jon is not on, from the list longest
+/// waiting first; None while the only one waiting is the one he is on.
+fn needs_target(session: &mut Session, data: &Data, list: &[String]) -> Option<NeedsTarget> {
+    let id = list
+        .iter()
+        .find(|id| !session.is_selected(data, data.ws_by_id(id)))?;
+    Some(NeedsTarget {
+        ws_id: id.clone(),
+        title: title_of(data.ws_by_id(id), id),
+    })
 }
 
 /// The pill's count in words: "3 need you", "1 needs you", "" for none.
@@ -372,12 +388,14 @@ pub fn needs_tone(count: usize, all_asking: bool, late: bool) -> (Token, Token) 
 }
 
 /// A waiting card's edge and status ink, None while it waits on nobody.
+/// Whether its agent asks is worked out once, and both come from that.
 fn waiting_of(session: &mut Session, view: &ViewModel, w: Option<&Workspace>) -> Option<Waiting> {
     let id = w?.id.as_str();
-    view.needs.list.iter().any(|n| n == id).then(|| Waiting {
-        edge: session.needs_edge(w),
-        ink: session.needs_ink(w),
-    })
+    if !view.needs.list.iter().any(|n| n == id) {
+        return None;
+    }
+    let (edge, ink) = waiting_tokens(session.ask_of(w).is_some());
+    Some(Waiting { edge, ink })
 }
 
 /// A waiting card's status line, "Asking: allow git push?", with a detail
@@ -391,20 +409,40 @@ fn needs_line(session: &mut Session, data: &Data, w: Option<&Workspace>) -> Stri
 /// Whether a card's status line carries its age: a waiting card's says
 /// the reason instead, so its title row shows the age. A row's status is
 /// its age, waiting or not.
-fn reason_has_no_age(density: Density, waiting: Option<Waiting>, has_age: bool) -> bool {
+fn status_carries_age(density: Density, waiting: Option<Waiting>, has_age: bool) -> bool {
     match (density, waiting) {
         (Density::Row, _) | (_, None) => has_age,
         (_, Some(_)) => false,
     }
 }
 
-/// A card's detail, none while it waits: the reason on its status line
-/// already says what the chat wants.
+/// A full, compact or Projects card's detail, none while it waits: the
+/// reason on its status line already says what the chat wants. A row is
+/// not blanked; `row_detail` gives it the reason instead.
 fn unless_waiting(waiting: Option<Waiting>, detail: String) -> String {
     if waiting.is_some() {
         String::new()
     } else {
         detail
+    }
+}
+
+/// A card's detail and its ink. A waiting row's status is its age, so its
+/// detail says the reason, in the waiting ink; any other waiting card's
+/// status line says it, so it has none.
+fn detail_of(
+    session: &mut Session,
+    data: &Data,
+    w: Option<&Workspace>,
+    density: Density,
+    waiting: Option<Waiting>,
+) -> (String, Token) {
+    match (density, waiting) {
+        (Density::Row, Some(wt)) => (needs_line(session, data, w), wt.ink),
+        _ => (
+            unless_waiting(waiting, whole_words(&session.card_detail(w), DETAIL_MAX)),
+            Token::Secondary,
+        ),
     }
 }
 
@@ -422,10 +460,12 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
     let style = session.status_info(data, w);
     let density = card_density(data, w);
     let waiting = waiting_of(session, view, w);
-    // A row carries its age alone, as the sidebar's row does; a card says
-    // its status with the age, or while it waits on Jon, why.
+    // A row carries its age alone, as the sidebar's row does, in the
+    // waiting ink while it waits (its detail says why); a card says its
+    // status with the age, or while it waits on Jon, why.
     let (status, status_ink) = match (density, waiting) {
-        (Density::Row, _) => (session.age_of(data, w), Token::MetaText),
+        (Density::Row, Some(wt)) => (session.age_of(data, w), wt.ink),
+        (Density::Row, None) => (session.age_of(data, w), Token::MetaText),
         (_, Some(wt)) => (needs_line(session, data, w), wt.ink),
         (_, None) => (session.status_line(data, w), style.text),
     };
@@ -436,6 +476,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
     };
     let chips = chips_row(session, data, w, chips_for_density(density));
     let looks = looks(session, data, w, density, &status);
+    let (detail, detail_ink) = detail_of(session, data, w, density, waiting);
     Card {
         ws_id: id.to_string(),
         icon: icon_of(&style),
@@ -450,11 +491,12 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         status,
         status_ink,
         age: looks.age,
-        status_has_age: reason_has_no_age(density, waiting, looks.status_has_age),
+        status_has_age: status_carries_age(density, waiting, looks.status_has_age),
         left_off,
         chips,
         merged: merged_chips(session, data, w),
-        detail: unless_waiting(waiting, whole_words(&session.card_detail(w), DETAIL_MAX)),
+        detail,
+        detail_ink,
         detail_lines: detail_lines(density),
         waiting,
         rank: session.state_rank(data, w),
@@ -565,11 +607,12 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         status,
         status_ink,
         age: looks.age,
-        status_has_age: reason_has_no_age(Density::Full, waiting, looks.status_has_age),
+        status_has_age: status_carries_age(Density::Full, waiting, looks.status_has_age),
         left_off: String::new(),
         chips: chips_row(session, data, w, ChipsFor::Project),
         merged: merged_chips(session, data, w),
         detail: unless_waiting(waiting, whole_words(&wanted, 0)),
+        detail_ink: Token::Secondary,
         detail_lines: 2,
         waiting,
         rank: session.state_rank(data, w),
@@ -905,19 +948,82 @@ mod tests {
         assert_eq!(needs_tone(1, true, true), (Token::Clay, Token::ClayText));
     }
 
+    /// Workspaces "a", "b" and "c", with `on` the one Jon is on.
+    fn three_on(on: &str) -> Data {
+        let ws = |id: &str| Workspace {
+            id: id.into(),
+            title: Some(format!("Title {id}")),
+            selected: Some(id == on),
+            ..Workspace::default()
+        };
+        Data {
+            workspaces: Some(vec![ws("a"), ws("b"), ws("c")]),
+            ..Data::default()
+        }
+    }
+
+    #[test]
+    fn names_the_oldest_waiting_session_jon_is_not_on() {
+        let mut core = Model::default();
+        let s = &mut core.session;
+        let list = ["a".to_string(), "b".to_string()];
+        let target = |s: &mut Session, on: &str, list: &[String]| {
+            needs_target(s, &three_on(on), list).map(|t| (t.ws_id, t.title))
+        };
+        assert_eq!(
+            target(s, "c", &list),
+            Some(("a".into(), "Title a".into())),
+            "the oldest while Jon is elsewhere"
+        );
+        assert_eq!(
+            target(s, "a", &list),
+            Some(("b".into(), "Title b".into())),
+            "the next oldest while Jon is on the oldest"
+        );
+        assert_eq!(target(s, "a", &list[..1]), None, "only the one he is on");
+        assert_eq!(target(s, "c", &[]), None, "nothing waiting");
+    }
+
+    #[test]
+    fn says_a_waiting_rows_reason_as_its_detail_in_the_waiting_ink() {
+        let mut core = Model::default();
+        let s = &mut core.session;
+        let data = three_on("c");
+        let w = data.ws_by_id("a");
+        let wt = Some(Waiting {
+            edge: Token::Clay,
+            ink: Token::ClayText,
+        });
+        let (detail, ink) = detail_of(s, &data, w, Density::Row, wt);
+        assert!(
+            detail.contains(": "),
+            "the reason with its status: {detail}"
+        );
+        assert_eq!(ink, Token::ClayText);
+        for d in [Density::Full, Density::Compact] {
+            assert_eq!(
+                detail_of(s, &data, w, d, wt),
+                (String::new(), Token::Secondary),
+                "{d:?}: the status line says it"
+            );
+        }
+        let (_, ink) = detail_of(s, &data, w, Density::Row, None);
+        assert_eq!(ink, Token::Secondary, "a row not waiting");
+    }
+
     #[test]
     fn moves_a_waiting_cards_age_to_its_title_row_and_drops_its_detail() {
         let wt = Some(Waiting {
             edge: Token::Clay,
             ink: Token::ClayText,
         });
-        assert!(!reason_has_no_age(Density::Full, wt, true));
-        assert!(!reason_has_no_age(Density::Compact, wt, true));
+        assert!(!status_carries_age(Density::Full, wt, true));
+        assert!(!status_carries_age(Density::Compact, wt, true));
         assert!(
-            reason_has_no_age(Density::Row, wt, true),
+            status_carries_age(Density::Row, wt, true),
             "a row's status is its age"
         );
-        assert!(reason_has_no_age(Density::Full, None, true));
+        assert!(status_carries_age(Density::Full, None, true));
         assert_eq!(unless_waiting(wt, "Pushed it.".into()), "");
         assert_eq!(unless_waiting(None, "Pushed it.".into()), "Pushed it.");
     }

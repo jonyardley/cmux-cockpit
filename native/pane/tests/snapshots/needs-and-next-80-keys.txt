@@ -13,17 +13,17 @@
 
  ▾ ■ UNSORTED  7
  ▎ ● Oldest question                                                        30m
+ ▎   Your turn: Should the strip cap at four?
  ▎ ● Publish                                                                 1m
+ ▎   Asking: allow npm publish?
  ▎ ● Second                                                                 15m
+ ▎   Your turn: reply "1b 2a" on the bridge and the store.
  ▎ ● Third                                                                  10m
- ▎ ● Fifth, past the cap                                                    <1m
-   ● Finished while away                                                     4m
-   ● Busy                                                                    1m
-
-                     ┌ Keys ──────────────────────────────┐
-                     │ ↑ ↓        move between cards      │
-                     │ shift ↑ ↓  reorder in its lane     │
-                     │ m 1-5      move to a lane          │
+ ▎   Your turn: the work is finished. Run /clear now.
+ ▎ ● Fifth, past the ┌ Keys ──────────────────────────────┐                 <1m
+ ▎   Your turn: One m│ ↑ ↓        move between cards      │
+   ● Finished while a│ shift ↑ ↓  reorder in its lane     │                  4m
+   ● Busy            │ m 1-5      move to a lane          │                  1m
                      │ drag       move to a lane or spot  │
                      │ Enter      switch to it            │
                      │ d          dismiss from Needs you  │

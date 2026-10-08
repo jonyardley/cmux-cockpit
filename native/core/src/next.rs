@@ -1,4 +1,4 @@
-//! Next and the Needs you strip's way back to a card (src/cockpit/next.ts):
+//! Next and its Needs you pill's way back to a card (src/cockpit/next.ts):
 //! where a session came from, the Next queue and its "1 of N", and
 //! revealing a card by unfolding what hides it.
 
@@ -18,7 +18,7 @@ pub enum Colour {
     Hex(String),
 }
 
-/// Where a session in Needs you came from: its lane, or its project group in Projects view.
+/// Where a session came from: its lane, or its project group in Projects view.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Origin {
     pub name: String,
@@ -35,8 +35,8 @@ pub struct NextStep<'d> {
 }
 
 impl Session {
-    /// Where a session in Needs you came from: its lane and marker, or its
-    /// project group in Projects view. A lane's generated anchor is in no
+    /// Where a session came from: its lane and marker, or its project
+    /// group in Projects view. A lane's generated anchor is in no
     /// project group, so it names its lane in both views.
     pub fn origin_of(&mut self, data: &Data, w: Option<&Workspace>) -> Origin {
         let Some(w) = w else {
@@ -162,9 +162,9 @@ impl Session {
         self.reveal_workspace(data, Some(step.target));
     }
 
-    /// Selects a workspace from Needs you or Next, first unfolding what
-    /// hides its card in the chosen view: its lane in All, its project in
-    /// Projects. A lane's generated anchor has no card; its status sits on
+    /// Selects a workspace from Next or its Needs you pill, first
+    /// unfolding what hides its card in the chosen view: its lane in All,
+    /// its project in Projects. A lane's generated anchor has no card; its status sits on
     /// the lane header, which shows only in All, so Projects switches to All.
     pub fn reveal_workspace(&mut self, data: &Data, w: Option<&Workspace>) {
         let Some(w) = w else { return };

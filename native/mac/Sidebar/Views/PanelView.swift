@@ -38,7 +38,7 @@ struct PanelBody: View {
                 ViewSwitch(view: panel.view)
                     .padding(.horizontal, Self.switchMargin)
                     .padding(.bottom, 8)
-                if !NextText.isNothing(panel.next) {
+                if NeedsText.shows(panel.needs) || !NextText.isNothing(panel.next) {
                     NextView(next: panel.next, needs: panel.needs).padding(.top, 6)
                 }
                 Group {

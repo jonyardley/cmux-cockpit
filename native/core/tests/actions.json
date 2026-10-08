@@ -45,5 +45,6 @@
   { "MessageAgent": { "id": "W1", "text": "Rebase when free." } },
   { "ToggleLane": { "lane": "main" } },
   { "ToggleProject": { "key": "/dev/cockpit" } },
-  "ToggleQuiet"
+  "ToggleQuiet",
+  { "Reveal": { "id": "W1" } }
 ]

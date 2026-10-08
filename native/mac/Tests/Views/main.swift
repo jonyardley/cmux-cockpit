@@ -148,6 +148,30 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("needs-an
     check(lines.contains("\(panel.needs.label) \(panel.needs.wait)"), "Needs you reads as the pane's line")
     check(NeedsText.count(panel.needs) == "5" && NeedsText.trail(panel.needs) == "30m ↓", "the pill reads 5, the title, then 30m ↓")
     check(panel.needs.fill == .clay && panel.needs.ink == .clayText, "the pill is clay while one waits late")
+    check(NeedsText.title(panel.needs) == "Oldest question", "the pill names the oldest waiting session Jon is not on")
+    check(NeedsText.tap(panel.needs) == .reveal(id: "n1"), "a tap on the pill reveals the session it names")
+    // A waiting row (Unsorted's one-line rows) keeps its age as its status
+    // and says its reason on its detail line, in the waiting ink.
+    let rows = panel.lanes.flatMap(\.rows).map { r -> Card in
+        switch r { case .card(let c): c }
+    }
+    let waitingRows = rows.filter { $0.density == .row && $0.waiting != nil }
+    check(!waitingRows.isEmpty, "needs-and-next has waiting rows")
+    for c in waitingRows {
+        check(c.status == c.age && c.detail.contains(": "), "\(c.title): its age as status, its reason as detail")
+        check(c.detailInk == c.waiting?.ink, "\(c.title): the reason in the waiting ink")
+        check(lines.contains { $0.hasSuffix(c.detail) }, "\(c.title): the reason reads as the pane's line")
+    }
+    for c in rows where c.waiting == nil {
+        check(c.detailInk == .secondary, "\(c.title): a detail not waiting is secondary")
+    }
+    // On the only waiting session, the pill still shows with its count,
+    // naming nothing, and a tap on it does nothing.
+    var alone = panel.needs
+    alone.count = 1
+    alone.target = nil
+    check(NeedsText.shows(alone) && NeedsText.title(alone).isEmpty && NeedsText.tap(alone) == nil,
+          "the pill shows on the only waiting session, names none and taps to nothing")
 }
 if let text = try? String(contentsOf: snapshots.appendingPathComponent("review-verdicts-80.txt"), encoding: .utf8) {
     check(text.contains("\(Words.next)  \(Words.nextNothing)"), "Next with nowhere to go reads as the pane's")
@@ -492,7 +516,7 @@ for name in ["lanes", "projects"] {
 }
 var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil), title: "t", density: .full, badge: Badge(icon: "terminal", color: nil),
                unread: "", ready: false, pinned: false, progress: 1.5, helpers: "", status: "", statusInk: .faint, age: "",
-               statusHasAge: false, leftOff: "", chips: [], merged: [], detail: "", detailLines: 2, waiting: nil, rank: 0,
+               statusHasAge: false, leftOff: "", chips: [], merged: [], detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, rank: 0,
                movable: true, dimmed: false, selected: false, menu: [])
 check(CardText.progress(bar) == 1, "a bar past the end stops full")
 bar.progress = -0.5

@@ -4,8 +4,8 @@
  2 need you                          5m
 
  ▾ ■ MAIN ACTIVITY  8
- ▎ ● Chip…      Your turn: Which green…
- ▎ ● Release…   Asking: allow git push?
+ ▎ ● Chip colours  Your turn: Which… 5m
+ ▎ ● Release…     Asking: allow git… 2m
    ● Tidy strip             Finished 6m
      To review →
      Done: the strip now groups by
@@ -17,7 +17,7 @@
    ● Selected card           Working 1m
    ○ Card layout fit           Idle 15m
      #176 merged  Park  Close
-   ○ Untimed card                  Idle
+   ○ Untimed card               Idle 5m
 
  ▾ ■ FOR REVIEW  2
    ● Ended agent           Finished 15m

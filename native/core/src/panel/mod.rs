@@ -105,8 +105,9 @@ pub enum NextLine {
 }
 
 /// Needs you, which Next's pill carries (issue #281): how many sessions
-/// wait on Jon and how long the oldest has. Each waiting card stays in
-/// its lane and says so itself. A count of 0 when nothing waits.
+/// wait on Jon, how long the oldest has, and where a tap on the pill goes.
+/// Each waiting card stays in its lane and says so itself. A count of 0
+/// when nothing waits.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Needs {
     pub count: usize,
@@ -121,6 +122,17 @@ pub struct Needs {
     pub fill: Token,
     /// The pill's words, in the fill's text ink.
     pub ink: Token,
+    /// The oldest waiting session Jon is not on, which the pill names and
+    /// a tap on it reveals; None while the only one waiting is the one he
+    /// is on.
+    pub target: Option<NeedsTarget>,
+}
+
+/// A waiting session the pill names: its workspace and title.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+pub struct NeedsTarget {
+    pub ws_id: String,
+    pub title: String,
 }
 
 /// Why a card waits on Jon: its leading edge, clay for Your turn and
@@ -187,8 +199,13 @@ pub struct Card {
     /// the chips line when every chip fits whole, else on a line of their
     /// own under it, as the sidebar's mergedBelow does, so neither is cut.
     pub merged: Vec<Chip>,
-    /// The latest message, or what the waiting chat wants.
+    /// The latest message, or what the waiting chat wants; on a waiting
+    /// row, its reason ("Asking: allow git push?"), as a row's status is
+    /// its age. Empty on a waiting full or compact card, whose status line
+    /// says the reason.
     pub detail: String,
+    /// The detail's ink: the waiting ink on a waiting row, else secondary.
+    pub detail_ink: Token,
     /// How many detail lines it draws: two on a full card, else one.
     pub detail_lines: usize,
     /// Set while its session waits on Jon: the card keeps its place and

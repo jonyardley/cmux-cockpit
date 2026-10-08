@@ -13,7 +13,10 @@ use cockpit_core::persist::SavedState;
 use cockpit_core::projects::Project;
 use cockpit_core::{Cockpit, Effect, Event, Model};
 use crux_core::App;
-use serde_json::{Value, json};
+use serde_json::Value;
+
+mod common;
+use common::without_the_strip;
 
 fn golden(name: &str) -> Value {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(format!("../../test/golden/{name}"));
@@ -26,25 +29,6 @@ fn send(app: &Cockpit, model: &mut Model, event: Event) {
     let mut cmd = app.update(event, model);
     let effects: Vec<Effect> = cmd.effects().collect();
     assert!(matches!(effects.as_slice(), [Effect::Render(_)]));
-}
-
-/// The TypeScript model with R4.5's one deliberate difference taken out
-/// (issue #281): the JS cockpit, being retired, still lifts waiting cards
-/// into a strip and leaves a placeholder; the core keeps each card in its
-/// place. So each placeholder reads as its card in the same spot, and
-/// Needs you keeps only its list and clock. A short copy of the helper in
-/// golden.rs, which also maps the Projects entries.
-fn without_the_strip(mut want: Value) -> Value {
-    if let Some(entries) = want["laneEntries"].as_array_mut() {
-        for e in entries.iter_mut().filter(|e| e["kind"] == "ghost") {
-            e["kind"] = json!("ws");
-            e["id"] = json!(format!("w:{}", e["wsId"].as_str().unwrap_or_default()));
-        }
-    }
-    if let Some(needs) = want["needs"].as_object_mut() {
-        needs.retain(|k, _| ["list", "waitText", "late"].contains(&k.as_str()));
-    }
-    want
 }
 
 fn check(scene: &str) {

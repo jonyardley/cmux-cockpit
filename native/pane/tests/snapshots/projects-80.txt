@@ -6,7 +6,7 @@
  ▾ ■ App One  2                                                               +
    ● One: parser rewrite for the streaming tokeniser                 Working 7m
      #148 draft +342 −17  parser-streaming-tokeniser
- ▎ ● One: docs                    Your turn: Read the draft in #142 and say go.
+ ▎ ● One: docs                 Your turn: Read the draft in #142 and say go. 1m
  ▎   Review
 
  ▾ ■ App Two  2

@@ -6,7 +6,7 @@
 ▌▾ ■ App One  2                       +
    ● One: parser rewrite…    Working 7m
      #148 draft +342 −17  …
- ▎ ● One: docs     Your turn: Read the…
+ ▎ ● One: docs  Your turn: Read the… 1m
  ▎   Review
 
  ▾ ■ App Two  2

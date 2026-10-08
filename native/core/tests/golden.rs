@@ -23,6 +23,9 @@ use cockpit_core::projects::Project;
 use cockpit_core::session::Session;
 use serde_json::{Map, Value, json};
 
+mod common;
+use common::without_the_strip;
+
 /// How a card's drawn chips fit a line `chars` wide.
 fn fit(s: &mut Session, data: &Data, drawn: &[Chip], w: &Workspace, chars: usize) -> Value {
     json!({
@@ -111,30 +114,6 @@ fn computed(input: &Value) -> Value {
         "quietProjects": quiet,
         "view": view,
     })
-}
-
-/// The TypeScript model with R4.5's one deliberate difference taken out
-/// (issue #281): the JS cockpit, being retired, still lifts waiting cards
-/// into a strip and leaves a placeholder; the core keeps each card in its
-/// place. So each placeholder reads as its card in the same spot, and
-/// Needs you keeps only its list and clock.
-fn without_the_strip(mut want: Value) -> Value {
-    if let Some(entries) = want["laneEntries"].as_array_mut() {
-        for e in entries.iter_mut().filter(|e| e["kind"] == "ghost") {
-            e["kind"] = json!("ws");
-            e["id"] = json!(format!("w:{}", e["wsId"].as_str().unwrap_or_default()));
-        }
-    }
-    if let Some(entries) = want["projectEntries"].as_array_mut() {
-        for e in entries.iter_mut().filter(|e| e["kind"] == "ghost") {
-            e["kind"] = json!("ws");
-            e["id"] = json!(format!("{}@p", e["wsId"].as_str().unwrap_or_default()));
-        }
-    }
-    if let Some(needs) = want["needs"].as_object_mut() {
-        needs.retain(|k, _| ["list", "waitText", "late"].contains(&k.as_str()));
-    }
-    want
 }
 
 fn check(scene: &str) {

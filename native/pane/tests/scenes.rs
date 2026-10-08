@@ -562,6 +562,14 @@ impl Live {
         self.handle(&Event::Key(KeyEvent::new(code, KeyModifiers::SHIFT)))
     }
 
+    /// Sends the core an event another shell sends (the sidebar's Next
+    /// or a lane's fold), then takes its new view, as the runner would.
+    fn core_event(&mut self, event: cockpit_core::Event) {
+        let _ = cockpit_core::Cockpit.update(event, &mut self.core);
+        self.pane
+            .set_view_model(PaneModel::from_core(&mut self.core));
+    }
+
     /// The ids of a lane's rows in the pane, top to bottom.
     fn lane(&self, key: LaneKey) -> Vec<String> {
         self.pane
@@ -1014,6 +1022,31 @@ fn a_move_a_dismissal_and_a_drag_show_in_the_pane_from_the_core() {
     assert_eq!(live.pane.model().needs.count, count - 1, "out of the count");
 }
 
+/// The pane has no key of its own for Next ('n' makes a project), so a
+/// waiting card in a folded lane is no cursor stop; Next, from the
+/// sidebar's pill or button, unfolds its lane, and the pane follows.
+#[test]
+fn next_unfolds_the_lane_hiding_a_waiting_card_and_the_cursor_reaches_it() {
+    let mut live = Live::new("needs-and-next");
+    let step = cockpit_core::Cockpit.view(&live.core).next.step;
+    let id = step.map(|s| s.target).unwrap_or_default();
+    let title = card_of(&live.pane, &id)
+        .map(|c| c.title)
+        .unwrap_or_default();
+    let lane = live.pane.model().lane_of(&id).unwrap();
+    assert!(
+        live.pane.model().is_waiting(&id),
+        "Next goes to a waiting card"
+    );
+    live.core_event(cockpit_core::Event::ToggleLane { lane });
+    assert!(!live.pane.model().is_lane_card(&id), "folded away");
+    live.core_event(cockpit_core::Event::Next);
+    assert!(live.pane.model().is_lane_card(&id), "its lane unfolds");
+    assert_eq!(live.pane.model().lane_of(&id), Some(lane));
+    assert!(card_of(&live.pane, &id).is_some_and(|c| c.selected && c.waiting.is_some()));
+    assert_eq!(cursor_to(&mut live.pane, &title), id);
+}
+
 #[test]
 fn the_card_keys_and_the_mouse_rest_under_the_keys_overlay() {
     let mut pane = pane_for("lanes");
@@ -1194,7 +1227,8 @@ fn a_press_on_a_waiting_cards_reason_puts_the_cursor_there_and_the_wheel_moves_i
     draw(&mut pane, &mut term);
     let buffer = term.backend().buffer().clone();
     let release = id_of(&pane, "Release notes");
-    let row = row_of(&buffer, "Asking: allow git push?");
+    // Cut at 40 columns to leave room for its age.
+    let row = row_of(&buffer, "Asking: allow git");
     let down = MouseEventKind::Down(MouseButton::Left);
     assert_eq!(pane.handle_event(&mouse(down, row)), Outcome::Redraw);
     assert_eq!(pane.cursor(), Some(release.as_str()));

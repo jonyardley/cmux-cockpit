@@ -437,6 +437,33 @@ mod switch_to {
     }
 }
 
+mod reveal {
+    use super::*;
+
+    #[test]
+    fn unfolds_the_lane_that_hides_the_card_then_selects_it_as_next_does() {
+        let (app, mut model) = started();
+        assert_eq!(lane_of(&app, &model, "p"), None, "Parked starts folded");
+        let asked = asked(&app, &mut model, Event::Reveal { id: "p".into() });
+        assert!(
+            asked.iter().any(|a| a.starts_with("set ui.collapsed")),
+            "the fold is saved: {asked:?}"
+        );
+        assert!(
+            asked.contains(&r#"cmux workspace.select {"workspace_id":"p"}"#.to_string()),
+            "{asked:?}"
+        );
+        assert_eq!(lane_of(&app, &model, "p"), Some(LaneKey::Parked));
+    }
+
+    #[test]
+    fn does_nothing_for_a_workspace_it_does_not_know() {
+        let (app, mut model) = started();
+        let asked = asked(&app, &mut model, Event::Reveal { id: "gone".into() });
+        assert_eq!(asked, ["render"]);
+    }
+}
+
 /// The card menu and a project's menu, opened and picked from as the
 /// pane sends them.
 mod menu {

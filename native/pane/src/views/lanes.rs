@@ -207,16 +207,16 @@ fn chip_width(c: &Chip) -> usize {
 pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<'static>> {
     let edge = if on { Edge::Cursor } else { Edge::Plain };
     let first = if landing { Edge::Drop } else { edge };
-    let status = fit(&c.status, inner.saturating_sub(CARD_LEAD + MIN_TITLE + 1));
-    let gap = usize::from(!status.is_empty());
-    let title_room = inner.saturating_sub(CARD_LEAD + width(&status) + gap);
+    let right = title_right(c, inner.saturating_sub(CARD_LEAD + MIN_TITLE + 1));
+    let right_width = spans_width(&right);
+    let gap = usize::from(right_width > 0);
+    let title_room = inner.saturating_sub(CARD_LEAD + right_width + gap);
     let left = vec![
         lead(c, "  "),
         Span::styled(c.icon.glyph, theme::icon(c.icon.ink)),
         Span::raw(" "),
         Span::styled(fit(&c.title, title_room), theme::title()),
     ];
-    let right = vec![Span::styled(status, theme::ink(c.status_ink))];
     let mut out = vec![spread(left, right, inner, first)];
     let room = inner.saturating_sub(CARD_LEAD);
     let indent = || lead(c, &" ".repeat(CARD_LEAD));
@@ -249,7 +249,7 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
         out.push(spread(spans, Vec::new(), inner, edge));
     }
     for line in wrap(&c.detail, room, c.detail_lines) {
-        let spans = vec![indent(), Span::styled(line, theme::plain(theme::SECONDARY))];
+        let spans = vec![indent(), Span::styled(line, theme::ink(c.detail_ink))];
         out.push(spread(spans, Vec::new(), inner, edge));
     }
     if on {
@@ -269,6 +269,29 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
     out
 }
 
+/// The right of a card's title row in at most `room` cells: its status,
+/// then its age while the status carries none (a waiting card's reason),
+/// in the waiting ink while it waits, as the sidebar's title row has it.
+/// The age is short and kept whole; the status gives way first.
+fn title_right(c: &Card, room: usize) -> Vec<Span<'static>> {
+    let age = if c.status_has_age { "" } else { c.age.as_str() };
+    let age = fit(age, room);
+    let age_room = if age.is_empty() { 0 } else { width(&age) + 1 };
+    let status = fit(&c.status, room.saturating_sub(age_room));
+    let mut out = Vec::new();
+    if !status.is_empty() {
+        out.push(Span::styled(status, theme::ink(c.status_ink)));
+    }
+    if !age.is_empty() {
+        if !out.is_empty() {
+            out.push(Span::raw(" "));
+        }
+        let ink = c.waiting.map_or(Token::MetaText, |w| w.ink);
+        out.push(Span::styled(age, theme::ink(ink)));
+    }
+    out
+}
+
 /// The blank start of a card's line, `blank` wide; on a waiting card its
 /// first cell is the waiting bar in the card's edge ink.
 fn lead(c: &Card, blank: &str) -> Span<'static> {
@@ -284,7 +307,7 @@ fn lead(c: &Card, blank: &str) -> Span<'static> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Piece, Row, fixtures};
+    use crate::model::{Density, Piece, Row, fixtures};
 
     #[test]
     fn joins_a_diff_size_to_the_pr_before_it() {
@@ -330,6 +353,46 @@ mod tests {
         c.waiting = None;
         let lines = card(&c, 30, false, false);
         assert_eq!(lines[0].spans[1].content, "  ", "no bar once answered");
+    }
+
+    #[test]
+    fn draws_the_age_after_a_waiting_cards_reason_in_its_ink() {
+        let Row::Card(mut c) = fixtures::card("asks", 0, true);
+        c.status = "Your turn: Which green?".into();
+        c.status_ink = Token::ClayText;
+        c.age = "5m".into();
+        let right = title_right(&c, 30);
+        let words: Vec<&str> = right.iter().map(|s| s.content.as_ref()).collect();
+        assert_eq!(words, ["Your turn: Which green?", " ", "5m"]);
+        assert_eq!(right[2].style.fg, theme::ink(Token::ClayText).fg);
+        let narrow = title_right(&c, 8);
+        assert_eq!(
+            narrow.last().map(|s| s.content.as_ref()),
+            Some("5m"),
+            "the age stays whole"
+        );
+        c.waiting = None;
+        let right = title_right(&c, 30);
+        assert_eq!(
+            right[2].style.fg,
+            theme::ink(Token::MetaText).fg,
+            "meta ink once answered"
+        );
+        c.status_has_age = true;
+        assert_eq!(title_right(&c, 30).len(), 1, "no second time");
+    }
+
+    #[test]
+    fn draws_a_waiting_rows_reason_in_the_waiting_ink() {
+        let Row::Card(mut c) = fixtures::card("row", 0, true);
+        c.density = Density::Row;
+        c.detail = "Asking: allow git push?".into();
+        c.detail_ink = Token::AmberText;
+        let lines = card(&c, 40, false, false);
+        assert_eq!(lines.len(), 2, "the title line and the reason");
+        let reason = &lines[1].spans[2];
+        assert_eq!(reason.content, "Asking: allow git push?");
+        assert_eq!(reason.style.fg, theme::ink(Token::AmberText).fg);
     }
 
     #[test]

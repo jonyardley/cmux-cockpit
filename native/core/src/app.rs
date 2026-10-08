@@ -68,8 +68,12 @@ pub enum Event {
     /// The shell selected the workspace itself (the sidebar's SDK select):
     /// it draws selected at once, with no cmux call from the core.
     Selected { id: String },
-    /// Dismisses the workspace's asks from Needs you, as its cross does.
+    /// Dismisses the workspace's asks from Needs you, as the card menu's
+    /// Dismiss needs you and the pane's 'd' do.
     Dismiss { id: String },
+    /// A tap on Next's Needs you pill: switches to the workspace it names,
+    /// first unfolding whatever hides its card, as Next does.
+    Reveal { id: String },
     /// Flips the view between All and Projects.
     FlipView,
     /// The shell could not carry out a cmux call about this workspace
@@ -143,6 +147,7 @@ impl Event {
             | Event::SwitchTo { .. }
             | Event::Selected { .. }
             | Event::Dismiss { .. }
+            | Event::Reveal { .. }
             | Event::FlipView
             | Event::Edit(_)
             | Event::OpenProject { .. }
@@ -442,6 +447,7 @@ impl Model {
             Event::SwitchTo { id } => s.select_workspace(data, Some(&id)),
             Event::Selected { id } => s.mark_selected(data, &id),
             Event::Dismiss { id } => s.dismiss_waiting(data, data.ws_by_id(&id)),
+            Event::Reveal { id } => s.reveal_workspace(data, data.ws_by_id(&id)),
             Event::Edit(e) => s.edit(data, e),
             Event::Menu(e) => s.menu(data, e),
             Event::OpenProject { key } => s.open_project_workspace(data, &key, None),

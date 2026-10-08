@@ -1,5 +1,5 @@
 //! Workspaces as the cockpit sees them (src/cockpit/model.ts): which lane
-//! each is in, tab order, lane folds and the view mode. The Needs you strip,
+//! each is in, tab order, lane folds and the view mode. Needs you,
 //! All's lane entries, the Projects view, Next and the card chips build on
 //! this, in their own modules.
 //!

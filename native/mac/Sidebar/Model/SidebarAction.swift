@@ -28,7 +28,7 @@ extension Event {
         case .refresh, .home, .cmuxFailed, .prPollOn, .panelOn, .at: false
         case .moveCard, .switchTo, .selected, .dismiss, .flipView, .edit, .openProject,
              .fileForReview, .parkMerged, .closeMerged, .keepMerged, .menu, .next,
-             .messageAgent, .toggleLane, .toggleProject, .toggleQuiet:
+             .messageAgent, .toggleLane, .toggleProject, .toggleQuiet, .reveal:
             true
         }
     }

@@ -141,6 +141,7 @@ pub fn words(model: &PaneModel) -> Vec<String> {
 fn card_words(c: &Card, out: &mut Vec<String>) {
     out.push(c.title.clone());
     out.push(c.status.clone());
+    out.push(c.age.clone());
     out.push(c.left_off.clone());
     out.push(c.detail.clone());
     for chip in c.chips.iter().chain(&c.merged) {
@@ -251,6 +252,7 @@ pub(crate) mod fixtures {
             chips: Vec::new(),
             merged: Vec::new(),
             detail: String::new(),
+            detail_ink: Token::Secondary,
             detail_lines: 1,
             waiting: waiting.then_some(Waiting {
                 edge: Token::Clay,

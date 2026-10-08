@@ -13,7 +13,11 @@
     "wait": "1m",
     "late": false,
     "fill": "clay",
-    "ink": "clayText"
+    "ink": "clayText",
+    "target": {
+      "ws_id": "one-b",
+      "title": "One: docs"
+    }
   },
   "lanes": [
     {
@@ -119,13 +123,14 @@
             "progress": null,
             "helpers": "",
             "status": "1m",
-            "status_ink": "metaText",
+            "status_ink": "clayText",
             "age": "1m",
             "status_has_age": true,
             "left_off": "",
             "chips": [],
             "merged": [],
-            "detail": "",
+            "detail": "Your turn: Read the draft in #142 and say go.",
+            "detail_ink": "clayText",
             "detail_lines": 1,
             "waiting": {
               "edge": "clay",
@@ -281,6 +286,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
             "rank": 1,
@@ -433,6 +439,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
             "rank": 2,
@@ -610,6 +617,7 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
             "rank": 3,
@@ -762,6 +770,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
             "rank": 3,
@@ -991,6 +1000,7 @@
         ],
         "merged": [],
         "detail": "",
+        "detail_ink": "secondary",
         "detail_lines": 2,
         "waiting": null,
         "rank": 2,
@@ -1156,6 +1166,7 @@
         ],
         "merged": [],
         "detail": "",
+        "detail_ink": "secondary",
         "detail_lines": 2,
         "waiting": {
           "edge": "clay",
@@ -1384,6 +1395,7 @@
         ],
         "merged": [],
         "detail": "",
+        "detail_ink": "secondary",
         "detail_lines": 2,
         "waiting": null,
         "rank": 1,
@@ -1578,6 +1590,7 @@
           }
         ],
         "detail": "",
+        "detail_ink": "secondary",
         "detail_lines": 2,
         "waiting": null,
         "rank": 3,
@@ -1755,6 +1768,7 @@
         "chips": [],
         "merged": [],
         "detail": "",
+        "detail_ink": "secondary",
         "detail_lines": 2,
         "waiting": null,
         "rank": 3,

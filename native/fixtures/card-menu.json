@@ -13,7 +13,11 @@
     "wait": "5m",
     "late": false,
     "fill": "clay",
-    "ink": "clayText"
+    "ink": "clayText",
+    "target": {
+      "ws_id": "needs",
+      "title": "Chip colours"
+    }
   },
   "lanes": [
     {
@@ -58,6 +62,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": {
               "edge": "clay",
@@ -213,6 +218,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": {
               "edge": "amber",
@@ -381,6 +387,7 @@
             ],
             "merged": [],
             "detail": "Done: the strip now groups by repo.",
+            "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
             "rank": 1,
@@ -578,6 +585,7 @@
             ],
             "merged": [],
             "detail": "Recording the view tree as text.",
+            "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
             "rank": 2,
@@ -730,6 +738,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
             "rank": 2,
@@ -882,6 +891,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
             "rank": 2,
@@ -1076,6 +1086,7 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
             "rank": 3,
@@ -1228,6 +1239,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
             "rank": 3,
@@ -1398,6 +1410,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
             "rank": 3,
@@ -1550,6 +1563,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
             "rank": 3,
@@ -1720,6 +1734,7 @@
             "chips": [],
             "merged": [],
             "detail": "The batch resumes by itself once load drops.",
+            "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
             "rank": 2,
@@ -1872,6 +1887,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
             "rank": 3,
@@ -2062,6 +2078,7 @@
             "chips": [],
             "merged": [],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
             "rank": 2,
@@ -2239,6 +2256,7 @@
               }
             ],
             "detail": "",
+            "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
             "rank": 3,
