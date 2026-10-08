@@ -2,7 +2,7 @@
 
 import type { MoveSize } from "../../shared/move.ts";
 import { isNeedsDismissed, restoreNeeds } from "../../shared/needs.ts";
-import { type ChipColors, NEUTRAL_CHIP, prChipColors, prInk } from "../../shared/pr-colors.ts";
+import { type ChipColors, NEUTRAL_CHIP, prInk } from "../../shared/pr-colors.ts";
 import { PROJECTS, projectId } from "../../shared/projects.ts";
 import { prSummary } from "../../shared/prs.ts";
 import { displayTitle } from "../../shared/titles.ts";
@@ -32,27 +32,10 @@ import {
   projectKey,
   projectOfWorkspace,
 } from "../by-project.ts";
-import {
-  type Chip,
-  type ChipId,
-  canFileForReview,
-  fileForReview,
-  type PrChip,
-  reviewIsGreen,
-  type TextChip,
-} from "../card-chips.ts";
-import { cardChips, chipsSplit, secondLineFits, showsChipsRow } from "../chips.ts";
+import { type Chip, type ChipId, chipsFor, type PrChip, type TextChip } from "../card-chips.ts";
+import { chipsSplit } from "../chips.ts";
 import { LANES } from "../lanes.ts";
-import {
-  cardOpacity,
-  closeMerged,
-  keepLabel,
-  keepMerged,
-  offersClose,
-  offersMergedChip,
-  offersPark,
-  parkMerged,
-} from "../merged.ts";
+import { cardOpacity } from "../merged.ts";
 import { laneOf, moveToLane } from "../model.ts";
 import { drag, isSelected, selectWorkspace } from "../state.ts";
 import {
@@ -274,27 +257,19 @@ function prById(chips: readonly Chip[]): PrChip {
 
 // A card's quiet action: a white chip with the quiet chip's edge.
 const ACTION_CHIP: ChipColors = { ...NEUTRAL_CHIP, bg: C.card };
-// A merged card's Close, the action that acts, in ink.
-const CLOSE_CHIP: ChipColors = { ...ACTION_CHIP, fg: C.text };
+const actionColors = (): ChipColors => ACTION_CHIP;
 
 // A card's action chip, with its own onTap, so the tap never also selects
 // the card.
-function actionChip(label: Reactive<string>, tap: () => void, colors: () => ChipColors = () => ACTION_CHIP): View {
+function actionChip(label: Reactive<string>, tap: () => void): View {
   const body = Text(label)
     .font(11)
     .weight("medium")
-    .color(() => colors().fg)
+    .color(ACTION_CHIP.fg)
     .lineLimit(1)
     .paddingHorizontal(7)
     .paddingVertical(1);
-  return ring(
-    body,
-    () => colors().bg,
-    () => colors().edge,
-    1,
-    6,
-    { hug: true, hover: chipHover(colors) },
-  ).onTap(tap);
+  return ring(body, ACTION_CHIP.bg, ACTION_CHIP.edge, 1, 6, { hug: true, hover: chipHover(actionColors) }).onTap(tap);
 }
 
 /** Under Other, a card whose folder can become a project offers it: the card menu's item, in view. */
@@ -314,55 +289,6 @@ export function makeProjectAction(w: WsAccessor, top = 0): View {
   );
 }
 
-// "To review →" (issue #53): files the card into For review, in the ready
-// chip's green while its PR is ready to merge, else a quiet white chip.
-export function toReviewAction(w: WsAccessor): View {
-  const colors = () => (reviewIsGreen(w()) ? prChipColors("ready") : ACTION_CHIP);
-  return when(
-    "to-review",
-    () => canFileForReview(w()),
-    () => actionChip("To review →", () => fileForReview(w()), colors),
-  ).layoutPriority(2);
-}
-
-// A merged card's Park and Close. Close is in ink and Park in the secondary
-// grey, so the one that acts reads first. Park goes once the card is in
-// Parked, a pinned card offers Park alone, and Close stays away while an
-// agent there is working or asking. Keep lives in the card menu.
-const mergedChips = (w: WsAccessor): View[] => [
-  when(
-    "merged-park",
-    () => offersPark(w()),
-    () => actionChip("Park", () => parkMerged(w())),
-  ),
-  when(
-    "merged-close",
-    () => offersClose(w()),
-    () =>
-      actionChip(
-        "Close",
-        () => closeMerged(w()),
-        () => CLOSE_CHIP,
-      ),
-  ),
-];
-
-/**
- * Park and Close on a line of their own, for the compact card and the row,
- * which have no chips row to carry them; `top` is the gap above it.
- */
-export function mergedActions(w: WsAccessor, indent = 0, top = 0): View {
-  return when(
-    "merged-actions",
-    () => offersMergedChip(w()),
-    () =>
-      HStack({ spacing: 5 }, mergedChips(w))
-        .paddingLeading(indent)
-        .paddingTop(top)
-        .frame({ maxWidth: "infinity", alignment: "leading" }),
-  );
-}
-
 // One when() per chip, so each has a fixed key and its own place in the
 // HStack. The PR and ports chips are short and say the most, so they hold
 // their width and the branch chip gives way, cut at its end. The priority
@@ -373,7 +299,7 @@ export function mergedActions(w: WsAccessor, indent = 0, top = 0): View {
 // `lineChars` is the card's line in characters (chips.ts).
 export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap, lineChars: number): View {
   // One chip list per change, read by every predicate and chip below.
-  const chips = computed(() => cardChips(w(), withBranch));
+  const chips = computed(() => chipsFor(w(), withBranch));
   const one = (id: ChipId) =>
     when(
       id,
@@ -398,47 +324,25 @@ export function chipsRow(w: WsAccessor, withBranch: boolean, prTap: PrTap, lineC
         ),
     ).layoutPriority(-1),
   ];
-  const merged = computed(() => offersMergedChip(w()));
-  // A merged card's Park and Close close the line, while `inline` holds.
-  const branchLine = (inline: () => boolean) => [
-    one("br"),
-    one("port").layoutPriority(2),
-    toReviewAction(w),
-    when(
-      "merged-inline",
-      () => merged() && inline(),
-      () => HStack({ spacing: 5 }, mergedChips(w)),
-    ).layoutPriority(2),
-  ];
+  const branchLine = () => [one("br"), one("port").layoutPriority(2)];
   const line = (views: View[]) => HStack({ spacing: 5 }, views).frame({ maxWidth: "infinity", alignment: "leading" });
   // Split, the branch goes under the PR when the two do not fit side by
-  // side, so a narrow card shows both whole; Park and Close go under the
-  // branch when the branch's line has no room for them. Worked out once
-  // per change.
-  const splits = computed(() => chipsSplit(chips(), w(), lineChars));
-  const mergedBelow = computed(() => !secondLineFits(chips(), w(), lineChars));
+  // side, so a narrow card shows both whole. Worked out once per change.
+  const splits = computed(() => chipsSplit(chips(), lineChars));
   const row = () =>
     VStack({ spacing: 0 }, [
       when("chips-split", splits, () =>
-        VStack({ alignment: "leading", spacing: 4 }, [
-          line(prLine()),
-          line(branchLine(() => !mergedBelow())),
-          when(
-            "merged-below",
-            () => merged() && mergedBelow(),
-            () => line(mergedChips(w)),
-          ),
-        ]),
+        VStack({ alignment: "leading", spacing: 4 }, [line(prLine()), line(branchLine())]),
       ),
       when(
         "chips-one",
         () => !splits(),
-        () => line([...prLine(), ...branchLine(() => true)]),
+        () => line([...prLine(), ...branchLine()]),
       ),
     ]).frame({ maxWidth: "infinity", alignment: "leading" });
   // Behind a when(), so a card with nothing to show has no empty row and no
   // gap above it (issue #79).
-  return when("chips-row", () => showsChipsRow(chips(), w()), row);
+  return when("chips-row", () => chips().length > 0, row);
 }
 
 // --- card chrome and menu ------------------------------------------------------------
@@ -504,10 +408,6 @@ export function cardMenu(w: WsAccessor): MenuItem[] {
     Button(
       () => openPrLabel(prSummary(w())),
       () => openIfUrl(prSummary(w())?.url),
-    ),
-    Button(
-      () => keepLabel(w()),
-      () => keepMerged(w()),
     ),
     Button(
       () => (isNeedsDismissed(w()) ? "Restore needs you" : "Dismiss needs you"),

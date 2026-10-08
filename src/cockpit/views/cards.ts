@@ -34,12 +34,10 @@ import {
   chipsRow,
   glyph,
   makeProjectAction,
-  mergedActions,
   pinMark,
   statusDot,
   statusLabel,
   titleRow,
-  toReviewAction,
   type WsAccessor,
 } from "./parts.ts";
 
@@ -116,9 +114,8 @@ function fullCard(w: WsAccessor, key: string): View {
       HStack({ spacing: 6 }, [statusDot(w, 7), statusLabel(w, 12, "medium"), helpers(w, 12)])
         // Left-aligned by the frame, not a Spacer, as the chips row is.
         .frame({ maxWidth: "infinity", alignment: "leading" }),
-      // The PR and branch under the status (a merged PR's Park and Close in the
-      // branch's place), the branch under the PR when they do not fit side by
-      // side, then the message.
+      // The PR and branch under the status, the branch under the PR when
+      // they do not fit side by side, then the message.
       chipsRow(w, true, "still", FULL_LINE_CHARS),
       detailLine(w, "detail", 2),
       progressBar(w, "full-progress"),
@@ -174,10 +171,6 @@ export function compactCard(w: WsAccessor, key: string): View {
       ]).frame({ maxWidth: "infinity", alignment: "leading" }),
       leftOffLine(w, "compact-left-off"),
       detailLine(w, "compact-detail", 1),
-      // Compact cards have no chips row, so a Ready one in Background takes
-      // the action on a line of its own.
-      toReviewAction(w),
-      mergedActions(w),
       progressBar(w, "compact-progress"),
     ])
       .frame({ maxWidth: "infinity", alignment: "leading" })
@@ -244,7 +237,6 @@ function denseRow(w: WsAccessor, key: string): View {
     // Under the title: past the dot, the badge and the gap after each.
     leftOffLine(w, "row-left-off", ROW_TEXT_INDENT),
     detailLine(w, "row-detail", 1, ROW_TEXT_INDENT),
-    mergedActions(w, ROW_TEXT_INDENT, 3),
   ])
     .paddingLeading(25)
     .paddingTrailing(12)

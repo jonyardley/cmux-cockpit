@@ -7,19 +7,12 @@ import { beforeEach, describe, it } from "node:test";
 import { installRenderer } from "./support/renderer.ts";
 
 const r = installRenderer();
-const { agent, group, ws } = await import("./support/fixtures.ts");
+const { agent, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
 const model = await import("../src/cockpit/card-chips.ts");
-const {
-  cardChips,
-  chipsFitOneLine,
-  chipsSplit,
-  FULL_LINE_CHARS,
-  hasChipsRow,
-  PROJECT_LINE_CHARS,
-  secondLineFits,
-  showsChipsRow,
-} = await import("../src/cockpit/chips.ts");
+const { chipsFitOneLine, chipsSplit, FULL_LINE_CHARS, hasChipsRow, PROJECT_LINE_CHARS } = await import(
+  "../src/cockpit/chips.ts"
+);
 const { liveRunCount } = await import("../src/shared/subagents.ts");
 
 beforeEach(() => {
@@ -212,70 +205,52 @@ describe("chipsFor", () => {
   });
 });
 
-describe("showsChipsRow (issue #79)", () => {
-  const shows = (w: Workspace | undefined, withBranch: boolean) => showsChipsRow(model.chipsFor(w, withBranch), w);
-
+describe("hasChipsRow (issue #79)", () => {
   it("has no row with no chips", () => {
-    assert.equal(shows(ws("x"), true), false);
-    assert.equal(shows(undefined, true), false);
+    assert.equal(hasChipsRow(ws("x"), true), false);
+    assert.equal(hasChipsRow(undefined, true), false);
   });
 
   it("keeps the row for a PR alone, which sits in it on every card", () => {
-    assert.equal(shows(ws("x", { pr: { number: 7, status: "open" } }), true), true);
+    assert.equal(hasChipsRow(ws("x", { pr: { number: 7, status: "open" } }), true), true);
   });
 
   it("keeps the row for a branch or ports chip", () => {
-    assert.equal(shows(ws("x", { branch: "feat" }), true), true);
-    assert.equal(shows(ws("x", { ports: [5173] }), true), true);
+    assert.equal(hasChipsRow(ws("x", { branch: "feat" }), true), true);
+    assert.equal(hasChipsRow(ws("x", { ports: [5173] }), true), true);
   });
 
   it("leaves the branch out when the card does", () => {
-    assert.equal(shows(ws("x", { branch: "feat" }), false), false);
-  });
-
-  it("agrees with hasChipsRow when the PR chip is in the row", () => {
-    for (const w of [ws("a"), ws("b", { pr: { number: 7 } }), ws("c", { branch: "feat" }), ws("d", { ports: [80] })]) {
-      assert.equal(shows(w, true), hasChipsRow(w, true));
-    }
+    assert.equal(hasChipsRow(ws("x", { branch: "feat" }), false), false);
   });
 });
 
-describe("cardChips", () => {
+describe("a merged card's chips", () => {
   const merged: PullRequest = { number: 7, status: "merged" };
-  const ids = (w: Workspace) => cardChips(w, true).map((c) => c.id);
+  const ids = (w: Workspace) => model.chipsFor(w, true).map((c) => c.id);
 
-  it("leaves a merged card's clean branch out while Park or Close takes its room", () => {
-    assert.deepEqual(ids(ws("x", { pr: merged, branch: "feat" })), ["pr"]);
-    assert.deepEqual(ids(ws("x", { pr: { ...merged, status: "open" }, branch: "feat" })), ["pr", "br"]);
-  });
-
-  it("keeps a branch with uncommitted changes: its dot is the only sign of work left", () => {
+  it("shows its branch as any card does", () => {
+    assert.deepEqual(ids(ws("x", { pr: merged, branch: "feat" })), ["pr", "br"]);
     assert.deepEqual(ids(ws("x", { pr: merged, branch: "feat", dirty: true })), ["pr", "br"]);
   });
 
-  it("keeps the branch when no merged button shows", () => {
-    r.data.groups = [group("g-parked", "Parked", { anchorId: "anchor-parked" })];
-    const busy = ws("x", { pr: merged, branch: "feat", group: "g-parked", agents: [agent("working")] });
-    assert.deepEqual(ids(busy), ["pr", "br"], "in Parked with an agent working: no Park, no Close");
-    r.data.groups = [];
+  it("has nothing to press: a Ready or merged card's row holds its chips alone", () => {
+    const ready = ws("y", {
+      pr: merged,
+      unread: 1,
+      agents: [agent("idle", { sinceEpoch: r.data.epoch - 600, lastActivityAt: r.data.epoch - 600 })],
+    });
+    assert.deepEqual(ids(ready), ["pr"]);
+    assert.equal(hasChipsRow(ws("z", { unread: 1, agents: [agent("idle")] }), true), false, "no chip, no row");
   });
 });
 
 describe("chipsFitOneLine", () => {
-  const fits = (w: Workspace) => chipsFitOneLine(model.chipsFor(w, true), w, PROJECT_LINE_CHARS);
+  const fits = (w: Workspace) => chipsFitOneLine(model.chipsFor(w, true), PROJECT_LINE_CHARS);
 
-  it("counts a merged card's Park and Close towards the line", () => {
-    const pr: PullRequest = { number: 174, status: "merged" };
-    assert.equal(fits(ws("x", { pr })), true, "#174 merged, Park and Close fit");
-    const ports = [5173, 3000];
-    assert.equal(fits(ws("x", { pr: { ...pr, status: "closed" }, ports })), true, "a closed PR has no buttons");
-    assert.equal(fits(ws("x", { pr, ports })), false, "Park and Close push it over");
-    assert.equal(fits(ws("x", { pr, ports, pinned: true })), true, "a pinned card offers Park alone");
-  });
-
-  it("fits a merged full card's Park and Close beside its PR, but not beside ports too", () => {
+  it("fits a merged full card's PR and branch, but not with ports too", () => {
     const pr: PullRequest = { number: 1234, status: "merged" };
-    const full = (w: Workspace) => chipsFitOneLine(cardChips(w, true), w, FULL_LINE_CHARS);
+    const full = (w: Workspace) => chipsFitOneLine(model.chipsFor(w, true), FULL_LINE_CHARS);
     assert.equal(full(ws("x", { pr, branch: "feat" })), true);
     assert.equal(full(ws("x", { pr, branch: "feat", ports: [5173] })), false, "so the full card splits");
   });
@@ -298,19 +273,6 @@ describe("chipsFitOneLine", () => {
     assert.equal(fits(ws("x", { branch, pr: { number: 148, status: "open", additions: 342, deletions: 17 } })), false);
   });
 
-  it("counts the To review button towards the line", () => {
-    const w = ws("x", { branch: "fix-card-layout", pr: { number: 12, status: "open" } });
-    assert.equal(fits(w), true);
-    const ready = ws("y", {
-      branch: "fix-card-layout",
-      pr: { number: 12, status: "open" },
-      unread: 1,
-      agents: [agent("idle", { sinceEpoch: r.data.epoch - 600, lastActivityAt: r.data.epoch - 600 })],
-    });
-    assert.equal(model.canFileForReview(ready), true);
-    assert.equal(fits(ready), false);
-  });
-
   it("fits a card with nothing in its chips row", () => {
     assert.equal(fits(ws("x")), true);
   });
@@ -323,7 +285,7 @@ describe("chipsFitOneLine", () => {
 });
 
 describe("chipsSplit", () => {
-  const splits = (w: Workspace) => chipsSplit(model.chipsFor(w, true), w, PROJECT_LINE_CHARS);
+  const splits = (w: Workspace) => chipsSplit(model.chipsFor(w, true), PROJECT_LINE_CHARS);
   const long: PullRequest = { number: 148, status: "open", draft: true, additions: 342, deletions: 17 };
 
   it("splits a PR and branch that do not fit on one line", () => {
@@ -343,28 +305,11 @@ describe("chipsSplit", () => {
   });
 
   it("splits sooner on the full card's narrower line", () => {
-    const full = (w: Workspace) => chipsSplit(cardChips(w, true), w, FULL_LINE_CHARS);
+    const full = (w: Workspace) => chipsSplit(model.chipsFor(w, true), FULL_LINE_CHARS);
     const w = ws("x", { branch: "fix-card-layout", pr: { number: 148, status: "open" } });
     assert.equal(splits(w), false, "fits a project card");
     assert.equal(full(w), true, "too wide for a full card");
     assert.equal(full(ws("x", { branch: "main", pr: { number: 12, status: "open" } })), false);
-  });
-});
-
-describe("secondLineFits", () => {
-  const pr: PullRequest = { number: 178, status: "merged" };
-  const second = (w: Workspace) => secondLineFits(cardChips(w, true), w, FULL_LINE_CHARS);
-
-  it("keeps a merged card's Park and Close beside its port", () => {
-    assert.equal(second(ws("x", { pr, branch: "feat", ports: [5173] })), true);
-  });
-
-  it("drops them under a long uncommitted branch and ports", () => {
-    assert.equal(second(ws("x", { pr, branch: "all-view-card-fit", dirty: true, ports: [5173] })), false);
-  });
-
-  it("fits a second line with no Park or Close", () => {
-    assert.equal(second(ws("x", { pr: { number: 178, status: "open" }, branch: "feat" })), true);
   });
 });
 

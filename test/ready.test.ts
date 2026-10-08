@@ -26,7 +26,7 @@ const { agent, group, ws } = await import("./support/fixtures.ts");
 const status = await import("../src/cockpit/status.ts");
 const state = await import("../src/cockpit/state.ts");
 const model = await import("../src/cockpit/card-chips.ts");
-const { hasChipsRow, showsChipsRow } = await import("../src/cockpit/chips.ts");
+const { hasChipsRow } = await import("../src/cockpit/chips.ts");
 const needs = await import("../src/shared/needs.ts");
 const prs = await import("../src/shared/prs.ts");
 
@@ -192,67 +192,14 @@ describe("a Ready card's PR words (issue #79)", () => {
   });
 });
 
-describe("To review", () => {
-  const lanes = () => [group("g-review", "For review"), group("g-main", "Main activity")];
-
-  it("offers To review on a Ready card outside For review, and files it there", () => {
-    r.data.groups = lanes();
+describe("a Ready card's chips row", () => {
+  it("has no row of its own: with no chip, a Ready card draws none", () => {
+    r.data.groups = [group("g-main", "Main activity")];
     const w = readyWs("w", { group: "g-main" });
     r.data.workspaces = [w];
-    assert.equal(model.canFileForReview(w), true);
-    assert.equal(hasChipsRow(w, true), true);
-    // The action alone keeps the row, with no chip at all.
+    assert.equal(status.isReady(w), true);
     assert.deepEqual(model.chipsFor(w, true), []);
-    assert.equal(showsChipsRow(model.chipsFor(w, true), w), true);
-    model.fileForReview(w);
-    assert.deepEqual(r.calls.at(-1), {
-      method: "workspace.group.add",
-      params: { group_id: "g-review", workspace_id: "w" },
-    });
-    // The move shows at once, so the action goes with it.
-    assert.equal(model.canFileForReview(w), false);
-  });
-
-  it("offers To review in green on a card whose PR is ready to merge, Ready or not", () => {
-    r.data.groups = lanes();
-    const read = ws("green", { group: "g-main", branch: "feat", agents: [agent("working")] });
-    r.data.workspaces = [read];
-    assert.equal(status.isReady(read), false, "its agent is still working");
-    assert.equal(model.canFileForReview(read), true, "the ready PR is reason enough");
-    assert.equal(model.reviewIsGreen(read), true);
-    assert.equal(model.reviewIsGreen(readyWs("w")), false, "a Ready card with no PR keeps the white chip");
-    for (const id of ["failing", "running", "draft", "open"]) {
-      const w = ws(id, { group: "g-main", branch: "feat" });
-      assert.equal(model.reviewIsGreen(w), false, id);
-      assert.equal(model.canFileForReview(w), false, id);
-    }
-  });
-
-  it("is not offered in For review, off a Ready card, or with no workspace", () => {
-    r.data.groups = lanes();
-    const inReview = readyWs("r", { group: "g-review" });
-    const read = readyWs("x", { unread: 0 });
-    r.data.workspaces = [inReview, read];
-    assert.equal(model.canFileForReview(inReview), false);
-    assert.equal(model.canFileForReview(read), false);
-    assert.equal(hasChipsRow(read, true), false);
-    assert.equal(model.canFileForReview(undefined), false);
-  });
-
-  it("is not offered on a real workspace anchoring a group, which cannot leave it", () => {
-    r.data.groups = [...lanes(), group("g-proj", "Some project", { anchorId: "real" })];
-    const real = readyWs("real", { title: "Status update", group: "g-proj" });
-    r.data.workspaces = [real];
-    assert.equal(status.isReady(real), true);
-    assert.equal(model.canFileForReview(real), false);
-  });
-
-  it("is not offered on a lane's generated anchor", () => {
-    r.data.groups = [group("g-main", "Main activity", { anchorId: "anchor" })];
-    const anchor = readyWs("anchor", { title: "Main activity", group: "g-main" });
-    r.data.workspaces = [anchor];
-    assert.equal(status.isReady(anchor), true);
-    assert.equal(model.canFileForReview(anchor), false);
+    assert.equal(hasChipsRow(w, true), false);
   });
 
   it("still counts a chip as a chips row", () => {

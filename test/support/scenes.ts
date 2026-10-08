@@ -87,7 +87,7 @@ const lanes: Scene = {
         agents: [agent("idle", { sinceEpoch: ago(360), lastActivityAt: ago(360) })],
         latestMessage: "Done: the strip now groups by repo.",
       }),
-      // Merged: dimmed, its branch left out for Park and Close.
+      // Merged: dimmed, its branch shown as on any card.
       ws("merged", {
         title: "Card layout fit",
         group: "g-main",
@@ -207,8 +207,8 @@ const needsAndNext: Scene = {
 // --- projects ---------------------------------------------------------------------------
 
 // The Projects view, with cards grouped under two projects, one card outside
-// any project, one card quoting its saved move, a merged card offering Park
-// and Close, and the third project folded into the quiet list.
+// any project, one card quoting its saved move, a merged card, dimmed, and
+// the third project folded into the quiet list.
 const projects: Scene = {
   seed: () => ({
     state: {
@@ -286,7 +286,7 @@ const prs = (): Record<string, SavedPr> => ({
 
 // The For review lane with a card for each merge verdict, and its header's
 // "N ready to merge", under a Main activity card whose PR is ready: it stays
-// there, offering a green "To review →".
+// there until Jon moves it.
 const reviewVerdicts: Scene = {
   seed: () => ({ state: { prs: prs() } }),
   data: (r) => {

@@ -1,9 +1,8 @@
-// A card's chips: the move size, the PR, the branch and the ports, and its To review action.
+// A card's chips: the move size, the PR, the branch and the ports.
 
 import { type MoveSize, moveSize, moveSizeText } from "../shared/move.ts";
-import { type PrHealth, prHealth, prSummary } from "../shared/prs.ts";
-import { isAnchor, laneOf, moveToLane } from "./model.ts";
-import { isReady, moveOf } from "./status.ts";
+import { type PrHealth, prSummary } from "../shared/prs.ts";
+import { moveOf } from "./status.ts";
 
 // --- Card chips (issue #48) ------------------------------------------------------------
 
@@ -64,22 +63,3 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
   if (port) out.push(port);
   return out;
 }
-
-// Ready cards (issue #53).
-
-/** Its PR is ready to merge (the green chip), so "To review" shows in green. */
-export const reviewIsGreen = (w: Workspace | undefined): boolean => prHealth(w) === "ready";
-
-/**
- * A Ready card, or one whose PR is ready to merge, offers "To review",
- * unless it is already in For review or anchors a group: a generated lane
- * anchor is its group, and a real workspace anchoring one cannot leave it
- * (drop.ts pins those too). A ready PR never files the card itself, so
- * this is the way in.
- */
-export function canFileForReview(w: Workspace | undefined): boolean {
-  return !!w && (isReady(w) || reviewIsGreen(w)) && laneOf(w) !== "review" && !isAnchor(w);
-}
-
-/** Files a card into For review. */
-export const fileForReview = (w: Workspace | undefined): void => moveToLane(w, "review");
