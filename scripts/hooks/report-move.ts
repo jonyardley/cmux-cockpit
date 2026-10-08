@@ -43,25 +43,29 @@ import { field } from "./gh-command.ts";
 import { readTail, replyFrom, sleep } from "./transcript.ts";
 
 // The line's label as Jon's rules write it, after any markdown the terminal
-// would not show (a quote, bold, a list marker) and an optional "Jon, ":
-// "Your move:" when the turn waits on Jon, "Nothing for you:" when it waits
-// on the agent. One word of drift may sit before the colon, inside the bold
-// or after it ("Nothing for you yet:", "**Your move** now:"), and so may a
-// short parenthetical ("Your move (optional, before merge):", inside the
-// bold or out); "Nothing for you" alone may add "beyond that ..." (or those,
-// this, these: "Nothing for you beyond that close-out:"). Only these
-// shapes, so a sentence such as "Your move to main was blocked: ..." stays
-// prose. The text after the colon may be empty: a bare header over steps,
-// which lastMove reads from the lines below.
+// would not show (a quote, bold or italic, a list or step marker) and an
+// optional "Jon, ": "Your move:" when the turn waits on Jon, "Nothing for
+// you:" when it waits on the agent. One word of drift may sit before the
+// colon, inside the bold or after it ("Nothing for you yet:", "**Your
+// move** now:"), and so may a short parenthetical ("Your move (optional,
+// before merge):", inside the bold or out); "Nothing for you" alone may add
+// "beyond that ..." (or those, this, these: "Nothing for you beyond that
+// close-out:"), and may end on a full stop instead of the colon ("Nothing
+// for you right now. The agent is reading ..."). Only these shapes, so a
+// sentence such as "Your move to main was blocked: ..." stays prose, and so
+// does "Your move." The text after the colon or full stop may be empty: a
+// bare header over steps, which lastMove reads from the lines below.
 const DRIFT = String.raw`(?:\s+(?:yet|now|right now|for now|so far|at the moment|here|today))?`;
 const PAREN = String.raw`(?:\s*\([^)]{1,60}\))?`;
-const BEYOND = String.raw`(?:\s+beyond\s+(?:that|those|this|these)\b[^:,]{0,30})?`;
+const BEYOND = String.raw`(?:\s+beyond\s+(?:that|those|this|these)\b[^:,.]{0,30})?`;
+const EMPH = String.raw`(?:\*\*|__|\*|_)?`;
 const MOVE_LINE = new RegExp(
-  String.raw`^\s*(?:>\s*)?(?:[-*]\s+)?(?:jon,\s+)?(?:\*\*|__)?(your move|nothing for you${BEYOND})${DRIFT}${PAREN}(?:\*\*|__)?${DRIFT}${PAREN}\s*:\s*(?:\*\*|__)?\s*(.*)$`,
+  String.raw`^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?${EMPH}(your move|nothing for you${BEYOND})${DRIFT}${PAREN}${EMPH}${DRIFT}${PAREN}\s*(:|\.(?=[\s*_]|$))\s*${EMPH}\s*(.*)$`,
   "i",
 );
 // The narrow full-stop form: a sentence, then "Nothing for you yet." ending
-// the line. The sentence before it is the move text.
+// the line. The sentence before it is the move text, and is also cut from
+// the end of a full-stop label's text.
 const IDLE_SENTENCE = new RegExp(String.raw`^(.*[.!?])\s+nothing for you${DRIFT}\.$`, "i");
 // A list or step marker at the start of a line: "1.", "2)", "-", "*", ">".
 const STEP_MARKER = /^\s*(?:>\s*)?(?:\d+[.)]|[-*])\s+/;
@@ -108,6 +112,20 @@ function stepAfter(lines: readonly string[], from: number): string {
   return unmark(next.replace(STEP_MARKER, ""));
 }
 
+// The move a label on line `i` holds, or null when the label is "Your move."
+// on a full stop, which stays prose. A label right after a full-stop label
+// is the one that counts ("Nothing for you yet. Your move: merge it."), and
+// a closing "Nothing for you." is cut from the text after a full-stop label.
+function labelMove(hit: RegExpExecArray, lines: readonly string[], i: number): { line: string; idle: boolean } | null {
+  const [, label = "", stop = "", rest = ""] = hit;
+  const waits = /^your move/i.test(label);
+  if (stop === "." && waits) return null;
+  if (stop === "." && MOVE_LINE.test(rest)) return moveOn([rest, ...lines.slice(i + 1)], 0);
+  const text = unmark(rest);
+  const trimmed = stop === "." ? (IDLE_SENTENCE.exec(text)?.[1] ?? text) : text;
+  return { line: cleanMove(trimmed || stepAfter(lines, i)) ?? "", idle: !waits };
+}
+
 // The move on one line of a reply, if the line holds one: a label with its
 // text, a bare label over the steps below (an empty line when nothing
 // follows, which ends the scan as an empty label always has), or a closing
@@ -115,10 +133,8 @@ function stepAfter(lines: readonly string[], from: number): string {
 function moveOn(lines: readonly string[], i: number): { line: string; idle: boolean } | null {
   const text = lines[i] ?? "";
   const hit = MOVE_LINE.exec(text);
-  if (hit?.[1]) {
-    const line = cleanMove(unmark(hit[2] ?? "") || stepAfter(lines, i)) ?? "";
-    return { line, idle: !/^your move/i.test(hit[1]) };
-  }
+  const labelled = hit ? labelMove(hit, lines, i) : null;
+  if (labelled) return labelled;
   const sentence = IDLE_SENTENCE.exec(unmark(text))?.[1];
   const last = sentence?.split(/(?<=[.!?])\s+/).pop();
   const line = last ? cleanMove(last) : null;
