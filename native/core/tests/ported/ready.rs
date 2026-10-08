@@ -248,39 +248,45 @@ mod a_ready_cards_pr_words_issue_79 {
     }
 
     /// The compact card's PR words for `w`.
-    fn text(s: &Session, w: &Workspace) -> String {
-        compact_pr_text(
-            pr_summary(&s.saved, Some(w))
-                .as_ref()
-                .map(|p| p.text.as_str()),
-        )
+    fn text(s: &mut Session, w: &Workspace) -> String {
+        let words = pr_summary(&s.saved, Some(w)).map(|p| s.card_pr_words(Some(w), &p));
+        compact_pr_text(words.as_deref())
     }
 
     #[test]
-    fn leaves_the_pr_out_of_the_status_line_since_the_chips_row_carries_it() {
+    fn leaves_the_prs_words_out_of_the_status_line_since_the_chips_row_carries_it() {
         let (mut s, data, mut fx) = setup();
+        // A PR GitHub would merge changes the status itself (issue #299),
+        // never the words after it.
         let green = with_pr(&mut fx, "green");
-        assert_eq!(s.status_line(&data, Some(&green)), "Finished 6m");
+        assert_eq!(s.status_line(&data, Some(&green)), "Ready to merge 6m");
         let failing = with_pr(&mut fx, "failing");
         assert_eq!(s.status_line(&data, Some(&failing)), "Finished 6m");
     }
 
     #[test]
     fn keeps_the_pr_on_a_compact_card_in_the_chips_own_words() {
-        let (s, _, mut fx) = setup();
-        assert_eq!(text(&s, &with_pr(&mut fx, "green")), "· #45 · ready");
-        assert_eq!(text(&s, &with_pr(&mut fx, "failing")), "· #46 · 1 failing");
-        assert_eq!(text(&s, &with_pr(&mut fx, "running")), "· #47 · running");
-        assert_eq!(text(&s, &with_pr(&mut fx, "draft")), "· #48 · draft");
-        assert_eq!(text(&s, &with_pr(&mut fx, "open")), "· #49");
+        let (mut s, _, mut fx) = setup();
+        // Its number alone once the status says Ready to merge (decided 1a, #299).
+        assert_eq!(text(&mut s, &with_pr(&mut fx, "green")), "· #45");
+        assert_eq!(
+            text(&mut s, &with_pr(&mut fx, "failing")),
+            "· #46 · 1 failing"
+        );
+        assert_eq!(
+            text(&mut s, &with_pr(&mut fx, "running")),
+            "· #47 · running"
+        );
+        assert_eq!(text(&mut s, &with_pr(&mut fx, "draft")), "· #48 · draft");
+        assert_eq!(text(&mut s, &with_pr(&mut fx, "open")), "· #49");
         let merged = ready_ws(&mut fx, "m").pr(pr(50.0, Some(PrStatus::Merged)));
-        assert_eq!(text(&s, &merged), "· #50 · merged");
+        assert_eq!(text(&mut s, &merged), "· #50 · merged");
     }
 
     #[test]
     fn is_empty_without_a_pr() {
-        let (s, _, mut fx) = setup();
-        assert_eq!(text(&s, &ready_ws(&mut fx, "none")), "");
+        let (mut s, _, mut fx) = setup();
+        assert_eq!(text(&mut s, &ready_ws(&mut fx, "none")), "");
         assert_eq!(compact_pr_text(None), "");
         assert_eq!(compact_pr_text(Some("")), "");
     }

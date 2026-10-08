@@ -81,7 +81,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "status": "needs_input"
+      "status": "needs_input",
+      "statusLine": "Asking 1m"
     },
     "busy": {
       "actualLane": "unsorted",
@@ -89,7 +90,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "status": "working"
+      "status": "working",
+      "statusLine": "Working 1m"
     },
     "n1": {
       "actualLane": "unsorted",
@@ -97,7 +99,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "status": "needs_input"
+      "status": "needs_input",
+      "statusLine": "Your turn 30m"
     },
     "n2": {
       "actualLane": "unsorted",
@@ -105,7 +108,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "status": "needs_input"
+      "status": "needs_input",
+      "statusLine": "Your turn 15m"
     },
     "n3": {
       "actualLane": "unsorted",
@@ -113,7 +117,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "status": "needs_input"
+      "status": "needs_input",
+      "statusLine": "Your turn 10m"
     },
     "n4": {
       "actualLane": "unsorted",
@@ -121,7 +126,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "status": "needs_input"
+      "status": "needs_input",
+      "statusLine": "Your turn <1m"
     },
     "ready": {
       "actualLane": "unsorted",
@@ -129,7 +135,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "status": "idle"
+      "status": "idle",
+      "statusLine": "Finished 4m"
     }
   },
   "projectEntries": [

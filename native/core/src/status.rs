@@ -8,6 +8,7 @@ use crate::js::{non_empty, positive, truthy};
 use crate::moves::{quiet_move, waiting_move};
 use crate::needs::ask_reason;
 use crate::persist::{SavedMove, is_move_description};
+use crate::prs::{PrHealth, PrSummary, pr_health};
 use crate::session::Session;
 use crate::shells::live_shell_count;
 use crate::text::{card_message, clip, one_line, readable};
@@ -15,7 +16,8 @@ use crate::theme::Token;
 use crate::time::{age_since, finished_at};
 use crate::ui::{PillColors, URGENCY_RANK, Urgency, count_tint};
 use crate::words::{
-    ASKING_WORD, NO_AGENT_WORD, WAITING_WORD, YOU_WORD, shell_text, status_word, with_age,
+    ASKING_WORD, MERGE_READY_WORD, NO_AGENT_WORD, WAITING_WORD, YOU_WORD, shell_text, status_word,
+    with_age,
 };
 
 /// A workspace's status: its agent's, or none.
@@ -64,6 +66,9 @@ impl Status {
 /// Which of the card's status looks applies.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatusKind {
+    /// Its PR is one GitHub would merge now, and no agent there works,
+    /// waits on Jon or asks (issue #299).
+    MergeReady,
     /// Finished and not yet looked at (issue #53).
     Ready,
     /// needs_input on a permission or a question (issue #81).
@@ -128,6 +133,16 @@ impl StatusKind {
     /// The look this kind draws with.
     pub fn style(&self) -> StatusStyle {
         match self {
+            // Its own vivid green, never the finished olive, and quiet for
+            // a header's pill, which it leaves as it was.
+            StatusKind::MergeReady => StatusStyle {
+                label: MERGE_READY_WORD,
+                dot: Some(Token::MergeGreen),
+                halo: Token::MergeHalo,
+                text: Token::MergeText,
+                ring: None,
+                urgency: Urgency::Quiet,
+            },
             // The finished green and word: Ready adds no hue of its own.
             StatusKind::Ready => StatusStyle {
                 halo: Token::Clear,
@@ -348,12 +363,56 @@ impl Session {
             && live_shell_count(&self.saved, w, a) > 0
     }
 
-    /// Which status look the card takes.
+    /// Whether the card says Ready to merge: its PR is ready and its agent,
+    /// if any, is idle or finished, not asking, and not Waiting on a shell
+    /// it still runs. Working (quiet too), Your turn, Asking and Waiting
+    /// keep their status, since they come first, and so does a status cmux
+    /// names that the core does not know, which may yet be busy.
+    fn merge_ready(&self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
+        if pr_health(&self.saved, w) != PrHealth::Ready {
+            return false;
+        }
+        let at_rest = a.is_none_or(|a| {
+            matches!(
+                a.status,
+                None | Some(AgentStatus::Idle | AgentStatus::Ended)
+            )
+        });
+        at_rest && ask_reason(&self.saved, a, w).is_none() && !self.is_waiting(a, w)
+    }
+
+    /// True when the card's status says Ready to merge (issue #299): the
+    /// same rule status_kind puts first, without the rest of its pass.
+    /// It takes no Data, so chips_for needs none; status_kind must keep
+    /// merge_ready first for the two to agree, and a test in
+    /// tests/ported/merge_ready.rs holds them to it.
+    pub fn shows_merge_ready(&mut self, w: Option<&Workspace>) -> bool {
+        let a = self.agent_of(w);
+        self.merge_ready(a.as_ref(), w)
+    }
+
+    /// The PR's words a compact card runs on from its status: the number
+    /// alone once the status says Ready to merge, since the PR's "ready"
+    /// would only say it again and crowd the line ("Ready to merge 3m ·
+    /// #1"); else its full words ("#45 · 1 failing").
+    pub fn card_pr_words(&mut self, w: Option<&Workspace>, pr: &PrSummary) -> String {
+        if self.shows_merge_ready(w) {
+            pr.tag.clone()
+        } else {
+            pr.text.clone()
+        }
+    }
+
+    /// Which status look the card takes. Ready to merge wins over Ready:
+    /// the unread badge still says there is output.
     pub fn status_kind(&mut self, data: &Data, w: Option<&Workspace>) -> StatusKind {
+        let a = self.agent_of(w);
+        if self.merge_ready(a.as_ref(), w) {
+            return StatusKind::MergeReady;
+        }
         if self.is_ready(data, w) {
             return StatusKind::Ready;
         }
-        let a = self.agent_of(w);
         if ask_reason(&self.saved, a.as_ref(), w).is_some() {
             return StatusKind::Asking;
         }
@@ -463,9 +522,16 @@ impl Session {
         format!("{label}: {}", self.needs_detail(w))
     }
 
+    /// Whether the card shows the green Ready pill: Ready, and not Ready
+    /// to merge, which wins the card and leaves the badge to say there is
+    /// output.
+    pub fn shows_ready(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        self.status_kind(data, w) == StatusKind::Ready
+    }
+
     /// The unread count a card's badge shows: none while the Ready pill stands in for it.
     pub fn badge_count(&mut self, data: &Data, w: Option<&Workspace>) -> f64 {
-        if self.is_ready(data, w) {
+        if self.shows_ready(data, w) {
             0.0
         } else {
             w.and_then(|w| w.unread).unwrap_or(0.0)

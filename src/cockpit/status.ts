@@ -7,7 +7,7 @@ import { quietMove, waitingMove } from "../shared/move.ts";
 import { agentsOf, askReason, hasRealAsk } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
 import { prInk } from "../shared/pr-colors.ts";
-import type { PrSummary } from "../shared/prs.ts";
+import { type PrSummary, prHealth } from "../shared/prs.ts";
 import { quietSince, quietSuffix } from "../shared/quiet.ts";
 import { liveShellCount } from "../shared/shells.ts";
 import { liveRunCount } from "../shared/subagents.ts";
@@ -16,6 +16,7 @@ import { ageSince, finishedAt } from "../shared/time.ts";
 import { countTint, type HaloStatus, haloColor, type PillColors, type Urgency } from "../shared/ui.ts";
 import {
   ASKING_WORD,
+  MERGE_READY_WORD,
   NO_AGENT_WORD,
   STATUS_WORD,
   shellText,
@@ -168,10 +169,38 @@ const WAITING: StatusStyle = { ...STATUS.working, label: WAITING_WORD };
 export const isWaiting = (a: Agent | null, w: Workspace | undefined): boolean =>
   a?.status === "idle" && liveShellCount(w, a) > 0;
 
+// Ready to merge (issue #299): the card's PR is one GitHub would merge now
+// (prs.ts's ready health, which the ready chip and the header's "N ready to
+// merge" read), in its own vivid green, never the finished olive. Quiet for
+// a header's pill, which it leaves as it was.
+const MERGE_READY: StatusStyle = {
+  label: MERGE_READY_WORD,
+  dot: C.mergeGreen,
+  halo: C.mergeHalo,
+  text: C.mergeText,
+  urgency: "quiet",
+};
+
+/**
+ * True when the card says Ready to merge: its PR is ready and its agent, if
+ * any, is idle or finished, not asking, and not Waiting on a shell it still
+ * runs. Working (quiet too), Your turn, Asking and Waiting keep their status,
+ * since they come first, and so does a status cmux names that this code does
+ * not know, which may yet be busy. It wins over Ready: the unread badge still
+ * says there is output.
+ */
+function mergeReady(a: Agent | null, w: Workspace | undefined): boolean {
+  if (prHealth(w) !== "ready") return false;
+  const s = a?.status;
+  const atRest = !s || s === "idle" || s === "ended";
+  return atRest && !askReason(a, w) && !isWaiting(a, w);
+}
+
 export function statusInfo(w: Workspace | undefined): StatusStyle {
-  if (isReady(w)) return READY;
-  // The agent is worked out once, for the ask, the shells and the status.
+  // The agent is worked out once, for the PR, the ask, the shells and the status.
   const a = agentOf(w);
+  if (mergeReady(a, w)) return MERGE_READY;
+  if (isReady(w)) return READY;
   if (askReason(a, w)) return ASKING;
   if (quietSince(a, w)) return QUIET;
   if (isWaiting(a, w)) return WAITING;
@@ -248,8 +277,15 @@ export const placeholderText = (w: Workspace | undefined): string =>
 /** A Needs you row's edge: amber while its agent asks, else clay, so each hue keeps one meaning. */
 export const needsRowEdge = (w: Workspace | undefined): string => (askOf(w) ? C.amberRowEdge : C.needsRowEdge);
 
+/**
+ * True when the card shows the green Ready pill: Ready, and not Ready to
+ * merge, which wins the card and leaves the unread badge to say there is
+ * output.
+ */
+export const showsReady = (w: Workspace | undefined): boolean => statusInfo(w) === READY;
+
 /** The unread count a card's badge shows: none while the Ready pill stands in for it. */
-export const badgeCount = (w: Workspace | undefined): number => (isReady(w) ? 0 : (w?.unread ?? 0));
+export const badgeCount = (w: Workspace | undefined): number => (showsReady(w) ? 0 : (w?.unread ?? 0));
 
 /**
  * The PR as text in a compact card's status line ("· #45 · 1 failing"), else
@@ -257,9 +293,26 @@ export const badgeCount = (w: Workspace | undefined): number => (isReady(w) ? 0 
  * not. The full card says nothing about the PR in its status row: the PR
  * chip at the head of its chips row carries the verdict (issue #79).
  */
-export function compactPrText(pr: Pick<PrSummary, "text"> | undefined): string {
-  const t = pr?.text;
-  return t ? "· " + t : "";
+export function compactPrText(text: string | undefined): string {
+  return text ? "· " + text : "";
+}
+
+/**
+ * True when the card's status says Ready to merge (issue #299). It asks
+ * statusInfo itself, as showsReady does, so the PR's words only go while the
+ * status really says it, whatever comes to rank ahead of it.
+ */
+export const showsMergeReady = (w: Workspace | undefined): boolean => statusInfo(w) === MERGE_READY;
+
+/**
+ * The PR's words a compact card runs on from its status: the number alone
+ * once the status says Ready to merge, since the PR's "ready" would only say
+ * it again and crowd the line ("Ready to merge 3m · #1"); else its full words
+ * ("#45 · 1 failing"). "" with no PR.
+ */
+export function cardPrWords(w: Workspace | undefined, pr: Pick<PrSummary, "tag" | "text"> | undefined): string {
+  if (!pr) return "";
+  return showsMergeReady(w) ? pr.tag : pr.text;
 }
 
 /**

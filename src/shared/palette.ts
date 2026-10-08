@@ -24,6 +24,12 @@ const hue = {
    * finished agent (test/merge-ready.test.ts holds the gap).
    */
   greenDeep: "#3F5A2B",
+  /**
+   * Ready to merge on a card's status line (issue #299): a vivid green,
+   * well apart from the finished olive (test/merge-ready.test.ts holds
+   * the gap), so a mergeable PR never reads as a finished agent.
+   */
+  mergeGreen: "#1DB954",
   red: "#C0453A",
 } as const;
 
@@ -44,6 +50,13 @@ export const P = {
   // Asking (issue #81): an agent stopped on a permission or a question.
   amberText: "#8A5A0B",
   amberHalo: "#D9A03F38",
+  /** Ready to merge's halo: its dot's green at about 28%. */
+  mergeHalo: `${hue.mergeGreen}47`,
+  /**
+   * Ready to merge in words, a step darker than its dot: the issue's
+   * #13893C a hair deeper, so it clears 4.5:1 on the white card.
+   */
+  mergeText: "#12873B",
   /** The finished green in words: "Finished 3m", the Ready pill. */
   greenText: "#5E7A40",
   /** A failing or conflicting PR in words, a deeper red than the dot for contrast. */

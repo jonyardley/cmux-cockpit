@@ -31,8 +31,8 @@
           "Card": {
             "ws_id": "waiting",
             "icon": {
-              "glyph": "○",
-              "ink": null
+              "glyph": "●",
+              "ink": "mergeGreen"
             },
             "title": "waiting card",
             "density": "Full",
@@ -45,8 +45,8 @@
             "pinned": false,
             "progress": null,
             "helpers": "",
-            "status": "No agent",
-            "status_ink": "faint",
+            "status": "Ready to merge",
+            "status_ink": "mergeText",
             "age": "",
             "status_has_age": false,
             "left_off": "",
@@ -57,10 +57,6 @@
                   {
                     "text": "#9",
                     "ink": "secondary"
-                  },
-                  {
-                    "text": "ready",
-                    "ink": "greenDeep"
                   }
                 ],
                 "gives_way": false,
@@ -80,6 +76,7 @@
                 "is_action": false
               }
             ],
+            "row_pr": null,
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 2,
@@ -224,8 +221,8 @@
           "Card": {
             "ws_id": "ready",
             "icon": {
-              "glyph": "○",
-              "ink": null
+              "glyph": "●",
+              "ink": "mergeGreen"
             },
             "title": "ready card",
             "density": "Compact",
@@ -238,8 +235,8 @@
             "pinned": false,
             "progress": null,
             "helpers": "",
-            "status": "No agent",
-            "status_ink": "faint",
+            "status": "Ready to merge",
+            "status_ink": "mergeText",
             "age": "",
             "status_has_age": false,
             "left_off": "",
@@ -248,7 +245,7 @@
                 "kind": "Pr",
                 "pieces": [
                   {
-                    "text": "#1 · ready",
+                    "text": "#1",
                     "ink": "greenDeep"
                   }
                 ],
@@ -269,6 +266,7 @@
                 "is_action": false
               }
             ],
+            "row_pr": null,
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -440,6 +438,7 @@
                 "is_action": false
               }
             ],
+            "row_pr": null,
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -599,6 +598,7 @@
                 "is_action": false
               }
             ],
+            "row_pr": null,
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -758,6 +758,7 @@
                 "is_action": false
               }
             ],
+            "row_pr": null,
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -917,6 +918,7 @@
                 "is_action": false
               }
             ],
+            "row_pr": null,
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -1076,6 +1078,7 @@
                 "is_action": false
               }
             ],
+            "row_pr": null,
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -1235,6 +1238,7 @@
                 "is_action": false
               }
             ],
+            "row_pr": null,
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -1394,6 +1398,7 @@
                 "is_action": false
               }
             ],
+            "row_pr": null,
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,

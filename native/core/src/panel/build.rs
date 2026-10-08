@@ -15,7 +15,8 @@ use crate::projects::Project;
 use crate::prs::pr_summary;
 use crate::session::Session;
 use crate::status::{
-    DETAIL_MAX, LEFT_OFF_MAX, NEEDS_DETAIL_MAX, StatusStyle, progress_fraction, waiting_tokens,
+    DETAIL_MAX, LEFT_OFF_MAX, NEEDS_DETAIL_MAX, StatusKind, StatusStyle, progress_fraction,
+    waiting_tokens,
 };
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
@@ -23,7 +24,7 @@ use crate::theme::{Token, parse_hex};
 use super::{
     Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT, EditorView, HOLLOW, Icon, Lane,
     Needs, NeedsTarget, NextLine, PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow,
-    QUIET_ROW, Row, Waiting, piece,
+    QUIET_ROW, Row, RowPr, Waiting, piece,
 };
 
 /// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
@@ -189,15 +190,18 @@ struct Looks {
     status_has_age: bool,
 }
 
-/// A card's looks beside its `status`. A row has no Ready pill
-/// (cards.ts denseRow), so it is never Ready, and its status is its age,
-/// so its age is that same string and the status carries it.
+/// A card's looks beside its `status` and the status `kind` it draws. A
+/// row has no Ready pill (cards.ts denseRow), so it is never Ready, and its
+/// status is its age, so its age is that same string and the status
+/// carries it. The pill reads the kind the card already worked out
+/// (shows_ready), not a second pass over the same rule.
 fn looks(
     session: &mut Session,
     data: &Data,
     w: Option<&Workspace>,
     density: Density,
     status: &str,
+    kind: &StatusKind,
 ) -> Looks {
     let row = density == Density::Row;
     let badge = session.badge_count(data, w);
@@ -209,7 +213,7 @@ fn looks(
     Looks {
         badge: badge_of(&session.project_of_workspace(w)),
         unread: card_unread(density, w.and_then(|w| w.unread), badge),
-        ready: !row && session.is_ready(data, w),
+        ready: !row && *kind == StatusKind::Ready,
         pinned: is_pinned(w),
         progress: progress_fraction(w),
         helpers: session.helper_text(w),
@@ -276,15 +280,19 @@ fn chips_row(session: &mut Session, w: Option<&Workspace>, kind: ChipsFor) -> Ve
     out
 }
 
-/// A compact card's PR in words, "#45 · ready", in its health's ink,
-/// then its diff size, faint, as a chip of its own. The sidebar runs them
-/// on from the status line after a "·"; here they have a line of their
-/// own, so they have none.
-fn compact_pr(session: &Session, w: Option<&Workspace>) -> Vec<Chip> {
+/// A compact card's PR in words, "#45 · 1 failing" (its number alone once
+/// the status says Ready to merge), in its health's ink, then its diff
+/// size, faint, as a chip of its own. The sidebar runs them on from the
+/// status line after a "·"; here they have a line of their own, so they
+/// have none.
+fn compact_pr(session: &mut Session, w: Option<&Workspace>) -> Vec<Chip> {
     let Some(pr) = pr_summary(&session.saved, w) else {
         return Vec::new();
     };
-    let words = piece(pr.text.clone(), pr_text_color(Some(&pr), Token::Secondary));
+    let words = piece(
+        session.card_pr_words(w, &pr),
+        pr_text_color(Some(&pr), Token::Secondary),
+    );
     let chip = Chip {
         url: pr.url.clone(),
         ..Chip::new(ChipKind::Pr, vec![words])
@@ -292,6 +300,20 @@ fn compact_pr(session: &Session, w: Option<&Workspace>) -> Vec<Chip> {
     let mut out = vec![chip];
     out.extend(diff_chip(&pr.diff));
     out
+}
+
+/// A row's PR: its number in its health's ink (metaText while quiet) and
+/// its title. Only a row has one; a card's chips carry its PR.
+fn row_pr(session: &Session, w: Option<&Workspace>, density: Density) -> Option<RowPr> {
+    if density != Density::Row {
+        return None;
+    }
+    let pr = pr_summary(&session.saved, w)?;
+    Some(RowPr {
+        ink: pr_text_color(Some(&pr), Token::MetaText),
+        tag: pr.tag,
+        title: pr.title,
+    })
 }
 
 /// Which chips a card in All carries, by its density.
@@ -435,7 +457,8 @@ fn left_off(text: &str) -> String {
 
 fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card {
     let w = data.ws_by_id(id);
-    let style = session.status_info(data, w);
+    let kind = session.status_kind(data, w);
+    let style = kind.style();
     let density = card_density(&session.lanes, data, w);
     let waiting = waiting_of(session, view, w);
     // A row carries its age alone, as the sidebar's row does, in the
@@ -453,7 +476,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         String::new()
     };
     let chips = chips_row(session, w, chips_for_density(density));
-    let looks = looks(session, data, w, density, &status);
+    let looks = looks(session, data, w, density, &status, &kind);
     let (detail, detail_ink) = detail_of(session, data, w, density, waiting);
     Card {
         ws_id: id.to_string(),
@@ -472,6 +495,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         status_has_age: status_carries_age(density, waiting, looks.status_has_age),
         left_off,
         chips,
+        row_pr: row_pr(session, w, density),
         detail,
         detail_ink,
         detail_lines: detail_lines(density),
@@ -562,14 +586,15 @@ fn lane_head(
 /// and status, what a waiting chat wants, and its chips with the branch.
 fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card {
     let w = data.ws_by_id(id);
-    let style = session.status_info(data, w);
+    let kind = session.status_kind(data, w);
+    let style = kind.style();
     let wanted = session.move_of(w).map(|m| m.text).unwrap_or_default();
     let waiting = waiting_of(session, view, w);
     let (status, status_ink) = match waiting {
         Some(wt) => (needs_line(session, data, w), wt.ink),
         None => (session.status_line(data, w), style.text),
     };
-    let looks = looks(session, data, w, Density::Full, &status);
+    let looks = looks(session, data, w, Density::Full, &status, &kind);
     Card {
         ws_id: id.to_string(),
         icon: icon_of(&style),
@@ -587,6 +612,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         status_has_age: status_carries_age(Density::Full, waiting, looks.status_has_age),
         left_off: String::new(),
         chips: chips_row(session, w, ChipsFor::Project),
+        row_pr: None,
         detail: unless_waiting(waiting, whole_words(&wanted, 0)),
         detail_ink: Token::Secondary,
         detail_lines: 2,
@@ -997,5 +1023,45 @@ mod tests {
         assert!(status_carries_age(Density::Full, None, true));
         assert_eq!(unless_waiting(wt, "Pushed it.".into()), "");
         assert_eq!(unless_waiting(None, "Pushed it.".into()), "Pushed it.");
+    }
+
+    #[test]
+    fn gives_a_row_its_prs_number_in_its_health_and_its_title() {
+        let mut core = Model::default();
+        let s = &mut core.session;
+        s.saved = crate::persist::SavedState::from_json(
+            r#"{"prs": {"r": {"number": 171, "url": "u", "status": "open", "branch": "feat",
+                "title": "  Row cards show their PR", "mergeable": true,
+                "checks": [{"name": "build", "state": "pass"}]},
+              "q": {"number": 9, "url": "u", "status": "open", "branch": "feat", "checks": []}}}"#,
+        )
+        .unwrap();
+        let ws = |id: &str| Workspace {
+            id: id.into(),
+            ..Workspace::default()
+        };
+        let (r, q, none) = (ws("r"), ws("q"), ws("n"));
+        assert_eq!(
+            row_pr(s, Some(&r), Density::Row),
+            Some(RowPr {
+                tag: "#171".into(),
+                title: "Row cards show their PR".into(),
+                ink: Token::GreenDeep,
+            }),
+            "a ready PR's number in ready's green, its title cleaned"
+        );
+        assert_eq!(
+            row_pr(s, Some(&q), Density::Row),
+            Some(RowPr {
+                tag: "#9".into(),
+                title: String::new(),
+                ink: Token::MetaText,
+            }),
+            "a quiet PR's number in the row's meta ink, and no title"
+        );
+        assert_eq!(row_pr(s, Some(&none), Density::Row), None, "no PR");
+        for d in [Density::Full, Density::Compact] {
+            assert_eq!(row_pr(s, Some(&r), d), None, "{d:?}: its chips carry it");
+        }
     }
 }

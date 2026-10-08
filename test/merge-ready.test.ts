@@ -27,6 +27,8 @@ const open = { url: "https://github.com/o/r/pull/1", status: "open", branch: "fe
   },
   ownPrs: {},
   ui: {},
+  // ready2's chat still runs a shell: idle there, its status says Waiting.
+  shells: { ready2: [{ id: "b1", session: "shell-chat", startedEpoch: 100 }] },
 };
 
 const { installRenderer } = await import("./support/renderer.ts");
@@ -35,6 +37,10 @@ const { agent, group, ws } = await import("./support/fixtures.ts");
 const model = { ...(await import("../src/cockpit/strip.ts")), ...(await import("../src/cockpit/lane-entries.ts")) };
 const { C } = await import("../src/cockpit/theme.ts");
 const { READY_INK } = await import("../src/shared/pr-colors.ts");
+const { P } = await import("../src/shared/palette.ts");
+const status = await import("../src/cockpit/status.ts");
+const prs = await import("../src/shared/prs.ts");
+const chips = await import("../src/cockpit/card-chips.ts");
 
 // WCAG relative luminance of a #RRGGBB colour, and the contrast ratio of two.
 const luminance = (hex: string): number => {
@@ -133,5 +139,106 @@ describe("headerHint", () => {
 
   it("keeps Parked's merge line faint", () => {
     assert.deepEqual(model.headerHint("parked", false), { text: "1 ready to merge", color: C.faint });
+  });
+});
+
+// HSL saturation of a #RRGGBB colour, 0 to 1: how vivid it reads.
+const saturation = (hex: string): number => {
+  const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16) / 255);
+  const hi = Math.max(r ?? 0, g ?? 0, b ?? 0);
+  const lo = Math.min(r ?? 0, g ?? 0, b ?? 0);
+  const l = (hi + lo) / 2;
+  return hi === lo ? 0 : (hi - lo) / (1 - Math.abs(2 * l - 1));
+};
+
+describe("Ready to merge on the status line (issue #299)", () => {
+  beforeEach(setup);
+
+  const card = (id: string, extra: Partial<Workspace> = {}): Workspace => {
+    const w = r.data.workspaces.find((x) => x.id === id);
+    if (!w) throw new Error("no workspace " + id);
+    Object.assign(w, extra);
+    return w;
+  };
+  const since = (s: number) => ({ sinceEpoch: r.data.epoch - s, lastActivityAt: r.data.epoch - s });
+
+  it("says Ready to merge on an idle card whose PR GitHub would merge, in the vivid green with its halo", () => {
+    const w = card("ready1", { agents: [agent("idle", since(180))] });
+    assert.deepEqual(status.statusInfo(w), {
+      label: "Ready to merge",
+      dot: C.mergeGreen,
+      halo: C.mergeHalo,
+      text: C.mergeText,
+      urgency: "quiet",
+    });
+    assert.equal(status.statusLine(w), "Ready to merge 3m");
+  });
+
+  it("says it on a finished card and one with no agent too", () => {
+    assert.equal(status.statusInfo(card("ready1", { agents: [agent("ended", since(60))] })).label, "Ready to merge");
+    assert.equal(status.statusInfo(card("ready2", { agents: [] })).label, "Ready to merge");
+  });
+
+  it("leaves a working or waiting card its own status", () => {
+    assert.equal(status.statusInfo(card("ready1", { agents: [agent("working", since(60))] })).label, "Working");
+    assert.equal(status.statusInfo(card("ready2", { agents: [agent("needs_input", since(60))] })).label, "Your turn");
+  });
+
+  it("leaves an agent whose status it does not know as it was, since it may yet be busy", () => {
+    // A word cmux may send that renderer.d.ts does not list: the cast stands
+    // in for data the type cannot describe.
+    const thinking = agent("thinking" as AgentStatus, since(60));
+    assert.notEqual(status.statusInfo(card("ready1", { agents: [thinking] })).label, "Ready to merge");
+  });
+
+  it("says nothing of a PR that is not ready", () => {
+    for (const id of ["draft", "failing", "conflicts", "running", "blocked", "noVerdict"]) {
+      assert.equal(status.statusInfo(card(id, { agents: [agent("idle", since(60))] })).label, "Idle", id);
+    }
+  });
+
+  it("wins over Ready, and the unread badge then says there is output", () => {
+    const w = card("ready1", { unread: 2, agents: [agent("idle", since(120))] });
+    assert.equal(status.isReady(w), true, "the agent finished with output unread");
+    assert.equal(status.statusInfo(w).label, "Ready to merge");
+    assert.equal(status.showsReady(w), false, "no Ready pill");
+    assert.equal(status.badgeCount(w), 2);
+  });
+
+  it("keeps a Ready card's pill when its PR is not ready", () => {
+    const w = card("failing", { unread: 2, agents: [agent("idle", since(120))] });
+    assert.equal(status.showsReady(w), true);
+    assert.equal(status.badgeCount(w), 0);
+  });
+
+  it("drops the PR's state words once the status says it, keeping its number (decided 1a)", () => {
+    const ready = card("ready1", { agents: [agent("idle", since(180))] });
+    const pr = prs.prSummary(ready);
+    assert.equal(status.compactPrText(status.cardPrWords(ready, pr)), "· #1", "compact: Ready to merge 3m · #1");
+    const chip = chips.chipsFor(ready, true).find((c) => c.id === "pr");
+    assert.deepEqual(chip && { ...chip }, { id: "pr", tag: "#1", state: "", health: "ready", diff: "", url: open.url });
+    // Working on the same ready PR, the status says Working, so the chip keeps "ready".
+    const busy = card("ready2", { agents: [agent("working", since(60))] });
+    assert.equal(status.compactPrText(status.cardPrWords(busy, prs.prSummary(busy))), "· #2 · ready");
+    const busyChip = chips.chipsFor(busy, true).find((c) => c.id === "pr");
+    assert.equal(busyChip && "state" in busyChip ? busyChip.state : undefined, "ready");
+    // Idle on a shell its own chat still runs, the status says Waiting, so the chip keeps "ready" there too.
+    const waiting = card("ready2", { agents: [agent("idle", { id: "shell-chat", ...since(60) })] });
+    assert.equal(status.statusInfo(waiting).label, "Waiting");
+    assert.equal(status.compactPrText(status.cardPrWords(waiting, prs.prSummary(waiting))), "· #2 · ready");
+    const waitingChip = chips.chipsFor(waiting, true).find((c) => c.id === "pr");
+    assert.equal(waitingChip && "state" in waitingChip ? waitingChip.state : undefined, "ready");
+  });
+
+  it("leaves a header's pill grey", () => {
+    const w = card("ready1", { agents: [agent("idle", since(60))] });
+    assert.equal(status.urgencyOf(w), "quiet");
+  });
+
+  it("is its own green: vivid beside the finished olive, its words readable on the white card", () => {
+    assert.ok(saturation(P.mergeGreen) - saturation(P.green) >= 0.3);
+    assert.ok(saturation(P.mergeText) - saturation(P.greenText) >= 0.3);
+    assert.ok(contrast(P.mergeText, "#FFFFFF") >= 4.5);
+    assert.equal(P.mergeHalo, P.mergeGreen + "47");
   });
 });

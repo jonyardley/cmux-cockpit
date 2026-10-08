@@ -74,9 +74,17 @@ impl Session {
             out.push(Chip::Size { text, size });
         }
         if let Some(pr) = pr_summary(&self.saved, Some(w)) {
+            // Its state words go once the status says Ready to merge:
+            // "ready" would only say it again, so the chip keeps its
+            // number (issue #299).
+            let state = if self.shows_merge_ready(Some(w)) {
+                String::new()
+            } else {
+                pr.state
+            };
             out.push(Chip::Pr {
                 tag: pr.tag,
-                state: pr.state,
+                state,
                 health: pr.health,
                 diff: pr.diff,
                 url: pr.url.filter(|u| !u.is_empty()),

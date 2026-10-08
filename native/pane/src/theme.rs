@@ -32,6 +32,7 @@ const AMBER_TEXT: u32 = 0x8A5A0B;
 const INK_HEADING: u32 = 0x3D3D3A;
 const RED: u32 = 0xC0453A;
 const GREEN_DEEP: u32 = 0x3F5A2B;
+const MERGE_GREEN: u32 = 0x1DB954;
 
 /// `rgb` at `alpha` (0 to 255) laid over `under`, per channel, rounded.
 pub fn blend(rgb: u32, alpha: u8, under: u32) -> u32 {
@@ -90,6 +91,9 @@ pub fn hex(t: Token) -> u32 {
         Token::LaneReview => 0x5E5D59,
         Token::LaneParked => 0xB0AEA5,
         Token::LaneUnsorted => 0xC9C6BB,
+        Token::MergeGreen => MERGE_GREEN,
+        Token::MergeHalo => blend(MERGE_GREEN, 0x47, GROUND),
+        Token::MergeText => 0x12873B,
     }
 }
 
@@ -181,7 +185,13 @@ mod tests {
 
     #[test]
     fn keeps_each_state_hue_apart() {
-        let hues = [Token::Blue, Token::Clay, Token::Green, Token::Amber];
+        let hues = [
+            Token::Blue,
+            Token::Clay,
+            Token::Green,
+            Token::Amber,
+            Token::MergeGreen,
+        ];
         for (i, a) in hues.iter().enumerate() {
             for b in &hues[i + 1..] {
                 assert_ne!(hex(*a), hex(*b));

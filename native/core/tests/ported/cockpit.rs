@@ -1439,6 +1439,7 @@ mod pr_text_color {
             tag: "#1".into(),
             text: "#1".into(),
             state: String::new(),
+            title: String::new(),
             diff: String::new(),
         }
     }

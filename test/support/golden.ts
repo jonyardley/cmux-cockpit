@@ -94,6 +94,7 @@ function placement({ model: m, byProject, status }: Model): Record<string, Json>
         lane: m.laneOf(w),
         project: byProject.projectKey(w),
         status: status.statusOf(w),
+        statusLine: status.statusLine(w),
       },
     ]),
   );

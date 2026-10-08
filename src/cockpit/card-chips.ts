@@ -2,7 +2,7 @@
 
 import { type MoveSize, moveSize, moveSizeText } from "../shared/move.ts";
 import { type PrHealth, prSummary } from "../shared/prs.ts";
-import { moveOf } from "./status.ts";
+import { moveOf, showsMergeReady } from "./status.ts";
 
 // --- Card chips (issue #48) ------------------------------------------------------------
 
@@ -54,7 +54,10 @@ export function chipsFor(w: Workspace | undefined, withBranch: boolean): Chip[] 
   if (move && size) out.push({ id: "size", text: moveSizeText(size, move.decisions), size });
   const pr = prSummary(w);
   if (pr) {
-    const c: PrChip = { id: "pr", tag: pr.tag, state: pr.state, health: pr.health, diff: pr.diff };
+    // Its state words go once the status says Ready to merge: "ready" would
+    // only say it again, so the chip keeps its number (issue #299).
+    const state = showsMergeReady(w) ? "" : pr.state;
+    const c: PrChip = { id: "pr", tag: pr.tag, state, health: pr.health, diff: pr.diff };
     if (pr.url) c.url = pr.url;
     out.push(c);
   }

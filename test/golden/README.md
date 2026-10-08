@@ -98,6 +98,7 @@ What the model computes, at the scene's clock.
 | `placement.<id>.density` | string | How big its card draws: "full", "compact" or "row". |
 | `placement.<id>.card` | boolean | Whether it is a card; false for a lane's generated anchor. |
 | `placement.<id>.status` | string | Its agent status: "working", "needs_input", "idle", "ended" or "none". |
+| `placement.<id>.statusLine` | string | Its card's status line as the card says it: "Working 14m", "Ready to merge 3m", "Asking". |
 | `placement.<id>.project` | string | Its project key, "other" when none matches. |
 | `laneHeaders` | object | Lane key to its header. |
 | `laneHeaders.<lane>.collapsed` | boolean | Folded or not. |

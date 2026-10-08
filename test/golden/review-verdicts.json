@@ -103,7 +103,7 @@
           "diff": "+120 −8",
           "health": "ready",
           "id": "pr",
-          "state": "ready",
+          "state": "",
           "tag": "#1",
           "url": "https://github.com/o/r/pull/1"
         },
@@ -131,14 +131,7 @@
     "waiting": {
       "cardOpacity": 1,
       "chips": [
-        {
-          "diff": "",
-          "health": "ready",
-          "id": "pr",
-          "state": "ready",
-          "tag": "#9",
-          "url": "https://github.com/o/r/pull/9"
-        },
+        { "diff": "", "health": "ready", "id": "pr", "state": "", "tag": "#9", "url": "https://github.com/o/r/pull/9" },
         { "dirty": false, "id": "br", "text": "feat-9" }
       ],
       "fullLine": { "fitsOneLine": true, "splits": false },
@@ -182,7 +175,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "anchor-review": {
       "actualLane": "review",
@@ -190,7 +184,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "blocked": {
       "actualLane": "review",
@@ -198,7 +193,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "closed": {
       "actualLane": "review",
@@ -206,7 +202,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "conflicts": {
       "actualLane": "review",
@@ -214,7 +211,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "draft": {
       "actualLane": "review",
@@ -222,7 +220,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "failing": {
       "actualLane": "review",
@@ -230,7 +229,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "merged": {
       "actualLane": "review",
@@ -238,7 +238,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "ready": {
       "actualLane": "review",
@@ -246,7 +247,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "Ready to merge"
     },
     "running": {
       "actualLane": "review",
@@ -254,7 +256,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "waiting": {
       "actualLane": "main",
@@ -262,7 +265,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "Ready to merge"
     }
   },
   "projectEntries": [

@@ -94,7 +94,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "one-a": {
       "actualLane": "unsorted",
@@ -102,7 +103,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "/dev/app-one",
-      "status": "working"
+      "status": "working",
+      "statusLine": "Working 7m"
     },
     "one-b": {
       "actualLane": "unsorted",
@@ -110,7 +112,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "/dev/app-one",
-      "status": "needs_input"
+      "status": "needs_input",
+      "statusLine": "Your turn 1m"
     },
     "two": {
       "actualLane": "unsorted",
@@ -118,7 +121,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "/dev/app-two",
-      "status": "idle"
+      "status": "idle",
+      "statusLine": "Finished 10m"
     },
     "two-merged": {
       "actualLane": "unsorted",
@@ -126,7 +130,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "/dev/app-two",
-      "status": "idle"
+      "status": "idle",
+      "statusLine": "Idle 15m"
     }
   },
   "projectEntries": [

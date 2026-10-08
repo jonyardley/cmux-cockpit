@@ -61,6 +61,13 @@ pub enum Token {
     LaneBackground,
     LaneParked,
     LaneUnsorted,
+    /// Ready to merge's dot (issue #299): palette.ts's vivid mergeGreen,
+    /// never the finished olive.
+    MergeGreen,
+    /// Ready to merge's halo: its dot's green, faint.
+    MergeHalo,
+    /// Ready to merge in words, a step darker than its dot.
+    MergeText,
 }
 
 /// A project's own colour, "#D97757" as the table writes it; None for

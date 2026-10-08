@@ -170,7 +170,8 @@
       "density": "compact",
       "lane": "bg",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "anchor-main": {
       "actualLane": "main",
@@ -178,7 +179,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "anchor-parked": {
       "actualLane": "parked",
@@ -186,7 +188,8 @@
       "density": "row",
       "lane": "parked",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "anchor-review": {
       "actualLane": "review",
@@ -194,7 +197,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "asking": {
       "actualLane": "main",
@@ -202,7 +206,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "needs_input"
+      "status": "needs_input",
+      "statusLine": "Asking 2m"
     },
     "ended": {
       "actualLane": "review",
@@ -210,7 +215,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "ended"
+      "status": "ended",
+      "statusLine": "Finished 15m"
     },
     "idle": {
       "actualLane": "review",
@@ -218,7 +224,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "idle"
+      "status": "idle",
+      "statusLine": "Idle 1h"
     },
     "loose": {
       "actualLane": "unsorted",
@@ -226,7 +233,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "/dev/app-one",
-      "status": "working"
+      "status": "working",
+      "statusLine": "Working 3m"
     },
     "loose-merged": {
       "actualLane": "unsorted",
@@ -234,7 +242,8 @@
       "density": "row",
       "lane": "unsorted",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "merged": {
       "actualLane": "main",
@@ -242,7 +251,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "idle"
+      "status": "idle",
+      "statusLine": "Idle 15m"
     },
     "needs": {
       "actualLane": "main",
@@ -250,7 +260,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "needs_input"
+      "status": "needs_input",
+      "statusLine": "Your turn 5m"
     },
     "none": {
       "actualLane": "bg",
@@ -258,7 +269,8 @@
       "density": "compact",
       "lane": "bg",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "parked": {
       "actualLane": "parked",
@@ -266,7 +278,8 @@
       "density": "row",
       "lane": "parked",
       "project": "other",
-      "status": "working"
+      "status": "working",
+      "statusLine": "Working 5m"
     },
     "quiet": {
       "actualLane": "main",
@@ -274,7 +287,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "working"
+      "status": "working",
+      "statusLine": "Working 40m · quiet 17m"
     },
     "ready": {
       "actualLane": "main",
@@ -282,7 +296,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "idle"
+      "status": "idle",
+      "statusLine": "Finished 6m"
     },
     "selected": {
       "actualLane": "main",
@@ -290,7 +305,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "working"
+      "status": "working",
+      "statusLine": "Working 1m"
     },
     "untimed": {
       "actualLane": "main",
@@ -298,7 +314,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "idle"
+      "status": "idle",
+      "statusLine": "Idle"
     },
     "waiting": {
       "actualLane": "bg",
@@ -306,7 +323,8 @@
       "density": "compact",
       "lane": "bg",
       "project": "other",
-      "status": "idle"
+      "status": "idle",
+      "statusLine": "Waiting 4m · 1 shell"
     },
     "working": {
       "actualLane": "main",
@@ -314,7 +332,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "working"
+      "status": "working",
+      "statusLine": "Working 14m"
     }
   },
   "projectEntries": [

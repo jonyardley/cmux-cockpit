@@ -25,6 +25,8 @@ const STATE: &str = r#"{"prs": {
     "blocked": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 10, "mergeable": false},
     "noChecks": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [], "number": 11, "mergeable": true},
     "anchor-parked": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 12, "mergeable": true}
+}, "shells": {
+    "ready2": [{"id": "b1", "session": "shell-chat", "startedEpoch": 100}]
 }}"#;
 
 fn setup() -> (Session, Data, Fx) {
@@ -166,5 +168,181 @@ mod header_hint {
                 color: Token::Faint,
             }
         );
+    }
+}
+
+/// Ready to merge on the status line (issue #299).
+mod merge_ready_status {
+    use super::*;
+    use cockpit_core::card_chips::Chip;
+    use cockpit_core::data::{Agent, AgentStatus, Workspace};
+    use cockpit_core::prs::pr_summary;
+    use cockpit_core::status::{StatusKind, compact_pr_text};
+    use cockpit_core::ui::Urgency;
+
+    /// The workspace `id` with `agents`, and `unread` unread.
+    fn card(data: &mut Data, id: &str, agents: Vec<Agent>, unread: f64) -> Workspace {
+        let w = ws_mut(data, id);
+        w.agents = Some(agents.into_iter().map(Some).collect());
+        w.unread = Some(unread);
+        w.clone()
+    }
+
+    /// An agent of `status` whose status began, and whose last activity
+    /// was, `ago` seconds back.
+    fn at(fx: &mut Fx, status: AgentStatus, ago: f64) -> Agent {
+        fx.agent(status).since(NOW - ago).activity(NOW - ago)
+    }
+
+    #[test]
+    fn says_ready_to_merge_on_an_idle_card_whose_pr_github_would_merge_in_the_vivid_green() {
+        let (mut s, mut data, mut fx) = setup();
+        let w = card(&mut data, "ready1", vec![at(&mut fx, Idle, 180.0)], 0.0);
+        let info = s.status_info(&data, Some(&w));
+        assert_eq!(info.label, "Ready to merge");
+        assert_eq!(info.dot, Some(Token::MergeGreen));
+        assert_eq!(info.halo, Token::MergeHalo);
+        assert_eq!(info.text, Token::MergeText);
+        assert_eq!(info.urgency, Urgency::Quiet);
+        assert_eq!(s.status_line(&data, Some(&w)), "Ready to merge 3m");
+    }
+
+    #[test]
+    fn says_it_on_a_finished_card_and_one_with_no_agent_too() {
+        let (mut s, mut data, mut fx) = setup();
+        let ended = card(&mut data, "ready1", vec![at(&mut fx, Ended, 60.0)], 0.0);
+        let none = card(&mut data, "ready2", vec![], 0.0);
+        for w in [ended, none] {
+            assert_eq!(
+                s.status_kind(&data, Some(&w)),
+                StatusKind::MergeReady,
+                "{}",
+                w.id
+            );
+        }
+    }
+
+    #[test]
+    fn leaves_a_working_or_waiting_card_its_own_status() {
+        let (mut s, mut data, mut fx) = setup();
+        let working = card(&mut data, "ready1", vec![at(&mut fx, Working, 60.0)], 0.0);
+        let turn = card(
+            &mut data,
+            "ready2",
+            vec![at(&mut fx, NeedsInput, 60.0)],
+            0.0,
+        );
+        assert_eq!(s.status_info(&data, Some(&working)).label, "Working");
+        assert_eq!(s.status_info(&data, Some(&turn)).label, "Your turn");
+    }
+
+    #[test]
+    fn leaves_an_agent_whose_status_it_does_not_know_as_it_was_since_it_may_yet_be_busy() {
+        let (mut s, mut data, mut fx) = setup();
+        let thinking = at(&mut fx, AgentStatus::Other("thinking".into()), 60.0);
+        let w = card(&mut data, "ready1", vec![thinking], 0.0);
+        assert_ne!(s.status_kind(&data, Some(&w)), StatusKind::MergeReady);
+    }
+
+    #[test]
+    fn says_nothing_of_a_pr_that_is_not_ready() {
+        let (mut s, mut data, mut fx) = setup();
+        for id in [
+            "draft",
+            "failing",
+            "conflicts",
+            "running",
+            "blocked",
+            "noVerdict",
+        ] {
+            let w = card(&mut data, id, vec![at(&mut fx, Idle, 60.0)], 0.0);
+            assert_eq!(s.status_info(&data, Some(&w)).label, "Idle", "{id}");
+        }
+    }
+
+    #[test]
+    fn wins_over_ready_and_the_unread_badge_then_says_there_is_output() {
+        let (mut s, mut data, mut fx) = setup();
+        let w = card(&mut data, "ready1", vec![at(&mut fx, Idle, 120.0)], 2.0);
+        assert!(
+            s.is_ready(&data, Some(&w)),
+            "the agent finished with output unread"
+        );
+        assert_eq!(s.status_kind(&data, Some(&w)), StatusKind::MergeReady);
+        assert!(!s.shows_ready(&data, Some(&w)), "no Ready pill");
+        assert_eq!(s.badge_count(&data, Some(&w)), 2.0);
+    }
+
+    #[test]
+    fn keeps_a_ready_cards_pill_when_its_pr_is_not_ready() {
+        let (mut s, mut data, mut fx) = setup();
+        let w = card(&mut data, "failing", vec![at(&mut fx, Idle, 120.0)], 2.0);
+        assert!(s.shows_ready(&data, Some(&w)));
+        assert_eq!(s.badge_count(&data, Some(&w)), 0.0);
+    }
+
+    #[test]
+    fn drops_the_prs_state_words_once_the_status_says_it_keeping_its_number_decided_1a() {
+        let (mut s, mut data, mut fx) = setup();
+        let words = |s: &mut Session, w: &Workspace| {
+            let pr = pr_summary(&s.saved, Some(w)).expect("a PR");
+            compact_pr_text(Some(&s.card_pr_words(Some(w), &pr)))
+        };
+        let state = |s: &mut Session, w: &Workspace| {
+            s.chips_for(Some(w), true)
+                .into_iter()
+                .find_map(|c| match c {
+                    Chip::Pr { tag, state, .. } => Some((tag, state)),
+                    _ => None,
+                })
+        };
+        let ready = card(&mut data, "ready1", vec![at(&mut fx, Idle, 180.0)], 0.0);
+        assert_eq!(
+            words(&mut s, &ready),
+            "· #1",
+            "compact: Ready to merge 3m · #1"
+        );
+        assert_eq!(state(&mut s, &ready), Some(("#1".into(), String::new())));
+        // Working on the same ready PR, the status says Working, so the chip keeps "ready".
+        let busy = card(&mut data, "ready2", vec![at(&mut fx, Working, 60.0)], 0.0);
+        assert_eq!(words(&mut s, &busy), "· #2 · ready");
+        assert_eq!(state(&mut s, &busy), Some(("#2".into(), "ready".into())));
+        // Idle on a shell its own chat still runs, the status says Waiting,
+        // so the chip keeps "ready" there too.
+        let shell = fx.agent(Idle).id("shell-chat").since(NOW - 60.0);
+        let waiting = card(&mut data, "ready2", vec![shell], 0.0);
+        assert_eq!(s.status_kind(&data, Some(&waiting)), StatusKind::Waiting);
+        assert_eq!(words(&mut s, &waiting), "· #2 · ready");
+        assert_eq!(state(&mut s, &waiting), Some(("#2".into(), "ready".into())));
+    }
+
+    #[test]
+    fn drops_the_words_exactly_when_the_status_says_ready_to_merge() {
+        // shows_merge_ready takes no Data, so it copies status_kind's first
+        // rule rather than asking it: this holds the two to one answer.
+        let (mut s, mut data, mut fx) = setup();
+        let cards = [
+            ("ready1", vec![at(&mut fx, Idle, 180.0)], 0.0),
+            ("ready1", vec![at(&mut fx, Idle, 120.0)], 2.0),
+            ("ready1", vec![at(&mut fx, Ended, 60.0)], 0.0),
+            ("ready2", vec![], 0.0),
+            ("ready1", vec![at(&mut fx, Working, 60.0)], 0.0),
+            ("ready1", vec![at(&mut fx, NeedsInput, 60.0)], 0.0),
+            ("ready2", vec![fx.agent(Idle).id("shell-chat")], 0.0),
+            ("failing", vec![at(&mut fx, Idle, 120.0)], 2.0),
+            ("draft", vec![at(&mut fx, Idle, 60.0)], 0.0),
+        ];
+        for (id, agents, unread) in cards {
+            let w = card(&mut data, id, agents, unread);
+            let says = s.status_kind(&data, Some(&w)) == StatusKind::MergeReady;
+            assert_eq!(s.shows_merge_ready(Some(&w)), says, "{id}");
+        }
+    }
+
+    #[test]
+    fn leaves_a_headers_pill_grey() {
+        let (mut s, mut data, mut fx) = setup();
+        let w = card(&mut data, "ready1", vec![at(&mut fx, Idle, 60.0)], 0.0);
+        assert_eq!(s.urgency_of(&data, Some(&w)), Urgency::Quiet);
     }
 }
