@@ -40,6 +40,8 @@ CLAUDE.local.md
 
 # Rust build output under native/.
 native/**/target/
+# Swift Package Manager's build folder under native/mac, never committed.
+native/mac/.build/
 
 # The macOS helper app's fetched SDK, generated project and build output
 # are ignored by native/mac/.gitignore.

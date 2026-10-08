@@ -144,7 +144,7 @@ struct DenseRow: View {
                     .layoutPriority(1)
                 Spacer(minLength: 4)
                 if !card.unread.isEmpty { UnreadBadge(count: card.unread) }
-                if !card.age.isEmpty { MetaText(text: card.age, ink: Color(Token.metaText)) }
+                if !card.age.isEmpty { MetaText(text: card.age, ink: Color(CardText.ageInk(card) ?? .metaText)) }
                 if card.pinned { PinMark() }
             }
             LeftOff(text: card.leftOff).padding(.leading, CardLook.rowIndent)
@@ -207,10 +207,15 @@ struct TitleRow: View {
             if card.ready { ReadyPill() }
             if !card.unread.isEmpty { UnreadBadge(count: card.unread) }
             let age = CardText.titleAge(card)
-            if !age.isEmpty { MetaText(text: age, ink: Color(Palette.Own.tertiary)) }
+            if !age.isEmpty { MetaText(text: age, ink: ageInk) }
             if card.pinned { PinMark() }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// The waiting ink while the card waits on Jon, else the third ink.
+    private var ageInk: Color {
+        CardText.ageInk(card).map { Color($0) } ?? Color(Palette.Own.tertiary)
     }
 }
 
@@ -395,7 +400,9 @@ extension View {
 /// on cmux's selected workspace (status.ts outline); a step darker under
 /// the pointer. A quiet row has no face or edge until it is selected, and
 /// takes the hover wash. A merged card nothing in wants sits dimmed, at
-/// full strength under the pointer.
+/// full strength under the pointer. A card waiting on Jon carries a 4pt
+/// leading edge in its clay or amber (issue #281), under the outline so
+/// the selection still reads.
 struct CardChrome: ViewModifier {
     let card: Card
     let radius: CGFloat
@@ -406,6 +413,7 @@ struct CardChrome: ViewModifier {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(face, in: .rect(cornerRadius: radius))
+            .overlay { WaitingEdge(card: card, radius: radius) }
             .overlay(Outline(selected: card.selected, radius: radius, rest: quiet ? .clear : .cardEdge))
             .opacity(card.dimmed && !hovering ? CardLook.dimmed : 1)
             .onHover { hovering = $0 }
@@ -415,6 +423,24 @@ struct CardChrome: ViewModifier {
     private var face: Color {
         if quiet && !card.selected { return hovering ? Color(Palette.Own.hover) : .clear }
         return Color(hovering ? Palette.Own.cardHover : Palette.Own.card)
+    }
+}
+
+/// The leading edge down a card waiting on Jon, clipped by the card's
+/// rounded shape; nothing on any other card.
+struct WaitingEdge: View {
+    let card: Card
+    let radius: CGFloat
+
+    var body: some View {
+        if let edge = CardText.edge(card) {
+            HStack(spacing: 0) {
+                Rectangle().fill(Color(edge)).frame(width: Metrics.waitingEdge)
+                Spacer(minLength: 0)
+            }
+            .clipShape(.rect(cornerRadius: radius))
+            .allowsHitTesting(false)
+        }
     }
 }
 
@@ -434,31 +460,13 @@ struct Outline: View {
     }
 }
 
-/// Where a card waiting in Needs you would sit: faint, one line.
-struct GhostRow: View {
-    let title: String
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(Words.ghost)
-            Text(CardText.ghost(title: title, text: text)).lineLimit(1).truncationMode(.tail)
-        }
-        .font(.system(size: Metrics.body))
-        .foregroundStyle(Color(Token.faint))
-        .padding(.horizontal, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-/// A lane's row, card or placeholder.
+/// A lane's row: its card.
 struct RowView: View {
     let row: Row
 
     var body: some View {
         switch row {
         case .card(let card): LaneCard(card: card)
-        case .ghost(_, let title, let text, _): GhostRow(title: title, text: text)
         }
     }
 }
