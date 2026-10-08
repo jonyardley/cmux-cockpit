@@ -154,7 +154,7 @@ mod tests {
                 ..Workspace::default()
             })
             .to_vec();
-        feed.input(Input::Workspaces(list));
+        feed.input(Input::Workspaces(list, 0.0));
         let e = json!({"type": "event", "seq": 1, "name": "agent.hook.PermissionRequest",
                        "occurred_at": "1970-01-01T00:00:01Z",
                        "payload": {"_ppid": 7, "workspace_id": "B"}});

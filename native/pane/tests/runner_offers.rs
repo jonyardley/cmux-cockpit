@@ -26,10 +26,10 @@ fn project_offers(home: Option<&str>) -> Vec<(String, Option<String>)> {
         directory: Some(dir.to_string()),
         ..ws(id)
     };
-    feed.input(Input::Workspaces(vec![
-        in_dir("A", "/Users/me/dev/app"),
-        in_dir("H", "/Users/me"),
-    ]));
+    feed.input(Input::Workspaces(
+        vec![in_dir("A", "/Users/me/dev/app"), in_dir("H", "/Users/me")],
+        0.0,
+    ));
     feed.act(Event::FlipView);
     feed.frame(1_791_127_100.0);
     let pane = Panel::from_core(&mut feed.model);
