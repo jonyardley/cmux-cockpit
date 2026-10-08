@@ -1331,6 +1331,33 @@ mod tests {
     }
 
     #[test]
+    fn the_layout_poll_stamps_a_list_with_when_it_was_asked_for() {
+        let (tx, rx) = mpsc::channel();
+        let (nudge_tx, nudge_rx) = mpsc::channel::<()>();
+        drop(nudge_tx);
+        let started = Arc::new(std::sync::Mutex::new(0.0));
+        let at_read = Arc::clone(&started);
+        // A slow read: the stamp is from before it began, not when it answered.
+        let list = move || {
+            if let Ok(mut t) = at_read.lock() {
+                *t = now_epoch();
+            }
+            thread::sleep(Duration::from_millis(50));
+            Some((vec![ws("A")], None))
+        };
+        poll_layout(&tx, &nudge_rx, Duration::from_secs(600), list, |_| None);
+        let began = started.lock().map(|t| *t).unwrap_or_default();
+        let asked = rx.try_iter().find_map(|i| match i {
+            Input::Workspaces(_, asked) => Some(asked),
+            _ => None,
+        });
+        assert!(
+            asked.is_some_and(|a| a <= began && began - a < 0.05),
+            "{asked:?} {began}"
+        );
+    }
+
+    #[test]
     fn a_failed_group_read_keeps_the_last_good_one() {
         let (tx, rx) = mpsc::channel();
         let (nudge_tx, nudge_rx) = mpsc::channel::<()>();

@@ -63,8 +63,9 @@ pub struct Join {
     workspaces: Option<Vec<Workspace>>,
     groups: Option<Groups>,
     selected: Option<String>,
-    /// When the selection event that set `selected` happened, in epoch
-    /// seconds: a list asked for before then answers from before it.
+    /// When `selected` was last set, in epoch seconds: a selection
+    /// event's `occurred_at`, or when the list that set it was asked for.
+    /// Word from before then gives way (issue #301).
     selected_at: Option<f64>,
     /// pid to workspace, from a status write.
     tab_of: HashMap<u32, String>,
@@ -113,6 +114,8 @@ impl Join {
             .as_u64()
             .unwrap_or_default();
         if after == 0 {
+            // A new cmux boot: its events and lists start the selection afresh.
+            self.selected_at = None;
             self.tab_of.clear();
             self.sessions.clear();
             self.absent.clear();
@@ -140,24 +143,29 @@ impl Join {
         true
     }
 
-    /// Takes a new workspace list, asked for at `asked` (epoch seconds);
-    /// false when it matches the last one. Its selection wins unless a
-    /// selection event happened after it was asked for: cmux answered
-    /// from before that event, and the outline would jump back to a
-    /// workspace no longer on screen (issue #301). A replayed event
-    /// happened before the list was asked for, so the list wins over it.
+    /// Takes a workspace list, asked for at `asked` (epoch seconds);
+    /// false when neither it nor the selection changed. Its selection
+    /// wins unless a selection event happened after it was asked for:
+    /// cmux answered from before that event, and the outline would jump
+    /// back to a workspace no longer on screen (issue #301). A list the
+    /// same as the last one still gives its selection, since the last one
+    /// may have been held back.
     pub fn workspaces(&mut self, list: Vec<Workspace>, asked: f64) -> bool {
-        if self.workspaces.as_ref() == Some(&list) {
-            return false;
-        }
+        let mut changed = false;
         if self.selected_at.is_none_or(|at| at < asked) {
-            self.selected = list
+            let selected = list
                 .iter()
                 .find(|w| w.selected == Some(true))
                 .map(|w| w.id.clone());
+            changed = selected != self.selected;
+            self.selected = selected;
+            self.selected_at = Some(asked);
         }
-        self.workspaces = Some(list);
-        true
+        if self.workspaces.as_ref() != Some(&list) {
+            self.workspaces = Some(list);
+            changed = true;
+        }
+        changed
     }
 
     /// Takes a fresh group list; false when nothing changed.
@@ -240,7 +248,15 @@ impl Join {
         if p["selected"] == false {
             return false;
         }
-        self.selected_at = at;
+        // One from before the selection was last set (a replayed event
+        // landing after the list) gives way. One with no time cmux gave
+        // counts as new and keeps the stamp it found.
+        if let Some(at) = at {
+            if self.selected_at.is_some_and(|last| at < last) {
+                return false;
+            }
+            self.selected_at = Some(at);
+        }
         if self.selected.as_deref() == Some(id) {
             return false;
         }
@@ -712,6 +728,51 @@ mod tests {
         j.event(&select_at("B", 20));
         assert!(j.workspaces(vec![selected("A"), ws("B")], 10.0));
         assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("B"));
+    }
+
+    #[test]
+    fn a_held_back_list_does_not_hide_the_next_one_like_it() {
+        let mut j = Join::default();
+        j.workspaces(vec![selected("A"), ws("B")], 0.0);
+        j.event(&select_at("B", 20));
+        j.workspaces(vec![selected("A"), ws("B")], 10.0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("B"));
+        // Jon went back to A with no event: the next list, the same as
+        // the held-back one, is the only word and must land.
+        assert!(j.workspaces(vec![selected("A"), ws("B")], 30.0));
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("A"));
+        assert!(!j.workspaces(vec![selected("A"), ws("B")], 40.0));
+    }
+
+    #[test]
+    fn a_replayed_selection_landing_after_the_list_gives_way() {
+        let mut j = Join::default();
+        j.workspaces(vec![selected("A"), ws("B")], 50.0);
+        assert!(!j.event(&select_at("B", 20)).0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("A"));
+        // A newer one still moves it.
+        assert!(j.event(&select_at("B", 55)).0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("B"));
+    }
+
+    #[test]
+    fn a_new_cmux_boot_starts_the_selection_afresh() {
+        let mut j = Join::default();
+        j.event(&select_at("B", 50));
+        j.event(&ack(0, 10));
+        j.workspaces(vec![selected("A"), ws("B")], 30.0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("A"));
+    }
+
+    #[test]
+    fn a_selection_with_no_time_moves_it_and_keeps_the_guard() {
+        let mut j = Join::default();
+        j.event(&select_at("B", 20));
+        let untimed = json!({"type": "event", "seq": 2, "name": "workspace.selected",
+                             "payload": {"workspace_id": "C", "selected": true}});
+        assert!(j.event(&untimed).0);
+        j.workspaces(vec![selected("A"), ws("B"), ws("C")], 10.0);
+        assert_eq!(j.frame(0.0).selected_id.as_deref(), Some("C"));
     }
 
     #[test]
