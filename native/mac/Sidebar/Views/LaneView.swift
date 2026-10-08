@@ -179,10 +179,14 @@ struct LaneHeader: View {
 
 /// A lane: its header, then its rows (none while folded). Its cards drag
 /// within it and to other lanes, and the whole lane takes a drop
-/// (Drag.swift); the core draws a drop where it landed.
+/// (Drag.swift); the core draws a drop where it landed. While a card is
+/// dragged over it, its other cards slide apart to open a gap the card's
+/// size where it will land.
 struct LaneView: View {
     /// The header's key among the lane's frames.
     nonisolated static let header = "header"
+    /// How long the cards take to slide apart for the gap, in seconds.
+    private static let slide = 0.15
 
     let lane: Lane
     /// The lane's top in the lanes' space, for the floating card.
@@ -192,18 +196,19 @@ struct LaneView: View {
 
     var body: some View {
         let space = "lane:" + String(describing: lane.key)
+        let room = room
         VStack(alignment: .leading, spacing: Metrics.cardGap) {
             LaneHeader(lane: lane, target: drag.over?.lane == lane.key)
                 .foldsOnClick(lane.empty ? nil : .toggleLane(lane.key))
                 .reportsFrame(Self.header, in: space)
-            ForEach(lane.rows) { row in
+            ForEach(DropRule.shown(lane.rows, lifted: drag.lifted, gap: room.gap)) { row in
                 RowView(row: row)
-                    .liftable(row, in: lane.key, state: drag)
+                    .liftable(row, in: lane.key, state: drag, frame: frames[row.id], folded: room.folded)
                     .reportsFrame(row.id, in: space)
             }
         }
+        .animation(.easeOut(duration: Self.slide), value: room)
         .coordinateSpace(name: space)
-        .overlay(alignment: .topLeading) { landing }
         .onPreferenceChange(RowFrames.self) { next in
             MainActor.assumeIsolated { if next != frames { frames = next } }
         }
@@ -218,11 +223,18 @@ struct LaneView: View {
         }
     }
 
-    @ViewBuilder
-    private var landing: some View {
-        if let over = drag.over, over.lane == lane.key,
-           let y = LandingSpot.y(before: lane.collapsed ? nil : over.before, rows: lane.collapsed ? [] : lane.rows, frames: frames) {
-            LandingLine().offset(y: y - 1).allowsHitTesting(false)
-        }
+    /// Where this lane draws the gap, and whether the lifted card's own
+    /// row folds away because the gap is in another lane.
+    private var room: Room {
+        let gap = DropRule.gap(
+            in: lane.key, rows: lane.rows, collapsed: lane.collapsed, lifted: drag.lifted, from: drag.from, over: drag.over
+        )
+        let own = drag.lifted.map { card in lane.rows.contains { DropRule.isCard($0, card.wsId) } } ?? false
+        return Room(gap: gap, folded: own && gap == nil)
+    }
+
+    private struct Room: Equatable {
+        let gap: Int?
+        let folded: Bool
     }
 }
