@@ -69,7 +69,6 @@ test("validateState reads a good file unchanged", () => {
       w9: { text: "go", epoch: 303 },
       w10: { text: "CI is running.", epoch: 304, idle: true },
     },
-    mergeKept: { w5: 400 },
     ui: { mode: "projects", collapsed: { "lane:parked": 0, "project:/dev/a": 1 } },
   };
   assert.deepEqual(validateState(raw), raw);
@@ -97,7 +96,6 @@ test("validateState drops bad ids, bad epochs, bad keys and empty entries", () =
     prOrigins: {},
     asking: {},
     moves: {},
-    mergeKept: {},
     ui: {},
   });
 });
@@ -222,7 +220,6 @@ test("applySet sets, replaces and deletes an entry without changing its input", 
       prOrigins: {},
       asking: {},
       moves: {},
-      mergeKept: {},
       ui: {},
     },
   });
@@ -402,7 +399,6 @@ test("a fold on a project with a long match path is kept, not dropped", () => {
 test("rebuildsOn skips the build for the cockpit's own view and folds only", () => {
   assert.equal(rebuildsOn("ui.mode"), false);
   assert.equal(rebuildsOn("ui.collapsed"), false);
-  assert.equal(rebuildsOn("mergeKept.w1"), false, "the sidebar hides the buttons itself");
   for (const key of ["dismissed.w1", "projectOverride.w1", "projects./dev/a/"])
     assert.equal(rebuildsOn(key), true, key);
 });
@@ -412,15 +408,11 @@ test("a file from when lanes moved themselves drops its seen PR states", () => {
   assert.equal(applySet(emptyState(), "prSeen.w1", JSON.stringify("ready")).ok, false);
 });
 
-test("mergeKept keeps the kept PR's number, and refuses anything else", () => {
-  const set = applySet(emptyState(), "mergeKept.w1", JSON.stringify(400));
-  assert.deepEqual(set.ok && set.state.mergeKept, { w1: 400 });
-  for (const bad of [-1, 0, 1.5, "400", true, { at: 400 }])
-    assert.equal(applySet(emptyState(), "mergeKept.w1", JSON.stringify(bad)).ok, false, String(bad));
-  const cleared = set.ok ? applySet(set.state, "mergeKept.w1", null) : set;
-  assert.deepEqual(cleared.ok && cleared.state.mergeKept, {});
-  assert.deepEqual(validateState({ mergeKept: { w1: 5, w2: "5", w3: -1 } }).mergeKept, { w1: 5 });
-  assert.deepEqual(validateState({}).mergeKept, {}, "a file from before the map reads as empty");
+test("a file from when merged cards had Keep still loads, without its kept PRs", () => {
+  const old = validateState({ mergeKept: { w1: 5 }, projectOverride: { w2: "alpha" } });
+  assert.equal(Object.hasOwn(old, "mergeKept"), false);
+  assert.deepEqual(old.projectOverride, { w2: "alpha" }, "the rest of the file reads as before");
+  assert.equal(applySet(emptyState(), "mergeKept.w1", JSON.stringify(5)).ok, false);
 });
 
 test("cleanLabel cuts by the length isLabel measures, so an astral title still validates", () => {

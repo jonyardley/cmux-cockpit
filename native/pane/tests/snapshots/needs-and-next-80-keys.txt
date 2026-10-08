@@ -20,17 +20,15 @@
  ▎   Your turn: reply "1b 2a" on the bridge and the store.
  ▎ ● Third                                                                  10m
  ▎   Your turn: the work is finished. Run /clear now.
- ▎ ● Fifth, past the ┌ Keys ──────────────────────────────┐                 <1m
- ▎   Your turn: One m│ ↑ ↓        move between cards      │
-   ● Finished while a│ shift ↑ ↓  reorder in its lane     │                  4m
-   ● Busy            │ m 1-5      move to a lane          │                  1m
+ ▎ ● Fifth, past the cap                                                    <1m
+ ▎   Your turn: One more thing
+   ● Finished while a┌ Keys ──────────────────────────────┐                  4m
+   ● Busy            │ ↑ ↓        move between cards      │                  1m
+                     │ shift ↑ ↓  reorder in its lane     │
+                     │ m 1-5      move to a lane          │
                      │ drag       move to a lane or spot  │
                      │ Enter      switch to it            │
                      │ d          dismiss from Needs you  │
-                     │ r          send to For review      │
-                     │ p          park a merged card      │
-                     │ x          close a merged card     │
-                     │ k          keep: hide its buttons  │
                      │ +          session in project      │
                      │ e          edit project            │
                      │ n          new project             │

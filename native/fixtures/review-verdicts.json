@@ -78,21 +78,8 @@
                 "gives_way": true,
                 "url": null,
                 "is_action": false
-              },
-              {
-                "kind": "Action",
-                "pieces": [
-                  {
-                    "text": "To review →",
-                    "ink": "greenDeep"
-                  }
-                ],
-                "gives_way": false,
-                "url": null,
-                "is_action": true
               }
             ],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 2,
@@ -208,12 +195,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -288,7 +269,6 @@
                 "is_action": false
               }
             ],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -404,12 +384,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -466,7 +440,6 @@
                 "is_action": false
               }
             ],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -582,12 +555,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -632,7 +599,6 @@
                 "is_action": false
               }
             ],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -748,12 +714,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -798,7 +758,6 @@
                 "is_action": false
               }
             ],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -914,12 +873,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -964,7 +917,6 @@
                 "is_action": false
               }
             ],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -1080,12 +1032,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -1130,7 +1076,6 @@
                 "is_action": false
               }
             ],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -1246,12 +1191,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -1294,32 +1233,6 @@
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/7",
                 "is_action": false
-              }
-            ],
-            "merged": [
-              {
-                "kind": "Action",
-                "pieces": [
-                  {
-                    "text": "Park",
-                    "ink": "secondary"
-                  }
-                ],
-                "gives_way": false,
-                "url": null,
-                "is_action": true
-              },
-              {
-                "kind": "Action",
-                "pieces": [
-                  {
-                    "text": "Close",
-                    "ink": "text"
-                  }
-                ],
-                "gives_way": false,
-                "url": null,
-                "is_action": true
               }
             ],
             "detail": "",
@@ -1437,12 +1350,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep, hide Park and Close",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -1487,7 +1394,6 @@
                 "is_action": false
               }
             ],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -1599,12 +1505,6 @@
                 "Item": {
                   "label": "Open PR #8",
                   "action": "OpenPr"
-                }
-              },
-              {
-                "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
                 }
               },
               {

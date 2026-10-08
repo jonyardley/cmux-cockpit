@@ -1,73 +1,30 @@
 {
   "chips": {
     "asking": {
-      "canFileForReview": false,
-      "cardChips": [],
       "cardOpacity": 1,
       "chips": [],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": false
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "ended": {
-      "canFileForReview": false,
-      "cardChips": [],
       "cardOpacity": 1,
       "chips": [],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": false
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "idle": {
-      "canFileForReview": false,
-      "cardChips": [],
       "cardOpacity": 1,
       "chips": [],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": false
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "loose": {
-      "canFileForReview": false,
-      "cardChips": [],
       "cardOpacity": 1,
       "chips": [],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": false
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "loose-merged": {
-      "canFileForReview": false,
-      "cardChips": [
-        {
-          "diff": "",
-          "health": "quiet",
-          "id": "pr",
-          "state": "merged",
-          "tag": "#171",
-          "url": "https://github.com/o/r/pull/171"
-        }
-      ],
       "cardOpacity": 0.6,
       "chips": [
         {
@@ -80,27 +37,10 @@
         },
         { "dirty": false, "id": "br", "text": "tidy-strip" }
       ],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep, hide Park and Close",
-      "offersClose": true,
-      "offersMergedActions": true,
-      "offersPark": true,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": true
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "merged": {
-      "canFileForReview": false,
-      "cardChips": [
-        {
-          "diff": "",
-          "health": "quiet",
-          "id": "pr",
-          "state": "merged",
-          "tag": "#176",
-          "url": "https://github.com/o/r/pull/176"
-        }
-      ],
       "cardOpacity": 0.6,
       "chips": [
         {
@@ -113,140 +53,58 @@
         },
         { "dirty": false, "id": "br", "text": "card-layout-fit" }
       ],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep, hide Park and Close",
-      "offersClose": true,
-      "offersMergedActions": true,
-      "offersPark": true,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": true
+      "fullLine": { "fitsOneLine": false, "splits": true },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "needs": {
-      "canFileForReview": false,
-      "cardChips": [],
       "cardOpacity": 1,
       "chips": [],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": false
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "none": {
-      "canFileForReview": false,
-      "cardChips": [{ "dirty": false, "id": "br", "text": "main" }],
       "cardOpacity": 1,
       "chips": [{ "dirty": false, "id": "br", "text": "main" }],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": true
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "parked": {
-      "canFileForReview": false,
-      "cardChips": [],
       "cardOpacity": 1,
       "chips": [],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": false
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "quiet": {
-      "canFileForReview": false,
-      "cardChips": [],
       "cardOpacity": 1,
       "chips": [],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": false
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "ready": {
-      "canFileForReview": true,
-      "cardChips": [],
       "cardOpacity": 1,
       "chips": [],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": true
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "selected": {
-      "canFileForReview": false,
-      "cardChips": [],
       "cardOpacity": 1,
       "chips": [],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": false
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "untimed": {
-      "canFileForReview": false,
-      "cardChips": [],
       "cardOpacity": 1,
       "chips": [],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": false
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "waiting": {
-      "canFileForReview": false,
-      "cardChips": [],
       "cardOpacity": 1,
       "chips": [],
-      "fullLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": true, "secondLineFits": true, "splits": false },
-      "reviewIsGreen": false,
-      "showsChipsRow": false
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
     },
     "working": {
-      "canFileForReview": false,
-      "cardChips": [
-        {
-          "diff": "+342 −17",
-          "health": "quiet",
-          "id": "pr",
-          "state": "draft",
-          "tag": "#130",
-          "url": "https://github.com/o/r/pull/130"
-        },
-        { "dirty": true, "id": "br", "text": "snapshot-tests" }
-      ],
       "cardOpacity": 1,
       "chips": [
         {
@@ -259,14 +117,8 @@
         },
         { "dirty": true, "id": "br", "text": "snapshot-tests" }
       ],
-      "fullLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
-      "keepLabel": "Keep: for a merged PR's buttons",
-      "offersClose": false,
-      "offersMergedActions": false,
-      "offersPark": false,
-      "projectLine": { "fitsOneLine": false, "secondLineFits": true, "splits": true },
-      "reviewIsGreen": false,
-      "showsChipsRow": true
+      "fullLine": { "fitsOneLine": false, "splits": true },
+      "projectLine": { "fitsOneLine": false, "splits": true }
     }
   },
   "laneEntries": [

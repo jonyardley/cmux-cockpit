@@ -191,12 +191,6 @@ fn glued(chips: &[Chip]) -> Vec<Chip> {
     out
 }
 
-/// The cells a run of chips takes on one line, each whole.
-fn chips_width(chips: &[Chip]) -> usize {
-    let gaps = chips.len().saturating_sub(1) * width(CHIP_GAP);
-    chips.iter().map(chip_width).sum::<usize>() + gaps
-}
-
 /// The cells a chip takes: its pieces, a space apart.
 fn chip_width(c: &Chip) -> usize {
     c.pieces.iter().map(|p| width(&p.text)).sum::<usize>() + c.pieces.len().saturating_sub(1)
@@ -225,21 +219,9 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
         spans.extend(chips_line(chips, room));
         spread(spans, Vec::new(), inner, edge)
     };
-    // Park and Close end the chips line while every chip fits whole, else
-    // take a line of their own, so a button `x` acts on is never cut.
     let chips = glued(&c.chips);
-    let together: Vec<Chip> = chips.iter().chain(&c.merged).cloned().collect();
-    if chips_width(&together) <= room {
-        if !together.is_empty() {
-            out.push(chips_at(&together));
-        }
-    } else {
-        if !chips.is_empty() {
-            out.push(chips_at(&chips));
-        }
-        if !c.merged.is_empty() {
-            out.push(chips_at(&c.merged));
-        }
+    if !chips.is_empty() {
+        out.push(chips_at(&chips));
     }
     if !c.left_off.is_empty() {
         let spans = vec![

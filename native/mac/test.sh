@@ -18,7 +18,7 @@
 #    effect the runner takes from outbox/.
 # 6. Drag and drop: where a dropped card lands, and that a drag carries
 #    only our own type, declared in Sidebar/Info.plist as data, not text.
-# 7. The panel's clicks and menus: what each merged chip and menu pick
+# 7. The panel's clicks and menus: what each action chip and menu pick
 #    sends, over every fixture.
 # 8. The sidebar's own core, linked to native/ffi as the extension links
 #    it: a golden scene's data.json draws, a click redraws on the click,

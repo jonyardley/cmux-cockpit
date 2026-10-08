@@ -212,11 +212,9 @@ struct LaneView: View {
             Color.clear.preference(key: LaneTops.self, value: [String(describing: lane.key): geo.frame(in: .named(FloatingCard.space)).minY])
         })
         .onDrop(of: [DragItem.type], delegate: LaneDrop(lane: lane, rows: lane.rows, frames: frames, top: top, state: drag))
-        // Hover never fires while a drag is in flight, so a hover with a
-        // card still lifted means the drag ended without a drop: Escape,
-        // or let go outside every lane.
+        // Hover fires mid-drag as well as after it, so DragState decides.
         .onContinuousHover { phase in
-            if case .active = phase { drag.settle("hover after the drag") }
+            if case .active = phase { drag.hovered() }
         }
     }
 

@@ -1,6 +1,6 @@
 // Scene: the For review lane with a card for each merge verdict, and its
 // header's "N ready to merge", under a Main activity card whose PR is ready:
-// it stays there, offering a green "To review →".
+// it stays there until Jon moves it.
 // Fixture data in test/support/scenes.ts, shared with its golden test;
 // see test/support/snapshot.ts.
 

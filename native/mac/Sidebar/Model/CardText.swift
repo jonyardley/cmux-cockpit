@@ -2,8 +2,7 @@ import Foundation
 
 /// What a card and its neighbours say, decided here so the views only lay
 /// it out. The order is the pane's (native/pane/src/views/lanes.rs): the
-/// title and status, the chips with Park and Close after them, where you
-/// left off, then the detail.
+/// title and status, the chips, where you left off, then the detail.
 enum CardText {
     /// A chip's words: its pieces, a space apart.
     static func chip(_ chip: Chip) -> String {
@@ -15,7 +14,6 @@ enum CardText {
     static func runs(_ card: Card) -> [String] {
         var out = [card.title, card.status, titleAge(card)]
         out += ChipFit.glued(card.chips).map(chip)
-        out += card.merged.map(chip)
         out += [card.leftOff, card.detail]
         return out.filter { !$0.isEmpty }
     }
@@ -175,9 +173,6 @@ enum ChipTap: Equatable {
     case send([SidebarAction])
     case none
 
-    /// The core's words on the To review chip (panel/mod.rs TO_REVIEW).
-    static let toReview = "To review →"
-
     /// The core's Make project chip (by_project.rs): "Make "x" a project",
     /// or "Make a project" with no name to offer.
     static func isMakeProject(_ chip: Chip) -> Bool {
@@ -185,15 +180,13 @@ enum ChipTap: Equatable {
         return words.hasPrefix("Make ") && words.hasSuffix(" project")
     }
 
-    /// A chip's tap: the PR's page or a port; an action by its words (To
-    /// review, Park, Close, Make project). An action it does not know does
-    /// nothing, rather than guess at one. A full
-    /// card's PR stays still (parts.ts prChip "still", issue #72): a tap on
-    /// it selects the card, and the card menu's Open PR opens it.
+    /// A chip's tap: the PR's page or a port; an action by its words (Make
+    /// project). An action it does not know does nothing, rather than
+    /// guess at one. A full card's PR stays still (parts.ts prChip
+    /// "still", issue #72): a tap on it selects the card, and the card
+    /// menu's Open PR opens it.
     static func of(_ chip: Chip, id: String, prOpens: Bool = true) -> ChipTap {
         if chip.isAction {
-            if let merged = SidebarAction.merged(chip, id: id) { return .send([merged]) }
-            if chip.pieces.first?.text == toReview { return .send([.fileForReview(id: id)]) }
             if isMakeProject(chip) { return .send(SidebarAction.pick(.newProjectFromFolder, on: id)) }
             return .none
         }

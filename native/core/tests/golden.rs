@@ -3,8 +3,7 @@
 //! workspace's placement, and the All view as the app builds it (Needs
 //! you, Next, All's rows, and each lane header's fold, cards and merge
 //! line), the Projects rows, quiet projects and headers, and every card's
-//! chips, what it draws of them and how they fit, its To review action
-//! and a merged card's Park, Close and dimming.
+//! chips, how they fit, and a merged card's dimming.
 
 #![cfg(test)]
 
@@ -13,8 +12,8 @@ use std::path::PathBuf;
 use cockpit_core::app::build_view;
 use cockpit_core::by_project::ProjectEntry;
 use cockpit_core::card_chips::Chip;
-use cockpit_core::chips::{FULL_LINE_CHARS, PROJECT_LINE_CHARS};
-use cockpit_core::data::{Data, Workspace};
+use cockpit_core::chips::{FULL_LINE_CHARS, PROJECT_LINE_CHARS, chips_fit_one_line, chips_split};
+use cockpit_core::data::Data;
 use cockpit_core::js::json_num;
 use cockpit_core::lanes::LANES;
 use cockpit_core::model::{actual_lane_of, card_density};
@@ -26,12 +25,11 @@ use serde_json::{Map, Value, json};
 mod common;
 use common::without_the_strip;
 
-/// How a card's drawn chips fit a line `chars` wide.
-fn fit(s: &mut Session, data: &Data, drawn: &[Chip], w: &Workspace, chars: usize) -> Value {
+/// How a card's chips fit a line `chars` wide.
+fn fit(drawn: &[Chip], chars: usize) -> Value {
     json!({
-        "fitsOneLine": s.chips_fit_one_line(data, drawn, Some(w), chars),
-        "secondLineFits": s.second_line_fits(data, drawn, Some(w), chars),
-        "splits": s.chips_split(data, drawn, Some(w), chars),
+        "fitsOneLine": chips_fit_one_line(drawn, chars),
+        "splits": chips_split(drawn, chars),
     })
 }
 
@@ -67,20 +65,12 @@ fn computed(input: &Value) -> Value {
     }
     let mut chips = Map::new();
     for w in s.card_workspaces(&data) {
-        let drawn = s.card_chips(&data, Some(w), true);
+        let drawn = s.chips_for(Some(w), true);
         let row = json!({
-            "canFileForReview": s.can_file_for_review(&data, Some(w)),
-            "cardChips": drawn,
             "cardOpacity": json_num(s.card_opacity(Some(w), false)),
-            "chips": s.chips_for(Some(w), true),
-            "fullLine": fit(&mut s, &data, &drawn, w, FULL_LINE_CHARS),
-            "keepLabel": s.keep_label(&data, Some(w)),
-            "offersClose": s.offers_close(&data, Some(w)),
-            "offersMergedActions": s.offers_merged_actions(&data, Some(w)),
-            "offersPark": s.offers_park(&data, Some(w)),
-            "projectLine": fit(&mut s, &data, &drawn, w, PROJECT_LINE_CHARS),
-            "reviewIsGreen": s.review_is_green(Some(w)),
-            "showsChipsRow": s.shows_chips_row(&data, &drawn, Some(w)),
+            "chips": drawn,
+            "fullLine": fit(&drawn, FULL_LINE_CHARS),
+            "projectLine": fit(&drawn, PROJECT_LINE_CHARS),
         });
         chips.insert(w.id.clone(), row);
     }

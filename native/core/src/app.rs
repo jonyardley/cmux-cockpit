@@ -92,15 +92,6 @@ pub enum Event {
     Edit(EditEvent),
     /// A project's "+": a new session in its folder.
     OpenProject { key: String },
-    /// A card's "To review →": files it into For review, when it offers it.
-    FileForReview { id: String },
-    /// A merged card's Park: files it into Parked, when it offers it.
-    ParkMerged { id: String },
-    /// A merged card's Close: closes its workspace, when it offers it.
-    CloseMerged { id: String },
-    /// Keep on a merged card: hides its Park and Close for this PR, as the
-    /// card menu's Keep does.
-    KeepMerged { id: String },
     /// Something done with the card menu or a project's menu (menu.rs).
     Menu(MenuEvent),
     /// The Next button: switches to the next workspace in its queue.
@@ -151,10 +142,6 @@ impl Event {
             | Event::FlipView
             | Event::Edit(_)
             | Event::OpenProject { .. }
-            | Event::FileForReview { .. }
-            | Event::ParkMerged { .. }
-            | Event::CloseMerged { .. }
-            | Event::KeepMerged { .. }
             | Event::Menu(_)
             | Event::Next
             | Event::MessageAgent { .. }
@@ -451,17 +438,6 @@ impl Model {
             Event::Edit(e) => s.edit(data, e),
             Event::Menu(e) => s.menu(data, e),
             Event::OpenProject { key } => s.open_project_workspace(data, &key, None),
-            // Only a card that offers it: the pane's key reaches every card.
-            Event::FileForReview { id } => {
-                let w = data.ws_by_id(&id);
-                if s.can_file_for_review(data, w) {
-                    s.file_for_review(data, w);
-                }
-            }
-            // Each refuses a card that does not offer it, for the same reason.
-            Event::ParkMerged { id } => s.park_merged(data, data.ws_by_id(&id)),
-            Event::CloseMerged { id } => s.close_merged(data, data.ws_by_id(&id)),
-            Event::KeepMerged { id } => s.keep_merged(data, data.ws_by_id(&id)),
             Event::Next => s.jump_next(data),
             Event::MessageAgent { id, text } => s.message_agent(data, &id, &text),
             Event::ToggleLane { lane } => s.toggle_lane(data, &lane_by_key(lane)),
@@ -603,9 +579,6 @@ mod tests {
         assert!(Event::FlipView.is_action());
         assert!(Event::Menu(MenuEvent::Close).is_action());
         assert!(Event::Edit(EditEvent::Close).is_action());
-        assert!(Event::ParkMerged { id: "a".into() }.is_action());
-        assert!(Event::CloseMerged { id: "a".into() }.is_action());
-        assert!(Event::KeepMerged { id: "a".into() }.is_action());
         assert!(Event::Next.is_action());
         assert!(Event::Selected { id: "a".into() }.is_action());
         assert!(Event::ToggleQuiet.is_action());
@@ -945,62 +918,5 @@ mod tests {
             !model.session.saved.prs.contains_key("b"),
             "the file has none for b"
         );
-    }
-
-    /// A frame with a merged card `m` and an open one `a`.
-    fn merged_frame() -> Event {
-        let data = serde_json::json!({ "epoch": 100.0, "workspaces": [
-            { "id": "a", "directory": "/a" },
-            { "id": "m", "directory": "/m",
-              "pr": { "number": 7, "status": "merged", "url": "https://github.com/o/r/pull/7" } },
-        ]});
-        Event::Data(serde_json::from_value(data).unwrap())
-    }
-
-    fn closes(effects: &[Effect]) -> usize {
-        effects
-            .iter()
-            .filter(|e| matches!(e, Effect::Cmux(c) if c.operation.method == "workspace.close"))
-            .count()
-    }
-
-    #[test]
-    fn a_merged_cards_park_close_and_keep_act_only_on_a_card_that_offers_them() {
-        let app = Cockpit;
-        let mut model = Model::default();
-        let _ = app.update(merged_frame(), &mut model);
-        for id in ["a", "m"] {
-            let mut cmd = app.update(Event::CloseMerged { id: id.into() }, &mut model);
-            let effects: Vec<Effect> = cmd.effects().collect();
-            assert_eq!(closes(&effects), usize::from(id == "m"), "close on {id}");
-        }
-
-        let mut cmd = app.update(Event::KeepMerged { id: "a".into() }, &mut model);
-        let effects: Vec<Effect> = cmd.effects().collect();
-        assert!(writes(&effects).is_empty(), "nothing to keep on an open PR");
-        let mut cmd = app.update(Event::KeepMerged { id: "m".into() }, &mut model);
-        let effects: Vec<Effect> = cmd.effects().collect();
-        assert_eq!(writes(&effects)[0].0, "mergeKept.m");
-        let mut cmd = app.update(Event::CloseMerged { id: "m".into() }, &mut model);
-        let effects: Vec<Effect> = cmd.effects().collect();
-        assert_eq!(closes(&effects), 0, "kept: Close is hidden");
-    }
-
-    #[test]
-    fn park_files_a_merged_card_into_parked_and_leaves_an_open_one() {
-        let app = Cockpit;
-        let mut model = Model::default();
-        let _ = app.update(merged_frame(), &mut model);
-        let _ = app.update(Event::ParkMerged { id: "a".into() }, &mut model);
-        let _ = app.update(Event::ParkMerged { id: "m".into() }, &mut model);
-        let Some(data) = model.data.clone() else {
-            panic!("no frame")
-        };
-        let lane = |model: &mut Model, id: &str| {
-            let w = data.ws_by_id(id).unwrap();
-            model.session.lane_of(&data, w)
-        };
-        assert_eq!(lane(&mut model, "m"), LaneKey::Parked);
-        assert_ne!(lane(&mut model, "a"), LaneKey::Parked);
     }
 }

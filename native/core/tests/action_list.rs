@@ -37,19 +37,15 @@ fn variants(e: &Event) -> Option<Vec<(&'static str, usize, usize)>> {
         Event::FlipView => 4,
         Event::Edit(_) => 5,
         Event::OpenProject { .. } => 6,
-        Event::FileForReview { .. } => 7,
-        Event::ParkMerged { .. } => 8,
-        Event::CloseMerged { .. } => 9,
-        Event::KeepMerged { .. } => 10,
-        Event::Menu(_) => 11,
-        Event::Next => 12,
-        Event::MessageAgent { .. } => 13,
-        Event::ToggleLane { .. } => 14,
-        Event::ToggleProject { .. } => 15,
-        Event::ToggleQuiet => 16,
-        Event::Reveal { .. } => 17,
+        Event::Menu(_) => 7,
+        Event::Next => 8,
+        Event::MessageAgent { .. } => 9,
+        Event::ToggleLane { .. } => 10,
+        Event::ToggleProject { .. } => 11,
+        Event::ToggleQuiet => 12,
+        Event::Reveal { .. } => 13,
     };
-    let mut out = vec![("Action", top, 18)];
+    let mut out = vec![("Action", top, 14)];
     if let Event::Edit(e) = e {
         let n = match e {
             EditEvent::OpenNew => 0,
@@ -86,12 +82,11 @@ fn variants(e: &Event) -> Option<Vec<(&'static str, usize, usize)>> {
             MenuAction::TogglePin => 5,
             MenuAction::MarkRead => 6,
             MenuAction::OpenPr => 7,
-            MenuAction::KeepMerged => 8,
-            MenuAction::ToggleNeeds => 9,
-            MenuAction::OpenProject => 10,
-            MenuAction::EditProject => 11,
+            MenuAction::ToggleNeeds => 8,
+            MenuAction::OpenProject => 9,
+            MenuAction::EditProject => 10,
         };
-        out.push(("Pick", n, 12));
+        out.push(("Pick", n, 11));
     }
     Some(out)
 }

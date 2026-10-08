@@ -128,7 +128,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "Your turn: Read the draft in #142 and say go.",
             "detail_ink": "clayText",
             "detail_lines": 1,
@@ -247,12 +246,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -284,7 +277,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -400,12 +392,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -437,7 +423,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -553,12 +538,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -590,32 +569,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [
-              {
-                "kind": "Action",
-                "pieces": [
-                  {
-                    "text": "Park",
-                    "ink": "secondary"
-                  }
-                ],
-                "gives_way": false,
-                "url": null,
-                "is_action": true
-              },
-              {
-                "kind": "Action",
-                "pieces": [
-                  {
-                    "text": "Close",
-                    "ink": "text"
-                  }
-                ],
-                "gives_way": false,
-                "url": null,
-                "is_action": true
-              }
-            ],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -731,12 +684,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep, hide Park and Close",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -768,7 +715,6 @@
             "status_has_age": false,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -884,12 +830,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -998,7 +938,6 @@
             "is_action": false
           }
         ],
-        "merged": [],
         "detail": "",
         "detail_ink": "secondary",
         "detail_lines": 2,
@@ -1114,12 +1053,6 @@
           },
           {
             "Item": {
-              "label": "Keep: for a merged PR's buttons",
-              "action": "KeepMerged"
-            }
-          },
-          {
-            "Item": {
               "label": "Dismiss needs you",
               "action": "ToggleNeeds"
             }
@@ -1164,7 +1097,6 @@
             "is_action": false
           }
         ],
-        "merged": [],
         "detail": "",
         "detail_ink": "secondary",
         "detail_lines": 2,
@@ -1283,12 +1215,6 @@
           },
           {
             "Item": {
-              "label": "Keep: for a merged PR's buttons",
-              "action": "KeepMerged"
-            }
-          },
-          {
-            "Item": {
               "label": "Dismiss needs you",
               "action": "ToggleNeeds"
             }
@@ -1379,21 +1305,8 @@
             "gives_way": true,
             "url": null,
             "is_action": false
-          },
-          {
-            "kind": "Action",
-            "pieces": [
-              {
-                "text": "To review →",
-                "ink": "secondary"
-              }
-            ],
-            "gives_way": false,
-            "url": null,
-            "is_action": true
           }
         ],
-        "merged": [],
         "detail": "",
         "detail_ink": "secondary",
         "detail_lines": 2,
@@ -1509,12 +1422,6 @@
           },
           {
             "Item": {
-              "label": "Keep: for a merged PR's buttons",
-              "action": "KeepMerged"
-            }
-          },
-          {
-            "Item": {
               "label": "Dismiss needs you",
               "action": "ToggleNeeds"
             }
@@ -1561,32 +1468,18 @@
             "gives_way": false,
             "url": "https://github.com/o/r/pull/14",
             "is_action": false
-          }
-        ],
-        "merged": [
+          },
           {
-            "kind": "Action",
+            "kind": "Branch",
             "pieces": [
               {
-                "text": "Park",
+                "text": "changelog-for-release",
                 "ink": "secondary"
               }
             ],
-            "gives_way": false,
+            "gives_way": true,
             "url": null,
-            "is_action": true
-          },
-          {
-            "kind": "Action",
-            "pieces": [
-              {
-                "text": "Close",
-                "ink": "text"
-              }
-            ],
-            "gives_way": false,
-            "url": null,
-            "is_action": true
+            "is_action": false
           }
         ],
         "detail": "",
@@ -1704,12 +1597,6 @@
           },
           {
             "Item": {
-              "label": "Keep, hide Park and Close",
-              "action": "KeepMerged"
-            }
-          },
-          {
-            "Item": {
               "label": "Dismiss needs you",
               "action": "ToggleNeeds"
             }
@@ -1765,8 +1652,20 @@
         "age": "",
         "status_has_age": false,
         "left_off": "",
-        "chips": [],
-        "merged": [],
+        "chips": [
+          {
+            "kind": "Action",
+            "pieces": [
+              {
+                "text": "Make \"Scratch\" a project",
+                "ink": "secondary"
+              }
+            ],
+            "gives_way": false,
+            "url": null,
+            "is_action": true
+          }
+        ],
         "detail": "",
         "detail_ink": "secondary",
         "detail_lines": 2,
@@ -1878,12 +1777,6 @@
             "Item": {
               "label": "No PR to open",
               "action": "OpenPr"
-            }
-          },
-          {
-            "Item": {
-              "label": "Keep: for a merged PR's buttons",
-              "action": "KeepMerged"
             }
           },
           {

@@ -215,20 +215,10 @@ export function writePrs(path: string, prs: State["prs"]): ApplyResult {
 }
 
 /**
- * Keeps a Keep (State.mergeKept) only while the workspace's saved PR is the
- * one kept, so closed workspaces and later PRs do not leave entries behind.
- */
-function keptStill(before: State, prs: State["prs"]): State["mergeKept"] {
-  return Object.fromEntries(
-    Object.entries(before.mergeKept).filter(([id, n]) => Object.hasOwn(prs, id) && prs[id]?.number === n),
-  );
-}
-
-/**
  * One poll's whole write (scripts/pr-poll.ts) in a single locked pass:
  * replaces the `prs` and `ownPrs` maps, keys sorted as writePrs does,
- * folds `subagents` over the `subagents` map and prunes `mergeKept`
- * (keptStill), so the file is never left half updated. `poll` (#78) is the
+ * and folds `subagents` over the `subagents` map, so the file is never
+ * left half updated. `poll` (#78) is the
  * saved poll status in the same pass: replaced when given, removed when
  * null, kept as it was when left out.
  */
@@ -246,7 +236,6 @@ export function writePollMaps(
       ...before,
       prs: sortedByKey(prs),
       ownPrs: sortedByKey(ownPrs),
-      mergeKept: keptStill(before, prs),
       ...(poll ? { poll } : {}),
     };
     if (poll === null) delete next.poll;

@@ -3,7 +3,7 @@
 //! placement (model.rs), what an agent's status means (status.rs), the
 //! Needs you (strip.rs), All's rows (lane_entries.rs) and Next
 //! (next.rs), drops and the pane's card moves (placement.rs), the card
-//! chips (card_chips.rs, chips.rs), a merged card's tidy-up (merged.rs)
+//! chips (card_chips.rs, chips.rs), a merged card's dimming (merged.rs)
 //! and the Projects view (by_project.rs), with the
 //! shared helpers they need. Session holds the state
 //! between frames; each call takes the frame's cmux data.
@@ -16,6 +16,7 @@ pub mod card_chips;
 pub mod chips;
 pub mod data;
 pub mod edit;
+pub mod fixture;
 pub mod home;
 pub mod hooks;
 pub mod js;

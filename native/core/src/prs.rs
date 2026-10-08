@@ -152,7 +152,7 @@ impl PrStatus {
     }
 }
 
-/// A merged PR: the card dims and offers Park and Close.
+/// A merged PR: the card dims while nothing in it wants Jon (merged.rs).
 pub fn is_merged_pr(pr: Option<&PullRequest>) -> bool {
     pr.is_some_and(|p| truthy(p.number).is_some() && p.status == Some(PrStatus::Merged))
 }

@@ -128,7 +128,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "Your turn: Should the strip cap at four?",
             "detail_ink": "clayText",
             "detail_lines": 1,
@@ -247,12 +246,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -284,7 +277,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "Asking: allow npm publish?",
             "detail_ink": "amberText",
             "detail_lines": 1,
@@ -403,12 +395,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -440,7 +426,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "Your turn: reply \"1b 2a\" on the bridge and the store.",
             "detail_ink": "clayText",
             "detail_lines": 1,
@@ -559,12 +544,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -596,7 +575,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "Your turn: the work is finished. Run /clear now.",
             "detail_ink": "clayText",
             "detail_lines": 1,
@@ -715,12 +693,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -752,7 +724,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "Your turn: One more thing",
             "detail_ink": "clayText",
             "detail_lines": 1,
@@ -871,12 +842,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -908,7 +873,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -1024,12 +988,6 @@
               },
               {
                 "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
-                }
-              },
-              {
-                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -1061,7 +1019,6 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
-            "merged": [],
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -1173,12 +1130,6 @@
                 "Item": {
                   "label": "No PR to open",
                   "action": "OpenPr"
-                }
-              },
-              {
-                "Item": {
-                  "label": "Keep: for a merged PR's buttons",
-                  "action": "KeepMerged"
                 }
               },
               {

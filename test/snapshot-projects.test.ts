@@ -1,6 +1,6 @@
 // Scene: the Projects view, with cards grouped under two projects, one card
-// outside any project, one card quoting its saved move, a merged card
-// offering Park and Close, and the third project folded into the quiet list.
+// outside any project, one card quoting its saved move, a merged card,
+// dimmed, and the third project folded into the quiet list.
 // Fixture data in test/support/scenes.ts, shared with its golden test;
 // see test/support/snapshot.ts.
 

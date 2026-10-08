@@ -53,7 +53,7 @@ func note(_ panel: Panel) {
         if !card.age.isEmpty { seen.insert("age") }
         if card.statusHasAge { seen.insert("status has age") }
         if !card.badge.icon.isEmpty, card.badge.color != nil { seen.insert("badge") }
-        for chip in card.chips + card.merged {
+        for chip in card.chips {
             seen.insert("chip \(chip.kind)")
             if chip.url != nil { seen.insert("chip url") }
             if chip.isAction != (chip.kind == .action) { seen.insert("action flag disagrees") }

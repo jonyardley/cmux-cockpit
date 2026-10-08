@@ -447,10 +447,10 @@ check(glued.first?.kind == .pr, "the PR keeps its kind")
 // The chips row's two lines: the size, PR and diff; then the branch, ports
 // and actions, each line in the core's order.
 let row = [chipOf(.size, "Quick"), chipOf(.pr, "#3"), chipOf(.diff, "+1"), chipOf(.branch, "feat"),
-           chipOf(.port, ":5173 ↗"), chipOf(.action, "To review →", action: true)]
+           chipOf(.port, ":5173 ↗"), chipOf(.action, "Make a project", action: true)]
 let split = ChipLines(row)
 check(split.pr.map(CardText.chip) == ["Quick", "#3", "+1"], "the PR's line holds the size, the PR and its diff")
-check(split.branch.map(CardText.chip) == ["feat", ":5173 ↗", "To review →"], "the branch's line holds the branch, the ports and the actions")
+check(split.branch.map(CardText.chip) == ["feat", ":5173 ↗", "Make a project"], "the branch's line holds the branch, the ports and the actions")
 check(ChipLines([]).isEmpty && !split.isEmpty, "no chips, no lines")
 
 // A dirty branch's mark is drawn as a dot, not words.
@@ -468,12 +468,11 @@ check(ChipTap.of(chipOf(.pr, "#3", url: pr?.absoluteString), id: "W1", prOpens: 
 check(ChipTap.of(chipOf(.port, ":5173", url: "http://localhost:5173"), id: "W1", prOpens: false) != .none, "a full card's port still opens")
 check(ChipTap.of(chipOf(.pr, "#3"), id: "W1") == .none, "a PR with no link leaves the tap to the card")
 check(ChipTap.of(chipOf(.branch, "feat"), id: "W1") == .none, "the branch leaves the tap to the card")
-check(ChipTap.of(chipOf(.action, ChipTap.toReview, action: true), id: "W1") == .send([.fileForReview(id: "W1")]), "To review files the card for review")
-check(ChipTap.of(chipOf(.action, SidebarAction.parkWord, action: true), id: "W1") == .send([.parkMerged(id: "W1")]), "Park parks")
-check(ChipTap.of(chipOf(.action, SidebarAction.closeWord, action: true), id: "W1") == .send([.closeMerged(id: "W1")]), "Close closes")
 check(ChipTap.of(chipOf(.action, "Make a project", action: true), id: "W1") == .send(SidebarAction.pick(.newProjectFromFolder, on: "W1")),
       "Make a project, with no name, picks it too")
-check(ChipTap.of(chipOf(.action, "Keep", action: true), id: "W1") == .none, "an action it does not know does nothing")
+for word in ["To review →", "Park", "Close", "Keep"] {
+    check(ChipTap.of(chipOf(.action, word, action: true), id: "W1") == .none, "\(word), an action it does not know, does nothing")
+}
 check(ChipTap.of(chipOf(.action, "Make \"x\" a project", action: true), id: "W1") == .send(SidebarAction.pick(.newProjectFromFolder, on: "W1")),
       "Make project picks the card menu's own item")
 
@@ -505,7 +504,7 @@ for name in ["lanes", "projects"] {
         return nil
     }
     for card in cards {
-        for chip in card.chips + card.merged where chip.isAction {
+        for chip in card.chips where chip.isAction {
             check(ChipTap.of(chip, id: card.wsId) != .none, "\(name): \(card.title)'s \(CardText.chip(chip)) acts")
         }
     }
@@ -516,7 +515,7 @@ for name in ["lanes", "projects"] {
 }
 var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil), title: "t", density: .full, badge: Badge(icon: "terminal", color: nil),
                unread: "", ready: false, pinned: false, progress: 1.5, helpers: "", status: "", statusInk: .faint, age: "",
-               statusHasAge: false, leftOff: "", chips: [], merged: [], detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, rank: 0,
+               statusHasAge: false, leftOff: "", chips: [], detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, rank: 0,
                movable: true, dimmed: false, selected: false, menu: [])
 check(CardText.progress(bar) == 1, "a bar past the end stops full")
 bar.progress = -0.5
@@ -532,7 +531,7 @@ check(CardText.progress(bar) == nil, "no value, no bar")
 
 // The core's words the panel matches on.
 let marks = source("core/src/panel/mod.rs")
-for (name, word) in [("TO_REVIEW", ChipTap.toReview), ("DIRTY_MARK", ChipFit.dirtyMark), ("DOT", CardText.filledDot)] {
+for (name, word) in [("DIRTY_MARK", ChipFit.dirtyMark), ("DOT", CardText.filledDot)] {
     check(marks.contains("pub const \(name): &str = \"\(word)\";"), "\(name) is \"\(word)\"")
 }
 

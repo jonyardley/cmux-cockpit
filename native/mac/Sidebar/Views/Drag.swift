@@ -67,11 +67,27 @@ final class DragState {
             up = NSEvent.pressedMouseButtons & 1 == 0 ? up + 1 : 0
             if up == 1 { Timeline.drag.note("button up seen") }
             if up >= 3 {
-                if let lifted, let from { released = (lifted, from, Date()) }
-                settle("release watch, no drop yet")
+                letGo("release watch, no drop yet")
                 return
             }
         }
+    }
+
+    /// A hover over a lane. Hover fires mid-drag too (a lift was settled
+    /// 14ms in, before any drop, so no card could move), so only one with
+    /// the button up ends the drag, and it lets go as the release watch
+    /// does, so a drop cmux hands over late still lands.
+    func hovered() {
+        guard lifted != nil || over != nil else { return }
+        guard NSEvent.pressedMouseButtons & 1 == 0 else { return }
+        letGo("hover after the drag")
+    }
+
+    /// The button is up with no drop yet: the card stays `carried` for
+    /// `late` in case cmux hands the drop over after this.
+    private func letGo(_ why: String) {
+        if let lifted, let from { released = (lifted, from, Date()) }
+        settle(why)
     }
 
     func hover(_ lane: LaneKey, before: String?) {
