@@ -298,10 +298,11 @@ export function compactPrText(text: string | undefined): string {
 }
 
 /**
- * True when the card's status says Ready to merge (issue #299): the same
- * rule statusInfo puts first, without the rest of its pass.
+ * True when the card's status says Ready to merge (issue #299). It asks
+ * statusInfo itself, as showsReady does, so the PR's words only go while the
+ * status really says it, whatever comes to rank ahead of it.
  */
-export const showsMergeReady = (w: Workspace | undefined): boolean => mergeReady(agentOf(w), w);
+export const showsMergeReady = (w: Workspace | undefined): boolean => statusInfo(w) === MERGE_READY;
 
 /**
  * The PR's words a compact card runs on from its status: the number alone

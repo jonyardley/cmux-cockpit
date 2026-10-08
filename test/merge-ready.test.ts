@@ -27,6 +27,8 @@ const open = { url: "https://github.com/o/r/pull/1", status: "open", branch: "fe
   },
   ownPrs: {},
   ui: {},
+  // ready2's chat still runs a shell: idle there, its status says Waiting.
+  shells: { ready2: [{ id: "b1", session: "shell-chat", startedEpoch: 100 }] },
 };
 
 const { installRenderer } = await import("./support/renderer.ts");
@@ -220,6 +222,12 @@ describe("Ready to merge on the status line (issue #299)", () => {
     assert.equal(status.compactPrText(status.cardPrWords(busy, prs.prSummary(busy))), "· #2 · ready");
     const busyChip = chips.chipsFor(busy, true).find((c) => c.id === "pr");
     assert.equal(busyChip && "state" in busyChip ? busyChip.state : undefined, "ready");
+    // Idle on a shell its own chat still runs, the status says Waiting, so the chip keeps "ready" there too.
+    const waiting = card("ready2", { agents: [agent("idle", { id: "shell-chat", ...since(60) })] });
+    assert.equal(status.statusInfo(waiting).label, "Waiting");
+    assert.equal(status.compactPrText(status.cardPrWords(waiting, prs.prSummary(waiting))), "· #2 · ready");
+    const waitingChip = chips.chipsFor(waiting, true).find((c) => c.id === "pr");
+    assert.equal(waitingChip && "state" in waitingChip ? waitingChip.state : undefined, "ready");
   });
 
   it("leaves a header's pill grey", () => {

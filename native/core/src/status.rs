@@ -383,6 +383,9 @@ impl Session {
 
     /// True when the card's status says Ready to merge (issue #299): the
     /// same rule status_kind puts first, without the rest of its pass.
+    /// It takes no Data, so chips_for needs none; status_kind must keep
+    /// merge_ready first for the two to agree, and a test in
+    /// tests/ported/merge_ready.rs holds them to it.
     pub fn shows_merge_ready(&mut self, w: Option<&Workspace>) -> bool {
         let a = self.agent_of(w);
         self.merge_ready(a.as_ref(), w)

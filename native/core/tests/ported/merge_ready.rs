@@ -25,6 +25,8 @@ const STATE: &str = r#"{"prs": {
     "blocked": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 10, "mergeable": false},
     "noChecks": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [], "number": 11, "mergeable": true},
     "anchor-parked": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 12, "mergeable": true}
+}, "shells": {
+    "ready2": [{"id": "b1", "session": "shell-chat", "startedEpoch": 100}]
 }}"#;
 
 fn setup() -> (Session, Data, Fx) {
@@ -305,6 +307,36 @@ mod merge_ready_status {
         let busy = card(&mut data, "ready2", vec![at(&mut fx, Working, 60.0)], 0.0);
         assert_eq!(words(&mut s, &busy), "· #2 · ready");
         assert_eq!(state(&mut s, &busy), Some(("#2".into(), "ready".into())));
+        // Idle on a shell its own chat still runs, the status says Waiting,
+        // so the chip keeps "ready" there too.
+        let shell = fx.agent(Idle).id("shell-chat").since(NOW - 60.0);
+        let waiting = card(&mut data, "ready2", vec![shell], 0.0);
+        assert_eq!(s.status_kind(&data, Some(&waiting)), StatusKind::Waiting);
+        assert_eq!(words(&mut s, &waiting), "· #2 · ready");
+        assert_eq!(state(&mut s, &waiting), Some(("#2".into(), "ready".into())));
+    }
+
+    #[test]
+    fn drops_the_words_exactly_when_the_status_says_ready_to_merge() {
+        // shows_merge_ready takes no Data, so it copies status_kind's first
+        // rule rather than asking it: this holds the two to one answer.
+        let (mut s, mut data, mut fx) = setup();
+        let cards = [
+            ("ready1", vec![at(&mut fx, Idle, 180.0)], 0.0),
+            ("ready1", vec![at(&mut fx, Idle, 120.0)], 2.0),
+            ("ready1", vec![at(&mut fx, Ended, 60.0)], 0.0),
+            ("ready2", vec![], 0.0),
+            ("ready1", vec![at(&mut fx, Working, 60.0)], 0.0),
+            ("ready1", vec![at(&mut fx, NeedsInput, 60.0)], 0.0),
+            ("ready2", vec![fx.agent(Idle).id("shell-chat")], 0.0),
+            ("failing", vec![at(&mut fx, Idle, 120.0)], 2.0),
+            ("draft", vec![at(&mut fx, Idle, 60.0)], 0.0),
+        ];
+        for (id, agents, unread) in cards {
+            let w = card(&mut data, id, agents, unread);
+            let says = s.status_kind(&data, Some(&w)) == StatusKind::MergeReady;
+            assert_eq!(s.shows_merge_ready(Some(&w)), says, "{id}");
+        }
     }
 
     #[test]
