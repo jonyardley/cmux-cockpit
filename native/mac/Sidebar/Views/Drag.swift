@@ -11,11 +11,15 @@ import UniformTypeIdentifiers
 final class DragState {
     static let shared = DragState()
 
-    /// The card lifted, drawn as a gap in its slot while the drag lasts.
+    /// The card lifted, drawn as the gap where it will land while the drag
+    /// lasts.
     private(set) var lifted: Card?
     private(set) var from: LaneKey?
+    /// Where the lifted card sat in its lane's own space as it was lifted:
+    /// its height sizes the gap's moves and its middle fixes the hold.
+    private(set) var held: CGRect?
     /// The lane under the drag and the card it would land above (nil for
-    /// the end), for the landing line.
+    /// the end), where that lane opens the gap.
     private(set) var over: (lane: LaneKey, before: String?)?
     /// Where the pointer is, down the All view, while it is over a lane:
     /// the floating copy of the lifted card is drawn there. The drag
@@ -30,12 +34,13 @@ final class DragState {
     /// The card the release watch let go of, and when: cmux can hand the
     /// drop over after the watch has given up on it, and the drop still
     /// lands for `late` after that.
-    @ObservationIgnored private var released: (card: Card, from: LaneKey, at: Date)?
+    @ObservationIgnored private var released: (card: Card, from: LaneKey, at: Date, over: (lane: LaneKey, before: String?)?)?
     private static let late: TimeInterval = 2
 
-    func lift(_ card: Card, from lane: LaneKey) {
+    func lift(_ card: Card, from lane: LaneKey, frame: CGRect?) {
         lifted = card
         from = lane
+        held = frame
         over = nil
         pointer = nil
         grab = nil
@@ -43,6 +48,14 @@ final class DragState {
         Timeline.drag.begin("lift")
         watch?.cancel()
         watch = Task { [weak self] in await self?.settleOnRelease() }
+    }
+
+    /// Where the gap was in `lane` when the release watch let go, so a
+    /// drop cmux hands over late lands where Jon saw it; nil when it was
+    /// in another lane or nowhere.
+    func lateBefore(in lane: LaneKey) -> String?? {
+        guard lifted == nil, let over = released?.over, over.lane == lane else { return nil }
+        return .some(over.before)
     }
 
     /// The card a drop carries: the one lifted, else the one the release
@@ -86,7 +99,7 @@ final class DragState {
     /// The button is up with no drop yet: the card stays `carried` for
     /// `late` in case cmux hands the drop over after this.
     private func letGo(_ why: String) {
-        if let lifted, let from { released = (lifted, from, Date()) }
+        if let lifted, let from { released = (lifted, from, Date(), over) }
         settle(why)
     }
 
@@ -98,7 +111,7 @@ final class DragState {
     }
 
     /// The pointer is at `y` down the All view; `mid` is the lifted card's
-    /// middle there when its lane can see it, which fixes the hold once.
+    /// middle there as it was lifted, which fixes the hold once.
     func point(_ y: CGFloat, mid: CGFloat?) {
         if grab == nil, let mid { grab = y - mid }
         if pointer != y { pointer = y }
@@ -114,9 +127,9 @@ final class DragState {
     }
 
     /// The drag is over without a drop (Escape, or let go outside a lane):
-    /// the gap closes and the card is drawn where it was. The landing line
-    /// goes too even with nothing lifted: a late drop hovers after the
-    /// release watch has settled, and its line must not outlive it.
+    /// the gap closes and the card is drawn where it was. The lane under
+    /// the drag lets go too even with nothing lifted: a late drop hovers
+    /// after the release watch has settled, and must not outlive it.
     func settle(_ why: String) {
         watch?.cancel()
         watch = nil
@@ -126,6 +139,7 @@ final class DragState {
         Timeline.drag.note("settled: \(why)")
         lifted = nil
         from = nil
+        held = nil
     }
 
     /// Lets go of `id` in `lane` above `before`, among the lane's rows as
@@ -160,10 +174,11 @@ extension View {
         })
     }
 
-    /// A row of a lane: a movable card lifts, and while lifted its slot is
-    /// drawn as a gap the card's size.
-    func liftable(_ row: Row, in lane: LaneKey, state: DragState) -> some View {
-        modifier(Liftable(row: row, lane: lane, state: state))
+    /// A row of a lane: a movable card lifts from where `frame` has it,
+    /// and while lifted its row is drawn as a gap the card's size, folded
+    /// to nothing when the gap is in another lane.
+    func liftable(_ row: Row, in lane: LaneKey, state: DragState, frame: CGRect?, folded: Bool) -> some View {
+        modifier(Liftable(row: row, lane: lane, state: state, frame: frame, folded: folded))
     }
 }
 
@@ -171,20 +186,28 @@ private struct Liftable: ViewModifier {
     let row: Row
     let lane: LaneKey
     let state: DragState
+    let frame: CGRect?
+    let folded: Bool
 
     func body(content: Content) -> some View {
         if case .card(let card) = row, card.movable {
             let gap = state.lifted?.wsId == card.wsId
+            let gone = gap && folded
             content
                 .opacity(gap ? 0 : 1)
                 .overlay {
-                    if gap {
+                    if gap, !gone {
                         RoundedRectangle(cornerRadius: Metrics.corner)
                             .strokeBorder(Color(Token.cardEdge), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
                     }
                 }
+                // Folded, not removed: the drag began here, and the row
+                // stays in the lane while it lasts. It is see-through, so
+                // nothing spills; the pull up cancels the lane's spacing.
+                .frame(height: gone ? 0 : nil, alignment: .top)
+                .padding(.top, gone ? -Metrics.cardGap : 0)
                 .onDrag {
-                    state.lift(card, from: lane)
+                    state.lift(card, from: lane, frame: frame)
                     return DragItem.provider(card)
                 } preview: {
                     // See-through: the floating card (FloatingCard) is drawn
@@ -246,16 +269,10 @@ struct LaneTops: PreferenceKey {
     }
 }
 
-/// The line across a lane where the card will land.
-struct LandingLine: View {
-    var body: some View {
-        Capsule().fill(Color(Token.blue)).frame(height: 2)
-    }
-}
-
-/// A lane as a drop target. The landing slot comes from the drop's height
-/// against the middles of the rows drawn; a folded or empty lane takes
-/// the card at its end.
+/// A lane as a drop target. The landing place is the gap the lane draws
+/// for the lifted card, moved as the floating copy's edges pass the
+/// middles of the cards around it (DropRule.place); a folded or empty lane
+/// takes the card at its end.
 struct LaneDrop: DropDelegate {
     let lane: Lane
     let rows: [Row]
@@ -304,6 +321,7 @@ struct LaneDrop: DropDelegate {
             state.settle("late drop refused")
             return false
         }
+        let lands = state.lateBefore(in: lane.key) ?? before
         let (key, rows, state) = (lane.key, rows, state)
         Task { @MainActor in
             guard await DragItem.read(provider) == DragItem.text(card) else {
@@ -311,16 +329,15 @@ struct LaneDrop: DropDelegate {
                 state.settle("late drop refused")
                 return
             }
-            state.drop(card.wsId, in: key, before: before, rows: rows)
+            state.drop(card.wsId, in: key, before: lands, rows: rows)
         }
         return true
     }
 
     /// Moves the floating copy to the pointer, with the lifted card's
-    /// middle when it is drawn in this lane.
+    /// middle as it was lifted when this is its own lane.
     private func track(_ info: DropInfo) {
-        let own = state.lifted.flatMap { card in rows.first { DropRule.isCard($0, card.wsId) } }
-        let mid = own.flatMap { frames[$0.id] }.map { top + $0.midY }
+        let mid = state.from == lane.key ? state.held.map { top + $0.midY } : nil
         state.point(top + info.location.y, mid: mid)
     }
 
@@ -329,22 +346,31 @@ struct LaneDrop: DropDelegate {
     private func before(_ info: DropInfo) -> String?? {
         guard let card = state.carried else { return nil }
         if lane.collapsed || rows.isEmpty { return .some(nil) }
-        // A row not laid out yet counts as below the pointer, never above.
+        if state.lifted != nil, let held = state.held {
+            return .some(roomy(info, card: card, height: Double(held.height)))
+        }
+        // A late drop, with no gap drawn: the pointer against the rows'
+        // middles. A row not laid out yet counts as below the pointer.
         let mids = rows.map { frames[$0.id].map { Double($0.midY) } ?? .infinity }
         let slot = DropRule.slot(y: Double(info.location.y), mids: mids)
         return .some(DropRule.before(rows: rows, dragged: card, slot: slot))
     }
-}
 
-/// Where the landing line sits in a lane, from the frames the lane
-/// reported: above the row the card goes before, else under the last row,
-/// else under the header.
-enum LandingSpot {
-    static func y(before: String?, rows: [Row], frames: [String: CGRect]) -> CGFloat? {
-        if let before, let row = rows.first(where: { DropRule.wsId($0) == before }), let frame = frames[row.id] {
-            return frame.minY - 2
-        }
-        if let last = rows.last, let frame = frames[last.id] { return frame.maxY + 2 }
-        return frames[LaneView.header].map { $0.maxY + 2 }
+    /// The card the gap is above, moved for the floating copy's edges in
+    /// this lane's space. The gap as drawn comes from the frames, not from
+    /// `state.over`, so a frame that lags a move is never read against it.
+    private func roomy(_ info: DropInfo, card: Card, height: Double) -> String? {
+        let others = rows.filter { !DropRule.isCard($0, card.wsId) }
+        // A row not laid out yet counts as below the copy, never above.
+        let mids = others.map { frames[$0.id].map { Double($0.midY) } ?? .infinity }
+        let tops = others.map { frames[$0.id].map { Double($0.minY) } ?? .infinity }
+        let own = frames[Row.card(card).id]
+        let current = DropRule.drawnGap(tops: tops, gapTop: own.map { Double($0.minY) }, gapHeight: own.map { Double($0.height) } ?? 0)
+        let mid = Double(info.location.y - (state.grab ?? 0))
+        let at = DropRule.place(
+            current: current, mids: mids, top: mid - height / 2, bottom: mid + height / 2,
+            within: DropRule.places(others, dragged: card)
+        )
+        return DropRule.before(others, at: at)
     }
 }
