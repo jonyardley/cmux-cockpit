@@ -37,6 +37,8 @@ const { C } = await import("../src/cockpit/theme.ts");
 const { READY_INK } = await import("../src/shared/pr-colors.ts");
 const { P } = await import("../src/shared/palette.ts");
 const status = await import("../src/cockpit/status.ts");
+const prs = await import("../src/shared/prs.ts");
+const chips = await import("../src/cockpit/card-chips.ts");
 
 // WCAG relative luminance of a #RRGGBB colour, and the contrast ratio of two.
 const luminance = (hex: string): number => {
@@ -205,6 +207,19 @@ describe("Ready to merge on the status line (issue #299)", () => {
     const w = card("failing", { unread: 2, agents: [agent("idle", since(120))] });
     assert.equal(status.showsReady(w), true);
     assert.equal(status.badgeCount(w), 0);
+  });
+
+  it("drops the PR's state words once the status says it, keeping its number (decided 1a)", () => {
+    const ready = card("ready1", { agents: [agent("idle", since(180))] });
+    const pr = prs.prSummary(ready);
+    assert.equal(status.compactPrText(status.cardPrWords(ready, pr)), "· #1", "compact: Ready to merge 3m · #1");
+    const chip = chips.chipsFor(ready, true).find((c) => c.id === "pr");
+    assert.deepEqual(chip && { ...chip }, { id: "pr", tag: "#1", state: "", health: "ready", diff: "", url: open.url });
+    // Working on the same ready PR, the status says Working, so the chip keeps "ready".
+    const busy = card("ready2", { agents: [agent("working", since(60))] });
+    assert.equal(status.compactPrText(status.cardPrWords(busy, prs.prSummary(busy))), "· #2 · ready");
+    const busyChip = chips.chipsFor(busy, true).find((c) => c.id === "pr");
+    assert.equal(busyChip && "state" in busyChip ? busyChip.state : undefined, "ready");
   });
 
   it("leaves a header's pill grey", () => {

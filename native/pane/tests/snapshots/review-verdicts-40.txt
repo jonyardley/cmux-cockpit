@@ -3,11 +3,11 @@
 
  ▾ ■ MAIN ACTIVITY  1  1 ready to merge
    ● waiting card        Ready to merge
-     #9 ready  feat-9
+     #9  feat-9
 
  ▾ ■ FOR REVIEW  8     1 ready to merge
    ● ready card          Ready to merge
-     #1 · ready +120 −8
+     #1 +120 −8
    ○ draft card                No agent
      #2 · draft +1.2k −56
    ○ failing card              No agent

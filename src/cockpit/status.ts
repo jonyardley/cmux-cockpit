@@ -293,9 +293,25 @@ export const badgeCount = (w: Workspace | undefined): number => (showsReady(w) ?
  * not. The full card says nothing about the PR in its status row: the PR
  * chip at the head of its chips row carries the verdict (issue #79).
  */
-export function compactPrText(pr: Pick<PrSummary, "text"> | undefined): string {
-  const t = pr?.text;
-  return t ? "· " + t : "";
+export function compactPrText(text: string | undefined): string {
+  return text ? "· " + text : "";
+}
+
+/**
+ * True when the card's status says Ready to merge (issue #299): the same
+ * rule statusInfo puts first, without the rest of its pass.
+ */
+export const showsMergeReady = (w: Workspace | undefined): boolean => mergeReady(agentOf(w), w);
+
+/**
+ * The PR's words a compact card runs on from its status: the number alone
+ * once the status says Ready to merge, since the PR's "ready" would only say
+ * it again and crowd the line ("Ready to merge 3m · #1"); else its full words
+ * ("#45 · 1 failing"). "" with no PR.
+ */
+export function cardPrWords(w: Workspace | undefined, pr: Pick<PrSummary, "tag" | "text"> | undefined): string {
+  if (!pr) return "";
+  return showsMergeReady(w) ? pr.tag : pr.text;
 }
 
 /**

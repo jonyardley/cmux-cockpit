@@ -178,8 +178,9 @@ describe("a Ready card's PR words (issue #79)", () => {
   });
 
   it("keeps the PR on a compact card, in the chip's own words", () => {
-    const text = (w: Workspace) => status.compactPrText(prs.prSummary(w));
-    assert.equal(text(withPr("green")), "· #45 · ready");
+    const text = (w: Workspace) => status.compactPrText(status.cardPrWords(w, prs.prSummary(w)));
+    // Its number alone once the status says Ready to merge (decided 1a, #299).
+    assert.equal(text(withPr("green")), "· #45");
     assert.equal(text(withPr("failing")), "· #46 · 1 failing");
     assert.equal(text(withPr("running")), "· #47 · running");
     assert.equal(text(withPr("draft")), "· #48 · draft");
@@ -188,9 +189,9 @@ describe("a Ready card's PR words (issue #79)", () => {
   });
 
   it("is empty without a PR", () => {
-    assert.equal(status.compactPrText(prs.prSummary(readyWs("none"))), "");
+    assert.equal(status.cardPrWords(readyWs("none"), prs.prSummary(readyWs("none"))), "");
     assert.equal(status.compactPrText(undefined), "");
-    assert.equal(status.compactPrText({ text: "" }), "");
+    assert.equal(status.compactPrText(""), "");
   });
 });
 

@@ -57,10 +57,6 @@
                   {
                     "text": "#9",
                     "ink": "secondary"
-                  },
-                  {
-                    "text": "ready",
-                    "ink": "greenDeep"
                   }
                 ],
                 "gives_way": false,
@@ -249,7 +245,7 @@
                 "kind": "Pr",
                 "pieces": [
                   {
-                    "text": "#1 · ready",
+                    "text": "#1",
                     "ink": "greenDeep"
                   }
                 ],

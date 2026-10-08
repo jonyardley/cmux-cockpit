@@ -15,6 +15,7 @@ import { drag, isSelected, selectWorkspace } from "../state.ts";
 import {
   ageOf,
   cardDetail,
+  cardPrWords,
   compactPrText,
   helperText,
   leftOffText,
@@ -148,7 +149,7 @@ export function compactCard(w: WsAccessor, key: string): View {
           "compact-pr",
           () => !!pr(),
           () =>
-            Text(() => compactPrText(pr()))
+            Text(() => compactPrText(cardPrWords(w(), pr())))
               .font(11.5)
               .color(() => prTextColor(pr(), C.secondary))
               .lineLimit(1)

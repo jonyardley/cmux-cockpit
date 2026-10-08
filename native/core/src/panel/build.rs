@@ -280,15 +280,19 @@ fn chips_row(session: &mut Session, w: Option<&Workspace>, kind: ChipsFor) -> Ve
     out
 }
 
-/// A compact card's PR in words, "#45 · ready", in its health's ink,
-/// then its diff size, faint, as a chip of its own. The sidebar runs them
-/// on from the status line after a "·"; here they have a line of their
-/// own, so they have none.
-fn compact_pr(session: &Session, w: Option<&Workspace>) -> Vec<Chip> {
+/// A compact card's PR in words, "#45 · 1 failing" (its number alone once
+/// the status says Ready to merge), in its health's ink, then its diff
+/// size, faint, as a chip of its own. The sidebar runs them on from the
+/// status line after a "·"; here they have a line of their own, so they
+/// have none.
+fn compact_pr(session: &mut Session, w: Option<&Workspace>) -> Vec<Chip> {
     let Some(pr) = pr_summary(&session.saved, w) else {
         return Vec::new();
     };
-    let words = piece(pr.text.clone(), pr_text_color(Some(&pr), Token::Secondary));
+    let words = piece(
+        session.card_pr_words(w, &pr),
+        pr_text_color(Some(&pr), Token::Secondary),
+    );
     let chip = Chip {
         url: pr.url.clone(),
         ..Chip::new(ChipKind::Pr, vec![words])

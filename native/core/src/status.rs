@@ -8,7 +8,7 @@ use crate::js::{non_empty, positive, truthy};
 use crate::moves::{quiet_move, waiting_move};
 use crate::needs::ask_reason;
 use crate::persist::{SavedMove, is_move_description};
-use crate::prs::{PrHealth, pr_health};
+use crate::prs::{PrHealth, PrSummary, pr_health};
 use crate::session::Session;
 use crate::shells::live_shell_count;
 use crate::text::{card_message, clip, one_line, readable};
@@ -379,6 +379,25 @@ impl Session {
             )
         });
         at_rest && ask_reason(&self.saved, a, w).is_none() && !self.is_waiting(a, w)
+    }
+
+    /// True when the card's status says Ready to merge (issue #299): the
+    /// same rule status_kind puts first, without the rest of its pass.
+    pub fn shows_merge_ready(&mut self, w: Option<&Workspace>) -> bool {
+        let a = self.agent_of(w);
+        self.merge_ready(a.as_ref(), w)
+    }
+
+    /// The PR's words a compact card runs on from its status: the number
+    /// alone once the status says Ready to merge, since the PR's "ready"
+    /// would only say it again and crowd the line ("Ready to merge 3m ·
+    /// #1"); else its full words ("#45 · 1 failing").
+    pub fn card_pr_words(&mut self, w: Option<&Workspace>, pr: &PrSummary) -> String {
+        if self.shows_merge_ready(w) {
+            pr.tag.clone()
+        } else {
+            pr.text.clone()
+        }
     }
 
     /// Which status look the card takes. Ready to merge wins over Ready:

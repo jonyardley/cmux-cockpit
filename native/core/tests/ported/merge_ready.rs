@@ -172,8 +172,10 @@ mod header_hint {
 /// Ready to merge on the status line (issue #299).
 mod merge_ready_status {
     use super::*;
+    use cockpit_core::card_chips::Chip;
     use cockpit_core::data::{Agent, AgentStatus, Workspace};
-    use cockpit_core::status::StatusKind;
+    use cockpit_core::prs::pr_summary;
+    use cockpit_core::status::{StatusKind, compact_pr_text};
     use cockpit_core::ui::Urgency;
 
     /// The workspace `id` with `agents`, and `unread` unread.
@@ -275,6 +277,34 @@ mod merge_ready_status {
         let w = card(&mut data, "failing", vec![at(&mut fx, Idle, 120.0)], 2.0);
         assert!(s.shows_ready(&data, Some(&w)));
         assert_eq!(s.badge_count(&data, Some(&w)), 0.0);
+    }
+
+    #[test]
+    fn drops_the_prs_state_words_once_the_status_says_it_keeping_its_number_decided_1a() {
+        let (mut s, mut data, mut fx) = setup();
+        let words = |s: &mut Session, w: &Workspace| {
+            let pr = pr_summary(&s.saved, Some(w)).expect("a PR");
+            compact_pr_text(Some(&s.card_pr_words(Some(w), &pr)))
+        };
+        let state = |s: &mut Session, w: &Workspace| {
+            s.chips_for(Some(w), true)
+                .into_iter()
+                .find_map(|c| match c {
+                    Chip::Pr { tag, state, .. } => Some((tag, state)),
+                    _ => None,
+                })
+        };
+        let ready = card(&mut data, "ready1", vec![at(&mut fx, Idle, 180.0)], 0.0);
+        assert_eq!(
+            words(&mut s, &ready),
+            "· #1",
+            "compact: Ready to merge 3m · #1"
+        );
+        assert_eq!(state(&mut s, &ready), Some(("#1".into(), String::new())));
+        // Working on the same ready PR, the status says Working, so the chip keeps "ready".
+        let busy = card(&mut data, "ready2", vec![at(&mut fx, Working, 60.0)], 0.0);
+        assert_eq!(words(&mut s, &busy), "· #2 · ready");
+        assert_eq!(state(&mut s, &busy), Some(("#2".into(), "ready".into())));
     }
 
     #[test]
