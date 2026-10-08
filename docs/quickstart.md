@@ -325,7 +325,14 @@ What each script in `routes.ts` turns on:
   too, when Claude's turn finishes (or on your next message, if the session
   was idle or you pressed Esc), so its sidebar row shows the new name. It
   also names each agent row in the agents panel: the `/rename`, else the
-  session's first real prompt.
+  session's first real prompt. Two renames happen at once instead:
+  `/ws <name>` renames the workspace the moment you press Enter and never
+  reaches Claude (`/ws #123 <name>` sets the issue number too; without
+  one the name keeps the number it had), and a session's first prompt
+  that names an issue (`#123`, "issue 123" or an issue link) puts
+  `#123` at the front of a name that has no number yet. Turn off cmux's
+  own Workspace Auto-Naming (Settings, Automation) so nothing else
+  renames workspaces as the topic shifts.
 
 Older versions added each script to settings on its own, with its own
 matcher. Left beside the entry points, those would run their script

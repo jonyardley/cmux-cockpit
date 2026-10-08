@@ -10,7 +10,7 @@ type Obj = Record<string, unknown>;
 export interface Route {
   script: string;
   matcher?: string;
-  /** Its block decision on stdout reaches Claude Code (dispatch.ts); every other script's stdout is dropped. */
+  /** Its block decision on stdout reaches Claude Code (dispatch.ts), on Stop or UserPromptSubmit only; every other script's stdout is dropped. */
   sendsBack?: true;
 }
 
@@ -28,7 +28,7 @@ export const ROUTES: Readonly<Record<string, readonly Route[]>> = {
     },
   ],
   Stop: [{ script: "report-move.ts", sendsBack: true }, { script: "report-rename.ts" }, { script: "report-shell.ts" }],
-  UserPromptSubmit: [{ script: "report-rename.ts" }],
+  UserPromptSubmit: [{ script: "report-rename.ts", sendsBack: true }],
   SessionStart: [{ script: "report-rename.ts" }],
   SubagentStart: [{ script: "report-subagent.ts" }],
   SubagentStop: [{ script: "report-subagent.ts" }],
@@ -81,6 +81,11 @@ function routesFor(event: string, payload: Obj | null, routes: typeof ROUTES): r
 export const scriptsFor = (event: string, payload: Obj | null, routes = ROUTES): string[] =>
   routesFor(event, payload, routes).map((r) => r.script);
 
-/** Which of those scripts may send the turn back: only Stop's, since a block on any other event would stop a tool or answer a prompt. */
+// The events a block decision may come from: a Stop block sends the turn
+// back, and a UserPromptSubmit block keeps a prompt from the model (the
+// `/ws` rename). A block on any other event would stop a tool.
+const BLOCKABLE = new Set(["Stop", "UserPromptSubmit"]);
+
+/** Which of those scripts may block: only those marked, and only on Stop or UserPromptSubmit. */
 export const sendersFor = (event: string, payload: Obj | null, routes = ROUTES): string[] =>
-  event === "Stop" ? routesFor(event, payload, routes).flatMap((r) => (r.sendsBack ? [r.script] : [])) : [];
+  BLOCKABLE.has(event) ? routesFor(event, payload, routes).flatMap((r) => (r.sendsBack ? [r.script] : [])) : [];
