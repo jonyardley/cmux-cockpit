@@ -233,6 +233,14 @@ mod merge_ready_status {
     }
 
     #[test]
+    fn leaves_an_agent_whose_status_it_does_not_know_as_it_was_since_it_may_yet_be_busy() {
+        let (mut s, mut data, mut fx) = setup();
+        let thinking = at(&mut fx, AgentStatus::Other("thinking".into()), 60.0);
+        let w = card(&mut data, "ready1", vec![thinking], 0.0);
+        assert_ne!(s.status_kind(&data, Some(&w)), StatusKind::MergeReady);
+    }
+
+    #[test]
     fn says_nothing_of_a_pr_that_is_not_ready() {
         let (mut s, mut data, mut fx) = setup();
         for id in [

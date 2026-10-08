@@ -182,15 +182,18 @@ const MERGE_READY: StatusStyle = {
 };
 
 /**
- * True when the card says Ready to merge: its PR is ready and no agent there
- * is working (quiet too), waiting on Jon, asking, or Waiting on a shell it
- * still runs. Those keep their status, since they come first. It wins over
- * Ready: the unread badge still says there is output.
+ * True when the card says Ready to merge: its PR is ready and its agent, if
+ * any, is idle or finished, not asking, and not Waiting on a shell it still
+ * runs. Working (quiet too), Your turn, Asking and Waiting keep their status,
+ * since they come first, and so does a status cmux names that this code does
+ * not know, which may yet be busy. It wins over Ready: the unread badge still
+ * says there is output.
  */
 function mergeReady(a: Agent | null, w: Workspace | undefined): boolean {
   if (prHealth(w) !== "ready") return false;
   const s = a?.status;
-  return s !== "working" && s !== "needs_input" && !askReason(a, w) && !isWaiting(a, w);
+  const atRest = !s || s === "idle" || s === "ended";
+  return atRest && !askReason(a, w) && !isWaiting(a, w);
 }
 
 export function statusInfo(w: Workspace | undefined): StatusStyle {

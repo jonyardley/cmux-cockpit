@@ -180,6 +180,13 @@ describe("Ready to merge on the status line (issue #299)", () => {
     assert.equal(status.statusInfo(card("ready2", { agents: [agent("needs_input", since(60))] })).label, "Your turn");
   });
 
+  it("leaves an agent whose status it does not know as it was, since it may yet be busy", () => {
+    // A word cmux may send that renderer.d.ts does not list: the cast stands
+    // in for data the type cannot describe.
+    const thinking = agent("thinking" as AgentStatus, since(60));
+    assert.notEqual(status.statusInfo(card("ready1", { agents: [thinking] })).label, "Ready to merge");
+  });
+
   it("says nothing of a PR that is not ready", () => {
     for (const id of ["draft", "failing", "conflicts", "running", "blocked", "noVerdict"]) {
       assert.equal(status.statusInfo(card(id, { agents: [agent("idle", since(60))] })).label, "Idle", id);

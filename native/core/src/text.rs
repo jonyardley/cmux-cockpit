@@ -78,12 +78,19 @@ pub fn clip(t: &str, max: usize) -> String {
 }
 
 /// A PR title as a card shows it (cleanTitle): the leading marks that
-/// are not a letter, a number or one of `~ / # ( [` dropped, then trimmed.
+/// are not a letter, a number or one of `~ / # ( [` dropped, then trimmed
+/// as JS trim() does (js_space).
 pub fn clean_title(s: Option<&str>) -> String {
     s.unwrap_or_default()
         .trim_start_matches(|c: char| !(c.is_alphanumeric() || "~/#([".contains(c)))
-        .trim()
+        .trim_end_matches(js_space)
         .to_string()
+}
+
+/// What JS trim() takes off: Rust's whitespace, but the byte order mark
+/// too, and never U+0085, which JS keeps.
+fn js_space(c: char) -> bool {
+    c == '\u{FEFF}' || (c.is_whitespace() && c != '\u{85}')
 }
 
 /// readable(), cut to `max` characters with an ellipsis.
@@ -203,6 +210,8 @@ mod tests {
         assert_eq!(clean_title(Some("2 fixes")), "2 fixes");
         assert_eq!(clean_title(Some(" \u{2014} ")), "");
         assert_eq!(clean_title(None), "");
+        assert_eq!(clean_title(Some("Ship it\u{FEFF}")), "Ship it");
+        assert_eq!(clean_title(Some("Ship it\u{85}")), "Ship it\u{85}");
     }
 
     #[test]

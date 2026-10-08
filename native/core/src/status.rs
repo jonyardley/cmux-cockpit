@@ -363,20 +363,22 @@ impl Session {
             && live_shell_count(&self.saved, w, a) > 0
     }
 
-    /// Whether the card says Ready to merge: its PR is ready and no agent
-    /// there is working (quiet too), waiting on Jon, asking, or Waiting on
-    /// a shell it still runs. Those keep their status, since they come first.
+    /// Whether the card says Ready to merge: its PR is ready and its agent,
+    /// if any, is idle or finished, not asking, and not Waiting on a shell
+    /// it still runs. Working (quiet too), Your turn, Asking and Waiting
+    /// keep their status, since they come first, and so does a status cmux
+    /// names that the core does not know, which may yet be busy.
     fn merge_ready(&self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
         if pr_health(&self.saved, w) != PrHealth::Ready {
             return false;
         }
-        let busy = a.is_some_and(|a| {
+        let at_rest = a.is_none_or(|a| {
             matches!(
                 a.status,
-                Some(AgentStatus::Working | AgentStatus::NeedsInput)
+                None | Some(AgentStatus::Idle | AgentStatus::Ended)
             )
         });
-        !busy && ask_reason(&self.saved, a, w).is_none() && !self.is_waiting(a, w)
+        at_rest && ask_reason(&self.saved, a, w).is_none() && !self.is_waiting(a, w)
     }
 
     /// Which status look the card takes. Ready to merge wins over Ready:

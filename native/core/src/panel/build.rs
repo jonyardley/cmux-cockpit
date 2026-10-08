@@ -15,7 +15,8 @@ use crate::projects::Project;
 use crate::prs::pr_summary;
 use crate::session::Session;
 use crate::status::{
-    DETAIL_MAX, LEFT_OFF_MAX, NEEDS_DETAIL_MAX, StatusStyle, progress_fraction, waiting_tokens,
+    DETAIL_MAX, LEFT_OFF_MAX, NEEDS_DETAIL_MAX, StatusKind, StatusStyle, progress_fraction,
+    waiting_tokens,
 };
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
@@ -189,15 +190,18 @@ struct Looks {
     status_has_age: bool,
 }
 
-/// A card's looks beside its `status`. A row has no Ready pill
-/// (cards.ts denseRow), so it is never Ready, and its status is its age,
-/// so its age is that same string and the status carries it.
+/// A card's looks beside its `status` and the status `kind` it draws. A
+/// row has no Ready pill (cards.ts denseRow), so it is never Ready, and its
+/// status is its age, so its age is that same string and the status
+/// carries it. The pill reads the kind the card already worked out
+/// (shows_ready), not a second pass over the same rule.
 fn looks(
     session: &mut Session,
     data: &Data,
     w: Option<&Workspace>,
     density: Density,
     status: &str,
+    kind: &StatusKind,
 ) -> Looks {
     let row = density == Density::Row;
     let badge = session.badge_count(data, w);
@@ -209,7 +213,7 @@ fn looks(
     Looks {
         badge: badge_of(&session.project_of_workspace(w)),
         unread: card_unread(density, w.and_then(|w| w.unread), badge),
-        ready: !row && session.shows_ready(data, w),
+        ready: !row && *kind == StatusKind::Ready,
         pinned: is_pinned(w),
         progress: progress_fraction(w),
         helpers: session.helper_text(w),
@@ -449,7 +453,8 @@ fn left_off(text: &str) -> String {
 
 fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card {
     let w = data.ws_by_id(id);
-    let style = session.status_info(data, w);
+    let kind = session.status_kind(data, w);
+    let style = kind.style();
     let density = card_density(&session.lanes, data, w);
     let waiting = waiting_of(session, view, w);
     // A row carries its age alone, as the sidebar's row does, in the
@@ -467,7 +472,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         String::new()
     };
     let chips = chips_row(session, w, chips_for_density(density));
-    let looks = looks(session, data, w, density, &status);
+    let looks = looks(session, data, w, density, &status, &kind);
     let (detail, detail_ink) = detail_of(session, data, w, density, waiting);
     Card {
         ws_id: id.to_string(),
@@ -577,14 +582,15 @@ fn lane_head(
 /// and status, what a waiting chat wants, and its chips with the branch.
 fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card {
     let w = data.ws_by_id(id);
-    let style = session.status_info(data, w);
+    let kind = session.status_kind(data, w);
+    let style = kind.style();
     let wanted = session.move_of(w).map(|m| m.text).unwrap_or_default();
     let waiting = waiting_of(session, view, w);
     let (status, status_ink) = match waiting {
         Some(wt) => (needs_line(session, data, w), wt.ink),
         None => (session.status_line(data, w), style.text),
     };
-    let looks = looks(session, data, w, Density::Full, &status);
+    let looks = looks(session, data, w, Density::Full, &status, &kind);
     Card {
         ws_id: id.to_string(),
         icon: icon_of(&style),
