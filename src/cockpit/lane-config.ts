@@ -6,7 +6,10 @@
 // The file is a bare array of {id?, name, color?, density?, folded?, faint?,
 // leftOff?}, in display order. Unsorted is built in and last. A field left
 // out takes the same-id built-in lane's value, else compact, unfolded and
-// plain in laneUnsorted's colour. No file, or an empty array, is today's four.
+// plain in laneUnsorted's colour. A field set to null counts as left out, as
+// serde reads it natively. No file, or an empty array, is today's four.
+
+import { isRecord } from "../../scripts/state-config.ts";
 
 /** The colours a lane may take: the lane tokens in theme.ts, by name. */
 export const LANE_COLORS = ["laneMain", "laneReview", "laneBackground", "laneParked", "laneUnsorted"] as const;
@@ -49,19 +52,21 @@ type Fail = { error: string };
 
 const KEYS: ReadonlySet<string> = new Set(["id", "name", "color", "density", "folded", "faint", "leftOff"]);
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
-const isColor = (v: string): v is LaneColor => (LANE_COLORS as readonly string[]).includes(v);
-const isDensity = (v: string): v is Density => (DENSITIES as readonly string[]).includes(v);
+// Widened to unknown so includes() takes any string, no cast.
+const COLOR_NAMES: readonly unknown[] = LANE_COLORS;
+const DENSITY_NAMES: readonly unknown[] = DENSITIES;
+const isColor = (v: string): v is LaneColor => COLOR_NAMES.includes(v);
+const isDensity = (v: string): v is Density => DENSITY_NAMES.includes(v);
 
-// An optional string field: absent, or a string; anything else fails.
+// An optional string field: absent or null, or a string; anything else fails.
 function optString(raw: Record<string, unknown>, key: string, label: string): string | undefined | Fail {
-  const v = raw[key];
+  const v = raw[key] ?? undefined;
   if (v === undefined || typeof v === "string") return v;
   return { error: `${label}: ${key} must be a string` };
 }
 
 function optBool(raw: Record<string, unknown>, key: string, label: string): boolean | undefined | Fail {
-  const v = raw[key];
+  const v = raw[key] ?? undefined;
   if (v === undefined || typeof v === "boolean") return v;
   return { error: `${label}: ${key} must be true or false` };
 }

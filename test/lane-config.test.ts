@@ -83,6 +83,23 @@ describe("lanes.json", () => {
     });
   });
 
+  it("reads a field set to null as left out, as the native core does", () => {
+    assert.deepEqual(lanes([{ id: null, name: "Ideas", color: null, density: null, folded: null }]), [
+      {
+        id: "Ideas",
+        name: "Ideas",
+        color: "laneUnsorted",
+        density: "compact",
+        folded: false,
+        faint: false,
+        leftOff: false,
+      },
+    ]);
+    assert.deepEqual(lanes([{ id: "parked", name: "Shelf", faint: null, leftOff: null }]), [
+      { ...BUILT_IN_LANES[3], name: "Shelf" },
+    ]);
+  });
+
   it("refuses what it cannot draw", () => {
     assert.match(error({}), /JSON array/);
     assert.match(error(["Ideas"]), /object/);
