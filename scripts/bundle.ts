@@ -77,6 +77,8 @@ export function stateFor(entry: Entry, state: State): Partial<State> {
 /** What the build bakes into every sidebar, before stateFor trims the state. */
 export interface Baked {
   projects: unknown;
+  /** The lane table (src/cockpit/lane-config.ts), every gap filled. */
+  lanes: unknown;
   state: State;
   unreadable: boolean;
   urlToken: string;
@@ -99,6 +101,7 @@ export function bundleOptions(entry: Entry, baked: Baked): BuildOptions & { writ
     banner: { js: `// GENERATED from src/${entry}/ by \`npm run build\`. Do not edit.` },
     define: {
       __PROJECTS__: JSON.stringify(baked.projects),
+      __LANES__: JSON.stringify(baked.lanes),
       __STATE__: JSON.stringify(stateFor(entry, baked.state)),
       __STATE_UNREADABLE__: JSON.stringify(baked.unreadable),
       __URL_TOKEN__: JSON.stringify(baked.urlToken),

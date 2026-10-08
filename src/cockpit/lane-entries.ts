@@ -118,11 +118,12 @@ const laneEntries = computed(() =>
 // (panelOpacity). drop.ts ignores a drag or move outside All instead.
 export const flatEntries: () => LaneEntry[] = laneEntries;
 
-// Lanes you come back to after a while, where a card also says what you last asked.
-const LEFT_OFF_LANES: ReadonlySet<LaneKey> = new Set<LaneKey>(["bg", "parked"]);
-
-/** Whether the card shows your last prompt: in Background and Parked, by cmux's own data as cardDensity is. */
-export const showsLeftOff = (w: Workspace | undefined): boolean => LEFT_OFF_LANES.has(actualLaneOf(w));
+/**
+ * Whether the card shows your last prompt: in a lane you come back to after a
+ * while (`leftOff`, Background and Parked by default), by cmux's own data as
+ * cardDensity is.
+ */
+export const showsLeftOff = (w: Workspace | undefined): boolean => laneByKey(actualLaneOf(w)).leftOff;
 
 /**
  * The cards a lane header counts, every card it lists, folded or not, and
@@ -154,12 +155,12 @@ export interface HeaderHint {
 }
 
 /**
- * "Drop here" while a drag is over the lane, else its merge line. Parked
- * keeps its merge line faint, as it does its title: set-aside work should
+ * "Drop here" while a drag is over the lane, else its merge line. A faint
+ * lane (Parked by default) keeps its merge line faint, as it does its title: set-aside work should
  * not call out in green. Otherwise Ready's green (pr-colors.ts), so the
  * count reads as the PR verdict, not the agent's Ready pill.
  */
 export function headerHint(laneKey: LaneKey, dropping: boolean): HeaderHint {
   if (dropping) return { text: "Drop here", color: C.heading };
-  return { text: mergeReadyText(laneKey), color: laneKey === "parked" ? C.faint : READY_INK };
+  return { text: mergeReadyText(laneKey), color: laneByKey(laneKey).faint ? C.faint : READY_INK };
 }

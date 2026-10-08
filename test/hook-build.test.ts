@@ -282,6 +282,13 @@ describe("buildInputs", () => {
     assert.notEqual(buildInputs(root), before);
   });
 
+  it("changes when the lane table appears", () => {
+    const root = tree();
+    const before = buildInputs(root);
+    writeFileSync(join(root, "config", "lanes.json"), "[]");
+    assert.notEqual(buildInputs(root), before);
+  });
+
   it("changes with the build script and the committed fallback table", () => {
     const root = tree();
     const before = buildInputs(root);

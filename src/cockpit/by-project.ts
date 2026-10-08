@@ -12,7 +12,7 @@ import {
   projectId,
   savedSpec,
 } from "../shared/projects.ts";
-import { type Lane, laneByKey } from "./lanes.ts";
+import { FIRST_LANE, type Lane, laneByKey } from "./lanes.ts";
 import {
   allWorkspaces,
   cards,
@@ -229,9 +229,10 @@ export function newSessionLabel(w: Workspace | undefined): string {
 }
 
 /** Opens a new session in the card's project folder, a no-op without one.
- * It lands in Main activity, since Jon is about to work in it. */
+ * It lands in the first lane (Main activity by default), since Jon is about
+ * to work in it. */
 export function newSessionFor(w: Workspace | undefined): void {
-  if (w) openProjectWorkspace(projectKey(w), laneByKey("main"));
+  if (w) openProjectWorkspace(projectKey(w), laneByKey(FIRST_LANE));
 }
 
 /** A project menu's first item: what it opens, or why it opens nothing. */

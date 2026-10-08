@@ -296,7 +296,7 @@ function tsFiles(dir: string, deep: boolean): string[] {
 /**
  * What a build reads, cheaply: the state file's text, plus the size and
  * modification time of everything else build.ts reads: the project table
- * and its committed fallback, the state file's unreadable copy, every .ts
+ * and its committed fallback, the lane table, the state file's unreadable copy, every .ts
  * file under src/ and the scripts (build.ts and the modules it imports) in
  * scripts/. A tap or a hook changes the first; a pull or a branch switch
  * changes the others, so a source change landing mid-build reads
@@ -309,6 +309,7 @@ export function buildInputs(root: string = ROOT): string {
   const files = [
     join(root, "config", "projects.json"),
     join(root, "config", "projects.example.json"),
+    join(root, "config", "lanes.json"),
     unreadableCopyOf(state),
     ...tsFiles(join(root, "src"), true).map((f) => join(root, "src", f)),
     ...tsFiles(join(root, "scripts"), false).map((f) => join(root, "scripts", f)),
