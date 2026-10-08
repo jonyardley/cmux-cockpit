@@ -128,6 +128,7 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
+            "row_pr": null,
             "detail": "Your turn: Read the draft in #142 and say go.",
             "detail_ink": "clayText",
             "detail_lines": 1,
@@ -277,6 +278,11 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
+            "row_pr": {
+              "tag": "#12",
+              "title": "",
+              "ink": "metaText"
+            },
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -423,6 +429,11 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
+            "row_pr": {
+              "tag": "#148",
+              "title": "",
+              "ink": "metaText"
+            },
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -569,6 +580,11 @@
             "status_has_age": true,
             "left_off": "",
             "chips": [],
+            "row_pr": {
+              "tag": "#14",
+              "title": "",
+              "ink": "metaText"
+            },
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -715,6 +731,7 @@
             "status_has_age": false,
             "left_off": "",
             "chips": [],
+            "row_pr": null,
             "detail": "",
             "detail_ink": "secondary",
             "detail_lines": 1,
@@ -938,6 +955,7 @@
             "is_action": false
           }
         ],
+        "row_pr": null,
         "detail": "",
         "detail_ink": "secondary",
         "detail_lines": 2,
@@ -1097,6 +1115,7 @@
             "is_action": false
           }
         ],
+        "row_pr": null,
         "detail": "",
         "detail_ink": "secondary",
         "detail_lines": 2,
@@ -1307,6 +1326,7 @@
             "is_action": false
           }
         ],
+        "row_pr": null,
         "detail": "",
         "detail_ink": "secondary",
         "detail_lines": 2,
@@ -1482,6 +1502,7 @@
             "is_action": false
           }
         ],
+        "row_pr": null,
         "detail": "",
         "detail_ink": "secondary",
         "detail_lines": 2,
@@ -1666,6 +1687,7 @@
             "is_action": true
           }
         ],
+        "row_pr": null,
         "detail": "",
         "detail_ink": "secondary",
         "detail_lines": 2,

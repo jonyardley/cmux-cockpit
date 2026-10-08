@@ -9,6 +9,7 @@ use std::borrow::Cow;
 use crate::data::{PrStatus, PullRequest, Workspace};
 use crate::js::{non_empty, num_text, truthy};
 use crate::persist::{SavedCheck, SavedPr, SavedState};
+use crate::text::clean_title;
 
 /// What a PR's chip says about it: its worst state, or quiet.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -171,6 +172,8 @@ pub struct PrSummary {
     /// The words without the number: "1 failing", "draft · running", a
     /// quiet open PR's "open".
     pub state: String,
+    /// Its own title, cleaned (cleanTitle); "" when it has none.
+    pub title: String,
     /// Its diff size, "+120 −8"; "" when it has none.
     pub diff: String,
 }
@@ -261,6 +264,7 @@ pub fn summary_of(pr: &PullRequest, checks: &[SavedCheck]) -> Option<PrSummary> 
         tag,
         text,
         state,
+        title: clean_title(pr.title.as_deref()),
         diff: diff_text(pr),
     })
 }

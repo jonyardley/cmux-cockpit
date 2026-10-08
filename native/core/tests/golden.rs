@@ -60,6 +60,7 @@ fn computed(input: &Value) -> Value {
             "lane": s.lane_of(&data, w).as_str(),
             "project": s.project_key(w),
             "status": s.status_of(Some(w)).as_str(),
+            "statusLine": s.status_line(&data, Some(w)),
         });
         placement.insert(w.id.clone(), place);
     }

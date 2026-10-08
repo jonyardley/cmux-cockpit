@@ -313,6 +313,7 @@ pub(crate) mod fixtures {
             status_has_age: false,
             left_off: String::new(),
             chips: Vec::new(),
+            row_pr: None,
             detail: String::new(),
             detail_ink: Token::Secondary,
             detail_lines: 1,

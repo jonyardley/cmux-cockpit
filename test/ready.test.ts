@@ -170,8 +170,10 @@ describe("a Ready card", () => {
 describe("a Ready card's PR words (issue #79)", () => {
   const withPr = (id: string) => readyWs(id, { branch: "feat" });
 
-  it("leaves the PR out of the status line, since the chips row carries it", () => {
-    assert.equal(status.statusLine(withPr("green")), "Finished 6m");
+  it("leaves the PR's words out of the status line, since the chips row carries it", () => {
+    // A PR GitHub would merge changes the status itself (issue #299), never
+    // the words after it.
+    assert.equal(status.statusLine(withPr("green")), "Ready to merge 6m");
     assert.equal(status.statusLine(withPr("failing")), "Finished 6m");
   });
 

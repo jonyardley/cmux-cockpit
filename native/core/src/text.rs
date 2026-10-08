@@ -77,6 +77,15 @@ pub fn clip(t: &str, max: usize) -> String {
     }
 }
 
+/// A PR title as a card shows it (cleanTitle): the leading marks that
+/// are not a letter, a number or one of `~ / # ( [` dropped, then trimmed.
+pub fn clean_title(s: Option<&str>) -> String {
+    s.unwrap_or_default()
+        .trim_start_matches(|c: char| !(c.is_alphanumeric() || "~/#([".contains(c)))
+        .trim()
+        .to_string()
+}
+
 /// readable(), cut to `max` characters with an ellipsis.
 pub fn one_line(s: Option<&str>, max: usize) -> String {
     clip(&readable(s), max)
@@ -181,6 +190,19 @@ mod tests {
     #[test]
     fn keeps_an_ellipsis_the_agent_wrote_under_the_cap() {
         assert_eq!(whole_words("Running tests…", 140), "Running tests…");
+    }
+
+    #[test]
+    fn cleans_a_pr_title_as_the_sidebar_does() {
+        assert_eq!(
+            clean_title(Some("  Row cards show their PR ")),
+            "Row cards show their PR"
+        );
+        assert_eq!(clean_title(Some("- [x] #293: rows")), "[x] #293: rows");
+        assert_eq!(clean_title(Some("\u{1F680} Ship it")), "Ship it");
+        assert_eq!(clean_title(Some("2 fixes")), "2 fixes");
+        assert_eq!(clean_title(Some(" \u{2014} ")), "");
+        assert_eq!(clean_title(None), "");
     }
 
     #[test]

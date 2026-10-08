@@ -182,7 +182,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "anchor-review": {
       "actualLane": "review",
@@ -190,7 +191,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "blocked": {
       "actualLane": "review",
@@ -198,7 +200,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "closed": {
       "actualLane": "review",
@@ -206,7 +209,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "conflicts": {
       "actualLane": "review",
@@ -214,7 +218,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "draft": {
       "actualLane": "review",
@@ -222,7 +227,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "failing": {
       "actualLane": "review",
@@ -230,7 +236,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "merged": {
       "actualLane": "review",
@@ -238,7 +245,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "ready": {
       "actualLane": "review",
@@ -246,7 +254,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "Ready to merge"
     },
     "running": {
       "actualLane": "review",
@@ -254,7 +263,8 @@
       "density": "compact",
       "lane": "review",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "No agent"
     },
     "waiting": {
       "actualLane": "main",
@@ -262,7 +272,8 @@
       "density": "full",
       "lane": "main",
       "project": "other",
-      "status": "none"
+      "status": "none",
+      "statusLine": "Ready to merge"
     }
   },
   "projectEntries": [

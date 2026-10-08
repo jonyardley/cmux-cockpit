@@ -128,9 +128,10 @@ extension CardText {
     /// The green pill's word (parts.ts readyPill).
     static let ready = "Ready"
 
-    /// The soft halo round a status dot: working, needs and asking, the
-    /// three filled dots in blue, clay and amber, each in its own hue's
-    /// halo. Everything else, a hollow dot or finished green, is clear, so
+    /// The soft halo round a status dot: working, needs, asking and ready
+    /// to merge, the four filled dots in blue, clay, amber and vivid green,
+    /// each in its own hue's halo. Everything else, a hollow dot or
+    /// finished green, is clear, so
     /// dots with and without one still line up (ui.ts haloDot).
     static func halo(_ icon: Icon) -> Token {
         guard icon.glyph == filledDot else { return .clear }
@@ -138,8 +139,16 @@ extension CardText {
         case .blue: return .blueHalo
         case .clay: return .clayHalo
         case .amber: return .amberHalo
+        case .mergeGreen: return .mergeHalo
         default: return .clear
         }
+    }
+
+    /// A row's PR title as it follows the session's, "· Row cards show
+    /// their PR"; nil with no PR or a PR with no title (cards.ts denseRow).
+    static func rowPrTitle(_ card: Card) -> String? {
+        guard let title = card.rowPr?.title, !title.isEmpty else { return nil }
+        return "· " + title
     }
 
     /// The age at the end of the title row: shown only while the status

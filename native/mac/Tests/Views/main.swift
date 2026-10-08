@@ -484,11 +484,14 @@ check(BadgeInk.glyph(on: 0x3B6FB6) == BadgeInk.light, "blue (#3B6FB6) takes the 
 check(BadgeInk.glyph(on: 0x000000) == BadgeInk.light && BadgeInk.glyph(on: 0xFFFFFF) == BadgeInk.dark, "black takes white, white takes dark")
 check(BadgeInk.fallback == Palette.rgba(Palette.Own.grey, dark: false).hex, "no colour is the cockpit's grey")
 
-// The halo round a status dot: the three filled hues that ask for a look.
+// The halo round a status dot: the four filled hues that ask for a look.
 check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .blue)) == .blueHalo, "working's blue dot has its halo")
 check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .clay)) == .clayHalo, "needs' clay dot has its halo")
 check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .amber)) == .amberHalo, "asking's amber dot has its halo")
+check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .mergeGreen)) == .mergeHalo, "ready to merge's green dot has its halo")
 check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .green)) == .clear, "finished green has none")
+check(Palette.rgba(Token.mergeHalo, dark: false).hex == Palette.rgba(Token.mergeGreen, dark: false).hex, "ready to merge's halo is its green at an alpha")
+check(Palette.rgba(Token.mergeGreen, dark: false) != Palette.rgba(Token.green, dark: false), "ready to merge is not the finished green")
 check(CardText.halo(Icon(glyph: "○", ink: .blue)) == .clear, "a hollow dot has none")
 check(CardText.halo(Icon(glyph: "○", ink: nil)) == .clear, "a grey outline has none")
 
@@ -515,7 +518,7 @@ for name in ["lanes", "projects"] {
 }
 var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil), title: "t", density: .full, badge: Badge(icon: "terminal", color: nil),
                unread: "", ready: false, pinned: false, progress: 1.5, helpers: "", status: "", statusInk: .faint, age: "",
-               statusHasAge: false, leftOff: "", chips: [], detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, rank: 0,
+               statusHasAge: false, leftOff: "", chips: [], rowPr: nil, detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, rank: 0,
                movable: true, dimmed: false, selected: false, menu: [])
 check(CardText.progress(bar) == 1, "a bar past the end stops full")
 bar.progress = -0.5
@@ -528,6 +531,11 @@ bar.statusHasAge = true
 check(CardText.titleAge(bar).isEmpty, "a timed status keeps the title row free of a second time")
 bar.progress = nil
 check(CardText.progress(bar) == nil, "no value, no bar")
+check(CardText.rowPrTitle(bar) == nil, "a card with no PR says no PR title")
+bar.rowPr = RowPr(tag: "#171", title: "", ink: .metaText)
+check(CardText.rowPrTitle(bar) == nil, "a PR with no title adds none")
+bar.rowPr = RowPr(tag: "#171", title: "Row cards show their PR", ink: .greenDeep)
+check(CardText.rowPrTitle(bar) == "· Row cards show their PR", "a row's PR title follows the session's after a dot")
 
 // The core's words the panel matches on.
 let marks = source("core/src/panel/mod.rs")

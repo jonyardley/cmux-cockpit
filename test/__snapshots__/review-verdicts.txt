@@ -36,9 +36,9 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                     Text "" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
                 HStack spacing: 6 .frame(maxWidth: infinity, alignment: leading)
                   ZStack .frame(width: 13, height: 13)
-                    Circle size: 13 .fill(clear)
-                    Circle size: 7 .fill(clear) .stroke(grey) .strokeWidth(1.5)
-                  Text "No agent" .font(12) .weight(medium) .color(faint|laneBackground) .lineLimit(1) .layoutPriority(2)
+                    Circle size: 13 .fill(mergeHalo)
+                    Circle size: 7 .fill(mergeGreen) .stroke(clear) .strokeWidth(1.5)
+                  Text "Ready to merge" .font(12) .weight(medium) .color(mergeText) .lineLimit(1) .layoutPriority(2)
                 VStack spacing: 0 .frame(maxWidth: infinity, alignment: leading)
                   HStack spacing: 5 .frame(maxWidth: infinity, alignment: leading)
                     ForEach .layoutPriority(2)
@@ -76,9 +76,9 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                     Text "" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
                 HStack spacing: 6 .frame(maxWidth: infinity, alignment: leading)
                   ZStack .frame(width: 12, height: 12)
-                    Circle size: 12 .fill(clear)
-                    Circle size: 6 .fill(clear) .stroke(grey) .strokeWidth(1.5)
-                  Text "No agent" .font(11.5) .weight(regular) .color(faint|laneBackground) .lineLimit(1) .layoutPriority(2)
+                    Circle size: 12 .fill(mergeHalo)
+                    Circle size: 6 .fill(mergeGreen) .stroke(clear) .strokeWidth(1.5)
+                  Text "Ready to merge" .font(11.5) .weight(regular) .color(mergeText) .lineLimit(1) .layoutPriority(2)
                   Text "· #1 · ready" .font(11.5) .color(greenDeep|readyInk) .lineLimit(1) .truncation(tail)
                   ForEach .layoutPriority(-1)
                     Text "+120 −8" .font(11.5) .color(faint|laneBackground) .lineLimit(1) .truncation(tail)
@@ -268,6 +268,9 @@ hover #7F7F7F14
 laneMain|select|heading #3D3D3A
 laneParked #B0AEA5
 laneUnsorted #C9C6BB
+mergeGreen #1DB954
+mergeHalo #1DB95447
+mergeText #12873B
 metaText #6B6A64
 onBadge|card #FFFFFF
 redText #9E2F27

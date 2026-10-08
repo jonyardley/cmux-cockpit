@@ -14,6 +14,9 @@ export const ASKING_WORD = "Asking";
 
 export const NO_AGENT_WORD = "No agent";
 
+/** An idle card whose PR GitHub would merge now (issue #299): "Ready to merge 3m". */
+export const MERGE_READY_WORD = "Ready to merge";
+
 /** An idle agent whose background shell is still running: "Waiting 4m · 1 shell". */
 export const WAITING_WORD = "Waiting";
 

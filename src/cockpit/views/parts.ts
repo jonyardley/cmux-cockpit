@@ -41,10 +41,10 @@ import { drag, isSelected, selectWorkspace } from "../state.ts";
 import {
   ageOf,
   badgeCount,
-  isReady,
   OUTLINE_MAX,
   openPrLabel,
   outline,
+  showsReady,
   statusHasAge,
   statusInfo,
   statusLine,
@@ -95,7 +95,7 @@ export function glyph(w: WsAccessor, size: number, radius: number, font: number)
 function readyPill(w: WsAccessor): View {
   return when(
     "ready",
-    () => isReady(w()),
+    () => showsReady(w()),
     () =>
       Text("Ready")
         .font(10.5)

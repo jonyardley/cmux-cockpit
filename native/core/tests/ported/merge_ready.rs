@@ -168,3 +168,111 @@ mod header_hint {
         );
     }
 }
+
+/// Ready to merge on the status line (issue #299).
+mod merge_ready_status {
+    use super::*;
+    use cockpit_core::data::{Agent, AgentStatus, Workspace};
+    use cockpit_core::status::StatusKind;
+    use cockpit_core::ui::Urgency;
+
+    /// The workspace `id` with `agents`, and `unread` unread.
+    fn card(data: &mut Data, id: &str, agents: Vec<Agent>, unread: f64) -> Workspace {
+        let w = ws_mut(data, id);
+        w.agents = Some(agents.into_iter().map(Some).collect());
+        w.unread = Some(unread);
+        w.clone()
+    }
+
+    /// An agent of `status` whose status began, and whose last activity
+    /// was, `ago` seconds back.
+    fn at(fx: &mut Fx, status: AgentStatus, ago: f64) -> Agent {
+        fx.agent(status).since(NOW - ago).activity(NOW - ago)
+    }
+
+    #[test]
+    fn says_ready_to_merge_on_an_idle_card_whose_pr_github_would_merge_in_the_vivid_green() {
+        let (mut s, mut data, mut fx) = setup();
+        let w = card(&mut data, "ready1", vec![at(&mut fx, Idle, 180.0)], 0.0);
+        let info = s.status_info(&data, Some(&w));
+        assert_eq!(info.label, "Ready to merge");
+        assert_eq!(info.dot, Some(Token::MergeGreen));
+        assert_eq!(info.halo, Token::MergeHalo);
+        assert_eq!(info.text, Token::MergeText);
+        assert_eq!(info.urgency, Urgency::Quiet);
+        assert_eq!(s.status_line(&data, Some(&w)), "Ready to merge 3m");
+    }
+
+    #[test]
+    fn says_it_on_a_finished_card_and_one_with_no_agent_too() {
+        let (mut s, mut data, mut fx) = setup();
+        let ended = card(&mut data, "ready1", vec![at(&mut fx, Ended, 60.0)], 0.0);
+        let none = card(&mut data, "ready2", vec![], 0.0);
+        for w in [ended, none] {
+            assert_eq!(
+                s.status_kind(&data, Some(&w)),
+                StatusKind::MergeReady,
+                "{}",
+                w.id
+            );
+        }
+    }
+
+    #[test]
+    fn leaves_a_working_or_waiting_card_its_own_status() {
+        let (mut s, mut data, mut fx) = setup();
+        let working = card(&mut data, "ready1", vec![at(&mut fx, Working, 60.0)], 0.0);
+        let turn = card(
+            &mut data,
+            "ready2",
+            vec![at(&mut fx, NeedsInput, 60.0)],
+            0.0,
+        );
+        assert_eq!(s.status_info(&data, Some(&working)).label, "Working");
+        assert_eq!(s.status_info(&data, Some(&turn)).label, "Your turn");
+    }
+
+    #[test]
+    fn says_nothing_of_a_pr_that_is_not_ready() {
+        let (mut s, mut data, mut fx) = setup();
+        for id in [
+            "draft",
+            "failing",
+            "conflicts",
+            "running",
+            "blocked",
+            "noVerdict",
+        ] {
+            let w = card(&mut data, id, vec![at(&mut fx, Idle, 60.0)], 0.0);
+            assert_eq!(s.status_info(&data, Some(&w)).label, "Idle", "{id}");
+        }
+    }
+
+    #[test]
+    fn wins_over_ready_and_the_unread_badge_then_says_there_is_output() {
+        let (mut s, mut data, mut fx) = setup();
+        let w = card(&mut data, "ready1", vec![at(&mut fx, Idle, 120.0)], 2.0);
+        assert!(
+            s.is_ready(&data, Some(&w)),
+            "the agent finished with output unread"
+        );
+        assert_eq!(s.status_kind(&data, Some(&w)), StatusKind::MergeReady);
+        assert!(!s.shows_ready(&data, Some(&w)), "no Ready pill");
+        assert_eq!(s.badge_count(&data, Some(&w)), 2.0);
+    }
+
+    #[test]
+    fn keeps_a_ready_cards_pill_when_its_pr_is_not_ready() {
+        let (mut s, mut data, mut fx) = setup();
+        let w = card(&mut data, "failing", vec![at(&mut fx, Idle, 120.0)], 2.0);
+        assert!(s.shows_ready(&data, Some(&w)));
+        assert_eq!(s.badge_count(&data, Some(&w)), 0.0);
+    }
+
+    #[test]
+    fn leaves_a_headers_pill_grey() {
+        let (mut s, mut data, mut fx) = setup();
+        let w = card(&mut data, "ready1", vec![at(&mut fx, Idle, 60.0)], 0.0);
+        assert_eq!(s.urgency_of(&data, Some(&w)), Urgency::Quiet);
+    }
+}

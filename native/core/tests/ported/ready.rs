@@ -257,10 +257,12 @@ mod a_ready_cards_pr_words_issue_79 {
     }
 
     #[test]
-    fn leaves_the_pr_out_of_the_status_line_since_the_chips_row_carries_it() {
+    fn leaves_the_prs_words_out_of_the_status_line_since_the_chips_row_carries_it() {
         let (mut s, data, mut fx) = setup();
+        // A PR GitHub would merge changes the status itself (issue #299),
+        // never the words after it.
         let green = with_pr(&mut fx, "green");
-        assert_eq!(s.status_line(&data, Some(&green)), "Finished 6m");
+        assert_eq!(s.status_line(&data, Some(&green)), "Ready to merge 6m");
         let failing = with_pr(&mut fx, "failing");
         assert_eq!(s.status_line(&data, Some(&failing)), "Finished 6m");
     }

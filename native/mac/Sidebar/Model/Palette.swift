@@ -86,6 +86,8 @@ enum Palette {
     private static let green = Pair(RGBA(0x788C5D), RGBA(0x93A877))
     private static let greenDeep = Pair(RGBA(0x3F5A2B), RGBA(0xA6C58A))
     private static let red = Pair(RGBA(0xC0453A), RGBA(0xD9655A))
+    /// Ready to merge's vivid green (issue #299), never the finished olive.
+    private static let mergeGreen = Pair(RGBA(0x1DB954), RGBA(0x3DD171))
     private static let text = Pair(RGBA(0x141413), RGBA(0xF0EEE6))
     private static let secondary = Pair(RGBA(0x5E5D59), RGBA(0xB7B5A9))
     private static let heading = Pair(RGBA(0x3D3D3A), RGBA(0xD6D4CA))
@@ -136,6 +138,9 @@ enum Palette {
         case .cardEdge: faint(text, 0x1F)
         case .laneParked: Pair(RGBA(0xB0AEA5), RGBA(0x6E6C66))
         case .laneUnsorted: Pair(RGBA(0xC9C6BB), RGBA(0x57564F))
+        case .mergeGreen: mergeGreen
+        case .mergeHalo: faint(mergeGreen, 0x47)
+        case .mergeText: Pair(RGBA(0x12873B), RGBA(0x5FD98A))
         }
     }
 

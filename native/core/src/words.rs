@@ -20,6 +20,9 @@ pub const ASKING_WORD: &str = "Asking";
 
 pub const NO_AGENT_WORD: &str = "No agent";
 
+/// An idle card whose PR GitHub would merge now (issue #299).
+pub const MERGE_READY_WORD: &str = "Ready to merge";
+
 /// An idle agent whose background shell is still running.
 pub const WAITING_WORD: &str = "Waiting";
 

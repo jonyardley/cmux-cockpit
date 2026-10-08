@@ -8,6 +8,7 @@ use crate::js::{non_empty, positive, truthy};
 use crate::moves::{quiet_move, waiting_move};
 use crate::needs::ask_reason;
 use crate::persist::{SavedMove, is_move_description};
+use crate::prs::{PrHealth, pr_health};
 use crate::session::Session;
 use crate::shells::live_shell_count;
 use crate::text::{card_message, clip, one_line, readable};
@@ -15,7 +16,8 @@ use crate::theme::Token;
 use crate::time::{age_since, finished_at};
 use crate::ui::{PillColors, URGENCY_RANK, Urgency, count_tint};
 use crate::words::{
-    ASKING_WORD, NO_AGENT_WORD, WAITING_WORD, YOU_WORD, shell_text, status_word, with_age,
+    ASKING_WORD, MERGE_READY_WORD, NO_AGENT_WORD, WAITING_WORD, YOU_WORD, shell_text, status_word,
+    with_age,
 };
 
 /// A workspace's status: its agent's, or none.
@@ -64,6 +66,9 @@ impl Status {
 /// Which of the card's status looks applies.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StatusKind {
+    /// Its PR is one GitHub would merge now, and no agent there works,
+    /// waits on Jon or asks (issue #299).
+    MergeReady,
     /// Finished and not yet looked at (issue #53).
     Ready,
     /// needs_input on a permission or a question (issue #81).
@@ -128,6 +133,16 @@ impl StatusKind {
     /// The look this kind draws with.
     pub fn style(&self) -> StatusStyle {
         match self {
+            // Its own vivid green, never the finished olive, and quiet for
+            // a header's pill, which it leaves as it was.
+            StatusKind::MergeReady => StatusStyle {
+                label: MERGE_READY_WORD,
+                dot: Some(Token::MergeGreen),
+                halo: Token::MergeHalo,
+                text: Token::MergeText,
+                ring: None,
+                urgency: Urgency::Quiet,
+            },
             // The finished green and word: Ready adds no hue of its own.
             StatusKind::Ready => StatusStyle {
                 halo: Token::Clear,
@@ -348,12 +363,32 @@ impl Session {
             && live_shell_count(&self.saved, w, a) > 0
     }
 
-    /// Which status look the card takes.
+    /// Whether the card says Ready to merge: its PR is ready and no agent
+    /// there is working (quiet too), waiting on Jon, asking, or Waiting on
+    /// a shell it still runs. Those keep their status, since they come first.
+    fn merge_ready(&self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
+        if pr_health(&self.saved, w) != PrHealth::Ready {
+            return false;
+        }
+        let busy = a.is_some_and(|a| {
+            matches!(
+                a.status,
+                Some(AgentStatus::Working | AgentStatus::NeedsInput)
+            )
+        });
+        !busy && ask_reason(&self.saved, a, w).is_none() && !self.is_waiting(a, w)
+    }
+
+    /// Which status look the card takes. Ready to merge wins over Ready:
+    /// the unread badge still says there is output.
     pub fn status_kind(&mut self, data: &Data, w: Option<&Workspace>) -> StatusKind {
+        let a = self.agent_of(w);
+        if self.merge_ready(a.as_ref(), w) {
+            return StatusKind::MergeReady;
+        }
         if self.is_ready(data, w) {
             return StatusKind::Ready;
         }
-        let a = self.agent_of(w);
         if ask_reason(&self.saved, a.as_ref(), w).is_some() {
             return StatusKind::Asking;
         }
@@ -463,9 +498,16 @@ impl Session {
         format!("{label}: {}", self.needs_detail(w))
     }
 
+    /// Whether the card shows the green Ready pill: Ready, and not Ready
+    /// to merge, which wins the card and leaves the badge to say there is
+    /// output.
+    pub fn shows_ready(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        self.status_kind(data, w) == StatusKind::Ready
+    }
+
     /// The unread count a card's badge shows: none while the Ready pill stands in for it.
     pub fn badge_count(&mut self, data: &Data, w: Option<&Workspace>) -> f64 {
-        if self.is_ready(data, w) {
+        if self.shows_ready(data, w) {
             0.0
         } else {
             w.and_then(|w| w.unread).unwrap_or(0.0)

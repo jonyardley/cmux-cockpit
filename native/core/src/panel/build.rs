@@ -23,7 +23,7 @@ use crate::theme::{Token, parse_hex};
 use super::{
     Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT, EditorView, HOLLOW, Icon, Lane,
     Needs, NeedsTarget, NextLine, PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow,
-    QUIET_ROW, Row, Waiting, piece,
+    QUIET_ROW, Row, RowPr, Waiting, piece,
 };
 
 /// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
@@ -209,7 +209,7 @@ fn looks(
     Looks {
         badge: badge_of(&session.project_of_workspace(w)),
         unread: card_unread(density, w.and_then(|w| w.unread), badge),
-        ready: !row && session.is_ready(data, w),
+        ready: !row && session.shows_ready(data, w),
         pinned: is_pinned(w),
         progress: progress_fraction(w),
         helpers: session.helper_text(w),
@@ -292,6 +292,20 @@ fn compact_pr(session: &Session, w: Option<&Workspace>) -> Vec<Chip> {
     let mut out = vec![chip];
     out.extend(diff_chip(&pr.diff));
     out
+}
+
+/// A row's PR: its number in its health's ink (metaText while quiet) and
+/// its title. Only a row has one; a card's chips carry its PR.
+fn row_pr(session: &Session, w: Option<&Workspace>, density: Density) -> Option<RowPr> {
+    if density != Density::Row {
+        return None;
+    }
+    let pr = pr_summary(&session.saved, w)?;
+    Some(RowPr {
+        ink: pr_text_color(Some(&pr), Token::MetaText),
+        tag: pr.tag,
+        title: pr.title,
+    })
 }
 
 /// Which chips a card in All carries, by its density.
@@ -472,6 +486,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         status_has_age: status_carries_age(density, waiting, looks.status_has_age),
         left_off,
         chips,
+        row_pr: row_pr(session, w, density),
         detail,
         detail_ink,
         detail_lines: detail_lines(density),
@@ -587,6 +602,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         status_has_age: status_carries_age(Density::Full, waiting, looks.status_has_age),
         left_off: String::new(),
         chips: chips_row(session, w, ChipsFor::Project),
+        row_pr: None,
         detail: unless_waiting(waiting, whole_words(&wanted, 0)),
         detail_ink: Token::Secondary,
         detail_lines: 2,
@@ -997,5 +1013,45 @@ mod tests {
         assert!(status_carries_age(Density::Full, None, true));
         assert_eq!(unless_waiting(wt, "Pushed it.".into()), "");
         assert_eq!(unless_waiting(None, "Pushed it.".into()), "Pushed it.");
+    }
+
+    #[test]
+    fn gives_a_row_its_prs_number_in_its_health_and_its_title() {
+        let mut core = Model::default();
+        let s = &mut core.session;
+        s.saved = crate::persist::SavedState::from_json(
+            r#"{"prs": {"r": {"number": 171, "url": "u", "status": "open", "branch": "feat",
+                "title": "  Row cards show their PR", "mergeable": true,
+                "checks": [{"name": "build", "state": "pass"}]},
+              "q": {"number": 9, "url": "u", "status": "open", "branch": "feat", "checks": []}}}"#,
+        )
+        .unwrap();
+        let ws = |id: &str| Workspace {
+            id: id.into(),
+            ..Workspace::default()
+        };
+        let (r, q, none) = (ws("r"), ws("q"), ws("n"));
+        assert_eq!(
+            row_pr(s, Some(&r), Density::Row),
+            Some(RowPr {
+                tag: "#171".into(),
+                title: "Row cards show their PR".into(),
+                ink: Token::GreenDeep,
+            }),
+            "a ready PR's number in ready's green, its title cleaned"
+        );
+        assert_eq!(
+            row_pr(s, Some(&q), Density::Row),
+            Some(RowPr {
+                tag: "#9".into(),
+                title: String::new(),
+                ink: Token::MetaText,
+            }),
+            "a quiet PR's number in the row's meta ink, and no title"
+        );
+        assert_eq!(row_pr(s, Some(&none), Density::Row), None, "no PR");
+        for d in [Density::Full, Density::Compact] {
+            assert_eq!(row_pr(s, Some(&r), d), None, "{d:?}: its chips carry it");
+        }
     }
 }

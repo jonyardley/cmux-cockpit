@@ -119,9 +119,10 @@ struct CompactCard: View {
     }
 }
 
-/// The row (cards.ts denseRow): dot, a small badge, the title, then the
-/// unread count, the age and the pin; the detail on one line under the
-/// title. No face of its own until it is selected.
+/// The row (cards.ts denseRow): dot, a small badge, the title and its
+/// PR's title faint after it, then the unread count, the PR's number, the
+/// age and the pin; the detail on one line under the title. No face of
+/// its own until it is selected.
 struct DenseRow: View {
     let card: Card
 
@@ -139,8 +140,20 @@ struct DenseRow: View {
                     .lineLimit(1)
                     .truncationMode(.middle)
                     .layoutPriority(1)
+                // The PR's own title, faint, at the lowest priority, so it
+                // is what gets cut and the dot, PR and time show.
+                if let title = CardText.rowPrTitle(card) {
+                    Text(title)
+                        .font(.system(size: CardLook.rowTitle))
+                        .foregroundStyle(Color(Token.faint))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
                 Spacer(minLength: 4)
                 if !card.unread.isEmpty { UnreadBadge(count: card.unread) }
+                if let pr = card.rowPr {
+                    MetaText(text: pr.tag, ink: Color(pr.ink)).layoutPriority(2)
+                }
                 if !card.age.isEmpty { MetaText(text: card.age, ink: Color(CardText.ageInk(card) ?? .metaText)) }
                 if card.pinned { PinMark() }
             }

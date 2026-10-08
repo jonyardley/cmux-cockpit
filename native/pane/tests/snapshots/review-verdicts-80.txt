@@ -2,11 +2,11 @@
  Next  nothing waiting
 
  ▾ ■ MAIN ACTIVITY  1                                          1 ready to merge
-   ○ waiting card                                                      No agent
+   ● waiting card                                                Ready to merge
      #9 ready  feat-9
 
  ▾ ■ FOR REVIEW  8                                             1 ready to merge
-   ○ ready card                                                        No agent
+   ● ready card                                                  Ready to merge
      #1 · ready +120 −8
    ○ draft card                                                        No agent
      #2 · draft +1.2k −56

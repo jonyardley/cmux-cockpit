@@ -139,6 +139,15 @@ pub struct Waiting {
     pub ink: Token,
 }
 
+/// A row's PR as the row draws it: "#171" by the age in `ink`, and the
+/// PR's own title, "" when it has none, faint after the session's title.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+pub struct RowPr {
+    pub tag: String,
+    pub title: String,
+    pub ink: Token,
+}
+
 /// A project's badge: its SF Symbol on a tile of its colour, as the
 /// sidebar's projectBadge draws it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
@@ -190,6 +199,11 @@ pub struct Card {
     /// project card, Make project, as the sidebar's card of this kind
     /// shows them; empty for a row.
     pub chips: Vec<Chip>,
+    /// A row's PR (cards.ts denseRow): its own title, faint after the
+    /// session's, and its number by the age in its health's ink. None on a
+    /// full or compact card, whose chips carry the PR, and on a row with
+    /// no numbered PR.
+    pub row_pr: Option<RowPr>,
     /// The latest message, or what the waiting chat wants; on a waiting
     /// row, its reason ("Asking: allow git push?"), as a row's status is
     /// its age. Empty on a waiting full or compact card, whose status line
