@@ -15,15 +15,17 @@ import {
   issueIn,
   latestTitle,
   leadingIssue,
+  needsCurrent,
   parseStamp,
   promptFromEvent,
   promptText,
+  renamedTitle,
   sessionName,
   titleFrom,
   wholeLines,
   withIssue,
   withName,
-  wsTitle,
+  withoutIssue,
   wsWords,
 } from "../scripts/hooks/report-rename.ts";
 
@@ -76,8 +78,15 @@ describe("wholeLines", () => {
 
 describe("parseStamp", () => {
   it("reads a saved stamp", () => {
-    const stamp = { offset: 120, seen: "Design Review", handled: null, prompt: "Fix it" };
+    const stamp = { offset: 120, seen: "Design Review", handled: null, prompt: "Fix it", issue: 281 };
     assert.deepEqual(parseStamp(JSON.stringify(stamp)), stamp);
+  });
+
+  it("reads a stamp from before issues were kept, or a bad issue, as no issue pending", () => {
+    const stamp = { offset: 120, seen: null, handled: null, prompt: "Fix it" };
+    assert.deepEqual(parseStamp(JSON.stringify(stamp)), { ...stamp, issue: null });
+    assert.deepEqual(parseStamp(JSON.stringify({ ...stamp, issue: "12" })), { ...stamp, issue: null });
+    assert.deepEqual(parseStamp(JSON.stringify({ ...stamp, issue: 0 })), { ...stamp, issue: null });
   });
 
   it("reads a stamp from before names were kept from the start again, keeping what was handled", () => {
@@ -87,11 +96,12 @@ describe("parseStamp", () => {
       seen: null,
       handled: "Design Review",
       prompt: null,
+      issue: null,
     });
   });
 
   it("starts empty for a missing, broken or wrong-shaped stamp", () => {
-    const empty = { offset: 0, seen: null, handled: null, prompt: null };
+    const empty = { offset: 0, seen: null, handled: null, prompt: null, issue: null };
     assert.deepEqual(parseStamp(null), empty);
     assert.deepEqual(parseStamp("{"), empty);
     assert.deepEqual(parseStamp(JSON.stringify({ offset: -1, seen: null, handled: null })), empty);
@@ -123,6 +133,14 @@ describe("promptFromEvent", () => {
     );
     assert.equal(promptFromEvent({ ...base, hook_event_name: "Stop", stop_hook_active: false }), null);
     assert.equal(promptFromEvent({ ...base, hook_event_name: "Stop", prompt: "Fix the cards" }), null);
+  });
+
+  it("skips a slash command as typed, but not a prompt that starts with a path", () => {
+    const ev = (prompt: string) => ({ hook_event_name: "UserPromptSubmit", prompt });
+    assert.equal(promptFromEvent(ev("/code-review high #298")), null);
+    assert.equal(promptFromEvent(ev("/plugin:skill go")), null);
+    assert.equal(promptFromEvent(ev("/ws")), null);
+    assert.notEqual(promptFromEvent(ev("/Users/jon/notes.md has the fix for #12")), null);
   });
 });
 
@@ -230,6 +248,17 @@ describe("issueIn", () => {
   it("skips a pull request to find an issue after it", () => {
     assert.equal(issueIn("PR #292 closes #281"), 281);
   });
+
+  it("skips plural pull requests and numbers listed after one", () => {
+    assert.equal(issueIn("review PRs #292 and #293"), null);
+    assert.equal(issueIn("PR #292, #293 & #294 then #281"), 281);
+    assert.equal(issueIn("pull requests 5 or 6"), null);
+  });
+
+  it("is not fooled by a colour written in digits", () => {
+    assert.equal(issueIn("make the border #222222"), null);
+    assert.equal(issueIn("#22222280 then #9"), 9);
+  });
 });
 
 describe("leadingIssue and withIssue", () => {
@@ -238,6 +267,11 @@ describe("leadingIssue and withIssue", () => {
     assert.equal(leadingIssue("#123"), 123);
     assert.equal(leadingIssue("Fix #123"), null);
     assert.equal(leadingIssue("#123abc"), null);
+  });
+
+  it("takes a leading number off", () => {
+    assert.equal(withoutIssue("#12 Fix reload"), "Fix reload");
+    assert.equal(withoutIssue("Fix #12"), "Fix #12");
   });
 
   it("puts the number at the front", () => {
@@ -261,18 +295,36 @@ describe("wsWords", () => {
   });
 });
 
-describe("wsTitle", () => {
+describe("renamedTitle", () => {
   it("keeps the workspace's issue number", () => {
-    assert.equal(wsTitle("Fix reload", "#123 Old name"), "#123 Fix reload");
+    assert.equal(renamedTitle("Fix reload", "#123 Old name"), "#123 Fix reload");
   });
 
   it("takes a number the words bring instead", () => {
-    assert.equal(wsTitle("#45 New text", "#123 Old name"), "#45 New text");
+    assert.equal(renamedTitle("#45 New text", "#123 Old name"), "#45 New text");
+    assert.equal(renamedTitle("#45 New text", null), "#45 New text");
   });
 
-  it("is the words alone when the workspace has no number or its name is unknown", () => {
-    assert.equal(wsTitle("Fix reload", "cmux/r4-cards"), "Fix reload");
-    assert.equal(wsTitle("Fix reload", null), "Fix reload");
+  it("changes only the number for words that are only a number", () => {
+    assert.equal(renamedTitle("#45", "#12 Fix reload"), "#45 Fix reload");
+    assert.equal(renamedTitle("#45", "Fix reload"), "#45 Fix reload");
+  });
+
+  it("is the words alone when the workspace has no number", () => {
+    assert.equal(renamedTitle("Fix reload", "cmux/r4-cards"), "Fix reload");
+  });
+
+  it("is null when the current name matters and is not known", () => {
+    assert.equal(renamedTitle("Fix reload", null), null);
+    assert.equal(renamedTitle("#45", null), null);
+  });
+});
+
+describe("needsCurrent", () => {
+  it("skips reading the name only for words with their own number and more", () => {
+    assert.equal(needsCurrent("#45 New text"), false);
+    assert.equal(needsCurrent("#45"), true);
+    assert.equal(needsCurrent("New text"), true);
   });
 });
 
