@@ -164,7 +164,7 @@ export function laneHeader(laneKey: LaneKey, anchorId: string | null): View {
   const row = HStack({ spacing: 8 }, [
     chevron(() => isCollapsed(lane)),
     laneMarker(lane.color),
-    laneHeading(lane.name, laneKey === "parked" ? C.faint : C.secondary),
+    laneHeading(lane.name, lane.faint ? C.faint : C.secondary),
     ...(anchorId ? [anchorStatus(anchorId)] : []),
     ...cardsCount(
       () => laneWorkspaces(laneKey),

@@ -6,6 +6,11 @@
 // A `root` field's leading `~` is expanded against HOME here, since a sidebar
 // has no filesystem access to do it at runtime.
 //
+// config/lanes.json (gitignored) is the lane table, checked by the native
+// core's rules (src/cockpit/lane-config.ts) and injected as __LANES__ with
+// every gap filled. With no file it is today's four lanes; a file that
+// breaks a rule fails the build, as a bad project table does.
+//
 // config/state.json (gitignored, written by the URL handler) is read the
 // same way and injected as __STATE__, so a sidebar starts from whatever was
 // saved last (docs/state-loop.md), with __STATE_UNREADABLE__ true when the
@@ -26,6 +31,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { build } from "esbuild";
+import { BUILT_IN_LANES, type LaneSpec, resolveLanes } from "../src/cockpit/lane-config.ts";
 import { expandHome } from "../src/shared/home.ts";
 import { bundleOptions, ENTRIES } from "./bundle.ts";
 import { changedKeys, takeTags } from "./hook-build.ts";
@@ -55,6 +61,26 @@ function loadProjects(): readonly Project[] {
     process.exit(1);
   }
   return result.projects;
+}
+
+function loadLanes(): readonly LaneSpec[] {
+  const path = "config/lanes.json";
+  if (!existsSync(path)) return BUILT_IN_LANES;
+  console.log(`build: using ${path}`);
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch (err) {
+    console.error(`build: cannot read or parse ${path}: ${(err as Error).message}`);
+    process.exit(1);
+  }
+  const result = resolveLanes(parsed);
+  if (!result.ok) {
+    console.error(`build: ${path}: ${result.error}`);
+    process.exit(1);
+  }
+  return result.lanes;
 }
 
 // Expands a leading "~" (bare, or "~/...") against HOME; other roots pass
@@ -148,7 +174,8 @@ function saveLastBuilt(baked: State): void {
 
 const urlToken = loadUrlToken();
 const table = loadProjects();
-// Taken after the steps that can exit, so a bad project table never drops
+const lanes = loadLanes();
+// Taken after the steps that can exit, so a bad project or lane table never drops
 // tags unlogged, and just before the state is read, so a tag almost always
 // stands for a write this build includes. A hook records its tag just
 // after its write, so one that writes between the take and the read is
@@ -170,7 +197,7 @@ const written: string[] = [];
 const changed = broken ? null : changedKeys(loadLastBuilt(), state);
 try {
   for (const name of ENTRIES) {
-    const result = await build(bundleOptions(name, { projects, state, unreadable, urlToken, home: homedir() }));
+    const result = await build(bundleOptions(name, { projects, lanes, state, unreadable, urlToken, home: homedir() }));
     const rewrote = result.outputFiles.map((out) => writeIfChanged(out.path, out.contents));
     if (rewrote.includes(true)) written.push(name);
   }

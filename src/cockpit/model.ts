@@ -11,7 +11,7 @@ import { P } from "../shared/palette.ts";
 import { persistSet } from "../shared/persist.ts";
 import { isProjectKey, type Project, projectId } from "../shared/projects.ts";
 import { nowEpoch } from "../shared/time.ts";
-import { LANES, type Lane, type LaneKey, laneByKey } from "./lanes.ts";
+import { findLane, LANES, type Lane, type LaneKey, laneByKey, UNSORTED_KEY } from "./lanes.ts";
 import {
   bump,
   collapsedProjects,
@@ -34,7 +34,7 @@ export const groups = (): WorkspaceGroup[] => data.groups() ?? [];
 export const isAnchor = (w: Workspace): boolean => groups().some((g) => g.anchorId === w.id);
 
 export const groupForLane = (lane: Lane): WorkspaceGroup | null =>
-  lane.key === "unsorted" ? null : (groups().find((g) => g.name === lane.name) ?? null);
+  lane.key === UNSORTED_KEY ? null : (groups().find((g) => g.name === lane.name) ?? null);
 
 // Each lane group's generated anchor (shared/anchors.ts) is not a real card;
 // a real workspace used as an anchor belongs in its lane, its count and
@@ -67,12 +67,12 @@ function hideNewAnchor(lane: Lane, out: Set<string>): void {
 }
 
 export function actualLaneOf(w: Workspace | undefined): LaneKey {
-  if (!w?.group) return "unsorted";
+  if (!w?.group) return UNSORTED_KEY;
   for (const lane of LANES) {
     const g = groupForLane(lane);
     if (g && g.id === w.group) return lane.key;
   }
-  return "unsorted";
+  return UNSORTED_KEY;
 }
 
 /**
@@ -119,17 +119,17 @@ export function laneOf(w: Workspace): LaneKey {
 // A lane's generated anchor IS its group, so it never moves (Needs you still
 // lists one, with the card menu).
 export function moveToLane(w: Workspace | undefined, laneKey: LaneKey): void {
-  if (!w || laneAnchorIds().has(w.id)) return;
+  const lane = findLane(laneKey);
+  if (!w || !lane || laneAnchorIds().has(w.id)) return;
   if (actualLaneOf(w) === laneKey) {
     if (laneOverride.delete(w.id)) bump();
     return;
   }
-  const lane = laneByKey(laneKey);
   const g = groupForLane(lane);
-  if (laneKey === "unsorted") cmux("workspace.group.remove", { workspace_id: w.id });
+  if (laneKey === UNSORTED_KEY) cmux("workspace.group.remove", { workspace_id: w.id });
   else if (g) cmux("workspace.group.add", { group_id: g.id, workspace_id: w.id });
   else requestLaneGroup(lane);
-  laneOverride.set(w.id, { lane: laneKey, at: nowEpoch(), awaiting: laneKey !== "unsorted" && !g });
+  laneOverride.set(w.id, { lane: laneKey, at: nowEpoch(), awaiting: laneKey !== UNSORTED_KEY && !g });
   bump();
 }
 
@@ -219,13 +219,13 @@ export const OTHER: Project = { match: "other", name: "Other", color: P.grey, ic
 // --- lane collapse -------------------------------------------------------------------
 
 const collapseOverride = new Map<string, boolean>(); // groupId -> collapsed
-// A lane with a saved flag has been toggled before, so startsCollapsed no
+// A lane with a saved flag has been toggled before, so its `folded` no
 // longer applies to it after a reload.
 const touchedLanes = new Set<LaneKey>(LANES.filter((l) => `lane:${l.key}` in savedFolds).map((l) => l.key));
 
 export function isCollapsed(lane: Lane): boolean {
   tick();
-  if (lane.key === "unsorted") return unsortedCollapsed();
+  if (lane.key === UNSORTED_KEY) return unsortedCollapsed();
   const g = groupForLane(lane);
   if (!g) return false;
   const v = collapseOverride.get(g.id);
@@ -233,14 +233,14 @@ export function isCollapsed(lane: Lane): boolean {
     if (v === g.collapsed) collapseOverride.delete(g.id);
     else return v;
   }
-  if (lane.startsCollapsed && !touchedLanes.has(lane.key)) return true;
+  if (lane.folded && !touchedLanes.has(lane.key)) return true;
   return !!g.collapsed;
 }
 
 export function toggleLane(lane: Lane): void {
   const next = !isCollapsed(lane);
   touchedLanes.add(lane.key);
-  if (lane.key === "unsorted") {
+  if (lane.key === UNSORTED_KEY) {
     setUnsortedCollapsed(next);
     saveFolds();
     return;
@@ -253,13 +253,19 @@ export function toggleLane(lane: Lane): void {
   saveFolds();
 }
 
+// The saved folds of lanes lanes.json no longer holds, kept as they were.
+const goneLaneFolds = (): [string, number][] =>
+  Object.entries(savedFolds).filter(([k]) => k.startsWith("lane:") && !findLane(k.slice("lane:".length)));
+
 // Sends every fold at once, so the saved copy never lags a quick second tap.
 // cmux holds a lane group's own fold; its flag marks it as touched, and only
 // Unsorted's value is read back. The Quiet header saves only while folded. Folds on projects that are gone are dropped,
-// and keys are sorted so the same folds always write the same file.
+// but a lane taken out of lanes.json keeps its saved fold, so putting it back brings the fold too.
+// Keys are sorted so the same folds always write the same file.
 export function saveFolds(): void {
   const folds: [string, number][] = [];
   for (const lane of LANES) if (touchedLanes.has(lane.key)) folds.push([`lane:${lane.key}`, isCollapsed(lane) ? 1 : 0]);
+  folds.push(...goneLaneFolds());
   for (const k of collapsedProjects()) if (isProjectKey(k) || k === projectId(OTHER)) folds.push([`project:${k}`, 1]);
   if (quietCollapsed()) folds.push(["quiet", 1]);
   folds.sort(([a], [b]) => (a < b ? -1 : 1));

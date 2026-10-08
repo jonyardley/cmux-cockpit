@@ -7,8 +7,16 @@ import { describe, it } from "node:test";
 import { build } from "esbuild";
 import { type Baked, bundleOptions, cockpitPr, ENTRIES, stateFor, UNREAD } from "../scripts/bundle.ts";
 import { emptyState, type SavedCheck, type SavedPr } from "../scripts/state-config.ts";
+import { BUILT_IN_LANES } from "../src/cockpit/lane-config.ts";
 
-const baked: Baked = { projects: [], state: emptyState(), unreadable: false, urlToken: "", home: "" };
+const baked: Baked = {
+  projects: [],
+  lanes: BUILT_IN_LANES,
+  state: emptyState(),
+  unreadable: false,
+  urlToken: "",
+  home: "",
+};
 
 async function bundleText(entry: (typeof ENTRIES)[number], with_: Baked = baked): Promise<string> {
   const result = await build(bundleOptions(entry, with_));
@@ -40,6 +48,14 @@ describe("each sidebar's saved state", () => {
     assert.ok("prs" in agents && "poll" in stateFor("agents", { ...state, poll: { okEpoch: 1 } }));
     const cockpit = stateFor("cockpit", { ...state, poll: { okEpoch: 1 } });
     assert.ok(!("poll" in cockpit) && !("published" in cockpit) && "ui" in cockpit);
+  });
+});
+
+describe("the lane table", () => {
+  it("is baked into the cockpit as given", async () => {
+    const shelf = { ...BUILT_IN_LANES[3], name: "Shelf of ideas" };
+    const text = await bundleText("cockpit", { ...baked, lanes: [shelf] });
+    assert.ok(text.includes('"Shelf of ideas"'));
   });
 });
 
