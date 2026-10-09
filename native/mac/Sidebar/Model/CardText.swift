@@ -9,10 +9,11 @@ enum CardText {
         chip.pieces.map(\.text).joined(separator: " ")
     }
 
-    /// Every run of words a card draws, top to bottom, none empty: the
-    /// title row's age after the status, where the pane draws it.
+    /// Every run of words a card draws, top to bottom, none empty: a
+    /// row's PR title and number after its title, then the title row's
+    /// age after the status, where the pane draws them.
     static func runs(_ card: Card) -> [String] {
-        var out = [card.title, card.status, titleAge(card)]
+        var out = [card.title, rowPrTitle(card) ?? "", card.rowPr?.tag ?? "", card.status, titleAge(card)]
         out += ChipFit.glued(card.chips).map(chip)
         out += [card.leftOff, card.detail]
         return out.filter { !$0.isEmpty }
