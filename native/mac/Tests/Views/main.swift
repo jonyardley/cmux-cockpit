@@ -543,4 +543,25 @@ for (name, word) in [("DIRTY_MARK", ChipFit.dirtyMark), ("DOT", CardText.filledD
     check(marks.contains("pub const \(name): &str = \"\(word)\";"), "\(name) is \"\(word)\"")
 }
 
+// MARK: Colours from a hand-written config
+
+// A hand-typed project colour previews in its own colour, not grey, and a
+// lane's hex reads as the core reads it (theme::parse_colour).
+check(ProjectText.hex("#D97757") == 0xD97757, "six digits read")
+check(ProjectText.hex("#d75") == 0xDD7755, "three digits read doubled, not grey")
+check(ProjectText.hex("#D9775780") == 0xD97757, "eight digits read, their alpha dropped, not grey")
+for bad in ["D97757", "#D975", "#D9775", "#D97757A", "#D9775G", "#+97757", "#", ""] {
+    check(ProjectText.hex(bad) == nil, "\(bad.debugDescription) is no colour")
+}
+check(ProjectText.colour("#abc") == Rgba(rgb: 0xAABBCC, alpha: 0xFF), "three digits are opaque")
+check(ProjectText.colour("#AABBCC80") == Rgba(rgb: 0xAABBCC, alpha: 0x80), "eight digits keep their alpha")
+if var panel = load("lanes") {
+    check(panel.laneColors == nil, "lanes: no lane has a hex of its own")
+    let first = panel.lanes.first?.key ?? ""
+    check(LaneText.ownColor(first, in: panel) == nil, "lanes: a token lane draws its token")
+    panel.laneColors = [LaneHex(key: first, color: Rgba(rgb: 0xCC6633, alpha: 0xFF))]
+    check(LaneText.ownColor(first, in: panel) == Rgba(rgb: 0xCC6633, alpha: 0xFF), "a hex lane draws its own colour")
+    check(LaneText.ownColor("unsorted", in: panel) == nil, "and only that lane")
+}
+
 exit(failures == 0 ? 0 : 1)

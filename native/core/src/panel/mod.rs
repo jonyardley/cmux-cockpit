@@ -27,7 +27,7 @@ pub use crate::lanes::{Density, LaneKey, Lanes};
 pub use crate::menu::{MenuAction, MenuItem, MenuTarget, MenuView};
 pub use crate::projects::PROJECT_COLORS;
 pub use crate::text::whole_words;
-pub use crate::theme::{Token, parse_hex};
+pub use crate::theme::{Rgba, Token, parse_hex};
 pub use crate::ui::{PillColors, QUIET_PILL};
 
 /// The view switch's two views.
@@ -446,6 +446,13 @@ pub struct Lane {
     pub rows: Vec<Row>,
 }
 
+/// A lane's own colour, from a hex in config/lanes.json.
+#[derive(Debug, Clone, PartialEq, Serialize, facet::Facet)]
+pub struct LaneHex {
+    pub key: LaneKey,
+    pub color: Rgba,
+}
+
 /// Everything the pane draws.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, facet::Facet)]
 pub struct Panel {
@@ -458,6 +465,12 @@ pub struct Panel {
     pub projects: Vec<ProjectRow>,
     /// The open card or project menu, with its items' words for this frame.
     pub menu: Option<MenuView>,
+    /// The lanes config/lanes.json colours with a hex of their own, which
+    /// the Swift panel draws over their marker token. None while every
+    /// lane is a token (today's four), so the frame reads as before. The
+    /// terminal pane draws tokens alone, so it keeps the marker.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lane_colors: Option<Vec<LaneHex>>,
     /// Every lane's key and name as configured, in display order with
     /// Unsorted last: the pane's lane picker. The sidebar picks from its
     /// card menu instead, so this is never sent.

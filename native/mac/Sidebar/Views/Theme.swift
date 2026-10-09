@@ -12,6 +12,12 @@ extension Color {
         self.init(nsColor: Self.dynamic(light: Palette.rgba(own, dark: false), dark: Palette.rgba(own, dark: true)))
     }
 
+    /// A lane's own hex colour, the same in light and dark.
+    init(own c: Rgba) {
+        let rgba = RGBA(c.rgb, c.alpha)
+        self.init(.sRGB, red: rgba.red, green: rgba.green, blue: rgba.blue, opacity: rgba.opacity)
+    }
+
     /// A dot's colour: its token, or the grey outline with none.
     init(dot ink: Token?) {
         if let ink { self.init(ink) } else { self.init(Palette.Own.grey) }

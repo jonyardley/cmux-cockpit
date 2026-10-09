@@ -11,7 +11,7 @@ const table = resolveLanes([
   { name: "Ideas", color: "laneReview", leftOff: true },
   { id: "main", name: "Main activity" },
   { id: "parked", name: "Shelf" },
-  { name: "Quiet", density: "row", faint: true },
+  { name: "Quiet", color: "#c63", density: "row", faint: true },
 ]);
 assert.ok(table.ok);
 const g = globalThis as Record<string, unknown>;
@@ -68,6 +68,7 @@ describe("lanes from lanes.json", () => {
     );
     assert.equal(FIRST_LANE, "Ideas");
     assert.equal(laneByKey("Ideas").color, C.laneReview);
+    assert.equal(laneByKey("Quiet").color, "#CC6633", "a hex draws as written");
     assert.equal(findLane("bg"), undefined);
   });
 
@@ -118,5 +119,14 @@ describe("lanes from lanes.json", () => {
     const q = new URL(last).searchParams;
     assert.equal(q.get("key"), "ui.collapsed");
     assert.deepEqual(JSON.parse(q.get("value") ?? "null"), { "lane:Ideas": 1, "lane:bg": 1 });
+  });
+
+  it("knows the file's lane names as anchors, in the agents panel too", async () => {
+    const { LANE_GROUP_NAMES, placeholderIds } = await import("../src/shared/anchors.ts");
+    assert.deepEqual([...LANE_GROUP_NAMES], ["Ideas", "Main activity", "Shelf", "Quiet"]);
+    // With no group list, as the agents panel has, the title alone decides.
+    const titled = ["Ideas", "Shelf", "Parked", "For review"].map((t) => ws(t, { title: t }));
+    const ids = placeholderIds([], new Map(titled.map((w) => [w.id, w])));
+    assert.deepEqual([...ids], ["Ideas", "Shelf"], "the old names are cards now");
   });
 });

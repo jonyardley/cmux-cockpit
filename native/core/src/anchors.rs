@@ -2,11 +2,12 @@
 //! to hold each lane's group. The cockpit draws one as its lane's header,
 //! never as a card. The renderer's data has no flag for it (issue #7), so a
 //! generated anchor is the one titled exactly after its group.
+//!
+//! Which groups are lanes is the lane table's to say (lanes.rs, from
+//! config/lanes.json), so the anchors follow a renamed or added lane:
+//! `Session::lane_anchor_ids` asks this of each configured lane's group.
 
 use crate::data::{Workspace, WorkspaceGroup};
-
-/// The lane groups' names, as lanes.rs names them.
-pub const LANE_GROUP_NAMES: [&str; 4] = ["Main activity", "For review", "Background", "Parked"];
 
 /// A name or title as the matches compare it.
 fn norm(s: Option<&str>) -> String {
@@ -47,5 +48,44 @@ mod tests {
             ..g.clone()
         };
         assert!(!is_generated_anchor(&nameless, Some(&titled(""))));
+    }
+
+    #[test]
+    fn follows_the_configured_lane_names() {
+        use crate::data::Data;
+        use crate::lanes::LaneConfig;
+        use crate::session::Session;
+
+        let group = |id: &str, name: &str| WorkspaceGroup {
+            id: id.into(),
+            name: Some(name.into()),
+            anchor_id: Some(format!("{id}-anchor")),
+            ..WorkspaceGroup::default()
+        };
+        let anchor = |id: &str, title: &str| Workspace {
+            id: format!("{id}-anchor"),
+            title: Some(title.into()),
+            ..Workspace::default()
+        };
+        let data = Data {
+            epoch: Some(1000.0),
+            groups: Some(vec![group("d", "Doing"), group("p", "Parked")]),
+            workspaces: Some(vec![anchor("d", "Doing"), anchor("p", "Parked")]),
+            ..Data::default()
+        };
+        let mut s = Session::default();
+        let built_in: Vec<String> = s.lane_anchor_ids(&data).into_iter().collect();
+        assert_eq!(built_in, ["p-anchor"], "today's four: Parked's alone");
+        let doing = LaneConfig {
+            name: "Doing".into(),
+            ..LaneConfig::default()
+        };
+        s.set_lanes(&[doing]);
+        let configured: Vec<String> = s.lane_anchor_ids(&data).into_iter().collect();
+        assert_eq!(
+            configured,
+            ["d-anchor"],
+            "Doing's, and Parked's is a card now it is no lane"
+        );
     }
 }

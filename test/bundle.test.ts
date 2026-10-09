@@ -57,6 +57,12 @@ describe("the lane table", () => {
     const text = await bundleText("cockpit", { ...baked, lanes: [shelf] });
     assert.ok(text.includes('"Shelf of ideas"'));
   });
+
+  it("reaches the agents panel too, whose placeholders follow the lane names", async () => {
+    const shelf = { ...BUILT_IN_LANES[3], name: "Shelf of ideas" };
+    const text = await bundleText("agents", { ...baked, lanes: [shelf] });
+    assert.ok(text.includes('"Shelf of ideas"'), "shared/anchors.ts reads the baked names");
+  });
 });
 
 // One draft PR on 4 Oct: ten pushes in seventy minutes, and every check
