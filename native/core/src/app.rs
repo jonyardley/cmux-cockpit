@@ -801,7 +801,7 @@ mod tests {
         let mut model = Model::default();
         let _ = app.update(frame(1000.0), &mut model);
         let _ = app.update(switch_at(1005.0), &mut model);
-        let stamp = model.session.select_override.clone();
+        let stamp = model.session.select_override.map(|o| (o.id, o.at));
         assert_eq!(stamp, Some(("b".to_string(), 1005.0)));
     }
 
@@ -811,8 +811,23 @@ mod tests {
         let mut model = Model::default();
         let _ = app.update(frame(1000.0), &mut model);
         let _ = app.update(switch_at(990.0), &mut model);
-        let stamp = model.session.select_override.clone();
+        let stamp = model.session.select_override.map(|o| (o.id, o.at));
         assert_eq!(stamp, Some(("b".to_string(), 1000.0)));
+    }
+
+    #[test]
+    fn a_select_cmux_refused_stops_showing_the_clicked_card() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(frame(1000.0), &mut model);
+        let _ = app.update(switch_at(1001.0), &mut model);
+        let refused = Event::CmuxFailed { id: "b".into() };
+        let _ = app.update(refused, &mut model);
+        let Some(data) = &model.data else {
+            panic!("the frame is held")
+        };
+        let b = data.ws_by_id("b");
+        assert!(!model.session.is_selected(data, b));
     }
 
     fn frame(epoch: f64) -> Event {
