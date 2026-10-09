@@ -112,6 +112,12 @@ enum LaneText {
     static func pill(_ lane: Lane) -> PillColors {
         lane.empty ? PillColors(bg: .countBg, fg: .faint) : lane.pill
     }
+
+    /// The hex config/lanes.json gives a lane of its own, drawn over its
+    /// marker token; nil for a lane in a token's colour.
+    static func ownColor(_ key: String, in panel: Panel) -> Rgba? {
+        panel.laneColors?.first { $0.key == key }?.color
+    }
 }
 
 /// A lane row's identity is its workspace, so a card keeps its view as its

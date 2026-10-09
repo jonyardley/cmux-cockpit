@@ -19,8 +19,16 @@
 // third wrong case there: a real chat titled exactly after a lane drops out
 // of the PR card, and an own PR opened from it names no chat.
 
+// The lane table the build bakes in from config/lanes.json (cockpit/lane-config.ts),
+// in both sidebars. Only the names matter here, so shared/ reads no cockpit module.
+declare const __LANES__: readonly { name: string }[] | undefined;
+
+/** Today's four lanes' names, for a bundle built without the define (cockpit/lanes.ts BUILT_IN_LANES). */
+const BUILT_IN_NAMES: readonly string[] = ["Main activity", "For review", "Background", "Parked"];
+
 /** The lane groups' names, as cockpit/lanes.ts names them (a test holds the two together). */
-export const LANE_GROUP_NAMES: readonly string[] = ["Main activity", "For review", "Background", "Parked"];
+export const LANE_GROUP_NAMES: readonly string[] =
+  typeof __LANES__ === "undefined" ? BUILT_IN_NAMES : __LANES__.map((l) => l.name);
 
 // A name or title as the matches compare it.
 const norm = (s: string | undefined): string => (s ?? "").trim().toLowerCase();

@@ -12,7 +12,9 @@ struct AllView: View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
                 ForEach(panel.lanes, id: \.key) { lane in
-                    LaneView(lane: lane, top: tops[String(describing: lane.key)] ?? 0)
+                    LaneView(
+                        lane: lane, top: tops[String(describing: lane.key)] ?? 0,
+                        own: LaneText.ownColor(lane.key, in: panel))
                 }
             }
             .coordinateSpace(name: FloatingCard.space)
