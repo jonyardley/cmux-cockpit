@@ -23,7 +23,6 @@ const LANE_TOKENS = [
   "laneViolet",
   "laneTeal",
   "laneRose",
-  "laneBrown",
 ] as const;
 export type LaneToken = (typeof LANE_TOKENS)[number];
 

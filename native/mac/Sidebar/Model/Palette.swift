@@ -141,7 +141,6 @@ enum Palette {
         case .laneViolet: Pair(RGBA(0x7A5BA6), RGBA(0xB39BD6))
         case .laneTeal: Pair(RGBA(0x2E8A86), RGBA(0x6CC2BC))
         case .laneRose: Pair(RGBA(0xB04A75), RGBA(0xE08AAE))
-        case .laneBrown: Pair(RGBA(0x8B6A45), RGBA(0xC4A27A))
         case .mergeGreen: mergeGreen
         case .mergeHalo: faint(mergeGreen, 0x47)
         case .mergeText: Pair(RGBA(0x12873B), RGBA(0x5FD98A))

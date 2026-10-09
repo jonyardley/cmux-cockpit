@@ -94,7 +94,6 @@ pub fn hex(t: Token) -> u32 {
         Token::LaneViolet => 0x7A5BA6,
         Token::LaneTeal => 0x2E8A86,
         Token::LaneRose => 0xB04A75,
-        Token::LaneBrown => 0x8B6A45,
         Token::MergeGreen => MERGE_GREEN,
         Token::MergeHalo => blend(MERGE_GREEN, 0x47, GROUND),
         Token::MergeText => 0x12873B,

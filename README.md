@@ -100,7 +100,7 @@ always last, holding every workspace outside the others.
 | --- | --- | --- |
 | `name` | The cmux group the lane matches, and its heading. Needed. | |
 | `id` | What saved folds and moves key on. Keep it when you rename. | the name |
-| `color` | A lane token: the greys `laneMain`, `laneReview`, `laneBackground`, `laneParked`, `laneUnsorted`, or the hues `laneViolet`, `laneTeal`, `laneRose`, `laneBrown` | |
+| `color` | A lane token: the greys `laneMain`, `laneReview`, `laneBackground`, `laneParked`, `laneUnsorted`, or the hues `laneViolet`, `laneTeal`, `laneRose` | |
 | `density` | `full`, `compact` or `row` | |
 | `folded` | Starts folded until you fold or open it | |
 | `faint` | Its heading and merge-ready hint draw faint | |
@@ -110,7 +110,7 @@ A field left out takes the value of the built-in lane with the same `id`
 (`main`, `review`, `bg`, `parked`), else compact, unfolded and plain in
 `laneUnsorted`'s grey. So `{ "id": "parked", "name": "Shelf" }` is Parked
 renamed, still faint, folded and in rows. Every colour is a token, so it
-follows light and dark mode; a hex is refused. The four hues are chosen
+follows light and dark mode; a hex is refused. The three hues are chosen
 clear of the state colours (clay, amber, blue, the greens and red), so a
 lane marker never reads as an agent's state.
 

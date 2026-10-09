@@ -101,15 +101,14 @@ describe("lanes.json", () => {
     ]);
   });
 
-  it("takes any lane token, the four hues included", () => {
+  it("takes any lane token, the three hues included", () => {
     const colors = lanes([
       { name: "Violet", color: "laneViolet" },
       { name: "Teal", color: "laneTeal" },
       { name: "Rose", color: "laneRose" },
-      { name: "Brown", color: "laneBrown" },
       { id: "main", name: "Token", color: "laneParked" },
     ]).map((l) => l.color);
-    assert.deepEqual(colors, ["laneViolet", "laneTeal", "laneRose", "laneBrown", "laneParked"]);
+    assert.deepEqual(colors, ["laneViolet", "laneTeal", "laneRose", "laneParked"]);
   });
 
   it("reads the committed sample, as the core does", () => {
@@ -119,7 +118,7 @@ describe("lanes.json", () => {
       [
         ["Doing", "laneMain"],
         ["Waiting on others", "laneTeal"],
-        ["Ideas", "laneBrown"],
+        ["Ideas", "laneRose"],
         ["Parked", "laneParked"],
       ],
     );
@@ -143,7 +142,7 @@ describe("lanes.json", () => {
     const message = error([{ name: "Ideas", color: "#c63" }]);
     assert.match(
       message,
-      /^lane "Ideas": unknown colour "#c63"; use a lane token \(laneMain, .* or laneBrown\); a hex is not taken$/,
+      /^lane "Ideas": unknown colour "#c63"; use a lane token \(laneMain, .* or laneRose\); a hex is not taken$/,
     );
     const hint = message.slice(message.indexOf("use a lane token"));
     assert.ok(readFileSync("native/core/src/lanes.rs", "utf8").includes(`"${hint}"`), "lanes.rs gives the same hint");

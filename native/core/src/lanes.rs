@@ -101,7 +101,7 @@ pub struct LaneConfig {
     pub name: String,
     /// One of the lane colour tokens: laneMain, laneReview,
     /// laneBackground, laneParked, laneUnsorted, laneViolet, laneTeal,
-    /// laneRose or laneBrown. A hex is refused, so every lane reads in
+    /// laneRose. A hex is refused, so every lane reads in
     /// both themes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
@@ -117,7 +117,7 @@ pub struct LaneConfig {
 }
 
 /// The colours a lane may take: the lane tokens, as JSON names them.
-const LANE_COLORS: [Token; 9] = [
+const LANE_COLORS: [Token; 8] = [
     Token::LaneMain,
     Token::LaneReview,
     Token::LaneBackground,
@@ -126,12 +126,11 @@ const LANE_COLORS: [Token; 9] = [
     Token::LaneViolet,
     Token::LaneTeal,
     Token::LaneRose,
-    Token::LaneBrown,
 ];
 
 /// What an unknown colour's error suggests. A hex is refused, so every
 /// lane reads in both themes; the same words as lane-config.ts.
-const LANE_COLOR_HINT: &str = "use a lane token (laneMain, laneReview, laneBackground, laneParked, laneUnsorted, laneViolet, laneTeal, laneRose or laneBrown); a hex is not taken";
+const LANE_COLOR_HINT: &str = "use a lane token (laneMain, laneReview, laneBackground, laneParked, laneUnsorted, laneViolet, laneTeal or laneRose); a hex is not taken";
 
 fn parse_color(s: &str) -> Option<Token> {
     let token: Token = serde_json::from_value(serde_json::Value::from(s)).ok()?;
@@ -411,8 +410,7 @@ mod tests {
         let json = r#"[
             {"name": "Violet", "color": "laneViolet"},
             {"name": "Teal", "color": "laneTeal"},
-            {"name": "Rose", "color": "laneRose"},
-            {"name": "Brown", "color": "laneBrown"}
+            {"name": "Rose", "color": "laneRose"}
         ]"#;
         let config: Vec<LaneConfig> = serde_json::from_str(json).unwrap();
         let lanes = Lanes::from_config(&config).unwrap();
@@ -420,7 +418,6 @@ mod tests {
         assert_eq!(color("Violet"), Token::LaneViolet);
         assert_eq!(color("Teal"), Token::LaneTeal);
         assert_eq!(color("Rose"), Token::LaneRose);
-        assert_eq!(color("Brown"), Token::LaneBrown);
         for bad in ["#c63", "#CC6633", "#cc663380", "blue", "text", "violet"] {
             let config = [LaneConfig {
                 color: Some(bad.into()),
@@ -451,7 +448,7 @@ mod tests {
             ["Doing", "Waiting on others", "Ideas", "Parked", "Unsorted"]
         );
         let ideas = lanes.get(&LaneKey::from("Ideas"));
-        assert_eq!(ideas.color, Token::LaneBrown);
+        assert_eq!(ideas.color, Token::LaneRose);
     }
 
     #[test]

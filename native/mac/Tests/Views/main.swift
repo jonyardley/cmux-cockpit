@@ -396,7 +396,7 @@ for (own, name) in [(Palette.Own.card, "card"), (.needsEdge, "needsEdge"), (.nee
 // The lane hues' light side is the JS sidebar's too, and the terminal
 // pane's, so a lane reads the same colour in all three.
 let paneTheme = source("pane/src/theme.rs")
-for (token, name) in [(Token.laneViolet, "laneViolet"), (.laneTeal, "laneTeal"), (.laneRose, "laneRose"), (.laneBrown, "laneBrown")] {
+for (token, name) in [(Token.laneViolet, "laneViolet"), (.laneTeal, "laneTeal"), (.laneRose, "laneRose")] {
     let hex = String(format: "%06X", Palette.rgba(token, dark: false).hex)
     check(themeTs.contains("\n  \(name.lowercased()): \"#\(hex.lowercased())\","), "light \(name) is the cockpit's")
     check(paneTheme.contains("Token::\(name.prefix(1).uppercased() + name.dropFirst()) => 0x\(hex),"), "light \(name) is the pane's")

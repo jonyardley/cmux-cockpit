@@ -1,6 +1,6 @@
 [
   { "id": "main", "name": "Doing", "density": "full" },
   { "id": "review", "name": "Waiting on others", "color": "laneTeal" },
-  { "name": "Ideas", "color": "laneBrown", "density": "row", "leftOff": true },
+  { "name": "Ideas", "color": "laneRose", "density": "row", "leftOff": true },
   { "id": "parked", "name": "Parked" }
 ]
