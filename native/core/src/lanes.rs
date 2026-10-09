@@ -196,6 +196,15 @@ fn built_in() -> Vec<Lane> {
     ]
 }
 
+/// The name a built-in lane goes by, by id: what a lane was called before
+/// any name was saved for it (lane_rename.rs).
+pub fn built_in_name(id: &str) -> Option<String> {
+    built_in()
+        .into_iter()
+        .find(|l| l.key.as_str() == id)
+        .map(|l| l.name)
+}
+
 /// The id a configured lane takes: its own, else its name.
 fn config_id(c: &LaneConfig) -> &str {
     c.id.as_deref().unwrap_or(&c.name).trim()

@@ -11,6 +11,7 @@ import { P } from "../shared/palette.ts";
 import { persistSet } from "../shared/persist.ts";
 import { isProjectKey, type Project, projectId } from "../shared/projects.ts";
 import { nowEpoch } from "../shared/time.ts";
+import { renameLaneGroups } from "./lane-rename.ts";
 import { findLane, LANES, type Lane, type LaneKey, laneByKey, UNSORTED_KEY } from "./lanes.ts";
 import {
   bump,
@@ -188,6 +189,7 @@ export function overrideOrder(ids: string[]): void {
 
 export function allWorkspaces(): Workspace[] {
   tick();
+  renameLaneGroups();
   fileAwaitingCards();
   let ws = data.workspaces() ?? [];
   if (orderOverride) {

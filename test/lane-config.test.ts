@@ -5,7 +5,13 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { BUILT_IN_LANES, type LaneSpec, resolveLanes } from "../src/cockpit/lane-config.ts";
+import {
+  BUILT_IN_LANES,
+  builtInName,
+  type LaneSpec,
+  resolveLanes,
+  unrecordedLanes,
+} from "../src/cockpit/lane-config.ts";
 
 const lanes = (raw: unknown): readonly LaneSpec[] => {
   const r = resolveLanes(raw);
@@ -173,5 +179,26 @@ describe("lanes.json", () => {
   it("refuses Unsorted's id or name in any case", () => {
     assert.match(error([{ name: "Unsorted" }]), /Unsorted's/);
     assert.match(error([{ id: "UNSORTED", name: "Loose" }]), /Unsorted's/);
+  });
+});
+
+describe("the lanes the build saves a name for", () => {
+  const table = resolveLanes([{ id: "main", name: "Doing" }, { name: "Ideas" }, { id: "shelf", name: "Shelf" }]);
+  assert.ok(table.ok);
+
+  it("takes a built-in lane's name by id", () => {
+    assert.equal(builtInName("parked"), "Parked");
+    assert.equal(builtInName("shelf"), undefined);
+  });
+
+  it("is each lane neither saved nor built in", () => {
+    assert.deepEqual(
+      unrecordedLanes(table.lanes, undefined).map((l) => l.id),
+      ["Ideas", "shelf"],
+    );
+    assert.deepEqual(
+      unrecordedLanes(table.lanes, { shelf: "Shelf" }).map((l) => l.id),
+      ["Ideas"],
+    );
   });
 });

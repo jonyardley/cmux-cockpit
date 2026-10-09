@@ -31,7 +31,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { build } from "esbuild";
-import { BUILT_IN_LANES, type LaneSpec, resolveLanes } from "../src/cockpit/lane-config.ts";
+import { BUILT_IN_LANES, type LaneSpec, resolveLanes, unrecordedLanes } from "../src/cockpit/lane-config.ts";
 import { expandHome } from "../src/shared/home.ts";
 import { bundleOptions, ENTRIES } from "./bundle.ts";
 import { changedKeys, takeTags } from "./hook-build.ts";
@@ -39,7 +39,7 @@ import { isLiveCheckout } from "./live-checkout.ts";
 import { mergeProjects, type Project, validateProjects } from "./projects-config.ts";
 import { emptyState, isRecord, type State, validateState } from "./state-config.ts";
 import { logLine, redrawLine } from "./state-log.ts";
-import { ensureUrlToken, keepUnreadableCopy, unreadableCopyOf } from "./state-url.ts";
+import { ensureUrlToken, keepUnreadableCopy, readApplyWrite, unreadableCopyOf } from "./state-url.ts";
 import { BUILT_MARK, touchBuilt, writeIfChanged } from "./write-if-changed.ts";
 
 function loadProjects(): readonly Project[] {
@@ -81,6 +81,25 @@ function loadLanes(): readonly LaneSpec[] {
     process.exit(1);
   }
   return result.lanes;
+}
+
+// Saves the name of each lane that has none saved and no built-in one
+// (issue #294), so renaming it later in lanes.json can rename its cmux
+// group: the sidebars only write when a lane is renamed, never on a plain
+// draw. Skipped for an unreadable file, and a write that fails leaves the
+// lane unrecorded, to be tried on the next build.
+function recordLaneNames(state: State): State {
+  let laneNames = state.laneNames;
+  for (const lane of unrecordedLanes(lanes, laneNames)) {
+    try {
+      const result = readApplyWrite(STATE_PATH, `laneNames.${lane.id}`, JSON.stringify(lane.name));
+      if (result.ok) laneNames = { ...laneNames, [lane.id]: lane.name };
+      else console.warn(`build: lane "${lane.name}" not recorded: ${result.error}`);
+    } catch (err) {
+      console.warn(`build: lane "${lane.name}" not recorded: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return laneNames ? { ...state, laneNames } : state;
 }
 
 // Expands a leading "~" (bare, or "~/...") against HOME; other roots pass
@@ -181,7 +200,8 @@ const lanes = loadLanes();
 // after its write, so one that writes between the take and the read is
 // built here and named on the next line instead.
 const tags = takeTags();
-const { state: saved, unreadable, broken } = loadState();
+const { state: loaded, unreadable, broken } = loadState();
+const saved = unreadable ? loaded : recordLaneNames(loaded);
 const merged = mergeProjects(table, saved.projects);
 const projects = withExpandedRoots(merged.projects);
 // Only the saved projects that survived the merge, so the sidebar edits from

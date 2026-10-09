@@ -182,6 +182,10 @@ pub struct Session {
     /// The lane table, from config/lanes.json; today's four until a shell
     /// sends one.
     pub lanes: Lanes,
+    /// A shell has sent a lane table the core could draw. Until then the
+    /// lanes are today's four by default, not by Jon's choice, so no lane
+    /// group is renamed to follow them (lane_rename.rs).
+    pub(crate) lanes_read: bool,
 
     /// The pane's own PR poll and the answers it holds, made over
     /// `saved.prs` on every read; a new state file never resets it.
@@ -311,6 +315,7 @@ impl Session {
             self.lane_override
                 .retain(|_, o| lanes.find(&o.lane).is_some());
             self.lanes = lanes;
+            self.lanes_read = true;
         }
     }
 

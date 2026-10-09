@@ -91,6 +91,13 @@ export interface State {
    * a URL could plant words the card shows as the chat's own.
    */
   moves: Record<string, SavedMove>;
+  /**
+   * lane id -> the name the cockpit last saw it under in config/lanes.json,
+   * so a rename there can rename the lane's cmux group (issue #294). Left
+   * out while nothing is saved, so a file from before it existed reads the
+   * same.
+   */
+  laneNames?: Record<string, string>;
   /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
   ui: UiState;
   /**
@@ -478,6 +485,10 @@ function uiState(v: unknown): UiState {
 
 const UI_KEYS: readonly string[] = ["mode", "collapsed"];
 
+/** The longest lane name kept: cmux shows a group's name on one line. */
+const MAX_LANE_NAME = 128;
+const laneName = (v: unknown): string | null => (isText(v, MAX_LANE_NAME) ? v : null);
+
 const POLL_ERRORS: readonly unknown[] = ["unavailable", "signed-out", "missing"];
 const isPollError = (v: unknown): v is PollError => POLL_ERRORS.includes(v);
 
@@ -659,6 +670,7 @@ export function validateState(raw: unknown): State {
   const v = isRecord(raw) ? raw : {};
   const poll = savedPoll(v.poll);
   const shells = cleanMap(v.shells, savedShells);
+  const laneNames = cleanMap(v.laneNames, laneName);
   return {
     dismissed: cleanMap(v.dismissed, agentStarts),
     projectOverride: cleanMap(v.projectOverride, projectKey),
@@ -673,6 +685,7 @@ export function validateState(raw: unknown): State {
     moves: cleanMap(v.moves, savedMove),
     ui: uiState(v.ui),
     ...(Object.keys(shells).length ? { shells } : {}),
+    ...(Object.keys(laneNames).length ? { laneNames } : {}),
     ...(poll ? { poll } : {}),
   };
 }
@@ -682,8 +695,8 @@ export type SetResult = { ok: true; state: State } | { ok: false; error: string 
 // The maps applySet takes. `prs`, `ownPrs`, `subagents`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
-type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves";
-const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui", "asking", "moves"];
+type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves" | "laneNames";
+const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui", "asking", "moves", "laneNames"];
 const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
 
 // Maps applySet takes from a hook but never from a URL.
@@ -718,6 +731,11 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       return { ...state, asking: without(state.asking, id) };
     case "moves":
       return { ...state, moves: without(state.moves, id) };
+    case "laneNames": {
+      const { laneNames, ...rest } = state;
+      const left = without(laneNames ?? {}, id);
+      return Object.keys(left).length ? { ...rest, laneNames: left } : rest;
+    }
     case "ui": {
       const { mode, collapsed } = state.ui;
       return { ...state, ui: id === "mode" ? (collapsed ? { collapsed } : {}) : mode ? { mode } : {} };
@@ -752,6 +770,10 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
       return askEntry(state, id, parsed);
     case "moves":
       return moveEntry(state, id, parsed);
+    case "laneNames": {
+      const name = laneName(parsed);
+      return name ? { ...state, laneNames: { ...state.laneNames, [id]: name } } : "laneNames wants a lane name string";
+    }
   }
 }
 
@@ -798,9 +820,10 @@ function isKeyFor(map: MapName, id: string): boolean {
  * Whether a set needs a rebuild to show. The sidebar already shows its own
  * view and folds, and every rebuild bakes in the file as it stands, so a
  * `ui` set only has to be written: rebuilding on each tap would reload the
- * sidebar under the tap.
+ * sidebar under the tap. A `laneNames` set is the sidebar's own record of
+ * what it already acted on, so it needs no rebuild either.
  */
-const WRITE_ONLY: readonly string[] = ["ui"];
+const WRITE_ONLY: readonly string[] = ["ui", "laneNames"];
 export const rebuildsOn = (key: string): boolean => !WRITE_ONLY.some((map) => key.startsWith(`${map}.`));
 
 /**

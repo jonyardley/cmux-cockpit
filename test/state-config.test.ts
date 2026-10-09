@@ -396,9 +396,10 @@ test("a fold on a project with a long match path is kept, not dropped", () => {
   if (set.ok) assert.deepEqual(set.state.ui.collapsed, { [key]: 1 });
 });
 
-test("rebuildsOn skips the build for the cockpit's own view and folds only", () => {
+test("rebuildsOn skips the build for the cockpit's own view, folds and lane names only", () => {
   assert.equal(rebuildsOn("ui.mode"), false);
   assert.equal(rebuildsOn("ui.collapsed"), false);
+  assert.equal(rebuildsOn("laneNames.main"), false);
   for (const key of ["dismissed.w1", "projectOverride.w1", "projects./dev/a/"])
     assert.equal(rebuildsOn(key), true, key);
 });
@@ -535,4 +536,17 @@ test("applySet refuses to set a session name from a URL", () => {
     ok: false,
     error: "unknown map names",
   });
+});
+
+test("laneNames keeps each lane id's last name, and is left out while empty", () => {
+  const set = applySet(emptyState(), "laneNames.main", JSON.stringify("Doing"));
+  assert.ok(set.ok);
+  assert.deepEqual(set.state.laneNames, { main: "Doing" });
+  const cleared = applySet(set.state, "laneNames.main", null);
+  assert.ok(cleared.ok);
+  assert.equal(Object.hasOwn(cleared.state, "laneNames"), false);
+  assert.equal(Object.hasOwn(validateState({}), "laneNames"), false);
+  assert.deepEqual(validateState({ laneNames: { main: "Doing", bad: 7, pad: " x" } }).laneNames, { main: "Doing" });
+  assert.equal(applySet(emptyState(), "laneNames.main", JSON.stringify(7)).ok, false);
+  assert.equal(urlMaySet("laneNames.main"), true);
 });

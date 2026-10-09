@@ -21,6 +21,7 @@ pub mod home;
 pub mod hooks;
 pub mod js;
 pub mod lane_entries;
+pub mod lane_rename;
 pub mod lanes;
 pub mod lenient;
 pub mod menu;

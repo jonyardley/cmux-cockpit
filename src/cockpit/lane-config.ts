@@ -163,3 +163,18 @@ export function resolveLanes(raw: unknown): LanesResult {
   }
   return { ok: true, lanes: lanes.length ? lanes : BUILT_IN_LANES };
 }
+
+/** The name a built-in lane goes by, by id: what a lane was called before any name was saved for it. */
+export const builtInName = (id: string): string | undefined => BUILT_IN_LANES.find((l) => l.id === id)?.name;
+
+/**
+ * The lanes the build saves a name for (issue #294): neither saved nor
+ * built in, so with nothing recorded a later rename would have no old
+ * name to follow. A built-in id needs none, as its built-in name stands in.
+ */
+export function unrecordedLanes(
+  lanes: readonly LaneSpec[],
+  laneNames: Readonly<Record<string, string>> | undefined,
+): LaneSpec[] {
+  return lanes.filter((l) => laneNames?.[l.id] === undefined && builtInName(l.id) === undefined);
+}
