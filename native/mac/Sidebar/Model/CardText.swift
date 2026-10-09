@@ -78,10 +78,17 @@ enum NeedsText {
         needs.count > 0
     }
 
-    /// The title the pill names: the oldest waiting session Jon is not
-    /// on, or none while the only one waiting is the one he is on.
+    /// What the pill says after its badge, as the core words it: the
+    /// oldest waiting session Jon is not on, or "needs you · this one"
+    /// while the only one waiting is the one he is on (issue #312).
     static func title(_ needs: Needs) -> String {
-        needs.target?.title ?? ""
+        needs.title
+    }
+
+    /// Whether the pill answers a tap and the pointer: only while it names
+    /// a session to reveal.
+    static func live(_ needs: Needs) -> Bool {
+        needs.target != nil
     }
 
     /// What a tap on the pill sends: reveal the session it names, or

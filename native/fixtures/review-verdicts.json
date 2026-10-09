@@ -8,6 +8,8 @@
     "late": false,
     "fill": "clear",
     "ink": "clear",
+    "title": "",
+    "title_ink": "clear",
     "target": null
   },
   "lanes": [

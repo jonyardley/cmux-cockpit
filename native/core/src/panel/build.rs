@@ -362,6 +362,8 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
         .iter()
         .all(|id| session.ask_of(data.ws_by_id(id)).is_some());
     let (fill, ink) = needs_tone(n.list.len(), asking, n.late);
+    let target = needs_target(session, data, &n.list);
+    let (title, title_ink) = needs_title(n.list.len(), target.as_ref(), ink);
     Needs {
         count: n.list.len(),
         label: needs_label(n.list.len()),
@@ -369,9 +371,26 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
         late: n.late,
         fill,
         ink,
-        target: needs_target(session, data, &n.list),
+        title,
+        title_ink,
+        target,
     }
 }
+
+/// What the pill says after its badge (issue #312): the target's title in
+/// the pill's ink, or, while the only one waiting is the one Jon is on,
+/// "needs you · this one" faint, so the bar reads "1 needs you · this
+/// one". Nothing with nothing waiting.
+fn needs_title(count: usize, target: Option<&NeedsTarget>, ink: Token) -> (String, Token) {
+    match target {
+        Some(t) => (t.title.clone(), ink),
+        None if count > 0 => (NEEDS_THIS_ONE.to_string(), Token::Faint),
+        None => (String::new(), Token::Clear),
+    }
+}
+
+/// The pill's words on the only waiting session, the one Jon is on.
+const NEEDS_THIS_ONE: &str = "needs you · this one";
 
 /// The oldest waiting session Jon is not on, from the list longest
 /// waiting first; None while the only one waiting is the one he is on.
@@ -996,6 +1015,38 @@ mod tests {
         );
         assert_eq!(target(s, "a", &list[..1]), None, "only the one he is on");
         assert_eq!(target(s, "c", &[]), None, "nothing waiting");
+    }
+
+    #[test]
+    fn says_this_one_faint_and_names_no_tap_while_jon_is_on_the_only_one_waiting() {
+        let mut core = Model::default();
+        let s = &mut core.session;
+        let mut view = ViewModel::default();
+        view.needs.list = vec!["a".to_string()];
+        let alone = needs(s, &three_on("a"), &view);
+        assert_eq!(alone.count, 1);
+        assert_eq!(
+            (alone.title.as_str(), alone.title_ink, alone.target),
+            ("needs you · this one", Token::Faint, None),
+            "the badge's 1, then the words, faint, and nothing to tap"
+        );
+
+        view.needs.list = vec!["a".to_string(), "b".to_string()];
+        let two = needs(s, &three_on("a"), &view);
+        assert_eq!(
+            (two.title.as_str(), two.title_ink),
+            ("Title b", two.ink),
+            "with another waiting, its title in the pill's ink"
+        );
+        assert_eq!(two.target.map(|t| t.ws_id), Some("b".to_string()));
+
+        view.needs.list = Vec::new();
+        let none = needs(s, &three_on("a"), &view);
+        assert_eq!(
+            (none.title.as_str(), none.target),
+            ("", None),
+            "nothing waiting"
+        );
     }
 
     #[test]

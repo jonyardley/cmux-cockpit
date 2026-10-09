@@ -53,10 +53,12 @@ private struct SwitchSegment: View {
 /// the middle so both ends show, and its place in the queue on the right
 /// (needs.ts nextButton). While something waits it is the Needs you pill
 /// instead (issue #281), next step or not: the count on a filled badge,
-/// the title of the oldest waiting session Jon is not on in the pill's
-/// ink, and the oldest wait with an arrow down to it. A tap on the pill
-/// reveals and selects that session; a tap on the plain line steps to
-/// Next's target. The panel leaves it out with neither.
+/// the core's words for it in their ink (the oldest waiting session Jon
+/// is not on, or "needs you · this one" faint on the only one waiting),
+/// and the oldest wait with an arrow down to it. A tap on the pill
+/// reveals and selects the session it names, and a pill naming none
+/// neither lights nor taps; a tap on the plain line steps to Next's
+/// target. The panel leaves it out with neither.
 struct NextView: View {
     let next: NextLine
     let needs: Needs
@@ -73,8 +75,14 @@ struct NextView: View {
             RoundedRectangle(cornerRadius: Metrics.Radius.tab)
                 .strokeBorder(Color(Palette.Own.needsEdge), lineWidth: Metrics.hairline)
         }
-        .onHover { hovering = $0 }
+        .onHover { hovering = $0 && lights }
         .modifier(NextTap(next: next, needs: needs))
+    }
+
+    /// Whether the pointer lights the pill: always on the plain line, and
+    /// on the waiting one only while it names a session to reveal.
+    private var lights: Bool {
+        !NeedsText.shows(needs) || NeedsText.live(needs)
     }
 
     private var plain: some View {
@@ -106,7 +114,7 @@ struct NextView: View {
                 .background(Color(needs.fill), in: .capsule)
             Text(NeedsText.title(needs))
                 .font(.system(size: Metrics.Font.next, weight: .semibold))
-                .foregroundStyle(Color(needs.ink))
+                .foregroundStyle(Color(needs.titleInk))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
