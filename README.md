@@ -31,8 +31,10 @@ Tested on cmux 0.64.25.
 
 - `src/cockpit/`: the left sidebar. All and Projects views, a "Needs you"
   strip (with dismiss), and workspace cards in lanes or grouped by
-  project. Lanes are cmux workspace groups named "Main activity",
-  "For review", "Background" and "Parked"; everything else is Unsorted. An
+  project. Lanes are cmux workspace groups, by default "Main activity",
+  "For review", "Background" and "Parked" (your own in
+  [`config/lanes.json`](#lanes-configlanesjson)); everything else is
+  Unsorted. An
   agent stopped on a permission or a question shows amber, "Asking", with
   the reason; one that finished its turn shows clay, "Your turn" (the
   first needs the notification hook in the
@@ -85,6 +87,46 @@ Tested on cmux 0.64.25.
 - `helper/` and `scripts/`: the URL handler app that saves state, the
   build, the pull request poller and the Claude Code hooks
   ([docs/state-loop.md](docs/state-loop.md)).
+
+## Lanes: config/lanes.json
+
+The lanes are a table you can change. `config/lanes.json` is yours and
+gitignored; `config/lanes.example.json` is a committed sample to copy.
+With no file, or an empty array, you get today's four lanes. The file is a
+bare JSON array of lanes in the order they draw; Unsorted is built in and
+always last, holding every workspace outside the others.
+
+| Field | What it does | Left out |
+| --- | --- | --- |
+| `name` | The cmux group the lane matches, and its heading. Needed. | |
+| `id` | What saved folds and moves key on. Keep it when you rename. | the name |
+| `color` | A lane token (`laneMain`, `laneReview`, `laneBackground`, `laneParked`, `laneUnsorted`) or a hex: `#RGB`, `#RRGGBB` or `#RRGGBBAA` | |
+| `density` | `full`, `compact` or `row` | |
+| `folded` | Starts folded until you fold or open it | |
+| `faint` | Its heading and merge-ready hint draw faint | |
+| `leftOff` | Its cards say where you left off ("You: ...") | |
+
+A field left out takes the value of the built-in lane with the same `id`
+(`main`, `review`, `bg`, `parked`), else compact, unfolded and plain in
+`laneUnsorted`'s grey. So `{ "id": "parked", "name": "Shelf" }` is Parked
+renamed, still faint, folded and in rows. A token follows light and dark
+mode; a hex draws the same in both, so pick one that reads on either.
+The terminal pane draws tokens only, so it shows a hex lane in Unsorted's
+grey.
+
+The file fails whole on a lane with no name, a field it does not know (a
+typo such as `colour` is refused, not ignored), an unknown colour or
+density, an id or name used twice, or the id or name `unsorted`. A bad
+file fails `npm run build`; the native panel keeps the table it had.
+
+Renaming a lane in the file does not rename its cmux group: its cards
+show in Unsorted until you rename the group in cmux to match (or drag
+them across). The placeholder cmux makes for a group counts as the
+lane's anchor only while its title matches the group's name, so retitle
+it too.
+
+To take a change: `npm run build` and reload the sidebar for the JS
+cockpit. The native panel's helper watches the file and picks it up live.
 
 ## Working on a sidebar
 

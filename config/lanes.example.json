@@ -1,0 +1,6 @@
+[
+  { "id": "main", "name": "Doing", "density": "full" },
+  { "id": "review", "name": "Waiting on others", "color": "#6A9BCC" },
+  { "name": "Ideas", "color": "#c63", "density": "row", "leftOff": true },
+  { "id": "parked", "name": "Parked" }
+]
