@@ -22,7 +22,6 @@ use crate::persist::{ProjectSpec, SavedState, ViewMode, persist_url};
 use crate::pr_poll::PrPoll;
 use crate::projects::{Project, is_project_key};
 use crate::state::{DragState, SelectOverride};
-use crate::status::Status;
 use crate::text::PromptMemory;
 
 /// A value in a cmux request's parameters.
@@ -166,10 +165,6 @@ pub struct Session {
     pub(crate) collapsed_projects: Vec<String>,
     pub(crate) select_override: Option<SelectOverride>,
     pub(crate) drag: Option<DragState>,
-
-    // cockpit/strip.ts: a card dismissed from Needs you, held at the top of
-    // its lane until its status moves on from the one it was dismissed in.
-    pub(crate) dismissed_hold: HashMap<String, Status>,
 
     // cockpit/lane-entries.ts: the rank each card last had while not
     // selected, so an opened card keeps its place until Jon moves on.

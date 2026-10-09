@@ -97,14 +97,6 @@ impl Session {
     fn live_rank(&mut self, data: &Data, w: Option<&Workspace>) -> u8 {
         let s = self.status_of(w);
         if s == Status::NeedsInput {
-            if let Some(w) = w {
-                self.release_hold(w);
-            }
-            return 0;
-        }
-        if let Some(w) = w
-            && self.held_at_top(w)
-        {
             return 0;
         }
         if self.is_ready(data, w) {
@@ -136,8 +128,7 @@ impl Session {
     }
 
     /// Rows in state order, tab order kept within a state. Every rank is
-    /// read once before the stable sort, since reading one can release a
-    /// hold or save a rank.
+    /// read once before the stable sort, since reading one saves a rank.
     fn by_state<'d>(&mut self, data: &Data, rows: Vec<&'d Workspace>) -> Vec<&'d Workspace> {
         let mut ranked: Vec<(u8, &Workspace)> = rows
             .into_iter()

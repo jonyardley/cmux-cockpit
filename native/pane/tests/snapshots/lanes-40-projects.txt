@@ -6,7 +6,7 @@
  ▾ ■ App One  1                       +
    ● Loose workspace         Working 3m
 
- ▾ ■ Other  14
+ ▾ ■ Other  14  ●
  ▎ ● Chip colours  Your turn: Which… 5m
  ▎ ● Release…     Asking: allow git… 2m
    ● Snapshot tests         Working 14m

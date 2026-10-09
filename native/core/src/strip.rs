@@ -1,9 +1,9 @@
 //! Needs you (src/cockpit/strip.ts): who waits on Jon and how long the
 //! oldest has waited. The TypeScript draws them as a strip with
 //! placeholders left in the lanes; here each card stays in its lane and
-//! says so itself, and Next's pill carries the count (issue #281). A
-//! dismissal holds the card at the top of its lane until its status moves
-//! on; lane entries read that hold.
+//! says so itself with a dot on its badge, and the All tab carries the
+//! count (issue #314). A dismissed card stays in its lane and sorts by
+//! its status from then on.
 //!
 //! The TypeScript memoises the list once per change. Here `needs` builds
 //! it once and answers every field from that; the single getters are for
@@ -72,39 +72,6 @@ impl Session {
     /// Whether the oldest ask has waited NEEDS_LATE_SECS or more.
     pub fn needs_wait_late(&mut self, data: &Data) -> bool {
         self.needs(data).late
-    }
-
-    /// Dismisses a waiting session from Needs you, holding its card at the
-    /// top of its lane. The card menu offers this on cards that are
-    /// not waiting too; only a real dismissal holds.
-    pub fn dismiss_waiting(&mut self, data: &Data, w: Option<&Workspace>) {
-        let Some(w) = w else { return };
-        self.dismiss_needs(Some(w));
-        if !self.is_needs_dismissed(Some(w)) {
-            return;
-        }
-        self.dismissed_hold
-            .retain(|id, _| data.ws_by_id(id).is_some());
-        let status = self.status_of(Some(w));
-        self.dismissed_hold.insert(w.id.clone(), status);
-    }
-
-    /// Lets go of a dismissed card's hold, as a new ask does.
-    pub fn release_hold(&mut self, w: &Workspace) {
-        self.dismissed_hold.remove(&w.id);
-    }
-
-    /// Whether a dismissed card still holds the top of its lane: until its
-    /// status moves on from the one it was dismissed in, when the hold goes.
-    pub fn held_at_top(&mut self, w: &Workspace) -> bool {
-        let Some(held) = self.dismissed_hold.get(&w.id).cloned() else {
-            return false;
-        };
-        if held == self.status_of(Some(w)) {
-            return true;
-        }
-        self.dismissed_hold.remove(&w.id);
-        false
     }
 }
 
@@ -193,17 +160,5 @@ mod tests {
         assert!(raw.iter().all(|st| *st == Some(AgentStatus::NeedsInput)));
         let mut s = Session::new(Vec::new(), saved);
         assert_eq!(ids(&s.needs_list(&data)), ["real"]);
-    }
-
-    #[test]
-    fn drops_holds_for_workspaces_gone_from_the_data_on_the_next_dismissal() {
-        let gone = asking("gone", 500.0);
-        let here = asking("here", 600.0);
-        let mut s = Session::default();
-        s.dismiss_waiting(&frame(2000.0, vec![gone.clone()]), Some(&gone));
-        assert!(s.dismissed_hold.contains_key("gone"));
-        s.dismiss_waiting(&frame(2100.0, vec![here.clone()]), Some(&here));
-        assert!(!s.dismissed_hold.contains_key("gone"));
-        assert!(s.held_at_top(&here));
     }
 }

@@ -51,7 +51,7 @@ check(DropRule.before(rows: ranked, dragged: card("X", rank: 0), slot: 4) == "R1
 check(DropRule.before(rows: ranked, dragged: card("X", rank: 5), slot: 3) == "R2",
       "with none of its state in the lane it goes above the row under the slot")
 var asking = card("G")
-asking.waiting = Waiting(edge: .amber, ink: .amberText)
+asking.waiting = Waiting(mark: .amber, ink: .amberText)
 let waited: [Row] = [row("A"), .card(asking), row("C")]
 check(DropRule.before(rows: waited, dragged: card("X"), slot: 1) == "G", "a waiting card anchors a drop as any card does")
 

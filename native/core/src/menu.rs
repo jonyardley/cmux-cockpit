@@ -289,7 +289,7 @@ impl Session {
                 if self.is_needs_dismissed(w) {
                     self.restore_needs(w);
                 } else {
-                    self.dismiss_waiting(data, w);
+                    self.dismiss_needs(w);
                 }
             }
             MenuAction::OpenProject | MenuAction::EditProject => {}

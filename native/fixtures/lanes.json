@@ -14,8 +14,6 @@
     "late": false,
     "fill": "clay",
     "ink": "clayText",
-    "title": "Chip colours",
-    "title_ink": "clayText",
     "target": {
       "ws_id": "needs",
       "title": "Chip colours"
@@ -34,7 +32,10 @@
         "bg": "clayCount",
         "fg": "clayText"
       },
-      "dot": null,
+      "dot": {
+        "glyph": "●",
+        "ink": "clay"
+      },
       "collapsed": false,
       "merge_ready": "",
       "rows": [
@@ -67,7 +68,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": {
-              "edge": "clay",
+              "mark": "clay",
               "ink": "clayText"
             },
             "rank": 0,
@@ -217,7 +218,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": {
-              "edge": "amber",
+              "mark": "amber",
               "ink": "amberText"
             },
             "rank": 0,

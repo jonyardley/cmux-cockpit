@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The All view: the five lanes. A card waiting on Jon stays in its lane
-/// with its leading edge (issue #281); Next's pill counts them.
+/// with a dot on its badge (issue #314); the All tab counts them.
 /// Each lane header carries its own section gap above it, so the lanes
 /// sit flush and their drop areas meet.
 struct AllView: View {
@@ -26,8 +26,8 @@ struct AllView: View {
     }
 }
 
-/// The whole panel: the view switch and Next (only while there is a next
-/// step), then the view the core has on, spaced as the cockpit's top
+/// The whole panel: the view switch and Next (only while nothing waits
+/// and there is a next step), then the view the core has on, spaced as the cockpit's top
 /// (headers.ts segmented, needs.ts nextButton), and the project editor
 /// as a sheet over it while the core has one open. Closing the sheet asks
 /// the core to close the editor; the sheet goes when the panel says it has.
@@ -37,11 +37,11 @@ struct PanelBody: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
-                ViewSwitch(view: panel.view)
+                ViewSwitch(view: panel.view, needs: panel.needs)
                     .padding(.horizontal, Self.switchMargin)
                     .padding(.bottom, 8)
-                if NeedsText.shows(panel.needs) || !NextText.isNothing(panel.next) {
-                    NextView(next: panel.next, needs: panel.needs).padding(.top, 6)
+                if TopText.showsNext(panel) {
+                    NextView(next: panel.next).padding(.top, 6)
                 }
                 Group {
                     switch panel.view {

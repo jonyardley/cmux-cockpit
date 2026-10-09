@@ -1381,7 +1381,7 @@ fn a_drag_holds_when_its_card_starts_asking_and_ends_when_it_goes() {
             && c.ws_id == snapshot
         {
             c.waiting = Some(cockpit_pane::model::Waiting {
-                edge: Token::Amber,
+                mark: Token::Amber,
                 ink: Token::AmberText,
             });
         }

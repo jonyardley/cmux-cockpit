@@ -14,8 +14,6 @@
     "late": false,
     "fill": "clay",
     "ink": "clayText",
-    "title": "One: docs",
-    "title_ink": "clayText",
     "target": {
       "ws_id": "one-b",
       "title": "One: docs"
@@ -102,7 +100,10 @@
         "bg": "clayCount",
         "fg": "clayText"
       },
-      "dot": null,
+      "dot": {
+        "glyph": "●",
+        "ink": "clay"
+      },
       "collapsed": false,
       "merge_ready": "",
       "rows": [
@@ -135,7 +136,7 @@
             "detail_ink": "clayText",
             "detail_lines": 1,
             "waiting": {
-              "edge": "clay",
+              "mark": "clay",
               "ink": "clayText"
             },
             "rank": 0,
@@ -872,7 +873,10 @@
           "bg": "clayCount",
           "fg": "clayText"
         },
-        "dot": null,
+        "dot": {
+          "glyph": "●",
+          "ink": "clay"
+        },
         "collapsed": false,
         "can_open": true,
         "menu": [
@@ -1122,7 +1126,7 @@
         "detail_ink": "secondary",
         "detail_lines": 2,
         "waiting": {
-          "edge": "clay",
+          "mark": "clay",
           "ink": "clayText"
         },
         "rank": 0,
