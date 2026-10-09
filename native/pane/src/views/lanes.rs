@@ -13,7 +13,8 @@ use ratatui::text::{Line, Span};
 
 use super::parts::{Edge, pill, spans_width, spread};
 use crate::model::{
-    Card, Chip, ChipKind, DROP_AT_END, DROP_HERE, FOLDED_MARK, LANE_MARK, Lane, OPEN_MARK, Row,
+    Card, Chip, ChipKind, DROP_AT_END, DROP_HERE, FOLDED_MARK, LANE_MARK, Lane, OPEN_MARK,
+    PR_TITLE_DOT, Row,
 };
 use crate::placing::{Place, Spot};
 use crate::text::{ELLIPSIS, fit, fit_ranked, width, wrap};
@@ -256,18 +257,18 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
 
 /// A row's PR title, faint after the session's: " · Row cards show their
 /// PR" in at most `room` cells, cut first; nothing with no PR, a PR with
-/// no title, or no room for more than its dot (cards.ts denseRow).
+/// no title, or no room for a word of it after the dot (cards.ts denseRow).
 fn row_pr_title(c: &Card, room: usize) -> Vec<Span<'static>> {
     let Some(pr) = c.row_pr.as_ref().filter(|p| !p.title.is_empty()) else {
         return Vec::new();
     };
-    let words = fit(&format!("· {}", pr.title), room);
-    if width(&words) < 3 {
+    let words = fit(&pr.title, room.saturating_sub(width(PR_TITLE_DOT)));
+    if words.is_empty() || words == ELLIPSIS {
         return Vec::new();
     }
     vec![
         Span::raw(" "),
-        Span::styled(words, theme::ink(Token::Faint)),
+        Span::styled(format!("{PR_TITLE_DOT}{words}"), theme::ink(Token::Faint)),
     ]
 }
 
@@ -280,9 +281,13 @@ fn title_right(c: &Card, room: usize) -> Vec<Span<'static>> {
     let age = if c.status_has_age { "" } else { c.age.as_str() };
     let age = fit(age, room);
     let age_room = if age.is_empty() { 0 } else { width(&age) + 1 };
-    let tag = c.row_pr.as_ref().map_or(String::new(), |p| {
-        fit(&p.tag, room.saturating_sub(age_room))
-    });
+    // The number is whole or not there: a lone "…" in its ink says nothing.
+    let tag = c
+        .row_pr
+        .as_ref()
+        .map(|p| p.tag.clone())
+        .filter(|t| width(t) <= room.saturating_sub(age_room))
+        .unwrap_or_default();
     let tag_room = if tag.is_empty() { 0 } else { width(&tag) + 1 };
     let status = fit(&c.status, room.saturating_sub(age_room + tag_room));
     let mut out = Vec::new();
@@ -355,6 +360,27 @@ mod tests {
         assert!(!bare.contains('·'), "no dot without a PR title: {bare}");
         c.row_pr = None;
         assert_eq!(text(&title_right(&c, 30)), "3m", "no PR, no number");
+    }
+
+    #[test]
+    fn a_rows_pr_number_is_whole_or_gone_and_its_title_needs_a_word() {
+        let Row::Card(mut c) = fixtures::card("row", 0, false);
+        c.density = Density::Row;
+        c.status = "3m".into();
+        c.age = "3m".into();
+        c.status_has_age = true;
+        c.row_pr = Some(RowPr {
+            tag: "#171".into(),
+            title: "Row cards show".into(),
+            ink: Token::GreenDeep,
+        });
+        assert_eq!(text(&title_right(&c, 4)), "#171", "the number fits whole");
+        assert_eq!(text(&title_right(&c, 3)), "3m", "no cut number: {c:?}");
+        for room in 0..=4 {
+            assert!(row_pr_title(&c, room).is_empty(), "{room}: no dot alone");
+        }
+        assert_eq!(text(&row_pr_title(&c, 2 + 4)), " · Row…");
+        assert_eq!(text(&row_pr_title(&c, 2 + 14)), " · Row cards show");
     }
 
     #[test]
