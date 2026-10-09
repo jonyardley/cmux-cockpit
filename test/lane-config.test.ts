@@ -139,6 +139,16 @@ describe("lanes.json", () => {
     assert.match(error([{ name: "A", faint: "yes" }]), /faint must be true or false/);
   });
 
+  it("says what to use instead of a hex, in the core's words and token list", () => {
+    const message = error([{ name: "Ideas", color: "#c63" }]);
+    assert.match(
+      message,
+      /^lane "Ideas": unknown colour "#c63"; use a lane token \(laneMain, .* or laneBrown\); a hex is not taken$/,
+    );
+    const hint = message.slice(message.indexOf("use a lane token"));
+    assert.ok(readFileSync("native/core/src/lanes.rs", "utf8").includes(`"${hint}"`), "lanes.rs gives the same hint");
+  });
+
   it("refuses a field it does not know, so a typo is not ignored", () => {
     assert.match(error([{ name: "A", colour: "laneMain" }]), /unknown field "colour"/);
     assert.match(error([{ name: "A", left_off: true }]), /unknown field "left_off"/);

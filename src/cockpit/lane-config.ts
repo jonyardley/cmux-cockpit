@@ -27,6 +27,9 @@ const LANE_TOKENS = [
 ] as const;
 export type LaneToken = (typeof LANE_TOKENS)[number];
 
+/** What an unknown colour's error suggests; the same words as the core's lanes.rs. */
+const LANE_COLOR_HINT = `use a lane token (${LANE_TOKENS.slice(0, -1).join(", ")} or ${LANE_TOKENS.at(-1)}); a hex is not taken`;
+
 const DENSITIES = ["full", "compact", "row"] as const;
 export type Density = (typeof DENSITIES)[number];
 
@@ -99,7 +102,7 @@ function colorOf(raw: Record<string, unknown>, label: string, base: LaneSpec | u
   const c = optString(raw, "color", label);
   if (failed(c)) return c;
   if (c === undefined) return base?.color ?? "laneUnsorted";
-  return isLaneToken(c) ? c : { error: `${label}: unknown colour "${c}"` };
+  return isLaneToken(c) ? c : { error: `${label}: unknown colour "${c}"; ${LANE_COLOR_HINT}` };
 }
 
 function densityOf(raw: Record<string, unknown>, label: string, base: LaneSpec | undefined): Density | Fail {

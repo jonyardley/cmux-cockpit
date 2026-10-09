@@ -129,6 +129,10 @@ const LANE_COLORS: [Token; 9] = [
     Token::LaneBrown,
 ];
 
+/// What an unknown colour's error suggests. A hex is refused, so every
+/// lane reads in both themes; the same words as lane-config.ts.
+const LANE_COLOR_HINT: &str = "use a lane token (laneMain, laneReview, laneBackground, laneParked, laneUnsorted, laneViolet, laneTeal, laneRose or laneBrown); a hex is not taken";
+
 fn parse_color(s: &str) -> Option<Token> {
     let token: Token = serde_json::from_value(serde_json::Value::from(s)).ok()?;
     LANE_COLORS.contains(&token).then_some(token)
@@ -210,9 +214,8 @@ fn configured(c: &LaneConfig, base: Option<&Lane>) -> Result<Lane, String> {
         return Err(format!("lane \"{name}\" has an empty id"));
     }
     let color = match c.color.as_deref() {
-        Some(s) => {
-            parse_color(s).ok_or_else(|| format!("lane \"{name}\": unknown colour {s:?}"))?
-        }
+        Some(s) => parse_color(s)
+            .ok_or_else(|| format!("lane \"{name}\": unknown colour {s:?}; {LANE_COLOR_HINT}"))?,
         None => base.map_or(Token::LaneUnsorted, |b| b.color),
     };
     let density = match c.density.as_deref() {
@@ -391,13 +394,13 @@ mod tests {
         let doing = lanes.get(&LaneKey::from("Doing"));
         assert_eq!(
             (doing.color, doing.density, doing.faint, doing.left_off),
-            ((Token::LaneReview), Density::Full, false, false)
+            (Token::LaneReview, Density::Full, false, false)
         );
         let later = lanes.get(&LaneKey::from("later"));
         assert_eq!(later.name, "Some day");
         assert_eq!(
             later.color,
-            (Token::LaneUnsorted),
+            Token::LaneUnsorted,
             "no colour: the neutral one"
         );
         assert!(later.starts_collapsed && later.faint && later.left_off);
@@ -425,7 +428,9 @@ mod tests {
             }];
             assert_eq!(
                 Lanes::from_config(&config),
-                Err(format!("lane \"Doing\": unknown colour {bad:?}")),
+                Err(format!(
+                    "lane \"Doing\": unknown colour {bad:?}; {LANE_COLOR_HINT}"
+                )),
                 "{bad}"
             );
         }
@@ -463,7 +468,7 @@ mod tests {
         assert_eq!(shelf.name, "Shelf");
         assert_eq!(
             (shelf.color, shelf.density),
-            ((Token::LaneParked), Density::Row)
+            (Token::LaneParked, Density::Row)
         );
         assert!(shelf.starts_collapsed && shelf.faint && shelf.left_off);
         let unfaint = LaneConfig {
@@ -524,16 +529,6 @@ mod tests {
             with(|c| c.color = Some("heading".into())).is_err(),
             "a token, not a lane's"
         );
-        for bad in [
-            "#12", "#1234", "#12345", "#1234567", "#12345G", "123456", "#",
-        ] {
-            let color = Some(bad.to_string());
-            let c = LaneConfig {
-                color,
-                ..named("Doing")
-            };
-            assert!(Lanes::from_config(&[c]).is_err(), "{bad:?} is no colour");
-        }
         assert!(
             with(|c| c.density = Some("huge".into())).is_err(),
             "no such density"
