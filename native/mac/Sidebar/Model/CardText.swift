@@ -70,7 +70,8 @@ enum NextText {
 }
 
 /// Needs you as the Next pill draws it (issue #281): the count on its
-/// fill, the next target's title, then the oldest wait and a down arrow.
+/// fill, the core's words (the next target's title, or "needs you · this
+/// one" on the only one waiting), then the oldest wait and a down arrow.
 enum NeedsText {
     /// Whether Next draws as the pill: whenever something waits, with or
     /// without a next step.
@@ -78,10 +79,25 @@ enum NeedsText {
         needs.count > 0
     }
 
-    /// The title the pill names: the oldest waiting session Jon is not
-    /// on, or none while the only one waiting is the one he is on.
+    /// What the pill says after its badge, as the core words it: the
+    /// oldest waiting session Jon is not on, or "needs you · this one"
+    /// while the only one waiting is the one he is on (issue #312).
     static func title(_ needs: Needs) -> String {
-        needs.target?.title ?? ""
+        needs.title
+    }
+
+    /// Whether the pill answers a tap and the pointer: only while it names
+    /// a session to reveal.
+    static func live(_ needs: Needs) -> Bool {
+        needs.target != nil
+    }
+
+    /// Whether the pointer lights Next: always on the plain line, and on
+    /// the pill only while it names a session to reveal. Read at draw
+    /// time, so a pill that loses its target under a resting pointer
+    /// drops its lit face at once.
+    static func lights(_ needs: Needs) -> Bool {
+        !shows(needs) || live(needs)
     }
 
     /// What a tap on the pill sends: reveal the session it names, or

@@ -165,13 +165,22 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("needs-an
     for c in rows where c.waiting == nil {
         check(c.detailInk == .secondary, "\(c.title): a detail not waiting is secondary")
     }
-    // On the only waiting session, the pill still shows with its count,
-    // naming nothing, and a tap on it does nothing.
+    var quiet = panel.needs
+    quiet.count = 0
+    quiet.target = nil
+    check(NeedsText.lights(quiet), "the plain Next line lights under the pointer")
+    check(NeedsText.live(panel.needs) && NeedsText.lights(panel.needs) && panel.needs.titleInk == panel.needs.ink,
+          "a pill naming a session lights and says it in the pill's ink")
+    // On the only waiting session (issue #312), the pill still shows with
+    // its count, says the core's words faint, and neither taps nor lights.
     var alone = panel.needs
     alone.count = 1
+    alone.title = "needs you · this one"
+    alone.titleInk = .faint
     alone.target = nil
-    check(NeedsText.shows(alone) && NeedsText.title(alone).isEmpty && NeedsText.tap(alone) == nil,
-          "the pill shows on the only waiting session, names none and taps to nothing")
+    check(NeedsText.shows(alone) && NeedsText.title(alone) == "needs you · this one" && NeedsText.tap(alone) == nil
+          && !NeedsText.live(alone) && !NeedsText.lights(alone),
+          "the pill on the only waiting session reads its words, taps to nothing and does not light")
 }
 if let text = try? String(contentsOf: snapshots.appendingPathComponent("review-verdicts-80.txt"), encoding: .utf8) {
     check(text.contains("\(Words.next)  \(Words.nextNothing)"), "Next with nowhere to go reads as the pane's")

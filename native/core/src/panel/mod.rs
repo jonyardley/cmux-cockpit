@@ -117,9 +117,17 @@ pub struct Needs {
     pub fill: Token,
     /// The pill's words, in the fill's text ink.
     pub ink: Token,
+    /// What the pill says between its badge and its wait: the target's
+    /// title, or "needs you · this one" while the only one waiting is the
+    /// one Jon is on (issue #312), so the badge's count reads on into it.
+    /// "" when nothing waits.
+    pub title: String,
+    /// The ink of those words: the pill's ink with a target, faint on the
+    /// one Jon is on.
+    pub title_ink: Token,
     /// The oldest waiting session Jon is not on, which the pill names and
     /// a tap on it reveals; None while the only one waiting is the one he
-    /// is on.
+    /// is on, when the pill does nothing on a tap or under the pointer.
     pub target: Option<NeedsTarget>,
 }
 
