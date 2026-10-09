@@ -138,6 +138,9 @@ enum Palette {
         case .cardEdge: faint(text, 0x1F)
         case .laneParked: Pair(RGBA(0xB0AEA5), RGBA(0x6E6C66))
         case .laneUnsorted: Pair(RGBA(0xC9C6BB), RGBA(0x57564F))
+        case .laneViolet: Pair(RGBA(0x7A5BA6), RGBA(0xB39BD6))
+        case .laneTeal: Pair(RGBA(0x2E8A86), RGBA(0x6CC2BC))
+        case .laneRose: Pair(RGBA(0xB04A75), RGBA(0xE08AAE))
         case .mergeGreen: mergeGreen
         case .mergeHalo: faint(mergeGreen, 0x47)
         case .mergeText: Pair(RGBA(0x12873B), RGBA(0x5FD98A))

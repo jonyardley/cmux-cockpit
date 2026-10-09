@@ -11,7 +11,7 @@ const table = resolveLanes([
   { name: "Ideas", color: "laneReview", leftOff: true },
   { id: "main", name: "Main activity" },
   { id: "parked", name: "Shelf" },
-  { name: "Quiet", color: "#c63", density: "row", faint: true },
+  { name: "Quiet", color: "laneRose", density: "row", faint: true },
 ]);
 assert.ok(table.ok);
 const g = globalThis as Record<string, unknown>;
@@ -68,7 +68,7 @@ describe("lanes from lanes.json", () => {
     );
     assert.equal(FIRST_LANE, "Ideas");
     assert.equal(laneByKey("Ideas").color, C.laneReview);
-    assert.equal(laneByKey("Quiet").color, "#CC6633", "a hex draws as written");
+    assert.equal(laneByKey("Quiet").color, C.laneRose, "a hue takes its colour from the theme");
     assert.equal(findLane("bg"), undefined);
   });
 

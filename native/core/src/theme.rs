@@ -61,6 +61,11 @@ pub enum Token {
     LaneBackground,
     LaneParked,
     LaneUnsorted,
+    /// The three lane hues config/lanes.json may pick, chosen clear of the
+    /// state hues (clay, amber, blue, the greens and red).
+    LaneViolet,
+    LaneTeal,
+    LaneRose,
     /// Ready to merge's dot (issue #299): palette.ts's vivid mergeGreen,
     /// never the finished olive.
     MergeGreen,
@@ -70,28 +75,12 @@ pub enum Token {
     MergeText,
 }
 
-/// A colour of its own, as hex: six digits of red, green and blue, and an
-/// alpha (0xFF for opaque).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, facet::Facet)]
-pub struct Rgba {
-    pub rgb: u32,
-    pub alpha: u8,
-}
-
-impl Rgba {
-    /// "#RRGGBB", or "#RRGGBBAA" when it is not opaque, in capitals.
-    pub fn to_hex(self) -> String {
-        if self.alpha == 0xFF {
-            format!("#{:06X}", self.rgb)
-        } else {
-            format!("#{:06X}{:02X}", self.rgb, self.alpha)
-        }
-    }
-}
-
-/// A colour as a hand-written config spells it: "#RGB", "#RRGGBB" or
-/// "#RRGGBBAA", in either case. None for anything else.
-pub fn parse_colour(s: &str) -> Option<Rgba> {
+/// A project's own colour, "#D97757" as the table writes it, as six hex
+/// digits. A hand-typed "#RGB" reads as its six digits, and "#RRGGBBAA"
+/// drops its alpha; None for anything else. The JS sidebar's badge ink
+/// (src/shared/contrast.ts) is looser: it also takes four digits and a
+/// colour with no "#", which this leaves grey.
+pub fn parse_hex(s: &str) -> Option<u32> {
     let digits = s.strip_prefix('#')?;
     if !digits.chars().all(|c| c.is_ascii_hexdigit()) {
         return None;
@@ -101,21 +90,7 @@ pub fn parse_colour(s: &str) -> Option<Rgba> {
         6 | 8 => digits.to_string(),
         _ => return None,
     };
-    let rgb = u32::from_str_radix(full.get(..6)?, 16).ok()?;
-    let alpha = match full.get(6..) {
-        Some(a) if !a.is_empty() => u8::from_str_radix(a, 16).ok()?,
-        _ => 0xFF,
-    };
-    Some(Rgba { rgb, alpha })
-}
-
-/// A project's own colour, "#D97757" as the table writes it, as six hex
-/// digits; None for anything `parse_colour` refuses. A hand-typed "#RGB"
-/// reads as its six digits, and "#RRGGBBAA" drops its alpha. The JS
-/// sidebar's badge ink (src/shared/contrast.ts) is looser: it also takes
-/// four digits and a colour with no "#", which this leaves grey.
-pub fn parse_hex(s: &str) -> Option<u32> {
-    parse_colour(s).map(|c| c.rgb)
+    u32::from_str_radix(full.get(..6)?, 16).ok()
 }
 
 #[cfg(test)]
@@ -136,11 +111,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_a_colour_with_its_alpha() {
-        let c = |rgb, alpha| Some(Rgba { rgb, alpha });
-        assert_eq!(parse_colour("#abc"), c(0xAABBCC, 0xFF));
-        assert_eq!(parse_colour("#AABBCC"), c(0xAABBCC, 0xFF));
-        assert_eq!(parse_colour("#aabbcc80"), c(0xAABBCC, 0x80));
+    fn refuses_every_other_shape() {
         for bad in [
             "",
             "#",
@@ -153,16 +124,9 @@ mod tests {
             "#ggg",
             "#+bc",
             "#ab c",
+            "#aabbccgg",
         ] {
-            assert_eq!(parse_colour(bad), None, "{bad:?}");
+            assert_eq!(parse_hex(bad), None, "{bad:?}");
         }
-        assert_eq!(
-            parse_colour("#abc").map(Rgba::to_hex).as_deref(),
-            Some("#AABBCC")
-        );
-        assert_eq!(
-            parse_colour("#aabbcc80").map(Rgba::to_hex).as_deref(),
-            Some("#AABBCC80")
-        );
     }
 }

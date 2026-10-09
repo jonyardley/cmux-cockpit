@@ -23,7 +23,7 @@ use crate::theme::{Token, parse_hex};
 
 use super::{
     Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT, EditorView, HOLLOW, Icon, Lane,
-    LaneHex, Needs, NeedsTarget, NextLine, PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow,
+    Needs, NeedsTarget, NextLine, PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow,
     QUIET_ROW, Row, RowPr, Waiting, piece,
 };
 
@@ -244,25 +244,8 @@ pub(super) fn build(session: &mut Session, data: &Data, view: &ViewModel) -> Pan
         lanes: lanes(session, data, view),
         projects,
         menu: session.menu_view(data),
-        lane_colors: lane_colors(session),
         lane_picks: lane_picks(session),
     }
-}
-
-/// The lanes with a hex colour of their own (Panel::lane_colors); None
-/// when every lane is a token.
-fn lane_colors(session: &Session) -> Option<Vec<LaneHex>> {
-    let out: Vec<LaneHex> = session
-        .lanes
-        .iter()
-        .filter_map(|l| {
-            l.color.hex().map(|color| LaneHex {
-                key: l.key.clone(),
-                color,
-            })
-        })
-        .collect();
-    (!out.is_empty()).then_some(out)
 }
 
 /// Every lane's key and name, in display order (Panel::lane_picks).
@@ -622,7 +605,7 @@ fn lane_head(
         empty,
         name: lane_name(&lane.name),
         faint: faint_heading(&lane, empty),
-        marker: lane.color.token(),
+        marker: lane.color,
         anchor: None,
         count: ids.len(),
         pill: status.tint,

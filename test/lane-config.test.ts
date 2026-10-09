@@ -101,15 +101,14 @@ describe("lanes.json", () => {
     ]);
   });
 
-  it("takes a hex colour of its own, written as the core writes it", () => {
+  it("takes any lane token, the three hues included", () => {
     const colors = lanes([
-      { name: "Short", color: "#c63" },
-      { name: "Long", color: "#CC6633" },
-      { name: "Opaque", color: "#cc6633ff" },
-      { name: "See-through", color: "#cc663380" },
+      { name: "Violet", color: "laneViolet" },
+      { name: "Teal", color: "laneTeal" },
+      { name: "Rose", color: "laneRose" },
       { id: "main", name: "Token", color: "laneParked" },
     ]).map((l) => l.color);
-    assert.deepEqual(colors, ["#CC6633", "#CC6633", "#CC6633", "#CC663380", "laneParked"]);
+    assert.deepEqual(colors, ["laneViolet", "laneTeal", "laneRose", "laneParked"]);
   });
 
   it("reads the committed sample, as the core does", () => {
@@ -118,8 +117,8 @@ describe("lanes.json", () => {
       sample.map((l) => [l.name, l.color]),
       [
         ["Doing", "laneMain"],
-        ["Waiting on others", "#6A9BCC"],
-        ["Ideas", "#CC6633"],
+        ["Waiting on others", "laneTeal"],
+        ["Ideas", "laneRose"],
         ["Parked", "laneParked"],
       ],
     );
@@ -132,11 +131,21 @@ describe("lanes.json", () => {
     assert.match(error([{ name: "  " }]), /no name/);
     assert.match(error([{ name: "A", id: " " }]), /empty id/);
     assert.match(error([{ name: "A", id: 3 }]), /id must be a string/);
-    for (const bad of ["red", "heading", "#12", "#1234", "#12345", "#1234567", "#12345G", "123456", "#"])
+    for (const bad of ["red", "heading", "violet", "#c63", "#CC6633", "#cc663380", "#12", "123456", "#"])
       assert.match(error([{ name: "A", color: bad }]), /unknown colour/, bad);
     assert.match(error([{ name: "A", color: 1 }]), /color must be a string/);
     assert.match(error([{ name: "A", density: "tall" }]), /unknown density "tall"/);
     assert.match(error([{ name: "A", faint: "yes" }]), /faint must be true or false/);
+  });
+
+  it("says what to use instead of a hex, in the core's words and token list", () => {
+    const message = error([{ name: "Ideas", color: "#c63" }]);
+    assert.match(
+      message,
+      /^lane "Ideas": unknown colour "#c63"; use a lane token \(laneMain, .* or laneRose\); a hex is not taken$/,
+    );
+    const hint = message.slice(message.indexOf("use a lane token"));
+    assert.ok(readFileSync("native/core/src/lanes.rs", "utf8").includes(`"${hint}"`), "lanes.rs gives the same hint");
   });
 
   it("refuses a field it does not know, so a typo is not ignored", () => {
