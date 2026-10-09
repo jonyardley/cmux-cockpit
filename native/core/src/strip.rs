@@ -2,8 +2,8 @@
 //! oldest has waited. The TypeScript draws them as a strip with
 //! placeholders left in the lanes; here each card stays in its lane and
 //! says so itself with a dot on its badge, and the All tab carries the
-//! count (issue #314). A dismissed card stays where it is and sorts by
-//! its status from then on, as cards never leave their lane.
+//! count (issue #314). A dismissed card stays in its lane and sorts by
+//! its status from then on.
 //!
 //! The TypeScript memoises the list once per change. Here `needs` builds
 //! it once and answers every field from that; the single getters are for

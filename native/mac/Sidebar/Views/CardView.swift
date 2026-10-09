@@ -132,8 +132,7 @@ struct DenseRow: View {
                 StatusDot(icon: card.icon, size: 7)
                 BadgeTile(
                     icon: card.badge.icon, color: card.badge.color, size: CardLook.rowBadge,
-                    font: CardLook.rowBadgeFont, radius: CardLook.rowBadgeRadius, mark: CardText.mark(card),
-                    ring: Color(Palette.Own.panelGround)
+                    font: CardLook.rowBadgeFont, radius: CardLook.rowBadgeRadius, mark: CardText.mark(card)
                 )
                 Text(card.title)
                     .font(.system(size: CardLook.rowTitle, weight: card.selected ? .medium : .regular))
@@ -209,7 +208,7 @@ struct TitleRow: View {
     var body: some View {
         HStack(alignment: lines > 1 ? .top : .center, spacing: 6) {
             if leadMark, let mark = CardText.mark(card) {
-                Circle().fill(Color(mark)).frame(width: Metrics.headerDot, height: Metrics.headerDot)
+                NeedsDot(ink: mark, size: Metrics.headerDot, onCorner: false)
                     .frame(height: size * 1.2)
             }
             Text(card.title)
@@ -345,29 +344,39 @@ struct MetaText: View {
 /// The x on a card waiting on Jon, under the pointer only (issue #314):
 /// a click dismisses its wait with the core's Dismiss, so the dot goes and
 /// the card reads Idle until its agent asks again. Its own button, so the
-/// click never opens the card.
+/// click never opens the card. A waiting card keeps the x's slot at rest
+/// too, so its title does not reflow as the pointer comes and goes; any
+/// other card has no slot.
 struct DismissX: View {
     let card: Card
     @Environment(\.cardHovering) private var cardHovering
     @State private var hovering = false
 
     var body: some View {
-        if cardHovering && CardText.dismissable(card) {
-            Button {
-                SidebarCore.send(.dismiss(id: card.wsId))
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: Metrics.dismissGlyph, weight: .bold))
-                    .foregroundStyle(Color(Token.secondary))
-                    .frame(width: Metrics.dismissSize, height: Metrics.dismissSize)
-                    .background(Color(hovering ? Palette.Own.cardHover : Palette.Own.hover), in: .circle)
-                    .overlay { Circle().strokeBorder(Color(Token.cardEdge), lineWidth: Metrics.hairline) }
-                    .contentShape(.circle)
+        if CardText.dismissable(card) {
+            ZStack {
+                if cardHovering { button }
             }
-            .buttonStyle(.plain)
-            .help(Words.dismiss)
-            .onHover { hovering = $0 }
+            .frame(width: Metrics.dismissSize, height: Metrics.dismissSize)
         }
+    }
+
+    /// The x itself, a step darker under its own pointer.
+    private var button: some View {
+        Button {
+            SidebarCore.send(.dismiss(id: card.wsId))
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: Metrics.dismissGlyph, weight: .bold))
+                .foregroundStyle(Color(Token.secondary))
+                .frame(width: Metrics.dismissSize, height: Metrics.dismissSize)
+                .background(Color(hovering ? Palette.Own.cardHover : Palette.Own.hover), in: .circle)
+                .overlay { Circle().strokeBorder(Color(Token.cardEdge), lineWidth: Metrics.hairline) }
+                .contentShape(.circle)
+        }
+        .buttonStyle(.plain)
+        .help(Words.dismiss)
+        .onHover { hovering = $0 }
     }
 }
 
@@ -449,7 +458,8 @@ extension View {
 /// the pointer. A quiet row has no face or edge until it is selected, and
 /// takes the hover wash. A merged card nothing in wants sits dimmed, at
 /// full strength under the pointer. The pointer also shows a waiting
-/// card's x (DismissX), read from the environment.
+/// card's x (DismissX), read from the environment, and the face goes the
+/// same way to ring a badge's needs dot (BadgeTile).
 struct CardChrome: ViewModifier {
     let card: Card
     let radius: CGFloat
@@ -460,6 +470,7 @@ struct CardChrome: ViewModifier {
         content
             .frame(maxWidth: .infinity, alignment: .leading)
             .environment(\.cardHovering, hovering)
+            .environment(\.cardFace, ring)
             .background(face, in: .rect(cornerRadius: radius))
             .overlay(Outline(selected: card.selected, radius: radius, rest: quiet ? .clear : .cardEdge))
             .opacity(card.dimmed && !hovering ? CardLook.dimmed : 1)
@@ -471,6 +482,13 @@ struct CardChrome: ViewModifier {
         if quiet && !card.selected { return hovering ? Color(Palette.Own.hover) : .clear }
         return Color(hovering ? Palette.Own.cardHover : Palette.Own.card)
     }
+
+    /// The colour under a badge's needs dot: the face, or the panel's
+    /// ground where a quiet row at rest has none.
+    private var ring: Color {
+        if quiet && !card.selected && !hovering { return Color(Palette.Own.panelGround) }
+        return face
+    }
 }
 
 /// Whether the pointer is over the card, for the parts that show only
@@ -479,10 +497,22 @@ private struct CardHoveringKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+/// The colour of the face a card's parts sit on, as it changes under the
+/// pointer, so a badge's needs dot is ringed in it; the card's face
+/// outside a card.
+private struct CardFaceKey: EnvironmentKey {
+    static let defaultValue = Color(Palette.Own.card)
+}
+
 extension EnvironmentValues {
     var cardHovering: Bool {
         get { self[CardHoveringKey.self] }
         set { self[CardHoveringKey.self] = newValue }
+    }
+
+    var cardFace: Color {
+        get { self[CardFaceKey.self] }
+        set { self[CardFaceKey.self] = newValue }
     }
 }
 

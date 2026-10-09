@@ -374,20 +374,19 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
 }
 
 /// Where a click on the count goes, from the list longest waiting first:
-/// the one after the waiting session Jon is on, round to the oldest
+/// the first one after the waiting session Jon is on that no window has
+/// selected (cmux keeps one selected per window), round to the oldest
 /// again, so each click steps on; the oldest while he is on none of
-/// them. None while the only one waiting is the one he is on.
+/// them. None while every one waiting is selected.
 fn needs_target(session: &mut Session, data: &Data, list: &[String]) -> Option<NeedsTarget> {
-    let on = list
-        .iter()
-        .position(|id| session.is_selected(data, data.ws_by_id(id)));
-    let id = match on {
+    let mut on = |id: &String| session.is_selected(data, data.ws_by_id(id));
+    let id = match list.iter().position(&mut on) {
         Some(i) => list
             .iter()
             .cycle()
             .skip(i + 1)
             .take(list.len())
-            .find(|id| *id != &list[i])?,
+            .find(|id| !on(id))?,
         None => list.first()?,
     };
     Some(NeedsTarget {
@@ -590,15 +589,14 @@ fn header_dot(
     ws: &[&Workspace],
     folded: Option<&Workspace>,
 ) -> Option<Icon> {
-    let waiting: Vec<&Workspace> = ws
+    let mut waiting = ws
         .iter()
         .copied()
-        .filter(|w| view.needs.list.contains(&w.id))
-        .collect();
-    if waiting.is_empty() {
+        .filter(|w| view.needs.list.contains(&w.id));
+    if waiting.clone().next().is_none() {
         return folded.map(|w| icon_of(&session.status_info(data, Some(w))));
     }
-    let asking = waiting.iter().all(|w| session.ask_of(Some(w)).is_some());
+    let asking = waiting.all(|w| session.ask_of(Some(w)).is_some());
     Some(Icon {
         glyph: DOT,
         ink: Some(waiting_tokens(asking).0),
@@ -1000,10 +998,16 @@ mod tests {
 
     /// Workspaces "a", "b" and "c", with `on` the one Jon is on.
     fn three_on(on: &str) -> Data {
+        three_on_all(&[on])
+    }
+
+    /// Workspaces "a", "b" and "c", with each of `on` selected, as when
+    /// two windows each have one selected.
+    fn three_on_all(on: &[&str]) -> Data {
         let ws = |id: &str| Workspace {
             id: id.into(),
             title: Some(format!("Title {id}")),
-            selected: Some(id == on),
+            selected: Some(on.contains(&id)),
             ..Workspace::default()
         };
         Data {
@@ -1042,6 +1046,31 @@ mod tests {
             "the one he is on, listed twice"
         );
         assert_eq!(target(s, "c", &[]), None, "nothing waiting");
+    }
+
+    #[test]
+    fn steps_the_count_past_every_selected_waiting_session() {
+        let mut core = Model::default();
+        let s = &mut core.session;
+        let list = ["a".to_string(), "b".to_string(), "c".to_string()];
+        let target = |s: &mut Session, on: &[&str], list: &[String]| {
+            needs_target(s, &three_on_all(on), list).map(|t| t.ws_id)
+        };
+        assert_eq!(
+            target(s, &["a", "b"], &list),
+            Some("c".into()),
+            "skips b, selected in another window"
+        );
+        assert_eq!(
+            target(s, &["b", "c"], &list),
+            Some("a".into()),
+            "round past c to the oldest"
+        );
+        assert_eq!(
+            target(s, &["a", "b"], &list[..2]),
+            None,
+            "every one waiting is selected"
+        );
     }
 
     /// "a" asks, "b" waits on its turn, "c" works; asks dated as their

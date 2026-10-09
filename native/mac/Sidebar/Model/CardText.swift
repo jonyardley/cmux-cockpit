@@ -84,11 +84,12 @@ enum NeedsText {
 
     /// What a click on the count sends: back to All when Projects is on,
     /// then reveal the session the core names, the oldest waiting or the
-    /// one after the waiting session Jon is on. Nothing while it names
-    /// none, as on the only waiting session.
+    /// one after the waiting session Jon is on. While it names none, as on
+    /// the only waiting session, only the flip back to All: the badge sits
+    /// over the All tab and its button takes the tab's own click.
     static func tap(_ needs: Needs, from view: PanelView) -> [SidebarAction] {
-        guard let target = needs.target else { return [] }
         let back: [SidebarAction] = view == .all ? [] : [.flipView]
+        guard let target = needs.target else { return back }
         return back + [.reveal(id: target.wsId)]
     }
 }

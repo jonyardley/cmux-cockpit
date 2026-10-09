@@ -177,6 +177,8 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("needs-an
     alone.target = nil
     check(NeedsText.shows(alone) && NeedsText.tap(alone, from: .all).isEmpty,
           "the count on the only waiting session shows and taps to nothing")
+    check(NeedsText.tap(alone, from: .projects) == [.flipView],
+          "from Projects, the count on the only waiting session still flips back to All")
 }
 if let text = try? String(contentsOf: snapshots.appendingPathComponent("review-verdicts-80.txt"), encoding: .utf8) {
     check(text.contains("\(Words.next)  \(Words.nextNothing)"), "Next with nowhere to go reads as the pane's")
