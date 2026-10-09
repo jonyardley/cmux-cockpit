@@ -485,9 +485,11 @@ function uiState(v: unknown): UiState {
 
 const UI_KEYS: readonly string[] = ["mode", "collapsed"];
 
-/** The longest lane name kept: cmux shows a group's name on one line. */
-const MAX_LANE_NAME = 128;
-const laneName = (v: unknown): string | null => (isText(v, MAX_LANE_NAME) ? v : null);
+// Any name lanes.json takes (trimmed, not empty), bounded only so a flood
+// of URLs cannot bloat the file; a tighter rule would refuse a lane's own
+// name and leave the sidebars asking to save it on every reload.
+const laneName = (v: unknown): string | null =>
+  typeof v === "string" && v.trim() === v && v.length > 0 && v.length <= 1024 ? v : null;
 
 const POLL_ERRORS: readonly unknown[] = ["unavailable", "signed-out", "missing"];
 const isPollError = (v: unknown): v is PollError => POLL_ERRORS.includes(v);

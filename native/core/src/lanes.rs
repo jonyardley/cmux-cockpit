@@ -189,6 +189,7 @@ fn built_in() -> Vec<Lane> {
         left_off: true,
     };
     vec![
+        // Each name is built_in_name's for the id; a test holds them together.
         built_in_lane("main", "Main activity", Token::LaneMain, Full, plain),
         built_in_lane("review", "For review", Token::LaneReview, Compact, plain),
         built_in_lane("bg", "Background", Token::LaneBackground, Compact, left_off),
@@ -198,11 +199,14 @@ fn built_in() -> Vec<Lane> {
 
 /// The name a built-in lane goes by, by id: what a lane was called before
 /// any name was saved for it (lane_rename.rs).
-pub fn built_in_name(id: &str) -> Option<String> {
-    built_in()
-        .into_iter()
-        .find(|l| l.key.as_str() == id)
-        .map(|l| l.name)
+pub fn built_in_name(id: &str) -> Option<&'static str> {
+    match id {
+        "main" => Some("Main activity"),
+        "review" => Some("For review"),
+        "bg" => Some("Background"),
+        "parked" => Some("Parked"),
+        _ => None,
+    }
 }
 
 /// The id a configured lane takes: its own, else its name.
@@ -562,5 +566,13 @@ mod tests {
             ..named("a")
         };
         assert!(twice(named("A"), other_id), "the same group, any case");
+    }
+
+    #[test]
+    fn built_in_name_matches_the_built_in_table() {
+        for lane in built_in() {
+            assert_eq!(built_in_name(lane.key.as_str()), Some(lane.name.as_str()));
+        }
+        assert_eq!(built_in_name("shelf"), None);
     }
 }
