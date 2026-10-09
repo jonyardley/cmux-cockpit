@@ -1194,6 +1194,33 @@ mod the_selection_override {
         assert!(s.is_selected(&data, Some(&ws("second"))));
         assert!(!s.is_selected(&data, Some(&ws("first").selected())));
     }
+
+    #[test]
+    fn holds_when_the_tap_frame_marked_the_old_selection_only_on_its_card() {
+        let (mut s, mut data, _) = setup();
+        if let Some(list) = data.workspaces.as_mut() {
+            for w in list.iter_mut().filter(|w| w.id == "a") {
+                w.selected = Some(true);
+            }
+        }
+        s.select_workspace(&data, Some("tapped"));
+        data.epoch = Some(NOW + 1.0);
+        data.selected_id = Some("a".into());
+        assert!(s.is_selected(&data, Some(&ws("tapped"))));
+    }
+
+    #[test]
+    fn a_lapsed_tap_is_not_carried_into_the_next() {
+        let (mut s, mut data, _) = setup();
+        data.selected_id = Some("other".into());
+        s.select_workspace(&data, Some("first"));
+        data.epoch = Some(NOW + 5.0);
+        s.select_workspace(&data, Some("second"));
+        data.epoch = Some(NOW + 6.0);
+        data.selected_id = Some("first".into());
+        assert!(!s.is_selected(&data, Some(&ws("second"))));
+        assert!(s.is_selected(&data, Some(&ws("first").selected())));
+    }
 }
 
 mod data_fields_cmux_may_leave_out_issue_7 {

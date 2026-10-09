@@ -139,23 +139,37 @@ impl Session {
         if id.is_empty() {
             return;
         }
+        let now = now_epoch(data);
+        // A held tap that has lapsed no longer stands for anything cmux may
+        // still publish, so the next tap starts afresh rather than inherit it.
         let mut stale = match self.select_override.take() {
-            Some(held) => {
+            Some(held) if now - held.at <= OVERRIDE_SECS => {
                 let mut stale = held.stale;
                 stale.push(held.id);
                 stale
             }
-            None => Vec::new(),
+            _ => Vec::new(),
         };
-        if let Some(was) = &data.selected_id
-            && !stale.contains(was)
-        {
-            stale.push(was.clone());
+        if let Some(was) = shown_selection(data) {
+            stale.push(was.to_string());
         }
+        stale.sort();
+        stale.dedup();
         self.select_override = Some(SelectOverride {
             id: id.to_string(),
-            at: now_epoch(data),
+            at: now,
             stale,
         });
     }
+}
+
+/// The workspace cmux shows selected: its `selectedId`, or, when the frame
+/// leaves that out (issue #7), the card it marks selected.
+fn shown_selection(data: &Data) -> Option<&str> {
+    data.selected_id.as_deref().or_else(|| {
+        data.workspace_list()
+            .iter()
+            .find(|w| w.selected == Some(true))
+            .map(|w| w.id.as_str())
+    })
 }
