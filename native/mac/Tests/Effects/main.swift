@@ -24,7 +24,7 @@ guard args.count == 2 else {
 }
 
 /// Every effect the runner takes from outbox/, in effects.json's order.
-let every = ["Cmux", "Persist", "PrPoll", "OpenUrl", "AgentMessage"]
+let every = ["Cmux", "Persist", "PrPoll", "OpenUrl", "AgentMessage", "SavePrs"]
 
 let fixture = URL(fileURLWithPath: args[1])
 let data = (try? Data(contentsOf: fixture)) ?? Data()

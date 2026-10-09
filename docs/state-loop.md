@@ -130,14 +130,25 @@ itself is never written by the loop: it is the starting table.
 
 ## Pull requests: the one map no URL writes
 
-cmux sends custom sidebars no PR data (#7), so `scripts/pr-poll.ts` finds it
-instead and keeps it in a fourth map, `prs`: workspace id to
+cmux sends custom sidebars no PR data (#7), so the native cockpit's PR poll
+(`native/core/src/pr_poll.rs`) finds it instead and keeps it in a fourth
+map, `prs`: workspace id to
 `{"number", "url", "status": "open|merged|closed", "branch", "title"?, "draft"?, "mergeable"?, "conflicts"?, "checks"?}`.
 `title` is the PR's own title, cleaned as an own PR's is and left out when
 nothing readable is left; `draft`, `mergeable` (gh's `mergeStateStatus`
 CLEAN) and `conflicts` (DIRTY) are saved only as `true`, so the chips can
-say a PR's worst state. For every
-workspace in every window it reads the directory's git branch and asks
+say a PR's worst state. Since #300 the native poll is the one writer of
+these verdicts, so the card and the agents panel, which reads only this
+file, say the same thing: an answer that differs from the file goes out as
+the core's `SavePrs` effect, and the runner hands it to
+`scripts/pr-save.sh`, which runs `scripts/pr-save.ts`: the PRs cleaned by
+`validateState`, set or deleted entry by entry under the file lock, and a
+rebuild scheduled only when the file changed. `scripts/pr-poll.ts` no
+longer looks a workspace's PR up; it only drops the entries of workspaces
+no window holds, folding the map as it stands under the lock so it never
+undoes an answer written since it read the file. The rules below are the
+native poll's, which mirrors what pr-poll.ts did. For each
+directory a workspace sits in it reads the git branch and asks
 `gh pr list --head <branch> --state all` for that branch's PR, preferring an
 open one, and ignoring a fork's PR (`isCrossRepository`), since the sidebar
 cannot open one of those the way it opens ours. It replaces the whole map

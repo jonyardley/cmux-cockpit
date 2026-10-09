@@ -215,8 +215,30 @@ export function writePrs(path: string, prs: State["prs"]): ApplyResult {
 }
 
 /**
+ * The native PR poll's answers (scripts/pr-save.ts, #300), the one writer
+ * of `prs` verdicts: each id in `set` takes its PR, each id in `remove`
+ * loses its entry, every other entry stays, in the same locked
+ * read-modify-write step as every other write. `set` must already be
+ * clean (validateState's `prs`); keys are sorted as writePrs sorts them.
+ */
+export function writePrEntries(path: string, set: State["prs"], remove: readonly string[]): ApplyResult {
+  return readUpdateWrite(path, (before) => {
+    const prs = { ...before.prs, ...set };
+    for (const id of remove) delete prs[id];
+    return { ok: true, state: validateState({ ...before, prs: sortedByKey(prs) }) };
+  });
+}
+
+/**
+ * The `prs` a poll writes: a whole map to replace it, or a function from
+ * the map as it stands under the lock to the next one, so a write that
+ * landed since the poll read the file is never undone.
+ */
+export type PrsUpdate = State["prs"] | ((prs: State["prs"]) => State["prs"]);
+
+/**
  * One poll's whole write (scripts/pr-poll.ts) in a single locked pass:
- * replaces the `prs` and `ownPrs` maps, keys sorted as writePrs does,
+ * replaces (or folds) the `prs` map and replaces `ownPrs`, keys sorted as writePrs does,
  * and folds `subagents` over the `subagents` map, so the file is never
  * left half updated. `poll` (#78) is the
  * saved poll status in the same pass: replaced when given, removed when
@@ -224,7 +246,7 @@ export function writePrs(path: string, prs: State["prs"]): ApplyResult {
  */
 export function writePollMaps(
   path: string,
-  prs: State["prs"],
+  prs: PrsUpdate,
   ownPrs: State["ownPrs"],
   subagents: (runs: State["subagents"]) => State["subagents"],
   poll?: SavedPoll | null,
@@ -234,7 +256,7 @@ export function writePollMaps(
   const result = readUpdateWrite(path, (before) => {
     const next: State = {
       ...before,
-      prs: sortedByKey(prs),
+      prs: sortedByKey(typeof prs === "function" ? prs(before.prs) : prs),
       ownPrs: sortedByKey(ownPrs),
       ...(poll ? { poll } : {}),
     };

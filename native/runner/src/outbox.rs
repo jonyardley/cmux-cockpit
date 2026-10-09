@@ -12,17 +12,21 @@
 //! - Jon's words for the agent in a workspace, as
 //!   `cmux agent message <workspace> --from Cockpit -- <text>`. cmux
 //!   delivers them through the agent's hooks; `--from` names the sender,
-//!   since the headless publisher sits in no workspace of its own.
+//!   since the headless publisher sits in no workspace of its own;
+//! - the PR poll's answers for config/state.json's `prs` map (#300), as
+//!   `scripts/pr-save.sh '<json>'` beside the config folder: it finds node
+//!   and runs pr-save.ts, which writes them under the state file's lock
+//!   and schedules the sidebars' rebuild, so it returns at once.
 //!
 //! One worker thread takes them in the order asked, so a reorder always
 //! reaches cmux before the group join that follows it, and a slow cmux
 //! never holds up a frame.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 
-use cockpit_core::app::{AgentMessage, CmuxCall, OpenUrl, StateSet};
+use cockpit_core::app::{AgentMessage, CmuxCall, OpenUrl, PrSave, StateSet};
 use cockpit_core::session::Param;
 use serde::Serialize;
 
@@ -36,14 +40,30 @@ pub enum Outgoing {
     OpenUrl(OpenUrl),
     /// Words for the agent in a workspace.
     AgentMessage(AgentMessage),
+    /// The PR poll's answers for the state file.
+    SavePrs(PrSave),
 }
 
 /// Who a message says it is from.
 pub const MESSAGE_FROM: &str = "Cockpit";
 
+/// The script that saves the PR poll's answers: in the repo that holds
+/// `config`, as the TypeScript poll's is.
+pub fn pr_save_script(config: &Path) -> PathBuf {
+    config
+        .parent()
+        .unwrap_or(config)
+        .join("scripts")
+        .join("pr-save.sh")
+}
+
 /// The program and arguments that carry out a request, or why it cannot
 /// go: a state write with no token would only be refused by the handler.
-pub fn command_for(o: &Outgoing, token: Option<&str>) -> Result<(String, Vec<String>), String> {
+pub fn command_for(
+    o: &Outgoing,
+    token: Option<&str>,
+    config: &Path,
+) -> Result<(String, Vec<String>), String> {
     match o {
         Outgoing::Cmux(call) => Ok((
             "cmux".to_string(),
@@ -85,6 +105,14 @@ pub fn command_for(o: &Outgoing, token: Option<&str>) -> Result<(String, Vec<Str
                 m.text.clone(),
             ],
         )),
+        Outgoing::SavePrs(save) => {
+            let json =
+                serde_json::to_string(&save.prs).map_err(|e| format!("pr save not sent: {e}"))?;
+            Ok((
+                "/bin/sh".to_string(),
+                vec![pr_save_script(config).display().to_string(), json],
+            ))
+        }
     }
 }
 
@@ -96,6 +124,8 @@ fn describe(o: &Outgoing) -> String {
         Outgoing::OpenUrl(_) => "opening a link".to_string(),
         // Never the words: they are Jon's.
         Outgoing::AgentMessage(_) => "cmux agent message".to_string(),
+        // How many, never which PR: a title can be anything.
+        Outgoing::SavePrs(save) => format!("pr save of {}", save.prs.len()),
     }
 }
 
@@ -136,9 +166,12 @@ pub fn perform<L: Fn(String), F: Fn(String)>(
     while let Ok(o) = rx.recv() {
         let token = match o {
             Outgoing::Persist(_) => read_token(config),
-            Outgoing::Cmux(_) | Outgoing::OpenUrl(_) | Outgoing::AgentMessage(_) => None,
+            Outgoing::Cmux(_)
+            | Outgoing::OpenUrl(_)
+            | Outgoing::AgentMessage(_)
+            | Outgoing::SavePrs(_) => None,
         };
-        match command_for(&o, token.as_deref()) {
+        match command_for(&o, token.as_deref(), config) {
             Ok((program, args)) => {
                 if !exec(&program, &args) {
                     log(format!("{} failed or timed out", describe(&o)));
@@ -178,7 +211,7 @@ mod tests {
 
     #[test]
     fn a_cmux_call_goes_as_cmux_rpc_with_its_params_in_order() {
-        let (program, args) = command_for(&reorder(), None).unwrap();
+        let (program, args) = command_for(&reorder(), None, Path::new("/c")).unwrap();
         assert_eq!(program, "cmux");
         assert_eq!(
             args,
@@ -195,7 +228,7 @@ mod tests {
         let link = Outgoing::OpenUrl(OpenUrl {
             url: "https://example.com/pr/7".into(),
         });
-        let (program, args) = command_for(&link, None).unwrap();
+        let (program, args) = command_for(&link, None, Path::new("/c")).unwrap();
         assert_eq!(program, "/usr/bin/open");
         assert_eq!(args, ["-u", "https://example.com/pr/7"]);
         assert_eq!(describe(&link), "opening a link");
@@ -208,7 +241,7 @@ mod tests {
             workspace: "W1".into(),
             text: "--help is not a flag here".into(),
         });
-        let (program, args) = command_for(&message, None).unwrap();
+        let (program, args) = command_for(&message, None, Path::new("/c")).unwrap();
         assert_eq!(program, "cmux");
         assert_eq!(
             args,
@@ -231,8 +264,24 @@ mod tests {
     }
 
     #[test]
+    fn a_pr_save_runs_the_repos_script_with_the_answers_as_json() {
+        let mut prs = std::collections::BTreeMap::new();
+        prs.insert("W2".to_string(), None);
+        let save = Outgoing::SavePrs(PrSave { prs });
+        let (program, args) =
+            command_for(&save, None, Path::new("/u/.config/cmux/config")).unwrap();
+        assert_eq!(program, "/bin/sh");
+        assert_eq!(
+            args,
+            ["/u/.config/cmux/scripts/pr-save.sh", r#"{"W2":null}"#]
+        );
+        assert_eq!(describe(&save), "pr save of 1");
+        assert_eq!(workspace_of(&save), None);
+    }
+
+    #[test]
     fn a_state_write_opens_its_url_with_the_token_in_the_background() {
-        let (program, args) = command_for(&dismissal(), Some("t0k")).unwrap();
+        let (program, args) = command_for(&dismissal(), Some("t0k"), Path::new("/c")).unwrap();
         assert_eq!(program, "/usr/bin/open");
         assert_eq!(
             args,
@@ -246,7 +295,7 @@ mod tests {
     #[test]
     fn a_state_write_without_a_token_is_not_sent_and_says_why_without_a_url() {
         for token in [None, Some("")] {
-            let why = command_for(&dismissal(), token).unwrap_err();
+            let why = command_for(&dismissal(), token, Path::new("/c")).unwrap_err();
             assert!(why.contains("\"dismissed.c\"") && why.contains("url-token"));
             assert!(!why.contains("cmux-cockpit://"));
         }

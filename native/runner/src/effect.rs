@@ -11,6 +11,7 @@
 //! {"PrPoll": {"directory": "/dev/cockpit", "asked": 1791229864.5}}
 //! {"OpenUrl": {"url": "https://github.com/o/r/pull/1"}}
 //! {"AgentMessage": {"workspace": "W1", "text": "Rebase when free."}}
+//! {"SavePrs": {"prs": {"W1": {"number": 7, "url": "...", ...}, "W2": null}}}
 //! ```
 //!
 //! `Render` is the shell's own business and never comes this way. An
@@ -19,7 +20,7 @@
 //! some of these bring back (a cmux call that failed, a PR) go to inbox/
 //! (inbox.rs).
 
-use cockpit_core::{AgentMessage, CmuxCall, OpenUrl, PrAsk, StateSet};
+use cockpit_core::{AgentMessage, CmuxCall, OpenUrl, PrAsk, PrSave, StateSet};
 use serde::{Deserialize, Serialize};
 
 /// An effect file's contents: every effect of the core but `Render`, with
@@ -31,6 +32,7 @@ pub enum EffectFile {
     PrPoll(PrAsk),
     OpenUrl(OpenUrl),
     AgentMessage(AgentMessage),
+    SavePrs(PrSave),
 }
 
 impl EffectFile {
@@ -48,6 +50,7 @@ impl EffectFile {
             EffectFile::PrPoll(_) => "PrPoll",
             EffectFile::OpenUrl(_) => "OpenUrl",
             EffectFile::AgentMessage(_) => "AgentMessage",
+            EffectFile::SavePrs(_) => "SavePrs",
         }
     }
 }
@@ -75,9 +78,10 @@ mod tests {
             EffectFile::PrPoll(_) => 2,
             EffectFile::OpenUrl(_) => 3,
             EffectFile::AgentMessage(_) => 4,
+            EffectFile::SavePrs(_) => 5,
         }
     }
-    const EFFECTS: usize = 5;
+    const EFFECTS: usize = 6;
 
     /// The core's own effect for a file, as the core's update makes it.
     fn as_core(file: EffectFile) -> Effect {
@@ -87,6 +91,7 @@ mod tests {
             EffectFile::PrPoll(op) => Command::notify_shell(op).into(),
             EffectFile::OpenUrl(op) => Command::notify_shell(op).into(),
             EffectFile::AgentMessage(op) => Command::notify_shell(op).into(),
+            EffectFile::SavePrs(op) => Command::notify_shell(op).into(),
         };
         cmd.effects().next().unwrap()
     }
@@ -157,6 +162,7 @@ mod tests {
                 EffectFile::Persist(p) => Outgoing::Persist(p),
                 EffectFile::OpenUrl(u) => Outgoing::OpenUrl(u),
                 EffectFile::AgentMessage(m) => Outgoing::AgentMessage(m),
+                EffectFile::SavePrs(p) => Outgoing::SavePrs(p),
             };
             assert_eq!(serde_json::to_value(&out).unwrap(), want);
         }
@@ -186,6 +192,8 @@ mod tests {
             r#"{"PrPoll": {"directory": "/a"}}"#,
             r#"{"OpenUrl": {"url": "u", "typo": 1}}"#,
             r#"{"AgentMessage": {"workspace": "W1", "text": "t", "from": "x"}}"#,
+            r#"{"SavePrs": {"prs": {}, "typo": 1}}"#,
+            r#"{"SavePrs": {"prs": {"W1": {"number": 7}}}}"#,
             r#"{"OpenUrl": "#,
             "",
         ] {

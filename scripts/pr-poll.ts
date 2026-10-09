@@ -1,16 +1,21 @@
-// Finds each cmux workspace's pull request and saves it in config/state.json
-// (the `prs` map, docs/state-loop.md), because cmux sends custom sidebars no
-// PR data (issue #7).
+// Finds Jon's own open PRs across the repos his cmux workspaces sit in and
+// saves them in config/state.json (the `ownPrs` map, docs/state-loop.md),
+// with the poll's status, because cmux sends custom sidebars no PR data
+// (issue #7).
 //   node scripts/pr-poll.ts [--delay <seconds>]
+// Each workspace's own PR (the `prs` map) is no longer looked up here: the
+// native cockpit's poll asks for it and writes its answers through
+// scripts/pr-save.ts (#300), so the card and the agents panel read one
+// verdict from one writer. This run only drops the entries of workspaces
+// that have closed, under the state file's lock, so it never undoes an
+// answer written since it read the file.
 // Run by the pr-poll rules in automations.json when an agent's turn ends or a
 // workspace is selected, and by the report-pr hook with a delay after an
-// agent opens a PR, since gh can take a few seconds to list a new one, or
-// marks one ready or merges it. For
-// every workspace in every window it reads the git branch of its directory
-// and asks gh for that branch's PR and its checks, then rebuilds the
-// sidebars only if a PR or a check's state changed. It never fails loudly:
-// every problem is a log line and exit 0. No shell: every command is
-// spawnSync with an argument array, since directories and branch names come
+// agent opens a PR, marks one ready or merges it. For every workspace in
+// every window it reads the git repo of its directory and asks gh for Jon's
+// open PRs there, then rebuilds the sidebars only if something changed. It
+// never fails loudly: every problem is a log line and exit 0. No shell:
+// every command is spawnSync with an argument array, since directories come
 // from outside. A lockfile stops two runs overlapping, and an overall
 // deadline stops one slow run blocking every workspace behind it.
 
@@ -35,7 +40,7 @@ import {
   validateState,
 } from "./state-config.ts";
 import { logLine } from "./state-log.ts";
-import { type PollApplyResult, writePollMaps } from "./state-url.ts";
+import { type PollApplyResult, type PrsUpdate, writePollMaps } from "./state-url.ts";
 import { prune } from "./subagent-runs.ts";
 
 const TIMEOUT_MS = 15_000;
@@ -194,7 +199,7 @@ function saved(p: Listed): SavedPr {
 }
 
 /**
- * The branch's PR from `gh pr list --json <PR_FIELDS>`, with its checks:
+ * The branch's PR from `gh pr list --json` with the fields above, with its checks:
  * an open one first, else the most recently updated. A fork's PR is never
  * picked: a fork's branch of the same name is someone else's work, not
  * this workspace's. Null when there is none; undefined when the output
@@ -248,73 +253,10 @@ export function ownPrsFrom(text: string, repo: string): State["ownPrs"] | undefi
   return out;
 }
 
-// The fields pickPr reads.
-const PR_FIELDS =
-  "number,state,url,headRefName,updatedAt,isCrossRepository,isDraft,mergeStateStatus,statusCheckRollup,title,additions,deletions";
 // The fields ownPrsFrom reads.
 const OWN_FIELDS = "number,state,url,headRefName,isCrossRepository,isDraft,title";
 // Jon's open PRs asked for per repo; more than this is not a sidebar list.
 const OWN_LIMIT = "30";
-
-export interface Lookups {
-  /**
-   * The directory's current branch. Null when it is not on one (a detached
-   * HEAD) or the directory is not a repo, so its entry is dropped; undefined
-   * when git itself failed, timed out, or the run is past its deadline, so
-   * the caller keeps whatever it had rather than guess.
-   */
-  branchOf: (directory: string) => string | null | undefined;
-  /** The branch's PR, null for none, undefined when gh failed or was skipped. */
-  prFor: (directory: string, branch: string) => SavedPr | null | undefined;
-}
-
-// The directory's branch, asking `branchOf` at most once per directory.
-function branchFor(
-  dir: string,
-  branches: Map<string, string | null | undefined>,
-  branchOf: Lookups["branchOf"],
-): string | null | undefined {
-  if (!branches.has(dir)) branches.set(dir, branchOf(dir));
-  return branches.get(dir);
-}
-
-// The directory and branch's PR, asking `prFor` at most once per pair.
-function prForBranch(
-  dir: string,
-  branch: string,
-  found: Map<string, SavedPr | null | undefined>,
-  prFor: Lookups["prFor"],
-): SavedPr | null | undefined {
-  const key = `${dir}\n${branch}`;
-  if (!found.has(key)) found.set(key, prFor(dir, branch));
-  return found.get(key);
-}
-
-/**
- * The new `prs` map. Each directory and branch is asked once however many
- * workspaces share it. A workspace whose branch could not be read keeps its
- * previous entry as-is; one whose branch was read but has no PR, or whose
- * gh lookup failed, keeps its previous entry only while still on that same
- * branch; closed workspaces drop out.
- */
-export function findPrs(workspaces: WorkspaceDir[], previous: State["prs"], look: Lookups): State["prs"] {
-  const branches = new Map<string, string | null | undefined>();
-  const found = new Map<string, SavedPr | null | undefined>();
-  const out: State["prs"] = {};
-  for (const w of workspaces) {
-    const branch = branchFor(w.directory, branches, look.branchOf);
-    if (branch === undefined) {
-      const kept = previous[w.id];
-      if (kept) out[w.id] = kept;
-      continue;
-    }
-    if (branch === null) continue;
-    const pr = prForBranch(w.directory, branch, found, look.prFor);
-    const kept = pr === undefined ? previous[w.id] : pr;
-    if (kept && kept.branch === branch) out[w.id] = kept;
-  }
-  return out;
-}
 
 // The fields that differ between two saved PRs, in key order.
 function fieldsChanged(was: SavedPr, now: SavedPr): string[] {
@@ -523,15 +465,6 @@ function gitRepo(git: string, dir: string): string | null | undefined {
   return branchFromGit({ status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" });
 }
 
-function gitBranch(git: string, dir: string): string | null | undefined {
-  const r = spawnSync(git, ["-C", dir, "branch", "--show-current"], {
-    cwd: dir,
-    encoding: "utf8",
-    timeout: TIMEOUT_MS,
-  });
-  return branchFromGit({ status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" });
-}
-
 // The automation runner has the app's PATH, so each tool falls back to its
 // usual install path, as restore-agents.sh does for cmux.
 function tool(name: string, fallbacks: string[]): string {
@@ -556,7 +489,17 @@ function listWorkspaces(cmux: string): WorkspaceDir[] | null {
 const acquireLock = (lockFile: string): boolean => tryTakeLock(lockFile, LOCK_STALE_MS);
 
 /**
- * Writes the new `prs` and `ownPrs` maps and, in the same pass, prunes the
+ * The `prs` update a poll writes (#300): the map as it stands under the
+ * lock, less the workspaces no window holds any more. Every verdict is the
+ * native poll's (scripts/pr-save.ts); this only drops closed workspaces.
+ */
+export function dropClosed(workspaces: WorkspaceDir[]): (prs: State["prs"]) => State["prs"] {
+  const open = new Set(workspaces.map((w) => w.id));
+  return (prs) => Object.fromEntries(Object.entries(prs).filter(([id]) => open.has(id)));
+}
+
+/**
+ * Writes the `prs` update and the new `ownPrs` map and, in the same pass, prunes the
  * `subagents` map (scripts/subagent-runs.ts): the pr-poll rules already run
  * this on every agent turn end and workspace select, so pruning here too
  * means a done row or a crashed run clears without waiting on a new subagent
@@ -566,7 +509,7 @@ const acquireLock = (lockFile: string): boolean => tryTakeLock(lockFile, LOCK_ST
  */
 export function writePollState(
   stateFile: string,
-  prs: State["prs"],
+  prs: PrsUpdate,
   ownPrs: State["ownPrs"],
   now: number,
   poll?: SavedPoll | null,
@@ -593,18 +536,7 @@ function poll(root: string): number {
   const tally: GhTally = { answered: 0, skipped: 0 };
   const deadline = Date.now() + DEADLINE_MS;
   const pastDeadline = () => Date.now() > deadline;
-  const prs = findPrs(workspaces, previous, {
-    branchOf: (dir) => counted(tally, pastDeadline, () => gitBranch(git, dir)),
-    prFor: (dir, branch) => {
-      if (pastDeadline()) {
-        tally.skipped++;
-        return undefined;
-      }
-      const args = ["pr", "list", "--head", branch, "--state", "all", "--limit", "5", "--json", PR_FIELDS];
-      const out = ghRun(gh, args, dir, tally);
-      return out === null ? undefined : pickPr(out, branch);
-    },
-  });
+  const prs = dropClosed(workspaces);
   const ownPrs = findOwnPrs(workspaces, previousOwn, {
     repoOf: (dir) => counted(tally, pastDeadline, () => gitRepo(git, dir)),
     ownPrs: (dir, repo) => {
@@ -619,7 +551,7 @@ function poll(root: string): number {
   });
   const now = Math.floor(Date.now() / 1000);
   const status = nextPoll(before.poll, tally, now);
-  const counts = `${Object.keys(prs).length} PRs, ${Object.keys(ownPrs).length} own${status?.error ? ", gh " + status.error : ""}`;
+  const counts = `${Object.keys(ownPrs).length} own${status?.error ? ", gh " + status.error : ""}`;
 
   let applied: ReturnType<typeof writePollState>;
   try {
@@ -633,7 +565,7 @@ function poll(root: string): number {
     log(`ok, unchanged (${counts})`);
     return 0;
   }
-  const moved = movedTag(applied.maps, prChanges(previous, prs));
+  const moved = movedTag(applied.maps, prChanges(previous, prs(previous)));
 
   // Through hook-build.ts's lock, so this build never races a hook's and
   // lands an older bundle last. It waits briefly for a build in flight,
@@ -651,14 +583,21 @@ function poll(root: string): number {
     return 0;
   }
 
-  // The build failed with the new maps in place: write the old ones and the
-  // old poll status (none, if there was none) back so the file matches what
-  // actually shows, and so the next poll sees a change again and retries
-  // the build instead of staying silent. Subagent runs are left as they
-  // are: a hook may have recorded one while this poll ran.
+  // The build failed with the new maps in place: write the old `ownPrs` and
+  // the old poll status (none, if there was none) back so the file matches
+  // what actually shows, and so the next poll sees a change again and
+  // retries the build instead of staying silent. `prs` and subagent runs
+  // are left as they are: the native poll or a hook may have written one
+  // while this poll ran.
   log("error: build failed, reverted");
   try {
-    writePollMaps(stateFile, previous, previousOwn, (runs) => runs, before.poll ?? null);
+    writePollMaps(
+      stateFile,
+      (now) => now,
+      previousOwn,
+      (runs) => runs,
+      before.poll ?? null,
+    );
   } catch (err) {
     log(`error: revert failed (${err instanceof Error ? err.message : String(err)})`);
   }

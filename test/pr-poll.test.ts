@@ -12,11 +12,10 @@ import {
   checksFrom,
   cleanTitle,
   delayFrom,
+  dropClosed,
   findOwnPrs,
-  findPrs,
   type GhTally,
   ghOutcome,
-  type Lookups,
   lockWithin,
   movedTag,
   nextPoll,
@@ -285,42 +284,13 @@ describe("branchFromGit", () => {
   });
 });
 
-describe("findPrs", () => {
-  const ws = (id: string, directory = "/d/app") => ({ id, directory });
-
-  it("asks once per directory and branch, and gives every workspace there the PR", () => {
-    let asked = 0;
-    const look: Lookups = {
-      branchOf: () => "feat",
-      prFor: () => {
-        asked++;
-        return pr(1);
-      },
-    };
-    assert.deepEqual(findPrs([ws("a"), ws("b")], {}, look), { a: pr(1), b: pr(1) });
-    assert.equal(asked, 1);
-  });
-
-  it("skips a directory with no branch and drops a PR that has gone", () => {
-    const look: Lookups = { branchOf: (d) => (d === "/d/app" ? "feat" : null), prFor: () => null };
-    assert.deepEqual(findPrs([ws("a"), ws("b", "/d/none")], { a: pr(1) }, look), {});
-  });
-
-  it("keeps the previous PR when gh fails, but only for the same branch", () => {
-    const look: Lookups = { branchOf: (d) => (d === "/d/app" ? "feat" : "main"), prFor: () => undefined };
-    const previous = { a: pr(1), b: pr(2) };
-    assert.deepEqual(findPrs([ws("a"), ws("b", "/d/other"), ws("gone")], previous, look), { a: pr(1) });
-  });
-
-  it("keeps the previous PR as-is when git itself failed, regardless of branch", () => {
-    const look: Lookups = { branchOf: () => undefined, prFor: () => pr(9) };
-    const previous = { a: pr(1, { branch: "other" }) };
-    assert.deepEqual(findPrs([ws("a")], previous, look), { a: pr(1, { branch: "other" }) });
-  });
-
-  it("drops the workspace when the directory is not a repo (branchOf null)", () => {
-    const look: Lookups = { branchOf: () => null, prFor: () => pr(9) };
-    assert.deepEqual(findPrs([ws("a")], { a: pr(1) }, look), {});
+// findPrs, the per-workspace lookup, is retired (#300): the native poll
+// answers each workspace's PR and scripts/pr-save.ts writes it
+// (test/pr-save.test.ts); dropClosed is all this poll does to `prs` now.
+describe("dropClosed", () => {
+  it("keeps the entries of workspaces still open and drops the rest", () => {
+    const update = dropClosed([{ id: "a", directory: "/d/app" }]);
+    assert.deepEqual(update({ a: pr(1), gone: pr(2) }), { a: pr(1) });
   });
 });
 

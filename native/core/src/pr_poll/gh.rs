@@ -13,7 +13,7 @@ use super::{GhFailure, PollAnswer};
 use crate::data::PrStatus;
 use crate::persist::{SavedCheck, SavedPr};
 
-/// The fields the PR pick reads (PR_FIELDS in scripts/pr-poll.ts).
+/// The fields the PR pick reads (pickPr in scripts/pr-poll.ts reads the same).
 pub const PR_FIELDS: &str = "number,state,url,headRefName,updatedAt,isCrossRepository,isDraft,mergeStateStatus,statusCheckRollup,title,additions,deletions";
 
 /// Checks kept per PR (MAX_CHECKS in scripts/state-config.ts).

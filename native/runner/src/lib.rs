@@ -246,6 +246,7 @@ impl Feed {
                 Effect::Persist(r) => Outgoing::Persist(r.operation),
                 Effect::OpenUrl(r) => Outgoing::OpenUrl(r.operation),
                 Effect::AgentMessage(r) => Outgoing::AgentMessage(r.operation),
+                Effect::SavePrs(r) => Outgoing::SavePrs(r.operation),
             };
             self.hand(out);
         }
@@ -275,6 +276,7 @@ impl Feed {
             EffectFile::Persist(set) => self.hand(Outgoing::Persist(set)),
             EffectFile::OpenUrl(url) => self.hand(Outgoing::OpenUrl(url)),
             EffectFile::AgentMessage(m) => self.hand(Outgoing::AgentMessage(m)),
+            EffectFile::SavePrs(p) => self.hand(Outgoing::SavePrs(p)),
         }
     }
 
@@ -1039,6 +1041,7 @@ mod tests {
                 Outgoing::Persist(p) => format!("set {}", p.key),
                 Outgoing::OpenUrl(u) => format!("open {}", u.url),
                 Outgoing::AgentMessage(m) => format!("message {}", m.workspace),
+                Outgoing::SavePrs(p) => format!("save {} prs", p.prs.len()),
             })
             .collect()
     }
