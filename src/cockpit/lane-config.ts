@@ -6,18 +6,26 @@
 // The file is a bare array of {id?, name, color?, density?, folded?, faint?,
 // leftOff?}, in display order. Unsorted is built in and last. A field left
 // out takes the same-id built-in lane's value, else compact, unfolded and
-// plain in laneUnsorted's colour. A colour is a lane token's name or a hex
-// ("#RGB", "#RRGGBB" or "#RRGGBBAA"), which draws the same light and dark.
+// plain in laneUnsorted's colour. A colour is a lane token's name, never a
+// hex, so every lane reads in both themes.
 // A field set to null counts as left out, as serde reads it natively. No
 // file, or an empty array, is today's four.
 
 import { isRecord } from "../../scripts/state-config.ts";
 
 /** The tokens a lane may take: the lane tokens in theme.ts, by name. */
-const LANE_TOKENS = ["laneMain", "laneReview", "laneBackground", "laneParked", "laneUnsorted"] as const;
+const LANE_TOKENS = [
+  "laneMain",
+  "laneReview",
+  "laneBackground",
+  "laneParked",
+  "laneUnsorted",
+  "laneViolet",
+  "laneTeal",
+  "laneRose",
+  "laneBrown",
+] as const;
 export type LaneToken = (typeof LANE_TOKENS)[number];
-/** A lane token's name, or a hex in capitals: "#RRGGBB", or "#RRGGBBAA" when not opaque. */
-export type LaneColor = LaneToken | `#${string}`;
 
 const DENSITIES = ["full", "compact", "row"] as const;
 export type Density = (typeof DENSITIES)[number];
@@ -27,7 +35,7 @@ export interface LaneSpec {
   id: string;
   /** The cmux group name it matches. */
   name: string;
-  color: LaneColor;
+  color: LaneToken;
   density: Density;
   /** Starts folded until Jon folds or opens it himself. */
   folded: boolean;
@@ -59,7 +67,7 @@ const KEYS: ReadonlySet<string> = new Set(["id", "name", "color", "density", "fo
 // Widened to unknown so includes() takes any string, no cast.
 const TOKEN_NAMES: readonly unknown[] = LANE_TOKENS;
 const DENSITY_NAMES: readonly unknown[] = DENSITIES;
-export const isLaneToken = (v: string): v is LaneToken => TOKEN_NAMES.includes(v);
+const isLaneToken = (v: string): v is LaneToken => TOKEN_NAMES.includes(v);
 const isDensity = (v: string): v is Density => DENSITY_NAMES.includes(v);
 
 // An optional string field: absent or null, or a string; anything else fails.
@@ -87,26 +95,11 @@ function identity(raw: Record<string, unknown>): { name: string; id: string } | 
   return trimmed === "" ? { error: `lane "${name}" has an empty id` } : { name, id: trimmed };
 }
 
-/**
- * A hex as a hand-written config spells it, "#RGB", "#RRGGBB" or "#RRGGBBAA"
- * in either case, written as the core's Rgba::to_hex writes it: six digits
- * in capitals, with the alpha pair only when it is not FF. Null for
- * anything else.
- */
-export function normalHex(s: string): `#${string}` | null {
-  const m = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(s);
-  if (!m?.[1]) return null;
-  const digits = m[1].toUpperCase();
-  const full = digits.length === 3 ? digits.replace(/./g, (c) => c + c) : digits;
-  return full.endsWith("FF") && full.length === 8 ? `#${full.slice(0, 6)}` : `#${full}`;
-}
-
-function colorOf(raw: Record<string, unknown>, label: string, base: LaneSpec | undefined): LaneColor | Fail {
+function colorOf(raw: Record<string, unknown>, label: string, base: LaneSpec | undefined): LaneToken | Fail {
   const c = optString(raw, "color", label);
   if (failed(c)) return c;
   if (c === undefined) return base?.color ?? "laneUnsorted";
-  if (isLaneToken(c)) return c;
-  return normalHex(c) ?? { error: `${label}: unknown colour "${c}"` };
+  return isLaneToken(c) ? c : { error: `${label}: unknown colour "${c}"` };
 }
 
 function densityOf(raw: Record<string, unknown>, label: string, base: LaneSpec | undefined): Density | Fail {

@@ -101,15 +101,15 @@ describe("lanes.json", () => {
     ]);
   });
 
-  it("takes a hex colour of its own, written as the core writes it", () => {
+  it("takes any lane token, the four hues included", () => {
     const colors = lanes([
-      { name: "Short", color: "#c63" },
-      { name: "Long", color: "#CC6633" },
-      { name: "Opaque", color: "#cc6633ff" },
-      { name: "See-through", color: "#cc663380" },
+      { name: "Violet", color: "laneViolet" },
+      { name: "Teal", color: "laneTeal" },
+      { name: "Rose", color: "laneRose" },
+      { name: "Brown", color: "laneBrown" },
       { id: "main", name: "Token", color: "laneParked" },
     ]).map((l) => l.color);
-    assert.deepEqual(colors, ["#CC6633", "#CC6633", "#CC6633", "#CC663380", "laneParked"]);
+    assert.deepEqual(colors, ["laneViolet", "laneTeal", "laneRose", "laneBrown", "laneParked"]);
   });
 
   it("reads the committed sample, as the core does", () => {
@@ -118,8 +118,8 @@ describe("lanes.json", () => {
       sample.map((l) => [l.name, l.color]),
       [
         ["Doing", "laneMain"],
-        ["Waiting on others", "#6A9BCC"],
-        ["Ideas", "#CC6633"],
+        ["Waiting on others", "laneTeal"],
+        ["Ideas", "laneBrown"],
         ["Parked", "laneParked"],
       ],
     );
@@ -132,7 +132,7 @@ describe("lanes.json", () => {
     assert.match(error([{ name: "  " }]), /no name/);
     assert.match(error([{ name: "A", id: " " }]), /empty id/);
     assert.match(error([{ name: "A", id: 3 }]), /id must be a string/);
-    for (const bad of ["red", "heading", "#12", "#1234", "#12345", "#1234567", "#12345G", "123456", "#"])
+    for (const bad of ["red", "heading", "violet", "#c63", "#CC6633", "#cc663380", "#12", "123456", "#"])
       assert.match(error([{ name: "A", color: bad }]), /unknown colour/, bad);
     assert.match(error([{ name: "A", color: 1 }]), /color must be a string/);
     assert.match(error([{ name: "A", density: "tall" }]), /unknown density "tall"/);

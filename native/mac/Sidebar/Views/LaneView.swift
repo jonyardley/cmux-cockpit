@@ -107,8 +107,6 @@ struct LaneHeader: View {
     let lane: Lane
     /// A card is being dragged over this lane.
     var target = false
-    /// Its own hex colour from config/lanes.json, over its marker token.
-    var own: Rgba? = nil
     @State private var hovering = false
 
     var body: some View {
@@ -133,7 +131,7 @@ struct LaneHeader: View {
             } else {
                 FoldMark(folded: lane.collapsed)
             }
-            LaneMarker(color: own.map { Color(own: $0) } ?? Color(lane.marker)).opacity(fade)
+            LaneMarker(color: Color(lane.marker)).opacity(fade)
             Text(lane.name)
                 .font(.system(size: Metrics.Font.section, weight: .semibold))
                 .textCase(.uppercase)
@@ -193,8 +191,6 @@ struct LaneView: View {
     let lane: Lane
     /// The lane's top in the lanes' space, for the floating card.
     var top: CGFloat = 0
-    /// Its own hex colour, for its header's marker.
-    var own: Rgba? = nil
     private let drag = DragState.shared
     @State private var frames: [String: CGRect] = [:]
 
@@ -202,7 +198,7 @@ struct LaneView: View {
         let space = "lane:" + String(describing: lane.key)
         let room = room
         VStack(alignment: .leading, spacing: Metrics.cardGap) {
-            LaneHeader(lane: lane, target: drag.over?.lane == lane.key, own: own)
+            LaneHeader(lane: lane, target: drag.over?.lane == lane.key)
                 .foldsOnClick(lane.empty ? nil : .toggleLane(lane.key))
                 .reportsFrame(Self.header, in: space)
             ForEach(DropRule.shown(lane.rows, lifted: drag.lifted, gap: room.gap)) { row in

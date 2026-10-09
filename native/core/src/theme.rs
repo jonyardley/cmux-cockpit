@@ -61,6 +61,12 @@ pub enum Token {
     LaneBackground,
     LaneParked,
     LaneUnsorted,
+    /// The four lane hues config/lanes.json may pick, chosen clear of the
+    /// state hues (clay, amber, blue, the greens and red).
+    LaneViolet,
+    LaneTeal,
+    LaneRose,
+    LaneBrown,
     /// Ready to merge's dot (issue #299): palette.ts's vivid mergeGreen,
     /// never the finished olive.
     MergeGreen,

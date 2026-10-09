@@ -2,7 +2,7 @@
 
 use crate::support::lane_by_key;
 use cockpit_core::data::{Data, Workspace};
-use cockpit_core::lanes::{LaneColor, LaneKey};
+use cockpit_core::lanes::LaneKey;
 use cockpit_core::session::Session;
 use cockpit_core::theme::Token;
 use cockpit_core::ui::{HaloStatus, halo_status};
@@ -68,11 +68,8 @@ mod lane_colours {
     fn uses_board_1s_tokens_for_background_and_unsorted() {
         assert_eq!(
             lane_by_key(LaneKey::from("bg")).color,
-            LaneColor::Token(Token::LaneBackground)
+            Token::LaneBackground
         );
-        assert_eq!(
-            lane_by_key(LaneKey::unsorted()).color,
-            LaneColor::Token(Token::LaneUnsorted)
-        );
+        assert_eq!(lane_by_key(LaneKey::unsorted()).color, Token::LaneUnsorted);
     }
 }

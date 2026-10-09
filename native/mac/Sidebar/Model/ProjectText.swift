@@ -83,13 +83,13 @@ enum ProjectText {
     /// hand-typed "#D75" doubled to "#DD7755", or "#D9775780" with its
     /// alpha dropped, as the core's parse_hex reads it for the badges.
     static func hex(_ s: String) -> UInt32? {
-        colour(s)?.rgb
+        colour(s)?.hex
     }
 
     /// A colour as a hand-written config spells it, "#RGB", "#RRGGBB" or
     /// "#RRGGBBAA" in either case, with its alpha (the core's
     /// theme::parse_colour). Nil for anything else.
-    static func colour(_ s: String) -> Rgba? {
+    static func colour(_ s: String) -> RGBA? {
         guard s.hasPrefix("#") else { return nil }
         let digits = Array(s.dropFirst())
         guard digits.allSatisfy(\.isHexDigit) else { return nil }
@@ -102,7 +102,7 @@ enum ProjectText {
         guard let rgb = UInt32(String(full[0..<6]), radix: 16) else { return nil }
         let alpha = full.count == 8 ? UInt8(String(full[6..<8]), radix: 16) : 0xFF
         guard let alpha else { return nil }
-        return Rgba(rgb: rgb, alpha: alpha)
+        return RGBA(rgb, alpha)
     }
 }
 

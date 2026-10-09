@@ -19,15 +19,21 @@ export const C = {
   // A card's face under the pointer. Opaque, since hoverBackground replaces
   // the white face rather than washing over it.
   cardHover: "#F7F6F2",
-  // Lanes and selection stay neutral so hue only ever means state: clay is
-  // needs you (amber when it is asking), blue working, green finished. Lane
-  // markers step down in lightness from Main to Unsorted instead, each a
-  // clear step from the next.
+  // Selection and today's lanes stay neutral so hue means state: clay is
+  // needs you (amber when it is asking), blue working, green finished. The
+  // built-in lane markers step down in lightness from Main to Unsorted,
+  // each a clear step from the next. Violet, teal, rose and brown are for
+  // lanes config/lanes.json colours (issue #294), chosen clear of every
+  // state hue; the native panel pairs each with a dark value.
   laneMain: "#3D3D3A",
   laneReview: "#5E5D59",
   laneBackground: "#8A8880",
   laneParked: "#B0AEA5",
   laneUnsorted: "#C9C6BB",
+  laneViolet: "#7A5BA6",
+  laneTeal: "#2E8A86",
+  laneRose: "#B04A75",
+  laneBrown: "#8B6A45",
   select: "#3D3D3A",
   // The inline editor's outline: ink at a third.
   selectEdge: "#14141357",

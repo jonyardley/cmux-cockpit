@@ -12,7 +12,7 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::theme::{Rgba, Token, parse_colour};
+use crate::theme::Token;
 
 /// A lane's id: a configured lane's `id`, or its name when it has none.
 /// Saved folds are keyed by it (`lane:<id>`).
@@ -76,40 +76,14 @@ impl Density {
     }
 }
 
-/// A lane's colour: one of the lane tokens, which the theme maps light
-/// and dark, or a hex of its own, which draws the same in both.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum LaneColor {
-    Token(Token),
-    Hex(Rgba),
-}
-
-impl LaneColor {
-    /// The token a shell that draws tokens alone (the terminal pane) uses:
-    /// a hex lane's is Unsorted's neutral.
-    pub fn token(self) -> Token {
-        match self {
-            LaneColor::Token(t) => t,
-            LaneColor::Hex(_) => Token::LaneUnsorted,
-        }
-    }
-
-    /// The hex, for a lane that has one.
-    pub fn hex(self) -> Option<Rgba> {
-        match self {
-            LaneColor::Hex(c) => Some(c),
-            LaneColor::Token(_) => None,
-        }
-    }
-}
-
 /// One lane.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Lane {
     pub key: LaneKey,
     /// The cmux group name it matches.
     pub name: String,
-    pub color: LaneColor,
+    /// One of the lane tokens, which the theme maps light and dark.
+    pub color: Token,
     pub density: Density,
     pub starts_collapsed: bool,
     /// Its heading and merge-ready hint draw faint.
@@ -125,9 +99,10 @@ pub struct LaneConfig {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
     pub name: String,
-    /// One of the lane colour tokens (laneMain, laneReview,
-    /// laneBackground, laneParked or laneUnsorted), or a hex: "#RGB",
-    /// "#RRGGBB" or "#RRGGBBAA".
+    /// One of the lane colour tokens: laneMain, laneReview,
+    /// laneBackground, laneParked, laneUnsorted, laneViolet, laneTeal,
+    /// laneRose or laneBrown. A hex is refused, so every lane reads in
+    /// both themes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
     /// full, compact or row.
@@ -142,29 +117,28 @@ pub struct LaneConfig {
 }
 
 /// The colours a lane may take: the lane tokens, as JSON names them.
-const LANE_COLORS: [Token; 5] = [
+const LANE_COLORS: [Token; 9] = [
     Token::LaneMain,
     Token::LaneReview,
     Token::LaneBackground,
     Token::LaneParked,
     Token::LaneUnsorted,
+    Token::LaneViolet,
+    Token::LaneTeal,
+    Token::LaneRose,
+    Token::LaneBrown,
 ];
 
-fn parse_color(s: &str) -> Option<LaneColor> {
-    if s.starts_with('#') {
-        return parse_colour(s).map(LaneColor::Hex);
-    }
+fn parse_color(s: &str) -> Option<Token> {
     let token: Token = serde_json::from_value(serde_json::Value::from(s)).ok()?;
-    LANE_COLORS
-        .contains(&token)
-        .then_some(LaneColor::Token(token))
+    LANE_COLORS.contains(&token).then_some(token)
 }
 
 fn unsorted() -> Lane {
     Lane {
         key: LaneKey::unsorted(),
         name: "Unsorted".to_string(),
-        color: LaneColor::Token(Token::LaneUnsorted),
+        color: Token::LaneUnsorted,
         density: Density::Row,
         starts_collapsed: false,
         faint: false,
@@ -186,7 +160,7 @@ fn built_in_lane(id: &str, name: &str, color: Token, density: Density, flags: Fl
     Lane {
         key: LaneKey::new(id),
         name: name.to_string(),
-        color: LaneColor::Token(color),
+        color,
         density,
         starts_collapsed: flags.folded,
         faint: flags.faint,
@@ -239,7 +213,7 @@ fn configured(c: &LaneConfig, base: Option<&Lane>) -> Result<Lane, String> {
         Some(s) => {
             parse_color(s).ok_or_else(|| format!("lane \"{name}\": unknown colour {s:?}"))?
         }
-        None => base.map_or(LaneColor::Token(Token::LaneUnsorted), |b| b.color),
+        None => base.map_or(Token::LaneUnsorted, |b| b.color),
     };
     let density = match c.density.as_deref() {
         Some(s) => {
@@ -417,41 +391,44 @@ mod tests {
         let doing = lanes.get(&LaneKey::from("Doing"));
         assert_eq!(
             (doing.color, doing.density, doing.faint, doing.left_off),
-            (
-                LaneColor::Token(Token::LaneReview),
-                Density::Full,
-                false,
-                false
-            )
+            ((Token::LaneReview), Density::Full, false, false)
         );
         let later = lanes.get(&LaneKey::from("later"));
         assert_eq!(later.name, "Some day");
         assert_eq!(
             later.color,
-            LaneColor::Token(Token::LaneUnsorted),
+            (Token::LaneUnsorted),
             "no colour: the neutral one"
         );
         assert!(later.starts_collapsed && later.faint && later.left_off);
     }
 
     #[test]
-    fn takes_a_hex_colour_of_its_own() {
-        let json = r##"[
-            {"name": "Short", "color": "#c63"},
-            {"name": "Long", "color": "#CC6633"},
-            {"name": "See-through", "color": "#cc663380"},
-            {"id": "main", "name": "Token", "color": "laneParked"}
-        ]"##;
+    fn takes_any_lane_token_and_refuses_a_hex() {
+        let json = r#"[
+            {"name": "Violet", "color": "laneViolet"},
+            {"name": "Teal", "color": "laneTeal"},
+            {"name": "Rose", "color": "laneRose"},
+            {"name": "Brown", "color": "laneBrown"}
+        ]"#;
         let config: Vec<LaneConfig> = serde_json::from_str(json).unwrap();
         let lanes = Lanes::from_config(&config).unwrap();
         let color = |k: &str| lanes.get(&LaneKey::from(k)).color;
-        let hex = |rgb, alpha| LaneColor::Hex(Rgba { rgb, alpha });
-        assert_eq!(color("Short"), hex(0xCC6633, 0xFF));
-        assert_eq!(color("Long"), hex(0xCC6633, 0xFF));
-        assert_eq!(color("See-through"), hex(0xCC6633, 0x80));
-        assert_eq!(color("main"), LaneColor::Token(Token::LaneParked));
-        assert_eq!(color("Short").token(), Token::LaneUnsorted, "the pane's");
-        assert_eq!(color("main").hex(), None);
+        assert_eq!(color("Violet"), Token::LaneViolet);
+        assert_eq!(color("Teal"), Token::LaneTeal);
+        assert_eq!(color("Rose"), Token::LaneRose);
+        assert_eq!(color("Brown"), Token::LaneBrown);
+        for bad in ["#c63", "#CC6633", "#cc663380", "blue", "text", "violet"] {
+            let config = [LaneConfig {
+                color: Some(bad.into()),
+                ..named("Doing")
+            }];
+            assert_eq!(
+                Lanes::from_config(&config),
+                Err(format!("lane \"Doing\": unknown colour {bad:?}")),
+                "{bad}"
+            );
+        }
     }
 
     #[test]
@@ -469,10 +446,7 @@ mod tests {
             ["Doing", "Waiting on others", "Ideas", "Parked", "Unsorted"]
         );
         let ideas = lanes.get(&LaneKey::from("Ideas"));
-        assert_eq!(
-            ideas.color.hex().map(Rgba::to_hex).as_deref(),
-            Some("#CC6633")
-        );
+        assert_eq!(ideas.color, Token::LaneBrown);
     }
 
     #[test]
@@ -489,7 +463,7 @@ mod tests {
         assert_eq!(shelf.name, "Shelf");
         assert_eq!(
             (shelf.color, shelf.density),
-            (LaneColor::Token(Token::LaneParked), Density::Row)
+            ((Token::LaneParked), Density::Row)
         );
         assert!(shelf.starts_collapsed && shelf.faint && shelf.left_off);
         let unfaint = LaneConfig {

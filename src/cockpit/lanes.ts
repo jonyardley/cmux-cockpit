@@ -3,7 +3,7 @@
 // The table comes from config/lanes.json (lane-config.ts), which build.ts
 // bakes in as __LANES__; with no file it is today's four.
 
-import { BUILT_IN_LANES, type Density, isLaneToken, type LaneSpec, UNSORTED_ID } from "./lane-config.ts";
+import { BUILT_IN_LANES, type Density, type LaneSpec, UNSORTED_ID } from "./lane-config.ts";
 import { C } from "./theme.ts";
 
 declare const __LANES__: readonly LaneSpec[] | undefined;
@@ -36,10 +36,10 @@ const UNSORTED: Lane = {
   leftOff: false,
 };
 
-// A token's name takes its colour from the theme; a hex draws as written.
+// A lane token's name takes its colour from the theme.
 const lane = ({ id, color, ...rest }: LaneSpec): Lane => ({
   key: id,
-  color: isLaneToken(color) ? C[color] : color,
+  color: C[color],
   ...rest,
 });
 

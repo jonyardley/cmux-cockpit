@@ -5,7 +5,6 @@
 use std::cmp::Ordering;
 
 use crate::data::{Data, Workspace};
-use crate::lanes::LaneColor;
 use crate::persist::ViewMode;
 use crate::session::{LastJump, Session};
 use crate::theme::Token;
@@ -56,10 +55,7 @@ impl Session {
         let lane = self.lanes.get(&key);
         Origin {
             name: lane.name.clone(),
-            color: match lane.color {
-                LaneColor::Token(t) => Colour::Token(t),
-                LaneColor::Hex(c) => Colour::Hex(c.to_hex()),
-            },
+            color: Colour::Token(lane.color),
         }
     }
 
