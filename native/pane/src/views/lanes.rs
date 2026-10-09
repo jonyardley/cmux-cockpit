@@ -205,12 +205,15 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
     let right_width = spans_width(&right);
     let gap = usize::from(right_width > 0);
     let title_room = inner.saturating_sub(CARD_LEAD + right_width + gap);
-    let left = vec![
+    let title = fit(&c.title, title_room);
+    let pr_room = title_room.saturating_sub(width(&title) + 1);
+    let mut left = vec![
         lead(c, "  "),
         Span::styled(c.icon.glyph, theme::icon(c.icon.ink)),
         Span::raw(" "),
-        Span::styled(fit(&c.title, title_room), theme::title()),
+        Span::styled(title, theme::title()),
     ];
+    left.extend(row_pr_title(c, pr_room));
     let mut out = vec![spread(left, right, inner, first)];
     let room = inner.saturating_sub(CARD_LEAD);
     let indent = || lead(c, &" ".repeat(CARD_LEAD));
@@ -251,17 +254,45 @@ pub(super) fn card(c: &Card, inner: usize, on: bool, landing: bool) -> Vec<Line<
     out
 }
 
-/// The right of a card's title row in at most `room` cells: its status,
-/// then its age while the status carries none (a waiting card's reason),
-/// in the waiting ink while it waits, as the sidebar's title row has it.
-/// The age is short and kept whole; the status gives way first.
+/// A row's PR title, faint after the session's: " · Row cards show their
+/// PR" in at most `room` cells, cut first; nothing with no PR, a PR with
+/// no title, or no room for more than its dot (cards.ts denseRow).
+fn row_pr_title(c: &Card, room: usize) -> Vec<Span<'static>> {
+    let Some(pr) = c.row_pr.as_ref().filter(|p| !p.title.is_empty()) else {
+        return Vec::new();
+    };
+    let words = fit(&format!("· {}", pr.title), room);
+    if width(&words) < 3 {
+        return Vec::new();
+    }
+    vec![
+        Span::raw(" "),
+        Span::styled(words, theme::ink(Token::Faint)),
+    ]
+}
+
+/// The right of a card's title row in at most `room` cells: a row's PR
+/// number in its health's ink, its status, then its age while the status
+/// carries none (a waiting card's reason), in the waiting ink while it
+/// waits, as the sidebar's title row has it. The PR number and the age are
+/// short and kept whole; the status gives way first.
 fn title_right(c: &Card, room: usize) -> Vec<Span<'static>> {
     let age = if c.status_has_age { "" } else { c.age.as_str() };
     let age = fit(age, room);
     let age_room = if age.is_empty() { 0 } else { width(&age) + 1 };
-    let status = fit(&c.status, room.saturating_sub(age_room));
+    let tag = c.row_pr.as_ref().map_or(String::new(), |p| {
+        fit(&p.tag, room.saturating_sub(age_room))
+    });
+    let tag_room = if tag.is_empty() { 0 } else { width(&tag) + 1 };
+    let status = fit(&c.status, room.saturating_sub(age_room + tag_room));
     let mut out = Vec::new();
+    if let Some(pr) = c.row_pr.as_ref().filter(|_| !tag.is_empty()) {
+        out.push(Span::styled(tag, theme::ink(pr.ink)));
+    }
     if !status.is_empty() {
+        if !out.is_empty() {
+            out.push(Span::raw(" "));
+        }
         out.push(Span::styled(status, theme::ink(c.status_ink)));
     }
     if !age.is_empty() {
@@ -290,6 +321,41 @@ fn lead(c: &Card, blank: &str) -> Span<'static> {
 mod tests {
     use super::*;
     use crate::model::{Density, Piece, Row, fixtures};
+    use cockpit_core::panel::RowPr;
+
+    fn text(spans: &[Span]) -> String {
+        spans.iter().map(|s| s.content.as_ref()).collect()
+    }
+
+    #[test]
+    fn a_row_shows_its_prs_number_in_its_ink_and_its_title_faint() {
+        let Row::Card(mut c) = fixtures::card("row", 0, false);
+        c.density = Density::Row;
+        c.title = "Row PR".into();
+        c.status = "3m".into();
+        c.age = "3m".into();
+        c.status_has_age = true;
+        c.row_pr = Some(RowPr {
+            tag: "#171".into(),
+            title: "Row cards show their PR".into(),
+            ink: Token::GreenDeep,
+        });
+        let right = title_right(&c, 30);
+        assert_eq!(text(&right), "#171 3m", "the number before the age");
+        assert_eq!(right[0].style.fg, theme::ink(Token::GreenDeep).fg);
+        let line = text(&card(&c, 60, false, false)[0].spans);
+        assert!(line.contains("Row PR · Row cards show their PR"), "{line}");
+        let narrow = text(&card(&c, 30, false, false)[0].spans);
+        assert!(narrow.contains("#171 3m"), "the number stays: {narrow}");
+        assert!(!narrow.contains("their PR"), "the PR title is cut first");
+        if let Some(pr) = c.row_pr.as_mut() {
+            pr.title.clear();
+        }
+        let bare = text(&card(&c, 60, false, false)[0].spans);
+        assert!(!bare.contains('·'), "no dot without a PR title: {bare}");
+        c.row_pr = None;
+        assert_eq!(text(&title_right(&c, 30)), "3m", "no PR, no number");
+    }
 
     #[test]
     fn joins_a_diff_size_to_the_pr_before_it() {

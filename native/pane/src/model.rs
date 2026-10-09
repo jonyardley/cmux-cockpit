@@ -151,6 +151,10 @@ fn card_words(c: &Card, out: &mut Vec<String>) {
     out.push(c.age.clone());
     out.push(c.left_off.clone());
     out.push(c.detail.clone());
+    if let Some(pr) = &c.row_pr {
+        out.push(pr.tag.clone());
+        out.push(pr.title.clone());
+    }
     for chip in &c.chips {
         out.extend(chip.pieces.iter().map(|p| p.text.clone()));
     }
