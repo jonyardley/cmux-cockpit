@@ -70,19 +70,13 @@ struct NextView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 5)
-        .background(Color(hovering ? Palette.Own.needsHover : Palette.Own.card), in: .rect(cornerRadius: Metrics.Radius.tab))
+        .background(Color(hovering && NeedsText.lights(needs) ? Palette.Own.needsHover : Palette.Own.card), in: .rect(cornerRadius: Metrics.Radius.tab))
         .overlay {
             RoundedRectangle(cornerRadius: Metrics.Radius.tab)
                 .strokeBorder(Color(Palette.Own.needsEdge), lineWidth: Metrics.hairline)
         }
-        .onHover { hovering = $0 && lights }
+        .onHover { hovering = $0 }
         .modifier(NextTap(next: next, needs: needs))
-    }
-
-    /// Whether the pointer lights the pill: always on the plain line, and
-    /// on the waiting one only while it names a session to reveal.
-    private var lights: Bool {
-        !NeedsText.shows(needs) || NeedsText.live(needs)
     }
 
     private var plain: some View {

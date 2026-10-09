@@ -380,17 +380,24 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
 /// What the pill says after its badge (issue #312): the target's title in
 /// the pill's ink, or, while the only one waiting is the one Jon is on,
 /// "needs you · this one" faint, so the bar reads "1 needs you · this
-/// one". Nothing with nothing waiting.
+/// one". With more than one counted and none to reveal (the list naming
+/// the selected one twice, or one selected in each window), plain "need
+/// you" faint, so the words still agree with the badge: "2 need you".
+/// Nothing with nothing waiting.
 fn needs_title(count: usize, target: Option<&NeedsTarget>, ink: Token) -> (String, Token) {
-    match target {
-        Some(t) => (t.title.clone(), ink),
-        None if count > 0 => (NEEDS_THIS_ONE.to_string(), Token::Faint),
-        None => (String::new(), Token::Clear),
+    match (target, count) {
+        (Some(t), _) => (t.title.clone(), ink),
+        (None, 0) => (String::new(), Token::Clear),
+        (None, 1) => (NEEDS_THIS_ONE.to_string(), Token::Faint),
+        (None, _) => (NEEDS_MANY_HERE.to_string(), Token::Faint),
     }
 }
 
 /// The pill's words on the only waiting session, the one Jon is on.
 const NEEDS_THIS_ONE: &str = "needs you · this one";
+
+/// The pill's words with more than one counted and none to reveal.
+const NEEDS_MANY_HERE: &str = "need you";
 
 /// The oldest waiting session Jon is not on, from the list longest
 /// waiting first; None while the only one waiting is the one he is on.
@@ -1046,6 +1053,25 @@ mod tests {
             (none.title.as_str(), none.target),
             ("", None),
             "nothing waiting"
+        );
+    }
+
+    #[test]
+    fn keeps_the_words_in_step_with_a_badge_above_one_when_none_can_be_revealed() {
+        let mut core = Model::default();
+        let s = &mut core.session;
+        let mut view = ViewModel::default();
+        view.needs.list = vec!["a".to_string(), "a".to_string()];
+        let twice = needs(s, &three_on("a"), &view);
+        assert_eq!(
+            (
+                twice.count,
+                twice.title.as_str(),
+                twice.title_ink,
+                twice.target
+            ),
+            (2, "need you", Token::Faint, None),
+            "the bar reads \"2 need you\", never \"2 needs you · this one\""
         );
     }
 
