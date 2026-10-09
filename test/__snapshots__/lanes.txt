@@ -361,6 +361,7 @@ VStack spacing: 0, alignment: leading .paddingBottom(12)
                 RoundedRectangle cornerRadius: 4 .fill(grey)
                 Image terminal .font(8) .weight(semibold) .color(text)
               Text "Merged elsewhere" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(middle) .layoutPriority(1)
+              Text "· Row cards show their PR" .font(12.5) .color(faint|laneBackground) .lineLimit(1) .truncation(tail)
               Spacer minLength: 4
               Text "" .font(10) .bold() .color(onBadge|card) .paddingHorizontal(0) .paddingVertical(0) .background(clear) .cornerRadius(7)
               ForEach .layoutPriority(2)

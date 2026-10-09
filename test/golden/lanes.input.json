@@ -122,7 +122,12 @@
       {
         "branch": "tidy-strip",
         "id": "loose-merged",
-        "pr": { "number": 171, "status": "merged", "url": "https://github.com/o/r/pull/171" },
+        "pr": {
+          "number": 171,
+          "status": "merged",
+          "title": "Row cards show their PR",
+          "url": "https://github.com/o/r/pull/171"
+        },
         "title": "Merged elsewhere"
       },
       {

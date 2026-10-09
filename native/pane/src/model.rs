@@ -28,6 +28,8 @@ pub const KEYS_TITLE: &str = "Keys";
 pub const PICK_TITLE: &str = "Move to lane";
 /// The lane picker's last line: how to leave it.
 pub const PICK_CANCEL: (&str, &str) = ("Esc", "cancel");
+/// What leads a row's PR title after the session's (cards.ts denseRow).
+pub const PR_TITLE_DOT: &str = "· ";
 
 /// The rows of a keys box that fit `room` lines: all of them, or as many
 /// from the top as fit with the last kept, since it says how to close the
@@ -151,6 +153,12 @@ fn card_words(c: &Card, out: &mut Vec<String>) {
     out.push(c.age.clone());
     out.push(c.left_off.clone());
     out.push(c.detail.clone());
+    if let Some(pr) = &c.row_pr {
+        out.push(pr.tag.clone());
+        if !pr.title.is_empty() {
+            out.push(format!("{PR_TITLE_DOT}{}", pr.title));
+        }
+    }
     for chip in &c.chips {
         out.extend(chip.pieces.iter().map(|p| p.text.clone()));
     }

@@ -143,7 +143,7 @@ const lanes: Scene = {
       ws("loose-merged", {
         title: "Merged elsewhere",
         branch: "tidy-strip",
-        pr: { number: 171, status: "merged", url: "https://github.com/o/r/pull/171" },
+        pr: { number: 171, status: "merged", url: "https://github.com/o/r/pull/171", title: "Row cards show their PR" },
       }),
       ws("loose", {
         title: "Loose workspace",
