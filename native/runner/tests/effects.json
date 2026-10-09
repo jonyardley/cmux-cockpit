@@ -3,5 +3,25 @@
   { "Persist": { "key": "dismissed.W1", "value": { "s1": 900 } } },
   { "PrPoll": { "directory": "/dev/cockpit", "asked": 1791229864.5 } },
   { "OpenUrl": { "url": "https://github.com/o/r/pull/1" } },
-  { "AgentMessage": { "workspace": "W1", "text": "Rebase when free." } }
+  { "AgentMessage": { "workspace": "W1", "text": "Rebase when free." } },
+  {
+    "SavePrs": {
+      "prs": {
+        "W1": {
+          "number": 7.0,
+          "url": "https://github.com/o/r/pull/7",
+          "status": "open",
+          "branch": "feat",
+          "draft": null,
+          "mergeable": true,
+          "conflicts": null,
+          "title": "Poll",
+          "additions": 3.0,
+          "deletions": 1.0,
+          "checks": [{ "name": "check", "state": "pass" }]
+        },
+        "W2": null
+      }
+    }
+  }
 ]

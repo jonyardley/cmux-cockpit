@@ -15,10 +15,13 @@
 //!   A failure about the repo itself (no GitHub remote) waits the cap.
 //! - At most MAX_IN_FLIGHT asks out at once.
 //!
-//! The answers are held here, not written to config/state.json, and made
-//! over the state file's `prs` map on every read (overlay), so a new
-//! state file never hides a fresher answer. A result redraws only when
-//! what a card shows of the PR changed (Shown, the lesson from #198).
+//! The answers are held here and made over the state file's `prs` map on
+//! every read (overlay), so a new state file never hides a fresher answer.
+//! An answer that differs from what the file holds is also written back
+//! to it (writes, #300), so the agents panel, which reads only the file,
+//! says what the card says: this poll is the one writer of `prs`. A
+//! result redraws only when what a card shows of the PR changed (Shown,
+//! the lesson from #198).
 
 mod gh;
 
@@ -196,6 +199,10 @@ struct Target {
     stirred: bool,
     /// The last answer that said something: the PR, or none. None until one does.
     known: Option<Option<SavedPr>>,
+    /// The branch gh last failed on, while that failure is the latest
+    /// answer: a file entry on another branch is stale (findPrs kept the
+    /// previous PR only while on its branch), so it is deleted.
+    failed_on: Option<String>,
 }
 
 impl Target {
@@ -224,6 +231,7 @@ impl Target {
 
     fn record(&mut self, answer: PollAnswer) {
         self.waiting = false;
+        self.failed_on = None;
         match answer {
             PollAnswer::NoBranch => self.settle(Some(None)),
             PollAnswer::Answered { pr, .. } => self.settle(Some(pr)),
@@ -232,6 +240,7 @@ impl Target {
                 if matches!(&self.known, Some(Some(pr)) if pr.branch != branch) {
                     self.known = None;
                 }
+                self.failed_on = Some(branch);
                 if why == GhFailure::Repo {
                     self.failures = 0;
                     self.no_remote = true;
@@ -371,18 +380,50 @@ impl PrPoll {
     }
 
     /// A new state file: where it changed a workspace's PR since it was
-    /// last read, the TypeScript poll saw it later than any answer held
-    /// here, so its directory's answer is let go until the next one.
+    /// last read to something other than the answer held here, another
+    /// writer saw it later, so its directory's answer is let go until the
+    /// next one. The file catching up with this poll's own write keeps it.
     pub fn file_read(&mut self, file: &BTreeMap<String, SavedPr>, data: Option<&Data>) {
         for w in data.map(Data::workspace_list).unwrap_or_default() {
-            if file.get(&w.id) == self.file.get(&w.id) {
+            let now = file.get(&w.id);
+            if now == self.file.get(&w.id) {
                 continue;
             }
             if let Some(t) = dir_of(w).and_then(|d| self.targets.get_mut(d)) {
-                t.known = None;
+                let held = t.known.as_ref().map(Option::as_ref);
+                if held != Some(now) {
+                    t.known = None;
+                }
             }
         }
         self.file = file.clone();
+    }
+
+    /// The state file entries the answer held for `directory` changes:
+    /// each of its workspaces whose entry in the file as last read is not
+    /// that answer, with the PR to set, or None to delete. With no answer
+    /// held after gh failed on a branch, the entries left on another
+    /// branch are deleted, as findPrs dropped them; else nothing. Once the
+    /// file says the same, an answer that changes nothing writes nothing.
+    pub fn writes(&self, data: &Data, directory: &str) -> BTreeMap<String, Option<SavedPr>> {
+        let Some(t) = self.targets.get(directory) else {
+            return BTreeMap::new();
+        };
+        let here = data
+            .workspace_list()
+            .iter()
+            .filter(|w| dir_of(w) == Some(directory));
+        match (&t.known, &t.failed_on) {
+            (Some(known), _) => here
+                .filter(|w| self.file.get(&w.id) != known.as_ref())
+                .map(|w| (w.id.clone(), known.clone()))
+                .collect(),
+            (None, Some(branch)) => here
+                .filter(|w| self.file.get(&w.id).is_some_and(|pr| &pr.branch != branch))
+                .map(|w| (w.id.clone(), None))
+                .collect(),
+            (None, None) => BTreeMap::new(),
+        }
     }
 
     /// Makes the answers over the saved `prs` map, for each workspace in
@@ -722,6 +763,148 @@ mod tests {
             shown(&merged(Some(9.0))),
             "no diff once merged"
         );
+    }
+
+    #[test]
+    fn writes_what_the_file_does_not_hold_yet_and_keeps_the_answer_once_it_does() {
+        let d = data(vec![ws("a", "/a"), ws("b", "/a"), ws("c", "/c")]);
+        let mut p = on();
+        assert!(p.writes(&d, "/a").is_empty(), "nothing answered yet");
+        let _ = p.due(&d, 0.0);
+        p.record(answered("/a", Some(pr(&["pending"])), 0.0));
+        let want: BTreeMap<String, Option<SavedPr>> = [
+            ("a".to_string(), Some(pr(&["pending"]))),
+            ("b".to_string(), Some(pr(&["pending"]))),
+        ]
+        .into();
+        assert_eq!(p.writes(&d, "/a"), want, "c is in another directory");
+
+        // The file catches up with the write: nothing more to write, and
+        // the answer is still held, so a failure next keeps showing it.
+        let file: BTreeMap<String, SavedPr> = [
+            ("a".to_string(), pr(&["pending"])),
+            ("b".to_string(), pr(&["pending"])),
+        ]
+        .into();
+        p.file_read(&file, Some(&d));
+        assert!(p.writes(&d, "/a").is_empty());
+        assert!(p.targets.get("/a").is_some_and(|t| t.known.is_some()));
+
+        // The PR is gone: both entries are deleted.
+        let _ = p.due(&d, 30.0);
+        p.record(answered("/a", None, 30.0));
+        let gone: BTreeMap<String, Option<SavedPr>> =
+            [("a".to_string(), None), ("b".to_string(), None)].into();
+        assert_eq!(p.writes(&d, "/a"), gone);
+
+        // Another writer puts something else in the file: let go until the
+        // next answer, and write nothing over it meanwhile.
+        let other: BTreeMap<String, SavedPr> = [("a".to_string(), pr(&["fail"]))].into();
+        p.file_read(&other, Some(&d));
+        assert!(p.targets.get("/a").is_some_and(|t| t.known.is_none()));
+        assert!(p.writes(&d, "/a").is_empty());
+    }
+
+    /// An answer for `/a` to the ask made at `asked`.
+    fn polled(answer: PollAnswer, asked: f64) -> PrPolled {
+        PrPolled {
+            directory: "/a".into(),
+            asked,
+            answer,
+            epoch: asked,
+        }
+    }
+
+    /// A file holding `held` for each id.
+    fn file_of(ids: &[&str], held: &SavedPr) -> BTreeMap<String, SavedPr> {
+        ids.iter()
+            .map(|id| ((*id).to_string(), held.clone()))
+            .collect()
+    }
+
+    // The TypeScript findPrs tests retired in #300, each kept here.
+
+    #[test]
+    fn a_gh_failure_keeps_the_file_entry_only_while_on_its_branch() {
+        // "keeps the previous PR when gh fails, but only for the same branch"
+        let d = data(vec![ws("a", "/a"), ws("b", "/a")]);
+        let mut p = on();
+        let other = SavedPr {
+            branch: "old".into(),
+            ..pr(&[])
+        };
+        let mut file = file_of(&["a"], &pr(&[]));
+        file.insert("b".into(), other);
+        p.file_read(&file, Some(&d));
+        let _ = p.due(&d, 0.0);
+        p.record(failed("/a", GhFailure::SignedOut, 0.0));
+        let gone: BTreeMap<String, Option<SavedPr>> = [("b".to_string(), None)].into();
+        assert_eq!(p.writes(&d, "/a"), gone, "a on feat stays, b on old goes");
+
+        // Held on feat, then gh fails on feat2: the held PR is let go and
+        // both entries, still on feat, are deleted.
+        let _ = p.due(&d, 600.0);
+        p.record(answered("/a", Some(pr(&[])), 600.0));
+        p.file_read(&file_of(&["a", "b"], &pr(&[])), Some(&d));
+        assert!(p.writes(&d, "/a").is_empty());
+        let _ = p.due(&d, 900.0);
+        p.record(polled(
+            PollAnswer::Failed {
+                branch: "feat2".into(),
+                why: GhFailure::Unavailable,
+            },
+            900.0,
+        ));
+        let both: BTreeMap<String, Option<SavedPr>> =
+            [("a".to_string(), None), ("b".to_string(), None)].into();
+        assert_eq!(p.writes(&d, "/a"), both);
+    }
+
+    #[test]
+    fn a_git_failure_keeps_what_is_known_whatever_its_branch() {
+        // "keeps the previous PR as-is when git itself failed, regardless of branch"
+        let d = data(vec![ws("a", "/a")]);
+        let mut p = on();
+        let other = SavedPr {
+            branch: "other".into(),
+            ..pr(&[])
+        };
+        p.file_read(&file_of(&["a"], &other), Some(&d));
+        let _ = p.due(&d, 0.0);
+        p.record(polled(PollAnswer::GitFailed, 0.0));
+        assert!(
+            p.writes(&d, "/a").is_empty(),
+            "nothing held: the file stands"
+        );
+        let mut prs = file_of(&["a"], &other);
+        p.overlay(&mut prs, &d);
+        assert_eq!(prs.get("a"), Some(&other));
+
+        // An answer held, then git fails: it is still held and shown.
+        let _ = p.due(&d, 600.0);
+        p.record(answered("/a", Some(pr(&[])), 600.0));
+        p.file_read(&file_of(&["a"], &pr(&[])), Some(&d));
+        let _ = p.due(&d, 900.0);
+        p.record(polled(PollAnswer::GitFailed, 900.0));
+        assert!(p.writes(&d, "/a").is_empty());
+        let mut shown_now = BTreeMap::new();
+        p.overlay(&mut shown_now, &d);
+        assert_eq!(shown_now.get("a"), Some(&pr(&[])));
+    }
+
+    #[test]
+    fn no_branch_or_not_a_repo_deletes_every_entry_in_the_directory() {
+        // "drops the workspace when the directory is not a repo" and
+        // "skips a directory with no branch and drops a PR that has gone":
+        // git's not-a-repo and a detached HEAD both read as NoBranch (gh.rs).
+        let d = data(vec![ws("a", "/a"), ws("b", "/a"), ws("c", "/c")]);
+        let mut p = on();
+        p.file_read(&file_of(&["a", "b", "c"], &pr(&[])), Some(&d));
+        let _ = p.due(&d, 0.0);
+        p.record(polled(PollAnswer::NoBranch, 0.0));
+        let gone: BTreeMap<String, Option<SavedPr>> =
+            [("a".to_string(), None), ("b".to_string(), None)].into();
+        assert_eq!(p.writes(&d, "/a"), gone, "c is in another directory");
     }
 
     #[test]

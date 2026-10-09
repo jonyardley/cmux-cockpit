@@ -24,7 +24,7 @@ use crate::lane_entries::LaneEntry;
 use crate::lanes::{LaneConfig, LaneKey};
 use crate::menu::MenuEvent;
 use crate::panel::Panel;
-use crate::persist::{SavedState, ViewMode, persist_url};
+use crate::persist::{SavedPr, SavedState, ViewMode, persist_url};
 use crate::pr_poll::{PrPolled, shown_in};
 use crate::projects::Project;
 use crate::session::{Outbound, Param, Session};
@@ -321,6 +321,21 @@ impl Operation for PrAsk {
     type Output = ();
 }
 
+/// The PR poll's answers for config/state.json's `prs` map (#300), by
+/// workspace id: a PR to set, or null to delete. The shell hands them to
+/// scripts/pr-save.ts, which writes them under the state file's lock and
+/// rebuilds the sidebars, so the agents panel reads the card's verdict.
+/// Only what changed comes this way (pr_poll's `writes`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PrSave {
+    pub prs: BTreeMap<String, Option<SavedPr>>,
+}
+
+impl Operation for PrSave {
+    type Output = ();
+}
+
 /// A link for the shell to open in the browser, as the sidebar's
 /// `openURL`: the card menu's Open PR.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -355,6 +370,7 @@ pub enum Effect {
     PrPoll(PrAsk),
     OpenUrl(OpenUrl),
     AgentMessage(AgentMessage),
+    SavePrs(PrSave),
 }
 
 /// A request from the session's outbox as the command that hands it to the shell.
@@ -479,8 +495,9 @@ impl Model {
             .collect()
     }
 
-    /// An answer: held, then a redraw only when what a card shows of a
-    /// PR in that directory changed, then any asks it makes room for.
+    /// An answer: held, then written to the state file where it differs
+    /// from it, then a redraw only when what a card shows of a PR in that
+    /// directory changed, then any asks it makes room for.
     fn polled(&mut self, polled: PrPolled) -> Command<Effect, Event> {
         let directory = polled.directory.clone();
         let now = polled.epoch;
@@ -493,7 +510,16 @@ impl Model {
         self.session.pr_poll.record(polled);
         self.overlay();
         let moved = before != shown(self);
-        let mut out = self.asks(Some(now));
+        let prs = self
+            .data
+            .as_ref()
+            .map(|d| self.session.pr_poll.writes(d, &directory))
+            .unwrap_or_default();
+        let mut out = Vec::new();
+        if !prs.is_empty() {
+            out.push(Command::notify_shell(PrSave { prs }).into());
+        }
+        out.extend(self.asks(Some(now)));
         if moved {
             self.rebuild();
             // A rebuild can file a card whose lane group has appeared.
@@ -705,13 +731,18 @@ mod tests {
         );
     }
 
-    /// The effects of one event, in words: `render` or `pr <directory>`.
+    /// The effects of one event, in words: `render`, `pr <directory>` or
+    /// `save <workspace ids>`.
     fn asked(app: &Cockpit, model: &mut Model, event: Event) -> Vec<String> {
         let mut cmd = app.update(event, model);
         cmd.effects()
             .map(|e| match e {
                 Effect::Render(_) => "render".to_string(),
                 Effect::PrPoll(r) => format!("pr {}", r.operation.directory),
+                Effect::SavePrs(r) => {
+                    let ids: Vec<&str> = r.operation.prs.keys().map(String::as_str).collect();
+                    format!("save {}", ids.join(" "))
+                }
                 Effect::Cmux(_)
                 | Effect::Persist(_)
                 | Effect::OpenUrl(_)
@@ -912,7 +943,11 @@ mod tests {
         let _ = app.update(Event::PrPollOn, &mut model);
         let _ = app.update(frame(100.0), &mut model);
         let first = found(&[("build", "pending"), ("lint", "pass")], 101.0);
-        assert_eq!(asked(&app, &mut model, first), ["render"], "a PR appeared");
+        assert_eq!(
+            asked(&app, &mut model, first),
+            ["save a b", "render"],
+            "a PR appeared"
+        );
         assert_eq!(
             model.session.saved.prs.len(),
             2,
@@ -921,9 +956,11 @@ mod tests {
 
         let _ = app.update(frame(131.0), &mut model);
         let same_chip = found(&[("build", "pending"), ("lint2", "pending")], 132.0);
-        assert!(
-            asked(&app, &mut model, same_chip).is_empty(),
-            "a check renamed and another running: the chip still says running"
+        assert_eq!(
+            asked(&app, &mut model, same_chip),
+            ["save a b"],
+            "a check renamed and another running: the chip still says running, \
+             but the agents panel lists the checks, so the file hears of it"
         );
         let checks = |m: &Model| m.session.saved.prs.get("a").and_then(|p| p.checks.clone());
         assert_eq!(
@@ -934,7 +971,46 @@ mod tests {
 
         let _ = app.update(frame(162.0), &mut model);
         let failing = found(&[("build", "fail")], 163.0);
-        assert_eq!(asked(&app, &mut model, failing), ["render"]);
+        assert_eq!(asked(&app, &mut model, failing), ["save a b", "render"]);
+    }
+
+    #[test]
+    fn an_answer_is_written_to_the_state_file_only_while_the_file_says_otherwise() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(Event::PrPollOn, &mut model);
+        let _ = app.update(frame(100.0), &mut model);
+        let mut cmd = app.update(found(&[("build", "pass")], 101.0), &mut model);
+        let saved: Vec<PrSave> = cmd
+            .effects()
+            .filter_map(|e| match e {
+                Effect::SavePrs(r) => Some(r.operation),
+                _ => None,
+            })
+            .collect();
+        let [save] = saved.as_slice() else {
+            panic!("one save, got {saved:?}")
+        };
+        let pr = save.prs.get("a").cloned().flatten();
+        assert_eq!(pr.as_ref().map(|p| p.number), Some(4.0));
+        assert_eq!(save.prs.get("b").cloned().flatten(), pr, "b shares /a");
+
+        // The file comes back holding the answer: the same answer again
+        // writes nothing, and the next ask is still due.
+        let back = serde_json::json!({ "prs": { "a": pr, "b": pr } });
+        let file = SavedState::from_json(&back.to_string()).unwrap();
+        let _ = app.update(Event::State(Box::new(file)), &mut model);
+        let _ = app.update(frame(400.0), &mut model);
+        assert_eq!(
+            asked(&app, &mut model, found(&[("build", "pass")], 401.0)),
+            Vec::<String>::new(),
+            "nothing changed, so nothing is written or drawn"
+        );
+        assert_eq!(
+            asked(&app, &mut model, found(&[("build", "fail")], 402.0)),
+            Vec::<String>::new(),
+            "an answer to an ask already answered is dropped"
+        );
     }
 
     #[test]
