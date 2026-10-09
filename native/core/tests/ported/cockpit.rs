@@ -1127,6 +1127,100 @@ mod the_selection_override {
         data.epoch = Some(NOW + 4.0);
         assert!(s.is_selected(&data, Some(&ws("tapped"))));
     }
+
+    // Not ported: PR #280's review, findings 2 and 3.
+
+    #[test]
+    fn holds_while_cmux_still_shows_the_selection_from_before_the_tap() {
+        let (mut s, mut data, _) = setup();
+        data.selected_id = Some("other".into());
+        s.select_workspace(&data, Some("tapped"));
+        data.epoch = Some(NOW + 2.0);
+        assert!(s.is_selected(&data, Some(&ws("tapped"))));
+        assert!(!s.is_selected(&data, Some(&ws("other").selected())));
+    }
+
+    #[test]
+    fn gives_way_at_once_when_cmux_refuses_the_select() {
+        let (mut s, mut data, _) = setup();
+        data.selected_id = Some("other".into());
+        s.select_workspace(&data, Some("tapped"));
+        s.request_failed("tapped");
+        assert!(!s.is_selected(&data, Some(&ws("tapped"))));
+        assert!(s.is_selected(&data, Some(&ws("other").selected())));
+    }
+
+    #[test]
+    fn holds_through_a_failed_call_about_another_workspace() {
+        let (mut s, mut data, _) = setup();
+        data.selected_id = Some("other".into());
+        s.select_workspace(&data, Some("tapped"));
+        s.request_failed("a");
+        assert!(s.is_selected(&data, Some(&ws("tapped"))));
+    }
+
+    #[test]
+    fn gives_way_when_cmux_publishes_a_different_selection() {
+        let (mut s, mut data, _) = setup();
+        data.selected_id = Some("other".into());
+        s.select_workspace(&data, Some("tapped"));
+        data.epoch = Some(NOW + 1.0);
+        data.selected_id = Some("third".into());
+        assert!(!s.is_selected(&data, Some(&ws("tapped"))));
+        assert!(s.is_selected(&data, Some(&ws("third").selected())));
+        // Gone, not hidden: cmux going back to the old selection within the
+        // window shows that one, not the tap.
+        data.selected_id = Some("other".into());
+        assert!(!s.is_selected(&data, Some(&ws("tapped"))));
+    }
+
+    #[test]
+    fn holds_through_a_frame_that_leaves_the_selection_out() {
+        let (mut s, mut data, _) = setup();
+        data.selected_id = Some("other".into());
+        s.select_workspace(&data, Some("tapped"));
+        data.selected_id = None;
+        assert!(s.is_selected(&data, Some(&ws("tapped"))));
+    }
+
+    #[test]
+    fn a_second_tap_holds_through_cmux_publishing_the_first() {
+        let (mut s, mut data, _) = setup();
+        data.selected_id = Some("other".into());
+        s.select_workspace(&data, Some("first"));
+        s.select_workspace(&data, Some("second"));
+        data.epoch = Some(NOW + 1.0);
+        data.selected_id = Some("first".into());
+        assert!(s.is_selected(&data, Some(&ws("second"))));
+        assert!(!s.is_selected(&data, Some(&ws("first").selected())));
+    }
+
+    #[test]
+    fn holds_when_the_tap_frame_marked_the_old_selection_only_on_its_card() {
+        let (mut s, mut data, _) = setup();
+        if let Some(list) = data.workspaces.as_mut() {
+            for w in list.iter_mut().filter(|w| w.id == "a") {
+                w.selected = Some(true);
+            }
+        }
+        s.select_workspace(&data, Some("tapped"));
+        data.epoch = Some(NOW + 1.0);
+        data.selected_id = Some("a".into());
+        assert!(s.is_selected(&data, Some(&ws("tapped"))));
+    }
+
+    #[test]
+    fn a_lapsed_tap_is_not_carried_into_the_next() {
+        let (mut s, mut data, _) = setup();
+        data.selected_id = Some("other".into());
+        s.select_workspace(&data, Some("first"));
+        data.epoch = Some(NOW + 5.0);
+        s.select_workspace(&data, Some("second"));
+        data.epoch = Some(NOW + 6.0);
+        data.selected_id = Some("first".into());
+        assert!(!s.is_selected(&data, Some(&ws("second"))));
+        assert!(s.is_selected(&data, Some(&ws("first").selected())));
+    }
 }
 
 mod data_fields_cmux_may_leave_out_issue_7 {

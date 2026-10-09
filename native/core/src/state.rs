@@ -10,6 +10,21 @@ use crate::time::now_epoch;
 /// How long an optimistic override holds before cmux's own data wins.
 pub const OVERRIDE_SECS: f64 = 4.0;
 
+/// A tapped card shown selected before cmux publishes the change.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct SelectOverride {
+    /// The workspace tapped.
+    pub(crate) id: String,
+    /// When, in epoch seconds: it lapses OVERRIDE_SECS later.
+    pub(crate) at: f64,
+    /// The selections cmux may still publish without that meaning it went
+    /// elsewhere: the one it showed at the first tap, and each card tapped
+    /// since while this was held. Any other means cmux (or Jon in cmux)
+    /// chose another workspace, and the override gives way at once. A
+    /// frame with no selection says nothing either way (issue #7).
+    pub(crate) stale: Vec<String>,
+}
+
 /// A card being dragged: its row's key (`w:<wsId>`) and the slot it is over.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DragState {
@@ -76,19 +91,33 @@ impl Session {
     }
 
     /// Whether the workspace is selected: a tapped card reads as selected
-    /// the same frame, until cmux publishes the change or OVERRIDE_SECS
-    /// pass, so a select cmux refused cannot pin the highlight.
+    /// the same frame, until cmux publishes the change, publishes some
+    /// other selection, refuses the select (`select_failed`) or
+    /// OVERRIDE_SECS pass, so the highlight is never left on a card cmux
+    /// did not select.
     pub fn is_selected(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
         let Some(w) = w else { return false };
-        if let Some((id, at)) = &self.select_override {
-            let published = data.selected_id.as_deref() == Some(id.as_str());
-            if published || now_epoch(data) - at > OVERRIDE_SECS {
+        if let Some(o) = &self.select_override {
+            let published = data.selected_id.as_deref() == Some(o.id.as_str());
+            let elsewhere = data
+                .selected_id
+                .as_ref()
+                .is_some_and(|id| !o.stale.contains(id));
+            if published || elsewhere || now_epoch(data) - o.at > OVERRIDE_SECS {
                 self.select_override = None;
             } else {
-                return w.id == *id;
+                return w.id == o.id;
             }
         }
         w.selected == Some(true)
+    }
+
+    /// A cmux call about this workspace failed: a select of it shows what
+    /// cmux has selected again, rather than holding the tap until it lapses.
+    pub(crate) fn select_failed(&mut self, ws_id: &str) {
+        if self.select_override.as_ref().is_some_and(|o| o.id == ws_id) {
+            self.select_override = None;
+        }
     }
 
     /// Selects a workspace, showing it selected at once.
@@ -110,6 +139,37 @@ impl Session {
         if id.is_empty() {
             return;
         }
-        self.select_override = Some((id.to_string(), now_epoch(data)));
+        let now = now_epoch(data);
+        // A held tap that has lapsed no longer stands for anything cmux may
+        // still publish, so the next tap starts afresh rather than inherit it.
+        let mut stale = match self.select_override.take() {
+            Some(held) if now - held.at <= OVERRIDE_SECS => {
+                let mut stale = held.stale;
+                stale.push(held.id);
+                stale
+            }
+            _ => Vec::new(),
+        };
+        if let Some(was) = shown_selection(data) {
+            stale.push(was.to_string());
+        }
+        stale.sort();
+        stale.dedup();
+        self.select_override = Some(SelectOverride {
+            id: id.to_string(),
+            at: now,
+            stale,
+        });
     }
+}
+
+/// The workspace cmux shows selected: its `selectedId`, or, when the frame
+/// leaves that out (issue #7), the card it marks selected.
+fn shown_selection(data: &Data) -> Option<&str> {
+    data.selected_id.as_deref().or_else(|| {
+        data.workspace_list()
+            .iter()
+            .find(|w| w.selected == Some(true))
+            .map(|w| w.id.as_str())
+    })
 }

@@ -801,7 +801,7 @@ mod tests {
         let mut model = Model::default();
         let _ = app.update(frame(1000.0), &mut model);
         let _ = app.update(switch_at(1005.0), &mut model);
-        let stamp = model.session.select_override.clone();
+        let stamp = model.session.select_override.map(|o| (o.id, o.at));
         assert_eq!(stamp, Some(("b".to_string(), 1005.0)));
     }
 
@@ -811,8 +811,44 @@ mod tests {
         let mut model = Model::default();
         let _ = app.update(frame(1000.0), &mut model);
         let _ = app.update(switch_at(990.0), &mut model);
-        let stamp = model.session.select_override.clone();
+        let stamp = model.session.select_override.map(|o| (o.id, o.at));
         assert_eq!(stamp, Some(("b".to_string(), 1000.0)));
+    }
+
+    #[test]
+    fn taps_back_and_forth_keep_one_entry_per_workspace() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(frame(1000.0), &mut model);
+        for id in ["a", "b", "a", "b"] {
+            let event = Box::new(Event::SwitchTo { id: id.into() });
+            let _ = app.update(Event::At { now: 1001.0, event }, &mut model);
+        }
+        let stale = model.session.select_override.map(|o| o.stale);
+        assert_eq!(stale, Some(vec!["a".to_string(), "b".to_string()]));
+    }
+
+    #[test]
+    fn a_select_cmux_refused_stops_showing_the_clicked_card() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let data = serde_json::json!({ "epoch": 1000.0, "selectedId": "a", "workspaces": [
+            { "id": "a", "directory": "/a", "selected": true },
+            { "id": "b", "directory": "/a" },
+        ]});
+        let _ = app.update(
+            Event::Data(serde_json::from_value(data).unwrap()),
+            &mut model,
+        );
+        let _ = app.update(switch_at(1001.0), &mut model);
+        let refused = Event::CmuxFailed { id: "b".into() };
+        let _ = app.update(refused, &mut model);
+        let Some(data) = &model.data else {
+            panic!("the frame is held")
+        };
+        let (a, b) = (data.ws_by_id("a"), data.ws_by_id("b"));
+        assert!(!model.session.is_selected(data, b));
+        assert!(model.session.is_selected(data, a));
     }
 
     fn frame(epoch: f64) -> Event {

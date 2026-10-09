@@ -21,7 +21,7 @@ use crate::menu::MenuTarget;
 use crate::persist::{ProjectSpec, SavedState, ViewMode, persist_url};
 use crate::pr_poll::PrPoll;
 use crate::projects::{Project, is_project_key};
-use crate::state::DragState;
+use crate::state::{DragState, SelectOverride};
 use crate::status::Status;
 use crate::text::PromptMemory;
 
@@ -164,7 +164,7 @@ pub struct Session {
     pub(crate) unsorted_collapsed: bool,
     pub(crate) quiet_collapsed: bool,
     pub(crate) collapsed_projects: Vec<String>,
-    pub(crate) select_override: Option<(String, f64)>,
+    pub(crate) select_override: Option<SelectOverride>,
     pub(crate) drag: Option<DragState>,
 
     // cockpit/strip.ts: a card dismissed from Needs you, held at the top of
@@ -273,7 +273,8 @@ impl Session {
     }
 
     /// A request for this workspace failed in cmux: lets go of the pane's
-    /// hold on it, so the card shows where cmux has it.
+    /// hold on it, so the card shows where and how cmux has it: in its
+    /// lane, and selected only if cmux selected it.
     pub fn request_failed(&mut self, ws_id: &str) {
         let held = |o: &LaneMove| o.held_from.is_some();
         if self.lane_override.get(ws_id).is_some_and(held) {
@@ -286,6 +287,7 @@ impl Session {
         {
             self.order_override = None;
         }
+        self.select_failed(ws_id);
     }
 
     /// Every request made since the last call, oldest first.
