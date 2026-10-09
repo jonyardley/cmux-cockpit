@@ -69,51 +69,36 @@ enum NextText {
     }
 }
 
-/// Needs you as the Next pill draws it (issue #281): the count on its
-/// fill, the core's words (the next target's title, or "needs you · this
-/// one" on the only one waiting), then the oldest wait and a down arrow.
+/// Needs you as the All tab carries it (issue #314): the waiting count
+/// on a clay badge, whose click reveals the next waiting session.
 enum NeedsText {
-    /// Whether Next draws as the pill: whenever something waits, with or
-    /// without a next step.
+    /// Whether the All tab carries the count: whenever something waits.
     static func shows(_ needs: Needs) -> Bool {
         needs.count > 0
     }
 
-    /// What the pill says after its badge, as the core words it: the
-    /// oldest waiting session Jon is not on, or "needs you · this one"
-    /// while the only one waiting is the one he is on (issue #312).
-    static func title(_ needs: Needs) -> String {
-        needs.title
-    }
-
-    /// Whether the pill answers a tap and the pointer: only while it names
-    /// a session to reveal.
-    static func live(_ needs: Needs) -> Bool {
-        needs.target != nil
-    }
-
-    /// Whether the pointer lights Next: always on the plain line, and on
-    /// the pill only while it names a session to reveal. Read at draw
-    /// time, so a pill that loses its target under a resting pointer
-    /// drops its lit face at once.
-    static func lights(_ needs: Needs) -> Bool {
-        !shows(needs) || live(needs)
-    }
-
-    /// What a tap on the pill sends: reveal the session it names, or
-    /// nothing when it names none.
-    static func tap(_ needs: Needs) -> SidebarAction? {
-        needs.target.map { .reveal(id: $0.wsId) }
-    }
-
-    /// The count on the pill's badge.
+    /// The count on the All tab's badge.
     static func count(_ needs: Needs) -> String {
         String(needs.count)
     }
 
-    /// The pill's right end: the oldest wait, then the arrow down to it.
-    static func trail(_ needs: Needs) -> String {
-        needs.wait.isEmpty ? Words.down : needs.wait + " " + Words.down
+    /// What a click on the count sends: back to All when Projects is on,
+    /// then reveal the session the core names, the oldest waiting or the
+    /// one after the waiting session Jon is on. Nothing while it names
+    /// none, as on the only waiting session.
+    static func tap(_ needs: Needs, from view: PanelView) -> [SidebarAction] {
+        guard let target = needs.target else { return [] }
+        let back: [SidebarAction] = view == .all ? [] : [.flipView]
+        return back + [.reveal(id: target.wsId)]
+    }
+}
+
+/// Whether the Next line shows: only while nothing waits, as the All
+/// tab's count leads to what waits (issue #314), and Next has somewhere
+/// to go, a Ready session.
+enum TopText {
+    static func showsNext(_ panel: Panel) -> Bool {
+        !NeedsText.shows(panel.needs) && !NextText.isNothing(panel.next)
     }
 }
 
@@ -186,10 +171,16 @@ extension CardText {
         card.waiting?.ink
     }
 
-    /// The leading edge's colour on a card waiting on Jon, clay for Your
-    /// turn and amber for Asking; nil while it waits on nobody.
-    static func edge(_ card: Card) -> Token? {
-        card.waiting?.edge
+    /// The dot on the badge of a card waiting on Jon (issue #314), clay
+    /// for Your turn and amber for Asking; nil while it waits on nobody.
+    static func mark(_ card: Card) -> Token? {
+        card.waiting?.mark
+    }
+
+    /// Whether the pointer shows the card's x, which dismisses its wait:
+    /// only on a card waiting on Jon.
+    static func dismissable(_ card: Card) -> Bool {
+        card.waiting != nil
     }
 
     /// The progress bar's fraction, held to 0 to 1; nil draws no bar.

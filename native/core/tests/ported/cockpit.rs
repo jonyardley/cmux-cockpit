@@ -559,7 +559,7 @@ mod needs_you_clock {
         let (mut s, mut data, mut fx) = setup();
         ask(&mut data, &mut fx, "a", 45.0 * 60.0);
         ask(&mut data, &mut fx, "b", 2.0 * 60.0);
-        s.dismiss_waiting(&data, Some(by_id(&data, "a")));
+        s.dismiss_needs(Some(by_id(&data, "a")));
         assert_eq!(s.needs_wait_text(&data), "2m");
         assert!(!s.needs_wait_late(&data));
     }
@@ -682,33 +682,32 @@ mod needs_you {
             ["a", "b"]
         );
         let at = position(&rows, "a@main");
-        s.dismiss_waiting(&data, Some(by_id(&data, "a")));
+        s.dismiss_needs(Some(by_id(&data, "a")));
         assert!(!has(&ids(&s.needs_list(&data)), "a"));
         let rows = entry_ids(&mut s, &data);
         assert_eq!(position(&rows, "a@main"), at);
         assert_eq!(s.lane_workspaces(&data, &LaneKey::from("main")).len(), 2);
     }
 
+    /// Issue #314: cards never leave their lane, so a dismissed card is
+    /// held nowhere; it sorts by the status it now reads.
     #[test]
-    fn holds_a_dismissed_card_in_its_waiting_spot_until_its_status_changes() {
+    fn sorts_a_dismissed_card_by_the_status_it_now_reads_at_once() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "b").agents = Some(vec![Some(fx.agent(Working).since(400.0))]);
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
         assert_eq!(main_rows(&mut s, &data), ["a@main", "b@main"]);
-        s.dismiss_waiting(&data, Some(by_id(&data, "a")));
-        // Idle now, it would sort under the working card; it keeps the top.
-        assert_eq!(main_rows(&mut s, &data), ["a@main", "b@main"]);
-        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(Working).since(600.0))]);
-        assert_eq!(s.state_rank(&data, Some(by_id(&data, "a"))), 2);
-        ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(Idle).since(700.0))]);
+        s.dismiss_needs(Some(by_id(&data, "a")));
+        // Idle now, under the working card.
         assert_eq!(main_rows(&mut s, &data), ["b@main", "a@main"]);
+        assert_eq!(s.state_rank(&data, Some(by_id(&data, "a"))), 3);
     }
 
     #[test]
-    fn holds_nothing_when_the_menu_dismisses_a_card_that_is_not_waiting() {
+    fn leaves_a_card_that_is_not_waiting_where_it_sorts_when_the_menu_dismisses_it() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "b").agents = Some(vec![Some(fx.agent(Working).since(400.0))]);
-        s.dismiss_waiting(&data, Some(by_id(&data, "a")));
+        s.dismiss_needs(Some(by_id(&data, "a")));
         let main: Vec<String> = entry_ids(&mut s, &data)
             .into_iter()
             .filter(|id| id.ends_with("@main"))
@@ -718,11 +717,11 @@ mod needs_you {
     }
 
     #[test]
-    fn releases_a_hold_when_the_agent_asks_again_so_the_next_answer_sorts_normally() {
+    fn tops_its_lane_again_when_a_dismissed_agent_asks_again_then_sorts_by_status() {
         let (mut s, mut data, mut fx) = setup();
         ws_mut(&mut data, "b").agents = Some(vec![Some(fx.agent(Working).since(400.0))]);
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(500.0))]);
-        s.dismiss_waiting(&data, Some(by_id(&data, "a")));
+        s.dismiss_needs(Some(by_id(&data, "a")));
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(900.0))]);
         assert_eq!(s.state_rank(&data, Some(by_id(&data, "a"))), 0);
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(Idle).since(950.0))]);

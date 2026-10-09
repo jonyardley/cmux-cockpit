@@ -39,8 +39,13 @@ enum Metrics {
     static let small: CGFloat = 11
     static let gutter: CGFloat = 10
     static let cardIndent: CGFloat = 16
-    /// The leading edge down a card waiting on Jon.
-    static let waitingEdge: CGFloat = 4
+    /// The needs dot on a waiting card's badge corner, as a share of the
+    /// badge, and the ring of card face round it (issue #314).
+    static let needsDotShare: CGFloat = 0.36
+    static let needsDotRing: CGFloat = 2
+    /// The x a waiting card shows under the pointer, and its glyph.
+    static let dismissSize: CGFloat = 16
+    static let dismissGlyph: CGFloat = 8
     /// Between the cards in a lane, as the cockpit's.
     static let cardGap: CGFloat = 6
     static let corner: CGFloat = 6

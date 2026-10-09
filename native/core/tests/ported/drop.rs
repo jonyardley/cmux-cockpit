@@ -92,7 +92,7 @@ mod resolve_drop {
     }
 
     #[test]
-    fn counts_a_placeholder_as_a_waiting_peer_so_a_held_card_drops_beside_it() {
+    fn counts_every_waiting_card_as_a_peer_so_a_waiting_card_drops_beside_them() {
         let (mut s, mut data, mut fx) = setup();
         let mut asks = Vec::new();
         for since in [500.0, 600.0, 700.0] {
@@ -105,12 +105,8 @@ mod resolve_drop {
         }
         ws_mut(&mut data, "a").agents = Some(vec![Some(asks[0].clone())]);
         ws_mut(&mut data, "b").agents = Some(vec![Some(asks[1].clone())]);
-        let b = by_id(&data, "b").clone();
-        let d = by_id(&data, "d").clone();
-        s.dismiss_waiting(&data, Some(&b));
-        s.dismiss_waiting(&data, Some(&d));
-        // [h:main, g:a, w:b, w:d, ...], all waiting rank; without w:d, slot 1
-        // sits above g:a, so d lands before a, not before b further down.
+        // [h:main, w:a, w:b, w:d, ...], all waiting rank; without w:d, slot 1
+        // sits above w:a, so d lands before a, not before b further down.
         assert_eq!(
             s.resolve_drop(&data, "w:d", 1),
             target(LaneKey::from("main"), Some("a"), None)

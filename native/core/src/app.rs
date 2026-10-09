@@ -455,7 +455,7 @@ impl Model {
             Event::MoveCard { id, lane, before } => s.move_card(data, &id, lane, before.as_deref()),
             Event::SwitchTo { id } => s.select_workspace(data, Some(&id)),
             Event::Selected { id } => s.mark_selected(data, &id),
-            Event::Dismiss { id } => s.dismiss_waiting(data, data.ws_by_id(&id)),
+            Event::Dismiss { id } => s.dismiss_needs(data.ws_by_id(&id)),
             Event::Reveal { id } => s.reveal_workspace(data, data.ws_by_id(&id)),
             Event::Edit(e) => s.edit(data, e),
             Event::Menu(e) => s.menu(data, e),

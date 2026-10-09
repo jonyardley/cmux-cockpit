@@ -9,8 +9,8 @@ enum Words {
     static let projects = "Projects"
     static let next = "Next"
     static let nextNothing = "nothing waiting"
-    /// At the end of the Next pill while something waits: down to it.
-    static let down = "↓"
+    /// The help on a waiting card's x.
+    static let dismiss = "Dismiss"
     static let laneMark = "■"
     static let folded = "▸"
     static let open = "▾"

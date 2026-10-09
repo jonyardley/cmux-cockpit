@@ -326,7 +326,7 @@ pub(crate) mod fixtures {
             detail_ink: Token::Secondary,
             detail_lines: 1,
             waiting: waiting.then_some(Waiting {
-                edge: Token::Clay,
+                mark: Token::Clay,
                 ink: Token::ClayText,
             }),
             rank,

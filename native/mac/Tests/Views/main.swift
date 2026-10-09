@@ -146,10 +146,12 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("needs-an
     check(lines.contains("\(Words.next) \(next.title) \(next.place)"), "Next reads as the pane's")
     check(NextText.targetId(panel.next) == "n1", "a Next click outlines the card it goes to")
     check(lines.contains("\(panel.needs.label) \(panel.needs.wait)"), "Needs you reads as the pane's line")
-    check(NeedsText.count(panel.needs) == "5" && NeedsText.trail(panel.needs) == "30m ↓", "the pill reads 5, the title, then 30m ↓")
-    check(panel.needs.fill == .clay && panel.needs.ink == .clayText, "the pill is clay while one waits late")
-    check(NeedsText.title(panel.needs) == "Oldest question", "the pill names the oldest waiting session Jon is not on")
-    check(NeedsText.tap(panel.needs) == .reveal(id: "n1"), "a tap on the pill reveals the session it names")
+    check(NeedsText.count(panel.needs) == "5", "the All tab counts 5")
+    check(panel.needs.fill == .clay && panel.needs.ink == .clayText, "the count is clay while one waits late")
+    check(NeedsText.tap(panel.needs, from: .all) == [.reveal(id: "n1")], "a click on the count reveals the oldest waiting session")
+    check(NeedsText.tap(panel.needs, from: .projects) == [.flipView, .reveal(id: "n1")],
+          "from Projects, a click on the count goes back to All first")
+    check(!TopText.showsNext(panel), "Next's line stays off while something waits: the All tab's count leads there")
     // A waiting row (Unsorted's one-line rows) keeps its age as its status
     // and says its reason on its detail line, in the waiting ink.
     let rows = panel.lanes.flatMap(\.rows).map { r -> Card in
@@ -165,22 +167,16 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("needs-an
     for c in rows where c.waiting == nil {
         check(c.detailInk == .secondary, "\(c.title): a detail not waiting is secondary")
     }
-    var quiet = panel.needs
-    quiet.count = 0
-    quiet.target = nil
-    check(NeedsText.lights(quiet), "the plain Next line lights under the pointer")
-    check(NeedsText.live(panel.needs) && NeedsText.lights(panel.needs) && panel.needs.titleInk == panel.needs.ink,
-          "a pill naming a session lights and says it in the pill's ink")
-    // On the only waiting session (issue #312), the pill still shows with
-    // its count, says the core's words faint, and neither taps nor lights.
+    var quiet = panel
+    quiet.needs.count = 0
+    quiet.needs.target = nil
+    check(TopText.showsNext(quiet), "with nothing waiting, Next's line shows while it has somewhere to go")
+    // On the only waiting session, the count still shows and taps to nothing.
     var alone = panel.needs
     alone.count = 1
-    alone.title = "needs you · this one"
-    alone.titleInk = .faint
     alone.target = nil
-    check(NeedsText.shows(alone) && NeedsText.title(alone) == "needs you · this one" && NeedsText.tap(alone) == nil
-          && !NeedsText.live(alone) && !NeedsText.lights(alone),
-          "the pill on the only waiting session reads its words, taps to nothing and does not light")
+    check(NeedsText.shows(alone) && NeedsText.tap(alone, from: .all).isEmpty,
+          "the count on the only waiting session shows and taps to nothing")
 }
 if let text = try? String(contentsOf: snapshots.appendingPathComponent("review-verdicts-80.txt"), encoding: .utf8) {
     check(text.contains("\(Words.next)  \(Words.nextNothing)"), "Next with nowhere to go reads as the pane's")
@@ -189,27 +185,29 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("review-v
 if let panel = load("lanes") {
     let rows = panel.lanes.flatMap(\.rows)
     check(Set(rows.map(\.id)).count == rows.count, "each lane row has its own id")
-    // A waiting card stays in its lane (issue #281): it draws its edge in
-    // its waiting colour, its reason on its status line and its age on the
-    // title row in the same ink.
+    // A waiting card stays in its lane (issue #314): it draws the needs dot
+    // on its badge in its waiting colour, its reason on its status line and
+    // its age on the title row in the same ink, and shows its x.
     let cards = rows.map { r -> Card in
         switch r { case .card(let c): c }
     }
     let waiting = cards.filter { $0.waiting != nil }
     check(waiting.count == Int(panel.needs.count), "lanes: every waiting card is in its lane, \(waiting.count) of \(panel.needs.count)")
     if let chip = waiting.first(where: { $0.title == "Chip colours" }) {
-        check(CardText.edge(chip) == .clay && chip.status.hasPrefix("Your turn: "), "Your turn draws a clay edge and its reason")
+        check(CardText.mark(chip) == .clay && chip.status.hasPrefix("Your turn: "), "Your turn draws a clay dot and its reason")
+        check(CardText.dismissable(chip), "a waiting card shows its x under the pointer")
         check(CardText.ageInk(chip) == .clayText && CardText.titleAge(chip) == chip.age && !chip.age.isEmpty, "its age on the title row, in clay")
     } else {
         check(false, "lanes: Chip colours waits")
     }
     if let ask = waiting.first(where: { $0.title == "Release notes" }) {
-        check(CardText.edge(ask) == .amber && ask.status == "Asking: allow git push?", "Asking draws an amber edge and its reason")
+        check(CardText.mark(ask) == .amber && ask.status == "Asking: allow git push?", "Asking draws an amber dot and its reason")
     } else {
         check(false, "lanes: Release notes asks")
     }
     for c in cards where c.waiting == nil {
-        check(CardText.edge(c) == nil && CardText.ageInk(c) == nil, "\(c.title): no edge while it waits on nobody")
+        check(CardText.mark(c) == nil && CardText.ageInk(c) == nil && !CardText.dismissable(c),
+              "\(c.title): no dot and no x while it waits on nobody")
     }
 }
 
@@ -234,9 +232,21 @@ if let panel = load("lanes") {
         if lane.empty { check(LaneText.pill(lane) == PillColors(bg: .countBg, fg: .faint), "\(lane.name): an empty lane's pill is quiet") }
     }
     check(NeedsText.shows(panel.needs), "Needs you shows while something waits")
+    // Every lane with a waiting card dots its heading, folded or open, in
+    // clay while any of them is Your turn (issue #314).
+    for lane in panel.lanes {
+        let marks = lane.rows.compactMap { r -> Token? in
+            switch r { case .card(let c): CardText.mark(c) }
+        }
+        if !marks.isEmpty {
+            let want: Token = marks.contains(.clay) ? .clay : .amber
+            check(lane.dot?.ink == want, "\(lane.name): its heading's dot is the needs dot")
+        }
+    }
 }
 if let panel = load("review-verdicts") {
     check(!NeedsText.shows(panel.needs), "Needs you hides with nothing waiting")
+    check(!TopText.showsNext(panel), "Next's line hides with nowhere to go")
     check(NextText.isNothing(panel.next), "Next has nowhere to go")
     check(NextText.targetId(panel.next) == nil, "a Next click with nowhere to go outlines nothing")
 }

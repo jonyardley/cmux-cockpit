@@ -14,8 +14,6 @@
     "late": true,
     "fill": "clay",
     "ink": "clayText",
-    "title": "Oldest question",
-    "title_ink": "clayText",
     "target": {
       "ws_id": "n1",
       "title": "Oldest question"
@@ -102,7 +100,10 @@
         "bg": "clayCount",
         "fg": "clayText"
       },
-      "dot": null,
+      "dot": {
+        "glyph": "●",
+        "ink": "clay"
+      },
       "collapsed": false,
       "merge_ready": "",
       "rows": [
@@ -135,7 +136,7 @@
             "detail_ink": "clayText",
             "detail_lines": 1,
             "waiting": {
-              "edge": "clay",
+              "mark": "clay",
               "ink": "clayText"
             },
             "rank": 0,
@@ -285,7 +286,7 @@
             "detail_ink": "amberText",
             "detail_lines": 1,
             "waiting": {
-              "edge": "amber",
+              "mark": "amber",
               "ink": "amberText"
             },
             "rank": 0,
@@ -435,7 +436,7 @@
             "detail_ink": "clayText",
             "detail_lines": 1,
             "waiting": {
-              "edge": "clay",
+              "mark": "clay",
               "ink": "clayText"
             },
             "rank": 0,
@@ -585,7 +586,7 @@
             "detail_ink": "clayText",
             "detail_lines": 1,
             "waiting": {
-              "edge": "clay",
+              "mark": "clay",
               "ink": "clayText"
             },
             "rank": 0,
@@ -735,7 +736,7 @@
             "detail_ink": "clayText",
             "detail_lines": 1,
             "waiting": {
-              "edge": "clay",
+              "mark": "clay",
               "ink": "clayText"
             },
             "rank": 0,

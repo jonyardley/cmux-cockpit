@@ -99,10 +99,11 @@ pub enum NextLine {
     },
 }
 
-/// Needs you, which Next's pill carries (issue #281): how many sessions
-/// wait on Jon, how long the oldest has, and where a tap on the pill goes.
-/// Each waiting card stays in its lane and says so itself. A count of 0
-/// when nothing waits.
+/// Needs you (issue #314): how many sessions wait on Jon, how long the
+/// oldest has, and where a click on the count goes. Each waiting card
+/// stays in its lane and says so itself, with a dot on its badge; the
+/// sidebar carries the count on its All tab, the pane on its Needs line.
+/// A count of 0 when nothing waits.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Needs {
     pub count: usize,
@@ -115,35 +116,29 @@ pub struct Needs {
     /// The count's fill: amber while every waiting session asks and none
     /// is late, else clay. Clear when nothing waits.
     pub fill: Token,
-    /// The pill's words, in the fill's text ink.
+    /// The count's words, in the fill's text ink.
     pub ink: Token,
-    /// What the pill says between its badge and its wait: the target's
-    /// title, or "needs you · this one" while the only one waiting is the
-    /// one Jon is on (issue #312), so the badge's count reads on into it.
-    /// "" when nothing waits.
-    pub title: String,
-    /// The ink of those words: the pill's ink with a target, faint on the
-    /// one Jon is on.
-    pub title_ink: Token,
-    /// The oldest waiting session Jon is not on, which the pill names and
-    /// a tap on it reveals; None while the only one waiting is the one he
-    /// is on, when the pill does nothing on a tap or under the pointer.
+    /// Where a click on the count goes: the oldest waiting session, or,
+    /// while Jon is on one, the next after it, round to the oldest again,
+    /// so each click steps on. None while the only one waiting is the one
+    /// he is on.
     pub target: Option<NeedsTarget>,
 }
 
-/// A waiting session the pill names: its workspace and title.
+/// A waiting session the count reveals: its workspace and title.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct NeedsTarget {
     pub ws_id: String,
     pub title: String,
 }
 
-/// Why a card waits on Jon: its leading edge, clay for Your turn and
-/// amber for Asking, and the ink of its status line, which then says the
-/// reason ("Asking: allow git push?").
+/// Why a card waits on Jon: its mark, clay for Your turn and amber for
+/// Asking, and the ink of its status line, which then says the reason
+/// ("Asking: allow git push?"). The sidebar draws the mark as a dot on
+/// the card's badge, the pane as a bar down its lead.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Waiting {
-    pub edge: Token,
+    pub mark: Token,
     pub ink: Token,
 }
 
@@ -222,7 +217,7 @@ pub struct Card {
     /// How many detail lines it draws: two on a full card, else one.
     pub detail_lines: usize,
     /// Set while its session waits on Jon: the card keeps its place and
-    /// draws the edge, its status line the reason. Its title row's age
+    /// draws the mark, its status line the reason. Its title row's age
     /// takes the same ink.
     pub waiting: Option<Waiting>,
     /// Its state's place in the lane's sort (the core's state rank): a
@@ -383,7 +378,8 @@ pub struct ProjectHead {
     pub icon: String,
     pub count: usize,
     pub pill: PillColors,
-    /// While folded: the dot of its most urgent session.
+    /// The needs dot while a card in it waits on Jon, folded or open;
+    /// else, while folded, the dot of its most urgent session.
     pub dot: Option<Icon>,
     pub collapsed: bool,
     pub can_open: bool,
@@ -446,7 +442,8 @@ pub struct Lane {
     pub anchor: Option<Anchor>,
     pub count: usize,
     pub pill: PillColors,
-    /// While folded: the dot of its most urgent session.
+    /// The needs dot while a card in it waits on Jon, folded or open;
+    /// else, while folded, the dot of its most urgent session.
     pub dot: Option<Icon>,
     pub collapsed: bool,
     /// "2 ready to merge", or "".

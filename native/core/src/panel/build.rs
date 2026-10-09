@@ -353,8 +353,8 @@ fn next_line(data: &Data, view: &ViewModel) -> NextLine {
     }
 }
 
-/// Needs you for Next's pill: the count, the oldest wait and its colour,
-/// and the session a tap on it reveals.
+/// Needs you for the All tab's count: how many wait, the oldest wait
+/// and its colour, and the session a click on the count reveals.
 fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
     let n = &view.needs;
     let asking = n
@@ -362,8 +362,6 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
         .iter()
         .all(|id| session.ask_of(data.ws_by_id(id)).is_some());
     let (fill, ink) = needs_tone(n.list.len(), asking, n.late);
-    let target = needs_target(session, data, &n.list);
-    let (title, title_ink) = needs_title(n.list.len(), target.as_ref(), ink);
     Needs {
         count: n.list.len(),
         label: needs_label(n.list.len()),
@@ -371,47 +369,34 @@ fn needs(session: &mut Session, data: &Data, view: &ViewModel) -> Needs {
         late: n.late,
         fill,
         ink,
-        title,
-        title_ink,
-        target,
+        target: needs_target(session, data, &n.list),
     }
 }
 
-/// What the pill says after its badge (issue #312): the target's title in
-/// the pill's ink, or, while the only one waiting is the one Jon is on,
-/// "needs you · this one" faint, so the bar reads "1 needs you · this
-/// one". With more than one counted and none to reveal (the list naming
-/// the selected one twice, or one selected in each window), plain "need
-/// you" faint, so the words still agree with the badge: "2 need you".
-/// Nothing with nothing waiting.
-fn needs_title(count: usize, target: Option<&NeedsTarget>, ink: Token) -> (String, Token) {
-    match (target, count) {
-        (Some(t), _) => (t.title.clone(), ink),
-        (None, 0) => (String::new(), Token::Clear),
-        (None, 1) => (NEEDS_THIS_ONE.to_string(), Token::Faint),
-        (None, _) => (NEEDS_MANY_HERE.to_string(), Token::Faint),
-    }
-}
-
-/// The pill's words on the only waiting session, the one Jon is on.
-const NEEDS_THIS_ONE: &str = "needs you · this one";
-
-/// The pill's words with more than one counted and none to reveal.
-const NEEDS_MANY_HERE: &str = "need you";
-
-/// The oldest waiting session Jon is not on, from the list longest
-/// waiting first; None while the only one waiting is the one he is on.
+/// Where a click on the count goes, from the list longest waiting first:
+/// the one after the waiting session Jon is on, round to the oldest
+/// again, so each click steps on; the oldest while he is on none of
+/// them. None while the only one waiting is the one he is on.
 fn needs_target(session: &mut Session, data: &Data, list: &[String]) -> Option<NeedsTarget> {
-    let id = list
+    let on = list
         .iter()
-        .find(|id| !session.is_selected(data, data.ws_by_id(id)))?;
+        .position(|id| session.is_selected(data, data.ws_by_id(id)));
+    let id = match on {
+        Some(i) => list
+            .iter()
+            .cycle()
+            .skip(i + 1)
+            .take(list.len())
+            .find(|id| *id != &list[i])?,
+        None => list.first()?,
+    };
     Some(NeedsTarget {
         ws_id: id.clone(),
         title: title_of(data.ws_by_id(id), id),
     })
 }
 
-/// The pill's count in words: "3 need you", "1 needs you", "" for none.
+/// The count in words: "3 need you", "1 needs you", "" for none.
 pub fn needs_label(count: usize) -> String {
     match count {
         0 => String::new(),
@@ -420,7 +405,7 @@ pub fn needs_label(count: usize) -> String {
     }
 }
 
-/// The pill's fill and words: nothing with nothing waiting, amber while
+/// The count's fill and words: nothing with nothing waiting, amber while
 /// only asks wait and none is late, else clay.
 pub fn needs_tone(count: usize, all_asking: bool, late: bool) -> (Token, Token) {
     match count {
@@ -430,15 +415,15 @@ pub fn needs_tone(count: usize, all_asking: bool, late: bool) -> (Token, Token) 
     }
 }
 
-/// A waiting card's edge and status ink, None while it waits on nobody.
+/// A waiting card's mark and status ink, None while it waits on nobody.
 /// Whether its agent asks is worked out once, and both come from that.
 fn waiting_of(session: &mut Session, view: &ViewModel, w: Option<&Workspace>) -> Option<Waiting> {
     let id = w?.id.as_str();
     if !view.needs.list.iter().any(|n| n == id) {
         return None;
     }
-    let (edge, ink) = waiting_tokens(session.ask_of(w).is_some());
-    Some(Waiting { edge, ink })
+    let (mark, ink) = waiting_tokens(session.ask_of(w).is_some());
+    Some(Waiting { mark, ink })
 }
 
 /// A waiting card's status line, "Asking: allow git push?", with a detail
@@ -559,13 +544,13 @@ fn lanes(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Lane> {
                 lane, anchor_id, ..
             } => {
                 let header = view.lane_headers.get(lane);
-                let mut head = lane_head(session, data, lane, header, false);
+                let mut head = lane_head(session, data, view, lane, header, false);
                 head.anchor = anchor_id.as_deref().map(|id| anchor(session, data, id));
                 out.push(head);
             }
             LaneEntry::Zone { lane, .. } => {
                 let header = view.lane_headers.get(lane);
-                out.push(lane_head(session, data, lane, header, true));
+                out.push(lane_head(session, data, view, lane, header, true));
             }
             LaneEntry::Ws { ws_id, .. } => {
                 let c = card(session, data, view, ws_id);
@@ -594,9 +579,36 @@ fn anchor(session: &mut Session, data: &Data, id: &str) -> Anchor {
     }
 }
 
+/// A lane's or project's heading dot (issue #314): the needs dot while
+/// a card under it waits on Jon, folded or open, clay while any of them
+/// is Your turn and amber while every one asks, as its cards' marks are;
+/// else `folded`'s dot, the most urgent session while folded.
+fn header_dot(
+    session: &mut Session,
+    data: &Data,
+    view: &ViewModel,
+    ws: &[&Workspace],
+    folded: Option<&Workspace>,
+) -> Option<Icon> {
+    let waiting: Vec<&Workspace> = ws
+        .iter()
+        .copied()
+        .filter(|w| view.needs.list.contains(&w.id))
+        .collect();
+    if waiting.is_empty() {
+        return folded.map(|w| icon_of(&session.status_info(data, Some(w))));
+    }
+    let asking = waiting.iter().all(|w| session.ask_of(Some(w)).is_some());
+    Some(Icon {
+        glyph: DOT,
+        ink: Some(waiting_tokens(asking).0),
+    })
+}
+
 fn lane_head(
     session: &mut Session,
     data: &Data,
+    view: &ViewModel,
     key: &LaneKey,
     header: Option<&LaneHeaderView>,
     empty: bool,
@@ -606,9 +618,7 @@ fn lane_head(
     let collapsed = header.is_some_and(|h| h.collapsed);
     let ws: Vec<&Workspace> = ids.iter().filter_map(|id| data.ws_by_id(id)).collect();
     let status = session.header_status(data, &ws, collapsed);
-    let dot = status
-        .dot
-        .map(|w| icon_of(&session.status_info(data, Some(w))));
+    let dot = header_dot(session, data, view, &ws, status.dot);
     Lane {
         key: lane.key.clone(),
         empty,
@@ -669,14 +679,12 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
 }
 
 /// A project's header: its look from the table, and the cards it counts.
-fn project_head(session: &mut Session, data: &Data, k: &str) -> ProjectHead {
+fn project_head(session: &mut Session, data: &Data, view: &ViewModel, k: &str) -> ProjectHead {
     let p = session.project_by_key(k);
     let collapsed = session.is_project_collapsed(k);
     let ws = session.project_workspaces(data, k);
     let status = session.header_status(data, &ws, collapsed);
-    let dot = status
-        .dot
-        .map(|w| icon_of(&session.status_info(data, Some(w))));
+    let dot = header_dot(session, data, view, &ws, status.dot);
     ProjectHead {
         key: k.to_string(),
         id: format!("{PROJECT_ROW}{k}"),
@@ -699,7 +707,7 @@ fn projects(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Project
     for entry in &entries {
         let row = match entry {
             ProjectEntry::Header { project, .. } => {
-                ProjectRow::Header(project_head(session, data, project))
+                ProjectRow::Header(project_head(session, data, view, project))
             }
             ProjectEntry::Ws { ws_id, .. } => {
                 ProjectRow::Card(project_card(session, data, view, ws_id))
@@ -734,6 +742,8 @@ fn projects(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Project
 mod tests {
     use super::*;
     use crate::Model;
+    use crate::data::{Agent, AgentStatus};
+    use crate::persist::SavedState;
     use crate::ui::Urgency;
 
     fn style(dot: Option<Token>, ring: Option<Token>) -> StatusStyle {
@@ -1003,75 +1013,125 @@ mod tests {
     }
 
     #[test]
-    fn names_the_oldest_waiting_session_jon_is_not_on() {
+    fn steps_the_count_on_from_the_waiting_session_jon_is_on() {
         let mut core = Model::default();
         let s = &mut core.session;
-        let list = ["a".to_string(), "b".to_string()];
+        let list = ["a".to_string(), "b".to_string(), "c".to_string()];
         let target = |s: &mut Session, on: &str, list: &[String]| {
             needs_target(s, &three_on(on), list).map(|t| (t.ws_id, t.title))
         };
         assert_eq!(
-            target(s, "c", &list),
+            target(s, "x", &list),
             Some(("a".into(), "Title a".into())),
-            "the oldest while Jon is elsewhere"
+            "the oldest while Jon is on none of them"
         );
+        let mut walk = vec!["a".to_string()];
+        for _ in 0..3 {
+            let on = walk.last().cloned().unwrap_or_default();
+            walk.extend(target(s, &on, &list).map(|t| t.0));
+        }
         assert_eq!(
-            target(s, "a", &list),
-            Some(("b".into(), "Title b".into())),
-            "the next oldest while Jon is on the oldest"
+            walk,
+            ["a", "b", "c", "a"],
+            "each click steps on, then round"
         );
         assert_eq!(target(s, "a", &list[..1]), None, "only the one he is on");
+        assert_eq!(
+            target(s, "a", &["a".to_string(), "a".to_string()]),
+            None,
+            "the one he is on, listed twice"
+        );
         assert_eq!(target(s, "c", &[]), None, "nothing waiting");
     }
 
+    /// "a" asks, "b" waits on its turn, "c" works; asks dated as their
+    /// agents' waits began.
+    fn heading_dot(list: &[&str], ws: &[&str], folded: bool) -> Option<Icon> {
+        let saved = SavedState::from_json(
+            r#"{"asking": {"a": {"reason": "allow git push?", "epoch": 1000}}}"#,
+        )
+        .unwrap_or_default();
+        let agent = |id: &str, status: AgentStatus| Workspace {
+            id: id.into(),
+            agents: Some(vec![Some(Agent {
+                id: format!("{id}-agent"),
+                status: Some(status),
+                since_epoch: Some(1000.0),
+                ..Agent::default()
+            })]),
+            ..Workspace::default()
+        };
+        let data = Data {
+            epoch: Some(1100.0),
+            workspaces: Some(vec![
+                agent("a", AgentStatus::NeedsInput),
+                agent("b", AgentStatus::NeedsInput),
+                agent("c", AgentStatus::Working),
+            ]),
+            ..Data::default()
+        };
+        let mut s = Session::new(Vec::new(), saved);
+        let mut view = ViewModel::default();
+        view.needs.list = list.iter().map(|id| id.to_string()).collect();
+        let under: Vec<&Workspace> = ws.iter().filter_map(|id| data.ws_by_id(id)).collect();
+        let lead = folded.then(|| under.last().copied()).flatten();
+        header_dot(&mut s, &data, &view, &under, lead)
+    }
+
     #[test]
-    fn says_this_one_faint_and_names_no_tap_while_jon_is_on_the_only_one_waiting() {
+    fn dots_a_heading_with_a_waiting_card_clay_for_a_turn_amber_for_asks_alone() {
+        let dot = |ink| {
+            Some(Icon {
+                glyph: DOT,
+                ink: Some(ink),
+            })
+        };
+        assert_eq!(
+            heading_dot(&["a"], &["a", "c"], false),
+            dot(Token::Amber),
+            "open, every waiting card asks"
+        );
+        assert_eq!(
+            heading_dot(&["b", "a"], &["a", "b", "c"], false),
+            dot(Token::Clay),
+            "a turn among the asks: clay, as the mock-up's Main lane"
+        );
+        assert_eq!(
+            heading_dot(&["b"], &["b", "c"], true),
+            dot(Token::Clay),
+            "folded, the needs dot over the lead's own"
+        );
+        assert_eq!(
+            heading_dot(&["b"], &["c"], false),
+            None,
+            "nothing under it waits"
+        );
+        assert_eq!(
+            heading_dot(&[], &["c"], true).map(|i| i.ink),
+            Some(Some(Token::Blue)),
+            "folded with nothing waiting: its lead's status dot"
+        );
+    }
+
+    #[test]
+    fn counts_every_waiting_session_and_names_none_to_reveal_when_only_jon_s_waits() {
         let mut core = Model::default();
         let s = &mut core.session;
         let mut view = ViewModel::default();
         view.needs.list = vec!["a".to_string()];
         let alone = needs(s, &three_on("a"), &view);
-        assert_eq!(alone.count, 1);
-        assert_eq!(
-            (alone.title.as_str(), alone.title_ink, alone.target),
-            ("needs you · this one", Token::Faint, None),
-            "the badge's 1, then the words, faint, and nothing to tap"
-        );
+        assert_eq!((alone.count, alone.target), (1, None));
 
         view.needs.list = vec!["a".to_string(), "b".to_string()];
         let two = needs(s, &three_on("a"), &view);
-        assert_eq!(
-            (two.title.as_str(), two.title_ink),
-            ("Title b", two.ink),
-            "with another waiting, its title in the pill's ink"
-        );
+        assert_eq!(two.count, 2);
         assert_eq!(two.target.map(|t| t.ws_id), Some("b".to_string()));
 
         view.needs.list = Vec::new();
         let none = needs(s, &three_on("a"), &view);
         assert_eq!(
-            (none.title.as_str(), none.target),
-            ("", None),
-            "nothing waiting"
-        );
-    }
-
-    #[test]
-    fn keeps_the_words_in_step_with_a_badge_above_one_when_none_can_be_revealed() {
-        let mut core = Model::default();
-        let s = &mut core.session;
-        let mut view = ViewModel::default();
-        view.needs.list = vec!["a".to_string(), "a".to_string()];
-        let twice = needs(s, &three_on("a"), &view);
-        assert_eq!(
-            (
-                twice.count,
-                twice.title.as_str(),
-                twice.title_ink,
-                twice.target
-            ),
-            (2, "need you", Token::Faint, None),
-            "the bar reads \"2 need you\", never \"2 needs you · this one\""
+            (none.count, none.label.as_str(), none.target),
+            (0, "", None)
         );
     }
 
@@ -1082,7 +1142,7 @@ mod tests {
         let data = three_on("c");
         let w = data.ws_by_id("a");
         let wt = Some(Waiting {
-            edge: Token::Clay,
+            mark: Token::Clay,
             ink: Token::ClayText,
         });
         let (detail, ink) = detail_of(s, &data, w, Density::Row, wt);
@@ -1105,7 +1165,7 @@ mod tests {
     #[test]
     fn moves_a_waiting_cards_age_to_its_title_row_and_drops_its_detail() {
         let wt = Some(Waiting {
-            edge: Token::Clay,
+            mark: Token::Clay,
             ink: Token::ClayText,
         });
         assert!(!status_carries_age(Density::Full, wt, true));

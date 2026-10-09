@@ -316,7 +316,7 @@ fn lead(c: &Card, blank: &str) -> Span<'static> {
     match c.waiting {
         Some(w) => Span::styled(
             format!("{WAITING_BAR}{}", blank.get(1..).unwrap_or_default()),
-            theme::ink(w.edge),
+            theme::ink(w.mark),
         ),
         None => Span::raw(blank.to_string()),
     }

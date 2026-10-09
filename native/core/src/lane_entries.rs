@@ -97,14 +97,6 @@ impl Session {
     fn live_rank(&mut self, data: &Data, w: Option<&Workspace>) -> u8 {
         let s = self.status_of(w);
         if s == Status::NeedsInput {
-            if let Some(w) = w {
-                self.release_hold(w);
-            }
-            return 0;
-        }
-        if let Some(w) = w
-            && self.held_at_top(w)
-        {
             return 0;
         }
         if self.is_ready(data, w) {
