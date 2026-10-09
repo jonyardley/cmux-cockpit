@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { BUILT_IN_LANES, type LaneSpec, resolveLanes } from "../src/cockpit/lane-config.ts";
+import { BUILT_IN_LANES, builtInName, type LaneSpec, resolveLanes } from "../src/cockpit/lane-config.ts";
 
 const lanes = (raw: unknown): readonly LaneSpec[] => {
   const r = resolveLanes(raw);
@@ -174,4 +174,9 @@ describe("lanes.json", () => {
     assert.match(error([{ name: "Unsorted" }]), /Unsorted's/);
     assert.match(error([{ id: "UNSORTED", name: "Loose" }]), /Unsorted's/);
   });
+});
+
+it("takes a built-in lane's name by id", () => {
+  assert.equal(builtInName("parked"), "Parked");
+  assert.equal(builtInName("shelf"), undefined);
 });

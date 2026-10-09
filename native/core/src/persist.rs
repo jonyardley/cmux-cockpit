@@ -210,6 +210,10 @@ pub struct SavedState {
     pub asking: BTreeMap<String, SavedAsk>,
     #[serde(deserialize_with = "crate::lenient::map")]
     pub moves: BTreeMap<String, SavedMove>,
+    /// Lane id to the name the cockpit last saw it under in lanes.json, so
+    /// a rename there renames the lane's group (lane_rename.rs).
+    #[serde(deserialize_with = "crate::lenient::map")]
+    pub lane_names: BTreeMap<String, String>,
     #[serde(deserialize_with = "crate::lenient::field")]
     pub ui: UiState,
     #[serde(deserialize_with = "crate::lenient::field")]
@@ -224,7 +228,7 @@ impl SavedState {
 
     /// Makes one of the cockpit's own writes here, as the handler's
     /// applySet makes it in the file: `dismissed.<ws>`, `projectOverride.<ws>`,
-    /// `projects.<key>`, `ui.mode` or `ui.collapsed`, set, or deleted with
+    /// `projects.<key>`, `laneNames.<id>`, `ui.mode` or `ui.collapsed`, set, or deleted with
     /// no value. False
     /// for any other key or a value of the wrong shape, leaving the state
     /// as it was.
@@ -250,6 +254,9 @@ impl SavedState {
                 .map(|v| put(&mut self.project_override, id, v))
                 .is_ok(),
             ("projects", _) => parse(value).map(|v| put(&mut self.projects, id, v)).is_ok(),
+            ("laneNames", _) => parse(value)
+                .map(|v| put(&mut self.lane_names, id, v))
+                .is_ok(),
             ("ui", "mode") => parse(value).map(|v| self.ui.mode = v).is_ok(),
             ("ui", "collapsed") => parse(value)
                 .map(|v| self.ui.collapsed = v.unwrap_or_default())

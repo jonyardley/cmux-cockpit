@@ -159,6 +159,10 @@ declare function cmux(
   method: "workspace.create",
   params: { cwd: string; focus: boolean; group_id?: string; group_placement?: "top" | "end" },
 ): void;
+/** Renames a workspace group; cmux 0.65.0 refuses it without both fields. */
+declare function cmux(method: "workspace.group.rename", params: { group_id: string; name: string }): void;
+/** Renames a workspace, as `cmux rename-workspace` does. */
+declare function cmux(method: "workspace.rename", params: { workspace_id: string; title: string }): void;
 /** Dispatches a cmux socket command, e.g. workspace.select. */
 declare function cmux(method: string, params: Record<string, string | number | boolean>): void;
 declare function openURL(url: string): void;

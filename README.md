@@ -119,11 +119,17 @@ typo such as `colour` is refused, not ignored), an unknown colour or
 density, an id or name used twice, or the id or name `unsorted`. A bad
 file fails `npm run build`; the native panel keeps the table it had.
 
-Renaming a lane in the file does not rename its cmux group: its cards
-show in Unsorted until you rename the group in cmux to match (or drag
-them across). The placeholder cmux makes for a group counts as the
-lane's anchor only while its title matches the group's name, so retitle
-it too.
+Renaming a lane in the file renames its cmux group, and the group's
+placeholder, so the lane keeps its cards. A lane is known by its `id`,
+so give one to any lane you might rename: without one the id is the
+name, and a renamed lane is a new lane whose old group's cards show in
+Unsorted. The last name of each lane is kept in `config/state.json`
+(`laneNames`); a group is renamed only while it still has the old name
+and no group has the new one, else the new name is just recorded. A
+chain of renames (Main activity becomes For review while For review
+becomes To check) follows through; swapping two lanes' names renames
+neither, so their cards swap lanes. Rename the groups in cmux by hand
+for a swap.
 
 To take a change: `npm run build` and reload the sidebar for the JS
 cockpit. The native panel's helper watches the file and picks it up live.

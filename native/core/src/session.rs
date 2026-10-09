@@ -182,6 +182,18 @@ pub struct Session {
     /// The lane table, from config/lanes.json; today's four until a shell
     /// sends one.
     pub lanes: Lanes,
+    /// A shell has sent a lane table from a lanes.json that lists lanes.
+    /// Until then the lanes are today's four by default, so no group is
+    /// renamed to follow them: a lanes.json moved aside, or rewritten by
+    /// an editor that empties it first, never renames groups back
+    /// (lane_rename.rs).
+    pub(crate) lanes_read: bool,
+    /// A state file has been read. Until then no lane name is saved, so
+    /// one that cannot be read is never written over (lane_rename.rs).
+    pub(crate) state_read: bool,
+    /// Renames asked of cmux, so each is asked once: "group:<lane id>" or
+    /// "anchor:<workspace id>" to the name asked for (lane_rename.rs).
+    pub(crate) renames_asked: IndexMap<String, String>,
 
     /// The pane's own PR poll and the answers it holds, made over
     /// `saved.prs` on every read; a new state file never resets it.
@@ -265,6 +277,7 @@ impl Session {
         self.quiet_collapsed = fresh.quiet_collapsed;
         self.collapsed_projects = fresh.collapsed_projects;
         self.touched_lanes = fresh.touched_lanes;
+        self.state_read = true;
     }
 
     /// A request for this workspace failed in cmux: lets go of the pane's
@@ -311,6 +324,7 @@ impl Session {
             self.lane_override
                 .retain(|_, o| lanes.find(&o.lane).is_some());
             self.lanes = lanes;
+            self.lanes_read = !config.is_empty();
         }
     }
 

@@ -290,8 +290,10 @@ impl Session {
     }
 
     /// Every workspace in tab order, a pending reorder applied. The read
-    /// every frame starts with, so it also files cards waiting on a group.
+    /// every frame starts with, so it also renames the group of a lane
+    /// renamed in lanes.json and files cards waiting on a group.
     pub fn all_workspaces<'d>(&mut self, data: &'d Data) -> Vec<&'d Workspace> {
+        self.rename_lane_groups(data);
         self.file_awaiting_cards(data);
         let mut ws: Vec<&Workspace> = data.workspace_list().iter().collect();
         if let Some(o) = self.order_override.clone() {

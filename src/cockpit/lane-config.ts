@@ -163,3 +163,6 @@ export function resolveLanes(raw: unknown): LanesResult {
   }
   return { ok: true, lanes: lanes.length ? lanes : BUILT_IN_LANES };
 }
+
+/** The name a built-in lane goes by, by id: what a lane was called before any name was saved for it. */
+export const builtInName = (id: string): string | undefined => BUILT_IN_LANES.find((l) => l.id === id)?.name;

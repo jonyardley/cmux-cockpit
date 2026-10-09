@@ -96,7 +96,24 @@ fn a_configured_lane_table_draws_its_lanes_in_its_order() {
     send(&app, &mut model, Event::Lanes(lanes));
     send(&app, &mut model, Event::Projects(projects));
     send(&app, &mut model, Event::State(Box::new(saved)));
-    send(&app, &mut model, Event::Data(data));
+    // For review has no id, so it is a lane new to the state file: its
+    // name is saved once, as its group already goes by it (lane_rename.rs).
+    // The built-in ids keep their built-in names, so nothing else is.
+    let mut cmd = app.update(Event::Data(data), &mut model);
+    let saves: Vec<(String, Option<Value>)> = cmd
+        .effects()
+        .filter_map(|e| match e {
+            Effect::Persist(r) => Some((r.operation.key.clone(), r.operation.value.clone())),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        saves,
+        [(
+            "laneNames.For review".to_string(),
+            Some(Value::from("For review"))
+        )]
+    );
 
     let panel = Panel::from_core(&mut model);
     let heads: Vec<(&str, &str, bool)> = panel
