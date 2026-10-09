@@ -111,8 +111,9 @@ pub fn parse_colour(s: &str) -> Option<Rgba> {
 
 /// A project's own colour, "#D97757" as the table writes it, as six hex
 /// digits; None for anything `parse_colour` refuses. A hand-typed "#RGB"
-/// reads as its six digits, and "#RRGGBBAA" drops its alpha, as the
-/// sidebar's badge ink (src/shared/contrast.ts) reads them.
+/// reads as its six digits, and "#RRGGBBAA" drops its alpha. The JS
+/// sidebar's badge ink (src/shared/contrast.ts) is looser: it also takes
+/// four digits and a colour with no "#", which this leaves grey.
 pub fn parse_hex(s: &str) -> Option<u32> {
     parse_colour(s).map(|c| c.rgb)
 }

@@ -7,8 +7,9 @@
 // leftOff?}, in display order. Unsorted is built in and last. A field left
 // out takes the same-id built-in lane's value, else compact, unfolded and
 // plain in laneUnsorted's colour. A colour is a lane token's name or a hex
-// ("#RGB", "#RRGGBB" or "#RRGGBBAA"), which draws the same light and dark. A field set to null counts as left out, as
-// serde reads it natively. No file, or an empty array, is today's four.
+// ("#RGB", "#RRGGBB" or "#RRGGBBAA"), which draws the same light and dark.
+// A field set to null counts as left out, as serde reads it natively. No
+// file, or an empty array, is today's four.
 
 import { isRecord } from "../../scripts/state-config.ts";
 
