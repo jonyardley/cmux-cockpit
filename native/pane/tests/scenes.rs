@@ -384,8 +384,9 @@ fn move_card(id: &str, lane: LaneKey, before: Option<&str>) -> Outcome {
 #[test]
 fn shift_up_and_down_reorder_the_card_among_its_lanes_cards_in_its_state() {
     let mut pane = pane_for("lanes");
-    // Main sorts Tidy strip (finished) above the working Snapshot tests,
-    // Long build and Selected card, then the idle ones.
+    // Main sorts the pinned Untimed card first, then Tidy strip (finished)
+    // above the working Snapshot tests, Long build and Selected card, then
+    // the idle ones.
     let snapshot = cursor_to(&mut pane, "Snapshot tests");
     let selected = id_of(&pane, "Selected card");
     assert_eq!(

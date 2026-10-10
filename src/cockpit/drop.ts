@@ -40,8 +40,8 @@ function peersAround(entries: LaneEntry[], at: number, laneKey: LaneKey, rank: n
   return { above: entries.slice(0, at).filter(peer).at(-1), below: entries.slice(at).find(peer) };
 }
 
-// Cards sort by state inside a lane (lane-entries.ts's stateRank), and the drag
-// order only holds among cards in the same state. So a drop anchors to the
+// Cards sort by pin and state inside a lane (lane-entries.ts's stateRank), and the drag
+// order only holds among cards in the same pin and state. So a drop anchors to the
 // nearest card in the dragged card's own state: just before the first one
 // below the slot, else just after the last one above it. Either way it sits
 // among its peers where Jon let go. With no peer in the lane it falls back

@@ -44,7 +44,7 @@ pub fn spot_at(spots: &[Spot], line: usize) -> Spot {
 
 /// Where a card dragged onto `spot` would land, or None when it would
 /// stay where it is or the spot takes no card. A lane sorts its cards by
-/// state and the order holds only among cards in the same state, so, as
+/// pin and state and the order holds only among cards in the same pin and state, so, as
 /// drop.ts does, the drop anchors to the nearest card in the dragged
 /// card's own state: above the first one below the spot, else just after
 /// the last one above it, else above whatever is below the spot.

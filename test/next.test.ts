@@ -203,19 +203,52 @@ describe("cards sorted by state inside a lane", () => {
     assert.deepEqual(lane(), ["n1", "r1", "w1", "i1", "i2", "i3"]);
     assert.deepEqual(
       ["n1", "r1", "w1", "i1"].map((id) => model.stateRank(byId(id))),
-      [0, 2, 3, 4],
+      [0, 4, 5, 6],
     );
   });
 
+  // Each case unpins in finally, so a failure cannot leak a pin into later cases.
+  const unpin = (...ids: string[]): void => {
+    for (const id of ids) delete byId(id).pinned;
+  };
+
   it("puts a pinned card under needs you and above Ready", () => {
-    byId("i1").pinned = true;
-    assert.deepEqual(lane(), ["n1", "i1", "r1", "w1", "i2", "i3"]);
-    byId("n1").pinned = true;
-    assert.deepEqual(lane(), ["n1", "i1", "r1", "w1", "i2", "i3"]);
-    assert.equal(model.stateRank(byId("n1")), 0);
-    delete byId("i1").pinned;
-    delete byId("n1").pinned;
+    try {
+      byId("i1").pinned = true;
+      assert.deepEqual(lane(), ["n1", "i1", "r1", "w1", "i2", "i3"]);
+      byId("n1").pinned = true;
+      assert.deepEqual(lane(), ["n1", "i1", "r1", "w1", "i2", "i3"]);
+      assert.equal(model.stateRank(byId("n1")), 0);
+    } finally {
+      unpin("i1", "n1");
+    }
     assert.deepEqual(lane(), ["n1", "r1", "w1", "i1", "i2", "i3"]);
+  });
+
+  it("keeps state order among pinned cards", () => {
+    try {
+      byId("i1").pinned = true;
+      byId("r1").pinned = true;
+      assert.deepEqual(lane(), ["n1", "r1", "i1", "w1", "i2", "i3"]);
+    } finally {
+      unpin("i1", "r1");
+    }
+  });
+
+  it("moves the selected card at once when it is unpinned", () => {
+    const i1 = byId("i1");
+    try {
+      i1.pinned = true;
+      assert.deepEqual(lane(), ["n1", "i1", "r1", "w1", "i2", "i3"]);
+      r.data.selectedId = "i1";
+      i1.selected = true;
+      delete i1.pinned;
+      assert.deepEqual(lane(), ["n1", "r1", "w1", "i1", "i2", "i3"]);
+    } finally {
+      unpin("i1");
+      r.data.selectedId = null;
+      i1.selected = false;
+    }
   });
 
   it("re-sorts a card when its state changes", () => {

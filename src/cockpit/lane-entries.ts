@@ -45,11 +45,9 @@ function liveRank(w: Workspace | undefined): number {
     return 0;
   }
   if (w && heldAtTop(w)) return 0;
-  // A pinned card sits under the cards that need you and above the rest.
-  if (w?.pinned) return 1;
-  if (isReady(w)) return 2;
+  if (isReady(w)) return 1;
   // A Waiting card is drawn in working blue, so it sorts with the working.
-  return s === "working" || isWaiting(agentOf(w), w) ? 3 : 4;
+  return s === "working" || isWaiting(agentOf(w), w) ? 2 : 3;
 }
 
 // The rank each card last had while not selected. Opening a Ready card
@@ -59,15 +57,22 @@ function liveRank(w: Workspace | undefined): number {
 // Written during render and read only for the selected card, so no bump().
 const heldRank = new Map<string, number>();
 
-/** A card's place in its lane (issue #74): needs you, then pinned, then Ready, then working, then the rest. */
+// Needs you stays first; a pinned card goes above every unpinned one.
+const pinTier = (state: number, pinned: boolean): number => (state === 0 || pinned ? state : state + 3);
+
+/**
+ * A card's place in its lane (issue #74): needs you, then the pinned cards,
+ * then the rest, each part in state order (Ready, working, the rest). So 0,
+ * then 1 to 3 pinned, then 4 to 6. The hold covers the state only; the pin
+ * is read live, so unpinning the selected card moves it at once.
+ */
 export function stateRank(w: Workspace | undefined): number {
-  const rank = liveRank(w);
-  if (!w) return rank;
-  if (!isSelected(w)) {
-    heldRank.set(w.id, rank);
-    return rank;
-  }
-  return Math.min(rank, heldRank.get(w.id) ?? rank);
+  const live = liveRank(w);
+  if (!w) return pinTier(live, false);
+  let state = live;
+  if (!isSelected(w)) heldRank.set(w.id, live);
+  else state = Math.min(live, heldRank.get(w.id) ?? live);
+  return pinTier(state, !!w.pinned);
 }
 
 // Array sort is stable, so cards in the same state keep the tab order Jon
