@@ -309,7 +309,38 @@ mod cards_sorted_by_state_inside_a_lane {
             .iter()
             .map(|id| s.state_rank(&data, Some(by_id(&data, id))))
             .collect();
-        assert_eq!(ranks, [0, 1, 2, 3]);
+        assert_eq!(ranks, [0, 4, 5, 6]);
+    }
+
+    /// A pin puts a card under the cards that need you and above Ready.
+    #[test]
+    fn puts_a_pinned_card_under_needs_you_and_above_ready() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "i1").pinned = Some(true);
+        assert_eq!(lane(&mut s, &data), ["n1", "i1", "r1", "w1", "i2", "i3"]);
+        ws_mut(&mut data, "n1").pinned = Some(true);
+        assert_eq!(lane(&mut s, &data), ["n1", "i1", "r1", "w1", "i2", "i3"]);
+        assert_eq!(s.state_rank(&data, Some(by_id(&data, "n1"))), 0);
+    }
+
+    /// Pinned cards keep state order among themselves: Ready above idle.
+    #[test]
+    fn keeps_state_order_among_pinned_cards() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "i1").pinned = Some(true);
+        ws_mut(&mut data, "r1").pinned = Some(true);
+        assert_eq!(lane(&mut s, &data), ["n1", "r1", "i1", "w1", "i2", "i3"]);
+    }
+
+    /// The hold keeps the selected card's state, not its pin.
+    #[test]
+    fn moves_the_selected_card_at_once_when_it_is_unpinned() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "i1").pinned = Some(true);
+        assert_eq!(lane(&mut s, &data), ["n1", "i1", "r1", "w1", "i2", "i3"]);
+        select_only(&mut data, Some("i1"));
+        ws_mut(&mut data, "i1").pinned = None;
+        assert_eq!(lane(&mut s, &data), ["n1", "r1", "w1", "i1", "i2", "i3"]);
     }
 
     #[test]

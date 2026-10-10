@@ -384,8 +384,9 @@ fn move_card(id: &str, lane: LaneKey, before: Option<&str>) -> Outcome {
 #[test]
 fn shift_up_and_down_reorder_the_card_among_its_lanes_cards_in_its_state() {
     let mut pane = pane_for("lanes");
-    // Main sorts Tidy strip (finished) above the working Snapshot tests,
-    // Long build and Selected card, then the idle ones.
+    // Main sorts the pinned Untimed card first, then Tidy strip (finished)
+    // above the working Snapshot tests, Long build and Selected card, then
+    // the idle ones.
     let snapshot = cursor_to(&mut pane, "Snapshot tests");
     let selected = id_of(&pane, "Selected card");
     assert_eq!(
@@ -1155,7 +1156,6 @@ fn a_drag_onto_a_header_or_past_the_end_lands_at_the_top_or_the_end() {
     let buffer = term.backend().buffer().clone();
     let snapshot = id_of(&pane, "Snapshot tests");
     let loose = id_of(&pane, "Loose workspace");
-    let merged = id_of(&pane, "Merged elsewhere");
     let from = row_of(&buffer, "Snapshot tests");
     let down = MouseEventKind::Down(MouseButton::Left);
     let up = MouseEventKind::Up(MouseButton::Left);
@@ -1170,8 +1170,8 @@ fn a_drag_onto_a_header_or_past_the_end_lands_at_the_top_or_the_end() {
     pane.handle_event(&mouse(down, from));
     assert_eq!(
         pane.handle_event(&mouse(up, HEIGHT - 1)),
-        move_card(&snapshot, LaneKey::unsorted(), Some(&merged)),
-        "below every lane is the last lane's end: after the working card there"
+        move_card(&snapshot, LaneKey::unsorted(), None),
+        "below every lane is the last lane's end; Loose workspace is pinned, so no peer"
     );
 }
 

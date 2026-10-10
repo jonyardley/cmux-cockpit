@@ -138,7 +138,7 @@ impl Session {
         };
         items.push(MenuItem::item(make, MenuAction::NewProjectFromFolder));
         items.push(MenuItem::Divider);
-        let pinned = w.is_some_and(|w| w.pinned == Some(true));
+        let pinned = w.is_some_and(Workspace::is_pinned);
         items.push(MenuItem::item(
             if pinned { "Unpin" } else { "Pin" },
             MenuAction::TogglePin,
@@ -271,7 +271,7 @@ impl Session {
             MenuAction::ClearProjectOverride => self.clear_project_override(w),
             MenuAction::NewProjectFromFolder => self.create_project_from(w),
             MenuAction::TogglePin => {
-                let pinned = w.is_some_and(|w| w.pinned == Some(true));
+                let pinned = w.is_some_and(Workspace::is_pinned);
                 self.workspace_action(w, if pinned { "unpin" } else { "pin" });
             }
             MenuAction::MarkRead => self.workspace_action(w, "mark_read"),
