@@ -309,7 +309,18 @@ mod cards_sorted_by_state_inside_a_lane {
             .iter()
             .map(|id| s.state_rank(&data, Some(by_id(&data, id))))
             .collect();
-        assert_eq!(ranks, [0, 1, 2, 3]);
+        assert_eq!(ranks, [0, 2, 3, 4]);
+    }
+
+    /// A pin puts a card under the cards that need you and above Ready.
+    #[test]
+    fn puts_a_pinned_card_under_needs_you_and_above_ready() {
+        let (mut s, mut data, _) = setup();
+        ws_mut(&mut data, "i1").pinned = Some(true);
+        assert_eq!(lane(&mut s, &data), ["n1", "i1", "r1", "w1", "i2", "i3"]);
+        ws_mut(&mut data, "n1").pinned = Some(true);
+        assert_eq!(lane(&mut s, &data), ["n1", "i1", "r1", "w1", "i2", "i3"]);
+        assert_eq!(s.state_rank(&data, Some(by_id(&data, "n1"))), 0);
     }
 
     #[test]

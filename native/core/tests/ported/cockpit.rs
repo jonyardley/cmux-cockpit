@@ -700,7 +700,7 @@ mod needs_you {
         s.dismiss_needs(Some(by_id(&data, "a")));
         // Idle now, under the working card.
         assert_eq!(main_rows(&mut s, &data), ["b@main", "a@main"]);
-        assert_eq!(s.state_rank(&data, Some(by_id(&data, "a"))), 3);
+        assert_eq!(s.state_rank(&data, Some(by_id(&data, "a"))), 4);
     }
 
     #[test]
@@ -725,7 +725,7 @@ mod needs_you {
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(NeedsInput).since(900.0))]);
         assert_eq!(s.state_rank(&data, Some(by_id(&data, "a"))), 0);
         ws_mut(&mut data, "a").agents = Some(vec![Some(fx.agent(Idle).since(950.0))]);
-        assert_eq!(s.state_rank(&data, Some(by_id(&data, "a"))), 3);
+        assert_eq!(s.state_rank(&data, Some(by_id(&data, "a"))), 4);
     }
 
     #[test]

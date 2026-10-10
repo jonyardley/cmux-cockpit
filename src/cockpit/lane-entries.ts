@@ -45,9 +45,11 @@ function liveRank(w: Workspace | undefined): number {
     return 0;
   }
   if (w && heldAtTop(w)) return 0;
-  if (isReady(w)) return 1;
+  // A pinned card sits under the cards that need you and above the rest.
+  if (w?.pinned) return 1;
+  if (isReady(w)) return 2;
   // A Waiting card is drawn in working blue, so it sorts with the working.
-  return s === "working" || isWaiting(agentOf(w), w) ? 2 : 3;
+  return s === "working" || isWaiting(agentOf(w), w) ? 3 : 4;
 }
 
 // The rank each card last had while not selected. Opening a Ready card
@@ -57,7 +59,7 @@ function liveRank(w: Workspace | undefined): number {
 // Written during render and read only for the selected card, so no bump().
 const heldRank = new Map<string, number>();
 
-/** A card's place in its lane (issue #74): needs you, then Ready, then working, then the rest. */
+/** A card's place in its lane (issue #74): needs you, then pinned, then Ready, then working, then the rest. */
 export function stateRank(w: Workspace | undefined): number {
   const rank = liveRank(w);
   if (!w) return rank;

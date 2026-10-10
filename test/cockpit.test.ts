@@ -666,7 +666,7 @@ describe("needs you", () => {
     // Idle now, it would sort under the working card; it keeps the top.
     assert.deepEqual(lane(), ["a@main", "b@main"]);
     a.agents = [agent("working", { sinceEpoch: 600 })];
-    assert.equal(model.stateRank(a), 2);
+    assert.equal(model.stateRank(a), 3);
     a.agents = [agent("idle", { sinceEpoch: 700 })];
     assert.deepEqual(lane(), ["b@main", "a@main"]);
   });
@@ -693,7 +693,7 @@ describe("needs you", () => {
     a.agents = [agent("needs_input", { sinceEpoch: 900 })];
     assert.equal(model.stateRank(a), 0);
     a.agents = [agent("idle", { sinceEpoch: 950 })];
-    assert.equal(model.stateRank(a), 3);
+    assert.equal(model.stateRank(a), 4);
   });
 
   it("names the lane for a waiting generated anchor, even in Projects view", () => {

@@ -203,8 +203,19 @@ describe("cards sorted by state inside a lane", () => {
     assert.deepEqual(lane(), ["n1", "r1", "w1", "i1", "i2", "i3"]);
     assert.deepEqual(
       ["n1", "r1", "w1", "i1"].map((id) => model.stateRank(byId(id))),
-      [0, 1, 2, 3],
+      [0, 2, 3, 4],
     );
+  });
+
+  it("puts a pinned card under needs you and above Ready", () => {
+    byId("i1").pinned = true;
+    assert.deepEqual(lane(), ["n1", "i1", "r1", "w1", "i2", "i3"]);
+    byId("n1").pinned = true;
+    assert.deepEqual(lane(), ["n1", "i1", "r1", "w1", "i2", "i3"]);
+    assert.equal(model.stateRank(byId("n1")), 0);
+    delete byId("i1").pinned;
+    delete byId("n1").pinned;
+    assert.deepEqual(lane(), ["n1", "r1", "w1", "i1", "i2", "i3"]);
   });
 
   it("re-sorts a card when its state changes", () => {

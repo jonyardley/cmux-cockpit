@@ -99,20 +99,24 @@ impl Session {
         if s == Status::NeedsInput {
             return 0;
         }
-        if self.is_ready(data, w) {
+        // A pinned card sits under the cards that need you and above the rest.
+        if w.is_some_and(|w| w.pinned == Some(true)) {
             return 1;
+        }
+        if self.is_ready(data, w) {
+            return 2;
         }
         // A Waiting card is drawn in working blue, so it sorts with the working.
         let a = self.agent_of(w);
         if s == Status::Working || self.is_waiting(a.as_ref(), w) {
-            2
-        } else {
             3
+        } else {
+            4
         }
     }
 
-    /// A card's place in its lane (issue #74): needs you, then Ready, then
-    /// working, then the rest. The selected card keeps the best of its
+    /// A card's place in its lane (issue #74): needs you, then pinned, then
+    /// Ready, then working, then the rest. The selected card keeps the best of its
     /// live rank and the one it last had while not selected, so it never
     /// slides out from under the pointer and settles once Jon moves on.
     pub fn state_rank(&mut self, data: &Data, w: Option<&Workspace>) -> u8 {
