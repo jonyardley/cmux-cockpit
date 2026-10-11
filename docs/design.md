@@ -1,7 +1,7 @@
 # Native sidebar design reference
 
 This describes the look of the native Mac left sidebar (`native/mac/Sidebar`,
-SwiftUI) as it stands on main at `cc996b7`. It is the one reference for that
+SwiftUI) as it stands on main at `12d4303`. It is the one reference for that
 look. The TypeScript sidebars (`src/cockpit`, `src/agents`) and the terminal
 pane (`native/pane`) are being retired, so nothing here describes them, and a
 view comment that points at one of them (for example `(cards.ts fullCard)`)
@@ -19,7 +19,7 @@ target becomes today's description in the PR that builds it, listed in
 [follow-up work](#follow-up-work).
 
 File paths below are relative to `native/mac/Sidebar/` unless they say
-otherwise. Line numbers are as of `cc996b7`.
+otherwise. Line numbers are as of `12d4303`.
 
 ## Principles
 
@@ -310,7 +310,7 @@ size `Font.meta` 11. Where: `Views/LaneView.swift:104-178`.
 
 **Target (D8 a, D11 a, D12 a, not built yet):** "Drop here" and the merge
 line's ink come from the core's `header_hint`
-(`native/core/src/lane_entries.rs:255`), not a pick in the view (D8). The
+(`native/core/src/lane_entries.rs:270`), not a pick in the view (D8). The
 merge line is in `mergeText`, the ink every other "ready to merge" uses (D11).
 An empty lane's count pill takes the core's tint and is only faded, not faint
 as well (D12).
@@ -657,9 +657,9 @@ Every card is decided as option a; where that changes a rule, the rule says
    ([gaps J, M, N, P, U](#known-gaps)). **Target (D8 a):** views draw the
    core's colour everywhere: the waiting count, the Ready pill's ink, the
    empty and Quiet pills, the halo and the drop hint all take the core's
-   value, with a panel model field added where one is missing. Next's green
-   (D9 a) is then picked by the core too, so the grep still prints only the
-   progress bar.
+   value, with a panel model field added where one is missing. The core
+   picks Next's green too (D9 a; follow-up 9 adds the field to the panel
+   model if it is missing), so the grep still prints only the progress bar.
 2. **A state is a dot plus words, and the dot and the words are a fixed
    pair:** `blue`/`blueText` working, `clay`/`clayText` your turn,
    `amber`/`amberText` asking, `green`/`greenText` finished,
@@ -734,14 +734,14 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 
 | Meaning | Cards (full, compact, Projects) | Dense row | Headers and anchor | Elsewhere | Chosen at |
 |-|-|-|-|-|-|
-| Your turn | clay dot with halo, `clayText` words, clay needs dot | same, age and reason in `clayText` | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `status.rs:110`, `:248-254`; `panel/build.rs:568-591` |
+| Your turn | clay dot with halo, `clayText` words, clay needs dot | same, age and reason in `clayText` | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `status.rs:110`, `:248-254`; `panel/build.rs:568-587` |
 | Asking | amber dot with halo, `amberText` words, amber needs dot | same | amber glyph **≠**; `amberCount` pill | waiting count stays clay **≠** (`TopView.swift:79`) | `status.rs:151-157`; `panel/build.rs:392-398` |
 | Working | blue dot with halo, `blueText`; blue progress bar | blue dot | blue glyph; `blueCount` pill | | `status.rs:109` |
 | Waiting on a shell | as working, the word "Waiting" **≠** | as working | as working | "waiting" elsewhere means your turn | `status.rs:166-169`; `words.rs:27` |
 | Quiet working | hollow blue ring, `blueText` | same | hollow glyph | | `status.rs:160-165` |
 | Finished, Ready | olive dot, no halo, `greenText`; Ready pill `greenText` on `Own.readyBg` | olive dot; no Ready pill **≠** | olive glyph | Next in `clayText` **≠** | `status.rs:112`, `:147-150` |
 | Idle, no agent | hollow grey; `metaText` idle, `faint` no agent **≠** | hollow grey | hollow grey glyph | | `status.rs:111`, `:113` |
-| Ready to merge | `mergeGreen` dot with halo, `mergeText` words | same | merge line in `greenDeep` **≠** | PR chip "ready" in `greenDeep` **≠** | `status.rs:138-145`; `lane_entries.rs:265-268`; `pr_colors.rs:28` |
+| Ready to merge | `mergeGreen` dot with halo, `mergeText` words | same | merge line in `greenDeep` **≠** | PR chip "ready" in `greenDeep` **≠** | `status.rs:138-145`; `lane_entries.rs:279-283`; `pr_colors.rs:28` |
 | PR quiet (draft, open, closed) | chip state `metaText`; compact words `secondary` **≠** | number `metaText` | | | `pr_colors.rs:36`; `panel/build.rs:294`, `:313` |
 | Checks failing, conflict | chip words `redText` on a neutral chip | number `redText` | | | `pr_colors.rs:33` |
 | Checks running | chip words `blueText` (blue also means working) | number `blueText` | | | `pr_colors.rs:34` |
@@ -767,9 +767,10 @@ constant. Each is a place a core change would not reach the screen.
   (`Model/ProjectText.swift:49-51`), which the panel model does not carry.
 - The status dot's halo is worked out again from the dot's ink
   (`Model/CardText.swift:139-148`) where the core already has one per status
-  (`status.rs:99-105`, `StatusStyle.halo`).
+  (`StatusStyle.halo`, set for every status in `status.rs:107-172`:
+  `plain_style` through `halo_color` and each `StatusKind::style` arm).
 - "Drop here" and the merge line's ink are picked in `LaneView.swift:158-168`;
-  the core's `header_hint` (`lane_entries.rs:255-269`) picks the same and no
+  the core's `header_hint` (`lane_entries.rs:270-285`) picks the same and no
   view calls it.
 
 ## Wording
@@ -825,8 +826,8 @@ main today, the failures are listed and tracked as a gap.
    `grep -rnE "padding\((\.[a-z]+, )?[0-9]|spacing: [1-9]" Views` prints nothing.
    Fails today: 36 lines, listed on the audit page ([gap C](#known-gaps)).
 5. **A new colour is a pair.** Every case in `Palette.pair(_:)` names a light
-   and a dark `RGBA`; `faint` is the only pair whose two sides match by accident
-   ([gap L](#known-gaps)).
+   and a dark `RGBA`. Two pairs have equal sides: `Own.onFill` is white in
+   both on purpose, and `faint`'s match by accident ([gap L](#known-gaps)).
 6. **A new word lives in `Words.swift` or comes from the core.**
    `grep -rnE "Text\(\"[A-Za-z]" Views` prints nothing. Passes today; the
    words outside `Words` are constants elsewhere ([gap K](#known-gaps)).
@@ -836,13 +837,15 @@ main today, the failures are listed and tracked as a gap.
    all) and 3 a pane path; in all, 19 lines lean on the pane
    ([gap 1](#known-gaps)). **Target (D6 a):** each pointer becomes a
    `docs/design.md` anchor, for example `(cards.ts fullCard)` becomes
-   `(docs/design.md#full-card)`, and the 13 lines that say "as the
-   cockpit's" without a file name the heading here instead.
+   `(docs/design.md#full-card)`, and the 6 lines that say "as the
+   cockpit's" (`grep -rn "as the cockpit's" native/mac/Sidebar`; 2 of
+   them also name a TypeScript file) name the heading here instead.
 8. **The views test pins its own values.** Not built yet (D7 a). Today
    `native/mac/Tests/Views/main.swift` reads TypeScript and pane source six
-   times (`:314`, `:379`, `:383`, `:389`, `:398`, `:412`), and its `source()`
-   helper returns an empty string for a missing file, so retiring those
-   files fails it. **Target:** the light hexes, the quiet fade and the
+   times (`:314`, `:379`, `:383`, `:389`, `:398`, `:412`). The five from
+   `:379` go through its `source()` helper, which returns an empty string
+   for a missing file, so retiring those files fails them; `:314` is its own
+   `try?` read that skips its checks silently when the file is gone. **Target:** the light hexes, the quiet fade and the
    editor's words it reads from them are written into the test; checks
    against the core stay as they are. It passes when none of those six reads
    is left.
@@ -925,8 +928,9 @@ are under `native/mac/Sidebar/` unless they start with `native/`.
 9. **Next in Ready's green (D9).** On screen: the clay Next pill turns green.
    Files: `Views/TopView.swift`, `Model/Palette.swift`,
    `native/mac/Tests/Views/main.swift` (it checks `needsEdge` and
-   `needsHover`), and the core if Next's ink moves there under grammar rule 1
-   (`native/core/src/panel/`).
+   `needsHover`), and the core, which picks Next's ink under grammar rule 1
+   (`native/core/src/panel/`, adding the field to the panel model if it is
+   missing).
 10. **The size chip goes neutral (D10).** On screen: "quick", "decide" and
     "review" turn grey. Files: `native/core/src/panel/build.rs` (`size_ink`
     and its test).
