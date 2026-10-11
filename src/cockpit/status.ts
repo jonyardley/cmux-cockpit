@@ -264,11 +264,23 @@ export function moveOf(w: Workspace | undefined): SavedMove | null {
 export const needsDetail = (w: Workspace | undefined): string =>
   askOf(w) ?? (clip(moveOf(w)?.text ?? "", 80) || oneLine(cardMessage(w), 80) || "Waiting for your reply");
 
-/** A Needs you row's detail with its status in front: "Asking: allow git push?", "Your turn: want the banner?". */
-export const needsLine = (w: Workspace | undefined): string => statusInfo(w).label + ": " + needsDetail(w);
+// True when the waiting chat's reply had no "Your move" label, so the row
+// quotes the reply's last line instead (SavedMove.unlabelled).
+const unlabelled = (w: Workspace | undefined): boolean => !askOf(w) && moveOf(w)?.unlabelled === true;
+
+/**
+ * A Needs you row's detail with its status in front: "Asking: allow git
+ * push?", "Your turn: want the banner?". A reply's last line, quoted for want
+ * of a label, goes bare: it is the chat's words, not a stated move.
+ */
+export const needsLine = (w: Workspace | undefined): string =>
+  unlabelled(w) ? needsDetail(w) : statusInfo(w).label + ": " + needsDetail(w);
 
 /** The ink of a Needs you row's detail and its placeholder's words: amber while asking, else clay. */
 export const needsInk = (w: Workspace | undefined): string => (askOf(w) ? C.amberText : C.clayText);
+
+/** The ink of a Needs you row's detail alone: needsInk, or grey for a quoted last line. */
+export const needsLineInk = (w: Workspace | undefined): string => (unlabelled(w) ? C.secondary : needsInk(w));
 
 /** A placeholder's words after the title: why its card went; the arrow says where. */
 export const placeholderText = (w: Workspace | undefined): string =>

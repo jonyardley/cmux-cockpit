@@ -78,8 +78,8 @@ describe("scriptsFor", () => {
 });
 
 describe("sendersFor", () => {
-  it("names Stop's report-move and the prompt's report-rename, and nothing for any other event", () => {
-    assert.deepEqual(sendersFor("Stop", {}), ["report-move.ts"]);
+  it("names the prompt's report-rename, and nothing for any other event", () => {
+    assert.deepEqual(sendersFor("Stop", {}), []);
     assert.deepEqual(sendersFor("UserPromptSubmit", {}), ["report-rename.ts"]);
     assert.deepEqual(sendersFor("SessionStart", {}), []);
     assert.deepEqual(sendersFor("PreToolUse", { tool_name: "Agent" }), []);

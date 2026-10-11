@@ -17,11 +17,9 @@
 // shows a move only while no prompt has come since it was saved (cmux's
 // latestAt, src/shared/move.ts), so nothing here has to clear a stale one.
 //
-// A final reply with neither label would read as Jon's turn once the idle
-// nudge lands, even when the chat is waiting on its own background work. So
-// in an interactive chat inside cmux, such a turn is sent back once for the
-// line (Claude Code's block decision on stdout, which dispatch.ts passes on
-// for this script alone), and nothing is saved until the turn really ends.
+// A final reply with neither label is never sent back for one: its last
+// line is saved instead, marked unlabelled, and the card quotes it in grey,
+// so Jon still sees what the chat ended on without paying for a second turn.
 // It never fails the hook: every problem is a note on stderr and exit 0.
 
 import { readFileSync } from "node:fs";
@@ -42,31 +40,19 @@ import { cmux } from "./cmux-cli.ts";
 import { field } from "./gh-command.ts";
 import { readTail, replyFrom, sleep } from "./transcript.ts";
 
-// The line's label as Jon's rules write it, after any markdown the terminal
-// would not show (a quote, bold or italic, a list or step marker) and an
-// optional "Jon, ": "Your move:" when the turn waits on Jon, "Nothing for
-// you:" when it waits on the agent. One word of drift may sit before the
-// colon, inside the bold or after it ("Nothing for you yet:", "**Your
-// move** now:"), and so may a short parenthetical ("Your move (optional,
-// before merge):", inside the bold or out); "Nothing for you" alone may add
-// "beyond that ..." (or those, this, these: "Nothing for you beyond that
-// close-out:"), and may end on a full stop instead of the colon ("Nothing
-// for you right now. The agent is reading ..."). Only these shapes, so a
-// sentence such as "Your move to main was blocked: ..." stays prose, and so
-// does "Your move." The text after the colon or full stop may be empty: a
-// bare header over steps, which lastMove reads from the lines below.
-const DRIFT = String.raw`(?:\s+(?:yet|now|right now|for now|so far|at the moment|here|today))?`;
-const PAREN = String.raw`(?:\s*\([^)]{1,60}\))?`;
-const BEYOND = String.raw`(?:\s+beyond\s+(?:that|those|this|these)\b[^:,.]{0,30})?`;
+// The line's label as Jon's rules write it: "Your move:" when the turn
+// waits on Jon, "Nothing for you:" when it waits on the agent. Markdown the
+// terminal would not show may wrap it (a quote, a list or step marker, bold
+// or italic with the colon inside or out), and "Jon, " may lead it. Nothing
+// else counts: a reply without the exact label is quoted by its last line
+// instead (lastLine), so loose wording costs nothing but the label. The
+// text after the colon may be empty: a bare header over steps, which
+// lastMove reads from the lines below.
 const EMPH = String.raw`(?:\*\*|__|\*|_)?`;
 const MOVE_LINE = new RegExp(
-  String.raw`^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?${EMPH}(your move|nothing for you${BEYOND})${DRIFT}${PAREN}${EMPH}${DRIFT}${PAREN}\s*(:|\.(?=[\s*_]|$))\s*${EMPH}\s*(.*)$`,
+  String.raw`^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?${EMPH}(your move|nothing for you)${EMPH}\s*:\s*${EMPH}\s*(.*)$`,
   "i",
 );
-// The narrow full-stop form: a sentence, then "Nothing for you yet." ending
-// the line. The sentence before it is the move text, and is also cut from
-// the end of a full-stop label's text.
-const IDLE_SENTENCE = new RegExp(String.raw`^(.*[.!?])\s+nothing for you${DRIFT}\.$`, "i");
 // A list or step marker at the start of a line: "1.", "2)", "-", "*", ">".
 const STEP_MARKER = /^\s*(?:>\s*)?(?:\d+[.)]|[-*])\s+/;
 // A decision's heading: "**1. Where the card gets the line**", or the same
@@ -112,47 +98,56 @@ function stepAfter(lines: readonly string[], from: number): string {
   return unmark(next.replace(STEP_MARKER, ""));
 }
 
-// The move a label on line `i` holds, or null when the label is "Your move."
-// on a full stop, which stays prose. A label right after a full-stop label
-// is the one that counts ("Nothing for you yet. Your move: merge it."), and
-// a closing "Nothing for you." is cut from the text after a full-stop label.
-function labelMove(hit: RegExpExecArray, lines: readonly string[], i: number): { line: string; idle: boolean } | null {
-  const [, label = "", stop = "", rest = ""] = hit;
-  const waits = /^your move/i.test(label);
-  if (stop === "." && waits) return null;
-  if (stop === "." && MOVE_LINE.test(rest)) return moveOn([rest, ...lines.slice(i + 1)], 0);
-  const text = unmark(rest);
-  const trimmed = stop === "." ? (IDLE_SENTENCE.exec(text)?.[1] ?? text) : text;
-  return { line: cleanMove(trimmed || stepAfter(lines, i)) ?? "", idle: !waits };
+type Found = { line: string; idle: boolean };
+
+// The move a label on line `i` holds: its text, else the first step below a
+// bare header, else "" for a bare header with nothing under it.
+function labelMove(hit: RegExpExecArray, lines: readonly string[], i: number): Found {
+  const [, label = "", rest = ""] = hit;
+  return { line: cleanMove(unmark(rest) || stepAfter(lines, i)) ?? "", idle: !/^your move/i.test(label) };
 }
 
-// The move on one line of a reply, if the line holds one: a label with its
-// text, a bare label over the steps below (an empty line when nothing
-// follows, which ends the scan as an empty label always has), or a closing
-// "Nothing for you."
-function moveOn(lines: readonly string[], i: number): { line: string; idle: boolean } | null {
-  const text = lines[i] ?? "";
-  const hit = MOVE_LINE.exec(text);
-  const labelled = hit ? labelMove(hit, lines, i) : null;
-  if (labelled) return labelled;
-  const sentence = IDLE_SENTENCE.exec(unmark(text))?.[1];
-  const last = sentence?.split(/(?<=[.!?])\s+/).pop();
-  const line = last ? cleanMove(last) : null;
-  return line ? { line, idle: true } : null;
-}
-
-/** The last move line in `text` outside a code fence, cleaned, with whether it asks nothing of Jon. */
-function lastMove(text: string): { line: string; idle: boolean } | null {
+/**
+ * The last labelled line in `text` outside a code fence, cleaned, with
+ * whether it asks nothing of Jon; "bare" for a label with nothing under it,
+ * which is no move but is no unlabelled reply either; null with no label.
+ */
+function lastMove(text: string): Found | "bare" | null {
   const lines = unfenced(text);
   for (let i = lines.length - 1; i >= 0; i--) {
-    const found = moveOn(lines, i);
-    if (found) return found.line ? found : null;
+    const hit = MOVE_LINE.exec(lines[i] ?? "");
+    if (!hit) continue;
+    const found = labelMove(hit, lines, i);
+    return found.line ? found : "bare";
   }
   return null;
 }
 
 /** The last "Your move" or "Nothing for you" line in `text` outside a code fence, cleaned, or null when there is none. */
-export const moveLine = (text: string): string | null => lastMove(text)?.line ?? null;
+export function moveLine(text: string): string | null {
+  const found = lastMove(text);
+  return found === null || found === "bare" ? null : found.line;
+}
+
+// A table row: no line to quote on its own.
+const TABLE_ROW = /^\s*\|/;
+// A quote's marker, and italics around the whole line ("_Done._").
+const QUOTE = /^\s*>\s?/;
+const ITALIC = /^([*_])(.+)\1$/;
+
+/**
+ * A reply's last line outside a code fence, marker and markdown stripped,
+ * skipping rules, headings and table rows: what the card quotes when the
+ * reply has no label. Null when nothing is left.
+ */
+export function lastLine(text: string): string | null {
+  const line = unfenced(text)
+    .reverse()
+    .find((l) => l.trim() !== "" && !BREAK.test(l) && !TABLE_ROW.test(l));
+  if (line === undefined) return null;
+  const plain = unmark(line.replace(STEP_MARKER, "").replace(QUOTE, ""));
+  return cleanMove(plain.replace(ITALIC, "$2"));
+}
 
 /**
  * How many decisions a reply lays out, and the letter it leans to under each
@@ -178,18 +173,26 @@ export function decisionsIn(text: string): { count: number; leans: string } {
   return { count: Math.min(seen.size, MAX_DECISIONS), leans: leans.join(" ") };
 }
 
-/** What the hook saves for a reply, or null when the reply has no move line. */
-export function moveFrom(text: string, now: number, session?: string): SavedMove | null {
+/**
+ * What the hook saves for a reply: its labelled line, else, in an
+ * interactive chat (`attended`), its last line marked unlabelled; null for
+ * a bare label, or a headless run (claude -p, the SDK) with no label, whose
+ * output is no chat's move and must not replace one.
+ */
+export function moveFrom(text: string, now: number, session?: string, attended = true): SavedMove | null {
   const found = lastMove(text);
-  if (!found) return null;
+  if (found === "bare" || (found === null && !attended)) return null;
+  const line = found?.line ?? lastLine(text);
+  if (!line) return null;
   const { count, leans } = decisionsIn(text);
   return {
-    text: found.line,
+    text: line,
     epoch: now,
     ...(session ? { session } : {}),
     ...(count ? { decisions: count } : {}),
     ...(leans ? { leans } : {}),
-    ...(found.idle ? { idle: true } : {}),
+    ...(found?.idle ? { idle: true } : {}),
+    ...(found ? {} : { unlabelled: true }),
   };
 }
 
@@ -252,42 +255,14 @@ function hasSaved(wsId: string): boolean {
   }
 }
 
-/** What the chat is told when its turn is sent back. */
-export const SEND_BACK_REASON =
-  "Your reply has no closing line the cmux sidebar can read. Reply with only that line: " +
-  '"Your move: <what Jon does next>" when something waits on him, or ' +
-  '"Nothing for you: <what is running and what he hears next>" when the turn waits on your own work.';
-
-/**
- * Whether to send the turn back for its closing line: only in an interactive
- * chat (`attended`), never twice in a row (stop_hook_active), and only when
- * the reply has neither label. A reply that lays out decisions is left alone:
- * it waits on Jon whatever it ends on, and a one-line retry would lose its
- * decisions and leans. No reply yet (not flushed, or an empty turn) is left
- * alone too: there is nothing to judge.
- */
-export function shouldSendBack(event: unknown, reply: string, attended: boolean): boolean {
-  if (!attended || field(event, "stop_hook_active") === true) return false;
-  return !!reply.trim() && lastMove(reply) === null && decisionsIn(reply).count === 0;
-}
-
-interface Outcome {
-  note: string | null;
-  sendBack: boolean;
-}
-
-// Records the turn's move, or sends the turn back without saving anything,
-// since the turn goes on. `now` is the hook's entry time, taken before
-// finalReply may sleep, so a prompt that lands during that sleep is judged
-// newer than the move.
-function record(event: unknown, wsId: string | undefined, now: number, attended: boolean): Outcome {
-  const none = { note: null, sendBack: false };
-  if (!wsId || !isId(wsId) || field(event, "hook_event_name") !== "Stop") return none;
+// Records the turn's move; a note for stderr, or null. `now` is the hook's
+// entry time, taken before finalReply may sleep, so a prompt that lands
+// during that sleep is judged newer than the move.
+function record(event: unknown, wsId: string | undefined, now: number, attended: boolean): string | null {
+  if (!wsId || !isId(wsId) || field(event, "hook_event_name") !== "Stop") return null;
   const raw = field(event, "session_id");
   const session = typeof raw === "string" && isId(raw) ? raw : undefined;
-  const reply = finalReply(event);
-  if (shouldSendBack(event, reply, attended)) return { note: null, sendBack: true };
-  return { note: deliver(wsId, moveFrom(reply, now, session), REAL_DELIVERY), sendBack: false };
+  return deliver(wsId, moveFrom(finalReply(event), now, session, attended), REAL_DELIVERY);
 }
 
 /**
@@ -419,15 +394,13 @@ export function deliver(wsId: string, move: SavedMove | null, d: Delivery): stri
 
 if (import.meta.main) {
   const now = Math.floor(Date.now() / 1000);
-  // "cli" is an interactive chat; a headless run (claude -p, the SDK) names
-  // another entry point and must end on the output its caller asked for.
+  // "cli" is an interactive chat; a headless run names another entry point.
   const attended = process.env.CLAUDE_CODE_ENTRYPOINT === "cli";
-  let out: Outcome;
+  let note: string | null;
   try {
-    out = record(JSON.parse(readFileSync(0, "utf8")), process.env.CMUX_WORKSPACE_ID, now, attended);
+    note = record(JSON.parse(readFileSync(0, "utf8")), process.env.CMUX_WORKSPACE_ID, now, attended);
   } catch (err) {
-    out = { note: err instanceof Error ? err.message : String(err), sendBack: false };
+    note = err instanceof Error ? err.message : String(err);
   }
-  if (out.note) console.error(`report-move: ${out.note}`);
-  if (out.sendBack) console.log(JSON.stringify({ decision: "block", reason: SEND_BACK_REASON }));
+  if (note) console.error(`report-move: ${note}`);
 }

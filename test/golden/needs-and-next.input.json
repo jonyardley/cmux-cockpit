@@ -69,6 +69,12 @@
     "asking": { "ask": { "epoch": 999940, "reason": "allow npm publish?" } },
     "dismissed": {},
     "moves": {
+      "n1": {
+        "epoch": 998200,
+        "session": "s-n1",
+        "text": "Reply with the letter and I'll ask the next one.",
+        "unlabelled": true
+      },
       "n2": {
         "decisions": 2,
         "epoch": 999100,

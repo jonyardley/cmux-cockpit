@@ -150,7 +150,7 @@ pub fn move_size(m: &SavedMove) -> Option<MoveSize> {
     if m.decisions.unwrap_or(0.0) > 0.0 {
         return Some(MoveSize::Decide);
     }
-    if asks_nothing(m) {
+    if asks_nothing(m) || m.unlabelled == Some(true) {
         return None;
     }
     if test(&REVIEW, &m.text) {
@@ -183,5 +183,20 @@ mod tests {
         for re in [&NOTHING_WAITS, &NOTHING_FIRST, &REVIEW, &QUICK] {
             assert!(re.is_some());
         }
+    }
+
+    #[test]
+    fn gives_a_quoted_last_line_no_size_unless_it_laid_out_decisions() {
+        let quoted = SavedMove {
+            text: "Let me know if you want me to go further.".into(),
+            unlabelled: Some(true),
+            ..SavedMove::default()
+        };
+        assert_eq!(move_size(&quoted), None);
+        let deciding = SavedMove {
+            decisions: Some(2.0),
+            ..quoted
+        };
+        assert_eq!(move_size(&deciding), Some(MoveSize::Decide));
     }
 }

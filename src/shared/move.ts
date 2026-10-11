@@ -109,7 +109,7 @@ export function quietMove(a: Agent, w: Workspace | undefined): SavedMove | null 
  * How big answering a move is: "decide" when the reply laid out numbered
  * decisions, "review" when Jon reads something first (a link, "read",
  * "review", "look at"), "quick" when it is a word or a paste ("go", "/clear", a `!`
- * command). null when nothing waits on Jon, or the line gives no clue: the card then shows the line
+ * command). null when nothing waits on Jon, the line is a quoted last line, or it gives no clue: the card then shows the line
  * with no chip, since a wrong chip is worse than none.
  */
 export type MoveSize = "quick" | "decide" | "review";
@@ -118,9 +118,10 @@ export type MoveSize = "quick" | "decide" | "review";
 const REVIEW = /https?:\/\/|claude\.ai\/|\b(?:read|review|look at)\b/i;
 const QUICK = /\/clear\b|\bgo\b|(?:^|\s)!\s?\w|\bpaste\b|nothing follows|under (?:a|one|two) minutes?/i;
 
-export function moveSize(m: Pick<SavedMove, "text" | "decisions" | "idle">): MoveSize | null {
+export function moveSize(m: Pick<SavedMove, "text" | "decisions" | "idle" | "unlabelled">): MoveSize | null {
   if ((m.decisions ?? 0) > 0) return "decide";
-  if (asksNothing(m)) return null;
+  // A quoted last line is the chat's prose, not a stated move: no clue to read.
+  if (asksNothing(m) || m.unlabelled) return null;
   if (REVIEW.test(m.text)) return "review";
   if (QUICK.test(m.text)) return "quick";
   return null;

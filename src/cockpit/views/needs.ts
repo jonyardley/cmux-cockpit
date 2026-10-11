@@ -8,7 +8,7 @@ import { displayTitle } from "../../shared/titles.ts";
 import { countPill, meta, motionList, ring, sectionTitle, when } from "../../shared/ui.ts";
 import { jumpNext, nextStep, originOf, revealWorkspace } from "../next.ts";
 import { isSelected } from "../state.ts";
-import { ageOf, countColors, needsInk, needsLine, needsRowEdge, OUTLINE_MAX, outline } from "../status.ts";
+import { ageOf, countColors, needsLine, needsLineInk, needsRowEdge, OUTLINE_MAX, outline } from "../status.ts";
 import { dismissWaiting, needsList, needsMore, needsShown, needsWaitLate, needsWaitText } from "../strip.ts";
 import { C } from "../theme.ts";
 import { laneMarker } from "./headers.ts";
@@ -39,7 +39,7 @@ function needsRow(w: WsAccessor): View {
         .truncation("middle"),
       Text(() => needsLine(w()))
         .font(12)
-        .color(() => needsInk(w()))
+        .color(() => needsLineInk(w()))
         .lineLimit(1)
         .truncation("tail"),
       originLine(w),

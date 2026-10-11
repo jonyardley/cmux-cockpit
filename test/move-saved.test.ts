@@ -28,6 +28,7 @@ import { beforeEach, describe, it } from "node:test";
     legacy: { text: "nothing. Waiting until CI lands.", epoch: 1000, session: "s-legacy" },
     quietAsks: { text: "CI is running.", epoch: 1000, session: "s-quietAsks", idle: true },
     quietDecide: { text: "CI is running.", epoch: 1000, session: "s-quietDecide", idle: true, decisions: 2 },
+    quoted: { text: "Reply with the letter.", epoch: 1000, session: "s-quoted", unlabelled: true },
   },
   ui: {},
 };
@@ -40,6 +41,7 @@ const needs = await import("../src/shared/needs.ts");
 const status = await import("../src/cockpit/status.ts");
 const cockpit = { ...(await import("../src/cockpit/strip.ts")), ...(await import("../src/cockpit/card-chips.ts")) };
 const { moveDescription } = await import("../scripts/state-config.ts");
+const { C } = await import("../src/cockpit/theme.ts");
 
 // The Claude session that saved workspace `id`'s move, as cmux reports it once hooked.
 const own = (id: string): Partial<Agent> => ({ id: "s-" + id, kind: "claude" });
@@ -74,6 +76,11 @@ describe("moveSize", () => {
     assert.equal(move.moveSize({ text: "tell me which one you meant." }), null);
     assert.equal(move.moveSize({ text: "the algorithm is good" }), null, "go only as a word");
     assert.equal(move.moveSize({ text: "check the build passes." }), null, "check is too common to mean review");
+  });
+
+  it("gives a quoted last line no size, unless the reply laid out decisions", () => {
+    assert.equal(move.moveSize({ text: "Let me know if you want me to go further.", unlabelled: true }), null);
+    assert.equal(move.moveSize({ text: "pick one", unlabelled: true, decisions: 2 }), "decide");
   });
 
   it("gives no size when nothing waits on Jon", () => {
@@ -178,6 +185,15 @@ describe("the card", () => {
     const w = at("quick", [waiting("quick", 1000)]);
     assert.equal(status.cardDetail(w), "the work is finished. Run /clear now.");
     assert.equal(status.needsDetail(w), "the work is finished. Run /clear now.");
+  });
+
+  it("quotes an unlabelled reply's last line bare and grey on the Needs you row", () => {
+    const w = at("quoted", [waiting("quoted", 1000)]);
+    assert.equal(status.needsLine(w), "Reply with the letter.");
+    assert.equal(status.needsLineInk(w), C.secondary);
+    const labelled = at("quick", [waiting("quick", 1000)]);
+    assert.equal(status.needsLine(labelled), "Your turn: the work is finished. Run /clear now.");
+    assert.equal(status.needsLineInk(labelled), C.clayText);
   });
 
   it("keeps the message once the move is stale", () => {

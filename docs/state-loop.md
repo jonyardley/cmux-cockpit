@@ -680,7 +680,10 @@ first 240 characters of a message, so the sidebar never sees that line.
 the transcript's tail, read once more after a pause when a prompt or a tool
 result still comes after the last reply, since that reply is not the final
 one) and hands the line to the cockpit as a move:
-`{"text", "epoch", "session"?, "decisions"?, "leans"?, "idle"?}`. The move
+`{"text", "epoch", "session"?, "decisions"?, "leans"?, "idle"?, "unlabelled"?}`.
+Only the exact label counts ("Your move:" or "Nothing for you:", markdown
+aside); a reply with neither is never sent back for one: its last line is
+saved as an `unlabelled` move, which the card shows in grey. The move
 goes into the workspace's cmux description (`cmux workspace-action
 --action set-description`), line first and the rest in one bracketed
 JSON tail (`moveDescription` in `scripts/state-config.ts`), since cmux

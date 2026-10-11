@@ -516,8 +516,18 @@ impl Session {
         "Waiting for your reply".to_string()
     }
 
-    /// A waiting card's reason with its status in front: "Asking: allow git push?".
+    /// True when the waiting chat's reply had no "Your move" label, so its
+    /// line is the reply's last line, quoted bare and grey (SavedMove::unlabelled).
+    pub fn unlabelled(&mut self, w: Option<&Workspace>) -> bool {
+        self.ask_of(w).is_none() && self.move_of(w).is_some_and(|m| m.unlabelled == Some(true))
+    }
+
+    /// A waiting card's reason with its status in front: "Asking: allow git
+    /// push?". A reply's last line, quoted for want of a label, goes bare.
     pub fn needs_line(&mut self, data: &Data, w: Option<&Workspace>) -> String {
+        if self.unlabelled(w) {
+            return self.needs_detail(w);
+        }
         let label = self.status_info(data, w).label;
         format!("{label}: {}", self.needs_detail(w))
     }

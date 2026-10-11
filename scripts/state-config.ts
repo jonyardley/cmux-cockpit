@@ -299,6 +299,8 @@ export interface SavedMove {
   leans?: string;
   /** Set when the line was "Nothing for you:", not "Your move:": the turn waits on the agent. */
   idle?: true;
+  /** Set when the reply had neither label: `text` is its last line, which the card shows in grey. */
+  unlabelled?: true;
 }
 
 /** The longest "Your move" line kept; the hook cuts one to this. */
@@ -589,13 +591,18 @@ const isLeans = (v: unknown): v is string =>
 const isDecisions = (v: unknown): v is number =>
   typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_DECISIONS;
 
+// A move's optional fields: each absent or well formed, its flags only true.
+function movePartsOk(v: Record<string, unknown>): boolean {
+  const { session, decisions, leans, idle, unlabelled } = v;
+  if (session !== undefined && (typeof session !== "string" || !isId(session))) return false;
+  if (decisions !== undefined && !isDecisions(decisions)) return false;
+  if (leans !== undefined && !isLeans(leans)) return false;
+  return (idle === undefined || idle === true) && (unlabelled === undefined || unlabelled === true);
+}
+
 function savedMove(v: unknown): SavedMove | null {
-  if (!isRecord(v) || !isText(v.text, MAX_MOVE) || !isEpoch(v.epoch)) return null;
-  const { session, decisions, leans, idle } = v;
-  if (session !== undefined && (typeof session !== "string" || !isId(session))) return null;
-  if (decisions !== undefined && !isDecisions(decisions)) return null;
-  if (leans !== undefined && !isLeans(leans)) return null;
-  if (idle !== undefined && idle !== true) return null;
+  if (!isRecord(v) || !isText(v.text, MAX_MOVE) || !isEpoch(v.epoch) || !movePartsOk(v)) return null;
+  const { session, decisions, leans, idle, unlabelled } = v;
   return {
     text: v.text,
     epoch: v.epoch,
@@ -603,6 +610,7 @@ function savedMove(v: unknown): SavedMove | null {
     ...(isDecisions(decisions) ? { decisions } : {}),
     ...(isLeans(leans) ? { leans } : {}),
     ...(idle === true ? { idle } : {}),
+    ...(unlabelled === true ? { unlabelled } : {}),
   };
 }
 
@@ -798,7 +806,7 @@ export const MOVE_MAX_AGE_S = 7 * 24 * 60 * 60;
 // As askEntry: the move goes last, and moves a week older than it are dropped.
 function moveEntry(state: State, id: string, parsed: unknown): State | string {
   const move = savedMove(parsed);
-  if (!move) return "moves wants {text, epoch, session?, decisions?, leans?, idle?: true}";
+  if (!move) return "moves wants {text, epoch, session?, decisions?, leans?, idle?: true, unlabelled?: true}";
   const kept = Object.entries(state.moves).filter(([, m]) => m.epoch >= move.epoch - MOVE_MAX_AGE_S);
   return { ...state, moves: { ...Object.fromEntries(kept), [id]: move } };
 }
