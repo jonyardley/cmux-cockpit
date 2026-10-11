@@ -1,8 +1,8 @@
 import Foundation
 
 /// Where a dropped card lands, by the rule the TypeScript sidebar's
-/// src/cockpit/drop.ts uses: cards sort by state inside a lane, and the
-/// drag order holds only among cards in the same state, so a drop anchors
+/// src/cockpit/drop.ts uses: cards sort by pin and state inside a lane, and the
+/// drag order holds only among cards in the same pin and state, so a drop anchors
 /// to the nearest card in the dragged card's own state. A card waiting
 /// on Jon stays in its lane (issue #281), so every row is a card.
 enum DropRule {

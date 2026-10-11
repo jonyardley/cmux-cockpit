@@ -174,7 +174,7 @@ pub fn card_unread(density: Density, unread: Option<f64>, badge: f64) -> String 
 
 /// Whether the workspace is pinned.
 fn is_pinned(w: Option<&Workspace>) -> bool {
-    w.is_some_and(|w| w.pinned == Some(true))
+    w.is_some_and(Workspace::is_pinned)
 }
 
 /// The looks a card shares whatever its shape: its badge, unread count,

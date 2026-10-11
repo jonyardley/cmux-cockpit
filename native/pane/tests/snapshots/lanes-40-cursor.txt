@@ -6,6 +6,7 @@
  ▾ ■ MAIN ACTIVITY  8  ●
 ▌▎ ● Chip colours  Your turn: Which… 5m
  ▎ ● Release…     Asking: allow git… 2m
+   ○ Untimed card               Idle 5m
    ● Tidy strip             Finished 6m
      Done: the strip now groups by
      repo.
@@ -16,7 +17,6 @@
    ● Selected card           Working 1m
    ○ Card layout fit           Idle 15m
      #176 merged  card-layout-fit
-   ○ Untimed card               Idle 5m
 
  ▾ ■ FOR REVIEW  2
    ● Ended agent           Finished 15m

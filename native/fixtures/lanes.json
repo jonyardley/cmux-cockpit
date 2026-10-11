@@ -341,6 +341,153 @@
         },
         {
           "Card": {
+            "ws_id": "untimed",
+            "icon": {
+              "glyph": "○",
+              "ink": null
+            },
+            "title": "Untimed card",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "pinned": true,
+            "progress": null,
+            "helpers": "",
+            "status": "Idle",
+            "status_ink": "metaText",
+            "age": "5m",
+            "status_has_age": false,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 2,
+            "waiting": null,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Unpin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "Card": {
             "ws_id": "ready",
             "icon": {
               "glyph": "●",
@@ -368,7 +515,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
-            "rank": 1,
+            "rank": 4,
             "movable": true,
             "dimmed": false,
             "selected": false,
@@ -560,7 +707,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
-            "rank": 2,
+            "rank": 5,
             "movable": true,
             "dimmed": false,
             "selected": false,
@@ -707,7 +854,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
-            "rank": 2,
+            "rank": 5,
             "movable": true,
             "dimmed": false,
             "selected": false,
@@ -854,7 +1001,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
-            "rank": 2,
+            "rank": 5,
             "movable": true,
             "dimmed": false,
             "selected": true,
@@ -1030,7 +1177,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
-            "rank": 3,
+            "rank": 6,
             "movable": true,
             "dimmed": true,
             "selected": false,
@@ -1136,153 +1283,6 @@
               {
                 "Item": {
                   "label": "Open PR #176",
-                  "action": "OpenPr"
-                }
-              },
-              {
-                "Item": {
-                  "label": "Dismiss needs you",
-                  "action": "ToggleNeeds"
-                }
-              }
-            ]
-          }
-        },
-        {
-          "Card": {
-            "ws_id": "untimed",
-            "icon": {
-              "glyph": "○",
-              "ink": null
-            },
-            "title": "Untimed card",
-            "density": "Full",
-            "badge": {
-              "icon": "terminal",
-              "color": 10526357
-            },
-            "unread": "",
-            "ready": false,
-            "pinned": true,
-            "progress": null,
-            "helpers": "",
-            "status": "Idle",
-            "status_ink": "metaText",
-            "age": "5m",
-            "status_has_age": false,
-            "left_off": "",
-            "chips": [],
-            "row_pr": null,
-            "detail": "",
-            "detail_ink": "secondary",
-            "detail_lines": 2,
-            "waiting": null,
-            "rank": 3,
-            "movable": true,
-            "dimmed": false,
-            "selected": false,
-            "menu": [
-              {
-                "Item": {
-                  "label": "New session (project has no folder)",
-                  "action": "NewSession"
-                }
-              },
-              "Divider",
-              {
-                "Item": {
-                  "label": "✓ Lane: Main activity",
-                  "action": {
-                    "Lane": "main"
-                  }
-                }
-              },
-              {
-                "Item": {
-                  "label": "Lane: For review",
-                  "action": {
-                    "Lane": "review"
-                  }
-                }
-              },
-              {
-                "Item": {
-                  "label": "Lane: Background",
-                  "action": {
-                    "Lane": "bg"
-                  }
-                }
-              },
-              {
-                "Item": {
-                  "label": "Lane: Parked",
-                  "action": {
-                    "Lane": "parked"
-                  }
-                }
-              },
-              {
-                "Item": {
-                  "label": "Lane: Unsorted",
-                  "action": {
-                    "Lane": "unsorted"
-                  }
-                }
-              },
-              "Divider",
-              {
-                "Item": {
-                  "label": "Project: App One",
-                  "action": {
-                    "Project": "/dev/app-one"
-                  }
-                }
-              },
-              {
-                "Item": {
-                  "label": "Project: App Two",
-                  "action": {
-                    "Project": "/dev/app-two"
-                  }
-                }
-              },
-              {
-                "Item": {
-                  "label": "Project: App Three",
-                  "action": {
-                    "Project": "/dev/app-three"
-                  }
-                }
-              },
-              {
-                "Item": {
-                  "label": "No project override set",
-                  "action": "ClearProjectOverride"
-                }
-              },
-              "Divider",
-              {
-                "Item": {
-                  "label": "New project (folder has one, or none)",
-                  "action": "NewProjectFromFolder"
-                }
-              },
-              "Divider",
-              {
-                "Item": {
-                  "label": "Unpin",
-                  "action": "TogglePin"
-                }
-              },
-              {
-                "Item": {
-                  "label": "Mark read",
-                  "action": "MarkRead"
-                }
-              },
-              {
-                "Item": {
-                  "label": "No PR to open",
                   "action": "OpenPr"
                 }
               },
@@ -1489,7 +1489,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
-            "rank": 3,
+            "rank": 6,
             "movable": true,
             "dimmed": false,
             "selected": false,
@@ -1654,7 +1654,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
-            "rank": 2,
+            "rank": 5,
             "movable": true,
             "dimmed": false,
             "selected": false,
@@ -1801,7 +1801,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
-            "rank": 3,
+            "rank": 6,
             "movable": true,
             "dimmed": false,
             "selected": false,
@@ -2137,7 +2137,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
-            "rank": 3,
+            "rank": 6,
             "movable": true,
             "dimmed": true,
             "selected": false,

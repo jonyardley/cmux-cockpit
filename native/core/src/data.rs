@@ -200,6 +200,11 @@ pub struct Workspace {
 }
 
 impl Workspace {
+    /// Whether cmux has the workspace pinned.
+    pub fn is_pinned(&self) -> bool {
+        self.pinned == Some(true)
+    }
+
     /// The agents cmux sent, skipping holes.
     pub fn agent_list(&self) -> impl Iterator<Item = &Agent> {
         self.agents.iter().flatten().flatten()

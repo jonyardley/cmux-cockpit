@@ -93,6 +93,15 @@ pub fn shows_left_off(lanes: &Lanes, data: &Data, w: Option<&Workspace>) -> bool
     lanes.get(&actual_lane_of(lanes, data, w)).left_off
 }
 
+/// Needs you stays first; a pinned card goes above every unpinned one.
+fn pin_tier(state: u8, pinned: bool) -> u8 {
+    if state == 0 || pinned {
+        state
+    } else {
+        state + 3
+    }
+}
+
 impl Session {
     fn live_rank(&mut self, data: &Data, w: Option<&Workspace>) -> u8 {
         let s = self.status_of(w);
@@ -111,20 +120,26 @@ impl Session {
         }
     }
 
-    /// A card's place in its lane (issue #74): needs you, then Ready, then
-    /// working, then the rest. The selected card keeps the best of its
-    /// live rank and the one it last had while not selected, so it never
-    /// slides out from under the pointer and settles once Jon moves on.
+    /// A card's place in its lane (issue #74): needs you, then the pinned
+    /// cards, then the rest, each part in state order (Ready, working, the
+    /// rest). So 0, then 1 to 3 pinned, then 4 to 6. The selected card keeps
+    /// the best of its live state and the one it last had while not
+    /// selected, so it never slides out from under the pointer and settles
+    /// once Jon moves on; the pin is read live, so unpinning moves it at once.
     pub fn state_rank(&mut self, data: &Data, w: Option<&Workspace>) -> u8 {
-        let rank = self.live_rank(data, w);
-        let Some(w) = w else { return rank };
-        if !self.is_selected(data, Some(w)) {
-            self.held_rank.insert(w.id.clone(), rank);
-            return rank;
-        }
-        self.held_rank
-            .get(&w.id)
-            .map_or(rank, |held| rank.min(*held))
+        let live = self.live_rank(data, w);
+        let Some(w) = w else {
+            return pin_tier(live, false);
+        };
+        let state = if self.is_selected(data, Some(w)) {
+            self.held_rank
+                .get(&w.id)
+                .map_or(live, |held| live.min(*held))
+        } else {
+            self.held_rank.insert(w.id.clone(), live);
+            live
+        };
+        pin_tier(state, w.is_pinned())
     }
 
     /// Rows in state order, tab order kept within a state. Every rank is

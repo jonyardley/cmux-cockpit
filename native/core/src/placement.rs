@@ -96,8 +96,8 @@ fn ids_of(ws: &[&Workspace]) -> Vec<String> {
 
 impl Session {
     /// Where a drop of the row `key` at `index` (its slot in the flat list
-    /// with the row removed) lands. Cards sort by state inside a lane, and
-    /// the drag order only holds among cards in the same state, so a drop
+    /// with the row removed) lands. Cards sort by pin and state inside a lane, and
+    /// the drag order only holds among cards in the same pin and state, so a drop
     /// anchors to the nearest card in the dragged card's own state: just
     /// before the first one below the slot, else just after the last one
     /// above it. With no peer in the lane it falls back to the neighbours:
