@@ -116,9 +116,9 @@ not the old TS sidebar's F4F2EA, which survives only as `Own.ground`. Dark is
 | `Own.onBadge` | FFFFFF | 1F1E1D | the unread badge's number |
 | `Own.onFill` | FFFFFF | FFFFFF | the number on the clay waiting count |
 | `blueCount`, `clayCount`, `amberCount` | hue / 0x1F, 0x29, 0x29 | same | a count pill's face in a state (core picks) |
-| `redChipFace`, `redChipEdge` | red / 0x1A, 0x38 | same | a failing PR chip |
-| `blueChipFace`, `blueChipEdge` | blue / 0x1A, 0x38 | same | a PR chip in review |
-| `greenChipFace`, `greenChipEdge` | green / 0x29, greenDeep / 0x59 | same | a PR chip ready |
+| `redChipFace`, `redChipEdge` | red / 0x1A, 0x38 | same | not drawn: the core's `pr_chip_colors` (`native/core/src/pr_colors.rs:52`) has no caller outside its tests, and every PR chip sits on `chipFace` |
+| `blueChipFace`, `blueChipEdge` | blue / 0x1A, 0x38 | same | not drawn, as above |
+| `greenChipFace`, `greenChipEdge` | green / 0x29, greenDeep / 0x59 | same | not drawn, as above |
 
 ### Lanes
 
@@ -135,7 +135,9 @@ not the old TS sidebar's F4F2EA, which survives only as `Own.ground`. Dark is
 
 `Own.ground` and `Own.cardFace` are read only by the views test; `amberRowEdge`
 and `needsRowEdge` are neither chosen by the core nor drawn. See
-[gap F](#known-gaps).
+[gap F](#known-gaps). The six PR chip faces and edges (`redChipFace` to
+`greenChipEdge`) are chosen by a core function nothing calls, so a PR's
+health shows only in the ink of its words ([gap S](#known-gaps)).
 
 ## Type scale
 
@@ -528,6 +530,110 @@ Two lines, a title at 12 semibold in `text` and why at 12 in `secondary`,
 padded by the gutter. While the helper is down the panel shows one on an
 `amberHalo` band above it. Where: `Views/PanelView.swift:76-114`.
 
+## Meaning
+
+The tables above say what each token is. This section says what each look
+means, so the same meaning looks the same in every place and one look never
+stands for two things. Paths under `native/core/src` are the core's choices;
+the rest are the views that draw them. The audit page carries the full matrix
+and the decision cards D8 to D15; where a rule fails today it names the gap.
+
+### The grammar
+
+1. **The core chooses state tokens; views draw them as given.** A view never
+   names a state hue or state ink itself.
+   `grep -rnE "Token\.(clay|amber|blue|green|mergeGreen|greenDeep|clayText|amberText|blueText|greenText|mergeText|amberHalo|clayHalo|blueHalo)\b" Views`
+   should print only the progress bar's fill (`CardView.swift:438`, blue for
+   working). Fails today: 7 lines, the progress bar and six others
+   ([gaps J, M, N, P, U](#known-gaps)).
+2. **A state is a dot plus words, and the dot and the words are a fixed
+   pair:** `blue`/`blueText` working, `clay`/`clayText` your turn,
+   `amber`/`amberText` asking, `green`/`greenText` finished,
+   `mergeGreen`/`mergeText` ready to merge, no colour (`Own.grey`) with
+   `metaText` idle. The pairs are set once in `status.rs:108-114` and
+   `:136-170`. A filled dot in a live state (working, your turn, asking, ready
+   to merge) carries its halo; a quiet one (finished, idle) does not; a
+   hollow dot means the agent is there but not active (quiet working in blue,
+   idle and no agent in grey).
+3. **A state hue marks that state and nothing else.** Not a queue (Next), not
+   a size (the move size chip), not an error, not a warning. Fails today:
+   [gaps N, O, J](#known-gaps).
+4. **A state on a header is the same dot as on a card.** Today headers and
+   the anchor badge draw a text glyph ([gap H](#known-gaps)).
+5. **A count is a pill**, coloured by how urgent what it counts is
+   (`ui.rs:54` `count_tint`). The unread count is grey because unread is not a
+   state. One shape for all counts is [D1](#known-gaps).
+6. **Hover:** anything that takes a click lights under the pointer. A solid
+   face steps to `Own.cardHover`; a clear surface takes the `Own.hover` wash.
+   `Own.needsHover` on Next is the one tinted hover, and goes with D9.
+7. **Selection is the heading ink.** A selected card or row is outlined in
+   `select` at 2. The anchor badge's `Own.anchorSelected` face and the
+   editor's two "chosen" looks (a `text` ring on a colour, a `countBg` cell
+   on an icon) are the exceptions, open as [gap Q](#known-gaps).
+8. **Faint ink means less important information.** It is never a state and
+   never "you cannot click this". `grep -rn "Token.faint" Views` lists every
+   use; today the fold chevron and a quiet row's "+" are controls drawn
+   faint, and "No agent" is a state in faint words (`status.rs:113`)
+   ([gap R](#known-gaps)).
+9. **Fading by opacity means nothing to act on here:** an empty lane
+   (`emptyFade`) or a quiet project with no folder (`quietFade`). A merged
+   card's `dimmed` 0.6 means finished history, and lifts under the pointer.
+   [Gap E](#known-gaps) names the values; D12 settles the meanings.
+10. **An age is `MetaText` in `metaText`**, or the waiting ink while the card
+    waits. Today a title row's age is `Own.tertiary` ([gap I](#known-gaps)).
+11. **A PR's state is words in its health's ink** (`pr_colors.rs:31` `pr_ink`):
+    `redText` failing or conflicting, `blueText` checks running,
+    `metaText` quiet. Ready is [gap P](#known-gaps).
+12. **Errors are `redText`; notices are neutral.** `grep -rn "Token.clayText" Views`
+    should print only what D9 leaves; today it prints Next and "Not sent"
+    ([gap J](#known-gaps)).
+
+### The matrix, compact
+
+One line per meaning that is drawn in more than one place. "Glyph" is the
+core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
+**≠**.
+
+| Meaning | Cards (full, compact, Projects) | Dense row | Headers and anchor | Elsewhere | Chosen at |
+|-|-|-|-|-|-|
+| Your turn | clay dot with halo, `clayText` words, clay needs dot | same, age and reason in `clayText` | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `status.rs:110`, `:248-254`; `panel/build.rs:568-591` |
+| Asking | amber dot with halo, `amberText` words, amber needs dot | same | amber glyph **≠**; `amberCount` pill | waiting count stays clay **≠** (`TopView.swift:79`) | `status.rs:151-157`; `panel/build.rs:392-398` |
+| Working | blue dot with halo, `blueText`; blue progress bar | blue dot | blue glyph; `blueCount` pill | | `status.rs:109` |
+| Waiting on a shell | as working, the word "Waiting" **≠** | as working | as working | "waiting" elsewhere means your turn | `status.rs:166-169`; `words.rs:27` |
+| Quiet working | hollow blue ring, `blueText` | same | hollow glyph | | `status.rs:160-165` |
+| Finished, Ready | olive dot, no halo, `greenText`; Ready pill `greenText` on `Own.readyBg` | olive dot; no Ready pill **≠** | olive glyph | Next in `clayText` **≠** | `status.rs:112`, `:147-150` |
+| Idle, no agent | hollow grey; `metaText` idle, `faint` no agent **≠** | hollow grey | hollow grey glyph | | `status.rs:111`, `:113` |
+| Ready to merge | `mergeGreen` dot with halo, `mergeText` words | same | merge line in `greenDeep` **≠** | PR chip "ready" in `greenDeep` **≠** | `status.rs:138-145`; `lane_entries.rs:265-268`; `pr_colors.rs:28` |
+| PR quiet (draft, open, closed) | chip state `metaText`; compact words `secondary` **≠** | number `metaText` | | | `pr_colors.rs:36`; `panel/build.rs:294`, `:313` |
+| Checks failing, conflict | chip words `redText` on a neutral chip | number `redText` | | | `pr_colors.rs:33` |
+| Checks running | chip words `blueText` (blue also means working) | number `blueText` | | | `pr_colors.rs:34` |
+| Move size | chip words `greenText` quick, `clayText` decide, `blueText` review **≠** | not drawn | | | `panel/build.rs:34-39` |
+| Unread | grey badge | grey badge | inline copy on the anchor **≠** | | `CardView.swift:316-328`, `LaneView.swift:73-80` |
+| Needs dot | on the badge corner; leads the title on a Projects card | on the 14 badge | glyph on headers **≠** | | `status.rs:248`; `panel/build.rs:568` |
+| Selected | `select` outline at 2 | face, outline, medium title | `Own.anchorSelected` face **≠** | chosen tab: white face; editor: `text` ring or `countBg` cell **≠** | `CardView.swift:531`, `LaneView.swift:92`, `EditorSheet.swift:143`, `:166` |
+| Age | `Own.tertiary` | `metaText` **≠** | | Next's place `metaText` | `CardView.swift:157`, `:234` |
+| Error | | | | editor `redText`; "Not sent" `clayText` **≠** | `EditorSheet.swift:59`, `Actions.swift:105` |
+| Notice | | | | neutral words; stale band on `amberHalo` **≠** | `PanelView.swift:106` |
+
+### Where the views override the core
+
+The core picks a token and the view draws another, or the view copies a core
+constant. Each is a place a core change would not reach the screen.
+
+- The waiting count draws clay; the core sends `Needs.fill` and `Needs.ink`
+  (`panel/mod.rs:116-120`), amber while every waiting card asks, and no view
+  reads them.
+- An empty lane's pill is `countBg` with `faint` whatever the core's tint
+  says (`Model/CardText.swift:115-117`).
+- The Quiet heading's pill copies the core's `QUIET_PILL`
+  (`Model/ProjectText.swift:49-51`), which the panel model does not carry.
+- The status dot's halo is worked out again from the dot's ink
+  (`Model/CardText.swift:139-148`) where the core already has one per status
+  (`status.rs:99-105`, `StatusStyle.halo`).
+- "Drop here" and the merge line's ink are picked in `LaneView.swift:158-168`;
+  the core's `header_hint` (`lane_entries.rs:255-269`) picks the same and no
+  view calls it.
+
 ## Wording
 
 ### Casing
@@ -594,7 +700,7 @@ decision cards; this list is the index.
 
 | Gap | What | Where |
 |-|-|-|
-| 1 | Views and the views test define the look by pointing at TypeScript and the pane; the test reads those files, so retiring them fails it | 51 `.ts` pointers in 16 files; `native/mac/Tests/Views/main.swift:314`, `:379`, `:383`, `:389`, `:398`, `:412` |
+| 1 | Views and the views test define the look by pointing at TypeScript and the pane; the test reads those files, so retiring them fails it. **Decided: D7 a**, pin the values in the views test; open until that PR lands | 51 `.ts` pointers in 16 files; `native/mac/Tests/Views/main.swift:314`, `:379`, `:383`, `:389`, `:398`, `:412` |
 | A | Four count treatments: unread badge, its copy in the anchor badge, the waiting count, the count pill; the Ready pill on literals | `CardView.swift:316-328`, `LaneView.swift:73-80`, `TopView.swift:65-84`, `LaneView.swift:4-17`, `CardView.swift:302-313` |
 | B | Two names for one scale (`body`/`small` beside `Font.control`/`meta`; `CardLook.rowTitle` and `compactStatus` duplicate `Font.title` and `next`) | `Theme.swift:32-33`, `CardView.swift:40-41`, `ProjectsView.swift:126` |
 | C | Spacing, size and radius literals outside a look enum | listed on the audit page |
@@ -607,3 +713,12 @@ decision cards; this list is the index.
 | J | Clay for "Not sent" and amber for the helper-down banner, where those hues mean your turn and asking | `Actions.swift:105`, `PanelView.swift:106` |
 | K | Words outside `Words.swift`; "Drop here" differs in case from the core's "drop here"; Cancel defined twice | `LaneView.swift:105`, `native/core/src/panel/mod.rs:65`, `Actions.swift:29`, `Words.swift:34` |
 | L | Dark mode is the extension's own: ground unsampled, `faint` one hex for both, `Own.cardFace` dark see-through | `Palette.swift:34-37`, `:94`, `:154` |
+| M | The waiting count on All is always clay; the core sends amber while every waiting card asks (D8) | `TopView.swift:75`, `:79`; `native/core/src/panel/build.rs:392-398`; `native/core/src/panel/mod.rs:116-120` |
+| N | Next is drawn in your turn's clay, but it shows only while nothing waits, so it always leads to a Ready card (D9) | `TopView.swift:100`, `:113`, `:116`; `Model/CardText.swift:100-103`; `native/core/src/next.rs:84-90` |
+| O | The move size chip borrows three state inks: green quick, clay decide, blue review (D10) | `native/core/src/panel/build.rs:34-39` |
+| P | Ready to merge is `mergeGreen`/`mergeText` on a card and `greenDeep` on the lane's merge line and a PR chip's "ready" (D11) | `native/core/src/status.rs:138-145`; `LaneView.swift:165`; `native/core/src/pr_colors.rs:28` |
+| Q | Selection has five looks: card outline, row face, anchor face, chosen tab, editor ring and cell (D13) | `CardView.swift:531`; `LaneView.swift:92`; `TopView.swift:56`; `EditorSheet.swift:143`, `:166` |
+| R | Faint ink is also a state ("No agent") and two controls (fold chevron, a quiet row's "+"); 0.55 means both empty and cannot click (D12) | `native/core/src/status.rs:113`; `LaneView.swift:28`; `ProjectsView.swift:204`, `:209-210` |
+| S | A quiet PR's words are `secondary` on a compact card and `metaText` on a chip and a row; the PR chip faces are never drawn (D14) | `native/core/src/panel/build.rs:294`, `:313`; `native/core/src/pr_colors.rs:36`, `:52` |
+| T | "Waiting" names a blue status (a shell still running) and, everywhere else, a card that waits on you (D15) | `native/core/src/words.rs:27`; `native/core/src/status.rs:166-169` |
+| U | Views pick or copy what the core picks: Ready pill ink, empty and Quiet pills, the halo, the drop hint (D8) | `CardView.swift:306`; `Model/CardText.swift:115-117`, `:139-148`; `Model/ProjectText.swift:49-51`; `LaneView.swift:158-168` |
