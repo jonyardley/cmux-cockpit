@@ -284,6 +284,17 @@ describe("moveFrom", () => {
     });
   });
 
+  it("is null for a bare label with nothing under it, never quoting the label", () => {
+    assert.equal(moveFrom("Done.\n\nYour move:", 5), null);
+    assert.equal(moveFrom("Your move:\n\n---\n\nRun it.", 5), null);
+    assert.equal(moveFrom("Done.\n\nNothing for you:", 5), null);
+  });
+
+  it("quotes no last line for a headless run, but keeps its labelled line", () => {
+    assert.equal(moveFrom('{"ok": true}', 5, undefined, false), null);
+    assert.deepEqual(moveFrom("Your move: go", 5, undefined, false), { text: "go", epoch: 5 });
+  });
+
   it("is null for a reply with nothing to quote", () => {
     assert.equal(moveFrom("", 5), null);
     assert.equal(moveFrom("```\nnpm run check\n```", 5), null);
@@ -294,6 +305,12 @@ describe("lastLine", () => {
   it("is the reply's last line, marker and markdown stripped", () => {
     assert.equal(lastLine("Filed it.\n\n**Done:** nothing is running.\n"), "Done: nothing is running.");
     assert.equal(lastLine("Steps:\n\n1. Open it\n2. Close [it](https://x)"), "Close it");
+  });
+
+  it("drops a quote's marker and whole-line italics, and skips table rows", () => {
+    assert.equal(lastLine("Body.\n\n> see above"), "see above");
+    assert.equal(lastLine("Body.\n\n_Done._"), "Done.");
+    assert.equal(lastLine("Summary.\n\n| #322 | ready |\n| --- | --- |"), "Summary.");
   });
 
   it("skips code fences, rules and headings", () => {

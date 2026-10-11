@@ -78,6 +78,11 @@ describe("moveSize", () => {
     assert.equal(move.moveSize({ text: "check the build passes." }), null, "check is too common to mean review");
   });
 
+  it("gives a quoted last line no size, unless the reply laid out decisions", () => {
+    assert.equal(move.moveSize({ text: "Let me know if you want me to go further.", unlabelled: true }), null);
+    assert.equal(move.moveSize({ text: "pick one", unlabelled: true, decisions: 2 }), "decide");
+  });
+
   it("gives no size when nothing waits on Jon", () => {
     assert.equal(move.moveSize({ text: "CI is running; say go if you want it sooner.", idle: true }), null);
     assert.equal(move.moveSize({ text: "nothing. Waiting until CI lands." }), null);

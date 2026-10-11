@@ -8,9 +8,10 @@
 // One that fails, hangs or crashes never stops the others. It always exits
 // 0 and drops the scripts' stdout, so it can never block a tool or answer
 // a permission prompt; their stderr is passed on, each line tagged. The
-// exception is a Stop or UserPromptSubmit script routes.ts marks sendsBack:
-// its block decision is passed on, so a `/ws` prompt never reaches the
-// model (report-rename.ts). Only those scripts' stdout is read at all. Each
+// exception is a script routes.ts marks sendsBack, which only a Stop or
+// UserPromptSubmit route may be (today only report-rename.ts, on the
+// prompt): its block decision is passed on, so a `/ws` prompt never
+// reaches the model. Only those scripts' stdout is read at all. Each
 // script runs in its own process group, so a time limit, or Claude Code
 // stopping this one, ends whatever the script started too.
 

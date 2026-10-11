@@ -107,31 +107,46 @@ function labelMove(hit: RegExpExecArray, lines: readonly string[], i: number): F
   return { line: cleanMove(unmark(rest) || stepAfter(lines, i)) ?? "", idle: !/^your move/i.test(label) };
 }
 
-/** The last labelled line in `text` outside a code fence, cleaned, with whether it asks nothing of Jon. */
-function lastMove(text: string): Found | null {
+/**
+ * The last labelled line in `text` outside a code fence, cleaned, with
+ * whether it asks nothing of Jon; "bare" for a label with nothing under it,
+ * which is no move but is no unlabelled reply either; null with no label.
+ */
+function lastMove(text: string): Found | "bare" | null {
   const lines = unfenced(text);
   for (let i = lines.length - 1; i >= 0; i--) {
     const hit = MOVE_LINE.exec(lines[i] ?? "");
     if (!hit) continue;
     const found = labelMove(hit, lines, i);
-    return found.line ? found : null;
+    return found.line ? found : "bare";
   }
   return null;
 }
 
 /** The last "Your move" or "Nothing for you" line in `text` outside a code fence, cleaned, or null when there is none. */
-export const moveLine = (text: string): string | null => lastMove(text)?.line ?? null;
+export function moveLine(text: string): string | null {
+  const found = lastMove(text);
+  return found === null || found === "bare" ? null : found.line;
+}
+
+// A table row: no line to quote on its own.
+const TABLE_ROW = /^\s*\|/;
+// A quote's marker, and italics around the whole line ("_Done._").
+const QUOTE = /^\s*>\s?/;
+const ITALIC = /^([*_])(.+)\1$/;
 
 /**
  * A reply's last line outside a code fence, marker and markdown stripped,
- * skipping rules and headings: what the card quotes when the reply has no
- * label. Null when nothing is left.
+ * skipping rules, headings and table rows: what the card quotes when the
+ * reply has no label. Null when nothing is left.
  */
 export function lastLine(text: string): string | null {
   const line = unfenced(text)
     .reverse()
-    .find((l) => l.trim() !== "" && !BREAK.test(l));
-  return line === undefined ? null : cleanMove(unmark(line.replace(STEP_MARKER, "")));
+    .find((l) => l.trim() !== "" && !BREAK.test(l) && !TABLE_ROW.test(l));
+  if (line === undefined) return null;
+  const plain = unmark(line.replace(STEP_MARKER, "").replace(QUOTE, ""));
+  return cleanMove(plain.replace(ITALIC, "$2"));
 }
 
 /**
@@ -158,9 +173,15 @@ export function decisionsIn(text: string): { count: number; leans: string } {
   return { count: Math.min(seen.size, MAX_DECISIONS), leans: leans.join(" ") };
 }
 
-/** What the hook saves for a reply: its labelled line, else its last line marked unlabelled, else null. */
-export function moveFrom(text: string, now: number, session?: string): SavedMove | null {
+/**
+ * What the hook saves for a reply: its labelled line, else, in an
+ * interactive chat (`attended`), its last line marked unlabelled; null for
+ * a bare label, or a headless run (claude -p, the SDK) with no label, whose
+ * output is no chat's move and must not replace one.
+ */
+export function moveFrom(text: string, now: number, session?: string, attended = true): SavedMove | null {
   const found = lastMove(text);
+  if (found === "bare" || (found === null && !attended)) return null;
   const line = found?.line ?? lastLine(text);
   if (!line) return null;
   const { count, leans } = decisionsIn(text);
@@ -237,11 +258,11 @@ function hasSaved(wsId: string): boolean {
 // Records the turn's move; a note for stderr, or null. `now` is the hook's
 // entry time, taken before finalReply may sleep, so a prompt that lands
 // during that sleep is judged newer than the move.
-function record(event: unknown, wsId: string | undefined, now: number): string | null {
+function record(event: unknown, wsId: string | undefined, now: number, attended: boolean): string | null {
   if (!wsId || !isId(wsId) || field(event, "hook_event_name") !== "Stop") return null;
   const raw = field(event, "session_id");
   const session = typeof raw === "string" && isId(raw) ? raw : undefined;
-  return deliver(wsId, moveFrom(finalReply(event), now, session), REAL_DELIVERY);
+  return deliver(wsId, moveFrom(finalReply(event), now, session, attended), REAL_DELIVERY);
 }
 
 /**
@@ -373,9 +394,11 @@ export function deliver(wsId: string, move: SavedMove | null, d: Delivery): stri
 
 if (import.meta.main) {
   const now = Math.floor(Date.now() / 1000);
+  // "cli" is an interactive chat; a headless run names another entry point.
+  const attended = process.env.CLAUDE_CODE_ENTRYPOINT === "cli";
   let note: string | null;
   try {
-    note = record(JSON.parse(readFileSync(0, "utf8")), process.env.CMUX_WORKSPACE_ID, now);
+    note = record(JSON.parse(readFileSync(0, "utf8")), process.env.CMUX_WORKSPACE_ID, now, attended);
   } catch (err) {
     note = err instanceof Error ? err.message : String(err);
   }
