@@ -408,11 +408,33 @@ fn waiting_of(session: &mut Session, view: &ViewModel, w: Option<&Workspace>) ->
     Some(Waiting { mark, ink })
 }
 
+/// The ink of a waiting card's needs_line: the waiting ink, or grey for a
+/// reply's last line quoted for want of a label.
+fn needs_ink(session: &mut Session, w: Option<&Workspace>, wt: Waiting) -> Token {
+    if unlabelled(session, w) {
+        Token::Secondary
+    } else {
+        wt.ink
+    }
+}
+
+/// True when the waiting chat's reply had no "Your move" label, so its line
+/// is the reply's last line, quoted bare and grey (SavedMove::unlabelled).
+fn unlabelled(session: &mut Session, w: Option<&Workspace>) -> bool {
+    session.ask_of(w).is_none()
+        && session
+            .move_of(w)
+            .is_some_and(|m| m.unlabelled == Some(true))
+}
+
 /// A waiting card's status line, "Asking: allow git push?", with a detail
 /// the core cut taken back to a whole word.
 fn needs_line(session: &mut Session, data: &Data, w: Option<&Workspace>) -> String {
-    let label = session.status_info(data, w).label;
     let detail = whole_words(&session.needs_detail(w), NEEDS_DETAIL_MAX);
+    if unlabelled(session, w) {
+        return detail;
+    }
+    let label = session.status_info(data, w).label;
     format!("{label}: {detail}")
 }
 
@@ -448,7 +470,7 @@ fn detail_of(
     waiting: Option<Waiting>,
 ) -> (String, Token) {
     match (density, waiting) {
-        (Density::Row, Some(wt)) => (needs_line(session, data, w), wt.ink),
+        (Density::Row, Some(wt)) => (needs_line(session, data, w), needs_ink(session, w, wt)),
         _ => (
             unless_waiting(waiting, whole_words(&session.card_detail(w), DETAIL_MAX)),
             Token::Secondary,
@@ -477,7 +499,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
     let (status, status_ink) = match (density, waiting) {
         (Density::Row, Some(wt)) => (session.age_of(data, w), wt.ink),
         (Density::Row, None) => (session.age_of(data, w), Token::MetaText),
-        (_, Some(wt)) => (needs_line(session, data, w), wt.ink),
+        (_, Some(wt)) => (needs_line(session, data, w), needs_ink(session, w, wt)),
         (_, None) => (session.status_line(data, w), style.text),
     };
     let left_off = if shows_left_off(&session.lanes, data, w) {
@@ -625,7 +647,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
     let wanted = session.move_of(w).map(|m| m.text).unwrap_or_default();
     let waiting = waiting_of(session, view, w);
     let (status, status_ink) = match waiting {
-        Some(wt) => (needs_line(session, data, w), wt.ink),
+        Some(wt) => (needs_line(session, data, w), needs_ink(session, w, wt)),
         None => (session.status_line(data, w), style.text),
     };
     let looks = looks(session, data, w, Density::Full, &status, &kind);

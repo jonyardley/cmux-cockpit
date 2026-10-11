@@ -157,6 +157,9 @@ pub struct SavedMove {
     /// Set when the line was "Nothing for you:": the turn waits on the agent.
     #[serde(default)]
     pub idle: Option<bool>,
+    /// Set when the reply had neither label: `text` is its last line, shown in grey.
+    #[serde(default)]
+    pub unlabelled: Option<bool>,
 }
 
 impl Stamped for SavedMove {
@@ -343,11 +346,8 @@ fn saved_move(fields: &Map<String, Value>, text: &str) -> Option<SavedMove> {
         }
         Some(_) => return None,
     };
-    let idle = match fields.get("idle") {
-        None => None,
-        Some(Value::Bool(true)) => Some(true),
-        Some(_) => return None,
-    };
+    let idle = flag(fields.get("idle"))?;
+    let unlabelled = flag(fields.get("unlabelled"))?;
     Some(SavedMove {
         text: text.to_string(),
         epoch,
@@ -355,7 +355,18 @@ fn saved_move(fields: &Map<String, Value>, text: &str) -> Option<SavedMove> {
         decisions,
         leans,
         idle,
+        unlabelled,
     })
+}
+
+/// A move's marker field: absent, or true; None for anything else, which
+/// makes the whole move bad.
+fn flag(v: Option<&Value>) -> Option<Option<bool>> {
+    match v {
+        None => Some(None),
+        Some(Value::Bool(true)) => Some(Some(true)),
+        Some(_) => None,
+    }
 }
 
 /// The move a workspace description carries, or None when it carries none or a bad one.
@@ -389,6 +400,9 @@ pub fn move_description(m: &SavedMove) -> String {
     }
     if let Some(i) = m.idle {
         rest.insert("idle".into(), Value::from(i));
+    }
+    if let Some(u) = m.unlabelled {
+        rest.insert("unlabelled".into(), Value::from(u));
     }
     format!("{} ⟦move {}⟧", m.text, Value::Object(rest))
 }
@@ -494,9 +508,21 @@ mod tests {
     }
 
     #[test]
+    fn round_trips_an_unlabelled_move() {
+        let d = r##"Reply with the letter. ⟦move {"epoch":1,"unlabelled":true}⟧"##;
+        let m = move_of_description(Some(d));
+        assert_eq!(m.as_ref().and_then(|m| m.unlabelled), Some(true));
+        assert_eq!(m.map(|m| move_description(&m)).as_deref(), Some(d));
+    }
+
+    #[test]
     fn refuses_a_move_with_a_bad_field() {
         assert_eq!(
             move_of_description(Some(r##"go ⟦move {"epoch":1,"idle":false}⟧"##)),
+            None
+        );
+        assert_eq!(
+            move_of_description(Some(r##"go ⟦move {"epoch":1,"unlabelled":false}⟧"##)),
             None
         );
         assert_eq!(

@@ -10,10 +10,10 @@ import {
   type DescriptionRead,
   decisionsIn,
   deliver,
+  lastLine,
   lastReply,
   moveFrom,
   moveLine,
-  shouldSendBack,
 } from "../scripts/hooks/report-move.ts";
 import {
   applySet,
@@ -63,12 +63,18 @@ describe("moveLine", () => {
     assert.equal(moveLine("- your move: go"), "go");
   });
 
-  it("takes one word of drift before the colon, inside the bold or after it", () => {
-    assert.equal(moveLine("Nothing for you yet: CI is running on #2183."), "CI is running on #2183.");
-    assert.equal(moveLine("**Nothing for you right now:** the gate is running"), "the gate is running");
-    assert.equal(moveLine("**Nothing for you** yet: CI is running"), "CI is running");
-    assert.equal(moveLine("**Your move** now: go"), "go");
-    assert.equal(moveLine("Your move for now: go"), "go");
+  it("takes only the exact label: drift, parentheticals and full stops are prose", () => {
+    for (const reply of [
+      "Nothing for you yet: CI is running on #2183.",
+      "**Your move** now: go",
+      "Your move (optional): go",
+      "Nothing for you beyond that close-out: the review is running",
+      "Both lanes are running. Nothing for you yet.",
+      "Nothing for you right now. The agent is reading.",
+      "Your move. Merge it.",
+    ])
+      assert.equal(moveLine(reply), null, reply);
+    assert.equal(moveLine("**Nothing for you**: CI is running"), "CI is running", "colon outside the bold");
   });
 
   it("keeps a sentence that only starts like a label as prose", () => {
@@ -106,75 +112,11 @@ describe("moveLine", () => {
     assert.equal(moveLine("Your move:\n\n```\nnpm run check\n```"), null);
   });
 
-  it("takes a parenthetical before the colon, inside the bold or out", () => {
-    assert.equal(
-      moveLine("Your move (optional, while those run): build drag and drop from main and try it."),
-      "build drag and drop from main and try it.",
-    );
-    assert.equal(
-      moveLine("- **Your move (optional, before merge):** paste this to see it now."),
-      "paste this to see it now.",
-    );
-    assert.equal(moveLine("**Your move** (optional): go"), "go");
-  });
-
-  it("takes beyond-wording after Nothing for you only", () => {
-    assert.equal(
-      moveLine("Nothing for you beyond those: both R1.4 lanes are running, and you'll get their PR links"),
-      "both R1.4 lanes are running, and you'll get their PR links",
-    );
-    assert.equal(
-      moveLine("Nothing for you beyond that close-out: the #288 review is running"),
-      "the #288 review is running",
-    );
-    assert.equal(moveLine("Your move beyond that: go"), null);
-    assert.equal(moveLine("Nothing for you beyond that, I think: see below"), null);
-    assert.equal(moveLine("Nothing for you beyond the obvious: see below"), null);
-  });
-
   it("takes a leading Jon, before the label", () => {
     assert.equal(
       moveLine("Jon, your move: say go and I'll check what already exists"),
       "say go and I'll check what already exists",
     );
-  });
-
-  it("takes a closing Nothing for you sentence, and only with a sentence before it", () => {
-    assert.equal(
-      moveLine("Both lanes are running and will report. Nothing for you yet."),
-      "Both lanes are running and will report.",
-    );
-    assert.equal(moveLine("Nothing for you."), null);
-    assert.equal(moveLine("Nothing for you yet."), null);
-  });
-
-  it("takes a Nothing for you sentence that opens the line, with the rest as the move", () => {
-    const reply = "Here's the plan.\n\nNothing for you right now. The agent is reading the eight pages.";
-    assert.equal(moveLine(reply), "The agent is reading the eight pages.");
-    assert.equal(
-      moveLine("**Nothing for you.** CI is running, and you'll hear when it lands."),
-      "CI is running, and you'll hear when it lands.",
-    );
-    assert.equal(moveLine("Nothing for you nowhere. It ran."), null);
-    assert.equal(moveLine("Your move. Merge it."), null);
-  });
-
-  it("reads the full-stop label in every wrapping the colon label takes", () => {
-    for (const reply of [
-      "> - Jon, Nothing for you yet. CI runs.",
-      "*Nothing for you.* CI runs.",
-      "1. Nothing for you yet. CI runs.",
-      "Nothing for you beyond that close-out. CI runs.",
-      "Nothing for you (CI is running). CI runs.",
-      "Nothing for you yet. CI runs. Nothing for you yet.",
-      "Nothing for you right now.\n\n- CI runs.",
-    ])
-      assert.equal(moveLine(reply), "CI runs.", reply);
-  });
-
-  it("lets a Your move label after a full-stop label decide, and stops at a bare one", () => {
-    assert.equal(moveLine("Nothing for you yet. Your move: merge #307."), "merge #307.");
-    assert.equal(moveLine("Your move: merge it.\n\nLater.\n\nNothing for you right now."), null);
   });
 
   it("is null without the label, and cuts a long line with an ellipsis", () => {
@@ -317,7 +259,6 @@ describe("moveFrom", () => {
     });
     assert.deepEqual(moveFrom("Nothing for you: CI runs.\n\nYour move: go", 5), { text: "go", epoch: 5 });
     assert.equal(moveLine("I have nothing for you: fine"), null, "only as the line's label");
-    assert.equal(moveFrom("Nothing for you yet: CI runs.", 5)?.idle, true, "a drifted label is still idle");
   });
 
   it("saves a bare Nothing for you header as idle, with the first step", () => {
@@ -326,50 +267,44 @@ describe("moveFrom", () => {
       epoch: 5,
       idle: true,
     });
-    assert.equal(moveFrom("Nothing for you beyond that: CI runs.", 5)?.idle, true);
   });
 
-  it("is null when the reply has no move line", () => {
-    assert.equal(moveFrom(DECISIONS.replace("Your move:", "Next:"), 1000), null);
+  it("saves the last line, unlabelled, when the reply has no label, keeping its decisions", () => {
+    assert.deepEqual(moveFrom(DECISIONS.replace("Your move:", "Next:"), 1000), {
+      text: 'Next: reply "1a 2b" (under a minute, yours).',
+      epoch: 1000,
+      decisions: 2,
+      leans: "1a 2b",
+      unlabelled: true,
+    });
+    assert.deepEqual(moveFrom("Nothing for you yet: CI runs.", 5), {
+      text: "Nothing for you yet: CI runs.",
+      epoch: 5,
+      unlabelled: true,
+    });
+  });
+
+  it("is null for a reply with nothing to quote", () => {
+    assert.equal(moveFrom("", 5), null);
+    assert.equal(moveFrom("```\nnpm run check\n```", 5), null);
   });
 });
 
-describe("shouldSendBack", () => {
-  const stop = { hook_event_name: "Stop" };
-
-  it("sends back an interactive reply with no closing line", () => {
-    assert.equal(shouldSendBack(stop, "CI is running; I'll report when it lands.", true), true);
-    assert.equal(
-      shouldSendBack(stop, "Opener:\n\n```\nYour move: go\n```", true),
-      true,
-      "a fenced label is not the reply's",
-    );
+describe("lastLine", () => {
+  it("is the reply's last line, marker and markdown stripped", () => {
+    assert.equal(lastLine("Filed it.\n\n**Done:** nothing is running.\n"), "Done: nothing is running.");
+    assert.equal(lastLine("Steps:\n\n1. Open it\n2. Close [it](https://x)"), "Close it");
   });
 
-  it("lets a reply with either label end, drifted wording included", () => {
-    for (const reply of ["Done.\n\nYour move: go", "Nothing for you: CI runs.", "Nothing for you yet: CI runs."])
-      assert.equal(shouldSendBack(stop, reply, true), false, reply);
+  it("skips code fences, rules and headings", () => {
+    assert.equal(lastLine("Paste this.\n\n```\nnpm run check\n```\n\n---\n"), "Paste this.");
+    assert.equal(lastLine("Body.\n\n## Next"), "Body.");
   });
 
-  it("lets a full-stop Nothing for you end, but still sends back Done: and Next: closings", () => {
-    assert.equal(shouldSendBack(stop, "Plan.\n\nNothing for you right now. The agent reads.", true), false);
-    for (const reply of ["Filed it.\n\nDone: nothing is running.", "- **Next:** you merge.\n\n`/clear` after."])
-      assert.equal(shouldSendBack(stop, reply, true), true, reply);
-  });
-
-  it("lets a bare header over steps end, but sends back a header with nothing under it", () => {
-    assert.equal(shouldSendBack(stop, "Done.\n\nYour move:\n\n1. Run the script.", true), false);
-    assert.equal(shouldSendBack(stop, "Done.\n\nYour move:", true), true);
-  });
-
-  it("leaves a reply with decisions alone, since a one-line retry would lose them", () => {
-    assert.equal(shouldSendBack(stop, DECISIONS.replace("Your move:", "Next:"), true), false);
-  });
-
-  it("never sends back twice, a headless run, or a turn with no reply to judge", () => {
-    assert.equal(shouldSendBack({ ...stop, stop_hook_active: true }, "Done.", true), false);
-    assert.equal(shouldSendBack(stop, "Done.", false), false);
-    assert.equal(shouldSendBack(stop, "  \n", true), false);
+  it("cuts a long line with an ellipsis, and is null with nothing left", () => {
+    const long = lastLine("word ".repeat(80));
+    assert.ok(long && long.length === MAX_MOVE && long.endsWith("…"));
+    assert.equal(lastLine("  \n---\n"), null);
   });
 });
 
@@ -432,6 +367,9 @@ describe("the moves map", () => {
     });
     assert.equal(set({ text: "go", epoch: 10, decisions: 0 }).ok, false);
     assert.equal(set({ text: "go", epoch: 10, leans: "one b" }).ok, false);
+    assert.equal(set({ text: "go", epoch: 10, unlabelled: false }).ok, false);
+    const quoted = set({ text: "go", epoch: 10, unlabelled: true });
+    assert.deepEqual(quoted.ok && quoted.state.moves.ws1, { text: "go", epoch: 10, unlabelled: true });
     assert.equal(set({ text: " padded ", epoch: 10 }).ok, false);
     assert.equal(set({ text: "x".repeat(MAX_MOVE + 1), epoch: 10 }).ok, false);
   });

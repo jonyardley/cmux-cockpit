@@ -132,8 +132,8 @@
             "left_off": "",
             "chips": [],
             "row_pr": null,
-            "detail": "Your turn: Should the strip cap at four?",
-            "detail_ink": "clayText",
+            "detail": "Reply with the letter and I'll ask the next one.",
+            "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": {
               "mark": "clay",

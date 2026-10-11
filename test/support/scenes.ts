@@ -170,12 +170,19 @@ const waiting = (id: string, title: string, secs: number, latestMessage?: string
   });
 
 // The Next button and the Needs you strip, capped at four rows with
-// "+N more", one of them asking and two quoting their saved move.
+// "+N more", one of them asking, two quoting their saved move and one
+// quoting a reply that ended with no label, bare and grey.
 const needsAndNext: Scene = {
   seed: () => ({
     state: {
       asking: { ask: { reason: "allow npm publish?", epoch: EPOCH - 60 } },
       moves: {
+        n1: {
+          text: "Reply with the letter and I'll ask the next one.",
+          epoch: EPOCH - 1800,
+          session: "s-n1",
+          unlabelled: true,
+        },
         n2: {
           text: 'reply "1b 2a" on the bridge and the store.',
           epoch: EPOCH - 900,
