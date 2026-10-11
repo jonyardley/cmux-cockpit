@@ -11,6 +11,13 @@ Read it before changing a view, `Palette.swift` or `Theme.swift`, and update
 it in the same PR when the look changes. Sections that describe a known
 inconsistency say so and link to the [known gaps](#known-gaps).
 
+Decisions D1 to D15 on the audit page are all decided, each as option a
+(11 October 2026). Where one sets a rule for future work, the section says so
+in a line that starts **Target (Dn a, not built yet)**. That line is the rule
+to build towards; everything else in the section describes main today. A
+target becomes today's description in the PR that builds it, listed in
+[follow-up work](#follow-up-work).
+
 File paths below are relative to `native/mac/Sidebar/` unless they say
 otherwise. Line numbers are as of `cc996b7`.
 
@@ -49,6 +56,11 @@ The panel sits on `Own.panelGround`, **FAF9F5** light: cmux's own window
 off-white, sampled from a light capture (`Palette.swift:34-38`, `:153`). It is
 not the old TS sidebar's F4F2EA, which survives only as `Own.ground`. Dark is
 262624 and was not sampled (see [gap L](#known-gaps)).
+
+**Target (D4 a, not built yet, blocked):** the dark ground and the dark side
+of `faint` are sampled from a dark-mode capture of cmux, and the views test's
+contrast checks are re-run against them. Blocked until Jon supplies a
+dark-mode screenshot; nothing here changes before then.
 
 ### State hues
 
@@ -163,6 +175,12 @@ The `Metrics.Font` enum (`Views/Theme.swift:51-68`) is the reading scale and
 covers 10 to 13.5. `Metrics.body` and `Metrics.small` (`Theme.swift:32-33`)
 are a second set of names for 12 and 11. See [gap B](#known-gaps).
 
+**Target (D2 a, not built yet):** one naming system. `Metrics.body`,
+`Metrics.small`, `CardLook.rowTitle` and `CardLook.compactStatus` fold into
+`Metrics.Font`; glyph sizes stay in their look enums. No size changes, so
+nothing moves on screen. A new text size gets a `Metrics.Font` name or reuses
+one.
+
 Section headings are tracked by `Metrics.sectionTracking` (1pt,
 `Theme.swift:115`) and set in capitals by `.textCase(.uppercase)`, never by
 capitalising the string.
@@ -226,6 +244,13 @@ Badge tiles carry their own radius: 26 takes 8, 22 takes 7, 18 and 16 take
 the default 5, 14 takes 4. Each is `round(0.3 × size)`; the lane marker's
 `size / 3` lands on the same 3. See [gap D](#known-gaps).
 
+**Target (D3 a, not built yet):** a badge's radius is `round(0.3 × size)`,
+worked out in `BadgeTile` rather than typed per size, and every other surface
+takes one radius per kind, named in `Metrics.Radius` (the Ready pill's 8 and
+the editor's icon cell 4 get names). The drag's gap outline and floating card
+take the card's radius, so a dragged card keeps its 12 corner; that is the one
+change you would see. `Metrics.corner` goes.
+
 ## Components
 
 ### View switch
@@ -248,6 +273,12 @@ waiting card. `Font.tiny` 10 bold, monospaced; padding `pillPadH` 7 and
 `pillPadV` 1; `clay` face, `Own.onFill` ink; capsule shape.
 Where: `Views/TopView.swift:65-84`. See [gap A](#known-gaps).
 
+**Target (D1 a and D8 a, not built yet):** the count takes the
+[count pill](#count-pill)'s shape (D1), and its face and number come from the
+core's `Needs.fill` and `Needs.ink` (`native/core/src/panel/mod.rs:116-120`)
+rather than a fixed clay (D8). You would see it turn amber while every
+waiting card is an agent asking.
+
 ### Next
 
 A white pill with a clay edge, "Next: <title>" in clay cut in the middle, the
@@ -256,6 +287,11 @@ place in the queue on the right. Shown only while nothing waits. Face
 `Radius.tab` 7; padding 8 by 5 (literals, [gap C](#known-gaps)). Title
 `Font.next` 11.5 semibold `clayText`; place `Font.meta` 11 monospaced
 `metaText`. Where: `Views/TopView.swift:91-120`.
+
+**Target (D9 a, not built yet):** Next takes Ready's green, since it only
+ever leads to a Ready card: words in `greenText`, the edge from the Ready
+pill's green, `Own.cardHover` under the pointer. `Own.needsEdge` and
+`Own.needsHover` go. You would see the clay pill at the top turn green.
 
 ### Lane header
 
@@ -272,10 +308,20 @@ Padding `headerPadH` 8, `headerPadV` 5; radius `Radius.header` 8; spacing
 `Font.section` 10.5 semibold, `secondary` (or `faint` for a faint lane). Row
 size `Font.meta` 11. Where: `Views/LaneView.swift:104-178`.
 
+**Target (D8 a, D11 a, D12 a, not built yet):** "Drop here" and the merge
+line's ink come from the core's `header_hint`
+(`native/core/src/lane_entries.rs:255`), not a pick in the view (D8). The
+merge line is in `mergeText`, the ink every other "ready to merge" uses (D11).
+An empty lane's count pill takes the core's tint and is only faded, not faint
+as well (D12).
+
 ### Fold chevron
 
 `chevron.right` at `Font.tiny` 10 semibold in `faint`, turned down when open,
 in a 12 by 16 slot. Where: `Views/LaneView.swift:22-32`.
+
+**Target (D12 a, not built yet):** the chevron is a control, so it is drawn
+in `secondary`, not `faint`. You would see it darken a little.
 
 ### Lane marker
 
@@ -289,6 +335,11 @@ and unread count, a click opens it. Face clear, `Own.hover` under the
 pointer, `Own.anchorSelected` while selected; radius `Radius.anchor` 6; height
 16; padding 4. The unread count inside is an inline copy of the
 [unread badge](#unread-badge). Where: `Views/LaneView.swift:63-95`.
+
+**Target (D1 a and D13 a, not built yet):** the unread count inside is the
+unread badge view itself, not a copy (D1). While selected, the badge takes a
+1 `select` outline like a card instead of the `Own.anchorSelected` face
+(D13), so it no longer matches a lane under a drag.
 
 ### Project header
 
@@ -318,6 +369,11 @@ no folder takes no click and fades to `ProjectText.quietFade` 0.55
 (`Model/ProjectText.swift:47`). Padding 8 by 3, hover radius 7.
 Where: `Views/ProjectsView.swift:167-213`.
 
+**Target (D12 a, not built yet):** the "+" is a control, so it is drawn in
+`secondary`, not `faint`. The fade for a row with no folder is named
+`disabledFade` (cannot click), apart from `emptyFade` (nothing here); both
+stay 0.55.
+
 ### New project row
 
 "+ New project" styled as a quiet row: a 10 semibold plus in the 16 badge
@@ -341,6 +397,10 @@ the detail, the progress bar. Badge to text 9; same padding as the full card;
 column spacing 3 (literal). Title `Font.compactTitle` 13 semibold; status
 `CardLook.compactStatus` 11.5 regular with a 6 dot. Radius 12.
 Where: `Views/CardView.swift:95-120`.
+
+**Target (D14 a, not built yet):** a quiet PR's words take `metaText`, as on
+a chip and a dense row, not `secondary` (one core line,
+`native/core/src/panel/build.rs:294`).
 
 ### Dense row
 
@@ -367,11 +427,22 @@ age (only when the status line has none), the dismiss x and the pin. Spacing
 end. Age `MetaText` 11 monospaced in `Own.tertiary`, or the waiting ink while
 the card waits. Where: `Views/CardView.swift:202-236`.
 
+**Target (D14 a, not built yet):** the age is `metaText`, as on a dense row,
+or the waiting ink while the card waits. `Own.tertiary` stays for where you
+left off and live helpers only.
+
 ### Status line
 
 Status dot, the status words in the core's ink, the live helpers in
 `Own.tertiary`, and on a compact card the PR and diff in words. Spacing 6.
 Where: `Views/CardView.swift:240-276`.
+
+**Target (D12 a and D15 a, not built yet):** "No agent" is in `metaText`
+with Idle, not `faint` (`native/core/src/status.rs:113`, D12). The blue status
+for an idle agent whose background shell still runs is renamed from
+"Waiting" (`WAITING_WORD`, `native/core/src/words.rs:27`) so "waiting" only
+ever means waiting on you (D15). The working name is "Shell running";
+**Jon to confirm the word** before that PR is built.
 
 ### Status dot
 
@@ -410,6 +481,10 @@ Where: `Views/BadgeTile.swift:11-34`.
 elsewhere. `Font.section` 10.5 medium; padding 7 by 1 and radius 8, all
 literals ([gap A](#known-gaps)). Where: `Views/CardView.swift:302-313`.
 
+**Target (D1 a, D3 a, D8 a, not built yet):** its padding and radius are
+named values (D1, D3), and its ink comes from the core rather than the view
+naming `greenText` (D8).
+
 ### Unread badge
 
 The unread count, white on grey in both appearances so clay only ever means
@@ -417,11 +492,20 @@ your turn. `Font.tiny` 10 bold, not monospaced; padding 5 by 1 (literals);
 radius `Radius.tab` 7; `Own.badge` face, `Own.onBadge` ink.
 Where: `Views/CardView.swift:316-328`.
 
+**Target (D1 a, not built yet):** the [count pill](#count-pill)'s padding and
+radius, still white on grey.
+
 ### Count pill
 
 A lane's or project's count. `Font.meta` 11 medium with monospaced digits;
 padding `pillPadH` 7 by `pillPadV` 1; radius `Radius.pill` 10; face and ink
 from the core. Where: `Views/LaneView.swift:4-17`.
+
+**Target (D1 a, not built yet):** one pill for every count. The count pill's
+padding and radius are used by the unread badge and the waiting count too;
+colour still follows meaning (grey unread, the core's tint on lane and
+project counts, the core's `Needs` colours on the waiting count). You would
+see the unread number grow slightly wider and match the lane count.
 
 ### Meta text
 
@@ -446,6 +530,22 @@ Where: `Views/ChipsView.swift:43-173`.
 the state regular in its health's ink. When it opens, the glyph turns to
 `arrow.up.right` and the face takes `Own.hover`. On the full card it does not
 open.
+
+**Target (D11 a, not built yet):** a PR GitHub would merge says "ready" in
+`mergeText`, not `greenDeep` (`READY_INK`, `native/core/src/pr_colors.rs:28`);
+a dense row's ready PR number follows, as it takes the same ink.
+`greenDeep` is then left only on the undrawn green chip edge, or goes.
+
+#### Move size chip
+
+On a card waiting on you, how big answering is: "quick", "decide" or
+"review". Today its words take a state ink each: `greenText`, `clayText`,
+`blueText` (`size_ink`, `native/core/src/panel/build.rs:34-39`,
+[gap O](#known-gaps)).
+
+**Target (D10 a, not built yet):** a quiet chip. The size is in `secondary`
+on the neutral chip, like the branch; the card's own clay or amber already
+says it waits. You would see the size chips go grey.
 
 #### Branch chip
 
@@ -524,11 +624,18 @@ From a card's right-click menu: a prompt line at 12 semibold, a text field,
 Cancel and Send; "Not sent" at 11 in `clayText` when the core refuses. 280
 wide with 12 padding (literals). Where: `Views/Actions.swift:83-129`.
 
+**Target (D5 a, not built yet):** "Not sent" is a failure, so it is in
+`redText` like the editor's problems, not `clayText`.
+
 ### Notices
 
 Two lines, a title at 12 semibold in `text` and why at 12 in `secondary`,
 padded by the gutter. While the helper is down the panel shows one on an
 `amberHalo` band above it. Where: `Views/PanelView.swift:76-114`.
+
+**Target (D5 a, not built yet):** the helper-down band is a notice, not an
+ask, so it sits on a neutral face (for example `countBg`) instead of
+`amberHalo`. You would see the band lose its amber.
 
 ## Meaning
 
@@ -537,6 +644,8 @@ means, so the same meaning looks the same in every place and one look never
 stands for two things. Paths under `native/core/src` are the core's choices;
 the rest are the views that draw them. The audit page carries the full matrix
 and the decision cards D8 to D15; where a rule fails today it names the gap.
+Every card is decided as option a; where that changes a rule, the rule says
+**Target** and what is built today follows it.
 
 ### The grammar
 
@@ -545,7 +654,12 @@ and the decision cards D8 to D15; where a rule fails today it names the gap.
    `grep -rnE "Token\.(clay|amber|blue|green|mergeGreen|greenDeep|clayText|amberText|blueText|greenText|mergeText|amberHalo|clayHalo|blueHalo)\b" Views`
    should print only the progress bar's fill (`CardView.swift:438`, blue for
    working). Fails today: 7 lines, the progress bar and six others
-   ([gaps J, M, N, P, U](#known-gaps)).
+   ([gaps J, M, N, P, U](#known-gaps)). **Target (D8 a):** views draw the
+   core's colour everywhere: the waiting count, the Ready pill's ink, the
+   empty and Quiet pills, the halo and the drop hint all take the core's
+   value, with a panel model field added where one is missing. Next's green
+   (D9 a) is then picked by the core too, so the grep still prints only the
+   progress bar.
 2. **A state is a dot plus words, and the dot and the words are a fixed
    pair:** `blue`/`blueText` working, `clay`/`clayText` your turn,
    `amber`/`amberText` asking, `green`/`greenText` finished,
@@ -557,40 +671,64 @@ and the decision cards D8 to D15; where a rule fails today it names the gap.
    idle and no agent in grey).
 3. **A state hue marks that state and nothing else.** Not a queue (Next), not
    a size (the move size chip), not an error, not a warning. Fails today:
-   [gaps N, O, J](#known-gaps).
+   [gaps N, O, J](#known-gaps). **Target:** Next in Ready's green (D9 a),
+   the size chip neutral (D10 a), red for failures and neutral for helper
+   down (D5 a).
 4. **A state on a header is the same dot as on a card.** Today headers and
    the anchor badge draw a text glyph ([gap H](#known-gaps)).
 5. **A count is a pill**, coloured by how urgent what it counts is
    (`ui.rs:54` `count_tint`). The unread count is grey because unread is not a
-   state. One shape for all counts is [D1](#known-gaps).
+   state. **Target (D1 a):** one pill shape for every count (the count
+   pill's padding and radius), colour still by meaning. Today there are four
+   ([gap A](#known-gaps)).
 6. **Hover:** anything that takes a click lights under the pointer. A solid
    face steps to `Own.cardHover`; a clear surface takes the `Own.hover` wash.
-   `Own.needsHover` on Next is the one tinted hover, and goes with D9.
+   `Own.needsHover` on Next is the one tinted hover today. **Target
+   (D9 a):** it goes, and Next steps to `Own.cardHover` like any solid face.
 7. **Selection is the heading ink.** A selected card or row is outlined in
    `select` at 2. The anchor badge's `Own.anchorSelected` face and the
    editor's two "chosen" looks (a `text` ring on a colour, a `countBg` cell
-   on an icon) are the exceptions, open as [gap Q](#known-gaps).
+   on an icon) are the exceptions today ([gap Q](#known-gaps)).
+   **Target (D13 a):** selection is the heading outline everywhere in the
+   panel, so the anchor badge takes a 1 `select` outline instead of its
+   face. The view switch's chosen tab and the editor's chosen colour and icon
+   keep the system's own looks, as the only named exceptions.
 8. **Faint ink means less important information.** It is never a state and
    never "you cannot click this". `grep -rn "Token.faint" Views` lists every
    use; today the fold chevron and a quiet row's "+" are controls drawn
    faint, and "No agent" is a state in faint words (`status.rs:113`)
-   ([gap R](#known-gaps)).
+   ([gap R](#known-gaps)). **Target (D12 a):** controls are drawn in
+   `secondary` at least, and "No agent" moves to `metaText` with Idle.
 9. **Fading by opacity means nothing to act on here:** an empty lane
    (`emptyFade`) or a quiet project with no folder (`quietFade`). A merged
    card's `dimmed` 0.6 means finished history, and lifts under the pointer.
-   [Gap E](#known-gaps) names the values; D12 settles the meanings.
+   [Gap E](#known-gaps) names the values. **Target (D12 a):** three named
+   meanings. `emptyFade` is nothing here, a new `disabledFade` is cannot
+   click (both 0.55, `quietFade` becomes `disabledFade`), and `dimmed` 0.6
+   stays for merged. Nothing is both faint and faded.
 10. **An age is `MetaText` in `metaText`**, or the waiting ink while the card
     waits. Today a title row's age is `Own.tertiary` ([gap I](#known-gaps)).
+    **Target (D14 a):** every age is `metaText` unless the card waits;
+    `Own.tertiary` is only where you left off and live helpers.
 11. **A PR's state is words in its health's ink** (`pr_colors.rs:31` `pr_ink`):
     `redText` failing or conflicting, `blueText` checks running,
-    `metaText` quiet. Ready is [gap P](#known-gaps).
+    `metaText` quiet. Ready is [gap P](#known-gaps), and a compact card's
+    quiet words are `secondary` ([gap S](#known-gaps)). **Target (D11 a and
+    D14 a):** ready to merge is `mergeText` everywhere it means ready to
+    merge, and quiet is `metaText` everywhere, the compact card included.
 12. **Errors are `redText`; notices are neutral.** `grep -rn "Token.clayText" Views`
-    should print only what D9 leaves; today it prints Next and "Not sent"
-    ([gap J](#known-gaps)).
+    prints Next and "Not sent" today ([gap J](#known-gaps)). **Target (D5 a
+    and D9 a):** it prints nothing; "Not sent" is `redText` and the
+    helper-down band sits on a neutral face.
+13. **"Waiting" means waiting on you, and nothing else.** Today the blue
+    status for a running shell is also "Waiting" ([gap T](#known-gaps)).
+    **Target (D15 a):** that status is renamed; the working name is "Shell
+    running", **Jon to confirm**.
 
 ### The matrix, compact
 
-One line per meaning that is drawn in more than one place. "Glyph" is the
+One line per meaning that is drawn in more than one place, as main draws it
+today; the targets above say where each **≠** is going. "Glyph" is the
 core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 **≠**.
 
@@ -662,6 +800,11 @@ constant. Each is a place a core change would not reach the screen.
 
 New words go in `Words.swift`, or come from the core.
 
+**Target (D15 a, not built yet):** "waiting" in any form means a card waits
+on you. The blue status for a running shell (`WAITING_WORD`,
+`native/core/src/words.rs:27`) gets its own word; the working name is "Shell
+running", **Jon to confirm**.
+
 ## The code is right if
 
 Each rule is a check you can run from `native/mac/Sidebar`. Where it fails on
@@ -691,34 +834,128 @@ main today, the failures are listed and tracked as a gap.
    `grep -rnE "\.ts\b|native/pane" .` prints nothing.
    Fails today: 52 lines. 49 of them name a TypeScript file (51 pointers in
    all) and 3 a pane path; in all, 19 lines lean on the pane
-   ([gap 1](#known-gaps)).
+   ([gap 1](#known-gaps)). **Target (D6 a):** each pointer becomes a
+   `docs/design.md` anchor, for example `(cards.ts fullCard)` becomes
+   `(docs/design.md#full-card)`, and the 13 lines that say "as the
+   cockpit's" without a file name the heading here instead.
+8. **The views test pins its own values.** Not built yet (D7 a). Today
+   `native/mac/Tests/Views/main.swift` reads TypeScript and pane source six
+   times (`:314`, `:379`, `:383`, `:389`, `:398`, `:412`), and its `source()`
+   helper returns an empty string for a missing file, so retiring those
+   files fails it. **Target:** the light hexes, the quiet fade and the
+   editor's words it reads from them are written into the test; checks
+   against the core stay as they are. It passes when none of those six reads
+   is left.
 
 ## Known gaps
 
-Each is open until decided. The audit page carries the evidence and the
-decision cards; this list is the index.
+The audit page carries the evidence and the decision cards; this list is
+the index. All fifteen decisions are made, each as option a. A gap marked
+**Decided** stays open until the PR in [follow-up work](#follow-up-work)
+that builds it lands; until then the sections above describe main as it is.
+Gaps with no decision (F, G, H, K and most of C) are tidy-ups that ride along
+with a follow-up PR.
 
 | Gap | What | Where |
 |-|-|-|
-| 1 | Views and the views test define the look by pointing at TypeScript and the pane; the test reads those files, so retiring them fails it. **Decided: D7 a**, pin the values in the views test; open until that PR lands | 51 `.ts` pointers in 16 files; `native/mac/Tests/Views/main.swift:314`, `:379`, `:383`, `:389`, `:398`, `:412` |
-| A | Four count treatments: unread badge, its copy in the anchor badge, the waiting count, the count pill; the Ready pill on literals | `CardView.swift:316-328`, `LaneView.swift:73-80`, `TopView.swift:65-84`, `LaneView.swift:4-17`, `CardView.swift:302-313` |
-| B | Two names for one scale (`body`/`small` beside `Font.control`/`meta`; `CardLook.rowTitle` and `compactStatus` duplicate `Font.title` and `next`) | `Theme.swift:32-33`, `CardView.swift:40-41`, `ProjectsView.swift:126` |
-| C | Spacing, size and radius literals outside a look enum | listed on the audit page |
-| D | Badge radii have no stated rule, though all fit `round(0.3 × size)` | `CardView.swift:13`, `:18`, `:29`; `BadgeTile.swift:16`; `LaneView.swift:40` |
-| E | Fades: 0.55 under two names, 0.6 dimmed, 0.9 dragged | `Theme.swift:110`, `ProjectText.swift:47`, `CardView.swift:47`, `Drag.swift:243` |
+| 1 | Views and the views test define the look by pointing at TypeScript and the pane; the test reads those files, so retiring them fails it. **Decided: D7 a**, the views test pins its own values. **Decided: D6 a**, comments point at `docs/design.md` anchors | 51 `.ts` pointers in 16 files; `native/mac/Tests/Views/main.swift:314`, `:379`, `:383`, `:389`, `:398`, `:412` |
+| A | Four count treatments: unread badge, its copy in the anchor badge, the waiting count, the count pill; the Ready pill on literals. **Decided: D1 a**, one count pill shape for every count, colour by meaning | `CardView.swift:316-328`, `LaneView.swift:73-80`, `TopView.swift:65-84`, `LaneView.swift:4-17`, `CardView.swift:302-313` |
+| B | Two names for one scale (`body`/`small` beside `Font.control`/`meta`; `CardLook.rowTitle` and `compactStatus` duplicate `Font.title` and `next`). **Decided: D2 a**, one `Metrics.Font` naming, no size changes | `Theme.swift:32-33`, `CardView.swift:40-41`, `ProjectsView.swift:126` |
+| C | Spacing, size and radius literals outside a look enum. **Decided in part: D3 a** names the two radius literals; the spacing literals have no card and are named in their own PR | listed on the audit page |
+| D | Badge radii have no stated rule, though all fit `round(0.3 × size)`. **Decided: D3 a**, badge radius is `round(0.3 × size)` worked out in `BadgeTile` | `CardView.swift:13`, `:18`, `:29`; `BadgeTile.swift:16`; `LaneView.swift:40` |
+| E | Fades: 0.55 under two names, 0.6 dimmed, 0.9 dragged. **Decided: D12 a**, `emptyFade` nothing here, `disabledFade` cannot click, `dimmed` merged | `Theme.swift:110`, `ProjectText.swift:47`, `CardView.swift:47`, `Drag.swift:243` |
 | F | Colours no view draws: `Own.ground`, `Own.cardFace`, `amberRowEdge`, `needsRowEdge`; `Metrics.cardIndent` unused; `Metrics.corner` duplicates radius 6 | `Palette.swift:33`, `:40`, `:136-137`; `Theme.swift:35`, `:45` |
 | G | Eight views keep their own hover state beside the one shared hover shade | `ProjectsView.swift:60-78`; the eight other `@State private var hovering` sites |
 | H | Status dots drawn as circles on cards and as text glyphs on headers | `CardView.swift:281-299`; `LaneView.swift:72`, `:146`; `ProjectsView.swift:121` |
-| I | Card shapes differ in status weight, title weight and age ink | `CardView.swift:77`, `:107`, `:138`, `:157`, `:233-235` |
-| J | Clay for "Not sent" and amber for the helper-down banner, where those hues mean your turn and asking | `Actions.swift:105`, `PanelView.swift:106` |
+| I | Card shapes differ in status weight, title weight and age ink. **Decided in part: D14 a** settles the age ink; the weights have no card | `CardView.swift:77`, `:107`, `:138`, `:157`, `:233-235` |
+| J | Clay for "Not sent" and amber for the helper-down banner, where those hues mean your turn and asking. **Decided: D5 a**, red for failures, neutral for helper down | `Actions.swift:105`, `PanelView.swift:106` |
 | K | Words outside `Words.swift`; "Drop here" differs in case from the core's "drop here"; Cancel defined twice | `LaneView.swift:105`, `native/core/src/panel/mod.rs:65`, `Actions.swift:29`, `Words.swift:34` |
-| L | Dark mode is the extension's own: ground unsampled, `faint` one hex for both, `Own.cardFace` dark see-through | `Palette.swift:34-37`, `:94`, `:154` |
-| M | The waiting count on All is always clay; the core sends amber while every waiting card asks (D8) | `TopView.swift:75`, `:79`; `native/core/src/panel/build.rs:392-398`; `native/core/src/panel/mod.rs:116-120` |
-| N | Next is drawn in your turn's clay, but it shows only while nothing waits, so it always leads to a Ready card (D9) | `TopView.swift:100`, `:113`, `:116`; `Model/CardText.swift:100-103`; `native/core/src/next.rs:84-90` |
-| O | The move size chip borrows three state inks: green quick, clay decide, blue review (D10) | `native/core/src/panel/build.rs:34-39` |
-| P | Ready to merge is `mergeGreen`/`mergeText` on a card and `greenDeep` on the lane's merge line and a PR chip's "ready" (D11) | `native/core/src/status.rs:138-145`; `LaneView.swift:165`; `native/core/src/pr_colors.rs:28` |
-| Q | Selection has five looks: card outline, row face, anchor face, chosen tab, editor ring and cell (D13) | `CardView.swift:531`; `LaneView.swift:92`; `TopView.swift:56`; `EditorSheet.swift:143`, `:166` |
-| R | Faint ink is also a state ("No agent") and two controls (fold chevron, a quiet row's "+"); 0.55 means both empty and cannot click (D12) | `native/core/src/status.rs:113`; `LaneView.swift:28`; `ProjectsView.swift:204`, `:209-210` |
-| S | A quiet PR's words are `secondary` on a compact card and `metaText` on a chip and a row; the PR chip faces are never drawn (D14) | `native/core/src/panel/build.rs:294`, `:313`; `native/core/src/pr_colors.rs:36`, `:52` |
-| T | "Waiting" names a blue status (a shell still running) and, everywhere else, a card that waits on you (D15) | `native/core/src/words.rs:27`; `native/core/src/status.rs:166-169` |
-| U | Views pick or copy what the core picks: Ready pill ink, empty and Quiet pills, the halo, the drop hint (D8) | `CardView.swift:306`; `Model/CardText.swift:115-117`, `:139-148`; `Model/ProjectText.swift:49-51`; `LaneView.swift:158-168` |
+| L | Dark mode is the extension's own: ground unsampled, `faint` one hex for both, `Own.cardFace` dark see-through. **Decided: D4 a**, sample from a dark capture of cmux; blocked on a dark-mode screenshot from Jon | `Palette.swift:34-37`, `:94`, `:154` |
+| M | The waiting count on All is always clay; the core sends amber while every waiting card asks. **Decided: D8 a**, views draw the core's colour | `TopView.swift:75`, `:79`; `native/core/src/panel/build.rs:392-398`; `native/core/src/panel/mod.rs:116-120` |
+| N | Next is drawn in your turn's clay, but it shows only while nothing waits, so it always leads to a Ready card. **Decided: D9 a**, Next in Ready's green | `TopView.swift:100`, `:113`, `:116`; `Model/CardText.swift:100-103`; `native/core/src/next.rs:84-90` |
+| O | The move size chip borrows three state inks: green quick, clay decide, blue review. **Decided: D10 a**, the size chip is neutral | `native/core/src/panel/build.rs:34-39` |
+| P | Ready to merge is `mergeGreen`/`mergeText` on a card and `greenDeep` on the lane's merge line and a PR chip's "ready". **Decided: D11 a**, `mergeText` for ready to merge everywhere | `native/core/src/status.rs:138-145`; `LaneView.swift:165`; `native/core/src/pr_colors.rs:28` |
+| Q | Selection has five looks: card outline, row face, anchor face, chosen tab, editor ring and cell. **Decided: D13 a**, the heading outline in the panel, system looks for the switch and the editor | `CardView.swift:531`; `LaneView.swift:92`; `TopView.swift:56`; `EditorSheet.swift:143`, `:166` |
+| R | Faint ink is also a state ("No agent") and two controls (fold chevron, a quiet row's "+"); 0.55 means both empty and cannot click. **Decided: D12 a**, three named faint and fade meanings | `native/core/src/status.rs:113`; `LaneView.swift:28`; `ProjectsView.swift:204`, `:209-210` |
+| S | A quiet PR's words are `secondary` on a compact card and `metaText` on a chip and a row; the PR chip faces are never drawn. Gap I's age inks go with it. **Decided: D14 a**, quiet PR words and every age in `metaText` | `native/core/src/panel/build.rs:294`, `:313`; `native/core/src/pr_colors.rs:36`, `:52` |
+| T | "Waiting" names a blue status (a shell still running) and, everywhere else, a card that waits on you. **Decided: D15 a**, rename the blue status; "Shell running" is a placeholder, Jon to confirm | `native/core/src/words.rs:27`; `native/core/src/status.rs:166-169` |
+| U | Views pick or copy what the core picks: Ready pill ink, empty and Quiet pills, the halo, the drop hint. **Decided: D8 a**, views draw the core's colour | `CardView.swift:306`; `Model/CardText.swift:115-117`, `:139-148`; `Model/ProjectText.swift:49-51`; `LaneView.swift:158-168` |
+
+## Follow-up work
+
+The PRs that build the decisions, in order. Each is one PR; each moves its
+**Target** lines above into today's description and closes its gaps. Paths
+are under `native/mac/Sidebar/` unless they start with `native/`.
+
+1. **The views test pins its own values (D7).** Nothing on screen. Blocks
+   retiring the TypeScript sidebars and the pane, so it goes first. Files:
+   `native/mac/Tests/Views/main.swift`.
+2. **Comments point at design.md anchors (D6).** Nothing on screen. Files:
+   the 16 files with a `.ts` pointer (`Views/CardView.swift`,
+   `Views/ProjectsView.swift`, `Views/ChipsView.swift`, `Model/CardText.swift`,
+   `Views/LaneView.swift`, `Model/BadgeInk.swift`, `Views/PanelView.swift`,
+   `Model/Palette.swift`, `Model/ProjectText.swift`, `Views/TopView.swift`,
+   `Views/Actions.swift`, `Views/BadgeTile.swift`, `Model/ChipFit.swift`,
+   `Model/DropRule.swift`, `Views/Theme.swift`, `Model/Words.swift`) and the
+   lines that lean on the pane or "the cockpit's".
+3. **One type scale naming (D2).** Nothing on screen. Files:
+   `Views/Theme.swift`, `Views/CardView.swift`, `Views/ProjectsView.swift`,
+   `Views/EditorSheet.swift`, `Views/Actions.swift`, `Views/PanelView.swift`.
+4. **Radius rule (D3), with gap F's unused sizes.** On screen: a dragged card
+   and its gap outline keep the card's 12 corner instead of 6. Files:
+   `Views/BadgeTile.swift`, `Views/CardView.swift`, `Views/LaneView.swift`,
+   `Views/Theme.swift`, `Views/Drag.swift`, `Views/EditorSheet.swift`.
+5. **Spacing literals named (gap C, no card).** Nothing on screen. Files: the
+   views listed on the audit page, mostly `Views/CardView.swift`,
+   `Views/EditorSheet.swift`, `Views/PanelView.swift`, `Views/TopView.swift`
+   and `Views/Theme.swift`.
+6. **One count pill (D1).** On screen: the unread number grows slightly wider
+   and matches the lane count; the anchor badge draws the real unread badge.
+   Files: `Views/CardView.swift`, `Views/LaneView.swift`, `Views/TopView.swift`,
+   `Views/Theme.swift`.
+7. **Views draw the core's colour (D8).** On screen: the waiting count turns
+   amber while every waiting card is an agent asking. Files:
+   `Views/TopView.swift`, `Views/CardView.swift`, `Views/LaneView.swift`,
+   `Model/CardText.swift`, `Model/ProjectText.swift`,
+   `native/core/src/panel/mod.rs`, `native/core/src/panel/build.rs`.
+8. **Red for failures, neutral for helper down (D5), with gap K's words.** On
+   screen: "Not sent" turns red; the "Cockpit isn't running" band loses its
+   amber. Files: `Views/Actions.swift`, `Views/PanelView.swift`,
+   `Model/Words.swift`, `Views/LaneView.swift`.
+9. **Next in Ready's green (D9).** On screen: the clay Next pill turns green.
+   Files: `Views/TopView.swift`, `Model/Palette.swift`,
+   `native/mac/Tests/Views/main.swift` (it checks `needsEdge` and
+   `needsHover`), and the core if Next's ink moves there under grammar rule 1
+   (`native/core/src/panel/`).
+10. **The size chip goes neutral (D10).** On screen: "quick", "decide" and
+    "review" turn grey. Files: `native/core/src/panel/build.rs` (`size_ink`
+    and its test).
+11. **One green for ready to merge (D11).** On screen: the lane's "ready to
+    merge" line, a PR chip's "ready" and a dense row's ready PR number
+    brighten to the merge green. Files: `native/core/src/pr_colors.rs`,
+    `native/core/src/lane_entries.rs`, `native/core/src/panel/build.rs`
+    tests, `native/mac/Tests/Views/main.swift`, and
+    `native/core/src/theme.rs` and `Model/Palette.swift` if `greenDeep`
+    goes.
+12. **Faint and fade meanings (D12).** On screen: fold chevrons and a quiet
+    row's "+" darken a little; "No agent" takes the Idle grey; an empty
+    lane's pill is no longer faint. Files: `native/core/src/status.rs`,
+    `Views/LaneView.swift`, `Views/ProjectsView.swift`, `Views/Theme.swift`,
+    `Model/ProjectText.swift`, `Model/CardText.swift`.
+13. **Selection is the heading outline (D13).** On screen: a selected anchor
+    badge is outlined instead of shaded. Files: `Views/LaneView.swift`,
+    `Model/Palette.swift` (`anchorSelected` goes),
+    `native/mac/Tests/Views/main.swift`.
+14. **Quiet words in the meta ink (D14).** On screen: a compact card's quiet
+    PR words and a card's title row age shift to the meta grey; hard to see.
+    Files: `native/core/src/panel/build.rs`, `Views/CardView.swift`.
+15. **Rename the "Waiting" status (D15).** On screen: a blue card with a
+    running shell says the new word instead of "Waiting". Needs Jon to
+    confirm the word ("Shell running" is a placeholder). Files:
+    `native/core/src/words.rs`, `native/core/src/status.rs` tests.
+16. **Unused colours go (gap F, no card).** Nothing on screen. After 1, since
+    the views test reads `Own.ground` and `Own.cardFace` today. Files:
+    `Model/Palette.swift`, `native/mac/Tests/Views/main.swift`.
+17. **Dark ground sampled (D4).** On screen: in dark mode the panel's ground
+    and faint ink may shift slightly. Blocked on a dark-mode screenshot from
+    Jon. Files: `Model/Palette.swift`, `native/mac/Tests/Views/main.swift`.
