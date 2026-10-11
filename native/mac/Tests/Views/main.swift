@@ -153,15 +153,18 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("needs-an
           "from Projects, a click on the count goes back to All first")
     check(!TopText.showsNext(panel), "Next's line stays off while something waits: the All tab's count leads there")
     // A waiting row (Unsorted's one-line rows) keeps its age as its status
-    // and says its reason on its detail line, in the waiting ink.
+    // and says its reason on its detail line, in the waiting ink. The
+    // scene's n1 ended on no label, so its row quotes the reply's last line
+    // bare, with no "Your turn:", in grey.
     let rows = panel.lanes.flatMap(\.rows).map { r -> Card in
         switch r { case .card(let c): c }
     }
     let waitingRows = rows.filter { $0.density == .row && $0.waiting != nil }
     check(!waitingRows.isEmpty, "needs-and-next has waiting rows")
     for c in waitingRows {
-        check(c.status == c.age && c.detail.contains(": "), "\(c.title): its age as status, its reason as detail")
-        check(c.detailInk == c.waiting?.ink, "\(c.title): the reason in the waiting ink")
+        let quoted = c.wsId == "n1"
+        check(c.status == c.age && c.detail.contains(": ") != quoted, "\(c.title): its age as status, its reason as detail")
+        check(c.detailInk == (quoted ? .secondary : c.waiting?.ink), "\(c.title): the reason in the waiting ink, or grey quoted")
         check(lines.contains { $0.hasSuffix(c.detail) }, "\(c.title): the reason reads as the pane's line")
     }
     for c in rows where c.waiting == nil {
