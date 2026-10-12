@@ -1,9 +1,10 @@
 // scripts/start-cockpit.sh, which the start-cockpit rule runs when cmux
 // opens a window. Each case runs it with a fake HOME and a PATH of
-// stand-ins: pgrep answers from a file that says whether Cockpit runs,
-// pkill removes it, open records the app it was asked for and starts
-// Cockpit, and sleep returns at once, writing the next data.json (dated
-// ahead, so it is newer than the script's mark) when a case lines one up.
+// stand-ins: ps names cmux at pid 100, pgrep answers from files that say
+// which Cockpit pid runs and whether its publisher does, pkill records
+// how it was called and stops Cockpit (unless a case makes it stubborn,
+// when only -9 does), open records the app and starts Cockpit at a new
+// pid, and sleep returns at once.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -23,18 +24,13 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "start-cockpit.sh");
 // Real tools the script and the stand-ins use.
-const TOOLS = ["grep", "mktemp", "rm", "cp", "touch"];
-
-const HEALTHY = '{"data":{"epoch":1,"workspaces":[{"id":"A"}]}}';
-const REFUSED = '{"data":{"epoch":1,"workspaces":null}}';
+const TOOLS = ["grep", "head", "tr", "cut", "cat", "mkdir", "rm"];
 
 let home = "";
 let bin = "";
 let app = "";
-let data = "";
-let running = "";
-let opened = "";
-let next = "";
+let state = "";
+let calls = "";
 
 function which(tool: string): string {
   const found = ["/usr/bin", "/bin"].map((d) => join(d, tool)).find((p) => existsSync(p));
@@ -55,91 +51,129 @@ beforeEach(() => {
   for (const tool of TOOLS) symlinkSync(which(tool), join(bin, tool));
   app = join(home, "Cockpit.app");
   mkdirSync(app);
-  data = join(home, "data.json");
-  running = join(home, "running");
-  opened = join(home, "opened");
-  next = join(home, "next.json");
-  stub("pgrep", `[ -f "${running}" ]`);
-  stub("pkill", `rm -f "${running}"`);
-  stub("open", `echo "$1" >> "${opened}"; : > "${running}"`);
-  stub("sleep", `[ -f "${next}" ] && cp "${next}" "${data}" && touch -t 203001010000 "${data}"; exit 0`);
+  state = join(home, "state");
+  calls = join(home, "calls");
+  const f = (name: string) => join(home, name);
+  stub("ps", `echo "  99 /usr/sbin/cfprefsd"; echo "  100 /Applications/cmux.app/Contents/MacOS/cmux"`);
+  stub(
+    "pgrep",
+    `case "$2" in
+  Cockpit) [ -f "${f("running")}" ] && cat "${f("running")}" ;;
+  cockpit-publish) [ -f "${f("publisher")}" ] ;;
+  *) exit 1 ;;
+esac`,
+  );
+  stub(
+    "pkill",
+    `echo "pkill $*" >> "${calls}"
+if [ "$1" = -9 ] || [ ! -f "${f("stubborn")}" ]; then rm -f "${f("running")}"; fi
+exit 0`,
+  );
+  stub(
+    "open",
+    `echo "open $1" >> "${calls}"
+n=$(cat "${f("next")}" 2>/dev/null || echo 500)
+echo "$n" > "${f("running")}"; echo $((n + 1)) > "${f("next")}"; : > "${f("publisher")}"`,
+  );
+  stub("sleep", "exit 0");
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-function run(env: Record<string, string> = {}) {
+function run() {
   return spawnSync("/bin/sh", [SCRIPT], {
     encoding: "utf8",
-    env: {
-      HOME: home,
-      PATH: bin,
-      TMPDIR: home,
-      COCKPIT_APP: app,
-      COCKPIT_DATA: data,
-      COCKPIT_WAIT: "3",
-      ...env,
-    },
+    env: { HOME: home, PATH: bin, COCKPIT_APP: app, COCKPIT_STATE: state },
   });
 }
 
-function opens(): string[] {
-  return existsSync(opened) ? readFileSync(opened, "utf8").trim().split("\n") : [];
+/** A Cockpit at `pid`, with its publisher running unless told otherwise. */
+function cockpitRunning(pid: number, publisher = true): void {
+  writeFileSync(join(home, "running"), `${pid}\n`);
+  if (publisher) writeFileSync(join(home, "publisher"), "");
+}
+
+function started(pair: string): void {
+  mkdirSync(state, { recursive: true });
+  writeFileSync(join(state, "started"), `${pair}\n`);
+}
+
+function log(): string[] {
+  return existsSync(calls) ? readFileSync(calls, "utf8").trim().split("\n") : [];
+}
+
+function noted(): string {
+  return readFileSync(join(state, "started"), "utf8").trim();
 }
 
 describe("start-cockpit.sh", () => {
-  it("opens Cockpit when none is running", () => {
-    const out = run();
-    assert.equal(out.status, 0);
-    assert.deepEqual(opens(), [app]);
+  it("opens Cockpit when none is running, and notes this cmux started it", () => {
+    assert.equal(run().status, 0);
+    assert.deepEqual(log(), [`open ${app}`]);
+    assert.equal(noted(), "100 500");
   });
 
-  it("leaves a Cockpit alone once it writes a workspace list", () => {
-    writeFileSync(running, "");
-    writeFileSync(data, REFUSED);
-    writeFileSync(next, HEALTHY);
-    const out = run();
-    assert.equal(out.status, 0);
-    assert.deepEqual(opens(), []);
-    assert.ok(existsSync(running));
+  it("leaves alone the Cockpit this cmux started", () => {
+    cockpitRunning(42);
+    started("100 42");
+    assert.equal(run().status, 0);
+    assert.deepEqual(log(), []);
   });
 
-  it("starts Cockpit again when its fresh data has no workspaces", () => {
-    writeFileSync(running, "");
-    writeFileSync(data, REFUSED);
-    writeFileSync(next, REFUSED);
-    const out = run();
-    assert.equal(out.status, 0);
-    assert.deepEqual(opens(), [app]);
-    assert.ok(existsSync(running));
+  it("restarts a Cockpit started outside this cmux, as at login", () => {
+    cockpitRunning(42);
+    assert.equal(run().status, 0);
+    assert.deepEqual(log(), ["pkill -x Cockpit", `open ${app}`]);
+    assert.equal(noted(), "100 500");
   });
 
-  it("does not trust a list written before it began", () => {
-    // A data.json left from before a reboot still lists workspaces.
-    writeFileSync(running, "");
-    writeFileSync(data, HEALTHY);
-    touchPast(data);
-    const out = run();
-    assert.equal(out.status, 0);
-    assert.deepEqual(opens(), [app]);
+  it("restarts a Cockpit an earlier cmux started", () => {
+    cockpitRunning(42);
+    started("77 42");
+    run();
+    assert.deepEqual(log(), ["pkill -x Cockpit", `open ${app}`]);
+    assert.equal(noted(), "100 500");
+  });
+
+  it("forces out a Cockpit that will not quit before opening another", () => {
+    cockpitRunning(42);
+    writeFileSync(join(home, "stubborn"), "");
+    run();
+    assert.deepEqual(log(), ["pkill -x Cockpit", "pkill -9 -x Cockpit", `open ${app}`]);
+  });
+
+  it("leaves a Cockpit without its publisher alone, as a fixture runs", () => {
+    cockpitRunning(42, false);
+    run();
+    assert.deepEqual(log(), []);
+  });
+
+  it("does nothing while another copy holds the lock", () => {
+    cockpitRunning(42);
+    mkdirSync(join(state, "start.lock"), { recursive: true });
+    writeFileSync(join(state, "start.lock", "pid"), `${process.pid}\n`);
+    run();
+    assert.deepEqual(log(), []);
+  });
+
+  it("takes over a lock its holder died with, and releases it", () => {
+    cockpitRunning(42);
+    mkdirSync(join(state, "start.lock"), { recursive: true });
+    writeFileSync(join(state, "start.lock", "pid"), "999999\n");
+    run();
+    assert.deepEqual(log(), ["pkill -x Cockpit", `open ${app}`]);
+    assert.ok(!existsSync(join(state, "start.lock")));
   });
 
   it("does nothing without a Cockpit build", () => {
     rmSync(app, { recursive: true });
-    const out = run();
-    assert.equal(out.status, 0);
-    assert.deepEqual(opens(), []);
+    assert.equal(run().status, 0);
+    assert.deepEqual(log(), []);
   });
 
-  it("leaves no mark behind", () => {
-    writeFileSync(running, "");
-    writeFileSync(data, REFUSED);
-    writeFileSync(next, HEALTHY);
-    run();
-    const left = spawnSync("/bin/ls", [home], { encoding: "utf8" }).stdout;
-    assert.doesNotMatch(left, /start-cockpit\./);
+  it("does nothing when it cannot find cmux", () => {
+    stub("ps", 'echo "  99 /usr/sbin/cfprefsd"');
+    cockpitRunning(42);
+    assert.equal(run().status, 0);
+    assert.deepEqual(log(), []);
   });
 });
-
-function touchPast(path: string): void {
-  const out = spawnSync(which("touch"), ["-t", "202001010000", path]);
-  assert.equal(out.status, 0);
-}
