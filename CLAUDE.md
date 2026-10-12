@@ -121,6 +121,12 @@ warnings denied, and the tests, from `native/`.
 - Clippy clean with warnings denied, on every target, tests included.
 - New logic in `core` has a test beside it.
 
+## Native sidebar (native/mac)
+
+`docs/design.md` defines the native sidebar's look: colours, type, spacing
+and each component by name. Read it before changing a view, `Palette.swift`
+or `Metrics`, and update it in the same PR when the look changes.
+
 ## Workflow
 
 Work on a branch and open a PR; main is protected by habit.
