@@ -13,6 +13,17 @@
       ]
     },
     {
+      "id": "start-cockpit",
+      "when": { "event": "window.created" },
+      "then": [
+        {
+          "action": "run",
+          "command": "\"$HOME/.config/cmux/scripts/start-cockpit.sh\"",
+          "timeout_seconds": 90
+        }
+      ]
+    },
+    {
       "id": "pr-poll-turn",
       "when": { "event": "agent.hook.Stop" },
       "rate_limit": { "interval_seconds": 30, "maximum": 1 },
