@@ -118,6 +118,14 @@ registered:
 pluginkit -mAvvv -i dev.jonyardley.cockpit.sidebar
 ```
 
+Start it from cmux, not at login. cmux's socket answers only programs
+cmux started ("cmux processes only"), so a Cockpit macOS opens at login,
+before cmux, reads no workspaces and every lane shows 0. The
+start-cockpit rule in `automations.json` runs `scripts/start-cockpit.sh`
+whenever cmux opens a window: it opens Cockpit when none is running, and
+starts it again when a running one writes no workspace list within 45
+seconds.
+
 To stop the helper: `pkill -x Cockpit`. To run it without the
 publisher, so a fixture stays on screen:
 
