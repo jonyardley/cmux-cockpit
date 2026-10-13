@@ -831,7 +831,7 @@ mod tests {
     }
 
     /// The panel over one workspace "W" running `agents`, each its status
-    /// and its tab's title and surface.
+    /// and its tab's title and surface ("" for none).
     fn one_workspace(agents: &[(&str, Option<&str>, &str)]) -> Panel {
         use crate::{Cockpit, Event};
         use crux_core::App;
@@ -840,7 +840,8 @@ mod tests {
             .enumerate()
             .map(|(i, (status, title, surface))| {
                 serde_json::json!({"id": format!("a{i}"), "status": status,
-                    "title": title, "surfaceId": surface, "sinceEpoch": 100 + i})
+                    "tabTitle": title, "surfaceId": (!surface.is_empty()).then_some(surface),
+                    "sinceEpoch": 100 + i})
             })
             .collect();
         let data: Data = serde_json::from_value(serde_json::json!({"epoch": 200,
@@ -887,7 +888,34 @@ mod tests {
         assert_eq!(tab_of(&busy), None, "nothing waits");
         let untitled = one_workspace(&[("working", None, "S1"), ("needs_input", Some(" "), "S2")]);
         assert!(untitled.is_waiting("W"));
-        assert_eq!(tab_of(&untitled), None, "a tab with no title names nothing");
+        assert_eq!(
+            tab_of(&untitled),
+            Some(WaitingTab {
+                title: String::new(),
+                surface_id: "S2".into()
+            }),
+            "an untitled tab draws no line but a click still selects it"
+        );
+        let nowhere = one_workspace(&[
+            ("working", Some("Review #327"), "S1"),
+            ("needs_input", None, ""),
+        ]);
+        assert!(nowhere.is_waiting("W"));
+        assert_eq!(tab_of(&nowhere), None, "no tab, nothing to name or select");
+    }
+
+    #[test]
+    fn an_ended_agent_does_not_count_towards_several() {
+        let panel = one_workspace(&[
+            ("ended", Some("Review #327"), "S1"),
+            ("needs_input", Some("Fix CI lint"), "S2"),
+        ]);
+        assert!(panel.is_waiting("W"));
+        assert_eq!(
+            tab_of(&panel),
+            None,
+            "one agent still running: the card is that tab"
+        );
     }
 
     #[test]

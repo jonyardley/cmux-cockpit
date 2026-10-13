@@ -197,6 +197,7 @@ impl Join {
             .tab_of
             .keys()
             .chain(self.sessions.keys())
+            .chain(self.surface_of.keys())
             .copied()
             .collect();
         pids.sort_unstable();
@@ -300,14 +301,17 @@ impl Join {
         moved
     }
 
-    /// Takes cmux's tab titles, surface id to title; false when nothing
-    /// changed.
+    /// Takes cmux's tab titles, surface id to title; whether the title of
+    /// a tab some session runs in changed. Every other tab's title is kept
+    /// too, for a session placed in it before the next read, but a change
+    /// there is no news for a frame.
     pub fn titles(&mut self, titles: HashMap<String, String>) -> bool {
-        if self.titles == titles {
-            return false;
-        }
+        let changed = self
+            .surface_of
+            .values()
+            .any(|(s, _)| self.titles.get(s) != titles.get(s));
         self.titles = titles;
-        true
+        changed
     }
 
     /// Whether the hook changed the session at all (a repeated status
@@ -359,12 +363,12 @@ impl Join {
             .and_then(|a| a.session.get(&pid).cloned())
             .unwrap_or_else(|| format!("pid:{pid}"));
         let surface = self.surface_of.get(&pid).map(|(s, _)| s.clone());
-        let title = surface.as_ref().and_then(|s| self.titles.get(s)).cloned();
+        let tab_title = surface.as_ref().and_then(|s| self.titles.get(s)).cloned();
         let mut a = Agent {
             id,
             kind: Some("claude".to_string()),
             surface_id: surface,
-            title,
+            tab_title,
             ..Agent::default()
         };
         match self.sessions.get(&pid) {
@@ -515,7 +519,7 @@ mod tests {
         d.workspace_list()
             .iter()
             .flat_map(|w| w.agent_list())
-            .map(|a| (a.surface_id.clone(), a.title.clone()))
+            .map(|a| (a.surface_id.clone(), a.tab_title.clone()))
             .collect()
     }
 
@@ -533,6 +537,50 @@ mod tests {
             tabs(&j.frame(200.0)),
             vec![(Some("S1".into()), Some("Fix CI lint".into()))]
         );
+    }
+
+    #[test]
+    fn only_a_title_change_on_a_tab_a_session_runs_in_is_news() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(1, "Stop", 7, "A", "S1"));
+        let read = |s1: &str, s9: &str| {
+            HashMap::from([
+                ("S1".to_string(), s1.to_string()),
+                ("S9".to_string(), s9.to_string()),
+            ])
+        };
+        assert!(j.titles(read("Fix CI lint", "zsh")));
+        assert!(!j.titles(read("Fix CI lint", "vim")), "S9 runs no session");
+        assert!(j.titles(read("Review #327", "vim")));
+        // A session placed later in S9 finds the title already read.
+        j.agents(view(&[(7, true, "s7"), (8, true, "s8")]));
+        j.event(&hook_in(2, "Stop", 8, "A", "S9"));
+        let mut t = tabs(&j.frame(200.0));
+        t.sort();
+        assert_eq!(
+            t,
+            vec![
+                (Some("S1".into()), Some("Review #327".into())),
+                (Some("S9".into()), Some("vim".into()))
+            ]
+        );
+    }
+
+    #[test]
+    fn a_pid_with_only_a_tab_is_forgotten_too() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(1, "SubagentStart", 7, "A", "S1"));
+        assert!(j.surface_of.contains_key(&7));
+        assert!(!j.sessions.contains_key(&7) && !j.tab_of.contains_key(&7));
+        for _ in 0..FORGET_AFTER {
+            j.agents(view(&[]));
+        }
+        assert!(j.surface_of.is_empty(), "its tab is forgotten with it");
+        assert!(j.absent.is_empty());
     }
 
     #[test]

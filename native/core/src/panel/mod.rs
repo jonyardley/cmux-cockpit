@@ -147,7 +147,9 @@ pub struct Waiting {
 /// puts Jon on.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct WaitingTab {
-    /// The tab's title as cmux's tab bar shows it.
+    /// The tab's title as cmux's tab bar shows it, less Claude Code's
+    /// status glyph; "" when it has none worth showing, and the card then
+    /// draws no line but a click still selects the tab.
     pub title: String,
     /// The tab's cmux surface id.
     pub surface_id: String,

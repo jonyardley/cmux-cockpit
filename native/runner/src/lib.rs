@@ -24,8 +24,9 @@
 //!   but a selection, which takes in `workspace.reordered` (sent when a
 //!   card is dragged between lanes) and `workspace.group.` names, and any
 //!   `workspace_group.` one.
-//! - `cmux rpc system.tree` every 10 seconds: each tab's title, which
-//!   names the tab an agent runs in.
+//! - `cmux rpc system.tree` every 10 seconds, without a core only (the
+//!   Swift sidebar's feed): each tab's title, which names the tab an
+//!   agent runs in.
 //! - config/state.json, config/projects.json and config/lanes.json,
 //!   checked every 2 seconds.
 //! - Each directory's PR, when the core asks (pr_ask.rs): `git` then `gh`
@@ -732,7 +733,8 @@ fn run_with(
         let stop = Arc::clone(&stop);
         thread::spawn(move || poll_agents(&tx, &stop));
     }
-    {
+    // Only the Swift sidebar names a waiting agent's tab; the pane does not.
+    if feed.no_core {
         let tx = tx.clone();
         let stop = Arc::clone(&stop);
         thread::spawn(move || poll_titles(&tx, &stop));

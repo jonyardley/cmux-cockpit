@@ -163,7 +163,7 @@ struct DenseRow: View {
             LeftOff(text: card.leftOff).padding(.leading, CardLook.rowIndent)
             Detail(text: card.detail, lines: CardText.detailLines(card), ink: card.detailInk)
                 .padding(.leading, CardLook.rowIndent)
-            WaitingTabLine(card: card).padding(.leading, CardLook.rowIndent)
+            WaitingTabLine(card: card, leading: CardLook.rowIndent)
         }
         .padding(.leading, CardLook.rowPadLeading)
         .padding(.trailing, CardLook.padTrailing)
@@ -184,7 +184,7 @@ struct CardView: View {
             TitleRow(card: card, size: CardLook.rowTitle, lines: 2, leadMark: true)
             StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
                 .padding(.top, 2)
-            WaitingTabLine(card: card).padding(.top, CardText.waitingTab(card) == nil ? 0 : 2)
+            WaitingTabLine(card: card, top: 2)
             Detail(text: card.detail, lines: CardText.detailLines(card)).padding(.top, card.detail.isEmpty ? 0 : 3)
             if ChipsRow.shows(card) {
                 ChipsRow(card: card).padding(.top, CardLook.projectGap)
@@ -281,9 +281,14 @@ struct StatusLine: View {
 
 /// "in Fix CI lint": the tab of the agent a waiting card waits on, when
 /// its workspace runs several (issue #329). The lead in `metaText`, the
-/// tab's title in `secondary`, one line cut at the end.
+/// tab's title in `secondary`, one line cut at the end. Its insets apply
+/// only when it draws, so a card with no line keeps its spacing.
 struct WaitingTabLine: View {
     let card: Card
+    /// Inset from the leading edge: the dense row's indent to its title.
+    var leading: CGFloat = 0
+    /// Space above it: the Projects card's gap under the status line.
+    var top: CGFloat = 0
 
     var body: some View {
         if let title = CardText.waitingTab(card) {
@@ -297,6 +302,8 @@ struct WaitingTabLine: View {
             }
             .font(.system(size: CardLook.compactStatus))
             .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, leading)
+            .padding(.top, top)
         }
     }
 }

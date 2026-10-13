@@ -283,21 +283,24 @@ impl Session {
     }
 
     /// The tab of the agent a workspace's card speaks for, as its title
-    /// and surface id, while the workspace runs two or more agents, so a
-    /// waiting card can say which one waits. None with one agent, or when
-    /// cmux has not given that agent's tab or a title for it.
+    /// and surface id, while the workspace runs two or more agents that
+    /// have not ended, so a waiting card can say which one waits. The
+    /// title is "" when the tab has none worth showing: the card then
+    /// draws no line, but a click still selects the tab. None with one
+    /// agent, or when the runner has not placed that agent in a tab.
     pub fn agent_tab_of(&mut self, w: Option<&Workspace>) -> Option<(String, String)> {
         let agents = self.agents_of(w);
-        if agents.len() < 2 {
+        let running = agents
+            .iter()
+            .filter(|a| a.status != Some(AgentStatus::Ended))
+            .count();
+        if running < 2 {
             return None;
         }
         let a = most_active(&agents)?;
-        let title = a
-            .title
-            .as_deref()
-            .map(str::trim)
-            .filter(|t| !t.is_empty())?;
-        Some((title.to_string(), a.surface_id.clone()?))
+        let surface = a.surface_id.clone()?;
+        let title = a.tab_title.as_deref().map(str::trim).unwrap_or_default();
+        Some((title.to_string(), surface))
     }
 
     /// The workspace's status.

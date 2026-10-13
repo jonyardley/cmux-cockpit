@@ -96,6 +96,10 @@ pub struct Agent {
     pub title: Option<String>,
     #[serde(deserialize_with = "crate::lenient::field")]
     pub surface_id: Option<String>,
+    /// The title of the tab (cmux surface) it runs in, as the runner reads
+    /// it from cmux's tree; not cmux's own `title`, which names the agent.
+    #[serde(deserialize_with = "crate::lenient::field")]
+    pub tab_title: Option<String>,
     #[serde(deserialize_with = "crate::lenient::field")]
     pub transcript_path: Option<String>,
     /// Epoch seconds the current status began.

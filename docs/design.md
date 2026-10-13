@@ -448,12 +448,14 @@ ever means waiting on you (D15). The working name is "Shell running";
 
 On a waiting card whose workspace runs two or more agents, the tab the
 waiting one runs in: "in" at 11.5 regular in `metaText`, then the tab's
-title as cmux's tab bar shows it, 11.5 medium in `secondary`, one line cut
-at the end.
+title as cmux's tab bar shows it, less Claude Code's status glyph, 11.5
+medium in `secondary`, one line cut at the end.
 It sits under the status line on a full, compact and Projects card, and
-under the detail on a dense row, indented to the title. No line with one
-agent, nothing waiting, or a tab cmux has not titled. A click on the card
-selects the workspace, then that tab. Where: `Views/CardView.swift`
+under the detail on a dense row, indented to the title. Only agents that
+have not ended count towards the two. No line with one agent, nothing
+waiting, or a tab with no title (or only "Claude Code"). A click on the
+card selects the workspace, then that tab, even when the tab has no title
+to show. Where: `Views/CardView.swift`
 (`WaitingTabLine`); the core sets `Card.waiting_tab`
 (`native/core/src/panel/build.rs`). Issue #329.
 
