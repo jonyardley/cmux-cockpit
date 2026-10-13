@@ -447,8 +447,9 @@ ever means waiting on you (D15). The working name is "Shell running";
 ### Waiting tab line
 
 On a waiting card whose workspace runs two or more agents, the tab the
-waiting one runs in: "in" in `metaText`, then the tab's title as cmux's tab
-bar shows it, medium in `secondary`, one line cut at the end, 11.5 regular.
+waiting one runs in: "in" at 11.5 regular in `metaText`, then the tab's
+title as cmux's tab bar shows it, 11.5 medium in `secondary`, one line cut
+at the end.
 It sits under the status line on a full, compact and Projects card, and
 under the detail on a dense row, indented to the title. No line with one
 agent, nothing waiting, or a tab cmux has not titled. A click on the card
