@@ -119,14 +119,18 @@ pluginkit -mAvvv -i dev.jonyardley.cockpit.sidebar
 ```
 
 Start it from cmux, not at login. cmux's socket answers only programs
-cmux started ("cmux processes only"), so a Cockpit macOS opens at login,
-before cmux, reads no workspaces and every lane shows 0. The
-start-cockpit rule in `automations.json` runs `scripts/start-cockpit.sh`
-whenever cmux opens a window: it opens Cockpit when none is running, and
-starts it again when the running one was not started by this cmux (it
-notes the pair in `~/.local/state/cockpit/started`). A Cockpit running
-with `--no-publish` is left alone; one stopped with `pkill` comes back at
-the next new window.
+cmux started ("cmux processes only") or ones holding the pass cmux gives
+each of its terminals, so a Cockpit macOS opens at login, before cmux,
+reads no workspaces and every lane shows 0. The start-cockpit rule in
+`automations.json` runs `scripts/start-cockpit.sh` whenever cmux opens a
+window. It opens Cockpit from a background cmux terminal tab, which hands
+Cockpit the pass and closes itself, so a tab may flash in that window. A
+running Cockpit whose publisher holds a pass is left alone (the pass
+outlives cmux restarts); any other is quit and opened again. Opening it
+straight from the rule would not do: cmux ends the rule after its
+timeout, and Cockpit's tie to cmux goes with it. A Cockpit running with
+`--no-publish` is left alone; one stopped with `pkill` comes back at the
+next new window.
 
 To stop the helper: `pkill -x Cockpit`. To run it without the
 publisher, so a fixture stays on screen:
