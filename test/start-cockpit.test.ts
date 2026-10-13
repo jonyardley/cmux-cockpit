@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "start-cockpit.sh");
 // Real tools the script and the stand-ins use.
-const TOOLS = ["grep", "head", "sed", "cat", "mkdir", "rm", "printf"];
+const TOOLS = ["grep", "head", "sed", "cat", "mkdir", "rm", "printf", "id"];
 
 let home = "";
 let bin = "";

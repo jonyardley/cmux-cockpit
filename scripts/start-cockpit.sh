@@ -22,9 +22,9 @@ APP=${COCKPIT_APP:-$HOME/.config/cmux/native/mac/build/Build/Products/Debug/Cock
 STATE=${COCKPIT_STATE:-$HOME/.local/state/cockpit}
 [ -d "$APP" ] || exit 0
 
-# The CLI sits beside the running app, wherever it is installed; the
+# The CLI sits beside this user's running app, wherever it is installed; the
 # automation runner has the app's PATH, not a shell's.
-app=$(ps -axo comm= | grep '/cmux\.app/Contents/MacOS/cmux$' | head -n 1)
+app=$(ps -U "$(id -u)" -o comm= | grep '/cmux\.app/Contents/MacOS/cmux$' | head -n 1)
 [ -n "$app" ] || exit 0
 CMUX=$(command -v cmux || echo "${app%/MacOS/cmux}/Resources/bin/cmux")
 [ -x "$CMUX" ] || exit 0
