@@ -1,10 +1,13 @@
 // scripts/start-cockpit.sh, which the start-cockpit rule runs when cmux
 // opens a window. Each case runs it with a fake HOME and a PATH of
-// stand-ins: ps names cmux at pid 100, pgrep answers from files that say
-// which Cockpit pid runs and whether its publisher does, pkill records
-// how it was called and stops Cockpit (unless a case makes it stubborn,
-// when only -9 does), open records the app and starts Cockpit at a new
-// pid, and sleep returns at once.
+// stand-ins: ps names cmux among the processes and, asked for the
+// publisher's environment, shows the terminal pass when the running
+// Cockpit has one; pgrep answers from files that say which Cockpit pid
+// runs and whether its publisher does; pkill records how it was called
+// and stops Cockpit (unless a case makes it stubborn, when only -9 does);
+// cmux records the tab it is asked for and starts Cockpit with the pass,
+// unless a case makes it refuse; open records the app and starts Cockpit
+// without the pass; and sleep returns at once.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -24,7 +27,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "start-cockpit.sh");
 // Real tools the script and the stand-ins use.
-const TOOLS = ["grep", "head", "tr", "cut", "cat", "mkdir", "rm"];
+const TOOLS = ["grep", "head", "sed", "cat", "mkdir", "rm"];
 
 let home = "";
 let bin = "";
@@ -54,12 +57,19 @@ beforeEach(() => {
   state = join(home, "state");
   calls = join(home, "calls");
   const f = (name: string) => join(home, name);
-  stub("ps", `echo "  99 /usr/sbin/cfprefsd"; echo "  100 /Applications/cmux.app/Contents/MacOS/cmux"`);
+  stub(
+    "ps",
+    `if [ "$1" = -E ]; then
+  echo "/x/cockpit-publish --parent 42 HOME=/h$([ -f "${f("pass")}" ] && echo " CMUX_SOCKET_CAPABILITY=v1.x")"
+else
+  echo "/usr/sbin/cfprefsd"; echo "/Applications/cmux.app/Contents/MacOS/cmux"
+fi`,
+  );
   stub(
     "pgrep",
     `case "$2" in
   Cockpit) [ -f "${f("running")}" ] && cat "${f("running")}" ;;
-  cockpit-publish) [ -f "${f("publisher")}" ] ;;
+  cockpit-publish) [ -f "${f("publisher")}" ] && echo 43 ;;
   *) exit 1 ;;
 esac`,
   );
@@ -69,82 +79,101 @@ esac`,
 if [ "$1" = -9 ] || [ ! -f "${f("stubborn")}" ]; then rm -f "${f("running")}"; fi
 exit 0`,
   );
+  const start = (pass: boolean) =>
+    `n=$(cat "${f("next")}" 2>/dev/null || echo 500)
+echo "$n" > "${f("running")}"; echo $((n + 1)) > "${f("next")}"; : > "${f("publisher")}"
+${pass ? `: > "${f("pass")}"` : `rm -f "${f("pass")}"`}`;
   stub(
-    "open",
-    `echo "open $1" >> "${calls}"
-n=$(cat "${f("next")}" 2>/dev/null || echo 500)
-echo "$n" > "${f("running")}"; echo $((n + 1)) > "${f("next")}"; : > "${f("publisher")}"`,
+    "cmux",
+    `echo "cmux $*" >> "${calls}"
+[ -f "${f("refuses")}" ] && exit 1
+${start(true)}`,
   );
+  stub("open", `echo "open $1" >> "${calls}"\n${start(false)}`);
   stub("sleep", "exit 0");
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-function run() {
+function run(event = '{"name":"window.created","window_id":"W1"}') {
   return spawnSync("/bin/sh", [SCRIPT], {
     encoding: "utf8",
-    env: { HOME: home, PATH: bin, COCKPIT_APP: app, COCKPIT_STATE: state },
+    env: {
+      HOME: home,
+      PATH: bin,
+      COCKPIT_APP: app,
+      COCKPIT_STATE: state,
+      CMUX_AUTOMATION_EVENT_JSON: event,
+    },
   });
 }
 
-/** A Cockpit at `pid`, with its publisher running unless told otherwise. */
-function cockpitRunning(pid: number, publisher = true): void {
+/**
+ * A Cockpit at `pid`, with its publisher running unless told otherwise,
+ * and holding a cmux terminal's pass when `pass` is set.
+ */
+function cockpitRunning(pid: number, { publisher = true, pass = false } = {}): void {
   writeFileSync(join(home, "running"), `${pid}\n`);
   if (publisher) writeFileSync(join(home, "publisher"), "");
-}
-
-function started(pair: string): void {
-  mkdirSync(state, { recursive: true });
-  writeFileSync(join(state, "started"), `${pair}\n`);
+  if (pass) writeFileSync(join(home, "pass"), "");
 }
 
 function log(): string[] {
   return existsSync(calls) ? readFileSync(calls, "utf8").trim().split("\n") : [];
 }
 
-function noted(): string {
-  return readFileSync(join(state, "started"), "utf8").trim();
+/** The tab start-cockpit asks cmux for, in window `window` if given. */
+function tab(window = "W1"): string {
+  const where = window ? `--window ${window} ` : "";
+  return `cmux new-surface --type terminal ${where}--focus false --command open '${app}'; exit`;
 }
 
 describe("start-cockpit.sh", () => {
-  it("opens Cockpit when none is running, and notes this cmux started it", () => {
+  it("opens Cockpit from a background cmux tab in the new window", () => {
     assert.equal(run().status, 0);
-    assert.deepEqual(log(), [`open ${app}`]);
-    assert.equal(noted(), "100 500");
+    assert.deepEqual(log(), [tab()]);
   });
 
-  it("leaves alone the Cockpit this cmux started", () => {
-    cockpitRunning(42);
-    started("100 42");
+  it("asks for the tab without a window when the event names none", () => {
+    run("{}");
+    assert.deepEqual(log(), [tab("")]);
+  });
+
+  it("opens Cockpit directly when cmux will not open the tab", () => {
+    writeFileSync(join(home, "refuses"), "");
+    assert.equal(run().status, 0);
+    assert.deepEqual(log(), [tab(), `open ${app}`]);
+  });
+
+  it("leaves alone a Cockpit whose publisher holds a cmux pass", () => {
+    cockpitRunning(42, { pass: true });
     assert.equal(run().status, 0);
     assert.deepEqual(log(), []);
   });
 
-  it("restarts a Cockpit started outside this cmux, as at login", () => {
+  it("restarts a Cockpit without a pass, as one opened at login", () => {
     cockpitRunning(42);
     assert.equal(run().status, 0);
-    assert.deepEqual(log(), ["pkill -x Cockpit", `open ${app}`]);
-    assert.equal(noted(), "100 500");
-  });
-
-  it("restarts a Cockpit an earlier cmux started", () => {
-    cockpitRunning(42);
-    started("77 42");
-    run();
-    assert.deepEqual(log(), ["pkill -x Cockpit", `open ${app}`]);
-    assert.equal(noted(), "100 500");
+    assert.deepEqual(log(), ["pkill -x Cockpit", tab()]);
   });
 
   it("forces out a Cockpit that will not quit before opening another", () => {
     cockpitRunning(42);
     writeFileSync(join(home, "stubborn"), "");
     run();
-    assert.deepEqual(log(), ["pkill -x Cockpit", "pkill -9 -x Cockpit", `open ${app}`]);
+    assert.deepEqual(log(), ["pkill -x Cockpit", "pkill -9 -x Cockpit", tab()]);
   });
 
   it("leaves a Cockpit without its publisher alone, as a fixture runs", () => {
-    cockpitRunning(42, false);
+    cockpitRunning(42, { publisher: false });
     run();
     assert.deepEqual(log(), []);
+  });
+
+  it("clears the note the earlier version kept", () => {
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(state, "started"), "100 42\n");
+    run();
+    assert.ok(!existsSync(join(state, "started")));
   });
 
   it("does nothing while another copy holds the lock", () => {
@@ -160,7 +189,7 @@ describe("start-cockpit.sh", () => {
     mkdirSync(join(state, "start.lock"), { recursive: true });
     writeFileSync(join(state, "start.lock", "pid"), "999999\n");
     run();
-    assert.deepEqual(log(), ["pkill -x Cockpit", `open ${app}`]);
+    assert.deepEqual(log(), ["pkill -x Cockpit", tab()]);
     assert.ok(!existsSync(join(state, "start.lock")));
   });
 
@@ -171,7 +200,7 @@ describe("start-cockpit.sh", () => {
   });
 
   it("does nothing when it cannot find cmux", () => {
-    stub("ps", 'echo "  99 /usr/sbin/cfprefsd"');
+    stub("ps", 'echo "/usr/sbin/cfprefsd"');
     cockpitRunning(42);
     assert.equal(run().status, 0);
     assert.deepEqual(log(), []);
