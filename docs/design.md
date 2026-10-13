@@ -447,17 +447,22 @@ ever means waiting on you (D15). The working name is "Shell running";
 ### Waiting tab line
 
 On a waiting card whose workspace runs two or more agents, the tab the
-waiting one runs in: "in" at 11.5 regular in `metaText`, then the tab's
-title as cmux's tab bar shows it, less Claude Code's status glyph, 11.5
-medium in `secondary`, one line cut at the end.
-It sits under the status line on a full, compact and Projects card, and
-under the detail on a dense row, indented to the title. Only agents that
-have not ended count towards the two. No line with one agent, nothing
-waiting, or a tab with no title (or only "Claude Code"). A click on the
+waiting one runs in, drawn as a pill shaped like a tab: the tab's title
+alone, as cmux's tab bar shows it less Claude Code's status glyph, 11
+regular in `secondary`, one line cut at the end. The pill hugs its text
+from the leading edge, never wider than the card's column: fill
+`chipFace`, a 1pt edge in `chipEdge` with the bottom edge in `cardEdge`,
+top corners radius 6 and bottom corners square, padding 8 leading and
+trailing, 1 top and 2 bottom.
+It sits under the status line on a full, compact and Projects card (2
+above it on a Projects card), and under the detail on a dense row,
+indented to the title. Only agents that have not ended count towards the
+two. No pill with one agent, nothing waiting, or a tab with no title (or
+only "Claude Code"); the space it would take goes with it. A click on the
 card selects the workspace, then that tab, even when the tab has no title
-to show. Where: `Views/CardView.swift`
-(`WaitingTabLine`); the core sets `Card.waiting_tab`
-(`native/core/src/panel/build.rs`). Issue #329.
+to show. Where: `Views/CardView.swift` (`WaitingTabLine`, `TabPillLook`);
+the core sets `Card.waiting_tab` (`native/core/src/panel/build.rs`).
+Issue #329.
 
 ### Status dot
 
