@@ -10,9 +10,11 @@ import SwiftUI
 /// host send the core's SwitchTo, which it hands cockpit-publish through
 /// the outbox.
 struct SwitchWorkspace: Sendable {
-    let run: @MainActor @Sendable (String) -> Void
+    /// The workspace's id, and the tab to put Jon on in it, if any.
+    let run: @MainActor @Sendable (String, String?) -> Void
 
-    static let core = SwitchWorkspace { id in
+    /// Through the core, which selects the workspace only.
+    static let core = SwitchWorkspace { id, _ in
         SidebarCore.send(.switchTo(id: id))
     }
 }
@@ -47,7 +49,7 @@ struct CardActions: ViewModifier {
     func body(content: Content) -> some View {
         content
             .contentShape(.rect)
-            .onTapGesture { switchWorkspace.run(card.wsId) }
+            .onTapGesture { switchWorkspace.run(card.wsId, CardText.tabTarget(card)) }
             .contextMenu { CardMenu(card: card, messaging: $messaging) }
             .popover(isPresented: $messaging, arrowEdge: .trailing) {
                 MessageAgent(id: card.wsId, title: card.title, shown: $messaging)

@@ -10,7 +10,7 @@ final class CockpitSidebar: CmuxSidebarExtension {
         id: "dev.jonyardley.cockpit.sidebar",
         displayName: "Cockpit",
         readScopes: [.workspaceList, .workspaceMetadata],
-        actionScopes: [.selectWorkspace]
+        actionScopes: [.selectWorkspace, .selectSurface]
     )
 
     private let store = PanelStore()
@@ -34,16 +34,17 @@ final class CockpitSidebar: CmuxSidebarExtension {
 final class HostLink {
     var host: CmuxSidebarHost?
 
-    /// Selects the workspace in cmux. Without a host yet, or an id that is
+    /// Selects the workspace in cmux, then the tab given, if any. Without a host yet, or an id that is
     /// not a UUID, or when cmux refuses, the core's SwitchTo goes to the
     /// helper instead, so a click is never lost. Built once, so each
     /// republish hands the views the same value.
     /// Each answer is logged with its id, timed from its own click.
-    lazy var switchWorkspace = SwitchWorkspace { [weak self] id in
+    /// A tab that will not select leaves Jon on the workspace.
+    lazy var switchWorkspace = SwitchWorkspace { [weak self] id, tab in
         let at = Date()
         guard let host = self?.host, let uuid = UUID(uuidString: id) else {
             Timeline.select.note("no cmux host, sent to the core: \(id)", since: at)
-            SwitchWorkspace.core.run(id)
+            SwitchWorkspace.core.run(id, nil)
             return
         }
         // The core hears of it on the click, so the card stops drawing as
@@ -55,7 +56,15 @@ final class HostLink {
                 Timeline.select.note("cmux took the select: \(id)", since: at)
             } catch {
                 Timeline.select.note("cmux refused the select, sent to the core: \(id)", since: at)
-                SwitchWorkspace.core.run(id)
+                SwitchWorkspace.core.run(id, nil)
+                return
+            }
+            guard let tab, let surface = UUID(uuidString: tab) else { return }
+            do {
+                try await host.selectSurface(workspaceID: uuid, surfaceID: surface)
+                Timeline.select.note("cmux took the tab: \(tab)", since: at)
+            } catch {
+                Timeline.select.note("cmux refused the tab, left on the workspace: \(tab)", since: at)
             }
         }
     }

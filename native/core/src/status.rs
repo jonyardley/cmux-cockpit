@@ -282,6 +282,24 @@ impl Session {
         most_active(&self.agents_of(w)).cloned()
     }
 
+    /// The tab of the agent a workspace's card speaks for, as its title
+    /// and surface id, while the workspace runs two or more agents, so a
+    /// waiting card can say which one waits. None with one agent, or when
+    /// cmux has not given that agent's tab or a title for it.
+    pub fn agent_tab_of(&mut self, w: Option<&Workspace>) -> Option<(String, String)> {
+        let agents = self.agents_of(w);
+        if agents.len() < 2 {
+            return None;
+        }
+        let a = most_active(&agents)?;
+        let title = a
+            .title
+            .as_deref()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())?;
+        Some((title.to_string(), a.surface_id.clone()?))
+    }
+
     /// The workspace's status.
     pub fn status_of(&mut self, w: Option<&Workspace>) -> Status {
         Status::of(self.agent_of(w).as_ref())

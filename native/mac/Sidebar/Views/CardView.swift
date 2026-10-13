@@ -75,6 +75,7 @@ struct FullCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 TitleRow(card: card, size: Metrics.Font.cardTitle, lines: 2)
                 StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
+                WaitingTabLine(card: card)
                 if ChipsRow.shows(card) { ChipsRow(card: card, prOpens: false) }
                 Detail(text: card.detail, lines: CardText.detailLines(card))
                 ProgressBar(card: card)
@@ -105,6 +106,7 @@ struct CompactCard: View {
             VStack(alignment: .leading, spacing: 3) {
                 TitleRow(card: card, size: Metrics.Font.compactTitle, lines: 1)
                 StatusLine(card: card, dot: 6, size: CardLook.compactStatus, weight: .regular, pr: lines.pr)
+                WaitingTabLine(card: card)
                 LeftOff(text: card.leftOff)
                 Detail(text: card.detail, lines: CardText.detailLines(card))
                 ProgressBar(card: card)
@@ -161,6 +163,7 @@ struct DenseRow: View {
             LeftOff(text: card.leftOff).padding(.leading, CardLook.rowIndent)
             Detail(text: card.detail, lines: CardText.detailLines(card), ink: card.detailInk)
                 .padding(.leading, CardLook.rowIndent)
+            WaitingTabLine(card: card).padding(.leading, CardLook.rowIndent)
         }
         .padding(.leading, CardLook.rowPadLeading)
         .padding(.trailing, CardLook.padTrailing)
@@ -181,6 +184,7 @@ struct CardView: View {
             TitleRow(card: card, size: CardLook.rowTitle, lines: 2, leadMark: true)
             StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
                 .padding(.top, 2)
+            WaitingTabLine(card: card).padding(.top, CardText.waitingTab(card) == nil ? 0 : 2)
             Detail(text: card.detail, lines: CardText.detailLines(card)).padding(.top, card.detail.isEmpty ? 0 : 3)
             if ChipsRow.shows(card) {
                 ChipsRow(card: card).padding(.top, CardLook.projectGap)
@@ -272,6 +276,28 @@ struct StatusLine: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// "in Fix CI lint": the tab of the agent a waiting card waits on, when
+/// its workspace runs several (issue #329). The lead in `metaText`, the
+/// tab's title in `secondary`, one line cut at the end.
+struct WaitingTabLine: View {
+    let card: Card
+
+    var body: some View {
+        if let title = CardText.waitingTab(card) {
+            HStack(spacing: 4) {
+                Text(Words.inTab).foregroundStyle(Color(Token.metaText))
+                Text(title)
+                    .fontWeight(.medium)
+                    .foregroundStyle(Color(Token.secondary))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .font(.system(size: CardLook.compactStatus))
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 

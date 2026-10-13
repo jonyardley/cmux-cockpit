@@ -329,6 +329,7 @@ pub(crate) mod fixtures {
                 mark: Token::Clay,
                 ink: Token::ClayText,
             }),
+            waiting_tab: None,
             rank,
             movable: true,
             dimmed: false,

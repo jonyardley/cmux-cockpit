@@ -24,7 +24,7 @@ use crate::theme::{Token, parse_hex};
 use super::{
     Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT, EditorView, HOLLOW, Icon, Lane,
     Needs, NeedsTarget, NextLine, PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow,
-    QUIET_ROW, Row, RowPr, Waiting, piece,
+    QUIET_ROW, Row, RowPr, Waiting, WaitingTab, piece,
 };
 
 /// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
@@ -408,6 +408,17 @@ fn waiting_of(session: &mut Session, view: &ViewModel, w: Option<&Workspace>) ->
     Some(Waiting { mark, ink })
 }
 
+/// The tab a waiting card names, from its workspace's agents.
+fn waiting_tab_of(
+    session: &mut Session,
+    w: Option<&Workspace>,
+    waiting: Option<Waiting>,
+) -> Option<WaitingTab> {
+    waiting?;
+    let (title, surface_id) = session.agent_tab_of(w)?;
+    Some(WaitingTab { title, surface_id })
+}
+
 /// A waiting card's status line, "Asking: allow git push?", with a detail
 /// the core cut taken back to a whole word, and its ink: the waiting ink,
 /// or grey and with no status in front for a reply's last line quoted for
@@ -520,6 +531,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         detail_ink,
         detail_lines: detail_lines(density),
         waiting,
+        waiting_tab: waiting_tab_of(session, w, waiting),
         rank: session.state_rank(data, w),
         movable: !is_foreign_anchor(session, data, id),
         dimmed: is_dimmed(session, data, w),
@@ -661,6 +673,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         detail_ink: Token::Secondary,
         detail_lines: 2,
         waiting,
+        waiting_tab: waiting_tab_of(session, w, waiting),
         rank: session.state_rank(data, w),
         movable: !is_foreign_anchor(session, data, id),
         dimmed: is_dimmed(session, data, w),
@@ -815,6 +828,66 @@ mod tests {
             ..Workspace::default()
         };
         assert_eq!(title_of(Some(&w), "ws-1"), "fix login");
+    }
+
+    /// The panel over one workspace "W" running `agents`, each its status
+    /// and its tab's title and surface.
+    fn one_workspace(agents: &[(&str, Option<&str>, &str)]) -> Panel {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let agents: Vec<serde_json::Value> = agents
+            .iter()
+            .enumerate()
+            .map(|(i, (status, title, surface))| {
+                serde_json::json!({"id": format!("a{i}"), "status": status,
+                    "title": title, "surfaceId": surface, "sinceEpoch": 100 + i})
+            })
+            .collect();
+        let data: Data = serde_json::from_value(serde_json::json!({"epoch": 200,
+            "workspaces": [{"id": "W", "title": "fix login", "agents": agents}]}))
+        .unwrap();
+        let mut core = Model::default();
+        let _effects = Cockpit.update(Event::Data(data), &mut core);
+        Panel::from_core(&mut core)
+    }
+
+    fn tab_of(panel: &Panel) -> Option<WaitingTab> {
+        panel
+            .lane_cards()
+            .find(|c| c.ws_id == "W")?
+            .waiting_tab
+            .clone()
+    }
+
+    #[test]
+    fn a_waiting_card_with_several_agents_names_the_waiting_ones_tab() {
+        let panel = one_workspace(&[
+            ("working", Some("Review #327"), "S1"),
+            ("needs_input", Some("Fix CI lint"), "S2"),
+        ]);
+        assert!(panel.is_waiting("W"));
+        assert_eq!(
+            tab_of(&panel),
+            Some(WaitingTab {
+                title: "Fix CI lint".into(),
+                surface_id: "S2".into()
+            })
+        );
+    }
+
+    #[test]
+    fn names_no_tab_with_one_agent_nothing_waiting_or_no_title() {
+        let one = one_workspace(&[("needs_input", Some("Fix CI lint"), "S2")]);
+        assert!(one.is_waiting("W"));
+        assert_eq!(tab_of(&one), None, "one agent: the card is that tab");
+        let busy = one_workspace(&[
+            ("working", Some("Review #327"), "S1"),
+            ("working", Some("Fix CI lint"), "S2"),
+        ]);
+        assert_eq!(tab_of(&busy), None, "nothing waits");
+        let untitled = one_workspace(&[("working", None, "S1"), ("needs_input", Some(" "), "S2")]);
+        assert!(untitled.is_waiting("W"));
+        assert_eq!(tab_of(&untitled), None, "a tab with no title names nothing");
     }
 
     #[test]

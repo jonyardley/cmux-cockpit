@@ -11,6 +11,9 @@ enum Words {
     static let nextNothing = "nothing waiting"
     /// The help on a waiting card's x.
     static let dismiss = "Dismiss"
+    /// Before the tab a waiting agent runs in, "in Fix CI lint", on a card
+    /// whose workspace runs several agents. The pane does not draw it.
+    static let inTab = "in"
     static let laneMark = "■"
     static let folded = "▸"
     static let open = "▾"
