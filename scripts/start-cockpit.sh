@@ -13,7 +13,8 @@
 # A Cockpit running without its publisher (--no-publish, for a fixture)
 # is left alone. One copy works at a time, so a restore that opens
 # several windows restarts Cockpit once. If cmux will not open the tab,
-# it opens Cockpit directly, which is no worse than before.
+# it opens nothing: a Cockpit without the pass reads no workspaces, and
+# the next new window would only quit it and try again.
 # Never fails: with no Cockpit build, no cmux, or on any error, it stops.
 # COCKPIT_APP and COCKPIT_STATE are for the tests.
 
@@ -21,9 +22,12 @@ APP=${COCKPIT_APP:-$HOME/.config/cmux/native/mac/build/Build/Products/Debug/Cock
 STATE=${COCKPIT_STATE:-$HOME/.local/state/cockpit}
 [ -d "$APP" ] || exit 0
 
-ps -axo comm= | grep -q '/cmux\.app/Contents/MacOS/cmux$' || exit 0
-# The automation runner has the app's PATH, not a shell's.
-CMUX=$(command -v cmux || echo /Applications/cmux.app/Contents/Resources/bin/cmux)
+# The CLI sits beside the running app, wherever it is installed; the
+# automation runner has the app's PATH, not a shell's.
+app=$(ps -axo comm= | grep '/cmux\.app/Contents/MacOS/cmux$' | head -n 1)
+[ -n "$app" ] || exit 0
+CMUX=$(command -v cmux || echo "${app%/MacOS/cmux}/Resources/bin/cmux")
+[ -x "$CMUX" ] || exit 0
 cockpit() { pgrep -x Cockpit | head -n 1; }
 
 mkdir -p "$STATE" || exit 0
@@ -37,8 +41,6 @@ if ! mkdir "$lock" 2>/dev/null; then
 fi
 echo $$ > "$lock/pid"
 trap 'rm -rf "$lock"' EXIT
-# Left by the version that noted which cmux started Cockpit.
-rm -f "$STATE/started"
 
 running=$(cockpit)
 if [ -n "$running" ]; then
@@ -59,16 +61,20 @@ if [ -n "$running" ]; then
 fi
 
 window=$(printf '%s' "${CMUX_AUTOMATION_EVENT_JSON:-}" |
-  sed -n 's/.*"window_id":"\([^"]*\)".*/\1/p' | head -n 1)
+  sed -n 's/.*"window_id" *: *"\([^"]*\)".*/\1/p' | head -n 1)
 if [ -n "$window" ]; then
   set -- --window "$window"
 else
   set --
 fi
+# The tab's shell reads the path inside single quotes.
+quoted=$(printf '%s' "$APP" | sed "s/'/'\\\\''/g")
 "$CMUX" new-surface --type terminal "$@" --focus false \
-  --command "open '$APP'; exit" >/dev/null 2>&1 || open "$APP" || exit 0
+  --command "open '$quoted'; exit" >/dev/null 2>&1 || exit 0
+# Hold the lock until Cockpit is up, so another window's run in the
+# meantime does not open a second tab. A slow shell start can take a while.
 i=0
-while [ -z "$(cockpit)" ] && [ "$i" -lt 10 ]; do
+while [ -z "$(cockpit)" ] && [ "$i" -lt 30 ]; do
   sleep 1
   i=$((i + 1))
 done

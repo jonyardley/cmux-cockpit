@@ -3,11 +3,10 @@
 // stand-ins: ps names cmux among the processes and, asked for the
 // publisher's environment, shows the terminal pass when the running
 // Cockpit has one; pgrep answers from files that say which Cockpit pid
-// runs and whether its publisher does; pkill records how it was called
+// runs and whether its publisher does (always pid 43); pkill records how it was called
 // and stops Cockpit (unless a case makes it stubborn, when only -9 does);
 // cmux records the tab it is asked for and starts Cockpit with the pass,
-// unless a case makes it refuse; open records the app and starts Cockpit
-// without the pass; and sleep returns at once.
+// unless a case makes it refuse; and sleep returns at once.
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -17,6 +16,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -27,7 +27,7 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 
 const SCRIPT = join(import.meta.dirname, "..", "scripts", "start-cockpit.sh");
 // Real tools the script and the stand-ins use.
-const TOOLS = ["grep", "head", "sed", "cat", "mkdir", "rm"];
+const TOOLS = ["grep", "head", "sed", "cat", "mkdir", "rm", "printf"];
 
 let home = "";
 let bin = "";
@@ -60,6 +60,7 @@ beforeEach(() => {
   stub(
     "ps",
     `if [ "$1" = -E ]; then
+  [ "$3" = 43 ] || exit 1
   echo "/x/cockpit-publish --parent 42 HOME=/h$([ -f "${f("pass")}" ] && echo " CMUX_SOCKET_CAPABILITY=v1.x")"
 else
   echo "/usr/sbin/cfprefsd"; echo "/Applications/cmux.app/Contents/MacOS/cmux"
@@ -79,17 +80,14 @@ esac`,
 if [ "$1" = -9 ] || [ ! -f "${f("stubborn")}" ]; then rm -f "${f("running")}"; fi
 exit 0`,
   );
-  const start = (pass: boolean) =>
-    `n=$(cat "${f("next")}" 2>/dev/null || echo 500)
-echo "$n" > "${f("running")}"; echo $((n + 1)) > "${f("next")}"; : > "${f("publisher")}"
-${pass ? `: > "${f("pass")}"` : `rm -f "${f("pass")}"`}`;
   stub(
     "cmux",
     `echo "cmux $*" >> "${calls}"
 [ -f "${f("refuses")}" ] && exit 1
-${start(true)}`,
+n=$(cat "${f("next")}" 2>/dev/null || echo 500)
+echo "$n" > "${f("running")}"; echo $((n + 1)) > "${f("next")}"
+: > "${f("publisher")}"; : > "${f("pass")}"`,
   );
-  stub("open", `echo "open $1" >> "${calls}"\n${start(false)}`);
   stub("sleep", "exit 0");
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
@@ -122,9 +120,9 @@ function log(): string[] {
 }
 
 /** The tab start-cockpit asks cmux for, in window `window` if given. */
-function tab(window = "W1"): string {
+function tab(window = "W1", path = app): string {
   const where = window ? `--window ${window} ` : "";
-  return `cmux new-surface --type terminal ${where}--focus false --command open '${app}'; exit`;
+  return `cmux new-surface --type terminal ${where}--focus false --command open '${path}'; exit`;
 }
 
 describe("start-cockpit.sh", () => {
@@ -138,10 +136,40 @@ describe("start-cockpit.sh", () => {
     assert.deepEqual(log(), [tab("")]);
   });
 
-  it("opens Cockpit directly when cmux will not open the tab", () => {
+  it("reads a window id written with spaces", () => {
+    run('{"name": "window.created", "window_id": "W2"}');
+    assert.deepEqual(log(), [tab("W2")]);
+  });
+
+  it("escapes a quote in the app's path for the tab's shell", () => {
+    const odd = join(home, "o'neil", "Cockpit.app");
+    mkdirSync(odd, { recursive: true });
+    spawnSync("/bin/sh", [SCRIPT], {
+      env: {
+        HOME: home,
+        PATH: bin,
+        COCKPIT_APP: odd,
+        COCKPIT_STATE: state,
+        CMUX_AUTOMATION_EVENT_JSON: "{}",
+      },
+    });
+    assert.deepEqual(log(), [tab("", odd.replace("'", "'\\''"))]);
+  });
+
+  it("opens nothing when cmux will not open the tab", () => {
     writeFileSync(join(home, "refuses"), "");
     assert.equal(run().status, 0);
-    assert.deepEqual(log(), [tab(), `open ${app}`]);
+    assert.deepEqual(log(), [tab()]);
+    assert.ok(!existsSync(join(home, "running")));
+  });
+
+  it("finds the CLI beside the running app when PATH has none", () => {
+    const where = join(home, "Apps", "cmux.app", "Contents");
+    mkdirSync(join(where, "Resources", "bin"), { recursive: true });
+    renameSync(join(bin, "cmux"), join(where, "Resources", "bin", "cmux"));
+    stub("ps", `echo "${join(where, "MacOS", "cmux")}"`);
+    run();
+    assert.deepEqual(log(), [tab()]);
   });
 
   it("leaves alone a Cockpit whose publisher holds a cmux pass", () => {
@@ -167,13 +195,6 @@ describe("start-cockpit.sh", () => {
     cockpitRunning(42, { publisher: false });
     run();
     assert.deepEqual(log(), []);
-  });
-
-  it("clears the note the earlier version kept", () => {
-    mkdirSync(state, { recursive: true });
-    writeFileSync(join(state, "started"), "100 42\n");
-    run();
-    assert.ok(!existsSync(join(state, "started")));
   });
 
   it("does nothing while another copy holds the lock", () => {
