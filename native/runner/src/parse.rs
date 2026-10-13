@@ -141,6 +141,41 @@ fn workspace(w: &Value) -> Option<Workspace> {
     })
 }
 
+/// Every tab's title by its surface id, from `cmux rpc system.tree`
+/// with `all`, or None when the reply has no windows. Each title is
+/// cleaned (`tab_title`); a tab with no id or no title left is left out.
+pub fn titles(out: &[u8]) -> Option<HashMap<String, String>> {
+    let v: Value = serde_json::from_slice(out).ok()?;
+    let surfaces = v["windows"]
+        .as_array()?
+        .iter()
+        .flat_map(|w| w["workspaces"].as_array().into_iter().flatten())
+        .flat_map(|ws| ws["panes"].as_array().into_iter().flatten())
+        .flat_map(|p| p["surfaces"].as_array().into_iter().flatten());
+    let mut titles = HashMap::new();
+    for s in surfaces {
+        let (Some(id), Some(title)) = (s["id"].as_str(), s["title"].as_str()) else {
+            continue;
+        };
+        if let Some(title) = tab_title(title) {
+            titles.insert(id.to_string(), title);
+        }
+    }
+    Some(titles)
+}
+
+/// A tab's title worth showing: without the status glyph or spinner frame
+/// Claude Code puts in front ("✳ Fix CI lint"), so the leading run of
+/// symbols and spaces goes, all but a "#" that starts an issue number.
+/// None when nothing is left, or only Claude Code's own name, which a
+/// session shows before it has a title of its own.
+fn tab_title(title: &str) -> Option<String> {
+    let title = title
+        .trim_start_matches(|c: char| !c.is_alphanumeric() && c != '#')
+        .trim_end();
+    (!title.is_empty() && title != "Claude Code").then(|| title.to_string())
+}
+
 /// cmux's workspace groups, from `cmux rpc workspace.group.list`.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Groups {
@@ -227,6 +262,41 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn titles_come_from_every_window_and_pane() {
+        let out = br#"{"windows": [
+            {"workspaces": [{"panes": [
+                {"surfaces": [{"id": "S1", "title": "Fix CI lint"}, {"id": "S2", "title": " "}]},
+                {"surfaces": [{"title": "no id"}, {"id": "S3", "title": "Review #327"}]}]}]},
+            {"workspaces": [{"panes": [{"surfaces": [{"id": "S4", "title": "Other window"}]}]}]}]}"#;
+        let t = titles(out).unwrap();
+        let mut ids: Vec<_> = t.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+        ids.sort_unstable();
+        assert_eq!(
+            ids,
+            vec![
+                ("S1", "Fix CI lint"),
+                ("S3", "Review #327"),
+                ("S4", "Other window")
+            ]
+        );
+        assert_eq!(titles(b"{}"), None);
+    }
+
+    #[test]
+    fn a_tab_title_loses_claude_codes_glyph_and_its_bare_name() {
+        assert_eq!(tab_title("✳ Fix CI lint").as_deref(), Some("Fix CI lint"));
+        assert_eq!(tab_title("⠂ Review #327 ").as_deref(), Some("Review #327"));
+        assert_eq!(tab_title("#327 Review").as_deref(), Some("#327 Review"));
+        assert_eq!(tab_title("✳ Claude Code"), None);
+        assert_eq!(tab_title("Claude Code"), None);
+        assert_eq!(tab_title(" ✳ "), None);
+        assert_eq!(
+            tab_title("Claude Code review").as_deref(),
+            Some("Claude Code review")
+        );
+    }
 
     #[test]
     fn agent_views_from_every_config_dir_read_as_one() {

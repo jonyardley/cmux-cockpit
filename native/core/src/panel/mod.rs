@@ -142,6 +142,19 @@ pub struct Waiting {
     pub ink: Token,
 }
 
+/// The tab of the agent a waiting card waits on, in a workspace running
+/// two or more: "in Fix CI lint" under its status, and the tab a click
+/// puts Jon on.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+pub struct WaitingTab {
+    /// The tab's title as cmux's tab bar shows it, less Claude Code's
+    /// status glyph; "" when it has none worth showing, and the card then
+    /// draws no line but a click still selects the tab.
+    pub title: String,
+    /// The tab's cmux surface id.
+    pub surface_id: String,
+}
+
 /// A row's PR as the row draws it: "#171" by the age in `ink`, and the
 /// PR's own title, "" when it has none, faint after the session's title.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
@@ -220,6 +233,9 @@ pub struct Card {
     /// draws the mark, its status line the reason. Its title row's age
     /// takes the same ink.
     pub waiting: Option<Waiting>,
+    /// While it waits and its workspace runs two or more agents, the tab
+    /// of the one waiting; None otherwise.
+    pub waiting_tab: Option<WaitingTab>,
     /// Its state's place in the lane's sort (the core's state rank): a
     /// lane sorts by state, and a card keeps its place only among cards
     /// in its own state.

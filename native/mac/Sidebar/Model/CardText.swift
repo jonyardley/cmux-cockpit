@@ -166,6 +166,21 @@ extension CardText {
         card.waiting?.ink
     }
 
+    /// The title of the tab a waiting card's agent runs in, when its
+    /// workspace runs several agents (issue #329); nil otherwise, and nil
+    /// for a tab the core found no title for.
+    static func waitingTab(_ card: Card) -> String? {
+        guard let title = card.waitingTab?.title, !title.isEmpty else { return nil }
+        return title
+    }
+
+    /// The tab a click on the card also selects: the waiting agent's,
+    /// whenever the core gives one, titled or not; nil for the workspace
+    /// alone.
+    static func tabTarget(_ card: Card) -> String? {
+        card.waitingTab?.surfaceId
+    }
+
     /// The dot on the badge of a card waiting on Jon (issue #314), clay
     /// for Your turn and amber for Asking; nil while it waits on nobody.
     static func mark(_ card: Card) -> Token? {

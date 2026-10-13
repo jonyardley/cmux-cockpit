@@ -75,6 +75,7 @@ struct FullCard: View {
             VStack(alignment: .leading, spacing: 4) {
                 TitleRow(card: card, size: Metrics.Font.cardTitle, lines: 2)
                 StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
+                WaitingTabLine(card: card)
                 if ChipsRow.shows(card) { ChipsRow(card: card, prOpens: false) }
                 Detail(text: card.detail, lines: CardText.detailLines(card))
                 ProgressBar(card: card)
@@ -105,6 +106,7 @@ struct CompactCard: View {
             VStack(alignment: .leading, spacing: 3) {
                 TitleRow(card: card, size: Metrics.Font.compactTitle, lines: 1)
                 StatusLine(card: card, dot: 6, size: CardLook.compactStatus, weight: .regular, pr: lines.pr)
+                WaitingTabLine(card: card)
                 LeftOff(text: card.leftOff)
                 Detail(text: card.detail, lines: CardText.detailLines(card))
                 ProgressBar(card: card)
@@ -161,6 +163,7 @@ struct DenseRow: View {
             LeftOff(text: card.leftOff).padding(.leading, CardLook.rowIndent)
             Detail(text: card.detail, lines: CardText.detailLines(card), ink: card.detailInk)
                 .padding(.leading, CardLook.rowIndent)
+            WaitingTabLine(card: card, leading: CardLook.rowIndent)
         }
         .padding(.leading, CardLook.rowPadLeading)
         .padding(.trailing, CardLook.padTrailing)
@@ -181,6 +184,7 @@ struct CardView: View {
             TitleRow(card: card, size: CardLook.rowTitle, lines: 2, leadMark: true)
             StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
                 .padding(.top, 2)
+            WaitingTabLine(card: card, top: 2)
             Detail(text: card.detail, lines: CardText.detailLines(card)).padding(.top, card.detail.isEmpty ? 0 : 3)
             if ChipsRow.shows(card) {
                 ChipsRow(card: card).padding(.top, CardLook.projectGap)
@@ -272,6 +276,55 @@ struct StatusLine: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// The waiting tab pill's measures (docs/design.md "Waiting tab line").
+enum TabPillLook {
+    static let font: CGFloat = 11
+    static let padH: CGFloat = 8
+    static let padTop: CGFloat = 1
+    static let padBottom: CGFloat = 2
+    /// The top corners; the bottom ones are square, like a tab's.
+    static let radius: CGFloat = 6
+    static let shape = UnevenRoundedRectangle(topLeadingRadius: radius, topTrailingRadius: radius)
+}
+
+/// The tab of the agent a waiting card waits on, when its workspace runs
+/// several (issue #329): its title alone in a pill shaped like a tab, in
+/// `secondary` on `chipFace`, hugging the text from the leading edge and
+/// never wider than the card's column, one line cut at the end. Its
+/// insets apply only when it draws, so a card with no pill keeps its
+/// spacing.
+struct WaitingTabLine: View {
+    let card: Card
+    /// Inset from the leading edge: the dense row's indent to its title.
+    var leading: CGFloat = 0
+    /// Space above it: the Projects card's gap under the status line.
+    var top: CGFloat = 0
+
+    var body: some View {
+        if let title = CardText.waitingTab(card) {
+            Text(title)
+                .font(.system(size: TabPillLook.font))
+                .foregroundStyle(Color(Token.secondary))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.horizontal, TabPillLook.padH)
+                .padding(.top, TabPillLook.padTop)
+                .padding(.bottom, TabPillLook.padBottom)
+                .background(Color(Token.chipFace), in: TabPillLook.shape)
+                .overlay(TabPillLook.shape.strokeBorder(Color(Token.chipEdge), lineWidth: Metrics.hairline))
+                // The bottom edge is the card's edge colour, not the chip's,
+                // so the pill reads as a tab sitting on a line; a stroke takes
+                // one colour, so this second overlay paints over its bottom.
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Color(Token.cardEdge)).frame(height: Metrics.hairline)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, leading)
+                .padding(.top, top)
+        }
     }
 }
 

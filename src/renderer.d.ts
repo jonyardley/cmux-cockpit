@@ -192,6 +192,9 @@ interface Agent {
   kind?: string;
   title?: string;
   surfaceId?: string;
+  /** The title of the tab it runs in, which the native runner reads from
+   * cmux's tree; cmux itself does not send it. */
+  tabTitle?: string;
   /** The session's transcript file, under whichever Claude folder ran it
    * (~/.claude or ~/.claude-personal). */
   transcriptPath?: string;

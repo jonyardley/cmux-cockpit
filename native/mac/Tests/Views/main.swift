@@ -550,7 +550,7 @@ for name in ["lanes", "projects"] {
 }
 var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil), title: "t", density: .full, badge: Badge(icon: "terminal", color: nil),
                unread: "", ready: false, pinned: false, progress: 1.5, helpers: "", status: "", statusInk: .faint, age: "",
-               statusHasAge: false, leftOff: "", chips: [], rowPr: nil, detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, rank: 0,
+               statusHasAge: false, leftOff: "", chips: [], rowPr: nil, detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, waitingTab: nil, rank: 0,
                movable: true, dimmed: false, selected: false, menu: [])
 check(CardText.progress(bar) == 1, "a bar past the end stops full")
 bar.progress = -0.5
@@ -568,6 +568,13 @@ bar.rowPr = RowPr(tag: "#171", title: "", ink: .metaText)
 check(CardText.rowPrTitle(bar) == nil, "a PR with no title adds none")
 bar.rowPr = RowPr(tag: "#171", title: "Row cards show their PR", ink: .greenDeep)
 check(CardText.rowPrTitle(bar) == "· Row cards show their PR", "a row's PR title follows the session's after a dot")
+check(CardText.waitingTab(bar) == nil && CardText.tabTarget(bar) == nil, "no waiting tab, no tab line and no tab to select")
+bar.waitingTab = WaitingTab(title: "", surfaceId: "9A8CD62C-CD0B-4C88-8063-C0633918D83B")
+check(CardText.waitingTab(bar) == nil, "a tab with no title draws no line")
+check(CardText.tabTarget(bar) == "9A8CD62C-CD0B-4C88-8063-C0633918D83B", "but a click still selects that tab")
+bar.waitingTab = WaitingTab(title: "Fix CI lint", surfaceId: "9A8CD62C-CD0B-4C88-8063-C0633918D83B")
+check(CardText.waitingTab(bar) == "Fix CI lint", "a waiting tab names its title")
+check(CardText.tabTarget(bar) == "9A8CD62C-CD0B-4C88-8063-C0633918D83B", "and a click selects that tab")
 
 // The core's words the panel matches on.
 let marks = source("core/src/panel/mod.rs")

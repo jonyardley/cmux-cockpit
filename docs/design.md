@@ -444,6 +444,26 @@ for an idle agent whose background shell still runs is renamed from
 ever means waiting on you (D15). The working name is "Shell running";
 **Jon to confirm the word** before that PR is built.
 
+### Waiting tab line
+
+On a waiting card whose workspace runs two or more agents, the tab the
+waiting one runs in, drawn as a pill shaped like a tab: the tab's title
+alone, as cmux's tab bar shows it less Claude Code's status glyph, 11
+regular in `secondary`, one line cut at the end. The pill hugs its text
+from the leading edge, never wider than the card's column: fill
+`chipFace`, a 1pt edge in `chipEdge` with the bottom edge in `cardEdge`,
+top corners radius 6 and bottom corners square, padding 8 leading and
+trailing, 1 top and 2 bottom.
+It sits under the status line on a full, compact and Projects card (2
+above it on a Projects card), and under the detail on a dense row,
+indented to the title. Only agents that have not ended count towards the
+two. No pill with one agent, nothing waiting, or a tab with no title (or
+only "Claude Code"); the space it would take goes with it. A click on the
+card selects the workspace, then that tab, even when the tab has no title
+to show. Where: `Views/CardView.swift` (`WaitingTabLine`, `TabPillLook`);
+the core sets `Card.waiting_tab` (`native/core/src/panel/build.rs`).
+Issue #329.
+
 ### Status dot
 
 A filled circle, or a hollow 1.5 ring for a hollow glyph, over a soft halo 3

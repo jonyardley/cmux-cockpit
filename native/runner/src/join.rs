@@ -10,6 +10,11 @@
 //! hidden once it ends or Agent View stops listing its pid, and forgotten
 //! once Agent View has left it out `FORGET_AFTER` times running, so a
 //! reused pid starts clean.
+//!
+//! Each session also keeps the tab (cmux surface) it runs in: the status
+//! write's `--panel=` (this wins), or the hook's `surface_id`. cmux's tree
+//! gives each tab's title, so a workspace with several agents can name
+//! the one waiting.
 
 use std::collections::HashMap;
 
@@ -69,6 +74,12 @@ pub struct Join {
     selected_at: Option<f64>,
     /// pid to workspace, from a status write.
     tab_of: HashMap<u32, String>,
+    /// pid to the tab (cmux surface) it runs in, and whether a status
+    /// write's `--panel=` said so (this wins) rather than a hook's
+    /// `surface_id`.
+    surface_of: HashMap<u32, (String, bool)>,
+    /// Surface id to its tab title, from cmux's tree.
+    titles: HashMap<String, String>,
     /// pid to its latest status-setting hook.
     sessions: HashMap<u32, Hooked>,
     agents: Option<AgentView>,
@@ -117,6 +128,7 @@ impl Join {
             // A new cmux boot: its events and lists start the selection afresh.
             self.selected_at = None;
             self.tab_of.clear();
+            self.surface_of.clear();
             self.sessions.clear();
             self.absent.clear();
             self.health.last_seq = 0;
@@ -185,6 +197,7 @@ impl Join {
             .tab_of
             .keys()
             .chain(self.sessions.keys())
+            .chain(self.surface_of.keys())
             .copied()
             .collect();
         pids.sort_unstable();
@@ -199,6 +212,7 @@ impl Join {
             if *n >= FORGET_AFTER {
                 self.absent.remove(&pid);
                 self.tab_of.remove(&pid);
+                self.surface_of.remove(&pid);
                 self.sessions.remove(&pid);
             }
         }
@@ -270,8 +284,34 @@ impl Join {
         else {
             return false;
         };
+        let surface_moved = flag("--panel=").is_some_and(|s| self.set_surface(pid, s, true));
         let old = self.tab_of.insert(pid, tab.to_string());
-        old.as_deref() != Some(tab)
+        old.as_deref() != Some(tab) || surface_moved
+    }
+
+    /// Records the tab `pid` runs in; whether it changed. A hook's word
+    /// (`written` false) never replaces a status write's.
+    fn set_surface(&mut self, pid: u32, surface: &str, written: bool) -> bool {
+        let old = self.surface_of.get(&pid);
+        if !written && old.is_some_and(|(_, w)| *w) {
+            return false;
+        }
+        let moved = old.is_none_or(|(s, _)| s != surface);
+        self.surface_of.insert(pid, (surface.to_string(), written));
+        moved
+    }
+
+    /// Takes cmux's tab titles, surface id to title; whether the title of
+    /// a tab some session runs in changed. Every other tab's title is kept
+    /// too, for a session placed in it before the next read, but a change
+    /// there is no news for a frame.
+    pub fn titles(&mut self, titles: HashMap<String, String>) -> bool {
+        let changed = self
+            .surface_of
+            .values()
+            .any(|(s, _)| self.titles.get(s) != titles.get(s));
+        self.titles = titles;
+        changed
     }
 
     /// Whether the hook changed the session at all (a repeated status
@@ -286,14 +326,17 @@ impl Join {
         let Some(pid) = pid_of(&p["_ppid"]) else {
             return (false, false);
         };
+        let surface_moved = p["surface_id"]
+            .as_str()
+            .is_some_and(|s| self.set_surface(pid, s, false));
         let Some(status) = status_from_hook(hook, p["tool_name"].as_str()) else {
-            return (false, false);
+            return (surface_moved, false);
         };
         let prev = self.sessions.get(&pid);
         let moved = prev.is_none_or(|s| s.status != status || s.workspace != ws);
         let at = at.or(prev.map(|s| s.last_activity)).unwrap_or_default();
         let next = Hooked::after(prev, status, at, moves_activity(hook), ws);
-        let changed = prev != Some(&next);
+        let changed = prev != Some(&next) || surface_moved;
         self.sessions.insert(pid, next);
         (changed, moved)
     }
@@ -319,9 +362,13 @@ impl Join {
         let id = view
             .and_then(|a| a.session.get(&pid).cloned())
             .unwrap_or_else(|| format!("pid:{pid}"));
+        let surface = self.surface_of.get(&pid).map(|(s, _)| s.clone());
+        let tab_title = surface.as_ref().and_then(|s| self.titles.get(s)).cloned();
         let mut a = Agent {
             id,
             kind: Some("claude".to_string()),
+            surface_id: surface,
+            tab_title,
             ..Agent::default()
         };
         match self.sessions.get(&pid) {
@@ -458,6 +505,106 @@ mod tests {
                 (w.id.clone(), agents)
             })
             .collect()
+    }
+
+    /// `hook` from the tab `surface`.
+    fn hook_in(seq: u64, name: &str, pid: u32, ws: &str, surface: &str) -> Value {
+        let mut e = hook(seq, name, pid, ws, None);
+        e["payload"]["surface_id"] = json!(surface);
+        e
+    }
+
+    /// Each agent's tab and its title, in frame order.
+    fn tabs(d: &Data) -> Vec<(Option<String>, Option<String>)> {
+        d.workspace_list()
+            .iter()
+            .flat_map(|w| w.agent_list())
+            .map(|a| (a.surface_id.clone(), a.tab_title.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn an_agent_carries_its_hooks_tab_and_that_tabs_title() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        assert!(j.event(&hook_in(1, "Stop", 7, "A", "S1")).0);
+        assert_eq!(tabs(&j.frame(200.0)), vec![(Some("S1".into()), None)]);
+        let titles = HashMap::from([("S1".to_string(), "Fix CI lint".to_string())]);
+        assert!(j.titles(titles.clone()));
+        assert!(!j.titles(titles));
+        assert_eq!(
+            tabs(&j.frame(200.0)),
+            vec![(Some("S1".into()), Some("Fix CI lint".into()))]
+        );
+    }
+
+    #[test]
+    fn only_a_title_change_on_a_tab_a_session_runs_in_is_news() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(1, "Stop", 7, "A", "S1"));
+        let read = |s1: &str, s9: &str| {
+            HashMap::from([
+                ("S1".to_string(), s1.to_string()),
+                ("S9".to_string(), s9.to_string()),
+            ])
+        };
+        assert!(j.titles(read("Fix CI lint", "zsh")));
+        assert!(!j.titles(read("Fix CI lint", "vim")), "S9 runs no session");
+        assert!(j.titles(read("Review #327", "vim")));
+        // A session placed later in S9 finds the title already read.
+        j.agents(view(&[(7, true, "s7"), (8, true, "s8")]));
+        j.event(&hook_in(2, "Stop", 8, "A", "S9"));
+        let mut t = tabs(&j.frame(200.0));
+        t.sort();
+        assert_eq!(
+            t,
+            vec![
+                (Some("S1".into()), Some("Review #327".into())),
+                (Some("S9".into()), Some("vim".into()))
+            ]
+        );
+    }
+
+    #[test]
+    fn a_pid_with_only_a_tab_is_forgotten_too() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(1, "SubagentStart", 7, "A", "S1"));
+        assert!(j.surface_of.contains_key(&7));
+        assert!(!j.sessions.contains_key(&7) && !j.tab_of.contains_key(&7));
+        for _ in 0..FORGET_AFTER {
+            j.agents(view(&[]));
+        }
+        assert!(j.surface_of.is_empty(), "its tab is forgotten with it");
+        assert!(j.absent.is_empty());
+    }
+
+    #[test]
+    fn a_status_writes_panel_beats_the_hooks_tab() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(1, "Stop", 7, "A", "S1"));
+        let write = json!({"type": "event", "seq": 2, "name": "sidebar.metadata.updated",
+            "payload": {"args": "claude_code Running --tab=A --panel=S2 --pid=7"}});
+        assert!(j.event(&write).0);
+        // A later hook naming another tab does not move it back.
+        assert!(!j.event(&hook_in(3, "Stop", 7, "A", "S1")).0);
+        assert_eq!(tabs(&j.frame(200.0)), vec![(Some("S2".into()), None)]);
+    }
+
+    #[test]
+    fn a_hook_with_no_status_still_places_its_tab() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(1, "Stop", 7, "A", "S1"));
+        assert!(j.event(&hook_in(2, "SubagentStart", 7, "A", "S3")).0);
+        assert_eq!(tabs(&j.frame(200.0)), vec![(Some("S3".into()), None)]);
     }
 
     #[test]

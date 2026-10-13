@@ -24,6 +24,9 @@
 //!   but a selection, which takes in `workspace.reordered` (sent when a
 //!   card is dragged between lanes) and `workspace.group.` names, and any
 //!   `workspace_group.` one.
+//! - `cmux rpc system.tree` every 10 seconds, without a core only (the
+//!   Swift sidebar's feed): each tab's title, which names the tab an
+//!   agent runs in.
 //! - config/state.json, config/projects.json and config/lanes.json,
 //!   checked every 2 seconds.
 //! - Each directory's PR, when the core asks (pr_ask.rs): `git` then `gh`
@@ -31,7 +34,7 @@
 //!   decides when (cockpit_core::pr_poll), and only an answer that moves
 //!   what a card shows asks for a new frame.
 //!
-//! The join (join.rs) turns the first four into one frame of the core's
+//! The join (join.rs) turns the first five into one frame of the core's
 //! data; a fresh frame goes in when any of them changed, and every 30
 //! seconds anyway so the ages move on. The core's render request is the
 //! cue to draw; its cmux calls and state writes go to one worker thread
@@ -59,7 +62,7 @@ pub mod stream;
 pub mod text;
 pub mod watch;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::ops::ControlFlow;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -90,6 +93,8 @@ use watch::{Watched, read_lanes, read_projects, read_state};
 
 pub const AGENTS_EVERY: Duration = Duration::from_secs(2);
 pub const WORKSPACES_EVERY: Duration = Duration::from_secs(30);
+/// How often the tab titles are read, which name a waiting agent's tab.
+pub const TITLES_EVERY: Duration = Duration::from_secs(10);
 pub const FILES_EVERY: Duration = Duration::from_secs(2);
 /// A fresh frame at least this often, so ages move on with nothing new.
 pub const CLOCK_EVERY: Duration = Duration::from_secs(30);
@@ -111,6 +116,8 @@ pub enum Input {
     /// The workspace list, and when it was asked for, in epoch seconds.
     Workspaces(Vec<Workspace>, f64),
     Groups(Groups),
+    /// Every tab's title, by its surface id.
+    Titles(HashMap<String, String>),
     /// From the caller's own thread (a key press, say): call `on_frame`
     /// now, with or without a new frame.
     Poke,
@@ -328,6 +335,7 @@ impl Feed {
             Input::Agents(view) => (self.join.agents(view), false, None),
             Input::Workspaces(list, asked) => (self.join.workspaces(list, asked), false, None),
             Input::Groups(groups) => (self.join.groups(groups), false, None),
+            Input::Titles(titles) => (self.join.titles(titles), false, None),
             // Without a core an answer is kept for inbox/, for the core
             // that asked; the caller's next turn writes it, so it is not
             // news for a frame.
@@ -509,6 +517,21 @@ fn poll_agents(tx: &Sender<Input>, stop: &AtomicBool) {
             return;
         }
         thread::sleep(AGENTS_EVERY);
+    }
+}
+
+/// Reads every tab's title from cmux's tree every `TITLES_EVERY`. A read
+/// that fails keeps the last good one.
+fn poll_titles(tx: &Sender<Input>, stop: &AtomicBool) {
+    while !stop.load(Ordering::SeqCst) {
+        let titles = output("cmux", &["rpc", "system.tree", r#"{"all":true}"#])
+            .and_then(|out| parse::titles(&out));
+        if let Some(titles) = titles
+            && tx.send(Input::Titles(titles)).is_err()
+        {
+            return;
+        }
+        thread::sleep(TITLES_EVERY);
     }
 }
 
@@ -709,6 +732,12 @@ fn run_with(
         let tx = tx.clone();
         let stop = Arc::clone(&stop);
         thread::spawn(move || poll_agents(&tx, &stop));
+    }
+    // Only the Swift sidebar names a waiting agent's tab; the pane does not.
+    if feed.no_core {
+        let tx = tx.clone();
+        let stop = Arc::clone(&stop);
+        thread::spawn(move || poll_titles(&tx, &stop));
     }
     let worker = {
         let (out_tx, out_rx) = mpsc::channel();
