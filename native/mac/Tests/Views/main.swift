@@ -288,8 +288,8 @@ for dark in [false, true] {
         grounds.append(("card face", Palette.rgba(.cardFace, dark: dark)))
     }
     for (where_, ground) in grounds {
-        // Body ink at WCAG's 4.5; the state inks at 3, as the light palette
-        // (palette.ts) holds them, the finished green the lowest.
+        // Body ink at WCAG's 4.5; the state inks at 3, the finished green
+        // the lowest.
         for (token, name) in [(Token.text, "text"), (.secondary, "secondary"), (.heading, "heading")] {
             check(contrast(Palette.rgba(token, dark: dark), ground) >= 4.5, "\(scheme): \(name) reads on the \(where_)")
         }
@@ -361,8 +361,9 @@ if let projects = load("projects") {
     check(load("new-project").flatMap(ProjectText.editor)?.isNew == true, "new-project's editor is new")
 }
 
-// The words the sidebar keeps for itself are the core's.
-let native = snapshots.appendingPathComponent("../../..").standardizedFileURL
+// The words the sidebar keeps for itself are the core's. The core is found
+// from this file, not from the snapshots folder, so it needs no pane.
+let native = URL(fileURLWithPath: #filePath).appendingPathComponent("../../../..").standardizedFileURL
 func source(_ path: String) -> String {
     (try? String(contentsOf: native.appendingPathComponent(path), encoding: .utf8)) ?? ""
 }
@@ -373,7 +374,7 @@ for (name, word) in [("NEW_PROJECT_LABEL", Words.newProject), ("QUIET_LABEL", Wo
 // The editor's words, pinned here.
 let editorWords = [
     (Words.folder, "Folder"), (Words.name, "Name"), (Words.colour, "Colour"), (Words.icon, "Icon"),
-    (Words.newProjectTitle, "New project"), (Words.add, "Add"), (Words.done, "Done"), (Words.cancel, "Cancel"),
+    (Words.newProjectTitle, "New project"), (Words.editProjectTitle, "Edit project"), (Words.add, "Add"), (Words.done, "Done"), (Words.cancel, "Cancel"),
     (Words.projectName, "Project name"), (Words.searchIcons, "Search icons"), (Words.openFolders, "Or one you have open"),
 ]
 for (word, pinned) in editorWords {
@@ -388,7 +389,7 @@ let ownLight: [(Palette.Own, RGBA)] = [
 for (own, pinned) in ownLight {
     check(Palette.rgba(own, dark: false) == pinned, "light \(own) is pinned")
 }
-// The lane hues' light side, pinned here, so a lane reads one colour.
+// The lane hues' light side, pinned here.
 for (token, hex) in [(Token.laneViolet, 0x7A5BA6), (.laneTeal, 0x2E8A86), (.laneRose, 0xB04A75)] as [(Token, UInt32)] {
     check(Palette.rgba(token, dark: false) == RGBA(hex), "light \(token) is \(String(format: "%06X", hex))")
 }
@@ -495,13 +496,13 @@ for word in ["To review →", "Park", "Close", "Keep"] {
 check(ChipTap.of(chipOf(.action, "Make \"x\" a project", action: true), id: "W1") == .send(SidebarAction.pick(.newProjectFromFolder, on: "W1")),
       "Make project picks the card menu's own item")
 
-// A badge's glyph reads on its face (contrast.ts glyphColor, issue #2).
+// A badge's glyph reads on its face (issue #2).
 check(BadgeInk.glyph(on: 0xB0AEA5) == BadgeInk.dark, "a light face (#B0AEA5) takes the dark glyph")
-// Clay reads better in dark, as contrast.ts's own glyphColor has it.
-check(BadgeInk.glyph(on: 0xD97757) == BadgeInk.dark, "clay (#D97757) takes the dark glyph, as the cockpit's does")
+// Clay reads better in dark.
+check(BadgeInk.glyph(on: 0xD97757) == BadgeInk.dark, "clay (#D97757) takes the dark glyph")
 check(BadgeInk.glyph(on: 0x3B6FB6) == BadgeInk.light, "blue (#3B6FB6) takes the white glyph")
 check(BadgeInk.glyph(on: 0x000000) == BadgeInk.light && BadgeInk.glyph(on: 0xFFFFFF) == BadgeInk.dark, "black takes white, white takes dark")
-check(BadgeInk.fallback == Palette.rgba(Palette.Own.grey, dark: false).hex, "no colour is the cockpit's grey")
+check(BadgeInk.fallback == Palette.rgba(Palette.Own.grey, dark: false).hex, "no colour is the extension's grey")
 
 // The halo round a status dot: the four filled hues that ask for a look.
 check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .blue)) == .blueHalo, "working's blue dot has its halo")

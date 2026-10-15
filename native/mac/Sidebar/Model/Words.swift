@@ -19,14 +19,14 @@ enum Words {
     static let quiet = "Quiet"
     static let plus = "+"
     /// The editor's labels, as the pane's editor words them
-    /// (native/pane/src/editor.rs); the views check reads them there.
+    /// (native/pane/src/editor.rs); the views test pins them.
     static let folder = "Folder"
     static let name = "Name"
     static let colour = "Colour"
     static let icon = "Icon"
     /// The editor sheet's words where the pane says "Enter saves · Esc
     /// cancels": the cockpit JS sidebar's editor's
-    /// (src/cockpit/views/editor.ts), which the views check reads there.
+    /// (src/cockpit/views/editor.ts); the views test pins them.
     static let newProjectTitle = "New project"
     static let editProjectTitle = "Edit project"
     static let add = "Add"

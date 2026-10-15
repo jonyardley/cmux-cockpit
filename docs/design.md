@@ -863,8 +863,10 @@ main today, the failures are listed and tracked as a gap.
 8. **The views test pins its own values.** Passes (D7 a). The light
    hexes, the quiet fade and the editor's words are written into
    `native/mac/Tests/Views/main.swift`; it reads no TypeScript or pane
-   source, only the core's. The card and Projects words still compare
-   against the pane's snapshots, given as its second argument.
+   source, only the core's, found from the test's own path.
+   `grep -nE '\.\./src/|pane/src/' ../Tests/Views/main.swift` prints
+   nothing. The card and Projects words still compare against the pane's
+   snapshots, given as its second argument.
 
 ## Known gaps
 
@@ -906,9 +908,8 @@ The PRs that build the decisions, in order. Each is one PR; each moves its
 **Target** lines above into today's description and closes its gaps. Paths
 are under `native/mac/Sidebar/` unless they start with `native/`.
 
-1. **The views test pins its own values (D7).** Nothing on screen. Blocks
-   retiring the TypeScript sidebars and the pane, so it goes first. Files:
-   `native/mac/Tests/Views/main.swift`.
+1. **The views test pins its own values (D7).** Built. Nothing on screen.
+   Files: `native/mac/Tests/Views/main.swift`.
 2. **Comments point at design.md anchors (D6).** Nothing on screen. Files:
    the 16 files with a `.ts` pointer (`Views/CardView.swift`,
    `Views/ProjectsView.swift`, `Views/ChipsView.swift`, `Model/CardText.swift`,
