@@ -860,15 +860,11 @@ main today, the failures are listed and tracked as a gap.
    `(docs/design.md#full-card)`, and the 6 lines that say "as the
    cockpit's" (`grep -rn "as the cockpit's" native/mac/Sidebar`; 2 of
    them also name a TypeScript file) name the heading here instead.
-8. **The views test pins its own values.** Not built yet (D7 a). Today
-   `native/mac/Tests/Views/main.swift` reads TypeScript and pane source six
-   times (`:314`, `:379`, `:383`, `:389`, `:398`, `:412`). The five from
-   `:379` go through its `source()` helper, which returns an empty string
-   for a missing file, so retiring those files fails them; `:314` is its own
-   `try?` read that skips its checks silently when the file is gone. **Target:** the light hexes, the quiet fade and the
-   editor's words it reads from them are written into the test; checks
-   against the core stay as they are. It passes when none of those six reads
-   is left.
+8. **The views test pins its own values.** Passes (D7 a). The light
+   hexes, the quiet fade and the editor's words are written into
+   `native/mac/Tests/Views/main.swift`; it reads no TypeScript or pane
+   source, only the core's. The card and Projects words still compare
+   against the pane's snapshots, given as its second argument.
 
 ## Known gaps
 
@@ -881,7 +877,7 @@ with a follow-up PR.
 
 | Gap | What | Where |
 |-|-|-|
-| 1 | Views and the views test define the look by pointing at TypeScript and the pane; the test reads those files, so retiring them fails it. **Decided: D7 a**, the views test pins its own values. **Decided: D6 a**, comments point at `docs/design.md` anchors | 51 `.ts` pointers in 16 files; `native/mac/Tests/Views/main.swift:314`, `:379`, `:383`, `:389`, `:398`, `:412` |
+| 1 | Views define the look by pointing at TypeScript and the pane. **Built: D7 a**, the views test pins its own values. **Decided: D6 a**, comments point at `docs/design.md` anchors | 51 `.ts` pointers in 16 files |
 | A | Four count treatments: unread badge, its copy in the anchor badge, the waiting count, the count pill; the Ready pill on literals. **Decided: D1 a**, one count pill shape for every count, colour by meaning | `CardView.swift:316-328`, `LaneView.swift:73-80`, `TopView.swift:65-84`, `LaneView.swift:4-17`, `CardView.swift:302-313` |
 | B | Two names for one scale (`body`/`small` beside `Font.control`/`meta`; `CardLook.rowTitle` and `compactStatus` duplicate `Font.title` and `next`). **Decided: D2 a**, one `Metrics.Font` naming, no size changes | `Theme.swift:32-33`, `CardView.swift:40-41`, `ProjectsView.swift:126` |
 | C | Spacing, size and radius literals outside a look enum. **Decided in part: D3 a** names the two radius literals; the spacing literals have no card and are named in their own PR | listed on the audit page |
