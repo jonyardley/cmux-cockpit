@@ -288,8 +288,8 @@ for dark in [false, true] {
         grounds.append(("card face", Palette.rgba(.cardFace, dark: dark)))
     }
     for (where_, ground) in grounds {
-        // Body ink at WCAG's 4.5; the state inks at 3, as the light palette
-        // (palette.ts) holds them, the finished green the lowest.
+        // Body ink at WCAG's 4.5; the state inks at 3, the finished green
+        // the lowest.
         for (token, name) in [(Token.text, "text"), (.secondary, "secondary"), (.heading, "heading")] {
             check(contrast(Palette.rgba(token, dark: dark), ground) >= 4.5, "\(scheme): \(name) reads on the \(where_)")
         }
@@ -312,19 +312,10 @@ for dark in [false, true] {
 check(Palette.rgba(.ground, dark: false) != Palette.rgba(.ground, dark: true), "light and dark grounds differ")
 check(Palette.rgba(.panelGround, dark: false) != Palette.rgba(.panelGround, dark: true), "light and dark panel grounds differ")
 
-// The light side of the extension's own colours is the pane's, read from
-// native/pane/src/theme.rs beside the snapshots.
-let themeRs = snapshots.appendingPathComponent("../../src/theme.rs").standardizedFileURL
-if let theme = try? String(contentsOf: themeRs, encoding: .utf8) {
-    func paneHex(_ name: String) -> UInt32? {
-        let line = theme.split(separator: "\n").first { $0.hasPrefix("pub const \(name): u32 = 0x") }
-        return line.flatMap { UInt32($0.split(separator: "0x").last?.prefix(6) ?? "", radix: 16) }
-    }
-    for (own, name) in [(Palette.Own.ground, "GROUND"), (.tertiary, "TERTIARY"), (.grey, "GREY")] {
-        check(paneHex(name) == Palette.rgba(own, dark: false).hex && Palette.rgba(own, dark: false).alpha == 0xFF, "light \(own) is the pane's \(name)")
-    }
-} else {
-    check(false, "the pane's theme.rs is at \(themeRs.path)")
+// The light side of the extension's own colours, pinned here; see
+// docs/design.md "Colour".
+for (own, hex) in [(Palette.Own.ground, 0xF4F2EA), (.tertiary, 0x73726C), (.grey, 0xA09E95)] as [(Palette.Own, UInt32)] {
+    check(Palette.rgba(own, dark: false) == RGBA(hex), "light \(own) is \(String(format: "%06X", hex))")
 }
 check(Palette.rgba(Token.clayHalo, dark: false).hex == Palette.rgba(Token.clay, dark: false).hex, "a halo is its hue at an alpha")
 
@@ -370,8 +361,9 @@ if let projects = load("projects") {
     check(load("new-project").flatMap(ProjectText.editor)?.isNew == true, "new-project's editor is new")
 }
 
-// The words the sidebar keeps for itself are the core's and the pane's.
-let native = snapshots.appendingPathComponent("../../..").standardizedFileURL
+// The words the sidebar keeps for itself are the core's. The core is found
+// from this file, not from the snapshots folder, so it needs no pane.
+let native = URL(fileURLWithPath: #filePath).appendingPathComponent("../../../..").standardizedFileURL
 func source(_ path: String) -> String {
     (try? String(contentsOf: native.appendingPathComponent(path), encoding: .utf8)) ?? ""
 }
@@ -379,30 +371,27 @@ let panelRs = source("core/src/panel/mod.rs")
 for (name, word) in [("NEW_PROJECT_LABEL", Words.newProject), ("QUIET_LABEL", Words.quiet), ("PLUS_MARK", Words.plus)] {
     check(panelRs.contains("pub const \(name): &str = \"\(word)\";"), "\(name) is \"\(word)\"")
 }
-let editorRs = source("pane/src/editor.rs")
-for (name, word) in [("FOLDER_LABEL", Words.folder), ("NAME_LABEL", Words.name), ("COLOUR_LABEL", Words.colour), ("ICON_LABEL", Words.icon)] {
-    check(editorRs.contains("pub const \(name): &str = \"\(word)\";"), "the editor's \(name) is \"\(word)\"")
+// The editor's words, pinned here.
+let editorWords = [
+    (Words.folder, "Folder"), (Words.name, "Name"), (Words.colour, "Colour"), (Words.icon, "Icon"),
+    (Words.newProjectTitle, "New project"), (Words.editProjectTitle, "Edit project"), (Words.add, "Add"), (Words.done, "Done"), (Words.cancel, "Cancel"),
+    (Words.projectName, "Project name"), (Words.searchIcons, "Search icons"), (Words.openFolders, "Or one you have open"),
+]
+for (word, pinned) in editorWords {
+    check(word == pinned, "the editor's \"\(pinned)\"")
 }
-let editorTs = source("../src/cockpit/views/editor.ts")
-for word in [Words.newProjectTitle, Words.add, Words.done, Words.cancel, Words.projectName, Words.searchIcons, Words.openFolders] {
-    check(editorTs.contains("\"\(word)\""), "the sheet's \"\(word)\" is the JS sidebar editor's")
+// The light side of the panel's own colours, pinned here.
+let ownLight: [(Palette.Own, RGBA)] = [
+    (.card, RGBA(0xFFFFFF)), (.needsEdge, RGBA(0xF0D2C3)), (.needsHover, RGBA(0xFBF1EB)), (.cardHover, RGBA(0xF7F6F2)),
+    (.hover, RGBA(0x7F7F7F, 0x14)), (.dropTarget, RGBA(0x141413, 0x1F)), (.zoneLit, RGBA(0xE7E4D9)),
+    (.anchorSelected, RGBA(0x141413, 0x1F)),
+]
+for (own, pinned) in ownLight {
+    check(Palette.rgba(own, dark: false) == pinned, "light \(own) is pinned")
 }
-// The light side of the panel's own cockpit colours is the JS sidebar's,
-// read from src/cockpit/theme.ts.
-let themeTs = source("../src/cockpit/theme.ts").lowercased()
-for (own, name) in [(Palette.Own.card, "card"), (.needsEdge, "needsEdge"), (.needsHover, "needsHover"), (.cardHover, "cardHover"),
-                    (.hover, "hover"), (.dropTarget, "dropTarget"), (.zoneLit, "zoneLit"), (.anchorSelected, "anchorSelected")] {
-    let c = Palette.rgba(own, dark: false)
-    let hex = "#" + String(format: "%06x", c.hex) + (c.alpha == 0xFF ? "" : String(format: "%02x", c.alpha))
-    check(themeTs.contains("\n  \(name.lowercased()): \"\(hex)\","), "light \(own) is the cockpit's \(name)")
-}
-// The lane hues' light side is the JS sidebar's too, and the terminal
-// pane's, so a lane reads the same colour in all three.
-let paneTheme = source("pane/src/theme.rs")
-for (token, name) in [(Token.laneViolet, "laneViolet"), (.laneTeal, "laneTeal"), (.laneRose, "laneRose")] {
-    let hex = String(format: "%06X", Palette.rgba(token, dark: false).hex)
-    check(themeTs.contains("\n  \(name.lowercased()): \"#\(hex.lowercased())\","), "light \(name) is the cockpit's")
-    check(paneTheme.contains("Token::\(name.prefix(1).uppercased() + name.dropFirst()) => 0x\(hex),"), "light \(name) is the pane's")
+// The lane hues' light side, pinned here.
+for (token, hex) in [(Token.laneViolet, 0x7A5BA6), (.laneTeal, 0x2E8A86), (.laneRose, 0xB04A75)] as [(Token, UInt32)] {
+    check(Palette.rgba(token, dark: false) == RGBA(hex), "light \(token) is \(String(format: "%06X", hex))")
 }
 check(Palette.rgba(.readyBg, dark: false) == RGBA(Palette.rgba(Token.green, dark: false).hex, 0x1F), "readyBg is the finished green, faint")
 check(source("core/src/ui.rs").contains("QUIET_PILL: PillColors = PillColors {\n    bg: Token::CountBg,\n    fg: Token::MetaText,"), "the Quiet pill is the core's")
@@ -411,8 +400,7 @@ check(source("core/src/ui.rs").contains("QUIET_PILL: PillColors = PillColors {\n
 // alone; a quiet project with no folder fades, one with a folder does not.
 check(ProjectText.newProjectLabel == "New project", "+ New project's label drops the plus it draws as an icon")
 check(ProjectText.quietOpacity(canOpen: true) == 1, "a quiet project with a folder is whole")
-check(ProjectText.quietOpacity(canOpen: false) == 0.55, "a quiet project with no folder fades as the cockpit's")
-check(source("../src/cockpit/views/headers.ts").contains("if (!open) return row.opacity(\(ProjectText.quietFade));"), "the quiet fade is headers.ts quietRow's")
+check(ProjectText.quietOpacity(canOpen: false) == 0.55, "a quiet project with no folder fades to 0.55")
 if let panel = load("projects") {
     let icons = panel.projects.compactMap { r -> String? in
         switch r {
@@ -508,13 +496,13 @@ for word in ["To review →", "Park", "Close", "Keep"] {
 check(ChipTap.of(chipOf(.action, "Make \"x\" a project", action: true), id: "W1") == .send(SidebarAction.pick(.newProjectFromFolder, on: "W1")),
       "Make project picks the card menu's own item")
 
-// A badge's glyph reads on its face (contrast.ts glyphColor, issue #2).
+// A badge's glyph reads on its face (issue #2).
 check(BadgeInk.glyph(on: 0xB0AEA5) == BadgeInk.dark, "a light face (#B0AEA5) takes the dark glyph")
-// Clay reads better in dark, as contrast.ts's own glyphColor has it.
-check(BadgeInk.glyph(on: 0xD97757) == BadgeInk.dark, "clay (#D97757) takes the dark glyph, as the cockpit's does")
+// Clay reads better in dark.
+check(BadgeInk.glyph(on: 0xD97757) == BadgeInk.dark, "clay (#D97757) takes the dark glyph")
 check(BadgeInk.glyph(on: 0x3B6FB6) == BadgeInk.light, "blue (#3B6FB6) takes the white glyph")
 check(BadgeInk.glyph(on: 0x000000) == BadgeInk.light && BadgeInk.glyph(on: 0xFFFFFF) == BadgeInk.dark, "black takes white, white takes dark")
-check(BadgeInk.fallback == Palette.rgba(Palette.Own.grey, dark: false).hex, "no colour is the cockpit's grey")
+check(BadgeInk.fallback == Palette.rgba(Palette.Own.grey, dark: false).hex, "no colour is the extension's grey")
 
 // The halo round a status dot: the four filled hues that ask for a look.
 check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .blue)) == .blueHalo, "working's blue dot has its halo")

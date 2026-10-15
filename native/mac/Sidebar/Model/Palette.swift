@@ -25,7 +25,8 @@ struct RGBA: Equatable, Sendable {
 /// the dark side is this file's own, the same hues lifted for a dark
 /// ground, as nothing else in the repo has one yet. Two exceptions: the
 /// panel ground is cmux's window off-white, and a card's face is the
-/// cockpit sidebar's card white (C.card in src/cockpit/theme.ts).
+/// cockpit sidebar's card white (C.card in src/cockpit/theme.ts). The
+/// views test pins the light side; nothing checks it against those files.
 enum Palette {
     /// The colours the views use that no core token names.
     enum Own: CaseIterable {
