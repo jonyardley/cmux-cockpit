@@ -35,8 +35,7 @@ extension Event {
 
 extension SidebarAction {
     /// What picking an item of a card's menu sends: the menu opened on
-    /// that card, then the item, in that order, as the pane's Space then
-    /// Enter would.
+    /// that card, then the item, in that order.
     static func pick(_ action: MenuAction, on id: String) -> [SidebarAction] {
         [.menu(.openCard(id: id)), .menu(.pick(action))]
     }

@@ -3,9 +3,9 @@
 This describes the look of the native Mac left sidebar (`native/mac/Sidebar`,
 SwiftUI) as it stands on main at `12d4303`. It is the one reference for that
 look. The TypeScript sidebars (`src/cockpit`, `src/agents`) and the terminal
-pane (`native/pane`) are being retired, so nothing here describes them, and a
-view comment that points at one of them (for example `(cards.ts fullCard)`)
-should point at the matching heading here instead (`docs/design.md#full-card`).
+pane (`native/pane`) are being retired, so nothing here describes them. A
+view comment points at the matching heading here (for example
+`docs/design.md#full-card`), never at one of them.
 
 Read it before changing a view, `Palette.swift` or `Theme.swift`, and update
 it in the same PR when the look changes. Sections that describe a known
@@ -205,7 +205,9 @@ capitalising the string.
 | `Metrics.needsDotShare`, `needsDotRing` | 0.36, 2 | a needs dot as a share of its badge, and its ring |
 | `Metrics.emptyFade` | 0.55 | an empty lane's marker and count |
 
-### Card spacing (`CardLook`, `Views/CardView.swift:9-48`)
+### Card spacing (`CardLook`)
+
+In `Views/CardView.swift`.
 
 | Name | Value | Use |
 |-|-|-|
@@ -217,17 +219,20 @@ capitalising the string.
 | `bar` | 4 | the progress bar's height |
 | `dimmed` | 0.6 | a merged card nothing in it wants |
 
-### Chips (`ChipLook`, `Views/ChipsView.swift:6-18`)
+### Chips (`ChipLook`)
 
-`padH` 6, `padV` 1, `inner` 4 (glyph to words), `dirty` 5 (the dot), `gap` 5
-between chips, `lineGap` 4 between chip lines.
+In `Views/ChipsView.swift`. `padH` 6, `padV` 1, `inner` 4 (glyph to words),
+`dirty` 5 (the dot), `gap` 5 between chips, `lineGap` 4 between chip lines.
 
-### Projects view (`ProjectMetrics`, `Views/ProjectsView.swift:37-58`)
+### Projects view (`ProjectMetrics`)
 
-Header badge 18, quiet badge 16, "+" button 20, row padding 3, row radius 7,
-Quiet heading padding 4, gap above Quiet 10, gap above New project 6.
+In `Views/ProjectsView.swift`. Header badge 18, quiet badge 16, "+" button
+20, row padding 3, row radius 7, Quiet heading padding 4, gap above Quiet 10,
+gap above New project 6.
 
-### Radii (`Metrics.Radius`, `Views/Theme.swift:71-88`)
+### Radii (`Metrics.Radius`)
+
+In `Views/Theme.swift`.
 
 | Name | Value | Use |
 |-|-|-|
@@ -852,14 +857,11 @@ main today, the failures are listed and tracked as a gap.
    `grep -rnE "Text\(\"[A-Za-z]" Views` prints nothing. Passes today; the
    words outside `Words` are constants elsewhere ([gap K](#known-gaps)).
 7. **No comment points at a TypeScript file or the pane.**
-   `grep -rnE "\.ts\b|native/pane" .` prints nothing.
-   Fails today: 52 lines. 49 of them name a TypeScript file (51 pointers in
-   all) and 3 a pane path; in all, 19 lines lean on the pane
-   ([gap 1](#known-gaps)). **Target (D6 a):** each pointer becomes a
-   `docs/design.md` anchor, for example `(cards.ts fullCard)` becomes
-   `(docs/design.md#full-card)`, and the 6 lines that say "as the
-   cockpit's" (`grep -rn "as the cockpit's" native/mac/Sidebar`; 2 of
-   them also name a TypeScript file) name the heading here instead.
+   `grep -rnE "\.ts\b|native/pane" .` prints nothing, and neither does
+   `grep -rn "cockpit's" .`. Passes (D6 a): each pointer is a
+   `docs/design.md` anchor, for example `(docs/design.md#full-card)`. The
+   only comments that still name the pane say what the views test compares
+   against (its snapshots).
 8. **The views test pins its own values.** Passes (D7 a). The light
    hexes, the quiet fade and the editor's words are written into
    `native/mac/Tests/Views/main.swift`; it reads no TypeScript or pane
@@ -879,7 +881,7 @@ with a follow-up PR.
 
 | Gap | What | Where |
 |-|-|-|
-| 1 | Views define the look by pointing at TypeScript and the pane. **Built: D7 a**, the views test pins its own values. **Decided: D6 a**, comments point at `docs/design.md` anchors | 51 `.ts` pointers in 16 files |
+| 1 | Views defined the look by pointing at TypeScript and the pane. **Built: D7 a**, the views test pins its own values. **Built: D6 a**, comments point at `docs/design.md` anchors | closed |
 | A | Four count treatments: unread badge, its copy in the anchor badge, the waiting count, the count pill; the Ready pill on literals. **Decided: D1 a**, one count pill shape for every count, colour by meaning | `CardView.swift:316-328`, `LaneView.swift:73-80`, `TopView.swift:65-84`, `LaneView.swift:4-17`, `CardView.swift:302-313` |
 | B | Two names for one scale (`body`/`small` beside `Font.control`/`meta`; `CardLook.rowTitle` and `compactStatus` duplicate `Font.title` and `next`). **Decided: D2 a**, one `Metrics.Font` naming, no size changes | `Theme.swift:32-33`, `CardView.swift:40-41`, `ProjectsView.swift:126` |
 | C | Spacing, size and radius literals outside a look enum. **Decided in part: D3 a** names the two radius literals; the spacing literals have no card and are named in their own PR | listed on the audit page |
@@ -910,7 +912,7 @@ are under `native/mac/Sidebar/` unless they start with `native/`.
 
 1. **The views test pins its own values (D7).** Built. Nothing on screen.
    Files: `native/mac/Tests/Views/main.swift`.
-2. **Comments point at design.md anchors (D6).** Nothing on screen. Files:
+2. **Comments point at design.md anchors (D6).** Built. Nothing on screen. Files:
    the 16 files with a `.ts` pointer (`Views/CardView.swift`,
    `Views/ProjectsView.swift`, `Views/ChipsView.swift`, `Model/CardText.swift`,
    `Views/LaneView.swift`, `Model/BadgeInk.swift`, `Views/PanelView.swift`,

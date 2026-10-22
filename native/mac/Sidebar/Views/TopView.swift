@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The view switch, as the core has it on: two tabs on a ringed track, the
-/// chosen one a white face with an edge (headers.ts segmented). Tapping
+/// chosen one a white face with an edge (docs/design.md#view-switch). Tapping
 /// the other view asks the sidebar's core to flip to it. While something
 /// waits on Jon, the All tab carries the count on a clay badge (issue
 /// #314), whose click goes to the next waiting card.
@@ -85,7 +85,7 @@ private struct NeedsCount: View {
 
 /// Next: a white pill with a clay edge, "Next: <title>" in clay, cut in
 /// the middle so both ends show, and its place in the queue on the right
-/// (needs.ts nextButton). The panel shows it only while nothing waits
+/// (docs/design.md#next). The panel shows it only while nothing waits
 /// (TopText), so it steps to a Ready session; a tap steps to Next's
 /// target.
 struct NextView: View {

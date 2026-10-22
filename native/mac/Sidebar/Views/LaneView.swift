@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A count in its pill: 11pt medium on a capsule, as the cockpit's.
+/// A count in its pill: 11pt medium on a capsule (docs/design.md#count-pill).
 struct CountPill: View {
     let count: UInt64
     let colors: PillColors
@@ -18,7 +18,7 @@ struct CountPill: View {
 
 /// The fold mark on a heading: one faint chevron, pointing right while
 /// folded and turned down while open, in a fixed slot so the names line
-/// up (headers.ts chevron).
+/// up (docs/design.md#fold-chevron).
 struct FoldMark: View {
     let folded: Bool
 
@@ -59,7 +59,7 @@ extension View {
 
 /// A lane's generated anchor on its header: its dot and unread count, the
 /// click that opens it since it has no card, shaded while it is cmux's
-/// selected workspace (headers.ts anchorStatus).
+/// selected workspace (docs/design.md#anchor-badge).
 struct AnchorBadge: View {
     let anchor: Anchor
     @State private var hovering = false
@@ -97,9 +97,9 @@ struct AnchorBadge: View {
 /// A lane's header: fold chevron, marker, name in tracked capitals, anchor
 /// badge, the count, the folded lane's dot, and on the right how many PRs
 /// are ready to merge, or "Drop here" while a card is dragged over the lane
-/// (headers.ts laneHeader). An empty lane draws as the cockpit's drop zone:
-/// no chevron, its marker and count faded, and a lit face and edge while a
-/// card is over it (headers.ts dropZone). The section gap sits above the
+/// (docs/design.md#lane-header). An empty lane draws as a drop zone: no
+/// chevron, its marker and count faded, and a lit face and edge while a
+/// card is over it. The section gap sits above the
 /// face, so the hover and drop shading hug the row.
 struct LaneHeader: View {
     static let dropHere = "Drop here"

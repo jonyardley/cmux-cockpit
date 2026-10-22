@@ -2,7 +2,7 @@ import Foundation
 
 /// A colour as the palette holds it: six hex digits and an alpha. A faint
 /// token (a hue at an alpha) keeps its alpha here and is drawn over the
-/// ground, rather than blended first as the terminal pane must.
+/// ground, rather than blended first.
 struct RGBA: Equatable, Sendable {
     let hex: UInt32
     let alpha: UInt8
@@ -20,24 +20,21 @@ struct RGBA: Equatable, Sendable {
 
 /// The colours the panel draws with, light and dark, for each of the core's
 /// tokens and for the few the views need of their own. Every colour
-/// literal in the extension lives here. The light side is the sidebars'
-/// palette (src/shared/palette.ts, as native/pane/src/theme.rs maps it);
-/// the dark side is this file's own, the same hues lifted for a dark
-/// ground, as nothing else in the repo has one yet. Two exceptions: the
-/// panel ground is cmux's window off-white, and a card's face is the
-/// cockpit sidebar's card white (C.card in src/cockpit/theme.ts). The
-/// views test pins the light side; nothing checks it against those files.
+/// literal in the extension lives here; docs/design.md#colour says where
+/// each is drawn. The dark side is the same hues lifted for a dark ground;
+/// the panel ground is cmux's window off-white (docs/design.md#the-ground).
+/// The views test pins the light side.
 enum Palette {
     /// The colours the views use that no core token names.
     enum Own: CaseIterable {
-        /// The pane's cream: the selected tab.
+        /// The old cream; no view draws it (docs/design.md#not-drawn-by-any-view).
         case ground
         /// Under the whole panel (and behind a dragged card): cmux's own
-        /// off-white, which the TS sidebar and the right sidebar sit on
-        /// (sampled from a light-mode capture), so the panel matches the
+        /// off-white, which the right sidebar sits on (sampled from a
+        /// light-mode capture), so the panel matches the
         /// rest of the window. Dark is unsampled and stays the dark ground.
         case panelGround
-        /// A card's face: white on the panel ground, as the TS sidebar's cards.
+        /// A card's face: white on the panel ground.
         case cardFace
         /// The third ink: where you left off.
         case tertiary

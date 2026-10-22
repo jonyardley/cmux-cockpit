@@ -58,7 +58,7 @@ struct CardActions: ViewModifier {
 }
 
 /// The card's menu: the core's items for this frame, top to bottom, then
-/// "Message agent…", which the pane has no key for yet.
+/// "Message agent…" (docs/design.md#message-agent-popover).
 struct CardMenu: View {
     let card: Card
     @Binding var messaging: Bool
@@ -130,7 +130,7 @@ struct MessageAgent: View {
     }
 }
 
-/// One of a card's action chips (parts.ts actionChip): Make project, a
+/// One of a card's action chips (docs/design.md#action-chip): Make project, a
 /// white button with the quiet chip's edge, its words in the ink the core
 /// gives them. Its own tap, so a press never also selects the card; under
 /// the pointer its face steps darker.

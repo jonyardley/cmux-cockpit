@@ -40,12 +40,12 @@ enum Metrics {
     /// The x a waiting card shows under the pointer, and its glyph.
     static let dismissSize: CGFloat = 16
     static let dismissGlyph: CGFloat = 8
-    /// Between the cards in a lane, as the cockpit's.
+    /// Between the cards in a lane (docs/design.md#spacing-viewsthemeswift).
     static let cardGap: CGFloat = 6
     static let corner: CGFloat = 6
 
-    // The cockpit JS sidebar's sizes (src/cockpit/views, src/shared/ui.ts),
-    // named for what draws with them, so each part reads as the cockpit's.
+    // Sizes named for what draws with them; docs/design.md#type-scale and
+    // docs/design.md#spacing-and-radii say where each is used.
 
     /// Type sizes, 10 to 13.5.
     enum Font {
@@ -111,6 +111,6 @@ enum Metrics {
     /// A count pill's padding.
     static let pillPadH: CGFloat = 7
     static let pillPadV: CGFloat = 1
-    /// A section heading's letter spacing, for the JS side's hair spaces.
+    /// A section heading's letter spacing (docs/design.md#type-scale).
     static let sectionTracking: CGFloat = 1
 }

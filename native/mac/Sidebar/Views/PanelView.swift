@@ -25,8 +25,8 @@ struct AllView: View {
 }
 
 /// The whole panel: the view switch and Next (only while nothing waits
-/// and there is a next step), then the view the core has on, spaced as the cockpit's top
-/// (headers.ts segmented, needs.ts nextButton), and the project editor
+/// and there is a next step), then the view the core has on
+/// (docs/design.md#view-switch, docs/design.md#next), and the project editor
 /// as a sheet over it while the core has one open. Closing the sheet asks
 /// the core to close the editor; the sheet goes when the panel says it has.
 struct PanelBody: View {

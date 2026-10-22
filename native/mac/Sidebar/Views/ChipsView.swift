@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The quiet chip's look (shared/pr-colors.ts NEUTRAL_CHIP, ui.ts
-/// chipFrame): words at the meta size on the chip face, inside a 1pt edge
+/// The quiet chip's look (docs/design.md#quiet-chip,
+/// docs/design.md#chips): words at the meta size on the chip face, inside a 1pt edge
 /// with 6pt corners.
 enum ChipLook {
     static let padH: CGFloat = 6
@@ -18,7 +18,7 @@ enum ChipLook {
 }
 
 extension View {
-    /// A chip's frame (ui.ts chipFrame): the padding, the face, the 6pt
+    /// A chip's frame (docs/design.md#chips): the padding, the face, the 6pt
     /// corners and the chip edge, shared by the quiet chips and the action
     /// buttons so the two never drift apart.
     func chipFrame(_ face: some View, padH: CGFloat = ChipLook.padH) -> some View {
@@ -33,7 +33,7 @@ extension View {
     }
 }
 
-/// One chip, as the cockpit draws its kind (parts.ts chips): the size in
+/// One chip, drawn by its kind (docs/design.md#chips): the size in
 /// its state's ink; the PR with its glyph, its number in medium and its
 /// state in its health's ink; the branch with its glyph and a dot when it
 /// has uncommitted changes; a port; the diff size unframed and faint
@@ -129,14 +129,14 @@ struct ChipView: View {
     }
 }
 
-/// A card's chips row (parts.ts chipsRow): the size, the PR and its diff,
+/// A card's chips row (docs/design.md#chips): the size, the PR and its diff,
 /// then the branch, the ports and the actions. On one line when it all
 /// fits; else the branch's line goes under the PR's, so nothing is cut
 /// while it can be whole. Only where a line alone is too wide does the
 /// diff size give way, then the branch name, cut in the middle.
 struct ChipsRow: View {
     let card: Card
-    /// Whether the PR chip opens its PR (parts.ts PrTap): the Projects
+    /// Whether the PR chip opens its PR (docs/design.md#pr-chip): the Projects
     /// card's does; the full card's stays still (issue #72).
     var prOpens = true
 

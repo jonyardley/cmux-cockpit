@@ -1,11 +1,13 @@
 import SwiftUI
 
-// A workspace's card at each of the cockpit's shapes (src/cockpit/views
-// cards.ts): full, compact and row in All, by the density the core gives
-// its lane, and the one shape every Projects card takes. A click switches
-// to it and a right-click shows its menu (Actions.swift).
+// A workspace's card at each of its shapes (docs/design.md#full-card,
+// #compact-card, #dense-row, #projects-card): full, compact and row in
+// All, by the density the core gives its lane, and the one shape every
+// Projects card takes. A click switches to it and a right-click shows its
+// menu (Actions.swift).
 
-/// The cockpit's card sizes, named for what draws with them.
+/// The card sizes, named for what draws with them
+/// (docs/design.md#card-spacing-cardlook).
 private enum CardLook {
     /// A full card: the badge, its gap, the padding round it.
     static let fullBadge: CGFloat = 26
@@ -43,7 +45,7 @@ private enum CardLook {
     static let pin: CGFloat = 9.5
     /// The progress bar's height.
     static let bar: CGFloat = 4
-    /// A merged card while nothing in it wants Jon (merged.ts).
+    /// A merged card while nothing in it wants Jon (docs/design.md#card-chrome).
     static let dimmed: Double = 0.6
 }
 
@@ -60,7 +62,7 @@ struct LaneCard: View {
     }
 }
 
-/// The full card (cards.ts fullCard): the project's badge beside the title
+/// The full card (docs/design.md#full-card): the project's badge beside the title
 /// row; the status on its own line; the chips; the detail over two lines;
 /// the progress bar along the bottom.
 struct FullCard: View {
@@ -90,7 +92,7 @@ struct FullCard: View {
     }
 }
 
-/// The compact card (cards.ts compactCard): a smaller badge and title, the
+/// The compact card (docs/design.md#compact-card): a smaller badge and title, the
 /// PR in words on the status line with its diff size faint after it, the
 /// detail on one line, then the progress bar. No actions: the card menu holds them.
 struct CompactCard: View {
@@ -121,7 +123,7 @@ struct CompactCard: View {
     }
 }
 
-/// The row (cards.ts denseRow): dot, a small badge, the title and its
+/// The row (docs/design.md#dense-row): dot, a small badge, the title and its
 /// PR's title faint after it, then the unread count, the PR's number, the
 /// age and the pin; the detail on one line under the title. No face of
 /// its own until it is selected.
@@ -172,7 +174,7 @@ struct DenseRow: View {
     }
 }
 
-/// A Projects card (cards.ts projectRow): no badge, as the project's
+/// A Projects card (docs/design.md#projects-card): no badge, as the project's
 /// header carries it, so a waiting card's needs dot leads its title; the
 /// title and its pills, the status on its own
 /// line, the detail, then the chips, whose PR and ports open on a tap.
@@ -196,7 +198,7 @@ struct CardView: View {
     }
 }
 
-// MARK: The card's parts (parts.ts)
+// MARK: The card's parts (docs/design.md#components)
 
 /// The title, then at its end the Ready pill, the unread count, the age
 /// (only while the status line has none), the x while it waits under the
@@ -328,7 +330,7 @@ struct WaitingTabLine: View {
     }
 }
 
-/// A status dot over its soft halo (ui.ts haloDot): filled, or hollow in
+/// A status dot over its soft halo (docs/design.md#status-dot): filled, or hollow in
 /// its ring's colour. The frame is always the halo's, so dots with and
 /// without one line up down a lane.
 struct StatusDot: View {
@@ -351,7 +353,7 @@ struct StatusDot: View {
     }
 }
 
-/// Ready: the agent finished while Jon was elsewhere (parts.ts readyPill).
+/// Ready: the agent finished while Jon was elsewhere (docs/design.md#ready-pill).
 struct ReadyPill: View {
     var body: some View {
         Text(CardText.ready)
@@ -507,7 +509,7 @@ extension View {
 }
 
 /// A card's opaque white face with the hairline edge, or the select ink's
-/// on cmux's selected workspace (status.ts outline); a step darker under
+/// on cmux's selected workspace (docs/design.md#card-chrome); a step darker under
 /// the pointer. A quiet row has no face or edge until it is selected, and
 /// takes the hover wash. A merged card nothing in wants sits dimmed, at
 /// full strength under the pointer. The pointer also shows a waiting
@@ -570,7 +572,7 @@ extension EnvironmentValues {
 }
 
 /// A card's edge: the select ink at 2pt on cmux's selected workspace, the
-/// one open in the terminal, else the hairline (status.ts outline). A
+/// one open in the terminal, else the hairline (docs/design.md#card-chrome). A
 /// click moves it at once: the core draws the clicked card selected
 /// before cmux says so. Drawn inside the card, so the wider line moves
 /// nothing.

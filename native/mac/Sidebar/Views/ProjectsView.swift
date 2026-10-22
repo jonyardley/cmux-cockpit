@@ -33,7 +33,8 @@ struct ProjectMenuItems: View {
     }
 }
 
-/// The Projects view's sizes, the cockpit's (src/cockpit/views/headers.ts).
+/// The Projects view's sizes
+/// (docs/design.md#projects-view-projectmetrics).
 enum ProjectMetrics {
     /// A busy project's badge on its header, and its glyph.
     static let headerBadge: CGFloat = 18
@@ -58,8 +59,8 @@ enum ProjectMetrics {
 }
 
 extension View {
-    /// The row's hover shade in its shape, as headers.ts hoverBackground
-    /// draws it; off when the row takes no click.
+    /// The row's hover shade in its shape (docs/design.md#project-header);
+    /// off when the row takes no click.
     func hoverShade(in shape: some Shape, enabled: Bool = true) -> some View {
         modifier(HoverShade(shape: shape, enabled: enabled))
     }
@@ -79,7 +80,7 @@ private struct HoverShade<S: Shape>: ViewModifier {
 
 /// "+" at the right of a busy project's header, when it has a folder: a
 /// round button shaded on hover, whose click opens a new session in it
-/// (parts.ts glyphButton).
+/// (docs/design.md#plus-button).
 struct PlusButton: View {
     let key: String
 
@@ -99,10 +100,10 @@ struct PlusButton: View {
 }
 
 /// A busy project's header: fold chevron, its badge, name, the count, the
-/// folded project's dot, and "+" when it has a folder (headers.ts
-/// projectHeader). The section gap sits above the face, so the hover shade
-/// hugs the row, but inside the fold click, so a click in the gap folds it
-/// as headers.ts headerGap does.
+/// folded project's dot, and "+" when it has a folder
+/// (docs/design.md#project-header). The section gap sits above the face, so
+/// the hover shade hugs the row, but inside the fold click, so a click in
+/// the gap folds it too.
 struct ProjectHeader: View {
     let head: ProjectHead
 
@@ -134,8 +135,8 @@ struct ProjectHeader: View {
 }
 
 /// The Quiet heading: fold chevron, QUIET in faint tracked capitals and
-/// the count, the whole row the click that folds it (headers.ts
-/// quietHeader).
+/// the count, the whole row the click that folds it
+/// (docs/design.md#quiet-header).
 struct QuietHeader: View {
     let count: UInt64
     let collapsed: Bool
@@ -163,7 +164,7 @@ struct QuietHeader: View {
 /// A project with no sessions: its badge and name, and a faint "+" with a
 /// folder, when the whole row is a button that opens a session in it, so
 /// the keyboard and VoiceOver reach it too. With no folder it takes no
-/// click and fades, so it does not read as a button (headers.ts quietRow).
+/// click and fades, so it does not read as a button (docs/design.md#quiet-row).
 struct QuietRow: View {
     let key: String
     let name: String
@@ -214,7 +215,7 @@ struct QuietRow: View {
 
 /// "+ New project" at the foot of the busy projects: a plus in the badge's
 /// slot and the label, styled as a quiet row so it reads as part of the
-/// list; a click opens the editor (headers.ts newProjectRow).
+/// list; a click opens the editor (docs/design.md#new-project-row).
 struct NewProjectRow: View {
 
     var body: some View {

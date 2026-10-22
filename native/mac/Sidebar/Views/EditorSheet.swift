@@ -60,7 +60,7 @@ struct EditorSheet: View {
             HStack {
                 Spacer()
                 // Esc has its own key, out of sight: in the icon search with
-                // words typed it keeps the editor open, as the pane's does.
+                // words typed it keeps the editor open.
                 Button(Words.cancel) { escape() }
                     .keyboardShortcut(.cancelAction)
                     .opacity(0)

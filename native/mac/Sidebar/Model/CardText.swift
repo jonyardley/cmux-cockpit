@@ -1,8 +1,8 @@
 import Foundation
 
 /// What a card and its neighbours say, decided here so the views only lay
-/// it out. The order is the pane's (native/pane/src/views/lanes.rs): the
-/// title and status, the chips, where you left off, then the detail.
+/// it out. The order is the card's, top to bottom (docs/design.md#full-card):
+/// the title and status, the chips, where you left off, then the detail.
 enum CardText {
     /// A chip's words: its pieces, a space apart.
     static func chip(_ chip: Chip) -> String {
@@ -11,7 +11,7 @@ enum CardText {
 
     /// Every run of words a card draws, top to bottom, none empty: a
     /// row's PR title and number after its title, then the title row's
-    /// age after the status, where the pane draws them.
+    /// age after the status, as the views test's snapshots read them.
     static func runs(_ card: Card) -> [String] {
         var out = [card.title, rowPrTitle(card) ?? "", card.rowPr?.tag ?? "", card.status, titleAge(card)]
         out += ChipFit.glued(card.chips).map(chip)
@@ -123,19 +123,19 @@ extension Row: Identifiable {
     public var id: String { CardText.id(self) }
 }
 
-/// The parts of a card the cockpit's card draws round its words (parts.ts
-/// statusDot, titleRow), decided here so the views only lay them out.
+/// The parts of a card drawn round its words (docs/design.md#status-dot,
+/// docs/design.md#title-row), decided here so the views only lay them out.
 extension CardText {
     /// The core's filled dot (panel/mod.rs DOT); a hollow one has no halo.
     static let filledDot = "●"
-    /// The green pill's word (parts.ts readyPill).
+    /// The green pill's word (docs/design.md#ready-pill).
     static let ready = "Ready"
 
     /// The soft halo round a status dot: working, needs, asking and ready
     /// to merge, the four filled dots in blue, clay, amber and vivid green,
     /// each in its own hue's halo. Everything else, a hollow dot or
     /// finished green, is clear, so
-    /// dots with and without one still line up (ui.ts haloDot).
+    /// dots with and without one still line up (docs/design.md#status-dot).
     static func halo(_ icon: Icon) -> Token {
         guard icon.glyph == filledDot else { return .clear }
         switch icon.ink {
@@ -148,7 +148,7 @@ extension CardText {
     }
 
     /// A row's PR title as it follows the session's, "· Row cards show
-    /// their PR"; nil with no PR or a PR with no title (cards.ts denseRow).
+    /// their PR"; nil with no PR or a PR with no title (docs/design.md#dense-row).
     static func rowPrTitle(_ card: Card) -> String? {
         guard let title = card.rowPr?.title, !title.isEmpty else { return nil }
         return "· " + title
@@ -215,8 +215,8 @@ enum ChipTap: Equatable {
 
     /// A chip's tap: the PR's page or a port; an action by its words (Make
     /// project). An action it does not know does nothing, rather than
-    /// guess at one. A full card's PR stays still (parts.ts prChip
-    /// "still", issue #72): a tap on it selects the card, and the card
+    /// guess at one. A full card's PR stays still (docs/design.md#pr-chip,
+    /// issue #72): a tap on it selects the card, and the card
     /// menu's Open PR opens it.
     static func of(_ chip: Chip, id: String, prOpens: Bool = true) -> ChipTap {
         if chip.isAction {
