@@ -34,7 +34,7 @@ private struct SwitchSegment<Extra: View>: View {
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Metrics.inlineGap) {
             Text(label)
                 .font(.system(size: Metrics.Font.control, weight: .medium))
                 .foregroundStyle(Color(on ? Token.text : Token.secondary))
@@ -94,7 +94,7 @@ struct NextView: View {
 
     var body: some View {
         let target = NextText.target(next)
-        HStack(spacing: 6) {
+        HStack(spacing: Metrics.inlineGap) {
             Text(Words.next + ": " + target.title)
                 .font(.system(size: Metrics.Font.next, weight: .semibold))
                 .foregroundStyle(Color(Token.clayText))
@@ -108,8 +108,8 @@ struct NextView: View {
                 .lineLimit(1)
                 .layoutPriority(2)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .padding(.horizontal, Metrics.nextPadH)
+        .padding(.vertical, Metrics.nextPadV)
         .background(Color(hovering ? Palette.Own.needsHover : Palette.Own.card), in: .rect(cornerRadius: Metrics.Radius.tab))
         .overlay {
             RoundedRectangle(cornerRadius: Metrics.Radius.tab)

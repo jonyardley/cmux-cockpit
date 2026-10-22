@@ -37,8 +37,20 @@ private enum CardLook {
     static let projectGap: CGFloat = 5
     /// The pin at the end of a pinned card's title row.
     static let pin: CGFloat = 9.5
-    /// The progress bar's height.
+    /// Between the lines of a card's column: full, compact, and a row's
+    /// title line and the lines under it.
+    static let fullColumn: CGFloat = 4
+    static let compactColumn: CGFloat = 3
+    static let rowColumn: CGFloat = 2
+    /// Above a Projects card's status line (and its waiting tab), and
+    /// above its detail.
+    static let projectStatusTop: CGFloat = 2
+    static let projectDetailTop: CGFloat = 3
+    /// The progress bar's height, and the gap above it.
     static let bar: CGFloat = 4
+    static let barTop: CGFloat = 2
+    /// A hollow status dot's ring.
+    static let hollowRing: CGFloat = 1.5
     /// A merged card while nothing in it wants Jon (docs/design.md#card-chrome).
     static let dimmed: Double = 0.6
 }
@@ -68,7 +80,7 @@ struct FullCard: View {
                 icon: card.badge.icon, color: card.badge.color, size: CardLook.fullBadge,
                 font: CardLook.fullBadgeFont, mark: CardText.mark(card)
             )
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: CardLook.fullColumn) {
                 TitleRow(card: card, size: Metrics.Font.cardTitle, lines: 2)
                 StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
                 WaitingTabLine(card: card)
@@ -99,7 +111,7 @@ struct CompactCard: View {
                 icon: card.badge.icon, color: card.badge.color, size: CardLook.compactBadge,
                 font: CardLook.compactBadgeFont, mark: CardText.mark(card)
             )
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: CardLook.compactColumn) {
                 TitleRow(card: card, size: Metrics.Font.compactTitle, lines: 1)
                 StatusLine(card: card, dot: 6, size: Metrics.Font.next, weight: .regular, pr: lines.pr)
                 WaitingTabLine(card: card)
@@ -125,8 +137,8 @@ struct DenseRow: View {
     let card: Card
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: CardLook.rowColumn) {
+            HStack(spacing: Metrics.inlineGap) {
                 StatusDot(icon: card.icon, size: 7)
                 BadgeTile(
                     icon: card.badge.icon, color: card.badge.color, size: CardLook.rowBadge,
@@ -179,9 +191,10 @@ struct CardView: View {
         VStack(alignment: .leading, spacing: 0) {
             TitleRow(card: card, size: Metrics.Font.title, lines: 2, leadMark: true)
             StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
-                .padding(.top, 2)
-            WaitingTabLine(card: card, top: 2)
-            Detail(text: card.detail, lines: CardText.detailLines(card)).padding(.top, card.detail.isEmpty ? 0 : 3)
+                .padding(.top, CardLook.projectStatusTop)
+            WaitingTabLine(card: card, top: CardLook.projectStatusTop)
+            Detail(text: card.detail, lines: CardText.detailLines(card))
+                .padding(.top, card.detail.isEmpty ? 0 : CardLook.projectDetailTop)
             if ChipsRow.shows(card) {
                 ChipsRow(card: card).padding(.top, CardLook.projectGap)
             }
@@ -206,7 +219,7 @@ struct TitleRow: View {
     var leadMark = false
 
     var body: some View {
-        HStack(alignment: lines > 1 ? .top : .center, spacing: 6) {
+        HStack(alignment: lines > 1 ? .top : .center, spacing: Metrics.inlineGap) {
             if leadMark, let mark = CardText.mark(card) {
                 NeedsDot(ink: mark, size: Metrics.headerDot, onCorner: false)
                     .frame(height: size * 1.2)
@@ -245,7 +258,7 @@ struct StatusLine: View {
     var pr: [Chip] = []
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Metrics.inlineGap) {
             StatusDot(icon: card.icon, size: dot)
             if !card.status.isEmpty {
                 Text(card.status)
@@ -340,7 +353,7 @@ struct StatusDot: View {
             if icon.glyph == CardText.filledDot {
                 Circle().fill(Color(dot: icon.ink)).frame(width: size, height: size)
             } else {
-                Circle().strokeBorder(Color(dot: icon.ink), lineWidth: 1.5).frame(width: size, height: size)
+                Circle().strokeBorder(Color(dot: icon.ink), lineWidth: CardLook.hollowRing).frame(width: size, height: size)
             }
         }
         .frame(width: Self.frame(size), height: Self.frame(size))
@@ -488,7 +501,7 @@ struct ProgressBar: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 2)
+                .padding(.top, CardLook.barTop)
         }
     }
 }
@@ -577,7 +590,7 @@ struct Outline: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: radius)
-            .strokeBorder(Color(selected ? Token.select : rest), lineWidth: selected ? 2 : 1)
+            .strokeBorder(Color(selected ? Token.select : rest), lineWidth: selected ? Metrics.selectWidth : Metrics.hairline)
     }
 }
 

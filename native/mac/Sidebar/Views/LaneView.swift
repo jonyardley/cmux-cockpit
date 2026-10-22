@@ -69,7 +69,7 @@ struct AnchorBadge: View {
         Button {
             SidebarCore.send(.switchTo(id: anchor.id))
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: Metrics.anchorGap) {
                 Text(anchor.icon.glyph).foregroundStyle(Color(dot: anchor.icon.ink))
                 if !anchor.unread.isEmpty {
                     Text(anchor.unread)
@@ -80,7 +80,7 @@ struct AnchorBadge: View {
                         .background(Color(Palette.Own.badge), in: .rect(cornerRadius: Metrics.Radius.tab))
                 }
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, Metrics.anchorPad)
             .frame(height: Metrics.chevronHeight)
             .background(face, in: .rect(cornerRadius: Metrics.Radius.anchor))
             .contentShape(.rect)

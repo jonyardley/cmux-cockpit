@@ -80,6 +80,14 @@ struct CardMenu: View {
     }
 }
 
+/// The Message agent popover's measures
+/// (docs/design.md#message-agent-popover).
+private enum MessageLook {
+    static let width: CGFloat = 280
+    static let pad: CGFloat = 12
+    static let gap: CGFloat = 8
+}
+
 /// A line for Jon's words to the agent in a workspace. Return or Send
 /// sends them; blank words send nothing.
 struct MessageAgent: View {
@@ -91,7 +99,7 @@ struct MessageAgent: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: MessageLook.gap) {
             Text("\(ActionWords.messagePrompt) \(title)")
                 .font(.system(size: Metrics.Font.control, weight: .semibold))
                 .lineLimit(1)
@@ -115,8 +123,8 @@ struct MessageAgent: View {
                     .disabled(SidebarAction.message(text, to: id) == nil)
             }
         }
-        .padding(12)
-        .frame(width: 280)
+        .padding(MessageLook.pad)
+        .frame(width: MessageLook.width)
         .onAppear { focused = true }
     }
 

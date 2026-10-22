@@ -39,8 +39,8 @@ otherwise. Line numbers are as of `12d4303`.
    (`Views/ProjectsView.swift:6`).
 6. **Every size comes from a named constant.** Type sizes, spacing and radii
    live in `Metrics` (`Views/Theme.swift:31`) or a view's own look enum
-   (`CardLook`, `ChipLook`, `ProjectMetrics`). Today a number of literals
-   still sit in views: see [gap C](#known-gaps).
+   (`CardLook`, `ChipLook`, `ProjectMetrics`, `EditorLook`, `MessageLook`,
+   `DragLook`).
 
 ## Colour
 
@@ -193,7 +193,12 @@ capitalising the string.
 | `Metrics.headerSpacing` | 8 | between the parts of a header row |
 | `Metrics.pillPadH`, `pillPadV` | 7, 1 | inside a count pill and the waiting count |
 | `Metrics.switchHeight`, `switchInset` | 26, 3 | a tab's height; the track's inner padding |
-| `Metrics.hairline` | 1 | every edge |
+| `Metrics.hairline`, `selectWidth` | 1, 2 | every edge; a selected card's outline |
+| `Metrics.inlineGap` | 6 | between the parts of a line in a card, a tab or Next |
+| `Metrics.switchGap`, `topGap` | 8, 6 | under the view switch; above Next and above the view |
+| `Metrics.nextPadH`, `nextPadV` | 8, 5 | inside Next's pill |
+| `Metrics.anchorPad`, `anchorGap` | 4, 5 | inside an anchor badge; glyph to count |
+| `Metrics.noticeGap` | 4 | a notice's title to its why |
 | `Metrics.chevronWidth`, `chevronHeight` | 12, 16 | the fold chevron's slot, so names line up |
 | `Metrics.laneMarker`, `headerDot` | 9, 7 | a lane's square marker; a header's dot |
 | `Metrics.dismissSize` | 16 | the dismiss x's circle |
@@ -211,7 +216,10 @@ In `Views/CardView.swift`.
 | `rowPadLeading`, `rowPadV` | 25, 5 | inside a dense row, so its dot sits under the lane marker |
 | `rowIndent` | 7 + 6 + 6 + 14 + 6 | a dense row's second line starts under its title |
 | `projectPad`, `projectGap` | 10, 5 | inside a Projects card; above its chips and bar |
-| `bar` | 4 | the progress bar's height |
+| `fullColumn`, `compactColumn`, `rowColumn` | 4, 3, 2 | between the lines of a full card, a compact card, a dense row |
+| `projectStatusTop`, `projectDetailTop` | 2, 3 | above a Projects card's status line (and waiting tab), and its detail |
+| `bar`, `barTop` | 4, 2 | the progress bar's height, and the gap above it |
+| `hollowRing` | 1.5 | a hollow status dot's ring |
 | `dimmed` | 0.6 | a merged card nothing in it wants |
 
 ### Chips (`ChipLook`)
@@ -281,7 +289,7 @@ waiting card is an agent asking.
 A white pill with a clay edge, "Next: <title>" in clay cut in the middle, the
 place in the queue on the right. Shown only while nothing waits. Face
 `Own.card`, `Own.needsHover` under the pointer; edge `Own.needsEdge`; radius
-`Radius.tab` 7; padding 8 by 5 (literals, [gap C](#known-gaps)). Title
+`Radius.tab` 7; padding `nextPadH` 8 by `nextPadV` 5. Title
 `Font.next` 11.5 semibold `clayText`; place `Font.meta` 11 monospaced
 `metaText`. Where: `Views/TopView.swift:91-120`.
 
@@ -381,7 +389,7 @@ Where: `Views/ProjectsView.swift:218-243`.
 The badge tile (26, glyph 12, radius 8) beside a column of: the title row, the
 status line, the chips, the detail over up to two lines, the progress bar.
 Badge to text 10; padding 10 leading, 12 trailing, 11 above and below; column
-spacing 4 (literal). Title `Font.cardTitle` 13.5 semibold over two lines;
+spacing `fullColumn` 4. Title `Font.cardTitle` 13.5 semibold over two lines;
 status `Font.control` 12 medium with a 7 dot. Radius `Radius.card` 12, with
 the [card chrome](#card-chrome). Where: `Views/CardView.swift:66-90`.
 
@@ -390,7 +398,7 @@ the [card chrome](#card-chrome). Where: `Views/CardView.swift:66-90`.
 A smaller badge (22, glyph 11, radius 7), the title on one line, the status
 line with the PR in words and its diff faint after it, where you left off,
 the detail, the progress bar. Badge to text 9; same padding as the full card;
-column spacing 3 (literal). Title `Font.compactTitle` 13 semibold; status
+column spacing `compactColumn` 3. Title `Font.compactTitle` 13 semibold; status
 `Font.next` 11.5 regular with a 6 dot. Radius 12.
 Where: `Views/CardView.swift:95-120`.
 
@@ -581,7 +589,7 @@ The diff size unframed, regular, beside its PR. It is the first thing to go.
 
 A white button with the chip edge (for example Make project): `Own.card`
 face, `Own.cardHover` under the pointer, words 11 medium, padding 7 by 1
-(not the chip's 6, [gap C](#known-gaps)). Where: `Views/Actions.swift:135-163`.
+(`ActionChip.padH`, a step wider than the chip's 6). Where: `Views/Actions.swift:135-163`.
 
 ### Dismiss x
 
@@ -629,7 +637,8 @@ Where: `Views/Drag.swift:192-249`, `Views/LaneView.swift:189`.
 
 ### Editor sheet
 
-The project editor as a sheet, 260 wide with 14 padding (literals). Title at
+The project editor as a sheet, 260 wide with 14 padding (`EditorLook`, which
+names every measure in the sheet). Title at
 `Font.control` 12 semibold; labels at `Font.meta` 11 in `faint`; the
 badge preview at 18; colour swatches 14 with a 2 `text` ring on the chosen
 one; icons in 24 by 22 cells, the chosen one on `countBg` with radius
@@ -640,7 +649,7 @@ problems and Remove in `redText`. Where: `Views/EditorSheet.swift:9-186`.
 
 From a card's right-click menu: a prompt line at 12 semibold, a text field,
 Cancel and Send; "Not sent" at 11 in `clayText` when the core refuses. 280
-wide with 12 padding (literals). Where: `Views/Actions.swift:83-129`.
+wide with 12 padding (`MessageLook`). Where: `Views/Actions.swift:83-129`.
 
 **Target (D5 a, not built yet):** "Not sent" is a failure, so it is in
 `redText` like the editor's problems, not `clayText`.
@@ -841,7 +850,9 @@ main today, the failures are listed and tracked as a gap.
    `grep -rnE "cornerRadius: [0-9]" Views` prints nothing. Passes (D3 a).
 4. **No bare number in padding or spacing outside a look enum.**
    `grep -rnE "padding\((\.[a-z]+, )?[0-9]|spacing: [1-9]" Views` prints nothing.
-   Fails today: 36 lines, listed on the audit page ([gap C](#known-gaps)).
+   Fails today: 6 lines, the unread badge's, its anchor copy's and the Ready
+   pill's padding, which [follow-up 6](#follow-up-work) names
+   ([gap A](#known-gaps)).
 5. **A new colour is a pair.** Every case in `Palette.pair(_:)` names a light
    and a dark `RGBA`. Two pairs have equal sides: `Own.onFill` is white in
    both on purpose, and `faint`'s match by accident ([gap L](#known-gaps)).
@@ -876,7 +887,7 @@ with a follow-up PR.
 | 1 | Views defined the look by pointing at TypeScript and the pane. **Built: D7 a**, the views test pins its own values. **Built: D6 a**, comments point at `docs/design.md` anchors | closed |
 | A | Four count treatments: unread badge, its copy in the anchor badge, the waiting count, the count pill; the Ready pill on literals. **Decided: D1 a**, one count pill shape for every count, colour by meaning | `CardView.swift:316-328`, `LaneView.swift:73-80`, `TopView.swift:65-84`, `LaneView.swift:4-17`, `CardView.swift:302-313` |
 | B | Two names for one scale. **Built: D2 a**, one `Metrics.Font` naming, no size changes | closed |
-| C | Spacing and size literals outside a look enum. **Built in part: D3 a** named the two radius literals; the spacing literals have no card and are named in their own PR | listed on the audit page |
+| C | Spacing and size literals outside a look enum. **Built**: D3 a named the radius literals, and the spacing literals are named in `Metrics` and each view's look enum; the count paddings left go with gap A | closed |
 | D | Badge radii had no stated rule. **Built: D3 a**, badge radius is `round(0.3 × size)` worked out in `BadgeTile` | closed |
 | E | Fades: 0.55 under two names, 0.6 dimmed, 0.9 dragged. **Decided: D12 a**, `emptyFade` nothing here, `disabledFade` cannot click, `dimmed` merged | `Theme.swift:110`, `ProjectText.swift:47`, `CardView.swift:47`, `Drag.swift:243` |
 | F | Colours no view draws: `Own.ground`, `Own.cardFace`, `amberRowEdge`, `needsRowEdge`. The unused sizes (`Metrics.cardIndent`, `Metrics.corner`) went with D3 a | `Palette.swift:33`, `:40`, `:136-137` |
@@ -919,7 +930,7 @@ are under `native/mac/Sidebar/` unless they start with `native/`.
    and its gap outline keep the card's 12 corner instead of 6. Files:
    `Views/BadgeTile.swift`, `Views/CardView.swift`, `Views/LaneView.swift`,
    `Views/Theme.swift`, `Views/Drag.swift`, `Views/EditorSheet.swift`.
-5. **Spacing literals named (gap C, no card).** Nothing on screen. Files: the
+5. **Spacing literals named (gap C, no card).** Built. Nothing on screen. Files: the
    views listed on the audit page, mostly `Views/CardView.swift`,
    `Views/EditorSheet.swift`, `Views/PanelView.swift`, `Views/TopView.swift`
    and `Views/Theme.swift`.

@@ -56,6 +56,8 @@ enum ProjectMetrics {
     static let quietPadV: CGFloat = 4
     static let quietGap: CGFloat = 10
     static let newGap: CGFloat = 6
+    /// Between the Projects view's rows.
+    static let rowGap: CGFloat = 4
 }
 
 extension View {
@@ -272,7 +274,7 @@ struct ProjectsView: View {
     let panel: Panel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: ProjectMetrics.rowGap) {
             ForEach(ProjectText.listed(panel)) { ProjectRowView(row: $0) }
         }
     }

@@ -37,9 +37,9 @@ struct PanelBody: View {
             VStack(alignment: .leading, spacing: 0) {
                 ViewSwitch(view: panel.view, needs: panel.needs)
                     .padding(.horizontal, Self.switchMargin)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, Metrics.switchGap)
                 if TopText.showsNext(panel) {
-                    NextView(next: panel.next).padding(.top, 6)
+                    NextView(next: panel.next).padding(.top, Metrics.topGap)
                 }
                 Group {
                     switch panel.view {
@@ -47,7 +47,7 @@ struct PanelBody: View {
                     case .projects: ProjectsView(panel: panel)
                     }
                 }
-                .padding(.top, 6)
+                .padding(.top, Metrics.topGap)
             }
             .padding(Metrics.gutter)
         }
@@ -78,7 +78,7 @@ struct Notice: View {
     let why: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Metrics.noticeGap) {
             Text(title).font(.system(size: Metrics.Font.control, weight: .semibold)).foregroundStyle(Color(Token.text))
             Text(why).font(.system(size: Metrics.Font.control)).foregroundStyle(Color(Token.secondary))
         }

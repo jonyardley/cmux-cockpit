@@ -101,6 +101,22 @@ enum Metrics {
     static let switchInset: CGFloat = 3
     /// Lines round a face: a tab's edge, the track's, Next's.
     static let hairline: CGFloat = 1
+    /// A selected card's outline.
+    static let selectWidth: CGFloat = 2
+    /// Between the parts of a line inside a card, a tab or Next: a title
+    /// row, a status line, a dense row, a tab's label and count.
+    static let inlineGap: CGFloat = 6
+    /// Under the view switch; above Next and above the view.
+    static let switchGap: CGFloat = 8
+    static let topGap: CGFloat = 6
+    /// Next's padding.
+    static let nextPadH: CGFloat = 8
+    static let nextPadV: CGFloat = 5
+    /// An anchor badge's padding, and between its glyph and count.
+    static let anchorPad: CGFloat = 4
+    static let anchorGap: CGFloat = 5
+    /// A notice's title to its why.
+    static let noticeGap: CGFloat = 4
 
     /// A header's fold chevron sits in this slot, so names line up.
     static let chevronWidth: CGFloat = 12

@@ -198,7 +198,7 @@ private struct Liftable: ViewModifier {
                 .overlay {
                     if gap, !gone {
                         RoundedRectangle(cornerRadius: Metrics.Radius.card)
-                            .strokeBorder(Color(Token.cardEdge), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+                            .strokeBorder(Color(Token.cardEdge), style: StrokeStyle(lineWidth: Metrics.hairline, dash: DragLook.dash))
                     }
                 }
                 // Folded, not removed: the drag began here, and the row
@@ -221,6 +221,15 @@ private struct Liftable: ViewModifier {
     }
 }
 
+/// The drag's measures (docs/design.md#drag): the gap outline's dash, and
+/// the floating card's opacity and shadow.
+private enum DragLook {
+    static let dash: [CGFloat] = [4, 3]
+    static let floatOpacity = 0.9
+    static let shadowRadius: CGFloat = 6
+    static let shadowDrop: CGFloat = 2
+}
+
 /// The lifted card, drawn over the lanes at the pointer's height while it
 /// is over them, in place of macOS's drag picture. An overlay, so the
 /// lanes under it never move.
@@ -240,8 +249,8 @@ struct FloatingCard: View {
                     .background(Color(Palette.Own.panelGround), in: .rect(cornerRadius: Metrics.Radius.card))
                     .frame(width: geo.size.width)
                     .fixedSize(horizontal: false, vertical: true)
-                    .opacity(0.9)
-                    .shadow(color: Color(Palette.Own.lift), radius: 6, y: 2)
+                    .opacity(DragLook.floatOpacity)
+                    .shadow(color: Color(Palette.Own.lift), radius: DragLook.shadowRadius, y: DragLook.shadowDrop)
                     .position(x: geo.size.width / 2, y: y - (state.grab ?? 0))
             }
             .allowsHitTesting(false)
