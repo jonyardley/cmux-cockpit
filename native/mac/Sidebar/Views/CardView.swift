@@ -368,13 +368,15 @@ struct ReadyPill: View {
             .foregroundStyle(Color(Token.greenText))
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, 7)
-            .padding(.vertical, 1)
+            .padding(.horizontal, Metrics.pillPadH)
+            .padding(.vertical, Metrics.pillPadV)
             .background(Color(Palette.Own.readyBg), in: .rect(cornerRadius: Metrics.Radius.ready))
     }
 }
 
-/// The unread count, grey on both sides so clay only ever means needs you.
+/// The unread count in the count pill's shape, grey on both sides so clay
+/// only ever means needs you (docs/design.md#unread-badge). A card's title
+/// row, a dense row and a lane's anchor badge all draw this one view.
 struct UnreadBadge: View {
     let count: String
 
@@ -383,9 +385,7 @@ struct UnreadBadge: View {
             .font(.system(size: Metrics.Font.tiny, weight: .bold))
             .foregroundStyle(Color(Palette.Own.onBadge))
             .fixedSize()
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(Color(Palette.Own.badge), in: .rect(cornerRadius: Metrics.Radius.tab))
+            .countPillShape(Color(Palette.Own.badge))
     }
 }
 

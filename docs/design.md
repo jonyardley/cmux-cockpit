@@ -191,7 +191,7 @@ capitalising the string.
 | `Metrics.sectionGap` | 14 | from the section above to a header's words |
 | `Metrics.headerPadH`, `headerPadV` | 8, 5 | inside a lane or project header |
 | `Metrics.headerSpacing` | 8 | between the parts of a header row |
-| `Metrics.pillPadH`, `pillPadV` | 7, 1 | inside a count pill and the waiting count |
+| `Metrics.pillPadH`, `pillPadV` | 7, 1 | inside every count pill, and the Ready pill |
 | `Metrics.switchHeight`, `switchInset` | 26, 3 | a tab's height; the track's inner padding |
 | `Metrics.hairline`, `selectWidth` | 1, 2 | every edge; a selected card's outline |
 | `Metrics.inlineGap` | 6 | between the parts of a line in a card, a tab or Next |
@@ -242,9 +242,9 @@ In `Views/Theme.swift`.
 | `card` | 12 | full and compact cards |
 | `row` | 9 | a dense row, a Projects card |
 | `track` | 10 | the view switch's track |
-| `pill` | 10 | a count pill |
+| `pill` | 10 | every count pill: a lane's or project's count, the unread badge, the waiting count |
 | `header` | 8 | a lane or project header, the Quiet heading, an empty lane's zone |
-| `tab` | 7 | a switch tab, Next's pill, the unread badge |
+| `tab` | 7 | a switch tab, Next's pill |
 | `anchor` | 6 | an anchor badge's face |
 | `chip` | 6 | every chip |
 | `ready` | 8 | the Ready pill |
@@ -273,15 +273,14 @@ Where: `Views/TopView.swift:8-59`.
 
 ### Needs count
 
-White number on a clay capsule on the All tab; a click steps to the next
-waiting card. `Font.tiny` 10 bold, monospaced; padding `pillPadH` 7 and
-`pillPadV` 1; `clay` face, `Own.onFill` ink; capsule shape.
-Where: `Views/TopView.swift:65-84`. See [gap A](#known-gaps).
+White number on a clay pill on the All tab; a click steps to the next
+waiting card. `Font.tiny` 10 bold, monospaced; the
+[count pill](#count-pill)'s shape (D1 a); `clay` face, `Own.onFill` ink.
+Where: `Views/TopView.swift` (`NeedsCount`).
 
-**Target (D1 a and D8 a, not built yet):** the count takes the
-[count pill](#count-pill)'s shape (D1), and its face and number come from the
+**Target (D8 a, not built yet):** its face and number come from the
 core's `Needs.fill` and `Needs.ink` (`native/core/src/panel/mod.rs:116-120`)
-rather than a fixed clay (D8). You would see it turn amber while every
+rather than a fixed clay. You would see it turn amber while every
 waiting card is an agent asking.
 
 ### Next
@@ -338,13 +337,13 @@ Where: `Views/LaneView.swift:35-44`.
 On a lane header, a lane's generated workspace with no card: its status glyph
 and unread count, a click opens it. Face clear, `Own.hover` under the
 pointer, `Own.anchorSelected` while selected; radius `Radius.anchor` 6; height
-16; padding 4. The unread count inside is an inline copy of the
-[unread badge](#unread-badge). Where: `Views/LaneView.swift:63-95`.
+16; padding 4. The unread count inside is the
+[unread badge](#unread-badge) view itself (D1 a). Where:
+`Views/LaneView.swift` (`AnchorBadge`).
 
-**Target (D1 a and D13 a, not built yet):** the unread count inside is the
-unread badge view itself, not a copy (D1). While selected, the badge takes a
-1 `select` outline like a card instead of the `Own.anchorSelected` face
-(D13), so it no longer matches a lane under a drag.
+**Target (D13 a, not built yet):** while selected, the badge takes a
+1 `select` outline like a card instead of the `Own.anchorSelected` face, so
+it no longer matches a lane under a drag.
 
 ### Project header
 
@@ -503,34 +502,30 @@ Where: `Views/BadgeTile.swift:11-34`.
 ### Ready pill
 
 "Ready" in `greenText` on `Own.readyBg`, the agent finished while you were
-elsewhere. `Font.section` 10.5 medium; padding 7 by 1 (literals,
-[gap A](#known-gaps)); radius `Radius.ready` 8. Where: `Views/CardView.swift:302-313`.
+elsewhere. `Font.section` 10.5 medium; padding `pillPadH` 7 by `pillPadV`
+1, the count pill's (D1 a); radius `Radius.ready` 8, its own, as it is not a
+count. Where: `Views/CardView.swift` (`ReadyPill`).
 
-**Target (D1 a, D8 a, not built yet):** its padding is a named value (D1),
-and its ink comes from the core rather than the view
-naming `greenText` (D8).
+**Target (D8 a, not built yet):** its ink comes from the core rather than
+the view naming `greenText`.
 
 ### Unread badge
 
 The unread count, white on grey in both appearances so clay only ever means
-your turn. `Font.tiny` 10 bold, not monospaced; padding 5 by 1 (literals);
-radius `Radius.tab` 7; `Own.badge` face, `Own.onBadge` ink.
-Where: `Views/CardView.swift:316-328`.
-
-**Target (D1 a, not built yet):** the [count pill](#count-pill)'s padding and
-radius, still white on grey.
+your turn. `Font.tiny` 10 bold, not monospaced; the
+[count pill](#count-pill)'s shape (D1 a); `Own.badge` face, `Own.onBadge`
+ink. A card's title row, a dense row and the anchor badge draw the same
+view. Where: `Views/CardView.swift` (`UnreadBadge`).
 
 ### Count pill
 
-A lane's or project's count. `Font.meta` 11 medium with monospaced digits;
-padding `pillPadH` 7 by `pillPadV` 1; radius `Radius.pill` 10; face and ink
-from the core. Where: `Views/LaneView.swift:4-17`.
-
-**Target (D1 a, not built yet):** one pill for every count. The count pill's
-padding and radius are used by the unread badge and the waiting count too;
-colour still follows meaning (grey unread, the core's tint on lane and
-project counts, the core's `Needs` colours on the waiting count). You would
-see the unread number grow slightly wider and match the lane count.
+One pill shape for every count (D1 a): padding `pillPadH` 7 by `pillPadV`
+1, radius `Radius.pill` 10 (`countPillShape`). A lane's or project's count
+is `Font.meta` 11 medium with monospaced digits, face and ink from the core.
+The unread badge and the waiting count take the same shape; colour follows
+meaning (grey unread, the core's tint on lane and project counts, clay on
+the waiting count). Where: `Views/LaneView.swift` (`CountPill`,
+`countPillShape`).
 
 ### Meta text
 
@@ -705,9 +700,8 @@ Every card is decided as option a; where that changes a rule, the rule says
    the anchor badge draw a text glyph ([gap H](#known-gaps)).
 5. **A count is a pill**, coloured by how urgent what it counts is
    (`ui.rs:54` `count_tint`). The unread count is grey because unread is not a
-   state. **Target (D1 a):** one pill shape for every count (the count
-   pill's padding and radius), colour still by meaning. Today there are four
-   ([gap A](#known-gaps)).
+   state. Every count takes the one count pill's shape (D1 a), colour by
+   meaning.
 6. **Hover:** anything that takes a click lights under the pointer. A solid
    face steps to `Own.cardHover`; a clear surface takes the `Own.hover` wash.
    `Own.needsHover` on Next is the one tinted hover today. **Target
@@ -773,7 +767,7 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Checks failing, conflict | chip words `redText` on a neutral chip | number `redText` | | | `pr_colors.rs:33` |
 | Checks running | chip words `blueText` (blue also means working) | number `blueText` | | | `pr_colors.rs:34` |
 | Move size | chip words `greenText` quick, `clayText` decide, `blueText` review **≠** | not drawn | | | `panel/build.rs:34-39` |
-| Unread | grey badge | grey badge | inline copy on the anchor **≠** | | `CardView.swift:316-328`, `LaneView.swift:73-80` |
+| Unread | grey badge | grey badge | the same badge on the anchor | | `CardView.swift` `UnreadBadge` |
 | Needs dot | on the badge corner; leads the title on a Projects card | on the 14 badge | glyph on headers **≠** | | `status.rs:248`; `panel/build.rs:568` |
 | Selected | `select` outline at 2 | face, outline, medium title | `Own.anchorSelected` face **≠** | chosen tab: white face; editor: `text` ring or `countBg` cell **≠** | `CardView.swift:531`, `LaneView.swift:92`, `EditorSheet.swift:143`, `:166` |
 | Age | `Own.tertiary` | `metaText` **≠** | | Next's place `metaText` | `CardView.swift:157`, `:234` |
@@ -850,9 +844,7 @@ main today, the failures are listed and tracked as a gap.
    `grep -rnE "cornerRadius: [0-9]" Views` prints nothing. Passes (D3 a).
 4. **No bare number in padding or spacing outside a look enum.**
    `grep -rnE "padding\((\.[a-z]+, )?[0-9]|spacing: [1-9]" Views` prints nothing.
-   Fails today: 6 lines, the unread badge's, its anchor copy's and the Ready
-   pill's padding, which [follow-up 6](#follow-up-work) names
-   ([gap A](#known-gaps)).
+   Passes.
 5. **A new colour is a pair.** Every case in `Palette.pair(_:)` names a light
    and a dark `RGBA`. Two pairs have equal sides: `Own.onFill` is white in
    both on purpose, and `faint`'s match by accident ([gap L](#known-gaps)).
@@ -885,9 +877,9 @@ with a follow-up PR.
 | Gap | What | Where |
 |-|-|-|
 | 1 | Views defined the look by pointing at TypeScript and the pane. **Built: D7 a**, the views test pins its own values. **Built: D6 a**, comments point at `docs/design.md` anchors | closed |
-| A | Four count treatments: unread badge, its copy in the anchor badge, the waiting count, the count pill; the Ready pill on literals. **Decided: D1 a**, one count pill shape for every count, colour by meaning | `CardView.swift:316-328`, `LaneView.swift:73-80`, `TopView.swift:65-84`, `LaneView.swift:4-17`, `CardView.swift:302-313` |
+| A | Four count treatments and the Ready pill on literals. **Built: D1 a**, one count pill shape for every count, colour by meaning | closed |
 | B | Two names for one scale. **Built: D2 a**, one `Metrics.Font` naming, no size changes | closed |
-| C | Spacing and size literals outside a look enum. **Built**: D3 a named the radius literals, and the spacing literals are named in `Metrics` and each view's look enum; the count paddings left go with gap A | closed |
+| C | Spacing and size literals outside a look enum. **Built**: D3 a named the radius literals, and the spacing literals are named in `Metrics` and each view's look enum; the count paddings went with gap A | closed |
 | D | Badge radii had no stated rule. **Built: D3 a**, badge radius is `round(0.3 × size)` worked out in `BadgeTile` | closed |
 | E | Fades: 0.55 under two names, 0.6 dimmed, 0.9 dragged. **Decided: D12 a**, `emptyFade` nothing here, `disabledFade` cannot click, `dimmed` merged | `Theme.swift:110`, `ProjectText.swift:47`, `CardView.swift:47`, `Drag.swift:243` |
 | F | Colours no view draws: `Own.ground`, `Own.cardFace`, `amberRowEdge`, `needsRowEdge`. The unused sizes (`Metrics.cardIndent`, `Metrics.corner`) went with D3 a | `Palette.swift:33`, `:40`, `:136-137` |
@@ -934,7 +926,7 @@ are under `native/mac/Sidebar/` unless they start with `native/`.
    views listed on the audit page, mostly `Views/CardView.swift`,
    `Views/EditorSheet.swift`, `Views/PanelView.swift`, `Views/TopView.swift`
    and `Views/Theme.swift`.
-6. **One count pill (D1).** On screen: the unread number grows slightly wider
+6. **One count pill (D1).** Built. On screen: the unread number grows slightly wider
    and matches the lane count; the anchor badge draws the real unread badge.
    Files: `Views/CardView.swift`, `Views/LaneView.swift`, `Views/TopView.swift`,
    `Views/Theme.swift`.

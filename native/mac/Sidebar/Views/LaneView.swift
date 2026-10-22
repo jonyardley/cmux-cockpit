@@ -1,6 +1,19 @@
 import SwiftUI
 
-/// A count in its pill: 11pt medium on a capsule (docs/design.md#count-pill).
+extension View {
+    /// The one count pill's shape (docs/design.md#count-pill): its padding
+    /// and corner on `face`. Every count takes it: a lane's or project's,
+    /// the unread badge and the waiting count; their colours follow what
+    /// they count.
+    func countPillShape(_ face: Color) -> some View {
+        padding(.horizontal, Metrics.pillPadH)
+            .padding(.vertical, Metrics.pillPadV)
+            .background(face, in: .rect(cornerRadius: Metrics.Radius.pill))
+    }
+}
+
+/// A lane's or project's count in its pill: 11pt medium, in the core's
+/// colours (docs/design.md#count-pill).
 struct CountPill: View {
     let count: UInt64
     let colors: PillColors
@@ -10,9 +23,7 @@ struct CountPill: View {
             .font(.system(size: Metrics.Font.meta, weight: .medium).monospacedDigit())
             .foregroundStyle(Color(colors.fg))
             .lineLimit(1)
-            .padding(.horizontal, Metrics.pillPadH)
-            .padding(.vertical, Metrics.pillPadV)
-            .background(Color(colors.bg), in: .rect(cornerRadius: Metrics.Radius.pill))
+            .countPillShape(Color(colors.bg))
     }
 }
 
@@ -71,14 +82,7 @@ struct AnchorBadge: View {
         } label: {
             HStack(spacing: Metrics.anchorGap) {
                 Text(anchor.icon.glyph).foregroundStyle(Color(dot: anchor.icon.ink))
-                if !anchor.unread.isEmpty {
-                    Text(anchor.unread)
-                        .font(.system(size: Metrics.Font.tiny, weight: .bold))
-                        .foregroundStyle(Color(Palette.Own.onBadge))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Color(Palette.Own.badge), in: .rect(cornerRadius: Metrics.Radius.tab))
-                }
+                if !anchor.unread.isEmpty { UnreadBadge(count: anchor.unread) }
             }
             .padding(.horizontal, Metrics.anchorPad)
             .frame(height: Metrics.chevronHeight)

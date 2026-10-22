@@ -58,7 +58,8 @@ private struct SwitchSegment<Extra: View>: View {
     }
 }
 
-/// The waiting count on the All tab: white on clay. A click reveals the
+/// The waiting count on the All tab: white on clay, in the count pill's
+/// shape. A click reveals the
 /// session the core names, back in All first, and steps on with each
 /// click; it does not flip the view itself, so it sits over the tab's
 /// own tap.
@@ -74,10 +75,8 @@ private struct NeedsCount: View {
                 .font(.system(size: Metrics.Font.tiny, weight: .bold).monospaced())
                 .foregroundStyle(Color(Palette.Own.onFill))
                 .fixedSize()
-                .padding(.horizontal, Metrics.pillPadH)
-                .padding(.vertical, Metrics.pillPadV)
-                .background(Color(Token.clay), in: .capsule)
-                .contentShape(.capsule)
+                .countPillShape(Color(Token.clay))
+                .contentShape(.rect(cornerRadius: Metrics.Radius.pill))
         }
         .buttonStyle(.plain)
     }

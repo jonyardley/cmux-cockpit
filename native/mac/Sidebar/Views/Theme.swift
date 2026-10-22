@@ -80,13 +80,14 @@ enum Metrics {
         static let row: CGFloat = 9
         /// The view switch's track.
         static let track: CGFloat = 10
-        /// A view switch tab, Next's pill, the unread badge.
+        /// A view switch tab, Next's pill.
         static let tab: CGFloat = 7
         /// A lane header and an empty lane's drop zone.
         static let header: CGFloat = 8
         /// A lane anchor's badge.
         static let anchor: CGFloat = 6
-        /// A count pill.
+        /// Every count pill: a lane's or project's count, the unread
+        /// badge, the waiting count.
         static let pill: CGFloat = 10
         /// A chip round a branch, a PR or a port.
         static let chip: CGFloat = 6
@@ -133,7 +134,7 @@ enum Metrics {
     static let sectionGap: CGFloat = 14
     /// An empty lane's marker and count, faded.
     static let emptyFade: Double = 0.55
-    /// A count pill's padding.
+    /// Every count pill's padding, and the Ready pill's.
     static let pillPadH: CGFloat = 7
     static let pillPadV: CGFloat = 1
     /// A section heading's letter spacing (docs/design.md#type-scale).
