@@ -53,8 +53,7 @@ otherwise. Line numbers are as of `12d4303`.
 ### The ground
 
 The panel sits on `Own.panelGround`, **FAF9F5** light: cmux's own window
-off-white, sampled from a light capture (`Palette.swift:34-38`, `:153`). It is
-not the old TS sidebar's F4F2EA, which survives only as `Own.ground`. Dark is
+off-white, sampled from a light capture (`Model/Palette.swift`). Dark is
 262624 and was not sampled (see [gap L](#known-gaps)).
 
 **Target (D4 a, not built yet, blocked):** the dark ground and the dark side
@@ -144,9 +143,10 @@ dark-mode screenshot; nothing here changes before then.
 
 ### Not drawn by any view
 
-`Own.ground` and `Own.cardFace` are read only by the views test; `amberRowEdge`
-and `needsRowEdge` are neither chosen by the core nor drawn. See
-[gap F](#known-gaps). The six PR chip faces and edges (`redChipFace` to
+`amberRowEdge` and `needsRowEdge` are neither chosen by the core nor drawn;
+they are core tokens, so they go in a core PR ([gap F](#known-gaps)). The
+sidebar's own unused colours (`Own.ground`, `Own.cardFace`) have gone, and
+the views test checks contrast on `Own.card`, the face cards are drawn on. The six PR chip faces and edges (`redChipFace` to
 `greenChipEdge`) are chosen by a core function nothing calls, so a PR's
 health shows only in the ink of its words ([gap S](#known-gaps)).
 
@@ -872,13 +872,13 @@ with a follow-up PR.
 | C | Spacing and size literals outside a look enum. **Built**: D3 a named the radius literals, and the spacing literals are named in `Metrics` and each view's look enum; the count paddings went with gap A | closed |
 | D | Badge radii had no stated rule. **Built: D3 a**, badge radius is `round(0.3 × size)` worked out in `BadgeTile` | closed |
 | E | Fades: 0.55 under two names, 0.6 dimmed, 0.9 dragged. **Decided: D12 a**, `emptyFade` nothing here, `disabledFade` cannot click, `dimmed` merged | `Theme.swift:110`, `ProjectText.swift:47`, `CardView.swift:47`, `Drag.swift:243` |
-| F | Colours no view draws: `Own.ground`, `Own.cardFace`, `amberRowEdge`, `needsRowEdge`. The unused sizes (`Metrics.cardIndent`, `Metrics.corner`) went with D3 a | `Palette.swift:33`, `:40`, `:136-137` |
+| F | Colours and sizes no view draws. **Built in part**: `Own.ground`, `Own.cardFace`, `Metrics.cardIndent` and `Metrics.corner` are gone. Left: `amberRowEdge` and `needsRowEdge`, core tokens the extension must map while the core has them, which go in a core PR | `native/core/src/theme.rs`; `Model/Palette.swift` |
 | G | Eight views keep their own hover state beside the one shared hover shade | `ProjectsView.swift:60-78`; the eight other `@State private var hovering` sites |
 | H | Status dots drawn as circles on cards and as text glyphs on headers | `CardView.swift:281-299`; `LaneView.swift:72`, `:146`; `ProjectsView.swift:121` |
 | I | Card shapes differ in status weight, title weight and age ink. **Decided in part: D14 a** settles the age ink; the weights have no card | `CardView.swift:77`, `:107`, `:138`, `:157`, `:233-235` |
 | J | Clay for "Not sent" and amber for the helper-down banner. **Built: D5 a**, red for failures, neutral for helper down | closed |
 | K | Words outside `Words.swift`; Cancel defined twice. **Built**: every fixed word is in `Words.swift`, one Cancel. Left: "Drop here" differs in case from the core's "drop here", settled when the views draw the core's `header_hint` (follow-up 7) | `Words.swift` `dropHere`, `native/core/src/panel/mod.rs:65` |
-| L | Dark mode is the extension's own: ground unsampled, `faint` one hex for both, `Own.cardFace` dark see-through. **Decided: D4 a**, sample from a dark capture of cmux; blocked on a dark-mode screenshot from Jon | `Palette.swift:34-37`, `:94`, `:154` |
+| L | Dark mode is the extension's own: ground unsampled, `faint` one hex for both. **Decided: D4 a**, sample from a dark capture of cmux; blocked on a dark-mode screenshot from Jon | `Palette.swift:34-37`, `:94`, `:154` |
 | M | The waiting count on All is always clay; the core sends amber while every waiting card asks. **Decided: D8 a**, views draw the core's colour | `TopView.swift:75`, `:79`; `native/core/src/panel/build.rs:392-398`; `native/core/src/panel/mod.rs:116-120` |
 | N | Next is drawn in your turn's clay, but it shows only while nothing waits, so it always leads to a Ready card. **Decided: D9 a**, Next in Ready's green | `TopView.swift:100`, `:113`, `:116`; `Model/CardText.swift:100-103`; `native/core/src/next.rs:84-90` |
 | O | The move size chip borrows three state inks: green quick, clay decide, blue review. **Decided: D10 a**, the size chip is neutral | `native/core/src/panel/build.rs:34-39` |
@@ -961,8 +961,9 @@ are under `native/mac/Sidebar/` unless they start with `native/`.
     running shell says the new word instead of "Waiting". Needs Jon to
     confirm the word ("Shell running" is a placeholder). Files:
     `native/core/src/words.rs`, `native/core/src/status.rs` tests.
-16. **Unused colours go (gap F, no card).** Nothing on screen. After 1, since
-    the views test reads `Own.ground` and `Own.cardFace` today. Files:
+16. **Unused colours go (gap F, no card).** Built for the sidebar's own
+    colours; `amberRowEdge` and `needsRowEdge` need a core PR. Nothing on
+    screen. Files:
     `Model/Palette.swift`, `native/mac/Tests/Views/main.swift`.
 17. **Dark ground sampled (D4).** On screen: in dark mode the panel's ground
     and faint ink may shift slightly. Blocked on a dark-mode screenshot from

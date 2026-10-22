@@ -27,15 +27,11 @@ struct RGBA: Equatable, Sendable {
 enum Palette {
     /// The colours the views use that no core token names.
     enum Own: CaseIterable {
-        /// The old cream; no view draws it (docs/design.md#not-drawn-by-any-view).
-        case ground
         /// Under the whole panel (and behind a dragged card): cmux's own
         /// off-white, which the right sidebar sits on (sampled from a
         /// light-mode capture), so the panel matches the
         /// rest of the window. Dark is unsampled and stays the dark ground.
         case panelGround
-        /// A card's face: white on the panel ground.
-        case cardFace
         /// The third ink: where you left off.
         case tertiary
         /// The outline of a dot with no colour of its own.
@@ -45,7 +41,7 @@ enum Palette {
         case onBadge
         /// The shadow under a card being dragged.
         case lift
-        /// A solid face: the chosen view tab, Next's pill.
+        /// A solid face: a card's, the chosen view tab, Next's pill.
         case card
         /// The edge round Next's pill.
         case needsEdge
@@ -145,9 +141,7 @@ enum Palette {
 
     private static func pair(_ own: Own) -> Pair {
         switch own {
-        case .ground: Pair(RGBA(0xF4F2EA), RGBA(0x262624))
         case .panelGround: Pair(RGBA(0xFAF9F5), RGBA(0x262624))
-        case .cardFace: Pair(RGBA(0xFFFFFF), RGBA(0x30302D, 0x99))
         case .tertiary: Pair(RGBA(0x73726C), RGBA(0x9C9A92))
         case .grey: Pair(RGBA(0xA09E95), RGBA(0x77756D))
         case .badge: secondary
