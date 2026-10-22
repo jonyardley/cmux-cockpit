@@ -1,4 +1,4 @@
-// Text clean-up shared by both sidebars.
+// Text clean-up for the agents panel.
 
 // Claude's terminal titles lead with a spinner glyph (✳, ⏺, braille dots).
 export function cleanTitle(s: string | null | undefined): string {

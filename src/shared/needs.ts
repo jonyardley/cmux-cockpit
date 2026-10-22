@@ -1,7 +1,7 @@
-// "Needs you", corrected the same way in both sidebars. An agent's
-// needs_input reads as idle when it is Claude Code's idle nudge (issue #4) or
-// when Jon has dismissed it. The sidebars run in separate contexts, so each
-// holds its own dismissals, and a reload forgets them (issues #3 and #5).
+// "Needs you", corrected the same way as the native Cockpit does it. An
+// agent's needs_input reads as idle when it is Claude Code's idle nudge
+// (issue #4) or when Jon has dismissed it. The agents panel holds its own
+// dismissals, and a reload forgets them (issues #3 and #5).
 
 import type { SavedAsk, SavedMove } from "../../scripts/state-config.ts";
 import { sinceOrActivity } from "./activity.ts";

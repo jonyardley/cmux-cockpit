@@ -47,7 +47,7 @@ const ownsMove = (saved: SavedMove, a: Agent): boolean =>
   saved.session !== undefined && a.kind === "claude" && a.id === saved.session;
 
 /**
- * The move `a` is waiting on, or null. Pass `a` as the sidebars show it
+ * The move `a` is waiting on, or null. Pass `a` as the agents panel shows it
  * (agentsOf) and `asking` from askReason. Only a turn end counts: idle or
  * needs_input, never working or ended, and never an ask. The move is current
  * while it is no older than the workspace's last prompt (latestAt, which
@@ -63,7 +63,7 @@ export function waitingMove(a: Agent | null | undefined, w: Workspace | undefine
   return savedFor(savedMoveFor(w), a, w, promptAt, ownsMove);
 }
 
-// Nothing to answer, so no size. "Nothing follows" is different: it ends in /clear.
+// Nothing to answer. "Nothing follows" is different: it ends in /clear.
 const NOTHING_WAITS = /nothing (?:else )?waits on you/i;
 // "Your move: nothing. Waiting until CI lands.": the bare word, then a stop.
 // "nothing pending, /clear now" and "nothing follows" still ask something.

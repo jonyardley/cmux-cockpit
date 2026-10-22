@@ -44,7 +44,7 @@ const { moveDescription } = await import("../scripts/state-config.ts");
 const shown = (w: Workspace): Agent | null => needs.agentsOf(w)[0] ?? null;
 const moveOf = (w: Workspace): SavedMove | null => {
   const a = shown(w);
-  return move.waitingMove(a, w, !!needs.askReason(a, w));
+  return move.waitingMove(a, w, needs.askReason(a, w) !== null);
 };
 
 // The Claude session that saved workspace `id`'s move, as cmux reports it once hooked.

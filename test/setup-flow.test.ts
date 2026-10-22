@@ -79,6 +79,7 @@ describe("setup", () => {
     }
     assert.deepEqual(f.asked, []);
     assert.ok(f.out.some((l) => l.startsWith("✗ Build")));
+    assert.ok(!f.calls.some((c) => c.startsWith("cmux sidebar select")), "the left sidebar is the native Cockpit's");
   });
 
   it("is safe to rerun: it keeps an existing cmux.json and projects.json, and says so", async () => {
@@ -93,6 +94,10 @@ describe("setup", () => {
     assert.equal(readFileSync(p.projects, "utf8"), "[]");
     assert.ok(f.out.some((l) => l.includes("no customSidebars block")));
     assert.ok(f.out.some((l) => l.includes("projects.json: already there")));
+    assert.ok(
+      f.out.some((l) => l.includes("native/mac/README.md")),
+      "points at the native Cockpit",
+    );
     assert.ok(!f.calls.some((c) => c.includes("list-workspaces")));
   });
 
@@ -331,6 +336,17 @@ describe("doctor", () => {
     utimesSync(mark, new Date(Date.now() + 120_000), new Date(Date.now() + 120_000));
     const fresh = runChecks(fakeEnv(w).env).find((c) => c.label === "Build");
     assert.equal(fresh?.ok, true, "a build that left the bundles unchanged still counts as fresh");
+  });
+
+  it("notes a leftover cockpit bundle without failing the build check", () => {
+    const w = where();
+    built(w.repo);
+    const clean = runChecks(fakeEnv(w).env).find((c) => c.label === "Build");
+    assert.equal(clean?.notes, undefined);
+    writeFileSync(join(w.repo, "sidebars", "cockpit.js"), "");
+    const check = runChecks(fakeEnv(w).env).find((c) => c.label === "Build");
+    assert.equal(check?.ok, true);
+    assert.match(check?.notes?.[0] ?? "", /sidebars\/cockpit\.js is the retired cockpit/);
   });
 
   it("flags an old per-script hook left beside the entry points, naming the file", async () => {

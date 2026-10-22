@@ -1,4 +1,4 @@
-// Agent ranking shared by both sidebars: needs_input beats working beats
+// Agent ranking for the agents panel, as the native Cockpit ranks: needs_input beats working beats
 // idle beats ended, then the most recent activity wins.
 
 export const ACTIVITY: Readonly<Record<AgentStatus, number>> = { needs_input: 3, working: 2, idle: 1, ended: 0 };

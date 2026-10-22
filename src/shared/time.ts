@@ -1,4 +1,4 @@
-// Clock and duration formatting shared by both sidebars.
+// Clock and duration formatting for the agents panel.
 
 /** The app clock in epoch seconds; 0 before the first tick. */
 export function nowEpoch(): number {

@@ -91,5 +91,6 @@ export function buildAndShow(env: Env): boolean {
   env.print("✓ built sidebars/agents.js");
   env.run("cmux", ["right-sidebar", "set", "custom", "agents"]);
   env.print("✓ agents panel in the right sidebar");
+  env.print("  The Cockpit in the left sidebar is a native extension: native/mac/README.md builds and shows it.");
   return true;
 }

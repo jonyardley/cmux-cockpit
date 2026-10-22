@@ -1,4 +1,4 @@
-// View helpers shared by both sidebars.
+// View helpers for the agents panel.
 
 import { glyphColor } from "./contrast.ts";
 import { P } from "./palette.ts";

@@ -322,7 +322,7 @@ const REAL_DELIVERY: Delivery = {
 };
 
 // Asks again once when cmux does not answer, since a busy cmux's one missed
-// answer would otherwise cost a rebuild of both sidebars. A workspace cmux
+// answer would otherwise cost a rebuild of the agents panel. A workspace cmux
 // does not list is not asked about again: the answer would be the same.
 function readTwice(wsId: string, d: Delivery): DescriptionRead {
   const first = d.read(wsId);
