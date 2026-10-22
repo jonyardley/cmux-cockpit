@@ -117,7 +117,6 @@ dark-mode screenshot; nothing here changes before then.
 | `Own.readyBg` | green / 0x1F | same | the Ready pill's face |
 | `Own.dropTarget` | text / 0x1F | same | a lane header while a card is dragged over it |
 | `Own.zoneLit` | E7E4D9 | 3A3935 | an empty lane's drop zone while a card is over it |
-| `Own.anchorSelected` | text / 0x1F | same | an anchor badge while its workspace is selected |
 | `Own.lift` | 000000 / 0x2E | 000000 / 0x66 | the shadow under a dragged card |
 
 ### Counts, chips and badges
@@ -336,14 +335,10 @@ Where: `Views/LaneView.swift:35-44`.
 
 On a lane header, a lane's generated workspace with no card: its status glyph
 and unread count, a click opens it. Face clear, `Own.hover` under the
-pointer, `Own.anchorSelected` while selected; radius `Radius.anchor` 6; height
-16; padding 4. The unread count inside is the
-[unread badge](#unread-badge) view itself (D1 a). Where:
-`Views/LaneView.swift` (`AnchorBadge`).
-
-**Target (D13 a, not built yet):** while selected, the badge takes a
-1 `select` outline like a card instead of the `Own.anchorSelected` face, so
-it no longer matches a lane under a drag.
+pointer; while selected, a 1 `select` outline like a card (D13 a), so it
+never matches a lane under a drag; radius `Radius.anchor` 6; height 16;
+padding 4. The unread count inside is the [unread badge](#unread-badge)
+view itself (D1 a). Where: `Views/LaneView.swift` (`AnchorBadge`).
 
 ### Project header
 
@@ -703,13 +698,11 @@ Every card is decided as option a; where that changes a rule, the rule says
    `Own.needsHover` on Next is the one tinted hover today. **Target
    (D9 a):** it goes, and Next steps to `Own.cardHover` like any solid face.
 7. **Selection is the heading ink.** A selected card or row is outlined in
-   `select` at 2. The anchor badge's `Own.anchorSelected` face and the
-   editor's two "chosen" looks (a `text` ring on a colour, a `countBg` cell
-   on an icon) are the exceptions today ([gap Q](#known-gaps)).
-   **Target (D13 a):** selection is the heading outline everywhere in the
-   panel, so the anchor badge takes a 1 `select` outline instead of its
-   face. The view switch's chosen tab and the editor's chosen colour and icon
-   keep the system's own looks, as the only named exceptions.
+   `select` at 2, and a selected anchor badge at 1: selection is the
+   heading outline everywhere in the panel (D13 a). The view switch's
+   chosen tab and the editor's chosen colour and icon (a `text` ring on a
+   colour, a `countBg` cell on an icon) keep the system's own looks, as the
+   only named exceptions.
 8. **Faint ink means less important information.** It is never a state and
    never "you cannot click this". `grep -rn "Token.faint" Views` lists every
    use; today the fold chevron and a quiet row's "+" are controls drawn
@@ -765,7 +758,7 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Move size | chip words `greenText` quick, `clayText` decide, `blueText` review **≠** | not drawn | | | `panel/build.rs:34-39` |
 | Unread | grey badge | grey badge | the same badge on the anchor | | `CardView.swift` `UnreadBadge` |
 | Needs dot | on the badge corner; leads the title on a Projects card | on the 14 badge | glyph on headers **≠** | | `status.rs:248`; `panel/build.rs:568` |
-| Selected | `select` outline at 2 | face, outline, medium title | `Own.anchorSelected` face **≠** | chosen tab: white face; editor: `text` ring or `countBg` cell **≠** | `CardView.swift:531`, `LaneView.swift:92`, `EditorSheet.swift:143`, `:166` |
+| Selected | `select` outline at 2 | face, outline, medium title | `select` outline at 1 on the anchor | chosen tab: white face; editor: `text` ring or `countBg` cell (the named exceptions) | `CardView.swift` `Outline`, `LaneView.swift` `AnchorBadge`, `EditorSheet.swift` |
 | Age | `Own.tertiary` | `metaText` **≠** | | Next's place `metaText` | `CardView.swift:157`, `:234` |
 | Error | | | | editor `redText`; "Not sent" `redText` | `EditorSheet.swift:59`, `Actions.swift:105` |
 | Notice | | | | neutral words; stale band on `countBg` | `PanelView.swift:106` |
@@ -890,7 +883,7 @@ with a follow-up PR.
 | N | Next is drawn in your turn's clay, but it shows only while nothing waits, so it always leads to a Ready card. **Decided: D9 a**, Next in Ready's green | `TopView.swift:100`, `:113`, `:116`; `Model/CardText.swift:100-103`; `native/core/src/next.rs:84-90` |
 | O | The move size chip borrows three state inks: green quick, clay decide, blue review. **Decided: D10 a**, the size chip is neutral | `native/core/src/panel/build.rs:34-39` |
 | P | Ready to merge is `mergeGreen`/`mergeText` on a card and `greenDeep` on the lane's merge line and a PR chip's "ready". **Decided: D11 a**, `mergeText` for ready to merge everywhere | `native/core/src/status.rs:138-145`; `LaneView.swift:165`; `native/core/src/pr_colors.rs:28` |
-| Q | Selection has five looks: card outline, row face, anchor face, chosen tab, editor ring and cell. **Decided: D13 a**, the heading outline in the panel, system looks for the switch and the editor | `CardView.swift:531`; `LaneView.swift:92`; `TopView.swift:56`; `EditorSheet.swift:143`, `:166` |
+| Q | Selection had five looks. **Built: D13 a**, the heading outline in the panel (the anchor badge outlined, `Own.anchorSelected` gone), system looks for the switch and the editor | closed |
 | R | Faint ink is also a state ("No agent") and two controls (fold chevron, a quiet row's "+"); 0.55 means both empty and cannot click. **Decided: D12 a**, three named faint and fade meanings | `native/core/src/status.rs:113`; `LaneView.swift:28`; `ProjectsView.swift:204`, `:209-210` |
 | S | A quiet PR's words are `secondary` on a compact card and `metaText` on a chip and a row; the PR chip faces are never drawn. Gap I's age inks go with it. **Decided: D14 a**, quiet PR words and every age in `metaText` | `native/core/src/panel/build.rs:294`, `:313`; `native/core/src/pr_colors.rs:36`, `:52` |
 | T | "Waiting" names a blue status (a shell still running) and, everywhere else, a card that waits on you. **Decided: D15 a**, rename the blue status; "Shell running" is a placeholder, Jon to confirm | `native/core/src/words.rs:27`; `native/core/src/status.rs:166-169` |
@@ -957,7 +950,7 @@ are under `native/mac/Sidebar/` unless they start with `native/`.
     lane's pill is no longer faint. Files: `native/core/src/status.rs`,
     `Views/LaneView.swift`, `Views/ProjectsView.swift`, `Views/Theme.swift`,
     `Model/ProjectText.swift`, `Model/CardText.swift`.
-13. **Selection is the heading outline (D13).** On screen: a selected anchor
+13. **Selection is the heading outline (D13).** Built. On screen: a selected anchor
     badge is outlined instead of shaded. Files: `Views/LaneView.swift`,
     `Model/Palette.swift` (`anchorSelected` goes),
     `native/mac/Tests/Views/main.swift`.

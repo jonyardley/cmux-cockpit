@@ -64,8 +64,6 @@ enum Palette {
         case dropTarget
         /// An empty lane's drop zone while a card is dragged over it.
         case zoneLit
-        /// A lane anchor's header badge while it is cmux's selected workspace.
-        case anchorSelected
     }
 
     private struct Pair {
@@ -162,7 +160,7 @@ enum Palette {
         case .cardHover: Pair(RGBA(0xF7F6F2), RGBA(0x383835))
         case .hover: Pair(RGBA(0x7F7F7F, 0x14), RGBA(0x7F7F7F, 0x24))
         case .readyBg: faint(green, 0x1F)
-        case .dropTarget, .anchorSelected: faint(text, 0x1F)
+        case .dropTarget: faint(text, 0x1F)
         case .zoneLit: Pair(RGBA(0xE7E4D9), RGBA(0x3A3935))
         }
     }

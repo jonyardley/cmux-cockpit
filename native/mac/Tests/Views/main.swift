@@ -384,7 +384,6 @@ for (word, pinned) in editorWords {
 let ownLight: [(Palette.Own, RGBA)] = [
     (.card, RGBA(0xFFFFFF)), (.needsEdge, RGBA(0xF0D2C3)), (.needsHover, RGBA(0xFBF1EB)), (.cardHover, RGBA(0xF7F6F2)),
     (.hover, RGBA(0x7F7F7F, 0x14)), (.dropTarget, RGBA(0x141413, 0x1F)), (.zoneLit, RGBA(0xE7E4D9)),
-    (.anchorSelected, RGBA(0x141413, 0x1F)),
 ]
 for (own, pinned) in ownLight {
     check(Palette.rgba(own, dark: false) == pinned, "light \(own) is pinned")

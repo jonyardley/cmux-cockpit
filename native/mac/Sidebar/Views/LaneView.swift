@@ -70,8 +70,9 @@ extension View {
 }
 
 /// A lane's generated anchor on its header: its dot and unread count, the
-/// click that opens it since it has no card, shaded while it is cmux's
-/// selected workspace (docs/design.md#anchor-badge).
+/// click that opens it since it has no card, outlined in the select ink
+/// while it is cmux's selected workspace, as a selected card is
+/// (docs/design.md#anchor-badge).
 struct AnchorBadge: View {
     let anchor: Anchor
     @State private var hovering = false
@@ -86,16 +87,17 @@ struct AnchorBadge: View {
             }
             .padding(.horizontal, Metrics.anchorPad)
             .frame(height: Metrics.chevronHeight)
-            .background(face, in: .rect(cornerRadius: Metrics.Radius.anchor))
+            .background(hovering ? Color(Palette.Own.hover) : .clear, in: .rect(cornerRadius: Metrics.Radius.anchor))
+            .overlay {
+                if anchor.selected {
+                    RoundedRectangle(cornerRadius: Metrics.Radius.anchor)
+                        .strokeBorder(Color(Token.select), lineWidth: Metrics.hairline)
+                }
+            }
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-    }
-
-    private var face: Color {
-        if anchor.selected { return Color(Palette.Own.anchorSelected) }
-        return hovering ? Color(Palette.Own.hover) : .clear
     }
 }
 
