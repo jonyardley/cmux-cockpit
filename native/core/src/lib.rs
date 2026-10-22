@@ -36,6 +36,7 @@ pub mod persist;
 pub mod placement;
 pub mod pr_colors;
 pub mod pr_poll;
+pub mod program;
 pub mod project_rules;
 pub mod project_table;
 pub mod projects;

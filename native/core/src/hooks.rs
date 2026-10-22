@@ -57,8 +57,13 @@ pub struct Hooked {
     pub status: AgentStatus,
     /// Epoch seconds the status began: the hook that last changed it.
     pub since: f64,
-    /// Epoch seconds of the latest hook that set a status.
+    /// Epoch seconds of the latest hook that set a status, a
+    /// Notification aside (`moves_activity`).
     pub last_activity: f64,
+    /// Epoch seconds of the latest hook that set a status, a
+    /// Notification too: when the hooks last had their say, which
+    /// program.rs weighs against Claude's own report.
+    pub last_hook: f64,
     /// The workspace the hook named.
     pub workspace: String,
 }
@@ -88,6 +93,7 @@ impl Hooked {
             status,
             since,
             last_activity,
+            last_hook: at,
             workspace: workspace.to_string(),
         }
     }
@@ -184,6 +190,7 @@ mod tests {
         let stopped = Hooked::after(None, AgentStatus::Idle, 100.0, true, "w");
         let nudge = Hooked::after(Some(&stopped), AgentStatus::NeedsInput, 160.0, false, "w");
         assert_eq!((nudge.since, nudge.last_activity), (160.0, 100.0));
+        assert_eq!(nudge.last_hook, 160.0, "the hooks still had their say");
         let first = Hooked::after(None, AgentStatus::NeedsInput, 50.0, false, "w");
         assert_eq!(
             first.last_activity, 50.0,

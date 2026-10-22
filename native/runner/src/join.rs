@@ -15,11 +15,17 @@
 //! write's `--panel=` (this wins), or the hook's `surface_id`. cmux's tree
 //! gives each tab's title, so a workspace with several agents can name
 //! the one waiting.
+//!
+//! Claude Code also reports its own state per tab, as cmux's
+//! `program_status.changed` (issue #326). The join keeps the latest per
+//! surface and cockpit_core::program decides, for each session, whether
+//! its tab's report or its hooks say what the card shows.
 
 use std::collections::HashMap;
 
 use cockpit_core::data::{Agent, Data, Workspace};
-use cockpit_core::hooks::{Hooked, moves_activity, status_from_hook, status_without_hooks};
+use cockpit_core::hooks::{Hooked, moves_activity, status_from_hook};
+use cockpit_core::program::{Record, resolve, status_of_records};
 use serde_json::Value;
 
 use super::parse::{AgentView, Groups, iso_epoch};
@@ -82,6 +88,8 @@ pub struct Join {
     titles: HashMap<String, String>,
     /// pid to its latest status-setting hook.
     sessions: HashMap<u32, Hooked>,
+    /// Surface id to Claude's own latest report there, while it has one.
+    program: HashMap<String, Hooked>,
     agents: Option<AgentView>,
     /// pid to how many Agent Views running have left it out.
     absent: HashMap<u32, u8>,
@@ -130,6 +138,7 @@ impl Join {
             self.tab_of.clear();
             self.surface_of.clear();
             self.sessions.clear();
+            self.program.clear();
             self.absent.clear();
             self.health.last_seq = 0;
         } else {
@@ -238,6 +247,9 @@ impl Join {
                 None,
             );
         }
+        if name == "program_status.changed" {
+            return self.program_status(e, seq);
+        }
         if name == "workspace.selected" {
             let at = e["occurred_at"].as_str().and_then(iso_epoch);
             return (self.select(p, at), None);
@@ -314,6 +326,45 @@ impl Join {
         changed
     }
 
+    /// Takes a tab's program status: the records cmux lists after the
+    /// change, which every event carries. A `dismissed` (Jon looked at the
+    /// tab) lists none but changes nothing Claude said, so the last report
+    /// stands until Claude sends another. A tab whose records say nothing
+    /// is forgotten, and its sessions fall back to their hooks. A report
+    /// with no readable time is left out, since its order is unknown.
+    fn program_status(&mut self, e: &Value, seq: u64) -> (bool, Option<Change>) {
+        let p = &e["payload"];
+        let Some(surface) = e["surface_id"].as_str() else {
+            return (false, None);
+        };
+        if p["event"] == "dismissed" {
+            return (false, None);
+        }
+        let records: Vec<Record<'_>> = p["records"]
+            .as_array()
+            .map(|list| list.iter().filter_map(record_of).collect())
+            .unwrap_or_default();
+        let Some(status) = status_of_records(&records) else {
+            let forgot = self.program.remove(surface).is_some();
+            return (forgot, None);
+        };
+        let Some(at) = e["occurred_at"].as_str().and_then(iso_epoch) else {
+            return (false, None);
+        };
+        let ws = e["workspace_id"].as_str().unwrap_or_default();
+        let prev = self.program.get(surface);
+        let moved = prev.is_none_or(|s| s.status != status);
+        let next = Hooked::after(prev, status, at, true, ws);
+        let changed = prev != Some(&next);
+        self.program.insert(surface.to_string(), next);
+        let change = moved.then(|| Change {
+            seq,
+            hook: format!("program_status.{}", p["event"].as_str().unwrap_or_default()),
+            at: Some(at),
+        });
+        (changed, change)
+    }
+
     /// Whether the hook changed the session at all (a repeated status
     /// still moves its last activity, which picks the workspace's most
     /// active agent), and whether it changed its status or workspace.
@@ -371,17 +422,11 @@ impl Join {
             tab_title,
             ..Agent::default()
         };
-        match self.sessions.get(&pid) {
-            Some(s) => {
-                let (status, since) = s.with_agent_view(busy, now);
-                a.status = Some(status);
-                a.since_epoch = Some(since).filter(|t| *t > 0.0);
-                a.last_activity_at = Some(s.last_activity).filter(|t| *t > 0.0);
-            }
-            None => {
-                a.status = Some(status_without_hooks(busy)?);
-            }
-        }
+        let program = a.surface_id.as_ref().and_then(|s| self.program.get(s));
+        let r = resolve(self.sessions.get(&pid), program, busy, now)?;
+        a.status = Some(r.status);
+        a.since_epoch = Some(r.since).filter(|t| *t > 0.0);
+        a.last_activity_at = Some(r.last_activity).filter(|t| *t > 0.0);
         Some(a)
     }
 
@@ -439,6 +484,14 @@ impl Join {
             workspaces,
         }
     }
+}
+
+/// One record from a program status event's list.
+fn record_of(r: &Value) -> Option<Record<'_>> {
+    Some(Record {
+        id: r["id"].as_str().unwrap_or_default(),
+        state: r["state"].as_str()?,
+    })
 }
 
 /// `_ppid` arrives as a number, or as a string from some hook writers.
@@ -521,6 +574,151 @@ mod tests {
             .flat_map(|w| w.agent_list())
             .map(|a| (a.surface_id.clone(), a.tab_title.clone()))
             .collect()
+    }
+
+    /// A `program_status.changed` from tab `surface` in workspace `ws` at
+    /// epoch second `at`, listing `records` (id, state, kind) as cmux does
+    /// after the change. The shape is copied from cmux 0.65's stream.
+    fn program(
+        seq: u64,
+        event: &str,
+        surface: &str,
+        at: u32,
+        records: &[(&str, &str, &str)],
+    ) -> Value {
+        let records: Vec<Value> = records
+            .iter()
+            .enumerate()
+            .map(|(i, (id, state, kind))| {
+                json!({"id": id, "kind": kind, "progress": null, "state": state, "updated_seq": i})
+            })
+            .collect();
+        let record = if event == "report" {
+            records.first().cloned()
+        } else {
+            None
+        };
+        json!({"type": "event", "seq": seq, "name": "program_status.changed",
+               "category": "terminal", "source": "terminal.program_status",
+               "occurred_at": format!("1970-01-01T00:{:02}:{:02}Z", at / 60, at % 60),
+               "surface_id": surface, "workspace_id": "A",
+               "payload": {"event": event, "id": null, "record": record,
+                           "records": records, "records_total": records.len()}})
+    }
+
+    /// Workspace A's one agent's status at epoch `now`.
+    fn status_at(j: &Join, now: f64) -> Option<AgentStatus> {
+        j.frame(now)
+            .workspace_list()
+            .iter()
+            .flat_map(|w| w.agent_list())
+            .find_map(|a| a.status.clone())
+    }
+
+    /// A join with one live session, pid 7, placed by a Stop at 100s in tab S1.
+    fn stopped_in_s1() -> Join {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(1, "Stop", 7, "A", "S1"));
+        j
+    }
+
+    #[test]
+    fn a_working_report_after_a_stop_keeps_the_card_working() {
+        let mut j = stopped_in_s1();
+        assert_eq!(status_at(&j, 101.0), Some(AgentStatus::Idle));
+        let (changed, change) =
+            j.event(&program(2, "report", "S1", 101, &[("", "working", "none")]));
+        assert!(changed);
+        assert_eq!(
+            change.map(|c| c.hook),
+            Some("program_status.report".to_string())
+        );
+        assert_eq!(status_at(&j, 102.0), Some(AgentStatus::Working));
+    }
+
+    #[test]
+    fn a_blocked_permission_report_needs_jon_from_the_documented_mapping() {
+        // No live blocked event has been seen yet (issue #326): this is the
+        // mapping read from Claude Code 2.1.302, in the stream's shape.
+        let mut j = stopped_in_s1();
+        j.event(&program(2, "report", "S1", 101, &[("", "working", "none")]));
+        j.event(&program(
+            3,
+            "report",
+            "S1",
+            102,
+            &[("", "blocked", "permission")],
+        ));
+        assert_eq!(status_at(&j, 103.0), Some(AgentStatus::NeedsInput));
+        let since = j.frame(103.0).workspace_list()[0]
+            .agent_list()
+            .find_map(|a| a.since_epoch);
+        assert_eq!(since, Some(102.0));
+    }
+
+    #[test]
+    fn a_blocked_helper_needs_jon_while_the_session_works() {
+        let mut j = stopped_in_s1();
+        j.event(&program(
+            2,
+            "report",
+            "S1",
+            101,
+            &[("", "working", "none"), ("a1", "blocked", "question")],
+        ));
+        assert_eq!(status_at(&j, 102.0), Some(AgentStatus::NeedsInput));
+    }
+
+    #[test]
+    fn dismissed_keeps_the_last_report_and_clearing_every_record_falls_back_to_the_hooks() {
+        let mut j = stopped_in_s1();
+        j.event(&program(2, "report", "S1", 101, &[("", "working", "none")]));
+        assert_eq!(
+            j.event(&program(3, "dismissed", "S1", 120, &[])),
+            (false, None)
+        );
+        assert_eq!(status_at(&j, 121.0), Some(AgentStatus::Working));
+        let (changed, change) = j.event(&program(4, "removed", "S1", 130, &[]));
+        assert!(changed && change.is_none());
+        assert_eq!(status_at(&j, 131.0), Some(AgentStatus::Idle), "the Stop's");
+    }
+
+    #[test]
+    fn a_helpers_clear_leaves_the_sessions_own_record() {
+        let mut j = stopped_in_s1();
+        j.event(&program(
+            2,
+            "report",
+            "S1",
+            101,
+            &[("", "done", "none"), ("a1", "working", "none")],
+        ));
+        let (changed, _) = j.event(&program(3, "clear", "S1", 102, &[("", "done", "none")]));
+        assert!(changed, "a later report moves the last activity");
+        assert_eq!(status_at(&j, 103.0), Some(AgentStatus::Idle));
+    }
+
+    #[test]
+    fn another_tabs_report_and_one_with_no_time_change_nothing() {
+        let mut j = stopped_in_s1();
+        j.event(&program(2, "report", "S9", 101, &[("", "working", "none")]));
+        assert_eq!(status_at(&j, 102.0), Some(AgentStatus::Idle));
+        let mut untimed = program(3, "report", "S1", 101, &[("", "working", "none")]);
+        untimed["occurred_at"] = Value::Null;
+        assert_eq!(j.event(&untimed), (false, None));
+        assert_eq!(status_at(&j, 102.0), Some(AgentStatus::Idle));
+    }
+
+    #[test]
+    fn a_fresh_stream_forgets_the_reports() {
+        let mut j = stopped_in_s1();
+        j.event(&program(2, "report", "S1", 101, &[("", "working", "none")]));
+        j.ack(&ack(0, 10));
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(3, "Stop", 7, "A", "S1"));
+        assert_eq!(status_at(&j, 102.0), Some(AgentStatus::Idle));
     }
 
     #[test]
