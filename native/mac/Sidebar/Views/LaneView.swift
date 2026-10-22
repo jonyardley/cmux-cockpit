@@ -31,13 +31,14 @@ struct FoldMark: View {
     }
 }
 
-/// A lane's square marker: a rounded square in the lane's colour.
+/// A lane's square marker: a rounded square in the lane's colour, its
+/// corner by the badge rule (3 at 9).
 struct LaneMarker: View {
     let color: Color
     var size: CGFloat = Metrics.laneMarker
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size / 3)
+        RoundedRectangle(cornerRadius: BadgeTile.radius(size))
             .fill(color)
             .frame(width: size, height: size)
     }

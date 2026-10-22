@@ -30,7 +30,6 @@ extension Color {
 /// The panel's type sizes and spacing, in one place.
 enum Metrics {
     static let gutter: CGFloat = 10
-    static let cardIndent: CGFloat = 16
     /// The needs dot on a waiting card's badge corner, as a share of the
     /// badge, and the ring of card face round it (issue #314).
     static let needsDotShare: CGFloat = 0.36
@@ -40,7 +39,6 @@ enum Metrics {
     static let dismissGlyph: CGFloat = 8
     /// Between the cards in a lane (docs/design.md#spacing-viewsthemeswift).
     static let cardGap: CGFloat = 6
-    static let corner: CGFloat = 6
 
     // Sizes named for what draws with them; docs/design.md#type-scale and
     // docs/design.md#spacing-and-radii say where each is used.
@@ -71,8 +69,11 @@ enum Metrics {
         static let cardTitle: CGFloat = 13.5
     }
 
-    /// Corner radii.
+    /// Corner radii, one per kind of surface. A badge tile works its own
+    /// out from its size (BadgeTile.radius).
     enum Radius {
+        /// A badge tile's corner as a share of its side, rounded.
+        static let badgeShare: CGFloat = 0.3
         /// A card.
         static let card: CGFloat = 12
         /// A compact row, a Projects card.
@@ -89,6 +90,10 @@ enum Metrics {
         static let pill: CGFloat = 10
         /// A chip round a branch, a PR or a port.
         static let chip: CGFloat = 6
+        /// The Ready pill.
+        static let ready: CGFloat = 8
+        /// The editor's chosen icon cell.
+        static let iconCell: CGFloat = 4
     }
 
     /// The view switch: a ringed track round two tabs.

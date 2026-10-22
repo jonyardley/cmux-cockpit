@@ -197,7 +197,7 @@ private struct Liftable: ViewModifier {
                 .opacity(gap ? 0 : 1)
                 .overlay {
                     if gap, !gone {
-                        RoundedRectangle(cornerRadius: Metrics.corner)
+                        RoundedRectangle(cornerRadius: Metrics.Radius.card)
                             .strokeBorder(Color(Token.cardEdge), style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
                     }
                 }
@@ -237,7 +237,7 @@ struct FloatingCard: View {
             let card = Self.fresh(lifted, in: lanes)
             GeometryReader { geo in
                 RowView(row: .card(card))
-                    .background(Color(Palette.Own.panelGround), in: .rect(cornerRadius: Metrics.corner))
+                    .background(Color(Palette.Own.panelGround), in: .rect(cornerRadius: Metrics.Radius.card))
                     .frame(width: geo.size.width)
                     .fixedSize(horizontal: false, vertical: true)
                     .opacity(0.9)

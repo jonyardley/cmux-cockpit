@@ -12,12 +12,10 @@ private enum CardLook {
     /// A full card: the badge, its gap, the padding round it.
     static let fullBadge: CGFloat = 26
     static let fullBadgeFont: CGFloat = 12
-    static let fullBadgeRadius: CGFloat = 8
     static let fullGap: CGFloat = 10
     /// A compact card's.
     static let compactBadge: CGFloat = 22
     static let compactBadgeFont: CGFloat = 11
-    static let compactBadgeRadius: CGFloat = 7
     static let compactGap: CGFloat = 9
     /// A card's padding: in from the leading edge, the trailing, and above
     /// and below.
@@ -28,7 +26,6 @@ private enum CardLook {
     /// lane header's marker.
     static let rowBadge: CGFloat = 14
     static let rowBadgeFont: CGFloat = 8
-    static let rowBadgeRadius: CGFloat = 4
     static let rowPadLeading: CGFloat = 25
     static let rowPadV: CGFloat = 5
     /// A row's lines under its title start where the title does: past the
@@ -69,7 +66,7 @@ struct FullCard: View {
         HStack(alignment: .top, spacing: CardLook.fullGap) {
             BadgeTile(
                 icon: card.badge.icon, color: card.badge.color, size: CardLook.fullBadge,
-                font: CardLook.fullBadgeFont, radius: CardLook.fullBadgeRadius, mark: CardText.mark(card)
+                font: CardLook.fullBadgeFont, mark: CardText.mark(card)
             )
             VStack(alignment: .leading, spacing: 4) {
                 TitleRow(card: card, size: Metrics.Font.cardTitle, lines: 2)
@@ -100,7 +97,7 @@ struct CompactCard: View {
         HStack(spacing: CardLook.compactGap) {
             BadgeTile(
                 icon: card.badge.icon, color: card.badge.color, size: CardLook.compactBadge,
-                font: CardLook.compactBadgeFont, radius: CardLook.compactBadgeRadius, mark: CardText.mark(card)
+                font: CardLook.compactBadgeFont, mark: CardText.mark(card)
             )
             VStack(alignment: .leading, spacing: 3) {
                 TitleRow(card: card, size: Metrics.Font.compactTitle, lines: 1)
@@ -133,7 +130,7 @@ struct DenseRow: View {
                 StatusDot(icon: card.icon, size: 7)
                 BadgeTile(
                     icon: card.badge.icon, color: card.badge.color, size: CardLook.rowBadge,
-                    font: CardLook.rowBadgeFont, radius: CardLook.rowBadgeRadius, mark: CardText.mark(card)
+                    font: CardLook.rowBadgeFont, mark: CardText.mark(card)
                 )
                 Text(card.title)
                     .font(.system(size: Metrics.Font.title, weight: card.selected ? .medium : .regular))
@@ -360,7 +357,7 @@ struct ReadyPill: View {
             .fixedSize()
             .padding(.horizontal, 7)
             .padding(.vertical, 1)
-            .background(Color(Palette.Own.readyBg), in: .rect(cornerRadius: 8))
+            .background(Color(Palette.Own.readyBg), in: .rect(cornerRadius: Metrics.Radius.ready))
     }
 }
 

@@ -164,7 +164,7 @@ struct EditorSheet: View {
                             .foregroundStyle(Color(name == editor.icon ? Token.text : Token.secondary))
                             .background(
                                 name == editor.icon ? Color(Token.countBg) : .clear,
-                                in: .rect(cornerRadius: 4)
+                                in: .rect(cornerRadius: Metrics.Radius.iconCell)
                             )
                     }
                     .buttonStyle(.plain)

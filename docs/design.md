@@ -239,17 +239,14 @@ In `Views/Theme.swift`.
 | `tab` | 7 | a switch tab, Next's pill, the unread badge |
 | `anchor` | 6 | an anchor badge's face |
 | `chip` | 6 | every chip |
+| `ready` | 8 | the Ready pill |
+| `iconCell` | 4 | the editor's chosen icon cell |
 
-Badge tiles carry their own radius: 26 takes 8, 22 takes 7, 18 and 16 take
-the default 5, 14 takes 4. Each is `round(0.3 × size)`; the lane marker's
-`size / 3` lands on the same 3. See [gap D](#known-gaps).
-
-**Target (D3 a, not built yet):** a badge's radius is `round(0.3 × size)`,
-worked out in `BadgeTile` rather than typed per size, and every other surface
-takes one radius per kind, named in `Metrics.Radius` (the Ready pill's 8 and
-the editor's icon cell 4 get names). The drag's gap outline and floating card
-take the card's radius, so a dragged card keeps its 12 corner; that is the one
-change you would see. `Metrics.corner` goes.
+A badge tile's radius is `round(0.3 × size)` (`Radius.badgeShare`), worked
+out in `BadgeTile.radius` rather than typed per size (D3 a): 26 takes 8, 22
+takes 7, 18 and 16 take 5, 14 takes 4. The lane marker takes the same rule,
+3 at 9. Every other surface takes one radius per kind, named above. The
+drag's gap outline and floating card take the card's 12.
 
 ## Components
 
@@ -325,7 +322,7 @@ in `secondary`, not `faint`. You would see it darken a little.
 
 ### Lane marker
 
-A rounded square in the lane's colour, 9 square, radius a third of its size.
+A rounded square in the lane's colour, 9 square, radius by the badge rule (3).
 Where: `Views/LaneView.swift:35-44`.
 
 ### Anchor badge
@@ -482,7 +479,8 @@ Where: `Views/BadgeTile.swift:40-68`.
 
 A project's SF Symbol in semibold on a rounded square of its colour; the
 glyph is inked light or dark for contrast (`Model/BadgeInk.swift`). A project
-with no colour takes the grey. Sizes and radii:
+with no colour takes the grey. Sizes and radii (the radius is
+`round(0.3 × size)`, worked out by `BadgeTile.radius`):
 
 | Where | Size | Glyph | Radius |
 |-|-|-|-|
@@ -497,11 +495,11 @@ Where: `Views/BadgeTile.swift:11-34`.
 ### Ready pill
 
 "Ready" in `greenText` on `Own.readyBg`, the agent finished while you were
-elsewhere. `Font.section` 10.5 medium; padding 7 by 1 and radius 8, all
-literals ([gap A](#known-gaps)). Where: `Views/CardView.swift:302-313`.
+elsewhere. `Font.section` 10.5 medium; padding 7 by 1 (literals,
+[gap A](#known-gaps)); radius `Radius.ready` 8. Where: `Views/CardView.swift:302-313`.
 
-**Target (D1 a, D3 a, D8 a, not built yet):** its padding and radius are
-named values (D1, D3), and its ink comes from the core rather than the view
+**Target (D1 a, D8 a, not built yet):** its padding is a named value (D1),
+and its ink comes from the core rather than the view
 naming `greenText` (D8).
 
 ### Unread badge
@@ -625,8 +623,8 @@ Every card's face, edge, dimming and hover (`Views/CardView.swift:463-492`).
 While a card is dragged its slot stays as a dashed `cardEdge` outline
 (1 wide, dash 4 and 3) and the other cards slide apart over 0.15s to open a
 gap. The card itself floats over the lanes at the pointer: `Own.panelGround`
-behind it, 0.9 opacity, an `Own.lift` shadow of radius 6 dropped 2. Both use
-`Metrics.corner` 6, not the card's 12 ([gap C](#known-gaps)).
+behind it, 0.9 opacity, an `Own.lift` shadow of radius 6 dropped 2. Both take
+the card's corner, `Radius.card` 12.
 Where: `Views/Drag.swift:192-249`, `Views/LaneView.swift:189`.
 
 ### Editor sheet
@@ -634,7 +632,8 @@ Where: `Views/Drag.swift:192-249`, `Views/LaneView.swift:189`.
 The project editor as a sheet, 260 wide with 14 padding (literals). Title at
 `Font.control` 12 semibold; labels at `Font.meta` 11 in `faint`; the
 badge preview at 18; colour swatches 14 with a 2 `text` ring on the chosen
-one; icons in 24 by 22 cells, the chosen one on `countBg` with radius 4;
+one; icons in 24 by 22 cells, the chosen one on `countBg` with radius
+`Radius.iconCell` 4;
 problems and Remove in `redText`. Where: `Views/EditorSheet.swift:9-186`.
 
 ### Message agent popover
@@ -839,8 +838,7 @@ main today, the failures are listed and tracked as a gap.
    prints nothing. Passes today. The one colour from outside the palette is a
    project's own, through `Color(project:)`.
 3. **No bare number in a corner radius.**
-   `grep -rnE "cornerRadius: [0-9]" Views` prints nothing.
-   Fails today: `EditorSheet.swift:167`, `CardView.swift:311` ([gap C](#known-gaps)).
+   `grep -rnE "cornerRadius: [0-9]" Views` prints nothing. Passes (D3 a).
 4. **No bare number in padding or spacing outside a look enum.**
    `grep -rnE "padding\((\.[a-z]+, )?[0-9]|spacing: [1-9]" Views` prints nothing.
    Fails today: 36 lines, listed on the audit page ([gap C](#known-gaps)).
@@ -878,10 +876,10 @@ with a follow-up PR.
 | 1 | Views defined the look by pointing at TypeScript and the pane. **Built: D7 a**, the views test pins its own values. **Built: D6 a**, comments point at `docs/design.md` anchors | closed |
 | A | Four count treatments: unread badge, its copy in the anchor badge, the waiting count, the count pill; the Ready pill on literals. **Decided: D1 a**, one count pill shape for every count, colour by meaning | `CardView.swift:316-328`, `LaneView.swift:73-80`, `TopView.swift:65-84`, `LaneView.swift:4-17`, `CardView.swift:302-313` |
 | B | Two names for one scale. **Built: D2 a**, one `Metrics.Font` naming, no size changes | closed |
-| C | Spacing, size and radius literals outside a look enum. **Decided in part: D3 a** names the two radius literals; the spacing literals have no card and are named in their own PR | listed on the audit page |
-| D | Badge radii have no stated rule, though all fit `round(0.3 × size)`. **Decided: D3 a**, badge radius is `round(0.3 × size)` worked out in `BadgeTile` | `CardView.swift:13`, `:18`, `:29`; `BadgeTile.swift:16`; `LaneView.swift:40` |
+| C | Spacing and size literals outside a look enum. **Built in part: D3 a** named the two radius literals; the spacing literals have no card and are named in their own PR | listed on the audit page |
+| D | Badge radii had no stated rule. **Built: D3 a**, badge radius is `round(0.3 × size)` worked out in `BadgeTile` | closed |
 | E | Fades: 0.55 under two names, 0.6 dimmed, 0.9 dragged. **Decided: D12 a**, `emptyFade` nothing here, `disabledFade` cannot click, `dimmed` merged | `Theme.swift:110`, `ProjectText.swift:47`, `CardView.swift:47`, `Drag.swift:243` |
-| F | Colours no view draws: `Own.ground`, `Own.cardFace`, `amberRowEdge`, `needsRowEdge`; `Metrics.cardIndent` unused; `Metrics.corner` duplicates radius 6 | `Palette.swift:33`, `:40`, `:136-137`; `Theme.swift:35`, `:45` |
+| F | Colours no view draws: `Own.ground`, `Own.cardFace`, `amberRowEdge`, `needsRowEdge`. The unused sizes (`Metrics.cardIndent`, `Metrics.corner`) went with D3 a | `Palette.swift:33`, `:40`, `:136-137` |
 | G | Eight views keep their own hover state beside the one shared hover shade | `ProjectsView.swift:60-78`; the eight other `@State private var hovering` sites |
 | H | Status dots drawn as circles on cards and as text glyphs on headers | `CardView.swift:281-299`; `LaneView.swift:72`, `:146`; `ProjectsView.swift:121` |
 | I | Card shapes differ in status weight, title weight and age ink. **Decided in part: D14 a** settles the age ink; the weights have no card | `CardView.swift:77`, `:107`, `:138`, `:157`, `:233-235` |
@@ -917,7 +915,7 @@ are under `native/mac/Sidebar/` unless they start with `native/`.
 3. **One type scale naming (D2).** Built. Nothing on screen. Files:
    `Views/Theme.swift`, `Views/CardView.swift`, `Views/ProjectsView.swift`,
    `Views/EditorSheet.swift`, `Views/Actions.swift`, `Views/PanelView.swift`.
-4. **Radius rule (D3), with gap F's unused sizes.** On screen: a dragged card
+4. **Radius rule (D3), with gap F's unused sizes.** Built. On screen: a dragged card
    and its gap outline keep the card's 12 corner instead of 6. Files:
    `Views/BadgeTile.swift`, `Views/CardView.swift`, `Views/LaneView.swift`,
    `Views/Theme.swift`, `Views/Drag.swift`, `Views/EditorSheet.swift`.
