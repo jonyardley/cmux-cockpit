@@ -47,7 +47,7 @@ const ownsMove = (saved: SavedMove, a: Agent): boolean =>
   saved.session !== undefined && a.kind === "claude" && a.id === saved.session;
 
 /**
- * The move `a` is waiting on, or null. Pass `a` as the sidebars show it
+ * The move `a` is waiting on, or null. Pass `a` as the agents panel shows it
  * (agentsOf) and `asking` from askReason. Only a turn end counts: idle or
  * needs_input, never working or ended, and never an ask. The move is current
  * while it is no older than the workspace's last prompt (latestAt, which
@@ -63,7 +63,7 @@ export function waitingMove(a: Agent | null | undefined, w: Workspace | undefine
   return savedFor(savedMoveFor(w), a, w, promptAt, ownsMove);
 }
 
-// Nothing to answer, so no size. "Nothing follows" is different: it ends in /clear.
+// Nothing to answer. "Nothing follows" is different: it ends in /clear.
 const NOTHING_WAITS = /nothing (?:else )?waits on you/i;
 // "Your move: nothing. Waiting until CI lands.": the bare word, then a stop.
 // "nothing pending, /clear now" and "nothing follows" still ask something.
@@ -103,32 +103,4 @@ export function quietTurn(a: Agent, w: Workspace | undefined): SavedMove | null 
 export function quietMove(a: Agent, w: Workspace | undefined): SavedMove | null {
   const m = waitingMove(a, w, false);
   return m && asksNothing(m) ? m : null;
-}
-
-/**
- * How big answering a move is: "decide" when the reply laid out numbered
- * decisions, "review" when Jon reads something first (a link, "read",
- * "review", "look at"), "quick" when it is a word or a paste ("go", "/clear", a `!`
- * command). null when nothing waits on Jon, the line is a quoted last line, or it gives no clue: the card then shows the line
- * with no chip, since a wrong chip is worse than none.
- */
-export type MoveSize = "quick" | "decide" | "review";
-
-// A bare "#N" is only a reference ("see #2044"), so it is no clue.
-const REVIEW = /https?:\/\/|claude\.ai\/|\b(?:read|review|look at)\b/i;
-const QUICK = /\/clear\b|\bgo\b|(?:^|\s)!\s?\w|\bpaste\b|nothing follows|under (?:a|one|two) minutes?/i;
-
-export function moveSize(m: Pick<SavedMove, "text" | "decisions" | "idle" | "unlabelled">): MoveSize | null {
-  if ((m.decisions ?? 0) > 0) return "decide";
-  // A quoted last line is the chat's prose, not a stated move: no clue to read.
-  if (asksNothing(m) || m.unlabelled) return null;
-  if (REVIEW.test(m.text)) return "review";
-  if (QUICK.test(m.text)) return "quick";
-  return null;
-}
-
-/** The size chip's words: "Quick", "Review", "Decide · 2". */
-export function moveSizeText(size: MoveSize, decisions = 0): string {
-  if (size === "decide") return decisions > 1 ? "Decide · " + decisions : "Decide";
-  return size === "quick" ? "Quick" : "Review";
 }

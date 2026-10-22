@@ -1,7 +1,8 @@
 // config/lanes.json read into the lane table, by the same rules as the
-// native core's Lanes::from_config (native/core/src/lanes.rs), so the two
-// sidebars draw the same lanes from the same file. build.ts runs it and
-// bakes the result in as __LANES__; lanes.ts turns it into lanes.
+// native core's Lanes::from_config (native/core/src/lanes.rs), so a file
+// the native sidebar refuses also fails the build. build.ts runs it and
+// bakes the result in as __LANES__, where the agents panel reads the lane
+// names to know each lane's placeholder (anchors.ts).
 //
 // The file is a bare array of {id?, name, color?, density?, folded?, faint?,
 // leftOff?}, in display order. Unsorted is built in and last. A field left
@@ -13,7 +14,7 @@
 
 import { isRecord } from "../../scripts/state-config.ts";
 
-/** The tokens a lane may take: the lane tokens in theme.ts, by name. */
+/** The tokens a lane may take, by name, as the native core's lanes.rs lists them. */
 const LANE_TOKENS = [
   "laneMain",
   "laneReview",
@@ -163,6 +164,3 @@ export function resolveLanes(raw: unknown): LanesResult {
   }
   return { ok: true, lanes: lanes.length ? lanes : BUILT_IN_LANES };
 }
-
-/** The name a built-in lane goes by, by id: what a lane was called before any name was saved for it. */
-export const builtInName = (id: string): string | undefined => BUILT_IN_LANES.find((l) => l.id === id)?.name;

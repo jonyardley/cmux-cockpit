@@ -1,7 +1,7 @@
-// "Needs you", corrected the same way in both sidebars. An agent's
-// needs_input reads as idle when it is Claude Code's idle nudge (issue #4) or
-// when Jon has dismissed it. The sidebars run in separate contexts, so each
-// holds its own dismissals, and a reload forgets them (issues #3 and #5).
+// "Needs you", corrected the same way as the native Cockpit does it. An
+// agent's needs_input reads as idle when it is Claude Code's idle nudge
+// (issue #4) or when Jon has dismissed it. The agents panel holds its own
+// dismissals, and a reload forgets them (issues #3 and #5).
 
 import type { SavedAsk, SavedMove } from "../../scripts/state-config.ts";
 import { sinceOrActivity } from "./activity.ts";
@@ -145,15 +145,6 @@ export function agentsOf(w: Workspace | undefined): Agent[] {
   return (w?.agents ?? []).filter((a) => !!a?.status).map((a) => effectiveAgent(a, w));
 }
 
-/** True while any agent in the workspace is really asking, dismissed or not. */
-export const hasRealAsk = (w: Workspace | undefined): boolean => asking(w).length > 0;
-
-/** True when dismissals are all that keep the workspace from showing needs you. */
-export function isNeedsDismissed(w: Workspace | undefined): boolean {
-  const list = asking(w);
-  return list.length > 0 && list.every((a) => isDismissed(w, a));
-}
-
 /** Dismisses every real ask in the workspace; each comes back when that agent asks again. */
 export function dismissNeeds(w: Workspace | undefined): void {
   const list = asking(w);
@@ -165,10 +156,4 @@ export function dismissNeeds(w: Workspace | undefined): void {
   // would match it too; that dismissal holds for this session only.
   const dated = [...starts].filter(([, start]) => start > 0);
   persistSet(`dismissed.${w.id}`, dated.length ? Object.fromEntries(dated) : null);
-}
-
-export function restoreNeeds(w: Workspace | undefined): void {
-  if (!w || !dismissed.delete(w.id)) return;
-  bump();
-  persistSet(`dismissed.${w.id}`, null);
 }

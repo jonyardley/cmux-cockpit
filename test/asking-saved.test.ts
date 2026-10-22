@@ -28,10 +28,7 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const needs = await import("../src/shared/needs.ts");
 const { HOOK_SLACK } = await import("../src/shared/saved.ts");
-const status = await import("../src/cockpit/status.ts");
-const cockpit = await import("../src/cockpit/strip.ts");
 const m = await import("../src/agents/model.ts");
-const { C } = await import("../src/cockpit/theme.ts");
 const { T } = await import("../src/agents/theme.ts");
 
 // An agent that went needs_input at `since`, its turn having worked until then.
@@ -89,48 +86,6 @@ describe("askReason", () => {
     const d = ws("wA", { agents: [asker] });
     needs.dismissNeeds(d);
     assert.equal(needs.askReason(needs.agentsOf(d)[0], d), null);
-    needs.restoreNeeds(d);
-    assert.equal(needs.askReason(needs.agentsOf(d)[0], d), "allow git push?");
-  });
-});
-
-describe("cockpit", () => {
-  it("shows an asking card amber with its reason, and a finished turn clay", () => {
-    const asking = ws("wA", { agents: [waiting(1000)] });
-    assert.equal(status.askOf(asking), "allow git push?");
-    assert.deepEqual(status.statusInfo(asking), {
-      label: "Asking",
-      dot: C.amber,
-      halo: C.amberHalo,
-      text: C.amberText,
-      urgency: "asking",
-    });
-    assert.equal(status.statusLine(asking), "Asking 1m");
-    assert.equal(status.needsDetail(asking), "allow git push?");
-    assert.equal(status.needsRowEdge(asking), C.amberRowEdge);
-    assert.equal(status.needsLine(asking), "Asking: allow git push?");
-    assert.equal(status.needsInk(asking), C.amberText);
-    assert.equal(status.placeholderText(asking), "is asking");
-
-    const turn = ws("wA", { agents: [waiting(1100)], latestMessage: "Pushed it." });
-    r.data.epoch = 1160;
-    assert.equal(status.askOf(turn), null);
-    assert.equal(status.statusInfo(turn).label, "Your turn");
-    assert.equal(status.statusInfo(turn).dot, C.clay);
-    assert.equal(status.needsDetail(turn), "Pushed it.");
-    assert.equal(status.needsRowEdge(turn), C.needsRowEdge);
-    assert.equal(status.needsLine(turn), "Your turn: Pushed it.");
-    assert.equal(status.needsInk(turn), C.clayText);
-    assert.equal(status.placeholderText(turn), "your turn");
-    assert.equal(status.needsDetail(ws("x", { agents: [waiting(1100)] })), "Waiting for your reply");
-  });
-
-  it("lists asking and your-turn workspaces alike in Needs you", () => {
-    r.data.workspaces = [ws("wA", { agents: [waiting(1000)] }), ws("other", { agents: [waiting(1010)] })];
-    assert.deepEqual(
-      cockpit.needsList().map((w) => w.id),
-      ["wA", "other"],
-    );
   });
 });
 

@@ -1,6 +1,6 @@
 // A quiet agent: still working, but with no activity for a while, and no
-// helper running for it. Both sidebars read it, so the same agent reads
-// quiet on each side.
+// helper running for it. The native Cockpit keeps the same rule, so the
+// same agent reads quiet on each side.
 
 import { liveRunCount } from "./subagents.ts";
 import { ageSince, nowEpoch } from "./time.ts";

@@ -33,25 +33,7 @@ function spy<T>(value: T): { get: () => T; reads: () => number } {
   };
 }
 
-describe("badgeLabel", () => {
-  it("shows the count, and nothing at zero or below", () => {
-    assert.equal(ui.badgeLabel(3), "3");
-    assert.equal(ui.badgeLabel(0), "");
-    assert.equal(ui.badgeLabel(-1), "");
-    assert.equal(ui.badgeLabel(Number.NaN), "");
-  });
-});
-
 describe("the shared builders read what they are handed", () => {
-  it("unreadBadge reads its count", () => {
-    const n = spy(2);
-    ui.unreadBadge(n.get);
-    assert.ok(n.reads() > 0);
-    const zero = spy(0);
-    ui.unreadBadge(zero.get);
-    assert.ok(zero.reads() > 0);
-  });
-
   it("ring reads a reactive width, face and edge, and takes a plain width", () => {
     const width = spy(1.5);
     const face = spy("#FFFFFF");
@@ -176,8 +158,7 @@ describe("the shared builders read what they are handed", () => {
     assert.equal(modValue(empty, "paddingHorizontal"), 0);
   });
 
-  it("builds both heading styles", () => {
-    assert.ok(ui.laneTitle("Main", "#000000"));
+  it("builds a section heading", () => {
     assert.ok(ui.sectionTitle("PULL REQUESTS", "#000000"));
   });
 

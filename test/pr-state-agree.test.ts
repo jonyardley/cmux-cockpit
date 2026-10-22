@@ -1,6 +1,5 @@
-// Issue #300: for one PR, the cockpit card, the agents panel's Pull
-// requests row and This workspace's status chip say the same state in the
-// same health. The screenshot's case comes first: the selected workspace's
+// Issue #300: for one PR, the agents panel's Pull requests row and This
+// workspace's status chip say the same state in the same health. The screenshot's case comes first: the selected workspace's
 // PR, out of draft with its checks passed and GitHub's merge verdict saved,
 // also listed among Jon's own PRs and opened by this chat (prOrigins), so
 // the row could come from either copy. __STATE__ is set before the renderer
@@ -51,7 +50,6 @@ const prOrigins = Object.fromEntries(
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const chips = await import("../src/cockpit/card-chips.ts");
 const list = await import("../src/agents/pr-list.ts");
 const model = await import("../src/agents/model.ts");
 
@@ -60,23 +58,19 @@ interface Said {
   health: string;
 }
 
-// The three places, with `id` the selected workspace and its agent working,
-// so the card keeps its state words (a finished one's status would say
-// Ready to merge instead, issue #299).
-function saidFor(id: string): { card: Said; row: Said; here: Said } {
+// The two places, with `id` the selected workspace and its agent working.
+function saidFor(id: string): { row: Said; here: Said } {
   r.data.workspaces = [ws(id, { branch: "feat", selected: true, agents: [agent("working")] })];
   r.data.epoch++;
-  const chip = chips.chipsFor(r.data.workspaces[0], false).find((c) => c.id === "pr");
-  const card = chip && "health" in chip ? { state: chip.state, health: chip.health } : undefined;
   const entry = list.prs().find((e) => e.pr.url === prs[id]?.url);
   const row = entry ? { state: list.prChipText(entry), health: list.prChipHealth(entry) } : undefined;
   const pr = model.currentPr();
   const here = pr ? { state: pr.state, health: pr.health } : undefined;
-  assert.ok(card && row && here, `${id}: every place shows the PR`);
-  return { card, row, here };
+  assert.ok(row && here, `${id}: every place shows the PR`);
+  return { row, here };
 }
 
-describe("one PR's state, card and agents panel alike (issue #300)", () => {
+describe("one PR's state, alike across the agents panel (issue #300)", () => {
   const cases: [string, Said][] = [
     ["ready", { state: "ready", health: "ready" }],
     ["draft", { state: "draft", health: "quiet" }],
@@ -87,9 +81,8 @@ describe("one PR's state, card and agents panel alike (issue #300)", () => {
     ["noVerdict", { state: "open", health: "quiet" }],
   ];
   for (const [id, want] of cases) {
-    it(`says ${want.state} in all three places for ${id}`, () => {
+    it(`says ${want.state} in both places for ${id}`, () => {
       const said = saidFor(id);
-      assert.deepEqual(said.card, want, "the card");
       assert.deepEqual(said.row, want, "the Pull requests row");
       assert.deepEqual(said.here, want, "This workspace");
     });

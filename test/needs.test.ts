@@ -6,7 +6,6 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const needs = await import("../src/shared/needs.ts");
 const agents = await import("../src/agents/model.ts");
-const status = await import("../src/cockpit/status.ts");
 
 // A Claude turn that ended at `ended`, then flagged needs_input at `flagged`.
 const claude = (ended: number, flagged: number) =>
@@ -69,27 +68,21 @@ describe("dismissals", () => {
     const w = ws("d", {
       agents: [agent("needs_input", { sinceEpoch: 500 }), agent("needs_input", { sinceEpoch: 600 })],
     });
-    assert.equal(needs.isNeedsDismissed(w), false);
     needs.dismissNeeds(w);
-    assert.equal(needs.isNeedsDismissed(w), true);
     assert.deepEqual(
       needs.agentsOf(w).map((a) => a.status),
       ["idle", "idle"],
     );
     w.agents = [agent("needs_input", { sinceEpoch: 900 })];
-    assert.equal(needs.isNeedsDismissed(w), false);
     assert.equal(needs.agentsOf(w)[0]?.status, "needs_input");
   });
 
-  it("are per workspace and can be restored", () => {
+  it("are per workspace", () => {
     const a = ws("a", { agents: [agent("needs_input", { sinceEpoch: 500 })] });
     const b = ws("b", { agents: [agent("needs_input", { sinceEpoch: 500 })] });
     needs.dismissNeeds(a);
-    assert.equal(needs.isNeedsDismissed(b), false);
-    needs.restoreNeeds(a);
-    assert.equal(needs.isNeedsDismissed(a), false);
-    needs.restoreNeeds(a);
-    assert.equal(needs.isNeedsDismissed(a), false);
+    assert.equal(needs.agentsOf(a)[0]?.status, "idle");
+    assert.equal(needs.agentsOf(b)[0]?.status, "needs_input");
   });
 
   it("end with the spell, so a later ask with the same start still shows", () => {
@@ -108,7 +101,6 @@ describe("dismissals", () => {
     const w = ws("t", { agents: [first] });
     needs.dismissNeeds(w);
     w.agents = [first, agent("needs_input", { sinceEpoch: 500 })];
-    assert.equal(needs.isNeedsDismissed(w), false, "the menu offers Dismiss, not Restore");
     assert.deepEqual(
       needs.agentsOf(w).map((a) => a.status),
       ["idle", "needs_input"],
@@ -116,20 +108,20 @@ describe("dismissals", () => {
   });
 
   it("have nothing to dismiss when the only ask is a nudge", () => {
-    const w = ws("n", { agents: [claude(1000, 1060)] });
-    needs.dismissNeeds(w);
-    assert.equal(needs.isNeedsDismissed(w), false);
+    r.opened.length = 0;
+    needs.dismissNeeds(ws("n", { agents: [claude(1000, 1060)] }));
+    assert.deepEqual(r.opened, []);
   });
 
   it("ignore a workspace with nothing to dismiss", () => {
     const w = ws("q", { agents: [agent("working")] });
     needs.dismissNeeds(w);
     needs.dismissNeeds(undefined);
-    assert.equal(needs.isNeedsDismissed(w), false);
+    assert.equal(needs.agentsOf(w)[0]?.status, "working");
     assert.deepEqual(needs.agentsOf(undefined), []);
   });
 
-  it("dismissNeeds persists the workspace's dismissed asks, restoreNeeds a delete (issue #5)", () => {
+  it("dismissNeeds persists the workspace's dismissed asks (issue #5)", () => {
     r.opened.length = 0;
     const asker = agent("needs_input", { sinceEpoch: 500 });
     const w = ws("persist-d", { agents: [asker] });
@@ -137,10 +129,6 @@ describe("dismissals", () => {
     assert.deepEqual(r.opened, [
       `cmux-cockpit://set?key=dismissed.persist-d&value=${encodeURIComponent(JSON.stringify({ [asker.id]: 500 }))}`,
     ]);
-
-    r.opened.length = 0;
-    needs.restoreNeeds(w);
-    assert.deepEqual(r.opened, ["cmux-cockpit://set?key=dismissed.persist-d"]);
   });
 
   it("persists only dated spells, so an undated ask cannot stay hidden across reloads", () => {
@@ -148,7 +136,7 @@ describe("dismissals", () => {
     const undated = agent("needs_input");
     const w = ws("undated", { agents: [undated] });
     needs.dismissNeeds(w);
-    assert.equal(needs.isNeedsDismissed(w), true);
+    assert.equal(needs.agentsOf(w)[0]?.status, "idle");
     assert.deepEqual(r.opened, ["cmux-cockpit://set?key=dismissed.undated"]);
   });
 
@@ -159,20 +147,18 @@ describe("dismissals", () => {
     w.agents = [];
     needs.agentsOf(w);
     w.agents = [asker];
-    assert.equal(needs.isNeedsDismissed(w), true);
+    assert.equal(needs.agentsOf(w)[0]?.status, "idle");
   });
 
-  it("does not persist anything when there is nothing to dismiss or restore", () => {
+  it("does not persist anything when there is nothing to dismiss", () => {
     r.opened.length = 0;
     needs.dismissNeeds(ws("empty-persist", { agents: [agent("working")] }));
     needs.dismissNeeds(undefined);
-    needs.restoreNeeds(ws("never-dismissed"));
-    needs.restoreNeeds(undefined);
     assert.deepEqual(r.opened, []);
   });
 });
 
-describe("both sidebars apply the rule", () => {
+describe("the agents panel applies the rule", () => {
   it("the agents panel reads a nudge as idle and asks nothing", () => {
     r.data.workspaces = [ws("n", { selected: true, agents: [claude(1000, 1060)] })];
     assert.equal(agents.currentAsk(), null);
@@ -186,11 +172,5 @@ describe("both sidebars apply the rule", () => {
     r.data.workspaces = [w];
     needs.dismissNeeds(w);
     assert.equal(agents.currentAsk(), null);
-  });
-
-  it("the cockpit ranks a working agent over a nudge beside it", () => {
-    const w = ws("c", { agents: [claude(1000, 1060), agent("working", { lastActivityAt: 900 })] });
-    assert.equal(status.statusOf(w), "working");
-    assert.equal(status.statusOf(ws("n", { agents: [claude(1000, 1060)] })), "idle");
   });
 });

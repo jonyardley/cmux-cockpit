@@ -9,7 +9,7 @@ import { describe, it } from "node:test";
 import { agent, group, ws } from "./support/fixtures.ts";
 import { createRenderer, runBuilt } from "./support/renderer.ts";
 
-const SIDEBARS = ["sidebars/agents.js", "sidebars/cockpit.js"];
+const SIDEBARS = ["sidebars/agents.js"];
 
 function busyRenderer() {
   const r = createRenderer();

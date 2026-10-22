@@ -1,18 +1,17 @@
 # Golden JSON: the cockpit model's answers
 
-What the TypeScript cockpit model computes for each fixture scene, written
-as plain JSON so the native core can load the same inputs and compare its
-outputs. This file is the contract the Rust side reads: a field renamed or
-dropped here is a breaking change there.
+What the retired TypeScript cockpit model computed for each fixture scene,
+written as plain JSON so the native core loads the same inputs and compares
+its outputs. The TypeScript cockpit is gone (issue #247), so these files are
+now frozen fixtures owned by the Rust side: native/core, native/ffi,
+native/runner, native/pane and native/mac's tests read them. A field
+renamed or dropped here is a breaking change there.
 
-- Recorded by `npm run golden` (test/support/golden.ts, one
-  `test/golden-<scene>.test.ts` per scene). `npm run check` fails when a file
-  here is stale, missing, or has no scene behind it, and when a scene in
-  test/support/scenes.ts has no golden test.
+- Nothing records them any more: change a file by hand, in the same PR as
+  the Rust that reads it, and let `npm run rust` say whether the native
+  side agrees.
 - The JSON is laid out by the repo's Biome, as every JSON file here is, so
   compare parsed values, never the text.
-- Scenes come from test/support/scenes.ts, the same fixtures the text
-  snapshots in test/__snapshots__/ print.
 - Keys are sorted at every level; arrays keep their order, which is
   meaningful (display order, longest waiting first, and so on).
 - The clock is fixed: `data.epoch` is 1000000 in every scene, and every
@@ -27,10 +26,6 @@ dropped here is a breaking change there.
 | `needs-and-next` | Five sessions waiting (the strip's cap of four plus "+N more"), saved asks and moves, a Ready card, and the Next queue. No lane groups, so every card is Unsorted. |
 | `projects` | The Projects view: cards under two projects and Other, a waiting session's placeholder, a quiet project. |
 | `review-verdicts` | The For review lane with a PR in every merge state, and the header's "N ready to merge". |
-
-The `agents` scene is the other sidebar, and `editor` and `new-project` add
-only draft state the editor holds after load (a typed name or folder), not
-cmux data or saved state, so none of the three has golden files.
 
 ## `<scene>.input.json`
 

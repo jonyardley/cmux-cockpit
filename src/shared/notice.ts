@@ -1,6 +1,5 @@
-// A faint line of its own, shared by both sidebars (issue #78's
-// unreadable-state line, and the agents panel's quiet notes), so the two
-// copies cannot drift apart.
+// A faint line of its own (issue #78's unreadable-state line, and the
+// agents panel's quiet notes), one copy so the two cannot drift apart.
 
 import { when } from "./ui.ts";
 

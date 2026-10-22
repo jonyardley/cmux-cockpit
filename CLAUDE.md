@@ -1,11 +1,13 @@
 # cmux-cockpit: working rules for agents
 
-Two cmux custom sidebars written in strict TypeScript and bundled into the
-flat scripts cmux loads. README.md has the layout and commands.
+The agents panel, a cmux custom sidebar written in strict TypeScript and
+bundled into the flat script cmux loads, and the native Cockpit sidebar
+under `native/`, which replaced the TypeScript cockpit (issue #247).
+README.md has the layout and commands.
 
 ## Never
 
-- Edit `sidebars/*.js`. They are local build output from `src/` by
+- Edit `sidebars/*.js`. It is local build output from `src/` by
   `npm run build`, never committed, so there is nothing for CI to check
   freshness against; CI runs `npm run build` itself as part of `npm run check`.
 - Run `cmux sidebar reload`, move workspaces, or change groups: the person at
@@ -25,27 +27,26 @@ flat scripts cmux loads. README.md has the layout and commands.
    one module can sit below it. Raise it when coverage rises; never lower
    it to get green. It ends with `npm run rust`: rustfmt, clippy and the
    Rust tests under `native/`.
-2. New or changed logic in a sidebar's model modules (below) or a
+2. New or changed logic in the agents panel's model modules (below) or a
    `shared/` module has a test in `test/`.
 3. The PR says what the maintainer should look at after reload: validate and the
    renderer only run on main, so behaviour on screen is unverified until then.
 
 ## Where code goes
 
-- `src/shared/`: pure helpers both sidebars use. One copy, never mirrored.
-- `src/<sidebar>/*.ts` other than `index.ts` and `theme.ts`: data and
-  state. Reads `data`, returns plain values, no views. This is what the
-  tests cover. In cockpit, `model.ts` holds lanes and placement, and
-  `strip.ts` (Needs you), `lane-entries.ts` (All), `by-project.ts`
-  (Projects), `next.ts` and `card-chips.ts` build on it. In agents,
-  `model.ts` holds the selected workspace itself, and `lists.ts` (caps
-  and "+N more"), `team.ts` (agent rows and Helpers), `checks.ts` (checks
-  and Fix), `pr-list.ts` (Pull requests) and `made.ts` (Made here) build
-  on it. Never the other way round. A new module joins the coverage list
-  in `package.json`.
-- `src/<sidebar>/views/`: view builders only. Keep logic out; if a view
+- `src/shared/`: pure helpers the agents panel and the scripts use. One
+  copy, never mirrored. `symbols.ts` is also read by the native core's
+  tests, so it stays even with no TypeScript caller.
+- `src/agents/*.ts` other than `index.ts` and `theme.ts`: data and state.
+  Reads `data`, returns plain values, no views. This is what the tests
+  cover. `model.ts` holds the selected workspace itself, and `lists.ts`
+  (caps and "+N more"), `team.ts` (agent rows and Helpers), `checks.ts`
+  (checks and Fix), `pr-list.ts` (Pull requests) and `made.ts` (Made
+  here) build on it. Never the other way round. A new module joins the
+  coverage list in `package.json`.
+- `src/agents/views/`: view builders only. Keep logic out; if a view
   needs a decision, put it in the model and test it there.
-- `src/<sidebar>/theme.ts`: colour tokens. No hex literals scattered in new
+- `src/agents/theme.ts`: colour tokens. No hex literals scattered in new
   code; add a token.
 - `src/renderer.d.ts`: the renderer contract. When code needs a renderer
   call or data field that is not declared, add it here first. Data fields
@@ -85,13 +86,13 @@ its own process; within a file, advance `r.data.epoch` to expire optimistic
 overrides between tests.
 
 The fake renderer also records each view's tree, and
-`test/snapshot-*.test.ts` print seven fixture scenes as text (elements,
-words, colours by token name, spacing) into `test/__snapshots__/`, one
-file per scene. `npm run check` fails on any drift; when the change on
+`test/snapshot-*.test.ts` print the agents panel's fixture scene as text
+(elements, words, colours by token name, spacing) into
+`test/__snapshots__/`, one file per scene. `npm run check` fails on any drift; when the change on
 screen is meant, `npm run snapshots` re-records them, and the snapshot
 diff, in words, fills the PR's `## What changed on screen` section.
 
-`npm run preview` draws the same scenes as PNGs in the gitignored
+`npm run preview` draws the same scene as PNGs in the gitignored
 `preview/` (test/support/html.ts maps the tree to HTML, headless Chrome
 screenshots it), so a design change can be judged by eye without a
 reload. It approximates SwiftUI in flexbox: spacing and colour are true,
@@ -105,6 +106,11 @@ Re-run it after later pushes that change a scene again. Never leave a UI
 PR with the words alone.
 
 ## Rust in native/
+
+`test/golden/` holds the retired TypeScript cockpit's answers for four
+fixture scenes, now frozen fixtures the Rust and Swift tests read
+(`test/golden/README.md`). Nothing regenerates them: change one by hand in
+the same PR as the native code that reads it.
 
 `native/` is one Cargo workspace: `core` (the `cockpit_core` Crux app),
 `runner` (`cockpit_runner`, the live-data runner, with no terminal types)

@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { relative } from "node:path";
 import { checkoutRoot } from "./checkout.ts";
 
-// Case-insensitive because APFS is: Sidebars/Cockpit.JS is the same file.
+// Case-insensitive because APFS is: Sidebars/Agents.JS is the same file.
 const RULES: readonly { pattern: RegExp; reason: string }[] = [
   {
     pattern: /^sidebars\/[^/]+\.js$/i,

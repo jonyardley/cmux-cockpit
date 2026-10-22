@@ -1,4 +1,4 @@
-// A card's helper count from the saved subagent runs (issues #6 and #47):
+// A workspace's helper count from the saved subagent runs (issues #6 and #47):
 // cmux sends custom sidebars no subagents, so the count falls back on the
 // hook's saved copy while no agent carries cmux's own children. __STATE__ is
 // set before the renderer import, as in subagents-saved.test.ts.
@@ -20,9 +20,6 @@ const run = (id: string, extra: Record<string, unknown> = {}) => ({
   projects: {},
   prs: {},
   ownPrs: {},
-  // The built state always carries ui (validateState); status.ts reads
-  // selection from state.ts, which reads the saved folds at import.
-  ui: {},
   subagents: {
     w1: [run("a", { endedEpoch: 200 }), run("b"), run("c")],
     matched: [run("m", { session: "owner" })],
@@ -33,13 +30,11 @@ const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const { liveRunCount } = await import("../src/shared/subagents.ts");
-const { helperText } = await import("../src/cockpit/status.ts");
 
 describe("saved helper count", () => {
   it("counts saved runs with no end while a workspace agent is live", () => {
     const w = ws("w1", { agents: [agent("working")] });
     assert.equal(liveRunCount(w), 2);
-    assert.equal(helperText(w), "· 2 helpers");
   });
 
   it("counts none once every workspace agent has ended", () => {

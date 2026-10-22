@@ -1,4 +1,4 @@
-// Text clean-up shared by both sidebars.
+// Text clean-up for the agents panel.
 
 // Claude's terminal titles lead with a spinner glyph (✳, ⏺, braille dots).
 export function cleanTitle(s: string | null | undefined): string {
@@ -32,16 +32,6 @@ export function readable(s: string | null | undefined): string {
     .replace(/[^A-Za-z]+/g, " ")
     .trim();
   return /[A-Za-z]{2,}/.test(words) ? t : "";
-}
-
-/** `t` cut to `max` characters with an ellipsis. */
-export function clip(t: string, max: number): string {
-  return t.length > max ? t.slice(0, max - 1) + "…" : t;
-}
-
-/** readable(), cut to `max` characters with an ellipsis. */
-export function oneLine(s: string | null | undefined, max: number): string {
-  return clip(readable(s), max);
 }
 
 // The renderer has no letter-spacing modifier, so tracking goes in the string:

@@ -1,4 +1,4 @@
-// List helpers shared by both sidebars.
+// List helpers for the agents panel.
 
 export type Last<T> = T & { last: boolean };
 

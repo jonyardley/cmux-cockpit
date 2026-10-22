@@ -127,11 +127,20 @@ function buildInputs(paths: Paths): string[] {
 const newest = (files: readonly string[]): number =>
   Math.max(0, ...files.map((f) => statSync(f, { throwIfNoEntry: false })?.mtimeMs ?? 0));
 
-export const buildCheck: Probe = (_env, paths) => {
+// The retired TypeScript cockpit's last bundle (#247): nothing rebuilds it,
+// so a left sidebar still on it shows whatever it held at the merge.
+const RETIRED_COCKPIT =
+  "sidebars/cockpit.js is the retired cockpit, frozen at its last build: delete it, and show the Cockpit extension in the left sidebar (native/mac/README.md)";
+
+export const buildCheck: Probe = (env, paths) => {
+  const check = bundleCheck(env, paths);
+  return existsSync(join(paths.sidebars, "cockpit.js")) ? { ...check, notes: [RETIRED_COCKPIT] } : check;
+};
+
+const bundleCheck: Probe = (_env, paths) => {
   const label = "Build";
-  const built = ["cockpit.js", "agents.js"].map((f) => join(paths.sidebars, f));
-  const missing = built.filter((f) => !existsSync(f));
-  if (missing.length > 0) return fail(label, "the sidebars are not built", "npm run build", true);
+  if (!existsSync(join(paths.sidebars, "agents.js")))
+    return fail(label, "the agents sidebar is not built", "npm run build", true);
   // The build's own mark, since a bundle it left unchanged keeps its old time.
   const mark = statSync(paths.lastBuild, { throwIfNoEntry: false });
   if (!mark || mark.mtimeMs < newest(buildInputs(paths))) {

@@ -5,7 +5,7 @@ import { installRenderer } from "./support/renderer.ts";
 installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const { isGeneratedAnchor, LANE_GROUP_NAMES, placeholderIds } = await import("../src/shared/anchors.ts");
-const { LANES } = await import("../src/cockpit/lanes.ts");
+const { BUILT_IN_LANES } = await import("../src/shared/lane-config.ts");
 
 describe("isGeneratedAnchor", () => {
   it("matches an anchor titled after its group, ignoring case and spaces", () => {
@@ -60,8 +60,8 @@ describe("placeholderIds", () => {
     assert.deepEqual([...placeholderIds(groups, byId)], ["anchor"]);
   });
 
-  it("knows the same lane names the cockpit draws", () => {
-    const named = LANES.filter((l) => l.key !== "unsorted").map((l) => l.name);
+  it("knows the built-in lane table's names", () => {
+    const named = BUILT_IN_LANES.map((l) => l.name);
     assert.deepEqual([...LANE_GROUP_NAMES], named);
   });
 });

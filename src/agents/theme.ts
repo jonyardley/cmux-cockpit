@@ -1,6 +1,6 @@
-// Agents panel colour tokens and status styling. The ink, state hues and
-// unread badge come from shared/palette.ts, so they read the same in the
-// cockpit.
+// Agents panel colour tokens and status styling. The ink and state hues
+// come from shared/palette.ts, which the native Cockpit mirrors, so they
+// read the same on both sides.
 
 import type { CheckState } from "../../scripts/state-config.ts";
 import { P } from "../shared/palette.ts";

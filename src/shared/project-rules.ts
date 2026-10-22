@@ -1,8 +1,7 @@
 // The rules a saved project keeps, in one copy: scripts/state-config.ts
-// checks every value arriving from a URL against them, and the sidebar's
-// editor (src/cockpit/edit.ts) uses the same ones to say why Done would not
-// save. Pure, with no node imports, so a sidebar bundles it and a script
-// imports it, as with project-sets.ts. The contract's types are imported as
+// checks every value arriving from a URL against them, and
+// scripts/projects-config.ts reads removals by the same rule. Pure, with no
+// node imports, as with project-sets.ts. The contract's types are imported as
 // types only, so esbuild erases them.
 
 import type { ProjectRemoved, SavedProject } from "../../scripts/state-config.ts";

@@ -123,7 +123,6 @@ const STYLE: Record<string, (v: unknown) => string> = {
   // Hidden until hovered unless its flag reads false. The recorder resolves a
   // reactive flag already; a function here is read once all the same.
   showOnHover: (v) => ((typeof v === "function" ? v() : v) === false ? "" : "opacity:0"),
-  rotation: (v) => `transform:rotate(${num(v) ?? 0}deg)`,
 };
 
 // Modifiers that wrap the element built so far in a new one.
@@ -134,7 +133,6 @@ const WRAP: Record<string, (v: unknown) => string> = {
   paddingTop: (v) => `padding-top:${pad(v)}px`,
   paddingBottom: (v) => `padding-bottom:${pad(v)}px`,
   paddingLeading: (v) => `padding-left:${pad(v)}px`,
-  paddingTrailing: (v) => `padding-right:${pad(v)}px`,
   background: (v) => `background:${colour(v)}`,
   cornerRadius: (v) => `border-radius:${num(v) ?? 0}px;overflow:hidden`,
 };
@@ -210,8 +208,6 @@ class Writer {
         return this.image(typeof n.args[0] === "string" ? n.args[0] : "");
       case "ProgressView":
         return progress(n);
-      case "TextField":
-        return field(n);
       case "Spacer":
         return spacer(parent, num(o.minLength) ?? 8);
       default:
@@ -308,14 +304,6 @@ class Writer {
     }
     return { ...b, html: styled(b.html, pending.filter(Boolean).join(";")) };
   }
-}
-
-// Its value, or its placeholder in the system's faint grey when empty.
-function field(n: ViewNode): Built {
-  const value = typeof n.args[0] === "string" ? n.args[0] : "";
-  const placeholder = String(opts(n.args[1]).placeholder ?? "");
-  const text = value ? html(value) : `<span style="color:#14141466">${html(placeholder)}</span>`;
-  return leaf(`<div class="t" style="white-space:nowrap;overflow:hidden">${text}</div>`);
 }
 
 // With a value it is the system's linear bar, in the accent blue; without,

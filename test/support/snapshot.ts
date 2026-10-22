@@ -25,9 +25,9 @@ const PREVIEW = process.env.PREVIEW_DIR;
 // semibold). PREVIEW_FONT_SCALE overrides it to recalibrate.
 const FONT_SCALE = Number(process.env.PREVIEW_FONT_SCALE ?? 1.12) || 1.12;
 
-// Each sidebar's width in points, as measured off a Retina screenshot of
-// the app: the agents panel on the right is the wider one.
-const WIDTH = { cockpit: 296, agents: 382 };
+// The sidebar's width in points, as measured off a Retina screenshot of
+// the app.
+const WIDTH = { agents: 382 };
 
 /** Which sidebar a scene draws, for its preview width. */
 type Sidebar = keyof typeof WIDTH;
