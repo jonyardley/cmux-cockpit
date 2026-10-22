@@ -71,6 +71,28 @@ pub fn status_of_records(records: &[Record<'_>]) -> Option<AgentStatus> {
         .and_then(|r| status_from_program(r.state))
 }
 
+/// Claude's latest word for a tab: the status its records add up to and
+/// when that status began. Only a change of status moves `since`, so a
+/// repeated report, or a helper's progress under the same status, leaves
+/// it alone: it is the moment Claude last changed its mind, which is what
+/// the hooks are weighed against and what the nudge's gap is read from.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Report {
+    pub status: AgentStatus,
+    pub since: f64,
+}
+
+impl Report {
+    /// The report after one at epoch `at` saying `status`, given the last.
+    pub fn after(prev: Option<&Report>, status: AgentStatus, at: f64) -> Report {
+        let since = match prev {
+            Some(p) if p.status == status => p.since,
+            _ => at,
+        };
+        Report { status, since }
+    }
+}
+
 /// A session's status, when it began and its latest activity, in epoch
 /// seconds (0 when unknown).
 #[derive(Debug, Clone, PartialEq)]
@@ -80,22 +102,11 @@ pub struct Resolved {
     pub last_activity: f64,
 }
 
-impl Resolved {
-    fn from(h: &Hooked, last_activity: f64) -> Resolved {
-        Resolved {
-            status: h.status.clone(),
-            since: h.since,
-            last_activity,
-        }
-    }
-}
-
-/// The status a card shows, from the session's hooks, its tab's program
-/// status (a `Hooked` built from the reports, `last_activity` the latest
-/// one) and Agent View's busy, at epoch `now`. None when nothing has said.
+/// The status a card shows, from the session's hooks, its tab's report
+/// and Agent View's busy, at epoch `now`. None when nothing has said.
 pub fn resolve(
     hook: Option<&Hooked>,
-    program: Option<&Hooked>,
+    program: Option<&Report>,
     busy: Option<bool>,
     now: f64,
 ) -> Option<Resolved> {
@@ -113,26 +124,38 @@ pub fn resolve(
                 last_activity: h.last_activity,
             })
         }
-        (None, Some(p)) => Some(Resolved::from(p, p.last_activity)),
+        (None, Some(p)) => Some(Resolved {
+            status: p.status.clone(),
+            since: p.since,
+            last_activity: p.since,
+        }),
         (Some(h), Some(p)) => Some(both(h, p)),
     }
 }
 
-/// Rules 2 to 5: which of the hooks and the program status wins.
-fn both(h: &Hooked, p: &Hooked) -> Resolved {
-    let last_activity = h.last_activity.max(p.last_activity);
-    let hook_wins = hook_wins(h, p);
-    let winner = if hook_wins { h } else { p };
-    Resolved::from(winner, last_activity)
+/// Rules 2 to 5: which of the hooks and the report wins.
+fn both(h: &Hooked, p: &Report) -> Resolved {
+    let last_activity = h.last_activity.max(p.since);
+    let (status, since) = if hook_wins(h, p) {
+        (h.status.clone(), h.since)
+    } else {
+        (p.status.clone(), p.since)
+    };
+    Resolved {
+        status,
+        since,
+        last_activity,
+    }
 }
 
-fn hook_wins(h: &Hooked, p: &Hooked) -> bool {
-    let reported = p.last_activity;
+/// Rule 2 also holds here, not only in the runner (which hides an ended
+/// session before it asks), so any caller of `resolve` gets it.
+fn hook_wins(h: &Hooked, p: &Report) -> bool {
     match (&h.status, &p.status) {
         (AgentStatus::Ended, _) => true,
         (_, AgentStatus::NeedsInput) => false,
-        (AgentStatus::NeedsInput, _) => h.last_hook > reported,
-        (AgentStatus::Working, AgentStatus::Idle) => h.last_hook > reported + PROGRAM_GRACE_SECS,
+        (AgentStatus::NeedsInput, _) => h.last_hook > p.since,
+        (AgentStatus::Working, AgentStatus::Idle) => h.last_hook > p.since + PROGRAM_GRACE_SECS,
         _ => false,
     }
 }
@@ -145,11 +168,15 @@ mod tests {
         Hooked::after(None, status, at, true, "w")
     }
 
+    fn report(status: AgentStatus, at: f64) -> Report {
+        Report::after(None, status, at)
+    }
+
     fn rec<'a>(id: &'a str, state: &'a str) -> Record<'a> {
         Record { id, state }
     }
 
-    fn status(h: Option<&Hooked>, p: Option<&Hooked>) -> Option<AgentStatus> {
+    fn status(h: Option<&Hooked>, p: Option<&Report>) -> Option<AgentStatus> {
         resolve(h, p, None, 1000.0).map(|r| r.status)
     }
 
@@ -199,7 +226,7 @@ mod tests {
 
     #[test]
     fn program_status_alone_is_the_status() {
-        let p = hooked(AgentStatus::Working, 100.0);
+        let p = report(AgentStatus::Working, 100.0);
         assert_eq!(
             resolve(None, Some(&p), Some(false), 900.0),
             Some(Resolved {
@@ -214,7 +241,7 @@ mod tests {
     #[test]
     fn a_stop_then_working_a_second_later_is_no_hand_back() {
         let stop = hooked(AgentStatus::Idle, 100.0);
-        let working = hooked(AgentStatus::Working, 101.0);
+        let working = report(AgentStatus::Working, 101.0);
         assert_eq!(
             status(Some(&stop), Some(&working)),
             Some(AgentStatus::Working)
@@ -228,9 +255,10 @@ mod tests {
     }
 
     #[test]
-    fn working_keeps_its_first_reports_start() {
-        let first = hooked(AgentStatus::Working, 100.0);
-        let again = Hooked::after(Some(&first), AgentStatus::Working, 130.0, true, "w");
+    fn a_repeated_report_keeps_its_first_start() {
+        let first = report(AgentStatus::Working, 100.0);
+        let again = Report::after(Some(&first), AgentStatus::Working, 130.0);
+        assert_eq!(again.since, 100.0);
         let stop = hooked(AgentStatus::Idle, 99.0);
         let r = resolve(Some(&stop), Some(&again), None, 140.0);
         assert_eq!(
@@ -238,14 +266,39 @@ mod tests {
             Some(Resolved {
                 status: AgentStatus::Working,
                 since: 100.0,
-                last_activity: 130.0
+                last_activity: 100.0
             })
+        );
+        let done = Report::after(Some(&again), AgentStatus::Idle, 150.0);
+        assert_eq!(done.since, 150.0, "a change of status starts afresh");
+    }
+
+    #[test]
+    fn a_later_report_of_the_same_status_keeps_the_hooks_ask() {
+        // A helper's progress lists the session as working again: the
+        // permission hook between still stands.
+        let working = report(AgentStatus::Working, 100.0);
+        let ask = hooked(AgentStatus::NeedsInput, 100.5);
+        let helper = Report::after(Some(&working), AgentStatus::Working, 101.0);
+        assert_eq!(
+            status(Some(&ask), Some(&helper)),
+            Some(AgentStatus::NeedsInput)
         );
     }
 
     #[test]
+    fn repeated_done_reports_leave_the_nudges_gap_alone() {
+        let stop = hooked(AgentStatus::Idle, 100.0);
+        let nudge = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 160.0, false, "w");
+        let done = report(AgentStatus::Idle, 100.0);
+        let later = Report::after(Some(&done), AgentStatus::Idle, 130.0);
+        let r = resolve(Some(&nudge), Some(&later), None, 170.0);
+        assert_eq!(r.map(|r| r.last_activity), Some(100.0));
+    }
+
+    #[test]
     fn a_permission_hook_after_the_last_working_report_needs_input() {
-        let working = hooked(AgentStatus::Working, 100.0);
+        let working = report(AgentStatus::Working, 100.0);
         let ask = hooked(AgentStatus::NeedsInput, 100.5);
         assert_eq!(
             status(Some(&ask), Some(&working)),
@@ -261,7 +314,7 @@ mod tests {
 
     #[test]
     fn blocked_needs_input_whatever_the_hooks_say() {
-        let blocked = hooked(AgentStatus::NeedsInput, 100.0);
+        let blocked = report(AgentStatus::NeedsInput, 100.0);
         for h in [
             AgentStatus::Working,
             AgentStatus::Idle,
@@ -278,7 +331,7 @@ mod tests {
 
     #[test]
     fn a_hook_that_ends_the_session_wins() {
-        let blocked = hooked(AgentStatus::NeedsInput, 100.0);
+        let blocked = report(AgentStatus::NeedsInput, 100.0);
         let ended = hooked(AgentStatus::Ended, 90.0);
         assert_eq!(
             status(Some(&ended), Some(&blocked)),
@@ -290,7 +343,7 @@ mod tests {
     fn done_then_the_nudge_a_minute_on_keeps_the_hooks_spell() {
         let stop = hooked(AgentStatus::Idle, 100.0);
         let nudge = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 160.0, false, "w");
-        let done = hooked(AgentStatus::Idle, 100.4);
+        let done = report(AgentStatus::Idle, 100.4);
         assert_eq!(
             resolve(Some(&nudge), Some(&done), None, 170.0),
             Some(Resolved {
@@ -324,10 +377,10 @@ mod tests {
         };
         let stop = hooked(AgentStatus::Idle, 100.0);
         let nudge = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 160.0, false, "w");
-        let done = hooked(AgentStatus::Idle, 100.4);
+        let done = report(AgentStatus::Idle, 100.4);
         let nudged = resolve(Some(&nudge), Some(&done), None, 170.0);
         assert_eq!(nudged.map(card), Some(crate::status::Status::Idle));
-        let blocked = hooked(AgentStatus::NeedsInput, 300.0);
+        let blocked = report(AgentStatus::NeedsInput, 300.0);
         let asked = resolve(Some(&stop), Some(&blocked), None, 400.0);
         assert_eq!(asked.map(card), Some(crate::status::Status::NeedsInput));
     }
@@ -335,14 +388,14 @@ mod tests {
     #[test]
     fn done_after_an_ask_answers_it() {
         let ask = hooked(AgentStatus::NeedsInput, 100.0);
-        let done = hooked(AgentStatus::Idle, 130.0);
+        let done = report(AgentStatus::Idle, 130.0);
         assert_eq!(status(Some(&ask), Some(&done)), Some(AgentStatus::Idle));
     }
 
     #[test]
     fn idle_a_second_after_a_working_hook_is_idle_at_once() {
         let working = hooked(AgentStatus::Working, 100.0);
-        let idle = hooked(AgentStatus::Idle, 101.0);
+        let idle = report(AgentStatus::Idle, 101.0);
         assert_eq!(
             resolve(Some(&working), Some(&idle), Some(true), 101.0).map(|r| r.status),
             Some(AgentStatus::Idle)
@@ -351,7 +404,7 @@ mod tests {
 
     #[test]
     fn a_working_hook_beats_done_only_past_the_grace() {
-        let done = hooked(AgentStatus::Idle, 100.0);
+        let done = report(AgentStatus::Idle, 100.0);
         let soon = hooked(AgentStatus::Working, 100.0 + PROGRAM_GRACE_SECS);
         assert_eq!(status(Some(&soon), Some(&done)), Some(AgentStatus::Idle));
         let new_turn = hooked(AgentStatus::Working, 103.0);
@@ -364,7 +417,7 @@ mod tests {
     #[test]
     fn at_the_same_moment_claude_wins() {
         let stop = hooked(AgentStatus::Idle, 100.0);
-        let working = hooked(AgentStatus::Working, 100.0);
+        let working = report(AgentStatus::Working, 100.0);
         assert_eq!(
             status(Some(&stop), Some(&working)),
             Some(AgentStatus::Working)
