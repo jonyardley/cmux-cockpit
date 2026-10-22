@@ -29,8 +29,6 @@ extension Color {
 
 /// The panel's type sizes and spacing, in one place.
 enum Metrics {
-    static let body: CGFloat = 12
-    static let small: CGFloat = 11
     static let gutter: CGFloat = 10
     static let cardIndent: CGFloat = 16
     /// The needs dot on a waiting card's badge corner, as a share of the
@@ -47,19 +45,25 @@ enum Metrics {
     // Sizes named for what draws with them; docs/design.md#type-scale and
     // docs/design.md#spacing-and-radii say where each is used.
 
-    /// Type sizes, 10 to 13.5.
+    /// Every text size, 10 to 13.5: the one naming for words. Glyph sizes
+    /// stay in their views' look enums. A new text size gets a name here
+    /// or reuses one.
     enum Font {
-        /// The fold chevron, the unread badge.
+        /// The fold chevron, the unread badge, the waiting count.
         static let tiny: CGFloat = 10
-        /// A section heading in tracked capitals: a lane's name, NEEDS YOU.
+        /// A section heading in tracked capitals: a lane's name, QUIET; the
+        /// Ready pill.
         static let section: CGFloat = 10.5
-        /// Meta words: an age, a count pill, a header's hint, a chip.
+        /// Meta words: an age, a count pill, a header row, a chip, the
+        /// waiting tab, the editor's labels and notes, "Not sent".
         static let meta: CGFloat = 11
-        /// Next's line.
+        /// Next's line, a compact card's status.
         static let next: CGFloat = 11.5
-        /// The view switch's tabs, a card's detail line.
+        /// The view switch's tabs, a card's status, detail and left off,
+        /// notices, the editor and Message agent.
         static let control: CGFloat = 12
-        /// A lane or project header's name.
+        /// A project header's name, a dense row's title, a Projects card's
+        /// title, a quiet row.
         static let title: CGFloat = 12.5
         /// A compact card's title.
         static let compactTitle: CGFloat = 13

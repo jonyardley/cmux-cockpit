@@ -79,8 +79,8 @@ struct Notice: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: Metrics.body, weight: .semibold)).foregroundStyle(Color(Token.text))
-            Text(why).font(.system(size: Metrics.body)).foregroundStyle(Color(Token.secondary))
+            Text(title).font(.system(size: Metrics.Font.control, weight: .semibold)).foregroundStyle(Color(Token.text))
+            Text(why).font(.system(size: Metrics.Font.control)).foregroundStyle(Color(Token.secondary))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

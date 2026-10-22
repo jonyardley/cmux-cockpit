@@ -93,7 +93,7 @@ struct MessageAgent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("\(ActionWords.messagePrompt) \(title)")
-                .font(.system(size: Metrics.body, weight: .semibold))
+                .font(.system(size: Metrics.Font.control, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.tail)
             TextField(ActionWords.messageAgent, text: $text, axis: .vertical)
@@ -103,7 +103,7 @@ struct MessageAgent: View {
                 .onSubmit(send)
             if failed {
                 Text(ActionWords.notSent)
-                    .font(.system(size: Metrics.small))
+                    .font(.system(size: Metrics.Font.meta))
                     .foregroundStyle(Color(Token.clayText))
             }
             HStack {

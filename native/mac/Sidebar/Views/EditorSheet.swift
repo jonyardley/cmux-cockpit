@@ -30,7 +30,7 @@ struct EditorSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(editor.isNew ? Words.newProjectTitle : Words.editProjectTitle)
-                .font(.system(size: Metrics.body, weight: .semibold))
+                .font(.system(size: Metrics.Font.control, weight: .semibold))
                 .foregroundStyle(Color(Token.text))
             if editor.isNew { folder }
             field(Words.name) {
@@ -55,7 +55,7 @@ struct EditorSheet: View {
                     .foregroundStyle(Color(Token.redText))
             }
             Text(editor.problem ?? " ")
-                .font(.system(size: Metrics.small))
+                .font(.system(size: Metrics.Font.meta))
                 .foregroundStyle(Color(Token.redText))
             HStack {
                 Spacer()
@@ -74,7 +74,7 @@ struct EditorSheet: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .font(.system(size: Metrics.body))
+        .font(.system(size: Metrics.Font.control))
         .padding(14)
         .frame(width: 260)
         .onChange(of: draft) { _, next in
@@ -109,10 +109,10 @@ struct EditorSheet: View {
             VStack(alignment: .leading, spacing: 4) {
                 TextField(Words.folder, text: $draft.folder).textFieldStyle(.roundedBorder)
                 if !editor.matches.isEmpty {
-                    Text(editor.matches).font(.system(size: Metrics.small)).foregroundStyle(Color(Token.faint))
+                    Text(editor.matches).font(.system(size: Metrics.Font.meta)).foregroundStyle(Color(Token.faint))
                 }
                 if !editor.suggestions.isEmpty {
-                    Text(Words.openFolders).font(.system(size: Metrics.small)).foregroundStyle(Color(Palette.Own.tertiary))
+                    Text(Words.openFolders).font(.system(size: Metrics.Font.meta)).foregroundStyle(Color(Palette.Own.tertiary))
                 }
                 ForEach(editor.suggestions, id: \.self) { dir in
                     Button {
@@ -172,14 +172,14 @@ struct EditorSheet: View {
                 }
             }
             if !editor.note.isEmpty {
-                Text(editor.note).font(.system(size: Metrics.small)).foregroundStyle(Color(Token.faint))
+                Text(editor.note).font(.system(size: Metrics.Font.meta)).foregroundStyle(Color(Token.faint))
             }
         }
     }
 
     private func field(_ label: String, @ViewBuilder _ content: () -> some View) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(.system(size: Metrics.small)).foregroundStyle(Color(Token.faint))
+            Text(label).font(.system(size: Metrics.Font.meta)).foregroundStyle(Color(Token.faint))
             content()
         }
     }

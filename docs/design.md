@@ -161,25 +161,20 @@ counted. Weights are named beside each use.
 |-|-|-|
 | 13.5 | `Metrics.Font.cardTitle` | a full card's title, semibold |
 | 13 | `Metrics.Font.compactTitle` | a compact card's title, semibold |
-| 12.5 | `Metrics.Font.title`, `CardLook.rowTitle` | project header name (semibold), quiet row and New project label (regular), a dense row's title (regular, medium when selected), a Projects card's title (semibold) |
-| 12 | `Metrics.Font.control`, `Metrics.body`, `CardLook.fullBadgeFont` | the view switch's tabs (medium), a full or Projects card's status (medium), detail, left off, notices, the editor and Message agent (body); a full card's badge glyph |
-| 11.5 | `Metrics.Font.next`, `CardLook.compactStatus` | Next's line (semibold), a compact card's status (regular) |
-| 11 | `Metrics.Font.meta`, `Metrics.small`, `CardLook.compactBadgeFont`, `ProjectMetrics.plusFont` | ages, count pills (medium, digits monospaced), chip words, a lane header row; editor labels and notes, "Not sent", the project header row; a compact badge glyph; the header "+" |
+| 12.5 | `Metrics.Font.title` | project header name (semibold), quiet row and New project label (regular), a dense row's title (regular, medium when selected), a Projects card's title (semibold) |
+| 12 | `Metrics.Font.control`, `CardLook.fullBadgeFont` | the view switch's tabs (medium), a full or Projects card's status (medium), detail, left off, notices, the editor and Message agent (body); a full card's badge glyph |
+| 11.5 | `Metrics.Font.next` | Next's line (semibold), a compact card's status (regular) |
+| 11 | `Metrics.Font.meta`, `CardLook.compactBadgeFont`, `ProjectMetrics.plusFont` | ages, count pills (medium, digits monospaced), chip words, a lane or project header row, the waiting tab (`TabPillLook.font` is this name), editor labels and notes, "Not sent"; a compact badge glyph; the header "+" |
 | 10.5 | `Metrics.Font.section` | section headings in tracked capitals (semibold); the Ready pill (medium) |
 | 10 | `Metrics.Font.tiny`, `ProjectMetrics.headerBadgeFont`, `ProjectMetrics.rowPlusFont` | fold chevron, unread badge, waiting count (bold); project header badge glyph; quiet row "+" |
 | 9.5 | `CardLook.pin` | the pin |
 | 9 | `ChipLook.glyph`, `ProjectMetrics.quietBadgeFont` | PR and branch glyphs in a chip; a quiet project's badge glyph |
 | 8 | `CardLook.rowBadgeFont`, `Metrics.dismissGlyph` | a dense row's badge glyph; the dismiss x (bold) |
 
-The `Metrics.Font` enum (`Views/Theme.swift:51-68`) is the reading scale and
-covers 10 to 13.5. `Metrics.body` and `Metrics.small` (`Theme.swift:32-33`)
-are a second set of names for 12 and 11. See [gap B](#known-gaps).
-
-**Target (D2 a, not built yet):** one naming system. `Metrics.body`,
-`Metrics.small`, `CardLook.rowTitle` and `CardLook.compactStatus` fold into
-`Metrics.Font`; glyph sizes stay in their look enums. No size changes, so
-nothing moves on screen. A new text size gets a `Metrics.Font` name or reuses
-one.
+The `Metrics.Font` enum (`Views/Theme.swift`) is the one naming system for
+text and covers 10 to 13.5 (D2 a). Glyph sizes stay in their look enums
+(`CardLook`, `ChipLook`, `ProjectMetrics`, `Metrics.dismissGlyph`). A new
+text size gets a `Metrics.Font` name or reuses one.
 
 Section headings are tracked by `Metrics.sectionTracking` (1pt,
 `Theme.swift:115`) and set in capitals by `.textCase(.uppercase)`, never by
@@ -353,8 +348,7 @@ the name, the count pill, the folded project's dot, and a round "+" when the
 project has a folder. Name `Font.title` 12.5 semibold in `heading`. Padding,
 radius and gap as the lane header; hover through the shared hover shade.
 Where: `Views/ProjectsView.swift:106-134`. The row's own size is
-`Metrics.small` where the lane header uses `Font.meta` (same 11, different
-name, [gap B](#known-gaps)).
+`Font.meta` 11, as on the lane header.
 
 ### Plus button
 
@@ -400,7 +394,7 @@ A smaller badge (22, glyph 11, radius 7), the title on one line, the status
 line with the PR in words and its diff faint after it, where you left off,
 the detail, the progress bar. Badge to text 9; same padding as the full card;
 column spacing 3 (literal). Title `Font.compactTitle` 13 semibold; status
-`CardLook.compactStatus` 11.5 regular with a 6 dot. Radius 12.
+`Font.next` 11.5 regular with a 6 dot. Radius 12.
 Where: `Views/CardView.swift:95-120`.
 
 **Target (D14 a, not built yet):** a quiet PR's words take `metaText`, as on
@@ -412,7 +406,7 @@ a chip and a dense row, not `secondary` (one core line,
 One line: status dot (7), a 14 badge (glyph 8, radius 4), the title, its PR's
 title faint after it, then unread, PR number, age, dismiss x, pin; under it
 left off and the detail, indented to the title. No face until selected; grey
-wash under the pointer. Title `CardLook.rowTitle` 12.5 regular (medium when
+wash under the pointer. Title `Font.title` 12.5 regular (medium when
 selected); age in `metaText`. Padding 25 leading, 12 trailing, 5 above and
 below; radius `Radius.row` 9. Where: `Views/CardView.swift:126-170`.
 
@@ -638,7 +632,7 @@ Where: `Views/Drag.swift:192-249`, `Views/LaneView.swift:189`.
 ### Editor sheet
 
 The project editor as a sheet, 260 wide with 14 padding (literals). Title at
-`Metrics.body` 12 semibold; labels at `Metrics.small` 11 in `faint`; the
+`Font.control` 12 semibold; labels at `Font.meta` 11 in `faint`; the
 badge preview at 18; colour swatches 14 with a 2 `text` ring on the chosen
 one; icons in 24 by 22 cells, the chosen one on `countBg` with radius 4;
 problems and Remove in `redText`. Where: `Views/EditorSheet.swift:9-186`.
@@ -883,7 +877,7 @@ with a follow-up PR.
 |-|-|-|
 | 1 | Views defined the look by pointing at TypeScript and the pane. **Built: D7 a**, the views test pins its own values. **Built: D6 a**, comments point at `docs/design.md` anchors | closed |
 | A | Four count treatments: unread badge, its copy in the anchor badge, the waiting count, the count pill; the Ready pill on literals. **Decided: D1 a**, one count pill shape for every count, colour by meaning | `CardView.swift:316-328`, `LaneView.swift:73-80`, `TopView.swift:65-84`, `LaneView.swift:4-17`, `CardView.swift:302-313` |
-| B | Two names for one scale (`body`/`small` beside `Font.control`/`meta`; `CardLook.rowTitle` and `compactStatus` duplicate `Font.title` and `next`). **Decided: D2 a**, one `Metrics.Font` naming, no size changes | `Theme.swift:32-33`, `CardView.swift:40-41`, `ProjectsView.swift:126` |
+| B | Two names for one scale. **Built: D2 a**, one `Metrics.Font` naming, no size changes | closed |
 | C | Spacing, size and radius literals outside a look enum. **Decided in part: D3 a** names the two radius literals; the spacing literals have no card and are named in their own PR | listed on the audit page |
 | D | Badge radii have no stated rule, though all fit `round(0.3 × size)`. **Decided: D3 a**, badge radius is `round(0.3 × size)` worked out in `BadgeTile` | `CardView.swift:13`, `:18`, `:29`; `BadgeTile.swift:16`; `LaneView.swift:40` |
 | E | Fades: 0.55 under two names, 0.6 dimmed, 0.9 dragged. **Decided: D12 a**, `emptyFade` nothing here, `disabledFade` cannot click, `dimmed` merged | `Theme.swift:110`, `ProjectText.swift:47`, `CardView.swift:47`, `Drag.swift:243` |
@@ -920,7 +914,7 @@ are under `native/mac/Sidebar/` unless they start with `native/`.
    `Views/Actions.swift`, `Views/BadgeTile.swift`, `Model/ChipFit.swift`,
    `Model/DropRule.swift`, `Views/Theme.swift`, `Model/Words.swift`) and the
    lines that lean on the pane or "the cockpit's".
-3. **One type scale naming (D2).** Nothing on screen. Files:
+3. **One type scale naming (D2).** Built. Nothing on screen. Files:
    `Views/Theme.swift`, `Views/CardView.swift`, `Views/ProjectsView.swift`,
    `Views/EditorSheet.swift`, `Views/Actions.swift`, `Views/PanelView.swift`.
 4. **Radius rule (D3), with gap F's unused sizes.** On screen: a dragged card

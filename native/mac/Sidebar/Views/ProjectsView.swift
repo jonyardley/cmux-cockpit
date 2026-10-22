@@ -124,7 +124,7 @@ struct ProjectHeader: View {
             Spacer(minLength: 4)
             if head.canOpen { PlusButton(key: head.key) }
         }
-        .font(.system(size: Metrics.small))
+        .font(.system(size: Metrics.Font.meta))
         .padding(.horizontal, Metrics.headerPadH)
         .padding(.vertical, Metrics.headerPadV)
         .hoverShade(in: .rect(cornerRadius: Metrics.Radius.header))

@@ -38,9 +38,6 @@ private enum CardLook {
     /// A Projects card's padding, and the gap above its chips.
     static let projectPad: CGFloat = 10
     static let projectGap: CGFloat = 5
-    /// A row's title, and a full card's status words.
-    static let rowTitle: CGFloat = 12.5
-    static let compactStatus: CGFloat = 11.5
     /// The pin at the end of a pinned card's title row.
     static let pin: CGFloat = 9.5
     /// The progress bar's height.
@@ -107,7 +104,7 @@ struct CompactCard: View {
             )
             VStack(alignment: .leading, spacing: 3) {
                 TitleRow(card: card, size: Metrics.Font.compactTitle, lines: 1)
-                StatusLine(card: card, dot: 6, size: CardLook.compactStatus, weight: .regular, pr: lines.pr)
+                StatusLine(card: card, dot: 6, size: Metrics.Font.next, weight: .regular, pr: lines.pr)
                 WaitingTabLine(card: card)
                 LeftOff(text: card.leftOff)
                 Detail(text: card.detail, lines: CardText.detailLines(card))
@@ -139,7 +136,7 @@ struct DenseRow: View {
                     font: CardLook.rowBadgeFont, radius: CardLook.rowBadgeRadius, mark: CardText.mark(card)
                 )
                 Text(card.title)
-                    .font(.system(size: CardLook.rowTitle, weight: card.selected ? .medium : .regular))
+                    .font(.system(size: Metrics.Font.title, weight: card.selected ? .medium : .regular))
                     .foregroundStyle(Color(Token.text))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -148,7 +145,7 @@ struct DenseRow: View {
                 // is what gets cut and the dot, PR and time show.
                 if let title = CardText.rowPrTitle(card) {
                     Text(title)
-                        .font(.system(size: CardLook.rowTitle))
+                        .font(.system(size: Metrics.Font.title))
                         .foregroundStyle(Color(Token.faint))
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -183,7 +180,7 @@ struct CardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TitleRow(card: card, size: CardLook.rowTitle, lines: 2, leadMark: true)
+            TitleRow(card: card, size: Metrics.Font.title, lines: 2, leadMark: true)
             StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
                 .padding(.top, 2)
             WaitingTabLine(card: card, top: 2)
@@ -283,7 +280,7 @@ struct StatusLine: View {
 
 /// The waiting tab pill's measures (docs/design.md "Waiting tab line").
 enum TabPillLook {
-    static let font: CGFloat = 11
+    static let font = Metrics.Font.meta
     static let padH: CGFloat = 8
     static let padTop: CGFloat = 1
     static let padBottom: CGFloat = 2
