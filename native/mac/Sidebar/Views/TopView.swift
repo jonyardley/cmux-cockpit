@@ -76,7 +76,6 @@ private struct NeedsCount: View {
                 .foregroundStyle(Color(Palette.Own.onFill))
                 .fixedSize()
                 .countPillShape(Color(Token.clay))
-                .contentShape(.rect(cornerRadius: Metrics.Radius.pill))
         }
         .buttonStyle(.plain)
     }

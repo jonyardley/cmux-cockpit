@@ -49,8 +49,15 @@ private enum CardLook {
     /// The progress bar's height, and the gap above it.
     static let bar: CGFloat = 4
     static let barTop: CGFloat = 2
+    /// A card's status dot: full, dense row and Projects card at 7, a
+    /// compact card at 6.
+    static let statusDot: CGFloat = 7
+    static let compactStatusDot: CGFloat = 6
     /// A hollow status dot's ring.
     static let hollowRing: CGFloat = 1.5
+    /// A title's first line, as a share of its size: the height the needs
+    /// dot centres in where it leads the title.
+    static let titleLine: CGFloat = 1.2
     /// A merged card while nothing in it wants Jon (docs/design.md#card-chrome).
     static let dimmed: Double = 0.6
 }
@@ -64,6 +71,16 @@ struct LaneCard: View {
         case .full: FullCard(card: card)
         case .compact: CompactCard(card: card)
         case .row: DenseRow(card: card)
+        }
+    }
+
+    /// The corner a lane card takes at its density: the card's for full and
+    /// compact, the row's for a dense row. The drag's gap outline and
+    /// floating card take it too (docs/design.md#drag).
+    nonisolated static func corner(_ card: Card) -> CGFloat {
+        switch card.density {
+        case .full, .compact: Metrics.Radius.card
+        case .row: Metrics.Radius.row
         }
     }
 }
@@ -82,7 +99,7 @@ struct FullCard: View {
             )
             VStack(alignment: .leading, spacing: CardLook.fullColumn) {
                 TitleRow(card: card, size: Metrics.Font.cardTitle, lines: 2)
-                StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
+                StatusLine(card: card, dot: CardLook.statusDot, size: Metrics.Font.control, weight: .medium)
                 WaitingTabLine(card: card)
                 if ChipsRow.shows(card) { ChipsRow(card: card, prOpens: false) }
                 Detail(text: card.detail, lines: CardText.detailLines(card))
@@ -94,7 +111,7 @@ struct FullCard: View {
         .padding(.leading, CardLook.padLeading)
         .padding(.trailing, CardLook.padTrailing)
         .padding(.vertical, CardLook.padV)
-        .cardChrome(card, radius: Metrics.Radius.card)
+        .cardChrome(card, radius: LaneCard.corner(card))
     }
 }
 
@@ -113,7 +130,7 @@ struct CompactCard: View {
             )
             VStack(alignment: .leading, spacing: CardLook.compactColumn) {
                 TitleRow(card: card, size: Metrics.Font.compactTitle, lines: 1)
-                StatusLine(card: card, dot: 6, size: Metrics.Font.next, weight: .regular, pr: lines.pr)
+                StatusLine(card: card, dot: CardLook.compactStatusDot, size: Metrics.Font.next, weight: .regular, pr: lines.pr)
                 WaitingTabLine(card: card)
                 LeftOff(text: card.leftOff)
                 Detail(text: card.detail, lines: CardText.detailLines(card))
@@ -125,7 +142,7 @@ struct CompactCard: View {
         .padding(.leading, CardLook.padLeading)
         .padding(.trailing, CardLook.padTrailing)
         .padding(.vertical, CardLook.padV)
-        .cardChrome(card, radius: Metrics.Radius.card)
+        .cardChrome(card, radius: LaneCard.corner(card))
     }
 }
 
@@ -139,7 +156,7 @@ struct DenseRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: CardLook.rowColumn) {
             HStack(spacing: Metrics.inlineGap) {
-                StatusDot(icon: card.icon, size: 7)
+                StatusDot(icon: card.icon, size: CardLook.statusDot)
                 BadgeTile(
                     icon: card.badge.icon, color: card.badge.color, size: CardLook.rowBadge,
                     font: CardLook.rowBadgeFont, mark: CardText.mark(card)
@@ -159,7 +176,7 @@ struct DenseRow: View {
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                Spacer(minLength: 4)
+                Spacer(minLength: Metrics.minGap)
                 if !card.unread.isEmpty { UnreadBadge(count: card.unread) }
                 if let pr = card.rowPr {
                     MetaText(text: pr.tag, ink: Color(pr.ink)).layoutPriority(2)
@@ -176,7 +193,7 @@ struct DenseRow: View {
         .padding(.leading, CardLook.rowPadLeading)
         .padding(.trailing, CardLook.padTrailing)
         .padding(.vertical, CardLook.rowPadV)
-        .cardChrome(card, radius: Metrics.Radius.row, quiet: true)
+        .cardChrome(card, radius: LaneCard.corner(card), quiet: true)
     }
 }
 
@@ -190,7 +207,7 @@ struct CardView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             TitleRow(card: card, size: Metrics.Font.title, lines: 2, leadMark: true)
-            StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
+            StatusLine(card: card, dot: CardLook.statusDot, size: Metrics.Font.control, weight: .medium)
                 .padding(.top, CardLook.projectStatusTop)
             WaitingTabLine(card: card, top: CardLook.projectStatusTop)
             Detail(text: card.detail, lines: CardText.detailLines(card))
@@ -222,7 +239,7 @@ struct TitleRow: View {
         HStack(alignment: lines > 1 ? .top : .center, spacing: Metrics.inlineGap) {
             if leadMark, let mark = CardText.mark(card) {
                 NeedsDot(ink: mark, size: Metrics.headerDot, onCorner: false)
-                    .frame(height: size * 1.2)
+                    .frame(height: size * CardLook.titleLine)
             }
             Text(card.title)
                 .font(.system(size: size, weight: .semibold))
@@ -231,7 +248,7 @@ struct TitleRow: View {
                 // One line keeps both ends; over more the end is cut.
                 .truncationMode(lines > 1 ? .tail : .middle)
                 .layoutPriority(1)
-            Spacer(minLength: 4)
+            Spacer(minLength: Metrics.minGap)
             if card.ready { ReadyPill() }
             if !card.unread.isEmpty { UnreadBadge(count: card.unread) }
             let age = CardText.titleAge(card)

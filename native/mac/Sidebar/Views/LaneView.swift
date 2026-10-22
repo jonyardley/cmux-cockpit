@@ -2,13 +2,14 @@ import SwiftUI
 
 extension View {
     /// The one count pill's shape (docs/design.md#count-pill): its padding
-    /// and corner on `face`. Every count takes it: a lane's or project's,
-    /// the unread badge and the waiting count; their colours follow what
-    /// they count.
+    /// and corner on `face`, and the same corner for its tap area. Every
+    /// count takes it: a lane's or project's, the unread badge and the
+    /// waiting count; their colours follow what they count.
     func countPillShape(_ face: Color) -> some View {
         padding(.horizontal, Metrics.pillPadH)
             .padding(.vertical, Metrics.pillPadV)
             .background(face, in: .rect(cornerRadius: Metrics.Radius.pill))
+            .contentShape(.rect(cornerRadius: Metrics.Radius.pill))
     }
 }
 
@@ -150,7 +151,7 @@ struct LaneHeader: View {
             if let dot = lane.dot {
                 Text(dot.glyph).foregroundStyle(Color(dot: dot.ink))
             }
-            Spacer(minLength: 4)
+            Spacer(minLength: Metrics.minGap)
             hint
         }
         .font(.system(size: Metrics.Font.meta))

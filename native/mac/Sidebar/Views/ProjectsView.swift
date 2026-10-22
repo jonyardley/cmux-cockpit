@@ -123,7 +123,7 @@ struct ProjectHeader: View {
             if let dot = head.dot {
                 Text(dot.glyph).foregroundStyle(Color(dot: dot.ink))
             }
-            Spacer(minLength: 4)
+            Spacer(minLength: Metrics.minGap)
             if head.canOpen { PlusButton(key: head.key) }
         }
         .font(.system(size: Metrics.Font.meta))
@@ -200,7 +200,7 @@ struct QuietRow: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .layoutPriority(1)
-            Spacer(minLength: 4)
+            Spacer(minLength: Metrics.minGap)
             if canOpen {
                 Image(systemName: "plus")
                     .font(.system(size: ProjectMetrics.rowPlusFont, weight: .semibold))

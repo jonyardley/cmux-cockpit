@@ -290,6 +290,11 @@ for dark in [false, true] {
             check(contrast(Palette.rgba(token, dark: dark), ground) >= 3, "\(scheme): \(name) reads on the \(where_)")
         }
     }
+    // The helper-down notice sits on a countBg band: its title in text and
+    // its why in secondary.
+    for (token, name) in [(Token.text, "text"), (.secondary, "secondary")] {
+        check(contrast(Palette.rgba(token, dark: dark), Palette.rgba(.countBg, dark: dark)) >= 4.5, "\(scheme): \(name) reads on the notice's countBg band")
+    }
     // The third ink sits on the panel and on cards.
     for (where_, ground) in grounds {
         check(contrast(Palette.rgba(.tertiary, dark: dark), ground) >= 4.5, "\(scheme): tertiary reads on the \(where_)")
@@ -370,6 +375,22 @@ let editorWords = [
 ]
 for (word, pinned) in editorWords {
     check(word == pinned, "the editor's \"\(pinned)\"")
+}
+// The sidebar's own words outside the editor, pinned here. Drop here
+// stands in for the core's hint, which differs only in its capital until
+// the views draw the core's (docs/design.md#known-gaps, gap K).
+let ownWords = [
+    (Words.ready, "Ready"), (Words.dropHere, "Drop here"), (Words.messageAgent, "Message agent…"),
+    (Words.messagePrompt, "Message for the agent in"), (Words.send, "Send"),
+    (Words.notSent, "Not sent: the cockpit could not take it. Try again."),
+]
+for (word, pinned) in ownWords {
+    check(word == pinned, "the sidebar's \"\(pinned)\"")
+}
+check(panelRs.contains("pub const DROP_HERE: &str = \"\(Words.dropHere.lowercased())\";"), "Drop here is the core's DROP_HERE but for its capital")
+// A badge's corner is 0.3 of its side, rounded (docs/design.md#badge-tile).
+for (side, corner) in [(26.0, 8.0), (22, 7), (18, 5), (16, 5), (14, 4), (9, 3)] {
+    check(BadgeCorner.radius(side) == corner, "a \(Int(side)) badge's corner is \(Int(corner))")
 }
 // The light side of the panel's own colours, pinned here.
 let ownLight: [(Palette.Own, RGBA)] = [

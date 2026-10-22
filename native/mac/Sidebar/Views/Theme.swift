@@ -70,10 +70,8 @@ enum Metrics {
     }
 
     /// Corner radii, one per kind of surface. A badge tile works its own
-    /// out from its size (BadgeTile.radius).
+    /// out from its size (BadgeCorner).
     enum Radius {
-        /// A badge tile's corner as a share of its side, rounded.
-        static let badgeShare: CGFloat = 0.3
         /// A card.
         static let card: CGFloat = 12
         /// A compact row, a Projects card.
@@ -107,6 +105,9 @@ enum Metrics {
     /// Between the parts of a line inside a card, a tab or Next: a title
     /// row, a status line, a dense row, a tab's label and count.
     static let inlineGap: CGFloat = 6
+    /// The least room a line keeps between its words and what sits at its
+    /// end: a title and its pills, a header row and its hint or +.
+    static let minGap: CGFloat = 4
     /// Under the view switch; above Next and above the view.
     static let switchGap: CGFloat = 8
     static let topGap: CGFloat = 6

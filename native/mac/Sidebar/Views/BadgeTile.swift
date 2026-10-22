@@ -31,10 +31,10 @@ struct BadgeTile: View {
         }
     }
 
-    /// A badge's corner: 0.3 of its side, rounded, so 26 takes 8, 22 takes
-    /// 7, 18 and 16 take 5 and 14 takes 4 (docs/design.md#badge-tile).
+    /// A badge's corner, by the one rule in BadgeCorner
+    /// (docs/design.md#badge-tile).
     nonisolated static func radius(_ size: CGFloat) -> CGFloat {
-        (size * Metrics.Radius.badgeShare).rounded()
+        BadgeCorner.radius(size)
     }
 }
 

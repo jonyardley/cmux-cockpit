@@ -4,8 +4,9 @@ import Foundation
 /// (docs/design.md#where-words-come-from). Where one mirrors the core's
 /// panel module (native/core/src/panel/mod.rs) the views test checks it
 /// there. The panel model carries the words that change; these are the
-/// ones that never do. The card words test reads them against the pane's
-/// snapshots, so a drift fails there.
+/// ones that never do. The views test reads those the terminal pane also
+/// draws (Next, the lane mark, the folds) against its snapshots, and pins
+/// the editor's, Ready, Drop here and the Message agent popover's.
 enum Words {
     static let all = "All"
     static let projects = "Projects"

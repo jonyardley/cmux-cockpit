@@ -194,6 +194,7 @@ capitalising the string.
 | `Metrics.switchHeight`, `switchInset` | 26, 3 | a tab's height; the track's inner padding |
 | `Metrics.hairline`, `selectWidth` | 1, 2 | every edge; a selected card's outline |
 | `Metrics.inlineGap` | 6 | between the parts of a line in a card, a tab or Next |
+| `Metrics.minGap` | 4 | the least room between a line's words and what ends it: a title and its pills, a header row and its hint or + |
 | `Metrics.switchGap`, `topGap` | 8, 6 | under the view switch; above Next and above the view |
 | `Metrics.nextPadH`, `nextPadV` | 8, 5 | inside Next's pill |
 | `Metrics.anchorPad`, `anchorGap` | 4, 5 | inside an anchor badge; glyph to count |
@@ -218,7 +219,9 @@ In `Views/CardView.swift`.
 | `fullColumn`, `compactColumn`, `rowColumn` | 4, 3, 2 | between the lines of a full card, a compact card, a dense row |
 | `projectStatusTop`, `projectDetailTop` | 2, 3 | above a Projects card's status line (and waiting tab), and its detail |
 | `bar`, `barTop` | 4, 2 | the progress bar's height, and the gap above it |
+| `statusDot`, `compactStatusDot` | 7, 6 | a card's status dot (full, dense row, Projects card); a compact card's |
 | `hollowRing` | 1.5 | a hollow status dot's ring |
+| `titleLine` | 1.2 | a title's first line as a share of its size, where a leading needs dot centres |
 | `dimmed` | 0.6 | a merged card nothing in it wants |
 
 ### Chips (`ChipLook`)
@@ -249,11 +252,13 @@ In `Views/Theme.swift`.
 | `ready` | 8 | the Ready pill |
 | `iconCell` | 4 | the editor's chosen icon cell |
 
-A badge tile's radius is `round(0.3 × size)` (`Radius.badgeShare`), worked
-out in `BadgeTile.radius` rather than typed per size (D3 a): 26 takes 8, 22
-takes 7, 18 and 16 take 5, 14 takes 4. The lane marker takes the same rule,
-3 at 9. Every other surface takes one radius per kind, named above. The
-drag's gap outline and floating card take the card's 12.
+A badge tile's radius is `round(0.3 × size)`, worked out in
+`Model/BadgeCorner.swift` rather than typed per size (D3 a), and pinned by
+the views test: 26 takes 8, 22 takes 7, 18 and 16 take 5, 14 takes 4. The
+lane marker takes the same rule, 3 at 9. Every other surface takes one
+radius per kind, named above. The drag's gap outline and floating card take
+the dragged card's own corner: 12 for a full or compact card, 9 for a dense
+row.
 
 ## Components
 
@@ -482,7 +487,7 @@ Where: `Views/BadgeTile.swift:40-68`.
 A project's SF Symbol in semibold on a rounded square of its colour; the
 glyph is inked light or dark for contrast (`Model/BadgeInk.swift`). A project
 with no colour takes the grey. Sizes and radii (the radius is
-`round(0.3 × size)`, worked out by `BadgeTile.radius`):
+`round(0.3 × size)`, worked out by `BadgeCorner`):
 
 | Where | Size | Glyph | Radius |
 |-|-|-|-|
@@ -622,7 +627,8 @@ While a card is dragged its slot stays as a dashed `cardEdge` outline
 (1 wide, dash 4 and 3) and the other cards slide apart over 0.15s to open a
 gap. The card itself floats over the lanes at the pointer: `Own.panelGround`
 behind it, 0.9 opacity, an `Own.lift` shadow of radius 6 dropped 2. Both take
-the card's corner, `Radius.card` 12.
+the dragged card's own corner: `Radius.card` 12 for a full or compact card,
+`Radius.row` 9 for a dense row.
 Where: `Views/Drag.swift:192-249`, `Views/LaneView.swift:189`.
 
 ### Editor sheet
@@ -761,7 +767,7 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Selected | `select` outline at 2 | face, outline, medium title | `select` outline at 1 on the anchor | chosen tab: white face; editor: `text` ring or `countBg` cell (the named exceptions) | `CardView.swift` `Outline`, `LaneView.swift` `AnchorBadge`, `EditorSheet.swift` |
 | Age | `Own.tertiary` | `metaText` **≠** | | Next's place `metaText` | `CardView.swift:157`, `:234` |
 | Error | | | | editor `redText`; "Not sent" `redText` | `EditorSheet.swift:59`, `Actions.swift:105` |
-| Notice | | | | neutral words; stale band on `countBg` | `PanelView.swift:106` |
+| Notice | | | | neutral words; stale band on `countBg` | `PanelView.swift` `SidebarView` |
 
 ### Where the views override the core
 
@@ -861,16 +867,16 @@ The audit page carries the evidence and the decision cards; this list is
 the index. All fifteen decisions are made, each as option a. A gap marked
 **Decided** stays open until the PR in [follow-up work](#follow-up-work)
 that builds it lands; until then the sections above describe main as it is.
-Gaps with no decision (F, G, H, K and most of C) are tidy-ups that ride along
-with a follow-up PR.
+Gaps with no decision (G and H, and what is left of F and K) are tidy-ups
+that ride along with a follow-up PR.
 
 | Gap | What | Where |
 |-|-|-|
 | 1 | Views defined the look by pointing at TypeScript and the pane. **Built: D7 a**, the views test pins its own values. **Built: D6 a**, comments point at `docs/design.md` anchors | closed |
 | A | Four count treatments and the Ready pill on literals. **Built: D1 a**, one count pill shape for every count, colour by meaning | closed |
 | B | Two names for one scale. **Built: D2 a**, one `Metrics.Font` naming, no size changes | closed |
-| C | Spacing and size literals outside a look enum. **Built**: D3 a named the radius literals, and the spacing literals are named in `Metrics` and each view's look enum; the count paddings went with gap A | closed |
-| D | Badge radii had no stated rule. **Built: D3 a**, badge radius is `round(0.3 × size)` worked out in `BadgeTile` | closed |
+| C | Spacing and size literals outside a look enum. **Built**: D3 a named the radius literals, and the spacing literals and the status dot sizes are named in `Metrics` and each view's look enum; the count paddings went with gap A | closed |
+| D | Badge radii had no stated rule. **Built: D3 a**, badge radius is `round(0.3 × size)` worked out in `BadgeCorner`, pinned by the views test | closed |
 | E | Fades: 0.55 under two names, 0.6 dimmed, 0.9 dragged. **Decided: D12 a**, `emptyFade` nothing here, `disabledFade` cannot click, `dimmed` merged | `Theme.swift:110`, `ProjectText.swift:47`, `CardView.swift:47`, `Drag.swift:243` |
 | F | Colours and sizes no view draws. **Built in part**: `Own.ground`, `Own.cardFace`, `Metrics.cardIndent` and `Metrics.corner` are gone. Left: `amberRowEdge` and `needsRowEdge`, core tokens the extension must map while the core has them, which go in a core PR | `native/core/src/theme.rs`; `Model/Palette.swift` |
 | G | Eight views keep their own hover state beside the one shared hover shade | `ProjectsView.swift:60-78`; the eight other `@State private var hovering` sites |
@@ -878,7 +884,7 @@ with a follow-up PR.
 | I | Card shapes differ in status weight, title weight and age ink. **Decided in part: D14 a** settles the age ink; the weights have no card | `CardView.swift:77`, `:107`, `:138`, `:157`, `:233-235` |
 | J | Clay for "Not sent" and amber for the helper-down banner. **Built: D5 a**, red for failures, neutral for helper down | closed |
 | K | Words outside `Words.swift`; Cancel defined twice. **Built**: every fixed word is in `Words.swift`, one Cancel. Left: "Drop here" differs in case from the core's "drop here", settled when the views draw the core's `header_hint` (follow-up 7) | `Words.swift` `dropHere`, `native/core/src/panel/mod.rs:65` |
-| L | Dark mode is the extension's own: ground unsampled, `faint` one hex for both. **Decided: D4 a**, sample from a dark capture of cmux; blocked on a dark-mode screenshot from Jon | `Palette.swift:34-37`, `:94`, `:154` |
+| L | Dark mode is the extension's own: ground unsampled, `faint` one hex for both. **Decided: D4 a**, sample from a dark capture of cmux; blocked on a dark-mode screenshot from Jon | `Palette.swift`: `panelGround`'s dark side, the `faint` pair |
 | M | The waiting count on All is always clay; the core sends amber while every waiting card asks. **Decided: D8 a**, views draw the core's colour | `TopView.swift:75`, `:79`; `native/core/src/panel/build.rs:392-398`; `native/core/src/panel/mod.rs:116-120` |
 | N | Next is drawn in your turn's clay, but it shows only while nothing waits, so it always leads to a Ready card. **Decided: D9 a**, Next in Ready's green | `TopView.swift:100`, `:113`, `:116`; `Model/CardText.swift:100-103`; `native/core/src/next.rs:84-90` |
 | O | The move size chip borrows three state inks: green quick, clay decide, blue review. **Decided: D10 a**, the size chip is neutral | `native/core/src/panel/build.rs:34-39` |
