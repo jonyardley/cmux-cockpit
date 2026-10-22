@@ -363,7 +363,7 @@ struct StatusDot: View {
 /// Ready: the agent finished while Jon was elsewhere (docs/design.md#ready-pill).
 struct ReadyPill: View {
     var body: some View {
-        Text(CardText.ready)
+        Text(Words.ready)
             .font(.system(size: Metrics.Font.section, weight: .medium))
             .foregroundStyle(Color(Token.greenText))
             .lineLimit(1)

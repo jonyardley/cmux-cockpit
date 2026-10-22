@@ -86,8 +86,9 @@ struct Notice: View {
     }
 }
 
-/// What the sidebar shows: the panel whenever there is one, with a line
-/// on top while the helper is down; else why there is none.
+/// What the sidebar shows: the panel whenever there is one, with a notice
+/// on a neutral band on top while the helper is down (a notice, not an
+/// ask, so no state hue; docs/design.md#notices); else why there is none.
 struct SidebarView: View {
     let showing: Showing
 
@@ -103,7 +104,7 @@ struct SidebarView: View {
                     if stale {
                         Notice(title: Words.notRunning, why: Words.startIt)
                             .padding(Metrics.gutter)
-                            .background(Color(Token.amberHalo))
+                            .background(Color(Token.countBg))
                     }
                     PanelBody(panel: panel)
                 }

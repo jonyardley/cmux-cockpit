@@ -128,8 +128,6 @@ extension Row: Identifiable {
 extension CardText {
     /// The core's filled dot (panel/mod.rs DOT); a hollow one has no halo.
     static let filledDot = "●"
-    /// The green pill's word (docs/design.md#ready-pill).
-    static let ready = "Ready"
 
     /// The soft halo round a status dot: working, needs, asking and ready
     /// to merge, the four filled dots in blue, clay, amber and vivid green,

@@ -107,8 +107,6 @@ struct AnchorBadge: View {
 /// card is over it. The section gap sits above the
 /// face, so the hover and drop shading hug the row.
 struct LaneHeader: View {
-    static let dropHere = "Drop here"
-
     let lane: Lane
     /// A card is being dragged over this lane.
     var target = false
@@ -161,7 +159,7 @@ struct LaneHeader: View {
     @ViewBuilder
     private var hint: some View {
         if target {
-            Text(Self.dropHere)
+            Text(Words.dropHere)
                 .fontWeight(.medium)
                 .foregroundStyle(Color(Token.heading))
                 .lineLimit(1)

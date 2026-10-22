@@ -73,7 +73,7 @@ dark-mode screenshot; nothing here changes before then.
 | `mergeGreen` | 1DB954 | 3DD171 | ready to merge | status dot (core picks) |
 | `greenDeep` | 3F5A2B | A6C58A | a PR GitHub would merge | lane header merge line (`LaneView.swift:165`) |
 | `clayHalo` | clay / 0x38 | same | soft ring round a clay dot | status dot halo |
-| `amberHalo` | amber / 0x38 | same | soft ring round an amber dot | status dot halo; also the helper-down banner (`PanelView.swift:106`, [gap J](#known-gaps)) |
+| `amberHalo` | amber / 0x38 | same | soft ring round an amber dot | status dot halo |
 | `blueHalo` | blue / 0x2E | same | soft ring round a blue dot | status dot halo |
 | `mergeHalo` | mergeGreen / 0x47 | same | soft ring round a merge dot | status dot halo |
 
@@ -81,12 +81,12 @@ dark-mode screenshot; nothing here changes before then.
 
 | Token | Light | Dark | Where drawn |
 |-|-|-|-|
-| `clayText` | A34A2A | E8997C | Next's line (`TopView.swift:100`); status words; "Not sent" ([gap J](#known-gaps)) |
+| `clayText` | A34A2A | E8997C | Next's line (`TopView.swift:100`); status words |
 | `amberText` | 8A5A0B | E8BC6E | status words (core picks) |
 | `blueText` | 2F5690 | 8FB4EC | status words (core picks) |
 | `greenText` | 5E7A40 | A3BC85 | the Ready pill (`CardView.swift:306`) |
 | `mergeText` | 12873B | 5FD98A | "Ready to merge" in words |
-| `redText` | 9E2F27 | E3796F | a failing PR; editor problems and Remove (`EditorSheet.swift:55`, `:59`) |
+| `redText` | 9E2F27 | E3796F | a failing PR; editor problems and Remove (`EditorSheet.swift:55`, `:59`); "Not sent" |
 
 ### Neutral inks
 
@@ -111,7 +111,7 @@ dark-mode screenshot; nothing here changes before then.
 | `cardEdge` | text / 0x1F | same | a card's hairline, the chosen tab's edge, the dismiss x ring |
 | `chipFace` | F1EFE8 | 30302D | a quiet chip's face |
 | `chipEdge` | E2DFD3 | 484741 | a chip's edge, the view switch track's edge |
-| `countBg` | E5E2D6 | 3A3935 | the switch track, progress bar track, chosen editor icon |
+| `countBg` | E5E2D6 | 3A3935 | the switch track, progress bar track, chosen editor icon, the helper-down band |
 | `Own.needsEdge` | F0D2C3 | clay / 0x47 | Next's pill edge |
 | `Own.needsHover` | FBF1EB | 3A3330 | Next's pill under the pointer |
 | `Own.readyBg` | green / 0x1F | same | the Ready pill's face |
@@ -643,21 +643,17 @@ problems and Remove in `redText`. Where: `Views/EditorSheet.swift:9-186`.
 ### Message agent popover
 
 From a card's right-click menu: a prompt line at 12 semibold, a text field,
-Cancel and Send; "Not sent" at 11 in `clayText` when the core refuses. 280
-wide with 12 padding (`MessageLook`). Where: `Views/Actions.swift:83-129`.
-
-**Target (D5 a, not built yet):** "Not sent" is a failure, so it is in
-`redText` like the editor's problems, not `clayText`.
+Cancel and Send; "Not sent" at 11 in `redText` when the core refuses: a
+failure, so red like the editor's problems (D5 a). 280 wide with 12 padding
+(`MessageLook`). Its words are in `Words.swift`. Where:
+`Views/Actions.swift` (`MessageAgent`).
 
 ### Notices
 
 Two lines, a title at 12 semibold in `text` and why at 12 in `secondary`,
-padded by the gutter. While the helper is down the panel shows one on an
-`amberHalo` band above it. Where: `Views/PanelView.swift:76-114`.
-
-**Target (D5 a, not built yet):** the helper-down band is a notice, not an
-ask, so it sits on a neutral face (for example `countBg`) instead of
-`amberHalo`. You would see the band lose its amber.
+padded by the gutter. While the helper is down the panel shows one on a
+`countBg` band above it: a notice, not an ask, so it takes no state hue
+(D5 a). Where: `Views/PanelView.swift` (`Notice`, `SidebarView`).
 
 ## Meaning
 
@@ -675,8 +671,8 @@ Every card is decided as option a; where that changes a rule, the rule says
    names a state hue or state ink itself.
    `grep -rnE "Token\.(clay|amber|blue|green|mergeGreen|greenDeep|clayText|amberText|blueText|greenText|mergeText|amberHalo|clayHalo|blueHalo)\b" Views`
    should print only the progress bar's fill (`CardView.swift:438`, blue for
-   working). Fails today: 7 lines, the progress bar and six others
-   ([gaps J, M, N, P, U](#known-gaps)). **Target (D8 a):** views draw the
+   working). Fails today: 5 lines, the progress bar and four others
+   ([gaps M, N, P, U](#known-gaps)). **Target (D8 a):** views draw the
    core's colour everywhere: the waiting count, the Ready pill's ink, the
    empty and Quiet pills, the halo and the drop hint all take the core's
    value, with a panel model field added where one is missing. The core
@@ -692,10 +688,10 @@ Every card is decided as option a; where that changes a rule, the rule says
    hollow dot means the agent is there but not active (quiet working in blue,
    idle and no agent in grey).
 3. **A state hue marks that state and nothing else.** Not a queue (Next), not
-   a size (the move size chip), not an error, not a warning. Fails today:
-   [gaps N, O, J](#known-gaps). **Target:** Next in Ready's green (D9 a),
-   the size chip neutral (D10 a), red for failures and neutral for helper
-   down (D5 a).
+   a size (the move size chip), not an error, not a warning. Failures are
+   red and the helper-down band is neutral (D5 a). Fails today:
+   [gaps N, O](#known-gaps). **Target:** Next in Ready's green (D9 a), the
+   size chip neutral (D10 a).
 4. **A state on a header is the same dot as on a card.** Today headers and
    the anchor badge draw a text glyph ([gap H](#known-gaps)).
 5. **A count is a pill**, coloured by how urgent what it counts is
@@ -738,9 +734,9 @@ Every card is decided as option a; where that changes a rule, the rule says
     D14 a):** ready to merge is `mergeText` everywhere it means ready to
     merge, and quiet is `metaText` everywhere, the compact card included.
 12. **Errors are `redText`; notices are neutral.** `grep -rn "Token.clayText" Views`
-    prints Next and "Not sent" today ([gap J](#known-gaps)). **Target (D5 a
-    and D9 a):** it prints nothing; "Not sent" is `redText` and the
-    helper-down band sits on a neutral face.
+    prints only Next today ([gap N](#known-gaps)): "Not sent" is `redText`
+    and the helper-down band sits on `countBg` (D5 a). **Target (D9 a):** it
+    prints nothing.
 13. **"Waiting" means waiting on you, and nothing else.** Today the blue
     status for a running shell is also "Waiting" ([gap T](#known-gaps)).
     **Target (D15 a):** that status is renamed; the working name is "Shell
@@ -771,8 +767,8 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Needs dot | on the badge corner; leads the title on a Projects card | on the 14 badge | glyph on headers **≠** | | `status.rs:248`; `panel/build.rs:568` |
 | Selected | `select` outline at 2 | face, outline, medium title | `Own.anchorSelected` face **≠** | chosen tab: white face; editor: `text` ring or `countBg` cell **≠** | `CardView.swift:531`, `LaneView.swift:92`, `EditorSheet.swift:143`, `:166` |
 | Age | `Own.tertiary` | `metaText` **≠** | | Next's place `metaText` | `CardView.swift:157`, `:234` |
-| Error | | | | editor `redText`; "Not sent" `clayText` **≠** | `EditorSheet.swift:59`, `Actions.swift:105` |
-| Notice | | | | neutral words; stale band on `amberHalo` **≠** | `PanelView.swift:106` |
+| Error | | | | editor `redText`; "Not sent" `redText` | `EditorSheet.swift:59`, `Actions.swift:105` |
+| Notice | | | | neutral words; stale band on `countBg` | `PanelView.swift:106` |
 
 ### Where the views override the core
 
@@ -812,13 +808,14 @@ constant. Each is a place a core change would not reach the screen.
    status words (`native/core/src/words.rs`), labels and marks
    (`native/core/src/panel/mod.rs:34-68`), menus, lane names, editor problems.
    The panel model carries them; views draw them as given.
-2. **`Model/Words.swift`** holds the fixed words the sidebar draws itself:
-   the switch labels, Next, the editor's labels and buttons, the notices.
-   Where one mirrors a core constant the views test checks it against the core.
-3. **Elsewhere, today:** `ActionWords` (`Views/Actions.swift:25-31`),
-   `CardText.ready` (`Model/CardText.swift:132`), `LaneHeader.dropHere`
-   (`Views/LaneView.swift:105`) and `ProjectText.newProjectLabel`
-   (`Model/ProjectText.swift:35`). See [gap K](#known-gaps).
+2. **`Model/Words.swift`** holds every fixed word the sidebar draws itself:
+   the switch labels, Next, Ready, "Drop here", the editor's labels and
+   buttons, Message agent's, the notices, and one Cancel for both the
+   editor and Message agent. Where one mirrors a core constant the views
+   test checks it against the core. `ProjectText.newProjectLabel` is worked
+   out from `Words.newProject`. "Drop here" is capitalised where the core's
+   `header_hint` says "drop here"; the two meet when the views draw the
+   core's hint ([follow-up 7](#follow-up-work)).
 
 New words go in `Words.swift`, or come from the core.
 
@@ -849,8 +846,8 @@ main today, the failures are listed and tracked as a gap.
    and a dark `RGBA`. Two pairs have equal sides: `Own.onFill` is white in
    both on purpose, and `faint`'s match by accident ([gap L](#known-gaps)).
 6. **A new word lives in `Words.swift` or comes from the core.**
-   `grep -rnE "Text\(\"[A-Za-z]" Views` prints nothing. Passes today; the
-   words outside `Words` are constants elsewhere ([gap K](#known-gaps)).
+   `grep -rnE "Text\(\"[A-Za-z]" Views` prints nothing, and every fixed word
+   is a constant in `Words`. Passes.
 7. **No comment points at a TypeScript file or the pane.**
    `grep -rnE "\.ts\b|native/pane" .` prints nothing, and neither does
    `grep -rn "cockpit's" .`. Passes (D6 a): each pointer is a
@@ -886,8 +883,8 @@ with a follow-up PR.
 | G | Eight views keep their own hover state beside the one shared hover shade | `ProjectsView.swift:60-78`; the eight other `@State private var hovering` sites |
 | H | Status dots drawn as circles on cards and as text glyphs on headers | `CardView.swift:281-299`; `LaneView.swift:72`, `:146`; `ProjectsView.swift:121` |
 | I | Card shapes differ in status weight, title weight and age ink. **Decided in part: D14 a** settles the age ink; the weights have no card | `CardView.swift:77`, `:107`, `:138`, `:157`, `:233-235` |
-| J | Clay for "Not sent" and amber for the helper-down banner, where those hues mean your turn and asking. **Decided: D5 a**, red for failures, neutral for helper down | `Actions.swift:105`, `PanelView.swift:106` |
-| K | Words outside `Words.swift`; "Drop here" differs in case from the core's "drop here"; Cancel defined twice | `LaneView.swift:105`, `native/core/src/panel/mod.rs:65`, `Actions.swift:29`, `Words.swift:34` |
+| J | Clay for "Not sent" and amber for the helper-down banner. **Built: D5 a**, red for failures, neutral for helper down | closed |
+| K | Words outside `Words.swift`; Cancel defined twice. **Built**: every fixed word is in `Words.swift`, one Cancel. Left: "Drop here" differs in case from the core's "drop here", settled when the views draw the core's `header_hint` (follow-up 7) | `Words.swift` `dropHere`, `native/core/src/panel/mod.rs:65` |
 | L | Dark mode is the extension's own: ground unsampled, `faint` one hex for both, `Own.cardFace` dark see-through. **Decided: D4 a**, sample from a dark capture of cmux; blocked on a dark-mode screenshot from Jon | `Palette.swift:34-37`, `:94`, `:154` |
 | M | The waiting count on All is always clay; the core sends amber while every waiting card asks. **Decided: D8 a**, views draw the core's colour | `TopView.swift:75`, `:79`; `native/core/src/panel/build.rs:392-398`; `native/core/src/panel/mod.rs:116-120` |
 | N | Next is drawn in your turn's clay, but it shows only while nothing waits, so it always leads to a Ready card. **Decided: D9 a**, Next in Ready's green | `TopView.swift:100`, `:113`, `:116`; `Model/CardText.swift:100-103`; `native/core/src/next.rs:84-90` |
@@ -935,7 +932,7 @@ are under `native/mac/Sidebar/` unless they start with `native/`.
    `Views/TopView.swift`, `Views/CardView.swift`, `Views/LaneView.swift`,
    `Model/CardText.swift`, `Model/ProjectText.swift`,
    `native/core/src/panel/mod.rs`, `native/core/src/panel/build.rs`.
-8. **Red for failures, neutral for helper down (D5), with gap K's words.** On
+8. **Red for failures, neutral for helper down (D5), with gap K's words.** Built. On
    screen: "Not sent" turns red; the "Cockpit isn't running" band loses its
    amber. Files: `Views/Actions.swift`, `Views/PanelView.swift`,
    `Model/Words.swift`, `Views/LaneView.swift`.

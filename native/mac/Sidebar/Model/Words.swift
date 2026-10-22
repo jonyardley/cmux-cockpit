@@ -1,9 +1,11 @@
 import Foundation
 
-/// The panel's own words and marks, as the core's panel module words them
-/// (native/core/src/panel/mod.rs). The panel model carries the words that
-/// change; these are the ones that never do. The card words test reads
-/// them against the pane's snapshots, so a drift fails there.
+/// Every fixed word and mark the sidebar draws itself, in one place
+/// (docs/design.md#where-words-come-from). Where one mirrors the core's
+/// panel module (native/core/src/panel/mod.rs) the views test checks it
+/// there. The panel model carries the words that change; these are the
+/// ones that never do. The card words test reads them against the pane's
+/// snapshots, so a drift fails there.
 enum Words {
     static let all = "All"
     static let projects = "Projects"
@@ -38,4 +40,17 @@ enum Words {
     static let startIt = "Open Cockpit.app to start it."
     static let waiting = "Waiting for the panel"
     static let waitingWhy = "Cockpit is running; the first panel arrives within ten seconds."
+    /// The green pill on a card whose agent finished while Jon was
+    /// elsewhere (docs/design.md#ready-pill).
+    static let ready = "Ready"
+    /// A lane header's hint while a card is dragged over its lane. The
+    /// core's own `header_hint` says "drop here"; the views draw this until
+    /// they draw the core's hint (docs/design.md#lane-header).
+    static let dropHere = "Drop here"
+    /// The card menu's last item and the popover it opens
+    /// (docs/design.md#message-agent-popover). Its Cancel is `cancel`.
+    static let messageAgent = "Message agent…"
+    static let messagePrompt = "Message for the agent in"
+    static let send = "Send"
+    static let notSent = "Not sent: the cockpit could not take it. Try again."
 }

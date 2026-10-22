@@ -23,15 +23,6 @@ extension EnvironmentValues {
     @Entry var switchWorkspace: SwitchWorkspace = .core
 }
 
-/// The words the panel adds of its own.
-enum ActionWords {
-    static let messageAgent = "Message agent…"
-    static let messagePrompt = "Message for the agent in"
-    static let send = "Send"
-    static let cancel = "Cancel"
-    static let notSent = "Not sent: the cockpit could not take it. Try again."
-}
-
 extension View {
     /// A card's click, right-click menu and "Message agent…" popover.
     func cardActions(_ card: Card) -> some View {
@@ -76,7 +67,7 @@ struct CardMenu: View {
             }
         }
         Divider()
-        Button(ActionWords.messageAgent) { messaging = true }
+        Button(Words.messageAgent) { messaging = true }
     }
 }
 
@@ -100,25 +91,25 @@ struct MessageAgent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MessageLook.gap) {
-            Text("\(ActionWords.messagePrompt) \(title)")
+            Text("\(Words.messagePrompt) \(title)")
                 .font(.system(size: Metrics.Font.control, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.tail)
-            TextField(ActionWords.messageAgent, text: $text, axis: .vertical)
+            TextField(Words.messageAgent, text: $text, axis: .vertical)
                 .lineLimit(1...5)
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
                 .onSubmit(send)
             if failed {
-                Text(ActionWords.notSent)
+                Text(Words.notSent)
                     .font(.system(size: Metrics.Font.meta))
-                    .foregroundStyle(Color(Token.clayText))
+                    .foregroundStyle(Color(Token.redText))
             }
             HStack {
                 Spacer()
-                Button(ActionWords.cancel) { shown = false }
+                Button(Words.cancel) { shown = false }
                     .keyboardShortcut(.cancelAction)
-                Button(ActionWords.send, action: send)
+                Button(Words.send, action: send)
                     .keyboardShortcut(.defaultAction)
                     .disabled(SidebarAction.message(text, to: id) == nil)
             }
