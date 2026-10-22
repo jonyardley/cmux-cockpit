@@ -1,21 +1,21 @@
 import SwiftUI
 
-// A workspace's card at each of the cockpit's shapes (src/cockpit/views
-// cards.ts): full, compact and row in All, by the density the core gives
-// its lane, and the one shape every Projects card takes. A click switches
-// to it and a right-click shows its menu (Actions.swift).
+// A workspace's card at each of its shapes (docs/design.md#full-card,
+// #compact-card, #dense-row, #projects-card): full, compact and row in
+// All, by the density the core gives its lane, and the one shape every
+// Projects card takes. A click switches to it and a right-click shows its
+// menu (Actions.swift).
 
-/// The cockpit's card sizes, named for what draws with them.
+/// The card sizes, named for what draws with them
+/// (docs/design.md#card-spacing-cardlook).
 private enum CardLook {
     /// A full card: the badge, its gap, the padding round it.
     static let fullBadge: CGFloat = 26
     static let fullBadgeFont: CGFloat = 12
-    static let fullBadgeRadius: CGFloat = 8
     static let fullGap: CGFloat = 10
     /// A compact card's.
     static let compactBadge: CGFloat = 22
     static let compactBadgeFont: CGFloat = 11
-    static let compactBadgeRadius: CGFloat = 7
     static let compactGap: CGFloat = 9
     /// A card's padding: in from the leading edge, the trailing, and above
     /// and below.
@@ -26,7 +26,6 @@ private enum CardLook {
     /// lane header's marker.
     static let rowBadge: CGFloat = 14
     static let rowBadgeFont: CGFloat = 8
-    static let rowBadgeRadius: CGFloat = 4
     static let rowPadLeading: CGFloat = 25
     static let rowPadV: CGFloat = 5
     /// A row's lines under its title start where the title does: past the
@@ -36,14 +35,30 @@ private enum CardLook {
     /// A Projects card's padding, and the gap above its chips.
     static let projectPad: CGFloat = 10
     static let projectGap: CGFloat = 5
-    /// A row's title, and a full card's status words.
-    static let rowTitle: CGFloat = 12.5
-    static let compactStatus: CGFloat = 11.5
     /// The pin at the end of a pinned card's title row.
     static let pin: CGFloat = 9.5
-    /// The progress bar's height.
+    /// Between the lines of a card's column: full, compact, and a row's
+    /// title line and the lines under it.
+    static let fullColumn: CGFloat = 4
+    static let compactColumn: CGFloat = 3
+    static let rowColumn: CGFloat = 2
+    /// Above a Projects card's status line (and its waiting tab), and
+    /// above its detail.
+    static let projectStatusTop: CGFloat = 2
+    static let projectDetailTop: CGFloat = 3
+    /// The progress bar's height, and the gap above it.
     static let bar: CGFloat = 4
-    /// A merged card while nothing in it wants Jon (merged.ts).
+    static let barTop: CGFloat = 2
+    /// A card's status dot: full, dense row and Projects card at 7, a
+    /// compact card at 6.
+    static let statusDot: CGFloat = 7
+    static let compactStatusDot: CGFloat = 6
+    /// A hollow status dot's ring.
+    static let hollowRing: CGFloat = 1.5
+    /// A title's first line, as a share of its size: the height the needs
+    /// dot centres in where it leads the title.
+    static let titleLine: CGFloat = 1.2
+    /// A merged card while nothing in it wants Jon (docs/design.md#card-chrome).
     static let dimmed: Double = 0.6
 }
 
@@ -58,9 +73,19 @@ struct LaneCard: View {
         case .row: DenseRow(card: card)
         }
     }
+
+    /// The corner a lane card takes at its density: the card's for full and
+    /// compact, the row's for a dense row. The drag's gap outline and
+    /// floating card take it too (docs/design.md#drag).
+    nonisolated static func corner(_ card: Card) -> CGFloat {
+        switch card.density {
+        case .full, .compact: Metrics.Radius.card
+        case .row: Metrics.Radius.row
+        }
+    }
 }
 
-/// The full card (cards.ts fullCard): the project's badge beside the title
+/// The full card (docs/design.md#full-card): the project's badge beside the title
 /// row; the status on its own line; the chips; the detail over two lines;
 /// the progress bar along the bottom.
 struct FullCard: View {
@@ -70,11 +95,11 @@ struct FullCard: View {
         HStack(alignment: .top, spacing: CardLook.fullGap) {
             BadgeTile(
                 icon: card.badge.icon, color: card.badge.color, size: CardLook.fullBadge,
-                font: CardLook.fullBadgeFont, radius: CardLook.fullBadgeRadius, mark: CardText.mark(card)
+                font: CardLook.fullBadgeFont, mark: CardText.mark(card)
             )
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: CardLook.fullColumn) {
                 TitleRow(card: card, size: Metrics.Font.cardTitle, lines: 2)
-                StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
+                StatusLine(card: card, dot: CardLook.statusDot, size: Metrics.Font.control, weight: .medium)
                 WaitingTabLine(card: card)
                 if ChipsRow.shows(card) { ChipsRow(card: card, prOpens: false) }
                 Detail(text: card.detail, lines: CardText.detailLines(card))
@@ -86,11 +111,11 @@ struct FullCard: View {
         .padding(.leading, CardLook.padLeading)
         .padding(.trailing, CardLook.padTrailing)
         .padding(.vertical, CardLook.padV)
-        .cardChrome(card, radius: Metrics.Radius.card)
+        .cardChrome(card, radius: LaneCard.corner(card))
     }
 }
 
-/// The compact card (cards.ts compactCard): a smaller badge and title, the
+/// The compact card (docs/design.md#compact-card): a smaller badge and title, the
 /// PR in words on the status line with its diff size faint after it, the
 /// detail on one line, then the progress bar. No actions: the card menu holds them.
 struct CompactCard: View {
@@ -101,11 +126,11 @@ struct CompactCard: View {
         HStack(spacing: CardLook.compactGap) {
             BadgeTile(
                 icon: card.badge.icon, color: card.badge.color, size: CardLook.compactBadge,
-                font: CardLook.compactBadgeFont, radius: CardLook.compactBadgeRadius, mark: CardText.mark(card)
+                font: CardLook.compactBadgeFont, mark: CardText.mark(card)
             )
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: CardLook.compactColumn) {
                 TitleRow(card: card, size: Metrics.Font.compactTitle, lines: 1)
-                StatusLine(card: card, dot: 6, size: CardLook.compactStatus, weight: .regular, pr: lines.pr)
+                StatusLine(card: card, dot: CardLook.compactStatusDot, size: Metrics.Font.next, weight: .regular, pr: lines.pr)
                 WaitingTabLine(card: card)
                 LeftOff(text: card.leftOff)
                 Detail(text: card.detail, lines: CardText.detailLines(card))
@@ -117,11 +142,11 @@ struct CompactCard: View {
         .padding(.leading, CardLook.padLeading)
         .padding(.trailing, CardLook.padTrailing)
         .padding(.vertical, CardLook.padV)
-        .cardChrome(card, radius: Metrics.Radius.card)
+        .cardChrome(card, radius: LaneCard.corner(card))
     }
 }
 
-/// The row (cards.ts denseRow): dot, a small badge, the title and its
+/// The row (docs/design.md#dense-row): dot, a small badge, the title and its
 /// PR's title faint after it, then the unread count, the PR's number, the
 /// age and the pin; the detail on one line under the title. No face of
 /// its own until it is selected.
@@ -129,15 +154,15 @@ struct DenseRow: View {
     let card: Card
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                StatusDot(icon: card.icon, size: 7)
+        VStack(alignment: .leading, spacing: CardLook.rowColumn) {
+            HStack(spacing: Metrics.inlineGap) {
+                StatusDot(icon: card.icon, size: CardLook.statusDot)
                 BadgeTile(
                     icon: card.badge.icon, color: card.badge.color, size: CardLook.rowBadge,
-                    font: CardLook.rowBadgeFont, radius: CardLook.rowBadgeRadius, mark: CardText.mark(card)
+                    font: CardLook.rowBadgeFont, mark: CardText.mark(card)
                 )
                 Text(card.title)
-                    .font(.system(size: CardLook.rowTitle, weight: card.selected ? .medium : .regular))
+                    .font(.system(size: Metrics.Font.title, weight: card.selected ? .medium : .regular))
                     .foregroundStyle(Color(Token.text))
                     .lineLimit(1)
                     .truncationMode(.middle)
@@ -146,12 +171,12 @@ struct DenseRow: View {
                 // is what gets cut and the dot, PR and time show.
                 if let title = CardText.rowPrTitle(card) {
                     Text(title)
-                        .font(.system(size: CardLook.rowTitle))
+                        .font(.system(size: Metrics.Font.title))
                         .foregroundStyle(Color(Token.faint))
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
-                Spacer(minLength: 4)
+                Spacer(minLength: Metrics.minGap)
                 if !card.unread.isEmpty { UnreadBadge(count: card.unread) }
                 if let pr = card.rowPr {
                     MetaText(text: pr.tag, ink: Color(pr.ink)).layoutPriority(2)
@@ -168,11 +193,11 @@ struct DenseRow: View {
         .padding(.leading, CardLook.rowPadLeading)
         .padding(.trailing, CardLook.padTrailing)
         .padding(.vertical, CardLook.rowPadV)
-        .cardChrome(card, radius: Metrics.Radius.row, quiet: true)
+        .cardChrome(card, radius: LaneCard.corner(card), quiet: true)
     }
 }
 
-/// A Projects card (cards.ts projectRow): no badge, as the project's
+/// A Projects card (docs/design.md#projects-card): no badge, as the project's
 /// header carries it, so a waiting card's needs dot leads its title; the
 /// title and its pills, the status on its own
 /// line, the detail, then the chips, whose PR and ports open on a tap.
@@ -181,11 +206,12 @@ struct CardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TitleRow(card: card, size: CardLook.rowTitle, lines: 2, leadMark: true)
-            StatusLine(card: card, dot: 7, size: Metrics.Font.control, weight: .medium)
-                .padding(.top, 2)
-            WaitingTabLine(card: card, top: 2)
-            Detail(text: card.detail, lines: CardText.detailLines(card)).padding(.top, card.detail.isEmpty ? 0 : 3)
+            TitleRow(card: card, size: Metrics.Font.title, lines: 2, leadMark: true)
+            StatusLine(card: card, dot: CardLook.statusDot, size: Metrics.Font.control, weight: .medium)
+                .padding(.top, CardLook.projectStatusTop)
+            WaitingTabLine(card: card, top: CardLook.projectStatusTop)
+            Detail(text: card.detail, lines: CardText.detailLines(card))
+                .padding(.top, card.detail.isEmpty ? 0 : CardLook.projectDetailTop)
             if ChipsRow.shows(card) {
                 ChipsRow(card: card).padding(.top, CardLook.projectGap)
             }
@@ -196,7 +222,7 @@ struct CardView: View {
     }
 }
 
-// MARK: The card's parts (parts.ts)
+// MARK: The card's parts (docs/design.md#components)
 
 /// The title, then at its end the Ready pill, the unread count, the age
 /// (only while the status line has none), the x while it waits under the
@@ -210,10 +236,10 @@ struct TitleRow: View {
     var leadMark = false
 
     var body: some View {
-        HStack(alignment: lines > 1 ? .top : .center, spacing: 6) {
+        HStack(alignment: lines > 1 ? .top : .center, spacing: Metrics.inlineGap) {
             if leadMark, let mark = CardText.mark(card) {
                 NeedsDot(ink: mark, size: Metrics.headerDot, onCorner: false)
-                    .frame(height: size * 1.2)
+                    .frame(height: size * CardLook.titleLine)
             }
             Text(card.title)
                 .font(.system(size: size, weight: .semibold))
@@ -222,7 +248,7 @@ struct TitleRow: View {
                 // One line keeps both ends; over more the end is cut.
                 .truncationMode(lines > 1 ? .tail : .middle)
                 .layoutPriority(1)
-            Spacer(minLength: 4)
+            Spacer(minLength: Metrics.minGap)
             if card.ready { ReadyPill() }
             if !card.unread.isEmpty { UnreadBadge(count: card.unread) }
             let age = CardText.titleAge(card)
@@ -249,7 +275,7 @@ struct StatusLine: View {
     var pr: [Chip] = []
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: Metrics.inlineGap) {
             StatusDot(icon: card.icon, size: dot)
             if !card.status.isEmpty {
                 Text(card.status)
@@ -281,7 +307,7 @@ struct StatusLine: View {
 
 /// The waiting tab pill's measures (docs/design.md "Waiting tab line").
 enum TabPillLook {
-    static let font: CGFloat = 11
+    static let font = Metrics.Font.meta
     static let padH: CGFloat = 8
     static let padTop: CGFloat = 1
     static let padBottom: CGFloat = 2
@@ -328,7 +354,7 @@ struct WaitingTabLine: View {
     }
 }
 
-/// A status dot over its soft halo (ui.ts haloDot): filled, or hollow in
+/// A status dot over its soft halo (docs/design.md#status-dot): filled, or hollow in
 /// its ring's colour. The frame is always the halo's, so dots with and
 /// without one line up down a lane.
 struct StatusDot: View {
@@ -344,28 +370,30 @@ struct StatusDot: View {
             if icon.glyph == CardText.filledDot {
                 Circle().fill(Color(dot: icon.ink)).frame(width: size, height: size)
             } else {
-                Circle().strokeBorder(Color(dot: icon.ink), lineWidth: 1.5).frame(width: size, height: size)
+                Circle().strokeBorder(Color(dot: icon.ink), lineWidth: CardLook.hollowRing).frame(width: size, height: size)
             }
         }
         .frame(width: Self.frame(size), height: Self.frame(size))
     }
 }
 
-/// Ready: the agent finished while Jon was elsewhere (parts.ts readyPill).
+/// Ready: the agent finished while Jon was elsewhere (docs/design.md#ready-pill).
 struct ReadyPill: View {
     var body: some View {
-        Text(CardText.ready)
+        Text(Words.ready)
             .font(.system(size: Metrics.Font.section, weight: .medium))
             .foregroundStyle(Color(Token.greenText))
             .lineLimit(1)
             .fixedSize()
-            .padding(.horizontal, 7)
-            .padding(.vertical, 1)
-            .background(Color(Palette.Own.readyBg), in: .rect(cornerRadius: 8))
+            .padding(.horizontal, Metrics.pillPadH)
+            .padding(.vertical, Metrics.pillPadV)
+            .background(Color(Palette.Own.readyBg), in: .rect(cornerRadius: Metrics.Radius.ready))
     }
 }
 
-/// The unread count, grey on both sides so clay only ever means needs you.
+/// The unread count in the count pill's shape, grey on both sides so clay
+/// only ever means needs you (docs/design.md#unread-badge). A card's title
+/// row, a dense row and a lane's anchor badge all draw this one view.
 struct UnreadBadge: View {
     let count: String
 
@@ -374,9 +402,7 @@ struct UnreadBadge: View {
             .font(.system(size: Metrics.Font.tiny, weight: .bold))
             .foregroundStyle(Color(Palette.Own.onBadge))
             .fixedSize()
-            .padding(.horizontal, 5)
-            .padding(.vertical, 1)
-            .background(Color(Palette.Own.badge), in: .rect(cornerRadius: Metrics.Radius.tab))
+            .countPillShape(Color(Palette.Own.badge))
     }
 }
 
@@ -492,7 +518,7 @@ struct ProgressBar: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 2)
+                .padding(.top, CardLook.barTop)
         }
     }
 }
@@ -507,7 +533,7 @@ extension View {
 }
 
 /// A card's opaque white face with the hairline edge, or the select ink's
-/// on cmux's selected workspace (status.ts outline); a step darker under
+/// on cmux's selected workspace (docs/design.md#card-chrome); a step darker under
 /// the pointer. A quiet row has no face or edge until it is selected, and
 /// takes the hover wash. A merged card nothing in wants sits dimmed, at
 /// full strength under the pointer. The pointer also shows a waiting
@@ -570,7 +596,7 @@ extension EnvironmentValues {
 }
 
 /// A card's edge: the select ink at 2pt on cmux's selected workspace, the
-/// one open in the terminal, else the hairline (status.ts outline). A
+/// one open in the terminal, else the hairline (docs/design.md#card-chrome). A
 /// click moves it at once: the core draws the clicked card selected
 /// before cmux says so. Drawn inside the card, so the wider line moves
 /// nothing.
@@ -581,7 +607,7 @@ struct Outline: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: radius)
-            .strokeBorder(Color(selected ? Token.select : rest), lineWidth: selected ? 2 : 1)
+            .strokeBorder(Color(selected ? Token.select : rest), lineWidth: selected ? Metrics.selectWidth : Metrics.hairline)
     }
 }
 

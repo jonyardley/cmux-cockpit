@@ -1,5 +1,27 @@
 import SwiftUI
 
+/// The editor sheet's measures (docs/design.md#editor-sheet).
+private enum EditorLook {
+    static let width: CGFloat = 260
+    static let pad: CGFloat = 14
+    /// Between the sheet's sections, between the lines inside one, and
+    /// from a label to what it labels.
+    static let sectionGap: CGFloat = 10
+    static let lineGap: CGFloat = 4
+    static let labelGap: CGFloat = 3
+    /// A colour swatch, the narrowest cell it takes, and the ring round
+    /// the chosen one.
+    static let swatch: CGFloat = 14
+    static let swatchCell: CGFloat = 16
+    static let swatchRing: CGFloat = 2
+    /// An icon's cell, and the narrowest column it takes.
+    static let iconWidth: CGFloat = 24
+    static let iconHeight: CGFloat = 22
+    static let iconColumn: CGFloat = 26
+    /// Between swatches and icons, across and down.
+    static let gridGap: CGFloat = 4
+}
+
 /// The project editor as a sheet, over the panel while the core has an
 /// editor open. What it shows (the colours, the icons on offer, why Save
 /// would not save, the folders on offer, Remove's words) is the core's
@@ -25,18 +47,18 @@ struct EditorSheet: View {
         _sent = State(initialValue: EditorDraft(editor))
     }
 
-    private let iconColumns = [GridItem(.adaptive(minimum: 26), spacing: 4)]
+    private let iconColumns = [GridItem(.adaptive(minimum: EditorLook.iconColumn), spacing: EditorLook.gridGap)]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: EditorLook.sectionGap) {
             Text(editor.isNew ? Words.newProjectTitle : Words.editProjectTitle)
-                .font(.system(size: Metrics.body, weight: .semibold))
+                .font(.system(size: Metrics.Font.control, weight: .semibold))
                 .foregroundStyle(Color(Token.text))
             if editor.isNew { folder }
             field(Words.name) {
                 // The badge as the header draws it, beside the name, so a
                 // colour or icon picked shows at once.
-                HStack(spacing: 6) {
+                HStack(spacing: Metrics.inlineGap) {
                     BadgeTile(
                         icon: editor.icon,
                         color: ProjectText.hex(editor.color),
@@ -55,12 +77,12 @@ struct EditorSheet: View {
                     .foregroundStyle(Color(Token.redText))
             }
             Text(editor.problem ?? " ")
-                .font(.system(size: Metrics.small))
+                .font(.system(size: Metrics.Font.meta))
                 .foregroundStyle(Color(Token.redText))
             HStack {
                 Spacer()
                 // Esc has its own key, out of sight: in the icon search with
-                // words typed it keeps the editor open, as the pane's does.
+                // words typed it keeps the editor open.
                 Button(Words.cancel) { escape() }
                     .keyboardShortcut(.cancelAction)
                     .opacity(0)
@@ -74,9 +96,9 @@ struct EditorSheet: View {
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .font(.system(size: Metrics.body))
-        .padding(14)
-        .frame(width: 260)
+        .font(.system(size: Metrics.Font.control))
+        .padding(EditorLook.pad)
+        .frame(width: EditorLook.width)
         .onChange(of: draft) { _, next in
             for edit in sent.changes(to: next) {
                 switch edit {
@@ -106,13 +128,13 @@ struct EditorSheet: View {
     /// offer for a new project.
     private var folder: some View {
         field(Words.folder) {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: EditorLook.lineGap) {
                 TextField(Words.folder, text: $draft.folder).textFieldStyle(.roundedBorder)
                 if !editor.matches.isEmpty {
-                    Text(editor.matches).font(.system(size: Metrics.small)).foregroundStyle(Color(Token.faint))
+                    Text(editor.matches).font(.system(size: Metrics.Font.meta)).foregroundStyle(Color(Token.faint))
                 }
                 if !editor.suggestions.isEmpty {
-                    Text(Words.openFolders).font(.system(size: Metrics.small)).foregroundStyle(Color(Palette.Own.tertiary))
+                    Text(Words.openFolders).font(.system(size: Metrics.Font.meta)).foregroundStyle(Color(Palette.Own.tertiary))
                 }
                 ForEach(editor.suggestions, id: \.self) { dir in
                     Button {
@@ -131,7 +153,7 @@ struct EditorSheet: View {
 
     /// The colours on offer, the chosen one ringed.
     private var colours: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 16), spacing: 4)], spacing: 4) {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: EditorLook.swatchCell), spacing: EditorLook.gridGap)], spacing: EditorLook.gridGap) {
             ForEach(editor.colors, id: \.self) { c in
                 let chosen = c.caseInsensitiveCompare(editor.color) == .orderedSame
                 Button {
@@ -139,8 +161,8 @@ struct EditorSheet: View {
                 } label: {
                     Circle()
                         .fill(Color(project: ProjectText.hex(c)))
-                        .frame(width: 14, height: 14)
-                        .overlay(Circle().strokeBorder(Color(Token.text), lineWidth: chosen ? 2 : 0))
+                        .frame(width: EditorLook.swatch, height: EditorLook.swatch)
+                        .overlay(Circle().strokeBorder(Color(Token.text), lineWidth: chosen ? EditorLook.swatchRing : 0))
                 }
                 .buttonStyle(.plain)
             }
@@ -150,21 +172,21 @@ struct EditorSheet: View {
     /// The icon search, the icons on offer with the chosen one lit, and
     /// the note under them.
     private var icons: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: EditorLook.lineGap) {
             TextField(Words.searchIcons, text: $draft.search)
                 .textFieldStyle(.roundedBorder)
                 .focused($searching)
-            LazyVGrid(columns: iconColumns, spacing: 4) {
+            LazyVGrid(columns: iconColumns, spacing: EditorLook.gridGap) {
                 ForEach(editor.icons, id: \.self) { name in
                     Button {
                         send(.icon(name))
                     } label: {
                         Image(systemName: name)
-                            .frame(width: 24, height: 22)
+                            .frame(width: EditorLook.iconWidth, height: EditorLook.iconHeight)
                             .foregroundStyle(Color(name == editor.icon ? Token.text : Token.secondary))
                             .background(
                                 name == editor.icon ? Color(Token.countBg) : .clear,
-                                in: .rect(cornerRadius: 4)
+                                in: .rect(cornerRadius: Metrics.Radius.iconCell)
                             )
                     }
                     .buttonStyle(.plain)
@@ -172,14 +194,14 @@ struct EditorSheet: View {
                 }
             }
             if !editor.note.isEmpty {
-                Text(editor.note).font(.system(size: Metrics.small)).foregroundStyle(Color(Token.faint))
+                Text(editor.note).font(.system(size: Metrics.Font.meta)).foregroundStyle(Color(Token.faint))
             }
         }
     }
 
     private func field(_ label: String, @ViewBuilder _ content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(.system(size: Metrics.small)).foregroundStyle(Color(Token.faint))
+        VStack(alignment: .leading, spacing: EditorLook.labelGap) {
+            Text(label).font(.system(size: Metrics.Font.meta)).foregroundStyle(Color(Token.faint))
             content()
         }
     }

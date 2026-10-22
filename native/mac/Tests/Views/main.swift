@@ -277,16 +277,9 @@ func contrast(_ a: RGBA, _ b: RGBA) -> Double {
 
 for dark in [false, true] {
     let scheme = dark ? "dark" : "light"
-    // The panel's off-white, the cream the selected tab keeps and a
-    // card's face where it is solid, each once: in dark mode the first two
-    // are the same colour and the card face is see-through.
-    var grounds = [("panel ground", Palette.rgba(.panelGround, dark: dark))]
-    if Palette.rgba(.ground, dark: dark) != grounds[0].1 {
-        grounds.append(("ground", Palette.rgba(.ground, dark: dark)))
-    }
-    if Palette.rgba(.cardFace, dark: dark).alpha == 0xFF {
-        grounds.append(("card face", Palette.rgba(.cardFace, dark: dark)))
-    }
+    // The two grounds words sit on: the panel's off-white and a card's
+    // solid face.
+    let grounds = [("panel ground", Palette.rgba(.panelGround, dark: dark)), ("card face", Palette.rgba(.card, dark: dark))]
     for (where_, ground) in grounds {
         // Body ink at WCAG's 4.5; the state inks at 3, the finished green
         // the lowest.
@@ -297,24 +290,27 @@ for dark in [false, true] {
             check(contrast(Palette.rgba(token, dark: dark), ground) >= 3, "\(scheme): \(name) reads on the \(where_)")
         }
     }
-    // The third ink sits on the panel and on cards; on the pane's cream it
-    // is short of 4.5 already, as it was before the panel changed colour.
-    for (where_, ground) in grounds where where_ != "ground" {
+    // The helper-down notice sits on a countBg band: its title in text and
+    // its why in secondary.
+    for (token, name) in [(Token.text, "text"), (.secondary, "secondary")] {
+        check(contrast(Palette.rgba(token, dark: dark), Palette.rgba(.countBg, dark: dark)) >= 4.5, "\(scheme): \(name) reads on the notice's countBg band")
+    }
+    // The third ink sits on the panel and on cards.
+    for (where_, ground) in grounds {
         check(contrast(Palette.rgba(.tertiary, dark: dark), ground) >= 4.5, "\(scheme): tertiary reads on the \(where_)")
     }
     // A card's face differs from the panel; the card's hairline edge does
     // the rest of the work of reading as a tile.
-    check(Palette.rgba(.cardFace, dark: dark) != Palette.rgba(.panelGround, dark: dark), "\(scheme): a card's face is not the panel ground")
+    check(Palette.rgba(.card, dark: dark) != Palette.rgba(.panelGround, dark: dark), "\(scheme): a card's face is not the panel ground")
     let hues = [Token.blue, .clay, .green, .amber].map { Palette.rgba($0, dark: dark) }
     check(Set(hues.map(\.hex)).count == hues.count, "\(scheme): each state hue is its own")
     check(Palette.rgba(.clear, dark: dark).alpha == 0, "\(scheme): clear is no colour")
 }
-check(Palette.rgba(.ground, dark: false) != Palette.rgba(.ground, dark: true), "light and dark grounds differ")
 check(Palette.rgba(.panelGround, dark: false) != Palette.rgba(.panelGround, dark: true), "light and dark panel grounds differ")
 
 // The light side of the extension's own colours, pinned here; see
 // docs/design.md "Colour".
-for (own, hex) in [(Palette.Own.ground, 0xF4F2EA), (.tertiary, 0x73726C), (.grey, 0xA09E95)] as [(Palette.Own, UInt32)] {
+for (own, hex) in [(Palette.Own.tertiary, 0x73726C), (.grey, 0xA09E95)] as [(Palette.Own, UInt32)] {
     check(Palette.rgba(own, dark: false) == RGBA(hex), "light \(own) is \(String(format: "%06X", hex))")
 }
 check(Palette.rgba(Token.clayHalo, dark: false).hex == Palette.rgba(Token.clay, dark: false).hex, "a halo is its hue at an alpha")
@@ -380,11 +376,26 @@ let editorWords = [
 for (word, pinned) in editorWords {
     check(word == pinned, "the editor's \"\(pinned)\"")
 }
+// The sidebar's own words outside the editor, pinned here. Drop here
+// stands in for the core's hint, which differs only in its capital until
+// the views draw the core's (docs/design.md#known-gaps, gap K).
+let ownWords = [
+    (Words.ready, "Ready"), (Words.dropHere, "Drop here"), (Words.messageAgent, "Message agent…"),
+    (Words.messagePrompt, "Message for the agent in"), (Words.send, "Send"),
+    (Words.notSent, "Not sent: the cockpit could not take it. Try again."),
+]
+for (word, pinned) in ownWords {
+    check(word == pinned, "the sidebar's \"\(pinned)\"")
+}
+check(panelRs.contains("pub const DROP_HERE: &str = \"\(Words.dropHere.lowercased())\";"), "Drop here is the core's DROP_HERE but for its capital")
+// A badge's corner is 0.3 of its side, rounded (docs/design.md#badge-tile).
+for (side, corner) in [(26.0, 8.0), (22, 7), (18, 5), (16, 5), (14, 4), (9, 3)] {
+    check(BadgeCorner.radius(side) == corner, "a \(Int(side)) badge's corner is \(Int(corner))")
+}
 // The light side of the panel's own colours, pinned here.
 let ownLight: [(Palette.Own, RGBA)] = [
     (.card, RGBA(0xFFFFFF)), (.needsEdge, RGBA(0xF0D2C3)), (.needsHover, RGBA(0xFBF1EB)), (.cardHover, RGBA(0xF7F6F2)),
     (.hover, RGBA(0x7F7F7F, 0x14)), (.dropTarget, RGBA(0x141413, 0x1F)), (.zoneLit, RGBA(0xE7E4D9)),
-    (.anchorSelected, RGBA(0x141413, 0x1F)),
 ]
 for (own, pinned) in ownLight {
     check(Palette.rgba(own, dark: false) == pinned, "light \(own) is pinned")

@@ -25,8 +25,8 @@ struct AllView: View {
 }
 
 /// The whole panel: the view switch and Next (only while nothing waits
-/// and there is a next step), then the view the core has on, spaced as the cockpit's top
-/// (headers.ts segmented, needs.ts nextButton), and the project editor
+/// and there is a next step), then the view the core has on
+/// (docs/design.md#view-switch, docs/design.md#next), and the project editor
 /// as a sheet over it while the core has one open. Closing the sheet asks
 /// the core to close the editor; the sheet goes when the panel says it has.
 struct PanelBody: View {
@@ -37,9 +37,9 @@ struct PanelBody: View {
             VStack(alignment: .leading, spacing: 0) {
                 ViewSwitch(view: panel.view, needs: panel.needs)
                     .padding(.horizontal, Self.switchMargin)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, Metrics.switchGap)
                 if TopText.showsNext(panel) {
-                    NextView(next: panel.next).padding(.top, 6)
+                    NextView(next: panel.next).padding(.top, Metrics.topGap)
                 }
                 Group {
                     switch panel.view {
@@ -47,7 +47,7 @@ struct PanelBody: View {
                     case .projects: ProjectsView(panel: panel)
                     }
                 }
-                .padding(.top, 6)
+                .padding(.top, Metrics.topGap)
             }
             .padding(Metrics.gutter)
         }
@@ -78,16 +78,17 @@ struct Notice: View {
     let why: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: Metrics.body, weight: .semibold)).foregroundStyle(Color(Token.text))
-            Text(why).font(.system(size: Metrics.body)).foregroundStyle(Color(Token.secondary))
+        VStack(alignment: .leading, spacing: Metrics.noticeGap) {
+            Text(title).font(.system(size: Metrics.Font.control, weight: .semibold)).foregroundStyle(Color(Token.text))
+            Text(why).font(.system(size: Metrics.Font.control)).foregroundStyle(Color(Token.secondary))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-/// What the sidebar shows: the panel whenever there is one, with a line
-/// on top while the helper is down; else why there is none.
+/// What the sidebar shows: the panel whenever there is one, with a notice
+/// on a neutral band on top while the helper is down (a notice, not an
+/// ask, so no state hue; docs/design.md#notices); else why there is none.
 struct SidebarView: View {
     let showing: Showing
 
@@ -103,7 +104,7 @@ struct SidebarView: View {
                     if stale {
                         Notice(title: Words.notRunning, why: Words.startIt)
                             .padding(Metrics.gutter)
-                            .background(Color(Token.amberHalo))
+                            .background(Color(Token.countBg))
                     }
                     PanelBody(panel: panel)
                 }

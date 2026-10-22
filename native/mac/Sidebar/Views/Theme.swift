@@ -29,10 +29,7 @@ extension Color {
 
 /// The panel's type sizes and spacing, in one place.
 enum Metrics {
-    static let body: CGFloat = 12
-    static let small: CGFloat = 11
     static let gutter: CGFloat = 10
-    static let cardIndent: CGFloat = 16
     /// The needs dot on a waiting card's badge corner, as a share of the
     /// badge, and the ring of card face round it (issue #314).
     static let needsDotShare: CGFloat = 0.36
@@ -40,26 +37,31 @@ enum Metrics {
     /// The x a waiting card shows under the pointer, and its glyph.
     static let dismissSize: CGFloat = 16
     static let dismissGlyph: CGFloat = 8
-    /// Between the cards in a lane, as the cockpit's.
+    /// Between the cards in a lane (docs/design.md#spacing-viewsthemeswift).
     static let cardGap: CGFloat = 6
-    static let corner: CGFloat = 6
 
-    // The cockpit JS sidebar's sizes (src/cockpit/views, src/shared/ui.ts),
-    // named for what draws with them, so each part reads as the cockpit's.
+    // Sizes named for what draws with them; docs/design.md#type-scale and
+    // docs/design.md#spacing-and-radii say where each is used.
 
-    /// Type sizes, 10 to 13.5.
+    /// Every text size, 10 to 13.5: the one naming for words. Glyph sizes
+    /// stay in their views' look enums. A new text size gets a name here
+    /// or reuses one.
     enum Font {
-        /// The fold chevron, the unread badge.
+        /// The fold chevron, the unread badge, the waiting count.
         static let tiny: CGFloat = 10
-        /// A section heading in tracked capitals: a lane's name, NEEDS YOU.
+        /// A section heading in tracked capitals: a lane's name, QUIET; the
+        /// Ready pill.
         static let section: CGFloat = 10.5
-        /// Meta words: an age, a count pill, a header's hint, a chip.
+        /// Meta words: an age, a count pill, a header row, a chip, the
+        /// waiting tab, the editor's labels and notes, "Not sent".
         static let meta: CGFloat = 11
-        /// Next's line.
+        /// Next's line, a compact card's status.
         static let next: CGFloat = 11.5
-        /// The view switch's tabs, a card's detail line.
+        /// The view switch's tabs, a card's status, detail and left off,
+        /// notices, the editor and Message agent.
         static let control: CGFloat = 12
-        /// A lane or project header's name.
+        /// A project header's name, a dense row's title, a Projects card's
+        /// title, a quiet row.
         static let title: CGFloat = 12.5
         /// A compact card's title.
         static let compactTitle: CGFloat = 13
@@ -67,7 +69,8 @@ enum Metrics {
         static let cardTitle: CGFloat = 13.5
     }
 
-    /// Corner radii.
+    /// Corner radii, one per kind of surface. A badge tile works its own
+    /// out from its size (BadgeCorner).
     enum Radius {
         /// A card.
         static let card: CGFloat = 12
@@ -75,16 +78,21 @@ enum Metrics {
         static let row: CGFloat = 9
         /// The view switch's track.
         static let track: CGFloat = 10
-        /// A view switch tab, Next's pill, the unread badge.
+        /// A view switch tab, Next's pill.
         static let tab: CGFloat = 7
         /// A lane header and an empty lane's drop zone.
         static let header: CGFloat = 8
         /// A lane anchor's badge.
         static let anchor: CGFloat = 6
-        /// A count pill.
+        /// Every count pill: a lane's or project's count, the unread
+        /// badge, the waiting count.
         static let pill: CGFloat = 10
         /// A chip round a branch, a PR or a port.
         static let chip: CGFloat = 6
+        /// The Ready pill.
+        static let ready: CGFloat = 8
+        /// The editor's chosen icon cell.
+        static let iconCell: CGFloat = 4
     }
 
     /// The view switch: a ringed track round two tabs.
@@ -92,6 +100,25 @@ enum Metrics {
     static let switchInset: CGFloat = 3
     /// Lines round a face: a tab's edge, the track's, Next's.
     static let hairline: CGFloat = 1
+    /// A selected card's outline.
+    static let selectWidth: CGFloat = 2
+    /// Between the parts of a line inside a card, a tab or Next: a title
+    /// row, a status line, a dense row, a tab's label and count.
+    static let inlineGap: CGFloat = 6
+    /// The least room a line keeps between its words and what sits at its
+    /// end: a title and its pills, a header row and its hint or +.
+    static let minGap: CGFloat = 4
+    /// Under the view switch; above Next and above the view.
+    static let switchGap: CGFloat = 8
+    static let topGap: CGFloat = 6
+    /// Next's padding.
+    static let nextPadH: CGFloat = 8
+    static let nextPadV: CGFloat = 5
+    /// An anchor badge's padding, and between its glyph and count.
+    static let anchorPad: CGFloat = 4
+    static let anchorGap: CGFloat = 5
+    /// A notice's title to its why.
+    static let noticeGap: CGFloat = 4
 
     /// A header's fold chevron sits in this slot, so names line up.
     static let chevronWidth: CGFloat = 12
@@ -108,9 +135,9 @@ enum Metrics {
     static let sectionGap: CGFloat = 14
     /// An empty lane's marker and count, faded.
     static let emptyFade: Double = 0.55
-    /// A count pill's padding.
+    /// Every count pill's padding, and the Ready pill's.
     static let pillPadH: CGFloat = 7
     static let pillPadV: CGFloat = 1
-    /// A section heading's letter spacing, for the JS side's hair spaces.
+    /// A section heading's letter spacing (docs/design.md#type-scale).
     static let sectionTracking: CGFloat = 1
 }

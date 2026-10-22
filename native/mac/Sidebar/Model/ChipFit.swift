@@ -1,14 +1,14 @@
 import Foundation
 
-/// How a card's chips read and break. The panel draws them as the cockpit
-/// sidebar does (ChipLines below): whole, splitting onto a second line
-/// rather than dropping any, where the pane drops chips behind an ellipsis.
+/// How a card's chips read and break. The panel draws them whole
+/// (ChipLines below, docs/design.md#chips), splitting onto a second line
+/// rather than dropping any.
 enum ChipFit {
-    /// A card's chips as the pane reads them, for checking the card's words
+    /// A card's chips as the snapshots read them, for checking the card's words
     /// against its snapshots: a diff size joins the PR before it, a space
-    /// apart, as one chip. The pane's glued (native/pane/src/views/lanes.rs).
-    /// A diff after anything else stays a chip of its own. The panel draws
-    /// the diff apart, faint and unframed, as the cockpit does.
+    /// apart, as one chip, as the snapshots glue them. A diff after
+    /// anything else stays a chip of its own. The panel draws the diff
+    /// apart, faint and unframed (docs/design.md#diff).
     static func glued(_ chips: [Chip]) -> [Chip] {
         var out: [Chip] = []
         for chip in chips {
@@ -32,8 +32,8 @@ enum ChipFit {
     }
 }
 
-/// A card's chips as the cockpit's chips row lays them out (parts.ts
-/// chipsRow): the size, the PR and its diff on one line; the branch, the
+/// A card's chips as the chips row lays them out (docs/design.md#chips):
+/// the size, the PR and its diff on one line; the branch, the
 /// ports and the actions on the next. A view draws both side by side when
 /// they fit and the second under the first when they do not, so a narrow
 /// card shows both whole.

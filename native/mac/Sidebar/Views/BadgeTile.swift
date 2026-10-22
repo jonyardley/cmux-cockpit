@@ -1,10 +1,10 @@
 import SwiftUI
 
 /// A project's badge: its icon in semibold on a rounded square of its
-/// colour, the glyph inked light or dark for contrast (BadgeInk). The port
-/// of `projectBadge` in src/shared/ui.ts, so every badge in the panel (a
-/// card, a project header, the editor) is the one view. A project with no
-/// colour takes the cockpit's grey. A card waiting on Jon carries the
+/// colour, the glyph inked light or dark for contrast (BadgeInk), so every
+/// badge in the panel (a card, a project header, the editor) is the one
+/// view (docs/design.md#badge-tile). A project with no colour takes the
+/// grey. A card waiting on Jon carries the
 /// needs dot on its top corner (issue #314), in `mark`, ringed in the
 /// face it sits on (the card's, from the environment), so it reads apart
 /// from the tile.
@@ -13,14 +13,13 @@ struct BadgeTile: View {
     let color: UInt32?
     let size: CGFloat
     let font: CGFloat
-    var radius: CGFloat = 5
     var mark: Token?
     @Environment(\.cardFace) private var ring
 
     var body: some View {
         let face = color ?? BadgeInk.fallback
         ZStack {
-            RoundedRectangle(cornerRadius: radius)
+            RoundedRectangle(cornerRadius: Self.radius(size))
                 .fill(Color(project: face))
             Image(systemName: icon)
                 .font(.system(size: font, weight: .semibold))
@@ -30,6 +29,12 @@ struct BadgeTile: View {
         .overlay(alignment: .topTrailing) {
             if let mark { NeedsDot(ink: mark, size: (size * Metrics.needsDotShare).rounded(), ring: ring) }
         }
+    }
+
+    /// A badge's corner, by the one rule in BadgeCorner
+    /// (docs/design.md#badge-tile).
+    nonisolated static func radius(_ size: CGFloat) -> CGFloat {
+        BadgeCorner.radius(size)
     }
 }
 

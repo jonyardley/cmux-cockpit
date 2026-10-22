@@ -1,6 +1,20 @@
 import SwiftUI
 
-/// A count in its pill: 11pt medium on a capsule, as the cockpit's.
+extension View {
+    /// The one count pill's shape (docs/design.md#count-pill): its padding
+    /// and corner on `face`, and the same corner for its tap area. Every
+    /// count takes it: a lane's or project's, the unread badge and the
+    /// waiting count; their colours follow what they count.
+    func countPillShape(_ face: Color) -> some View {
+        padding(.horizontal, Metrics.pillPadH)
+            .padding(.vertical, Metrics.pillPadV)
+            .background(face, in: .rect(cornerRadius: Metrics.Radius.pill))
+            .contentShape(.rect(cornerRadius: Metrics.Radius.pill))
+    }
+}
+
+/// A lane's or project's count in its pill: 11pt medium, in the core's
+/// colours (docs/design.md#count-pill).
 struct CountPill: View {
     let count: UInt64
     let colors: PillColors
@@ -10,15 +24,13 @@ struct CountPill: View {
             .font(.system(size: Metrics.Font.meta, weight: .medium).monospacedDigit())
             .foregroundStyle(Color(colors.fg))
             .lineLimit(1)
-            .padding(.horizontal, Metrics.pillPadH)
-            .padding(.vertical, Metrics.pillPadV)
-            .background(Color(colors.bg), in: .rect(cornerRadius: Metrics.Radius.pill))
+            .countPillShape(Color(colors.bg))
     }
 }
 
 /// The fold mark on a heading: one faint chevron, pointing right while
 /// folded and turned down while open, in a fixed slot so the names line
-/// up (headers.ts chevron).
+/// up (docs/design.md#fold-chevron).
 struct FoldMark: View {
     let folded: Bool
 
@@ -31,13 +43,14 @@ struct FoldMark: View {
     }
 }
 
-/// A lane's square marker: a rounded square in the lane's colour.
+/// A lane's square marker: a rounded square in the lane's colour, its
+/// corner by the badge rule (3 at 9).
 struct LaneMarker: View {
     let color: Color
     var size: CGFloat = Metrics.laneMarker
 
     var body: some View {
-        RoundedRectangle(cornerRadius: size / 3)
+        RoundedRectangle(cornerRadius: BadgeTile.radius(size))
             .fill(color)
             .frame(width: size, height: size)
     }
@@ -58,8 +71,9 @@ extension View {
 }
 
 /// A lane's generated anchor on its header: its dot and unread count, the
-/// click that opens it since it has no card, shaded while it is cmux's
-/// selected workspace (headers.ts anchorStatus).
+/// click that opens it since it has no card, outlined in the select ink
+/// while it is cmux's selected workspace, as a selected card is
+/// (docs/design.md#anchor-badge).
 struct AnchorBadge: View {
     let anchor: Anchor
     @State private var hovering = false
@@ -68,42 +82,34 @@ struct AnchorBadge: View {
         Button {
             SidebarCore.send(.switchTo(id: anchor.id))
         } label: {
-            HStack(spacing: 5) {
+            HStack(spacing: Metrics.anchorGap) {
                 Text(anchor.icon.glyph).foregroundStyle(Color(dot: anchor.icon.ink))
-                if !anchor.unread.isEmpty {
-                    Text(anchor.unread)
-                        .font(.system(size: Metrics.Font.tiny, weight: .bold))
-                        .foregroundStyle(Color(Palette.Own.onBadge))
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(Color(Palette.Own.badge), in: .rect(cornerRadius: Metrics.Radius.tab))
+                if !anchor.unread.isEmpty { UnreadBadge(count: anchor.unread) }
+            }
+            .padding(.horizontal, Metrics.anchorPad)
+            .frame(height: Metrics.chevronHeight)
+            .background(hovering ? Color(Palette.Own.hover) : .clear, in: .rect(cornerRadius: Metrics.Radius.anchor))
+            .overlay {
+                if anchor.selected {
+                    RoundedRectangle(cornerRadius: Metrics.Radius.anchor)
+                        .strokeBorder(Color(Token.select), lineWidth: Metrics.hairline)
                 }
             }
-            .padding(.horizontal, 4)
-            .frame(height: Metrics.chevronHeight)
-            .background(face, in: .rect(cornerRadius: Metrics.Radius.anchor))
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-    }
-
-    private var face: Color {
-        if anchor.selected { return Color(Palette.Own.anchorSelected) }
-        return hovering ? Color(Palette.Own.hover) : .clear
     }
 }
 
 /// A lane's header: fold chevron, marker, name in tracked capitals, anchor
 /// badge, the count, the folded lane's dot, and on the right how many PRs
 /// are ready to merge, or "Drop here" while a card is dragged over the lane
-/// (headers.ts laneHeader). An empty lane draws as the cockpit's drop zone:
-/// no chevron, its marker and count faded, and a lit face and edge while a
-/// card is over it (headers.ts dropZone). The section gap sits above the
+/// (docs/design.md#lane-header). An empty lane draws as a drop zone: no
+/// chevron, its marker and count faded, and a lit face and edge while a
+/// card is over it. The section gap sits above the
 /// face, so the hover and drop shading hug the row.
 struct LaneHeader: View {
-    static let dropHere = "Drop here"
-
     let lane: Lane
     /// A card is being dragged over this lane.
     var target = false
@@ -145,7 +151,7 @@ struct LaneHeader: View {
             if let dot = lane.dot {
                 Text(dot.glyph).foregroundStyle(Color(dot: dot.ink))
             }
-            Spacer(minLength: 4)
+            Spacer(minLength: Metrics.minGap)
             hint
         }
         .font(.system(size: Metrics.Font.meta))
@@ -156,7 +162,7 @@ struct LaneHeader: View {
     @ViewBuilder
     private var hint: some View {
         if target {
-            Text(Self.dropHere)
+            Text(Words.dropHere)
                 .fontWeight(.medium)
                 .foregroundStyle(Color(Token.heading))
                 .lineLimit(1)

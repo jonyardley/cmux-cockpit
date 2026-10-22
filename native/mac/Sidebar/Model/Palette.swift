@@ -2,7 +2,7 @@ import Foundation
 
 /// A colour as the palette holds it: six hex digits and an alpha. A faint
 /// token (a hue at an alpha) keeps its alpha here and is drawn over the
-/// ground, rather than blended first as the terminal pane must.
+/// ground, rather than blended first.
 struct RGBA: Equatable, Sendable {
     let hex: UInt32
     let alpha: UInt8
@@ -20,25 +20,18 @@ struct RGBA: Equatable, Sendable {
 
 /// The colours the panel draws with, light and dark, for each of the core's
 /// tokens and for the few the views need of their own. Every colour
-/// literal in the extension lives here. The light side is the sidebars'
-/// palette (src/shared/palette.ts, as native/pane/src/theme.rs maps it);
-/// the dark side is this file's own, the same hues lifted for a dark
-/// ground, as nothing else in the repo has one yet. Two exceptions: the
-/// panel ground is cmux's window off-white, and a card's face is the
-/// cockpit sidebar's card white (C.card in src/cockpit/theme.ts). The
-/// views test pins the light side; nothing checks it against those files.
+/// literal in the extension lives here; docs/design.md#colour says where
+/// each is drawn. The dark side is the same hues lifted for a dark ground;
+/// the panel ground is cmux's window off-white (docs/design.md#the-ground).
+/// The views test pins the light side.
 enum Palette {
     /// The colours the views use that no core token names.
     enum Own: CaseIterable {
-        /// The pane's cream: the selected tab.
-        case ground
         /// Under the whole panel (and behind a dragged card): cmux's own
-        /// off-white, which the TS sidebar and the right sidebar sit on
-        /// (sampled from a light-mode capture), so the panel matches the
+        /// off-white, which the right sidebar sits on (sampled from a
+        /// light-mode capture), so the panel matches the
         /// rest of the window. Dark is unsampled and stays the dark ground.
         case panelGround
-        /// A card's face: white on the panel ground, as the TS sidebar's cards.
-        case cardFace
         /// The third ink: where you left off.
         case tertiary
         /// The outline of a dot with no colour of its own.
@@ -48,7 +41,7 @@ enum Palette {
         case onBadge
         /// The shadow under a card being dragged.
         case lift
-        /// A solid face: the chosen view tab, Next's pill.
+        /// A solid face: a card's, the chosen view tab, Next's pill.
         case card
         /// The edge round Next's pill.
         case needsEdge
@@ -67,8 +60,6 @@ enum Palette {
         case dropTarget
         /// An empty lane's drop zone while a card is dragged over it.
         case zoneLit
-        /// A lane anchor's header badge while it is cmux's selected workspace.
-        case anchorSelected
     }
 
     private struct Pair {
@@ -150,9 +141,7 @@ enum Palette {
 
     private static func pair(_ own: Own) -> Pair {
         switch own {
-        case .ground: Pair(RGBA(0xF4F2EA), RGBA(0x262624))
         case .panelGround: Pair(RGBA(0xFAF9F5), RGBA(0x262624))
-        case .cardFace: Pair(RGBA(0xFFFFFF), RGBA(0x30302D, 0x99))
         case .tertiary: Pair(RGBA(0x73726C), RGBA(0x9C9A92))
         case .grey: Pair(RGBA(0xA09E95), RGBA(0x77756D))
         case .badge: secondary
@@ -165,7 +154,7 @@ enum Palette {
         case .cardHover: Pair(RGBA(0xF7F6F2), RGBA(0x383835))
         case .hover: Pair(RGBA(0x7F7F7F, 0x14), RGBA(0x7F7F7F, 0x24))
         case .readyBg: faint(green, 0x1F)
-        case .dropTarget, .anchorSelected: faint(text, 0x1F)
+        case .dropTarget: faint(text, 0x1F)
         case .zoneLit: Pair(RGBA(0xE7E4D9), RGBA(0x3A3935))
         }
     }

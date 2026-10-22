@@ -23,15 +23,6 @@ extension EnvironmentValues {
     @Entry var switchWorkspace: SwitchWorkspace = .core
 }
 
-/// The words the panel adds of its own.
-enum ActionWords {
-    static let messageAgent = "Message agent…"
-    static let messagePrompt = "Message for the agent in"
-    static let send = "Send"
-    static let cancel = "Cancel"
-    static let notSent = "Not sent: the cockpit could not take it. Try again."
-}
-
 extension View {
     /// A card's click, right-click menu and "Message agent…" popover.
     func cardActions(_ card: Card) -> some View {
@@ -58,7 +49,7 @@ struct CardActions: ViewModifier {
 }
 
 /// The card's menu: the core's items for this frame, top to bottom, then
-/// "Message agent…", which the pane has no key for yet.
+/// "Message agent…" (docs/design.md#message-agent-popover).
 struct CardMenu: View {
     let card: Card
     @Binding var messaging: Bool
@@ -76,8 +67,16 @@ struct CardMenu: View {
             }
         }
         Divider()
-        Button(ActionWords.messageAgent) { messaging = true }
+        Button(Words.messageAgent) { messaging = true }
     }
+}
+
+/// The Message agent popover's measures
+/// (docs/design.md#message-agent-popover).
+private enum MessageLook {
+    static let width: CGFloat = 280
+    static let pad: CGFloat = 12
+    static let gap: CGFloat = 8
 }
 
 /// A line for Jon's words to the agent in a workspace. Return or Send
@@ -91,32 +90,32 @@ struct MessageAgent: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("\(ActionWords.messagePrompt) \(title)")
-                .font(.system(size: Metrics.body, weight: .semibold))
+        VStack(alignment: .leading, spacing: MessageLook.gap) {
+            Text("\(Words.messagePrompt) \(title)")
+                .font(.system(size: Metrics.Font.control, weight: .semibold))
                 .lineLimit(1)
                 .truncationMode(.tail)
-            TextField(ActionWords.messageAgent, text: $text, axis: .vertical)
+            TextField(Words.messageAgent, text: $text, axis: .vertical)
                 .lineLimit(1...5)
                 .textFieldStyle(.roundedBorder)
                 .focused($focused)
                 .onSubmit(send)
             if failed {
-                Text(ActionWords.notSent)
-                    .font(.system(size: Metrics.small))
-                    .foregroundStyle(Color(Token.clayText))
+                Text(Words.notSent)
+                    .font(.system(size: Metrics.Font.meta))
+                    .foregroundStyle(Color(Token.redText))
             }
             HStack {
                 Spacer()
-                Button(ActionWords.cancel) { shown = false }
+                Button(Words.cancel) { shown = false }
                     .keyboardShortcut(.cancelAction)
-                Button(ActionWords.send, action: send)
+                Button(Words.send, action: send)
                     .keyboardShortcut(.defaultAction)
                     .disabled(SidebarAction.message(text, to: id) == nil)
             }
         }
-        .padding(12)
-        .frame(width: 280)
+        .padding(MessageLook.pad)
+        .frame(width: MessageLook.width)
         .onAppear { focused = true }
     }
 
@@ -130,7 +129,7 @@ struct MessageAgent: View {
     }
 }
 
-/// One of a card's action chips (parts.ts actionChip): Make project, a
+/// One of a card's action chips (docs/design.md#action-chip): Make project, a
 /// white button with the quiet chip's edge, its words in the ink the core
 /// gives them. Its own tap, so a press never also selects the card; under
 /// the pointer its face steps darker.
