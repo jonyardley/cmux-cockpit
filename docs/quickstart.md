@@ -1,12 +1,14 @@
 # Quickstart
 
 Get both sidebars running on your own projects in about 10 minutes. The
-cockpit (left) sorts your cmux workspaces into lanes and flags the agents
-waiting on you. The agents panel (right) details the selected workspace,
+Cockpit (left) is a native cmux sidebar extension that sorts your cmux
+workspaces into lanes and flags the agents waiting on you. The agents
+panel (right) is a custom sidebar that details the selected workspace,
 your open pull requests and the pages your agents published.
 
-Four steps: back up, clone, install, `npm run setup`. Setup does the rest
-and asks before each optional extra. Everything it does is also written
+Five steps: back up, clone, install, `npm run setup`, then build and
+switch on the Cockpit. Setup does the agents panel and asks before each
+optional extra. Everything it does is also written
 out in [Doing it by hand](#doing-it-by-hand), if you would rather.
 
 ## Before you start
@@ -56,8 +58,8 @@ Setup checks Node and cmux, then:
 - writes `config/projects.json` if you have none, with one project for each
   git repo open in cmux (or the example table when none are), which you can
   edit later;
-- builds the sidebars and shows them, the cockpit on the left and the
-  agents panel on the right;
+- builds the agents panel and shows it in the right sidebar (it leaves
+  the left sidebar alone: the Cockpit is step 5);
 - asks about each [optional extra](#the-optional-extras), saying what it
   adds;
 - ends with `npm run doctor`'s report.
@@ -67,14 +69,26 @@ replaces, so it is safe to run again. Off a terminal it asks nothing:
 `npm run setup -- --yes` adds every extra, `-- --no-extras` adds none, and
 `-- --helper`, `-- --automations` or `-- --hooks` add just those.
 
+You should now see the selected workspace's agents on the right.
+
+## 5. Build and switch on the Cockpit
+
+The Cockpit is a native sidebar extension inside a small macOS app,
+`native/mac`. It needs Xcode, XcodeGen and Rust; build it, run it once
+and switch it on in cmux with the steps in
+[native/mac/README.md](../native/mac/README.md) (Build, Run and Switch it
+on in cmux). The `start-cockpit` automation rule (one of the
+[automations](#the-optional-extras)) then opens it whenever cmux opens a
+window.
+
 You should now see your workspaces as cards on the left, and the selected
 workspace's agents on the right:
 
-![The cockpit on the left and the agents panel on the right](images/sidebars.png)
+![The Cockpit on the left and the agents panel on the right](images/sidebars.png)
 
 ## What you are looking at
 
-The cockpit has two views, All and Projects:
+The Cockpit has two views, All and Projects:
 
 - **All** sorts cards into four lanes, one per cmux workspace group:
   "Main activity", "For review", "Background" and "Parked". Anything not in
@@ -153,7 +167,7 @@ cp config/projects.example.json config/projects.json
 ```
 
 Edit `config/projects.json`. Each entry puts matching workspaces under one
-project in the cockpit's Projects view:
+project in the Cockpit's Projects view:
 
 - `match`: part of a folder path, in lower case, such as `"/dev/my-app"`,
   or a list of them. The first entry that matches wins.
@@ -175,19 +189,19 @@ project from this folder").
 npm run build
 ```
 
-This writes `sidebars/cockpit.js` and `sidebars/agents.js`, the files cmux
-loads. Run it again after every change to `config/projects.json`.
+This writes `sidebars/agents.js`, the file cmux loads for the agents
+panel. Run it again after every change to `config/projects.json`.
 
-### Show the sidebars
+### Show the agents panel
 
 ```sh
-cmux sidebar select cockpit
 npm run agents
 ```
 
-The first puts the cockpit in the left sidebar. The second puts the agents
-panel in the right sidebar (it wraps `cmux right-sidebar set custom
-agents`).
+This puts the agents panel in the right sidebar (it wraps `cmux
+right-sidebar set custom agents`). The Cockpit in the left sidebar is not
+a custom sidebar: build and switch it on as in
+[step 5](#5-build-and-switch-on-the-cockpit).
 
 The optional extras follow, each with what it adds.
 
@@ -217,7 +231,7 @@ delete `~/Applications/CmuxCockpit.app`.
 
 cmux leaves the pull request chips empty for PRs opened by an agent, and
 can drop the right sidebar out of the agents panel when it opens a window.
-Three cmux automation rules fix both. cmux reads rules only from
+Three cmux automation rules fix both, and a fourth starts the Cockpit. cmux reads rules only from
 `~/.cmuxterm/automations.json`, and this replaces that file, so merge any
 rules you already have into `~/.config/cmux/automations.json` first:
 
@@ -232,6 +246,9 @@ What each rule runs:
 
 - `restore-agents-panel`, when a window opens: puts the right sidebar back
   on the agents panel if it falls out in the next ten seconds.
+- `start-cockpit`, when a window opens: runs `scripts/start-cockpit.sh`,
+  which opens the Cockpit app from a cmux terminal so it can read your
+  workspaces ([why](../native/mac/README.md#run)).
 - `pr-poll-turn` and `pr-poll-select`, when an agent ends a turn or you
   select a workspace (at most every 30 seconds): run `gh pr list` in each
   workspace's repo, using your `gh` sign-in, and fill in the chips. That
@@ -271,8 +288,8 @@ fails, the tab stays open with the error. `--workspace` points it at the
 window you are in; without it, cmux can switch another window's sidebar.
 
 Pick "Show agents panel", not cmux's own "Sidebar: agents": that one
-puts the agents panel in the left sidebar instead (`cmux sidebar select
-cockpit` puts the cockpit back). cmux calls actions a nightly feature;
+puts the agents panel in the left sidebar instead (run "Sidebar:
+Extension Sidebar" to put the Cockpit back). cmux calls actions a nightly feature;
 this was tested on 0.64.25. On a build that does not know them, cmux
 rejects the whole `cmux.json`, custom sidebars included, and the palette
 shows a "cmux.json Schema Error" row: take the `actions` entry out and

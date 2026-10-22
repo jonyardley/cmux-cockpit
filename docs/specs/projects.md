@@ -5,6 +5,12 @@
 > panel reads projects, "Move to project" persists, and a card can make its
 > folder a project. For how it works today, see
 > [state-loop.md](../state-loop.md) and the [README](../../README.md).
+>
+> The TypeScript cockpit sidebar it cites is retired too (issue #247), so
+> the `src/cockpit/` paths below no longer exist. The Cockpit is now the
+> native sidebar extension: its logic is in `native/core` (`by_project.rs`,
+> `lanes.rs`, `edit.rs`) and its views in `native/mac`
+> ([native/mac/README.md](../../native/mac/README.md)).
 
 Answers issues [#8](https://github.com/jonyardley/cmux-cockpit/issues/8)
 (assign sessions to projects) and

@@ -37,7 +37,6 @@ interface View {
   paddingTop(points: Reactive<number>): View;
   paddingBottom(points: Reactive<number>): View;
   paddingLeading(points: Reactive<number>): View;
-  paddingTrailing(points: Reactive<number>): View;
   background(color: Reactive<string>): View;
   hoverBackground(color: Reactive<string>): View;
   cornerRadius(radius: Reactive<number>): View;
@@ -45,7 +44,6 @@ interface View {
   fill(color: Reactive<string>): View;
   stroke(color: Reactive<string>): View;
   strokeWidth(width: number): View;
-  rotation(degrees: Reactive<number>): View;
   opacity(value: Reactive<number>): View;
   value(fraction: Reactive<number>): View;
   /** Pins a row in a Reorderable so it cannot be dragged; bare means pinned. */
@@ -102,32 +100,13 @@ declare function ProgressView(): View;
 declare function ForEach<T>(options: ForEachOptions<T>, render: (item: () => T) => View): View;
 declare function Reorderable<T>(options: ReorderableOptions<T>, render: (item: () => T) => View): View;
 
-interface TextFieldOptions {
-  placeholder?: string;
-  /** Takes the keyboard when it mounts; true unless set false. */
-  autofocus?: boolean;
-  /** Every keystroke, with the whole text. */
-  onEdit?: (text: string) => void;
-  // No onSubmit, though the runtime takes one: cmux 0.64.25 sends submit on
-  // Return and also when the field ends editing, including a click elsewhere
-  // in the sidebar, which lands before that click's own tap. It carries only
-  // the text, so the two cannot be told apart, and a field that saved or
-  // closed on it swallowed every tap in the editor (PR #146). Leaving it
-  // undeclared makes the compiler refuse one.
-  /** Escape. */
-  onCancel?: () => void;
-}
-/**
- * A one-line text input. Seen drawing and taking typing and Return on cmux
- * 0.64.25 (2026-09-29). It draws no box of its own, so wrap it in ring().
- * Return and focus loss both send submit, so it is left undeclared; see above.
- */
-declare function TextField(value: Reactive<string>, options?: TextFieldOptions): View;
+// No TextField: nothing calls it since the cockpit sidebar retired (#247).
+// If one returns, cmux 0.64.25 sends its submit on Return and on focus loss
+// alike, so leave onSubmit undeclared (PR #146), and wrap it in ring().
 
 declare function Button(label: Reactive<string>, action: () => void): MenuItem;
 // No Menu(): cmux drops submenus from a context menu without an error, so
 // leaving it undeclared makes the compiler refuse one (PR #26).
-declare function Divider(): MenuItem;
 
 /** Author state local to this sidebar: a getter and a setter. */
 declare function signal<T>(initial: T): [() => T, (next: T) => void];

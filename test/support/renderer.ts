@@ -41,7 +41,7 @@ export interface Renderer {
   /** Every cmux() dispatch, in order. */
   calls: { method: string; params: Record<string, unknown> }[];
   opened: string[];
-  /** Every menu item built, as "button:<label>" or "divider". */
+  /** Every menu item built, as "button:<label>". */
   menu: string[];
   roots: (() => View)[];
   globals: Record<string, unknown>;
@@ -231,22 +231,10 @@ export function createRenderer(): Renderer {
     ProgressView: builder("ProgressView"),
     ForEach: list("ForEach"),
     Reorderable: list("Reorderable"),
-    // Its handlers are kept on the node, so a test can type into it.
-    TextField: (value: Reactive<string>, options: TextFieldOptions = {}) => {
-      const { onEdit, onCancel, ...shown } = options;
-      const field = view("TextField", [resolve(value), shown]);
-      const node = nodeOf(field);
-      if (node) Object.assign(node.handlers, { onEdit, onCancel });
-      return field;
-    },
     Button: (label: Reactive<string>, action: () => void) => {
       const text = typeof label === "function" ? label() : label;
       r.menu.push("button:" + text);
       return menuItem({ label: text, action });
-    },
-    Divider: () => {
-      r.menu.push("divider");
-      return menuItem();
     },
     signal: <T>(initial: T) => {
       let value = initial;
