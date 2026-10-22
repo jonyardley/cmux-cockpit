@@ -133,14 +133,6 @@ export function summaryOf(pr: PullRequest, checks: readonly SavedCheck[]): PrSum
   return { number: pr.number, status: pr.status, url: pr.url, health, tag, text, state, title, diff: diffText(pr) };
 }
 
-/** The health of the workspace's first numbered PR, without the words; quiet with none. */
-export function prHealth(w: Workspace | undefined): PrHealth {
-  const pr = prOf(w);
-  if (!w || !pr?.number) return "quiet";
-  const checks = checksOf(w);
-  return healthOf(pr, checks);
-}
-
 /** The workspace's first PR as a view shows it; undefined without a numbered PR. */
 export function prSummary(w: Workspace | undefined): PrSummary | undefined {
   const pr = prOf(w);

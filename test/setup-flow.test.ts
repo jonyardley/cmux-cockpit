@@ -58,7 +58,7 @@ function cmuxWith(home: string): Answers {
 }
 
 const built = (repo: string): void => {
-  for (const f of ["cockpit.js", "agents.js"]) writeFileSync(join(repo, "sidebars", f), "");
+  for (const f of ["agents.js"]) writeFileSync(join(repo, "sidebars", f), "");
   writeFileSync(join(repo, "config", "last-build"), "");
 };
 
@@ -74,12 +74,7 @@ describe("setup", () => {
       projects.map((x: { name: string }) => x.name),
       ["App One", "Two"],
     );
-    for (const c of [
-      "cmux reload-config",
-      "npm run build",
-      "cmux sidebar select cockpit",
-      "cmux right-sidebar set custom agents",
-    ]) {
+    for (const c of ["cmux reload-config", "npm run build", "cmux right-sidebar set custom agents"]) {
       assert.ok(f.calls.includes(c), c);
     }
     assert.deepEqual(f.asked, []);

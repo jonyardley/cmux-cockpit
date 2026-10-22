@@ -1,11 +1,11 @@
-// A chat's saved "Your move" line on the cockpit's cards: shown while its
-// turn end is still waiting and no prompt has come since it was saved (cmux's
-// latestAt), only on the Claude session that saved it, never while the chat
-// works or asks, with a size chip when the line says how big answering it is.
+// A chat's saved "Your move" line: shown while its turn end is still waiting
+// and no prompt has come since it was saved (cmux's latestAt), only on the
+// Claude session that saved it, never while the chat works or asks.
 // __STATE__ is set before the renderer import, as in asking-saved.test.ts.
 
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
+import type { SavedMove } from "../scripts/state-config.ts";
 
 (globalThis as Record<string, unknown>).__STATE__ = {
   dismissed: {},
@@ -38,10 +38,14 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const move = await import("../src/shared/move.ts");
 const needs = await import("../src/shared/needs.ts");
-const status = await import("../src/cockpit/status.ts");
-const cockpit = { ...(await import("../src/cockpit/strip.ts")), ...(await import("../src/cockpit/card-chips.ts")) };
 const { moveDescription } = await import("../scripts/state-config.ts");
-const { C } = await import("../src/cockpit/theme.ts");
+
+// The agent a single-agent workspace shows, and the move it is waiting on.
+const shown = (w: Workspace): Agent | null => needs.agentsOf(w)[0] ?? null;
+const moveOf = (w: Workspace): SavedMove | null => {
+  const a = shown(w);
+  return move.waitingMove(a, w, !!needs.askReason(a, w));
+};
 
 // The Claude session that saved workspace `id`'s move, as cmux reports it once hooked.
 const own = (id: string): Partial<Agent> => ({ id: "s-" + id, kind: "claude" });
@@ -62,86 +66,43 @@ beforeEach(() => {
   r.data.workspaces = [];
 });
 
-describe("moveSize", () => {
-  it("reads decide from decisions, then review, then quick, else nothing", () => {
-    assert.equal(move.moveSize({ text: "read it", decisions: 1 }), "decide");
-    assert.equal(move.moveSize({ text: "Read the draft in #142 and say go." }), "review");
-    assert.equal(move.moveSize({ text: "open https://claude.ai/artifact/x" }), "review");
-    assert.equal(move.moveSize({ text: "Run /clear now." }), "quick");
-    assert.equal(move.moveSize({ text: "Run /clear now (see #2044)." }), "quick", "a bare #N is no clue");
-    assert.equal(move.moveSize({ text: "look at the card after reload." }), "review");
-    assert.equal(move.moveSize({ text: "paste this: ! gcloud auth login" }), "quick");
-    assert.equal(move.moveSize({ text: "say go" }), "quick");
-    assert.equal(move.moveSize({ text: "the work is finished and nothing follows." }), "quick");
-    assert.equal(move.moveSize({ text: "tell me which one you meant." }), null);
-    assert.equal(move.moveSize({ text: "the algorithm is good" }), null, "go only as a word");
-    assert.equal(move.moveSize({ text: "check the build passes." }), null, "check is too common to mean review");
-  });
-
-  it("gives a quoted last line no size, unless the reply laid out decisions", () => {
-    assert.equal(move.moveSize({ text: "Let me know if you want me to go further.", unlabelled: true }), null);
-    assert.equal(move.moveSize({ text: "pick one", unlabelled: true, decisions: 2 }), "decide");
-  });
-
-  it("gives no size when nothing waits on Jon", () => {
-    assert.equal(move.moveSize({ text: "CI is running; say go if you want it sooner.", idle: true }), null);
-    assert.equal(move.moveSize({ text: "nothing. Waiting until CI lands." }), null);
-    assert.equal(move.moveSize({ text: "PR #130 is merged; nothing waits on you." }), null);
-    assert.equal(move.moveSize({ text: "done, nothing else waits on you. Read the notes if curious." }), null);
-  });
-
-  it("words the chip", () => {
-    assert.equal(move.moveSizeText("quick"), "Quick");
-    assert.equal(move.moveSizeText("review"), "Review");
-    assert.equal(move.moveSizeText("decide", 1), "Decide");
-    assert.equal(move.moveSizeText("decide", 3), "Decide · 3");
-  });
-});
-
 describe("moveOf", () => {
   it("shows at idle straight after Stop, when the move is newer than the last prompt", () => {
     const w = at("quick", [stopped("quick", 1000)]);
-    assert.equal(status.agentOf(w)?.status, "idle");
-    assert.equal(status.moveOf(w)?.text, "the work is finished. Run /clear now.");
-    assert.equal(status.cardDetail(w), "the work is finished. Run /clear now.");
+    assert.equal(shown(w)?.status, "idle");
+    assert.equal(moveOf(w)?.text, "the work is finished. Run /clear now.");
     assert.ok(
-      status.moveOf(at("quick", [stopped("quick", 1000)], { latestAt: 1000 + 3 })),
+      moveOf(at("quick", [stopped("quick", 1000)], { latestAt: 1000 + 3 })),
       "Stop in iMessage mode, slack aside",
     );
   });
 
   it("shows none when no prompt is known, since the move's age cannot be told", () => {
-    assert.equal(status.moveOf(ws("quick", { agents: [stopped("quick", 1000)] })), null, "no latestAt");
-    assert.equal(status.moveOf(ws("quick", { agents: [stopped("quick", 1000)], latestAt: 0 })), null, "latestAt 0");
+    assert.equal(moveOf(ws("quick", { agents: [stopped("quick", 1000)] })), null, "no latestAt");
+    assert.equal(moveOf(ws("quick", { agents: [stopped("quick", 1000)], latestAt: 0 })), null, "latestAt 0");
   });
 
   it("still shows after the nudge restamps the spell and the activity a minute on", () => {
     // idle_prompt about 60s after Stop: needs_input, sinceEpoch and lastActivityAt at its arrival, latestAt untouched.
     const w = at("quick", [waiting("quick", 1060)]);
-    assert.equal(status.agentOf(w)?.status, "needs_input");
-    assert.equal(status.moveOf(w)?.text, "the work is finished. Run /clear now.");
-    assert.equal(status.cardDetail(w), "the work is finished. Run /clear now.");
-    assert.equal(status.needsDetail(w), "the work is finished. Run /clear now.");
+    assert.equal(shown(w)?.status, "needs_input");
+    assert.equal(moveOf(w)?.text, "the work is finished. Run /clear now.");
   });
 
   it("is gone once a prompt comes after it: a new turn, or an interrupted one", () => {
     // A new prompt at 1100 while the agent still reads as at its turn end: the move from 1000 is the turn before's.
-    assert.equal(status.moveOf(at("quick", [stopped("quick", 1000)], { latestAt: 1100 })), null);
+    assert.equal(moveOf(at("quick", [stopped("quick", 1000)], { latestAt: 1100 })), null);
     // Interrupted at 1150 with no Stop, so nothing saved a new move: still gone.
-    assert.equal(status.moveOf(at("quick", [stopped("quick", 1150)], { latestAt: 1100 })), null);
-    assert.equal(
-      status.moveOf(at("quick", [waiting("quick", 1210)], { latestAt: 1100 })),
-      null,
-      "nudged after the interrupt",
-    );
-    assert.equal(status.moveOf(at("quick", [stopped("quick", 1000)], { latestAt: 1000 + 4 })), null, "past the slack");
+    assert.equal(moveOf(at("quick", [stopped("quick", 1150)], { latestAt: 1100 })), null);
+    assert.equal(moveOf(at("quick", [waiting("quick", 1210)], { latestAt: 1100 })), null, "nudged after the interrupt");
+    assert.equal(moveOf(at("quick", [stopped("quick", 1000)], { latestAt: 1000 + 4 })), null, "past the slack");
   });
 
   it("is null while it works, while it asks, once it ended, or without a saved move", () => {
-    assert.equal(status.moveOf(at("quick", [agent("working", { ...own("quick"), sinceEpoch: 1000 })])), null);
-    assert.equal(status.moveOf(at("asks", [waiting("asks", 1000)])), null);
-    assert.equal(status.moveOf(at("quick", [agent("ended", { ...own("quick"), sinceEpoch: 1010 })])), null);
-    assert.equal(status.moveOf(at("none", [stopped("none", 1000)])), null);
+    assert.equal(moveOf(at("quick", [agent("working", { ...own("quick"), sinceEpoch: 1000 })])), null);
+    assert.equal(moveOf(at("asks", [waiting("asks", 1000)])), null);
+    assert.equal(moveOf(at("quick", [agent("ended", { ...own("quick"), sinceEpoch: 1010 })])), null);
+    assert.equal(moveOf(at("none", [stopped("none", 1000)])), null);
   });
 });
 
@@ -180,51 +141,6 @@ describe("whose move it is", () => {
   });
 });
 
-describe("the card", () => {
-  it("quotes the move over the message, on the card and the Needs you row", () => {
-    const w = at("quick", [waiting("quick", 1000)]);
-    assert.equal(status.cardDetail(w), "the work is finished. Run /clear now.");
-    assert.equal(status.needsDetail(w), "the work is finished. Run /clear now.");
-  });
-
-  it("quotes an unlabelled reply's last line bare and grey on the Needs you row", () => {
-    const w = at("quoted", [waiting("quoted", 1000)]);
-    assert.equal(status.needsLine(w), "Reply with the letter.");
-    assert.equal(status.needsLineInk(w), C.secondary);
-    const labelled = at("quick", [waiting("quick", 1000)]);
-    assert.equal(status.needsLine(labelled), "Your turn: the work is finished. Run /clear now.");
-    assert.equal(status.needsLineInk(labelled), C.clayText);
-  });
-
-  it("keeps the message once the move is stale", () => {
-    const w = at("quick", [waiting("quick", 2000)], { latestAt: 1900, latestMessage: "Something new." });
-    assert.equal(status.cardDetail(w), "Something new.");
-  });
-
-  it("falls back to the message, then a plain line, when there is no move", () => {
-    const w = at("none", [stopped("none", 1000)], { latestMessage: "Jon, the reply." });
-    assert.equal(status.cardDetail(w), "Jon, the reply.");
-    const needs = at("none", [waiting("none", 1000)], { latestMessage: "" });
-    assert.equal(status.needsDetail(needs), "Waiting for your reply");
-  });
-
-  it("leads the chips with the size, and has no size chip when the line gives no clue", () => {
-    const decide = cockpit.chipsFor(at("decide", [waiting("decide", 1000)], { branch: "arch" }), true);
-    assert.deepEqual(
-      decide.map((c) => [c.id, c.id === "pr" ? c.tag : c.text]),
-      [
-        ["size", "Decide · 2"],
-        ["br", "arch"],
-      ],
-    );
-    const [size] = decide;
-    assert.equal(size?.id === "pr" ? null : size?.size, "decide");
-    const plain = cockpit.chipsFor(at("plain", [waiting("plain", 1000)]), true);
-    assert.deepEqual(plain, []);
-    assert.equal(status.cardDetail(at("plain", [waiting("plain", 1000)])), "tell me which one you meant.");
-  });
-});
-
 describe("a turn that ended on Nothing for you", () => {
   it("asks nothing when saved as idle, or in the older wordings, but not for nothing follows", () => {
     assert.equal(move.asksNothing({ text: "CI is running.", idle: true }), true);
@@ -242,45 +158,31 @@ describe("a turn that ended on Nothing for you", () => {
   it("reads as idle once the nudge lands, since the turn ended, and leaves Needs you", () => {
     const w = at("quiet", [waiting("quiet", 1060)]);
     r.data.workspaces = [w];
-    const a = status.agentOf(w);
+    const a = shown(w);
     assert.equal(a?.status, "idle");
     assert.equal(a?.sinceEpoch, 1000, "idle since the turn ended, not since the nudge");
-    assert.equal(cockpit.needsList().length, 0);
-    assert.equal(status.cardDetail(w), "CI is running on #2171. I report when it lands.");
-    assert.deepEqual(cockpit.chipsFor(w, true), [], "no size chip");
   });
 
   it("reads the older Your move: nothing line the same way", () => {
-    assert.equal(status.agentOf(at("legacy", [waiting("legacy", 1060)]))?.status, "idle");
+    assert.equal(shown(at("legacy", [waiting("legacy", 1060)]))?.status, "idle");
   });
 
   it("still needs Jon on a Your move line, a new prompt since, or a real ask", () => {
-    assert.equal(status.agentOf(at("quick", [waiting("quick", 1060)]))?.status, "needs_input");
-    assert.equal(status.agentOf(at("quiet", [waiting("quiet", 1160)], { latestAt: 1100 }))?.status, "needs_input");
+    assert.equal(shown(at("quick", [waiting("quick", 1060)]))?.status, "needs_input");
+    assert.equal(shown(at("quiet", [waiting("quiet", 1160)], { latestAt: 1100 }))?.status, "needs_input");
     const asks = waiting("quietAsks", 1060);
     assert.equal(needs.effectiveAgent(asks, at("quietAsks", [asks])).status, "needs_input");
   });
 
   it("still needs Jon on a later stop with no prompt between, or with decisions laid out", () => {
     // The agent woke on its own after CI and stopped to ask, well past the nudge.
-    assert.equal(status.agentOf(at("quiet", [waiting("quiet", 1000 + move.NUDGE_WINDOW + 1)]))?.status, "needs_input");
-    assert.equal(status.agentOf(at("quietDecide", [waiting("quietDecide", 1060)]))?.status, "needs_input");
-  });
-
-  it("is no ask: Ready once there is output and no shell runs, and nothing to dismiss", () => {
-    const w = at("quiet", [waiting("quiet", 1060)], { unread: 1 });
-    assert.equal(needs.hasRealAsk(w), false);
-    assert.equal(needs.isNeedsDismissed(w), false);
-    assert.equal(status.isReady(w), true);
-  });
-
-  it("is Ready with unread output when the turn ended on a Your move line", () => {
-    assert.equal(status.isReady(at("quick", [stopped("quick", 1000)], { unread: 1 })), true);
+    assert.equal(shown(at("quiet", [waiting("quiet", 1000 + move.NUDGE_WINDOW + 1)]))?.status, "needs_input");
+    assert.equal(shown(at("quietDecide", [waiting("quietDecide", 1060)]))?.status, "needs_input");
   });
 
   it("leaves another session's agent alone", () => {
     const other = agent("needs_input", { id: "s-other", kind: "claude", sinceEpoch: 1060, lastActivityAt: 1060 });
-    assert.equal(status.agentOf(at("quiet", [other]))?.status, "needs_input");
+    assert.equal(shown(at("quiet", [other]))?.status, "needs_input");
   });
 });
 
@@ -293,23 +195,20 @@ describe("a move in the workspace description", () => {
 
   it("shows with no saved move and no rebuild, decisions and all", () => {
     const w = described("live", { text: 'reply "1a".', epoch: 1000, decisions: 1 });
-    assert.equal(status.moveOf(w)?.text, 'reply "1a".');
-    assert.equal(status.moveOf(w)?.decisions, 1);
-    assert.equal(status.cardDetail(w), 'reply "1a".');
+    assert.equal(moveOf(w)?.text, 'reply "1a".');
+    assert.equal(moveOf(w)?.decisions, 1);
   });
 
   it("loses to a newer saved move, and wins over an older one", () => {
     assert.equal(
-      status.moveOf(described("quick", { text: "older", epoch: 990 }))?.text,
+      moveOf(described("quick", { text: "older", epoch: 990 }))?.text,
       "the work is finished. Run /clear now.",
     );
-    assert.equal(status.moveOf(described("quick", { text: "newer", epoch: 1010 }))?.text, "newer");
+    assert.equal(moveOf(described("quick", { text: "newer", epoch: 1010 }))?.text, "newer");
   });
 
   it("never shows its raw form once a prompt has retired it", () => {
     const w = described("live", { text: "say go", epoch: 1000 }, { latestAt: 1100, latestMessage: "" });
-    assert.equal(status.moveOf(w), null);
-    assert.equal(status.cardDetail(w), "");
-    assert.equal(status.cardDetail(ws("own", { description: "Jon's own words" })), "Jon's own words");
+    assert.equal(moveOf(w), null);
   });
 });

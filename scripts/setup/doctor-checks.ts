@@ -129,9 +129,8 @@ const newest = (files: readonly string[]): number =>
 
 export const buildCheck: Probe = (_env, paths) => {
   const label = "Build";
-  const built = ["cockpit.js", "agents.js"].map((f) => join(paths.sidebars, f));
-  const missing = built.filter((f) => !existsSync(f));
-  if (missing.length > 0) return fail(label, "the sidebars are not built", "npm run build", true);
+  if (!existsSync(join(paths.sidebars, "agents.js")))
+    return fail(label, "the agents sidebar is not built", "npm run build", true);
   // The build's own mark, since a bundle it left unchanged keeps its old time.
   const mark = statSync(paths.lastBuild, { throwIfNoEntry: false });
   if (!mark || mark.mtimeMs < newest(buildInputs(paths))) {

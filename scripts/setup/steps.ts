@@ -81,16 +81,15 @@ export function projects(env: Env, paths: Paths): void {
   env.print("✓ config/projects.json: copied the example (no repos open in cmux). Edit it, then npm run build.");
 }
 
-/** Builds the sidebars and shows them; false when the build failed. */
+/** Builds the agents sidebar and shows it; false when the build failed. */
 export function buildAndShow(env: Env): boolean {
   const build = env.run("npm", ["run", "build"], { cwd: env.repo, inherit: true });
   if (build.status !== 0) {
     env.print("✗ npm run build failed; the output above says why.");
     return false;
   }
-  env.print("✓ built sidebars/cockpit.js and sidebars/agents.js");
-  env.run("cmux", ["sidebar", "select", "cockpit"]);
+  env.print("✓ built sidebars/agents.js");
   env.run("cmux", ["right-sidebar", "set", "custom", "agents"]);
-  env.print("✓ cockpit in the left sidebar, agents panel in the right");
+  env.print("✓ agents panel in the right sidebar");
   return true;
 }

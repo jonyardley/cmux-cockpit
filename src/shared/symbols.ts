@@ -1,7 +1,7 @@
-// SF Symbols the project editor's icon search looks through. cmux cannot tell
-// a sidebar that a symbol name does not exist (its runtime only sends
-// drawing ops one way), so the search only offers names from this list. Each
-// was checked on macOS 27 with NSImage(systemSymbolName:) on 2026-09-29. The editor's common row
+// SF Symbols the project editor's icon search looks through. The native
+// core's list (native/core/src/symbols.rs) is tested name for name against
+// this file, so it stays the one copy. Each was checked on macOS 27 with
+// NSImage(systemSymbolName:) on 2026-09-29. The editor's common row
 // (PROJECT_ICONS) comes first, from its one copy.
 
 import { PROJECT_ICONS } from "./project-sets.ts";

@@ -238,22 +238,6 @@ export function tapChip(
   ).onTap(() => openIfUrl(url()));
 }
 
-/** The badge's figure: the count, or nothing at zero (or a bad count), so no empty pill shows. */
-export const badgeLabel = (n: number): string => (n > 0 ? String(n) : "");
-
-/** The unread count, grey on both sides so clay only ever means needs you; nothing at zero. */
-export function unreadBadge(n: () => number): View {
-  const has = () => n() > 0;
-  return Text(() => badgeLabel(n()))
-    .font(10)
-    .bold()
-    .color(P.onBadge)
-    .paddingHorizontal(() => (has() ? 5 : 0))
-    .paddingVertical(() => (has() ? 1 : 0))
-    .background(() => (has() ? P.badge : "clear"))
-    .cornerRadius(7);
-}
-
 /** A count pill's face and words. */
 export interface PillColors {
   bg: string;
@@ -265,8 +249,8 @@ export const QUIET_PILL: PillColors = { bg: P.countBg, fg: P.metaText };
 
 /**
  * How urgent the sessions behind a count pill are: needs you, asking,
- * working (quiet or not), or quiet (finished, idle and no agent). Their
- * ranking is URGENCY_RANK in cockpit/status.ts.
+ * working (quiet or not), or quiet (finished, idle and no agent), most
+ * urgent first.
  */
 export type Urgency = "needs" | "asking" | "working" | "quiet";
 
@@ -303,11 +287,6 @@ export function countPill(count: () => string, colors: () => PillColors = () => 
 
 // Headings come in two styles on both sides (issue #82): a lane or project
 // header's name, and a section's small capitals.
-
-/** A lane or project header's name: it wins the row's width and truncates rather than wrapping. */
-export function laneTitle(name: string, color: string, weight: Weight = "semibold"): View {
-  return Text(name).font(12.5).weight(weight).color(color).lineLimit(1).truncation("tail").layoutPriority(1);
-}
 
 /** A section heading in tracked capitals: "NEEDS YOU", "HELPERS", "PULL REQUEST". One line, since each hair space could break it. */
 export function sectionTitle(label: Reactive<string>, color: string): View {

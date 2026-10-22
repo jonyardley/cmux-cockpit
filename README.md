@@ -1,11 +1,12 @@
 # cmux-cockpit
 
-Two custom sidebars for [cmux](https://github.com/manaflow-ai/cmux), the
-macOS terminal for running coding agents. The cockpit, on the left, sorts
-your workspaces into lanes and flags the agents waiting on you, telling an
-agent that is asking a question apart from one that has finished its turn.
-The agents panel, on the right, details the selected workspace, your open
-pull requests and the pages your agents published.
+Two sidebars for [cmux](https://github.com/manaflow-ai/cmux), the macOS
+terminal for running coding agents. The Cockpit, on the left, is a native
+sidebar extension (`native/mac`) that sorts your workspaces into lanes and
+flags the agents waiting on you, telling an agent that is asking a question
+apart from one that has finished its turn. The agents panel, on the right,
+is a cmux custom sidebar written in TypeScript that details the selected
+workspace, your open pull requests and the pages your agents published.
 
 ![The cockpit on the left, with one workspace in the Main activity lane, and the agents panel on the right, showing that workspace's helper, pull request and checks](docs/images/sidebars.png)
 
@@ -13,8 +14,9 @@ pull requests and the pages your agents published.
 minutes): back up, clone, `npm ci`, `npm run setup`. `npm run doctor`
 checks an install, and `npm run uninstall` takes the extras out again.
 
-This is a personal setup shared as is. It follows cmux's custom sidebar
-beta, which has no published schema yet, so a cmux update can break it.
+This is a personal setup shared as is. The agents panel follows cmux's
+custom sidebar beta, which has no published schema yet, so a cmux update
+can break it.
 Tested on cmux 0.64.25.
 
 ## Requirements
@@ -29,26 +31,17 @@ Tested on cmux 0.64.25.
 
 ## What is here
 
-- `src/cockpit/`: the left sidebar. All and Projects views, a "Needs you"
-  strip (with dismiss), and workspace cards in lanes or grouped by
-  project. Lanes are cmux workspace groups, by default "Main activity",
-  "For review", "Background" and "Parked" (your own in
-  [`config/lanes.json`](#lanes-configlanesjson)); everything else is
-  Unsorted. An
-  agent stopped on a permission or a question shows amber, "Asking", with
-  the reason; one that finished its turn shows clay, "Your turn" (the
-  first needs the notification hook in the
-  [quickstart](docs/quickstart.md#claude-code-hooks)).
 - `src/agents/`: the agents panel, shown in the right sidebar.
-- `src/shared/`: helpers the sidebars share (text clean-up, projects, agent
-  ranking, time, and the "needs you" rules both sidebars apply: Claude
-  Code's idle nudge reads as idle, and dismissals), plus one copy of what
-  should look the same on both sides: the colours (`palette.ts`), the
-  status words (`words.ts`, "Finished 3m") and the view builders for rings,
-  chips, the unread badge, trailing times and headings (`ui.ts`).
+- `src/shared/`: helpers the agents panel builds on (text clean-up,
+  projects, agent ranking, time, the lane table, and the "needs you"
+  rules: Claude Code's idle nudge reads as idle, and dismissals), plus the
+  colours (`palette.ts`), the status words (`words.ts`, "Finished 3m") and
+  the view builders for rings, chips, trailing times and headings
+  (`ui.ts`). `symbols.ts` is the SF Symbols list the native core is tested
+  against.
 - `src/renderer.d.ts`: types for the renderer's globals and live data.
-- `sidebars/*.js`: local build output, built from `src/`. Never committed,
-  never edited by hand.
+- `sidebars/agents.js`: local build output, built from `src/`. Never
+  committed, never edited by hand.
 - `sidebars/*.parked`: retired Swift sidebar experiments cmux does not
   load. Rename one to `.swift` to load it again. `probe.swift.parked`
   probes what the Swift renderer supports; on cmux 0.64.25 a `let` derived
@@ -66,23 +59,25 @@ Tested on cmux 0.64.25.
   in the Projects view, opening a new workspace there. Projects with no
   sessions fold into one "Quiet" line of icons at the bottom; tapping an
   icon does the same as "+", and one without a `root` sits dimmed with no
-  tap. The file is the starting table: right-click any project's header
+  tap. The file is the starting table: in the Cockpit sidebar, right-click any project's header
   (or quiet row) and choose "Edit project" to rename it, pick its colour
   and icon, change its folder or remove it. To add one, tap "+ New
   project" above the quiet ones and type its folder (`~` allowed), or tap
   a folder you have open; a card under Other also offers "Make ... a
   project", as its menu's "New project from this folder" does. Those edits
   live in `config/state.json` and win over the file at build.
-- `native/`: one Cargo workspace for the native rewrite: `core` (the
+- `native/`: one Cargo workspace for the native sidebar: `core` (the
   `cockpit_core` Crux app), `runner` (`cockpit_runner`, the live-data
   runner any front end drives) and `pane` (`cockpit-pane`, the cockpit in
   a terminal, a thin loop over the runner; `--print` prints the view as
   text). The core builds the panel model every shell draws
   (`cockpit_core::panel`), and `native/fixtures/` holds it as JSON for
-  each scene; the core's tests fail when a fixture is stale.
+  each scene; the core's tests fail when a fixture is stale. The scenes'
+  inputs and expected answers are the frozen JSON in `test/golden/`.
   `rust-toolchain.toml` pins the Rust toolchain.
 - `native/mac/`: the macOS helper app with the Cockpit sidebar extension
-  embedded, which cmux draws in its left sidebar. Build it, run it and
+  embedded, which cmux draws in its left sidebar. It replaced the
+  TypeScript cockpit sidebar (issue #247). Build it, run it and
   switch it on in cmux with [native/mac/README.md](native/mac/README.md).
 - `helper/` and `scripts/`: the URL handler app that saves state, the
   build, the pull request poller and the Claude Code hooks
@@ -117,7 +112,8 @@ lane marker never reads as an agent's state.
 The file fails whole on a lane with no name, a field it does not know (a
 typo such as `colour` is refused, not ignored), an unknown colour or
 density, an id or name used twice, or the id or name `unsorted`. A bad
-file fails `npm run build`; the native panel keeps the table it had.
+file fails `npm run build`, which bakes the lane names into the agents
+panel; the native panel keeps the table it had.
 
 Renaming a lane in the file renames its cmux group, and the group's
 placeholder, so the lane keeps its cards. A lane is known by its `id`,
@@ -131,20 +127,21 @@ becomes To check) follows through; swapping two lanes' names renames
 neither, so their cards swap lanes. Rename the groups in cmux by hand
 for a swap.
 
-To take a change: `npm run build` and reload the sidebar for the JS
-cockpit. The native panel's helper watches the file and picks it up live.
+To take a change: the native panel's helper watches the file and picks it
+up live. `npm run build` bakes the new names into the agents panel, which
+skips a lane's placeholder by name.
 
-## Working on a sidebar
+## Working on the agents panel
 
 ```
-npm run dev                         # rebuild sidebars/*.js on every save
+npm run dev                         # rebuild sidebars/agents.js on every save
 npm run check                       # lint, types, dead code (knip), build fresh, tests with a coverage floor, validate, then npm run rust
 npm run rust                        # rustfmt, clippy with warnings denied, and the Rust tests under native/
-npm run snapshots                   # re-record the text snapshots after a change on screen
+npm run snapshots                   # re-record the agents panel's text snapshot after a change on screen
 UPDATE_SNAPSHOTS=1 cargo test --manifest-path native/Cargo.toml -p cockpit_core --test panel && npx biome format --write native/fixtures   # re-record the panel fixtures after a meant change
-npm run preview                     # every snapshot scene as a PNG in preview/ (needs Google Chrome)
+npm run preview                     # the snapshot scene as a PNG in preview/ (needs Google Chrome)
 npm run pr-visuals                  # before/after PNGs of the scenes this branch changes, pushed to pr-images, as markdown for the PR
-cmux sidebar reload cockpit         # show the change
+cmux sidebar reload                 # show the change
 ```
 
 `npm run agents` restores the agents panel in the right sidebar (wraps
@@ -166,8 +163,8 @@ the main checkout only; in a worktree `npm run validate` skips with a note.
 
 ## Rules the renderer taught me
 
-- Sidebars cannot import at runtime, so `src/` is bundled into one flat
-  script per sidebar.
+- Custom sidebars cannot import at runtime, so `src/` is bundled into one
+  flat script.
 - Borders use `ring()`, never `borderWidth` (it is clipped by the corner
   radius). Pass `hug` for chips and buttons.
 - Outer margins go on a wrapper VStack; on the same node the background is

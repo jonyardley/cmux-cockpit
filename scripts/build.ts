@@ -7,9 +7,10 @@
 // has no filesystem access to do it at runtime.
 //
 // config/lanes.json (gitignored) is the lane table, checked by the native
-// core's rules (src/cockpit/lane-config.ts) and injected as __LANES__ with
-// every gap filled. With no file it is today's four lanes; a file that
-// breaks a rule fails the build, as a bad project table does.
+// core's rules (src/shared/lane-config.ts) and injected as __LANES__ with
+// every gap filled, so the agents panel knows the lane placeholders by name
+// (src/shared/anchors.ts). With no file it is today's four lanes; a file
+// that breaks a rule fails the build, as a bad project table does.
 //
 // config/state.json (gitignored, written by the URL handler) is read the
 // same way and injected as __STATE__, so a sidebar starts from whatever was
@@ -31,8 +32,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { build } from "esbuild";
-import { BUILT_IN_LANES, type LaneSpec, resolveLanes } from "../src/cockpit/lane-config.ts";
 import { expandHome } from "../src/shared/home.ts";
+import { BUILT_IN_LANES, type LaneSpec, resolveLanes } from "../src/shared/lane-config.ts";
 import { bundleOptions, ENTRIES } from "./bundle.ts";
 import { changedKeys, takeTags } from "./hook-build.ts";
 import { isLiveCheckout } from "./live-checkout.ts";
@@ -197,7 +198,7 @@ const written: string[] = [];
 const changed = broken ? null : changedKeys(loadLastBuilt(), state);
 try {
   for (const name of ENTRIES) {
-    const result = await build(bundleOptions(name, { projects, lanes, state, unreadable, urlToken, home: homedir() }));
+    const result = await build(bundleOptions(name, { projects, lanes, state, unreadable, urlToken }));
     const rewrote = result.outputFiles.map((out) => writeIfChanged(out.path, out.contents));
     if (rewrote.includes(true)) written.push(name);
   }

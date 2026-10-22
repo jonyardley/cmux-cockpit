@@ -26,18 +26,18 @@ function runGuard(stdin: string): number | null {
 
 describe("guard-edit", () => {
   it("blocks built sidebars and the private project table", () => {
-    assert.match(blockReason(join(ours, "sidebars/cockpit.js")) ?? "", /build output/);
+    assert.match(blockReason(join(ours, "sidebars/agents.js")) ?? "", /build output/);
     assert.match(blockReason(join(ours, "config/projects.json")) ?? "", /private project table/);
   });
 
   it("blocks them whatever the case, since APFS ignores it", () => {
-    assert.notEqual(blockReason(join(ours, "Sidebars/Cockpit.JS")), null);
+    assert.notEqual(blockReason(join(ours, "Sidebars/Agents.JS")), null);
     assert.notEqual(blockReason(join(ours, "config/Projects.json")), null);
   });
 
   it("allows sources, the sample table, parked Swift and nested paths", () => {
     for (const p of [
-      "src/cockpit/model.ts",
+      "src/agents/model.ts",
       "config/projects.example.json",
       "sidebars/board.swift.parked",
       "sidebars/nested/x.js",
@@ -53,7 +53,7 @@ describe("guard-edit", () => {
 
   it("exits 2 to block, 0 to allow, and 2 when its input is unreadable", () => {
     const payload = (p: string) => JSON.stringify({ tool_input: { file_path: join(ours, p) } });
-    assert.equal(runGuard(payload("sidebars/cockpit.js")), 2);
+    assert.equal(runGuard(payload("sidebars/agents.js")), 2);
     assert.equal(runGuard(payload("src/x.ts")), 0);
     assert.equal(runGuard("not json"), 2);
   });

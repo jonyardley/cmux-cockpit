@@ -8,15 +8,14 @@ const { glyphColor } = await import("../src/shared/contrast.ts");
 const { hoverFace, shade } = await import("../src/shared/shade.ts");
 const { markLast } = await import("../src/shared/list.ts");
 const { NEUTRAL_CHIP, READY_INK, prChipColors, prInk, shownHealth } = await import("../src/shared/pr-colors.ts");
-const { PROJECTS, PROJECT_COLORS, PROJECT_ICONS, matchesOf, newProject, projectId, projectOf } = await import(
-  "../src/shared/projects.ts"
-);
-const { cleanTitle, oneLine, readable, tracked } = await import("../src/shared/text.ts");
-const { finishedAt, fmtAge, fmtElapsed, nowEpoch } = await import("../src/shared/time.ts");
+const { PROJECTS, matchesOf, projectId, projectOf } = await import("../src/shared/projects.ts");
+const { PROJECT_COLORS, PROJECT_ICONS } = await import("../src/shared/project-sets.ts");
+const { cleanTitle, readable, tracked } = await import("../src/shared/text.ts");
+const { finishedAt, fmtAge, nowEpoch } = await import("../src/shared/time.ts");
 const { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } = await import("../src/shared/words.ts");
 const { P, STATUS_TEXT } = await import("../src/shared/palette.ts");
-const { SYMBOLS } = await import("../src/shared/symbols.ts");
 const { isHex, isSymbol } = await import("../src/shared/project-rules.ts");
+const { SYMBOLS } = await import("../src/shared/symbols.ts");
 const { agent } = await import("./support/fixtures.ts");
 
 describe("cleanTitle", () => {
@@ -55,14 +54,7 @@ describe("readable", () => {
   });
 });
 
-describe("oneLine", () => {
-  it("cuts with an ellipsis at max characters", () => {
-    assert.equal(oneLine("abcdefghij words", 8), "abcdefg…");
-    assert.equal(oneLine("short words", 80), "short words");
-  });
-});
-
-describe("the editor's sets", () => {
+describe("the project sets", () => {
   it("holds sixteen distinct colours, two rows of eight", () => {
     assert.equal(PROJECT_COLORS.length, 16);
     assert.ok(PROJECT_COLORS.every(isHex));
@@ -228,13 +220,6 @@ describe("time", () => {
     assert.equal(finishedAt(agent("ended", { sinceEpoch: 900 })), 900);
     assert.equal(finishedAt(agent("ended")), 0);
   });
-  it("fmtElapsed shows seconds and hours with minutes", () => {
-    assert.equal(fmtElapsed(-5), "0s");
-    assert.equal(fmtElapsed(45.9), "45s");
-    assert.equal(fmtElapsed(720), "12m");
-    assert.equal(fmtElapsed(3 * 3600 + 5 * 60), "3h 5m");
-    assert.equal(fmtElapsed(2 * 86400), "2d");
-  });
 });
 
 describe("tracked", () => {
@@ -250,44 +235,6 @@ describe("tracked", () => {
   it("leaves empty and single-letter labels alone", () => {
     assert.equal(tracked(""), "");
     assert.equal(tracked("A"), "A");
-  });
-});
-
-describe("newProject (issue #9)", () => {
-  const taken = (name: string, color: string) => ({ match: "/x/" + name, name, color, icon: "x" });
-
-  it("matches and roots at the folder, named after its last segment", () => {
-    assert.deepEqual(newProject("/Users/jon/dev/scratch/", []), {
-      key: "/users/jon/dev/scratch/",
-      spec: { name: "Scratch", color: PROJECT_COLORS[0], icon: PROJECT_ICONS[0], root: "/Users/jon/dev/scratch" },
-    });
-  });
-
-  it("cleans a folder name the state contract would refuse", () => {
-    assert.equal(newProject("/dev/ my\u0007 notes ", [])?.spec.name, "My notes");
-    const long = newProject("/dev/" + "x".repeat(80), [])?.spec.name ?? "";
-    assert.equal(long.length, 60);
-    assert.equal(newProject("/dev/   ", []), null);
-  });
-
-  it("numbers a name that is taken", () => {
-    const made = newProject("/dev/scratch", [taken("Scratch", "#000000"), taken("Scratch 2", "#000000")]);
-    assert.equal(made?.spec.name, "Scratch 3");
-  });
-
-  it("takes the first colour no project uses, case-insensitively", () => {
-    const made = newProject("/dev/s", [taken("A", PROJECT_COLORS[0].toLowerCase()), taken("B", PROJECT_COLORS[1])]);
-    assert.equal(made?.spec.color, PROJECT_COLORS[2]);
-  });
-
-  it("cycles by count once every colour is used", () => {
-    const all = PROJECT_COLORS.map((c, i) => taken("P" + i, c));
-    assert.equal(newProject("/dev/s", [...all, taken("Q", "#000000")])?.spec.color, PROJECT_COLORS[1]);
-  });
-
-  it("is null without an absolute folder two segments deep", () => {
-    for (const d of [undefined, null, "", "/", "/dev", "/dev/", "~/dev/s", "dev/s"])
-      assert.equal(newProject(d, []), null, String(d));
   });
 });
 

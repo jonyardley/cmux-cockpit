@@ -4,7 +4,7 @@
 // sidebars only see a write once scripts/build.ts bakes it in. Moved here
 // from report-subagent.ts (#52) so every hook uses one lock and one build.
 //
-// Rebuilding both sidebars costs a full esbuild pass, so two events close
+// Rebuilding the sidebar costs a full esbuild pass, so two events close
 // together (SubagentStart fires ~25ms after the PreToolUse that starts the
 // same run, and independent subagents can start together) should not each
 // spawn their own build. This coalesces them with a lockfile in config/:
@@ -82,7 +82,7 @@ const URGENT_FLAG = join(ROOT, "config", "build-urgent");
 // Raised by a write at the usual pace, so a build waiting out the slow gap
 // for subagent runs waits no longer than REDRAW_GAP_MS.
 const SOON_FLAG = join(ROOT, "config", "build-soon");
-const BUNDLES = ["agents", "cockpit"].map((name) => join(ROOT, "sidebars", `${name}.js`));
+const BUNDLES = [join(ROOT, "sidebars", "agents.js")];
 // Exported so a test can check the stale threshold sits comfortably above
 // this delay plus the timeout, without duplicating the figures.
 export const COALESCE_MS = 300;

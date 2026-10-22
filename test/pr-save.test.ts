@@ -3,7 +3,7 @@
 // (the shape native/runner/tests/effects.json pins for the Rust side),
 // pr-save writes it under the state file's lock, scripts/pr-poll.ts only
 // drops closed workspaces without undoing such a write, and the agents
-// panel, baked from the file, then says what the card says.
+// panel, baked from the file, then says what the native poll said.
 
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -110,17 +110,13 @@ writePrEntries(stale, saved.set, saved.remove);
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
-const chips = await import("../src/cockpit/card-chips.ts");
 const list = await import("../src/agents/pr-list.ts");
 const model = await import("../src/agents/model.ts");
 
 describe("the agents panel reads the native poll's verdict (issue #300)", () => {
-  it("says ready in the Pull requests row and This workspace, as the card does", () => {
+  it("says ready in the Pull requests row and This workspace", () => {
     r.data.workspaces = [ws("W1", { branch: "feat", selected: true, agents: [agent("working")] })];
     r.data.epoch++;
-    const chip = chips.chipsFor(r.data.workspaces[0], false).find((c) => c.id === "pr");
-    assert.ok(chip && "health" in chip);
-    assert.deepEqual({ state: chip.state, health: chip.health }, { state: "ready", health: "ready" }, "the card");
     const entry = list.prs().find((e) => e.pr.number === 7);
     assert.ok(entry, "the row is listed");
     assert.equal(list.prChipText(entry), "ready", "the Pull requests row");

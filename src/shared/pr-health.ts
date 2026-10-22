@@ -1,5 +1,5 @@
-// What a PR's chip says about it, apart from the saved state, so the
-// sidebars' chips (prs.ts) and the cockpit's merged card read one rule.
+// What a PR's chip says about it, apart from the saved state, so every
+// chip (prs.ts) reads one rule.
 
 import type { SavedCheck } from "../../scripts/state-config.ts";
 
@@ -21,6 +21,3 @@ export function healthOf(pr: PullRequest, checks: readonly Pick<SavedCheck, "sta
   if (checks.some((c) => c.state === "pending")) return "running";
   return checks.length > 0 && !pr.draft && pr.mergeable === true ? "ready" : "quiet";
 }
-
-/** A merged PR: the card dims while nothing in it wants Jon (src/cockpit/merged.ts). */
-export const isMergedPr = (pr: PullRequest | undefined): boolean => !!pr?.number && pr.status === "merged";
