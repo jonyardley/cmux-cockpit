@@ -181,7 +181,7 @@ struct DenseRow: View {
                 if let pr = card.rowPr {
                     MetaText(text: pr.tag, ink: Color(pr.ink)).layoutPriority(2)
                 }
-                if !card.age.isEmpty { MetaText(text: card.age, ink: Color(CardText.ageInk(card) ?? .metaText)) }
+                if !card.age.isEmpty { MetaText(text: card.age, ink: Color(CardText.ageInk(card))) }
                 DismissX(card: card)
                 if card.pinned { PinMark() }
             }
@@ -249,19 +249,14 @@ struct TitleRow: View {
                 .truncationMode(lines > 1 ? .tail : .middle)
                 .layoutPriority(1)
             Spacer(minLength: Metrics.minGap)
-            if card.ready { ReadyPill() }
+            if card.ready { ReadyPill(ink: card.readyInk) }
             if !card.unread.isEmpty { UnreadBadge(count: card.unread) }
             let age = CardText.titleAge(card)
-            if !age.isEmpty { MetaText(text: age, ink: ageInk) }
+            if !age.isEmpty { MetaText(text: age, ink: Color(CardText.ageInk(card))) }
             DismissX(card: card)
             if card.pinned { PinMark() }
         }
         .frame(maxWidth: .infinity)
-    }
-
-    /// The waiting ink while the card waits on Jon, else the third ink.
-    private var ageInk: Color {
-        CardText.ageInk(card).map { Color($0) } ?? Color(Palette.Own.tertiary)
     }
 }
 
@@ -354,8 +349,8 @@ struct WaitingTabLine: View {
     }
 }
 
-/// A status dot over its soft halo (docs/design.md#status-dot): filled, or hollow in
-/// its ring's colour. The frame is always the halo's, so dots with and
+/// A status dot over its soft halo, both as the core picks them
+/// (docs/design.md#status-dot): filled, or hollow in its ring's colour. The frame is always the halo's, so dots with and
 /// without one line up down a lane.
 struct StatusDot: View {
     let icon: Icon
@@ -366,7 +361,7 @@ struct StatusDot: View {
 
     var body: some View {
         ZStack {
-            Circle().fill(Color(CardText.halo(icon)))
+            Circle().fill(Color(icon.halo))
             if icon.glyph == CardText.filledDot {
                 Circle().fill(Color(dot: icon.ink)).frame(width: size, height: size)
             } else {
@@ -377,12 +372,15 @@ struct StatusDot: View {
     }
 }
 
-/// Ready: the agent finished while Jon was elsewhere (docs/design.md#ready-pill).
+/// Ready: the agent finished while Jon was elsewhere, in the core's ink
+/// (docs/design.md#ready-pill).
 struct ReadyPill: View {
+    let ink: Token
+
     var body: some View {
         Text(Words.ready)
             .font(.system(size: Metrics.Font.section, weight: .medium))
-            .foregroundStyle(Color(Token.greenText))
+            .foregroundStyle(Color(ink))
             .lineLimit(1)
             .fixedSize()
             .padding(.horizontal, Metrics.pillPadH)

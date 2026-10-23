@@ -30,7 +30,8 @@ pub enum Token {
     Faint,
     /// A lane header's words.
     Heading,
-    /// palette.ts's greenDeep: pr-colors.ts's READY_INK, a PR GitHub would merge.
+    /// A deep green, now only under the green PR chip's edge, which no
+    /// shell draws yet: ready to merge is `MergeText` everywhere.
     GreenDeep,
     /// The first ink: a title's words, which the shells draw with it.
     Text,
@@ -52,8 +53,6 @@ pub enum Token {
     BlueCount,
     ClayCount,
     AmberCount,
-    AmberRowEdge,
-    NeedsRowEdge,
     Select,
     CardEdge,
     LaneMain,

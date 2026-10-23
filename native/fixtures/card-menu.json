@@ -4,7 +4,8 @@
     "Step": {
       "ws_id": "needs",
       "title": "Chip colours",
-      "place": "1 of 3"
+      "place": "1 of 3",
+      "ink": "greenText"
     }
   },
   "needs": {
@@ -34,17 +35,24 @@
       },
       "dot": {
         "glyph": "●",
-        "ink": "clay"
+        "ink": "clay",
+        "halo": "clayHalo"
       },
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": [
         {
           "Card": {
             "ws_id": "needs",
             "icon": {
               "glyph": "●",
-              "ink": "clay"
+              "ink": "clay",
+              "halo": "clayHalo"
             },
             "title": "Chip colours",
             "density": "Full",
@@ -54,6 +62,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -195,7 +204,8 @@
             "ws_id": "asking",
             "icon": {
               "glyph": "●",
-              "ink": "amber"
+              "ink": "amber",
+              "halo": "amberHalo"
             },
             "title": "Release notes",
             "density": "Full",
@@ -205,6 +215,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -346,7 +357,8 @@
             "ws_id": "untimed",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "Untimed card",
             "density": "Full",
@@ -356,6 +368,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": true,
             "progress": null,
             "helpers": "",
@@ -494,7 +507,8 @@
             "ws_id": "ready",
             "icon": {
               "glyph": "●",
-              "ink": "green"
+              "ink": "green",
+              "halo": "clear"
             },
             "title": "Tidy strip",
             "density": "Full",
@@ -504,6 +518,7 @@
             },
             "unread": "",
             "ready": true,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -642,7 +657,8 @@
             "ws_id": "working",
             "icon": {
               "glyph": "●",
-              "ink": "blue"
+              "ink": "blue",
+              "halo": "blueHalo"
             },
             "title": "Snapshot tests",
             "density": "Full",
@@ -652,6 +668,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": 0.4,
             "helpers": "· 1 helper",
@@ -835,7 +852,8 @@
             "ws_id": "quiet",
             "icon": {
               "glyph": "○",
-              "ink": "blue"
+              "ink": "blue",
+              "halo": "clear"
             },
             "title": "Long build",
             "density": "Full",
@@ -845,6 +863,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -983,7 +1002,8 @@
             "ws_id": "selected",
             "icon": {
               "glyph": "●",
-              "ink": "blue"
+              "ink": "blue",
+              "halo": "blueHalo"
             },
             "title": "Selected card",
             "density": "Full",
@@ -993,6 +1013,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -1131,7 +1152,8 @@
             "ws_id": "merged",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "Card layout fit",
             "density": "Full",
@@ -1141,6 +1163,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -1320,13 +1343,19 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": [
         {
           "Card": {
             "ws_id": "ended",
             "icon": {
               "glyph": "●",
-              "ink": "green"
+              "ink": "green",
+              "halo": "clear"
             },
             "title": "Ended agent",
             "density": "Compact",
@@ -1336,6 +1365,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": true,
             "progress": null,
             "helpers": "",
@@ -1474,7 +1504,8 @@
             "ws_id": "idle",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "Left off",
             "density": "Compact",
@@ -1484,6 +1515,7 @@
             },
             "unread": "1",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -1634,13 +1666,19 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": [
         {
           "Card": {
             "ws_id": "waiting",
             "icon": {
               "glyph": "●",
-              "ink": "blue"
+              "ink": "blue",
+              "halo": "blueHalo"
             },
             "title": "Iteration timings",
             "density": "Compact",
@@ -1650,6 +1688,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -1788,7 +1827,8 @@
             "ws_id": "none",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "No agent",
             "density": "Compact",
@@ -1798,11 +1838,12 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
             "status": "No agent",
-            "status_ink": "faint",
+            "status_ink": "metaText",
             "age": "",
             "status_has_age": false,
             "left_off": "",
@@ -1947,10 +1988,16 @@
       },
       "dot": {
         "glyph": "●",
-        "ink": "blue"
+        "ink": "blue",
+        "halo": "blueHalo"
       },
       "collapsed": true,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     },
     {
@@ -1968,13 +2015,19 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": [
         {
           "Card": {
             "ws_id": "loose",
             "icon": {
               "glyph": "●",
-              "ink": "blue"
+              "ink": "blue",
+              "halo": "blueHalo"
             },
             "title": "Loose workspace",
             "density": "Row",
@@ -1984,6 +2037,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": true,
             "progress": null,
             "helpers": "",
@@ -2122,7 +2176,8 @@
             "ws_id": "loose-merged",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "Merged elsewhere",
             "density": "Row",
@@ -2132,6 +2187,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",

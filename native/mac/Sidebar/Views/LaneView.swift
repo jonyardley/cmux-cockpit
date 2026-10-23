@@ -28,16 +28,16 @@ struct CountPill: View {
     }
 }
 
-/// The fold mark on a heading: one faint chevron, pointing right while
-/// folded and turned down while open, in a fixed slot so the names line
-/// up (docs/design.md#fold-chevron).
+/// The fold mark on a heading: one chevron in the second ink, as it is a
+/// control, pointing right while folded and turned down while open, in a
+/// fixed slot so the names line up (docs/design.md#fold-chevron).
 struct FoldMark: View {
     let folded: Bool
 
     var body: some View {
         Image(systemName: "chevron.right")
             .font(.system(size: Metrics.Font.tiny, weight: .semibold))
-            .foregroundStyle(Color(Token.faint))
+            .foregroundStyle(Color(Token.secondary))
             .rotationEffect(.degrees(folded ? 0 : 90))
             .frame(width: Metrics.chevronWidth, height: Metrics.chevronHeight)
     }
@@ -105,9 +105,10 @@ struct AnchorBadge: View {
 /// A lane's header: fold chevron, marker, name in tracked capitals, anchor
 /// badge, the count, the folded lane's dot, and on the right how many PRs
 /// are ready to merge, or "Drop here" while a card is dragged over the lane
-/// (docs/design.md#lane-header). An empty lane draws as a drop zone: no
-/// chevron, its marker and count faded, and a lit face and edge while a
-/// card is over it. The section gap sits above the
+/// (docs/design.md#lane-header), both words and ink as the core gives them.
+/// An empty lane draws as a drop zone: no chevron, its marker and count
+/// faded (in the core's tint, never faint as well), and a lit face and
+/// edge while a card is over it. The section gap sits above the
 /// face, so the hover and drop shading hug the row.
 struct LaneHeader: View {
     let lane: Lane
@@ -147,7 +148,7 @@ struct LaneHeader: View {
                 .truncationMode(.tail)
                 .layoutPriority(1)
             if let anchor = lane.anchor { AnchorBadge(anchor: anchor) }
-            CountPill(count: lane.count, colors: LaneText.pill(lane)).opacity(fade)
+            CountPill(count: lane.count, colors: lane.pill).opacity(fade)
             if let dot = lane.dot {
                 Text(dot.glyph).foregroundStyle(Color(dot: dot.ink))
             }
@@ -162,13 +163,13 @@ struct LaneHeader: View {
     @ViewBuilder
     private var hint: some View {
         if target {
-            Text(Words.dropHere)
+            Text(lane.dropHint.text)
                 .fontWeight(.medium)
-                .foregroundStyle(Color(Token.heading))
+                .foregroundStyle(Color(lane.dropHint.ink))
                 .lineLimit(1)
         } else if !lane.mergeReady.isEmpty {
             Text(lane.mergeReady)
-                .foregroundStyle(Color(lane.faint ? Token.faint : Token.greenDeep))
+                .foregroundStyle(Color(lane.mergeInk))
                 .lineLimit(1)
                 .layoutPriority(-1)
         }

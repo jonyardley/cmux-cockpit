@@ -82,7 +82,9 @@ pub fn lines(rows: &[ProjectRow], inner: usize, cursor: Option<&str>, field: Fie
                 let laid = editor::lines(e, inner, field);
                 (laid.lines, laid.focus)
             }
-            ProjectRow::QuietHeader { count, collapsed } => {
+            ProjectRow::QuietHeader {
+                count, collapsed, ..
+            } => {
                 out.push(Line::default());
                 (vec![quiet_header(*count, *collapsed, inner)], None)
             }

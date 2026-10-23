@@ -64,6 +64,27 @@ pub struct HeaderHint {
     pub color: Token,
 }
 
+/// What a lane header says while a card is dragged over its lane.
+pub const DROP_HINT: &str = "Drop here";
+
+/// "Drop here" in the heading ink: the same on every lane.
+pub fn drop_hint() -> HeaderHint {
+    HeaderHint {
+        text: DROP_HINT.to_string(),
+        color: Token::Heading,
+    }
+}
+
+/// A merge line's ink: faint in a faint lane (Parked by default), as its
+/// title is, else the merge green every other "ready to merge" is in.
+pub fn merge_ink(faint: bool) -> Token {
+    if faint {
+        Token::Faint
+    } else {
+        Token::MergeText
+    }
+}
+
 /// A lane with its cards in state order and the anchor its header shows.
 struct LaneSection<'d> {
     lane: Lane,
@@ -264,23 +285,15 @@ impl Session {
         }
     }
 
-    /// "Drop here" while a drag is over the lane, else its merge line:
-    /// faint in a faint lane (Parked by default), as its title is, else in
-    /// Ready's green.
+    /// "Drop here" while a drag is over the lane, else its merge line in
+    /// its lane's merge ink.
     pub fn header_hint(&mut self, data: &Data, key: &LaneKey, dropping: bool) -> HeaderHint {
         if dropping {
-            return HeaderHint {
-                text: "Drop here".to_string(),
-                color: Token::Heading,
-            };
+            return drop_hint();
         }
         HeaderHint {
             text: self.merge_ready_text(data, key),
-            color: if self.lanes.get(key).faint {
-                Token::Faint
-            } else {
-                Token::GreenDeep
-            },
+            color: merge_ink(self.lanes.get(key).faint),
         }
     }
 }
@@ -303,6 +316,19 @@ mod tests {
             ),
             ..Data::default()
         }
+    }
+
+    #[test]
+    fn inks_the_merge_line_in_the_merge_green_unless_its_lane_is_faint() {
+        use crate::status::StatusKind;
+        use crate::theme::Token;
+        assert_eq!(super::merge_ink(false), StatusKind::MergeReady.style().text);
+        assert_eq!(super::merge_ink(true), Token::Faint);
+        let drop = super::drop_hint();
+        assert_eq!(
+            (drop.text.as_str(), drop.color),
+            ("Drop here", Token::Heading)
+        );
     }
 
     #[test]

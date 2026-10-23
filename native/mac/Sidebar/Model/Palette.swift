@@ -43,11 +43,10 @@ enum Palette {
         case lift
         /// A solid face: a card's, the chosen view tab, Next's pill.
         case card
-        /// The edge round Next's pill.
-        case needsEdge
-        /// Next's pill under the pointer.
-        case needsHover
-        /// The count on the Next pill's filled badge: white on clay or
+        /// The edge round Next's pill: the Ready pill's green, a step
+        /// stronger so a hairline shows.
+        case readyEdge
+        /// The number on the All tab's waiting count: white on clay or
         /// amber, light and dark alike.
         case onFill
         /// A card's face under the pointer: opaque, as it replaces the face.
@@ -125,8 +124,6 @@ enum Palette {
         case .blueCount: faint(blue, 0x1F)
         case .clayCount: faint(clay, 0x29)
         case .amberCount: faint(amber, 0x29)
-        case .amberRowEdge: faint(amberText, 0x29)
-        case .needsRowEdge: faint(clayText, 0x29)
         case .cardEdge: faint(text, 0x1F)
         case .laneParked: Pair(RGBA(0xB0AEA5), RGBA(0x6E6C66))
         case .laneUnsorted: Pair(RGBA(0xC9C6BB), RGBA(0x57564F))
@@ -148,8 +145,7 @@ enum Palette {
         case .onBadge: Pair(RGBA(0xFFFFFF), RGBA(0x1F1E1D))
         case .lift: Pair(RGBA(0x000000, 0x2E), RGBA(0x000000, 0x66))
         case .card: Pair(RGBA(0xFFFFFF), RGBA(0x30302D))
-        case .needsEdge: Pair(RGBA(0xF0D2C3), RGBA(clay.dark.hex, 0x47))
-        case .needsHover: Pair(RGBA(0xFBF1EB), RGBA(0x3A3330))
+        case .readyEdge: faint(green, 0x47)
         case .onFill: Pair(RGBA(0xFFFFFF), RGBA(0xFFFFFF))
         case .cardHover: Pair(RGBA(0xF7F6F2), RGBA(0x383835))
         case .hover: Pair(RGBA(0x7F7F7F, 0x14), RGBA(0x7F7F7F, 0x24))

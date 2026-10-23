@@ -137,11 +137,12 @@ struct ProjectHeader: View {
 }
 
 /// The Quiet heading: fold chevron, QUIET in faint tracked capitals and
-/// the count, the whole row the click that folds it
+/// the count in the core's pill, the whole row the click that folds it
 /// (docs/design.md#quiet-header).
 struct QuietHeader: View {
     let count: UInt64
     let collapsed: Bool
+    let pill: PillColors
 
     var body: some View {
         HStack(spacing: Metrics.headerSpacing) {
@@ -152,7 +153,7 @@ struct QuietHeader: View {
                 .tracking(Metrics.sectionTracking)
                 .foregroundStyle(Color(Token.faint))
                 .lineLimit(1)
-            CountPill(count: count, colors: ProjectText.quietPill)
+            CountPill(count: count, colors: pill)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, Metrics.headerPadH)
@@ -163,8 +164,8 @@ struct QuietHeader: View {
     }
 }
 
-/// A project with no sessions: its badge and name, and a faint "+" with a
-/// folder, when the whole row is a button that opens a session in it, so
+/// A project with no sessions: its badge and name, and a "+" in the
+/// second ink (a control, so never faint) with a folder, when the whole row is a button that opens a session in it, so
 /// the keyboard and VoiceOver reach it too. With no folder it takes no
 /// click and fades, so it does not read as a button (docs/design.md#quiet-row).
 struct QuietRow: View {
@@ -204,7 +205,7 @@ struct QuietRow: View {
             if canOpen {
                 Image(systemName: "plus")
                     .font(.system(size: ProjectMetrics.rowPlusFont, weight: .semibold))
-                    .foregroundStyle(Color(Token.faint))
+                    .foregroundStyle(Color(Token.secondary))
             }
         }
         .padding(.horizontal, Metrics.headerPadH)
@@ -258,8 +259,8 @@ struct ProjectRowView: View {
             CardView(card: card)
         case .newProject:
             NewProjectRow()
-        case .quietHeader(let count, let collapsed):
-            QuietHeader(count: count, collapsed: collapsed)
+        case .quietHeader(let count, let collapsed, let pill):
+            QuietHeader(count: count, collapsed: collapsed, pill: pill)
         case .quiet(let key, _, let name, let color, let icon, let canOpen, let menu):
             QuietRow(key: key, name: name, color: color, icon: icon, canOpen: canOpen, menu: menu)
         case .editor:

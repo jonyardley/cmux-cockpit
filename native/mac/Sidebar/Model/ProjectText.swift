@@ -21,7 +21,7 @@ enum ProjectText {
             return out
         case .newProject:
             return [Words.newProject]
-        case .quietHeader(let count, let collapsed):
+        case .quietHeader(let count, let collapsed, _):
             return [collapsed ? Words.folded : Words.open, Words.quiet, String(count)]
         case .quiet(_, _, let name, _, _, let canOpen, _):
             return [Words.laneMark, name] + (canOpen ? [Words.plus] : [])
@@ -40,15 +40,13 @@ enum ProjectText {
     /// A quiet project's row: whole while a click opens it, faded while it
     /// has no folder, so it does not read as a button (docs/design.md#quiet-row).
     static func quietOpacity(canOpen: Bool) -> Double {
-        canOpen ? 1 : quietFade
+        canOpen ? 1 : disabledFade
     }
 
-    /// A quiet project with no folder, faded (docs/design.md#quiet-row).
-    static let quietFade = 0.55
-
-    /// The Quiet heading's pill, the core's QUIET_PILL (native/core/src/
-    /// ui.rs), which the panel model does not carry.
-    static var quietPill: PillColors { PillColors(bg: .countBg, fg: .metaText) }
+    /// Faded because it cannot be clicked: a quiet project with no folder.
+    /// Apart from `Metrics.emptyFade` (nothing here), though both are 0.55
+    /// (docs/design.md#the-grammar, rule 9).
+    static let disabledFade = 0.55
 
     /// A row's identity in a ForEach.
     static func id(_ row: ProjectRow) -> String {

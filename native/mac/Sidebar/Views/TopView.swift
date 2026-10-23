@@ -3,7 +3,7 @@ import SwiftUI
 /// The view switch, as the core has it on: two tabs on a ringed track, the
 /// chosen one a white face with an edge (docs/design.md#view-switch). Tapping
 /// the other view asks the sidebar's core to flip to it. While something
-/// waits on Jon, the All tab carries the count on a clay badge (issue
+/// waits on Jon, the All tab carries the count on the core's fill (issue
 /// #314), whose click goes to the next waiting card.
 struct ViewSwitch: View {
     let view: PanelView
@@ -58,8 +58,9 @@ private struct SwitchSegment<Extra: View>: View {
     }
 }
 
-/// The waiting count on the All tab: white on clay, in the count pill's
-/// shape. A click reveals the
+/// The waiting count on the All tab: white on the core's fill, clay, or
+/// amber while every waiting card is an agent asking, in the count pill's
+/// shape (docs/design.md#needs-count). A click reveals the
 /// session the core names, back in All first, and steps on with each
 /// click; it does not flip the view itself, so it sits over the tab's
 /// own tap.
@@ -75,17 +76,17 @@ private struct NeedsCount: View {
                 .font(.system(size: Metrics.Font.tiny, weight: .bold).monospaced())
                 .foregroundStyle(Color(Palette.Own.onFill))
                 .fixedSize()
-                .countPillShape(Color(Token.clay))
+                .countPillShape(Color(needs.fill))
         }
         .buttonStyle(.plain)
     }
 }
 
-/// Next: a white pill with a clay edge, "Next: <title>" in clay, cut in
-/// the middle so both ends show, and its place in the queue on the right
-/// (docs/design.md#next). The panel shows it only while nothing waits
-/// (TopText), so it steps to a Ready session; a tap steps to Next's
-/// target.
+/// Next: a white pill with a green edge, "Next: <title>" in the core's
+/// ink (Ready's green), cut in the middle so both ends show, and its place
+/// in the queue on the right (docs/design.md#next). The panel shows it
+/// only while nothing waits (TopText), so it steps to a Ready session; a
+/// tap steps to Next's target.
 struct NextView: View {
     let next: NextLine
     @State private var hovering = false
@@ -95,7 +96,7 @@ struct NextView: View {
         HStack(spacing: Metrics.inlineGap) {
             Text(Words.next + ": " + target.title)
                 .font(.system(size: Metrics.Font.next, weight: .semibold))
-                .foregroundStyle(Color(Token.clayText))
+                .foregroundStyle(Color(NextText.ink(next)))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -108,10 +109,10 @@ struct NextView: View {
         }
         .padding(.horizontal, Metrics.nextPadH)
         .padding(.vertical, Metrics.nextPadV)
-        .background(Color(hovering ? Palette.Own.needsHover : Palette.Own.card), in: .rect(cornerRadius: Metrics.Radius.tab))
+        .background(Color(hovering ? Palette.Own.cardHover : Palette.Own.card), in: .rect(cornerRadius: Metrics.Radius.tab))
         .overlay {
             RoundedRectangle(cornerRadius: Metrics.Radius.tab)
-                .strokeBorder(Color(Palette.Own.needsEdge), lineWidth: Metrics.hairline)
+                .strokeBorder(Color(Palette.Own.readyEdge), lineWidth: Metrics.hairline)
         }
         .onHover { hovering = $0 }
         .modifier(NextTap(next: next))
