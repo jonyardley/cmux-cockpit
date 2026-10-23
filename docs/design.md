@@ -67,7 +67,7 @@ dark-mode screenshot; nothing here changes before then.
 |-|-|-|-|-|
 | `clay` | D97757 | E08A6D | your turn | the waiting count on the All tab while one waiting card is your turn (core picks, `Needs.fill`); a needs dot |
 | `amber` | D9A03F | E3B260 | asking | needs dot, status dot, the waiting count while every waiting card asks (core picks) |
-| `blue` | 3B6FB6 | 6A9BE0 | working | progress bar fill (`CardView.swift:438`), status dot |
+| `blue` | 3B6FB6 | 6A9BE0 | working | progress bar fill (`CardView.swift` `ProgressBar`), status dot |
 | `green` | 788C5D | 93A877 | finished | status dot (core picks) |
 | `mergeGreen` | 1DB954 | 3DD171 | ready to merge | status dot (core picks) |
 | `greenDeep` | 3F5A2B | A6C58A | nothing now | not drawn: left only under `greenChipEdge`, which no view draws; ready to merge is `mergeText` everywhere (D11 a) |

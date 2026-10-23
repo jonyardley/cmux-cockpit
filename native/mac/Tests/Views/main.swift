@@ -236,7 +236,6 @@ if let panel = load("lanes") {
         let want = lane.empty ? "" : (lane.collapsed ? Words.folded : Words.open)
         check(mark == want, "\(lane.name): fold mark")
         check(lane.collapsed ? lane.rows.isEmpty : true, "\(lane.name): a folded lane has no rows")
-        if lane.empty { check(lane.pill.fg != .faint, "\(lane.name): an empty lane's pill takes the core's tint, faded but never faint") }
         check(lane.dropHint.text == "Drop here" && lane.dropHint.ink == .heading, "\(lane.name): Drop here in the heading ink, from the core")
         check(lane.mergeInk == (lane.faint ? .faint : .mergeText), "\(lane.name): its merge line in the merge green, or faint")
     }
@@ -260,6 +259,12 @@ if let panel = load("review-verdicts") {
     check(NextText.targetId(panel.next) == nil, "a Next click with nowhere to go outlines nothing")
     for lane in panel.lanes where !lane.mergeReady.isEmpty {
         check(lane.mergeInk == .mergeText || lane.faint, "\(lane.name): ready to merge in the merge green")
+    }
+    let empty = panel.lanes.filter(\.empty)
+    check(!empty.isEmpty, "review-verdicts has an empty lane")
+    for lane in empty {
+        check(lane.pill.fg != .faint, "\(lane.name): an empty lane's pill takes the core's tint, faded but never faint")
+        check(lane.mergeInk == (lane.faint ? .faint : .mergeText), "\(lane.name): its merge ink follows its faint heading")
     }
 }
 if let panel = load("needs-and-next") {

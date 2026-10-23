@@ -64,7 +64,9 @@ pub struct HeaderHint {
     pub color: Token,
 }
 
-/// What a lane header says while a card is dragged over its lane.
+/// What the sidebar's lane header says while a card is dragged over its
+/// lane. The pane keeps its own lower-case words for its two drop spots
+/// (`panel::DROP_HERE`, `DROP_AT_END`).
 pub const DROP_HINT: &str = "Drop here";
 
 /// "Drop here" in the heading ink: the same on every lane.

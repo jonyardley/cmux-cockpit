@@ -358,9 +358,12 @@ pub(crate) mod fixtures {
             collapsed: false,
             merge_ready: String::new(),
             merge_ink: Token::MergeText,
-            drop_hint: cockpit_core::panel::Piece {
-                text: "Drop here".into(),
-                ink: Token::Heading,
+            drop_hint: {
+                let hint = cockpit_core::lane_entries::drop_hint();
+                cockpit_core::panel::Piece {
+                    text: hint.text,
+                    ink: hint.color,
+                }
             },
             rows,
         }

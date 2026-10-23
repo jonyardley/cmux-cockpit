@@ -642,7 +642,7 @@ fn lane_head(
         dot,
         collapsed,
         merge_ready: header.map(|h| h.merge_ready.clone()).unwrap_or_default(),
-        merge_ink: merge_ink(lane.faint),
+        merge_ink: merge_ink(faint_heading(&lane, empty)),
         drop_hint: drop_piece(),
         rows: Vec::new(),
     }

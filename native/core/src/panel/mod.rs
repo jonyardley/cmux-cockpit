@@ -474,7 +474,8 @@ pub struct Lane {
     pub collapsed: bool,
     /// "2 ready to merge", or "".
     pub merge_ready: String,
-    /// The merge line's ink: the merge green, or faint in a faint lane.
+    /// The merge line's ink: the merge green, or faint while the heading
+    /// is (`faint`), so the two never disagree.
     pub merge_ink: Token,
     /// What the header says while a card is dragged over the lane, and
     /// its ink: "Drop here" in the heading ink.

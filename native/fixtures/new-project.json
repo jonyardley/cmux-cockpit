@@ -36,7 +36,7 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
-      "merge_ink": "mergeText",
+      "merge_ink": "faint",
       "drop_hint": {
         "text": "Drop here",
         "ink": "heading"
@@ -58,7 +58,7 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
-      "merge_ink": "mergeText",
+      "merge_ink": "faint",
       "drop_hint": {
         "text": "Drop here",
         "ink": "heading"
@@ -80,7 +80,7 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
-      "merge_ink": "mergeText",
+      "merge_ink": "faint",
       "drop_hint": {
         "text": "Drop here",
         "ink": "heading"
