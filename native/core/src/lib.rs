@@ -57,8 +57,8 @@ pub mod ui;
 pub mod words;
 
 pub use app::{
-    AgentMessage, CmuxCall, Cockpit, Effect, Event, Model, OpenUrl, PrAsk, PrSave, StateSet,
-    ViewModel,
+    AgentMessage, CmuxCall, Cockpit, CopyText, Effect, Event, Model, OpenUrl, PrAsk, PrSave,
+    StateSet, ViewModel,
 };
 pub use data::{Data, Workspace};
 pub use edit::EditEvent;

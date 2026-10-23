@@ -59,6 +59,8 @@ let every: [SidebarAction] = [
     .menu(.pick(.togglePin)),
     .menu(.pick(.markRead)),
     .menu(.pick(.openPr)),
+    .menu(.pick(.copyPrLink)),
+    .menu(.pick(.copyBranch)),
     .menu(.pick(.toggleNeeds)),
     .menu(.pick(.openProject)),
     .menu(.pick(.editProject)),

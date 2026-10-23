@@ -8,6 +8,7 @@
 
 use crate::data::{Data, Workspace};
 use crate::edit::edit_label;
+use crate::js::non_empty;
 use crate::lanes::LaneKey;
 use crate::projects::{OTHER_KEY, is_project_key};
 use crate::prs::pr_summary;
@@ -44,6 +45,10 @@ pub enum MenuAction {
     MarkRead,
     /// Opens the card's PR in the browser, when it has a link.
     OpenPr,
+    /// Puts the card's PR link on the clipboard; only offered with one.
+    CopyPrLink,
+    /// Puts the card's branch on the clipboard; only offered with one.
+    CopyBranch,
     /// Dismiss needs you, or Restore needs you when dismissed.
     ToggleNeeds,
     /// The project menu's new session in the project's folder.
@@ -99,6 +104,11 @@ pub enum MenuEvent {
     Pick(MenuAction),
 }
 
+/// The card's branch, when cmux knows it.
+fn branch_of(w: Option<&Workspace>) -> Option<&str> {
+    non_empty(w.and_then(|w| w.branch.as_deref()))
+}
+
 /// "✓ " before the current choice.
 fn ticked(on: bool, label: String) -> String {
     if on { format!("✓ {label}") } else { label }
@@ -150,6 +160,12 @@ impl Session {
             url: p.url.as_deref(),
         });
         items.push(MenuItem::item(open_pr_label(pr_ref), MenuAction::OpenPr));
+        if self.pr_link(w).is_some() {
+            items.push(MenuItem::item("Copy PR link", MenuAction::CopyPrLink));
+        }
+        if branch_of(w).is_some() {
+            items.push(MenuItem::item("Copy branch", MenuAction::CopyBranch));
+        }
         let needs = if self.is_needs_dismissed(w) {
             "Restore needs you"
         } else {
@@ -276,13 +292,20 @@ impl Session {
             }
             MenuAction::MarkRead => self.workspace_action(w, "mark_read"),
             MenuAction::OpenPr => {
-                let url = pr_summary(&self.saved, w)
-                    .and_then(|p| p.url)
-                    // Only a web link: a file path, or a word `open` would
-                    // read as a flag, is never handed to the shell.
-                    .filter(|u| u.starts_with("https://") || u.starts_with("http://"));
-                if let Some(url) = url {
+                if let Some(url) = self.pr_link(w) {
                     self.outbox.push(Outbound::OpenUrl { url });
+                }
+            }
+            MenuAction::CopyPrLink => {
+                if let Some(text) = self.pr_link(w) {
+                    self.outbox.push(Outbound::Copy { text });
+                }
+            }
+            MenuAction::CopyBranch => {
+                if let Some(text) = branch_of(w) {
+                    self.outbox.push(Outbound::Copy {
+                        text: text.to_string(),
+                    });
                 }
             }
             MenuAction::ToggleNeeds => {
@@ -294,6 +317,15 @@ impl Session {
             }
             MenuAction::OpenProject | MenuAction::EditProject => {}
         }
+    }
+
+    /// The card's PR link, for Open PR and Copy PR link alike. Only a web
+    /// link: a file path, or a word `open` would read as a flag, is never
+    /// handed to the shell.
+    fn pr_link(&self, w: Option<&Workspace>) -> Option<String> {
+        pr_summary(&self.saved, w)
+            .and_then(|p| p.url)
+            .filter(|u| u.starts_with("https://") || u.starts_with("http://"))
     }
 
     /// A cmux workspace action (pin, unpin, mark_read) on the card.
@@ -325,8 +357,8 @@ mod tests {
         .unwrap()
     }
 
-    /// Main activity with its anchor and card `a` (in /x/dev/app, PR #7
-    /// with a link), Parked with its anchor, and a pinned card `p` with no
+    /// Main activity with its anchor and card `a` (in /x/dev/app on branch
+    /// feat, PR #7 with a link), Parked with its anchor, and a pinned card `p` with no
     /// folder.
     fn data() -> Data {
         serde_json::from_value(serde_json::json!({
@@ -337,7 +369,7 @@ mod tests {
             ],
             "workspaces": [
                 { "id": "anchor-main", "title": "Main activity", "group": "g-main" },
-                { "id": "a", "group": "g-main", "directory": "/x/dev/app",
+                { "id": "a", "group": "g-main", "directory": "/x/dev/app", "branch": "feat",
                   "pr": { "number": 7, "status": "open", "url": "https://example.com/pr/7" } },
                 { "id": "anchor-parked", "title": "Parked", "group": "g-parked" },
                 { "id": "p", "group": "g-parked", "pinned": true },
@@ -382,6 +414,8 @@ mod tests {
                 "Pin",
                 "Mark read",
                 "Open PR #7",
+                "Copy PR link",
+                "Copy branch",
                 "Dismiss needs you",
             ]
         );
@@ -395,6 +429,8 @@ mod tests {
         assert!(words.contains(&"✓ Lane: Parked"));
         assert!(words.contains(&"Unpin"));
         assert!(words.contains(&"No PR to open"));
+        assert!(!words.contains(&"Copy PR link"));
+        assert!(!words.contains(&"Copy branch"));
         assert!(words.contains(&"New session (project has no folder)"));
         assert!(!words.iter().any(|w| w.starts_with("✓ Project")));
     }
@@ -568,6 +604,42 @@ mod tests {
             s.menu(&d, MenuEvent::Pick(MenuAction::OpenPr));
             assert!(s.outbox().is_empty(), "{url}");
         }
+    }
+
+    #[test]
+    fn copies_the_pr_link_and_the_branch_and_nothing_without_them() {
+        let (mut s, d) = (session(), data());
+        for (action, text) in [
+            (MenuAction::CopyPrLink, "https://example.com/pr/7"),
+            (MenuAction::CopyBranch, "feat"),
+        ] {
+            open_card(&mut s, &d, "a");
+            s.menu(&d, MenuEvent::Pick(action.clone()));
+            assert_eq!(s.take_outbox(), [Outbound::Copy { text: text.into() }]);
+            open_card(&mut s, &d, "p");
+            s.menu(&d, MenuEvent::Pick(action));
+            assert!(s.outbox().is_empty());
+        }
+    }
+
+    #[test]
+    fn offers_copy_pr_link_only_for_a_web_link_and_copy_branch_only_when_set() {
+        let mut s = session();
+        let d: Data = serde_json::from_value(serde_json::json!({
+            "epoch": 1000.0,
+            "workspaces": [
+                { "id": "a", "branch": "",
+                  "pr": { "number": 7, "status": "open", "url": "file:///x" } },
+            ],
+        }))
+        .unwrap();
+        let items = s.card_menu(&d, d.ws_by_id("a"));
+        let words = labels(&items);
+        assert!(!words.contains(&"Copy PR link"));
+        assert!(!words.contains(&"Copy branch"));
+        open_card(&mut s, &d, "a");
+        s.menu(&d, MenuEvent::Pick(MenuAction::CopyPrLink));
+        assert!(s.outbox().is_empty());
     }
 
     #[test]

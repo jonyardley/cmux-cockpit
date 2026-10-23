@@ -200,6 +200,18 @@
               },
               {
                 "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
+                }
+              },
+              {
+                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -398,6 +410,18 @@
               },
               {
                 "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
+                }
+              },
+              {
+                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -573,6 +597,18 @@
               },
               {
                 "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
+                }
+              },
+              {
+                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -732,6 +768,18 @@
                 "Item": {
                   "label": "Open PR #3",
                   "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
                 }
               },
               {
@@ -899,6 +947,18 @@
               },
               {
                 "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
+                }
+              },
+              {
+                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -1058,6 +1118,18 @@
                 "Item": {
                   "label": "Open PR #5",
                   "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
                 }
               },
               {
@@ -1225,6 +1297,18 @@
               },
               {
                 "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
+                }
+              },
+              {
+                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -1388,6 +1472,18 @@
               },
               {
                 "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
+                }
+              },
+              {
+                "Item": {
                   "label": "Dismiss needs you",
                   "action": "ToggleNeeds"
                 }
@@ -1547,6 +1643,18 @@
                 "Item": {
                   "label": "Open PR #8",
                   "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
                 }
               },
               {

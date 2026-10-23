@@ -121,6 +121,37 @@ check(SidebarCore.send(.selected(id: clicked)), "the click cmux was asked for go
 check(selected() == [clicked], "and draws that card alone selected on the click: \(selected())")
 check(sent().isEmpty, "with no cmux call of its own, since the SDK made it")
 
+// MARK: Copy from the card menu
+
+/// The first card whose menu offers `action`.
+@MainActor func cardOffering(_ action: MenuAction) -> String? {
+    (drawn?.lanes ?? []).flatMap(\.rows).compactMap { row -> String? in
+        guard case .card(let card) = row else { return nil }
+        let offers = card.menu.contains { if case .item(_, action) = $0 { true } else { false } }
+        return offers ? card.wsId : nil
+    }.first
+}
+
+var copied: [String] = []
+SidebarCore.copy = { copied.append($0); return true }
+for (action, looks) in [(MenuAction.copyPrLink, "https://"), (.copyBranch, "")] {
+    guard let id = cardOffering(action) else {
+        check(false, "a card offers \(action)")
+        continue
+    }
+    copied = []
+    _ = sent()
+    for pick in SidebarAction.pick(action, on: id) { SidebarCore.send(pick) }
+    let words = copied.first ?? ""
+    check(copied.count == 1 && !words.isEmpty && words.hasPrefix(looks), "\(action) puts words on the clipboard on the click: \(copied)")
+    check(sent().isEmpty, "and nothing goes to the outbox")
+}
+SidebarCore.copy = { _ in false }
+if let id = cardOffering(.copyBranch) {
+    let picks = SidebarAction.pick(.copyBranch, on: id)
+    check(picks.map { SidebarCore.send($0) } == [true, false], "a copy the pasteboard refuses reports so")
+}
+
 // MARK: The clock
 
 drawn = nil
