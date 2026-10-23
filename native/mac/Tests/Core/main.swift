@@ -151,6 +151,7 @@ if let id = cardOffering(.copyBranch) {
     let picks = SidebarAction.pick(.copyBranch, on: id)
     check(picks.map { SidebarCore.send($0) } == [true, false], "a copy the pasteboard refuses reports so")
 }
+SidebarCore.copy = { copied.append($0); return true }
 
 // MARK: The clock
 

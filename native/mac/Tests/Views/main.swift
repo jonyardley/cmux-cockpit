@@ -452,16 +452,17 @@ if let panel = load("projects") {
 // Copy PR link and Copy branch sit straight after Open PR, on a card that
 // has a PR link or a branch, and on no other.
 if let panel = load("lanes") {
-    let menus = panel.lanes.flatMap(\.rows).compactMap { row -> [String]? in
+    let menus = panel.lanes.flatMap(\.rows).compactMap { row -> [MenuItem]? in
         guard case .card(let card) = row else { return nil }
-        return card.menu.map { if case .item(let label, _) = $0 { label } else { "" } }
+        return card.menu
     }
-    check(menus.contains { $0.contains("Copy PR link") && $0.contains("Copy branch") }, "lanes: a card offers both copies")
-    check(menus.contains { !$0.contains("Copy PR link") }, "lanes: a card with no PR link offers no Copy PR link")
+    let words = { (menu: [MenuItem]) in menu.map { if case .item(let label, _) = $0 { label } else { "" } } }
+    check(menus.contains { words($0).contains("Copy PR link") && words($0).contains("Copy branch") }, "lanes: a card offers both copies")
+    check(menus.contains { !words($0).contains("Copy PR link") }, "lanes: a card with no PR link offers no Copy PR link")
     for menu in menus {
-        let copies = menu.filter { $0.hasPrefix("Copy ") }
-        let at = menu.firstIndex { $0.hasPrefix("Open PR") || $0 == "No PR to open" }
-        let after = at.map { Array(menu.dropFirst($0 + 1).prefix(copies.count)) }
+        let copies = words(menu).filter { $0.hasPrefix("Copy ") }
+        let at = menu.firstIndex { if case .item(_, .openPr) = $0 { true } else { false } }
+        let after = at.map { Array(words(menu).dropFirst($0 + 1).prefix(copies.count)) }
         check(after == copies, "lanes: \(copies) follow Open PR")
     }
 }

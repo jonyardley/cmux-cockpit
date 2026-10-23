@@ -11,7 +11,7 @@ use crate::edit::edit_label;
 use crate::js::non_empty;
 use crate::lanes::LaneKey;
 use crate::projects::{OTHER_KEY, is_project_key};
-use crate::prs::pr_summary;
+use crate::prs::{PrSummary, pr_summary};
 use crate::session::{Outbound, Param, Session};
 use crate::status::{PrRef, open_pr_label};
 
@@ -104,6 +104,14 @@ pub enum MenuEvent {
     Pick(MenuAction),
 }
 
+/// A PR's link when it is a web link: a file path, or a word `open`
+/// would read as a flag, is never handed to the shell.
+fn web_link(pr: &PrSummary) -> Option<String> {
+    pr.url
+        .clone()
+        .filter(|u| u.starts_with("https://") || u.starts_with("http://"))
+}
+
 /// The card's branch, when cmux knows it.
 fn branch_of(w: Option<&Workspace>) -> Option<&str> {
     non_empty(w.and_then(|w| w.branch.as_deref()))
@@ -155,12 +163,15 @@ impl Session {
         ));
         items.push(MenuItem::item("Mark read", MenuAction::MarkRead));
         let pr = pr_summary(&self.saved, w);
+        let link = pr.as_ref().and_then(web_link);
+        // Worded from the link the click opens, so a PR whose link is no
+        // web link says it has none rather than offering a dead Open PR.
         let pr_ref = pr.as_ref().map(|p| PrRef {
             tag: &p.tag,
-            url: p.url.as_deref(),
+            url: link.as_deref(),
         });
         items.push(MenuItem::item(open_pr_label(pr_ref), MenuAction::OpenPr));
-        if self.pr_link(w).is_some() {
+        if link.is_some() {
             items.push(MenuItem::item("Copy PR link", MenuAction::CopyPrLink));
         }
         if branch_of(w).is_some() {
@@ -319,13 +330,9 @@ impl Session {
         }
     }
 
-    /// The card's PR link, for Open PR and Copy PR link alike. Only a web
-    /// link: a file path, or a word `open` would read as a flag, is never
-    /// handed to the shell.
+    /// The card's PR link, for Open PR and Copy PR link alike.
     fn pr_link(&self, w: Option<&Workspace>) -> Option<String> {
-        pr_summary(&self.saved, w)
-            .and_then(|p| p.url)
-            .filter(|u| u.starts_with("https://") || u.starts_with("http://"))
+        pr_summary(&self.saved, w).as_ref().and_then(web_link)
     }
 
     /// A cmux workspace action (pin, unpin, mark_read) on the card.
@@ -635,11 +642,14 @@ mod tests {
         .unwrap();
         let items = s.card_menu(&d, d.ws_by_id("a"));
         let words = labels(&items);
+        assert!(words.contains(&"PR #7 has no link"));
         assert!(!words.contains(&"Copy PR link"));
         assert!(!words.contains(&"Copy branch"));
-        open_card(&mut s, &d, "a");
-        s.menu(&d, MenuEvent::Pick(MenuAction::CopyPrLink));
-        assert!(s.outbox().is_empty());
+        for action in [MenuAction::CopyPrLink, MenuAction::CopyBranch] {
+            open_card(&mut s, &d, "a");
+            s.menu(&d, MenuEvent::Pick(action));
+            assert!(s.outbox().is_empty());
+        }
     }
 
     #[test]

@@ -28,22 +28,10 @@ enum SidebarCore {
     /// What one call asked for (native/ffi `Out`).
     private struct Out: Decodable {
         let redraw: Bool
+        /// The words of each copy, for the clipboard, never the outbox.
+        let copies: [String]
         /// Each the text of one outbox/ effect file.
         let effects: [String]
-    }
-
-    /// A Copy effect, `{"Copy": {"text": "…"}}`, the one effect the
-    /// sidebar carries out itself rather than through the outbox.
-    private struct Copy: Decodable {
-        struct Words: Decodable {
-            let text: String
-        }
-
-        let words: Words
-
-        enum CodingKeys: String, CodingKey {
-            case words = "Copy"
-        }
     }
 
     /// The core's view: only the panel is read.
@@ -107,13 +95,9 @@ enum SidebarCore {
         }
         let now = Date()
         var lost = 0
+        for words in out.copies where !copy(words) { lost += 1 }
         for effect in out.effects {
-            let bytes = Data(effect.utf8)
-            if let copied = try? JSONDecoder().decode(Copy.self, from: bytes) {
-                if !copy(copied.words.text) { lost += 1 }
-                continue
-            }
-            let written = folder().flatMap { try? Outbox.write(bytes, into: $0, now: now) }
+            let written = folder().flatMap { try? Outbox.write(Data(effect.utf8), into: $0, now: now) }
             if written == nil { lost += 1 }
         }
         if lost > 0 { log.error("\(lost) effects not carried out") }

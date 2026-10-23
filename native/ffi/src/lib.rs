@@ -9,8 +9,9 @@
 //! - `cockpit_update`: one event as JSON in (`{"At": {"now": …, "event":
 //!   …}}` for a click, an inbox/ answer as it is).
 //! - Both hand back what the core asked for as `Out`: whether to draw
-//!   again, and each other effect as the JSON text of one outbox/ effect
-//!   file (runner/src/effect.rs), oldest first.
+//!   again, the words of each copy for the sidebar to put on the
+//!   clipboard itself, and each other effect as the JSON text of one
+//!   outbox/ effect file (runner/src/effect.rs), oldest first.
 //! - `cockpit_view`: the view as JSON, the whole panel under `panel` once
 //!   `"PanelOn"` has been sent.
 //! - `cockpit_free`: hands back the bytes any call gave out.
@@ -22,7 +23,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Mutex, OnceLock, PoisonError};
 
-use cockpit_core::Cockpit;
+use cockpit_core::{Cockpit, CopyText};
 use crux_core::Core;
 use crux_core::bridge::{Bridge, JsonFfiFormat};
 use serde::{Deserialize, Serialize};
@@ -78,6 +79,9 @@ fn shell() -> &'static Shell {
 pub struct Out {
     /// The core asked to be drawn again: read `cockpit_view`.
     pub redraw: bool,
+    /// The words of each Copy, oldest first: the sidebar puts them on the
+    /// clipboard on the click, so they never go to outbox/.
+    pub copies: Vec<String>,
     /// Every other effect, oldest first, each the JSON text of one
     /// outbox/ file, written as it is.
     pub effects: Vec<String>,
@@ -92,6 +96,10 @@ impl Out {
             let effect = &request["effect"];
             if effect.get("Render").is_some() {
                 self.redraw = true;
+            } else if let Some(copy) = effect.get("Copy") {
+                let copy: CopyText =
+                    serde_json::from_value(copy.clone()).map_err(|_| COCKPIT_FAILED)?;
+                self.copies.push(copy.text);
             } else {
                 self.effects
                     .push(serde_json::to_string(effect).map_err(|_| COCKPIT_FAILED)?);
@@ -357,6 +365,28 @@ mod tests {
         assert!(folded(&json_of(&view().unwrap())));
 
         assert_eq!(send(json!({ "Nope": 1 })), Err(COCKPIT_BAD_EVENT));
+    }
+
+    #[test]
+    fn a_copy_comes_back_as_its_words_never_as_an_outbox_file() {
+        let requests = json!([
+            { "id": 1, "effect": { "Copy": { "text": "feat" } } },
+            { "id": 2, "effect": { "OpenUrl": { "url": "https://example.com" } } },
+            { "id": 3, "effect": { "Render": null } },
+        ]);
+        let mut out = Out::default();
+        assert_eq!(out.add(requests.to_string().as_bytes()), Ok(()));
+        assert_eq!(out.copies, ["feat"]);
+        assert_eq!(
+            out.effects,
+            [r#"{"OpenUrl":{"url":"https://example.com"}}"#]
+        );
+        assert!(out.redraw);
+        let bad = json!([{ "id": 1, "effect": { "Copy": { "words": "feat" } } }]);
+        assert_eq!(
+            Out::default().add(bad.to_string().as_bytes()),
+            Err(COCKPIT_FAILED)
+        );
     }
 
     #[test]
