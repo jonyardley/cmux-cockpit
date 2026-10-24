@@ -17,7 +17,7 @@ use crate::Model;
 
 pub use build::{
     badge_of, card_unread, chip_views, chips_for_density, detail_lines, faint_heading, icon_of,
-    lane_name, size_ink, unread_text, view_of,
+    lane_name, unread_text, view_of,
 };
 pub use editor::{EditorView, Field};
 
@@ -78,11 +78,14 @@ pub enum PanelView {
 }
 
 /// The glyph before a title and its colour; None is the grey outline the
-/// sidebar draws round a dot with no colour of its own.
+/// sidebar draws round a dot with no colour of its own. `halo` is the soft
+/// ring round a live filled dot (working, your turn, asking, ready to
+/// merge), clear for the rest, so a shell draws it as given.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Icon {
     pub glyph: &'static str,
     pub ink: Option<Token>,
+    pub halo: Token,
 }
 
 /// Next: where the next press goes, "1 of 5", or nowhere.
@@ -96,6 +99,9 @@ pub enum NextLine {
         ws_id: String,
         title: String,
         place: String,
+        /// Its words' ink: Ready's green, as Next only leads to a Ready
+        /// card.
+        ink: Token,
     },
 }
 
@@ -193,6 +199,8 @@ pub struct Card {
     /// Ready: finished while Jon was elsewhere, with output unread; the
     /// green pill by the title. Never on a row, which has no pill.
     pub ready: bool,
+    /// The Ready pill's words: the finished green.
+    pub ready_ink: Token,
     /// Pinned: the faint pin at the end of the title row.
     pub pinned: bool,
     /// The progress bar along the bottom, 0 to 1; None draws no bar.
@@ -350,6 +358,8 @@ pub enum ProjectRow {
     QuietHeader {
         count: usize,
         collapsed: bool,
+        /// Its count pill: the quiet grey, as nothing under it runs.
+        pill: PillColors,
     },
     /// A project with no sessions: its name, and "+" when it has a folder.
     Quiet {
@@ -464,6 +474,12 @@ pub struct Lane {
     pub collapsed: bool,
     /// "2 ready to merge", or "".
     pub merge_ready: String,
+    /// The merge line's ink: the merge green, or faint while the heading
+    /// is (`faint`), so the two never disagree.
+    pub merge_ink: Token,
+    /// What the header says while a card is dragged over the lane, and
+    /// its ink: "Drop here" in the heading ink.
+    pub drop_hint: Piece,
     pub rows: Vec<Row>,
 }
 

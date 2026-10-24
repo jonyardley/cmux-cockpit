@@ -110,7 +110,8 @@ fn plain_style(s: &Status) -> StatusStyle {
         Status::NeedsInput => (Some(Token::Clay), Token::ClayText, Urgency::Needs),
         Status::Idle => (None, Token::MetaText, Urgency::Quiet),
         Status::Ended => (Some(Token::Green), Token::GreenText, Urgency::Quiet),
-        Status::Other(_) | Status::None => (None, Token::Faint, Urgency::Quiet),
+        // No agent reads with Idle, in the meta ink: faint is never a state.
+        Status::Other(_) | Status::None => (None, Token::MetaText, Urgency::Quiet),
     };
     let label = match s {
         Status::Working => status_word(&AgentStatus::Working),
@@ -250,6 +251,16 @@ pub fn waiting_tokens(asks: bool) -> (Token, Token) {
         (Token::Amber, Token::AmberText)
     } else {
         (Token::Clay, Token::ClayText)
+    }
+}
+
+/// The halo round a waiting mark drawn as a dot: Asking's amber or Your
+/// turn's clay, faint, as the status dot of each has.
+pub fn waiting_halo(asks: bool) -> Token {
+    if asks {
+        Token::AmberHalo
+    } else {
+        Token::ClayHalo
     }
 }
 
@@ -664,5 +675,23 @@ mod tests {
         assert_eq!(s.as_str(), "thinking");
         assert_eq!(halo_color(&s), Token::Clear);
         assert_eq!(StatusKind::Plain(s).style().label, NO_AGENT_WORD);
+    }
+
+    #[test]
+    fn inks_no_agent_with_idle_in_the_meta_ink_never_faint() {
+        let none = StatusKind::Plain(Status::None).style();
+        let idle = StatusKind::Plain(Status::Idle).style();
+        assert_eq!(none.text, Token::MetaText);
+        assert_eq!(none.text, idle.text);
+        assert_eq!((none.dot, none.ring), (None, None), "a grey outline");
+    }
+
+    #[test]
+    fn haloes_a_waiting_mark_as_its_status_dot_is() {
+        assert_eq!(waiting_halo(true), StatusKind::Asking.style().halo);
+        assert_eq!(
+            waiting_halo(false),
+            StatusKind::Plain(Status::NeedsInput).style().halo
+        );
     }
 }

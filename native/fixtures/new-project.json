@@ -4,7 +4,8 @@
     "Step": {
       "ws_id": "one-b",
       "title": "One: docs",
-      "place": "1 of 2"
+      "place": "1 of 2",
+      "ink": "greenText"
     }
   },
   "needs": {
@@ -35,6 +36,11 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     },
     {
@@ -52,6 +58,11 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     },
     {
@@ -69,6 +80,11 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     },
     {
@@ -86,6 +102,11 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     },
     {
@@ -102,17 +123,24 @@
       },
       "dot": {
         "glyph": "●",
-        "ink": "clay"
+        "ink": "clay",
+        "halo": "clayHalo"
       },
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": [
         {
           "Card": {
             "ws_id": "one-b",
             "icon": {
               "glyph": "●",
-              "ink": "clay"
+              "ink": "clay",
+              "halo": "clayHalo"
             },
             "title": "One: docs",
             "density": "Row",
@@ -122,6 +150,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -263,7 +292,8 @@
             "ws_id": "two",
             "icon": {
               "glyph": "●",
-              "ink": "green"
+              "ink": "green",
+              "halo": "clear"
             },
             "title": "Two: release",
             "density": "Row",
@@ -273,6 +303,7 @@
             },
             "unread": "1",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": true,
             "progress": null,
             "helpers": "",
@@ -415,7 +446,8 @@
             "ws_id": "one-a",
             "icon": {
               "glyph": "●",
-              "ink": "blue"
+              "ink": "blue",
+              "halo": "blueHalo"
             },
             "title": "One: parser rewrite for the streaming tokeniser",
             "density": "Row",
@@ -425,6 +457,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -567,7 +600,8 @@
             "ws_id": "two-merged",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "Two: changelog",
             "density": "Row",
@@ -577,6 +611,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -719,7 +754,8 @@
             "ws_id": "elsewhere",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "Scratch",
             "density": "Row",
@@ -729,6 +765,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -880,7 +917,8 @@
         },
         "dot": {
           "glyph": "●",
-          "ink": "clay"
+          "ink": "clay",
+          "halo": "clayHalo"
         },
         "collapsed": false,
         "can_open": true,
@@ -906,7 +944,8 @@
         "ws_id": "one-a",
         "icon": {
           "glyph": "●",
-          "ink": "blue"
+          "ink": "blue",
+          "halo": "blueHalo"
         },
         "title": "One: parser rewrite for the streaming tokeniser",
         "density": "Full",
@@ -916,6 +955,7 @@
         },
         "unread": "",
         "ready": false,
+        "ready_ink": "greenText",
         "pinned": false,
         "progress": null,
         "helpers": "",
@@ -1095,7 +1135,8 @@
         "ws_id": "one-b",
         "icon": {
           "glyph": "●",
-          "ink": "clay"
+          "ink": "clay",
+          "halo": "clayHalo"
         },
         "title": "One: docs",
         "density": "Full",
@@ -1105,6 +1146,7 @@
         },
         "unread": "",
         "ready": false,
+        "ready_ink": "greenText",
         "pinned": false,
         "progress": null,
         "helpers": "",
@@ -1119,7 +1161,7 @@
             "pieces": [
               {
                 "text": "Review",
-                "ink": "blueText"
+                "ink": "secondary"
               }
             ],
             "gives_way": false,
@@ -1291,7 +1333,8 @@
         "ws_id": "two",
         "icon": {
           "glyph": "●",
-          "ink": "green"
+          "ink": "green",
+          "halo": "clear"
         },
         "title": "Two: release",
         "density": "Full",
@@ -1301,6 +1344,7 @@
         },
         "unread": "",
         "ready": true,
+        "ready_ink": "greenText",
         "pinned": true,
         "progress": null,
         "helpers": "",
@@ -1468,7 +1512,8 @@
         "ws_id": "two-merged",
         "icon": {
           "glyph": "○",
-          "ink": null
+          "ink": null,
+          "halo": "clear"
         },
         "title": "Two: changelog",
         "density": "Full",
@@ -1478,6 +1523,7 @@
         },
         "unread": "",
         "ready": false,
+        "ready_ink": "greenText",
         "pinned": false,
         "progress": null,
         "helpers": "",
@@ -1670,7 +1716,8 @@
         "ws_id": "elsewhere",
         "icon": {
           "glyph": "○",
-          "ink": null
+          "ink": null,
+          "halo": "clear"
         },
         "title": "Scratch",
         "density": "Full",
@@ -1680,11 +1727,12 @@
         },
         "unread": "",
         "ready": false,
+        "ready_ink": "greenText",
         "pinned": false,
         "progress": null,
         "helpers": "",
         "status": "No agent",
-        "status_ink": "faint",
+        "status_ink": "metaText",
         "age": "",
         "status_has_age": false,
         "left_off": "",
@@ -1874,7 +1922,11 @@
     {
       "QuietHeader": {
         "count": 1,
-        "collapsed": false
+        "collapsed": false,
+        "pill": {
+          "bg": "countBg",
+          "fg": "metaText"
+        }
       }
     },
     {

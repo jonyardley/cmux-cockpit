@@ -54,8 +54,15 @@ enum NextText {
     static func target(_ next: NextLine) -> (title: String, place: String) {
         switch next {
         case .nothing: (Words.nextNothing, "")
-        case .step(_, let title, let place): (title, place)
+        case .step(_, let title, let place, _): (title, place)
         }
+    }
+
+    /// The words' ink, as the core picks it: Ready's green, since Next
+    /// only leads to a Ready card; the meta ink with nowhere to go.
+    static func ink(_ next: NextLine) -> Token {
+        if case .step(_, _, _, let ink) = next { return ink }
+        return .metaText
     }
 
     static func isNothing(_ next: NextLine) -> Bool {
@@ -64,13 +71,14 @@ enum NextText {
 
     /// The workspace the next press selects, or nil when nothing waits.
     static func targetId(_ next: NextLine) -> String? {
-        if case .step(let wsId, _, _) = next { return wsId }
+        if case .step(let wsId, _, _, _) = next { return wsId }
         return nil
     }
 }
 
 /// Needs you as the All tab carries it (issue #314): the waiting count
-/// on a clay badge, whose click reveals the next waiting session.
+/// on the core's fill (clay, or amber while every waiting card asks),
+/// whose click reveals the next waiting session.
 enum NeedsText {
     /// Whether the All tab carries the count: whenever something waits.
     static func shows(_ needs: Needs) -> Bool {
@@ -110,11 +118,6 @@ enum LaneText {
         if lane.empty { return "" }
         return lane.collapsed ? Words.folded : Words.open
     }
-
-    /// An empty lane's pill is quiet whatever its tint says.
-    static func pill(_ lane: Lane) -> PillColors {
-        lane.empty ? PillColors(bg: .countBg, fg: .faint) : lane.pill
-    }
 }
 
 /// A lane row's identity is its workspace, so a card keeps its view as its
@@ -126,24 +129,9 @@ extension Row: Identifiable {
 /// The parts of a card drawn round its words (docs/design.md#status-dot,
 /// docs/design.md#title-row), decided here so the views only lay them out.
 extension CardText {
-    /// The core's filled dot (panel/mod.rs DOT); a hollow one has no halo.
+    /// The core's filled dot (panel/mod.rs DOT). Its halo comes with the
+    /// icon, as the core picks it (docs/design.md#status-dot).
     static let filledDot = "●"
-
-    /// The soft halo round a status dot: working, needs, asking and ready
-    /// to merge, the four filled dots in blue, clay, amber and vivid green,
-    /// each in its own hue's halo. Everything else, a hollow dot or
-    /// finished green, is clear, so
-    /// dots with and without one still line up (docs/design.md#status-dot).
-    static func halo(_ icon: Icon) -> Token {
-        guard icon.glyph == filledDot else { return .clear }
-        switch icon.ink {
-        case .blue: return .blueHalo
-        case .clay: return .clayHalo
-        case .amber: return .amberHalo
-        case .mergeGreen: return .mergeHalo
-        default: return .clear
-        }
-    }
 
     /// A row's PR title as it follows the session's, "· Row cards show
     /// their PR"; nil with no PR or a PR with no title (docs/design.md#dense-row).
@@ -158,10 +146,11 @@ extension CardText {
         card.statusHasAge ? "" : card.age
     }
 
-    /// The title row age's ink: the waiting ink while the card waits on
-    /// Jon, so the age reads with its reason; nil for the usual one.
-    static func ageInk(_ card: Card) -> Token? {
-        card.waiting?.ink
+    /// An age's ink, on a title row or a dense row: the waiting ink while
+    /// the card waits on Jon, so the age reads with its reason, else the
+    /// meta ink (docs/design.md#title-row).
+    static func ageInk(_ card: Card) -> Token {
+        card.waiting?.ink ?? .metaText
     }
 
     /// The title of the tab a waiting card's agent runs in, when its

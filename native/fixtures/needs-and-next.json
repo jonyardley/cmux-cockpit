@@ -4,7 +4,8 @@
     "Step": {
       "ws_id": "n1",
       "title": "Oldest question",
-      "place": "1 of 6"
+      "place": "1 of 6",
+      "ink": "greenText"
     }
   },
   "needs": {
@@ -35,6 +36,11 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     },
     {
@@ -52,6 +58,11 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     },
     {
@@ -69,6 +80,11 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     },
     {
@@ -86,6 +102,11 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     },
     {
@@ -102,17 +123,24 @@
       },
       "dot": {
         "glyph": "●",
-        "ink": "clay"
+        "ink": "clay",
+        "halo": "clayHalo"
       },
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": [
         {
           "Card": {
             "ws_id": "n1",
             "icon": {
               "glyph": "●",
-              "ink": "clay"
+              "ink": "clay",
+              "halo": "clayHalo"
             },
             "title": "Oldest question",
             "density": "Row",
@@ -122,6 +150,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -263,7 +292,8 @@
             "ws_id": "ask",
             "icon": {
               "glyph": "●",
-              "ink": "amber"
+              "ink": "amber",
+              "halo": "amberHalo"
             },
             "title": "Publish",
             "density": "Row",
@@ -273,6 +303,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -414,7 +445,8 @@
             "ws_id": "n2",
             "icon": {
               "glyph": "●",
-              "ink": "clay"
+              "ink": "clay",
+              "halo": "clayHalo"
             },
             "title": "Second",
             "density": "Row",
@@ -424,6 +456,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -565,7 +598,8 @@
             "ws_id": "n3",
             "icon": {
               "glyph": "●",
-              "ink": "clay"
+              "ink": "clay",
+              "halo": "clayHalo"
             },
             "title": "Third",
             "density": "Row",
@@ -575,6 +609,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -716,7 +751,8 @@
             "ws_id": "n4",
             "icon": {
               "glyph": "●",
-              "ink": "clay"
+              "ink": "clay",
+              "halo": "clayHalo"
             },
             "title": "Fifth, past the cap",
             "density": "Row",
@@ -726,6 +762,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -867,7 +904,8 @@
             "ws_id": "ready",
             "icon": {
               "glyph": "●",
-              "ink": "green"
+              "ink": "green",
+              "halo": "clear"
             },
             "title": "Finished while away",
             "density": "Row",
@@ -877,6 +915,7 @@
             },
             "unread": "3",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -1015,7 +1054,8 @@
             "ws_id": "busy",
             "icon": {
               "glyph": "●",
-              "ink": "blue"
+              "ink": "blue",
+              "halo": "blueHalo"
             },
             "title": "Busy",
             "density": "Row",
@@ -1025,6 +1065,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",

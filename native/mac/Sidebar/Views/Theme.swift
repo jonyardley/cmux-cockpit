@@ -133,7 +133,9 @@ enum Metrics {
     static let headerPadV: CGFloat = 5
     /// From the section above to a header's words.
     static let sectionGap: CGFloat = 14
-    /// An empty lane's marker and count, faded.
+    /// Faded because nothing is here: an empty lane's marker and count.
+    /// Apart from `ProjectText.disabledFade` (cannot click) and a merged
+    /// card's `CardLook.dimmed` (docs/design.md#the-grammar, rule 9).
     static let emptyFade: Double = 0.55
     /// Every count pill's padding, and the Ready pill's.
     static let pillPadH: CGFloat = 7

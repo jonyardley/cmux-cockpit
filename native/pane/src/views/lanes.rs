@@ -32,7 +32,8 @@ const WAITING_BAR: &str = "▎";
 const CHIP_GAP: &str = "  ";
 /// A title keeps at least this many cells before the status takes the rest.
 const MIN_TITLE: usize = 10;
-/// An empty lane's count: faint on the quiet face.
+/// An empty lane's count: faint on the quiet face. The sidebar fades the
+/// core's tint instead; a terminal has no opacity, so faint stands in.
 const EMPTY_PILL: PillColors = PillColors {
     bg: Token::CountBg,
     fg: Token::Faint,
@@ -104,7 +105,7 @@ fn header(lane: &Lane, inner: usize, target: Option<&Place>) -> Line<'static> {
     let (right_words, right_ink) = match target {
         Some(p) if p.before.is_none() => (DROP_AT_END, theme::strong(Token::Select)),
         Some(_) => (DROP_HERE, theme::strong(Token::Select)),
-        None => (lane.merge_ready.as_str(), theme::ink(Token::GreenDeep)),
+        None => (lane.merge_ready.as_str(), theme::ink(lane.merge_ink)),
     };
     let merge = fit(right_words, inner.saturating_sub(fixed + keep + 1));
     let gap = usize::from(!merge.is_empty());

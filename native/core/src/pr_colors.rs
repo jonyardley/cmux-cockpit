@@ -24,8 +24,9 @@ pub const NEUTRAL_CHIP: ChipColors = ChipColors {
     edge: Token::ChipEdge,
 };
 
-/// Ready's green, as words on a card.
-pub const READY_INK: Token = Token::GreenDeep;
+/// Ready to merge in words: the ink a ready to merge card's status says it
+/// in, so one green means ready to merge everywhere.
+pub const READY_INK: Token = Token::MergeText;
 
 /// A PR's state as words: its health's colour when it has one, else grey.
 pub fn pr_ink(health: PrHealth) -> Token {
@@ -97,6 +98,13 @@ mod tests {
         let quiet = pr_chip_colors(PrHealth::Quiet);
         assert_eq!((quiet.bg, quiet.edge), (NEUTRAL_CHIP.bg, NEUTRAL_CHIP.edge));
         assert_eq!(quiet.fg, Token::MetaText);
+    }
+
+    #[test]
+    fn says_ready_in_the_merge_green_a_ready_to_merge_card_says_it_in() {
+        use crate::status::StatusKind;
+        assert_eq!(READY_INK, StatusKind::MergeReady.style().text);
+        assert_ne!(READY_INK, Token::GreenDeep);
     }
 
     #[test]

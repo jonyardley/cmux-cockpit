@@ -26,13 +26,19 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "1 ready to merge",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": [
         {
           "Card": {
             "ws_id": "waiting",
             "icon": {
               "glyph": "●",
-              "ink": "mergeGreen"
+              "ink": "mergeGreen",
+              "halo": "mergeHalo"
             },
             "title": "waiting card",
             "density": "Full",
@@ -42,6 +48,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -217,13 +224,19 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "1 ready to merge",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": [
         {
           "Card": {
             "ws_id": "ready",
             "icon": {
               "glyph": "●",
-              "ink": "mergeGreen"
+              "ink": "mergeGreen",
+              "halo": "mergeHalo"
             },
             "title": "ready card",
             "density": "Compact",
@@ -233,6 +246,7 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
@@ -247,7 +261,7 @@
                 "pieces": [
                   {
                     "text": "#1",
-                    "ink": "greenDeep"
+                    "ink": "mergeText"
                   }
                 ],
                 "gives_way": false,
@@ -396,7 +410,8 @@
             "ws_id": "draft",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "draft card",
             "density": "Compact",
@@ -406,11 +421,12 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
             "status": "No agent",
-            "status_ink": "faint",
+            "status_ink": "metaText",
             "age": "",
             "status_has_age": false,
             "left_off": "",
@@ -420,7 +436,7 @@
                 "pieces": [
                   {
                     "text": "#2 · draft",
-                    "ink": "secondary"
+                    "ink": "metaText"
                   }
                 ],
                 "gives_way": false,
@@ -569,7 +585,8 @@
             "ws_id": "failing",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "failing card",
             "density": "Compact",
@@ -579,11 +596,12 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
             "status": "No agent",
-            "status_ink": "faint",
+            "status_ink": "metaText",
             "age": "",
             "status_has_age": false,
             "left_off": "",
@@ -730,7 +748,8 @@
             "ws_id": "running",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "running card",
             "density": "Compact",
@@ -740,11 +759,12 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
             "status": "No agent",
-            "status_ink": "faint",
+            "status_ink": "metaText",
             "age": "",
             "status_has_age": false,
             "left_off": "",
@@ -891,7 +911,8 @@
             "ws_id": "conflicts",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "conflicts card",
             "density": "Compact",
@@ -901,11 +922,12 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
             "status": "No agent",
-            "status_ink": "faint",
+            "status_ink": "metaText",
             "age": "",
             "status_has_age": false,
             "left_off": "",
@@ -1052,7 +1074,8 @@
             "ws_id": "blocked",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "blocked card",
             "density": "Compact",
@@ -1062,11 +1085,12 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
             "status": "No agent",
-            "status_ink": "faint",
+            "status_ink": "metaText",
             "age": "",
             "status_has_age": false,
             "left_off": "",
@@ -1076,7 +1100,7 @@
                 "pieces": [
                   {
                     "text": "#6",
-                    "ink": "secondary"
+                    "ink": "metaText"
                   }
                 ],
                 "gives_way": false,
@@ -1213,7 +1237,8 @@
             "ws_id": "merged",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "merged card",
             "density": "Compact",
@@ -1223,11 +1248,12 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
             "status": "No agent",
-            "status_ink": "faint",
+            "status_ink": "metaText",
             "age": "",
             "status_has_age": false,
             "left_off": "",
@@ -1237,7 +1263,7 @@
                 "pieces": [
                   {
                     "text": "#7 · merged",
-                    "ink": "secondary"
+                    "ink": "metaText"
                   }
                 ],
                 "gives_way": false,
@@ -1374,7 +1400,8 @@
             "ws_id": "closed",
             "icon": {
               "glyph": "○",
-              "ink": null
+              "ink": null,
+              "halo": "clear"
             },
             "title": "closed card",
             "density": "Compact",
@@ -1384,11 +1411,12 @@
             },
             "unread": "",
             "ready": false,
+            "ready_ink": "greenText",
             "pinned": false,
             "progress": null,
             "helpers": "",
             "status": "No agent",
-            "status_ink": "faint",
+            "status_ink": "metaText",
             "age": "",
             "status_has_age": false,
             "left_off": "",
@@ -1398,7 +1426,7 @@
                 "pieces": [
                   {
                     "text": "#8 · closed",
-                    "ink": "secondary"
+                    "ink": "metaText"
                   }
                 ],
                 "gives_way": false,
@@ -1547,6 +1575,11 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     },
     {
@@ -1564,6 +1597,11 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     },
     {
@@ -1581,6 +1619,11 @@
       "dot": null,
       "collapsed": false,
       "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
       "rows": []
     }
   ],

@@ -4,10 +4,9 @@ use crate::app::{LaneHeaderView, ViewModel};
 use crate::by_project::ProjectEntry;
 use crate::card_chips::Chip as CoreChip;
 use crate::data::{Data, Workspace};
-use crate::lane_entries::{LaneEntry, shows_left_off};
+use crate::lane_entries::{LaneEntry, drop_hint, merge_ink, shows_left_off};
 use crate::lanes::{self, Density, LaneKey};
 use crate::model::card_density;
-use crate::moves::MoveSize;
 use crate::persist::ViewMode;
 use crate::placement::is_foreign_anchor;
 use crate::pr_colors::{pr_ink, pr_text_color};
@@ -16,10 +15,11 @@ use crate::prs::pr_summary;
 use crate::session::Session;
 use crate::status::{
     DETAIL_MAX, LEFT_OFF_MAX, NEEDS_DETAIL_MAX, StatusKind, StatusStyle, progress_fraction,
-    waiting_tokens,
+    waiting_halo, waiting_tokens,
 };
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
+use crate::ui::QUIET_PILL;
 
 use super::{
     Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT, EditorView, HOLLOW, Icon, Lane,
@@ -30,28 +30,17 @@ use super::{
 /// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
 const LEFT_OFF_LEAD: &str = "You: ";
 
-/// The size chip's ink: the state ink that fits what answering takes.
-pub fn size_ink(size: MoveSize) -> Token {
-    match size {
-        MoveSize::Quick => Token::GreenText,
-        MoveSize::Decide => Token::ClayText,
-        MoveSize::Review => Token::BlueText,
-    }
-}
-
-/// A core chip as the panel draws it: the PR's number in the quiet chip's
-/// ink and its state in its health's, then its diff size as a chip of its
-/// own, faint, as the sidebar sets it beside the PR; the branch with its
-/// dirty dot, and the ports, in the quiet chip's ink. The PR and the port
-/// carry where a tap opens.
+/// A core chip as the panel draws it: the size in the quiet chip's ink,
+/// as the card's own clay or amber already says it waits; the PR's number
+/// in the quiet chip's ink and its state in its health's, then its diff
+/// size as a chip of its own, faint, as the sidebar sets it beside the PR;
+/// the branch with its dirty dot, and the ports, in the quiet chip's ink.
+/// The PR and the port carry where a tap opens.
 pub fn chip_views(c: &CoreChip) -> Vec<Chip> {
     let quiet = Token::Secondary;
     match c {
-        CoreChip::Size { text, size } => {
-            vec![Chip::new(
-                ChipKind::Size,
-                vec![piece(text, size_ink(*size))],
-            )]
+        CoreChip::Size { text, .. } => {
+            vec![Chip::new(ChipKind::Size, vec![piece(text, quiet)])]
         }
         CoreChip::Pr {
             tag,
@@ -112,16 +101,19 @@ fn title_of(w: Option<&Workspace>, id: &str) -> String {
     }
 }
 
-/// A status's dot: filled, hollow in its ring's colour, or a grey outline.
+/// A status's dot: filled with its halo, or hollow in its ring's colour
+/// or a grey outline, which have none.
 pub fn icon_of(style: &StatusStyle) -> Icon {
     match (style.dot, style.ring) {
         (Some(ink), _) => Icon {
             glyph: DOT,
             ink: Some(ink),
+            halo: style.halo,
         },
         (None, ring) => Icon {
             glyph: HOLLOW,
             ink: ring,
+            halo: Token::Clear,
         },
     }
 }
@@ -281,7 +273,8 @@ fn chips_row(session: &mut Session, w: Option<&Workspace>, kind: ChipsFor) -> Ve
 }
 
 /// A compact card's PR in words, "#45 · 1 failing" (its number alone once
-/// the status says Ready to merge), in its health's ink, then its diff
+/// the status says Ready to merge), in its health's ink (the meta ink while
+/// quiet, as on a chip and a row), then its diff
 /// size, faint, as a chip of its own. The sidebar runs them on from the
 /// status line after a "·"; here they have a line of their own, so they
 /// have none.
@@ -291,7 +284,7 @@ fn compact_pr(session: &mut Session, w: Option<&Workspace>) -> Vec<Chip> {
     };
     let words = piece(
         session.card_pr_words(w, &pr),
-        pr_text_color(Some(&pr), Token::Secondary),
+        pr_text_color(Some(&pr), Token::MetaText),
     );
     let chip = Chip {
         url: pr.url.clone(),
@@ -325,12 +318,19 @@ pub fn chips_for_density(d: Density) -> ChipsFor {
     }
 }
 
+/// Ready's words: the finished green, as a Ready card's status says it.
+/// The Ready pill and Next, which only leads to a Ready card, take it.
+pub fn ready_ink() -> Token {
+    StatusKind::Ready.style().text
+}
+
 fn next_line(data: &Data, view: &ViewModel) -> NextLine {
     match &view.next.step {
         Some(step) => NextLine::Step {
             ws_id: step.target.clone(),
             title: title_of(data.ws_by_id(&step.target), &step.target),
             place: format!("{} of {}", step.position, step.total),
+            ink: ready_ink(),
         },
         None => NextLine::Nothing,
     }
@@ -517,6 +517,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         badge: looks.badge,
         unread: looks.unread,
         ready: looks.ready,
+        ready_ink: ready_ink(),
         pinned: looks.pinned,
         progress: looks.progress,
         helpers: looks.helpers,
@@ -605,7 +606,14 @@ fn header_dot(
     Some(Icon {
         glyph: DOT,
         ink: Some(waiting_tokens(asking).0),
+        halo: waiting_halo(asking),
     })
+}
+
+/// "Drop here" as a piece, for a lane header to say under a drag.
+fn drop_piece() -> super::Piece {
+    let hint = drop_hint();
+    piece(hint.text, hint.color)
 }
 
 fn lane_head(
@@ -634,6 +642,8 @@ fn lane_head(
         dot,
         collapsed,
         merge_ready: header.map(|h| h.merge_ready.clone()).unwrap_or_default(),
+        merge_ink: merge_ink(faint_heading(&lane, empty)),
+        drop_hint: drop_piece(),
         rows: Vec::new(),
     }
 }
@@ -659,6 +669,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         badge: looks.badge,
         unread: looks.unread,
         ready: looks.ready,
+        ready_ink: ready_ink(),
         pinned: looks.pinned,
         progress: looks.progress,
         helpers: looks.helpers,
@@ -720,6 +731,7 @@ fn projects(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Project
             ProjectEntry::QuietHeader { .. } => ProjectRow::QuietHeader {
                 count: quiet,
                 collapsed: session.quiet_collapsed(),
+                pill: QUIET_PILL,
             },
             ProjectEntry::QuietRow { project, .. } => {
                 let p = session.project_by_key(project);
@@ -747,6 +759,7 @@ mod tests {
     use super::*;
     use crate::Model;
     use crate::data::{Agent, AgentStatus};
+    use crate::moves::MoveSize;
     use crate::persist::SavedState;
     use crate::ui::Urgency;
 
@@ -754,7 +767,7 @@ mod tests {
         StatusStyle {
             label: "Working",
             dot,
-            halo: Token::Clear,
+            halo: Token::BlueHalo,
             text: Token::MetaText,
             ring,
             urgency: Urgency::Quiet,
@@ -767,22 +780,59 @@ mod tests {
             icon_of(&style(Some(Token::Blue), None)),
             Icon {
                 glyph: DOT,
-                ink: Some(Token::Blue)
+                ink: Some(Token::Blue),
+                halo: Token::BlueHalo,
             }
         );
         assert_eq!(
             icon_of(&style(None, Some(Token::Blue))),
             Icon {
                 glyph: HOLLOW,
-                ink: Some(Token::Blue)
-            }
+                ink: Some(Token::Blue),
+                halo: Token::Clear,
+            },
+            "a hollow dot has no halo"
         );
         assert_eq!(
             icon_of(&style(None, None)),
             Icon {
                 glyph: HOLLOW,
-                ink: None
+                ink: None,
+                halo: Token::Clear,
             }
+        );
+    }
+
+    #[test]
+    fn haloes_each_live_dot_in_its_own_hue_and_leaves_the_quiet_ones_clear() {
+        use crate::status::Status;
+        let halo = |k: StatusKind| icon_of(&k.style()).halo;
+        assert_eq!(halo(StatusKind::Plain(Status::Working)), Token::BlueHalo);
+        assert_eq!(halo(StatusKind::Plain(Status::NeedsInput)), Token::ClayHalo);
+        assert_eq!(halo(StatusKind::Asking), Token::AmberHalo);
+        assert_eq!(halo(StatusKind::MergeReady), Token::MergeHalo);
+        assert_eq!(halo(StatusKind::Waiting), Token::BlueHalo);
+        assert_eq!(halo(StatusKind::Ready), Token::Clear, "finished green");
+        assert_eq!(halo(StatusKind::Quiet), Token::Clear, "hollow blue");
+        assert_eq!(halo(StatusKind::Plain(Status::Idle)), Token::Clear);
+        assert_eq!(halo(StatusKind::Plain(Status::None)), Token::Clear);
+    }
+
+    #[test]
+    fn inks_ready_and_next_in_the_finished_green() {
+        assert_eq!(ready_ink(), Token::GreenText);
+    }
+
+    #[test]
+    fn inks_a_merge_line_and_says_drop_here_as_the_cores_header_hint() {
+        let lanes = lanes::Lanes::default();
+        let lane = |id: &str| lanes.get(&LaneKey::from(id));
+        assert_eq!(merge_ink(lane("review").faint), Token::MergeText);
+        assert_eq!(merge_ink(lane("parked").faint), Token::Faint);
+        let drop = drop_piece();
+        assert_eq!(
+            (drop.text.as_str(), drop.ink),
+            ("Drop here", Token::Heading)
         );
     }
 
@@ -966,7 +1016,7 @@ mod tests {
     }
 
     #[test]
-    fn marks_a_dirty_branch_and_inks_a_size_by_what_answering_takes() {
+    fn marks_a_dirty_branch_and_inks_every_size_in_the_quiet_chips_ink() {
         let br = chip_views(&CoreChip::Branch {
             text: "feat".into(),
             dirty: true,
@@ -976,14 +1026,18 @@ mod tests {
         assert_eq!(br[0].kind, ChipKind::Branch);
         assert!(br[0].gives_way, "the branch goes first on a narrow line");
         assert_eq!(br[0].url, None);
-        let size = chip_views(&CoreChip::Size {
-            text: "Decide".into(),
-            size: MoveSize::Decide,
-        });
-        assert_eq!(size[0].kind, ChipKind::Size);
-        assert_eq!(size[0].pieces[0].ink, Token::ClayText);
-        assert_eq!(size_ink(MoveSize::Quick), Token::GreenText);
-        assert_eq!(size_ink(MoveSize::Review), Token::BlueText);
+        for (text, size) in [
+            ("Quick", MoveSize::Quick),
+            ("Decide", MoveSize::Decide),
+            ("Review", MoveSize::Review),
+        ] {
+            let chip = chip_views(&CoreChip::Size {
+                text: text.into(),
+                size,
+            });
+            assert_eq!(chip[0].kind, ChipKind::Size);
+            assert_eq!(chip[0].pieces[0].ink, Token::Secondary, "{text}: neutral");
+        }
         let port = chip_views(&CoreChip::Port {
             text: ":5173 \u{2197}".into(),
             url: "http://localhost:5173".into(),
@@ -1207,6 +1261,11 @@ mod tests {
             Some(Icon {
                 glyph: DOT,
                 ink: Some(ink),
+                halo: if ink == Token::Amber {
+                    Token::AmberHalo
+                } else {
+                    Token::ClayHalo
+                },
             })
         };
         assert_eq!(
@@ -1323,9 +1382,9 @@ mod tests {
             Some(RowPr {
                 tag: "#171".into(),
                 title: "Row cards show their PR".into(),
-                ink: Token::GreenDeep,
+                ink: Token::MergeText,
             }),
-            "a ready PR's number in ready's green, its title cleaned"
+            "a ready PR's number in the merge green, its title cleaned"
         );
         assert_eq!(
             row_pr(s, Some(&q), Density::Row),
@@ -1337,6 +1396,14 @@ mod tests {
             "a quiet PR's number in the row's meta ink, and no title"
         );
         assert_eq!(row_pr(s, Some(&none), Density::Row), None, "no PR");
+        let compact = compact_pr(s, Some(&q));
+        assert_eq!(
+            compact[0].pieces[0].ink,
+            Token::MetaText,
+            "a compact card's quiet PR words in the meta ink, as on a chip and a row"
+        );
+        let compact = compact_pr(s, Some(&r));
+        assert_eq!(compact[0].pieces[0].ink, Token::MergeText, "a ready one");
         for d in [Density::Full, Density::Compact] {
             assert_eq!(row_pr(s, Some(&r), d), None, "{d:?}: its chips carry it");
         }

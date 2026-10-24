@@ -154,7 +154,7 @@ mod header_hint {
         let (mut s, data, _) = setup();
         let hint = s.header_hint(&data, &LaneKey::from("review"), false);
         assert_eq!(hint.text, "2 ready to merge");
-        assert_eq!(hint.color, Token::GreenDeep);
+        assert_eq!(hint.color, Token::MergeText);
         assert_ne!(hint.color, Token::GreenText);
     }
 

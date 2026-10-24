@@ -15,8 +15,8 @@ func check(_ ok: Bool, _ what: String) {
 }
 
 func card(_ id: String, rank: UInt8 = 1) -> Card {
-    Card(wsId: id, icon: Icon(glyph: "o", ink: nil), title: id, density: .full, badge: Badge(icon: "terminal", color: nil),
-         unread: "", ready: false, pinned: false, progress: nil, helpers: "", status: "", statusInk: .clear, age: "", statusHasAge: false, leftOff: "",
+    Card(wsId: id, icon: Icon(glyph: "o", ink: nil, halo: .clear), title: id, density: .full, badge: Badge(icon: "terminal", color: nil),
+         unread: "", ready: false, readyInk: .greenText, pinned: false, progress: nil, helpers: "", status: "", statusInk: .clear, age: "", statusHasAge: false, leftOff: "",
          chips: [], rowPr: nil, detail: "", detailInk: .secondary, detailLines: 1, waiting: nil, waitingTab: nil, rank: rank, movable: true, dimmed: false, selected: false, menu: [])
 }
 

@@ -148,6 +148,7 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("needs-an
     check(lines.contains("\(panel.needs.label) \(panel.needs.wait)"), "Needs you reads as the pane's line")
     check(NeedsText.count(panel.needs) == "5", "the All tab counts 5")
     check(panel.needs.fill == .clay && panel.needs.ink == .clayText, "the count is clay while one waits late")
+    check(Palette.rgba(Palette.Own.onFill, dark: false) == RGBA(0xFFFFFF), "the count's number is white on the core's fill")
     check(NeedsText.tap(panel.needs, from: .all) == [.reveal(id: "n1")], "a click on the count reveals the oldest waiting session")
     check(NeedsText.tap(panel.needs, from: .projects) == [.flipView, .reveal(id: "n1")],
           "from Projects, a click on the count goes back to All first")
@@ -202,6 +203,7 @@ if let panel = load("lanes") {
         check(CardText.mark(chip) == .clay && chip.status.hasPrefix("Your turn: "), "Your turn draws a clay dot and its reason")
         check(CardText.dismissable(chip), "a waiting card shows its x under the pointer")
         check(CardText.ageInk(chip) == .clayText && CardText.titleAge(chip) == chip.age && !chip.age.isEmpty, "its age on the title row, in clay")
+        check(chip.chips.allSatisfy { $0.kind != .size || $0.pieces.allSatisfy { $0.ink == .secondary } }, "its size chip is neutral, not a state ink")
     } else {
         check(false, "lanes: Chip colours waits")
     }
@@ -211,8 +213,8 @@ if let panel = load("lanes") {
         check(false, "lanes: Release notes asks")
     }
     for c in cards where c.waiting == nil {
-        check(CardText.mark(c) == nil && CardText.ageInk(c) == nil && !CardText.dismissable(c),
-              "\(c.title): no dot and no x while it waits on nobody")
+        check(CardText.mark(c) == nil && CardText.ageInk(c) == .metaText && !CardText.dismissable(c),
+              "\(c.title): no dot, no x and its age in the meta ink while it waits on nobody")
     }
 }
 
@@ -234,7 +236,8 @@ if let panel = load("lanes") {
         let want = lane.empty ? "" : (lane.collapsed ? Words.folded : Words.open)
         check(mark == want, "\(lane.name): fold mark")
         check(lane.collapsed ? lane.rows.isEmpty : true, "\(lane.name): a folded lane has no rows")
-        if lane.empty { check(LaneText.pill(lane) == PillColors(bg: .countBg, fg: .faint), "\(lane.name): an empty lane's pill is quiet") }
+        check(lane.dropHint.text == "Drop here" && lane.dropHint.ink == .heading, "\(lane.name): Drop here in the heading ink, from the core")
+        check(lane.mergeInk == (lane.faint ? .faint : .mergeText), "\(lane.name): its merge line in the merge green, or faint")
     }
     check(NeedsText.shows(panel.needs), "Needs you shows while something waits")
     // Every lane with a waiting card dots its heading, folded or open, in
@@ -254,7 +257,25 @@ if let panel = load("review-verdicts") {
     check(!TopText.showsNext(panel), "Next's line hides with nowhere to go")
     check(NextText.isNothing(panel.next), "Next has nowhere to go")
     check(NextText.targetId(panel.next) == nil, "a Next click with nowhere to go outlines nothing")
+    for lane in panel.lanes where !lane.mergeReady.isEmpty {
+        check(lane.mergeInk == .mergeText || lane.faint, "\(lane.name): ready to merge in the merge green")
+    }
+    let empty = panel.lanes.filter(\.empty)
+    check(!empty.isEmpty, "review-verdicts has an empty lane")
+    for lane in empty {
+        check(lane.pill.fg != .faint, "\(lane.name): an empty lane's pill takes the core's tint, faded but never faint")
+        check(lane.mergeInk == (lane.faint ? .faint : .mergeText), "\(lane.name): its merge ink follows its faint heading")
+    }
 }
+if let panel = load("needs-and-next") {
+    check(NextText.ink(panel.next) == .greenText, "Next is in Ready's green, as the core picks it")
+    let cards = panel.lanes.flatMap(\.rows).compactMap { r -> Card? in
+        if case .card(let c) = r { return c }
+        return nil
+    }
+    check(!cards.isEmpty && cards.allSatisfy { $0.readyInk == .greenText }, "the Ready pill's ink is the core's finished green")
+}
+check(NextText.ink(.nothing) == .metaText, "Next with nowhere to go is in the meta ink")
 
 // MARK: Colours
 
@@ -376,25 +397,23 @@ let editorWords = [
 for (word, pinned) in editorWords {
     check(word == pinned, "the editor's \"\(pinned)\"")
 }
-// The sidebar's own words outside the editor, pinned here. Drop here
-// stands in for the core's hint, which differs only in its capital until
-// the views draw the core's (docs/design.md#known-gaps, gap K).
+// The sidebar's own words outside the editor, pinned here. "Drop here"
+// is the core's, carried on each lane.
 let ownWords = [
-    (Words.ready, "Ready"), (Words.dropHere, "Drop here"), (Words.messageAgent, "Message agent…"),
+    (Words.ready, "Ready"), (Words.messageAgent, "Message agent…"),
     (Words.messagePrompt, "Message for the agent in"), (Words.send, "Send"),
     (Words.notSent, "Not sent: the cockpit could not take it. Try again."),
 ]
 for (word, pinned) in ownWords {
     check(word == pinned, "the sidebar's \"\(pinned)\"")
 }
-check(panelRs.contains("pub const DROP_HERE: &str = \"\(Words.dropHere.lowercased())\";"), "Drop here is the core's DROP_HERE but for its capital")
 // A badge's corner is 0.3 of its side, rounded (docs/design.md#badge-tile).
 for (side, corner) in [(26.0, 8.0), (22, 7), (18, 5), (16, 5), (14, 4), (9, 3)] {
     check(BadgeCorner.radius(side) == corner, "a \(Int(side)) badge's corner is \(Int(corner))")
 }
 // The light side of the panel's own colours, pinned here.
 let ownLight: [(Palette.Own, RGBA)] = [
-    (.card, RGBA(0xFFFFFF)), (.needsEdge, RGBA(0xF0D2C3)), (.needsHover, RGBA(0xFBF1EB)), (.cardHover, RGBA(0xF7F6F2)),
+    (.card, RGBA(0xFFFFFF)), (.readyEdge, RGBA(0x788C5D, 0x47)), (.cardHover, RGBA(0xF7F6F2)),
     (.hover, RGBA(0x7F7F7F, 0x14)), (.dropTarget, RGBA(0x141413, 0x1F)), (.zoneLit, RGBA(0xE7E4D9)),
 ]
 for (own, pinned) in ownLight {
@@ -405,7 +424,14 @@ for (token, hex) in [(Token.laneViolet, 0x7A5BA6), (.laneTeal, 0x2E8A86), (.lane
     check(Palette.rgba(token, dark: false) == RGBA(hex), "light \(token) is \(String(format: "%06X", hex))")
 }
 check(Palette.rgba(.readyBg, dark: false) == RGBA(Palette.rgba(Token.green, dark: false).hex, 0x1F), "readyBg is the finished green, faint")
-check(source("core/src/ui.rs").contains("QUIET_PILL: PillColors = PillColors {\n    bg: Token::CountBg,\n    fg: Token::MetaText,"), "the Quiet pill is the core's")
+check(Palette.rgba(.readyEdge, dark: false).hex == Palette.rgba(Token.green, dark: false).hex, "Next's edge is the Ready pill's green")
+if let panel = load("projects") {
+    let pills = panel.projects.compactMap { r -> PillColors? in
+        if case .quietHeader(_, _, let pill) = r { return pill }
+        return nil
+    }
+    check(pills == [PillColors(bg: .countBg, fg: .metaText)], "the Quiet pill is the core's QUIET_PILL, carried on its row")
+}
 
 // "+ New project" draws its plus as an icon, so its label is the words
 // alone; a quiet project with no folder fades, one with a folder does not.
@@ -515,16 +541,18 @@ check(BadgeInk.glyph(on: 0x3B6FB6) == BadgeInk.light, "blue (#3B6FB6) takes the 
 check(BadgeInk.glyph(on: 0x000000) == BadgeInk.light && BadgeInk.glyph(on: 0xFFFFFF) == BadgeInk.dark, "black takes white, white takes dark")
 check(BadgeInk.fallback == Palette.rgba(Palette.Own.grey, dark: false).hex, "no colour is the extension's grey")
 
-// The halo round a status dot: the four filled hues that ask for a look.
-check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .blue)) == .blueHalo, "working's blue dot has its halo")
-check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .clay)) == .clayHalo, "needs' clay dot has its halo")
-check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .amber)) == .amberHalo, "asking's amber dot has its halo")
-check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .mergeGreen)) == .mergeHalo, "ready to merge's green dot has its halo")
-check(CardText.halo(Icon(glyph: CardText.filledDot, ink: .green)) == .clear, "finished green has none")
+// The halo round a status dot comes from the core with its icon: over
+// the lanes scene, a live filled dot has its own hue's halo, a hollow dot
+// and finished green none.
+if let panel = load("lanes") {
+    let halos: [Token: Token] = [.blue: .blueHalo, .clay: .clayHalo, .amber: .amberHalo, .mergeGreen: .mergeHalo]
+    for case .card(let c) in panel.lanes.flatMap(\.rows) {
+        let want = c.icon.glyph == CardText.filledDot ? c.icon.ink.flatMap { halos[$0] } ?? .clear : .clear
+        check(c.icon.halo == want, "\(c.title): its dot's halo is its hue's, as the core picks it")
+    }
+}
 check(Palette.rgba(Token.mergeHalo, dark: false).hex == Palette.rgba(Token.mergeGreen, dark: false).hex, "ready to merge's halo is its green at an alpha")
 check(Palette.rgba(Token.mergeGreen, dark: false) != Palette.rgba(Token.green, dark: false), "ready to merge is not the finished green")
-check(CardText.halo(Icon(glyph: "○", ink: .blue)) == .clear, "a hollow dot has none")
-check(CardText.halo(Icon(glyph: "○", ink: nil)) == .clear, "a grey outline has none")
 
 // Over the fixtures: the age on the title row only while the status line
 // has none, so no card reads two; the bar held to 0 to 1.
@@ -547,8 +575,8 @@ for name in ["lanes", "projects"] {
         check(Set(cards.map(\.density)) == [.full, .compact, .row], "lanes: has every density")
     }
 }
-var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil), title: "t", density: .full, badge: Badge(icon: "terminal", color: nil),
-               unread: "", ready: false, pinned: false, progress: 1.5, helpers: "", status: "", statusInk: .faint, age: "",
+var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil, halo: .clear), title: "t", density: .full, badge: Badge(icon: "terminal", color: nil),
+               unread: "", ready: false, readyInk: .greenText, pinned: false, progress: 1.5, helpers: "", status: "", statusInk: .faint, age: "",
                statusHasAge: false, leftOff: "", chips: [], rowPr: nil, detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, waitingTab: nil, rank: 0,
                movable: true, dimmed: false, selected: false, menu: [])
 check(CardText.progress(bar) == 1, "a bar past the end stops full")
@@ -565,7 +593,7 @@ check(CardText.progress(bar) == nil, "no value, no bar")
 check(CardText.rowPrTitle(bar) == nil, "a card with no PR says no PR title")
 bar.rowPr = RowPr(tag: "#171", title: "", ink: .metaText)
 check(CardText.rowPrTitle(bar) == nil, "a PR with no title adds none")
-bar.rowPr = RowPr(tag: "#171", title: "Row cards show their PR", ink: .greenDeep)
+bar.rowPr = RowPr(tag: "#171", title: "Row cards show their PR", ink: .mergeText)
 check(CardText.rowPrTitle(bar) == "· Row cards show their PR", "a row's PR title follows the session's after a dot")
 check(CardText.waitingTab(bar) == nil && CardText.tabTarget(bar) == nil, "no waiting tab, no tab line and no tab to select")
 bar.waitingTab = WaitingTab(title: "", surfaceId: "9A8CD62C-CD0B-4C88-8063-C0633918D83B")

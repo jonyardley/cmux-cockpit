@@ -44,10 +44,6 @@ enum Words {
     /// The green pill on a card whose agent finished while Jon was
     /// elsewhere (docs/design.md#ready-pill).
     static let ready = "Ready"
-    /// A lane header's hint while a card is dragged over its lane. The
-    /// core's own `header_hint` says "drop here"; the views draw this until
-    /// they draw the core's hint (docs/design.md#lane-header).
-    static let dropHere = "Drop here"
     /// The card menu's last item and the popover it opens
     /// (docs/design.md#message-agent-popover). Its Cancel is `cancel`.
     static let messageAgent = "Message agent…"

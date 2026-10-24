@@ -303,6 +303,7 @@ pub(crate) mod fixtures {
             icon: Icon {
                 glyph: DOT,
                 ink: None,
+                halo: Token::Clear,
             },
             title: id.into(),
             density: Density::Full,
@@ -312,6 +313,7 @@ pub(crate) mod fixtures {
             },
             unread: String::new(),
             ready: false,
+            ready_ink: Token::GreenText,
             pinned: false,
             progress: None,
             helpers: String::new(),
@@ -355,6 +357,14 @@ pub(crate) mod fixtures {
             dot: None,
             collapsed: false,
             merge_ready: String::new(),
+            merge_ink: Token::MergeText,
+            drop_hint: {
+                let hint = cockpit_core::lane_entries::drop_hint();
+                cockpit_core::panel::Piece {
+                    text: hint.text,
+                    ink: hint.color,
+                }
+            },
             rows,
         }
     }

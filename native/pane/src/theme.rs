@@ -85,8 +85,6 @@ pub fn hex(t: Token) -> u32 {
         Token::BlueCount => blend(BLUE, 0x1F, GROUND),
         Token::ClayCount => blend(CLAY, 0x29, GROUND),
         Token::AmberCount => blend(AMBER, 0x29, GROUND),
-        Token::AmberRowEdge => blend(AMBER_TEXT, 0x29, GROUND),
-        Token::NeedsRowEdge => blend(CLAY_TEXT, 0x29, GROUND),
         Token::CardEdge => blend(TEXT, 0x1F, GROUND),
         Token::LaneReview => 0x5E5D59,
         Token::LaneParked => 0xB0AEA5,
