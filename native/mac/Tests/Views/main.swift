@@ -449,6 +449,25 @@ if let panel = load("projects") {
     check(!icons.isEmpty && icons.allSatisfy { !$0.isEmpty }, "projects: every header and quiet row has an icon for its badge")
 }
 
+// Copy PR link and Copy branch sit straight after Open PR, on a card that
+// has a PR link or a branch, and on no other.
+if let panel = load("lanes") {
+    let menus = panel.lanes.flatMap(\.rows).compactMap { row -> [MenuItem]? in
+        guard case .card(let card) = row else { return nil }
+        return card.menu
+    }
+    let words = { (menu: [MenuItem]) in menu.map { if case .item(let label, _) = $0 { label } else { "" } } }
+    check(menus.contains { words($0).contains("Copy PR link") && words($0).contains("Copy branch") }, "lanes: a card offers both copies")
+    check(menus.contains { !words($0).contains("Copy PR link") }, "lanes: a card with no PR link offers no Copy PR link")
+    for menu in menus {
+        let copies = words(menu).filter { $0.hasPrefix("Copy ") }
+        let at = menu.firstIndex { if case .item(_, .openPr) = $0 { true } else { false } }
+        let after = at.map { Array(words(menu).dropFirst($0 + 1).prefix(copies.count)) }
+        check(after == copies, "lanes: \(copies) follow Open PR")
+    }
+}
+check(SidebarAction.pick(.copyBranch, on: "W1") == [.menu(.openCard(id: "W1")), .menu(.pick(.copyBranch))], "Copy branch opens its card's menu first")
+
 // A pick opens the menu it was made from, then picks, in that order.
 check(ProjectMenu.pick(.editProject, key: "k", quiet: true) == [.menu(.openProject(key: "k", quiet: true)), .menu(.pick(.editProject))], "a project menu pick opens its menu first")
 

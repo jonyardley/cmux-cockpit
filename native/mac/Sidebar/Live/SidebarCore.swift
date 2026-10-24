@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import os
 
@@ -6,20 +7,29 @@ import os
 /// goes in whenever its bytes change, each of Jon's clicks goes in with
 /// the sidebar's clock, and each answer from inbox/ goes in as it is.
 /// Whatever the core asks of the world goes out through outbox/ for the
-/// helper to carry out; when it asks to be drawn, `changed` gets the
-/// panel.
+/// helper to carry out, but for a copy, which the sidebar puts on the
+/// clipboard itself on the click; when it asks to be drawn, `changed`
+/// gets the panel.
 @MainActor
 enum SidebarCore {
     /// Gets the core's panel whenever it changed.
     static var changed: ((Panel) -> Void)?
     /// Where the outbox is: the App Group folder, or a check's own.
     static var folder: () -> URL? = { Shared.folder }
+    /// Puts words on the clipboard: the general pasteboard, or a check's
+    /// own. False when the pasteboard would not take them.
+    static var copy: (String) -> Bool = { text in
+        NSPasteboard.general.clearContents()
+        return NSPasteboard.general.setString(text, forType: .string)
+    }
 
     private static let log = Logger(subsystem: "dev.jonyardley.cockpit.sidebar", category: "core")
 
     /// What one call asked for (native/ffi `Out`).
     private struct Out: Decodable {
         let redraw: Bool
+        /// The words of each copy, for the clipboard, never the outbox.
+        let copies: [String]
         /// Each the text of one outbox/ effect file.
         let effects: [String]
     }
@@ -85,11 +95,12 @@ enum SidebarCore {
         }
         let now = Date()
         var lost = 0
+        for words in out.copies where !copy(words) { lost += 1 }
         for effect in out.effects {
             let written = folder().flatMap { try? Outbox.write(Data(effect.utf8), into: $0, now: now) }
             if written == nil { lost += 1 }
         }
-        if lost > 0 { log.error("\(lost) effects not written to the outbox") }
+        if lost > 0 { log.error("\(lost) effects not carried out") }
         if out.redraw, let panel = panel() { changed?(panel) }
         // A click whose effects did not all go out reports so, as a send
         // the outbox would not take did before, so the view can keep

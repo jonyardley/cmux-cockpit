@@ -14,7 +14,10 @@
 //! {"SavePrs": {"prs": {"W1": {"number": 7, "url": "...", ...}, "W2": null}}}
 //! ```
 //!
-//! `Render` is the shell's own business and never comes this way. An
+//! `Render` is the shell's own business and never comes this way, nor
+//! does `Copy`: the sidebar's bridge hands its words back apart from the
+//! files (native/ffi `Out::copies`), and the sidebar puts them on the
+//! clipboard on the click. An
 //! unknown field is refused rather than ignored, so a typo shows in the
 //! log instead of doing something else. The answers
 //! some of these bring back (a cmux call that failed, a PR) go to inbox/
@@ -23,8 +26,8 @@
 use cockpit_core::{AgentMessage, CmuxCall, OpenUrl, PrAsk, PrSave, StateSet};
 use serde::{Deserialize, Serialize};
 
-/// An effect file's contents: every effect of the core but `Render`, with
-/// the names and fields the bridge writes.
+/// An effect file's contents: every effect of the core but `Render` and
+/// `Copy`, with the names and fields the bridge writes.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum EffectFile {
     Cmux(CmuxCall),

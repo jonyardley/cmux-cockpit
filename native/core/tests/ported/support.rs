@@ -266,9 +266,10 @@ pub fn calls(s: &Session) -> Vec<(String, Vec<(String, String)>)> {
                     .map(|(k, v)| (k.clone(), param_text(v)))
                     .collect(),
             )),
-            Outbound::Persist { .. } | Outbound::OpenUrl { .. } | Outbound::AgentMessage { .. } => {
-                None
-            }
+            Outbound::Persist { .. }
+            | Outbound::OpenUrl { .. }
+            | Outbound::Copy { .. }
+            | Outbound::AgentMessage { .. } => None,
         })
         .collect()
 }
@@ -313,9 +314,10 @@ pub fn sent(s: &Session) -> Vec<(String, Option<serde_json::Value>)> {
         .iter()
         .filter_map(|o| match o {
             Outbound::Persist { key, value } => Some((key.clone(), value.clone())),
-            Outbound::Cmux { .. } | Outbound::OpenUrl { .. } | Outbound::AgentMessage { .. } => {
-                None
-            }
+            Outbound::Cmux { .. }
+            | Outbound::OpenUrl { .. }
+            | Outbound::Copy { .. }
+            | Outbound::AgentMessage { .. } => None,
         })
         .collect()
 }

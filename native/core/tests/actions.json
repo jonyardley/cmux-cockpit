@@ -33,6 +33,8 @@
   { "Menu": { "Pick": "TogglePin" } },
   { "Menu": { "Pick": "MarkRead" } },
   { "Menu": { "Pick": "OpenPr" } },
+  { "Menu": { "Pick": "CopyPrLink" } },
+  { "Menu": { "Pick": "CopyBranch" } },
   { "Menu": { "Pick": "ToggleNeeds" } },
   { "Menu": { "Pick": "OpenProject" } },
   { "Menu": { "Pick": "EditProject" } },
