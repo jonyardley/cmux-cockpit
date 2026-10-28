@@ -171,6 +171,14 @@ impl Stamped for SavedMove {
     }
 }
 
+/// The agent tabs (cmux surface ids) the cockpit put to sleep in one
+/// workspace when its card was parked, and when, in epoch seconds (#328).
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
+pub struct SavedAsleep {
+    pub surfaces: Vec<String>,
+    pub since: f64,
+}
+
 /// How the PR poller's last runs went.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -217,6 +225,13 @@ pub struct SavedState {
     /// a rename there renames the lane's group (lane_rename.rs).
     #[serde(deserialize_with = "crate::lenient::map")]
     pub lane_names: BTreeMap<String, String>,
+    /// wsId to the agents the cockpit put to sleep there (sleep.rs), so a
+    /// card still reads Asleep after a reload. Left out while empty.
+    #[serde(
+        deserialize_with = "crate::lenient::map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub asleep: BTreeMap<String, SavedAsleep>,
     #[serde(deserialize_with = "crate::lenient::field")]
     pub ui: UiState,
     #[serde(deserialize_with = "crate::lenient::field")]
@@ -231,7 +246,7 @@ impl SavedState {
 
     /// Makes one of the cockpit's own writes here, as the handler's
     /// applySet makes it in the file: `dismissed.<ws>`, `projectOverride.<ws>`,
-    /// `projects.<key>`, `laneNames.<id>`, `ui.mode` or `ui.collapsed`, set, or deleted with
+    /// `projects.<key>`, `laneNames.<id>`, `asleep.<ws>`, `ui.mode` or `ui.collapsed`, set, or deleted with
     /// no value. False
     /// for any other key or a value of the wrong shape, leaving the state
     /// as it was.
@@ -260,6 +275,7 @@ impl SavedState {
             ("laneNames", _) => parse(value)
                 .map(|v| put(&mut self.lane_names, id, v))
                 .is_ok(),
+            ("asleep", _) => parse(value).map(|v| put(&mut self.asleep, id, v)).is_ok(),
             ("ui", "mode") => parse(value).map(|v| self.ui.mode = v).is_ok(),
             ("ui", "collapsed") => parse(value)
                 .map(|v| self.ui.collapsed = v.unwrap_or_default())

@@ -182,8 +182,11 @@ impl Session {
         if self.lane_anchor_ids(data).contains(&w.id) {
             return;
         }
+        // The lane on screen, so parking and unparking follow what Jon saw.
+        let from = self.lane_of(data, w);
         if actual_lane_of(&self.lanes, data, Some(w)) == key {
             self.lane_override.shift_remove(&w.id);
+            self.lane_moved(data, w, &from, &key);
             return;
         }
         let g = group_for_lane(data, &lane);
@@ -204,12 +207,13 @@ impl Session {
         self.lane_override.insert(
             w.id.clone(),
             LaneMove {
-                lane: key,
+                lane: key.clone(),
                 at,
                 awaiting,
                 held_from: None,
             },
         );
+        self.lane_moved(data, w, &from, &key);
     }
 
     /// Asks cmux for a lane's group, once per wait. No anchor is named, so

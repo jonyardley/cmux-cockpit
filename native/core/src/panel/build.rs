@@ -468,12 +468,32 @@ fn detail_of(
     density: Density,
     waiting: Option<Waiting>,
 ) -> (String, Token) {
+    // Why its agent did not sleep or wake comes first, on every shape.
+    if let Some(note) = w.and_then(|w| session.sleep_note(&w.id)) {
+        return (note.to_string(), Token::Secondary);
+    }
     match (density, waiting) {
         (Density::Row, Some(wt)) => needs_status(session, data, w, wt),
+        (Density::Row, None) => (row_detail(session, w), Token::Secondary),
         _ => (
             unless_waiting(waiting, whole_words(&session.card_detail(w), DETAIL_MAX)),
             Token::Secondary,
         ),
+    }
+}
+
+/// A row's detail. A row's status is its age, so a sleeping or waking
+/// row says so ahead of its detail: "Asleep · Tests pass".
+fn row_detail(session: &mut Session, w: Option<&Workspace>) -> String {
+    let detail = whole_words(&session.card_detail(w), DETAIL_MAX);
+    let Some(kind) = w.and_then(|w| session.sleep_kind(&w.id)) else {
+        return detail;
+    };
+    let word = kind.style().label;
+    if detail.is_empty() {
+        word.to_string()
+    } else {
+        format!("{word} · {detail}")
     }
 }
 
@@ -1342,6 +1362,50 @@ mod tests {
         }
         let (_, ink) = detail_of(s, &data, w, Density::Row, None);
         assert_eq!(ink, Token::Secondary, "a row not waiting");
+    }
+
+    #[test]
+    fn says_asleep_ahead_of_a_rows_detail_and_a_refusal_on_every_shape() {
+        let mut core = Model::default();
+        let s = &mut core.session;
+        s.saved = crate::persist::SavedState::from_json(
+            r#"{"asleep": {"a": {"surfaces": ["S1"], "since": 100}}}"#,
+        )
+        .unwrap();
+        let mut data = three_on("c");
+        if let Some(a) = data.workspaces.as_mut().and_then(|w| w.first_mut()) {
+            a.latest_message = Some("Tests pass".into());
+        }
+        let w = data.ws_by_id("a");
+        assert_eq!(
+            detail_of(s, &data, w, Density::Row, None),
+            ("Asleep · Tests pass".to_string(), Token::Secondary)
+        );
+        assert_eq!(
+            detail_of(s, &data, w, Density::Full, None).0,
+            "Tests pass",
+            "a full card's status line says Asleep"
+        );
+        assert_eq!(s.status_line(&data, w), "Asleep");
+        assert_eq!(
+            icon_of(&s.status_info(&data, w)),
+            Icon {
+                glyph: HOLLOW,
+                ink: Some(Token::MetaText),
+                halo: Token::Clear,
+            }
+        );
+
+        // Parking the open card is refused, and every shape says why.
+        let c = data.ws_by_id("c");
+        s.move_to_lane(&data, c, LaneKey::from("parked"));
+        for d in [Density::Row, Density::Compact, Density::Full] {
+            assert_eq!(
+                detail_of(s, &data, c, d, None),
+                ("Didn't sleep: it's on screen".to_string(), Token::Secondary),
+                "{d:?}"
+            );
+        }
     }
 
     #[test]

@@ -198,6 +198,10 @@ pub struct Session {
     /// The pane's own PR poll and the answers it holds, made over
     /// `saved.prs` on every read; a new state file never resets it.
     pub pr_poll: PrPoll,
+
+    /// Sleep calls on their way and refusals to show (sleep.rs); the
+    /// record of what sleeps is the state file's `asleep`.
+    pub(crate) sleep: crate::sleep::Sleep,
 }
 
 impl Session {

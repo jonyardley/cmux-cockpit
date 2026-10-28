@@ -404,6 +404,11 @@ wash under the pointer. Title `Font.title` 12.5 regular (medium when
 selected); age in `metaText`. Padding 25 leading, 12 trailing, 5 above and
 below; radius `Radius.row` 9. Where: `Views/CardView.swift:126-170`.
 
+A row has no status words, so a sleeping or waking row says it at the
+head of its detail, "Asleep · Tests pass" (or "Asleep" alone), in the
+detail's `secondary`; its dot is the [asleep](#asleep) ring. The core
+writes it (`row_detail` in `native/core/src/panel/build.rs`).
+
 ### Projects card
 
 The one shape every card takes in Projects. No badge (the header has it), so a
@@ -426,8 +431,30 @@ waiting ink while the card waits (D14 a, `CardText.ageInk`). Where:
 Status dot, the status words in the core's ink, the live helpers in
 `Own.tertiary`, and on a compact card the PR and diff in words. Spacing 6.
 "No agent" is in `metaText` with Idle, never `faint` (D12 a,
-`plain_style` in `native/core/src/status.rs`).
+`plain_style` in `native/core/src/status.rs`). "Asleep 3h" and "Waking"
+are in `metaText` too ([asleep](#asleep)).
 Where: `Views/CardView.swift` (`StatusLine`).
+
+### Asleep
+
+Parking a card puts its agent to sleep (issue #328): cmux hibernates it
+and keeps its session, and moving the card out of Parked, or opening it,
+wakes it. While asleep the status reads "Asleep" with how long, and
+"Waking" from the move out until the agent is back. Both draw a hollow
+ring in `metaText`, the ink of their words, where Idle and No agent take
+the grey ring: sleep wants nothing of Jon, so it takes no hue. A parked
+card reads Asleep at once, before cmux answers, and loses it if cmux
+refuses.
+
+When cmux refuses, the card says why in plain words in its detail, on
+every shape, ahead of anything else the detail would say: "Didn't sleep:
+it's on screen", "Didn't sleep: it's running background work", "Didn't
+wake: cmux couldn't start it again". A card that was active a moment ago
+says "Not asleep yet: it was active a moment ago, trying again" while the
+core tries again. The words stay half an hour, or until the next move.
+The words, ring and order are the core's (`native/core/src/sleep.rs`,
+`StatusKind::Asleep` and `Waking` in `native/core/src/status.rs`); the
+views draw them as any status and detail.
 
 **Target (D15 a, not built yet):** the blue status
 for an idle agent whose background shell still runs is renamed from
@@ -581,7 +608,8 @@ Where: `Views/CardView.swift:384-390`.
 ### Left off and detail
 
 Where you left off: `Font.control` 12 in `Own.tertiary`, one line. Detail: 12
-in `secondary` (or the core's ink), one or two lines.
+in `secondary` (or the core's ink), one or two lines. Why an agent did not
+sleep or wake takes the detail's place while it shows ([asleep](#asleep)).
 Where: `Views/CardView.swift:393-425`.
 
 ### Progress bar
@@ -666,7 +694,7 @@ Every card is decided as option a; where that changes a rule, the rule says
    `:136-170`. A filled dot in a live state (working, your turn, asking, ready
    to merge) carries its halo; a quiet one (finished, idle) does not; a
    hollow dot means the agent is there but not active (quiet working in blue,
-   idle and no agent in grey).
+   idle and no agent in grey, asleep and waking in `metaText`).
 3. **A state hue marks that state and nothing else.** Not a queue (Next), not
    a size (the move size chip), not an error, not a warning. Failures are
    red and the helper-down band is neutral (D5 a). Passes: Next is in
@@ -732,6 +760,8 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Quiet working | hollow blue ring, `blueText` | same | hollow glyph | | `status.rs:160-165` |
 | Finished, Ready | olive dot, no halo, `greenText`; Ready pill `greenText` on `Own.readyBg` | olive dot; no Ready pill **≠** | olive glyph | Next in `greenText` | `status.rs`; `panel/build.rs` `ready_ink` |
 | Idle, no agent | hollow grey; `metaText` idle and no agent | hollow grey | hollow grey glyph | | `status.rs` `plain_style` |
+| Asleep, waking | hollow `metaText` ring; `metaText` words | same ring; the word leads the detail | hollow glyph | | `status.rs` `StatusKind::style`; `panel/build.rs` `row_detail` |
+| Didn't sleep or wake | the reason as the detail, `secondary` | same | | | `sleep.rs` `refusal_note`; `panel/build.rs` `detail_of` |
 | Ready to merge | `mergeGreen` dot with halo, `mergeText` words | same, ready PR number `mergeText` | merge line in `mergeText` | PR chip "ready" in `mergeText` | `status.rs`; `lane_entries.rs` `merge_ink`; `pr_colors.rs` `READY_INK` |
 | PR quiet (draft, open, closed) | chip state `metaText`; compact words `metaText` | number `metaText` | | | `pr_colors.rs` `pr_ink`; `panel/build.rs` `compact_pr`, `row_pr` |
 | Checks failing, conflict | chip words `redText` on a neutral chip | number `redText` | | | `pr_colors.rs:33` |

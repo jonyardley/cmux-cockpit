@@ -28,6 +28,7 @@ use crate::persist::{SavedPr, SavedState, ViewMode, persist_url};
 use crate::pr_poll::{PrPolled, shown_in};
 use crate::projects::Project;
 use crate::session::{Outbound, Param, Session};
+use crate::sleep::SleepAnswer;
 
 /// What the shell can tell the core. native/typegen writes it in Swift for
 /// the sidebar to send; the core's own inputs (a frame, the state file, the
@@ -119,6 +120,10 @@ pub enum Event {
     /// #268): from now on the view carries it. The pane and the helper
     /// never send it, so they never pay for a build they do not read.
     PanelOn,
+    /// cmux's answer to putting an agent to sleep or waking it (sleep.rs),
+    /// which the shell carries out off the frame thread.
+    #[facet(skip)]
+    Slept(#[facet(opaque)] Box<SleepAnswer>),
 }
 
 impl Event {
@@ -139,6 +144,7 @@ impl Event {
             | Event::PrPollOn
             | Event::PanelOn
             | Event::PrPolled(_)
+            | Event::Slept(_)
             | Event::CmuxFailed { .. } => false,
             Event::MoveCard { .. }
             | Event::SwitchTo { .. }
@@ -588,7 +594,15 @@ impl App for Cockpit {
             Event::PrPollOn => model.session.pr_poll.turn_on(),
             Event::PanelOn => model.panel_on = true,
             Event::PrPolled(polled) => return model.polled(*polled),
+            Event::Slept(answer) => {
+                if let Some(data) = &model.data {
+                    model.session.sleep_answered(data, *answer);
+                }
+            }
             action => model.act(action),
+        }
+        if let Some(data) = &model.data {
+            model.session.tend_sleep(data);
         }
         model.overlay();
         model.rebuild();
@@ -632,6 +646,11 @@ mod tests {
         );
         assert!(!Event::Refresh.is_action());
         assert!(!Event::CmuxFailed { id: "a".into() }.is_action());
+        let answer: Event = serde_json::from_value(serde_json::json!({
+            "Slept": {"workspace": "a", "surface": "S1", "wake": false, "refused": "visible"}
+        }))
+        .unwrap();
+        assert!(!answer.is_action());
         assert!(!Event::Projects(Vec::new()).is_action());
         assert!(!Event::Lanes(Vec::new()).is_action());
         assert!(!Event::Home { home: None }.is_action());
