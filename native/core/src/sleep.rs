@@ -48,6 +48,9 @@ pub const NOTE_SECS: f64 = 30.0 * 60.0;
 pub const RETRY_SECS: f64 = 8.0;
 /// How many times it is tried again.
 pub const RETRIES: u8 = 4;
+/// The most tabs one workspace's record holds, as the state handler
+/// takes them (MAX_ASLEEP in scripts/state-config.ts).
+pub const MAX_ASLEEP: usize = 10;
 
 /// The code the runner gives a call that ran past its time.
 pub const TIMED_OUT: &str = "timed_out";
@@ -163,12 +166,15 @@ fn live(a: &Agent) -> bool {
     a.status.as_ref().is_some_and(|s| *s != AgentStatus::Ended)
 }
 
-/// Whether a running agent in the workspace began after `since`: one
-/// woken from sleep, or started again by hand. The agent put to sleep was
-/// quiet before it slept, so it never counts while it lingers in the data.
-fn newer_agent(w: &Workspace, since: f64) -> bool {
+/// Whether a running agent in one of the sleeping tabs began after
+/// `since`: one woken, by cmux on a visit or by hand. The agent put to
+/// sleep was quiet before it slept, so it never counts while it lingers in
+/// the data, and an agent in another tab (one that refused to sleep) never
+/// counts at all.
+fn newer_agent(w: &Workspace, surfaces: &[String], since: f64) -> bool {
     w.agent_list().any(|a| {
         live(a)
+            && a.surface_id.as_ref().is_some_and(|s| surfaces.contains(s))
             && a.since_epoch
                 .or(a.last_activity_at)
                 .is_some_and(|t| t > since)
@@ -188,6 +194,8 @@ struct Going {
 struct Waking {
     at: f64,
     record: SavedAsleep,
+    /// Every tab asked to wake, so its agent coming back ends Waking.
+    asked: Vec<String>,
 }
 
 /// Why a workspace's agent did not sleep or wake, and since when.
@@ -283,6 +291,10 @@ impl Session {
         if untabbed {
             self.sleep.note(&w.id, refusal_note(false, NO_TAB), now);
         }
+        // The record must fit what the state file takes, or a reload
+        // would forget a tab left asleep.
+        let held = asleep.map_or(0, |r| r.surfaces.len());
+        surfaces.truncate(MAX_ASLEEP.saturating_sub(held));
         for s in &surfaces {
             self.ask_sleep(&w.id, s, false);
         }
@@ -304,9 +316,15 @@ impl Session {
         for s in &record.surfaces {
             self.ask_sleep(&w.id, s, true);
         }
-        self.sleep
-            .waking
-            .insert(w.id.clone(), Waking { at: now, record });
+        let asked = record.surfaces.clone();
+        self.sleep.waking.insert(
+            w.id.clone(),
+            Waking {
+                at: now,
+                record,
+                asked,
+            },
+        );
         self.set_asleep(&w.id, None);
     }
 
@@ -411,47 +429,78 @@ impl Session {
         };
         waking.record.surfaces.retain(|s| *s != a.surface);
         let since = waking.record.since;
+        // Waking holds until every tab asked has answered, so a later
+        // refusal still finds it.
+        let answered = waking.record.surfaces.is_empty();
         match a.refused.as_deref() {
             // Awake now, or never asleep, or its tab has gone.
             None | Some("not_hibernated" | "surface_not_found") => {}
             Some(code) => {
-                self.sleep.waking.shift_remove(ws);
+                if answered {
+                    self.sleep.waking.shift_remove(ws);
+                }
                 self.add_asleep(ws, &a.surface, since);
                 self.sleep.note(ws, refusal_note(true, code), now);
             }
         }
     }
 
-    /// Tidies sleep each update: lapses what has waited too long, clears
-    /// a record a newer agent or a closed workspace makes stale, wakes a
-    /// sleeping card that is open, and tries a soft refusal again.
-    pub(crate) fn tend_sleep(&mut self, data: &Data) {
+    /// Tidies sleep each update: lapses what has waited too long, tries a
+    /// soft refusal again, and, when `owns` (the core that draws the
+    /// sidebar, so the pane's never doubles it), clears a record a newer
+    /// agent or a closed workspace makes stale and wakes a sleeping card
+    /// that is open or no longer parked.
+    pub(crate) fn tend_sleep(&mut self, data: &Data, owns: bool) {
         let now = now_epoch(data);
         self.sleep.going.retain(|_, g| now - g.at <= GOING_SECS);
         self.sleep.notes.retain(|_, n| now - n.at <= NOTE_SECS);
         self.sleep.waking.retain(|ws, k| {
             let back = data
                 .ws_by_id(ws)
-                .is_some_and(|w| newer_agent(w, k.record.since));
+                .is_some_and(|w| newer_agent(w, &k.asked, k.record.since));
             now - k.at <= WAKING_SECS && !back
         });
-        let records: Vec<(String, f64)> = self
+        self.retry_due(data, now);
+        if owns {
+            self.tend_records(data);
+        }
+    }
+
+    /// Clears each stale record and wakes each sleeping card that is open,
+    /// or has left Parked some way other than a move here (cmux's own
+    /// sidebar, a group join that failed).
+    fn tend_records(&mut self, data: &Data) {
+        // Before cmux's groups are read every card looks unsorted.
+        let lanes_known = !data.group_list().is_empty();
+        let records: Vec<(String, SavedAsleep)> = self
             .saved
             .asleep
             .iter()
-            .map(|(ws, r)| (ws.clone(), r.since))
+            .map(|(ws, r)| (ws.clone(), r.clone()))
             .collect();
-        for (ws, since) in records {
-            match data.ws_by_id(&ws) {
+        for (ws, r) in records {
+            let Some(w) = data.ws_by_id(&ws) else {
                 // An empty frame says nothing about which workspaces closed.
-                None if !data.workspace_list().is_empty() => self.set_asleep(&ws, None),
-                None => {}
-                Some(w) if newer_agent(w, since) => self.set_asleep(&ws, None),
-                Some(w) if self.is_selected(data, Some(w)) => self.wake_up(data, w),
-                Some(_) => {}
+                if !data.workspace_list().is_empty() {
+                    self.set_asleep(&ws, None);
+                }
+                continue;
+            };
+            if newer_agent(w, &r.surfaces, r.since) {
+                self.set_asleep(&ws, None);
+                continue;
+            }
+            // Not again after cmux refused a wake, or while one is on its
+            // way: the card says why, and asking on every frame would only
+            // be refused again.
+            if self.sleep.notes.contains_key(&ws) || self.sleep.waking.contains_key(&ws) {
+                continue;
+            }
+            let left = lanes_known && !sleeps_in(&self.lane_of(data, w));
+            if left || self.is_selected(data, Some(w)) {
+                self.wake_up(data, w);
             }
         }
-        self.retry_due(data, now);
     }
 
     /// Sends each retry that is due, while its card is still parked and
@@ -466,7 +515,14 @@ impl Session {
                 w.agent_list()
                     .any(|a| live(a) && a.surface_id.as_deref() == Some(r.surface.as_str()))
             });
-            if !running || !self.wants_sleep(data, &r.ws) {
+            if !running {
+                // Nothing left to put to sleep there.
+                self.sleep.notes.shift_remove(&r.ws);
+                continue;
+            }
+            if !self.wants_sleep(data, &r.ws) {
+                // Opened since: say so, rather than "trying again".
+                self.sleep.note(&r.ws, refusal_note(false, VISIBLE), now);
                 continue;
             }
             self.ask_sleep(&r.ws, &r.surface, false);
@@ -474,6 +530,8 @@ impl Session {
                 surfaces: Vec::new(),
                 at: now,
             });
+            // Its own clock, so the entry does not lapse under it.
+            going.at = now;
             going.surfaces.push(r.surface);
         }
     }
@@ -507,6 +565,13 @@ mod tests {
     use crate::session::Outbound;
 
     const NOW: f64 = 1_000_000.0;
+
+    impl Session {
+        /// As the sidebar's core tends it.
+        fn tend_sleep_test(&mut self, d: &Data) {
+            self.tend_sleep(d, true);
+        }
+    }
 
     fn session() -> Session {
         let mut s = Session::default();
@@ -693,10 +758,10 @@ mod tests {
                 s.sleep_note("a"),
                 Some("Not asleep yet: it was active a moment ago, trying again")
             );
-            s.tend_sleep(&parked(at + 1.0, idle_s1()));
+            s.tend_sleep_test(&parked(at + 1.0, idle_s1()));
             assert!(sent(&mut s).is_empty(), "not due yet");
             at += RETRY_SECS;
-            s.tend_sleep(&parked(at, idle_s1()));
+            s.tend_sleep_test(&parked(at, idle_s1()));
             assert_eq!(sent(&mut s), [hibernate("S1", "a")]);
         }
         s.sleep_answered(
@@ -708,7 +773,7 @@ mod tests {
             Some("Didn't sleep: it was active a moment ago"),
             "out of tries"
         );
-        s.tend_sleep(&parked(at + RETRY_SECS, idle_s1()));
+        s.tend_sleep_test(&parked(at + RETRY_SECS, idle_s1()));
         assert!(sent(&mut s).is_empty());
     }
 
@@ -721,7 +786,7 @@ mod tests {
         s.sleep_answered(&d, answer("a", "S1", false, Some(RECENTLY_ACTIVE)));
         unpark(&mut s, &d, "a");
         sent(&mut s);
-        s.tend_sleep(&data(NOW + RETRY_SECS));
+        s.tend_sleep_test(&data(NOW + RETRY_SECS));
         assert!(sent(&mut s).is_empty());
         assert_eq!(s.sleep_note("a"), None, "a new move starts afresh");
     }
@@ -734,7 +799,7 @@ mod tests {
             park(&mut s, &d, "a");
             sent(&mut s);
             s.sleep_answered(&d, answer("a", "S1", false, Some(code)));
-            s.tend_sleep(&data(NOW + RETRY_SECS));
+            s.tend_sleep_test(&data(NOW + RETRY_SECS));
             assert!(sent(&mut s).is_empty(), "{code}");
             assert!(
                 s.sleep_note("a")
@@ -759,11 +824,11 @@ mod tests {
         assert_eq!(s.sleep_kind("a"), Some(StatusKind::Waking));
 
         s.sleep_answered(&later, answer("a", "S1", true, None));
-        s.tend_sleep(&later);
+        s.tend_sleep_test(&later);
         assert_eq!(s.sleep_kind("a"), Some(StatusKind::Waking), "no agent yet");
         // The agent comes back, a new process.
         let back = parked(NOW + 605.0, json!([agent("S1", "idle", NOW + 603.0)]));
-        s.tend_sleep(&back);
+        s.tend_sleep_test(&back);
         assert_eq!(s.sleep_kind("a"), None);
     }
 
@@ -774,7 +839,7 @@ mod tests {
         park(&mut s, &d, "a");
         s.sleep_answered(&d, answer("a", "S1", false, None));
         unpark(&mut s, &d, "a");
-        s.tend_sleep(&data_with(NOW + WAKING_SECS + 1.0, json!([])));
+        s.tend_sleep_test(&data_with(NOW + WAKING_SECS + 1.0, json!([])));
         assert_eq!(s.sleep_kind("a"), None);
     }
 
@@ -807,10 +872,114 @@ mod tests {
         sent(&mut s);
         s.select_workspace(&d, Some("a"));
         sent(&mut s);
-        s.tend_sleep(&d);
+        s.tend_sleep_test(&d);
         let out = sent(&mut s);
         assert_eq!(out, [wake("S1", "a"), "clear asleep.a".to_string()]);
         assert_eq!(s.sleep_kind("a"), Some(StatusKind::Waking));
+    }
+
+    #[test]
+    fn an_open_card_whose_wake_was_refused_is_not_asked_again_every_frame() {
+        let mut s = session();
+        let d = data(NOW);
+        park(&mut s, &d, "a");
+        s.sleep_answered(&d, answer("a", "S1", false, None));
+        s.select_workspace(&d, Some("a"));
+        s.tend_sleep_test(&d);
+        sent(&mut s);
+        s.sleep_answered(&d, answer("a", "S1", true, Some("resume_unavailable")));
+        sent(&mut s);
+        s.tend_sleep_test(&data(NOW + 1.0));
+        assert!(sent(&mut s).is_empty(), "no second wake");
+        assert_eq!(s.sleep_kind("a"), Some(StatusKind::Asleep));
+    }
+
+    #[test]
+    fn a_retry_for_a_card_opened_since_says_it_is_on_screen() {
+        let mut s = session();
+        let d = parked(NOW, idle_s1());
+        park(&mut s, &data(NOW), "a");
+        sent(&mut s);
+        s.sleep_answered(&d, answer("a", "S1", false, Some(RECENTLY_ACTIVE)));
+        let later = parked(NOW + RETRY_SECS, idle_s1());
+        s.select_workspace(&later, Some("a"));
+        sent(&mut s);
+        s.tend_sleep_test(&later);
+        assert!(sent(&mut s).is_empty());
+        assert_eq!(s.sleep_note("a"), Some("Didn't sleep: it's on screen"));
+
+        // An agent gone before its retry leaves nothing to say.
+        let mut s = session();
+        park(&mut s, &data(NOW), "a");
+        s.sleep_answered(&d, answer("a", "S1", false, Some(RECENTLY_ACTIVE)));
+        s.tend_sleep_test(&parked(NOW + RETRY_SECS, json!([])));
+        assert_eq!(s.sleep_note("a"), None);
+    }
+
+    #[test]
+    fn a_sleeping_card_that_left_parked_in_cmux_itself_wakes() {
+        let mut s = session();
+        let d = data(NOW);
+        park(&mut s, &d, "a");
+        s.sleep_answered(&d, answer("a", "S1", false, None));
+        sent(&mut s);
+        s.tend_sleep_test(&parked(NOW + 10.0, json!([])));
+        assert!(sent(&mut s).is_empty(), "still parked");
+        // Dragged back to Main in cmux's own sidebar.
+        s.tend_sleep_test(&data_with(NOW + 20.0, json!([])));
+        assert_eq!(
+            sent(&mut s),
+            [wake("S1", "a"), "clear asleep.a".to_string()]
+        );
+    }
+
+    #[test]
+    fn only_the_sidebars_core_acts_on_the_shared_record() {
+        let mut s = session();
+        s.add_asleep("a", "S1", NOW);
+        sent(&mut s);
+        s.select_workspace(&data(NOW), Some("a"));
+        sent(&mut s);
+        s.tend_sleep(&data(NOW), false);
+        assert!(sent(&mut s).is_empty(), "the pane's core leaves it alone");
+        s.tend_sleep(&data(NOW), true);
+        assert_eq!(
+            sent(&mut s),
+            [wake("S1", "a"), "clear asleep.a".to_string()]
+        );
+    }
+
+    #[test]
+    fn every_refused_wake_in_a_workspace_goes_back_on_the_record() {
+        let mut s = session();
+        let d = parked(NOW, json!([]));
+        s.add_asleep("a", "S1", NOW);
+        s.add_asleep("a", "S2", NOW);
+        unpark(&mut s, &d, "a");
+        sent(&mut s);
+        s.sleep_answered(&d, answer("a", "S1", true, Some("teardown_in_progress")));
+        assert_eq!(s.sleep_kind("a"), Some(StatusKind::Waking), "S2 still out");
+        s.sleep_answered(&d, answer("a", "S2", true, Some("teardown_in_progress")));
+        assert_eq!(s.sleep_kind("a"), Some(StatusKind::Asleep));
+        assert_eq!(
+            s.saved.asleep.get("a").map(|r| r.surfaces.clone()),
+            Some(vec!["S1".to_string(), "S2".to_string()])
+        );
+    }
+
+    #[test]
+    fn parks_no_more_tabs_than_the_record_can_hold() {
+        let mut s = session();
+        let agents: Vec<Value> = (0..12)
+            .map(|n| agent(&format!("T{n}"), "idle", NOW - 60.0))
+            .collect();
+        let d = data_with(NOW, Value::Array(agents));
+        park(&mut s, &d, "a");
+        let asked = sent(&mut s)
+            .iter()
+            .filter(|o| o.starts_with(HIBERNATE))
+            .count();
+        assert_eq!(asked, MAX_ASLEEP);
     }
 
     #[test]
@@ -845,24 +1014,30 @@ mod tests {
         sent(&mut s);
 
         // The old agent lingering in the data does not count.
-        s.tend_sleep(&data(NOW + 2.0));
+        s.tend_sleep_test(&data(NOW + 2.0));
         assert!(sent(&mut s).is_empty());
         assert_eq!(s.sleep_kind("a"), Some(StatusKind::Asleep));
 
-        s.tend_sleep(&data_with(
+        // An agent in another tab, one that never slept, does not count.
+        s.tend_sleep_test(&parked(
+            NOW + 30.0,
+            json!([agent("S4", "working", NOW + 25.0)]),
+        ));
+        assert!(sent(&mut s).is_empty());
+        s.tend_sleep_test(&parked(
             NOW + 60.0,
-            json!([agent("S4", "working", NOW + 50.0)]),
+            json!([agent("S1", "working", NOW + 50.0)]),
         ));
         assert_eq!(sent(&mut s), ["clear asleep.a"]);
         assert_eq!(s.sleep_kind("a"), None);
 
         s.add_asleep("gone", "S5", NOW);
         sent(&mut s);
-        s.tend_sleep(&data(NOW + 70.0));
+        s.tend_sleep_test(&data(NOW + 70.0));
         assert_eq!(sent(&mut s), ["clear asleep.gone"]);
         s.add_asleep("gone", "S5", NOW);
         sent(&mut s);
-        s.tend_sleep(&Data::default());
+        s.tend_sleep_test(&Data::default());
         assert!(sent(&mut s).is_empty(), "an empty frame closes nothing");
     }
 
@@ -871,7 +1046,7 @@ mod tests {
         let mut s = session();
         let d = data(NOW);
         park(&mut s, &d, "a");
-        s.tend_sleep(&data(NOW + GOING_SECS + 1.0));
+        s.tend_sleep_test(&data(NOW + GOING_SECS + 1.0));
         assert_eq!(s.sleep_kind("a"), None);
     }
 

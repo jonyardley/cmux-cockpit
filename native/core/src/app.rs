@@ -602,7 +602,9 @@ impl App for Cockpit {
             action => model.act(action),
         }
         if let Some(data) = &model.data {
-            model.session.tend_sleep(data);
+            // Only the core that draws the sidebar acts on the shared
+            // record, so the pane's never doubles a wake.
+            model.session.tend_sleep(data, model.panel_on);
         }
         model.overlay();
         model.rebuild();
