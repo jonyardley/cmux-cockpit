@@ -252,6 +252,7 @@ impl Feed {
                 Effect::Cmux(r) => Outgoing::Cmux(r.operation),
                 Effect::Persist(r) => Outgoing::Persist(r.operation),
                 Effect::OpenUrl(r) => Outgoing::OpenUrl(r.operation),
+                Effect::Copy(r) => Outgoing::Copy(r.operation),
                 Effect::AgentMessage(r) => Outgoing::AgentMessage(r.operation),
                 Effect::SavePrs(r) => Outgoing::SavePrs(r.operation),
             };
@@ -1069,6 +1070,7 @@ mod tests {
                 Outgoing::Cmux(c) => c.method.clone(),
                 Outgoing::Persist(p) => format!("set {}", p.key),
                 Outgoing::OpenUrl(u) => format!("open {}", u.url),
+                Outgoing::Copy(c) => format!("copy {}", c.text),
                 Outgoing::AgentMessage(m) => format!("message {}", m.workspace),
                 Outgoing::SavePrs(p) => format!("save {} prs", p.prs.len()),
             })
