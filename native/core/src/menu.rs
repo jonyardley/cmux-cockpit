@@ -104,14 +104,6 @@ pub enum MenuEvent {
     Pick(MenuAction),
 }
 
-/// A PR's link when it is a web link: a file path, or a word `open`
-/// would read as a flag, is never handed to the shell.
-fn web_link(pr: &PrSummary) -> Option<String> {
-    pr.url
-        .clone()
-        .filter(|u| u.starts_with("https://") || u.starts_with("http://"))
-}
-
 /// The card's branch, when cmux knows it.
 fn branch_of(w: Option<&Workspace>) -> Option<&str> {
     non_empty(w.and_then(|w| w.branch.as_deref()))
@@ -163,7 +155,7 @@ impl Session {
         ));
         items.push(MenuItem::item("Mark read", MenuAction::MarkRead));
         let pr = pr_summary(&self.saved, w);
-        let link = pr.as_ref().and_then(web_link);
+        let link = pr.as_ref().and_then(PrSummary::web_link);
         // Worded from the link the click opens, so a PR whose link is no
         // web link says it has none rather than offering a dead Open PR.
         let pr_ref = pr.as_ref().map(|p| PrRef {
@@ -332,7 +324,9 @@ impl Session {
 
     /// The card's PR link, for Open PR and Copy PR link alike.
     fn pr_link(&self, w: Option<&Workspace>) -> Option<String> {
-        pr_summary(&self.saved, w).as_ref().and_then(web_link)
+        pr_summary(&self.saved, w)
+            .as_ref()
+            .and_then(PrSummary::web_link)
     }
 
     /// A cmux workspace action (pin, unpin, mark_read) on the card.

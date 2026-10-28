@@ -41,7 +41,8 @@ enum SidebarCore {
 
     /// Sends one of Jon's actions, stamped now. False when it is not one
     /// (`isAction`), the core refused it (nothing is drawn then), or an
-    /// effect it asked for could not be written to the outbox.
+    /// effect it asked for was not carried out: not written to the
+    /// outbox, or a copy the pasteboard would not take.
     @discardableResult
     static func send(_ action: SidebarAction, now: Date = Date()) -> Bool {
         guard action.isAction,

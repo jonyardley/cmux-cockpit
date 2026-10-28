@@ -47,7 +47,9 @@ pub enum Outgoing {
 }
 
 /// Puts its first argument on the clipboard as it is, with no newline.
-const COPY_SCRIPT: &str = r#"printf %s "$1" | /usr/bin/pbcopy"#;
+/// pbcopy reads its input in the locale's encoding, so it is told UTF-8:
+/// a runner started without one would otherwise mangle a non-ASCII branch.
+const COPY_SCRIPT: &str = r#"printf %s "$1" | LANG=en_GB.UTF-8 /usr/bin/pbcopy"#;
 
 /// Who a message says it is from.
 pub const MESSAGE_FROM: &str = "Cockpit";
@@ -264,7 +266,7 @@ mod tests {
             args,
             [
                 "-c",
-                r#"printf %s "$1" | /usr/bin/pbcopy"#,
+                r#"printf %s "$1" | LANG=en_GB.UTF-8 /usr/bin/pbcopy"#,
                 "copy",
                 "feat; rm -rf $HOME"
             ]
