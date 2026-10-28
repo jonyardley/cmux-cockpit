@@ -98,6 +98,13 @@ export interface State {
    * same.
    */
   laneNames?: Record<string, string>;
+  /**
+   * wsId -> the agent tabs the cockpit put to sleep when its card was
+   * parked, and when (issue #328), so the card still reads Asleep after a
+   * reload: to cmux's own data a sleeping agent looks like one that ended.
+   * Left out while nothing is saved.
+   */
+  asleep?: Record<string, SavedAsleep>;
   /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
   ui: UiState;
   /**
@@ -107,6 +114,12 @@ export interface State {
    * it existed reads the same.
    */
   poll?: SavedPoll;
+}
+
+/** The agent tabs (cmux surface ids) put to sleep in one workspace, and when, in epoch seconds. */
+export interface SavedAsleep {
+  surfaces: string[];
+  since: number;
 }
 
 /** Why a poll could not reach gh: it failed, it is signed out, or it is not installed. */
@@ -310,6 +323,9 @@ export const MAX_DECISIONS = 9;
 
 /** Shells kept per workspace, newest kept, so a runaway loop cannot bloat the file. */
 export const MAX_SHELLS = 10;
+
+/** Agent tabs kept asleep per workspace, so a bad write cannot bloat the file. */
+export const MAX_ASLEEP = 10;
 
 /** Runs kept per workspace, newest kept, so a busy agent cannot bloat the file. */
 export const MAX_SUBAGENTS = 10;
@@ -659,6 +675,13 @@ function savedShells(v: unknown): SavedShell[] | null {
   return shells.length ? shells : null;
 }
 
+function savedAsleep(v: unknown): SavedAsleep | null {
+  if (!isRecord(v) || !Array.isArray(v.surfaces) || !isEpoch(v.since)) return null;
+  const surfaces = v.surfaces.filter(isIdText);
+  const fits = surfaces.length > 0 && surfaces.length === v.surfaces.length && surfaces.length <= MAX_ASLEEP;
+  return fits ? { surfaces, since: v.since } : null;
+}
+
 function savedSubagents(v: unknown): SavedSubagent[] | null {
   const runs = Array.isArray(v) ? v.flatMap(savedSubagent).slice(-MAX_SUBAGENTS) : [];
   return runs.length ? runs : null;
@@ -681,6 +704,7 @@ export function validateState(raw: unknown): State {
   const poll = savedPoll(v.poll);
   const shells = cleanMap(v.shells, savedShells);
   const laneNames = cleanMap(v.laneNames, laneName);
+  const asleep = cleanMap(v.asleep, savedAsleep);
   return {
     dismissed: cleanMap(v.dismissed, agentStarts),
     projectOverride: cleanMap(v.projectOverride, projectKey),
@@ -696,6 +720,7 @@ export function validateState(raw: unknown): State {
     ui: uiState(v.ui),
     ...(Object.keys(shells).length ? { shells } : {}),
     ...(Object.keys(laneNames).length ? { laneNames } : {}),
+    ...(Object.keys(asleep).length ? { asleep } : {}),
     ...(poll ? { poll } : {}),
   };
 }
@@ -705,8 +730,17 @@ export type SetResult = { ok: true; state: State } | { ok: false; error: string 
 // The maps applySet takes. `prs`, `ownPrs`, `subagents`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
-type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves" | "laneNames";
-const MAPS: readonly MapName[] = ["dismissed", "projectOverride", "projects", "ui", "asking", "moves", "laneNames"];
+type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves" | "laneNames" | "asleep";
+const MAPS: readonly MapName[] = [
+  "dismissed",
+  "projectOverride",
+  "projects",
+  "ui",
+  "asking",
+  "moves",
+  "laneNames",
+  "asleep",
+];
 const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
 
 // Maps applySet takes from a hook but never from a URL.
@@ -746,6 +780,11 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       const left = without(laneNames ?? {}, id);
       return Object.keys(left).length ? { ...rest, laneNames: left } : rest;
     }
+    case "asleep": {
+      const { asleep, ...rest } = state;
+      const left = without(asleep ?? {}, id);
+      return Object.keys(left).length ? { ...rest, asleep: left } : rest;
+    }
     case "ui": {
       const { mode, collapsed } = state.ui;
       return { ...state, ui: id === "mode" ? (collapsed ? { collapsed } : {}) : mode ? { mode } : {} };
@@ -783,6 +822,12 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
     case "laneNames": {
       const name = laneName(parsed);
       return name ? { ...state, laneNames: { ...state.laneNames, [id]: name } } : "laneNames wants a lane name string";
+    }
+    case "asleep": {
+      const record = savedAsleep(parsed);
+      return record
+        ? { ...state, asleep: { ...state.asleep, [id]: record } }
+        : "asleep wants {surfaces: [surface id], since: epoch}";
     }
   }
 }
@@ -831,9 +876,10 @@ function isKeyFor(map: MapName, id: string): boolean {
  * view and folds, and every rebuild bakes in the file as it stands, so a
  * `ui` set only has to be written: rebuilding on each tap would reload the
  * sidebar under the tap. A `laneNames` set is the sidebar's own record of
- * what it already acted on, so it needs no rebuild either.
+ * what it already acted on, so it needs no rebuild either, and nor does an
+ * `asleep` set: the sidebar's core shows its card asleep before it writes.
  */
-const WRITE_ONLY: readonly string[] = ["ui", "laneNames"];
+const WRITE_ONLY: readonly string[] = ["ui", "laneNames", "asleep"];
 export const rebuildsOn = (key: string): boolean => !WRITE_ONLY.some((map) => key.startsWith(`${map}.`));
 
 /**

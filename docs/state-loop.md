@@ -82,6 +82,7 @@ sidebars send on every set.
 | `projectOverride` | `"<project key>"`, its first match path, e.g. `"/dev/alpha"` | #8    |
 | `projects`        | `{"name", "color": "#rrggbb", "icon": "<SF Symbol>", "root"?}`, or `{"removed": true}` | #9    |
 | `ui`              | `ui.mode`: `"all"` or `"projects"`; `ui.collapsed`: `{"lane:<key>" or "project:<key>": 0 or 1}` |       |
+| `asleep`          | `{"surfaces": ["<surface id>", ...], "since": <epoch>}`: the agent tabs the cockpit put to sleep when the card was parked, so it still reads Asleep after a reload; no rebuild | #328  |
 
 The id is a workspace id, except for `projects`, where it is the project's
 first match (lowercase, at least two segments deep: a sidebar-made

@@ -45,6 +45,7 @@ pub mod quiet;
 pub mod saved;
 pub mod session;
 pub mod shells;
+pub mod sleep;
 pub mod state;
 pub mod status;
 pub mod strip;

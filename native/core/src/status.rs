@@ -16,8 +16,8 @@ use crate::theme::Token;
 use crate::time::{age_since, finished_at};
 use crate::ui::{PillColors, URGENCY_RANK, Urgency, count_tint};
 use crate::words::{
-    ASKING_WORD, MERGE_READY_WORD, NO_AGENT_WORD, WAITING_WORD, YOU_WORD, shell_text, status_word,
-    with_age,
+    ASKING_WORD, ASLEEP_WORD, MERGE_READY_WORD, NO_AGENT_WORD, WAITING_WORD, WAKING_WORD, YOU_WORD,
+    shell_text, status_word, with_age,
 };
 
 /// A workspace's status: its agent's, or none.
@@ -77,6 +77,10 @@ pub enum StatusKind {
     Quiet,
     /// Idle on a background shell its own chat still runs.
     Waiting,
+    /// Put to sleep when its card was parked (issue #328), or on its way.
+    Asleep,
+    /// Asked to wake, until its agent is back.
+    Waking,
     /// The agent's own status, or none.
     Plain(Status),
 }
@@ -167,6 +171,19 @@ impl StatusKind {
             StatusKind::Waiting => StatusStyle {
                 label: WAITING_WORD,
                 ..plain_style(&Status::Working)
+            },
+            // Sleep is no state that wants Jon, so no hue: a hollow dot
+            // ringed in the meta ink its words take, set apart from Idle's
+            // grey ring.
+            StatusKind::Asleep => StatusStyle {
+                label: ASLEEP_WORD,
+                ring: Some(Token::MetaText),
+                ..plain_style(&Status::None)
+            },
+            StatusKind::Waking => StatusStyle {
+                label: WAKING_WORD,
+                ring: Some(Token::MetaText),
+                ..plain_style(&Status::None)
             },
             StatusKind::Plain(s) => plain_style(s),
         }
@@ -442,6 +459,11 @@ impl Session {
         if self.merge_ready(a.as_ref(), w) {
             return StatusKind::MergeReady;
         }
+        // To cmux a sleeping agent looks ended, so the cockpit's own
+        // record speaks for it (sleep.rs).
+        if let Some(kind) = w.and_then(|w| self.sleep_kind(&w.id)) {
+            return kind;
+        }
         if self.is_ready(data, w) {
             return StatusKind::Ready;
         }
@@ -610,6 +632,13 @@ impl Session {
     /// or ended one from when its agent finished; otherwise only the
     /// agent's sinceEpoch says when the status began.
     fn card_age(&mut self, data: &Data, w: Option<&Workspace>) -> String {
+        // Asleep counts from when it went to sleep; on its way, and while
+        // waking, there is no time to give yet.
+        match w.and_then(|w| self.sleep_kind(&w.id).map(|k| (k, &w.id))) {
+            Some((StatusKind::Asleep, id)) => return age_since(data, self.asleep_since(id)),
+            Some(_) => return String::new(),
+            None => {}
+        }
         if let Some(ready) = self.ready_agent(data, w) {
             return age_since(data, Some(finished_at(&ready)));
         }

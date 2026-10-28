@@ -26,6 +26,12 @@ pub const MERGE_READY_WORD: &str = "Ready to merge";
 /// An idle agent whose background shell is still running.
 pub const WAITING_WORD: &str = "Waiting";
 
+/// An agent the cockpit put to sleep when its card was parked (#328).
+pub const ASLEEP_WORD: &str = "Asleep";
+
+/// A sleeping agent asked to wake, until it shows up again.
+pub const WAKING_WORD: &str = "Waking";
+
 /// A working agent with no activity for a while.
 pub const QUIET_WORD: &str = "quiet";
 

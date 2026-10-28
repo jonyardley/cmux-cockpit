@@ -33,6 +33,9 @@
 //!   on a thread per ask, the answer coming back as an input. The core
 //!   decides when (cockpit_core::pr_poll), and only an answer that moves
 //!   what a card shows asks for a new frame.
+//! - Each sleep call the core makes (`agent.hibernate`, `agent.wake`),
+//!   on a thread per call, off the ordered worker (sleep_ask.rs), its
+//!   answer coming back as an input.
 //!
 //! The join (join.rs) turns the first five into one frame of the core's
 //! data; a fresh frame goes in when any of them changed, and every 30
@@ -58,6 +61,7 @@ pub mod parse;
 pub mod pr_ask;
 pub mod publish;
 pub mod signal;
+pub mod sleep_ask;
 pub mod stream;
 pub mod text;
 pub mod watch;
@@ -78,7 +82,8 @@ use cockpit_core::persist::{SavedProject, SavedState};
 use cockpit_core::pr_poll::PrPolled;
 use cockpit_core::project_table::merge_projects;
 use cockpit_core::projects::Project;
-use cockpit_core::{Cockpit, Effect, Event, Model, PrAsk};
+use cockpit_core::sleep::{SleepAnswer, sleep_call};
+use cockpit_core::{CmuxCall, Cockpit, Effect, Event, Model, PrAsk};
 use crux_core::App;
 use serde::Serialize;
 use serde_json::Value;
@@ -127,6 +132,8 @@ pub enum Input {
     CmuxFailed(String),
     /// A directory's PR, as the core asked for it.
     PrPolled(Box<PrPolled>),
+    /// cmux's answer to a sleep call (sleep_ask.rs).
+    Slept(Box<SleepAnswer>),
 }
 
 /// What `on_frame` is called with besides the feed.
@@ -223,6 +230,10 @@ pub struct Feed {
     asker: Option<Sender<PrAsk>>,
     /// PR asks made with no asker to take them, oldest first.
     pub unasked: Vec<PrAsk>,
+    /// Where the core's sleep calls go, while `run` drives the feed.
+    sleeper: Option<Sender<CmuxCall>>,
+    /// Sleep calls made with no sleeper to take them, oldest first.
+    pub unslept: Vec<CmuxCall>,
     /// Without a core: the answers to the effects carried out, oldest
     /// first, for the publisher to write to inbox/ and take.
     pub answers: Vec<Answer>,
@@ -261,9 +272,16 @@ impl Feed {
         render
     }
 
-    /// Hands a request to the outbox worker. A worker gone (only once the
-    /// run ends) keeps what it missed.
+    /// Hands a request to the outbox worker, or a sleep call to the
+    /// sleeper. A worker gone (only once the run ends) keeps what it missed.
     fn hand(&mut self, out: Outgoing) {
+        let out = match out {
+            Outgoing::Cmux(call) if sleep_call(&call).is_some() => {
+                self.sleep(call);
+                return;
+            }
+            out => out,
+        };
         match &self.worker {
             Some(w) => {
                 if let Err(mpsc::SendError(out)) = w.send(out) {
@@ -285,6 +303,17 @@ impl Feed {
             EffectFile::OpenUrl(url) => self.hand(Outgoing::OpenUrl(url)),
             EffectFile::AgentMessage(m) => self.hand(Outgoing::AgentMessage(m)),
             EffectFile::SavePrs(p) => self.hand(Outgoing::SavePrs(p)),
+        }
+    }
+
+    fn sleep(&mut self, call: CmuxCall) {
+        match &self.sleeper {
+            Some(s) => {
+                if let Err(mpsc::SendError(c)) = s.send(call) {
+                    self.unslept.push(c);
+                }
+            }
+            None => self.unslept.push(call),
         }
     }
 
@@ -348,12 +377,17 @@ impl Feed {
                 self.answers.push(Answer::PrPolled(polled));
                 (false, false, None)
             }
+            Input::Slept(answer) if self.no_core => {
+                self.answers.push(Answer::Slept(answer));
+                (false, false, None)
+            }
             Input::CmuxFailed(id) => {
                 self.send(Event::CmuxFailed { id });
                 (true, false, None)
             }
             // Only an answer that moves what a card shows is news.
             Input::PrPolled(polled) => (self.send(Event::PrPolled(polled)), false, None),
+            Input::Slept(answer) => (self.send(Event::Slept(answer)), false, None),
             // `run` logs these itself before they reach the feed.
             Input::Poke | Input::Log(_) => (false, false, None),
         }
@@ -763,6 +797,12 @@ fn run_with(
         feed.asker = Some(ask_tx);
         thread::spawn(move || pr_ask::serve(&ask_rx, &tx, pr_ask::ask));
     }
+    {
+        let (sleep_tx, sleep_rx) = mpsc::channel();
+        let tx = tx.clone();
+        feed.sleeper = Some(sleep_tx);
+        thread::spawn(move || sleep_ask::serve(&sleep_rx, &tx, sleep_ask::run));
+    }
     thread::spawn(move || {
         poll_layout(&tx, &nudge_rx, WORKSPACES_EVERY, read_list, read_groups);
     });
@@ -870,6 +910,7 @@ mod tests {
     use cockpit_core::data::WorkspaceGroup;
     use cockpit_core::lane_entries::LaneEntry;
     use cockpit_core::lanes::LaneKey;
+    use cockpit_core::session::Param;
     use serde_json::json;
 
     fn ws(id: &str) -> Workspace {
@@ -1157,6 +1198,52 @@ mod tests {
         assert_eq!(feed.model.data, None, "the model stays empty");
         assert!(feed.unsent.is_empty() && feed.unasked.is_empty());
         assert_eq!(pr_due_at(&feed), None);
+    }
+
+    fn hibernate_q() -> CmuxCall {
+        CmuxCall {
+            method: "agent.hibernate".into(),
+            params: vec![
+                ("surface_id".into(), Param::Str("S1".into())),
+                ("workspace_id".into(), Param::Str("Q".into())),
+            ],
+        }
+    }
+
+    fn slept_q() -> Box<SleepAnswer> {
+        Box::new(SleepAnswer {
+            workspace: "Q".into(),
+            surface: "S1".into(),
+            wake: false,
+            refused: Some("agent_busy".into()),
+        })
+    }
+
+    #[test]
+    fn a_sleep_call_goes_to_the_sleeper_never_the_worker_and_answers_in_the_inbox() {
+        let mut feed = Feed::without_core(Some("/h".into()));
+        feed.carry(EffectFile::Cmux(hibernate_q()));
+        assert!(feed.unsent.is_empty(), "never the ordered worker");
+        assert_eq!(feed.unslept, [hibernate_q()]);
+        let (changed, _, _) = feed.input(Input::Slept(slept_q()));
+        assert!(!changed);
+        assert!(
+            matches!(feed.answers.as_slice(), [Answer::Slept(a)] if a.refused.as_deref() == Some("agent_busy")),
+            "kept for inbox/, never a failed call: {:?}",
+            feed.answers
+        );
+    }
+
+    #[test]
+    fn a_refused_sleep_keeps_the_card_where_jon_put_it() {
+        let mut feed = moving_feed();
+        feed.act(move_q());
+        let (changed, _, _) = feed.input(Input::Slept(slept_q()));
+        assert!(changed, "drawn again");
+        assert_eq!(
+            placed(&feed).0,
+            vec![(LaneKey::from("bg"), "Q".to_string())]
+        );
     }
 
     #[test]

@@ -8,6 +8,7 @@
 //! ```json
 //! {"CmuxFailed": {"id": "W1"}}
 //! {"PrPolled": {"directory": "/dev/cockpit", "asked": 1791229864.5, "answer": "NoBranch", "epoch": 1791229866.0}}
+//! {"Slept": {"workspace": "W1", "surface": "S1", "wake": false, "refused": "visible"}}
 //! ```
 //!
 //! A file is named as the outbox's are, `<13 digit epoch ms>-<6 digit
@@ -23,6 +24,7 @@ use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
 use cockpit_core::pr_poll::PrPolled;
+use cockpit_core::sleep::SleepAnswer;
 use serde::Serialize;
 
 use crate::publish::name_ms;
@@ -42,6 +44,8 @@ pub enum Answer {
     CmuxFailed { id: String },
     /// A directory's PR, as the core asked for it.
     PrPolled(Box<PrPolled>),
+    /// cmux's answer to putting an agent to sleep or waking it.
+    Slept(Box<SleepAnswer>),
 }
 
 impl Answer {
@@ -50,6 +54,7 @@ impl Answer {
         match self {
             Answer::CmuxFailed { .. } => "CmuxFailed",
             Answer::PrPolled(_) => "PrPolled",
+            Answer::Slept(_) => "Slept",
         }
     }
 }
@@ -184,6 +189,12 @@ mod tests {
                 branch: "feat-9".into(),
                 why: GhFailure::SignedOut,
             }),
+            Answer::Slept(Box::new(SleepAnswer {
+                workspace: "W1".into(),
+                surface: "S1".into(),
+                wake: false,
+                refused: Some("visible".into()),
+            })),
         ];
         for a in &answers {
             let path = inbox.write(a, 1_791_229_864_123).unwrap();
@@ -191,6 +202,7 @@ mod tests {
             match (a, event) {
                 (Answer::CmuxFailed { id }, Event::CmuxFailed { id: got }) => assert_eq!(*id, got),
                 (Answer::PrPolled(want), Event::PrPolled(got)) => assert_eq!(*want, got),
+                (Answer::Slept(want), Event::Slept(got)) => assert_eq!(*want, got),
                 (a, e) => panic!("{} came back as {e:?}", a.name()),
             }
         }

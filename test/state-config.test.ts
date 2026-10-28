@@ -396,7 +396,7 @@ test("a fold on a project with a long match path is kept, not dropped", () => {
   if (set.ok) assert.deepEqual(set.state.ui.collapsed, { [key]: 1 });
 });
 
-test("rebuildsOn skips the build for the cockpit's own view, folds and lane names only", () => {
+test("rebuildsOn skips the build for the cockpit's own view, folds, lane names and sleeping agents only", () => {
   assert.equal(rebuildsOn("ui.mode"), false);
   assert.equal(rebuildsOn("ui.collapsed"), false);
   assert.equal(rebuildsOn("laneNames.main"), false);
@@ -549,4 +549,28 @@ test("laneNames keeps each lane id's last name, and is left out while empty", ()
   assert.deepEqual(validateState({ laneNames: { main: "Doing", bad: 7, pad: " x" } }).laneNames, { main: "Doing" });
   assert.equal(applySet(emptyState(), "laneNames.main", JSON.stringify(7)).ok, false);
   assert.equal(urlMaySet("laneNames.main"), true);
+});
+
+test("asleep keeps each workspace's sleeping agent tabs, and is left out while empty", () => {
+  const record = { surfaces: ["S1", "S2"], since: 1_791_229_864 };
+  const set = applySet(emptyState(), "asleep.w1", JSON.stringify(record));
+  assert.ok(set.ok);
+  assert.deepEqual(set.state.asleep, { w1: record });
+  const cleared = applySet(set.state, "asleep.w1", null);
+  assert.ok(cleared.ok);
+  assert.equal(Object.hasOwn(cleared.state, "asleep"), false);
+  assert.equal(Object.hasOwn(validateState({}), "asleep"), false);
+  const read = validateState({
+    asleep: {
+      w1: record,
+      none: { surfaces: [], since: 1 },
+      bad: { surfaces: ["S1", 7], since: 1 },
+      old: { surfaces: ["S1"], since: -1 },
+    },
+  });
+  assert.deepEqual(read.asleep, { w1: record });
+  for (const bad of [{ surfaces: "S1", since: 1 }, { surfaces: ["S1"] }, { surfaces: Array(11).fill("S"), since: 1 }])
+    assert.equal(applySet(emptyState(), "asleep.w1", JSON.stringify(bad)).ok, false, JSON.stringify(bad));
+  assert.equal(urlMaySet("asleep.w1"), true);
+  assert.equal(rebuildsOn("asleep.w1"), false);
 });
