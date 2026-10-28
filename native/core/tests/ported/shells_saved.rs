@@ -64,7 +64,7 @@ mod background_shells_on_the_card {
     }
 
     #[test]
-    fn does_not_turn_another_chats_card_to_waiting() {
+    fn does_not_turn_another_chats_card_to_shell_running() {
         let (mut s, data, mut fx) = setup();
         let w = ws("other").agents(vec![idle(&mut fx)]);
         assert!(s.status_line(&data, Some(&w)).starts_with("Idle"));
@@ -76,15 +76,15 @@ mod background_shells_on_the_card {
         let idle_line = s.status_line(&data, Some(&ws("none").agents(vec![idle(&mut fx)])));
         assert_eq!(idle_line, "Idle 4m");
         let w = ws("one").agents(vec![idle(&mut fx)]);
-        let waiting = idle_line.replace("Idle", "Shell running");
+        let running = idle_line.replace("Idle", "Shell running");
         assert_eq!(
             s.status_line(&data, Some(&w)),
-            format!("{waiting} · 1 shell")
+            format!("{running} · 1 shell")
         );
         let two = ws("two").agents(vec![idle(&mut fx)]);
         assert_eq!(
             s.status_line(&data, Some(&two)),
-            format!("{waiting} · 2 shells")
+            format!("{running} · 2 shells")
         );
         let info = s.status_info(&data, Some(&w));
         assert_eq!(info.dot, Some(Token::Blue));
@@ -100,7 +100,7 @@ mod background_shells_on_the_card {
     }
 
     #[test]
-    fn stays_waiting_not_ready_on_a_nothing_for_you_turn_while_its_shell_runs() {
+    fn stays_shell_running_not_ready_on_a_nothing_for_you_turn_while_its_shell_runs() {
         let (mut s, data, mut fx) = setup();
         let a = fx
             .agent(Idle)

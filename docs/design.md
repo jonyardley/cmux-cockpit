@@ -739,6 +739,9 @@ Every card is decided as option a; where that changes a rule, the rule says
     `countBg` (D5 a), and Next is green (D9 a).
 13. **"Waiting" means waiting on you, and nothing else.** The blue status
     for a running shell says "Shell running" (D15 a, [gap T](#known-gaps)).
+    Two uses are left on purpose: the helper-down band's "Waiting for the
+    panel" (`Model/Words.swift`), which waits on the helper and names no
+    card, and lane names, which are Jon's own words in `config/lanes.json`.
 
 ### The matrix, compact
 
@@ -881,7 +884,7 @@ follow-up PR.
 | Q | Selection had five looks. **Built: D13 a**, the heading outline in the panel (the anchor badge outlined, `Own.anchorSelected` gone), system looks for the switch and the editor | closed |
 | R | Faint ink was also a state ("No agent") and two controls; 0.55 meant both empty and cannot click. **Built: D12 a**, three named faint and fade meanings | closed |
 | S | A quiet PR's words were `secondary` on a compact card; the PR chip faces are never drawn. **Built: D14 a**, quiet PR words and every age in `metaText`. Left: the chip faces, undrawn by design | `native/core/src/pr_colors.rs` `pr_chip_colors` |
-| T | "Waiting" names a blue status (a shell still running) and, everywhere else, a card that waits on you. **Built: D15 a**, the blue status says "Shell running" | closed |
+| T | "Waiting" names a blue status (a shell still running) and, everywhere else, a card that waits on you. **Built: D15 a**, the blue status says "Shell running". Left on purpose: the helper-down band's words and lane names (rule 13) | closed |
 | U | Views picked or copied what the core picks. **Built: D8 a**, the Ready pill's ink, the empty and Quiet pills, the halo and the drop hint come from the panel model | closed |
 
 ## Follow-up work

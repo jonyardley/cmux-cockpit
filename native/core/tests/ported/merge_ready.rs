@@ -223,7 +223,7 @@ mod merge_ready_status {
     }
 
     #[test]
-    fn leaves_a_working_or_waiting_card_its_own_status() {
+    fn leaves_a_working_or_shell_running_card_its_own_status() {
         let (mut s, mut data, mut fx) = setup();
         let working = card(&mut data, "ready1", vec![at(&mut fx, Working, 60.0)], 0.0);
         let turn = card(
@@ -307,16 +307,16 @@ mod merge_ready_status {
         let busy = card(&mut data, "ready2", vec![at(&mut fx, Working, 60.0)], 0.0);
         assert_eq!(words(&mut s, &busy), "· #2 · ready");
         assert_eq!(state(&mut s, &busy), Some(("#2".into(), "ready".into())));
-        // Idle on a shell its own chat still runs, the status says Waiting,
+        // Idle on a shell its own chat still runs, the status says Shell running,
         // so the chip keeps "ready" there too.
         let shell = fx.agent(Idle).id("shell-chat").since(NOW - 60.0);
-        let waiting = card(&mut data, "ready2", vec![shell], 0.0);
+        let running = card(&mut data, "ready2", vec![shell], 0.0);
         assert_eq!(
-            s.status_kind(&data, Some(&waiting)),
+            s.status_kind(&data, Some(&running)),
             StatusKind::ShellRunning
         );
-        assert_eq!(words(&mut s, &waiting), "· #2 · ready");
-        assert_eq!(state(&mut s, &waiting), Some(("#2".into(), "ready".into())));
+        assert_eq!(words(&mut s, &running), "· #2 · ready");
+        assert_eq!(state(&mut s, &running), Some(("#2".into(), "ready".into())));
     }
 
     #[test]

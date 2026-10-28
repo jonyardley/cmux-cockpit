@@ -38,7 +38,7 @@ pub const QUIET_WORD: &str = "quiet";
 /// Your last prompt, on a card that shows where you left off.
 pub const YOU_WORD: &str = "You";
 
-/// "· 1 shell", "· 2 shells": what an idle agent is waiting on.
+/// "· 1 shell", "· 2 shells": the shells an idle agent still runs.
 pub fn shell_text(n: usize) -> String {
     format!("· {n} {}", if n == 1 { "shell" } else { "shells" })
 }

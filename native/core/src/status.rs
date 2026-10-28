@@ -390,9 +390,9 @@ impl Session {
             return None;
         }
         let a = self.finished_agent(w)?;
-        let waits_on_its_shell = quiet_move(&self.saved, &a, Some(w)).is_some()
+        let runs_its_shell = quiet_move(&self.saved, &a, Some(w)).is_some()
             && live_shell_count(&self.saved, Some(w), Some(&a)) > 0;
-        (!waits_on_its_shell).then_some(a)
+        (!runs_its_shell).then_some(a)
     }
 
     /// Whether the workspace is Ready.
