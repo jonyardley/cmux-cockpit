@@ -22,7 +22,7 @@
    ○ Left off                                                           Idle 1h
 
  ▾ ■ BACKGROUND  2
-   ● Iteration timings                                     Waiting 4m · 1 shell
+   ● Iteration timings                               Shell running 4m · 1 shell
      You: hi
      The batch resumes by itself once load drops.
    ○ No agent                                                          No agent

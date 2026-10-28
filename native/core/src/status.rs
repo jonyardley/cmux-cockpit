@@ -16,8 +16,8 @@ use crate::theme::Token;
 use crate::time::{age_since, finished_at};
 use crate::ui::{PillColors, URGENCY_RANK, Urgency, count_tint};
 use crate::words::{
-    ASKING_WORD, ASLEEP_WORD, MERGE_READY_WORD, NO_AGENT_WORD, WAITING_WORD, WAKING_WORD, YOU_WORD,
-    shell_text, status_word, with_age,
+    ASKING_WORD, ASLEEP_WORD, MERGE_READY_WORD, NO_AGENT_WORD, SHELL_RUNNING_WORD, WAKING_WORD,
+    YOU_WORD, shell_text, status_word, with_age,
 };
 
 /// A workspace's status: its agent's, or none.
@@ -76,7 +76,7 @@ pub enum StatusKind {
     /// Still working, but silent a while.
     Quiet,
     /// Idle on a background shell its own chat still runs.
-    Waiting,
+    ShellRunning,
     /// Put to sleep when its card was parked (issue #328), or on its way.
     Asleep,
     /// Asked to wake, until its agent is back.
@@ -168,8 +168,8 @@ impl StatusKind {
                 ring: Some(Token::Blue),
                 ..plain_style(&Status::Working)
             },
-            StatusKind::Waiting => StatusStyle {
-                label: WAITING_WORD,
+            StatusKind::ShellRunning => StatusStyle {
+                label: SHELL_RUNNING_WORD,
                 ..plain_style(&Status::Working)
             },
             // Sleep is no state that wants Jon, so no hue: a hollow dot
@@ -407,16 +407,16 @@ impl Session {
     }
 
     /// True when the agent is idle on a background shell its own chat still runs.
-    pub fn is_waiting(&self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
+    pub fn is_shell_running(&self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
         a.is_some_and(|a| a.status == Some(AgentStatus::Idle))
             && live_shell_count(&self.saved, w, a) > 0
     }
 
     /// Whether the card says Ready to merge: its PR is ready and its agent,
-    /// if any, is idle or finished, not asking, and not Waiting on a shell
-    /// it still runs. Working (quiet too), Your turn, Asking and Waiting
-    /// keep their status, since they come first, and so does a status cmux
-    /// names that the core does not know, which may yet be busy.
+    /// if any, is idle or finished, not asking, and not idle on a shell
+    /// it still runs. Working (quiet too), Your turn, Asking and Shell
+    /// running keep their status, since they come first, and so does a
+    /// status cmux names that the core does not know, which may yet be busy.
     fn merge_ready(&self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
         if pr_health(&self.saved, w) != PrHealth::Ready {
             return false;
@@ -427,7 +427,7 @@ impl Session {
                 None | Some(AgentStatus::Idle | AgentStatus::Ended)
             )
         });
-        at_rest && ask_reason(&self.saved, a, w).is_none() && !self.is_waiting(a, w)
+        at_rest && ask_reason(&self.saved, a, w).is_none() && !self.is_shell_running(a, w)
     }
 
     /// True when the card's status says Ready to merge (issue #299): the
@@ -473,8 +473,8 @@ impl Session {
         if self.quiet_since(data, a.as_ref(), w) > 0.0 {
             return StatusKind::Quiet;
         }
-        if self.is_waiting(a.as_ref(), w) {
-            return StatusKind::Waiting;
+        if self.is_shell_running(a.as_ref(), w) {
+            return StatusKind::ShellRunning;
         }
         StatusKind::Plain(Status::of(a.as_ref()))
     }
@@ -603,13 +603,13 @@ impl Session {
     }
 
     /// The status and how long it has held ("Working 14m", "Finished 6m"),
-    /// with the shell count while Waiting and the quiet time while Quiet.
+    /// with the shell count while Shell running and the quiet time while Quiet.
     pub fn status_line(&mut self, data: &Data, w: Option<&Workspace>) -> String {
         let kind = self.status_kind(data, w);
         let age = self.card_age(data, w);
         let line = with_age(kind.style().label, &age);
         match kind {
-            StatusKind::Waiting => {
+            StatusKind::ShellRunning => {
                 let a = self.agent_of(w);
                 let n = live_shell_count(&self.saved, w, a.as_ref());
                 format!("{line} {}", shell_text(n))

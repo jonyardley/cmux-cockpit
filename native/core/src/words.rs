@@ -24,7 +24,7 @@ pub const NO_AGENT_WORD: &str = "No agent";
 pub const MERGE_READY_WORD: &str = "Ready to merge";
 
 /// An idle agent whose background shell is still running.
-pub const WAITING_WORD: &str = "Waiting";
+pub const SHELL_RUNNING_WORD: &str = "Shell running";
 
 /// An agent the cockpit put to sleep when its card was parked (#328).
 pub const ASLEEP_WORD: &str = "Asleep";

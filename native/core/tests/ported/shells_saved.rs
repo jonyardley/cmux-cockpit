@@ -1,5 +1,5 @@
 //! test/shells-saved.test.ts: a card whose chat is idle on a background
-//! shell still running reads "Waiting 4m · 1 shell" in working blue.
+//! shell still running reads "Shell running 4m · 1 shell" in working blue.
 
 use cockpit_core::data::{Agent, Data};
 use cockpit_core::session::Session;
@@ -71,12 +71,12 @@ mod background_shells_on_the_card {
     }
 
     #[test]
-    fn reads_waiting_in_working_blue_with_the_idle_age_and_the_shell_count() {
+    fn reads_shell_running_in_working_blue_with_the_idle_age_and_the_shell_count() {
         let (mut s, data, mut fx) = setup();
         let idle_line = s.status_line(&data, Some(&ws("none").agents(vec![idle(&mut fx)])));
         assert_eq!(idle_line, "Idle 4m");
         let w = ws("one").agents(vec![idle(&mut fx)]);
-        let waiting = idle_line.replace("Idle", "Waiting");
+        let waiting = idle_line.replace("Idle", "Shell running");
         assert_eq!(
             s.status_line(&data, Some(&w)),
             format!("{waiting} · 1 shell")
@@ -112,7 +112,7 @@ mod background_shells_on_the_card {
         assert!(!s.is_ready(&data, Some(&w)));
         let line = s.status_line(&data, Some(&w));
         assert!(
-            line.starts_with("Waiting ") && line.ends_with(" · 1 shell"),
+            line.starts_with("Shell running ") && line.ends_with(" · 1 shell"),
             "{line}"
         );
     }

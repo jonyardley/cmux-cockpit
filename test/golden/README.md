@@ -22,7 +22,7 @@ renamed or dropped here is a breaking change there.
 
 | Scene | What it covers |
 | --- | --- |
-| `lanes` | A card in every state across the four lane groups and Unsorted, a folded Parked lane, a selected card, merged PRs, a background shell keeping an idle card Waiting. |
+| `lanes` | A card in every state across the four lane groups and Unsorted, a folded Parked lane, a selected card, merged PRs, a background shell keeping an idle card at Shell running. |
 | `needs-and-next` | Five sessions waiting (the strip's cap of four plus "+N more"), saved asks and moves, a Ready card, and the Next queue. No lane groups, so every card is Unsorted. |
 | `projects` | The Projects view: cards under two projects and Other, a waiting session's placeholder, a quiet project. |
 | `review-verdicts` | The For review lane with a PR in every merge state, and the header's "N ready to merge". |

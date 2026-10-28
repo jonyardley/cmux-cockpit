@@ -1716,7 +1716,7 @@
             "pinned": false,
             "progress": null,
             "helpers": "",
-            "status": "Waiting 4m · 1 shell",
+            "status": "Shell running 4m · 1 shell",
             "status_ink": "blueText",
             "age": "4m",
             "status_has_age": true,

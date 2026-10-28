@@ -21,7 +21,7 @@
    ○ Left off                   Idle 1h
    ○ No agent                  No agent
      main
-   ● Iteration…    Waiting 4m · 1 shell
+   ● Iteration…   Shell running 4m · 1…
    ● Parked card             Working 5m
    ○ Merged elsewhere          No agent
      #171 merged  tidy-strip

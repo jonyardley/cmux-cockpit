@@ -311,7 +311,10 @@ mod merge_ready_status {
         // so the chip keeps "ready" there too.
         let shell = fx.agent(Idle).id("shell-chat").since(NOW - 60.0);
         let waiting = card(&mut data, "ready2", vec![shell], 0.0);
-        assert_eq!(s.status_kind(&data, Some(&waiting)), StatusKind::Waiting);
+        assert_eq!(
+            s.status_kind(&data, Some(&waiting)),
+            StatusKind::ShellRunning
+        );
         assert_eq!(words(&mut s, &waiting), "· #2 · ready");
         assert_eq!(state(&mut s, &waiting), Some(("#2".into(), "ready".into())));
     }
