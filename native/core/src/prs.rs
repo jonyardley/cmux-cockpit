@@ -178,6 +178,17 @@ pub struct PrSummary {
     pub diff: String,
 }
 
+impl PrSummary {
+    /// Its link when it is a web link: a file path, or a word `open`
+    /// would read as a flag, is never opened or copied. The PR chip, Open
+    /// PR and Copy PR link all read this, so "has a link" means one thing.
+    pub fn web_link(&self) -> Option<String> {
+        self.url
+            .clone()
+            .filter(|u| u.starts_with("https://") || u.starts_with("http://"))
+    }
+}
+
 /// The chip's words after the number: a draft keeps its marker whatever
 /// its health, and a PR that is not open says its status.
 fn words_of(pr: &PullRequest, health: PrHealth, failing: usize) -> Vec<String> {
@@ -285,6 +296,23 @@ mod tests {
     }
 
     const READY: &str = r#"{"prs": {"w": {"number": 1, "url": "u", "status": "open", "branch": "feat", "mergeable": true, "checks": [{"name": "build", "state": "pass"}]}}}"#;
+
+    #[test]
+    fn only_a_web_link_counts_as_the_prs_link() {
+        let w = Workspace {
+            id: "w".into(),
+            ..Workspace::default()
+        };
+        let link = |url: &str| {
+            let s = saved(&READY.replace(r#""url": "u""#, &format!(r#""url": "{url}""#)));
+            pr_summary(&s, Some(&w)).and_then(|p| p.web_link())
+        };
+        assert_eq!(link("u"), None);
+        assert_eq!(link("file:///x"), None);
+        assert_eq!(link("-a"), None);
+        assert_eq!(link("http://h/1").as_deref(), Some("http://h/1"));
+        assert_eq!(link("https://h/1").as_deref(), Some("https://h/1"));
+    }
 
     #[test]
     fn reads_the_saved_pr_while_the_branch_is_unknown_or_the_same() {

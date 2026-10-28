@@ -354,6 +354,19 @@ impl Operation for OpenUrl {
     type Output = ();
 }
 
+/// Words for the shell to put on the clipboard: the card menu's Copy PR
+/// link and Copy branch. The sidebar writes them to its own pasteboard on
+/// the click; the runner hands them to `pbcopy`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CopyText {
+    pub text: String,
+}
+
+impl Operation for CopyText {
+    type Output = ();
+}
+
 /// Jon's words for the agent in a workspace, for the shell to send as
 /// `cmux agent message <workspace> -- <text>` (message.rs).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -375,6 +388,7 @@ pub enum Effect {
     Persist(StateSet),
     PrPoll(PrAsk),
     OpenUrl(OpenUrl),
+    Copy(CopyText),
     AgentMessage(AgentMessage),
     SavePrs(PrSave),
 }
@@ -387,6 +401,7 @@ fn send_out(o: Outbound) -> Command<Effect, Event> {
         }
         Outbound::Persist { key, value } => Command::notify_shell(StateSet { key, value }).into(),
         Outbound::OpenUrl { url } => Command::notify_shell(OpenUrl { url }).into(),
+        Outbound::Copy { text } => Command::notify_shell(CopyText { text }).into(),
         Outbound::AgentMessage { workspace, text } => {
             Command::notify_shell(AgentMessage { workspace, text }).into()
         }
@@ -767,6 +782,7 @@ mod tests {
                 Effect::Cmux(_)
                 | Effect::Persist(_)
                 | Effect::OpenUrl(_)
+                | Effect::Copy(_)
                 | Effect::AgentMessage(_) => "other".to_string(),
             })
             .collect()

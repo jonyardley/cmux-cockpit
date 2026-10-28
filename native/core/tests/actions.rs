@@ -8,9 +8,10 @@
 
 use cockpit_core::lane_entries::LaneEntry;
 use cockpit_core::lanes::LaneKey;
+use cockpit_core::menu::MenuAction;
 use cockpit_core::persist::SavedState;
 use cockpit_core::session::Session;
-use cockpit_core::{Cockpit, Effect, Event, Model};
+use cockpit_core::{Cockpit, Effect, Event, MenuEvent, Model};
 use crux_core::App;
 use serde_json::{Map, Value, json};
 
@@ -82,10 +83,30 @@ fn asked(app: &Cockpit, model: &mut Model, event: Event) -> Vec<String> {
             }
             Effect::PrPoll(r) => format!("pr {}", r.operation.directory),
             Effect::OpenUrl(r) => format!("open {}", r.operation.url),
+            Effect::Copy(r) => format!("copy {}", r.operation.text),
             Effect::AgentMessage(r) => format!("message {}", r.operation.workspace),
             Effect::SavePrs(r) => format!("save {} prs", r.operation.prs.len()),
         })
         .collect()
+}
+
+#[test]
+fn copy_branch_asks_the_shell_to_copy_the_branch() {
+    let app = Cockpit;
+    let mut model = Model::default();
+    let _ = app.update(Event::State(Box::default()), &mut model);
+    let data = json!({
+        "epoch": NOW,
+        "workspaces": [{ "id": "a", "branch": "feat" }],
+    });
+    let _ = app.update(
+        Event::Data(serde_json::from_value(data).unwrap()),
+        &mut model,
+    );
+    let open = Event::Menu(MenuEvent::OpenCard { id: "a".into() });
+    let _ = asked(&app, &mut model, open);
+    let pick = Event::Menu(MenuEvent::Pick(MenuAction::CopyBranch));
+    assert!(asked(&app, &mut model, pick).contains(&"copy feat".to_string()));
 }
 
 fn started() -> (Cockpit, Model) {

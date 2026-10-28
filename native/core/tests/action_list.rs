@@ -87,8 +87,10 @@ fn variants(e: &Event) -> Option<Vec<(&'static str, usize, usize)>> {
             MenuAction::ToggleNeeds => 8,
             MenuAction::OpenProject => 9,
             MenuAction::EditProject => 10,
+            MenuAction::CopyPrLink => 11,
+            MenuAction::CopyBranch => 12,
         };
-        out.push(("Pick", n, 11));
+        out.push(("Pick", n, 13));
     }
     Some(out)
 }

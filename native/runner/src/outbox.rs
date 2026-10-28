@@ -26,7 +26,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 
-use cockpit_core::app::{AgentMessage, CmuxCall, OpenUrl, PrSave, StateSet};
+use cockpit_core::app::{AgentMessage, CmuxCall, CopyText, OpenUrl, PrSave, StateSet};
 use cockpit_core::session::Param;
 use serde::Serialize;
 
@@ -38,11 +38,18 @@ pub enum Outgoing {
     Persist(StateSet),
     /// A link to open in the browser.
     OpenUrl(OpenUrl),
+    /// Words for the clipboard.
+    Copy(CopyText),
     /// Words for the agent in a workspace.
     AgentMessage(AgentMessage),
     /// The PR poll's answers for the state file.
     SavePrs(PrSave),
 }
+
+/// Puts its first argument on the clipboard as it is, with no newline.
+/// pbcopy reads its input in the locale's encoding, so it is told UTF-8:
+/// a runner started without one would otherwise mangle a non-ASCII branch.
+const COPY_SCRIPT: &str = r#"printf %s "$1" | LANG=en_GB.UTF-8 /usr/bin/pbcopy"#;
 
 /// Who a message says it is from.
 pub const MESSAGE_FROM: &str = "Cockpit";
@@ -92,6 +99,17 @@ pub fn command_for(
             "/usr/bin/open".to_string(),
             vec!["-u".to_string(), link.url.clone()],
         )),
+        // The words go as the script's own argument, never into its text,
+        // so nothing in them is read as shell.
+        Outgoing::Copy(copy) => Ok((
+            "/bin/sh".to_string(),
+            vec![
+                "-c".to_string(),
+                COPY_SCRIPT.to_string(),
+                "copy".to_string(),
+                copy.text.clone(),
+            ],
+        )),
         // `--` ends the flags, so words that start with a dash stay words.
         Outgoing::AgentMessage(m) => Ok((
             "cmux".to_string(),
@@ -122,6 +140,7 @@ fn describe(o: &Outgoing) -> String {
         Outgoing::Cmux(call) => format!("cmux rpc {}", call.method),
         Outgoing::Persist(set) => format!("state write {:?}", set.key),
         Outgoing::OpenUrl(_) => "opening a link".to_string(),
+        Outgoing::Copy(_) => "copying to the clipboard".to_string(),
         // Never the words: they are Jon's.
         Outgoing::AgentMessage(_) => "cmux agent message".to_string(),
         // How many, never which PR: a title can be anything.
@@ -168,6 +187,7 @@ pub fn perform<L: Fn(String), F: Fn(String)>(
             Outgoing::Persist(_) => read_token(config),
             Outgoing::Cmux(_)
             | Outgoing::OpenUrl(_)
+            | Outgoing::Copy(_)
             | Outgoing::AgentMessage(_)
             | Outgoing::SavePrs(_) => None,
         };
@@ -233,6 +253,26 @@ mod tests {
         assert_eq!(args, ["-u", "https://example.com/pr/7"]);
         assert_eq!(describe(&link), "opening a link");
         assert_eq!(workspace_of(&link), None);
+    }
+
+    #[test]
+    fn a_copy_hands_its_words_to_pbcopy_as_an_argument() {
+        let copy = Outgoing::Copy(CopyText {
+            text: "feat; rm -rf $HOME".into(),
+        });
+        let (program, args) = command_for(&copy, None, Path::new("/c")).unwrap();
+        assert_eq!(program, "/bin/sh");
+        assert_eq!(
+            args,
+            [
+                "-c",
+                r#"printf %s "$1" | LANG=en_GB.UTF-8 /usr/bin/pbcopy"#,
+                "copy",
+                "feat; rm -rf $HOME"
+            ]
+        );
+        assert_eq!(describe(&copy), "copying to the clipboard");
+        assert_eq!(workspace_of(&copy), None);
     }
 
     #[test]

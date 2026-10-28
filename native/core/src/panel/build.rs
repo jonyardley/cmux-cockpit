@@ -287,7 +287,7 @@ fn compact_pr(session: &mut Session, w: Option<&Workspace>) -> Vec<Chip> {
         pr_text_color(Some(&pr), Token::MetaText),
     );
     let chip = Chip {
-        url: pr.url.clone(),
+        url: pr.web_link(),
         ..Chip::new(ChipKind::Pr, vec![words])
     };
     let mut out = vec![chip];
