@@ -506,6 +506,11 @@ fn left_off(text: &str) -> String {
     }
 }
 
+/// A waiting card's status is its question: nothing to drop on a narrow card.
+fn with_no_short((status, ink): (String, Token)) -> (String, String, Token) {
+    (status, String::new(), ink)
+}
+
 fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card {
     let w = data.ws_by_id(id);
     let kind = session.status_kind(data, w);
@@ -515,11 +520,14 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
     // A row carries its age alone, as the sidebar's row does, in the
     // waiting ink while it waits (its detail says why); a card says its
     // status with the age, or while it waits on Jon, why.
-    let (status, status_ink) = match (density, waiting) {
-        (Density::Row, Some(wt)) => (session.age_of(data, w), wt.ink),
-        (Density::Row, None) => (session.age_of(data, w), Token::MetaText),
-        (_, Some(wt)) => needs_status(session, data, w, wt),
-        (_, None) => (session.status_line(data, w), style.text),
+    let (status, status_short, status_ink) = match (density, waiting) {
+        (Density::Row, Some(wt)) => (session.age_of(data, w), String::new(), wt.ink),
+        (Density::Row, None) => (session.age_of(data, w), String::new(), Token::MetaText),
+        (_, Some(wt)) => with_no_short(needs_status(session, data, w, wt)),
+        (_, None) => {
+            let (status, short) = session.status_forms(data, w);
+            (status, short, style.text)
+        }
     };
     let left_off = if shows_left_off(&session.lanes, data, w) {
         left_off(&session.left_off_text(w))
@@ -542,6 +550,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         progress: looks.progress,
         helpers: looks.helpers,
         status,
+        status_short,
         status_ink,
         age: looks.age,
         status_has_age: status_carries_age(density, waiting, looks.status_has_age),
@@ -676,9 +685,12 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
     let style = kind.style();
     let wanted = session.move_of(w).map(|m| m.text).unwrap_or_default();
     let waiting = waiting_of(session, view, w);
-    let (status, status_ink) = match waiting {
-        Some(wt) => needs_status(session, data, w, wt),
-        None => (session.status_line(data, w), style.text),
+    let (status, status_short, status_ink) = match waiting {
+        Some(wt) => with_no_short(needs_status(session, data, w, wt)),
+        None => {
+            let (status, short) = session.status_forms(data, w);
+            (status, short, style.text)
+        }
     };
     let looks = looks(session, data, w, Density::Full, &status, &kind);
     Card {
@@ -694,6 +706,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         progress: looks.progress,
         helpers: looks.helpers,
         status,
+        status_short,
         status_ink,
         age: looks.age,
         status_has_age: status_carries_age(Density::Full, waiting, looks.status_has_age),

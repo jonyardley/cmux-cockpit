@@ -520,6 +520,20 @@ let glued = ChipFit.glued([chipOf(.pr, "#3"), chipOf(.diff, "+1"), chipOf(.branc
 check(glued.map(CardText.chip) == ["#3 +1", "feat", "+2"], "a diff size joins only the PR before it")
 check(glued.first?.kind == .pr, "the PR keeps its kind")
 
+// A narrow card falls back to the core's short status, its tail dropped
+// whole; a status with no short form, such as a question, has one form.
+if let panel = load("lanes") {
+    let cards = panel.lanes.flatMap(\.rows).compactMap { r -> Card? in
+        if case .card(let c) = r { return c }
+        return nil
+    }
+    let shell = cards.first { $0.status.hasPrefix("Shell running") }
+    check(shell.map(CardText.statusForms) == ["Shell running 4m · 1 shell", "Shell running 4m…"],
+          "a shell count gives way whole, marked with an ellipsis")
+    let asking = cards.first { $0.status.hasPrefix("Asking") || $0.status.hasPrefix("Your turn") }
+    check(asking.map { CardText.statusForms($0).count } == 1, "a waiting card's question has one form")
+}
+
 // The chips row's two lines: the size, PR and diff; then the branch, ports
 // and actions, each line in the core's order.
 let row = [chipOf(.size, "Quick"), chipOf(.pr, "#3"), chipOf(.diff, "+1"), chipOf(.branch, "feat"),
@@ -595,7 +609,7 @@ for name in ["lanes", "projects"] {
     }
 }
 var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil, halo: .clear), title: "t", density: .full, badge: Badge(icon: "terminal", color: nil),
-               unread: "", ready: false, readyInk: .greenText, pinned: false, progress: 1.5, helpers: "", status: "", statusInk: .faint, age: "",
+               unread: "", ready: false, readyInk: .greenText, pinned: false, progress: 1.5, helpers: "", status: "", statusShort: "", statusInk: .faint, age: "",
                statusHasAge: false, leftOff: "", chips: [], rowPr: nil, detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, waitingTab: nil, rank: 0,
                movable: true, dimmed: false, selected: false, menu: [])
 check(CardText.progress(bar) == 1, "a bar past the end stops full")

@@ -38,31 +38,20 @@ pub fn fit(text: &str, max: usize) -> String {
     out
 }
 
-/// `text` fitted as [`fit`] does, but a part after a " · " is kept whole or
-/// left off, so "Shell running 4m · 1 shell" never ends on a bare "1…".
-pub fn fit_parts(text: &str, max: usize) -> String {
-    let whole = fit(text, max);
-    if !whole.ends_with(ELLIPSIS) {
+/// A status fitted as [`fit`] does, but when it is cut and the core gave
+/// a shorter form (the tail dropped whole), that form with an ellipsis, so
+/// "Shell running 4m · 1 shell" never ends on a bare "1…".
+pub fn fit_status(full: &str, short: &str, max: usize) -> String {
+    let whole = fit(full, max);
+    if short.is_empty() || !whole.ends_with(ELLIPSIS) {
         return whole;
     }
-    let parts: Vec<String> = text.split(" · ").map(|p| fit(p, usize::MAX)).collect();
-    let mut out = String::new();
-    for part in &parts {
-        let next = if out.is_empty() {
-            part.clone()
-        } else {
-            format!("{out} · {part}")
-        };
-        if width(&next) + width(ELLIPSIS) > max {
-            break;
-        }
-        out = next;
+    let short = fit(short, usize::MAX);
+    if width(&short) + width(ELLIPSIS) <= max {
+        short + ELLIPSIS
+    } else {
+        whole
     }
-    if out.is_empty() {
-        return whole;
-    }
-    out.push_str(ELLIPSIS);
-    out
 }
 
 /// How many items of these widths fit whole on a line of `room` cells,
@@ -202,11 +191,17 @@ mod tests {
     }
 
     #[test]
-    fn keeps_a_part_after_a_dot_whole_or_leaves_it_off() {
-        let line = "Shell running 4m · 1 shell";
-        assert_eq!(fit_parts(line, 26), line);
-        assert_eq!(fit_parts(line, 22), "Shell running 4m…");
-        assert_eq!(fit_parts(line, 10), "Shell…");
+    fn falls_back_to_the_short_status_whole_or_cuts_the_full_one() {
+        let (line, short) = ("Shell running 4m · 1 shell", "Shell running 4m");
+        assert_eq!(fit_status(line, short, 26), line);
+        assert_eq!(fit_status(line, short, 22), "Shell running 4m…");
+        assert_eq!(fit_status(line, short, 10), "Shell…");
+    }
+
+    #[test]
+    fn cuts_a_status_with_no_short_form_between_words() {
+        let ask = "Your turn: Merge #45 · or wait for CI?";
+        assert_eq!(fit_status(ask, "", 30), "Your turn: Merge #45 · or…");
     }
 
     #[test]

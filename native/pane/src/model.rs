@@ -318,6 +318,7 @@ pub(crate) mod fixtures {
             progress: None,
             helpers: String::new(),
             status: String::new(),
+            status_short: String::new(),
             status_ink: Token::MetaText,
             age: String::new(),
             status_has_age: false,

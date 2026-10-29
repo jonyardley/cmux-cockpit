@@ -9,6 +9,14 @@ enum CardText {
         chip.pieces.map(\.text).joined(separator: " ")
     }
 
+    /// The status, then the shorter form a narrow card falls back to: the
+    /// core's, its tail (the shell count or quiet time) dropped whole and
+    /// marked with an ellipsis, "Shell running 4m…", as the terminal pane
+    /// fits it. A status with no short form, such as a question, has one.
+    static func statusForms(_ card: Card) -> [String] {
+        card.statusShort.isEmpty ? [card.status] : [card.status, card.statusShort + "…"]
+    }
+
     /// Every run of words a card draws, top to bottom, none empty: a
     /// row's PR title and number after its title, then the title row's
     /// age after the status, as the views test's snapshots read them.
