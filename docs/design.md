@@ -433,6 +433,9 @@ Status dot, the status words in the core's ink, the live helpers in
 "No agent" is in `metaText` with Idle, never `faint` (D12 a,
 `plain_style` in `native/core/src/status.rs`). "Asleep 3h" and "Waking"
 are in `metaText` too ([asleep](#asleep)).
+On a narrow card the status drops its last " · " part whole before it is
+cut, so "Shell running 4m · 1 shell" reads "Shell running 4m", never
+"1 s…" (`CardText.statusForms`), as the terminal pane fits it.
 Where: `Views/CardView.swift` (`StatusLine`).
 
 ### Asleep

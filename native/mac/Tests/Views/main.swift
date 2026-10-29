@@ -520,6 +520,11 @@ let glued = ChipFit.glued([chipOf(.pr, "#3"), chipOf(.diff, "+1"), chipOf(.branc
 check(glued.map(CardText.chip) == ["#3 +1", "feat", "+2"], "a diff size joins only the PR before it")
 check(glued.first?.kind == .pr, "the PR keeps its kind")
 
+// A narrow card's status drops its last " · " part whole, never cut mid-part.
+check(CardText.statusForms("Shell running 4m · 1 shell") == ["Shell running 4m · 1 shell", "Shell running 4m"],
+      "a shell count gives way whole")
+check(CardText.statusForms("Working 14m") == ["Working 14m"], "a status with no parts has one form")
+
 // The chips row's two lines: the size, PR and diff; then the branch, ports
 // and actions, each line in the core's order.
 let row = [chipOf(.size, "Quick"), chipOf(.pr, "#3"), chipOf(.diff, "+1"), chipOf(.branch, "feat"),

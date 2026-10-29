@@ -273,11 +273,15 @@ struct StatusLine: View {
         HStack(spacing: Metrics.inlineGap) {
             StatusDot(icon: card.icon, size: dot)
             if !card.status.isEmpty {
-                Text(card.status)
-                    .font(.system(size: size, weight: weight))
-                    .foregroundStyle(Color(card.statusInk))
-                    .lineLimit(1)
-                    .layoutPriority(2)
+                // The widest form that fits whole; the shortest is cut last.
+                let forms = CardText.statusForms(card.status)
+                ViewThatFits(in: .horizontal) {
+                    ForEach(Array(forms.dropLast().enumerated()), id: \.offset) { _, form in
+                        status(form).fixedSize()
+                    }
+                    status(forms.last ?? card.status)
+                }
+                .layoutPriority(2)
             }
             if !card.helpers.isEmpty {
                 Text(card.helpers)
@@ -297,6 +301,13 @@ struct StatusLine: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func status(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: size, weight: weight))
+            .foregroundStyle(Color(card.statusInk))
+            .lineLimit(1)
     }
 }
 
