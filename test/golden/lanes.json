@@ -324,7 +324,7 @@
       "lane": "bg",
       "project": "other",
       "status": "idle",
-      "statusLine": "Waiting 4m · 1 shell"
+      "statusLine": "Shell running 4m · 1 shell"
     },
     "working": {
       "actualLane": "main",

@@ -1,6 +1,6 @@
 // Tells cmux about the background shells a workspace's chats have running:
 // custom sidebars get no shell data from cmux at all, so this hook is the
-// only source, and a card can say "Waiting · 1 shell" rather than a bare
+// only source, and a card can say "Shell running · 1 shell" rather than a bare
 // Idle while a chat's build or test run is still going.
 //
 // Run by scripts/hooks/dispatch.ts on two Claude Code events, as

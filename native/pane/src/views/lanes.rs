@@ -17,7 +17,7 @@ use crate::model::{
     PR_TITLE_DOT, Row,
 };
 use crate::placing::{Place, Spot};
-use crate::text::{ELLIPSIS, fit, fit_ranked, width, wrap};
+use crate::text::{ELLIPSIS, fit, fit_parts, fit_ranked, width, wrap};
 use crate::theme;
 use cockpit_core::panel::LaneKey;
 use cockpit_core::panel::PillColors;
@@ -290,7 +290,7 @@ fn title_right(c: &Card, room: usize) -> Vec<Span<'static>> {
         .filter(|t| width(t) <= room.saturating_sub(age_room))
         .unwrap_or_default();
     let tag_room = if tag.is_empty() { 0 } else { width(&tag) + 1 };
-    let status = fit(&c.status, room.saturating_sub(age_room + tag_room));
+    let status = fit_parts(&c.status, room.saturating_sub(age_room + tag_room));
     let mut out = Vec::new();
     if let Some(pr) = c.row_pr.as_ref().filter(|_| !tag.is_empty()) {
         out.push(Span::styled(tag, theme::ink(pr.ink)));

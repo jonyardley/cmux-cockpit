@@ -38,6 +38,33 @@ pub fn fit(text: &str, max: usize) -> String {
     out
 }
 
+/// `text` fitted as [`fit`] does, but a part after a " · " is kept whole or
+/// left off, so "Shell running 4m · 1 shell" never ends on a bare "1…".
+pub fn fit_parts(text: &str, max: usize) -> String {
+    let whole = fit(text, max);
+    if !whole.ends_with(ELLIPSIS) {
+        return whole;
+    }
+    let parts: Vec<String> = text.split(" · ").map(|p| fit(p, usize::MAX)).collect();
+    let mut out = String::new();
+    for part in &parts {
+        let next = if out.is_empty() {
+            part.clone()
+        } else {
+            format!("{out} · {part}")
+        };
+        if width(&next) + width(ELLIPSIS) > max {
+            break;
+        }
+        out = next;
+    }
+    if out.is_empty() {
+        return whole;
+    }
+    out.push_str(ELLIPSIS);
+    out
+}
+
 /// How many items of these widths fit whole on a line of `room` cells,
 /// `gap` cells apart, and whether some were left off: then an ellipsis
 /// after the last one that fits takes its place, a gap before it when
@@ -172,6 +199,14 @@ mod tests {
     fn leaves_the_ellipsis_alone_when_no_word_fits() {
         assert_eq!(fit("unbelievably", 5), "…");
         assert_eq!(fit("anything", 0), "");
+    }
+
+    #[test]
+    fn keeps_a_part_after_a_dot_whole_or_leaves_it_off() {
+        let line = "Shell running 4m · 1 shell";
+        assert_eq!(fit_parts(line, 26), line);
+        assert_eq!(fit_parts(line, 22), "Shell running 4m…");
+        assert_eq!(fit_parts(line, 10), "Shell…");
     }
 
     #[test]
