@@ -605,6 +605,13 @@ impl Session {
     /// The status and how long it has held ("Working 14m", "Finished 6m"),
     /// with the shell count while Shell running and the quiet time while Quiet.
     pub fn status_line(&mut self, data: &Data, w: Option<&Workspace>) -> String {
+        self.status_forms(data, w).0
+    }
+
+    /// The status line, and the shorter form a narrow card falls back to:
+    /// the word and age without the shell count or the quiet time, so the
+    /// tail goes whole rather than cut. "" when there is no tail to drop.
+    pub fn status_forms(&mut self, data: &Data, w: Option<&Workspace>) -> (String, String) {
         let kind = self.status_kind(data, w);
         let age = self.card_age(data, w);
         let line = with_age(kind.style().label, &age);
@@ -612,14 +619,18 @@ impl Session {
             StatusKind::ShellRunning => {
                 let a = self.agent_of(w);
                 let n = live_shell_count(&self.saved, w, a.as_ref());
-                format!("{line} {}", shell_text(n))
+                (format!("{line} {}", shell_text(n)), line)
             }
             StatusKind::Quiet => {
                 let a = self.agent_of(w);
                 let suffix = self.quiet_suffix(data, a.as_ref(), w);
-                format!("{line}{suffix}")
+                if suffix.is_empty() {
+                    (line, String::new())
+                } else {
+                    (format!("{line}{suffix}"), line)
+                }
             }
-            _ => line,
+            _ => (line, String::new()),
         }
     }
 

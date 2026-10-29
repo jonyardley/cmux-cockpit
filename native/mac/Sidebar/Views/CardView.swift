@@ -273,14 +273,13 @@ struct StatusLine: View {
         HStack(spacing: Metrics.inlineGap) {
             StatusDot(icon: card.icon, size: dot)
             if !card.status.isEmpty {
-                // The widest form that fits whole; the shortest is cut last.
-                let forms = CardText.statusForms(card.status)
+                // The widest form that fits whole; the last is cut if it must.
+                // VoiceOver reads the whole status whichever form draws.
                 ViewThatFits(in: .horizontal) {
-                    ForEach(Array(forms.dropLast().enumerated()), id: \.offset) { _, form in
-                        status(form).fixedSize()
-                    }
-                    status(forms.last ?? card.status)
+                    ForEach(CardText.statusForms(card), id: \.self) { status($0) }
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(card.status)
                 .layoutPriority(2)
             }
             if !card.helpers.isEmpty {

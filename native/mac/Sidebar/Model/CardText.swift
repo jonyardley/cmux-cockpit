@@ -9,13 +9,12 @@ enum CardText {
         chip.pieces.map(\.text).joined(separator: " ")
     }
 
-    /// The status, then shorter forms of it for a narrow card: each drops
-    /// its last " · " part whole, so "Shell running 4m · 1 shell" gives
-    /// way to "Shell running 4m" and never ends on a bare "1 s…", as the
-    /// terminal pane fits it.
-    static func statusForms(_ status: String) -> [String] {
-        let parts = status.components(separatedBy: " · ")
-        return (1...parts.count).reversed().map { parts.prefix($0).joined(separator: " · ") }
+    /// The status, then the shorter form a narrow card falls back to: the
+    /// core's, its tail (the shell count or quiet time) dropped whole and
+    /// marked with an ellipsis, "Shell running 4m…", as the terminal pane
+    /// fits it. A status with no short form, such as a question, has one.
+    static func statusForms(_ card: Card) -> [String] {
+        card.statusShort.isEmpty ? [card.status] : [card.status, card.statusShort + "…"]
     }
 
     /// Every run of words a card draws, top to bottom, none empty: a

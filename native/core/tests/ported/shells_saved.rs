@@ -92,6 +92,17 @@ mod background_shells_on_the_card {
     }
 
     #[test]
+    fn falls_back_to_the_word_and_age_alone_with_the_shell_count_dropped_whole() {
+        let (mut s, data, mut fx) = setup();
+        let w = ws("one").agents(vec![idle(&mut fx)]);
+        let (full, short) = s.status_forms(&data, Some(&w));
+        assert_eq!(full, format!("{short} · 1 shell"));
+        assert!(short.starts_with("Shell running "));
+        let none = ws("none").agents(vec![idle(&mut fx)]);
+        assert_eq!(s.status_forms(&data, Some(&none)).1, "", "no tail to drop");
+    }
+
+    #[test]
     fn stays_ready_while_its_finished_turn_is_unread_since_the_shell_may_never_end() {
         let (mut s, data, mut fx) = setup();
         let w = ws("one").unread(2.0).agents(vec![idle(&mut fx)]);
