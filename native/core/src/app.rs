@@ -252,7 +252,6 @@ fn params_value(params: &[(String, Param)]) -> Value {
                 Param::Str(s) => Value::from(s.as_str()),
                 Param::Num(n) => json_num(*n),
                 Param::Bool(b) => Value::from(*b),
-                Param::List(items) => Value::from(items.clone()),
             };
             (k.clone(), v)
         })
@@ -271,21 +270,13 @@ fn params_in<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<(String, Para
             let p = match v {
                 Value::String(s) => Param::Str(s),
                 Value::Bool(b) => Param::Bool(b),
-                Value::Array(items) => items
-                    .into_iter()
-                    .map(|i| match i {
-                        Value::String(s) => Ok(s),
-                        _ => Err(serde::de::Error::custom("a cmux param list holds strings")),
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-                    .map(Param::List)?,
                 Value::Number(n) => n
                     .as_f64()
                     .map(Param::Num)
                     .ok_or_else(|| serde::de::Error::custom("a cmux param number out of range"))?,
                 _ => {
                     return Err(serde::de::Error::custom(
-                        "a cmux param is a string, number, bool or list of strings",
+                        "a cmux param is a string, number or bool",
                     ));
                 }
             };
@@ -857,25 +848,6 @@ mod tests {
         assert_eq!(json["params"], params);
         assert_eq!(json["params"], call.params_json());
         assert_eq!(serde_json::from_value::<CmuxCall>(json).unwrap(), call);
-    }
-
-    #[test]
-    fn a_list_param_crosses_the_bridge_as_a_json_array() {
-        let call = CmuxCall {
-            method: "workspace.reorder_many".into(),
-            params: vec![(
-                "workspace_ids".into(),
-                Param::List(vec!["W2".into(), "W1".into()]),
-            )],
-        };
-        let json = serde_json::to_value(&call).unwrap();
-        assert_eq!(
-            json["params"],
-            serde_json::json!({ "workspace_ids": ["W2", "W1"] })
-        );
-        assert_eq!(serde_json::from_value::<CmuxCall>(json).unwrap(), call);
-        let mixed = serde_json::json!({ "method": "m", "params": { "ids": ["a", 1] } });
-        assert!(serde_json::from_value::<CmuxCall>(mixed).is_err());
     }
 
     /// A switch at `now`, as the sidebar sends a click.

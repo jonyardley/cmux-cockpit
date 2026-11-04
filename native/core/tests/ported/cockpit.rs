@@ -293,13 +293,13 @@ mod missing_lane_groups {
             list.push(ws("anchor-bg").title("Background").group("g-bg"));
         }
         s.card_workspaces(&data);
-        // Position first: just after the new anchor, the last tab once u is left out.
+        // Position first: just after the new anchor, the group's last tab.
         assert_eq!(
             calls(&s),
             [
                 call(
                     "workspace.reorder",
-                    &[("workspace_id", "u"), ("index", "8")]
+                    &[("workspace_id", "u"), ("after_workspace_id", "anchor-bg")]
                 ),
                 call(
                     "workspace.group.add",

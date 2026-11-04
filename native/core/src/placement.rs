@@ -2,7 +2,7 @@
 //! card move built on it.
 //!
 //! A drop resolves the target lane from the row above the slot, then asks
-//! cmux for `workspace.reorder_many` and `workspace.group.add` (or
+//! cmux for `workspace.reorder` (beside a neighbour) and `workspace.group.add` (or
 //! `workspace.group.remove` for Unsorted). A lane and its order live in
 //! cmux's groups and tab order, so a move writes nothing to
 //! config/state.json.
@@ -88,6 +88,18 @@ fn slot_in(
         .map_or(first, LaneEntry::lane)
         .clone();
     (entries, at, lane)
+}
+
+/// The neighbour a card put at `at` among `others` sits beside, as the
+/// reorder param that names it: before the tab now there, else after the
+/// last one. None when there is no other tab.
+fn beside(others: &[String], at: usize) -> Option<(&'static str, String)> {
+    match others.get(at) {
+        Some(next) => Some(("before_workspace_id", next.clone())),
+        None => others
+            .last()
+            .map(|prev| ("after_workspace_id", prev.clone())),
+    }
 }
 
 fn ids_of(ws: &[&Workspace]) -> Vec<String> {
@@ -177,8 +189,8 @@ impl Session {
         self.move_in(data, &all, &order, key, index);
     }
 
-    /// The drop itself, against All's rows and the tab order the reorder
-    /// index counts in.
+    /// The drop itself, against All's rows and the tab order the card's
+    /// neighbour is read from.
     fn move_in(
         &mut self,
         data: &Data,
@@ -201,17 +213,23 @@ impl Session {
         let header_lane = changes_lane.then(|| self.lanes.get(&target.lane).clone());
         let others: Vec<String> = order.iter().filter(|id| **id != w.id).cloned().collect();
         // Position first, then membership, so the tab is already inside the
-        // group's run when it joins. The whole order goes, as one batch, so
-        // cmux ends in the order on screen even before it has shown an
-        // earlier move this one builds on.
+        // group's run when it joins. The card goes beside a named neighbour,
+        // not to an index, so a move made before cmux shows an earlier one
+        // still lands where it was dropped.
         if let Some(at) = target_index(data, w, &others, &target, header_lane.as_ref()) {
+            let anchor = beside(&others, at);
             let mut order = others;
             order.insert(at, w.id.clone());
-            self.override_order(data, order.clone());
-            self.cmux(
-                "workspace.reorder_many",
-                vec![("workspace_ids", Param::List(order))],
-            );
+            self.override_order(data, order);
+            if let Some((side, id)) = anchor {
+                self.cmux(
+                    "workspace.reorder",
+                    vec![
+                        ("workspace_id", Param::Str(w.id.clone())),
+                        (side, Param::Str(id)),
+                    ],
+                );
+            }
         }
         if changes_lane {
             self.move_to_lane(data, Some(w), target.lane);
@@ -225,7 +243,7 @@ impl Session {
     /// no timer, until cmux's data shows them, or shows something else of
     /// its own, or a request fails (LaneMove::held_from), so a slow cmux
     /// never snaps the card back. A move made before cmux has shown the
-    /// last one builds on it: its reorder counts in the order the last
+    /// last one builds on it: its reorder names a neighbour in the order the last
     /// one asked for, and the hold lets either show on the way.
     pub fn move_card(&mut self, data: &Data, id: &str, lane: LaneKey, before: Option<&str>) {
         self.drag = None;
@@ -304,5 +322,32 @@ impl Session {
                 vec![("group_id", group), ("workspace_id", ws_id)],
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::beside;
+
+    fn ids(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn a_card_goes_before_the_tab_at_its_slot_else_after_the_last() {
+        let others = ids(&["a", "b"]);
+        assert_eq!(
+            beside(&others, 0),
+            Some(("before_workspace_id", "a".to_string()))
+        );
+        assert_eq!(
+            beside(&others, 1),
+            Some(("before_workspace_id", "b".to_string()))
+        );
+        assert_eq!(
+            beside(&others, 2),
+            Some(("after_workspace_id", "b".to_string()))
+        );
+        assert_eq!(beside(&[], 0), None);
     }
 }

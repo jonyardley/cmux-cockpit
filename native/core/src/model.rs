@@ -101,20 +101,16 @@ fn same_order(ws: &[&Workspace], order: &[String]) -> bool {
     now == then
 }
 
-/// The tab index, among the other tabs, just after the group's last member.
-fn index_after_group(data: &Data, ws_id: &str, g: &WorkspaceGroup) -> Option<usize> {
-    let others: Vec<&Workspace> = data
-        .workspace_list()
+/// The group's last tab (a member or its anchor), other than this one.
+fn last_of_group<'d>(data: &'d Data, ws_id: &str, g: &WorkspaceGroup) -> Option<&'d str> {
+    data.workspace_list()
         .iter()
         .filter(|x| x.id != ws_id)
-        .collect();
-    others
-        .iter()
-        .rposition(|x| {
+        .rfind(|x| {
             x.group.as_deref() == Some(g.id.as_str())
                 || g.anchor_id.as_deref() == Some(x.id.as_str())
         })
-        .map(|i| i + 1)
+        .map(|x| x.id.as_str())
 }
 
 impl Session {
@@ -256,12 +252,12 @@ impl Session {
             else {
                 continue;
             };
-            if let Some(at) = index_after_group(data, &ws_id, g) {
+            if let Some(last) = last_of_group(data, &ws_id, g) {
                 self.cmux(
                     "workspace.reorder",
                     vec![
                         ("workspace_id", Param::Str(ws_id.clone())),
-                        ("index", Param::Num(at as f64)),
+                        ("after_workspace_id", Param::Str(last.to_string())),
                     ],
                 );
             }

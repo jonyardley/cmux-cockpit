@@ -156,20 +156,13 @@ pub fn read_token(config: &Path) -> Option<String> {
         .map(|t| t.trim().to_string())
 }
 
-/// The workspaces a cmux call is about: its `workspace_id` param, or each
-/// of its `workspace_ids`, since a failed batch reorder moved none of them.
-fn workspaces_of(o: &Outgoing) -> Vec<&str> {
-    let Outgoing::Cmux(call) = o else {
-        return Vec::new();
-    };
-    call.params
-        .iter()
-        .flat_map(|(k, v)| match v {
-            Param::Str(id) if k == "workspace_id" => vec![id.as_str()],
-            Param::List(ids) if k == "workspace_ids" => ids.iter().map(String::as_str).collect(),
-            _ => Vec::new(),
-        })
-        .collect()
+/// The workspace a cmux call is about, from its `workspace_id` param.
+fn workspace_of(o: &Outgoing) -> Option<&str> {
+    let Outgoing::Cmux(call) = o else { return None };
+    call.params.iter().find_map(|(k, v)| match v {
+        Param::Str(id) if k == "workspace_id" => Some(id.as_str()),
+        _ => None,
+    })
 }
 
 /// Where the worker reports back.
@@ -202,7 +195,7 @@ pub fn perform<L: Fn(String), F: Fn(String)>(
             Ok((program, args)) => {
                 if !exec(&program, &args) {
                     log(format!("{} failed or timed out", describe(&o)));
-                    for id in workspaces_of(&o) {
+                    if let Some(id) = workspace_of(&o) {
                         (reports.failed)(id.to_string());
                     }
                 }
@@ -221,11 +214,11 @@ mod tests {
 
     fn reorder() -> Outgoing {
         Outgoing::Cmux(CmuxCall {
-            method: "workspace.reorder_many".into(),
-            params: vec![(
-                "workspace_ids".into(),
-                Param::List(vec!["c".into(), "a".into()]),
-            )],
+            method: "workspace.reorder".into(),
+            params: vec![
+                ("workspace_id".into(), Param::Str("a".into())),
+                ("index".into(), Param::Num(4.0)),
+            ],
         })
     }
 
@@ -244,8 +237,8 @@ mod tests {
             args,
             [
                 "rpc",
-                "workspace.reorder_many",
-                r#"{"workspace_ids":["c","a"]}"#
+                "workspace.reorder",
+                r#"{"workspace_id":"a","index":4}"#
             ]
         );
     }
@@ -259,7 +252,7 @@ mod tests {
         assert_eq!(program, "/usr/bin/open");
         assert_eq!(args, ["-u", "https://example.com/pr/7"]);
         assert_eq!(describe(&link), "opening a link");
-        assert!(workspaces_of(&link).is_empty());
+        assert_eq!(workspace_of(&link), None);
     }
 
     #[test]
@@ -279,7 +272,7 @@ mod tests {
             ]
         );
         assert_eq!(describe(&copy), "copying to the clipboard");
-        assert!(workspaces_of(&copy).is_empty());
+        assert_eq!(workspace_of(&copy), None);
     }
 
     #[test]
@@ -303,8 +296,9 @@ mod tests {
             ]
         );
         assert_eq!(describe(&message), "cmux agent message");
-        assert!(
-            workspaces_of(&message).is_empty(),
+        assert_eq!(
+            workspace_of(&message),
+            None,
             "a failed message never unpins a card's move"
         );
     }
@@ -322,7 +316,7 @@ mod tests {
             ["/u/.config/cmux/scripts/pr-save.sh", r#"{"W2":null}"#]
         );
         assert_eq!(describe(&save), "pr save of 1");
-        assert!(workspaces_of(&save).is_empty());
+        assert_eq!(workspace_of(&save), None);
     }
 
     #[test]
@@ -395,19 +389,5 @@ mod tests {
             ["b"],
             "a failed cmux call names its workspace"
         );
-    }
-
-    #[test]
-    fn a_failed_batch_reorder_names_every_workspace_it_would_have_moved() {
-        let (tx, rx) = mpsc::channel();
-        tx.send(reorder()).unwrap();
-        drop(tx);
-        let failed = RefCell::new(Vec::new());
-        let reports = Reports {
-            log: |_| {},
-            failed: |id| failed.borrow_mut().push(id),
-        };
-        perform(&rx, Path::new("/c"), |_, _| false, &reports);
-        assert_eq!(failed.into_inner(), ["c", "a"]);
     }
 }
