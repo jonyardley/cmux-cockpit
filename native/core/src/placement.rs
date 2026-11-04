@@ -10,7 +10,7 @@
 use crate::data::{Data, Workspace};
 use crate::lane_entries::LaneEntry;
 use crate::lanes::{Lane, LaneKey};
-use crate::model::{actual_lane_of, group_for_lane};
+use crate::model::{Beside, actual_lane_of, group_for_lane, last_of_group};
 use crate::persist::ViewMode;
 use crate::session::{LaneSet, Param, Session};
 
@@ -42,34 +42,31 @@ pub fn is_foreign_anchor(s: &Session, data: &Data, ws_id: &str) -> bool {
         .any(|g| g.anchor_id.as_deref() == Some(ws_id) && !lanes.contains(ws_id))
 }
 
-/// The tab index a dropped workspace should move to among the others, or
-/// None to leave its position alone. `lane` is the drop's lane when the
-/// card changes lane, else None.
-fn target_index(
+/// Where a dropped card should go among the other tabs: its index there,
+/// for the order shown at once, and the neighbour cmux is asked to put it
+/// beside, the card the drop named. None leaves its position alone. `lane`
+/// is the drop's lane when the card changes lane, else None.
+fn target_of(
     data: &Data,
     w: &Workspace,
     others: &[String],
     drop: &DropTarget,
     lane: Option<&Lane>,
-) -> Option<usize> {
+) -> Option<(usize, Beside)> {
     let index_of = |id: &str| others.iter().position(|x| x == id);
     if let Some(next) = &drop.next_ref {
-        return index_of(next);
+        return index_of(next).map(|i| (i, Beside::Before(next.clone())));
     }
     if let Some(prev) = &drop.prev_ref {
-        return index_of(prev).map(|p| p + 1);
+        return index_of(prev).map(|i| (i + 1, Beside::After(prev.clone())));
     }
     // Dropped straight under a header (an empty lane, say): land after the
     // group's last member, else after its anchor. cmux keeps a group as one
     // contiguous run of tabs, and its lane order differs from ours, so a
     // card left sitting before the anchor falls into the group above it.
     let g = group_for_lane(data, lane?)?;
-    let last = data.workspace_list().iter().rfind(|x| {
-        x.id != w.id
-            && (x.group.as_deref() == Some(g.id.as_str())
-                || g.anchor_id.as_deref() == Some(x.id.as_str()))
-    })?;
-    index_of(&last.id).map(|p| p + 1)
+    let last = last_of_group(data, &w.id, g)?;
+    index_of(last).map(|i| (i + 1, Beside::After(last.to_string())))
 }
 
 /// All's rows without the dragged one, the slot clamped into them, and the
@@ -88,18 +85,6 @@ fn slot_in(
         .map_or(first, LaneEntry::lane)
         .clone();
     (entries, at, lane)
-}
-
-/// The neighbour a card put at `at` among `others` sits beside, as the
-/// reorder param that names it: before the tab now there, else after the
-/// last one. None when there is no other tab.
-fn beside(others: &[String], at: usize) -> Option<(&'static str, String)> {
-    match others.get(at) {
-        Some(next) => Some(("before_workspace_id", next.clone())),
-        None => others
-            .last()
-            .map(|prev| ("after_workspace_id", prev.clone())),
-    }
 }
 
 fn ids_of(ws: &[&Workspace]) -> Vec<String> {
@@ -216,20 +201,11 @@ impl Session {
         // group's run when it joins. The card goes beside a named neighbour,
         // not to an index, so a move made before cmux shows an earlier one
         // still lands where it was dropped.
-        if let Some(at) = target_index(data, w, &others, &target, header_lane.as_ref()) {
-            let anchor = beside(&others, at);
+        if let Some((at, beside)) = target_of(data, w, &others, &target, header_lane.as_ref()) {
             let mut order = others;
             order.insert(at, w.id.clone());
             self.override_order(data, order);
-            if let Some((side, id)) = anchor {
-                self.cmux(
-                    "workspace.reorder",
-                    vec![
-                        ("workspace_id", Param::Str(w.id.clone())),
-                        (side, Param::Str(id)),
-                    ],
-                );
-            }
+            self.reorder_beside(&w.id, beside);
         }
         if changes_lane {
             self.move_to_lane(data, Some(w), target.lane);
@@ -322,32 +298,5 @@ impl Session {
                 vec![("group_id", group), ("workspace_id", ws_id)],
             );
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::beside;
-
-    fn ids(v: &[&str]) -> Vec<String> {
-        v.iter().map(|s| s.to_string()).collect()
-    }
-
-    #[test]
-    fn a_card_goes_before_the_tab_at_its_slot_else_after_the_last() {
-        let others = ids(&["a", "b"]);
-        assert_eq!(
-            beside(&others, 0),
-            Some(("before_workspace_id", "a".to_string()))
-        );
-        assert_eq!(
-            beside(&others, 1),
-            Some(("before_workspace_id", "b".to_string()))
-        );
-        assert_eq!(
-            beside(&others, 2),
-            Some(("after_workspace_id", "b".to_string()))
-        );
-        assert_eq!(beside(&[], 0), None);
     }
 }

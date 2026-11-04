@@ -162,7 +162,7 @@ mod move_card {
         assert_eq!(
             asked,
             [
-                r#"cmux workspace.reorder {"workspace_id":"a","before_workspace_id":"anchor-parked"}"#,
+                r#"cmux workspace.reorder {"workspace_id":"a","after_workspace_id":"c"}"#,
                 r#"cmux workspace.group.add {"group_id":"g-review","workspace_id":"a"}"#,
                 "render",
             ]
@@ -391,6 +391,26 @@ mod the_moved_card_holds {
         assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::unsorted()));
         let _ = app.update(frame(NOW + 3.0, &[("a", "")]), &mut model);
         assert_eq!(lane_of(&app, &model, "a"), Some(LaneKey::unsorted()));
+    }
+
+    #[test]
+    fn a_second_move_to_a_lanes_end_goes_after_the_card_above_it() {
+        let (app, mut model) = started();
+        let _ = app.update(move_card("c", LaneKey::from("main"), Some("a")), &mut model);
+        let asked = asked(
+            &app,
+            &mut model,
+            move_card("a", LaneKey::from("main"), None),
+        );
+        // After b, the card the drop sits under, whatever cmux shows yet.
+        assert_eq!(
+            asked[0],
+            r#"cmux workspace.reorder {"workspace_id":"a","after_workspace_id":"b"}"#
+        );
+        assert_eq!(
+            lane_cards(&app, &model, LaneKey::from("main")),
+            ["c", "b", "a"]
+        );
     }
 
     #[test]

@@ -217,7 +217,7 @@ mod tests {
             method: "workspace.reorder".into(),
             params: vec![
                 ("workspace_id".into(), Param::Str("a".into())),
-                ("index".into(), Param::Num(4.0)),
+                ("after_workspace_id".into(), Param::Str("d".into())),
             ],
         })
     }
@@ -238,7 +238,7 @@ mod tests {
             [
                 "rpc",
                 "workspace.reorder",
-                r#"{"workspace_id":"a","index":4}"#
+                r#"{"workspace_id":"a","after_workspace_id":"d"}"#
             ]
         );
     }

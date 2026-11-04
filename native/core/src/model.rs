@@ -7,6 +7,7 @@
 //! after OVERRIDE_SECS, so a normalised result from the app wins.
 
 use std::cmp::Ordering;
+use std::collections::HashMap;
 
 use indexmap::IndexSet;
 use serde_json::{Map, Value};
@@ -101,8 +102,21 @@ fn same_order(ws: &[&Workspace], order: &[String]) -> bool {
     now == then
 }
 
+/// The tab a moved card is put next to, as `workspace.reorder` names it.
+/// A neighbour, not an index, so a move cmux has not shown yet cannot throw
+/// the count off.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Beside {
+    Before(String),
+    After(String),
+}
+
 /// The group's last tab (a member or its anchor), other than this one.
-fn last_of_group<'d>(data: &'d Data, ws_id: &str, g: &WorkspaceGroup) -> Option<&'d str> {
+pub(crate) fn last_of_group<'d>(
+    data: &'d Data,
+    ws_id: &str,
+    g: &WorkspaceGroup,
+) -> Option<&'d str> {
     data.workspace_list()
         .iter()
         .filter(|x| x.id != ws_id)
@@ -114,6 +128,21 @@ fn last_of_group<'d>(data: &'d Data, ws_id: &str, g: &WorkspaceGroup) -> Option<
 }
 
 impl Session {
+    /// Asks cmux to put a workspace beside a neighbour.
+    pub(crate) fn reorder_beside(&mut self, ws_id: &str, beside: Beside) {
+        let (side, id) = match beside {
+            Beside::Before(id) => ("before_workspace_id", id),
+            Beside::After(id) => ("after_workspace_id", id),
+        };
+        self.cmux(
+            "workspace.reorder",
+            vec![
+                ("workspace_id", Param::Str(ws_id.to_string())),
+                (side, Param::Str(id)),
+            ],
+        );
+    }
+
     fn awaiting_lane(&self, key: &LaneKey, now: f64) -> bool {
         self.lane_override
             .values()
@@ -240,6 +269,7 @@ impl Session {
             .filter(|(_, o)| o.awaiting)
             .map(|(id, o)| (id.clone(), o.clone()))
             .collect();
+        let mut filed: HashMap<String, String> = HashMap::new();
         for (ws_id, o) in waiting {
             if expired(&o, now) {
                 self.lane_override.shift_remove(&ws_id);
@@ -252,15 +282,17 @@ impl Session {
             else {
                 continue;
             };
-            if let Some(last) = last_of_group(data, &ws_id, g) {
-                self.cmux(
-                    "workspace.reorder",
-                    vec![
-                        ("workspace_id", Param::Str(ws_id.clone())),
-                        ("after_workspace_id", Param::Str(last.to_string())),
-                    ],
-                );
+            // After the card filed into this group earlier in the pass, if
+            // any: cmux's data does not show it yet, and two cards both put
+            // after the group's last tab would land in reverse.
+            let after = filed
+                .get(&g.id)
+                .cloned()
+                .or_else(|| last_of_group(data, &ws_id, g).map(str::to_string));
+            if let Some(after) = after {
+                self.reorder_beside(&ws_id, Beside::After(after));
             }
+            filed.insert(g.id.clone(), ws_id.clone());
             self.cmux(
                 "workspace.group.add",
                 vec![

@@ -6,7 +6,7 @@
 //! writes it as it came:
 //!
 //! ```json
-//! {"Cmux": {"method": "workspace.reorder", "params": {"workspace_id": "W1", "index": 4}}}
+//! {"Cmux": {"method": "workspace.reorder", "params": {"workspace_id": "W1", "before_workspace_id": "W4"}}}
 //! {"Persist": {"key": "dismissed.W1", "value": {"s1": 900}}}
 //! {"PrPoll": {"directory": "/dev/cockpit", "asked": 1791229864.5}}
 //! {"OpenUrl": {"url": "https://github.com/o/r/pull/1"}}

@@ -313,6 +313,29 @@ mod missing_lane_groups {
     }
 
     #[test]
+    fn files_two_waiting_cards_in_the_order_they_were_moved() {
+        let (mut s, mut data, _) = setup();
+        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::from("bg"));
+        s.move_to_lane(&data, Some(by_id(&data, "a")), LaneKey::from("bg"));
+        s.take_outbox();
+        add_bg_group(&mut data);
+        if let Some(list) = data.workspaces.as_mut() {
+            list.push(ws("anchor-bg").title("Background").group("g-bg"));
+        }
+        s.card_workspaces(&data);
+        // The second goes after the first, not after the anchor as well,
+        // which would land them in reverse.
+        assert_eq!(
+            param_of(&s, "workspace.reorder", "after_workspace_id"),
+            ["anchor-bg", "u"]
+        );
+        assert_eq!(
+            param_of(&s, "workspace.reorder", "workspace_id"),
+            ["u", "a"]
+        );
+    }
+
+    #[test]
     fn asks_for_the_group_once_while_it_is_on_its_way() {
         let (mut s, mut data, _) = setup();
         s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::from("bg"));
