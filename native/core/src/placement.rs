@@ -2,7 +2,7 @@
 //! card move built on it.
 //!
 //! A drop resolves the target lane from the row above the slot, then asks
-//! cmux for `workspace.reorder` and `workspace.group.add` (or
+//! cmux for `workspace.reorder` (beside a neighbour) and `workspace.group.add` (or
 //! `workspace.group.remove` for Unsorted). A lane and its order live in
 //! cmux's groups and tab order, so a move writes nothing to
 //! config/state.json.
@@ -10,7 +10,7 @@
 use crate::data::{Data, Workspace};
 use crate::lane_entries::LaneEntry;
 use crate::lanes::{Lane, LaneKey};
-use crate::model::{actual_lane_of, group_for_lane};
+use crate::model::{Beside, actual_lane_of, group_for_lane, last_of_group};
 use crate::persist::ViewMode;
 use crate::session::{LaneSet, Param, Session};
 
@@ -42,34 +42,31 @@ pub fn is_foreign_anchor(s: &Session, data: &Data, ws_id: &str) -> bool {
         .any(|g| g.anchor_id.as_deref() == Some(ws_id) && !lanes.contains(ws_id))
 }
 
-/// The tab index a dropped workspace should move to among the others, or
-/// None to leave its position alone. `lane` is the drop's lane when the
-/// card changes lane, else None.
-fn target_index(
+/// Where a dropped card should go among the other tabs: its index there,
+/// for the order shown at once, and the neighbour cmux is asked to put it
+/// beside, the card the drop named. None leaves its position alone. `lane`
+/// is the drop's lane when the card changes lane, else None.
+fn target_of(
     data: &Data,
     w: &Workspace,
     others: &[String],
     drop: &DropTarget,
     lane: Option<&Lane>,
-) -> Option<usize> {
+) -> Option<(usize, Beside)> {
     let index_of = |id: &str| others.iter().position(|x| x == id);
     if let Some(next) = &drop.next_ref {
-        return index_of(next);
+        return index_of(next).map(|i| (i, Beside::Before(next.clone())));
     }
     if let Some(prev) = &drop.prev_ref {
-        return index_of(prev).map(|p| p + 1);
+        return index_of(prev).map(|i| (i + 1, Beside::After(prev.clone())));
     }
     // Dropped straight under a header (an empty lane, say): land after the
     // group's last member, else after its anchor. cmux keeps a group as one
     // contiguous run of tabs, and its lane order differs from ours, so a
     // card left sitting before the anchor falls into the group above it.
     let g = group_for_lane(data, lane?)?;
-    let last = data.workspace_list().iter().rfind(|x| {
-        x.id != w.id
-            && (x.group.as_deref() == Some(g.id.as_str())
-                || g.anchor_id.as_deref() == Some(x.id.as_str()))
-    })?;
-    index_of(&last.id).map(|p| p + 1)
+    let last = last_of_group(data, &w.id, g)?;
+    index_of(last).map(|i| (i + 1, Beside::After(last.to_string())))
 }
 
 /// All's rows without the dragged one, the slot clamped into them, and the
@@ -177,8 +174,8 @@ impl Session {
         self.move_in(data, &all, &order, key, index);
     }
 
-    /// The drop itself, against All's rows and the tab order the reorder
-    /// index counts in.
+    /// The drop itself, against All's rows and the tab order the card's
+    /// neighbour is read from.
     fn move_in(
         &mut self,
         data: &Data,
@@ -201,18 +198,14 @@ impl Session {
         let header_lane = changes_lane.then(|| self.lanes.get(&target.lane).clone());
         let others: Vec<String> = order.iter().filter(|id| **id != w.id).cloned().collect();
         // Position first, then membership, so the tab is already inside the
-        // group's run when it joins.
-        if let Some(at) = target_index(data, w, &others, &target, header_lane.as_ref()) {
+        // group's run when it joins. The card goes beside a named neighbour,
+        // not to an index, so a move made before cmux shows an earlier one
+        // still lands where it was dropped.
+        if let Some((at, beside)) = target_of(data, w, &others, &target, header_lane.as_ref()) {
             let mut order = others;
             order.insert(at, w.id.clone());
             self.override_order(data, order);
-            self.cmux(
-                "workspace.reorder",
-                vec![
-                    ("workspace_id", Param::Str(w.id.clone())),
-                    ("index", Param::Num(at as f64)),
-                ],
-            );
+            self.reorder_beside(&w.id, beside);
         }
         if changes_lane {
             self.move_to_lane(data, Some(w), target.lane);
@@ -226,7 +219,7 @@ impl Session {
     /// no timer, until cmux's data shows them, or shows something else of
     /// its own, or a request fails (LaneMove::held_from), so a slow cmux
     /// never snaps the card back. A move made before cmux has shown the
-    /// last one builds on it: its reorder counts in the order the last
+    /// last one builds on it: its reorder names a neighbour in the order the last
     /// one asked for, and the hold lets either show on the way.
     pub fn move_card(&mut self, data: &Data, id: &str, lane: LaneKey, before: Option<&str>) {
         self.drag = None;

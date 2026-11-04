@@ -293,13 +293,13 @@ mod missing_lane_groups {
             list.push(ws("anchor-bg").title("Background").group("g-bg"));
         }
         s.card_workspaces(&data);
-        // Position first: just after the new anchor, the last tab once u is left out.
+        // Position first: just after the new anchor, the group's last tab.
         assert_eq!(
             calls(&s),
             [
                 call(
                     "workspace.reorder",
-                    &[("workspace_id", "u"), ("index", "8")]
+                    &[("workspace_id", "u"), ("after_workspace_id", "anchor-bg")]
                 ),
                 call(
                     "workspace.group.add",
@@ -310,6 +310,29 @@ mod missing_lane_groups {
         // Sent once, not on every read.
         s.card_workspaces(&data);
         assert_eq!(calls(&s).len(), 2);
+    }
+
+    #[test]
+    fn files_two_waiting_cards_in_the_order_they_were_moved() {
+        let (mut s, mut data, _) = setup();
+        s.move_to_lane(&data, Some(by_id(&data, "u")), LaneKey::from("bg"));
+        s.move_to_lane(&data, Some(by_id(&data, "a")), LaneKey::from("bg"));
+        s.take_outbox();
+        add_bg_group(&mut data);
+        if let Some(list) = data.workspaces.as_mut() {
+            list.push(ws("anchor-bg").title("Background").group("g-bg"));
+        }
+        s.card_workspaces(&data);
+        // The second goes after the first, not after the anchor as well,
+        // which would land them in reverse.
+        assert_eq!(
+            param_of(&s, "workspace.reorder", "after_workspace_id"),
+            ["anchor-bg", "u"]
+        );
+        assert_eq!(
+            param_of(&s, "workspace.reorder", "workspace_id"),
+            ["u", "a"]
+        );
     }
 
     #[test]

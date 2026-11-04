@@ -180,7 +180,7 @@ mod handle_move {
             calls(&s),
             [call(
                 "workspace.reorder",
-                &[("workspace_id", "b"), ("index", "1")]
+                &[("workspace_id", "b"), ("before_workspace_id", "a")]
             )]
         );
     }
