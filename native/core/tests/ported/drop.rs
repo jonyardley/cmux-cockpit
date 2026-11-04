@@ -130,7 +130,10 @@ mod handle_move {
     fn reorders_before_joining_the_new_group() {
         let (mut s, data, _) = setup();
         s.handle_move(&data, "w:a", 4); // after c@review
-        assert_eq!(methods(&s), ["workspace.reorder", "workspace.group.add"]);
+        assert_eq!(
+            methods(&s),
+            ["workspace.reorder_many", "workspace.group.add"]
+        );
         assert_eq!(
             calls(&s)[1],
             call(
@@ -179,8 +182,11 @@ mod handle_move {
         assert_eq!(
             calls(&s),
             [call(
-                "workspace.reorder",
-                &[("workspace_id", "b"), ("index", "1")]
+                "workspace.reorder_many",
+                &[(
+                    "workspace_ids",
+                    "[anchor-main,b,a,anchor-review,c,anchor-parked,p,u]"
+                )]
             )]
         );
     }

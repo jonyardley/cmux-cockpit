@@ -162,7 +162,7 @@ mod move_card {
         assert_eq!(
             asked,
             [
-                r#"cmux workspace.reorder {"workspace_id":"a","index":4}"#,
+                r#"cmux workspace.reorder_many {"workspace_ids":["anchor-main","b","anchor-review","c","a","anchor-parked","p","u"]}"#,
                 r#"cmux workspace.group.add {"group_id":"g-review","workspace_id":"a"}"#,
                 "render",
             ]
@@ -184,7 +184,7 @@ mod move_card {
         );
         assert_eq!(
             asked[0],
-            r#"cmux workspace.reorder {"workspace_id":"a","index":3}"#
+            r#"cmux workspace.reorder_many {"workspace_ids":["anchor-main","b","anchor-review","a","c","anchor-parked","p","u"]}"#
         );
         assert_eq!(
             lane_cards(&app, &model, LaneKey::from("review")),
@@ -203,7 +203,7 @@ mod move_card {
         assert_eq!(
             asked,
             [
-                r#"cmux workspace.reorder {"workspace_id":"b","index":1}"#,
+                r#"cmux workspace.reorder_many {"workspace_ids":["anchor-main","b","a","anchor-review","c","anchor-parked","p","u"]}"#,
                 "render",
             ]
         );
@@ -406,11 +406,11 @@ mod the_moved_card_holds {
             &mut model,
             move_card("b", LaneKey::from("main"), Some("c")),
         );
-        // Counted in the order the first move asked for, which cmux will
-        // have by the time this one reaches it.
+        // The whole order on screen, both moves in it, so cmux lands there
+        // whether or not it has made the first move yet.
         assert_eq!(
             asked[0],
-            r#"cmux workspace.reorder {"workspace_id":"b","index":1}"#
+            r#"cmux workspace.reorder_many {"workspace_ids":["anchor-main","b","c","a","anchor-review","anchor-parked","p","u"]}"#
         );
         assert_eq!(
             lane_cards(&app, &model, LaneKey::from("main")),

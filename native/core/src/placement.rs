@@ -2,7 +2,7 @@
 //! card move built on it.
 //!
 //! A drop resolves the target lane from the row above the slot, then asks
-//! cmux for `workspace.reorder` and `workspace.group.add` (or
+//! cmux for `workspace.reorder_many` and `workspace.group.add` (or
 //! `workspace.group.remove` for Unsorted). A lane and its order live in
 //! cmux's groups and tab order, so a move writes nothing to
 //! config/state.json.
@@ -201,17 +201,16 @@ impl Session {
         let header_lane = changes_lane.then(|| self.lanes.get(&target.lane).clone());
         let others: Vec<String> = order.iter().filter(|id| **id != w.id).cloned().collect();
         // Position first, then membership, so the tab is already inside the
-        // group's run when it joins.
+        // group's run when it joins. The whole order goes, as one batch, so
+        // cmux ends in the order on screen even before it has shown an
+        // earlier move this one builds on.
         if let Some(at) = target_index(data, w, &others, &target, header_lane.as_ref()) {
             let mut order = others;
             order.insert(at, w.id.clone());
-            self.override_order(data, order);
+            self.override_order(data, order.clone());
             self.cmux(
-                "workspace.reorder",
-                vec![
-                    ("workspace_id", Param::Str(w.id.clone())),
-                    ("index", Param::Num(at as f64)),
-                ],
+                "workspace.reorder_many",
+                vec![("workspace_ids", Param::List(order))],
             );
         }
         if changes_lane {

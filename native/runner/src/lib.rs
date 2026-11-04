@@ -1132,7 +1132,11 @@ mod tests {
         let sent: Vec<Outgoing> = rx.try_iter().collect();
         assert_eq!(
             methods(&sent),
-            ["workspace.reorder", "workspace.group.add", "set ui.mode"]
+            [
+                "workspace.reorder_many",
+                "workspace.group.add",
+                "set ui.mode"
+            ]
         );
         assert!(feed.unsent.is_empty());
     }
@@ -1156,7 +1160,7 @@ mod tests {
         );
         assert_eq!(
             methods(&feed.unsent),
-            ["workspace.reorder", "workspace.group.add"],
+            ["workspace.reorder_many", "workspace.group.add"],
             "the move's own requests, once"
         );
     }

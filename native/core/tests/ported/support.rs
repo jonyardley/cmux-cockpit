@@ -251,6 +251,7 @@ fn param_text(p: &Param) -> String {
         Param::Str(s) => s.clone(),
         Param::Num(n) => cockpit_core::js::num_text(*n),
         Param::Bool(b) => b.to_string(),
+        Param::List(items) => format!("[{}]", items.join(",")),
     }
 }
 

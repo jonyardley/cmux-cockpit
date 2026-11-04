@@ -30,6 +30,8 @@ pub enum Param {
     Str(String),
     Num(f64),
     Bool(bool),
+    /// A list of strings, such as `workspace.reorder_many`'s ids.
+    List(Vec<String>),
 }
 
 /// Something the core asks of the world outside it.
