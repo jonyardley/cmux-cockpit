@@ -131,7 +131,7 @@ impl Session {
     }
 
     /// True once the project was removed here, before the rebuild drops it.
-    fn is_removed_project(&self, k: &str) -> bool {
+    pub(crate) fn is_removed_project(&self, k: &str) -> bool {
         matches!(self.sent_specs.get(k), Some(None))
     }
 
@@ -302,8 +302,14 @@ impl Session {
     /// The All view's add button: a new session in the project's folder,
     /// or with no project in the home folder, in the first lane as the
     /// card menu's New session opens (it calls this). A project with no
-    /// folder or removed here, or no home known, opens nothing.
+    /// folder or removed here, or no home known, opens nothing. A filter
+    /// on another project would hide the new card, so it shows every card
+    /// again, as a Needs click to a hidden card does.
     pub fn add_session(&mut self, data: &Data, project: Option<&str>) {
+        let target = project.unwrap_or(crate::filter::NO_PROJECT);
+        if self.filter().is_some_and(|k| k != target) {
+            self.choose_filter(None);
+        }
         let first = self.lanes.first().clone();
         match project {
             Some(k) => self.open_project_workspace(data, k, Some(first)),

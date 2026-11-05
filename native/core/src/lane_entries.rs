@@ -176,10 +176,19 @@ impl Session {
         ranked.into_iter().map(|(_, w)| w).collect()
     }
 
-    /// Every lane with the cards it counts, in tab order: one pass over the
-    /// cards for every lane. Ranks kept for workspaces gone from the data
-    /// are dropped here, so the map never outgrows the open workspaces.
+    /// Every lane with the cards it shows, in tab order: only the chosen
+    /// project's while the project filter is on (filter.rs).
     pub fn lane_cards<'d>(&mut self, data: &'d Data) -> Vec<(Lane, Vec<&'d Workspace>)> {
+        let mut out = self.lane_cards_all(data);
+        self.keep_shown(&mut out);
+        out
+    }
+
+    /// Every lane with every card it holds, filtered or not, in tab order:
+    /// one pass over the cards for every lane. Ranks kept for workspaces
+    /// gone from the data are dropped here, so the map never outgrows the
+    /// open workspaces.
+    pub fn lane_cards_all<'d>(&mut self, data: &'d Data) -> Vec<(Lane, Vec<&'d Workspace>)> {
         self.held_rank.retain(|id, _| data.ws_by_id(id).is_some());
         let mut out: Vec<(Lane, Vec<&Workspace>)> =
             self.lanes.iter().map(|l| (l.clone(), Vec::new())).collect();
@@ -250,11 +259,12 @@ impl Session {
     }
 
     /// The cards a lane header counts, in tab order: every card it lists,
-    /// folded or not.
+    /// folded or not, less any the project filter hides.
     pub fn lane_workspaces<'d>(&mut self, data: &'d Data, key: &LaneKey) -> Vec<&'d Workspace> {
         let mut out = Vec::new();
+        let filter = self.filter().map(str::to_string);
         for w in self.card_workspaces(data) {
-            if &self.lane_of(data, w) == key {
+            if &self.lane_of(data, w) == key && self.shows_under(filter.as_deref(), w) {
                 out.push(w);
             }
         }

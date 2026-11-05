@@ -59,6 +59,10 @@ enum Palette {
         case dropTarget
         /// An empty lane's drop zone while a card is dragged over it.
         case zoneLit
+        /// The edge round the filter button and its chip while the All
+        /// view is filtered: the working blue, the one accent no state
+        /// takes on a control.
+        case filterEdge
     }
 
     private struct Pair {
@@ -152,6 +156,7 @@ enum Palette {
         case .readyBg: faint(green, 0x1F)
         case .dropTarget: faint(text, 0x1F)
         case .zoneLit: Pair(RGBA(0xE7E4D9), RGBA(0x3A3935))
+        case .filterEdge: blue
         }
     }
 

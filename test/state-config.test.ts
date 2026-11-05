@@ -362,6 +362,27 @@ test("applySet sets and deletes the cockpit's view and folds under ui", () => {
   if (cleared.ok) assert.deepEqual(cleared.state.ui, { collapsed: folds.state.ui.collapsed });
 });
 
+test("applySet keeps the All view's project filter beside the mode and folds", () => {
+  const mode = applySet(emptyState(), "ui.mode", '"all"');
+  assert.ok(mode.ok);
+  if (!mode.ok) return;
+  const filter = applySet(mode.state, "ui.filter", '"/dev/app"');
+  assert.ok(filter.ok);
+  if (!filter.ok) return;
+  assert.deepEqual(filter.state.ui, { mode: "all", filter: "/dev/app" });
+  // Another write keeps it: the file is read back through validateState.
+  assert.deepEqual(validateState(JSON.parse(JSON.stringify(filter.state))).ui, { mode: "all", filter: "/dev/app" });
+  const other = applySet(filter.state, "ui.filter", '"other"');
+  assert.ok(other.ok);
+  if (other.ok) assert.equal(other.state.ui.filter, "other");
+  const cleared = applySet(filter.state, "ui.filter", null);
+  assert.ok(cleared.ok);
+  if (cleared.ok) assert.deepEqual(cleared.state.ui, { mode: "all" });
+  const modeGone = applySet(filter.state, "ui.mode", null);
+  assert.ok(modeGone.ok);
+  if (modeGone.ok) assert.deepEqual(modeGone.state.ui, { filter: "/dev/app" });
+});
+
 test("applySet refuses a bad ui key or value", () => {
   for (const [key, value] of [
     ["ui.other", '"all"'],
@@ -371,6 +392,8 @@ test("applySet refuses a bad ui key or value", () => {
     ["ui.collapsed", "{}"],
     ["ui.collapsed", '{"lane:main":2}'],
     ["ui.collapsed", '["lane:main"]'],
+    ["ui.filter", '""'],
+    ["ui.filter", "3"],
   ] as const) {
     assert.equal(applySet(emptyState(), key, value).ok, false, `${key} = ${value}`);
   }
@@ -399,6 +422,7 @@ test("a fold on a project with a long match path is kept, not dropped", () => {
 test("rebuildsOn skips the build for the cockpit's own view, folds, lane names and sleeping agents only", () => {
   assert.equal(rebuildsOn("ui.mode"), false);
   assert.equal(rebuildsOn("ui.collapsed"), false);
+  assert.equal(rebuildsOn("ui.filter"), false);
   assert.equal(rebuildsOn("laneNames.main"), false);
   for (const key of ["dismissed.w1", "projectOverride.w1", "projects./dev/a/"])
     assert.equal(rebuildsOn(key), true, key);

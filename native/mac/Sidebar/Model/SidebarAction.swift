@@ -27,7 +27,7 @@ extension Event {
         switch self {
         case .refresh, .home, .cmuxFailed, .prPollOn, .panelOn, .at: false
         case .moveCard, .switchTo, .selected, .dismiss, .flipView, .edit, .openProject, .addSession,
-             .menu, .next, .messageAgent, .toggleLane, .toggleProject, .toggleQuiet, .reveal:
+             .filterProject, .menu, .next, .messageAgent, .toggleLane, .toggleProject, .toggleQuiet, .reveal:
             true
         }
     }

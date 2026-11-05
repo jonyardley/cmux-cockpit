@@ -1,6 +1,7 @@
 //! The panel model for each scene, as JSON in native/fixtures/: the four
-//! golden scenes as they load, then a card's menu open over lanes, and
-//! the project editor open on a project and on a new one over projects.
+//! golden scenes as they load, then a card's menu open over lanes, the
+//! project editor open on a project and on a new one over projects, and
+//! the lanes filtered to one project.
 //! A shell that draws the panel (the Swift one, across the bridge) can
 //! test against these without the core.
 //!
@@ -64,6 +65,14 @@ fn scenes() -> Vec<(&'static str, Panel)> {
     let mut model = loaded("projects");
     send(&mut model, Event::Edit(EditEvent::OpenNew));
     out.push(("new-project", Panel::from_core(&mut model)));
+
+    // The sidebar filters All to the project the one card in a project
+    // folder is in: its lane counts 1 of all, the rest draw empty.
+    let mut model = loaded("lanes");
+    send(&mut model, Event::PanelOn);
+    let key = Some("/dev/app-one".to_string());
+    send(&mut model, Event::FilterProject { key });
+    out.push(("filtered", Panel::from_core(&mut model)));
     out
 }
 
@@ -101,7 +110,7 @@ fn every_fixture_has_a_scene() {
     }
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../fixtures");
     let names: Vec<String> = scenes().iter().map(|(n, _)| format!("{n}.json")).collect();
-    assert_eq!(names.len(), 7);
+    assert_eq!(names.len(), 8);
     for entry in std::fs::read_dir(&dir).unwrap() {
         let file = entry.unwrap().file_name().to_string_lossy().to_string();
         if !file.ends_with(".json") {
@@ -120,6 +129,16 @@ fn opens_the_menu_and_the_editors_the_fixtures_name() {
     let editor = panel("editor").editor().unwrap();
     assert!(!editor.is_new);
     assert!(panel("new-project").editor().unwrap().is_new);
+    let filtered = panel("filtered");
+    assert_eq!(filtered.card_ids(), ["loose"]);
+    assert!(filtered.lanes.iter().all(|l| l.total.is_some()));
+    assert!(panel("lanes").lanes.iter().all(|l| l.total.is_none()));
+    let menu = filtered.filter.as_ref().unwrap();
+    assert!(
+        menu.projects
+            .iter()
+            .any(|p| p.chosen && p.key == "/dev/app-one")
+    );
 }
 
 #[test]

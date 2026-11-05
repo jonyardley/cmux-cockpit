@@ -40,6 +40,11 @@ let sceneOf: [String: String] = [
     "new-project": "projects",
 ]
 
+/// Fixtures whose cards are some of another fixture's: filtered is the
+/// lanes scene with All filtered to one project, which the pane never
+/// draws (it shows every card), so its cards are checked against lanes.
+let subsetOf: [String: String] = ["filtered": "lanes"]
+
 /// The pane's bar down the lead of a card waiting on Jon (native/pane/
 /// src/views/lanes.rs WAITING_BAR): a mark, read as the blank it stands in.
 let waitingBar: Character = "▎"
@@ -102,7 +107,7 @@ let names = ((try? FileManager.default.contentsOfDirectory(atPath: fixtures.path
     .map { String($0.dropLast(5)) }
     .sorted()
 check(!names.isEmpty, "found the fixtures")
-for name in names {
+for name in names where subsetOf[name] == nil {
     guard let scene = sceneOf[name] else {
         check(false, "\(name): name the pane snapshot of its scene in sceneOf")
         continue
@@ -122,6 +127,20 @@ for name in names {
     check(drawn.count == ours.count, "\(name): \(ours.count) cards, the pane draws \(drawn.count)")
     for (i, card) in ours.enumerated() where i < drawn.count {
         check(card.words == drawn[i], "\(name): card \"\(card.title)\" says \(card.words.joined(separator: " ")) | pane: \(drawn[i].joined(separator: " "))")
+    }
+}
+
+// A filtered scene's cards are the whole scene's, word for word.
+for (name, whole) in subsetOf {
+    if let part = load(name), let all = load(whole) {
+        let words = Dictionary(panelCards(all).map { ($0.title, $0.words) }, uniquingKeysWith: { a, _ in a })
+        let cards = panelCards(part)
+        check(!cards.isEmpty, "\(name): has cards to compare")
+        for card in cards {
+            check(words[card.title] == card.words, "\(name): \(card.title) reads as in \(whole)")
+        }
+    } else {
+        check(false, "\(name) and \(whole) decode")
     }
 }
 
@@ -406,6 +425,9 @@ let ownWords = [
     (Words.notSent, "Not sent: the cockpit could not take it. Try again."),
     (Words.newSession, "New session"), (Words.newSessionIn, "New session in"),
     (Words.noFolder, "(no folder)"), (Words.noProject, "No project (home folder)"),
+    (Words.filterByProject, "Filter by project"), (Words.everything, "Everything"),
+    (Words.filterNoProject, "No project"), (Words.only, "only"),
+    (Words.showEverything, "Show every project"), (Words.of, "of"),
 ]
 for (word, pinned) in ownWords {
     check(word == pinned, "the sidebar's \"\(pinned)\"")
@@ -418,6 +440,7 @@ for (side, corner) in [(26.0, 8.0), (22, 7), (18, 5), (16, 5), (14, 4), (9, 3)] 
 let ownLight: [(Palette.Own, RGBA)] = [
     (.card, RGBA(0xFFFFFF)), (.readyEdge, RGBA(0x788C5D, 0x47)), (.cardHover, RGBA(0xF7F6F2)),
     (.hover, RGBA(0x7F7F7F, 0x14)), (.dropTarget, RGBA(0x141413, 0x1F)), (.zoneLit, RGBA(0xE7E4D9)),
+    (.filterEdge, RGBA(0x3B6FB6)),
 ]
 for (own, pinned) in ownLight {
     check(Palette.rgba(own, dark: false) == pinned, "light \(own) is pinned")
@@ -648,8 +671,8 @@ for (name, word) in [("DIRTY_MARK", ChipFit.dirtyMark), ("DOT", CardText.filledD
 // MARK: The add button
 
 // A project with a folder reads its name; one with none says why.
-let withFolder = AddProject(key: "/dev/app", name: "App", color: 0xD97757, canOpen: true)
-let noFolder = AddProject(key: "/dev/notes", name: "Notes", color: nil, canOpen: false)
+let withFolder = AddProject(key: "/dev/app", name: "App", color: 0xD97757, canOpen: true, chosen: false)
+let noFolder = AddProject(key: "/dev/notes", name: "Notes", color: nil, canOpen: false, chosen: false)
 check(AddText.label(withFolder) == "App", "a project with a folder reads its name")
 check(AddText.label(noFolder) == "Notes (no folder)", "a project with no folder says why")
 // Only All carries the menu, and every fixture in All has one.
@@ -662,6 +685,27 @@ if var panel = load("lanes") {
     check(AddText.menu(panel)?.projects.isEmpty == false, "lanes: the add menu lists the projects")
     panel.view = .projects
     check(AddText.menu(panel) == nil, "no add button once Projects is on, whatever the panel carries")
+}
+
+// MARK: The filter
+
+if let panel = load("filtered") {
+    let menu = FilterText.menu(panel)
+    check(menu.map(FilterText.isOn) == true, "filtered: the filter is on")
+    check(menu.flatMap(FilterText.chip)?.label == "App One only", "filtered: the chip names the project")
+    check(menu.flatMap(FilterText.chip)?.color == 0xD97757, "filtered: the chip carries its colour")
+    let counts = panel.lanes.map(FilterText.count)
+    check(counts == ["0 of 8", "0 of 2", "0 of 2", "0 of 1", "1 of 2"], "filtered: each header counts shown of held: \(counts)")
+    check(panel.add?.projects.first?.chosen == true, "filtered: the add menu leads with the filtered project, ticked")
+}
+if var panel = load("lanes"), let menu = FilterText.menu(panel) {
+    check(!FilterText.isOn(menu) && FilterText.chip(menu) == nil, "lanes: no filter, no chip")
+    check(panel.lanes.map(FilterText.count) == panel.lanes.map { String($0.count) }, "lanes: unfiltered counts read as today")
+    let none = FilterMenu(projects: menu.projects, noProject: menu.noProject, noProjectChosen: true)
+    check(FilterText.isOn(none) && FilterText.chip(none)?.label == "No project only", "No project's chip")
+    check(FilterText.chip(none)?.color == nil, "No project's chip dot is the grey of no colour")
+    panel.view = .projects
+    check(FilterText.menu(panel) == nil, "no filter once Projects is on, whatever the panel carries")
 }
 
 // MARK: Colours from a hand-written config

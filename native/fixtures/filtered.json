@@ -1,0 +1,345 @@
+{
+  "view": "All",
+  "next": {
+    "Step": {
+      "ws_id": "needs",
+      "title": "Chip colours",
+      "place": "1 of 3",
+      "ink": "greenText"
+    }
+  },
+  "needs": {
+    "count": 2,
+    "label": "2 need you",
+    "wait": "5m",
+    "late": false,
+    "fill": "clay",
+    "ink": "clayText",
+    "target": {
+      "ws_id": "needs",
+      "title": "Chip colours"
+    }
+  },
+  "lanes": [
+    {
+      "key": "main",
+      "empty": true,
+      "name": "MAIN ACTIVITY",
+      "faint": true,
+      "marker": "laneMain",
+      "anchor": null,
+      "count": 0,
+      "total": 8,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
+      "rows": []
+    },
+    {
+      "key": "review",
+      "empty": true,
+      "name": "FOR REVIEW",
+      "faint": true,
+      "marker": "laneReview",
+      "anchor": null,
+      "count": 0,
+      "total": 2,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
+      "rows": []
+    },
+    {
+      "key": "bg",
+      "empty": true,
+      "name": "BACKGROUND",
+      "faint": true,
+      "marker": "laneBackground",
+      "anchor": null,
+      "count": 0,
+      "total": 2,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
+      "rows": []
+    },
+    {
+      "key": "parked",
+      "empty": true,
+      "name": "PARKED",
+      "faint": true,
+      "marker": "laneParked",
+      "anchor": null,
+      "count": 0,
+      "total": 1,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": true,
+      "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
+      "rows": []
+    },
+    {
+      "key": "unsorted",
+      "empty": false,
+      "name": "UNSORTED",
+      "faint": false,
+      "marker": "laneUnsorted",
+      "anchor": null,
+      "count": 1,
+      "total": 2,
+      "pill": {
+        "bg": "blueCount",
+        "fg": "blueText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
+      "rows": [
+        {
+          "Card": {
+            "ws_id": "loose",
+            "icon": {
+              "glyph": "●",
+              "ink": "blue",
+              "halo": "blueHalo"
+            },
+            "title": "Loose workspace",
+            "density": "Row",
+            "badge": {
+              "icon": "star.fill",
+              "color": 14251863
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": true,
+            "progress": null,
+            "helpers": "",
+            "status": "3m",
+            "status_short": "",
+            "status_ink": "metaText",
+            "age": "3m",
+            "status_has_age": true,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 1,
+            "waiting": null,
+            "waiting_tab": null,
+            "rank": 2,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session in App One",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "✓ Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Unpin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "projects": [],
+  "menu": null,
+  "add": {
+    "projects": [
+      {
+        "key": "/dev/app-one",
+        "name": "App One",
+        "color": 14251863,
+        "can_open": true,
+        "chosen": true
+      },
+      {
+        "key": "/dev/app-two",
+        "name": "App Two",
+        "color": 6986700,
+        "can_open": false,
+        "chosen": false
+      },
+      {
+        "key": "/dev/app-three",
+        "name": "App Three",
+        "color": 7900253,
+        "can_open": false,
+        "chosen": false
+      }
+    ],
+    "home": true,
+    "home_chosen": false
+  },
+  "filter": {
+    "projects": [
+      {
+        "key": "/dev/app-one",
+        "name": "App One",
+        "color": 14251863,
+        "chosen": true
+      },
+      {
+        "key": "/dev/app-two",
+        "name": "App Two",
+        "color": 6986700,
+        "chosen": false
+      },
+      {
+        "key": "/dev/app-three",
+        "name": "App Three",
+        "color": 7900253,
+        "chosen": false
+      }
+    ],
+    "no_project": "other",
+    "no_project_chosen": false
+  }
+}

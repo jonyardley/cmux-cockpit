@@ -46,6 +46,8 @@ let every: [SidebarAction] = [
     .openProject(key: "/dev/cockpit"),
     .addSession(project: "/dev/cockpit"),
     .addSession(project: nil),
+    .filterProject(key: "/dev/cockpit"),
+    .filterProject(key: nil),
     .menu(.openCard(id: "W1")),
     .menu(.openProject(key: "/dev/cockpit", quiet: true)),
     .menu(.close),

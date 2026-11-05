@@ -29,6 +29,7 @@
       "marker": "laneMain",
       "anchor": null,
       "count": 0,
+      "total": null,
       "pill": {
         "bg": "countBg",
         "fg": "metaText"
@@ -51,6 +52,7 @@
       "marker": "laneReview",
       "anchor": null,
       "count": 0,
+      "total": null,
       "pill": {
         "bg": "countBg",
         "fg": "metaText"
@@ -73,6 +75,7 @@
       "marker": "laneBackground",
       "anchor": null,
       "count": 0,
+      "total": null,
       "pill": {
         "bg": "countBg",
         "fg": "metaText"
@@ -95,6 +98,7 @@
       "marker": "laneParked",
       "anchor": null,
       "count": 0,
+      "total": null,
       "pill": {
         "bg": "countBg",
         "fg": "metaText"
@@ -117,6 +121,7 @@
       "marker": "laneUnsorted",
       "anchor": null,
       "count": 7,
+      "total": null,
       "pill": {
         "bg": "clayCount",
         "fg": "clayText"
@@ -1217,21 +1222,49 @@
         "key": "/dev/app-one",
         "name": "App One",
         "color": 14251863,
-        "can_open": true
+        "can_open": true,
+        "chosen": false
       },
       {
         "key": "/dev/app-two",
         "name": "App Two",
         "color": 6986700,
-        "can_open": false
+        "can_open": false,
+        "chosen": false
       },
       {
         "key": "/dev/app-three",
         "name": "App Three",
         "color": 7900253,
-        "can_open": false
+        "can_open": false,
+        "chosen": false
       }
     ],
-    "home": true
+    "home": true,
+    "home_chosen": false
+  },
+  "filter": {
+    "projects": [
+      {
+        "key": "/dev/app-one",
+        "name": "App One",
+        "color": 14251863,
+        "chosen": false
+      },
+      {
+        "key": "/dev/app-two",
+        "name": "App Two",
+        "color": 6986700,
+        "chosen": false
+      },
+      {
+        "key": "/dev/app-three",
+        "name": "App Three",
+        "color": 7900253,
+        "chosen": false
+      }
+    ],
+    "no_project": "other",
+    "no_project_chosen": false
   }
 }

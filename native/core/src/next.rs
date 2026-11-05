@@ -164,7 +164,8 @@ impl Session {
 
     /// Selects a workspace from Next or its Needs you pill, first
     /// unfolding what hides its card in the chosen view: its lane in All,
-    /// its project in Projects. A lane's generated anchor has no card; its status sits on
+    /// clearing the project filter too when it hides the card; its
+    /// project in Projects. A lane's generated anchor has no card; its status sits on
     /// the lane header, which shows only in All, so Projects switches to All.
     pub fn reveal_workspace(&mut self, data: &Data, w: Option<&Workspace>) {
         let Some(w) = w else { return };
@@ -178,6 +179,10 @@ impl Session {
 
     fn unfold_card_of(&mut self, data: &Data, w: &Workspace) {
         if self.is_mode(ViewMode::All) {
+            // A card the project filter hides shows again with every card.
+            if !self.filter_shows(w) {
+                self.choose_filter(None);
+            }
             let key = self.lane_of(data, w);
             let lane = self.lanes.get(&key).clone();
             if self.is_collapsed(data, &lane) {

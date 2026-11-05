@@ -20,6 +20,8 @@
   { "OpenProject": { "key": "/dev/cockpit" } },
   { "AddSession": { "project": "/dev/cockpit" } },
   { "AddSession": { "project": null } },
+  { "FilterProject": { "key": "/dev/cockpit" } },
+  { "FilterProject": { "key": null } },
   { "Menu": { "OpenCard": { "id": "W1" } } },
   { "Menu": { "OpenProject": { "key": "/dev/cockpit", "quiet": true } } },
   { "Menu": "Close" },

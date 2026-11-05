@@ -164,6 +164,16 @@ pub struct Session {
 
     // cockpit/state.ts: the view, the local folds and the selection.
     pub(crate) mode: ViewMode,
+    // The All view's project filter as saved (filter.rs), checked against
+    // the table where it is read, so one read before the table is not lost.
+    pub(crate) filter: Option<String>,
+    /// Whether this core's shell draws the project filter: the sidebar,
+    /// which sends `Event::PanelOn`. The pane draws no picker, so its lanes
+    /// show every card whatever the sidebar chose.
+    pub(crate) filters: bool,
+    /// A shell has sent the project table, so a filter on a project it
+    /// does not hold is stale rather than not read yet.
+    pub(crate) projects_read: bool,
     pub(crate) unsorted_collapsed: bool,
     pub(crate) quiet_collapsed: bool,
     pub(crate) collapsed_projects: Vec<String>,
@@ -240,6 +250,7 @@ impl Session {
             .collect();
         Session {
             mode: saved.ui.mode.unwrap_or_default(),
+            filter: saved.ui.filter.clone(),
             unsorted_collapsed: folded("lane:unsorted"),
             quiet_collapsed: folded("quiet"),
             collapsed_projects,
@@ -281,6 +292,7 @@ impl Session {
         self.dismissed = fresh.dismissed;
         self.project_override = fresh.project_override;
         self.mode = fresh.mode;
+        self.filter = fresh.filter;
         self.unsorted_collapsed = fresh.unsorted_collapsed;
         self.quiet_collapsed = fresh.quiet_collapsed;
         self.collapsed_projects = fresh.collapsed_projects;
@@ -320,6 +332,7 @@ impl Session {
             .retain(|_, key| is_project_key(&projects, key));
         self.sent_specs.clear();
         self.projects = projects;
+        self.projects_read = true;
     }
 
     /// Swaps in the lane table config/lanes.json describes. One the core

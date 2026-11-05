@@ -29,6 +29,7 @@
       "marker": "laneMain",
       "anchor": null,
       "count": 0,
+      "total": null,
       "pill": {
         "bg": "countBg",
         "fg": "metaText"
@@ -51,6 +52,7 @@
       "marker": "laneReview",
       "anchor": null,
       "count": 0,
+      "total": null,
       "pill": {
         "bg": "countBg",
         "fg": "metaText"
@@ -73,6 +75,7 @@
       "marker": "laneBackground",
       "anchor": null,
       "count": 0,
+      "total": null,
       "pill": {
         "bg": "countBg",
         "fg": "metaText"
@@ -95,6 +98,7 @@
       "marker": "laneParked",
       "anchor": null,
       "count": 0,
+      "total": null,
       "pill": {
         "bg": "countBg",
         "fg": "metaText"
@@ -117,6 +121,7 @@
       "marker": "laneUnsorted",
       "anchor": null,
       "count": 5,
+      "total": null,
       "pill": {
         "bg": "clayCount",
         "fg": "clayText"
@@ -1994,5 +1999,6 @@
     }
   ],
   "menu": null,
-  "add": null
+  "add": null,
+  "filter": null
 }

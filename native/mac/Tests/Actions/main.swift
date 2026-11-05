@@ -86,9 +86,34 @@ for name in names {
     check(AddText.pickHome(menu) == (menu.home ? .addSession(project: nil) : nil), "\(name): No project picks once home is known")
 }
 check(addSeen > 0, "the fixtures hold an add menu to check (\(addSeen))")
-let homeless = AddMenu(projects: [], home: false)
+let homeless = AddMenu(projects: [], home: false, homeChosen: false)
 check(AddText.pickHome(homeless) == nil, "No project sends nothing with no home known")
-check(AddText.pickHome(AddMenu(projects: [], home: true)) == .addSession(project: nil), "No project opens the home folder")
+check(AddText.pickHome(AddMenu(projects: [], home: true, homeChosen: false)) == .addSession(project: nil), "No project opens the home folder")
+
+// The filter: a project's pick filters to it, No project to the key the
+// core gave, Everything clears; picking the ticked one clears too, as
+// unticking it; every pick is one of Jon's actions.
+var filterSeen = 0
+for name in names {
+    guard let data = try? Data(contentsOf: dir.appendingPathComponent(name)),
+          let panel = try? JSONDecoder().decode(Panel.self, from: data),
+          let menu = FilterText.menu(panel)
+    else { continue }
+    for project in menu.projects {
+        filterSeen += 1
+        let sent = project.chosen ? FilterText.clear : .filterProject(key: project.key)
+        check(FilterText.pick(project) == sent, "\(name): \(project.name) filters to it, or clears while ticked")
+    }
+    let noProject = menu.noProjectChosen ? FilterText.clear : .filterProject(key: menu.noProject)
+    check(FilterText.pickNoProject(menu) == noProject, "\(name): No project filters by the core's key, or clears while ticked")
+}
+check(filterSeen > 0, "the fixtures hold a filter menu to check (\(filterSeen))")
+check(FilterText.clear == .filterProject(key: nil), "Everything and the chip's x clear the filter")
+check(FilterText.clear.isAction, "a filter pick is an action")
+let tickedApp = FilterProject(key: "/dev/app", name: "App", color: nil, chosen: true)
+check(FilterText.pick(tickedApp) == FilterText.clear, "picking the ticked project clears the filter")
+let tickedNone = FilterMenu(projects: [], noProject: "other", noProjectChosen: true)
+check(FilterText.pickNoProject(tickedNone) == FilterText.clear, "picking the ticked No project clears the filter")
 
 check(SidebarAction.message(" \n\t", to: "W1") == nil, "blank words send nothing")
 check(

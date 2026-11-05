@@ -102,6 +102,10 @@ pub enum Event {
     /// project's folder, or with none in the home folder, in the first
     /// lane (by_project.rs `add_session`).
     AddSession { project: Option<String> },
+    /// A pick from the All view's filter: only a project's cards in the
+    /// lanes, the cards with no project (`filter::NO_PROJECT`), or with
+    /// None every card again (filter.rs).
+    FilterProject { key: Option<String> },
     /// Something done with the card menu or a project's menu (menu.rs).
     Menu(MenuEvent),
     /// The Next button: switches to the next workspace in its queue.
@@ -159,6 +163,7 @@ impl Event {
             | Event::Edit(_)
             | Event::OpenProject { .. }
             | Event::AddSession { .. }
+            | Event::FilterProject { .. }
             | Event::Menu(_)
             | Event::Next
             | Event::MessageAgent { .. }
@@ -214,6 +219,10 @@ pub struct LaneHeaderView {
     pub collapsed: bool,
     pub workspaces: Vec<String>,
     pub merge_ready: String,
+    /// While the project filter is on, every card the lane holds, shown
+    /// or not, so its header reads "1 of 4"; None while every card shows.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<usize>,
 }
 
 /// What the shell draws: the All view.
@@ -435,14 +444,18 @@ pub fn build_view(s: &mut Session, data: &Data) -> ViewModel {
         position: st.position,
         total: st.total,
     });
-    let cards = s.lane_cards(data);
+    let mut cards = s.lane_cards_all(data);
+    let totals: Vec<usize> = cards.iter().map(|(_, ws)| ws.len()).collect();
+    let filtered = s.filter().is_some();
+    s.keep_shown(&mut cards);
     let lane_entries = s.lane_entries_from(data, &cards);
     let mut lane_headers = BTreeMap::new();
-    for (lane, lane_cards) in &cards {
+    for ((lane, lane_cards), total) in cards.iter().zip(totals) {
         let header = LaneHeaderView {
             collapsed: s.is_collapsed(data, lane),
             workspaces: ids(lane_cards),
             merge_ready: s.merge_ready_of(data, &lane.key, lane_cards),
+            total: filtered.then_some(total),
         };
         lane_headers.insert(lane.key.clone(), header);
     }
@@ -487,6 +500,7 @@ impl Model {
             Event::Menu(e) => s.menu(data, e),
             Event::OpenProject { key } => s.open_project_workspace(data, &key, None),
             Event::AddSession { project } => s.add_session(data, project.as_deref()),
+            Event::FilterProject { key } => s.choose_filter(key.as_deref()),
             Event::Next => s.jump_next(data),
             Event::MessageAgent { id, text } => s.message_agent(data, &id, &text),
             Event::ToggleLane { lane } => s.toggle_lane(data, &lane),
@@ -613,7 +627,10 @@ impl App for Cockpit {
             Event::Home { home } => model.session.home = home,
             Event::Refresh => {}
             Event::PrPollOn => model.session.pr_poll.turn_on(),
-            Event::PanelOn => model.panel_on = true,
+            Event::PanelOn => {
+                model.panel_on = true;
+                model.session.filters = true;
+            }
             Event::PrPolled(polled) => return model.polled(*polled),
             Event::Slept(answer) => {
                 if let Some(data) = &model.data {
@@ -627,6 +644,7 @@ impl App for Cockpit {
             // record, so the pane's never doubles a wake.
             model.session.tend_sleep(data, model.panel_on);
         }
+        model.session.tend_filter();
         model.overlay();
         model.rebuild();
         let now = model.data.as_ref().and_then(|d| d.epoch);
