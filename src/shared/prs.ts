@@ -1,7 +1,9 @@
 // A workspace's pull requests: cmux's own when it sends any, else the one
-// scripts/pr-poll.ts saved in config/state.json (issue #7). cmux sends custom
-// sidebars no PR data today, so the saved copy is what shows; both sidebars
-// read PRs through here so the day cmux does send them, its data wins.
+// scripts/pr-poll.ts saved in config/state.json (issue #7). cmux's record,
+// in the renderer's data feed, carries a url, number and status but no
+// draft, title, diff, merge verdict or checks, so when it and the saved copy
+// are the same PR, cmux's status wins and the rest fills from the saved one.
+// Both sidebars read PRs through here (native/core/src/prs.rs mirrors it).
 
 import type { SavedCheck, SavedOwnPr, SavedPr, SavedPrOrigin } from "../../scripts/state-config.ts";
 import { SAVED_STATE } from "./persist.ts";
@@ -17,14 +19,31 @@ function savedFor(w: Workspace): SavedPr | undefined {
   return saved && (!w.branch || saved.branch === w.branch) ? saved : undefined;
 }
 
+// Whether cmux's `pr` is the saved PR: the same url, or, when cmux sends
+// no url, the same number (savedFor has already checked the branch).
+function isSaved(pr: PullRequest, saved: SavedPr): boolean {
+  return pr.url ? pr.url === saved.url : pr.number === saved.number;
+}
+
+// cmux's PR over the saved one: each field cmux sends wins, so its status
+// does, and what it leaves out (draft, title, diff, merge verdict) is filled
+// from the saved copy. A null counts as left out, as the Rust core reads it.
+function withSaved(pr: PullRequest, saved: SavedPr | undefined): PullRequest {
+  if (!saved || !isSaved(pr, saved)) return pr;
+  const { checks: _checks, ...rest } = saved;
+  const sent = Object.fromEntries(Object.entries(pr).filter(([, v]) => v !== undefined && v !== null));
+  return { ...rest, ...sent };
+}
+
 /**
- * The app's list, else its single PR, else the saved one. A branch switch
- * to a different branch hides the saved one until the next poll.
+ * The app's list, else its single PR, else the saved one; an app PR that is
+ * the saved one is filled from it. A branch switch to a different branch
+ * hides the saved one until the next poll.
  */
 export function prsOf(w: Workspace): PullRequest[] {
-  if (w.prs?.length) return w.prs;
-  if (w.pr) return [w.pr];
   const saved = savedFor(w);
+  if (w.prs?.length) return w.prs.map((pr) => withSaved(pr, saved));
+  if (w.pr) return [withSaved(w.pr, saved)];
   return saved ? [saved] : [];
 }
 
@@ -51,18 +70,24 @@ export function originOf(url: string | undefined): SavedPrOrigin | undefined {
 export const prOf = (w: Workspace | undefined): PullRequest | undefined => (w ? prsOf(w)[0] : undefined);
 
 /**
- * Whether the workspace's PRs are the poller's saved copy rather than
- * cmux's own, so they age with the poller's data (issue #78).
+ * Whether the workspace's first PR carries the poller's saved data, so it
+ * ages with it (issue #78): cmux sends none, or its first is the saved one.
  */
-export const fromPoller = (w: Workspace): boolean => !(w.prs?.length || w.pr);
+export function fromPoller(w: Workspace): boolean {
+  const first = w.prs?.length ? w.prs[0] : w.pr;
+  if (!first) return true;
+  const saved = savedFor(w);
+  return !!saved && isSaved(first, saved);
+}
 
 /**
- * The CI checks of the saved PR, in checksFrom's order. Only the poller
- * saves checks, so while cmux sends a PR of its own there are none.
+ * The CI checks of the saved PR, in checksFrom's order, for `pr` (the
+ * workspace's first by default). Only the poller saves checks, so a PR of
+ * cmux's own that is not the saved one has none.
  */
-export function checksOf(w: Workspace): SavedCheck[] {
-  if (!fromPoller(w)) return [];
-  return savedFor(w)?.checks ?? [];
+export function checksOf(w: Workspace, pr: PullRequest | undefined = prOf(w)): SavedCheck[] {
+  const saved = savedFor(w);
+  return saved && pr && isSaved(pr, saved) ? (saved.checks ?? []) : [];
 }
 
 // The chip's words after the number, joined by " · ": a draft keeps its

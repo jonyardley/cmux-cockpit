@@ -1,6 +1,8 @@
 //! A workspace's pull requests and their health (src/shared/prs.ts and
 //! src/shared/pr-health.ts): cmux's own when it sends any, else the one
 //! the poller saved in config/state.json, and the summary a chip shows.
+//! cmux's record has no draft, title, diff, merge verdict or checks, so
+//! when it is the saved PR, its fields win and the saved copy fills the rest.
 //! The agents sidebar's slice (Jon's own PRs, which chat opened a PR, a
 //! PR's title) waits for that sidebar's port.
 
@@ -62,42 +64,91 @@ fn saved_for<'s>(saved: &'s SavedState, w: &Workspace) -> Option<&'s SavedPr> {
     }
 }
 
-/// The app's list, else its single PR, else the saved one.
-pub fn prs_of(saved: &SavedState, w: &Workspace) -> Vec<PullRequest> {
-    if let Some(list) = w.prs.as_ref().filter(|l| !l.is_empty()) {
-        return list.clone();
+/// Whether cmux's PR is the saved one: the same url, or, when cmux sends
+/// no url, the same number (saved_for has already checked the branch).
+fn is_saved(pr: &PullRequest, saved: &SavedPr) -> bool {
+    match non_empty(pr.url.as_deref()) {
+        Some(url) => url == saved.url,
+        None => pr.number == Some(saved.number),
     }
-    if let Some(pr) = &w.pr {
-        return vec![pr.clone()];
-    }
-    saved_for(saved, w)
-        .map(as_pull_request)
-        .into_iter()
-        .collect()
 }
 
-/// The workspace's first PR, if any: borrowed when it is cmux's own, so
-/// a read every frame clones no list.
+/// cmux's PR over the saved one: each field cmux sends wins, so its status
+/// does, and what it leaves out (draft, title, diff, merge verdict) is
+/// filled from the saved copy.
+fn filled(pr: &PullRequest, saved: &SavedPr) -> PullRequest {
+    let base = as_pull_request(saved);
+    PullRequest {
+        url: pr.url.clone().or(base.url),
+        number: pr.number.or(base.number),
+        status: pr.status.or(base.status),
+        draft: pr.draft.or(base.draft),
+        mergeable: pr.mergeable.or(base.mergeable),
+        conflicts: pr.conflicts.or(base.conflicts),
+        title: pr.title.clone().or(base.title),
+        additions: pr.additions.or(base.additions),
+        deletions: pr.deletions.or(base.deletions),
+        label: pr.label.clone().or(base.label),
+        branch: pr.branch.clone().or(base.branch),
+        stale: pr.stale.or(base.stale),
+    }
+}
+
+/// cmux's PR, filled from the saved one when it is that PR; borrowed when
+/// it is not, so a read every frame clones nothing it need not.
+fn with_saved<'a>(pr: &'a PullRequest, saved: Option<&SavedPr>) -> Cow<'a, PullRequest> {
+    match saved {
+        Some(s) if is_saved(pr, s) => Cow::Owned(filled(pr, s)),
+        _ => Cow::Borrowed(pr),
+    }
+}
+
+/// cmux's first PR: the head of its list, else its single one.
+fn cmux_first(w: &Workspace) -> Option<&PullRequest> {
+    w.prs.as_ref().and_then(|l| l.first()).or(w.pr.as_ref())
+}
+
+/// The app's list, else its single PR, else the saved one; an app PR that
+/// is the saved one is filled from it.
+pub fn prs_of(saved: &SavedState, w: &Workspace) -> Vec<PullRequest> {
+    let mine = saved_for(saved, w);
+    if let Some(list) = w.prs.as_ref().filter(|l| !l.is_empty()) {
+        return list
+            .iter()
+            .map(|pr| with_saved(pr, mine).into_owned())
+            .collect();
+    }
+    if let Some(pr) = &w.pr {
+        return vec![with_saved(pr, mine).into_owned()];
+    }
+    mine.map(as_pull_request).into_iter().collect()
+}
+
+/// The workspace's first PR, if any: borrowed when it is cmux's own and
+/// not the saved one, so a read every frame clones no list.
 pub fn pr_of<'a>(saved: &SavedState, w: Option<&'a Workspace>) -> Option<Cow<'a, PullRequest>> {
     let w = w?;
-    if let Some(first) = w.prs.as_ref().and_then(|l| l.first()) {
-        return Some(Cow::Borrowed(first));
+    let mine = saved_for(saved, w);
+    match cmux_first(w) {
+        Some(pr) => Some(with_saved(pr, mine)),
+        None => mine.map(|p| Cow::Owned(as_pull_request(p))),
     }
-    if let Some(pr) = &w.pr {
-        return Some(Cow::Borrowed(pr));
-    }
-    saved_for(saved, w).map(|p| Cow::Owned(as_pull_request(p)))
 }
 
-/// Whether the workspace's PRs are the poller's saved copy rather than cmux's own.
-pub fn from_poller(w: &Workspace) -> bool {
-    !(w.prs.as_ref().is_some_and(|l| !l.is_empty()) || w.pr.is_some())
+/// Whether the workspace's first PR carries the poller's saved data:
+/// cmux sends none, or its first is the saved one.
+pub fn from_poller(saved: &SavedState, w: &Workspace) -> bool {
+    match cmux_first(w) {
+        None => true,
+        Some(pr) => saved_for(saved, w).is_some_and(|s| is_saved(pr, s)),
+    }
 }
 
-/// The CI checks of the saved PR. Only the poller saves checks, so while
-/// cmux sends a PR of its own there are none.
+/// The CI checks of the saved PR, for the workspace's first PR. Only the
+/// poller saves checks, so a PR of cmux's own that is not the saved one
+/// has none.
 pub fn checks_of<'s>(saved: &'s SavedState, w: &Workspace) -> &'s [SavedCheck] {
-    if !from_poller(w) {
+    if !from_poller(saved, w) {
         return &[];
     }
     saved_for(saved, w)
@@ -349,6 +400,91 @@ mod tests {
         };
         assert_eq!(pr_of(&s, Some(&w)).and_then(|p| p.number), Some(7.0));
         assert_eq!(pr_health(&s, Some(&w)), PrHealth::Quiet);
+    }
+
+    const HELD: &str = r#"{"prs": {"w": {"number": 347, "url": "https://h/347", "status": "open", "branch": "feat", "draft": true, "mergeable": true, "title": "Colour the menus", "additions": 280, "deletions": 45, "checks": [{"name": "build", "state": "fail"}]}}}"#;
+
+    fn holding(pr: PullRequest) -> Workspace {
+        Workspace {
+            id: "w".into(),
+            branch: Some("feat".into()),
+            pr: Some(pr),
+            ..Workspace::default()
+        }
+    }
+
+    fn cmuxs_347() -> PullRequest {
+        PullRequest {
+            url: Some("https://h/347".into()),
+            number: Some(347.0),
+            status: Some(PrStatus::Open),
+            ..PullRequest::default()
+        }
+    }
+
+    #[test]
+    fn fills_cmuxs_own_pr_from_the_saved_one_with_the_same_url() {
+        let s = saved(HELD);
+        let w = holding(cmuxs_347());
+        let summary = pr_summary(&s, Some(&w));
+        assert_eq!(
+            summary.as_ref().map(|p| p.text.as_str()),
+            Some("#347 · draft · 1 failing")
+        );
+        assert_eq!(
+            summary.as_ref().map(|p| p.title.as_str()),
+            Some("Colour the menus")
+        );
+        assert_eq!(
+            summary.as_ref().map(|p| p.diff.as_str()),
+            Some("+280 \u{2212}45")
+        );
+        assert_eq!(checks_of(&s, &w).len(), 1);
+        assert!(from_poller(&s, &w));
+        let listed = Workspace {
+            pr: None,
+            prs: Some(vec![cmuxs_347()]),
+            ..w
+        };
+        assert_eq!(
+            prs_of(&s, &listed).first().and_then(|p| p.draft),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn keeps_cmuxs_status_and_matches_by_number_without_a_url() {
+        let s = saved(HELD);
+        let merged = holding(PullRequest {
+            status: Some(PrStatus::Merged),
+            ..cmuxs_347()
+        });
+        let pr = pr_of(&s, Some(&merged));
+        assert_eq!(pr.as_ref().and_then(|p| p.status), Some(PrStatus::Merged));
+        assert_eq!(pr.as_ref().and_then(|p| p.draft), Some(true));
+        let bare = holding(PullRequest {
+            url: None,
+            ..cmuxs_347()
+        });
+        let pr = pr_of(&s, Some(&bare));
+        assert_eq!(
+            pr.as_ref().and_then(|p| p.title.as_deref()),
+            Some("Colour the menus")
+        );
+    }
+
+    #[test]
+    fn leaves_a_different_pr_from_cmux_as_it_came() {
+        let s = saved(HELD);
+        let other = PullRequest {
+            url: Some("https://h/348".into()),
+            number: Some(348.0),
+            ..cmuxs_347()
+        };
+        let w = holding(other.clone());
+        assert!(matches!(pr_of(&s, Some(&w)), Some(Cow::Borrowed(p)) if *p == other));
+        assert!(checks_of(&s, &w).is_empty());
+        assert!(!from_poller(&s, &w));
     }
 
     #[test]
