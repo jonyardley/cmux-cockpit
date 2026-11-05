@@ -351,6 +351,7 @@ pub(crate) mod fixtures {
             marker: Token::LaneMain,
             anchor: None,
             count: rows.len(),
+            total: None,
             pill: PillColors {
                 bg: Token::CountBg,
                 fg: Token::MetaText,

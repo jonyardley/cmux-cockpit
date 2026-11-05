@@ -45,6 +45,13 @@ pub struct UiState {
     /// "lane:<key>", "project:<key>" or "quiet" to 1 folded, 0 unfolded.
     #[serde(deserialize_with = "crate::lenient::map")]
     pub collapsed: BTreeMap<String, f64>,
+    /// The All view's project filter: a project's key, or "other" for the
+    /// cards with no project (filter.rs); none while every card shows.
+    #[serde(
+        deserialize_with = "crate::lenient::field",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub filter: Option<String>,
 }
 
 /// A project made or edited in the sidebar.
@@ -246,7 +253,7 @@ impl SavedState {
 
     /// Makes one of the cockpit's own writes here, as the handler's
     /// applySet makes it in the file: `dismissed.<ws>`, `projectOverride.<ws>`,
-    /// `projects.<key>`, `laneNames.<id>`, `asleep.<ws>`, `ui.mode` or `ui.collapsed`, set, or deleted with
+    /// `projects.<key>`, `laneNames.<id>`, `asleep.<ws>`, `ui.mode`, `ui.collapsed` or `ui.filter`, set, or deleted with
     /// no value. False
     /// for any other key or a value of the wrong shape, leaving the state
     /// as it was.
@@ -277,6 +284,7 @@ impl SavedState {
                 .is_ok(),
             ("asleep", _) => parse(value).map(|v| put(&mut self.asleep, id, v)).is_ok(),
             ("ui", "mode") => parse(value).map(|v| self.ui.mode = v).is_ok(),
+            ("ui", "filter") => parse(value).map(|v| self.ui.filter = v).is_ok(),
             ("ui", "collapsed") => parse(value)
                 .map(|v| self.ui.collapsed = v.unwrap_or_default())
                 .is_ok(),
@@ -452,6 +460,29 @@ mod tests {
             Some(SavedProject::Removed { .. })
         ));
         assert!(s.shells.is_empty());
+    }
+
+    #[test]
+    fn reads_and_writes_the_project_filter_beside_the_mode() {
+        let s = SavedState::from_json(r#"{"ui": {"filter": "/dev/app", "mode": "all"}}"#).unwrap();
+        assert_eq!(s.ui.filter.as_deref(), Some("/dev/app"));
+        let bad = SavedState::from_json(r#"{"ui": {"filter": 3, "mode": "projects"}}"#).unwrap();
+        assert_eq!(
+            (bad.ui.filter, bad.ui.mode),
+            (None, Some(ViewMode::Projects))
+        );
+        let mut s = SavedState::default();
+        assert!(s.set_entry("ui.filter", Some(&Value::from("other"))));
+        assert_eq!(s.ui.filter.as_deref(), Some("other"));
+        assert!(s.shows_entry("ui.filter", Some(&Value::from("other"))));
+        assert!(
+            !s.set_entry("ui.filter", Some(&Value::from(3))),
+            "a key is a string"
+        );
+        assert!(s.set_entry("ui.filter", None));
+        assert_eq!(s.ui.filter, None);
+        let written = serde_json::to_value(&s.ui).unwrap();
+        assert!(written.get("filter").is_none(), "no filter writes no key");
     }
 
     #[test]

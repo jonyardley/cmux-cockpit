@@ -16,6 +16,7 @@ pub mod card_chips;
 pub mod chips;
 pub mod data;
 pub mod edit;
+pub mod filter;
 pub mod fixture;
 pub mod home;
 pub mod hooks;

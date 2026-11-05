@@ -4,6 +4,7 @@ use crate::app::{LaneHeaderView, ViewModel};
 use crate::by_project::ProjectEntry;
 use crate::card_chips::Chip as CoreChip;
 use crate::data::{Data, Workspace};
+use crate::filter::NO_PROJECT;
 use crate::lane_entries::{LaneEntry, drop_hint, merge_ink, shows_left_off};
 use crate::lanes::{self, Density, LaneKey};
 use crate::model::card_density;
@@ -23,8 +24,9 @@ use crate::ui::QUIET_PILL;
 
 use super::{
     AddMenu, AddProject, Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT,
-    EditorView, HOLLOW, Icon, Lane, Needs, NeedsTarget, NextLine, PROJECT_ROW, Panel, PanelView,
-    ProjectHead, ProjectRow, QUIET_ROW, Row, RowPr, Waiting, WaitingTab, piece,
+    EditorView, FilterMenu, FilterProject, HOLLOW, Icon, Lane, Needs, NeedsTarget, NextLine,
+    PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow, QUIET_ROW, Row, RowPr, Waiting,
+    WaitingTab, piece,
 };
 
 /// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
@@ -225,9 +227,13 @@ pub fn view_of(view: &ViewModel) -> PanelView {
 
 pub(super) fn build(session: &mut Session, data: &Data, view: &ViewModel) -> Panel {
     let shown = view_of(view);
-    let (projects, add) = match shown {
-        PanelView::Projects => (projects(session, data, view), None),
-        PanelView::All => (Vec::new(), Some(add_menu(session, data))),
+    let (projects, add, filter) = match shown {
+        PanelView::Projects => (projects(session, data, view), None, None),
+        PanelView::All => {
+            let order = session.projects_in_view_order(data);
+            let add = add_menu(session, &order);
+            (Vec::new(), Some(add), Some(filter_menu(session, &order)))
+        }
     };
     Panel {
         view: shown,
@@ -237,6 +243,7 @@ pub(super) fn build(session: &mut Session, data: &Data, view: &ViewModel) -> Pan
         projects,
         menu: session.menu_view(data),
         add,
+        filter,
         lane_picks: lane_picks(session),
     }
 }
@@ -244,27 +251,55 @@ pub(super) fn build(session: &mut Session, data: &Data, view: &ViewModel) -> Pan
 /// The add button's menu: every project in the Projects view's order,
 /// the busy ones in table order then the quiet ones, whether or not
 /// Quiet is folded, less one removed here; and whether the home folder
-/// is known.
-fn add_menu(session: &mut Session, data: &Data) -> AddMenu {
-    let projects = session
-        .projects_in_view_order(data)
-        .into_iter()
+/// is known. While All is filtered, the filter's choice is ticked, and a
+/// project listed first.
+fn add_menu(session: &Session, order: &[String]) -> AddMenu {
+    let chosen = session.filter();
+    let mut projects: Vec<AddProject> = order
+        .iter()
         .map(|k| {
-            let p = session.project_by_key(&k);
+            let p = session.project_by_key(k);
             // What a pick opens, so a folder just set in the editor counts
             // before the rebuild carries it.
-            let can_open = session.root_to_open(&k).is_some();
+            let can_open = session.root_to_open(k).is_some();
             AddProject {
-                key: k,
+                key: k.clone(),
                 name: p.name,
                 color: parse_hex(&p.color),
                 can_open,
+                chosen: chosen == Some(k.as_str()),
             }
         })
         .collect();
+    // A stable sort: the chosen one first, the rest as they were.
+    projects.sort_by_key(|p| !p.chosen);
     AddMenu {
         projects,
         home: session.home_folder().is_some(),
+        home_chosen: chosen == Some(NO_PROJECT),
+    }
+}
+
+/// The filter's menu: every project in the add menu's order, then the
+/// cards with no project, with the filter's choice ticked.
+fn filter_menu(session: &Session, order: &[String]) -> FilterMenu {
+    let chosen = session.filter();
+    let projects = order
+        .iter()
+        .map(|k| {
+            let p = session.project_by_key(k);
+            FilterProject {
+                key: k.clone(),
+                name: p.name,
+                color: parse_hex(&p.color),
+                chosen: chosen == Some(k.as_str()),
+            }
+        })
+        .collect();
+    FilterMenu {
+        projects,
+        no_project: NO_PROJECT.to_string(),
+        no_project_chosen: chosen == Some(NO_PROJECT),
     }
 }
 
@@ -695,6 +730,7 @@ fn lane_head(
         marker: lane.color,
         anchor: None,
         count: ids.len(),
+        total: header.and_then(|h| h.total),
         pill: status.tint,
         dot,
         collapsed,
@@ -1549,15 +1585,18 @@ mod tests {
                         name: "Notes".into(),
                         color: None,
                         can_open: false,
+                        chosen: false,
                     },
                     AddProject {
                         key: "/dev/app".into(),
                         name: "App".into(),
                         color: Some(0xD9_77_57),
                         can_open: true,
+                        chosen: false,
                     },
                 ],
                 home: true,
+                home_chosen: false,
             },
             "busy then quiet, less the removed one; a project with no folder stays, disabled"
         );

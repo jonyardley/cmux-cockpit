@@ -474,6 +474,11 @@ pub struct Lane {
     pub marker: Token,
     pub anchor: Option<Anchor>,
     pub count: usize,
+    /// While the project filter is on, every card the lane holds, shown
+    /// or not, so the sidebar's header reads "1 of 4"; None while every
+    /// card shows. A lane whose every card is hidden draws empty, its
+    /// header still reading "0 of 3".
+    pub total: Option<usize>,
     pub pill: PillColors,
     /// The needs dot while a card in it waits on Jon, folded or open;
     /// else, while folded, the dot of its most urgent session.
@@ -503,6 +508,8 @@ pub struct AddProject {
     /// False for a project with no folder: the shell shows it, disabled,
     /// and says why.
     pub can_open: bool,
+    /// The project the All view is filtered to: ticked, and listed first.
+    pub chosen: bool,
 }
 
 /// The All view's add button: a new session in a project, or in the home
@@ -516,6 +523,37 @@ pub struct AddMenu {
     pub projects: Vec<AddProject>,
     /// Whether the home folder is known, so "No project" can open there.
     pub home: bool,
+    /// The All view is filtered to the cards with no project, so "No
+    /// project" is ticked.
+    pub home_chosen: bool,
+}
+
+/// A project in the filter's menu: its name and colour as the add menu
+/// has them, and whether All is filtered to it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+pub struct FilterProject {
+    /// Its key in the core, which a pick sends back (`Event::FilterProject`).
+    pub key: String,
+    pub name: String,
+    /// The table's colour; None draws the grey of a dot with no colour.
+    pub color: Option<u32>,
+    pub chosen: bool,
+}
+
+/// The All view's project filter (filter.rs): the funnel's menu and, while
+/// it is on, the chip that names it. The shell words both; the core says
+/// what is in the menu and what is chosen. The pane draws no filter and
+/// ignores it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, facet::Facet)]
+pub struct FilterMenu {
+    /// Every project in the add menu's order, folder or not, as filtering
+    /// needs none.
+    pub projects: Vec<FilterProject>,
+    /// The key "No project" sends: the cards the Projects view files
+    /// under Other.
+    pub no_project: String,
+    /// All is filtered to the cards with no project.
+    pub no_project_chosen: bool,
 }
 
 /// Everything the pane draws.
@@ -533,6 +571,9 @@ pub struct Panel {
     /// The add button's menu while All is on; None in Projects, which has
     /// a "+" on each project instead.
     pub add: Option<AddMenu>,
+    /// The project filter's menu while All is on; None in Projects, which
+    /// it never filters.
+    pub filter: Option<FilterMenu>,
     /// Every lane's key and name as configured, in display order with
     /// Unsorted last: the pane's lane picker. The sidebar picks from its
     /// card menu instead, so this is never sent.

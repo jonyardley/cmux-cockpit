@@ -131,7 +131,7 @@ impl Session {
     }
 
     /// True once the project was removed here, before the rebuild drops it.
-    fn is_removed_project(&self, k: &str) -> bool {
+    pub(crate) fn is_removed_project(&self, k: &str) -> bool {
         matches!(self.sent_specs.get(k), Some(None))
     }
 

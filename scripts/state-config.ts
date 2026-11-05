@@ -143,6 +143,8 @@ export interface UiState {
   mode?: ViewMode;
   /** "lane:<key>" or "project:<key>" -> 1 folded, 0 unfolded. */
   collapsed?: Record<string, number>;
+  /** The native sidebar's All view filter: a project's key, or "other" for the cards with no project. */
+  filter?: string;
 }
 
 /** A project made or edited in the sidebar. Its first match is the key it is stored under. */
@@ -498,10 +500,15 @@ function foldFlags(v: unknown): Record<string, number> | null {
 function uiState(v: unknown): UiState {
   if (!isRecord(v)) return {};
   const collapsed = foldFlags(v.collapsed);
-  return { ...(isViewMode(v.mode) ? { mode: v.mode } : {}), ...(collapsed ? { collapsed } : {}) };
+  const filter = projectKey(v.filter);
+  return {
+    ...(isViewMode(v.mode) ? { mode: v.mode } : {}),
+    ...(collapsed ? { collapsed } : {}),
+    ...(filter ? { filter } : {}),
+  };
 }
 
-const UI_KEYS: readonly string[] = ["mode", "collapsed"];
+const UI_KEYS: readonly string[] = ["mode", "collapsed", "filter"];
 
 // Any name lanes.json takes (trimmed, not empty), bounded only so a flood
 // of URLs cannot bloat the file; a tighter rule would refuse a lane's own
@@ -785,10 +792,8 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       const left = without(asleep ?? {}, id);
       return Object.keys(left).length ? { ...rest, asleep: left } : rest;
     }
-    case "ui": {
-      const { mode, collapsed } = state.ui;
-      return { ...state, ui: id === "mode" ? (collapsed ? { collapsed } : {}) : mode ? { mode } : {} };
-    }
+    case "ui":
+      return { ...state, ui: Object.fromEntries(Object.entries(state.ui).filter(([key]) => key !== id)) };
   }
 }
 
@@ -859,6 +864,10 @@ function moveEntry(state: State, id: string, parsed: unknown): State | string {
 function uiEntry(state: State, id: string, parsed: unknown): State | string {
   if (id === "mode")
     return isViewMode(parsed) ? { ...state, ui: { ...state.ui, mode: parsed } } : 'ui.mode wants "all" or "projects"';
+  if (id === "filter") {
+    const filter = projectKey(parsed);
+    return filter ? { ...state, ui: { ...state.ui, filter } } : "ui.filter wants a project key string";
+  }
   const collapsed = foldFlags(parsed);
   return collapsed ? { ...state, ui: { ...state.ui, collapsed } } : "ui.collapsed wants {section: 0 or 1}";
 }
