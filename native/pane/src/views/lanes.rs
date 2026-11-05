@@ -274,7 +274,7 @@ fn row_pr_title(c: &Card, room: usize) -> Vec<Span<'static>> {
 }
 
 /// The right of a card's title row in at most `room` cells: a row's PR
-/// number in its health's ink, its status, then its age while the status
+/// number in its tone's ink, its status, then its age while the status
 /// carries none (a waiting card's reason), in the waiting ink while it
 /// waits, as the sidebar's title row has it. The PR number and the age are
 /// short and kept whole; the status gives way first.

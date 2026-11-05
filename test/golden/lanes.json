@@ -29,10 +29,10 @@
       "chips": [
         {
           "diff": "",
-          "health": "quiet",
           "id": "pr",
           "state": "merged",
           "tag": "#171",
+          "tone": "merged",
           "url": "https://github.com/o/r/pull/171"
         },
         { "dirty": false, "id": "br", "text": "tidy-strip" }
@@ -45,10 +45,10 @@
       "chips": [
         {
           "diff": "",
-          "health": "quiet",
           "id": "pr",
           "state": "merged",
           "tag": "#176",
+          "tone": "merged",
           "url": "https://github.com/o/r/pull/176"
         },
         { "dirty": false, "id": "br", "text": "card-layout-fit" }
@@ -109,10 +109,10 @@
       "chips": [
         {
           "diff": "+342 −17",
-          "health": "quiet",
           "id": "pr",
           "state": "draft",
           "tag": "#130",
+          "tone": "draft",
           "url": "https://github.com/o/r/pull/130"
         },
         { "dirty": true, "id": "br", "text": "snapshot-tests" }

@@ -1203,7 +1203,7 @@
                   },
                   {
                     "text": "merged",
-                    "ink": "metaText"
+                    "ink": "mergedText"
                   }
                 ],
                 "gives_way": false,
@@ -2249,7 +2249,7 @@
             "row_pr": {
               "tag": "#171",
               "title": "Row cards show their PR",
-              "ink": "metaText"
+              "ink": "mergedText"
             },
             "detail": "",
             "detail_ink": "secondary",

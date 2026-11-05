@@ -5,7 +5,7 @@
 import type { CheckState } from "../../scripts/state-config.ts";
 import { NUDGE_WINDOW, waitingMove } from "../shared/move.ts";
 import { askReason } from "../shared/needs.ts";
-import { prInk } from "../shared/pr-colors.ts";
+import { QUIET_INK } from "../shared/pr-colors.ts";
 import { checksOf } from "../shared/prs.ts";
 import { nowEpoch } from "../shared/time.ts";
 
@@ -68,8 +68,8 @@ const neutral = (text: string): ChecksSummary => ({ text, mark: "minus.circle", 
 
 function passedLine(n: number, dim: boolean): ChecksSummary {
   const line = summaryIn("pass", n === 1 ? "1 check passed" : "All " + n + " checks passed");
-  // A stale pass drops to grey, as a stale ready chip does (shownHealth).
-  return dim ? { ...line, color: prInk("quiet") } : line;
+  // A stale pass drops to grey, as a stale ready chip does (shownTone).
+  return dim ? { ...line, color: QUIET_INK } : line;
 }
 
 /**

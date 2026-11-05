@@ -112,6 +112,11 @@ describe("the card's details", () => {
   it("gives the PR with its state", () => {
     r.data.workspaces = [ws("sel", { selected: true, pr: { number: 12, url: "u/12", status: "open", draft: true } })];
     assert.equal(m.currentPr()?.text, "#12 · draft");
+    assert.equal(m.currentPrTone(), "draft");
+    r.data.workspaces = [ws("sel", { selected: true, pr: { number: 12, url: "u/12", status: "open" } })];
+    assert.equal(m.currentPrTone(), "open");
+    r.data.workspaces = [ws("sel", { selected: true, pr: { number: 12, url: "u/12", status: "merged" } })];
+    assert.equal(m.currentPrTone(), "merged");
     r.data.workspaces = [ws("sel", { selected: true })];
     assert.equal(m.currentPr(), undefined);
   });
@@ -369,6 +374,17 @@ describe("prChipText", () => {
     assert.equal(m.prChipText({ pr, summary }), "draft · running · stale");
     assert.equal(m.prChipHealth({ summary }), "running");
     assert.equal(m.prChipHealth({ summary: undefined }), "quiet");
+  });
+
+  it("tones a row's chip by health, else by state", () => {
+    const tone = (pr: PullRequest, checks: { name: string; state: "pass" | "fail" | "pending" }[] = []) =>
+      m.prChipTone({ pr, summary: summaryOf(pr, checks), saved: false });
+    assert.equal(tone({ number: 1, status: "open", draft: true }), "draft");
+    assert.equal(tone({ number: 1, status: "open", draft: true }, [{ name: "t", state: "fail" }]), "failing");
+    assert.equal(tone({ number: 1, status: "open" }), "open");
+    assert.equal(tone({ number: 1, status: "merged" }), "merged");
+    assert.equal(tone({ number: 1, status: "closed" }), "closed");
+    assert.equal(m.prChipTone({ pr: { status: "open", draft: true }, summary: undefined, saved: false }), "draft");
   });
 });
 

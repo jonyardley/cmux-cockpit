@@ -83,6 +83,11 @@ enum Palette {
     private static let red = Pair(RGBA(0xC0453A), RGBA(0xD9655A))
     /// Ready to merge's vivid green (issue #299), never the finished olive.
     private static let mergeGreen = Pair(RGBA(0x1DB954), RGBA(0x3DD171))
+    /// An open PR's state words: GitHub's open green, cooler than the
+    /// merge green and the finished olive, lifted in dark to clear the card.
+    private static let openGreen = Pair(RGBA(0x1C7A55), RGBA(0x5CC59C))
+    /// A merged PR's state words: GitHub's merged purple, lifted in dark.
+    private static let purple = Pair(RGBA(0x8250DF), RGBA(0xB08CF5))
     private static let text = Pair(RGBA(0x141413), RGBA(0xF0EEE6))
     private static let secondary = Pair(RGBA(0x5E5D59), RGBA(0xB7B5A9))
     private static let heading = Pair(RGBA(0x3D3D3A), RGBA(0xD6D4CA))
@@ -137,6 +142,12 @@ enum Palette {
         case .mergeGreen: mergeGreen
         case .mergeHalo: faint(mergeGreen, 0x47)
         case .mergeText: Pair(RGBA(0x12873B), RGBA(0x5FD98A))
+        case .openText: openGreen
+        case .openChipFace: faint(openGreen, 0x1A)
+        case .openChipEdge: faint(openGreen, 0x38)
+        case .mergedText: purple
+        case .mergedChipFace: faint(purple, 0x1A)
+        case .mergedChipEdge: faint(purple, 0x38)
         }
     }
 

@@ -138,8 +138,8 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                   Image terminal .font(8) .weight(semibold) .color(text)
                 Text "Ready chip" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                 Spacer minLength: 4
-                VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|neutralChip.edge) .cornerRadius(6) .opacity(1) .layoutPriority(2)
-                  Text "open" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(metaText) .paddingHorizontal(6) .paddingVertical(1) .background(chipFace|neutralChip.bg) .cornerRadius(5)
+                VStack spacing: 0, alignment: leading .padding(1) .background(openChipEdge) .cornerRadius(6) .opacity(1) .layoutPriority(2)
+                  Text "open" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(openGreen|openText) .paddingHorizontal(6) .paddingVertical(1) .background(openChipFace) .cornerRadius(5)
               HStack spacing: 5 .paddingLeading(26)
                 Text "#9" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
                 HStack spacing: 5
@@ -155,8 +155,8 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                   Image terminal .font(8) .weight(semibold) .color(text)
                 Text "An orphaned PR" .font(12.5) .weight(regular) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                 Spacer minLength: 4
-                VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|neutralChip.edge) .cornerRadius(6) .opacity(1) .layoutPriority(2)
-                  Text "open" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(metaText) .paddingHorizontal(6) .paddingVertical(1) .background(chipFace|neutralChip.bg) .cornerRadius(5)
+                VStack spacing: 0, alignment: leading .padding(1) .background(openChipEdge) .cornerRadius(6) .opacity(1) .layoutPriority(2)
+                  Text "open" .font(11) .weight(medium) .lineLimit(1) .truncation(tail) .color(openGreen|openText) .paddingHorizontal(6) .paddingVertical(1) .background(openChipFace) .cornerRadius(5)
               HStack spacing: 5 .paddingLeading(26)
                 Text "#4" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
                 Spacer
@@ -203,6 +203,9 @@ hover #7F7F7F0F
 linkEdge #14141347
 linkHover #ECEAE3
 metaText #6B6A64
+openChipEdge #1C7A5538
+openChipFace #1C7A551A
+openGreen|openText #1C7A55
 panel|onClay #FFFFFF
 panelEdge #1414131A
 quote #1414130A

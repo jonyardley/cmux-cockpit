@@ -35,7 +35,7 @@ extension View {
 
 /// One chip, drawn by its kind (docs/design.md#chips): the size in
 /// its state's ink; the PR with its glyph, its number in medium and its
-/// state in its health's ink; the branch with its glyph and a dot when it
+/// state in its tone's ink; the branch with its glyph and a dot when it
 /// has uncommitted changes; a port; the diff size unframed and faint
 /// beside its PR; an action as a white button. A chip with somewhere to
 /// go opens it on a tap and steps darker under the pointer, the PR's

@@ -11,10 +11,10 @@
       "chips": [
         {
           "diff": "+342 −17",
-          "health": "quiet",
           "id": "pr",
           "state": "draft",
           "tag": "#148",
+          "tone": "draft",
           "url": "https://github.com/o/r/pull/148"
         },
         { "dirty": false, "id": "br", "text": "parser-streaming-tokeniser" }
@@ -33,10 +33,10 @@
       "chips": [
         {
           "diff": "",
-          "health": "quiet",
           "id": "pr",
           "state": "open",
           "tag": "#12",
+          "tone": "open",
           "url": "https://github.com/o/r/pull/12"
         },
         { "dirty": false, "id": "br", "text": "main" }
@@ -49,10 +49,10 @@
       "chips": [
         {
           "diff": "",
-          "health": "quiet",
           "id": "pr",
           "state": "merged",
           "tag": "#14",
+          "tone": "merged",
           "url": "https://github.com/o/r/pull/14"
         },
         { "dirty": false, "id": "br", "text": "changelog-for-release" }

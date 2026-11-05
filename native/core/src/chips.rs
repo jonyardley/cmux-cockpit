@@ -62,14 +62,14 @@ pub fn chips_split(chips: &[Chip], line_chars: usize) -> bool {
 mod tests {
     use super::*;
     use crate::moves::MoveSize;
-    use crate::prs::PrHealth;
+    use crate::pr_colors::PrTone;
 
     #[test]
     fn counts_each_chip_as_the_typescript_does() {
         let pr = Chip::Pr {
             tag: "#148".into(),
             state: "draft".into(),
-            health: PrHealth::Quiet,
+            tone: PrTone::Draft,
             diff: "+342 \u{2212}17".into(),
             url: None,
         };
@@ -78,7 +78,7 @@ mod tests {
         let bare = Chip::Pr {
             tag: "#7".into(),
             state: String::new(),
-            health: PrHealth::Quiet,
+            tone: PrTone::Open,
             diff: String::new(),
             url: None,
         };

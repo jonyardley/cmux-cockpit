@@ -7,7 +7,9 @@ const { byActivity, mostActive, sinceOrActivity } = await import("../src/shared/
 const { glyphColor } = await import("../src/shared/contrast.ts");
 const { hoverFace, shade } = await import("../src/shared/shade.ts");
 const { markLast } = await import("../src/shared/list.ts");
-const { NEUTRAL_CHIP, READY_INK, prChipColors, prInk, shownHealth } = await import("../src/shared/pr-colors.ts");
+const { NEUTRAL_CHIP, QUIET_INK, READY_INK, prChipColors, prInk, prTone, shownTone } = await import(
+  "../src/shared/pr-colors.ts"
+);
 const { PROJECTS, matchesOf, projectId, projectOf } = await import("../src/shared/projects.ts");
 const { PROJECT_COLORS, PROJECT_ICONS } = await import("../src/shared/project-sets.ts");
 const { cleanTitle, readable, tracked } = await import("../src/shared/text.ts");
@@ -238,16 +240,58 @@ describe("tracked", () => {
   });
 });
 
+const TONES = ["failing", "conflicts", "running", "ready", "draft", "open", "merged", "closed", "quiet"] as const;
+
+describe("prTone", () => {
+  it("lets a health with a hue win, draft or not", () => {
+    assert.equal(prTone("open", false, "failing"), "failing");
+    assert.equal(prTone("open", true, "failing"), "failing");
+    assert.equal(prTone("open", true, "conflicts"), "conflicts");
+    assert.equal(prTone("open", true, "running"), "running");
+    assert.equal(prTone("open", false, "ready"), "ready");
+  });
+
+  it("reads a quiet PR by its state, as GitHub does: draft, open, merged, closed", () => {
+    assert.equal(prTone("open", true, "quiet"), "draft");
+    assert.equal(prTone("open", false, "quiet"), "open");
+    assert.equal(prTone("open", undefined, "quiet"), "open");
+    assert.equal(prTone("merged", false, "quiet"), "merged");
+    assert.equal(prTone("closed", false, "quiet"), "closed");
+  });
+
+  it("keeps a PR with no status grey, never claiming open", () => {
+    assert.equal(prTone(undefined, false, "quiet"), "quiet");
+    assert.equal(prTone(undefined, true, "quiet"), "quiet");
+  });
+
+  it("says a merged or closed draft by its status, not its draft flag", () => {
+    assert.equal(prTone("merged", true, "quiet"), "merged");
+    assert.equal(prTone("closed", true, "quiet"), "closed");
+  });
+
+  it('greys a stale ready, so its "ready" never borrows open\'s green', () => {
+    assert.equal(shownTone(prTone("open", false, "ready"), true), "quiet");
+    assert.equal(shownTone("ready", false), "ready");
+  });
+
+  it("leaves every other tone alone, stale or not, its chip dimmed", () => {
+    for (const t of TONES.filter((t) => t !== "ready")) assert.equal(shownTone(t, true), t, t);
+  });
+});
+
 describe("prChipColors", () => {
-  it("colours each state's words: green ready, red failing and conflicts, blue running", () => {
+  it("colours each health's words: ready's ink, red failing and conflicts, blue running", () => {
     assert.equal(prChipColors("ready").fg, READY_INK);
     assert.equal(prChipColors("failing").fg, P.redText);
     assert.equal(prChipColors("conflicts").fg, P.redText);
     assert.equal(prChipColors("running").fg, P.blueText);
   });
 
-  it("is grey with no verdict, so draft, open, merged and closed read alike", () => {
-    assert.equal(prChipColors("quiet").fg, P.metaText);
+  it("colours a quiet PR by state: grey draft and closed, green open, purple merged", () => {
+    assert.equal(prChipColors("draft").fg, P.metaText);
+    assert.equal(prChipColors("closed").fg, P.metaText);
+    assert.equal(prChipColors("open").fg, P.openText);
+    assert.equal(prChipColors("merged").fg, P.mergedText);
   });
 
   it("puts each state in a pill: a faint face of its hue, the quiet chip's with none", () => {
@@ -255,37 +299,33 @@ describe("prChipColors", () => {
     assert.deepEqual(prChipColors("running"), { bg: `${P.blue}1A`, fg: P.blueText, edge: `${P.blue}38` });
     for (const h of ["failing", "conflicts"] as const)
       assert.deepEqual(prChipColors(h), { bg: `${P.red}1A`, fg: P.redText, edge: `${P.red}38` }, h);
-    assert.deepEqual(prChipColors("quiet"), { bg: NEUTRAL_CHIP.bg, fg: P.metaText, edge: NEUTRAL_CHIP.edge });
+    assert.deepEqual(prChipColors("open"), { bg: `${P.openGreen}1A`, fg: P.openText, edge: `${P.openGreen}38` });
+    assert.deepEqual(prChipColors("merged"), { bg: `${P.purple}1A`, fg: P.mergedText, edge: `${P.purple}38` });
+    for (const t of ["draft", "closed", "quiet"] as const)
+      assert.deepEqual(prChipColors(t), { bg: NEUTRAL_CHIP.bg, fg: P.metaText, edge: NEUTRAL_CHIP.edge }, t);
   });
 
   it("gives every state a face and an edge, so none is bare words", () => {
-    for (const h of ["ready", "failing", "conflicts", "running", "quiet"] as const) {
-      assert.notEqual(prChipColors(h).bg, "clear", h);
-      assert.notEqual(prChipColors(h).edge, "clear", h);
+    for (const t of TONES) {
+      assert.notEqual(prChipColors(t).bg, "clear", t);
+      assert.notEqual(prChipColors(t).edge, "clear", t);
     }
   });
 
-  it("is green only when genuinely ready (issue #82)", () => {
-    for (const h of ["failing", "conflicts", "running", "quiet"] as const)
-      assert.notEqual(prChipColors(h).fg, READY_INK, h);
+  it("says ready in its own green only: open's green is another ink", () => {
+    for (const t of TONES.filter((t) => t !== "ready")) assert.notEqual(prChipColors(t).fg, READY_INK, t);
+    for (const g of [P.greenDeep, P.green, P.greenText, P.mergeGreen]) assert.notEqual(P.openText, g);
   });
 });
 
 describe("prInk", () => {
   it("is the chip's own words colour, so a PR reads the same as a chip and as text", () => {
-    for (const h of ["ready", "failing", "conflicts", "running", "quiet"] as const)
-      assert.equal(prInk(h), prChipColors(h).fg, h);
-  });
-});
-
-describe("shownHealth", () => {
-  it("drops a stale ready to grey words, so an old verdict does not shout", () => {
-    assert.equal(shownHealth("ready", true), "quiet");
-    assert.equal(shownHealth("ready", false), "ready");
+    for (const t of TONES) assert.equal(prInk(t), prChipColors(t).fg, t);
   });
 
-  it("leaves every other health alone, stale or not", () => {
-    for (const h of ["failing", "conflicts", "running", "quiet"] as const) assert.equal(shownHealth(h, true), h);
+  it("keeps the grey of a quiet line as the draft's and closed's", () => {
+    assert.equal(QUIET_INK, prInk("draft"));
+    assert.equal(QUIET_INK, prInk("closed"));
   });
 });
 

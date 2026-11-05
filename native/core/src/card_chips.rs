@@ -6,7 +6,8 @@ use serde::Serialize;
 
 use crate::data::Workspace;
 use crate::moves::{MoveSize, move_size, move_size_text};
-use crate::prs::{PrHealth, pr_summary};
+use crate::pr_colors::{PrTone, draft_of, pr_tone};
+use crate::prs::pr_summary;
 use crate::session::Session;
 
 /// One chip, as the TypeScript's `Chip` writes it.
@@ -20,9 +21,11 @@ pub enum Chip {
         /// "#135", in the chip's own ink.
         tag: String,
         /// The words after the number ("draft", "1 failing"), in its
-        /// health's ink; "" with none.
+        /// tone's ink; "" with none.
         state: String,
-        health: PrHealth,
+        /// What colours the words: its health with a hue, else its state
+        /// (grey draft and closed, green open, purple merged).
+        tone: PrTone,
         /// "+120 −8", faint after the state; "" with none.
         diff: String,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -82,10 +85,11 @@ impl Session {
             } else {
                 pr.state
             };
+            let draft = draft_of(&self.saved, Some(w));
             out.push(Chip::Pr {
                 tag: pr.tag,
                 state,
-                health: pr.health,
+                tone: pr_tone(pr.status, draft, pr.health),
                 diff: pr.diff,
                 url: pr.url.filter(|u| !u.is_empty()),
             });
@@ -118,14 +122,14 @@ mod tests {
         let pr = Chip::Pr {
             tag: "#7".into(),
             state: "open".into(),
-            health: PrHealth::Quiet,
+            tone: PrTone::Open,
             diff: String::new(),
             url: None,
         };
         let json = serde_json::to_value(&pr).unwrap();
         assert_eq!(
             json,
-            serde_json::json!({"id": "pr", "tag": "#7", "state": "open", "health": "quiet", "diff": ""})
+            serde_json::json!({"id": "pr", "tag": "#7", "state": "open", "tone": "open", "diff": ""})
         );
         let br = Chip::Branch {
             text: "feat".into(),

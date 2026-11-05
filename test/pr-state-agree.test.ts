@@ -56,6 +56,7 @@ const model = await import("../src/agents/model.ts");
 interface Said {
   state: string;
   health: string;
+  tone: string;
 }
 
 // The two places, with `id` the selected workspace and its agent working.
@@ -63,22 +64,24 @@ function saidFor(id: string): { row: Said; here: Said } {
   r.data.workspaces = [ws(id, { branch: "feat", selected: true, agents: [agent("working")] })];
   r.data.epoch++;
   const entry = list.prs().find((e) => e.pr.url === prs[id]?.url);
-  const row = entry ? { state: list.prChipText(entry), health: list.prChipHealth(entry) } : undefined;
+  const row = entry
+    ? { state: list.prChipText(entry), health: list.prChipHealth(entry), tone: list.prChipTone(entry) }
+    : undefined;
   const pr = model.currentPr();
-  const here = pr ? { state: pr.state, health: pr.health } : undefined;
+  const here = pr ? { state: pr.state, health: pr.health, tone: model.currentPrTone() } : undefined;
   assert.ok(row && here, `${id}: every place shows the PR`);
   return { row, here };
 }
 
 describe("one PR's state, alike across the agents panel (issue #300)", () => {
   const cases: [string, Said][] = [
-    ["ready", { state: "ready", health: "ready" }],
-    ["draft", { state: "draft", health: "quiet" }],
-    ["draftRunning", { state: "draft · running", health: "running" }],
-    ["failing", { state: "1 failing", health: "failing" }],
-    ["conflicts", { state: "conflicts", health: "conflicts" }],
-    ["merged", { state: "merged", health: "quiet" }],
-    ["noVerdict", { state: "open", health: "quiet" }],
+    ["ready", { state: "ready", health: "ready", tone: "ready" }],
+    ["draft", { state: "draft", health: "quiet", tone: "draft" }],
+    ["draftRunning", { state: "draft · running", health: "running", tone: "running" }],
+    ["failing", { state: "1 failing", health: "failing", tone: "failing" }],
+    ["conflicts", { state: "conflicts", health: "conflicts", tone: "conflicts" }],
+    ["merged", { state: "merged", health: "quiet", tone: "merged" }],
+    ["noVerdict", { state: "open", health: "quiet", tone: "open" }],
   ];
   for (const [id, want] of cases) {
     it(`says ${want.state} in both places for ${id}`, () => {

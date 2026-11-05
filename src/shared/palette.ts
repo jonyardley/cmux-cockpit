@@ -2,7 +2,8 @@
 // quiet chip. The agents panel's theme.ts spreads these into its tokens, and
 // the native Cockpit (native/core/src/theme.rs, native/mac Palette.swift)
 // mirrors them, so a state reads the same on both sides. Hue only ever means
-// state: clay is your turn, amber asking, blue working, green finished. A
+// state: clay is your turn, amber asking, blue working, green finished;
+// a PR's own state adds GitHub's open green and merged purple. A
 // faint variant is its hue plus an alpha pair (`${P.green}1F`), so it
 // follows the hue.
 
@@ -32,6 +33,14 @@ const hue = {
    */
   mergeGreen: "#1DB954",
   red: "#C0453A",
+  /**
+   * An open PR's state words, as GitHub greens an open PR: a cooler green
+   * than ready's ink, the merge green and the finished olive, so it reads
+   * as a status, never as ready or finished.
+   */
+  openGreen: "#1C7A55",
+  /** A merged PR's state words, GitHub's merged purple. */
+  purple: "#8250DF",
 } as const;
 
 export const P = {
@@ -70,6 +79,14 @@ export const P = {
   greenChipEdge: `${hue.greenDeep}59`,
   redChipFace: `${hue.red}1A`,
   redChipEdge: `${hue.red}38`,
+  // A quiet PR by its state: open in green and merged in purple, the
+  // hues themselves as words (each clears 4.5:1 on the white card).
+  openText: hue.openGreen,
+  openChipFace: `${hue.openGreen}1A`,
+  openChipEdge: `${hue.openGreen}38`,
+  mergedText: hue.purple,
+  mergedChipFace: `${hue.purple}1A`,
+  mergedChipEdge: `${hue.purple}38`,
   /** A count pill with nothing urgent behind it; the segmented control's track too. */
   countBg: "#E5E2D6",
   // A count pill tinted by its most urgent session: clay needs you, amber

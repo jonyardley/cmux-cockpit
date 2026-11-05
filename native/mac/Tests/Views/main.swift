@@ -327,9 +327,14 @@ for dark in [false, true] {
         for (token, name) in [(Token.text, "text"), (.secondary, "secondary"), (.heading, "heading")] {
             check(contrast(Palette.rgba(token, dark: dark), ground) >= 4.5, "\(scheme): \(name) reads on the \(where_)")
         }
-        for (token, name) in [(Token.blueText, "blueText"), (.clayText, "clayText"), (.greenText, "greenText"), (.amberText, "amberText"), (.redText, "redText"), (.metaText, "metaText")] {
+        for (token, name) in [(Token.blueText, "blueText"), (.clayText, "clayText"), (.greenText, "greenText"), (.amberText, "amberText"), (.redText, "redText"), (.metaText, "metaText"), (.openText, "openText"), (.mergedText, "mergedText")] {
             check(contrast(Palette.rgba(token, dark: dark), ground) >= 3, "\(scheme): \(name) reads on the \(where_)")
         }
+    }
+    // An open or merged PR's words sit on a card: body strength, as
+    // docs/design.md claims for both sides.
+    for (token, name) in [(Token.openText, "openText"), (.mergedText, "mergedText")] {
+        check(contrast(Palette.rgba(token, dark: dark), Palette.rgba(.card, dark: dark)) >= 4.5, "\(scheme): \(name) reads at 4.5 on the card face")
     }
     // The helper-down notice sits on a countBg band: its title in text and
     // its why in secondary.

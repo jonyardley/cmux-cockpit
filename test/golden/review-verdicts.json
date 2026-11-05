@@ -5,10 +5,10 @@
       "chips": [
         {
           "diff": "",
-          "health": "quiet",
           "id": "pr",
           "state": "open",
           "tag": "#6",
+          "tone": "open",
           "url": "https://github.com/o/r/pull/6"
         },
         { "dirty": false, "id": "br", "text": "feat-6" }
@@ -21,10 +21,10 @@
       "chips": [
         {
           "diff": "",
-          "health": "quiet",
           "id": "pr",
           "state": "closed",
           "tag": "#8",
+          "tone": "closed",
           "url": "https://github.com/o/r/pull/8"
         },
         { "dirty": false, "id": "br", "text": "feat-8" }
@@ -37,10 +37,10 @@
       "chips": [
         {
           "diff": "",
-          "health": "conflicts",
           "id": "pr",
           "state": "conflicts",
           "tag": "#5",
+          "tone": "conflicts",
           "url": "https://github.com/o/r/pull/5"
         },
         { "dirty": false, "id": "br", "text": "feat-5" }
@@ -53,10 +53,10 @@
       "chips": [
         {
           "diff": "+1.2k −56",
-          "health": "quiet",
           "id": "pr",
           "state": "draft",
           "tag": "#2",
+          "tone": "draft",
           "url": "https://github.com/o/r/pull/2"
         },
         { "dirty": false, "id": "br", "text": "feat-2" }
@@ -69,10 +69,10 @@
       "chips": [
         {
           "diff": "",
-          "health": "failing",
           "id": "pr",
           "state": "1 failing",
           "tag": "#3",
+          "tone": "failing",
           "url": "https://github.com/o/r/pull/3"
         },
         { "dirty": false, "id": "br", "text": "feat-3" }
@@ -85,10 +85,10 @@
       "chips": [
         {
           "diff": "",
-          "health": "quiet",
           "id": "pr",
           "state": "merged",
           "tag": "#7",
+          "tone": "merged",
           "url": "https://github.com/o/r/pull/7"
         },
         { "dirty": false, "id": "br", "text": "feat-7" }
@@ -101,10 +101,10 @@
       "chips": [
         {
           "diff": "+120 −8",
-          "health": "ready",
           "id": "pr",
           "state": "",
           "tag": "#1",
+          "tone": "ready",
           "url": "https://github.com/o/r/pull/1"
         },
         { "dirty": false, "id": "br", "text": "feat-1" }
@@ -117,10 +117,10 @@
       "chips": [
         {
           "diff": "",
-          "health": "running",
           "id": "pr",
           "state": "running",
           "tag": "#4",
+          "tone": "running",
           "url": "https://github.com/o/r/pull/4"
         },
         { "dirty": false, "id": "br", "text": "feat-4" }
@@ -131,7 +131,7 @@
     "waiting": {
       "cardOpacity": 1,
       "chips": [
-        { "diff": "", "health": "ready", "id": "pr", "state": "", "tag": "#9", "url": "https://github.com/o/r/pull/9" },
+        { "diff": "", "id": "pr", "state": "", "tag": "#9", "tone": "ready", "url": "https://github.com/o/r/pull/9" },
         { "dirty": false, "id": "br", "text": "feat-9" }
       ],
       "fullLine": { "fitsOneLine": true, "splits": false },
