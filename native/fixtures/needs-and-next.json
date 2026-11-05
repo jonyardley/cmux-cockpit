@@ -1210,5 +1210,28 @@
     }
   ],
   "projects": [],
-  "menu": null
+  "menu": null,
+  "add": {
+    "projects": [
+      {
+        "key": "/dev/app-one",
+        "name": "App One",
+        "color": 14251863,
+        "can_open": true
+      },
+      {
+        "key": "/dev/app-two",
+        "name": "App Two",
+        "color": 6986700,
+        "can_open": false
+      },
+      {
+        "key": "/dev/app-three",
+        "name": "App Three",
+        "color": 7900253,
+        "can_open": false
+      }
+    ],
+    "home": true
+  }
 }

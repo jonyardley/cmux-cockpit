@@ -98,6 +98,10 @@ pub enum Event {
     Edit(EditEvent),
     /// A project's "+": a new session in its folder.
     OpenProject { key: String },
+    /// A pick from the All view's add button: a new session in the
+    /// project's folder, or with none in the home folder, in the first
+    /// lane (by_project.rs `add_session`).
+    AddSession { project: Option<String> },
     /// Something done with the card menu or a project's menu (menu.rs).
     Menu(MenuEvent),
     /// The Next button: switches to the next workspace in its queue.
@@ -154,6 +158,7 @@ impl Event {
             | Event::FlipView
             | Event::Edit(_)
             | Event::OpenProject { .. }
+            | Event::AddSession { .. }
             | Event::Menu(_)
             | Event::Next
             | Event::MessageAgent { .. }
@@ -481,6 +486,7 @@ impl Model {
             Event::Edit(e) => s.edit(data, e),
             Event::Menu(e) => s.menu(data, e),
             Event::OpenProject { key } => s.open_project_workspace(data, &key, None),
+            Event::AddSession { project } => s.add_session(data, project.as_deref()),
             Event::Next => s.jump_next(data),
             Event::MessageAgent { id, text } => s.message_agent(data, &id, &text),
             Event::ToggleLane { lane } => s.toggle_lane(data, &lane),

@@ -50,4 +50,11 @@ enum Words {
     static let messagePrompt = "Message for the agent in"
     static let send = "Send"
     static let notSent = "Not sent: the cockpit could not take it. Try again."
+    /// The All view's add button: its help, its menu's heading, a project
+    /// with no folder, and the session with no project
+    /// (docs/design.md#add-button).
+    static let newSession = "New session"
+    static let newSessionIn = "New session in"
+    static let noFolder = "(no folder)"
+    static let noProject = "No project (home folder)"
 }

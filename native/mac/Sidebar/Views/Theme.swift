@@ -98,6 +98,13 @@ enum Metrics {
     /// The view switch: a ringed track round two tabs.
     static let switchHeight: CGFloat = 26
     static let switchInset: CGFloat = 3
+    /// The add button at the end of the switch's row: a ringed circle as
+    /// tall as the track, its glyph, the gap from the track, and the
+    /// project dot before each item of its menu (docs/design.md#add-button).
+    static let addButton: CGFloat = switchHeight + 2 * switchInset
+    static let addGlyph: CGFloat = 12
+    static let addGap: CGFloat = 6
+    static let menuDot: CGFloat = 8
     /// Lines round a face: a tab's edge, the track's, Next's.
     static let hairline: CGFloat = 1
     /// A selected card's outline.

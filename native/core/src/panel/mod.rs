@@ -487,6 +487,33 @@ pub struct Lane {
     pub rows: Vec<Row>,
 }
 
+/// A project in the add button's menu: its name and colour as the
+/// Projects view draws them, and whether it has a folder to open a
+/// session in.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+pub struct AddProject {
+    /// Its key in the core, which a pick sends back (`Event::AddSession`).
+    pub key: String,
+    pub name: String,
+    /// The table's colour; None draws the grey of a dot with no colour.
+    pub color: Option<u32>,
+    /// False for a project with no folder: the shell shows it, disabled,
+    /// and says why.
+    pub can_open: bool,
+}
+
+/// The All view's add button: a new session in a project, or in the home
+/// folder with none. The shell words the menu; the core says what is in
+/// it. The pane draws no add button and ignores it.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, facet::Facet)]
+pub struct AddMenu {
+    /// Every project in the table's order, as the Projects view lists
+    /// them, less any removed here before the rebuild drops it.
+    pub projects: Vec<AddProject>,
+    /// Whether the home folder is known, so "No project" can open there.
+    pub home: bool,
+}
+
 /// Everything the pane draws.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, facet::Facet)]
 pub struct Panel {
@@ -499,6 +526,9 @@ pub struct Panel {
     pub projects: Vec<ProjectRow>,
     /// The open card or project menu, with its items' words for this frame.
     pub menu: Option<MenuView>,
+    /// The add button's menu while All is on; None in Projects, which has
+    /// a "+" on each project instead.
+    pub add: Option<AddMenu>,
     /// Every lane's key and name as configured, in display order with
     /// Unsorted last: the pane's lane picker. The sidebar picks from its
     /// card menu instead, so this is never sent.

@@ -59,6 +59,11 @@ func note(_ panel: Panel) {
             if chip.isAction != (chip.kind == .action) { seen.insert("action flag disagrees") }
         }
     }
+    for p in panel.add?.projects ?? [] {
+        seen.insert(p.canOpen ? "add project with a folder" : "add project with no folder")
+        if p.color != nil { seen.insert("add project colour") }
+    }
+    if panel.add?.home == true { seen.insert("add home") }
     for row in panel.projects {
         switch row {
         case .header(let head) where !head.icon.isEmpty: seen.insert("project icon")
@@ -76,6 +81,8 @@ struct Raw {
     let needs: UInt64?
     let menuItems: Int?
     let editor: Bool
+    let addProjects: Int?
+    let addHome: Bool?
 
     init(_ json: [String: Any]) {
         view = json["view"] as? String
@@ -86,6 +93,9 @@ struct Raw {
         needs = ((json["needs"] as? [String: Any])?["count"] as? NSNumber)?.uint64Value
         menuItems = ((json["menu"] as? [String: Any])?["items"] as? [Any])?.count
         editor = projects.contains { ($0 as? [String: Any])?["Editor"] != nil }
+        let add = json["add"] as? [String: Any]
+        addProjects = (add?["projects"] as? [Any])?.count
+        addHome = add?["home"] as? Bool
     }
 }
 
@@ -114,6 +124,9 @@ for name in names {
         check(panel.needs.count == raw.needs, "\(name): needs \(raw.needs.map(String.init) ?? "missing")")
         check(panel.menu?.items.count == raw.menuItems, "\(name): menu items")
         check(hasEditor(panel.projects) == raw.editor, "\(name): editor open")
+        check(panel.add?.projects.count == raw.addProjects, "\(name): add menu projects")
+        check(panel.add?.home == raw.addHome, "\(name): add menu home")
+        check((panel.add == nil) == (panel.view == .projects), "\(name): the add menu only in All")
         note(panel)
         sawMenu = sawMenu || raw.menuItems != nil
         sawEditor = sawEditor || raw.editor
@@ -126,8 +139,9 @@ check(sawMenu, "some fixture has a menu open")
 check(sawEditor, "some fixture has an editor open")
 for look in ["density full", "density compact", "density row", "ready", "pinned", "progress", "helpers", "unread",
              "age", "status has age", "badge", "chip pr", "chip diff", "chip branch", "chip action", "chip url",
-             "project icon", "quiet icon"] {
-    check(seen.contains(look), "some fixture's card carries \(look)")
+             "project icon", "quiet icon", "add project with a folder", "add project with no folder",
+             "add project colour", "add home"] {
+    check(seen.contains(look), "some fixture carries \(look)")
 }
 check(!seen.contains("action flag disagrees"), "a chip is an action exactly when its kind is")
 

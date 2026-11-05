@@ -403,6 +403,8 @@ let ownWords = [
     (Words.ready, "Ready"), (Words.messageAgent, "Message agent…"),
     (Words.messagePrompt, "Message for the agent in"), (Words.send, "Send"),
     (Words.notSent, "Not sent: the cockpit could not take it. Try again."),
+    (Words.newSession, "New session"), (Words.newSessionIn, "New session in"),
+    (Words.noFolder, "(no folder)"), (Words.noProject, "No project (home folder)"),
 ]
 for (word, pinned) in ownWords {
     check(word == pinned, "the sidebar's \"\(pinned)\"")
@@ -640,6 +642,25 @@ check(CardText.tabTarget(bar) == "9A8CD62C-CD0B-4C88-8063-C0633918D83B", "and a 
 let marks = source("core/src/panel/mod.rs")
 for (name, word) in [("DIRTY_MARK", ChipFit.dirtyMark), ("DOT", CardText.filledDot)] {
     check(marks.contains("pub const \(name): &str = \"\(word)\";"), "\(name) is \"\(word)\"")
+}
+
+// MARK: The add button
+
+// A project with a folder reads its name; one with none says why.
+let withFolder = AddProject(key: "/dev/app", name: "App", color: 0xD97757, canOpen: true)
+let noFolder = AddProject(key: "/dev/notes", name: "Notes", color: nil, canOpen: false)
+check(AddText.label(withFolder) == "App", "a project with a folder reads its name")
+check(AddText.label(noFolder) == "Notes (no folder)", "a project with no folder says why")
+// Only All carries the menu, and every fixture in All has one.
+for name in sceneOf.keys.sorted() {
+    if let panel = load(name) {
+        check((AddText.menu(panel) != nil) == (panel.view == .all), "\(name): the add button only in All")
+    }
+}
+if var panel = load("lanes") {
+    check(AddText.menu(panel)?.projects.isEmpty == false, "lanes: the add menu lists the projects")
+    panel.view = .projects
+    check(AddText.menu(panel) == nil, "no add button once Projects is on, whatever the panel carries")
 }
 
 // MARK: Colours from a hand-written config

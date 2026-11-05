@@ -882,3 +882,27 @@ mod fold {
         );
     }
 }
+
+/// The All view's add button, with no project: a session in the home
+/// folder, focused, at the top of the first lane's group, as the card
+/// menu's New session opens one.
+#[test]
+fn the_add_button_opens_a_session_in_the_first_lane() {
+    let (app, mut model) = started();
+    let home = Event::Home {
+        home: Some("/Users/jon".into()),
+    };
+    let _ = app.update(home, &mut model);
+    let add = Event::AddSession { project: None };
+    let asked = asked(&app, &mut model, add);
+    let create = asked
+        .iter()
+        .find(|a| a.starts_with("cmux workspace.create "))
+        .unwrap();
+    let params: Value =
+        serde_json::from_str(create.trim_start_matches("cmux workspace.create ")).unwrap();
+    assert_eq!(
+        params,
+        json!({"cwd": "/Users/jon", "focus": true, "group_id": "g-main", "group_placement": "top"})
+    );
+}

@@ -130,7 +130,7 @@ impl Session {
     }
 
     /// True once the project was removed here, before the rebuild drops it.
-    fn is_removed_project(&self, k: &str) -> bool {
+    pub(crate) fn is_removed_project(&self, k: &str) -> bool {
         matches!(self.sent_specs.get(k), Some(None))
     }
 
@@ -264,6 +264,13 @@ impl Session {
         if self.is_project_collapsed(k) {
             self.toggle_project(data, k);
         }
+        self.open_workspace_in(data, root, lane);
+    }
+
+    /// Opens a new workspace in `dir`, focused: at the top of the lane's
+    /// group when it exists, unfolding the lane so the card shows; else
+    /// ungrouped, which draws in Unsorted.
+    fn open_workspace_in(&mut self, data: &Data, dir: String, lane: Option<LaneKey>) {
         // A lane the table does not hold opens ungrouped, as no group does.
         let lane = lane.and_then(|k| self.lanes.find(&k).cloned());
         let group = lane.as_ref().and_then(|l| group_for_lane(data, l));
@@ -272,12 +279,38 @@ impl Session {
         {
             self.toggle_lane(data, &l.key);
         }
-        let mut params = vec![("cwd", Param::Str(root)), ("focus", Param::Bool(true))];
+        let mut params = vec![("cwd", Param::Str(dir)), ("focus", Param::Bool(true))];
         if let Some(g) = group {
             params.push(("group_id", Param::Str(g.id.clone())));
             params.push(("group_placement", Param::Str("top".to_string())));
         }
         self.cmux("workspace.create", params);
+    }
+
+    /// The home folder, for a new session with no project; None until
+    /// the shell says it.
+    pub fn home_folder(&self) -> Option<String> {
+        self.home
+            .as_deref()
+            .map(trim_slash)
+            .filter(|h| !h.is_empty())
+            .map(str::to_string)
+    }
+
+    /// The All view's add button: a new session in the project's folder,
+    /// or with no project in the home folder, in the first lane as the
+    /// card menu's New session opens. A project with no folder, or no
+    /// home known, opens nothing.
+    pub fn add_session(&mut self, data: &Data, project: Option<&str>) {
+        let first = self.lanes.first().clone();
+        match project {
+            Some(k) => self.open_project_workspace(data, k, Some(first)),
+            None => {
+                if let Some(home) = self.home_folder() {
+                    self.open_workspace_in(data, home, Some(first));
+                }
+            }
+        }
     }
 
     fn open_label(&self, k: &str) -> String {
@@ -463,6 +496,99 @@ mod tests {
         assert!(
             matches!(out.as_slice(), [crate::session::Outbound::Cmux { method, .. }] if method == "workspace.create"),
             "{out:?}"
+        );
+    }
+
+    /// Main activity's group with its anchor, and one card in Unsorted.
+    fn grouped() -> Data {
+        serde_json::from_value(serde_json::json!({
+            "epoch": 1,
+            "groups": [{ "id": "g-main", "name": "Main activity", "anchorId": "anchor-main" }],
+            "workspaces": [
+                { "id": "anchor-main", "title": "Main activity", "group": "g-main" },
+                { "id": "w", "directory": "/x/elsewhere" },
+            ],
+        }))
+        .unwrap()
+    }
+
+    /// The one `workspace.create` the session sent, by its params.
+    fn created(s: &mut Session) -> Vec<(String, crate::session::Param)> {
+        match s.take_outbox().as_slice() {
+            [crate::session::Outbound::Cmux { method, params }] if method == "workspace.create" => {
+                params.clone()
+            }
+            other => panic!("expected one workspace.create, got {other:?}"),
+        }
+    }
+
+    fn param(k: &str, v: crate::session::Param) -> (String, crate::session::Param) {
+        (k.to_string(), v)
+    }
+
+    fn text(v: &str) -> crate::session::Param {
+        crate::session::Param::Str(v.to_string())
+    }
+
+    #[test]
+    fn the_add_button_opens_a_project_in_the_first_lane_focused() {
+        let mut s = Session::new(table(), SavedState::default());
+        s.add_session(&grouped(), Some("/dev/app"));
+        assert_eq!(
+            created(&mut s),
+            [
+                param("cwd", text("/r/app")),
+                param("focus", crate::session::Param::Bool(true)),
+                param("group_id", text("g-main")),
+                param("group_placement", text("top")),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_add_button_opens_no_project_in_the_home_folder_in_the_first_lane() {
+        let mut s = Session::new(table(), SavedState::default());
+        s.home = Some("/Users/jon/".into());
+        s.add_session(&grouped(), None);
+        assert_eq!(
+            created(&mut s),
+            [
+                param("cwd", text("/Users/jon")),
+                param("focus", crate::session::Param::Bool(true)),
+                param("group_id", text("g-main")),
+                param("group_placement", text("top")),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_add_button_opens_nothing_with_no_home_or_no_folder() {
+        let mut with_notes = table();
+        with_notes.extend(
+            serde_json::from_str::<Vec<Project>>(
+                r##"[{"match": "/dev/notes", "name": "Notes", "color": "#000000", "icon": "x"}]"##,
+            )
+            .unwrap(),
+        );
+        let mut s = Session::new(with_notes, SavedState::default());
+        s.add_session(&grouped(), None);
+        s.home = Some(String::new());
+        s.add_session(&grouped(), None);
+        s.add_session(&grouped(), Some("/dev/notes"));
+        s.add_session(&grouped(), Some("/dev/gone"));
+        assert!(s.take_outbox().is_empty());
+    }
+
+    #[test]
+    fn a_projects_plus_still_opens_ungrouped() {
+        let mut s = Session::new(table(), SavedState::default());
+        s.open_project_workspace(&grouped(), "/dev/app", None);
+        assert_eq!(
+            created(&mut s),
+            [
+                param("cwd", text("/r/app")),
+                param("focus", crate::session::Param::Bool(true)),
+            ]
         );
     }
 

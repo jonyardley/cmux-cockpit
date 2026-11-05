@@ -24,9 +24,10 @@ struct AllView: View {
     }
 }
 
-/// The whole panel: the view switch and Next (only while nothing waits
-/// and there is a next step), then the view the core has on
-/// (docs/design.md#view-switch, docs/design.md#next), and the project editor
+/// The whole panel: the view switch, with the add button after it in All,
+/// and Next (only while nothing waits and there is a next step), then the
+/// view the core has on (docs/design.md#view-switch,
+/// docs/design.md#add-button, docs/design.md#next), and the project editor
 /// as a sheet over it while the core has one open. Closing the sheet asks
 /// the core to close the editor; the sheet goes when the panel says it has.
 struct PanelBody: View {
@@ -35,9 +36,12 @@ struct PanelBody: View {
     var body: some View {
         ScrollView(.vertical) {
             VStack(alignment: .leading, spacing: 0) {
-                ViewSwitch(view: panel.view, needs: panel.needs)
-                    .padding(.horizontal, Self.switchMargin)
-                    .padding(.bottom, Metrics.switchGap)
+                HStack(spacing: Metrics.addGap) {
+                    ViewSwitch(view: panel.view, needs: panel.needs)
+                    if let menu = AddText.menu(panel) { AddButton(menu: menu) }
+                }
+                .padding(.horizontal, Self.switchMargin)
+                .padding(.bottom, Metrics.switchGap)
                 if TopText.showsNext(panel) {
                     NextView(next: panel.next).padding(.top, Metrics.topGap)
                 }

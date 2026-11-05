@@ -18,6 +18,8 @@
   { "Edit": { "AddSuggested": { "dir": "/dev/cockpit" } } },
   { "Edit": "Remove" },
   { "OpenProject": { "key": "/dev/cockpit" } },
+  { "AddSession": { "project": "/dev/cockpit" } },
+  { "AddSession": { "project": null } },
   { "Menu": { "OpenCard": { "id": "W1" } } },
   { "Menu": { "OpenProject": { "key": "/dev/cockpit", "quiet": true } } },
   { "Menu": "Close" },

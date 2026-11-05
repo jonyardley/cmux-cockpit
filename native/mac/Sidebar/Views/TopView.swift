@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// The view switch, as the core has it on: two tabs on a ringed track, the
@@ -79,6 +80,74 @@ private struct NeedsCount: View {
                 .countPillShape(Color(needs.fill))
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// The add button: a round "+" after the view switch in All, ringed like
+/// the track (docs/design.md#add-button). Its menu, headed "New session
+/// in", lists every project with its colour dot, one with no folder
+/// disabled and saying so, then "No project (home folder)", disabled while
+/// the core knows no home. A pick opens a session there, focused, in the
+/// first lane; AddText decides what each item says and sends.
+struct AddButton: View {
+    let menu: AddMenu
+
+    var body: some View {
+        Menu {
+            Section(Words.newSessionIn) {
+                ForEach(menu.projects, id: \.key) { project in
+                    Button {
+                        if let action = AddText.pick(project) { SidebarCore.send(action) }
+                    } label: {
+                        Label {
+                            Text(AddText.label(project))
+                        } icon: {
+                            Image(nsImage: MenuDot.image(project.color))
+                        }
+                    }
+                    .disabled(!project.canOpen)
+                }
+            }
+            Divider()
+            Button(Words.noProject) {
+                if let action = AddText.pickHome(menu) { SidebarCore.send(action) }
+            }
+            .disabled(!menu.home)
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: Metrics.addGlyph, weight: .semibold))
+                .foregroundStyle(Color(Token.secondary))
+                .frame(width: Metrics.addButton, height: Metrics.addButton)
+                .hoverShade(in: .circle)
+                .background(Color(Token.countBg), in: .circle)
+                .overlay {
+                    Circle().strokeBorder(Color(Token.chipEdge), lineWidth: Metrics.hairline)
+                }
+                .contentShape(.circle)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(Words.newSession)
+        .accessibilityLabel(Words.newSession)
+    }
+}
+
+/// A project's colour dot for a menu item. A menu draws its items' icons
+/// as AppKit images and tints a template one, so the dot is drawn as an
+/// image that is not a template, which keeps its colour.
+enum MenuDot {
+    static func image(_ hex: UInt32?) -> NSImage {
+        let color = Color(project: hex)
+        let side = Metrics.menuDot
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSColor(color).setFill()
+            NSBezierPath(ovalIn: rect).fill()
+            return true
+        }
+        image.isTemplate = false
+        return image
     }
 }
 

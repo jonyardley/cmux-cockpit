@@ -68,6 +68,28 @@ check(
     "a pick opens the card's menu, then picks"
 )
 
+// The add button: a project with a folder opens a session in it, one with
+// none sends nothing; "No project" opens the home folder only once the
+// core knows it. Every pick is one of Jon's actions.
+var addSeen = 0
+for name in names {
+    guard let data = try? Data(contentsOf: dir.appendingPathComponent(name)),
+          let panel = try? JSONDecoder().decode(Panel.self, from: data),
+          let menu = AddText.menu(panel)
+    else { continue }
+    for project in menu.projects {
+        addSeen += 1
+        let sent = AddText.pick(project)
+        check(sent == (project.canOpen ? .addSession(project: project.key) : nil), "\(name): \(project.name) picks as it can open")
+        check(sent?.isAction != false, "\(name): \(project.name)'s pick is an action")
+    }
+    check(AddText.pickHome(menu) == (menu.home ? .addSession(project: nil) : nil), "\(name): No project picks once home is known")
+}
+check(addSeen > 0, "the fixtures hold an add menu to check (\(addSeen))")
+let homeless = AddMenu(projects: [], home: false)
+check(AddText.pickHome(homeless) == nil, "No project sends nothing with no home known")
+check(AddText.pickHome(AddMenu(projects: [], home: true)) == .addSession(project: nil), "No project opens the home folder")
+
 check(SidebarAction.message(" \n\t", to: "W1") == nil, "blank words send nothing")
 check(
     SidebarAction.message("  Rebase when free.\n", to: "W1") == .messageAgent(id: "W1", text: "Rebase when free."),
