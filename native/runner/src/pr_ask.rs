@@ -14,7 +14,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use cockpit_core::PrAsk;
-use cockpit_core::pr_poll::{PollAnswer, PrPolled, Ran, answer, gh_args, git_args};
+use cockpit_core::pr_poll::{PollAnswer, PrPolled, Ran, answer, default_args, gh_args, git_args};
 
 use super::{Input, now_epoch};
 
@@ -106,12 +106,22 @@ pub fn ran_within(
     }
 }
 
-/// The real ask: `git` for the branch, then `gh` for its PR.
+/// The real ask: `git` for the branch and the repo's default branch,
+/// then, off the default branch, `gh` for its PR.
 pub fn ask(directory: &str) -> PollAnswer {
     let git = tool("git", &["/opt/homebrew/bin/git", "/usr/bin/git"]);
     let gh = tool("gh", &["/opt/homebrew/bin/gh", "/usr/local/bin/gh"]);
     let branch = ran_within(&git, &git_args(directory), Some(directory), &QUIET, LIMIT);
-    answer(&branch, |b| {
+    let default = || {
+        ran_within(
+            &git,
+            &default_args(directory),
+            Some(directory),
+            &QUIET,
+            LIMIT,
+        )
+    };
+    answer(&branch, default, |b| {
         ran_within(&gh, &gh_args(b), Some(directory), &QUIET, LIMIT)
     })
 }
@@ -183,6 +193,11 @@ mod tests {
         };
         assert_eq!(log_line(&failed), "pr-poll gh signed-out");
         assert_eq!(log_line(&PollAnswer::NoBranch), "pr-poll no branch");
+        assert_eq!(
+            log_line(&PollAnswer::DefaultBranch),
+            "pr-poll default branch",
+            "gh is not asked on the default branch"
+        );
     }
 
     #[test]
