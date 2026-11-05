@@ -2397,6 +2397,7 @@
         "key": "/dev/app-one",
         "name": "App One",
         "color": 14251863,
+        "icon": "star.fill",
         "can_open": true,
         "chosen": false
       },
@@ -2404,6 +2405,7 @@
         "key": "/dev/app-two",
         "name": "App Two",
         "color": 6986700,
+        "icon": "cube.fill",
         "can_open": false,
         "chosen": false
       },
@@ -2411,6 +2413,7 @@
         "key": "/dev/app-three",
         "name": "App Three",
         "color": 7900253,
+        "icon": "leaf.fill",
         "can_open": false,
         "chosen": false
       }
@@ -2424,18 +2427,21 @@
         "key": "/dev/app-one",
         "name": "App One",
         "color": 14251863,
+        "icon": "star.fill",
         "chosen": false
       },
       {
         "key": "/dev/app-two",
         "name": "App Two",
         "color": 6986700,
+        "icon": "cube.fill",
         "chosen": false
       },
       {
         "key": "/dev/app-three",
         "name": "App Three",
         "color": 7900253,
+        "icon": "leaf.fill",
         "chosen": false
       }
     ],

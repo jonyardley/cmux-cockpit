@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 // Checks the sidebar's pure logic (Sidebar/Model/), compiled with the
@@ -671,8 +672,8 @@ for (name, word) in [("DIRTY_MARK", ChipFit.dirtyMark), ("DOT", CardText.filledD
 // MARK: The add button
 
 // A project with a folder reads its name; one with none says why.
-let withFolder = AddProject(key: "/dev/app", name: "App", color: 0xD97757, canOpen: true, chosen: false)
-let noFolder = AddProject(key: "/dev/notes", name: "Notes", color: nil, canOpen: false, chosen: false)
+let withFolder = AddProject(key: "/dev/app", name: "App", color: 0xD97757, icon: "star.fill", canOpen: true, chosen: false)
+let noFolder = AddProject(key: "/dev/notes", name: "Notes", color: nil, icon: "leaf.fill", canOpen: false, chosen: false)
 check(AddText.label(withFolder) == "App", "a project with a folder reads its name")
 check(AddText.label(noFolder) == "Notes (no folder)", "a project with no folder says why")
 // Only All carries the menu, and every fixture in All has one.
@@ -706,6 +707,62 @@ if var panel = load("lanes"), let menu = FilterText.menu(panel) {
     check(FilterText.chip(none)?.color == nil, "No project's chip dot is the grey of no colour")
     panel.view = .projects
     check(FilterText.menu(panel) == nil, "no filter once Projects is on, whatever the panel carries")
+}
+
+// MARK: The menus' project badges
+
+/// A pixel of a painted badge as stored, six hex digits and its alpha: the
+/// raw samples, with no colour conversion, so they are sRGB exactly when
+/// the badge is (checked below).
+func pixel(_ rep: NSBitmapImageRep, _ x: Int, _ y: Int) -> (hex: UInt32, alpha: Double)? {
+    guard rep.samplesPerPixel == 4, rep.bitsPerSample == 8 else { return nil }
+    var p = [Int](repeating: 0, count: 4)
+    rep.getPixel(&p, atX: x, y: y)
+    return (UInt32(p[0] << 16 | p[1] << 8 | p[2]), Double(p[3]) / 255)
+}
+
+/// Whether two colours are the same to within a step a channel.
+func near(_ a: UInt32, _ b: UInt32) -> Bool {
+    [16, 8, 0].allSatisfy { abs(Int((a >> $0) & 0xFF) - Int((b >> $0) & 0xFF)) <= 2 }
+}
+
+let badge = MenuBadge.image(icon: "star.fill", color: 0xD97757)
+check(!badge.isTemplate, "a menu badge is not a template, so the menu keeps its colour")
+check(badge.size == NSSize(width: 16, height: 16), "a menu badge is the quiet row's 16pt")
+let reps = badge.representations.compactMap { $0 as? NSBitmapImageRep }
+check(reps.map(\.pixelsWide).sorted() == [16, 32], "a menu badge is painted at 1x and 2x: \(reps.map(\.pixelsWide))")
+check(reps.allSatisfy { $0.size == badge.size }, "each scale fills the badge's 16pt")
+check(reps.allSatisfy { $0.colorSpace == .sRGB }, "each scale is tagged sRGB, as BadgeTile's face is, so no device conversion drifts it")
+check(MenuBadge.image(icon: "star.fill", color: 0xD97757) === badge, "a badge is painted once and then reused, not on every redraw")
+check(MenuBadge.image(icon: "star.fill", color: 0x6A9BCC) !== badge, "another colour is another badge")
+check(MenuBadge.image(icon: "leaf.fill", color: 0xD97757) !== badge, "another glyph is another badge")
+check(MenuBadge.centred(9.3, scale: 1) == 3, "a glyph's origin lands on a whole pixel at 1x")
+check(MenuBadge.centred(9.3, scale: 2) == 3.5, "and on a whole pixel at 2x")
+check(MenuBadge.centred(10, scale: 1) == 3, "a glyph that fits exactly is centred exactly")
+if let rep = MenuBadge.bitmap(icon: "star.fill", color: 0xD97757, scale: 2) {
+    let edge = pixel(rep, 16, 2)
+    check(edge.map { near($0.hex, 0xD97757) && $0.alpha == 1 } == true, "the face is the project's own colour: \(String(describing: edge))")
+    check(pixel(rep, 0, 0)?.alpha == 0, "the corner is rounded, so clear")
+    let middle = pixel(rep, 16, 16)
+    check(middle.map { !near($0.hex, 0xD97757) } == true, "the glyph sits in the middle: \(String(describing: middle))")
+    check(middle.map { near($0.hex, BadgeInk.glyph(on: 0xD97757)) } == true, "in the ink that reads on the face")
+}
+if let rep = MenuBadge.bitmap(icon: "leaf.fill", color: nil, scale: 2) {
+    check(MenuBadge.face(nil) == BadgeInk.fallback, "a project with no colour takes the badge grey")
+    check(pixel(rep, 16, 2).map { near($0.hex, BadgeInk.fallback) } == true, "and paints it")
+}
+if let rep = MenuBadge.bitmap(icon: "no.such.symbol.here", color: 0x6A9BCC, scale: 2) {
+    check(pixel(rep, 16, 16).map { near($0.hex, 0x6A9BCC) } == true, "a name that is no symbol leaves the bare face")
+}
+
+// The menus are drawn by cmux, across the extension's remote view: the
+// badge survives being sent, colour, size and all.
+if let data = try? NSKeyedArchiver.archivedData(withRootObject: badge, requiringSecureCoding: true),
+    let back = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSImage.self, from: data)
+{
+    check(!back.isTemplate && back.size == badge.size, "a menu badge arrives across processes still not a template")
+} else {
+    check(false, "a menu badge archives and unarchives")
 }
 
 // MARK: Colours from a hand-written config

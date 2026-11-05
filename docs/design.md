@@ -194,7 +194,8 @@ capitalising the string.
 | `Metrics.pillPadH`, `pillPadV` | 7, 1 | inside every count pill, and the Ready pill |
 | `Metrics.switchHeight`, `switchInset` | 26, 3 | a tab's height; the track's inner padding |
 | `Metrics.addButton`, `addGlyph`, `addGap` | 32, 12, 6 | the add button's circle (the track's height), its plus, and its gap from the track |
-| `Metrics.menuDot` | 8 | a project's colour dot in the add and filter menus, and on the filter chip |
+| `Metrics.menuDot` | 8 | a project's colour dot on the filter chip |
+| `MenuBadge.side`, `font` | 16, 9 | a project's badge in the add and filter menus and on a quiet project row (`ProjectMetrics.quietBadge` and `quietBadgeFont` read these) |
 | `Metrics.filterGlyph` | 11 | the filter button's funnel; the button is `addButton` across |
 | `Metrics.filterChipPadH`, `filterChipPadV`, `filterChipGap`, `filterChipX` | 8, 3, 5, 8 | inside the filter chip; between its dot, words and x; the x's size |
 | `Metrics.hairline`, `selectWidth` | 1, 2 | every edge; a selected card's outline |
@@ -295,8 +296,9 @@ and accessibility label say "New session".
 
 A click opens a native menu headed "New session in": every project in
 the Projects view's order (busy ones first, then the quiet ones, folded
-or not), each with its colour dot (`menuDot` 8, the project's
-own colour, grey with none) and its name; a project with no folder shows
+or not), each with its [badge](#badge-tile) as the quiet row draws it
+(`MenuBadge` 16 with a 9 glyph, the project's own colour and icon, the
+badge grey with no colour) and its name; a project with no folder shows
 disabled as "<name> (no folder)". Then a divider and "No project (home
 folder)", disabled while the core knows no home. A pick opens a new
 session there, focused, at the top of the first lane, as the card menu's
@@ -306,9 +308,17 @@ its place. A pick the filter would hide (another project, or the home
 folder while a project is chosen) clears the filter, so the new card
 shows. The core says which projects the menu holds, in what order,
 and which is ticked (`Panel.add`); the words are the sidebar's (`Words`),
-and `AddText` decides what each item says and sends.
-Where: `Views/TopView.swift` (`AddButton`, `RoundMenuButton`, `MenuDot`,
-`MenuTick`).
+and `AddText` decides what each item says and sends. "No project (home
+folder)" has no badge.
+
+A menu takes its items' icons as AppKit images and tints a template
+one grey, so `MenuBadge` paints the badge (face, corner by the badge
+rule, glyph in `BadgeInk`, its origin on a whole pixel) into 1x and 2x
+sRGB bitmaps, marked not a template, once per glyph and colour, and
+`MenuBadgeIcon` draws it with the original rendering in a title and icon
+label. The face is the same in light and dark, as on every badge.
+Where: `Model/MenuBadge.swift`, `Views/TopView.swift` (`AddButton`,
+`RoundMenuButton`, `MenuBadgeIcon`, `MenuTick`).
 
 ### Filter button
 
@@ -320,7 +330,8 @@ the shared hover shade. While All is filtered the hairline is
 accessibility label say "Filter by project".
 
 A click opens a native menu: "Everything", a divider, every project in
-the add menu's unfiltered order with its colour dot (`menuDot` 8), folder
+the add menu's unfiltered order with its badge, as the
+[add button](#add-button)'s menu draws it (`MenuBadge`), folder
 or not, a divider, then "No project", the cards the Projects view files
 under Other. The choice is ticked; "Everything" while nothing is. A pick
 filters All's lanes to that project's cards, kept across a reload and
@@ -330,7 +341,10 @@ it. The Projects view, the
 count click or Next to a card the filter hides clears it first. The core
 says what the menu holds and what is chosen (`Panel.filter`); the words
 are the sidebar's, and `FilterText` decides what each item sends.
-Where: `Views/TopView.swift` (`FilterButton`, `RoundMenuButton`).
+"Everything" and "No project" have no badge; the tick sits in the
+menu's own column, before the badge.
+Where: `Views/TopView.swift` (`FilterButton`, `RoundMenuButton`,
+`MenuBadgeIcon`).
 
 ### Filter chip
 
