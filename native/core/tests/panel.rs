@@ -1,6 +1,7 @@
 //! The panel model for each scene, as JSON in native/fixtures/: the four
-//! golden scenes as they load, then a card's menu open over lanes, and
-//! the project editor open on a project and on a new one over projects.
+//! golden scenes as they load, then a card's menu open over lanes, the
+//! project editor open on a project and on a new one over projects, and
+//! the lanes filtered to one project.
 //! A shell that draws the panel (the Swift one, across the bridge) can
 //! test against these without the core.
 //!

@@ -46,8 +46,8 @@ otherwise. Line numbers are as of `12d4303`.
 
 `Model/Palette.swift` holds every colour literal in the extension. Core tokens
 (`Token`, chosen by the Rust core in `native/core/src/theme.rs`) are mapped at
-`Palette.swift:103-148`; the colours only the views need (`Palette.Own`) are at
-`Palette.swift:150-169`. An alpha after the hex is written as `/ 0xAA`; a
+`Palette.swift:98-140`; the colours only the views need (`Palette.Own`) are at
+`Palette.swift:143-160`. An alpha after the hex is written as `/ 0xAA`; a
 "faint" token is its hue at that alpha, drawn over whatever is under it.
 
 ### The ground
@@ -103,7 +103,7 @@ dark-mode screenshot; nothing here changes before then.
 
 | Token | Light | Dark | Where drawn |
 |-|-|-|-|
-| `Own.panelGround` | FAF9F5 | 262624 | under the whole panel (`PanelView.swift:118`), under a floating card |
+| `Own.panelGround` | FAF9F5 | 262624 | under the whole panel (`PanelView.swift:124`), under a floating card |
 | `Own.card` | FFFFFF | 30302D | a card's face, the chosen tab, Next's pill, an action chip |
 | `Own.cardHover` | F7F6F2 | 383835 | a card's face, or Next's pill, under the pointer |
 | `Own.hover` | 7F7F7F / 0x14 | 7F7F7F / 0x24 | a header, tab, chip or quiet row under the pointer |
@@ -177,7 +177,7 @@ text and covers 10 to 13.5 (D2 a). Glyph sizes stay in their look enums
 text size gets a `Metrics.Font` name or reuses one.
 
 Section headings are tracked by `Metrics.sectionTracking` (1pt,
-`Theme.swift:151`) and set in capitals by `.textCase(.uppercase)`, never by
+`Theme.swift:160`) and set in capitals by `.textCase(.uppercase)`, never by
 capitalising the string.
 
 ## Spacing and radii
@@ -186,8 +186,8 @@ capitalising the string.
 
 | Name | Value | Use |
 |-|-|-|
-| `Metrics.gutter` | 10 | the panel's padding all round (`PanelView.swift:56`) and a notice's |
-| `Metrics.cardGap` | 6 | between cards in a lane (`LaneView.swift:200`) |
+| `Metrics.gutter` | 10 | the panel's padding all round (`PanelView.swift:62`) and a notice's |
+| `Metrics.cardGap` | 6 | between cards in a lane (`LaneView.swift:217`) |
 | `Metrics.sectionGap` | 14 | from the section above to a header's words |
 | `Metrics.headerPadH`, `headerPadV` | 8, 5 | inside a lane or project header |
 | `Metrics.headerSpacing` | 8 | between the parts of a header row |
@@ -277,7 +277,7 @@ While something waits, All carries the [waiting count](#needs-count).
 Track: `countBg` face, `chipEdge` hairline, radius `Radius.track` 10, inner
 padding `switchInset` 3. Tab: height 26, radius `Radius.tab` 7, `Own.card`
 face and `cardEdge` edge when chosen. Words: `Font.control` 12 medium. The
-switch sits 14 in from the sidebar edge (`PanelView.swift:67`).
+switch sits 14 in from the sidebar edge (`PanelView.swift:73`).
 While All is on, the [filter button](#filter-button) and then the
 [add button](#add-button) sit after the track on the same row, each
 `addGap` 6 from the one before, and the track gives up their width; in
@@ -396,7 +396,7 @@ Where: `Views/LaneView.swift` (`FoldMark`).
 ### Lane marker
 
 A rounded square in the lane's colour, 9 square, radius by the badge rule (3).
-Where: `Views/LaneView.swift:35-44`.
+Where: `Views/LaneView.swift:45-54`.
 
 ### Anchor badge
 
@@ -707,7 +707,7 @@ gap. The card itself floats over the lanes at the pointer: `Own.panelGround`
 behind it, 0.9 opacity, an `Own.lift` shadow of radius 6 dropped 2. Both take
 the dragged card's own corner: `Radius.card` 12 for a full or compact card,
 `Radius.row` 9 for a dense row.
-Where: `Views/Drag.swift:192-249`, `Views/LaneView.swift:189`.
+Where: `Views/Drag.swift:192-249`, `Views/LaneView.swift:199`.
 
 ### Editor sheet
 
