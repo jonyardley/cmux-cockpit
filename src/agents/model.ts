@@ -8,7 +8,7 @@ import { byActivity } from "../shared/activity.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
-import { type PrTone, prTone, shownHealth } from "../shared/pr-colors.ts";
+import { type PrTone, prTone, shownTone } from "../shared/pr-colors.ts";
 import { type Project, projectOf, savedProjectFor } from "../shared/projects.ts";
 import { fromPoller, type PrSummary, prOf, prSummary } from "../shared/prs.ts";
 import { quietSuffix } from "../shared/quiet.ts";
@@ -195,11 +195,11 @@ export const prStale = (): boolean => freshness().stale;
 /** The workspace's PR chip dims while it is the poller's copy and that copy is stale. */
 export const currentPrDim = computed((): boolean => !!currentPr() && fromPoller(cur().ws) && prStale());
 
-/** The workspace's PR chip's tone, for its colour: its health (a stale ready
- * dropped to quiet), else its state, the draft flag read off the PR itself. */
+/** The workspace's PR chip's tone, for its colour: its health, else its
+ * state, the draft flag read off the PR itself; a stale ready goes grey. */
 export const currentPrTone = computed((): PrTone => {
   const pr = currentPr();
-  return prTone(pr?.status, prOf(cur().ws)?.draft, shownHealth(pr?.health ?? "quiet", currentPrDim()));
+  return shownTone(prTone(pr?.status, prOf(cur().ws)?.draft, pr?.health ?? "quiet"), currentPrDim());
 });
 
 /** The workspace a row's right-click Open chat goes to, by id; none for the

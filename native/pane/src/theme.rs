@@ -159,6 +159,20 @@ mod tests {
     use super::*;
 
     #[test]
+    fn draws_an_open_prs_green_apart_from_every_green_that_means_ready_or_finished() {
+        for other in [
+            Token::MergeText,
+            Token::MergeGreen,
+            Token::GreenDeep,
+            Token::Green,
+            Token::GreenText,
+        ] {
+            assert_ne!(hex(Token::OpenText), hex(other), "{other:?}");
+        }
+        assert_ne!(hex(Token::MergedText), hex(Token::LaneViolet));
+    }
+
+    #[test]
     fn blends_a_faint_hue_onto_the_ground() {
         assert_eq!(blend(0x000000, 0, GROUND), GROUND);
         assert_eq!(blend(0x123456, 255, GROUND), 0x123456);

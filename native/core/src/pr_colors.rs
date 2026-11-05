@@ -7,7 +7,7 @@
 //! its own. A state chip on its own takes a faint face and edge of its
 //! tone's hue. Also status.ts's prTextColor, the one reading of it a
 //! card's PR words make. The shells ink words only, so the chip faces
-//! (pr_chip_colors) and the stale reading (shown_health) wait for a shell
+//! (pr_chip_colors) and the stale reading (shown_tone) wait for a shell
 //! that draws faces, and for the agents sidebar's port.
 
 use serde::Serialize;
@@ -26,7 +26,8 @@ pub struct ChipColors {
 }
 
 /// What colours a PR's words: its health when that has a hue, else its
-/// state. `Draft` is an open draft; a PR with no status counts as open.
+/// state. `Draft` is an open draft; `Quiet` is grey with nothing to say,
+/// a PR with no status the core knows or a stale ready (shown_tone).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PrTone {
@@ -38,6 +39,7 @@ pub enum PrTone {
     Open,
     Merged,
     Closed,
+    Quiet,
 }
 
 /// The quiet chip: the branch, the ports, and a PR's number.
@@ -54,7 +56,8 @@ pub const READY_INK: Token = Token::MergeText;
 
 /// A PR's tone: a health with a hue wins (a failing draft is red); a quiet
 /// PR reads by its state, a merged or closed one by its status whatever
-/// its draft flag.
+/// its draft flag, and one with no status the core knows stays grey
+/// rather than claim open.
 pub fn pr_tone(status: Option<PrStatus>, draft: bool, health: PrHealth) -> PrTone {
     match health {
         PrHealth::Failing => PrTone::Failing,
@@ -64,8 +67,9 @@ pub fn pr_tone(status: Option<PrStatus>, draft: bool, health: PrHealth) -> PrTon
         PrHealth::Quiet => match status {
             Some(PrStatus::Merged) => PrTone::Merged,
             Some(PrStatus::Closed) => PrTone::Closed,
-            _ if draft => PrTone::Draft,
-            _ => PrTone::Open,
+            Some(PrStatus::Open) if draft => PrTone::Draft,
+            Some(PrStatus::Open) => PrTone::Open,
+            Some(PrStatus::Unknown) | None => PrTone::Quiet,
         },
     }
 }
@@ -78,18 +82,19 @@ pub fn pr_ink(tone: PrTone) -> Token {
         PrTone::Ready => READY_INK,
         PrTone::Open => Token::OpenText,
         PrTone::Merged => Token::MergedText,
-        PrTone::Draft | PrTone::Closed => Token::MetaText,
+        PrTone::Draft | PrTone::Closed | PrTone::Quiet => Token::MetaText,
     }
 }
 
-/// The health a PR's words show while its data may be stale and the chip
-/// is dimmed: ready drops to quiet, so a stale verdict does not shout; an
-/// open PR then reads open, dimmed.
-pub fn shown_health(health: PrHealth, dim: bool) -> PrHealth {
-    if dim && health == PrHealth::Ready {
-        PrHealth::Quiet
+/// The tone a PR's words show while its data may be stale and the chip
+/// is dimmed: ready drops to grey, so a stale verdict (still saying
+/// "ready") does not shout, nor borrow open's green; the rest keep their
+/// hue, dimmed.
+pub fn shown_tone(tone: PrTone, dim: bool) -> PrTone {
+    if dim && tone == PrTone::Ready {
+        PrTone::Quiet
     } else {
-        health
+        tone
     }
 }
 
@@ -102,7 +107,7 @@ pub fn pr_chip_colors(tone: PrTone) -> ChipColors {
         PrTone::Ready => (Token::GreenChipFace, Token::GreenChipEdge),
         PrTone::Open => (Token::OpenChipFace, Token::OpenChipEdge),
         PrTone::Merged => (Token::MergedChipFace, Token::MergedChipEdge),
-        PrTone::Draft | PrTone::Closed => (NEUTRAL_CHIP.bg, NEUTRAL_CHIP.edge),
+        PrTone::Draft | PrTone::Closed | PrTone::Quiet => (NEUTRAL_CHIP.bg, NEUTRAL_CHIP.edge),
     };
     ChipColors {
         bg,
@@ -126,7 +131,7 @@ pub fn pr_text_color(pr: &PrSummary, draft: bool) -> Token {
 mod tests {
     use super::*;
 
-    const TONES: [PrTone; 8] = [
+    const TONES: [PrTone; 9] = [
         PrTone::Failing,
         PrTone::Conflicts,
         PrTone::Running,
@@ -135,6 +140,7 @@ mod tests {
         PrTone::Open,
         PrTone::Merged,
         PrTone::Closed,
+        PrTone::Quiet,
     ];
 
     #[test]
@@ -153,15 +159,22 @@ mod tests {
         assert_eq!(pr_tone(Some(PrStatus::Open), false, quiet), PrTone::Open);
         assert_eq!(pr_tone(Some(PrStatus::Merged), true, quiet), PrTone::Merged);
         assert_eq!(pr_tone(Some(PrStatus::Closed), true, quiet), PrTone::Closed);
-        assert_eq!(pr_tone(None, false, quiet), PrTone::Open);
-        assert_eq!(pr_tone(None, true, quiet), PrTone::Draft);
-        assert_eq!(pr_tone(Some(PrStatus::Unknown), false, quiet), PrTone::Open);
+        assert_eq!(pr_tone(None, false, quiet), PrTone::Quiet);
+        assert_eq!(pr_tone(None, true, quiet), PrTone::Quiet);
+        assert_eq!(
+            pr_tone(Some(PrStatus::Unknown), false, quiet),
+            PrTone::Quiet
+        );
     }
 
     #[test]
-    fn keeps_a_stale_ready_open_pr_green_never_ready() {
-        let shown = shown_health(PrHealth::Ready, true);
-        assert_eq!(pr_tone(Some(PrStatus::Open), false, shown), PrTone::Open);
+    fn greys_a_stale_ready_so_its_ready_never_borrows_opens_green() {
+        let ready = pr_tone(Some(PrStatus::Open), false, PrHealth::Ready);
+        assert_eq!(shown_tone(ready, true), PrTone::Quiet);
+        assert_eq!(shown_tone(ready, false), PrTone::Ready);
+        for t in TONES.into_iter().filter(|t| *t != PrTone::Ready) {
+            assert_eq!(shown_tone(t, true), t, "{t:?}");
+        }
     }
 
     #[test]
@@ -172,6 +185,7 @@ mod tests {
         assert_eq!(pr_ink(PrTone::Ready), READY_INK);
         assert_eq!(pr_ink(PrTone::Draft), Token::MetaText);
         assert_eq!(pr_ink(PrTone::Closed), Token::MetaText);
+        assert_eq!(pr_ink(PrTone::Quiet), Token::MetaText);
         assert_eq!(pr_ink(PrTone::Open), Token::OpenText);
         assert_eq!(pr_ink(PrTone::Merged), Token::MergedText);
     }
@@ -181,7 +195,6 @@ mod tests {
         for t in TONES.into_iter().filter(|t| *t != PrTone::Ready) {
             assert_ne!(pr_ink(t), READY_INK, "{t:?}");
         }
-        assert_ne!(Token::OpenText, Token::GreenDeep);
     }
 
     #[test]
@@ -207,7 +220,7 @@ mod tests {
                 Token::MergedChipEdge
             )
         );
-        for t in [PrTone::Draft, PrTone::Closed] {
+        for t in [PrTone::Draft, PrTone::Closed, PrTone::Quiet] {
             let c = pr_chip_colors(t);
             assert_eq!((c.bg, c.edge), (NEUTRAL_CHIP.bg, NEUTRAL_CHIP.edge));
             assert_eq!(c.fg, Token::MetaText);
@@ -219,12 +232,5 @@ mod tests {
         use crate::status::StatusKind;
         assert_eq!(READY_INK, StatusKind::MergeReady.style().text);
         assert_ne!(READY_INK, Token::GreenDeep);
-    }
-
-    #[test]
-    fn greys_a_stale_ready_and_leaves_the_rest() {
-        assert_eq!(shown_health(PrHealth::Ready, true), PrHealth::Quiet);
-        assert_eq!(shown_health(PrHealth::Ready, false), PrHealth::Ready);
-        assert_eq!(shown_health(PrHealth::Failing, true), PrHealth::Failing);
     }
 }

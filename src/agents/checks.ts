@@ -68,7 +68,7 @@ const neutral = (text: string): ChecksSummary => ({ text, mark: "minus.circle", 
 
 function passedLine(n: number, dim: boolean): ChecksSummary {
   const line = summaryIn("pass", n === 1 ? "1 check passed" : "All " + n + " checks passed");
-  // A stale pass drops to grey, as a stale ready chip does (shownHealth).
+  // A stale pass drops to grey, as a stale ready chip does (shownTone).
   return dim ? { ...line, color: QUIET_INK } : line;
 }
 

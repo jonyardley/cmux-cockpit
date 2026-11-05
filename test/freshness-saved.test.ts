@@ -115,14 +115,14 @@ describe("the saved poll status", () => {
     assert.equal(m.currentPrDim(), false);
   });
 
-  it("reads a stale ready PR as open, green and dimmed, in both chips", () => {
+  it('greys a stale ready PR in both chips, so its "ready" is not green', () => {
     r.data.workspaces = [ws("ready", { branch: "ready", selected: true })];
     assert.equal(m.currentPr()?.health, "ready");
-    assert.equal(m.currentPrTone(), "open");
+    assert.equal(m.currentPrTone(), "quiet");
     const entry = m.prs().find((e) => e.pr.number === 6);
     assert.ok(entry, "the row is listed");
     assert.equal(m.prDim(entry), true);
-    assert.equal(m.prChipTone(entry), "open");
+    assert.equal(m.prChipTone(entry), "quiet");
   });
 
   it("greys a stale pass in the This workspace checks line", () => {

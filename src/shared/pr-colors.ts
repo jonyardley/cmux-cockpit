@@ -22,9 +22,10 @@ export interface ChipColors {
 
 /**
  * What colours a PR's words: its health when that has a hue, else its state.
- * "draft" is an open draft; a PR with no status counts as open.
+ * "draft" is an open draft; "quiet" is grey with nothing to say, a PR with
+ * no status or a stale ready (shownTone).
  */
-export type PrTone = Exclude<PrHealth, "quiet"> | "draft" | "open" | "merged" | "closed";
+export type PrTone = Exclude<PrHealth, "quiet"> | "draft" | "open" | "merged" | "closed" | "quiet";
 
 /** The quiet chip: the branch, the ports, and a PR's number. */
 export const NEUTRAL_CHIP: ChipColors = { bg: P.chipFace, fg: P.secondary, edge: P.chipEdge };
@@ -44,6 +45,7 @@ const TONE_INK: Record<PrTone, string> = {
   open: P.openText,
   merged: P.mergedText,
   closed: QUIET_INK,
+  quiet: QUIET_INK,
 };
 
 // A state chip's face and edge for each tone, a faint face of its hue; the
@@ -57,16 +59,18 @@ const TONE_FACE: Record<PrTone, Omit<ChipColors, "fg">> = {
   open: { bg: P.openChipFace, edge: P.openChipEdge },
   merged: { bg: P.mergedChipFace, edge: P.mergedChipEdge },
   closed: NEUTRAL_CHIP,
+  quiet: NEUTRAL_CHIP,
 };
 
 /**
  * A PR's tone: a health with a hue wins (a failing draft is red); a quiet
  * PR reads by its state, a merged or closed one by its status whatever its
- * draft flag.
+ * draft flag, and one with no status stays grey rather than claim open.
  */
 export function prTone(status: PrStatus | undefined, draft: boolean | undefined, health: PrHealth): PrTone {
   if (health !== "quiet") return health;
   if (status === "merged" || status === "closed") return status;
+  if (status !== "open") return "quiet";
   return draft ? "draft" : "open";
 }
 
@@ -74,11 +78,11 @@ export function prTone(status: PrStatus | undefined, draft: boolean | undefined,
 export const prInk = (tone: PrTone): string => TONE_INK[tone];
 
 /**
- * The health a PR's words show while its data may be stale and the chip is
- * dimmed: ready drops to quiet, so a stale verdict does not shout; an open
- * PR then reads open, dimmed.
+ * The tone a PR's words show while its data may be stale and the chip is
+ * dimmed: ready drops to grey, so a stale verdict (still saying "ready")
+ * does not shout, nor borrow open's green; the rest keep their hue, dimmed.
  */
-export const shownHealth = (health: PrHealth, dim: boolean): PrHealth => (dim && health === "ready" ? "quiet" : health);
+export const shownTone = (tone: PrTone, dim: boolean): PrTone => (dim && tone === "ready" ? "quiet" : tone);
 
 /** A PR state chip's colours: its ink on a faint face of its tone's hue, or the quiet chip's. */
 export const prChipColors = (tone: PrTone): ChipColors => {

@@ -96,7 +96,7 @@ dark-mode screenshot; nothing here changes before then.
 | `text` | 141413 | F0EEE6 | card titles, the chosen tab, notice titles |
 | `heading` (also `select`, `laneMain`) | 3D3D3A | D6D4CA | project header names, a selected card's outline, "Drop here" |
 | `secondary` (also `laneReview`) | 5E5D59 | B7B5A9 | lane names, detail lines, chip glyphs, the size chip, the tab not chosen, the fold chevron, a quiet row's "+" |
-| `metaText` | 6B6A64 | A3A199 | Next's place, every age while its card waits on nobody, Idle and No agent, a draft or closed PR's words, the Quiet pill |
+| `metaText` | 6B6A64 | A3A199 | Next's place, every age while its card waits on nobody, Idle and No agent, a draft or closed PR's words (and one with no status), the Quiet pill |
 | `faint` (also `laneBackground`) | 8A8880 | 8A8880 | pin, QUIET, a faint or empty lane's name, a row's PR title, the diff, editor labels ([gap L](#known-gaps)) |
 | `Own.tertiary` | 73726C | 9C9A92 | where you left off, live helpers, the editor's "Or one you have open" |
 | `Own.grey` | A09E95 | 77756D | a dot with no colour; a project with no colour |
@@ -128,7 +128,7 @@ dark-mode screenshot; nothing here changes before then.
 | `Own.onBadge` | FFFFFF | 1F1E1D | the unread badge's number |
 | `Own.onFill` | FFFFFF | FFFFFF | the number on the waiting count, on clay or amber |
 | `blueCount`, `clayCount`, `amberCount` | hue / 0x1F, 0x29, 0x29 | same | a count pill's face in a state (core picks) |
-| `redChipFace`, `redChipEdge` | red / 0x1A, 0x38 | same | not drawn: the core's `pr_chip_colors` (`native/core/src/pr_colors.rs:98`) has no caller outside its tests, and every PR chip sits on `chipFace` |
+| `redChipFace`, `redChipEdge` | red / 0x1A, 0x38 | same | not drawn: the core's `pr_chip_colors` (`native/core/src/pr_colors.rs` `pr_chip_colors`) has no caller outside its tests, and every PR chip sits on `chipFace` |
 | `blueChipFace`, `blueChipEdge` | blue / 0x1A, 0x38 | same | not drawn, as above |
 | `greenChipFace`, `greenChipEdge` | green / 0x29, greenDeep / 0x59 | same | not drawn, as above |
 | `openChipFace`, `openChipEdge` | openText / 0x1A, 0x38 | same | not drawn, as above (the agents panel draws its own from `palette.ts`) |
@@ -815,8 +815,8 @@ Every card is decided as option a; where that changes a rule, the rule says
 11. **A PR's state is words in its tone's ink** (`pr_colors.rs` `pr_tone`,
     `pr_ink`): `redText` failing or conflicting, `blueText` checks
     running, `mergeText` ready to merge; with none of those, its state as
-    GitHub colours it, `metaText` draft and closed, `openText` open,
-    `mergedText` merged. Ready to merge is `mergeText` everywhere it means
+    GitHub colours it, `metaText` draft and closed (and a PR with no
+    status the core knows), `openText` open, `mergedText` merged. Ready to merge is `mergeText` everywhere it means
     ready to merge (D11 a); open's green is a status colour on the words, a
     cooler green, not a second ready. The same tone inks the chip, the
     compact card's words and a dense row's number.
@@ -848,7 +848,7 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Asleep, waking | hollow `metaText` ring; `metaText` words | same ring; the word leads the detail | hollow glyph | | `status.rs` `StatusKind::style`; `panel/build.rs` `row_detail` |
 | Didn't sleep or wake | the reason as the detail, `secondary` | same | | | `sleep.rs` `refusal_note`; `panel/build.rs` `detail_of` |
 | Ready to merge | `mergeGreen` dot with halo, `mergeText` words | same, ready PR number `mergeText` | merge line in `mergeText` | PR chip "ready" in `mergeText` | `status.rs`; `lane_entries.rs` `merge_ink`; `pr_colors.rs` `READY_INK` |
-| PR draft, closed | chip state `metaText`; compact words `metaText` | number `metaText` | | | `pr_colors.rs` `pr_tone`, `pr_ink`; `panel/build.rs` `compact_pr`, `row_pr` |
+| PR draft, closed, no status | chip state `metaText`; compact words `metaText` | number `metaText` | | | `pr_colors.rs` `pr_tone`, `pr_ink`; `panel/build.rs` `compact_pr`, `row_pr` |
 | PR open | chip state `openText`; compact words `openText` | number `openText` | | agents panel chip `openText` on `openChipFace` | as above |
 | PR merged | chip state `mergedText`; compact words `mergedText` | number `mergedText` | | agents panel chip `mergedText` on `mergedChipFace` | as above |
 | Checks failing, conflict | chip words `redText` on a neutral chip | number `redText` | | | `pr_colors.rs` `pr_ink` |

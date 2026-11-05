@@ -1081,7 +1081,7 @@ mod tests {
     }
 
     #[test]
-    fn inks_a_prs_number_quietly_its_state_by_health_and_its_diff_faint_on_its_own() {
+    fn inks_a_prs_number_quietly_its_state_by_tone_and_its_diff_faint_on_its_own() {
         use crate::pr_colors::PrTone;
         let chips = chip_views(&CoreChip::Pr {
             tag: "#3".into(),
