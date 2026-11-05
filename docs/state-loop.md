@@ -131,7 +131,9 @@ itself is never written by the loop: it is the starting table.
 
 ## Pull requests: the one map no URL writes
 
-cmux sends custom sidebars no PR data (#7), so the native cockpit's PR poll
+cmux's PR record, where it sends one, has no draft, title, diff, merge
+verdict or checks, and the CLI the native cockpit reads has none at all
+(#7), so the native cockpit's PR poll
 (`native/core/src/pr_poll.rs`) finds it instead and keeps it in a fourth
 map, `prs`: workspace id to
 `{"number", "url", "status": "open|merged|closed", "branch", "title"?, "draft"?, "mergeable"?, "conflicts"?, "checks"?}`.

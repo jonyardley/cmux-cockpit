@@ -142,7 +142,7 @@ function workspacePrs(workspaces: readonly Workspace[], seen: Set<string>): PrEn
     for (const pr of prsOf(w)) {
       if (!pr?.url || seen.has(pr.url)) continue;
       seen.add(pr.url);
-      const summary = summaryOf(pr, checksOf(w));
+      const summary = summaryOf(pr, checksOf(w, pr));
       // The PR's own title when the poller saved one, as an own PR's row has.
       const title = summary?.title || prTitle(w, pr);
       out.push({
@@ -150,7 +150,7 @@ function workspacePrs(workspaces: readonly Workspace[], seen: Set<string>): PrEn
         pr,
         title,
         summary,
-        saved: fromPoller(w),
+        saved: fromPoller(w, pr),
         project: savedProjectFor(w.directory, w.id),
         session: sessionOf(w),
       });

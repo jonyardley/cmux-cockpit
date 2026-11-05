@@ -1,6 +1,6 @@
-// A workspace's PR from the saved state (#7): cmux sends custom sidebars no
-// PR data, so the one scripts/pr-poll.ts saved shows instead, and cmux's own
-// wins the day it sends any. __STATE__ is set before the renderer import, as
+// A workspace's PR from the saved state (#7): the one scripts/pr-poll.ts
+// saved shows when cmux sends none, and fills in what cmux's own leaves out
+// when both are the same PR. __STATE__ is set before the renderer import, as
 // in state-seed.test.ts.
 
 import assert from "node:assert/strict";
@@ -42,6 +42,20 @@ const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open",
     conflictsMerged: { ...saved, number: 19, status: "merged", conflicts: true, checks: [] },
     titled: { ...saved, number: 20, title: "✳ Show the PR title", checks: [] },
     sized: { ...saved, number: 22, additions: 1234, deletions: 8, checks: [] },
+    // The poller's copy of a PR cmux also sends, by url: cmux's record has
+    // no draft, title, diff or checks, so those come from here.
+    held: {
+      number: 347,
+      url: "https://github.com/o/r/pull/347",
+      status: "open",
+      branch: "feat",
+      draft: true,
+      mergeable: true,
+      title: "Colour the menus",
+      additions: 280,
+      deletions: 45,
+      checks: [{ name: "build", state: "fail" }],
+    },
     // Not in the poller's worst-first order, so a sort would show.
     unsorted: {
       ...saved,
@@ -94,7 +108,9 @@ describe("prsOf", () => {
   it("prefers cmux's own PRs, list first", () => {
     const own = { number: 9, url: "https://github.com/o/r/pull/9" };
     assert.deepEqual(prsOf(ws("w1", { branch: "feat", pr: own })), [own]);
-    assert.deepEqual(prsOf(ws("w1", { branch: "feat", prs: [own, saved] })), [own, saved]);
+    // The saved PR sent as cmux's own is filled from itself: a PR, so no checks.
+    const { checks: _checks, ...savedPr } = saved;
+    assert.deepEqual(prsOf(ws("w1", { branch: "feat", prs: [own, saved] })), [own, savedPr]);
   });
 
   it("has nothing for an unknown workspace", () => {
@@ -179,6 +195,72 @@ describe("the Pull requests list's chips", () => {
     assert.deepEqual(chipOf(""), [42, "draft", "quiet"]);
     const own = agents.prs().find((e) => e.pr.number === 7);
     assert.deepEqual(own && [agents.prChipText(own), agents.prChipHealth(own)], ["open", "quiet"]);
+  });
+});
+
+describe("a PR cmux sends that the poller also saved", () => {
+  const heldUrl = "https://github.com/o/r/pull/347";
+  // What cmux's own record carries: no draft, title, diff or checks.
+  const cmuxPr = { url: heldUrl, number: 347, status: "open" as const, branch: "feat" };
+  const rowOf = (w: Workspace) => {
+    r.data.workspaces = [w];
+    r.data.epoch++;
+    return agents.prs().find((e) => e.key === heldUrl);
+  };
+
+  it("says draft on its Pull requests row, under the saved title, with the saved checks", () => {
+    for (const w of [ws("held", { branch: "feat", pr: cmuxPr }), ws("held", { branch: "feat", prs: [cmuxPr] })]) {
+      const row = rowOf(w);
+      assert.equal(row && agents.prChipText(row), "draft · 1 failing");
+      assert.equal(row && agents.prChipHealth(row), "failing");
+      assert.equal(row?.title, "Colour the menus");
+      assert.equal(row?.summary?.diff, "+280 \u221245");
+      assert.deepEqual(checksOf(w), [{ name: "build", state: "fail" }]);
+    }
+  });
+
+  it("keeps cmux's status over the saved one", () => {
+    const pr = prOf(ws("held", { branch: "feat", pr: { ...cmuxPr, status: "merged" } }));
+    assert.equal(pr?.status, "merged");
+    assert.equal(pr?.draft, true);
+  });
+
+  it("matches by number when cmux sends no url", () => {
+    const pr = prOf(ws("held", { branch: "feat", pr: { number: 347, status: "open" } }));
+    assert.equal(pr?.title, "Colour the menus");
+    assert.equal(pr?.url, heldUrl);
+  });
+
+  it("fills only the listed PR that is the saved one, and greys only that row", () => {
+    const other = { url: "https://github.com/o/r/pull/348", number: 348, status: "open" as const };
+    for (const prs of [
+      [other, cmuxPr],
+      [cmuxPr, other],
+    ]) {
+      r.data.workspaces = [ws("held", { branch: "feat", prs })];
+      r.data.epoch++;
+      const rows = agents.prs();
+      const held = rows.find((e) => e.key === heldUrl);
+      const plain = rows.find((e) => e.key === other.url);
+      assert.equal(held && agents.prChipText(held), "draft · 1 failing");
+      assert.equal(held?.saved, true);
+      assert.equal(plain && agents.prChipText(plain), "open");
+      assert.equal(plain?.saved, false);
+    }
+  });
+
+  it("takes the saved url when cmux sends a blank one, and passes a hole in its list through", () => {
+    assert.equal(prOf(ws("held", { branch: "feat", pr: { ...cmuxPr, url: "" } }))?.url, heldUrl);
+    // A hole as an unschematised feed might send one: the cast stands in for that data.
+    const holes = [null as unknown as PullRequest, cmuxPr];
+    assert.equal(prsOf(ws("held", { branch: "feat", prs: holes }))[1]?.draft, true);
+  });
+
+  it("leaves a different PR from cmux as it came, with no saved checks", () => {
+    const other = { url: "https://github.com/o/r/pull/348", number: 348, status: "open" as const };
+    const w = ws("held", { branch: "feat", pr: other });
+    assert.deepEqual(prOf(w), other);
+    assert.deepEqual(checksOf(w), []);
   });
 });
 

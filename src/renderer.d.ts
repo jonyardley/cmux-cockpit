@@ -185,11 +185,13 @@ interface Agent {
   children?: SubagentRun[];
 }
 
+// cmux's own record has no draft, merge verdict, title or diff; when it is
+// the poller's saved PR, src/shared/prs.ts fills those in from the saved copy.
 interface PullRequest {
   url?: string;
   number?: number;
   status?: PrStatus;
-  /** Only the saved PR carries it (scripts/pr-poll.ts); cmux sends none. */
+  /** Only the saved PR carries it (scripts/pr-poll.ts); cmux's record has none. */
   draft?: boolean;
   /** GitHub's own merge verdict ("CLEAN"); only the saved PR carries it. */
   mergeable?: boolean;
