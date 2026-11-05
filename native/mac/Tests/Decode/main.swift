@@ -134,6 +134,11 @@ for name in names {
         check(false, "\(name) decodes: \(error)")
     }
 }
+// No fixture's project lacks a colour, so the add menu's grey dot path
+// (a null colour) is decoded here.
+let colourless = Data(#"{"key": "/dev/notes", "name": "Notes", "color": null, "can_open": false}"#.utf8)
+let plain = try? JSONDecoder().decode(AddProject.self, from: colourless)
+check(plain?.color == nil && plain?.name == "Notes", "an add project with no colour decodes, colour nil")
 // So the menu and editor shapes stay covered if a fixture goes.
 check(sawMenu, "some fixture has a menu open")
 check(sawEditor, "some fixture has an editor open")

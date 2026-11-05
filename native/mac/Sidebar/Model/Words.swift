@@ -52,7 +52,8 @@ enum Words {
     static let notSent = "Not sent: the cockpit could not take it. Try again."
     /// The All view's add button: its help, its menu's heading, a project
     /// with no folder, and the session with no project
-    /// (docs/design.md#add-button).
+    /// (docs/design.md#add-button). The heading is the core's
+    /// NEW_SESSION_IN, which the views test checks.
     static let newSession = "New session"
     static let newSessionIn = "New session in"
     static let noFolder = "(no folder)"

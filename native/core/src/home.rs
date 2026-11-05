@@ -8,6 +8,12 @@ pub fn trim_slash(path: &str) -> &str {
     path.trim_end_matches('/')
 }
 
+/// The home folder without its trailing slash, or None while it is
+/// unknown or empty: the one rule every helper here reads home by.
+pub fn known_home(home: Option<&str>) -> Option<&str> {
+    home.map(trim_slash).filter(|h| !h.is_empty())
+}
+
 fn under_home(path: &str) -> bool {
     path == "~" || path.starts_with("~/")
 }
@@ -19,14 +25,14 @@ pub fn expand_home(path: &str, home: Option<&str>) -> Option<String> {
     if !under_home(p) {
         return Some(p.to_string());
     }
-    let home = home.map(trim_slash).filter(|h| !h.is_empty())?;
+    let home = known_home(home)?;
     Some(format!("{home}{}", &p[1..]))
 }
 
 /// Whether `dir` is the home folder itself, which would swallow every
 /// session as one project. Any case, as macOS folders are.
 pub fn is_home(dir: Option<&str>, home: Option<&str>) -> bool {
-    let Some(home) = home.map(trim_slash).filter(|h| !h.is_empty()) else {
+    let Some(home) = known_home(home) else {
         return false;
     };
     trim_slash(dir.unwrap_or_default()).to_lowercase() == home.to_lowercase()
@@ -34,7 +40,7 @@ pub fn is_home(dir: Option<&str>, home: Option<&str>) -> bool {
 
 /// An absolute path under home as "~/...", for showing; any other path as it is.
 pub fn tilde_home(path: &str, home: Option<&str>) -> String {
-    let Some(home) = home.map(trim_slash).filter(|h| !h.is_empty()) else {
+    let Some(home) = known_home(home) else {
         return path.to_string();
     };
     if path == home {

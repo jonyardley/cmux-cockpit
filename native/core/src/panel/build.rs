@@ -246,23 +246,19 @@ pub(super) fn build(session: &mut Session, data: &Data, view: &ViewModel) -> Pan
 /// Quiet is folded, less one removed here; and whether the home folder
 /// is known.
 fn add_menu(session: &mut Session, data: &Data) -> AddMenu {
-    let quiet = session.quiet_projects(data);
-    let busy: Vec<String> = session
-        .projects
-        .iter()
-        .map(|p| p.id().to_string())
-        .filter(|k| !quiet.contains(k) && !session.is_removed_project(k))
-        .collect();
-    let projects = busy
-        .iter()
-        .chain(&quiet)
+    let projects = session
+        .projects_in_view_order(data)
+        .into_iter()
         .map(|k| {
-            let p = session.project_by_key(k);
+            let p = session.project_by_key(&k);
+            // What a pick opens, so a folder just set in the editor counts
+            // before the rebuild carries it.
+            let can_open = session.root_to_open(&k).is_some();
             AddProject {
-                key: k.clone(),
-                name: p.name.clone(),
+                key: k,
+                name: p.name,
                 color: parse_hex(&p.color),
-                can_open: session.can_open_project(k),
+                can_open,
             }
         })
         .collect();
@@ -1570,6 +1566,37 @@ mod tests {
             Panel::from_core(&mut core).add,
             None,
             "Projects has its own pluses"
+        );
+    }
+
+    #[test]
+    fn the_add_menu_offers_a_folder_just_set_in_the_editor() {
+        use crate::persist::ProjectSpec;
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let table: Vec<Project> = serde_json::from_str(
+            r##"[{"match": "/dev/notes", "name": "Notes", "color": "blue", "icon": "x"}]"##,
+        )
+        .unwrap();
+        let mut core = Model::default();
+        let _effects = Cockpit.update(Event::Projects(table), &mut core);
+        let _effects = Cockpit.update(Event::Data(Data::default()), &mut core);
+        let can_open = |core: &mut Model| {
+            let add = Panel::from_core(core).add.unwrap();
+            add.projects.iter().map(|p| p.can_open).collect::<Vec<_>>()
+        };
+        assert_eq!(can_open(&mut core), [false], "no folder yet");
+        let spec = ProjectSpec {
+            name: "Notes".into(),
+            color: "blue".into(),
+            icon: "x".into(),
+            root: Some("/r/notes".into()),
+        };
+        core.session.save_project("/dev/notes", spec);
+        assert_eq!(
+            can_open(&mut core),
+            [true],
+            "a pick opens the folder just sent, so the menu offers it before the rebuild"
         );
     }
 }

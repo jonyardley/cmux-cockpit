@@ -176,7 +176,7 @@ text and covers 10 to 13.5 (D2 a). Glyph sizes stay in their look enums
 text size gets a `Metrics.Font` name or reuses one.
 
 Section headings are tracked by `Metrics.sectionTracking` (1pt,
-`Theme.swift:115`) and set in capitals by `.textCase(.uppercase)`, never by
+`Theme.swift:151`) and set in capitals by `.textCase(.uppercase)`, never by
 capitalising the string.
 
 ## Spacing and radii

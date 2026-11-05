@@ -60,6 +60,9 @@ pub const NEW_ROW: &str = "new";
 pub const QUIET_LABEL: &str = "Quiet";
 /// On a project that has a folder to open a session in.
 pub const PLUS_MARK: &str = "+";
+/// Before a project's name on a new session's item, and the sidebar's add
+/// menu heading (Words.newSessionIn).
+pub const NEW_SESSION_IN: &str = "New session in";
 /// On the header of the lane a drag would drop into: above a card in it,
 /// or at its end.
 pub const DROP_HERE: &str = "drop here";

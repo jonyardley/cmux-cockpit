@@ -385,7 +385,8 @@ func source(_ path: String) -> String {
     (try? String(contentsOf: native.appendingPathComponent(path), encoding: .utf8)) ?? ""
 }
 let panelRs = source("core/src/panel/mod.rs")
-for (name, word) in [("NEW_PROJECT_LABEL", Words.newProject), ("QUIET_LABEL", Words.quiet), ("PLUS_MARK", Words.plus)] {
+for (name, word) in [("NEW_PROJECT_LABEL", Words.newProject), ("QUIET_LABEL", Words.quiet), ("PLUS_MARK", Words.plus),
+                     ("NEW_SESSION_IN", Words.newSessionIn)] {
     check(panelRs.contains("pub const \(name): &str = \"\(word)\";"), "\(name) is \"\(word)\"")
 }
 // The editor's words, pinned here.
