@@ -495,7 +495,7 @@ pub struct Lane {
     pub rows: Vec<Row>,
 }
 
-/// A project in the add button's menu: its name and colour as the
+/// A project in the add button's menu: its name, colour and icon as the
 /// Projects view draws them, and whether it has a folder to open a
 /// session in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
@@ -503,8 +503,10 @@ pub struct AddProject {
     /// Its key in the core, which a pick sends back (`Event::AddSession`).
     pub key: String,
     pub name: String,
-    /// The table's colour; None draws the grey of a dot with no colour.
+    /// The table's colour; None draws the grey of a badge with no colour.
     pub color: Option<u32>,
+    /// The badge's SF Symbol, as the Projects view draws it.
+    pub icon: String,
     /// False for a project with no folder: the shell shows it, disabled,
     /// and says why.
     pub can_open: bool,
@@ -528,15 +530,17 @@ pub struct AddMenu {
     pub home_chosen: bool,
 }
 
-/// A project in the filter's menu: its name and colour as the add menu
-/// has them, and whether All is filtered to it.
+/// A project in the filter's menu: its name, colour and icon as the add
+/// menu has them, and whether All is filtered to it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct FilterProject {
     /// Its key in the core, which a pick sends back (`Event::FilterProject`).
     pub key: String,
     pub name: String,
-    /// The table's colour; None draws the grey of a dot with no colour.
+    /// The table's colour; None draws the grey of a badge with no colour.
     pub color: Option<u32>,
+    /// The badge's SF Symbol, as the Projects view draws it.
+    pub icon: String,
     pub chosen: bool,
 }
 

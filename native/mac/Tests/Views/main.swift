@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 // Checks the sidebar's pure logic (Sidebar/Model/), compiled with the
@@ -671,8 +672,8 @@ for (name, word) in [("DIRTY_MARK", ChipFit.dirtyMark), ("DOT", CardText.filledD
 // MARK: The add button
 
 // A project with a folder reads its name; one with none says why.
-let withFolder = AddProject(key: "/dev/app", name: "App", color: 0xD97757, canOpen: true, chosen: false)
-let noFolder = AddProject(key: "/dev/notes", name: "Notes", color: nil, canOpen: false, chosen: false)
+let withFolder = AddProject(key: "/dev/app", name: "App", color: 0xD97757, icon: "star.fill", canOpen: true, chosen: false)
+let noFolder = AddProject(key: "/dev/notes", name: "Notes", color: nil, icon: "leaf.fill", canOpen: false, chosen: false)
 check(AddText.label(withFolder) == "App", "a project with a folder reads its name")
 check(AddText.label(noFolder) == "Notes (no folder)", "a project with no folder says why")
 // Only All carries the menu, and every fixture in All has one.
@@ -706,6 +707,52 @@ if var panel = load("lanes"), let menu = FilterText.menu(panel) {
     check(FilterText.chip(none)?.color == nil, "No project's chip dot is the grey of no colour")
     panel.view = .projects
     check(FilterText.menu(panel) == nil, "no filter once Projects is on, whatever the panel carries")
+}
+
+// MARK: The menus' project badges
+
+/// A pixel of a painted badge in sRGB, as six hex digits, and its alpha.
+func pixel(_ rep: NSBitmapImageRep, _ x: Int, _ y: Int) -> (hex: UInt32, alpha: Double)? {
+    guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return nil }
+    let byte = { (v: CGFloat) in UInt32((v * 255).rounded()) }
+    return (byte(c.redComponent) << 16 | byte(c.greenComponent) << 8 | byte(c.blueComponent), Double(c.alphaComponent))
+}
+
+/// Whether two colours are the same to within a step a channel.
+func near(_ a: UInt32, _ b: UInt32) -> Bool {
+    [16, 8, 0].allSatisfy { abs(Int((a >> $0) & 0xFF) - Int((b >> $0) & 0xFF)) <= 2 }
+}
+
+let badge = MenuBadge.image(icon: "star.fill", color: 0xD97757)
+check(!badge.isTemplate, "a menu badge is not a template, so the menu keeps its colour")
+check(badge.size == NSSize(width: 16, height: 16), "a menu badge is the quiet row's 16pt")
+let reps = badge.representations.compactMap { $0 as? NSBitmapImageRep }
+check(reps.map(\.pixelsWide).sorted() == [16, 32], "a menu badge is painted at 1x and 2x: \(reps.map(\.pixelsWide))")
+check(reps.allSatisfy { $0.size == badge.size }, "each scale fills the badge's 16pt")
+if let rep = MenuBadge.bitmap(icon: "star.fill", color: 0xD97757, scale: 2) {
+    let edge = pixel(rep, 16, 2)
+    check(edge.map { near($0.hex, 0xD97757) && $0.alpha == 1 } == true, "the face is the project's own colour: \(String(describing: edge))")
+    check(pixel(rep, 0, 0)?.alpha == 0, "the corner is rounded, so clear")
+    let middle = pixel(rep, 16, 16)
+    check(middle.map { !near($0.hex, 0xD97757) } == true, "the glyph sits in the middle: \(String(describing: middle))")
+    check(middle.map { near($0.hex, BadgeInk.glyph(on: 0xD97757)) } == true, "in the ink that reads on the face")
+}
+if let rep = MenuBadge.bitmap(icon: "leaf.fill", color: nil, scale: 2) {
+    check(MenuBadge.face(nil) == BadgeInk.fallback, "a project with no colour takes the badge grey")
+    check(pixel(rep, 16, 2).map { near($0.hex, BadgeInk.fallback) } == true, "and paints it")
+}
+if let rep = MenuBadge.bitmap(icon: "no.such.symbol.here", color: 0x6A9BCC, scale: 2) {
+    check(pixel(rep, 16, 16).map { near($0.hex, 0x6A9BCC) } == true, "a name that is no symbol leaves the bare face")
+}
+
+// The menus are drawn by cmux, across the extension's remote view: the
+// badge survives being sent, colour, size and all.
+if let data = try? NSKeyedArchiver.archivedData(withRootObject: badge, requiringSecureCoding: true),
+    let back = try? NSKeyedUnarchiver.unarchivedObject(ofClass: NSImage.self, from: data)
+{
+    check(!back.isTemplate && back.size == badge.size, "a menu badge arrives across processes still not a template")
+} else {
+    check(false, "a menu badge archives and unarchives")
 }
 
 // MARK: Colours from a hand-written config

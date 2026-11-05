@@ -110,7 +110,7 @@ for name in names {
 check(filterSeen > 0, "the fixtures hold a filter menu to check (\(filterSeen))")
 check(FilterText.clear == .filterProject(key: nil), "Everything and the chip's x clear the filter")
 check(FilterText.clear.isAction, "a filter pick is an action")
-let tickedApp = FilterProject(key: "/dev/app", name: "App", color: nil, chosen: true)
+let tickedApp = FilterProject(key: "/dev/app", name: "App", color: nil, icon: "star.fill", chosen: true)
 check(FilterText.pick(tickedApp) == FilterText.clear, "picking the ticked project clears the filter")
 let tickedNone = FilterMenu(projects: [], noProject: "other", noProjectChosen: true)
 check(FilterText.pickNoProject(tickedNone) == FilterText.clear, "picking the ticked No project clears the filter")

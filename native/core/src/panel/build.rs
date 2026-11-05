@@ -266,6 +266,7 @@ fn add_menu(session: &Session, order: &[String]) -> AddMenu {
                 key: p.key,
                 name: p.name,
                 color: p.color,
+                icon: p.icon,
                 can_open,
                 chosen: p.chosen,
             }
@@ -280,14 +281,17 @@ fn add_menu(session: &Session, order: &[String]) -> AddMenu {
     }
 }
 
-/// A project as both menus list it: its name, its colour, and whether
-/// the filter has chosen it (`chosen` is `Session::filter`).
+/// A project as both menus list it: its name, its badge (colour and
+/// icon, as `badge_of` gives the Projects view), and whether the filter
+/// has chosen it (`chosen` is `Session::filter`).
 fn menu_project(session: &Session, k: &str, chosen: Option<&str>) -> FilterProject {
     let p = session.project_by_key(k);
+    let badge = badge_of(&p);
     FilterProject {
         key: k.to_string(),
         name: p.name,
-        color: parse_hex(&p.color),
+        color: badge.color,
+        icon: badge.icon,
         chosen: chosen == Some(k),
     }
 }
@@ -1588,6 +1592,7 @@ mod tests {
                         key: "/dev/notes".into(),
                         name: "Notes".into(),
                         color: None,
+                        icon: "x".into(),
                         can_open: false,
                         chosen: false,
                     },
@@ -1595,6 +1600,7 @@ mod tests {
                         key: "/dev/app".into(),
                         name: "App".into(),
                         color: Some(0xD9_77_57),
+                        icon: "x".into(),
                         can_open: true,
                         chosen: false,
                     },

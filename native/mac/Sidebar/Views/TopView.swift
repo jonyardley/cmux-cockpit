@@ -85,7 +85,7 @@ private struct NeedsCount: View {
 
 /// The add button: a round "+" after the view switch in All, ringed like
 /// the track (docs/design.md#add-button). Its menu, headed "New session
-/// in", lists every project with its colour dot, one with no folder
+/// in", lists every project with its badge (MenuBadge), one with no folder
 /// disabled and saying so, then "No project (home folder)", disabled while
 /// the core knows no home. A pick opens a session there, focused, in the
 /// first lane; AddText decides what each item says and sends. While All is
@@ -107,7 +107,7 @@ struct AddButton: View {
                         Label {
                             Text(AddText.label(project))
                         } icon: {
-                            Image(nsImage: MenuDot.image(project.color))
+                            MenuBadgeIcon(icon: project.icon, color: project.color)
                         }
                     }
                     .disabled(!project.canOpen)
@@ -127,7 +127,7 @@ struct AddButton: View {
 /// The filter button: a round funnel just before the add button, in All
 /// only, ringed like it; while All is filtered its ring is the filter's
 /// accent and its glyph the first ink (docs/design.md#filter-button). Its
-/// menu holds "Everything", every project with its colour dot in the add
+/// menu holds "Everything", every project with its badge in the add
 /// menu's order, then "No project", the choice ticked; FilterText decides
 /// what each sends.
 struct FilterButton: View {
@@ -150,7 +150,7 @@ struct FilterButton: View {
                     Label {
                         Text(project.name)
                     } icon: {
-                        Image(nsImage: MenuDot.image(project.color))
+                        MenuBadgeIcon(icon: project.icon, color: project.color)
                     }
                 }
             }
@@ -252,20 +252,16 @@ struct MenuTick<Content: View>: View {
     }
 }
 
-/// A project's colour dot for a menu item. A menu draws its items' icons
-/// as AppKit images and tints a template one, so the dot is drawn as an
-/// image that is not a template, which keeps its colour.
-enum MenuDot {
-    static func image(_ hex: UInt32?) -> NSImage {
-        let color = Color(project: hex)
-        let side = Metrics.menuDot
-        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
-            NSColor(color).setFill()
-            NSBezierPath(ovalIn: rect).fill()
-            return true
-        }
-        image.isTemplate = false
-        return image
+/// A project's badge as a menu item's icon: MenuBadge's painted image,
+/// drawn as it is, never as a template, so the menu keeps its colour
+/// (docs/design.md#add-button).
+struct MenuBadgeIcon: View {
+    let icon: String
+    let color: UInt32?
+
+    var body: some View {
+        Image(nsImage: MenuBadge.image(icon: icon, color: color))
+            .renderingMode(.original)
     }
 }
 
