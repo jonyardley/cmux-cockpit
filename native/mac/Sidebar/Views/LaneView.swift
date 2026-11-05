@@ -14,13 +14,23 @@ extension View {
 }
 
 /// A lane's or project's count in its pill: 11pt medium, in the core's
-/// colours (docs/design.md#count-pill).
+/// colours (docs/design.md#count-pill). A filtered lane's reads "1 of 4"
+/// (FilterText.count).
 struct CountPill: View {
-    let count: UInt64
+    let text: String
     let colors: PillColors
 
+    init(count: UInt64, colors: PillColors) {
+        self.init(text: String(count), colors: colors)
+    }
+
+    init(text: String, colors: PillColors) {
+        self.text = text
+        self.colors = colors
+    }
+
     var body: some View {
-        Text(String(count))
+        Text(text)
             .font(.system(size: Metrics.Font.meta, weight: .medium).monospacedDigit())
             .foregroundStyle(Color(colors.fg))
             .lineLimit(1)
@@ -148,7 +158,7 @@ struct LaneHeader: View {
                 .truncationMode(.tail)
                 .layoutPriority(1)
             if let anchor = lane.anchor { AnchorBadge(anchor: anchor) }
-            CountPill(count: lane.count, colors: lane.pill).opacity(fade)
+            CountPill(text: FilterText.count(lane), colors: lane.pill).opacity(fade)
             if let dot = lane.dot {
                 Text(dot.glyph).foregroundStyle(Color(dot: dot.ink))
             }

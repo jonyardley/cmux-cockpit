@@ -115,6 +115,7 @@ dark-mode screenshot; nothing here changes before then.
 | `Own.readyBg` | green / 0x1F | same | the Ready pill's face |
 | `Own.dropTarget` | text / 0x1F | same | a lane header while a card is dragged over it |
 | `Own.zoneLit` | E7E4D9 | 3A3935 | an empty lane's drop zone while a card is over it |
+| `Own.filterEdge` | = `blue` | = `blue` | the [filter button](#filter-button)'s ring and the [filter chip](#filter-chip)'s while All is filtered |
 | `Own.lift` | 000000 / 0x2E | 000000 / 0x66 | the shadow under a dragged card |
 
 ### Counts, chips and badges
@@ -193,7 +194,9 @@ capitalising the string.
 | `Metrics.pillPadH`, `pillPadV` | 7, 1 | inside every count pill, and the Ready pill |
 | `Metrics.switchHeight`, `switchInset` | 26, 3 | a tab's height; the track's inner padding |
 | `Metrics.addButton`, `addGlyph`, `addGap` | 32, 12, 6 | the add button's circle (the track's height), its plus, and its gap from the track |
-| `Metrics.menuDot` | 8 | a project's colour dot in the add button's menu |
+| `Metrics.menuDot` | 8 | a project's colour dot in the add and filter menus, and on the filter chip |
+| `Metrics.filterGlyph` | 11 | the filter button's funnel; the button is `addButton` across |
+| `Metrics.filterChipPadH`, `filterChipPadV`, `filterChipGap`, `filterChipX` | 8, 3, 5, 8 | inside the filter chip; between its dot, words and x; the x's size |
 | `Metrics.hairline`, `selectWidth` | 1, 2 | every edge; a selected card's outline |
 | `Metrics.inlineGap` | 6 | between the parts of a line in a card, a tab or Next |
 | `Metrics.minGap` | 4 | the least room between a line's words and what ends it: a title and its pills, a header row and its hint or + |
@@ -275,10 +278,11 @@ Track: `countBg` face, `chipEdge` hairline, radius `Radius.track` 10, inner
 padding `switchInset` 3. Tab: height 26, radius `Radius.tab` 7, `Own.card`
 face and `cardEdge` edge when chosen. Words: `Font.control` 12 medium. The
 switch sits 14 in from the sidebar edge (`PanelView.swift:67`).
-While All is on, the [add button](#add-button) sits after the track on
-the same row, `addGap` 6 from it, and the track gives up its width; in
-Projects the button goes and the track spans the row, as each project
-there has its own [plus](#plus-button).
+While All is on, the [filter button](#filter-button) and then the
+[add button](#add-button) sit after the track on the same row, each
+`addGap` 6 from the one before, and the track gives up their width; in
+Projects both go and the track spans the row, as Projects is never
+filtered and each project there has its own [plus](#plus-button).
 Where: `Views/TopView.swift:9-60`.
 
 ### Add button
@@ -296,10 +300,44 @@ own colour, grey with none) and its name; a project with no folder shows
 disabled as "<name> (no folder)". Then a divider and "No project (home
 folder)", disabled while the core knows no home. A pick opens a new
 session there, focused, at the top of the first lane, as the card menu's
-New session does. The core says which projects the menu holds
-(`Panel.add`); the words are the sidebar's (`Words`), and `AddText`
-decides what each item says and sends.
-Where: `Views/TopView.swift` (`AddButton`, `MenuDot`).
+New session does. While All is [filtered](#filter-button), the filter's
+choice is ticked: a project listed first, "No project (home folder)" in
+its place. The core says which projects the menu holds, in what order,
+and which is ticked (`Panel.add`); the words are the sidebar's (`Words`),
+and `AddText` decides what each item says and sends.
+Where: `Views/TopView.swift` (`AddButton`, `MenuDot`, `MenuTick`).
+
+### Filter button
+
+A round funnel just before the add button, in All only, the same circle:
+`addButton` 32 across, `countBg` face, `chipEdge` hairline,
+`line.3.horizontal.decrease` at `filterGlyph` 11 semibold in `secondary`,
+the shared hover shade. While All is filtered the hairline is
+`Own.filterEdge` (the working blue) and the glyph `text`. Its help and
+accessibility label say "Filter by project".
+
+A click opens a native menu: "Everything", a divider, every project in
+the add menu's unfiltered order with its colour dot (`menuDot` 8), folder
+or not, a divider, then "No project", the cards the Projects view files
+under Other. The choice is ticked; "Everything" while nothing is. A pick
+filters All's lanes to that project's cards, kept across a reload and
+dropped when the project leaves the table. The Projects view, the
+[waiting count](#needs-count) and [Next](#next) still see every card; a
+count click or Next to a card the filter hides clears it first. The core
+says what the menu holds and what is chosen (`Panel.filter`); the words
+are the sidebar's, and `FilterText` decides what each item sends.
+Where: `Views/TopView.swift` (`FilterButton`).
+
+### Filter chip
+
+One chip above the lanes while All is filtered: the project's colour dot
+(`menuDot` 8, grey for no project), "<project> only" (`Font.meta` 11
+medium, `text`), and an x (`xmark` at `filterChipX` 8 bold, `secondary`)
+that shows every card again; its help says "Show every project". An
+`Own.card` capsule with an `Own.filterEdge` hairline, padding
+`filterChipPadH` 8 by `filterChipPadV` 3, `filterChipGap` 5 between its
+parts. `FilterText.chip` words it. Where: `Views/TopView.swift`
+(`FilterChip`), placed by `AllView`.
 
 ### Needs count
 
@@ -327,7 +365,10 @@ waits, so it only ever leads to a Ready card (D9 a). Face `Own.card`,
 ### Lane header
 
 Fold chevron, the lane's square marker, the name in tracked capitals, an
-anchor badge if the lane has one, the count pill, the folded lane's dot, and
+anchor badge if the lane has one, the count pill (while All is
+[filtered](#filter-button), "1 of 4": the cards shown of those the lane
+holds, `FilterText.count`; a lane with every card hidden draws empty and
+reads "0 of 2"), the folded lane's dot, and
 on the right the merge line ("2 ready to merge") or "Drop here" during a drag,
 both words and ink from the core.
 Lights grey under the pointer, and with `Own.dropTarget` while a card is over
@@ -836,7 +877,9 @@ in; the sidebar sets the count's number in `Own.onFill` on the fill.
    the switch labels, Next, Ready, the editor's labels and
    buttons, Message agent's, the notices, the add button's menu (its
    heading, "(no folder)" and "No project (home folder)"; the core
-   carries only which projects it lists), and one Cancel for both the
+   carries only which projects it lists), the filter's ("Filter by
+   project", "Everything", "No project", "only", "Show every project"
+   and a lane count's "of"), and one Cancel for both the
    editor and Message agent. Where one mirrors a core constant the views
    test checks it against the core. `ProjectText.newProjectLabel` is worked
    out from `Words.newProject`. "Drop here" is the core's, carried on each

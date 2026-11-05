@@ -88,7 +88,9 @@ private struct NeedsCount: View {
 /// in", lists every project with its colour dot, one with no folder
 /// disabled and saying so, then "No project (home folder)", disabled while
 /// the core knows no home. A pick opens a session there, focused, in the
-/// first lane; AddText decides what each item says and sends.
+/// first lane; AddText decides what each item says and sends. While All is
+/// filtered, the filter's choice is ticked, and a project comes first (the
+/// core lists it so).
 struct AddButton: View {
     let menu: AddMenu
 
@@ -96,7 +98,7 @@ struct AddButton: View {
         Menu {
             Section(Words.newSessionIn) {
                 ForEach(menu.projects, id: \.key) { project in
-                    Button {
+                    MenuTick(on: project.chosen) {
                         if let action = AddText.pick(project) { SidebarCore.send(action) }
                     } label: {
                         Label {
@@ -109,8 +111,10 @@ struct AddButton: View {
                 }
             }
             Divider()
-            Button(Words.noProject) {
+            MenuTick(on: menu.homeChosen) {
                 if let action = AddText.pickHome(menu) { SidebarCore.send(action) }
+            } label: {
+                Text(Words.noProject)
             }
             .disabled(!menu.home)
         } label: {
@@ -131,6 +135,111 @@ struct AddButton: View {
         .fixedSize()
         .help(Words.newSession)
         .accessibilityLabel(Words.newSession)
+    }
+}
+
+/// The filter button: a round funnel just before the add button, in All
+/// only, ringed like it; while All is filtered its ring is the filter's
+/// accent and its glyph the first ink (docs/design.md#filter-button). Its
+/// menu holds "Everything", every project with its colour dot in the add
+/// menu's order, then "No project", the choice ticked; FilterText decides
+/// what each sends.
+struct FilterButton: View {
+    let menu: FilterMenu
+
+    var body: some View {
+        let on = FilterText.isOn(menu)
+        Menu {
+            MenuTick(on: !on) { SidebarCore.send(FilterText.clear) } label: { Text(Words.everything) }
+            Divider()
+            ForEach(menu.projects, id: \.key) { project in
+                MenuTick(on: project.chosen) {
+                    SidebarCore.send(FilterText.pick(project))
+                } label: {
+                    Label {
+                        Text(project.name)
+                    } icon: {
+                        Image(nsImage: MenuDot.image(project.color))
+                    }
+                }
+            }
+            Divider()
+            MenuTick(on: menu.noProjectChosen) {
+                SidebarCore.send(FilterText.pickNoProject(menu))
+            } label: {
+                Text(Words.filterNoProject)
+            }
+        } label: {
+            Image(systemName: "line.3.horizontal.decrease")
+                .font(.system(size: Metrics.filterGlyph, weight: .semibold))
+                .foregroundStyle(Color(on ? Token.text : Token.secondary))
+                .frame(width: Metrics.addButton, height: Metrics.addButton)
+                .hoverShade(in: .circle)
+                .background(Color(Token.countBg), in: .circle)
+                .overlay {
+                    Circle().strokeBorder(on ? Color(Palette.Own.filterEdge) : Color(Token.chipEdge), lineWidth: Metrics.hairline)
+                }
+                .contentShape(.circle)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(Words.filterByProject)
+        .accessibilityLabel(Words.filterByProject)
+    }
+}
+
+/// The chip above the lanes while All is filtered: the project's colour
+/// dot, "<project> only", and an x that shows every card again, on a card
+/// face ringed in the filter's accent (docs/design.md#filter-chip).
+struct FilterChip: View {
+    let label: String
+    let color: UInt32?
+
+    var body: some View {
+        HStack(spacing: Metrics.filterChipGap) {
+            Circle().fill(Color(project: color)).frame(width: Metrics.menuDot, height: Metrics.menuDot)
+            Text(label)
+                .font(.system(size: Metrics.Font.meta, weight: .medium))
+                .foregroundStyle(Color(Token.text))
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Button {
+                SidebarCore.send(FilterText.clear)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: Metrics.filterChipX, weight: .bold))
+                    .foregroundStyle(Color(Token.secondary))
+                    .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .help(Words.showEverything)
+            .accessibilityLabel(Words.showEverything)
+        }
+        .padding(.horizontal, Metrics.filterChipPadH)
+        .padding(.vertical, Metrics.filterChipPadV)
+        .background(Color(Palette.Own.card), in: .capsule)
+        .overlay { Capsule().strokeBorder(Color(Palette.Own.filterEdge), lineWidth: Metrics.hairline) }
+    }
+}
+
+/// A menu item with a tick while `on`: a toggle, which a menu draws as an
+/// item with a check, whose flip only sends the item's action, ticked or
+/// not. The core says what is ticked; the item never ticks itself.
+struct MenuTick<Content: View>: View {
+    let on: Bool
+    let action: () -> Void
+    @ViewBuilder let label: () -> Content
+
+    init(on: Bool, action: @escaping () -> Void, @ViewBuilder label: @escaping () -> Content) {
+        self.on = on
+        self.action = action
+        self.label = label
+    }
+
+    var body: some View {
+        Toggle(isOn: Binding(get: { on }, set: { _ in action() })) { label() }
     }
 }
 

@@ -64,6 +64,9 @@ func note(_ panel: Panel) {
         if p.color != nil { seen.insert("add project colour") }
     }
     if panel.add?.home == true { seen.insert("add home") }
+    if panel.add?.projects.contains(where: { $0.chosen }) == true { seen.insert("add project chosen") }
+    for p in panel.filter?.projects ?? [] where p.chosen { seen.insert("filter project chosen") }
+    for lane in panel.lanes where lane.total != nil { seen.insert("lane total") }
     for row in panel.projects {
         switch row {
         case .header(let head) where !head.icon.isEmpty: seen.insert("project icon")
@@ -83,6 +86,9 @@ struct Raw {
     let editor: Bool
     let addProjects: Int?
     let addHome: Bool?
+    let filterProjects: Int?
+    let noProject: String?
+    let totals: [UInt64?]
 
     init(_ json: [String: Any]) {
         view = json["view"] as? String
@@ -96,6 +102,10 @@ struct Raw {
         let add = json["add"] as? [String: Any]
         addProjects = (add?["projects"] as? [Any])?.count
         addHome = add?["home"] as? Bool
+        let filter = json["filter"] as? [String: Any]
+        filterProjects = (filter?["projects"] as? [Any])?.count
+        noProject = filter?["no_project"] as? String
+        totals = lanes.map { ($0["total"] as? NSNumber)?.uint64Value }
     }
 }
 
@@ -127,6 +137,10 @@ for name in names {
         check(panel.add?.projects.count == raw.addProjects, "\(name): add menu projects")
         check(panel.add?.home == raw.addHome, "\(name): add menu home")
         check((panel.add == nil) == (panel.view == .projects), "\(name): the add menu only in All")
+        check(panel.filter?.projects.count == raw.filterProjects, "\(name): filter menu projects")
+        check(panel.filter?.noProject == raw.noProject, "\(name): the No project key")
+        check((panel.filter == nil) == (panel.view == .projects), "\(name): the filter only in All")
+        check(panel.lanes.map(\.total) == raw.totals, "\(name): lane totals")
         note(panel)
         sawMenu = sawMenu || raw.menuItems != nil
         sawEditor = sawEditor || raw.editor
@@ -136,7 +150,7 @@ for name in names {
 }
 // No fixture's project lacks a colour, so the add menu's grey dot path
 // (a null colour) is decoded here.
-let colourless = Data(#"{"key": "/dev/notes", "name": "Notes", "color": null, "can_open": false}"#.utf8)
+let colourless = Data(#"{"key": "/dev/notes", "name": "Notes", "color": null, "can_open": false, "chosen": false}"#.utf8)
 let plain = try? JSONDecoder().decode(AddProject.self, from: colourless)
 check(plain?.color == nil && plain?.name == "Notes", "an add project with no colour decodes, colour nil")
 // So the menu and editor shapes stay covered if a fixture goes.
@@ -145,7 +159,7 @@ check(sawEditor, "some fixture has an editor open")
 for look in ["density full", "density compact", "density row", "ready", "pinned", "progress", "helpers", "unread",
              "age", "status has age", "badge", "chip pr", "chip diff", "chip branch", "chip action", "chip url",
              "project icon", "quiet icon", "add project with a folder", "add project with no folder",
-             "add project colour", "add home"] {
+             "add project colour", "add home", "add project chosen", "filter project chosen", "lane total"] {
     check(seen.contains(look), "some fixture carries \(look)")
 }
 check(!seen.contains("action flag disagrees"), "a chip is an action exactly when its kind is")

@@ -105,6 +105,15 @@ enum Metrics {
     static let addGlyph: CGFloat = 12
     static let addGap: CGFloat = 6
     static let menuDot: CGFloat = 8
+    /// The filter button's glyph, a size under the plus's as it is wider
+    /// (docs/design.md#filter-button); the button is `addButton` across.
+    static let filterGlyph: CGFloat = 11
+    /// The filter chip above the lanes: its padding, between its dot,
+    /// words and x, and the x's size (docs/design.md#filter-chip).
+    static let filterChipPadH: CGFloat = 8
+    static let filterChipPadV: CGFloat = 3
+    static let filterChipGap: CGFloat = 5
+    static let filterChipX: CGFloat = 8
     /// Lines round a face: a tab's edge, the track's, Next's.
     static let hairline: CGFloat = 1
     /// A selected card's outline.

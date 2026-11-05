@@ -58,4 +58,14 @@ enum Words {
     static let newSessionIn = "New session in"
     static let noFolder = "(no folder)"
     static let noProject = "No project (home folder)"
+    /// The All view's project filter: its help, its menu's first item and
+    /// last, the chip's "<project> only", its x's help, and a filtered lane
+    /// header's "1 of 4" (docs/design.md#filter-button,
+    /// docs/design.md#filter-chip).
+    static let filterByProject = "Filter by project"
+    static let everything = "Everything"
+    static let filterNoProject = "No project"
+    static let only = "only"
+    static let showEverything = "Show every project"
+    static let of = "of"
 }
