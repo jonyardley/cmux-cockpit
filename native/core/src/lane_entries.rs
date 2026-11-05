@@ -262,8 +262,9 @@ impl Session {
     /// folded or not, less any the project filter hides.
     pub fn lane_workspaces<'d>(&mut self, data: &'d Data, key: &LaneKey) -> Vec<&'d Workspace> {
         let mut out = Vec::new();
+        let filter = self.filter().map(str::to_string);
         for w in self.card_workspaces(data) {
-            if &self.lane_of(data, w) == key && self.filter_shows(w) {
+            if &self.lane_of(data, w) == key && self.shows_under(filter.as_deref(), w) {
                 out.push(w);
             }
         }

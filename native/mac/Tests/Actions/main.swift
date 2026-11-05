@@ -91,7 +91,8 @@ check(AddText.pickHome(homeless) == nil, "No project sends nothing with no home 
 check(AddText.pickHome(AddMenu(projects: [], home: true, homeChosen: false)) == .addSession(project: nil), "No project opens the home folder")
 
 // The filter: a project's pick filters to it, No project to the key the
-// core gave, Everything clears; every pick is one of Jon's actions.
+// core gave, Everything clears; picking the ticked one clears too, as
+// unticking it; every pick is one of Jon's actions.
 var filterSeen = 0
 for name in names {
     guard let data = try? Data(contentsOf: dir.appendingPathComponent(name)),
@@ -100,13 +101,19 @@ for name in names {
     else { continue }
     for project in menu.projects {
         filterSeen += 1
-        check(FilterText.pick(project) == .filterProject(key: project.key), "\(name): \(project.name) filters to it")
+        let sent = project.chosen ? FilterText.clear : .filterProject(key: project.key)
+        check(FilterText.pick(project) == sent, "\(name): \(project.name) filters to it, or clears while ticked")
     }
-    check(FilterText.pickNoProject(menu) == .filterProject(key: menu.noProject), "\(name): No project filters by the core's key")
+    let noProject = menu.noProjectChosen ? FilterText.clear : .filterProject(key: menu.noProject)
+    check(FilterText.pickNoProject(menu) == noProject, "\(name): No project filters by the core's key, or clears while ticked")
 }
 check(filterSeen > 0, "the fixtures hold a filter menu to check (\(filterSeen))")
 check(FilterText.clear == .filterProject(key: nil), "Everything and the chip's x clear the filter")
 check(FilterText.clear.isAction, "a filter pick is an action")
+let tickedApp = FilterProject(key: "/dev/app", name: "App", color: nil, chosen: true)
+check(FilterText.pick(tickedApp) == FilterText.clear, "picking the ticked project clears the filter")
+let tickedNone = FilterMenu(projects: [], noProject: "other", noProjectChosen: true)
+check(FilterText.pickNoProject(tickedNone) == FilterText.clear, "picking the ticked No project clears the filter")
 
 check(SidebarAction.message(" \n\t", to: "W1") == nil, "blank words send nothing")
 check(

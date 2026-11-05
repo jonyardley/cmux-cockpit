@@ -26,15 +26,17 @@ enum FilterText {
         return menu.noProjectChosen ? (Words.filterNoProject + " " + Words.only, nil) : nil
     }
 
-    /// What picking a project sends: All filtered to it.
+    /// What picking a project sends: All filtered to it, or, picking the
+    /// ticked one, which unticks it, every card again.
     static func pick(_ project: FilterProject) -> SidebarAction {
-        .filterProject(key: project.key)
+        project.chosen ? clear : .filterProject(key: project.key)
     }
 
     /// What picking "No project" sends: All filtered to the cards with no
-    /// project, by the key the core gave.
+    /// project, by the key the core gave, or every card again while it is
+    /// the ticked one.
     static func pickNoProject(_ menu: FilterMenu) -> SidebarAction {
-        .filterProject(key: menu.noProject)
+        menu.noProjectChosen ? clear : .filterProject(key: menu.noProject)
     }
 
     /// What "Everything" and the chip's x send: every card again.

@@ -302,10 +302,13 @@ folder)", disabled while the core knows no home. A pick opens a new
 session there, focused, at the top of the first lane, as the card menu's
 New session does. While All is [filtered](#filter-button), the filter's
 choice is ticked: a project listed first, "No project (home folder)" in
-its place. The core says which projects the menu holds, in what order,
+its place. A pick the filter would hide (another project, or the home
+folder while a project is chosen) clears the filter, so the new card
+shows. The core says which projects the menu holds, in what order,
 and which is ticked (`Panel.add`); the words are the sidebar's (`Words`),
 and `AddText` decides what each item says and sends.
-Where: `Views/TopView.swift` (`AddButton`, `MenuDot`, `MenuTick`).
+Where: `Views/TopView.swift` (`AddButton`, `RoundMenuButton`, `MenuDot`,
+`MenuTick`).
 
 ### Filter button
 
@@ -321,12 +324,13 @@ the add menu's unfiltered order with its colour dot (`menuDot` 8), folder
 or not, a divider, then "No project", the cards the Projects view files
 under Other. The choice is ticked; "Everything" while nothing is. A pick
 filters All's lanes to that project's cards, kept across a reload and
-dropped when the project leaves the table. The Projects view, the
+dropped when the project leaves the table; picking the ticked one clears
+it. The Projects view, the
 [waiting count](#needs-count) and [Next](#next) still see every card; a
 count click or Next to a card the filter hides clears it first. The core
 says what the menu holds and what is chosen (`Panel.filter`); the words
 are the sidebar's, and `FilterText` decides what each item sends.
-Where: `Views/TopView.swift` (`FilterButton`).
+Where: `Views/TopView.swift` (`FilterButton`, `RoundMenuButton`).
 
 ### Filter chip
 

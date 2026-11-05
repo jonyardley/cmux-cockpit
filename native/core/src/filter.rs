@@ -37,7 +37,13 @@ impl Session {
     /// chosen, the cards the Projects view files under Other: no project,
     /// or one removed here before the rebuild drops it.
     pub fn filter_shows(&self, w: &Workspace) -> bool {
-        let Some(k) = self.filter() else {
+        self.shows_under(self.filter(), w)
+    }
+
+    /// Whether filter `k`, as `filter()` gave it, leaves `w`'s card in its
+    /// lane; a loop over cards works the key out once and passes it here.
+    pub fn shows_under(&self, k: Option<&str>, w: &Workspace) -> bool {
+        let Some(k) = k else {
             return true;
         };
         let key = self.project_key(w);
@@ -50,8 +56,9 @@ impl Session {
 
     /// Keeps in each lane only the cards the filter shows.
     pub fn keep_shown(&self, lanes: &mut [(Lane, Vec<&Workspace>)]) {
+        let k = self.filter();
         for (_, cards) in lanes {
-            cards.retain(|w| self.filter_shows(w));
+            cards.retain(|w| self.shows_under(k, w));
         }
     }
 
@@ -72,14 +79,15 @@ impl Session {
 
     /// Drops a filter whose project has left the table, or was removed
     /// here, so it never comes back with the project. Only the core that
-    /// draws the picker writes it (`shows`), and only once the table is
-    /// read, so a filter read before its table is kept.
-    pub fn tend_filter(&mut self, shows: bool) {
+    /// draws the picker (`filters`, set by `Event::PanelOn`) writes it, and
+    /// only once the table is read, so a filter read before its table is
+    /// kept.
+    pub fn tend_filter(&mut self) {
         let stale = self
             .filter
             .as_deref()
             .is_some_and(|k| !self.is_filter_key(k));
-        if shows && self.projects_read && stale {
+        if self.filters && self.projects_read && stale {
             self.filter = None;
             self.persist_set("ui.filter".to_string(), None);
         }
@@ -192,7 +200,7 @@ mod tests {
             ["a1", "w1", "a2", "h"],
             "no longer applies"
         );
-        s.tend_filter(true);
+        s.tend_filter();
         assert_eq!(
             writes(&mut s),
             [("ui.filter".to_string(), None)],
@@ -211,21 +219,40 @@ mod tests {
         let saved = SavedState::from_json(r#"{"ui": {"filter": "/dev/app"}}"#).unwrap();
         let mut s = Session::new(Vec::new(), saved);
         s.filters = true;
-        s.tend_filter(true);
+        s.tend_filter();
         assert!(writes(&mut s).is_empty(), "no table yet: kept");
         s.set_projects(table());
-        s.tend_filter(true);
+        s.tend_filter();
         assert_eq!(s.filter(), Some("/dev/app"));
         assert!(writes(&mut s).is_empty());
         s.set_projects(table().into_iter().skip(1).collect());
-        s.tend_filter(false);
+        s.filters = false;
+        s.tend_filter();
         assert!(
             writes(&mut s).is_empty(),
             "only the sidebar's core writes it"
         );
-        s.tend_filter(true);
+        s.filters = true;
+        s.tend_filter();
         assert_eq!(writes(&mut s), [("ui.filter".to_string(), None)]);
         assert_eq!(s.filter, None);
+    }
+
+    #[test]
+    fn a_new_session_the_filter_would_hide_clears_it() {
+        let mut s = filtering();
+        let data = frame();
+        s.choose_filter(Some("/dev/app"));
+        s.add_session(&data, Some("/dev/app"));
+        assert_eq!(s.filter(), Some("/dev/app"), "its own project: kept");
+        s.add_session(&data, Some("/dev/web"));
+        assert_eq!(s.filter(), None, "another project: every card again");
+        s.choose_filter(Some("/dev/app"));
+        s.add_session(&data, None);
+        assert_eq!(s.filter(), None, "the home folder: every card again");
+        s.choose_filter(Some(NO_PROJECT));
+        s.add_session(&data, None);
+        assert_eq!(s.filter(), Some(NO_PROJECT), "no project: kept");
     }
 
     #[test]

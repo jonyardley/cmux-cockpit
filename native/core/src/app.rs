@@ -644,7 +644,7 @@ impl App for Cockpit {
             // record, so the pane's never doubles a wake.
             model.session.tend_sleep(data, model.panel_on);
         }
-        model.session.tend_filter(model.panel_on);
+        model.session.tend_filter();
         model.overlay();
         model.rebuild();
         let now = model.data.as_ref().and_then(|d| d.epoch);

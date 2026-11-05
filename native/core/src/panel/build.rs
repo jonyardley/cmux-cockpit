@@ -258,16 +258,16 @@ fn add_menu(session: &Session, order: &[String]) -> AddMenu {
     let mut projects: Vec<AddProject> = order
         .iter()
         .map(|k| {
-            let p = session.project_by_key(k);
+            let p = menu_project(session, k, chosen);
             // What a pick opens, so a folder just set in the editor counts
             // before the rebuild carries it.
             let can_open = session.root_to_open(k).is_some();
             AddProject {
-                key: k.clone(),
+                key: p.key,
                 name: p.name,
-                color: parse_hex(&p.color),
+                color: p.color,
                 can_open,
-                chosen: chosen == Some(k.as_str()),
+                chosen: p.chosen,
             }
         })
         .collect();
@@ -280,21 +280,25 @@ fn add_menu(session: &Session, order: &[String]) -> AddMenu {
     }
 }
 
+/// A project as both menus list it: its name, its colour, and whether
+/// the filter has chosen it (`chosen` is `Session::filter`).
+fn menu_project(session: &Session, k: &str, chosen: Option<&str>) -> FilterProject {
+    let p = session.project_by_key(k);
+    FilterProject {
+        key: k.to_string(),
+        name: p.name,
+        color: parse_hex(&p.color),
+        chosen: chosen == Some(k),
+    }
+}
+
 /// The filter's menu: every project in the add menu's order, then the
 /// cards with no project, with the filter's choice ticked.
 fn filter_menu(session: &Session, order: &[String]) -> FilterMenu {
     let chosen = session.filter();
     let projects = order
         .iter()
-        .map(|k| {
-            let p = session.project_by_key(k);
-            FilterProject {
-                key: k.clone(),
-                name: p.name,
-                color: parse_hex(&p.color),
-                chosen: chosen == Some(k.as_str()),
-            }
-        })
+        .map(|k| menu_project(session, k, chosen))
         .collect();
     FilterMenu {
         projects,

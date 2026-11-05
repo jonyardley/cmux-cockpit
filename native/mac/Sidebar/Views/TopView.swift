@@ -95,7 +95,10 @@ struct AddButton: View {
     let menu: AddMenu
 
     var body: some View {
-        Menu {
+        RoundMenuButton(
+            glyph: "plus", size: Metrics.addGlyph, ink: Color(Token.secondary),
+            edge: Color(Token.chipEdge), help: Words.newSession
+        ) {
             Section(Words.newSessionIn) {
                 ForEach(menu.projects, id: \.key) { project in
                     MenuTick(on: project.chosen) {
@@ -117,24 +120,7 @@ struct AddButton: View {
                 Text(Words.noProject)
             }
             .disabled(!menu.home)
-        } label: {
-            Image(systemName: "plus")
-                .font(.system(size: Metrics.addGlyph, weight: .semibold))
-                .foregroundStyle(Color(Token.secondary))
-                .frame(width: Metrics.addButton, height: Metrics.addButton)
-                .hoverShade(in: .circle)
-                .background(Color(Token.countBg), in: .circle)
-                .overlay {
-                    Circle().strokeBorder(Color(Token.chipEdge), lineWidth: Metrics.hairline)
-                }
-                .contentShape(.circle)
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .help(Words.newSession)
-        .accessibilityLabel(Words.newSession)
     }
 }
 
@@ -149,7 +135,12 @@ struct FilterButton: View {
 
     var body: some View {
         let on = FilterText.isOn(menu)
-        Menu {
+        RoundMenuButton(
+            glyph: "line.3.horizontal.decrease", size: Metrics.filterGlyph,
+            ink: Color(on ? Token.text : Token.secondary),
+            edge: on ? Color(Palette.Own.filterEdge) : Color(Token.chipEdge),
+            help: Words.filterByProject
+        ) {
             MenuTick(on: !on) { SidebarCore.send(FilterText.clear) } label: { Text(Words.everything) }
             Divider()
             ForEach(menu.projects, id: \.key) { project in
@@ -169,15 +160,33 @@ struct FilterButton: View {
             } label: {
                 Text(Words.filterNoProject)
             }
+        }
+    }
+}
+
+/// The add and filter buttons' shared face: a round glyph on the count
+/// fill, ringed in `edge`, shaded on hover, that opens `items` as a menu
+/// with no indicator (docs/design.md#add-button).
+struct RoundMenuButton<Items: View>: View {
+    let glyph: String
+    let size: CGFloat
+    let ink: Color
+    let edge: Color
+    let help: String
+    @ViewBuilder let items: () -> Items
+
+    var body: some View {
+        Menu {
+            items()
         } label: {
-            Image(systemName: "line.3.horizontal.decrease")
-                .font(.system(size: Metrics.filterGlyph, weight: .semibold))
-                .foregroundStyle(Color(on ? Token.text : Token.secondary))
+            Image(systemName: glyph)
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(ink)
                 .frame(width: Metrics.addButton, height: Metrics.addButton)
                 .hoverShade(in: .circle)
                 .background(Color(Token.countBg), in: .circle)
                 .overlay {
-                    Circle().strokeBorder(on ? Color(Palette.Own.filterEdge) : Color(Token.chipEdge), lineWidth: Metrics.hairline)
+                    Circle().strokeBorder(edge, lineWidth: Metrics.hairline)
                 }
                 .contentShape(.circle)
         }
@@ -185,8 +194,8 @@ struct FilterButton: View {
         .buttonStyle(.plain)
         .menuIndicator(.hidden)
         .fixedSize()
-        .help(Words.filterByProject)
-        .accessibilityLabel(Words.filterByProject)
+        .help(help)
+        .accessibilityLabel(help)
     }
 }
 
