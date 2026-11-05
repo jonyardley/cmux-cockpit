@@ -22,9 +22,9 @@ use crate::theme::{Token, parse_hex};
 use crate::ui::QUIET_PILL;
 
 use super::{
-    Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT, EditorView, HOLLOW, Icon, Lane,
-    Needs, NeedsTarget, NextLine, PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow,
-    QUIET_ROW, Row, RowPr, Waiting, WaitingTab, piece,
+    AddMenu, AddProject, Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT,
+    EditorView, HOLLOW, Icon, Lane, Needs, NeedsTarget, NextLine, PROJECT_ROW, Panel, PanelView,
+    ProjectHead, ProjectRow, QUIET_ROW, Row, RowPr, Waiting, WaitingTab, piece,
 };
 
 /// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
@@ -225,9 +225,9 @@ pub fn view_of(view: &ViewModel) -> PanelView {
 
 pub(super) fn build(session: &mut Session, data: &Data, view: &ViewModel) -> Panel {
     let shown = view_of(view);
-    let projects = match shown {
-        PanelView::Projects => projects(session, data, view),
-        PanelView::All => Vec::new(),
+    let (projects, add) = match shown {
+        PanelView::Projects => (projects(session, data, view), None),
+        PanelView::All => (Vec::new(), Some(add_menu(session, data))),
     };
     Panel {
         view: shown,
@@ -236,7 +236,35 @@ pub(super) fn build(session: &mut Session, data: &Data, view: &ViewModel) -> Pan
         lanes: lanes(session, data, view),
         projects,
         menu: session.menu_view(data),
+        add,
         lane_picks: lane_picks(session),
+    }
+}
+
+/// The add button's menu: every project in the Projects view's order,
+/// the busy ones in table order then the quiet ones, whether or not
+/// Quiet is folded, less one removed here; and whether the home folder
+/// is known.
+fn add_menu(session: &mut Session, data: &Data) -> AddMenu {
+    let projects = session
+        .projects_in_view_order(data)
+        .into_iter()
+        .map(|k| {
+            let p = session.project_by_key(&k);
+            // What a pick opens, so a folder just set in the editor counts
+            // before the rebuild carries it.
+            let can_open = session.root_to_open(&k).is_some();
+            AddProject {
+                key: k,
+                name: p.name,
+                color: parse_hex(&p.color),
+                can_open,
+            }
+        })
+        .collect();
+    AddMenu {
+        projects,
+        home: session.home_folder().is_some(),
     }
 }
 
@@ -1484,5 +1512,91 @@ mod tests {
         for d in [Density::Full, Density::Compact] {
             assert_eq!(row_pr(s, Some(&r), d), None, "{d:?}: its chips carry it");
         }
+    }
+
+    #[test]
+    fn offers_every_project_and_the_home_folder_on_the_add_button_in_all_only() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let table: Vec<Project> = serde_json::from_str(
+            r##"[{"match": "/dev/app", "name": "App", "color": "#D97757", "icon": "x", "root": "/r/app"},
+                {"match": "/dev/gone", "name": "Gone", "color": "#000000", "icon": "x", "root": "/r/gone"},
+                {"match": "/dev/notes", "name": "Notes", "color": "blue", "icon": "x"}]"##,
+        )
+        .unwrap();
+        // A session in Notes makes it busy, so it lists before App, which
+        // is quiet, as the Projects view lists them.
+        let data: Data = serde_json::from_value(serde_json::json!({"epoch": 1,
+            "workspaces": [{"id": "n", "directory": "/dev/notes"}]}))
+        .unwrap();
+        let mut core = Model::default();
+        let _effects = Cockpit.update(Event::Projects(table), &mut core);
+        let _effects = Cockpit.update(Event::Data(data), &mut core);
+        let add = Panel::from_core(&mut core).add.unwrap();
+        assert!(!add.home, "no home known yet");
+        core.session.remove_project("/dev/gone");
+        let home = Event::Home {
+            home: Some("/Users/jon".into()),
+        };
+        let _effects = Cockpit.update(home, &mut core);
+        let add = Panel::from_core(&mut core).add.unwrap();
+        assert_eq!(
+            add,
+            AddMenu {
+                projects: vec![
+                    AddProject {
+                        key: "/dev/notes".into(),
+                        name: "Notes".into(),
+                        color: None,
+                        can_open: false,
+                    },
+                    AddProject {
+                        key: "/dev/app".into(),
+                        name: "App".into(),
+                        color: Some(0xD9_77_57),
+                        can_open: true,
+                    },
+                ],
+                home: true,
+            },
+            "busy then quiet, less the removed one; a project with no folder stays, disabled"
+        );
+        let _effects = Cockpit.update(Event::FlipView, &mut core);
+        assert_eq!(
+            Panel::from_core(&mut core).add,
+            None,
+            "Projects has its own pluses"
+        );
+    }
+
+    #[test]
+    fn the_add_menu_offers_a_folder_just_set_in_the_editor() {
+        use crate::persist::ProjectSpec;
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let table: Vec<Project> = serde_json::from_str(
+            r##"[{"match": "/dev/notes", "name": "Notes", "color": "blue", "icon": "x"}]"##,
+        )
+        .unwrap();
+        let mut core = Model::default();
+        let _effects = Cockpit.update(Event::Projects(table), &mut core);
+        let _effects = Cockpit.update(Event::Data(Data::default()), &mut core);
+        let can_open = |core: &mut Model| {
+            let add = Panel::from_core(core).add.unwrap();
+            add.projects.iter().map(|p| p.can_open).collect::<Vec<_>>()
+        };
+        assert_eq!(can_open(&mut core), [false], "no folder yet");
+        let spec = ProjectSpec {
+            name: "Notes".into(),
+            color: "blue".into(),
+            icon: "x".into(),
+            root: Some("/r/notes".into()),
+        };
+        core.session.save_project("/dev/notes", spec);
+        assert_eq!(
+            can_open(&mut core),
+            [true],
+            "a pick opens the folder just sent, so the menu offers it before the rebuild"
+        );
     }
 }

@@ -46,8 +46,9 @@ fn variants(e: &Event) -> Option<Vec<(&'static str, usize, usize)>> {
         Event::ToggleProject { .. } => 11,
         Event::ToggleQuiet => 12,
         Event::Reveal { .. } => 13,
+        Event::AddSession { .. } => 14,
     };
-    let mut out = vec![("Action", top, 14)];
+    let mut out = vec![("Action", top, 15)];
     if let Event::Edit(e) = e {
         let n = match e {
             EditEvent::OpenNew => 0,

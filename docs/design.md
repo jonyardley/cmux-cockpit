@@ -103,7 +103,7 @@ dark-mode screenshot; nothing here changes before then.
 
 | Token | Light | Dark | Where drawn |
 |-|-|-|-|
-| `Own.panelGround` | FAF9F5 | 262624 | under the whole panel (`PanelView.swift:113`), under a floating card |
+| `Own.panelGround` | FAF9F5 | 262624 | under the whole panel (`PanelView.swift:118`), under a floating card |
 | `Own.card` | FFFFFF | 30302D | a card's face, the chosen tab, Next's pill, an action chip |
 | `Own.cardHover` | F7F6F2 | 383835 | a card's face, or Next's pill, under the pointer |
 | `Own.hover` | 7F7F7F / 0x14 | 7F7F7F / 0x24 | a header, tab, chip or quiet row under the pointer |
@@ -176,7 +176,7 @@ text and covers 10 to 13.5 (D2 a). Glyph sizes stay in their look enums
 text size gets a `Metrics.Font` name or reuses one.
 
 Section headings are tracked by `Metrics.sectionTracking` (1pt,
-`Theme.swift:115`) and set in capitals by `.textCase(.uppercase)`, never by
+`Theme.swift:151`) and set in capitals by `.textCase(.uppercase)`, never by
 capitalising the string.
 
 ## Spacing and radii
@@ -185,13 +185,15 @@ capitalising the string.
 
 | Name | Value | Use |
 |-|-|-|
-| `Metrics.gutter` | 10 | the panel's padding all round (`PanelView.swift:52`) and a notice's |
+| `Metrics.gutter` | 10 | the panel's padding all round (`PanelView.swift:56`) and a notice's |
 | `Metrics.cardGap` | 6 | between cards in a lane (`LaneView.swift:200`) |
 | `Metrics.sectionGap` | 14 | from the section above to a header's words |
 | `Metrics.headerPadH`, `headerPadV` | 8, 5 | inside a lane or project header |
 | `Metrics.headerSpacing` | 8 | between the parts of a header row |
 | `Metrics.pillPadH`, `pillPadV` | 7, 1 | inside every count pill, and the Ready pill |
 | `Metrics.switchHeight`, `switchInset` | 26, 3 | a tab's height; the track's inner padding |
+| `Metrics.addButton`, `addGlyph`, `addGap` | 32, 12, 6 | the add button's circle (the track's height), its plus, and its gap from the track |
+| `Metrics.menuDot` | 8 | a project's colour dot in the add button's menu |
 | `Metrics.hairline`, `selectWidth` | 1, 2 | every edge; a selected card's outline |
 | `Metrics.inlineGap` | 6 | between the parts of a line in a card, a tab or Next |
 | `Metrics.minGap` | 4 | the least room between a line's words and what ends it: a title and its pills, a header row and its hint or + |
@@ -272,8 +274,32 @@ While something waits, All carries the [waiting count](#needs-count).
 Track: `countBg` face, `chipEdge` hairline, radius `Radius.track` 10, inner
 padding `switchInset` 3. Tab: height 26, radius `Radius.tab` 7, `Own.card`
 face and `cardEdge` edge when chosen. Words: `Font.control` 12 medium. The
-switch sits 14 in from the sidebar edge (`PanelView.swift:63`).
-Where: `Views/TopView.swift:8-59`.
+switch sits 14 in from the sidebar edge (`PanelView.swift:67`).
+While All is on, the [add button](#add-button) sits after the track on
+the same row, `addGap` 6 from it, and the track gives up its width; in
+Projects the button goes and the track spans the row, as each project
+there has its own [plus](#plus-button).
+Where: `Views/TopView.swift:9-60`.
+
+### Add button
+
+A round plus at the end of the view switch's row, in All only: a circle
+`addButton` 32 across, as tall as the track, with the track's `countBg`
+face and `chipEdge` hairline, `plus` at `addGlyph` 12 semibold in
+`secondary`, and the shared hover shade over the face under the pointer. Its help
+and accessibility label say "New session".
+
+A click opens a native menu headed "New session in": every project in
+the Projects view's order (busy ones first, then the quiet ones, folded
+or not), each with its colour dot (`menuDot` 8, the project's
+own colour, grey with none) and its name; a project with no folder shows
+disabled as "<name> (no folder)". Then a divider and "No project (home
+folder)", disabled while the core knows no home. A pick opens a new
+session there, focused, at the top of the first lane, as the card menu's
+New session does. The core says which projects the menu holds
+(`Panel.add`); the words are the sidebar's (`Words`), and `AddText`
+decides what each item says and sends.
+Where: `Views/TopView.swift` (`AddButton`, `MenuDot`).
 
 ### Needs count
 
@@ -808,7 +834,9 @@ in; the sidebar sets the count's number in `Own.onFill` on the fill.
    The panel model carries them; views draw them as given.
 2. **`Model/Words.swift`** holds every fixed word the sidebar draws itself:
    the switch labels, Next, Ready, the editor's labels and
-   buttons, Message agent's, the notices, and one Cancel for both the
+   buttons, Message agent's, the notices, the add button's menu (its
+   heading, "(no folder)" and "No project (home folder)"; the core
+   carries only which projects it lists), and one Cancel for both the
    editor and Message agent. Where one mirrors a core constant the views
    test checks it against the core. `ProjectText.newProjectLabel` is worked
    out from `Words.newProject`. "Drop here" is the core's, carried on each
