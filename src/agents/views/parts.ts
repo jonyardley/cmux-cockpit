@@ -1,9 +1,9 @@
 // Small pieces shared by the agents panel's sections.
 
-import { prChipColors, shownHealth } from "../../shared/pr-colors.ts";
+import { prChipColors } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
 import { chipFrame, chipText, countPill, haloDot, projectBadge, ring, sectionTitle, when } from "../../shared/ui.ts";
-import { chatTarget, type PrEntry, prChipHealth, prChipText, prDim } from "../pr-list.ts";
+import { chatTarget, type PrEntry, prChipText, prChipTone, prDim } from "../pr-list.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
 
 // White panel with a hairline edge: the runtime has no shadows, so depth is
@@ -77,10 +77,10 @@ export function withChatMenu(row: () => View, chat: () => string | undefined): V
   ];
 }
 
-/** A PR's state chip, "draft": its words on a faint face of its health's hue,
+/** A PR's state chip, "draft": its words on a faint face of its tone's hue,
  * dimmed while stale. No tap of its own: its row opens the PR. */
 export function prChip(e: () => PrEntry): View {
-  const colors = () => prChipColors(shownHealth(prChipHealth(e()), prDim(e())));
+  const colors = () => prChipColors(prChipTone(e()));
   return chipFrame(
     chipText(
       () => prChipText(e()),

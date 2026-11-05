@@ -42,7 +42,7 @@ pub enum Token {
     /// The quiet chip's face and edge: the branch, the ports, a PR's pill.
     ChipFace,
     ChipEdge,
-    /// A PR state's own chip: a faint face of its health's hue and an edge.
+    /// A PR state's own chip: a faint face of its tone's hue and an edge.
     RedChipFace,
     RedChipEdge,
     BlueChipFace,
@@ -72,6 +72,17 @@ pub enum Token {
     MergeHalo,
     /// Ready to merge in words, a step darker than its dot.
     MergeText,
+    /// An open PR's state words (palette.ts openText), GitHub's open
+    /// green, cooler than ready's ink and the finished olive; and a state
+    /// chip's faint face and edge of it.
+    OpenText,
+    OpenChipFace,
+    OpenChipEdge,
+    /// A merged PR's state words (palette.ts mergedText), GitHub's merged
+    /// purple; and a state chip's faint face and edge of it.
+    MergedText,
+    MergedChipFace,
+    MergedChipEdge,
 }
 
 /// A project's own colour, "#D97757" as the table writes it, as six hex

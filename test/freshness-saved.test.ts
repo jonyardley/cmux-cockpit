@@ -17,6 +17,7 @@ globals.__STATE__ = {
   prs: {
     w1: saved,
     green: { ...saved, number: 8, branch: "green", checks: [{ name: "build", state: "pass" }] },
+    ready: { ...saved, number: 6, branch: "ready", mergeable: true, checks: [{ name: "build", state: "pass" }] },
   },
   ownPrs: {},
   subagents: {},
@@ -112,6 +113,16 @@ describe("the saved poll status", () => {
     assert.equal(m.currentPrDim(), false);
     r.data.workspaces = [ws("none", { selected: true })];
     assert.equal(m.currentPrDim(), false);
+  });
+
+  it("reads a stale ready PR as open, green and dimmed, in both chips", () => {
+    r.data.workspaces = [ws("ready", { branch: "ready", selected: true })];
+    assert.equal(m.currentPr()?.health, "ready");
+    assert.equal(m.currentPrTone(), "open");
+    const entry = m.prs().find((e) => e.pr.number === 6);
+    assert.ok(entry, "the row is listed");
+    assert.equal(m.prDim(entry), true);
+    assert.equal(m.prChipTone(entry), "open");
   });
 
   it("greys a stale pass in the This workspace checks line", () => {

@@ -124,7 +124,7 @@ What the model computes, at the scene's clock.
 | `chips.<id>.chips[].url` | string | On pr (absent with no link) and port: what a tap opens. |
 | `chips.<id>.chips[].tag` | string | On pr: the number, "#12". |
 | `chips.<id>.chips[].state` | string | On pr: the words after the number ("draft · running", "1 failing", "open", "merged"). |
-| `chips.<id>.chips[].health` | string | On pr: "failing", "conflicts", "running", "ready" or "quiet". |
+| `chips.<id>.chips[].tone` | string | On pr: what colours its words, its health when that has a hue (`failing`, `conflicts`, `running`, `ready`), else its state (`draft`, `open`, `merged`, `closed`). |
 | `chips.<id>.chips[].diff` | string | On pr: an open PR's diff size, "+120 −8", or "". |
 | `chips.<id>.cardOpacity` | number | How faint the card sits when not selected or dragged: 0.6 for a merged card nothing in which wants Jon, else 1. |
 | `chips.<id>.fullLine` | object | How `chips` fit a full card's line (`FULL_LINE_CHARS`): `fitsOneLine` and `splits` (over two lines). |

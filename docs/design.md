@@ -86,6 +86,8 @@ dark-mode screenshot; nothing here changes before then.
 | `greenText` | 5E7A40 | A3BC85 | the Ready pill and Next's line (core picks: `Card.ready_ink`, the `NextLine` step's `ink`) |
 | `mergeText` | 12873B | 5FD98A | "Ready to merge" in words, a lane's merge line, a PR chip's "ready", a dense row's ready PR number (core picks) |
 | `redText` | 9E2F27 | E3796F | a failing PR; editor problems and Remove (`EditorSheet.swift:55`, `:59`); "Not sent" |
+| `openText` | 1C7A55 | 5CC59C | an open PR's words: its chip's "open", a compact card's PR words, a dense row's PR number (core picks, `pr_colors.rs` `pr_tone`). GitHub's open green, cooler than `mergeText` so it never reads as ready to merge; 5.3:1 on the white card, dark 6.3:1 on the dark card but not yet checked against a capture ([gap L](#known-gaps), D4) |
+| `mergedText` | 8250DF | B08CF5 | a merged PR's words, in the same places as `openText`. GitHub's merged purple, lifted in dark to clear 4.5:1 on the dark card; dark not yet checked against a capture ([gap L](#known-gaps), D4) |
 
 ### Neutral inks
 
@@ -94,7 +96,7 @@ dark-mode screenshot; nothing here changes before then.
 | `text` | 141413 | F0EEE6 | card titles, the chosen tab, notice titles |
 | `heading` (also `select`, `laneMain`) | 3D3D3A | D6D4CA | project header names, a selected card's outline, "Drop here" |
 | `secondary` (also `laneReview`) | 5E5D59 | B7B5A9 | lane names, detail lines, chip glyphs, the size chip, the tab not chosen, the fold chevron, a quiet row's "+" |
-| `metaText` | 6B6A64 | A3A199 | Next's place, every age while its card waits on nobody, Idle and No agent, a quiet PR's words, the Quiet pill |
+| `metaText` | 6B6A64 | A3A199 | Next's place, every age while its card waits on nobody, Idle and No agent, a draft or closed PR's words, the Quiet pill |
 | `faint` (also `laneBackground`) | 8A8880 | 8A8880 | pin, QUIET, a faint or empty lane's name, a row's PR title, the diff, editor labels ([gap L](#known-gaps)) |
 | `Own.tertiary` | 73726C | 9C9A92 | where you left off, live helpers, the editor's "Or one you have open" |
 | `Own.grey` | A09E95 | 77756D | a dot with no colour; a project with no colour |
@@ -126,9 +128,11 @@ dark-mode screenshot; nothing here changes before then.
 | `Own.onBadge` | FFFFFF | 1F1E1D | the unread badge's number |
 | `Own.onFill` | FFFFFF | FFFFFF | the number on the waiting count, on clay or amber |
 | `blueCount`, `clayCount`, `amberCount` | hue / 0x1F, 0x29, 0x29 | same | a count pill's face in a state (core picks) |
-| `redChipFace`, `redChipEdge` | red / 0x1A, 0x38 | same | not drawn: the core's `pr_chip_colors` (`native/core/src/pr_colors.rs:52`) has no caller outside its tests, and every PR chip sits on `chipFace` |
+| `redChipFace`, `redChipEdge` | red / 0x1A, 0x38 | same | not drawn: the core's `pr_chip_colors` (`native/core/src/pr_colors.rs:98`) has no caller outside its tests, and every PR chip sits on `chipFace` |
 | `blueChipFace`, `blueChipEdge` | blue / 0x1A, 0x38 | same | not drawn, as above |
 | `greenChipFace`, `greenChipEdge` | green / 0x29, greenDeep / 0x59 | same | not drawn, as above |
+| `openChipFace`, `openChipEdge` | openText / 0x1A, 0x38 | same | not drawn, as above (the agents panel draws its own from `palette.ts`) |
+| `mergedChipFace`, `mergedChipEdge` | mergedText / 0x1A, 0x38 | same | not drawn, as above |
 
 ### Lanes
 
@@ -146,9 +150,9 @@ dark-mode screenshot; nothing here changes before then.
 Every unused colour has gone ([gap F](#known-gaps)): the core's
 `amberRowEdge` and `needsRowEdge`, and the sidebar's `Own.ground`,
 `Own.cardFace`, `Own.needsEdge` and `Own.needsHover`. The views test
-checks contrast on `Own.card`, the face cards are drawn on. The six PR
-chip faces and edges (`redChipFace` to `greenChipEdge`) are chosen by a
-core function nothing calls, so a PR's health shows only in the ink of
+checks contrast on `Own.card`, the face cards are drawn on. The ten PR
+chip faces and edges (`redChipFace` to `mergedChipEdge`) are chosen by a
+core function nothing calls, so a PR's tone shows only in the ink of
 its words; `greenDeep` is left only under `greenChipEdge`.
 
 ## Type scale
@@ -635,7 +639,10 @@ Where: `Views/ChipsView.swift:43-173`.
 #### PR chip
 
 `arrow.triangle.pull` glyph at 9 semibold in `secondary`, the number medium,
-the state regular in its health's ink. A PR GitHub would merge says "ready"
+the state regular in its tone's ink (`pr_colors.rs` `pr_tone`): a health
+with a hue wins, else the state as GitHub colours it, draft and closed
+`metaText`, open `openText`, merged `mergedText`. The face stays the quiet
+chip's, so only the words take the hue. A PR GitHub would merge says "ready"
 in `mergeText` (`READY_INK`, `native/core/src/pr_colors.rs`, D11 a), and a
 dense row's ready PR number takes the same ink. When it opens, the glyph
 turns to `arrow.up.right` and the face takes `Own.hover`. On the full card
@@ -805,11 +812,14 @@ Every card is decided as option a; where that changes a rule, the rule says
 10. **An age is `MetaText` in `metaText`**, or the waiting ink while the card
     waits, on a title row and a dense row alike (D14 a, `CardText.ageInk`).
     `Own.tertiary` is where you left off and live helpers.
-11. **A PR's state is words in its health's ink** (`pr_colors.rs:31` `pr_ink`):
-    `redText` failing or conflicting, `blueText` checks running,
-    `metaText` quiet, `mergeText` ready to merge. Ready to merge is
-    `mergeText` everywhere it means ready to merge (D11 a), and quiet is
-    `metaText` everywhere, the compact card included (D14 a).
+11. **A PR's state is words in its tone's ink** (`pr_colors.rs` `pr_tone`,
+    `pr_ink`): `redText` failing or conflicting, `blueText` checks
+    running, `mergeText` ready to merge; with none of those, its state as
+    GitHub colours it, `metaText` draft and closed, `openText` open,
+    `mergedText` merged. Ready to merge is `mergeText` everywhere it means
+    ready to merge (D11 a); open's green is a status colour on the words, a
+    cooler green, not a second ready. The same tone inks the chip, the
+    compact card's words and a dense row's number.
 12. **Errors are `redText`; notices are neutral.** `grep -rn "Token.clayText" Views`
     prints nothing: "Not sent" is `redText`, the helper-down band sits on
     `countBg` (D5 a), and Next is green (D9 a).
@@ -838,9 +848,11 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Asleep, waking | hollow `metaText` ring; `metaText` words | same ring; the word leads the detail | hollow glyph | | `status.rs` `StatusKind::style`; `panel/build.rs` `row_detail` |
 | Didn't sleep or wake | the reason as the detail, `secondary` | same | | | `sleep.rs` `refusal_note`; `panel/build.rs` `detail_of` |
 | Ready to merge | `mergeGreen` dot with halo, `mergeText` words | same, ready PR number `mergeText` | merge line in `mergeText` | PR chip "ready" in `mergeText` | `status.rs`; `lane_entries.rs` `merge_ink`; `pr_colors.rs` `READY_INK` |
-| PR quiet (draft, open, closed) | chip state `metaText`; compact words `metaText` | number `metaText` | | | `pr_colors.rs` `pr_ink`; `panel/build.rs` `compact_pr`, `row_pr` |
-| Checks failing, conflict | chip words `redText` on a neutral chip | number `redText` | | | `pr_colors.rs:33` |
-| Checks running | chip words `blueText` (blue also means working) | number `blueText` | | | `pr_colors.rs:34` |
+| PR draft, closed | chip state `metaText`; compact words `metaText` | number `metaText` | | | `pr_colors.rs` `pr_tone`, `pr_ink`; `panel/build.rs` `compact_pr`, `row_pr` |
+| PR open | chip state `openText`; compact words `openText` | number `openText` | | agents panel chip `openText` on `openChipFace` | as above |
+| PR merged | chip state `mergedText`; compact words `mergedText` | number `mergedText` | | agents panel chip `mergedText` on `mergedChipFace` | as above |
+| Checks failing, conflict | chip words `redText` on a neutral chip | number `redText` | | | `pr_colors.rs` `pr_ink` |
+| Checks running | chip words `blueText` (blue also means working) | number `blueText` | | | `pr_colors.rs` `pr_ink` |
 | Move size | chip words `secondary` on the quiet chip | not drawn | | | `panel/build.rs` `chip_views` |
 | Unread | grey badge | grey badge | the same badge on the anchor | | `CardView.swift` `UnreadBadge` |
 | Needs dot | on the badge corner; leads the title on a Projects card | on the 14 badge | glyph on headers **≠** | | `status.rs:248`; `panel/build.rs:568` |

@@ -4,7 +4,7 @@
 // checks come from the PR poller.
 
 import { dismissNeeds } from "../../shared/needs.ts";
-import { NEUTRAL_CHIP, prChipColors, shownHealth } from "../../shared/pr-colors.ts";
+import { NEUTRAL_CHIP, prChipColors } from "../../shared/pr-colors.ts";
 import {
   branchText,
   countPill,
@@ -25,6 +25,7 @@ import {
   currentAsk,
   currentPr,
   currentPrDim,
+  currentPrTone,
   dotFor,
   haloFor,
   headStatus,
@@ -337,7 +338,7 @@ function statusWords(): View {
       () =>
         tapChip(
           () => currentPr()?.state ?? "",
-          () => prChipColors(shownHealth(currentPr()?.health ?? "quiet", currentPrDim())),
+          () => prChipColors(currentPrTone()),
           () => currentPr()?.url,
         ),
     )

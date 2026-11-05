@@ -33,6 +33,8 @@ const INK_HEADING: u32 = 0x3D3D3A;
 const RED: u32 = 0xC0453A;
 const GREEN_DEEP: u32 = 0x3F5A2B;
 const MERGE_GREEN: u32 = 0x1DB954;
+const OPEN_GREEN: u32 = 0x1C7A55;
+const PURPLE: u32 = 0x8250DF;
 
 /// `rgb` at `alpha` (0 to 255) laid over `under`, per channel, rounded.
 pub fn blend(rgb: u32, alpha: u8, under: u32) -> u32 {
@@ -95,6 +97,12 @@ pub fn hex(t: Token) -> u32 {
         Token::MergeGreen => MERGE_GREEN,
         Token::MergeHalo => blend(MERGE_GREEN, 0x47, GROUND),
         Token::MergeText => 0x12873B,
+        Token::OpenText => OPEN_GREEN,
+        Token::OpenChipFace => blend(OPEN_GREEN, 0x1A, GROUND),
+        Token::OpenChipEdge => blend(OPEN_GREEN, 0x38, GROUND),
+        Token::MergedText => PURPLE,
+        Token::MergedChipFace => blend(PURPLE, 0x1A, GROUND),
+        Token::MergedChipEdge => blend(PURPLE, 0x38, GROUND),
     }
 }
 

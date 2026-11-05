@@ -231,7 +231,7 @@ pub struct Card {
     /// shows them; empty for a row.
     pub chips: Vec<Chip>,
     /// A row's PR (cards.ts denseRow): its own title, faint after the
-    /// session's, and its number by the age in its health's ink. None on a
+    /// session's, and its number by the age in its tone's ink. None on a
     /// full or compact card, whose chips carry the PR, and on a row with
     /// no numbered PR.
     pub row_pr: Option<RowPr>,

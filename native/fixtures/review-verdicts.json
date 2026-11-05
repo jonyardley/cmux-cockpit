@@ -1181,7 +1181,7 @@
                 "pieces": [
                   {
                     "text": "#6",
-                    "ink": "metaText"
+                    "ink": "openText"
                   }
                 ],
                 "gives_way": false,
@@ -1357,7 +1357,7 @@
                 "pieces": [
                   {
                     "text": "#7 · merged",
-                    "ink": "metaText"
+                    "ink": "mergedText"
                   }
                 ],
                 "gives_way": false,

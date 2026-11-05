@@ -323,7 +323,7 @@
             "row_pr": {
               "tag": "#12",
               "title": "",
-              "ink": "metaText"
+              "ink": "openText"
             },
             "detail": "",
             "detail_ink": "secondary",
@@ -657,7 +657,7 @@
             "row_pr": {
               "tag": "#14",
               "title": "",
-              "ink": "metaText"
+              "ink": "mergedText"
             },
             "detail": "",
             "detail_ink": "secondary",
@@ -1468,7 +1468,7 @@
               },
               {
                 "text": "open",
-                "ink": "metaText"
+                "ink": "openText"
               }
             ],
             "gives_way": false,
@@ -1660,7 +1660,7 @@
               },
               {
                 "text": "merged",
-                "ink": "metaText"
+                "ink": "mergedText"
               }
             ],
             "gives_way": false,

@@ -1543,9 +1543,6 @@ mod pr_text_color {
     use cockpit_core::pr_colors::{READY_INK, pr_text_color};
     use cockpit_core::prs::{PrHealth, PrSummary};
 
-    /// The density's own colour, as the TypeScript's "#111111".
-    const QUIET: Token = Token::Faint;
-
     fn pr(health: PrHealth, status: PrStatus) -> PrSummary {
         PrSummary {
             number: 1.0,
@@ -1561,22 +1558,24 @@ mod pr_text_color {
     }
 
     #[test]
-    fn keeps_the_densitys_colour_while_the_pr_is_quiet_or_absent() {
-        assert_eq!(pr_text_color(None, QUIET), QUIET);
-        let quiet = pr(PrHealth::Quiet, PrStatus::Open);
-        assert_eq!(pr_text_color(Some(&quiet), QUIET), QUIET);
+    fn colours_a_quiet_pr_by_its_state_grey_draft_and_closed_green_open_purple_merged() {
+        let open = pr(PrHealth::Quiet, PrStatus::Open);
+        assert_eq!(pr_text_color(&open, true), Token::MetaText);
+        assert_eq!(pr_text_color(&open, false), Token::OpenText);
         let merged = pr(PrHealth::Quiet, PrStatus::Merged);
-        assert_eq!(pr_text_color(Some(&merged), QUIET), QUIET);
+        assert_eq!(pr_text_color(&merged, false), Token::MergedText);
+        let closed = pr(PrHealth::Quiet, PrStatus::Closed);
+        assert_eq!(pr_text_color(&closed, false), Token::MetaText);
     }
 
     #[test]
-    fn takes_the_healths_chip_colour_otherwise_running_in_blue() {
+    fn takes_the_healths_chip_colour_otherwise_running_in_blue_even_on_a_draft() {
         let failing = pr(PrHealth::Failing, PrStatus::Open);
-        assert_eq!(pr_text_color(Some(&failing), QUIET), Token::RedText);
+        assert_eq!(pr_text_color(&failing, true), Token::RedText);
         let running = pr(PrHealth::Running, PrStatus::Open);
-        assert_eq!(pr_text_color(Some(&running), QUIET), Token::BlueText);
+        assert_eq!(pr_text_color(&running, true), Token::BlueText);
         let ready = pr(PrHealth::Ready, PrStatus::Open);
-        assert_eq!(pr_text_color(Some(&ready), QUIET), READY_INK);
+        assert_eq!(pr_text_color(&ready, false), READY_INK);
     }
 }
 

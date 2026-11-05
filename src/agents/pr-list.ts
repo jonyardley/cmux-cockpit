@@ -5,6 +5,7 @@ import { mostActive } from "../shared/activity.ts";
 import { placeholderIds } from "../shared/anchors.ts";
 import type { Last } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
+import { type PrTone, prTone, shownHealth } from "../shared/pr-colors.ts";
 import { type Project, savedProjectFor } from "../shared/projects.ts";
 import {
   checksOf,
@@ -206,6 +207,11 @@ export const prNote = computed((): string => freshness().line);
 
 /** A PR row's chip dims while it is the poller's copy and that copy is stale. */
 export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale();
+
+/** A PR row chip's tone, for its colour: its health, a stale ready dropped
+ * to quiet, else its state (grey draft or closed, green open, purple merged). */
+export const prChipTone = (e: Pick<PrEntry, "pr" | "summary" | "saved">): PrTone =>
+  prTone(e.pr.status, e.pr.draft, shownHealth(prChipHealth(e), prDim(e)));
 
 // ---- Which session a PR belongs to ------------------------------------------
 // A row's faint line names the chat that holds the PR, else the one that

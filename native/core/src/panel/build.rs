@@ -10,7 +10,7 @@ use crate::lanes::{self, Density, LaneKey};
 use crate::model::card_density;
 use crate::persist::ViewMode;
 use crate::placement::is_foreign_anchor;
-use crate::pr_colors::{pr_ink, pr_text_color};
+use crate::pr_colors::{draft_of, pr_ink, pr_text_color};
 use crate::projects::Project;
 use crate::prs::pr_summary;
 use crate::session::Session;
@@ -34,7 +34,7 @@ const LEFT_OFF_LEAD: &str = "You: ";
 
 /// A core chip as the panel draws it: the size in the quiet chip's ink,
 /// as the card's own clay or amber already says it waits; the PR's number
-/// in the quiet chip's ink and its state in its health's, then its diff
+/// in the quiet chip's ink and its state in its tone's, then its diff
 /// size as a chip of its own, faint, as the sidebar sets it beside the PR;
 /// the branch with its dirty dot, and the ports, in the quiet chip's ink.
 /// The PR and the port carry where a tap opens.
@@ -47,13 +47,13 @@ pub fn chip_views(c: &CoreChip) -> Vec<Chip> {
         CoreChip::Pr {
             tag,
             state,
-            health,
+            tone,
             diff,
             url,
         } => {
             let mut pieces = vec![piece(tag, quiet)];
             if !state.is_empty() {
-                pieces.push(piece(state, pr_ink(*health)));
+                pieces.push(piece(state, pr_ink(*tone)));
             }
             let pr = Chip {
                 url: url.clone(),
@@ -340,8 +340,8 @@ fn chips_row(session: &mut Session, w: Option<&Workspace>, kind: ChipsFor) -> Ve
 }
 
 /// A compact card's PR in words, "#45 · 1 failing" (its number alone once
-/// the status says Ready to merge), in its health's ink (the meta ink while
-/// quiet, as on a chip and a row), then its diff
+/// the status says Ready to merge), in its tone's ink (grey draft and
+/// closed, green open, purple merged, as on a chip and a row), then its diff
 /// size, faint, as a chip of its own. The sidebar runs them on from the
 /// status line after a "·"; here they have a line of their own, so they
 /// have none.
@@ -351,7 +351,7 @@ fn compact_pr(session: &mut Session, w: Option<&Workspace>) -> Vec<Chip> {
     };
     let words = piece(
         session.card_pr_words(w, &pr),
-        pr_text_color(Some(&pr), Token::MetaText),
+        pr_text_color(&pr, draft_of(&session.saved, w)),
     );
     let chip = Chip {
         url: pr.web_link(),
@@ -362,15 +362,15 @@ fn compact_pr(session: &mut Session, w: Option<&Workspace>) -> Vec<Chip> {
     out
 }
 
-/// A row's PR: its number in its health's ink (metaText while quiet) and
-/// its title. Only a row has one; a card's chips carry its PR.
+/// A row's PR: its number in its tone's ink (grey draft and closed, green
+/// open, purple merged) and its title. Only a row has one; a card's chips carry its PR.
 fn row_pr(session: &Session, w: Option<&Workspace>, density: Density) -> Option<RowPr> {
     if density != Density::Row {
         return None;
     }
     let pr = pr_summary(&session.saved, w)?;
     Some(RowPr {
-        ink: pr_text_color(Some(&pr), Token::MetaText),
+        ink: pr_text_color(&pr, draft_of(&session.saved, w)),
         tag: pr.tag,
         title: pr.title,
     })
@@ -1082,11 +1082,11 @@ mod tests {
 
     #[test]
     fn inks_a_prs_number_quietly_its_state_by_health_and_its_diff_faint_on_its_own() {
-        use crate::prs::PrHealth;
+        use crate::pr_colors::PrTone;
         let chips = chip_views(&CoreChip::Pr {
             tag: "#3".into(),
             state: "1 failing".into(),
-            health: PrHealth::Failing,
+            tone: PrTone::Failing,
             diff: "+1 \u{2212}2".into(),
             url: Some("https://github.com/o/r/pull/3".into()),
         });
@@ -1107,7 +1107,7 @@ mod tests {
         let bare = chip_views(&CoreChip::Pr {
             tag: "#6".into(),
             state: String::new(),
-            health: PrHealth::Quiet,
+            tone: PrTone::Open,
             diff: String::new(),
             url: None,
         });
@@ -1507,14 +1507,16 @@ mod tests {
     }
 
     #[test]
-    fn gives_a_row_its_prs_number_in_its_health_and_its_title() {
+    fn gives_a_row_its_prs_number_in_its_tone_and_its_title() {
         let mut core = Model::default();
         let s = &mut core.session;
         s.saved = crate::persist::SavedState::from_json(
             r#"{"prs": {"r": {"number": 171, "url": "u", "status": "open", "branch": "feat",
                 "title": "  Row cards show their PR", "mergeable": true,
                 "checks": [{"name": "build", "state": "pass"}]},
-              "q": {"number": 9, "url": "u", "status": "open", "branch": "feat", "checks": []}}}"#,
+              "q": {"number": 9, "url": "u", "status": "open", "branch": "feat", "checks": []},
+              "d": {"number": 4, "url": "u", "status": "open", "branch": "feat", "draft": true, "checks": []},
+              "m": {"number": 3, "url": "u", "status": "merged", "branch": "feat", "checks": []}}}"#,
         )
         .unwrap();
         let ws = |id: &str| Workspace {
@@ -1536,17 +1538,22 @@ mod tests {
             Some(RowPr {
                 tag: "#9".into(),
                 title: String::new(),
-                ink: Token::MetaText,
+                ink: Token::OpenText,
             }),
-            "a quiet PR's number in the row's meta ink, and no title"
+            "a quiet open PR's number in the open green, and no title"
         );
+        let ink = |id: &str| row_pr(s, Some(&ws(id)), Density::Row).map(|p| p.ink);
+        assert_eq!(ink("d"), Some(Token::MetaText), "a draft's number grey");
+        assert_eq!(ink("m"), Some(Token::MergedText), "a merged one's purple");
         assert_eq!(row_pr(s, Some(&none), Density::Row), None, "no PR");
         let compact = compact_pr(s, Some(&q));
         assert_eq!(
             compact[0].pieces[0].ink,
-            Token::MetaText,
-            "a compact card's quiet PR words in the meta ink, as on a chip and a row"
+            Token::OpenText,
+            "a compact card's quiet open PR words in the open green, as on a chip and a row"
         );
+        let draft = compact_pr(s, Some(&ws("d")));
+        assert_eq!(draft[0].pieces[0].ink, Token::MetaText, "a draft's grey");
         let compact = compact_pr(s, Some(&r));
         assert_eq!(compact[0].pieces[0].ink, Token::MergeText, "a ready one");
         for d in [Density::Full, Density::Compact] {

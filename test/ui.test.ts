@@ -97,7 +97,7 @@ describe("the shared builders read what they are handed", () => {
   it("chipHover lifts a faint state face a step more opaque, so its hover shows", () => {
     const read = (v: Reactive<string> | undefined): string | undefined => (typeof v === "function" ? v() : v);
     const alpha = (hex: string | undefined): number => Number.parseInt((hex ?? "").slice(7, 9), 16);
-    for (const health of ["ready", "failing", "running"] as const) {
+    for (const health of ["ready", "failing", "running", "open", "merged"] as const) {
       const rest = prChipColors(health);
       const face = read(ui.chipHover(() => rest).face);
       assert.notEqual(face, rest.bg);
