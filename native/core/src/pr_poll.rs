@@ -14,6 +14,8 @@
 //! - A failed ask backs off, doubling from FLOOR_SECS to BACKOFF_CAP_SECS.
 //!   A failure about the repo itself (no GitHub remote) waits the cap.
 //! - At most MAX_IN_FLIGHT asks out at once.
+//! - A directory on its repo's default branch has no PR, and gh is not
+//!   asked (gh.rs, is_default_branch).
 //!
 //! The answers are held here and made over the state file's `prs` map on
 //! every read (overlay), so a new state file never hides a fresher answer.
@@ -27,7 +29,7 @@ mod gh;
 
 use std::collections::BTreeMap;
 
-pub use gh::{Ran, answer, gh_args, git_args};
+pub use gh::{Ran, answer, default_args, gh_args, git_args};
 
 use serde::{Deserialize, Serialize};
 
@@ -79,6 +81,8 @@ impl GhFailure {
 pub enum PollAnswer {
     /// On no branch (a detached HEAD, or not a repo): it has no PR.
     NoBranch,
+    /// On the repo's default branch: it has no PR, and gh is not asked.
+    DefaultBranch,
     /// git could not say, so what was known stays.
     GitFailed,
     /// gh answered: the branch's PR, or none.
@@ -92,6 +96,7 @@ impl PollAnswer {
     pub fn log_word(&self) -> &'static str {
         match self {
             PollAnswer::NoBranch => "no branch",
+            PollAnswer::DefaultBranch => "default branch",
             PollAnswer::GitFailed => "git failed",
             PollAnswer::Answered { pr: Some(_), .. } => "found",
             PollAnswer::Answered { pr: None, .. } => "none",
@@ -233,7 +238,7 @@ impl Target {
         self.waiting = false;
         self.failed_on = None;
         match answer {
-            PollAnswer::NoBranch => self.settle(Some(None)),
+            PollAnswer::NoBranch | PollAnswer::DefaultBranch => self.settle(Some(None)),
             PollAnswer::Answered { pr, .. } => self.settle(Some(pr)),
             PollAnswer::Failed { branch, why } => {
                 // As findPrs: what was known stays only while on its branch.
@@ -905,6 +910,28 @@ mod tests {
         let gone: BTreeMap<String, Option<SavedPr>> =
             [("a".to_string(), None), ("b".to_string(), None)].into();
         assert_eq!(p.writes(&d, "/a"), gone, "c is in another directory");
+    }
+
+    #[test]
+    fn the_default_branch_deletes_a_pr_saved_for_it_and_overlays_none() {
+        // The three workspaces in raymond-james-onboarding on main, each
+        // saved with #1291, which was merged from main into a spike.
+        let d = data(vec![ws("a", "/a"), ws("b", "/a"), ws("c", "/c")]);
+        let mut from_main = pr(&[]);
+        from_main.branch = "main".into();
+        from_main.status = PrStatus::Merged;
+        let file = file_of(&["a", "b", "c"], &from_main);
+        let mut p = on();
+        p.file_read(&file, Some(&d));
+        let _ = p.due(&d, 0.0);
+        p.record(polled(PollAnswer::DefaultBranch, 0.0));
+        let gone: BTreeMap<String, Option<SavedPr>> =
+            [("a".to_string(), None), ("b".to_string(), None)].into();
+        assert_eq!(p.writes(&d, "/a"), gone, "c is in another directory");
+        let mut shown_now = file.clone();
+        p.overlay(&mut shown_now, &d);
+        assert_eq!(shown_now.keys().collect::<Vec<_>>(), ["c"]);
+        assert_eq!(PollAnswer::DefaultBranch.log_word(), "default branch");
     }
 
     #[test]

@@ -176,6 +176,7 @@ mod tests {
         let answers = [
             Answer::CmuxFailed { id: "W1".into() },
             polled(PollAnswer::NoBranch),
+            polled(PollAnswer::DefaultBranch),
             polled(PollAnswer::GitFailed),
             polled(PollAnswer::Answered {
                 branch: "feat-7".into(),

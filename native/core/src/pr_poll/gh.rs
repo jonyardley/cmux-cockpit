@@ -32,6 +32,71 @@ pub fn git_args(directory: &str) -> Vec<String> {
         .to_vec()
 }
 
+/// The arguments for `git`, run in the directory, that print the remote's
+/// default branch as `origin/main`. Local and quick: `git clone` records
+/// it and every worktree of the repo shares it, so no network call is
+/// spent per poll, as `gh repo view` would. `git clone` records it once:
+/// a repo whose default changed on GitHub since keeps the old name until
+/// `git remote set-head origin --auto` is run in it.
+pub fn default_args(directory: &str) -> Vec<String> {
+    [
+        "-C",
+        directory,
+        "symbolic-ref",
+        "--quiet",
+        "--short",
+        "refs/remotes/origin/HEAD",
+    ]
+    .map(str::to_string)
+    .to_vec()
+}
+
+/// What `default_args`' run says about the default branch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DefaultRef {
+    /// git named it.
+    Named(String),
+    /// The repo has no origin/HEAD (made with `git init` and `remote add`,
+    /// or with no remote called origin), or it reads as something else:
+    /// `main` and `master` stand in.
+    Unset,
+    /// git failed or was killed, so nothing can be said.
+    Unknown,
+}
+
+/// Reads the default branch: the name after `origin/` (or
+/// `remotes/origin/`, which `--short` prints when a local branch is called
+/// `origin/...` too), which may itself hold a slash. A missing ref exits 1
+/// in silence under `--quiet`; any other failure is Unknown.
+pub fn default_from_git(r: &Ran) -> DefaultRef {
+    match r.status {
+        Some(0) => {
+            let out = r.stdout.trim();
+            let name = out
+                .strip_prefix("remotes/origin/")
+                .or_else(|| out.strip_prefix("origin/"))
+                .filter(|b| !b.is_empty());
+            name.map_or(DefaultRef::Unset, |b| DefaultRef::Named(b.to_string()))
+        }
+        Some(1) if r.stderr.trim().is_empty() => DefaultRef::Unset,
+        _ => DefaultRef::Unknown,
+    }
+}
+
+/// The names taken as the default branch when git cannot say which it is.
+const USUAL_DEFAULTS: [&str; 2] = ["main", "master"];
+
+/// Whether `branch` is the repo's default branch: the one git named, else
+/// `main` or `master`. A workspace there gets no PR looked up, since a PR
+/// whose head is the default branch (one merged backwards into a spike,
+/// say) is not taken as that workspace's work.
+pub fn is_default_branch(branch: &str, default: Option<&str>) -> bool {
+    match default {
+        Some(d) => branch == d,
+        None => USUAL_DEFAULTS.contains(&branch),
+    }
+}
+
 /// The arguments for `gh`, run in the directory, that list the branch's PRs.
 pub fn gh_args(branch: &str) -> Vec<String> {
     let args = [
@@ -101,13 +166,27 @@ pub fn gh_outcome(r: &Ran) -> Result<(), GhFailure> {
 }
 
 /// The whole answer for one directory, from git's run and, once the
-/// branch is known, gh's.
-pub fn answer(git: &Ran, gh: impl FnOnce(&str) -> Ran) -> PollAnswer {
+/// branch is known, the default branch's lookup (`default`) and, off the
+/// default branch, gh's.
+pub fn answer(
+    git: &Ran,
+    default: impl FnOnce() -> Ran,
+    gh: impl FnOnce(&str) -> Ran,
+) -> PollAnswer {
     let branch = match branch_from_git(git) {
         Branch::On(b) => b,
         Branch::None => return PollAnswer::NoBranch,
         Branch::Unknown => return PollAnswer::GitFailed,
     };
+    let on_default = match default_from_git(&default()) {
+        DefaultRef::Named(d) => is_default_branch(&branch, Some(&d)),
+        DefaultRef::Unset => is_default_branch(&branch, None),
+        // As a git failure on the branch: what was known stays.
+        DefaultRef::Unknown => return PollAnswer::GitFailed,
+    };
+    if on_default {
+        return PollAnswer::DefaultBranch;
+    }
     let ran = gh(&branch);
     if let Err(why) = gh_outcome(&ran) {
         return PollAnswer::Failed { branch, why };
@@ -475,7 +554,8 @@ mod tests {
     #[test]
     fn the_answer_follows_git_then_gh() {
         let on = ran(Some(0), "feat\n", "");
-        let asked = answer(&on, |b| {
+        let main = || ran(Some(0), "origin/main\n", "");
+        let asked = answer(&on, main, |b| {
             ran(
                 Some(0),
                 &format!(r#"[{{"number": 9, "state": "OPEN", "url": "u", "headRefName": "{b}"}}]"#),
@@ -483,7 +563,7 @@ mod tests {
             )
         });
         assert!(matches!(asked, PollAnswer::Answered { pr: Some(ref p), .. } if p.number == 9.0));
-        let failed = answer(&on, |_| ran(Some(1), "", "network down"));
+        let failed = answer(&on, main, |_| ran(Some(1), "", "network down"));
         assert_eq!(
             failed,
             PollAnswer::Failed {
@@ -491,7 +571,7 @@ mod tests {
                 why: GhFailure::Unavailable
             }
         );
-        let unreadable = answer(&on, |_| ran(Some(0), "<html>", ""));
+        let unreadable = answer(&on, main, |_| ran(Some(0), "<html>", ""));
         assert!(matches!(
             unreadable,
             PollAnswer::Failed {
@@ -500,7 +580,95 @@ mod tests {
             }
         ));
         let never = |_: &str| -> Ran { unreachable!("gh is not asked without a branch") };
-        assert_eq!(answer(&ran(Some(0), "", ""), never), PollAnswer::NoBranch);
-        assert_eq!(answer(&ran(None, "", ""), never), PollAnswer::GitFailed);
+        let unasked = || -> Ran { unreachable!("the default is not asked without a branch") };
+        assert_eq!(
+            answer(&ran(Some(0), "", ""), unasked, never),
+            PollAnswer::NoBranch
+        );
+        assert_eq!(
+            answer(&ran(None, "", ""), unasked, never),
+            PollAnswer::GitFailed
+        );
+    }
+
+    /// gh's answer for raymond-james-onboarding's `main`: #1291, merged
+    /// from `main` into a spike branch, which the poll once saved.
+    fn merged_from_main(_: &str) -> Ran {
+        let list = r#"[{"number": 1291, "state": "MERGED", "url": "u", "headRefName": "main"}]"#;
+        ran(Some(0), list, "")
+    }
+
+    #[test]
+    fn a_workspace_on_its_default_branch_gets_no_pr_and_gh_is_not_asked() {
+        let on_main = ran(Some(0), "main\n", "");
+        let never = |_: &str| -> Ran { unreachable!("gh is not asked on the default branch") };
+        let main = || ran(Some(0), "origin/main\n", "");
+        assert_eq!(answer(&on_main, main, never), PollAnswer::DefaultBranch);
+        let unknown = || ran(Some(1), "", "");
+        assert_eq!(
+            answer(&on_main, unknown, never),
+            PollAnswer::DefaultBranch,
+            "main counts as the default when git cannot say"
+        );
+        let killed = || ran(None, "", "");
+        assert_eq!(
+            answer(&on_main, killed, never),
+            PollAnswer::GitFailed,
+            "a lookup that failed keeps what was known, never guesses main"
+        );
+        let develop = || ran(Some(0), "origin/develop\n", "");
+        assert!(
+            matches!(
+                answer(&on_main, develop, merged_from_main),
+                PollAnswer::Answered { pr: Some(ref p), .. } if p.number == 1291.0
+            ),
+            "main is an ordinary branch where develop is the default"
+        );
+    }
+
+    #[test]
+    fn reads_the_default_branch_unset_or_unknown() {
+        let said = |out: &str| default_from_git(&ran(Some(0), out, ""));
+        assert_eq!(said("origin/main\n"), DefaultRef::Named("main".into()));
+        assert_eq!(
+            said("origin/team/trunk\n"),
+            DefaultRef::Named("team/trunk".into())
+        );
+        assert_eq!(
+            said("remotes/origin/develop\n"),
+            DefaultRef::Named("develop".into()),
+            "--short when a local branch is called origin/develop too"
+        );
+        assert_eq!(said("origin/\n"), DefaultRef::Unset);
+        let missing = ran(Some(1), "", "");
+        assert_eq!(
+            default_from_git(&missing),
+            DefaultRef::Unset,
+            "no origin/HEAD"
+        );
+        assert_eq!(
+            default_from_git(&ran(None, "", "")),
+            DefaultRef::Unknown,
+            "a timeout"
+        );
+        let broken = ran(Some(128), "", "fatal: bad object");
+        assert_eq!(default_from_git(&broken), DefaultRef::Unknown);
+        assert_eq!(
+            default_args("/d").join(" "),
+            "-C /d symbolic-ref --quiet --short refs/remotes/origin/HEAD"
+        );
+    }
+
+    #[test]
+    fn the_default_is_the_named_one_else_main_or_master() {
+        assert!(is_default_branch("trunk", Some("trunk")));
+        assert!(!is_default_branch("main", Some("trunk")));
+        assert!(is_default_branch("main", None));
+        assert!(is_default_branch("master", None));
+        assert!(!is_default_branch("feat", None));
+        assert!(
+            !is_default_branch("Main", None),
+            "branch names are case sensitive"
+        );
     }
 }
