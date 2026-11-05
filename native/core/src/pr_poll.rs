@@ -29,7 +29,7 @@ mod gh;
 
 use std::collections::BTreeMap;
 
-pub use gh::{Ran, answer, default_args, gh_args, git_args, is_default_branch};
+pub use gh::{Ran, answer, default_args, gh_args, git_args};
 
 use serde::{Deserialize, Serialize};
 

@@ -20,6 +20,9 @@ use super::{Input, now_epoch};
 
 /// The longest `git` or `gh` may run before it is killed (TIMEOUT_MS).
 pub const LIMIT: Duration = Duration::from_secs(15);
+/// The longest the default branch's lookup may run: it reads one local
+/// ref, so this keeps the three commands well inside ANSWER_SECS.
+const DEFAULT_LIMIT: Duration = Duration::from_secs(5);
 /// How often a running command is checked on.
 const CHECK_EVERY: Duration = Duration::from_millis(50);
 /// What every poll command runs with, as the TypeScript's spawn sets it.
@@ -118,7 +121,7 @@ pub fn ask(directory: &str) -> PollAnswer {
             &default_args(directory),
             Some(directory),
             &QUIET,
-            LIMIT,
+            DEFAULT_LIMIT,
         )
     };
     answer(&branch, default, |b| {

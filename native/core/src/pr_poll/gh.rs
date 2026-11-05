@@ -33,9 +33,11 @@ pub fn git_args(directory: &str) -> Vec<String> {
 }
 
 /// The arguments for `git`, run in the directory, that print the remote's
-/// default branch as `origin/main` (defaultBranchArgs in
-/// src/shared/default-branch.ts). Local and quick: `git clone` records it,
-/// and every worktree of the repo shares it, so no network call is spent.
+/// default branch as `origin/main`. Local and quick: `git clone` records
+/// it and every worktree of the repo shares it, so no network call is
+/// spent per poll, as `gh repo view` would. `git clone` records it once:
+/// a repo whose default changed on GitHub since keeps the old name until
+/// `git remote set-head origin --auto` is run in it.
 pub fn default_args(directory: &str) -> Vec<String> {
     [
         "-C",
@@ -49,28 +51,45 @@ pub fn default_args(directory: &str) -> Vec<String> {
     .to_vec()
 }
 
-/// The default branch from `default_args`' run (defaultFromGit): the name
-/// after `origin/`, which may itself hold a slash. None when git could not
-/// say: a repo made with `git init` and `remote add`, or with no remote
-/// called origin, has no such ref.
-pub fn default_from_git(r: &Ran) -> Option<String> {
-    if r.status != Some(0) {
-        return None;
+/// What `default_args`' run says about the default branch.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DefaultRef {
+    /// git named it.
+    Named(String),
+    /// The repo has no origin/HEAD (made with `git init` and `remote add`,
+    /// or with no remote called origin), or it reads as something else:
+    /// `main` and `master` stand in.
+    Unset,
+    /// git failed or was killed, so nothing can be said.
+    Unknown,
+}
+
+/// Reads the default branch: the name after `origin/` (or
+/// `remotes/origin/`, which `--short` prints when a local branch is called
+/// `origin/...` too), which may itself hold a slash. A missing ref exits 1
+/// in silence under `--quiet`; any other failure is Unknown.
+pub fn default_from_git(r: &Ran) -> DefaultRef {
+    match r.status {
+        Some(0) => {
+            let out = r.stdout.trim();
+            let name = out
+                .strip_prefix("remotes/origin/")
+                .or_else(|| out.strip_prefix("origin/"))
+                .filter(|b| !b.is_empty());
+            name.map_or(DefaultRef::Unset, |b| DefaultRef::Named(b.to_string()))
+        }
+        Some(1) if r.stderr.trim().is_empty() => DefaultRef::Unset,
+        _ => DefaultRef::Unknown,
     }
-    r.stdout
-        .trim()
-        .strip_prefix("origin/")
-        .filter(|b| !b.is_empty())
-        .map(str::to_string)
 }
 
 /// The names taken as the default branch when git cannot say which it is.
-pub const USUAL_DEFAULTS: [&str; 2] = ["main", "master"];
+const USUAL_DEFAULTS: [&str; 2] = ["main", "master"];
 
-/// Whether `branch` is the repo's default branch (isDefaultBranch): the
-/// one git named, else `main` or `master`. A workspace there gets no PR
-/// looked up, since a PR whose head is the default branch (one merged
-/// backwards into a spike, say) is never that workspace's work.
+/// Whether `branch` is the repo's default branch: the one git named, else
+/// `main` or `master`. A workspace there gets no PR looked up, since a PR
+/// whose head is the default branch (one merged backwards into a spike,
+/// say) is not taken as that workspace's work.
 pub fn is_default_branch(branch: &str, default: Option<&str>) -> bool {
     match default {
         Some(d) => branch == d,
@@ -159,7 +178,13 @@ pub fn answer(
         Branch::None => return PollAnswer::NoBranch,
         Branch::Unknown => return PollAnswer::GitFailed,
     };
-    if is_default_branch(&branch, default_from_git(&default()).as_deref()) {
+    let on_default = match default_from_git(&default()) {
+        DefaultRef::Named(d) => is_default_branch(&branch, Some(&d)),
+        DefaultRef::Unset => is_default_branch(&branch, None),
+        // As a git failure on the branch: what was known stays.
+        DefaultRef::Unknown => return PollAnswer::GitFailed,
+    };
+    if on_default {
         return PollAnswer::DefaultBranch;
     }
     let ran = gh(&branch);
@@ -585,6 +610,12 @@ mod tests {
             PollAnswer::DefaultBranch,
             "main counts as the default when git cannot say"
         );
+        let killed = || ran(None, "", "");
+        assert_eq!(
+            answer(&on_main, killed, never),
+            PollAnswer::GitFailed,
+            "a lookup that failed keeps what was known, never guesses main"
+        );
         let develop = || ran(Some(0), "origin/develop\n", "");
         assert!(
             matches!(
@@ -596,18 +627,32 @@ mod tests {
     }
 
     #[test]
-    fn reads_the_default_branch_or_none() {
+    fn reads_the_default_branch_unset_or_unknown() {
         let said = |out: &str| default_from_git(&ran(Some(0), out, ""));
-        assert_eq!(said("origin/main\n").as_deref(), Some("main"));
-        assert_eq!(said("origin/team/trunk\n").as_deref(), Some("team/trunk"));
-        assert_eq!(said("origin/\n"), None);
-        assert_eq!(said("upstream/main\n"), None);
+        assert_eq!(said("origin/main\n"), DefaultRef::Named("main".into()));
         assert_eq!(
-            default_from_git(&ran(Some(1), "", "")),
-            None,
+            said("origin/team/trunk\n"),
+            DefaultRef::Named("team/trunk".into())
+        );
+        assert_eq!(
+            said("remotes/origin/develop\n"),
+            DefaultRef::Named("develop".into()),
+            "--short when a local branch is called origin/develop too"
+        );
+        assert_eq!(said("origin/\n"), DefaultRef::Unset);
+        let missing = ran(Some(1), "", "");
+        assert_eq!(
+            default_from_git(&missing),
+            DefaultRef::Unset,
             "no origin/HEAD"
         );
-        assert_eq!(default_from_git(&ran(None, "", "")), None, "a timeout");
+        assert_eq!(
+            default_from_git(&ran(None, "", "")),
+            DefaultRef::Unknown,
+            "a timeout"
+        );
+        let broken = ran(Some(128), "", "fatal: bad object");
+        assert_eq!(default_from_git(&broken), DefaultRef::Unknown);
         assert_eq!(
             default_args("/d").join(" "),
             "-C /d symbolic-ref --quiet --short refs/remotes/origin/HEAD"
