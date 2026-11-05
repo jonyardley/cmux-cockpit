@@ -613,7 +613,7 @@ mod tests {
     }
 
     #[test]
-    fn the_add_button_leaves_a_folded_project_as_the_card_menu_does() {
+    fn the_add_button_unfolds_a_folded_project_as_the_card_menu_does() {
         // Parity with the card menu's New session: both unfold the
         // project, so its new card shows when Projects is next on.
         let mut s = Session::new(table(), SavedState::default());
