@@ -79,7 +79,9 @@ fn is_saved(pr: &PullRequest, saved: &SavedPr) -> bool {
 fn filled(pr: &PullRequest, saved: &SavedPr) -> PullRequest {
     let base = as_pull_request(saved);
     PullRequest {
-        url: pr.url.clone().or(base.url),
+        url: non_empty(pr.url.as_deref())
+            .map(str::to_string)
+            .or(base.url),
         number: pr.number.or(base.number),
         status: pr.status.or(base.status),
         draft: pr.draft.or(base.draft),
@@ -135,23 +137,31 @@ pub fn pr_of<'a>(saved: &SavedState, w: Option<&'a Workspace>) -> Option<Cow<'a,
     }
 }
 
-/// Whether the workspace's first PR carries the poller's saved data:
-/// cmux sends none, or its first is the saved one.
-pub fn from_poller(saved: &SavedState, w: &Workspace) -> bool {
+/// The saved PR when `pr` is it; the one test every reading here shares.
+fn saved_match<'s>(saved: &'s SavedState, w: &Workspace, pr: &PullRequest) -> Option<&'s SavedPr> {
+    saved_for(saved, w).filter(|s| is_saved(pr, s))
+}
+
+/// The saved PR the workspace's first PR draws on: the saved one itself
+/// when cmux sends none, else the one cmux's first is.
+fn first_saved<'s>(saved: &'s SavedState, w: &Workspace) -> Option<&'s SavedPr> {
     match cmux_first(w) {
-        None => true,
-        Some(pr) => saved_for(saved, w).is_some_and(|s| is_saved(pr, s)),
+        Some(pr) => saved_match(saved, w, pr),
+        None => saved_for(saved, w),
     }
+}
+
+/// Whether the workspace's first PR carries the poller's saved data, so
+/// it ages with it: cmux sends none, or its first is the saved one.
+pub fn from_poller(saved: &SavedState, w: &Workspace) -> bool {
+    cmux_first(w).is_none() || first_saved(saved, w).is_some()
 }
 
 /// The CI checks of the saved PR, for the workspace's first PR. Only the
 /// poller saves checks, so a PR of cmux's own that is not the saved one
 /// has none.
 pub fn checks_of<'s>(saved: &'s SavedState, w: &Workspace) -> &'s [SavedCheck] {
-    if !from_poller(saved, w) {
-        return &[];
-    }
-    saved_for(saved, w)
+    first_saved(saved, w)
         .and_then(|pr| pr.checks.as_deref())
         .unwrap_or(&[])
 }
@@ -470,6 +480,15 @@ mod tests {
         assert_eq!(
             pr.as_ref().and_then(|p| p.title.as_deref()),
             Some("Colour the menus")
+        );
+        let blank = holding(PullRequest {
+            url: Some(String::new()),
+            ..cmuxs_347()
+        });
+        let pr = pr_of(&s, Some(&blank));
+        assert_eq!(
+            pr.as_ref().and_then(|p| p.url.as_deref()),
+            Some("https://h/347")
         );
     }
 

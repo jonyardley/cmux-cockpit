@@ -108,7 +108,9 @@ describe("prsOf", () => {
   it("prefers cmux's own PRs, list first", () => {
     const own = { number: 9, url: "https://github.com/o/r/pull/9" };
     assert.deepEqual(prsOf(ws("w1", { branch: "feat", pr: own })), [own]);
-    assert.deepEqual(prsOf(ws("w1", { branch: "feat", prs: [own, saved] })), [own, saved]);
+    // The saved PR sent as cmux's own is filled from itself: a PR, so no checks.
+    const { checks: _checks, ...savedPr } = saved;
+    assert.deepEqual(prsOf(ws("w1", { branch: "feat", prs: [own, saved] })), [own, savedPr]);
   });
 
   it("has nothing for an unknown workspace", () => {
@@ -227,6 +229,31 @@ describe("a PR cmux sends that the poller also saved", () => {
     const pr = prOf(ws("held", { branch: "feat", pr: { number: 347, status: "open" } }));
     assert.equal(pr?.title, "Colour the menus");
     assert.equal(pr?.url, heldUrl);
+  });
+
+  it("fills only the listed PR that is the saved one, and greys only that row", () => {
+    const other = { url: "https://github.com/o/r/pull/348", number: 348, status: "open" as const };
+    for (const prs of [
+      [other, cmuxPr],
+      [cmuxPr, other],
+    ]) {
+      r.data.workspaces = [ws("held", { branch: "feat", prs })];
+      r.data.epoch++;
+      const rows = agents.prs();
+      const held = rows.find((e) => e.key === heldUrl);
+      const plain = rows.find((e) => e.key === other.url);
+      assert.equal(held && agents.prChipText(held), "draft · 1 failing");
+      assert.equal(held?.saved, true);
+      assert.equal(plain && agents.prChipText(plain), "open");
+      assert.equal(plain?.saved, false);
+    }
+  });
+
+  it("takes the saved url when cmux sends a blank one, and passes a hole in its list through", () => {
+    assert.equal(prOf(ws("held", { branch: "feat", pr: { ...cmuxPr, url: "" } }))?.url, heldUrl);
+    // A hole as an unschematised feed might send one: the cast stands in for that data.
+    const holes = [null as unknown as PullRequest, cmuxPr];
+    assert.equal(prsOf(ws("held", { branch: "feat", prs: holes }))[1]?.draft, true);
   });
 
   it("leaves a different PR from cmux as it came, with no saved checks", () => {

@@ -149,7 +149,7 @@ function workspacePrs(workspaces: readonly Workspace[], seen: Set<string>): PrEn
         pr,
         title,
         summary,
-        saved: fromPoller(w),
+        saved: fromPoller(w, pr),
         project: savedProjectFor(w.directory, w.id),
         session: sessionOf(w),
       });
