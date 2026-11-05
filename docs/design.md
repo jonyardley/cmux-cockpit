@@ -290,7 +290,8 @@ face and `chipEdge` hairline, `plus` at `addGlyph` 12 semibold in
 and accessibility label say "New session".
 
 A click opens a native menu headed "New session in": every project in
-the table's order, each with its colour dot (`menuDot` 8, the project's
+the Projects view's order (busy ones first, then the quiet ones, folded
+or not), each with its colour dot (`menuDot` 8, the project's
 own colour, grey with none) and its name; a project with no folder shows
 disabled as "<name> (no folder)". Then a divider and "No project (home
 folder)", disabled while the core knows no home. A pick opens a new

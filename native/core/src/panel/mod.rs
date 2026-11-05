@@ -507,8 +507,9 @@ pub struct AddProject {
 /// it. The pane draws no add button and ignores it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct AddMenu {
-    /// Every project in the table's order, as the Projects view lists
-    /// them, less any removed here before the rebuild drops it.
+    /// Every project in the Projects view's order (the busy ones in
+    /// table order, then the quiet ones), less any removed here before
+    /// the rebuild drops it.
     pub projects: Vec<AddProject>,
     /// Whether the home folder is known, so "No project" can open there.
     pub home: bool,

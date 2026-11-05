@@ -227,7 +227,7 @@ pub(super) fn build(session: &mut Session, data: &Data, view: &ViewModel) -> Pan
     let shown = view_of(view);
     let (projects, add) = match shown {
         PanelView::Projects => (projects(session, data, view), None),
-        PanelView::All => (Vec::new(), Some(add_menu(session))),
+        PanelView::All => (Vec::new(), Some(add_menu(session, data))),
     };
     Panel {
         view: shown,
@@ -241,18 +241,29 @@ pub(super) fn build(session: &mut Session, data: &Data, view: &ViewModel) -> Pan
     }
 }
 
-/// The add button's menu: every project in table order, less one removed
-/// here, and whether the home folder is known.
-fn add_menu(session: &Session) -> AddMenu {
-    let projects = session
+/// The add button's menu: every project in the Projects view's order,
+/// the busy ones in table order then the quiet ones, whether or not
+/// Quiet is folded, less one removed here; and whether the home folder
+/// is known.
+fn add_menu(session: &mut Session, data: &Data) -> AddMenu {
+    let quiet = session.quiet_projects(data);
+    let busy: Vec<String> = session
         .projects
         .iter()
-        .filter(|p| !session.is_removed_project(p.id()))
-        .map(|p| AddProject {
-            key: p.id().to_string(),
-            name: p.name.clone(),
-            color: parse_hex(&p.color),
-            can_open: session.can_open_project(p.id()),
+        .map(|p| p.id().to_string())
+        .filter(|k| !quiet.contains(k) && !session.is_removed_project(k))
+        .collect();
+    let projects = busy
+        .iter()
+        .chain(&quiet)
+        .map(|k| {
+            let p = session.project_by_key(k);
+            AddProject {
+                key: k.clone(),
+                name: p.name.clone(),
+                color: parse_hex(&p.color),
+                can_open: session.can_open_project(k),
+            }
         })
         .collect();
     AddMenu {
@@ -1517,8 +1528,11 @@ mod tests {
                 {"match": "/dev/notes", "name": "Notes", "color": "blue", "icon": "x"}]"##,
         )
         .unwrap();
-        let data: Data =
-            serde_json::from_value(serde_json::json!({"epoch": 1, "workspaces": []})).unwrap();
+        // A session in Notes makes it busy, so it lists before App, which
+        // is quiet, as the Projects view lists them.
+        let data: Data = serde_json::from_value(serde_json::json!({"epoch": 1,
+            "workspaces": [{"id": "n", "directory": "/dev/notes"}]}))
+        .unwrap();
         let mut core = Model::default();
         let _effects = Cockpit.update(Event::Projects(table), &mut core);
         let _effects = Cockpit.update(Event::Data(data), &mut core);
@@ -1535,21 +1549,21 @@ mod tests {
             AddMenu {
                 projects: vec![
                     AddProject {
-                        key: "/dev/app".into(),
-                        name: "App".into(),
-                        color: Some(0xD9_77_57),
-                        can_open: true,
-                    },
-                    AddProject {
                         key: "/dev/notes".into(),
                         name: "Notes".into(),
                         color: None,
                         can_open: false,
                     },
+                    AddProject {
+                        key: "/dev/app".into(),
+                        name: "App".into(),
+                        color: Some(0xD9_77_57),
+                        can_open: true,
+                    },
                 ],
                 home: true,
             },
-            "table order, less the removed one; a project with no folder stays, disabled"
+            "busy then quiet, less the removed one; a project with no folder stays, disabled"
         );
         let _effects = Cockpit.update(Event::FlipView, &mut core);
         assert_eq!(
