@@ -195,7 +195,7 @@ capitalising the string.
 | `Metrics.switchHeight`, `switchInset` | 26, 3 | a tab's height; the track's inner padding |
 | `Metrics.addButton`, `addGlyph`, `addGap` | 32, 12, 6 | the add button's circle (the track's height), its plus, and its gap from the track |
 | `Metrics.menuDot` | 8 | a project's colour dot on the filter chip |
-| `MenuBadge.side`, `font` | 16, 9 | a project's badge in the add and filter menus: the quiet row's badge and glyph |
+| `MenuBadge.side`, `font` | 16, 9 | a project's badge in the add and filter menus and on a quiet project row (`ProjectMetrics.quietBadge` and `quietBadgeFont` read these) |
 | `Metrics.filterGlyph` | 11 | the filter button's funnel; the button is `addButton` across |
 | `Metrics.filterChipPadH`, `filterChipPadV`, `filterChipGap`, `filterChipX` | 8, 3, 5, 8 | inside the filter chip; between its dot, words and x; the x's size |
 | `Metrics.hairline`, `selectWidth` | 1, 2 | every edge; a selected card's outline |
@@ -313,9 +313,10 @@ folder)" has no badge.
 
 A menu takes its items' icons as AppKit images and tints a template
 one grey, so `MenuBadge` paints the badge (face, corner by the badge
-rule, glyph in `BadgeInk`) into 1x and 2x bitmaps, marked not a
-template, and `MenuBadgeIcon` draws it with the original rendering. The
-face is the same in light and dark, as on every badge.
+rule, glyph in `BadgeInk`, its origin on a whole pixel) into 1x and 2x
+sRGB bitmaps, marked not a template, once per glyph and colour, and
+`MenuBadgeIcon` draws it with the original rendering in a title and icon
+label. The face is the same in light and dark, as on every badge.
 Where: `Model/MenuBadge.swift`, `Views/TopView.swift` (`AddButton`,
 `RoundMenuButton`, `MenuBadgeIcon`, `MenuTick`).
 

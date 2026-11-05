@@ -1563,9 +1563,9 @@ mod tests {
         use crate::{Cockpit, Event};
         use crux_core::App;
         let table: Vec<Project> = serde_json::from_str(
-            r##"[{"match": "/dev/app", "name": "App", "color": "#D97757", "icon": "x", "root": "/r/app"},
-                {"match": "/dev/gone", "name": "Gone", "color": "#000000", "icon": "x", "root": "/r/gone"},
-                {"match": "/dev/notes", "name": "Notes", "color": "blue", "icon": "x"}]"##,
+            r##"[{"match": "/dev/app", "name": "App", "color": "#D97757", "icon": "star.fill", "root": "/r/app"},
+                {"match": "/dev/gone", "name": "Gone", "color": "#000000", "icon": "trash", "root": "/r/gone"},
+                {"match": "/dev/notes", "name": "Notes", "color": "blue", "icon": "leaf.fill"}]"##,
         )
         .unwrap();
         // A session in Notes makes it busy, so it lists before App, which
@@ -1592,7 +1592,7 @@ mod tests {
                         key: "/dev/notes".into(),
                         name: "Notes".into(),
                         color: None,
-                        icon: "x".into(),
+                        icon: "leaf.fill".into(),
                         can_open: false,
                         chosen: false,
                     },
@@ -1600,7 +1600,7 @@ mod tests {
                         key: "/dev/app".into(),
                         name: "App".into(),
                         color: Some(0xD9_77_57),
-                        icon: "x".into(),
+                        icon: "star.fill".into(),
                         can_open: true,
                         chosen: false,
                     },
@@ -1609,6 +1609,20 @@ mod tests {
                 home_chosen: false,
             },
             "busy then quiet, less the removed one; a project with no folder stays, disabled"
+        );
+        let filter = Panel::from_core(&mut core).filter.unwrap();
+        let badges: Vec<_> = filter
+            .projects
+            .iter()
+            .map(|p| (p.name.as_str(), p.color, p.icon.as_str()))
+            .collect();
+        assert_eq!(
+            badges,
+            [
+                ("Notes", None, "leaf.fill"),
+                ("App", Some(0xD9_77_57), "star.fill")
+            ],
+            "the filter menu has each project's own badge, in the add menu's order"
         );
         let _effects = Cockpit.update(Event::FlipView, &mut core);
         assert_eq!(

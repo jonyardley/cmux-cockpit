@@ -11,8 +11,9 @@ import AppKit
 /// its colour instead of tinting it. The face does not change with the
 /// appearance (BadgeInk), so one image serves light and dark.
 enum MenuBadge {
-    /// The quiet row's badge and glyph (ProjectMetrics.quietBadge and
-    /// quietBadgeFont), here so the model test can pin them.
+    /// The quiet row's badge and glyph: ProjectMetrics.quietBadge and
+    /// quietBadgeFont read these, so the menus and the Projects view stay
+    /// one size, and the model test can pin them.
     static let side: Double = 16
     static let font: Double = 9
     /// The pixel scales painted: a plain screen and Retina.
@@ -23,9 +24,30 @@ enum MenuBadge {
         color ?? BadgeInk.fallback
     }
 
+    /// The badges painted so far, by glyph and face: a menu's body runs on
+    /// every core update, and painting two bitmaps a project each time
+    /// would hand the menu a new image for an unchanged item.
+    @MainActor private static var painted: [String: NSImage] = [:]
+
     /// The badge for `icon` (an SF Symbol name) on `color`'s face, as a
-    /// menu item's image that keeps its colour.
-    static func image(icon: String, color: UInt32?) -> NSImage {
+    /// menu item's image that keeps its colour; painted once, then reused.
+    @MainActor static func image(icon: String, color: UInt32?) -> NSImage {
+        let key = "\(icon) \(face(color))"
+        if let image = painted[key] { return image }
+        let image = paint(icon: icon, color: color)
+        painted[key] = image
+        return image
+    }
+
+    /// Where a glyph `length` points long starts so it sits centred on the
+    /// badge, rounded to a whole pixel at `scale` so it is not resampled
+    /// soft.
+    static func centred(_ length: Double, scale: Int) -> Double {
+        let pixels = Double(scale)
+        return ((side - length) / 2 * pixels).rounded() / pixels
+    }
+
+    private static func paint(icon: String, color: UInt32?) -> NSImage {
         let image = NSImage(size: NSSize(width: side, height: side))
         for scale in scales {
             if let rep = bitmap(icon: icon, color: color, scale: scale) { image.addRepresentation(rep) }
@@ -36,18 +58,20 @@ enum MenuBadge {
 
     /// One scale of the badge: the rounded face, then the glyph centred in
     /// the ink that reads on it. A name that is no symbol leaves the bare
-    /// face, as Image(systemName:) draws nothing for it.
+    /// face, as Image(systemName:) draws nothing for it. It is painted in
+    /// sRGB, the space the face's colour is given in, so the pixels are the
+    /// project's colour and not a device conversion of it.
     static func bitmap(icon: String, color: UInt32?, scale: Int) -> NSBitmapImageRep? {
         let pixels = Int(side) * scale
         guard
-            let rep = NSBitmapImageRep(
-                bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels, bitsPerSample: 8,
-                samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
-                bytesPerRow: 0, bitsPerPixel: 0
+            let space = CGColorSpace(name: CGColorSpace.sRGB),
+            let canvas = CGContext(
+                data: nil, width: pixels, height: pixels, bitsPerComponent: 8, bytesPerRow: 0,
+                space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
             )
         else { return nil }
-        rep.size = NSSize(width: side, height: side)
-        guard let context = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+        canvas.scaleBy(x: CGFloat(scale), y: CGFloat(scale))
+        let context = NSGraphicsContext(cgContext: canvas, flipped: false)
         NSGraphicsContext.saveGraphicsState()
         defer { NSGraphicsContext.restoreGraphicsState() }
         NSGraphicsContext.current = context
@@ -59,12 +83,15 @@ enum MenuBadge {
         if let glyph = glyph(icon, ink: BadgeInk.glyph(on: face)) {
             let size = glyph.size
             let at = NSRect(
-                x: (side - size.width) / 2, y: (side - size.height) / 2,
+                x: centred(size.width, scale: scale), y: centred(size.height, scale: scale),
                 width: size.width, height: size.height
             )
             glyph.draw(in: at)
         }
         context.flushGraphics()
+        guard let painted = canvas.makeImage() else { return nil }
+        let rep = NSBitmapImageRep(cgImage: painted)
+        rep.size = NSSize(width: side, height: side)
         return rep
     }
 

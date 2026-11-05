@@ -109,6 +109,7 @@ struct AddButton: View {
                         } icon: {
                             MenuBadgeIcon(icon: project.icon, color: project.color)
                         }
+                        .labelStyle(.titleAndIcon)
                     }
                     .disabled(!project.canOpen)
                 }
@@ -152,6 +153,7 @@ struct FilterButton: View {
                     } icon: {
                         MenuBadgeIcon(icon: project.icon, color: project.color)
                     }
+                    .labelStyle(.titleAndIcon)
                 }
             }
             Divider()
@@ -254,7 +256,8 @@ struct MenuTick<Content: View>: View {
 
 /// A project's badge as a menu item's icon: MenuBadge's painted image,
 /// drawn as it is, never as a template, so the menu keeps its colour
-/// (docs/design.md#add-button).
+/// (docs/design.md#add-button). Its Label asks for title and icon, so a
+/// menu that would draw a label's title alone keeps the badge.
 struct MenuBadgeIcon: View {
     let icon: String
     let color: UInt32?

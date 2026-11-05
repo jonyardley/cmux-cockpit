@@ -40,9 +40,10 @@ enum ProjectMetrics {
     static let headerBadge: CGFloat = 18
     static let headerBadgeFont: CGFloat = 10
     /// A quiet project's badge, and its glyph; "+ New project"'s plus sits
-    /// in the same slot.
-    static let quietBadge: CGFloat = 16
-    static let quietBadgeFont: CGFloat = 9
+    /// in the same slot. The menus' badges are the same, so the one value
+    /// lives in MenuBadge, where the model test pins it.
+    static let quietBadge = CGFloat(MenuBadge.side)
+    static let quietBadgeFont = CGFloat(MenuBadge.font)
     /// The header's "+": a round button and its glyph.
     static let plusButton: CGFloat = 20
     static let plusFont: CGFloat = 11

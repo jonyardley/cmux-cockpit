@@ -711,11 +711,14 @@ if var panel = load("lanes"), let menu = FilterText.menu(panel) {
 
 // MARK: The menus' project badges
 
-/// A pixel of a painted badge in sRGB, as six hex digits, and its alpha.
+/// A pixel of a painted badge as stored, six hex digits and its alpha: the
+/// raw samples, with no colour conversion, so they are sRGB exactly when
+/// the badge is (checked below).
 func pixel(_ rep: NSBitmapImageRep, _ x: Int, _ y: Int) -> (hex: UInt32, alpha: Double)? {
-    guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return nil }
-    let byte = { (v: CGFloat) in UInt32((v * 255).rounded()) }
-    return (byte(c.redComponent) << 16 | byte(c.greenComponent) << 8 | byte(c.blueComponent), Double(c.alphaComponent))
+    guard rep.samplesPerPixel == 4, rep.bitsPerSample == 8 else { return nil }
+    var p = [Int](repeating: 0, count: 4)
+    rep.getPixel(&p, atX: x, y: y)
+    return (UInt32(p[0] << 16 | p[1] << 8 | p[2]), Double(p[3]) / 255)
 }
 
 /// Whether two colours are the same to within a step a channel.
@@ -729,6 +732,13 @@ check(badge.size == NSSize(width: 16, height: 16), "a menu badge is the quiet ro
 let reps = badge.representations.compactMap { $0 as? NSBitmapImageRep }
 check(reps.map(\.pixelsWide).sorted() == [16, 32], "a menu badge is painted at 1x and 2x: \(reps.map(\.pixelsWide))")
 check(reps.allSatisfy { $0.size == badge.size }, "each scale fills the badge's 16pt")
+check(reps.allSatisfy { $0.colorSpace == .sRGB }, "each scale is tagged sRGB, as BadgeTile's face is, so no device conversion drifts it")
+check(MenuBadge.image(icon: "star.fill", color: 0xD97757) === badge, "a badge is painted once and then reused, not on every redraw")
+check(MenuBadge.image(icon: "star.fill", color: 0x6A9BCC) !== badge, "another colour is another badge")
+check(MenuBadge.image(icon: "leaf.fill", color: 0xD97757) !== badge, "another glyph is another badge")
+check(MenuBadge.centred(9.3, scale: 1) == 3, "a glyph's origin lands on a whole pixel at 1x")
+check(MenuBadge.centred(9.3, scale: 2) == 3.5, "and on a whole pixel at 2x")
+check(MenuBadge.centred(10, scale: 1) == 3, "a glyph that fits exactly is centred exactly")
 if let rep = MenuBadge.bitmap(icon: "star.fill", color: 0xD97757, scale: 2) {
     let edge = pixel(rep, 16, 2)
     check(edge.map { near($0.hex, 0xD97757) && $0.alpha == 1 } == true, "the face is the project's own colour: \(String(describing: edge))")
