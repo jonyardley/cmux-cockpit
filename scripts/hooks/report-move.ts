@@ -39,7 +39,7 @@ import {
 } from "../state-config.ts";
 import { logLine } from "../state-log.ts";
 import { readApplyWrite } from "../state-url.ts";
-import { cmux } from "./cmux-cli.ts";
+import { type DescriptionRead, readDescription, withDescriptionLock, writeDescription } from "./description.ts";
 import { field } from "./gh-command.ts";
 import { readTail, replyFrom, sleep } from "./transcript.ts";
 
@@ -265,18 +265,18 @@ function record(event: unknown, wsId: string | undefined, now: number, attended:
   if (!wsId || !isId(wsId) || field(event, "hook_event_name") !== "Stop") return null;
   const raw = field(event, "session_id");
   const session = typeof raw === "string" && isId(raw) ? raw : undefined;
-  return deliver(wsId, moveFrom(finalReply(event), now, session, attended), REAL_DELIVERY);
+  const move = moveFrom(finalReply(event), now, session, attended);
+  // The lock keeps the status line's context writer from putting back the
+  // description it read before this move went in (description.ts). Waiting
+  // out a stuck holder costs at most the wait, then the move goes ahead.
+  return withDescriptionLock(
+    wsId,
+    3000,
+    () => deliver(wsId, move, REAL_DELIVERY),
+    () => deliver(wsId, move, REAL_DELIVERY),
+  );
 }
 
-/**
- * What cmux says the workspace's description is: the text, "" for none, or
- * why it could not say. "unlisted" is a workspace cmux's list does not hold,
- * which asking again will not change; "silent" is cmux failing to answer at
- * all, which a busy cmux may do once.
- */
-export type DescriptionRead = { ok: true; text: string } | { ok: false; why: "unlisted" | "silent" };
-
-/** Where a move goes: cmux's description, else the saved map and a rebuild. */
 export interface Delivery {
   read: (wsId: string) => DescriptionRead;
   /** Sets the description, or clears it for null; false when cmux refused. */
@@ -288,36 +288,9 @@ export interface Delivery {
   log: (line: string) => void;
 }
 
-const SILENT: DescriptionRead = { ok: false, why: "silent" };
-
-export function readDescription(wsId: string): DescriptionRead {
-  const res = cmux(["--json", "workspace", "list"]);
-  if (!res.ok) return SILENT;
-  try {
-    const list = field(JSON.parse(res.out), "workspaces");
-    const ws = Array.isArray(list) ? list.find((w) => field(w, "id") === wsId) : undefined;
-    if (ws === undefined) return { ok: false, why: "unlisted" };
-    const d = field(ws, "description");
-    return { ok: true, text: typeof d === "string" ? d : "" };
-  } catch {
-    return SILENT;
-  }
-}
-
-export function writeDescription(wsId: string, description: string | null): boolean {
-  const args = ["workspace-action", "--workspace", wsId];
-  const res = cmux(
-    description === null
-      ? [...args, "--action", "clear-description"]
-      : [...args, "--action", "set-description", "--description", description],
-  );
-  if (!res.ok) console.error(`cmux refused the description: ${res.err}`);
-  return res.ok;
-}
-
 const REAL_DELIVERY: Delivery = {
   read: readDescription,
-  write: writeDescription,
+  write: (wsId, description) => writeDescription("report-move", wsId, description),
   hasSaved,
   save: (wsId, move) => readApplyWrite(STATE_PATH, `moves.${wsId}`, move ? JSON.stringify(move) : null),
   build: () => scheduleBuild("report-move"),

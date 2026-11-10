@@ -16,7 +16,7 @@ import {
 
 const { installRenderer } = await import("./support/renderer.ts");
 const r = installRenderer();
-const { ws } = await import("./support/fixtures.ts");
+const { agent, ws } = await import("./support/fixtures.ts");
 const c = await import("../src/agents/context.ts");
 const { METER_FILL, METER_TRACK, METER_WARN, T } = await import("../src/agents/theme.ts");
 
@@ -42,6 +42,12 @@ describe("the context tail on a description", () => {
     assert.equal(isMoveDescription(withContext("Ship checklist", ctx())), false);
   });
 
+  it("never takes a move whose words hold an unclosed tail for a tail", () => {
+    const d = moveDescription({ text: "check ⟦ctx {used} parsing", epoch: 1 });
+    assert.deepEqual(splitContext(d), { body: d, context: null });
+    assert.equal(moveOfDescription(d)?.text, "check ⟦ctx {used} parsing");
+  });
+
   it("strips a bad tail but carries no context from it", () => {
     assert.deepEqual(splitContext('words ⟦ctx {"used":18}⟧'), { body: "words", context: null });
     assert.deepEqual(splitContext("words ⟦ctx {not json}⟧"), { body: "words", context: null });
@@ -64,6 +70,8 @@ describe("shortCount and resetsIn", () => {
   it("shortens token counts", () => {
     assert.equal(c.shortCount(950), "950");
     assert.equal(c.shortCount(177_816), "178k");
+    assert.equal(c.shortCount(999_499), "999k");
+    assert.equal(c.shortCount(999_600), "1M");
     assert.equal(c.shortCount(1_000_000), "1M");
     assert.equal(c.shortCount(1_500_000), "1.5M");
   });
@@ -92,7 +100,11 @@ describe("contextMeters", () => {
 
   it("shows this chat, then the plan's two limits", () => {
     r.data.workspaces = [
-      ws("sel", { selected: true, description: withContext("", ctx({ tokens: 177_816, size: 1_000_000, ...PLAN })) }),
+      ws("sel", {
+        selected: true,
+        agents: [agent("working")],
+        description: withContext("", ctx({ tokens: 177_816, size: 1_000_000, ...PLAN })),
+      }),
     ];
     assert.deepEqual(shown(), [
       { key: "chat", percent: 18, detail: "178k of 1M", last: false },
@@ -105,6 +117,7 @@ describe("contextMeters", () => {
     r.data.workspaces = [
       ws("sel", {
         selected: true,
+        agents: [agent("working")],
         description: withContext("Ship checklist", ctx({ used: 40, hour: 5, epoch: NOW - 900 })),
       }),
       ws("busy", { description: withContext("", ctx({ used: 90, hour: 30, epoch: NOW - 5 })) }),
@@ -114,6 +127,14 @@ describe("contextMeters", () => {
       { key: "chat", percent: 40, detail: "", last: false },
       { key: "hour", percent: 30, detail: "", last: true },
     ]);
+  });
+
+  it("leaves out the chat once it has ended, or with no chat at all, keeping the plan", () => {
+    const description = withContext("", ctx({ used: 85, week: 7 }));
+    for (const agents of [[agent("ended")], []]) {
+      r.data.workspaces = [ws("sel", { selected: true, agents, description })];
+      assert.deepEqual(shown(), [{ key: "week", percent: 7, detail: "", last: true }]);
+    }
   });
 
   it("shows the plan alone when the selected chat has not reported", () => {
@@ -126,14 +147,20 @@ describe("contextMeters", () => {
 
   it("reads a limit whose reset has passed as reset", () => {
     r.data.workspaces = [
-      ws("sel", { selected: true, description: withContext("", ctx({ hour: 95, hourReset: NOW - 1 })) }),
+      ws("sel", {
+        selected: true,
+        agents: [agent("working")],
+        description: withContext("", ctx({ hour: 95, hourReset: NOW - 1 })),
+      }),
     ];
     assert.deepEqual(shown()[1], { key: "hour", percent: 0, detail: "Reset", last: true });
   });
 
   it("leaves reset times out before the first clock tick", () => {
     r.data.epoch = 0;
-    r.data.workspaces = [ws("sel", { selected: true, description: withContext("", ctx(PLAN)) })];
+    r.data.workspaces = [
+      ws("sel", { selected: true, agents: [agent("working")], description: withContext("", ctx(PLAN)) }),
+    ];
     assert.deepEqual(
       shown().map((m) => m.detail),
       ["", "", ""],

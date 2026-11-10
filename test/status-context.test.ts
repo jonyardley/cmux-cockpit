@@ -5,8 +5,9 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { type Delivery, type DescriptionRead, deliver } from "../scripts/hooks/report-move.ts";
-import { type ContextDelivery, contextFrom, moved, report } from "../scripts/hooks/status-context.ts";
+import type { DescriptionRead } from "../scripts/hooks/description.ts";
+import { type Delivery, deliver } from "../scripts/hooks/report-move.ts";
+import { type ContextDelivery, contextFrom, due, REFRESH_S, report } from "../scripts/hooks/status-context.ts";
 import { moveDescription, type SavedContext, splitContext, withContext } from "../scripts/state-config.ts";
 
 const PAYLOAD = {
@@ -55,14 +56,15 @@ describe("contextFrom", () => {
   });
 });
 
-describe("moved", () => {
+describe("due", () => {
   const c: SavedContext = { epoch: 1, used: 18, tokens: 100, hour: 10 };
   it("ignores the time seen and the exact token count, so a busy status line writes rarely", () => {
-    assert.equal(moved(null, c), true);
-    assert.equal(moved(c, { ...c, epoch: 9, tokens: 150 }), false);
-    assert.equal(moved(c, { ...c, used: 19 }), true);
-    assert.equal(moved(c, { ...c, hour: 11 }), true);
-    assert.equal(moved(c, { ...c, week: 1 }), true);
+    assert.equal(due(null, c), true);
+    assert.equal(due(c, { ...c, epoch: 9, tokens: 150 }), false);
+    assert.equal(due(c, { ...c, used: 19 }), true);
+    assert.equal(due(c, { ...c, hour: 11 }), true);
+    assert.equal(due(c, { ...c, week: 1 }), true);
+    assert.equal(due(c, { ...c, epoch: 1 + REFRESH_S }), true);
   });
 });
 
@@ -79,7 +81,7 @@ function fakeCmux(start: string | null, opts: { refuse?: boolean } = {}) {
       return true;
     },
     last: () => last,
-    remember: (_ws, c) => {
+    remember: (c) => {
       last = c;
     },
   };
@@ -98,13 +100,18 @@ describe("report", () => {
     }
   });
 
-  it("writes once while nothing moves", () => {
+  it("writes once while nothing moves, and again once the refresh is due", () => {
     const f = fakeCmux("");
     report("ws1", c, f.d);
     report("ws1", { ...c, epoch: 2 }, f.d);
     assert.equal(f.writes.length, 1);
-    report("ws1", { ...c, used: 19 }, f.d);
+    report("ws1", { ...c, epoch: 1 + REFRESH_S }, f.d);
     assert.equal(f.writes.length, 2);
+    f.writes.length = 0;
+    report("ws1", { ...c, epoch: 2 + REFRESH_S }, f.d);
+    assert.equal(f.writes.length, 0);
+    report("ws1", { ...c, used: 19, epoch: 3 + REFRESH_S }, f.d);
+    assert.equal(f.writes.length, 1);
   });
 
   it("says why when cmux cannot say or refuses, and tries again next time", () => {

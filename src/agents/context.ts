@@ -39,7 +39,8 @@ function contextOf(d: string | undefined): SavedContext | null {
 /** A token count the short way: "950", "178k", "1M", "1.5M". */
 export function shortCount(n: number): string {
   if (n < 1000) return String(n);
-  if (n < 1_000_000) return Math.round(n / 1000) + "k";
+  // Below 999,500 rounds to at most 999k; from there it reads as 1M.
+  if (n < 999_500) return Math.round(n / 1000) + "k";
   const m = Math.round(n / 100_000) / 10;
   return String(m) + "M";
 }
@@ -87,7 +88,11 @@ function planMeters(now: number): Meter[] {
 
 /** The card's meters, top to bottom: this chat, then the plan's two limits; empty when nothing has reported. */
 export const contextMeters = computed((): Last<Meter>[] => {
-  const chat = contextOf(current()?.ws.description);
+  const cur = current();
+  // An ended chat's tail stays on the description, so it shows only while
+  // the workspace has a chat that has not ended.
+  const live = cur?.agents.some((a) => a.status !== "ended") ?? false;
+  const chat = live ? contextOf(cur?.ws.description) : null;
   return markLast([...(chat ? [chatMeter(chat)] : []), ...planMeters(nowEpoch())]);
 });
 

@@ -322,7 +322,7 @@ static MOVE_TAIL: LazyLock<Option<Regex>> =
 // The status line's context rides after the move as a second tail
 // (state-config.ts CONTEXT_TAIL); it is stripped before the move is read.
 static CONTEXT_TAIL: LazyLock<Option<Regex>> =
-    LazyLock::new(|| Regex::new(r"(?s)^(.*?) ?⟦ctx \{[^⟧]*\}⟧$").ok());
+    LazyLock::new(|| Regex::new(r"(?s)^(.*?) ?⟦ctx \{[^⟦⟧]*\}⟧$").ok());
 static LEANS: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"^[1-9][a-z](?: [1-9][a-z])*$").ok());
 
@@ -553,6 +553,9 @@ mod tests {
         assert_eq!(without_context(ctx), "");
         assert!(!is_move_description(Some(ctx)));
         assert_eq!(without_context("plain words"), "plain words");
+        let tricky = r#"check ⟦ctx {used} parsing ⟦move {"epoch":1}⟧"#;
+        assert_eq!(without_context(tricky), tricky);
+        assert!(is_move_description(Some(tricky)));
     }
 
     #[test]

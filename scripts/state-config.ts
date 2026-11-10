@@ -668,9 +668,10 @@ export interface SavedContext {
 
 // The context rides on the same description as the move, as a second tail
 // after it, so the line still comes first. Its JSON holds only numbers, so
-// no ⟧ can occur inside it, and stripping it first leaves the move's own
-// tail anchored at the end where MOVE_TAIL looks for it.
-const CONTEXT_TAIL = /^(.*?) ?⟦ctx (\{[^⟧]*\})⟧$/s;
+// no bracket can occur inside it; the pattern refuses one, so a move whose
+// words happen to hold "⟦ctx {" is never mistaken for a tail. Stripping it
+// first leaves the move's own tail anchored at the end, where MOVE_TAIL looks.
+const CONTEXT_TAIL = /^(.*?) ?⟦ctx (\{[^⟦⟧]*\})⟧$/s;
 
 const isPercent = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100;
 const isCount = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
