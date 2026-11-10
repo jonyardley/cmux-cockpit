@@ -153,12 +153,12 @@ describe("contextMeters", () => {
     r.data.workspaces = [{ ...main, selected: true }, acme];
     assert.deepEqual(label(), ["This chat: ", "Your plan, this week: Resets in 6 days"]);
     r.data.workspaces = [main, { ...acme, selected: true }];
-    assert.deepEqual(label(), ["This chat: ", "ACME plan, this week: Resets in 3 days"]);
+    assert.deepEqual(label(), ["This chat: ", "Acme plan, this week: Resets in 3 days"]);
   });
 
   it("names a plan by its account", () => {
     assert.equal(c.planName(undefined), "Your plan");
-    assert.equal(c.planName("acme"), "ACME plan");
+    assert.equal(c.planName("acme"), "Acme plan");
     assert.equal(c.planName("client-x"), "Client-x plan");
   });
 

@@ -5,7 +5,7 @@
 // selected workspace's own; the plan's is account-wide, so it is the newest
 // reading any workspace on the same Claude account carries, since an idle
 // chat's copy goes stale. Chats run under a second account (its own Claude
-// folder) have their own limits, named on the card: "ACME plan".
+// folder) have their own limits, named on the card: "Acme plan".
 
 import { type SavedContext, splitContext } from "../../scripts/state-config.ts";
 import { type Last, markLast } from "../shared/list.ts";
@@ -80,11 +80,10 @@ function newestPlan(account: string | undefined): SavedContext | null {
   return best;
 }
 
-/** Whose plan a meter shows: "Your plan" for the main account, else the account's name, "ACME plan". */
+/** Whose plan a meter shows: "Your plan" for the main account, else the account's name, "Acme plan". */
 export function planName(account: string | undefined): string {
   if (account === undefined) return "Your plan";
-  const name = account.length <= 4 ? account.toUpperCase() : account.charAt(0).toUpperCase() + account.slice(1);
-  return name + " plan";
+  return account.charAt(0).toUpperCase() + account.slice(1) + " plan";
 }
 
 function planMeters(account: string | undefined, now: number): Meter[] {
