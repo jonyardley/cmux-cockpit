@@ -7,7 +7,7 @@ use crate::data::{Agent, AgentStatus, Data, Workspace};
 use crate::js::{non_empty, positive, truthy};
 use crate::moves::{quiet_move, waiting_move};
 use crate::needs::ask_reason;
-use crate::persist::{SavedMove, is_move_description};
+use crate::persist::{SavedMove, is_move_description, without_context};
 use crate::prs::{PrHealth, PrSummary, pr_health};
 use crate::session::Session;
 use crate::shells::live_shell_count;
@@ -293,7 +293,7 @@ fn own_description(w: Option<&Workspace>) -> String {
     if is_move_description(d) {
         String::new()
     } else {
-        readable(d)
+        readable(d.map(without_context))
     }
 }
 

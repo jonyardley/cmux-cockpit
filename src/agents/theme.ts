@@ -26,6 +26,12 @@ export const T = {
 export const HERE_FACE = `${P.text}0A`;
 export const HERE_HOVER = hoverFace(HERE_FACE, 0);
 
+/** The Context card's bar: its filled steps in neutral ink, since hue only
+ * ever means state, on a faint ink track; amber only once nearly full. */
+export const METER_FILL = P.secondary;
+export const METER_TRACK = `${P.text}14`;
+export const METER_WARN = P.amber;
+
 /** A stale PR chip's opacity: dimmed while the poller's data is old or gh is down (issue #78). */
 export const STALE_OPACITY = 0.5;
 

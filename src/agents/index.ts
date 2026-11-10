@@ -19,6 +19,9 @@
 //                    old or gh is down, and those chips dim (#78).
 //   Made here      - pages and docs agents published (#52): this workspace's
 //                    first, then the latest few from others; tap opens it.
+//   Context        - how full this workspace's chat is, and the plan's
+//                    5-hour and weekly usage (context.ts); hidden until a
+//                    status line has reported.
 // Counts are the real totals, and a capped list ends in "+N more" (#80).
 // Pull requests shows its heading and count when empty; Made here, and the
 // card's Helpers, fold into one faint line at the bottom instead. When
@@ -30,11 +33,13 @@
 import { stateNotice } from "../shared/freshness.ts";
 import { faintLine } from "../shared/notice.ts";
 import { motionList, when } from "../shared/ui.ts";
+import { contextMeters } from "./context.ts";
 import { toggleExpanded } from "./lists.ts";
 import { emptyNote, madeCount, madeFoot, madeHere } from "./made.ts";
 import { current, currentHeading } from "./model.ts";
 import { prCount, prFoot, prNote, prs } from "./pr-list.ts";
 import { T } from "./theme.ts";
+import { meterRow } from "./views/context.ts";
 import { currentPanel } from "./views/current.ts";
 import { panel, sectionHeader } from "./views/parts.ts";
 import { footRow, madeRow, prRow } from "./views/rows.ts";
@@ -118,6 +123,15 @@ sidebar(
           }),
       ),
       faintNote("empty-note", emptyNote),
+      when(
+        "context-section",
+        () => contextMeters().length > 0,
+        () =>
+          VStack({ spacing: 8, alignment: "leading" }, [
+            sectionHeader("CONTEXT"),
+            panel([motionList({ items: contextMeters, key: (m) => m.key, spacing: 0 }, meterRow)]),
+          ]),
+      ),
       Spacer(),
     ])
       .paddingHorizontal(14)

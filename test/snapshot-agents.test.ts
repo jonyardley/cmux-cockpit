@@ -1,10 +1,12 @@
 // Scene: the agents panel for a selected workspace with a running helper,
 // ports and a PR with checks, then every PR and what agents made. Its three
 // agents are named each way a row can be: a saved session name, cmux's own
-// title, and the plain fallback. Fixture
+// title, and the plain fallback. Its chat and the plan's limits fill the
+// Context card at the foot. Fixture
 // data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
+import { withContext } from "../scripts/state-config.ts";
 import { ago, seed, snapshotScene } from "./support/snapshot.ts";
 
 const url = (n: number): string => `https://github.com/o/r/pull/${n}`;
@@ -69,6 +71,16 @@ it("the agents panel", () => {
       branch: "snapshots",
       ports: [5173],
       latestMessage: "Recorded six scenes; the lanes one is the longest.",
+      description: withContext("", {
+        epoch: ago(10),
+        used: 18,
+        tokens: 177_816,
+        size: 1_000_000,
+        hour: 84,
+        hourReset: ago(-7200),
+        week: 2,
+        weekReset: ago(-3 * 86400),
+      }),
       agents: [
         agent("working", { id: "s1", name: "Claude", sinceEpoch: ago(900), lastActivityAt: ago(20) }),
         agent("idle", { name: "Claude", title: "Check the chip colours", lastActivityAt: ago(240) }),

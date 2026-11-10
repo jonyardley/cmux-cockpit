@@ -31,8 +31,11 @@ import {
   isMoveDescription,
   MAX_DECISIONS,
   moveDescription,
+  type SavedContext,
   type SavedMove,
+  splitContext,
   validateState,
+  withContext,
 } from "../state-config.ts";
 import { logLine } from "../state-log.ts";
 import { readApplyWrite } from "../state-url.ts";
@@ -287,7 +290,7 @@ export interface Delivery {
 
 const SILENT: DescriptionRead = { ok: false, why: "silent" };
 
-function readDescription(wsId: string): DescriptionRead {
+export function readDescription(wsId: string): DescriptionRead {
   const res = cmux(["--json", "workspace", "list"]);
   if (!res.ok) return SILENT;
   try {
@@ -301,14 +304,14 @@ function readDescription(wsId: string): DescriptionRead {
   }
 }
 
-function writeDescription(wsId: string, description: string | null): boolean {
+export function writeDescription(wsId: string, description: string | null): boolean {
   const args = ["workspace-action", "--workspace", wsId];
   const res = cmux(
     description === null
       ? [...args, "--action", "clear-description"]
       : [...args, "--action", "set-description", "--description", description],
   );
-  if (!res.ok) console.error(`report-move: cmux refused the description: ${res.err}`);
+  if (!res.ok) console.error(`cmux refused the description: ${res.err}`);
   return res.ok;
 }
 
@@ -333,17 +336,23 @@ function readTwice(wsId: string, d: Delivery): DescriptionRead {
 const unread = (r: { why: "unlisted" | "silent" }, what: string): string =>
   r.why === "unlisted" ? "cmux does not list the workspace" : `cmux did not answer the ${what}, twice`;
 
-// Sets the move's description, then reads it back: a description cmux cut
-// or changed would read as no move and show a broken tail, so it is cleared
-// and the caller falls back to the saved map. The read-back is asked twice
-// too, so one missed answer never clears a description that landed. Null
-// when it landed, else why not.
-function describeMove(wsId: string, move: SavedMove, d: Delivery): string | null {
-  const description = moveDescription(move);
-  if (!d.write(wsId, description)) return "cmux refused the description";
+// The description with no body, keeping the context tail: null (clear it)
+// when there is no context to keep.
+const contextOnly = (context: SavedContext | null): string | null => (context ? withContext("", context) : null);
+
+// Sets the move's description, keeping the context tail the status line
+// wrote, then reads it back: a description cmux cut or changed would read
+// as no move and show a broken tail, so the move is taken off again and the
+// caller falls back to the saved map. Only the move's part is compared, as
+// the status line may rewrite the context tail in between. The read-back is
+// asked twice too, so one missed answer never clears a description that
+// landed. Null when it landed, else why not.
+function describeMove(wsId: string, move: SavedMove, context: SavedContext | null, d: Delivery): string | null {
+  const body = moveDescription(move);
+  if (!d.write(wsId, withContext(body, context))) return "cmux refused the description";
   const back = readTwice(wsId, d);
-  if (back.ok && back.text === description) return null;
-  d.write(wsId, null);
+  if (back.ok && splitContext(back.text).body === body) return null;
+  d.write(wsId, contextOnly(context));
   return back.ok ? "cmux changed the description" : unread(back, "read-back");
 }
 
@@ -353,8 +362,9 @@ function describeMove(wsId: string, move: SavedMove, d: Delivery): string | null
 function described(wsId: string, move: SavedMove, d: Delivery): string | null {
   const current = readTwice(wsId, d);
   if (!current.ok) return unread(current, "read");
-  if (current.text !== "" && !isMoveDescription(current.text)) return "the description holds other words";
-  return describeMove(wsId, move, d);
+  const { body, context } = splitContext(current.text);
+  if (body !== "" && !isMoveDescription(body)) return "the description holds other words";
+  return describeMove(wsId, move, context, d);
 }
 
 // Saves (or drops, for null) the workspace's move in the saved map and
@@ -388,7 +398,7 @@ export function deliver(wsId: string, move: SavedMove | null, d: Delivery): stri
     return why === null ? null : save(wsId, move, d, why);
   }
   const current = d.read(wsId);
-  if (current.ok && isMoveDescription(current.text)) d.write(wsId, null);
+  if (current.ok && isMoveDescription(current.text)) d.write(wsId, contextOnly(splitContext(current.text).context));
   return d.hasSaved(wsId) ? save(wsId, null, d) : null;
 }
 

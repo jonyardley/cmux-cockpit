@@ -649,9 +649,76 @@ export function moveDescription(m: SavedMove): string {
   return text + " ⟦move " + JSON.stringify(rest) + "⟧";
 }
 
+/** A chat's context and the plan's usage limits, as its status line last saw them. */
+export interface SavedContext {
+  /** Epoch seconds the status line reported it. */
+  epoch: number;
+  /** How full the chat's context window is, 0 to 100. */
+  used: number;
+  /** Tokens in the window now, and the window's size. */
+  tokens?: number;
+  size?: number;
+  /** The plan's 5-hour limit used, 0 to 100, and when it resets (epoch seconds). */
+  hour?: number;
+  hourReset?: number;
+  /** The plan's weekly limit used, 0 to 100, and when it resets (epoch seconds). */
+  week?: number;
+  weekReset?: number;
+}
+
+// The context rides on the same description as the move, as a second tail
+// after it, so the line still comes first. Its JSON holds only numbers, so
+// no ⟧ can occur inside it, and stripping it first leaves the move's own
+// tail anchored at the end where MOVE_TAIL looks for it.
+const CONTEXT_TAIL = /^(.*?) ?⟦ctx (\{[^⟧]*\})⟧$/s;
+
+const isPercent = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100;
+const isCount = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
+
+type ContextNumber = "tokens" | "size" | "hour" | "hourReset" | "week" | "weekReset";
+const CONTEXT_FIELDS: readonly [ContextNumber, (v: unknown) => v is number][] = [
+  ["tokens", isCount],
+  ["size", isCount],
+  ["hour", isPercent],
+  ["hourReset", isEpoch],
+  ["week", isPercent],
+  ["weekReset", isEpoch],
+];
+
+/** A saved context from its parsed JSON, keeping only well formed optional fields; null without epoch and used. */
+export function savedContext(v: unknown): SavedContext | null {
+  if (!isRecord(v) || !isEpoch(v.epoch) || !isPercent(v.used)) return null;
+  const out: SavedContext = { epoch: v.epoch, used: v.used };
+  for (const [key, ok] of CONTEXT_FIELDS) {
+    const value = v[key];
+    if (ok(value)) out[key] = value;
+  }
+  return out;
+}
+
+/** A description split into what precedes the context tail and the context it carries (null for none or a bad one). */
+export function splitContext(d: string): { body: string; context: SavedContext | null } {
+  const found = CONTEXT_TAIL.exec(d);
+  if (!found) return { body: d, context: null };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(found[2] ?? "");
+  } catch {
+    parsed = null;
+  }
+  return { body: found[1] ?? "", context: savedContext(parsed) };
+}
+
+/** A description holding `body` then the context's tail; just `body` for no context. */
+export function withContext(body: string, c: SavedContext | null): string {
+  if (c === null) return body;
+  const tail = "⟦ctx " + JSON.stringify(c) + "⟧";
+  return body === "" ? tail : body + " " + tail;
+}
+
 /** The move a workspace description carries, or null when it carries none or a bad one. */
 export function moveOfDescription(d: string | undefined): SavedMove | null {
-  const found = d === undefined ? null : MOVE_TAIL.exec(d);
+  const found = d === undefined ? null : MOVE_TAIL.exec(splitContext(d).body);
   if (!found) return null;
   let rest: unknown;
   try {
@@ -663,7 +730,8 @@ export function moveOfDescription(d: string | undefined): SavedMove | null {
 }
 
 /** True when a description is a move's, so it is never shown as Jon's own words. */
-export const isMoveDescription = (d: string | undefined): boolean => d !== undefined && MOVE_TAIL.test(d);
+export const isMoveDescription = (d: string | undefined): boolean =>
+  d !== undefined && MOVE_TAIL.test(splitContext(d).body);
 
 const SOURCES: readonly unknown[] = ["title", "prompt"];
 const isSource = (v: unknown): v is NameSource => SOURCES.includes(v);
