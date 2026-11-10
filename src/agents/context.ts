@@ -3,7 +3,9 @@
 // allowance is used. scripts/hooks/status-context.ts puts both on each
 // workspace's description from the status line. The chat's figure is the
 // selected workspace's own; the plan's is account-wide, so it is the newest
-// reading any workspace carries, since an idle chat's copy goes stale.
+// reading any workspace on the same Claude account carries, since an idle
+// chat's copy goes stale. Chats run under a second account (its own Claude
+// folder) have their own limits, named on the card: "Acme plan".
 
 import { type SavedContext, splitContext } from "../../scripts/state-config.ts";
 import { type Last, markLast } from "../shared/list.ts";
@@ -67,22 +69,30 @@ function limitMeter(key: string, label: string, used: number, reset: number | un
   return { key, label, percent: used, detail: reset !== undefined && now > 0 ? resetsIn(reset, now) : "" };
 }
 
-// The newest context any workspace carries that has the plan's figures.
-function newestPlan(): SavedContext | null {
+// The newest context on `account` (undefined for the main one) that has the plan's figures.
+function newestPlan(account: string | undefined): SavedContext | null {
   let best: SavedContext | null = null;
   for (const w of data.workspaces() ?? []) {
     const c = contextOf(w.description);
-    if (c && (c.hour !== undefined || c.week !== undefined) && (!best || c.epoch > best.epoch)) best = c;
+    if (!c || c.account !== account) continue;
+    if ((c.hour !== undefined || c.week !== undefined) && (!best || c.epoch > best.epoch)) best = c;
   }
   return best;
 }
 
-function planMeters(now: number): Meter[] {
-  const p = newestPlan();
+/** Whose plan a meter shows: "Your plan" for the main account, else the account's name, "Acme plan". */
+export function planName(account: string | undefined): string {
+  if (account === undefined) return "Your plan";
+  return account.charAt(0).toUpperCase() + account.slice(1) + " plan";
+}
+
+function planMeters(account: string | undefined, now: number): Meter[] {
+  const p = newestPlan(account);
   if (!p) return [];
+  const name = planName(account);
   return [
-    ...(p.hour !== undefined ? [limitMeter("hour", "Your plan, 5 hours", p.hour, p.hourReset, now)] : []),
-    ...(p.week !== undefined ? [limitMeter("week", "Your plan, this week", p.week, p.weekReset, now)] : []),
+    ...(p.hour !== undefined ? [limitMeter("hour", name + ", 5 hours", p.hour, p.hourReset, now)] : []),
+    ...(p.week !== undefined ? [limitMeter("week", name + ", this week", p.week, p.weekReset, now)] : []),
   ];
 }
 
@@ -92,8 +102,10 @@ export const contextMeters = computed((): Last<Meter>[] => {
   // An ended chat's tail stays on the description, so it shows only while
   // the workspace has a chat that has not ended.
   const live = cur?.agents.some((a) => a.status !== "ended") ?? false;
-  const chat = live ? contextOf(cur?.ws.description) : null;
-  return markLast([...(chat ? [chatMeter(chat)] : []), ...planMeters(nowEpoch())]);
+  const own = contextOf(cur?.ws.description);
+  const chat = live ? own : null;
+  // The selected workspace's account, from its last reading even once its chat ended.
+  return markLast([...(chat ? [chatMeter(chat)] : []), ...planMeters(own?.account, nowEpoch())]);
 });
 
 /** The percent's colour: amber from WARN_AT up, else the quiet grey. */

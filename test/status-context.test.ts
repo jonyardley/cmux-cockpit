@@ -7,7 +7,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { DescriptionRead } from "../scripts/hooks/description.ts";
 import { type Delivery, deliver } from "../scripts/hooks/report-move.ts";
-import { type ContextDelivery, contextFrom, due, REFRESH_S, report } from "../scripts/hooks/status-context.ts";
+import {
+  accountOf,
+  type ContextDelivery,
+  contextFrom,
+  due,
+  REFRESH_S,
+  report,
+} from "../scripts/hooks/status-context.ts";
 import { moveDescription, type SavedContext, splitContext, withContext } from "../scripts/state-config.ts";
 
 const PAYLOAD = {
@@ -50,9 +57,33 @@ describe("contextFrom", () => {
     });
   });
 
+  it("tags the figures with the account when one is given", () => {
+    assert.equal(contextFrom(PAYLOAD, 5, "acme")?.account, "acme");
+    assert.equal(contextFrom(PAYLOAD, 5)?.account, undefined);
+  });
+
   it("reports nothing without a used percentage", () => {
     assert.equal(contextFrom({ context_window: {} }, 5), null);
     assert.equal(contextFrom("junk", 5), null);
+  });
+});
+
+describe("accountOf", () => {
+  const main = (f: string) => f === "/Users/jon/.claude";
+  const at = (folder: string) => folder + "/projects/-Users-jon-x/abc.jsonl";
+  it("names a second Claude folder's account, and none for the main folder", () => {
+    assert.equal(accountOf(at("/Users/jon/.claude-acme"), main), "acme");
+    assert.equal(accountOf(at("/Users/jon/.claude-ACME"), main), "acme");
+    assert.equal(accountOf(at("/Users/jon/.claude"), main), undefined);
+    assert.equal(accountOf(undefined, main), undefined);
+    assert.equal(accountOf("/tmp/no-projects-folder.jsonl", main), undefined);
+  });
+
+  it("never takes an odd folder name for the main account", () => {
+    assert.equal(accountOf(at("/Users/jon/.claude-client_x"), main), "client-x");
+    assert.equal(accountOf(at("/Users/jon/claude-work"), main), "work");
+    assert.equal(accountOf(at("/Users/jon/.claude-averylongclientname-2026"), main), "averylongclientname-2026");
+    assert.equal(accountOf(at("/Users/jon/.claude-"), main), "other");
   });
 });
 

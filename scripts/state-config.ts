@@ -664,17 +664,22 @@ export interface SavedContext {
   /** The plan's weekly limit used, 0 to 100, and when it resets (epoch seconds). */
   week?: number;
   weekReset?: number;
+  /** The Claude account the plan figures belong to, when not the main one: "acme" for ~/.claude-acme. */
+  account?: string;
 }
 
 // The context rides on the same description as the move, as a second tail
-// after it, so the line still comes first. Its JSON holds only numbers, so
-// no bracket can occur inside it; the pattern refuses one, so a move whose
+// after it, so the line still comes first. Its JSON holds only numbers and
+// an account name of plain characters (isAccount), so no bracket can occur
+// inside it; the pattern refuses one, so a move whose
 // words happen to hold "⟦ctx {" is never mistaken for a tail. Stripping it
 // first leaves the move's own tail anchored at the end, where MOVE_TAIL looks.
 const CONTEXT_TAIL = /^(.*?) ?⟦ctx (\{[^⟦⟧]*\})⟧$/s;
 
 const isPercent = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100;
 const isCount = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
+/** An account name: lower case letters, digits and hyphens, so it never breaks the tail. */
+export const isAccount = (v: unknown): v is string => typeof v === "string" && /^[a-z0-9-]{1,24}$/.test(v);
 
 type ContextNumber = "tokens" | "size" | "hour" | "hourReset" | "week" | "weekReset";
 const CONTEXT_FIELDS: readonly [ContextNumber, (v: unknown) => v is number][] = [
@@ -694,6 +699,7 @@ export function savedContext(v: unknown): SavedContext | null {
     const value = v[key];
     if (ok(value)) out[key] = value;
   }
+  if (isAccount(v.account)) out.account = v.account;
   return out;
 }
 

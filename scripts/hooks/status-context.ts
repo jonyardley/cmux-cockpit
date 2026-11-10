@@ -17,10 +17,18 @@
 // tail that was edited away. It never fails: every problem is a note on
 // stderr and exit 0.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { isId, isRecord, type SavedContext, savedContext, splitContext, withContext } from "../state-config.ts";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { basename, join } from "node:path";
+import {
+  isAccount,
+  isId,
+  isRecord,
+  type SavedContext,
+  savedContext,
+  splitContext,
+  withContext,
+} from "../state-config.ts";
 import { type DescriptionRead, readDescription, withDescriptionLock, writeDescription } from "./description.ts";
 import { field } from "./gh-command.ts";
 
@@ -49,8 +57,46 @@ function limit(payload: unknown, name: string): { used: number | undefined; rese
   return { used: clampPercent(whole(field(l, "used_percentage"))), reset: whole(field(l, "resets_at")) };
 }
 
+/**
+ * The account a chat's Claude folder names, from the transcript path the
+ * status line gives (the folder above projects/, the one the chat really
+ * ran from, whatever CLAUDE_CONFIG_DIR said). Undefined for the main
+ * folder, which `isMain` decides so a link to it counts as main, or with no
+ * transcript. Any other folder is never main: "acme" for ~/.claude-acme,
+ * its name cut to plain characters, "other" when nothing is left. Each
+ * account has its own plan limits, so the card says whose it shows.
+ * Exported for testing.
+ */
+export function accountOf(transcript: unknown, isMain: (folder: string) => boolean): string | undefined {
+  if (typeof transcript !== "string") return undefined;
+  const at = transcript.lastIndexOf("/projects/");
+  if (at <= 0) return undefined;
+  const folder = transcript.slice(0, at);
+  if (isMain(folder)) return undefined;
+  const name = basename(folder)
+    .toLowerCase()
+    .replace(/^\.?claude-?/, "")
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 24)
+    .replace(/-+$/, "");
+  return isAccount(name) ? name : "other";
+}
+
+// True when `folder` is the main Claude folder, ~/.claude, through any link.
+function isMainFolder(folder: string): boolean {
+  const real = (p: string): string => {
+    try {
+      return realpathSync(p);
+    } catch {
+      return p;
+    }
+  };
+  return real(folder) === real(join(homedir(), ".claude"));
+}
+
 /** The context the status line's JSON reports, at `now`; null when it has no used percentage. Exported for testing. */
-export function contextFrom(payload: unknown, now: number): SavedContext | null {
+export function contextFrom(payload: unknown, now: number, account?: string): SavedContext | null {
   const window = field(payload, "context_window");
   const used = clampPercent(whole(field(window, "used_percentage")));
   if (used === undefined) return null;
@@ -65,6 +111,7 @@ export function contextFrom(payload: unknown, now: number): SavedContext | null 
     hourReset: hour.reset,
     week: week.used,
     weekReset: week.reset,
+    account,
   });
 }
 
@@ -136,7 +183,11 @@ if (import.meta.main) {
   try {
     const wsId = process.env.CMUX_WORKSPACE_ID;
     const payload: unknown = JSON.parse(readFileSync(0, "utf8"));
-    const c = contextFrom(payload, Math.floor(Date.now() / 1000));
+    const c = contextFrom(
+      payload,
+      Math.floor(Date.now() / 1000),
+      accountOf(field(payload, "transcript_path"), isMainFolder),
+    );
     const session = field(payload, "session_id");
     if (wsId && isId(wsId) && c) {
       const file = join(LAST_DIR, `${safe(wsId)}-${safe(typeof session === "string" ? session : "")}.json`);
