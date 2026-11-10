@@ -319,6 +319,10 @@ pub fn persist_url(key: &str, value: Option<&Value>, token: &str) -> String {
 // then the rest of the move as one bracketed JSON tail.
 static MOVE_TAIL: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"(?s)^(.*) ⟦move (\{.*\})⟧$").ok());
+// The status line's context rides after the move as a second tail
+// (state-config.ts CONTEXT_TAIL); it is stripped before the move is read.
+static CONTEXT_TAIL: LazyLock<Option<Regex>> =
+    LazyLock::new(|| Regex::new(r"(?s)^(.*?) ?⟦ctx \{[^⟦⟧]*\}⟧$").ok());
 static LEANS: LazyLock<Option<Regex>> =
     LazyLock::new(|| Regex::new(r"^[1-9][a-z](?: [1-9][a-z])*$").ok());
 
@@ -393,9 +397,18 @@ fn flag(v: Option<&Value>) -> Option<Option<bool>> {
     }
 }
 
+/// A description without the context tail the status line adds, when it has one.
+pub fn without_context(d: &str) -> &str {
+    CONTEXT_TAIL
+        .as_ref()
+        .and_then(|re| re.captures(d))
+        .and_then(|c| c.get(1))
+        .map_or(d, |m| m.as_str())
+}
+
 /// The move a workspace description carries, or None when it carries none or a bad one.
 pub fn move_of_description(d: Option<&str>) -> Option<SavedMove> {
-    let caps = MOVE_TAIL.as_ref()?.captures(d?)?;
+    let caps = MOVE_TAIL.as_ref()?.captures(without_context(d?))?;
     let text = caps.get(1)?.as_str();
     let rest: Value = serde_json::from_str(caps.get(2)?.as_str()).ok()?;
     saved_move(rest.as_object()?, text)
@@ -404,7 +417,7 @@ pub fn move_of_description(d: Option<&str>) -> Option<SavedMove> {
 /// True when a description is a move's, so it is never shown as Jon's own words.
 pub fn is_move_description(d: Option<&str>) -> bool {
     match (d, MOVE_TAIL.as_ref()) {
-        (Some(d), Some(re)) => re.is_match(d),
+        (Some(d), Some(re)) => re.is_match(without_context(d)),
         _ => false,
     }
 }
@@ -438,6 +451,7 @@ mod tests {
     #[test]
     fn every_pattern_compiles() {
         assert!(MOVE_TAIL.is_some());
+        assert!(CONTEXT_TAIL.is_some());
         assert!(LEANS.is_some());
     }
 
@@ -521,6 +535,27 @@ mod tests {
             persist_url("dismissed.w", None, "t k"),
             "cmux-cockpit://set?key=dismissed.w&token=t%20k"
         );
+    }
+
+    #[test]
+    fn reads_a_move_past_the_context_tail() {
+        let ctx = r#"⟦ctx {"epoch":5,"used":18,"hour":10}⟧"#;
+        let d = format!(r#"go ⟦move {{"epoch":1}}⟧ {ctx}"#);
+        assert!(is_move_description(Some(&d)));
+        assert_eq!(
+            move_of_description(Some(&d)).map(|m| m.text),
+            Some("go".into())
+        );
+        assert_eq!(
+            without_context(&format!("Ship checklist {ctx}")),
+            "Ship checklist"
+        );
+        assert_eq!(without_context(ctx), "");
+        assert!(!is_move_description(Some(ctx)));
+        assert_eq!(without_context("plain words"), "plain words");
+        let tricky = r#"check ⟦ctx {used} parsing ⟦move {"epoch":1}⟧"#;
+        assert_eq!(without_context(tricky), tricky);
+        assert!(is_move_description(Some(tricky)));
     }
 
     #[test]

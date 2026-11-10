@@ -31,12 +31,15 @@ import {
   isMoveDescription,
   MAX_DECISIONS,
   moveDescription,
+  type SavedContext,
   type SavedMove,
+  splitContext,
   validateState,
+  withContext,
 } from "../state-config.ts";
 import { logLine } from "../state-log.ts";
 import { readApplyWrite } from "../state-url.ts";
-import { cmux } from "./cmux-cli.ts";
+import { type DescriptionRead, readDescription, withDescriptionLock, writeDescription } from "./description.ts";
 import { field } from "./gh-command.ts";
 import { readTail, replyFrom, sleep } from "./transcript.ts";
 
@@ -262,18 +265,18 @@ function record(event: unknown, wsId: string | undefined, now: number, attended:
   if (!wsId || !isId(wsId) || field(event, "hook_event_name") !== "Stop") return null;
   const raw = field(event, "session_id");
   const session = typeof raw === "string" && isId(raw) ? raw : undefined;
-  return deliver(wsId, moveFrom(finalReply(event), now, session, attended), REAL_DELIVERY);
+  const move = moveFrom(finalReply(event), now, session, attended);
+  // The lock keeps the status line's context writer from putting back the
+  // description it read before this move went in (description.ts). Waiting
+  // out a stuck holder costs at most the wait, then the move goes ahead.
+  return withDescriptionLock(
+    wsId,
+    3000,
+    () => deliver(wsId, move, REAL_DELIVERY),
+    () => deliver(wsId, move, REAL_DELIVERY),
+  );
 }
 
-/**
- * What cmux says the workspace's description is: the text, "" for none, or
- * why it could not say. "unlisted" is a workspace cmux's list does not hold,
- * which asking again will not change; "silent" is cmux failing to answer at
- * all, which a busy cmux may do once.
- */
-export type DescriptionRead = { ok: true; text: string } | { ok: false; why: "unlisted" | "silent" };
-
-/** Where a move goes: cmux's description, else the saved map and a rebuild. */
 export interface Delivery {
   read: (wsId: string) => DescriptionRead;
   /** Sets the description, or clears it for null; false when cmux refused. */
@@ -285,36 +288,9 @@ export interface Delivery {
   log: (line: string) => void;
 }
 
-const SILENT: DescriptionRead = { ok: false, why: "silent" };
-
-function readDescription(wsId: string): DescriptionRead {
-  const res = cmux(["--json", "workspace", "list"]);
-  if (!res.ok) return SILENT;
-  try {
-    const list = field(JSON.parse(res.out), "workspaces");
-    const ws = Array.isArray(list) ? list.find((w) => field(w, "id") === wsId) : undefined;
-    if (ws === undefined) return { ok: false, why: "unlisted" };
-    const d = field(ws, "description");
-    return { ok: true, text: typeof d === "string" ? d : "" };
-  } catch {
-    return SILENT;
-  }
-}
-
-function writeDescription(wsId: string, description: string | null): boolean {
-  const args = ["workspace-action", "--workspace", wsId];
-  const res = cmux(
-    description === null
-      ? [...args, "--action", "clear-description"]
-      : [...args, "--action", "set-description", "--description", description],
-  );
-  if (!res.ok) console.error(`report-move: cmux refused the description: ${res.err}`);
-  return res.ok;
-}
-
 const REAL_DELIVERY: Delivery = {
   read: readDescription,
-  write: writeDescription,
+  write: (wsId, description) => writeDescription("report-move", wsId, description),
   hasSaved,
   save: (wsId, move) => readApplyWrite(STATE_PATH, `moves.${wsId}`, move ? JSON.stringify(move) : null),
   build: () => scheduleBuild("report-move"),
@@ -333,17 +309,23 @@ function readTwice(wsId: string, d: Delivery): DescriptionRead {
 const unread = (r: { why: "unlisted" | "silent" }, what: string): string =>
   r.why === "unlisted" ? "cmux does not list the workspace" : `cmux did not answer the ${what}, twice`;
 
-// Sets the move's description, then reads it back: a description cmux cut
-// or changed would read as no move and show a broken tail, so it is cleared
-// and the caller falls back to the saved map. The read-back is asked twice
-// too, so one missed answer never clears a description that landed. Null
-// when it landed, else why not.
-function describeMove(wsId: string, move: SavedMove, d: Delivery): string | null {
-  const description = moveDescription(move);
-  if (!d.write(wsId, description)) return "cmux refused the description";
+// The description with no body, keeping the context tail: null (clear it)
+// when there is no context to keep.
+const contextOnly = (context: SavedContext | null): string | null => (context ? withContext("", context) : null);
+
+// Sets the move's description, keeping the context tail the status line
+// wrote, then reads it back: a description cmux cut or changed would read
+// as no move and show a broken tail, so the move is taken off again and the
+// caller falls back to the saved map. Only the move's part is compared, as
+// the status line may rewrite the context tail in between. The read-back is
+// asked twice too, so one missed answer never clears a description that
+// landed. Null when it landed, else why not.
+function describeMove(wsId: string, move: SavedMove, context: SavedContext | null, d: Delivery): string | null {
+  const body = moveDescription(move);
+  if (!d.write(wsId, withContext(body, context))) return "cmux refused the description";
   const back = readTwice(wsId, d);
-  if (back.ok && back.text === description) return null;
-  d.write(wsId, null);
+  if (back.ok && splitContext(back.text).body === body) return null;
+  d.write(wsId, contextOnly(context));
   return back.ok ? "cmux changed the description" : unread(back, "read-back");
 }
 
@@ -353,8 +335,9 @@ function describeMove(wsId: string, move: SavedMove, d: Delivery): string | null
 function described(wsId: string, move: SavedMove, d: Delivery): string | null {
   const current = readTwice(wsId, d);
   if (!current.ok) return unread(current, "read");
-  if (current.text !== "" && !isMoveDescription(current.text)) return "the description holds other words";
-  return describeMove(wsId, move, d);
+  const { body, context } = splitContext(current.text);
+  if (body !== "" && !isMoveDescription(body)) return "the description holds other words";
+  return describeMove(wsId, move, context, d);
 }
 
 // Saves (or drops, for null) the workspace's move in the saved map and
@@ -388,7 +371,7 @@ export function deliver(wsId: string, move: SavedMove | null, d: Delivery): stri
     return why === null ? null : save(wsId, move, d, why);
   }
   const current = d.read(wsId);
-  if (current.ok && isMoveDescription(current.text)) d.write(wsId, null);
+  if (current.ok && isMoveDescription(current.text)) d.write(wsId, contextOnly(splitContext(current.text).context));
   return d.hasSaved(wsId) ? save(wsId, null, d) : null;
 }
 

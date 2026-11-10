@@ -5,9 +5,9 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { DescriptionRead } from "../scripts/hooks/description.ts";
 import {
   type Delivery,
-  type DescriptionRead,
   decisionsIn,
   deliver,
   lastLine,

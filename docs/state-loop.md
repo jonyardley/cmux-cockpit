@@ -703,6 +703,18 @@ sidebars as before, and once the save has run the state log says why:
 or `report-move could not save the move for 05B6A0B0 (...): <error>`. A
 turn with no move reads the description once, since that read only gates
 clearing an earlier move.
+The description also carries a second tail after the move, or after Jon's
+words, or alone: `⟦ctx {...}⟧`, the chat's context and the plan's usage
+limits, which `scripts/hooks/status-context.ts` writes from the status
+line for the agents panel's Context card (`withContext` and
+`splitContext` in `scripts/state-config.ts`). Every reader strips it
+first (the Rust core's `without_context`), so a move's tail stays
+anchored at the end and Jon's words read as his. The move hook keeps the
+tail it read when it writes or clears a move, and both hooks hold the
+workspace's description lock (`scripts/hooks/description.ts`) while they
+read and write, so neither puts back what the other just replaced. The
+move hook waits up to 3s for the lock; the status line writer never
+waits, as its next update tries again.
 A hook's own stderr is not kept, so before this the log could not say. The sidebar
 reads whichever of the two is newer. A "Your move"
 line inside a code fence (a handoff opener) is not the reply's. `decisions`
