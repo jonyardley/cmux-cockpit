@@ -7,7 +7,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { DescriptionRead } from "../scripts/hooks/description.ts";
 import { type Delivery, deliver } from "../scripts/hooks/report-move.ts";
-import { type ContextDelivery, contextFrom, due, REFRESH_S, report } from "../scripts/hooks/status-context.ts";
+import {
+  accountOf,
+  type ContextDelivery,
+  contextFrom,
+  due,
+  REFRESH_S,
+  report,
+} from "../scripts/hooks/status-context.ts";
 import { moveDescription, type SavedContext, splitContext, withContext } from "../scripts/state-config.ts";
 
 const PAYLOAD = {
@@ -50,9 +57,24 @@ describe("contextFrom", () => {
     });
   });
 
+  it("tags the figures with the account when one is given", () => {
+    assert.equal(contextFrom(PAYLOAD, 5, "acme")?.account, "acme");
+    assert.equal(contextFrom(PAYLOAD, 5)?.account, undefined);
+  });
+
   it("reports nothing without a used percentage", () => {
     assert.equal(contextFrom({ context_window: {} }, 5), null);
     assert.equal(contextFrom("junk", 5), null);
+  });
+});
+
+describe("accountOf", () => {
+  it("names a second Claude folder's account, and none for the main folder", () => {
+    assert.equal(accountOf("/Users/jon/.claude-acme"), "acme");
+    assert.equal(accountOf("/Users/jon/.claude-ACME/"), "acme");
+    assert.equal(accountOf("/Users/jon/.claude"), undefined);
+    assert.equal(accountOf(undefined), undefined);
+    assert.equal(accountOf("/Users/jon/.claude-a]b"), undefined);
   });
 });
 

@@ -19,8 +19,16 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { isId, isRecord, type SavedContext, savedContext, splitContext, withContext } from "../state-config.ts";
+import { basename, join } from "node:path";
+import {
+  isAccount,
+  isId,
+  isRecord,
+  type SavedContext,
+  savedContext,
+  splitContext,
+  withContext,
+} from "../state-config.ts";
 import { type DescriptionRead, readDescription, withDescriptionLock, writeDescription } from "./description.ts";
 import { field } from "./gh-command.ts";
 
@@ -49,8 +57,20 @@ function limit(payload: unknown, name: string): { used: number | undefined; rese
   return { used: clampPercent(whole(field(l, "used_percentage"))), reset: whole(field(l, "resets_at")) };
 }
 
+/**
+ * The account a chat's Claude folder names, from CLAUDE_CONFIG_DIR:
+ * "acme" for ~/.claude-acme; undefined for the main folder, unset, or a
+ * name that is not plain characters. Each account has its own plan
+ * limits, so the card says whose it shows. Exported for testing.
+ */
+export function accountOf(configDir: string | undefined): string | undefined {
+  const found = /^\.claude-(.+)$/.exec(basename(configDir ?? "").toLowerCase());
+  const name = found?.[1];
+  return isAccount(name) ? name : undefined;
+}
+
 /** The context the status line's JSON reports, at `now`; null when it has no used percentage. Exported for testing. */
-export function contextFrom(payload: unknown, now: number): SavedContext | null {
+export function contextFrom(payload: unknown, now: number, account?: string): SavedContext | null {
   const window = field(payload, "context_window");
   const used = clampPercent(whole(field(window, "used_percentage")));
   if (used === undefined) return null;
@@ -65,6 +85,7 @@ export function contextFrom(payload: unknown, now: number): SavedContext | null 
     hourReset: hour.reset,
     week: week.used,
     weekReset: week.reset,
+    account,
   });
 }
 
@@ -136,7 +157,7 @@ if (import.meta.main) {
   try {
     const wsId = process.env.CMUX_WORKSPACE_ID;
     const payload: unknown = JSON.parse(readFileSync(0, "utf8"));
-    const c = contextFrom(payload, Math.floor(Date.now() / 1000));
+    const c = contextFrom(payload, Math.floor(Date.now() / 1000), accountOf(process.env.CLAUDE_CONFIG_DIR));
     const session = field(payload, "session_id");
     if (wsId && isId(wsId) && c) {
       const file = join(LAST_DIR, `${safe(wsId)}-${safe(typeof session === "string" ? session : "")}.json`);

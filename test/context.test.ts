@@ -63,6 +63,15 @@ describe("the context tail on a description", () => {
       size: 10,
       week: 3,
     });
+    assert.deepEqual(savedContext({ epoch: 1, used: 5, account: "acme" }), { epoch: 1, used: 5, account: "acme" });
+    for (const account of ["ACME", "a]b", "", 7, "x".repeat(25)]) {
+      assert.deepEqual(savedContext({ epoch: 1, used: 5, account }), { epoch: 1, used: 5 });
+    }
+  });
+
+  it("round-trips an account in the tail", () => {
+    const full = ctx({ ...PLAN, account: "acme" });
+    assert.deepEqual(splitContext(withContext("words", full)), { body: "words", context: full });
   });
 });
 
@@ -127,6 +136,30 @@ describe("contextMeters", () => {
       { key: "chat", percent: 40, detail: "", last: false },
       { key: "hour", percent: 30, detail: "", last: true },
     ]);
+  });
+
+  it("keeps a second account's plan off the main account's card, and names it on its own", () => {
+    // Jon's report: a second account's chat reported last, so the card said "Resets in
+    // 3 days" over the main account's 6.
+    const label = () => c.contextMeters().map((m) => m.label + ": " + m.detail);
+    const main = ws("main", {
+      agents: [agent("working")],
+      description: withContext("", ctx({ week: 13, weekReset: NOW + 6 * 86400 + 60, epoch: NOW - 60 })),
+    });
+    const acme = ws("acme", {
+      agents: [agent("working")],
+      description: withContext("", ctx({ week: 1, weekReset: NOW + 3 * 86400 + 60, account: "acme", epoch: NOW - 5 })),
+    });
+    r.data.workspaces = [{ ...main, selected: true }, acme];
+    assert.deepEqual(label(), ["This chat: ", "Your plan, this week: Resets in 6 days"]);
+    r.data.workspaces = [main, { ...acme, selected: true }];
+    assert.deepEqual(label(), ["This chat: ", "ACME plan, this week: Resets in 3 days"]);
+  });
+
+  it("names a plan by its account", () => {
+    assert.equal(c.planName(undefined), "Your plan");
+    assert.equal(c.planName("acme"), "ACME plan");
+    assert.equal(c.planName("client-x"), "Client-x plan");
   });
 
   it("leaves out the chat once it has ended, or with no chat at all, keeping the plan", () => {
