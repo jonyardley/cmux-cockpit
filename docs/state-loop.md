@@ -460,10 +460,16 @@ in the background, so `scripts/hooks/report-shell.ts` records them in
 oldest first, at most `MAX_SHELLS`. The map is left out while it is empty,
 so a file from before it existed reads the same.
 
-`PostToolUse` on `Bash` saves a call that ran with `run_in_background`,
-keyed by the task id Claude Code gave it (`tool_response.backgroundTaskId`,
-else the id in its "running in background with ID" text); a subagent's
-Bash call is skipped, since its finish never reaches the main chat's Stop.
+`PostToolUse` on `Bash` saves a call that went to the background, keyed
+by the task id Claude Code gave it. A call gets there four ways: started
+with `run_in_background`, sent there with Ctrl+B, moved there on timeout,
+or moved there so a message the person sent could be delivered. All four
+carry `tool_response.backgroundTaskId`; only a call started with
+`run_in_background` falls back to the id in its stdout text
+(`scripts/hooks/background.ts`). A call moved there on timeout is dated
+back by `timedOutAfterMs`, so the card's clock counts from its real start.
+A subagent's Bash call is skipped, since its finish never reaches the main
+chat's Stop.
 `PostToolUse` on `KillShell` or `TaskStop` drops the shell it stopped.
 `Stop`, when the workspace has shells saved, reads the transcript's last
 2 MB for `<task-notification>` blocks, which Claude Code writes when a

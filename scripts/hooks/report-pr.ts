@@ -26,6 +26,7 @@ import { scheduleBuild } from "../hook-build.ts";
 import { isId, type SavedPrOrigin, type State } from "../state-config.ts";
 import { LOG_PATH } from "../state-log.ts";
 import { writePrOrigins } from "../state-url.ts";
+import { wentToBackground } from "./background.ts";
 import { field, ghPr, SEGMENTS } from "./gh-command.ts";
 
 export interface Pr {
@@ -68,10 +69,11 @@ export function createdPrUrl(event: unknown): string | null {
 
 // True when the event is a Bash call that ran `gh pr ready`, `merge`,
 // `close` or `reopen` in the foreground. A backgrounded call fires this hook
-// as soon as it starts, before gh has changed anything, so it is left to the
-// turn-end poll. A failed one still counts: its poll finds nothing changed.
+// before gh is known to have changed anything (as soon as it starts, or
+// mid-run when it was moved there), so it is left to the turn-end poll. A
+// failed one still counts: its poll finds nothing changed.
 export function settledPr(event: unknown): boolean {
-  if (field(field(event, "tool_input"), "run_in_background") === true) return false;
+  if (wentToBackground(event)) return false;
   return ranGhPr(event, PR_SETTLE);
 }
 
