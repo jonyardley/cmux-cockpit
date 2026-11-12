@@ -1,0 +1,44 @@
+{
+  "capture_event": "SubagentStop",
+  "payload": {
+    "session_id": "00000000-0000-4000-8000-00000000a001",
+    "transcript_path": "/Users/me/.claude/projects/p/s.jsonl",
+    "cwd": "/Users/me/work",
+    "scratchpad_dir": "/tmp/scratchpad",
+    "prompt_id": "569fe8ea-8961-49ab-a886-3573745d3f5f",
+    "permission_mode": "auto",
+    "agent_id": "a1b2c3d4e5f607182",
+    "agent_type": "general-purpose",
+    "effort": {
+      "level": "low"
+    },
+    "hook_event_name": "SubagentStop",
+    "stop_hook_active": false,
+    "agent_transcript_path": "/Users/me/.claude/projects/p/s/subagents/agent-a1b2c3d4e5f607182.jsonl",
+    "last_assistant_message": "(prompt text removed)",
+    "background_tasks": [
+      {
+        "id": "b8cvj4dry",
+        "type": "shell",
+        "status": "running",
+        "description": "Sleep 200 seconds in background",
+        "command": "sleep 200"
+      },
+      {
+        "id": "a1b2c3d4e5f607182",
+        "type": "subagent",
+        "status": "running",
+        "description": "Background sleep 170 then report",
+        "agent_type": "general-purpose"
+      },
+      {
+        "id": "byeh6pasn",
+        "type": "shell",
+        "status": "running",
+        "description": "190 second sleep then done",
+        "command": "sleep 190; echo done"
+      }
+    ],
+    "session_crons": []
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "capture_event": "PreToolUse",
+  "payload": {
+    "session_id": "00000000-0000-4000-8000-00000000a001",
+    "transcript_path": "/Users/me/.claude/projects/p/s.jsonl",
+    "cwd": "/Users/me/work",
+    "scratchpad_dir": "/tmp/scratchpad",
+    "prompt_id": "00000000-0000-4000-8000-00000000b001",
+    "permission_mode": "auto",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "PreToolUse",
+    "tool_name": "Agent",
+    "tool_input": {
+      "description": "Background sleep 170 then report",
+      "prompt": "(prompt text removed)",
+      "subagent_type": "general-purpose",
+      "model": "sonnet",
+      "effort": "low"
+    },
+    "tool_use_id": "toolu_FAKE_186081"
+  }
+}
