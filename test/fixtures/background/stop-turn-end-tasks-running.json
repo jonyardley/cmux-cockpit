@@ -12,7 +12,7 @@
     },
     "hook_event_name": "Stop",
     "stop_hook_active": false,
-    "last_assistant_message": "(prompt text removed)",
+    "last_assistant_message": "(message text removed)",
     "background_tasks": [
       {
         "id": "b8cvj4dry",

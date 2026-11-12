@@ -5,14 +5,14 @@
     "transcript_path": "/Users/me/.claude/projects/p/s.jsonl",
     "cwd": "/Users/me/work",
     "scratchpad_dir": "/tmp/scratchpad",
-    "prompt_id": "62922d21-8c07-4902-a469-0f00ecd80d5a",
+    "prompt_id": "00000000-0000-4000-8000-00000000b004",
     "permission_mode": "auto",
     "effort": {
       "level": "high"
     },
     "hook_event_name": "Stop",
     "stop_hook_active": false,
-    "last_assistant_message": "(prompt text removed)",
+    "last_assistant_message": "(message text removed)",
     "background_tasks": [
       {
         "id": "b8cvj4dry",
