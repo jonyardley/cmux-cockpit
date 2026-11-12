@@ -537,8 +537,8 @@ impl Join {
             background_sessions: self
                 .agents
                 .as_ref()
-                .map(|v| v.background.clone())
-                .filter(|list| !list.is_empty()),
+                .filter(|v| !v.background.is_empty())
+                .map(|v| v.background.clone()),
         }
     }
 }

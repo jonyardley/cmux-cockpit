@@ -276,9 +276,13 @@ impl BackgroundState {
 
     /// Whether the session still runs. Working and blocked (waiting on
     /// a permission or a question) run; done, failed and stopped have
-    /// settled. A word this port does not know counts as running: the
-    /// card must never say Idle while work runs, and a session that has
-    /// truly finished still stops counting once it leaves Agent View.
+    /// settled. These five are every word Claude Code 2.1.322 writes in
+    /// `state`; "idle" is never one of them, it is the separate process
+    /// `status` a live session also carries, and a session that finished
+    /// its turn reads `done` while its process waits. A word this port
+    /// does not know, from a later Claude Code, counts as running: the
+    /// card must never say Idle while work runs, and Agent View drops a
+    /// session with no live process unless it is working or blocked.
     pub fn runs(&self) -> bool {
         !matches!(
             self,
@@ -308,9 +312,10 @@ impl<'de> Deserialize<'de> for BackgroundState {
     }
 }
 
-/// One `claude --bg` session from `claude agents --json`. It has no pid
-/// and names no parent, so it belongs to no workspace or agent here; the
-/// hooks save the short id `claude --bg` prints to tie it to a chat.
+/// One `claude --bg` session from `claude agents --json`. It runs
+/// detached, in no tab, and names no parent, so it belongs to no
+/// workspace or agent here; the hooks save the short id `claude --bg`
+/// prints to tie it to a chat.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BackgroundSession {
@@ -493,11 +498,11 @@ mod tests {
 
     #[test]
     fn an_unknown_or_missing_background_state_counts_as_running() {
-        // A word Claude Code adds later (or "idle") keeps counting rather
-        // than let the card say Idle while work may run; leaving Agent
-        // View still settles it.
+        // A word a later Claude Code adds keeps counting rather than let
+        // the card say Idle while work may run; leaving Agent View still
+        // settles it.
         let data = with_bg(vec![
-            bg("aaaa", "s-a", Some(BackgroundState::Other("idle".into()))),
+            bg("aaaa", "s-a", Some(BackgroundState::Other("parked".into()))),
             bg("bbbb", "s-b", None),
         ]);
         assert!(data.background_runs("aaaa"));

@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use cockpit_core::data::{BackgroundSession, Workspace, WorkspaceGroup};
+use cockpit_core::data::{BackgroundSession, BackgroundState, Workspace, WorkspaceGroup};
 use serde_json::Value;
 
 /// Claude's own view of its sessions, from `claude agents --json`.
@@ -25,17 +25,17 @@ pub struct AgentView {
     pub background: Vec<BackgroundSession>,
 }
 
-/// `claude agents --json`, or None when it is not a list. Background
-/// sessions carry no pid, so they join no tab: they are kept apart, with
-/// their state, for the core to tell which still run. Any other entry
-/// without a pid is skipped.
+/// `claude agents --json`, or None when it is not a list. A `claude --bg`
+/// session runs detached, in no tab, and has a pid only while its process
+/// lives, so its short id and state are kept apart for the core to tell
+/// which still run. An entry with a pid, of either kind, also feeds the
+/// pid maps, as before; any other entry without one is skipped there.
 pub fn agents(out: &[u8]) -> Option<AgentView> {
     let list: Vec<Value> = serde_json::from_slice(out).ok()?;
     let mut view = AgentView::default();
     for a in &list {
         if a["kind"] == "background" {
             view.background.extend(background(a));
-            continue;
         }
         let Some(pid) = a["pid"].as_u64().and_then(|p| u32::try_from(p).ok()) else {
             continue;
@@ -52,8 +52,12 @@ pub fn agents(out: &[u8]) -> Option<AgentView> {
     Some(view)
 }
 
-/// One background entry, or None without a short id. `startedAt` is
-/// epoch milliseconds, kept as epoch seconds as the core's times are.
+/// One background entry, or None without a short id. Claude Code gives
+/// every session it has a state for a short id; the entries it lists
+/// without one are bare processes with no state. `startedAt` is epoch
+/// milliseconds, kept as epoch seconds as the core's times are. Read
+/// field by field, not as a `BackgroundSession`, because Claude Code's
+/// names and units differ from the frame's.
 fn background(a: &Value) -> Option<BackgroundSession> {
     let id = a["id"].as_str().filter(|id| !id.is_empty())?;
     let text = |key: &str| a[key].as_str().map(str::to_string);
@@ -66,8 +70,24 @@ fn background(a: &Value) -> Option<BackgroundSession> {
     })
 }
 
+/// A total order, so the same sessions always compare equal: the merge
+/// draws config dirs from a map in no fixed order, and the same short id
+/// listed twice must not flip places from one poll to the next.
 fn sort_background(list: &mut [BackgroundSession]) {
-    list.sort_by(|a, b| (&a.id, &a.session_id).cmp(&(&b.id, &b.session_id)));
+    list.sort_by(|a, b| {
+        fn key(s: &BackgroundSession) -> (&str, Option<&str>, Option<&str>, Option<&str>) {
+            (
+                &s.id,
+                s.session_id.as_deref(),
+                s.state.as_ref().map(BackgroundState::as_str),
+                s.cwd.as_deref(),
+            )
+        }
+        key(a).cmp(&key(b)).then_with(|| {
+            let at = |s: &BackgroundSession| s.started_epoch.unwrap_or(f64::NEG_INFINITY);
+            at(a).total_cmp(&at(b))
+        })
+    });
 }
 
 /// Agent Views read from several Claude config dirs, as one.
@@ -366,7 +386,6 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cockpit_core::data::BackgroundState;
 
     #[test]
     fn titles_come_from_every_window_and_pane() {
@@ -537,8 +556,30 @@ mod tests {
     }
 
     #[test]
+    fn a_live_background_session_keeps_its_state_and_feeds_the_pid_maps() {
+        // The shape Claude Code 2.1.322 prints while a `claude --bg`
+        // process lives: its pid and a process `status` ("idle" here, a
+        // word for the process, never for `state`) beside the state.
+        let out = br#"[
+            {"pid": 4242, "id": "5e5e5e5e", "cwd": "/w", "kind": "background",
+             "startedAt": 1794459510380, "sessionId": "s-5e", "status": "idle",
+             "state": "done"},
+            {"pid": 4343, "cwd": "/w", "kind": "background", "startedAt": 1794459510380,
+             "sessionId": "s-bare", "status": "busy"}
+        ]"#;
+        let v = agents(out).unwrap();
+        let ids: Vec<&str> = v.background.iter().map(|b| b.id.as_str()).collect();
+        assert_eq!(ids, ["5e5e5e5e"], "the bare process has no short id");
+        assert_eq!(v.background[0].state, Some(BackgroundState::Done));
+        assert_eq!(v.busy.get(&4242), Some(&false));
+        assert_eq!(v.busy.get(&4343), Some(&true));
+        assert_eq!(v.session.get(&4242).map(String::as_str), Some("s-5e"));
+        assert_eq!(v.started.get(&4343), Some(&1_794_459_510_380));
+    }
+
+    #[test]
     fn reads_every_background_state_and_keeps_an_unknown_word() {
-        let states = ["working", "blocked", "done", "failed", "stopped", "idle"];
+        let states = ["working", "blocked", "done", "failed", "stopped", "parked"];
         let entries: Vec<String> = states
             .iter()
             .enumerate()
@@ -555,7 +596,7 @@ mod tests {
                 BackgroundState::Done,
                 BackgroundState::Failed,
                 BackgroundState::Stopped,
-                BackgroundState::Other("idle".into()),
+                BackgroundState::Other("parked".into()),
             ]
             .map(Some)
         );
@@ -574,6 +615,19 @@ mod tests {
         let other_way = merged(b.into_iter().chain(a));
         assert_eq!(one_way, other_way);
         assert_eq!(one_way.background.len(), 2);
+
+        let twice = |state: &str| {
+            agents(
+                format!(r#"[{{"id": "aaaa", "kind": "background", "state": "{state}"}}]"#)
+                    .as_bytes(),
+            )
+        };
+        let (working, done) = (twice("working"), twice("done"));
+        assert_eq!(
+            merged(working.clone().into_iter().chain(done.clone())),
+            merged(done.into_iter().chain(working)),
+            "one short id in two dirs keeps its place whichever dir comes first"
+        );
 
         let personal = Some(PathBuf::from("/Users/me/.claude-personal"));
         let mut views = AgentViews::default();
