@@ -32,6 +32,7 @@ pub mod model;
 pub mod moves;
 pub mod needs;
 pub mod next;
+pub mod owner;
 pub mod panel;
 pub mod persist;
 pub mod placement;

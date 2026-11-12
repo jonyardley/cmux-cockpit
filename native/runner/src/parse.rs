@@ -16,6 +16,10 @@ pub struct AgentView {
     pub busy: HashMap<u32, bool>,
     /// pid to session id, which the core keys dismissals by.
     pub session: HashMap<u32, String>,
+    /// pid to when its process started (`startedAt`, epoch milliseconds).
+    /// It holds across `/clear`, which changes only the session id, so a
+    /// new value under a pid seen before means the pid was reused.
+    pub started: HashMap<u32, u64>,
 }
 
 /// `claude agents --json`, or None when it is not a list. Background
@@ -31,6 +35,9 @@ pub fn agents(out: &[u8]) -> Option<AgentView> {
         if let Some(id) = a["sessionId"].as_str() {
             view.session.insert(pid, id.to_string());
         }
+        if let Some(at) = a["startedAt"].as_u64() {
+            view.started.insert(pid, at);
+        }
     }
     Some(view)
 }
@@ -41,8 +48,75 @@ pub fn merged(views: impl IntoIterator<Item = AgentView>) -> AgentView {
     for v in views {
         all.busy.extend(v.busy);
         all.session.extend(v.session);
+        all.started.extend(v.started);
     }
     all
+}
+
+/// The most session ids kept for one process, its current one included:
+/// a chat cleared more often than this forgets its oldest sessions' work.
+pub const MAX_SESSIONS_PER_PID: usize = 16;
+
+/// One process's session ids, oldest first, and when it started.
+#[derive(Debug, Clone, Default, PartialEq)]
+struct PidSessions {
+    started: Option<u64>,
+    ids: Vec<String>,
+}
+
+/// Each Claude process's session ids over time, as Agent View has reported
+/// them. `/clear` gives a chat a new session id while the same process
+/// keeps its background shells and agents running, and the hooks save
+/// those under the old id, so the core counts work saved under any of a
+/// process's ids as its chat's. Kept in memory only, so a runner restart
+/// starts it afresh.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SessionHistory(HashMap<u32, PidSessions>);
+
+impl SessionHistory {
+    /// Records each pid's current session id. A process whose start time
+    /// differs from the one recorded is a new process under a reused pid,
+    /// so its history starts again; with no start time on either side it
+    /// is taken as the same process. Pids the view leaves out are kept:
+    /// the join forgets them (`forget`) once Agent View has left them out
+    /// long enough.
+    pub fn record(&mut self, view: &AgentView) {
+        for (pid, id) in &view.session {
+            let started = view.started.get(pid).copied();
+            let entry = self.0.entry(*pid).or_default();
+            if started.is_some() && entry.started.is_some() && entry.started != started {
+                *entry = PidSessions::default();
+            }
+            entry.started = started.or(entry.started);
+            entry.ids.retain(|known| known != id);
+            entry.ids.push(id.clone());
+            let over = entry.ids.len().saturating_sub(MAX_SESSIONS_PER_PID);
+            entry.ids.drain(..over);
+        }
+    }
+
+    /// The pid's session ids before its current one (`current`), newest
+    /// first.
+    pub fn earlier(&self, pid: u32, current: &str) -> Vec<String> {
+        self.0.get(&pid).map_or_else(Vec::new, |p| {
+            p.ids
+                .iter()
+                .rev()
+                .filter(|id| *id != current)
+                .cloned()
+                .collect()
+        })
+    }
+
+    /// The pids it holds history for.
+    pub fn pids(&self) -> impl Iterator<Item = u32> + '_ {
+        self.0.keys().copied()
+    }
+
+    /// Drops a pid that has gone away.
+    pub fn forget(&mut self, pid: u32) {
+        self.0.remove(&pid);
+    }
 }
 
 /// Each config dir's last good Agent View, keyed by the dir the read was
@@ -409,6 +483,99 @@ mod tests {
         assert_eq!(v.busy.get(&9533), Some(&true));
         assert_eq!(v.busy.get(&27486), Some(&false));
         assert_eq!(v.session.get(&9533).map(String::as_str), Some("77bc"));
+    }
+
+    #[test]
+    fn reads_when_each_process_started() {
+        let out = br#"[
+            {"pid": 9533, "sessionId": "77bc", "status": "busy", "startedAt": 1794459510380},
+            {"pid": 27486, "sessionId": "7a72", "status": "idle"}
+        ]"#;
+        let v = agents(out).unwrap();
+        assert_eq!(v.started.get(&9533), Some(&1_794_459_510_380));
+        assert_eq!(v.started.get(&27486), None);
+    }
+
+    /// An Agent View of one process, `pid`, under `session`, started at
+    /// `started` when given.
+    fn one(pid: u32, session: &str, started: Option<u64>) -> AgentView {
+        let mut v = AgentView::default();
+        v.busy.insert(pid, false);
+        v.session.insert(pid, session.to_string());
+        if let Some(at) = started {
+            v.started.insert(pid, at);
+        }
+        v
+    }
+
+    #[test]
+    fn a_clear_keeps_the_processes_earlier_sessions_newest_first() {
+        let mut h = SessionHistory::default();
+        h.record(&one(7, "first", Some(100)));
+        h.record(&one(7, "first", Some(100)));
+        assert_eq!(h.earlier(7, "first"), Vec::<String>::new());
+        h.record(&one(7, "second", Some(100)));
+        h.record(&one(7, "third", Some(100)));
+        assert_eq!(h.earlier(7, "third"), ["second", "first"]);
+        assert_eq!(h.earlier(8, "third"), Vec::<String>::new(), "unknown pid");
+    }
+
+    #[test]
+    fn a_session_resumed_again_is_current_not_earlier() {
+        let mut h = SessionHistory::default();
+        for id in ["a", "b", "a"] {
+            h.record(&one(7, id, Some(100)));
+        }
+        assert_eq!(h.earlier(7, "a"), ["b"]);
+    }
+
+    #[test]
+    fn a_reused_pid_starts_its_history_again() {
+        let mut h = SessionHistory::default();
+        h.record(&one(7, "old", Some(100)));
+        h.record(&one(7, "new", Some(200)));
+        assert_eq!(h.earlier(7, "new"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn a_process_with_no_start_time_is_taken_as_the_same_one() {
+        let mut h = SessionHistory::default();
+        h.record(&one(7, "old", Some(100)));
+        h.record(&one(7, "new", None));
+        assert_eq!(h.earlier(7, "new"), ["old"]);
+        h.record(&one(7, "newer", Some(100)));
+        assert_eq!(h.earlier(7, "newer"), ["new", "old"]);
+    }
+
+    #[test]
+    fn a_process_keeps_at_most_the_newest_sessions() {
+        let mut h = SessionHistory::default();
+        let ids: Vec<String> = (0..MAX_SESSIONS_PER_PID + 3)
+            .map(|i| format!("s{i}"))
+            .collect();
+        for id in &ids {
+            h.record(&one(7, id, Some(100)));
+        }
+        let current = ids.last().map_or("", String::as_str);
+        let earlier = h.earlier(7, current);
+        assert_eq!(earlier.len(), MAX_SESSIONS_PER_PID - 1);
+        assert_eq!(earlier.first(), ids.get(ids.len() - 2));
+        assert_eq!(earlier.last().map(String::as_str), Some("s3"));
+        assert!(
+            !earlier.contains(&"s2".to_string()),
+            "the oldest are dropped"
+        );
+    }
+
+    #[test]
+    fn a_forgotten_pid_has_no_history() {
+        let mut h = SessionHistory::default();
+        h.record(&one(7, "old", None));
+        h.record(&one(7, "new", None));
+        assert_eq!(h.pids().collect::<Vec<_>>(), [7]);
+        h.forget(7);
+        assert_eq!(h.pids().count(), 0);
+        assert_eq!(h.earlier(7, "new"), Vec::<String>::new());
     }
 
     #[test]
