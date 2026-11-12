@@ -249,7 +249,8 @@ mod a_ready_cards_pr_words_issue_79 {
 
     /// The compact card's PR words for `w`.
     fn text(s: &mut Session, w: &Workspace) -> String {
-        let words = pr_summary(&s.saved, Some(w)).map(|p| s.card_pr_words(Some(w), &p));
+        let words =
+            pr_summary(&s.saved, Some(w)).map(|p| s.card_pr_words(&Data::default(), Some(w), &p));
         compact_pr_text(words.as_deref())
     }
 
@@ -301,14 +302,14 @@ mod a_ready_cards_chips_row {
         let w = ready_ws(&mut fx, "w").group("g-main");
         let data = frame(NOW, vec![group("g-main", "Main activity")], vec![w.clone()]);
         assert!(s.is_ready(&data, Some(&w)));
-        assert!(s.chips_for(Some(&w), true).is_empty());
+        assert!(s.chips_for(&data, Some(&w), true).is_empty());
     }
 
     #[test]
     fn still_counts_a_chip_as_a_chips_row() {
         let (mut s, _, _) = setup();
         let w = ws("b").branch("feat");
-        assert!(!s.chips_for(Some(&w), true).is_empty());
-        assert!(s.chips_for(Some(&w), false).is_empty());
+        assert!(!s.chips_for(&Data::default(), Some(&w), true).is_empty());
+        assert!(s.chips_for(&Data::default(), Some(&w), false).is_empty());
     }
 }

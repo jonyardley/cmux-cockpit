@@ -6,6 +6,8 @@
 //! from the runner's memory of Agent View). Every match of a saved shell
 //! or subagent run to a chat goes through here. Saved asks and moves stay
 //! on the current id: they belong to a turn, and a clear starts afresh.
+//! The one exception is the Ready guard's "Nothing for you" check
+//! (`crate::moves::chat_quiet_move`), which looks under earlier ids too.
 
 use crate::data::Agent;
 

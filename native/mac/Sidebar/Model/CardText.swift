@@ -10,8 +10,8 @@ enum CardText {
     }
 
     /// The status, then the shorter form a narrow card falls back to: the
-    /// core's, its tail (the shell count or quiet time) dropped whole and
-    /// marked with an ellipsis, "Shell running 4m…", as the terminal pane
+    /// core's, its tail (the work's counts or quiet time) dropped whole and
+    /// marked with an ellipsis, "Running 4m…", as the terminal pane
     /// fits it. A status with no short form, such as a question, has one.
     static func statusForms(_ card: Card) -> [String] {
         card.statusShort.isEmpty ? [card.status] : [card.status, card.statusShort + "…"]

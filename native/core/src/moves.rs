@@ -11,6 +11,7 @@ use regex::Regex;
 
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::js::{positive, truthy};
+use crate::owner::owns;
 use crate::persist::{SavedMove, SavedState, move_of_description};
 use crate::saved::saved_for;
 
@@ -68,6 +69,45 @@ fn owns_move(m: &SavedMove, a: &Agent, _w: &Workspace) -> bool {
         && m.session.as_deref() == Some(a.id.as_str())
 }
 
+/// A move is `a`'s chat's when `a` is a Claude session and saved it under
+/// any session id its chat ran under (`crate::owner`), so a turn from
+/// before a /clear is still the chat's.
+fn chat_owns_move(m: &SavedMove, a: &Agent, w: &Workspace) -> bool {
+    let agents = w.agent_list().filter(|x| x.status.is_some());
+    a.kind.as_deref() == Some("claude") && m.session.as_deref().is_some_and(|s| owns(agents, a, s))
+}
+
+/// The move `a`'s chat's last turn ended on when it asks nothing of Jon,
+/// matched on any session id the chat ran under, with the same freshness
+/// rule as waiting_move. Only the Ready guard reads it: a turn that ended
+/// on "Nothing for you" before a /clear still keeps the card off Ready
+/// while its work runs. What a card shows as waiting stays on the current
+/// id, since a clear starts afresh.
+pub fn chat_quiet_move(saved: &SavedState, a: &Agent, w: &Workspace) -> Option<SavedMove> {
+    turn_move(saved, a, w, chat_owns_move).filter(asks_nothing)
+}
+
+/// The move `a`'s last turn ended on, when `owns` gives it to `a`: only at
+/// a turn end, and while the move is no older than the last prompt
+/// (latestAt), HOOK_SLACK aside. waiting_move and chat_quiet_move differ
+/// only in `owns`.
+fn turn_move(
+    saved: &SavedState,
+    a: &Agent,
+    w: &Workspace,
+    owns: fn(&SavedMove, &Agent, &Workspace) -> bool,
+) -> Option<SavedMove> {
+    if !at_turn_end(a) {
+        return None;
+    }
+    let prompt_at = w.latest_at.unwrap_or(0.0);
+    if !positive(prompt_at) {
+        return None;
+    }
+    let m = saved_move_for(saved, w)?;
+    saved_for(Some(&m), a, w, prompt_at, owns).cloned()
+}
+
 /// The move `a` is waiting on, or None. Pass `a` as the sidebars show it
 /// and `asking` from ask_reason. Only a turn end counts, never an ask; the
 /// move is current while it is no older than the last prompt (latestAt),
@@ -79,15 +119,10 @@ pub fn waiting_move(
     asking: bool,
 ) -> Option<SavedMove> {
     let (a, w) = (a?, w?);
-    if asking || !at_turn_end(a) {
+    if asking {
         return None;
     }
-    let prompt_at = w.latest_at.unwrap_or(0.0);
-    if !positive(prompt_at) {
-        return None;
-    }
-    let m = saved_move_for(saved, w)?;
-    saved_for(Some(&m), a, w, prompt_at, owns_move).cloned()
+    turn_move(saved, a, w, owns_move)
 }
 
 static NOTHING_WAITS: LazyLock<Option<Regex>> =
@@ -198,5 +233,64 @@ mod tests {
             ..quoted
         };
         assert_eq!(move_size(&deciding), Some(MoveSize::Decide));
+    }
+
+    fn claude(id: &str, earlier: &[&str]) -> Agent {
+        Agent {
+            id: id.to_string(),
+            kind: Some("claude".into()),
+            status: Some(AgentStatus::Idle),
+            earlier_sessions: Some(earlier.iter().map(|s| (*s).to_string()).collect()),
+            ..Agent::default()
+        }
+    }
+
+    fn quiet_saved(session: &str) -> SavedState {
+        SavedState::from_json(&format!(
+            r#"{{"moves": {{"w": {{"text": "Nothing for you: tests run on", "idle": true,
+                "epoch": 1000, "session": "{session}"}}}}}}"#
+        ))
+        .unwrap()
+    }
+
+    fn ws(agents: &[Agent], latest_at: f64) -> Workspace {
+        Workspace {
+            id: "w".into(),
+            latest_at: Some(latest_at),
+            agents: Some(agents.iter().cloned().map(Some).collect()),
+            ..Workspace::default()
+        }
+    }
+
+    #[test]
+    fn finds_the_chats_quiet_move_under_an_id_from_before_a_clear() {
+        let a = claude("now", &["before"]);
+        let w = ws(std::slice::from_ref(&a), 950.0);
+        let saved = quiet_saved("before");
+        assert!(chat_quiet_move(&saved, &a, &w).is_some());
+        assert!(
+            waiting_move(&saved, Some(&a), Some(&w), false).is_none(),
+            "what the card shows as waiting stays on the current id"
+        );
+    }
+
+    #[test]
+    fn a_prompt_after_the_move_leaves_it_behind() {
+        let a = claude("now", &["before"]);
+        let w = ws(std::slice::from_ref(&a), 1100.0);
+        assert!(chat_quiet_move(&quiet_saved("before"), &a, &w).is_none());
+    }
+
+    #[test]
+    fn never_finds_another_chats_move() {
+        let a = claude("now", &["before"]);
+        let resumed = claude("before", &[]);
+        let w = ws(&[a.clone(), resumed], 950.0);
+        assert!(
+            chat_quiet_move(&quiet_saved("before"), &a, &w).is_none(),
+            "a resumed session owns its id again"
+        );
+        let w = ws(std::slice::from_ref(&a), 950.0);
+        assert!(chat_quiet_move(&quiet_saved("stranger"), &a, &w).is_none());
     }
 }

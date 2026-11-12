@@ -306,7 +306,11 @@ mod chips_for {
             url: Some("https://x/7".into()),
             ..pr(7.0, Some(PrStatus::Open))
         };
-        let chips = s.chips_for(Some(&ws("x").pr(seven).branch("feat").dirty()), true);
+        let chips = s.chips_for(
+            &data(),
+            Some(&ws("x").pr(seven).branch("feat").dirty()),
+            true,
+        );
         assert_eq!(
             shape(&chips),
             [
@@ -332,7 +336,7 @@ mod chips_for {
             draft: Some(true),
             ..pr(8.0, Some(PrStatus::Open))
         };
-        let chips = s.chips_for(Some(&ws("d").pr(draft)), false);
+        let chips = s.chips_for(&data(), Some(&ws("d").pr(draft)), false);
         assert!(
             matches!(chips.first(), Some(Chip::Pr { tag, state, .. }) if tag == "#8" && state == "draft")
         );
@@ -341,10 +345,13 @@ mod chips_for {
             deletions: Some(2.0),
             ..pr(9.0, Some(PrStatus::Open))
         };
-        let chips = s.chips_for(Some(&ws("s").pr(sized)), false);
+        let chips = s.chips_for(&data(), Some(&ws("s").pr(sized)), false);
         assert!(matches!(chips.first(), Some(Chip::Pr { diff, .. }) if diff == "+40 \u{2212}2"));
-        assert!(s.chips_for(Some(&ws("y").branch("feat")), false).is_empty());
-        let chips = s.chips_for(Some(&ws("y").branch("feat")), true);
+        assert!(
+            s.chips_for(&data(), Some(&ws("y").branch("feat")), false)
+                .is_empty()
+        );
+        let chips = s.chips_for(&data(), Some(&ws("y").branch("feat")), true);
         assert!(matches!(
             chips.first(),
             Some(Chip::Branch { dirty: false, .. })
@@ -354,7 +361,7 @@ mod chips_for {
     #[test]
     fn adds_a_ports_chip_that_opens_the_first_port_on_localhost() {
         let mut s = fresh();
-        let chips = s.chips_for(Some(&ws("x").ports(&[5173.0])), true);
+        let chips = s.chips_for(&data(), Some(&ws("x").ports(&[5173.0])), true);
         assert_eq!(
             chips,
             [Chip::Port {
@@ -368,7 +375,7 @@ mod chips_for {
     fn shows_the_first_port_and_how_many_more() {
         let mut s = fresh();
         let w = ws("x").ports(&[5173.0, 3000.0, 5173.0, 8080.0]);
-        let chips = s.chips_for(Some(&w), true);
+        let chips = s.chips_for(&data(), Some(&w), true);
         assert!(matches!(chips.first(), Some(Chip::Port { text, url })
             if text == ":5173 +2 \u{2197}" && url == "http://localhost:5173"));
     }
@@ -377,18 +384,21 @@ mod chips_for {
     fn skips_ports_that_are_not_real_port_numbers() {
         let mut s = fresh();
         assert!(
-            s.chips_for(Some(&ws("x").ports(&[0.0, 70000.0, 1.5])), true)
+            s.chips_for(&data(), Some(&ws("x").ports(&[0.0, 70000.0, 1.5])), true)
                 .is_empty()
         );
-        assert!(s.chips_for(Some(&ws("x").ports(&[])), true).is_empty());
-        assert!(s.chips_for(None, true).is_empty());
+        assert!(
+            s.chips_for(&data(), Some(&ws("x").ports(&[])), true)
+                .is_empty()
+        );
+        assert!(s.chips_for(&data(), None, true).is_empty());
     }
 
     #[test]
     fn orders_the_chips_pr_branch_ports() {
         let mut s = fresh();
         let w = ws("x").pr(pr(7.0, None)).branch("main").ports(&[5173.0]);
-        let ids: Vec<&str> = shape(&s.chips_for(Some(&w), true))
+        let ids: Vec<&str> = shape(&s.chips_for(&data(), Some(&w), true))
             .into_iter()
             .map(|(id, ..)| id)
             .collect();
@@ -422,7 +432,7 @@ fn sized(number: f64, draft: bool, additions: f64, deletions: f64) -> PullReques
 
 /// chipsFor with the branch, fitted to a project card's line.
 fn fits(s: &mut Session, w: &Workspace) -> bool {
-    let chips = s.chips_for(Some(w), true);
+    let chips = s.chips_for(&data(), Some(w), true);
     chips_fit_one_line(&chips, PROJECT_LINE_CHARS)
 }
 
@@ -437,9 +447,9 @@ mod a_merged_cards_chips {
     fn shows_its_branch_as_any_card_does() {
         let mut s = fresh();
         let w = ws("x").pr(merged()).branch("feat");
-        assert_eq!(ids(&s.chips_for(Some(&w), true)), ["pr", "br"]);
+        assert_eq!(ids(&s.chips_for(&data(), Some(&w), true)), ["pr", "br"]);
         let dirty = ws("x").pr(merged()).branch("feat").dirty();
-        assert_eq!(ids(&s.chips_for(Some(&dirty), true)), ["pr", "br"]);
+        assert_eq!(ids(&s.chips_for(&data(), Some(&dirty), true)), ["pr", "br"]);
     }
 }
 
@@ -451,7 +461,7 @@ mod chips_fit_one_line {
         let mut s = fresh();
         let merged = pr(1234.0, Some(PrStatus::Merged));
         let mut full = |w: &Workspace| {
-            let chips = s.chips_for(Some(w), true);
+            let chips = s.chips_for(&data(), Some(w), true);
             chips_fit_one_line(&chips, FULL_LINE_CHARS)
         };
         assert!(full(&ws("x").pr(merged.clone()).branch("feat")));
@@ -510,7 +520,7 @@ mod chips_split {
     use super::*;
 
     fn splits(s: &mut Session, w: &Workspace) -> bool {
-        let chips = s.chips_for(Some(w), true);
+        let chips = s.chips_for(&data(), Some(w), true);
         chips_split(&chips, PROJECT_LINE_CHARS)
     }
 
@@ -553,7 +563,7 @@ mod chips_split {
             .pr(pr(148.0, Some(PrStatus::Open)));
         assert!(!splits(&mut s, &w), "fits a project card");
         let mut full = |w: &Workspace| {
-            let chips = s.chips_for(Some(w), true);
+            let chips = s.chips_for(&data(), Some(w), true);
             chips_split(&chips, FULL_LINE_CHARS)
         };
         assert!(full(&w), "too wide for a full card");

@@ -4,7 +4,7 @@
 
 use serde::Serialize;
 
-use crate::data::Workspace;
+use crate::data::{Data, Workspace};
 use crate::moves::{MoveSize, move_size, move_size_text};
 use crate::pr_colors::{PrTone, draft_of, pr_tone};
 use crate::prs::pr_summary;
@@ -66,7 +66,12 @@ fn port_chip(ports: Option<&[f64]>) -> Option<Chip> {
 impl Session {
     /// A card's chips, in order: the size, the PR, the branch (when
     /// asked for), the ports.
-    pub fn chips_for(&mut self, w: Option<&Workspace>, with_branch: bool) -> Vec<Chip> {
+    pub fn chips_for(
+        &mut self,
+        data: &Data,
+        w: Option<&Workspace>,
+        with_branch: bool,
+    ) -> Vec<Chip> {
         let mut out = Vec::new();
         let Some(w) = w else { return out };
         // First, so what answering takes reads before where the work is.
@@ -80,7 +85,7 @@ impl Session {
             // Its state words go once the status says Ready to merge:
             // "ready" would only say it again, so the chip keeps its
             // number (issue #299).
-            let state = if self.shows_merge_ready(Some(w)) {
+            let state = if self.shows_merge_ready(data, Some(w)) {
                 String::new()
             } else {
                 pr.state

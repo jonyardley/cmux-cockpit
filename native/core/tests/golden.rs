@@ -66,7 +66,7 @@ fn computed(input: &Value) -> Value {
     }
     let mut chips = Map::new();
     for w in s.card_workspaces(&data) {
-        let drawn = s.chips_for(Some(w), true);
+        let drawn = s.chips_for(&data, Some(w), true);
         let row = json!({
             "cardOpacity": json_num(s.card_opacity(Some(w), false)),
             "chips": drawn,

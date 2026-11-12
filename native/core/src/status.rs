@@ -5,19 +5,19 @@
 use crate::activity::most_active;
 use crate::data::{Agent, AgentStatus, Data, Workspace};
 use crate::js::{non_empty, positive, truthy};
-use crate::moves::{quiet_move, waiting_move};
+use crate::moves::{chat_quiet_move, waiting_move};
 use crate::needs::ask_reason;
 use crate::persist::{SavedMove, is_move_description, without_context};
 use crate::prs::{PrHealth, PrSummary, pr_health};
+use crate::running::{Running, running_work, shows_running};
 use crate::session::Session;
-use crate::shells::live_shell_count;
 use crate::text::{card_message, clip, one_line, readable};
 use crate::theme::Token;
 use crate::time::{age_since, finished_at};
 use crate::ui::{PillColors, URGENCY_RANK, Urgency, count_tint};
 use crate::words::{
-    ASKING_WORD, ASLEEP_WORD, HELPER_RUNNING_WORD, MERGE_READY_WORD, NO_AGENT_WORD,
-    SHELL_RUNNING_WORD, WAKING_WORD, YOU_WORD, shell_text, status_word, with_age,
+    ASKING_WORD, ASLEEP_WORD, MERGE_READY_WORD, NO_AGENT_WORD, RUNNING_WORD, WAKING_WORD, YOU_WORD,
+    running_text, status_word, with_age,
 };
 
 /// A workspace's status: its agent's, or none.
@@ -75,10 +75,9 @@ pub enum StatusKind {
     Asking,
     /// Still working, but silent a while.
     Quiet,
-    /// Idle on a background shell its own chat still runs.
-    ShellRunning,
-    /// Idle while a background agent it started still runs.
-    HelperRunning,
+    /// Idle while background work of any kind its chat started still
+    /// runs: shells, monitors, agents, `claude --bg` sessions (#359).
+    Running,
     /// Put to sleep when its card was parked (issue #328), or on its way.
     Asleep,
     /// Asked to wake, until its agent is back.
@@ -170,12 +169,8 @@ impl StatusKind {
                 ring: Some(Token::Blue),
                 ..plain_style(&Status::Working)
             },
-            StatusKind::ShellRunning => StatusStyle {
-                label: SHELL_RUNNING_WORD,
-                ..plain_style(&Status::Working)
-            },
-            StatusKind::HelperRunning => StatusStyle {
-                label: HELPER_RUNNING_WORD,
+            StatusKind::Running => StatusStyle {
+                label: RUNNING_WORD,
                 ..plain_style(&Status::Working)
             },
             // Sleep is no state that wants Jon, so no hue: a hollow dot
@@ -383,8 +378,27 @@ impl Session {
     /// The agent a Ready card reports, or None when the workspace is not
     /// Ready: finished while Jon was elsewhere, with output he has not
     /// read, not selected, never a real ask, and not a "Nothing for you"
-    /// turn whose shell or background agent still runs.
+    /// turn whose chat still runs background work.
     pub fn ready_agent(&mut self, data: &Data, w: Option<&Workspace>) -> Option<Agent> {
+        let card = self.card_running(data, w);
+        self.ready_with(data, w, &card)
+    }
+
+    /// The card's agent and the background work its chat runs, read once
+    /// for every rule a pass asks of it.
+    fn card_running(&mut self, data: &Data, w: Option<&Workspace>) -> CardRunning {
+        let agent = self.agent_of(w);
+        let running = running_work(&self.saved, data, w, agent.as_ref());
+        CardRunning { agent, running }
+    }
+
+    /// ready_agent, with the card's work already read.
+    fn ready_with(
+        &mut self,
+        data: &Data,
+        w: Option<&Workspace>,
+        card: &CardRunning,
+    ) -> Option<Agent> {
         let w = w?;
         if !positive(w.unread.unwrap_or(0.0))
             || self.is_selected(data, Some(w))
@@ -396,9 +410,17 @@ impl Session {
             return None;
         }
         let a = self.finished_agent(w)?;
-        let runs_on = quiet_move(&self.saved, &a, Some(w)).is_some()
-            && (live_shell_count(&self.saved, Some(w), Some(&a)) > 0
-                || self.own_run_count(Some(w), &a) > 0);
+        // The finished agent is almost always the card's; another one's
+        // work is read for it alone.
+        let runs = if card.agent.as_ref().is_some_and(|c| c.id == a.id) {
+            card.running.is_some()
+        } else {
+            running_work(&self.saved, data, Some(w), Some(&a)).is_some()
+        };
+        // A "Nothing for you" turn has nothing to read while its work
+        // runs; one from before a /clear counts too (#359). A turn with no
+        // such line stays Ready, since its work may never end.
+        let runs_on = runs && chat_quiet_move(&self.saved, &a, w).is_some();
         (!runs_on).then_some(a)
     }
 
@@ -413,26 +435,32 @@ impl Session {
         ask_reason(&self.saved, a.as_ref(), w)
     }
 
-    /// True when the agent is idle on a background shell its own chat still runs.
-    pub fn is_shell_running(&self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
-        a.is_some_and(|a| a.status == Some(AgentStatus::Idle))
-            && live_shell_count(&self.saved, w, a) > 0
+    /// Whether the card is Ready, and whether it says Running, from one
+    /// read of its work: what lane order sorts on.
+    pub fn ready_or_running(&mut self, data: &Data, w: Option<&Workspace>) -> (bool, bool) {
+        let card = self.card_running(data, w);
+        let ready = self.ready_with(data, w, &card).is_some();
+        (
+            ready,
+            shows_running(card.agent.as_ref(), card.running.as_ref()),
+        )
     }
 
-    /// True when the agent is idle while a background agent (a subagent
-    /// run) its own chat started still runs: the chat waits on it, so the
-    /// card is not at rest. A run that never reports is pruned by the hook.
-    pub fn is_helper_running(&mut self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
-        a.is_some_and(|a| a.status == Some(AgentStatus::Idle) && self.own_run_count(w, a) > 0)
+    /// Whether the background work the card's chat runs counts any agent,
+    /// so a Running status line already says them.
+    pub fn running_counts_agents(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        self.card_running(data, w)
+            .running
+            .is_some_and(|r| r.counts_agents())
     }
 
     /// Whether the card says Ready to merge: its PR is ready and its agent,
-    /// if any, is idle or finished, not asking, and not idle on a shell
-    /// or a background agent it still runs. Working (quiet too), Your
-    /// turn, Asking, Shell running and Helper running keep their status,
-    /// since they come first, and so does a status cmux names that the
-    /// core does not know, which may yet be busy.
-    fn merge_ready(&mut self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
+    /// if any, is idle or finished, not asking, and its chat runs no
+    /// background work. Working (quiet too), Your turn, Asking and
+    /// Running keep their status, since they come first, and so does a
+    /// status cmux names that the core does not know, which may yet be busy.
+    fn merge_ready(&mut self, w: Option<&Workspace>, card: &CardRunning) -> bool {
+        let a = card.agent.as_ref();
         if pr_health(&self.saved, w) != PrHealth::Ready {
             return false;
         }
@@ -442,28 +470,24 @@ impl Session {
                 None | Some(AgentStatus::Idle | AgentStatus::Ended)
             )
         });
-        at_rest
-            && ask_reason(&self.saved, a, w).is_none()
-            && !self.is_shell_running(a, w)
-            && !self.is_helper_running(a, w)
+        at_rest && ask_reason(&self.saved, a, w).is_none() && card.running.is_none()
     }
 
     /// True when the card's status says Ready to merge (issue #299): the
     /// same rule status_kind puts first, without the rest of its pass.
-    /// It takes no Data, so chips_for needs none; status_kind must keep
-    /// merge_ready first for the two to agree, and a test in
-    /// tests/ported/merge_ready.rs holds them to it.
-    pub fn shows_merge_ready(&mut self, w: Option<&Workspace>) -> bool {
-        let a = self.agent_of(w);
-        self.merge_ready(a.as_ref(), w)
+    /// status_kind must keep merge_ready first for the two to agree, and a
+    /// test in tests/ported/merge_ready.rs holds them to it.
+    pub fn shows_merge_ready(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        let card = self.card_running(data, w);
+        self.merge_ready(w, &card)
     }
 
     /// The PR's words a compact card runs on from its status: the number
     /// alone once the status says Ready to merge, since the PR's "ready"
     /// would only say it again and crowd the line ("Ready to merge 3m ·
     /// #1"); else its full words ("#45 · 1 failing").
-    pub fn card_pr_words(&mut self, w: Option<&Workspace>, pr: &PrSummary) -> String {
-        if self.shows_merge_ready(w) {
+    pub fn card_pr_words(&mut self, data: &Data, w: Option<&Workspace>, pr: &PrSummary) -> String {
+        if self.shows_merge_ready(data, w) {
             pr.tag.clone()
         } else {
             pr.text.clone()
@@ -473,8 +497,15 @@ impl Session {
     /// Which status look the card takes. Ready to merge wins over Ready:
     /// the unread badge still says there is output.
     pub fn status_kind(&mut self, data: &Data, w: Option<&Workspace>) -> StatusKind {
-        let a = self.agent_of(w);
-        if self.merge_ready(a.as_ref(), w) {
+        let card = self.card_running(data, w);
+        self.kind_with(data, w, &card)
+    }
+
+    /// status_kind, with the card's work read once for Ready to merge,
+    /// Ready and Running.
+    fn kind_with(&mut self, data: &Data, w: Option<&Workspace>, card: &CardRunning) -> StatusKind {
+        let a = card.agent.as_ref();
+        if self.merge_ready(w, card) {
             return StatusKind::MergeReady;
         }
         // To cmux a sleeping agent looks ended, so the cockpit's own
@@ -482,22 +513,19 @@ impl Session {
         if let Some(kind) = w.and_then(|w| self.sleep_kind(&w.id)) {
             return kind;
         }
-        if self.is_ready(data, w) {
+        if self.ready_with(data, w, card).is_some() {
             return StatusKind::Ready;
         }
-        if ask_reason(&self.saved, a.as_ref(), w).is_some() {
+        if ask_reason(&self.saved, a, w).is_some() {
             return StatusKind::Asking;
         }
-        if self.quiet_since(data, a.as_ref(), w) > 0.0 {
+        if self.quiet_since(data, a, w) > 0.0 {
             return StatusKind::Quiet;
         }
-        if self.is_shell_running(a.as_ref(), w) {
-            return StatusKind::ShellRunning;
+        if shows_running(a, card.running.as_ref()) {
+            return StatusKind::Running;
         }
-        if self.is_helper_running(a.as_ref(), w) {
-            return StatusKind::HelperRunning;
-        }
-        StatusKind::Plain(Status::of(a.as_ref()))
+        StatusKind::Plain(Status::of(a))
     }
 
     /// How the card's status draws.
@@ -624,32 +652,24 @@ impl Session {
     }
 
     /// The status and how long it has held ("Working 14m", "Finished 6m"),
-    /// with the shell count while Shell running, the helper count while
-    /// Helper running and the quiet time while Quiet.
+    /// with the count of each kind of work while Running ("Running 4m ·
+    /// 1 shell, 1 agent") and the quiet time while Quiet.
     pub fn status_line(&mut self, data: &Data, w: Option<&Workspace>) -> String {
         self.status_forms(data, w).0
     }
 
     /// The status line, and the shorter form a narrow card falls back to:
-    /// the word and age without the shell count or the quiet time, so the
-    /// tail goes whole rather than cut. "" when there is no tail to drop.
+    /// the word and age without the work's counts or the quiet time, so
+    /// the tail goes whole rather than cut. "" when there is no tail to drop.
     pub fn status_forms(&mut self, data: &Data, w: Option<&Workspace>) -> (String, String) {
-        let kind = self.status_kind(data, w);
-        let age = self.card_age(data, w);
+        let card = self.card_running(data, w);
+        let kind = self.kind_with(data, w, &card);
+        let age = self.age_with(data, w, &kind, &card);
         let line = with_age(kind.style().label, &age);
-        match kind {
-            StatusKind::ShellRunning => {
-                let a = self.agent_of(w);
-                let n = live_shell_count(&self.saved, w, a.as_ref());
-                (format!("{line} {}", shell_text(n)), line)
-            }
-            StatusKind::HelperRunning => {
-                let n = self.agent_of(w).map_or(0, |a| self.own_run_count(w, &a));
-                (format!("{line} {}", helpers_words(n)), line)
-            }
-            StatusKind::Quiet => {
-                let a = self.agent_of(w);
-                let suffix = self.quiet_suffix(data, a.as_ref(), w);
+        match (&kind, &card.running) {
+            (StatusKind::Running, Some(r)) => (format!("{line} {}", running_text(&r.counts)), line),
+            (StatusKind::Quiet, _) => {
+                let suffix = self.quiet_suffix(data, card.agent.as_ref(), w);
                 if suffix.is_empty() {
                     (line, String::new())
                 } else {
@@ -660,15 +680,30 @@ impl Session {
         }
     }
 
-    /// True when the status line carries a time, so a card leaves its top-right one off.
-    pub fn status_has_age(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
-        !self.card_age(data, w).is_empty()
+    /// How long the card's status has held, as its status line says it
+    /// ("5m" from the earliest work while Running).
+    pub fn status_age(&mut self, data: &Data, w: Option<&Workspace>) -> String {
+        let card = self.card_running(data, w);
+        let kind = self.kind_with(data, w, &card);
+        self.age_with(data, w, &kind, &card)
     }
 
-    /// A Ready card counts from when its finished agent finished, an idle
-    /// or ended one from when its agent finished; otherwise only the
-    /// agent's sinceEpoch says when the status began.
-    fn card_age(&mut self, data: &Data, w: Option<&Workspace>) -> String {
+    /// True when the status line carries a time, so a card leaves its top-right one off.
+    pub fn status_has_age(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        !self.status_age(data, w).is_empty()
+    }
+
+    /// A Running card counts from when its earliest work started, a Ready
+    /// card from when its finished agent finished, an idle or ended one
+    /// from when its agent finished; otherwise only the agent's
+    /// sinceEpoch says when the status began.
+    fn age_with(
+        &mut self,
+        data: &Data,
+        w: Option<&Workspace>,
+        kind: &StatusKind,
+        card: &CardRunning,
+    ) -> String {
         // Asleep counts from when it went to sleep; on its way, and while
         // waking, there is no time to give yet.
         match w.and_then(|w| self.sleep_kind(&w.id).map(|k| (k, &w.id))) {
@@ -676,14 +711,17 @@ impl Session {
             Some(_) => return String::new(),
             None => {}
         }
-        if let Some(ready) = self.ready_agent(data, w) {
+        if let (StatusKind::Running, Some(r)) = (kind, &card.running) {
+            return age_since(data, Some(r.since));
+        }
+        if let Some(ready) = self.ready_with(data, w, card) {
             return age_since(data, Some(finished_at(&ready)));
         }
-        let Some(a) = self.agent_of(w) else {
+        let Some(a) = card.agent.as_ref() else {
             return String::new();
         };
-        if Status::of(Some(&a)).finished() {
-            age_since(data, Some(finished_at(&a)))
+        if Status::of(Some(a)).finished() {
+            age_since(data, Some(finished_at(a)))
         } else {
             age_since(data, a.since_epoch)
         }
@@ -720,6 +758,13 @@ impl Session {
         };
         clip(&text, DETAIL_MAX)
     }
+}
+
+/// A card's agent as the sidebars show it, and the background work its
+/// chat runs, read once per pass over the card.
+struct CardRunning {
+    agent: Option<Agent>,
+    running: Option<Running>,
 }
 
 /// "· 1 helper", "· 3 helpers", or "" for none.

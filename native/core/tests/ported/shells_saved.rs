@@ -1,5 +1,7 @@
 //! test/shells-saved.test.ts: a card whose chat is idle on a background
-//! shell still running reads "Shell running 4m · 1 shell" in working blue.
+//! shell still running reads "Running 4m · 1 shell" in working blue (#359:
+//! the status reads the `background` record; the `shells` map is still
+//! counted by `live_shell_count` until #361 retires it).
 
 use cockpit_core::data::{Agent, Data};
 use cockpit_core::session::Session;
@@ -17,6 +19,13 @@ const STATE: &str = r#"{
         "two": [{"id": "b1", "session": "chat", "startedEpoch": 100}, {"id": "b2", "session": "chat", "startedEpoch": 100}],
         "other": [{"id": "b1", "session": "someone-else", "startedEpoch": 100}],
         "quiet": [{"id": "b1", "session": "chat", "startedEpoch": 100}]
+    },
+    "background": {
+        "one": [{"id": "b1", "type": "shell", "status": "running", "description": "build", "session": "chat", "startedEpoch": 999760, "seenEpoch": 999900}],
+        "two": [{"id": "b1", "type": "shell", "status": "running", "description": "build", "session": "chat", "startedEpoch": 999760, "seenEpoch": 999900},
+                {"id": "b2", "type": "monitor", "status": "running", "description": "watch", "session": "chat", "startedEpoch": 999800, "seenEpoch": 999900}],
+        "other": [{"id": "b1", "type": "shell", "status": "running", "description": "build", "session": "someone-else", "startedEpoch": 999760, "seenEpoch": 999900}],
+        "quiet": [{"id": "b1", "type": "shell", "status": "running", "description": "build", "session": "chat", "startedEpoch": 999760, "seenEpoch": 999900}]
     },
     "moves": {
         "quiet": {"text": "the rounds take about 20 minutes, and I report what they show.", "epoch": 1000, "session": "chat", "idle": true},
@@ -64,19 +73,19 @@ mod background_shells_on_the_card {
     }
 
     #[test]
-    fn does_not_turn_another_chats_card_to_shell_running() {
+    fn does_not_turn_another_chats_card_to_running() {
         let (mut s, data, mut fx) = setup();
         let w = ws("other").agents(vec![idle(&mut fx)]);
         assert!(s.status_line(&data, Some(&w)).starts_with("Idle"));
     }
 
     #[test]
-    fn reads_shell_running_in_working_blue_with_the_idle_age_and_the_shell_count() {
+    fn reads_running_in_working_blue_from_the_earliest_start_with_the_shell_count() {
         let (mut s, data, mut fx) = setup();
         let idle_line = s.status_line(&data, Some(&ws("none").agents(vec![idle(&mut fx)])));
         assert_eq!(idle_line, "Idle 4m");
         let w = ws("one").agents(vec![idle(&mut fx)]);
-        let running = idle_line.replace("Idle", "Shell running");
+        let running = idle_line.replace("Idle", "Running");
         assert_eq!(
             s.status_line(&data, Some(&w)),
             format!("{running} · 1 shell")
@@ -92,12 +101,12 @@ mod background_shells_on_the_card {
     }
 
     #[test]
-    fn falls_back_to_the_word_and_age_alone_with_the_shell_count_dropped_whole() {
+    fn falls_back_to_the_word_and_age_alone_with_the_counts_dropped_whole() {
         let (mut s, data, mut fx) = setup();
         let w = ws("one").agents(vec![idle(&mut fx)]);
         let (full, short) = s.status_forms(&data, Some(&w));
         assert_eq!(full, format!("{short} · 1 shell"));
-        assert!(short.starts_with("Shell running "));
+        assert_eq!(short, "Running 4m");
         let none = ws("none").agents(vec![idle(&mut fx)]);
         assert_eq!(s.status_forms(&data, Some(&none)).1, "", "no tail to drop");
     }
@@ -111,7 +120,7 @@ mod background_shells_on_the_card {
     }
 
     #[test]
-    fn stays_shell_running_not_ready_on_a_nothing_for_you_turn_while_its_shell_runs() {
+    fn stays_running_not_ready_on_a_nothing_for_you_turn_while_its_shell_runs() {
         let (mut s, data, mut fx) = setup();
         let a = fx
             .agent(Idle)
@@ -123,7 +132,7 @@ mod background_shells_on_the_card {
         assert!(!s.is_ready(&data, Some(&w)));
         let line = s.status_line(&data, Some(&w));
         assert!(
-            line.starts_with("Shell running ") && line.ends_with(" · 1 shell"),
+            line.starts_with("Running ") && line.ends_with(" · 1 shell"),
             "{line}"
         );
     }
@@ -139,6 +148,19 @@ mod background_shells_on_the_card {
             .activity(1000.0);
         let w = ws("quietDone").unread(1.0).latest_at(950.0).agents(vec![a]);
         assert!(s.is_ready(&data, Some(&w)));
+    }
+
+    #[test]
+    fn reads_only_the_background_record_never_the_old_shell_map() {
+        let (mut s, data, mut fx) = setup();
+        let mut old = session(
+            r#"{"shells": {"one": [{"id": "b1", "session": "chat", "startedEpoch": 100}]}}"#,
+        );
+        let w = ws("one").agents(vec![idle(&mut fx)]);
+        let a = idle(&mut fx);
+        assert_eq!(live_shell_count(&old.saved, Some(&w), Some(&a)), 1);
+        assert_eq!(old.status_line(&data, Some(&w)), "Idle 4m");
+        assert!(s.status_line(&data, Some(&w)).starts_with("Running"));
     }
 
     #[test]

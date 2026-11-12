@@ -2,6 +2,7 @@
 //! src/shared/words.ts).
 
 use crate::data::AgentStatus;
+use crate::persist::TaskType;
 
 /// The status word for each agent status, as a card head or status line
 /// starts. None for a status this port does not know.
@@ -23,11 +24,8 @@ pub const NO_AGENT_WORD: &str = "No agent";
 /// An idle card whose PR GitHub would merge now (issue #299).
 pub const MERGE_READY_WORD: &str = "Ready to merge";
 
-/// An idle agent whose background shell is still running.
-pub const SHELL_RUNNING_WORD: &str = "Shell running";
-
-/// An idle agent whose background agent (a subagent run) is still running.
-pub const HELPER_RUNNING_WORD: &str = "Helper running";
+/// An idle agent whose chat still runs background work of any kind (#359).
+pub const RUNNING_WORD: &str = "Running";
 
 /// An agent the cockpit put to sleep when its card was parked (#328).
 pub const ASLEEP_WORD: &str = "Asleep";
@@ -41,9 +39,36 @@ pub const QUIET_WORD: &str = "quiet";
 /// Your last prompt, on a card that shows where you left off.
 pub const YOU_WORD: &str = "You";
 
-/// "· 1 shell", "· 2 shells": the shells an idle agent still runs.
-pub fn shell_text(n: usize) -> String {
-    format!("· {n} {}", if n == 1 { "shell" } else { "shells" })
+/// One kind of background work in words, singular and plural. A monitor
+/// is listed as a shell, so it reads as one; a kind Claude Code adds
+/// later reads as a task.
+pub fn task_word(kind: TaskType, n: usize) -> &'static str {
+    let (one, many) = match kind {
+        TaskType::Shell | TaskType::Monitor => ("shell", "shells"),
+        TaskType::Subagent => ("agent", "agents"),
+        TaskType::Session => ("session", "sessions"),
+        TaskType::Workflow => ("workflow", "workflows"),
+        TaskType::Teammate => ("teammate", "teammates"),
+        TaskType::CloudSession => ("cloud session", "cloud sessions"),
+        TaskType::McpTask => ("MCP task", "MCP tasks"),
+        TaskType::Other => ("task", "tasks"),
+    };
+    if n == 1 { one } else { many }
+}
+
+/// "· 1 shell, 2 agents": the count of each kind an idle agent's chat
+/// still runs, in the order given; "" for none.
+pub fn running_text(counts: &[(TaskType, usize)]) -> String {
+    let words: Vec<String> = counts
+        .iter()
+        .filter(|(_, n)| *n > 0)
+        .map(|(kind, n)| format!("{n} {}", task_word(*kind, *n)))
+        .collect();
+    if words.is_empty() {
+        String::new()
+    } else {
+        format!("· {}", words.join(", "))
+    }
 }
 
 /// The word and how long it has held, "Finished 3m"; the word alone without an age.
@@ -65,7 +90,46 @@ mod tests {
         assert_eq!(status_word(&AgentStatus::Other("x".into())), None);
         assert_eq!(with_age("Finished", "3m"), "Finished 3m");
         assert_eq!(with_age("Idle", ""), "Idle");
-        assert_eq!(shell_text(1), "· 1 shell");
-        assert_eq!(shell_text(2), "· 2 shells");
+    }
+
+    #[test]
+    fn words_every_kind_of_background_work_one_and_many() {
+        let kinds = [
+            (TaskType::Shell, "1 shell", "2 shells"),
+            (TaskType::Monitor, "1 shell", "2 shells"),
+            (TaskType::Subagent, "1 agent", "2 agents"),
+            (TaskType::Session, "1 session", "2 sessions"),
+            (TaskType::Workflow, "1 workflow", "2 workflows"),
+            (TaskType::Teammate, "1 teammate", "2 teammates"),
+            (
+                TaskType::CloudSession,
+                "1 cloud session",
+                "2 cloud sessions",
+            ),
+            (TaskType::McpTask, "1 MCP task", "2 MCP tasks"),
+            (TaskType::Other, "1 task", "2 tasks"),
+        ];
+        for (kind, one, two) in kinds {
+            assert_eq!(running_text(&[(kind, 1)]), format!("· {one}"));
+            assert_eq!(running_text(&[(kind, 2)]), format!("· {two}"));
+        }
+    }
+
+    #[test]
+    fn lists_each_kind_after_one_dot_and_leaves_out_none() {
+        assert_eq!(
+            running_text(&[(TaskType::Shell, 1), (TaskType::Subagent, 1)]),
+            "· 1 shell, 1 agent"
+        );
+        assert_eq!(
+            running_text(&[
+                (TaskType::Shell, 2),
+                (TaskType::Subagent, 0),
+                (TaskType::Session, 3)
+            ]),
+            "· 2 shells, 3 sessions"
+        );
+        assert_eq!(running_text(&[]), "");
+        assert_eq!(running_text(&[(TaskType::Shell, 0)]), "");
     }
 }

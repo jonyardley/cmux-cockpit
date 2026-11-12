@@ -324,7 +324,7 @@
       "lane": "bg",
       "project": "other",
       "status": "idle",
-      "statusLine": "Shell running 4m · 1 shell"
+      "statusLine": "Running 5m · 1 shell, 1 agent"
     },
     "working": {
       "actualLane": "main",
