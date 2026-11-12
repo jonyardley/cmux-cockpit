@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use cockpit_core::data::{Workspace, WorkspaceGroup};
+use cockpit_core::data::{BackgroundSession, Workspace, WorkspaceGroup};
 use serde_json::Value;
 
 /// Claude's own view of its sessions, from `claude agents --json`.
@@ -20,14 +20,23 @@ pub struct AgentView {
     /// It holds across `/clear`, which changes only the session id, so a
     /// new value under a pid seen before means the pid was reused.
     pub started: HashMap<u32, u64>,
+    /// The `claude --bg` sessions, sorted by short id so two reads of the
+    /// same sessions compare equal whatever order they came in.
+    pub background: Vec<BackgroundSession>,
 }
 
 /// `claude agents --json`, or None when it is not a list. Background
-/// sessions carry no pid, so they cannot be joined and are skipped.
+/// sessions carry no pid, so they join no tab: they are kept apart, with
+/// their state, for the core to tell which still run. Any other entry
+/// without a pid is skipped.
 pub fn agents(out: &[u8]) -> Option<AgentView> {
     let list: Vec<Value> = serde_json::from_slice(out).ok()?;
     let mut view = AgentView::default();
     for a in &list {
+        if a["kind"] == "background" {
+            view.background.extend(background(a));
+            continue;
+        }
         let Some(pid) = a["pid"].as_u64().and_then(|p| u32::try_from(p).ok()) else {
             continue;
         };
@@ -39,7 +48,26 @@ pub fn agents(out: &[u8]) -> Option<AgentView> {
             view.started.insert(pid, at);
         }
     }
+    sort_background(&mut view.background);
     Some(view)
+}
+
+/// One background entry, or None without a short id. `startedAt` is
+/// epoch milliseconds, kept as epoch seconds as the core's times are.
+fn background(a: &Value) -> Option<BackgroundSession> {
+    let id = a["id"].as_str().filter(|id| !id.is_empty())?;
+    let text = |key: &str| a[key].as_str().map(str::to_string);
+    Some(BackgroundSession {
+        id: id.to_string(),
+        session_id: text("sessionId"),
+        state: serde_json::from_value(a["state"].clone()).ok(),
+        cwd: text("cwd"),
+        started_epoch: a["startedAt"].as_f64().map(|ms| ms / 1000.0),
+    })
+}
+
+fn sort_background(list: &mut [BackgroundSession]) {
+    list.sort_by(|a, b| (&a.id, &a.session_id).cmp(&(&b.id, &b.session_id)));
 }
 
 /// Agent Views read from several Claude config dirs, as one.
@@ -49,7 +77,9 @@ pub fn merged(views: impl IntoIterator<Item = AgentView>) -> AgentView {
         all.busy.extend(v.busy);
         all.session.extend(v.session);
         all.started.extend(v.started);
+        all.background.extend(v.background);
     }
+    sort_background(&mut all.background);
     all
 }
 
@@ -336,6 +366,7 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cockpit_core::data::BackgroundState;
 
     #[test]
     fn titles_come_from_every_window_and_pane() {
@@ -472,17 +503,87 @@ mod tests {
     }
 
     #[test]
-    fn reads_agent_view_skipping_background_sessions() {
+    fn reads_agent_view_keeping_background_sessions_apart() {
         let out = br#"[
-            {"id": "b8", "kind": "background", "state": "blocked"},
+            {"id": "b8b8b8b8", "kind": "background", "sessionId": "s-b8", "cwd": "/w",
+             "name": "tidy", "startedAt": 1794459510380, "state": "blocked"},
             {"pid": 9533, "kind": "interactive", "sessionId": "77bc", "status": "busy"},
-            {"pid": 27486, "kind": "interactive", "sessionId": "7a72", "status": "idle"}
+            {"id": "a1a1a1a1", "kind": "background", "sessionId": "s-a1", "state": "working"},
+            {"pid": 27486, "kind": "interactive", "sessionId": "7a72", "status": "idle"},
+            {"kind": "background", "sessionId": "no-id", "state": "working"},
+            {"id": "cccc", "kind": "something-new", "state": "working"}
         ]"#;
         let v = agents(out).unwrap();
         assert_eq!(v.busy.len(), 2);
         assert_eq!(v.busy.get(&9533), Some(&true));
         assert_eq!(v.busy.get(&27486), Some(&false));
         assert_eq!(v.session.get(&9533).map(String::as_str), Some("77bc"));
+        let ids: Vec<&str> = v.background.iter().map(|b| b.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["a1a1a1a1", "b8b8b8b8"],
+            "sorted, one with no short id and one of another kind skipped"
+        );
+        assert_eq!(
+            v.background[1],
+            BackgroundSession {
+                id: "b8b8b8b8".into(),
+                session_id: Some("s-b8".into()),
+                state: Some(BackgroundState::Blocked),
+                cwd: Some("/w".into()),
+                started_epoch: Some(1_794_459_510.38),
+            }
+        );
+    }
+
+    #[test]
+    fn reads_every_background_state_and_keeps_an_unknown_word() {
+        let states = ["working", "blocked", "done", "failed", "stopped", "idle"];
+        let entries: Vec<String> = states
+            .iter()
+            .enumerate()
+            .map(|(i, s)| format!(r#"{{"id": "{i}", "kind": "background", "state": "{s}"}}"#))
+            .collect();
+        let v = agents(format!("[{}]", entries.join(",")).as_bytes()).unwrap();
+        let read: Vec<Option<BackgroundState>> =
+            v.background.iter().map(|b| b.state.clone()).collect();
+        assert_eq!(
+            read,
+            [
+                BackgroundState::Working,
+                BackgroundState::Blocked,
+                BackgroundState::Done,
+                BackgroundState::Failed,
+                BackgroundState::Stopped,
+                BackgroundState::Other("idle".into()),
+            ]
+            .map(Some)
+        );
+    }
+
+    #[test]
+    fn background_sessions_from_every_dir_read_as_one_in_a_steady_order() {
+        let bg = |id: &str| {
+            agents(
+                format!(r#"[{{"id": "{id}", "kind": "background", "state": "working"}}]"#)
+                    .as_bytes(),
+            )
+        };
+        let (a, b) = (bg("aaaa"), bg("bbbb"));
+        let one_way = merged(a.clone().into_iter().chain(b.clone()));
+        let other_way = merged(b.into_iter().chain(a));
+        assert_eq!(one_way, other_way);
+        assert_eq!(one_way.background.len(), 2);
+
+        let personal = Some(PathBuf::from("/Users/me/.claude-personal"));
+        let mut views = AgentViews::default();
+        views.update([(None, view(1)), (personal.clone(), bg("cccc"))]);
+        let v = views.update([(None, view(1)), (personal, None)]).unwrap();
+        assert_eq!(
+            v.background.first().map(|b| b.id.as_str()),
+            Some("cccc"),
+            "a missed poll keeps the dir's background sessions"
+        );
     }
 
     #[test]

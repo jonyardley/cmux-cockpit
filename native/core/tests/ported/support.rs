@@ -215,6 +215,7 @@ pub fn frame(epoch: f64, groups: Vec<WorkspaceGroup>, workspaces: Vec<Workspace>
         groups: Some(groups),
         selected_id: None,
         workspaces: Some(workspaces),
+        background_sessions: None,
     }
 }
 

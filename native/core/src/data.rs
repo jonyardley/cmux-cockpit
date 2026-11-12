@@ -249,6 +249,98 @@ pub struct WorkspaceGroup {
     pub collapsed: Option<bool>,
 }
 
+/// A `claude --bg` session's state as Agent View reports it. A state this
+/// port does not know keeps Claude Code's own word.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BackgroundState {
+    Working,
+    Blocked,
+    Done,
+    Failed,
+    Stopped,
+    Other(String),
+}
+
+impl BackgroundState {
+    /// The state as Claude Code names it.
+    pub fn as_str(&self) -> &str {
+        match self {
+            BackgroundState::Working => "working",
+            BackgroundState::Blocked => "blocked",
+            BackgroundState::Done => "done",
+            BackgroundState::Failed => "failed",
+            BackgroundState::Stopped => "stopped",
+            BackgroundState::Other(s) => s,
+        }
+    }
+
+    /// Whether the session still runs. Working and blocked (waiting on
+    /// a permission or a question) run; done, failed and stopped have
+    /// settled. A word this port does not know counts as running: the
+    /// card must never say Idle while work runs, and a session that has
+    /// truly finished still stops counting once it leaves Agent View.
+    pub fn runs(&self) -> bool {
+        !matches!(
+            self,
+            BackgroundState::Done | BackgroundState::Failed | BackgroundState::Stopped
+        )
+    }
+}
+
+/// Written as Claude Code's own word, so it reads back as it was sent.
+impl Serialize for BackgroundState {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_str(self.as_str())
+    }
+}
+
+impl<'de> Deserialize<'de> for BackgroundState {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(d)?;
+        Ok(match s.as_str() {
+            "working" => BackgroundState::Working,
+            "blocked" => BackgroundState::Blocked,
+            "done" => BackgroundState::Done,
+            "failed" => BackgroundState::Failed,
+            "stopped" => BackgroundState::Stopped,
+            _ => BackgroundState::Other(s),
+        })
+    }
+}
+
+/// One `claude --bg` session from `claude agents --json`. It has no pid
+/// and names no parent, so it belongs to no workspace or agent here; the
+/// hooks save the short id `claude --bg` prints to tie it to a chat.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct BackgroundSession {
+    /// The short id `claude --bg` prints (8 hex characters).
+    #[serde(deserialize_with = "crate::lenient::field")]
+    pub id: String,
+    #[serde(deserialize_with = "crate::lenient::field")]
+    pub session_id: Option<String>,
+    #[serde(deserialize_with = "crate::lenient::field")]
+    pub state: Option<BackgroundState>,
+    #[serde(deserialize_with = "crate::lenient::field")]
+    pub cwd: Option<String>,
+    /// Epoch seconds the session started.
+    #[serde(deserialize_with = "crate::lenient::field")]
+    pub started_epoch: Option<f64>,
+}
+
+impl BackgroundSession {
+    /// Whether `id` names this session, by its short id or its session id.
+    fn is(&self, id: &str) -> bool {
+        !id.is_empty() && (self.id == id || self.session_id.as_deref() == Some(id))
+    }
+
+    /// Whether it still runs; a session with no state reads as running,
+    /// as an unknown one does (`BackgroundState::runs`).
+    pub fn runs(&self) -> bool {
+        self.state.as_ref().is_none_or(BackgroundState::runs)
+    }
+}
+
 /// One frame of cmux data: what `data.*()` returns in the renderer.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -262,6 +354,13 @@ pub struct Data {
     pub selected_id: Option<String>,
     #[serde(deserialize_with = "crate::lenient::list")]
     pub workspaces: Option<Vec<Workspace>>,
+    /// Every `claude --bg` session Agent View lists, from the runner; cmux
+    /// never sends it. Left out when there are none.
+    #[serde(
+        deserialize_with = "crate::lenient::list",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub background_sessions: Option<Vec<BackgroundSession>>,
 }
 
 impl Data {
@@ -278,6 +377,19 @@ impl Data {
     /// The workspace with this id.
     pub fn ws_by_id(&self, id: &str) -> Option<&Workspace> {
         self.workspace_list().iter().find(|w| w.id == id)
+    }
+
+    /// Every `claude --bg` session Agent View lists; none when the runner
+    /// sent no list.
+    pub fn background_list(&self) -> &[BackgroundSession] {
+        self.background_sessions.as_deref().unwrap_or_default()
+    }
+
+    /// Whether the `claude --bg` session named `id` (its short id or its
+    /// session id) still runs. One gone from Agent View has settled, as
+    /// has one done, failed or stopped.
+    pub fn background_runs(&self, id: &str) -> bool {
+        self.background_list().iter().any(|s| s.is(id) && s.runs())
     }
 }
 
@@ -336,5 +448,105 @@ mod tests {
         let back: Data = serde_json::from_value(written).unwrap();
         assert_eq!(back, data);
         assert_eq!(back.workspace_list()[0].agent_slots(), 3);
+    }
+
+    fn bg(id: &str, session: &str, state: Option<BackgroundState>) -> BackgroundSession {
+        BackgroundSession {
+            id: id.to_string(),
+            session_id: Some(session.to_string()),
+            state,
+            ..BackgroundSession::default()
+        }
+    }
+
+    fn with_bg(sessions: Vec<BackgroundSession>) -> Data {
+        Data {
+            background_sessions: Some(sessions),
+            ..Data::default()
+        }
+    }
+
+    #[test]
+    fn working_and_blocked_background_sessions_run_and_the_rest_have_settled() {
+        use BackgroundState::*;
+        let cases = [
+            (Working, true),
+            (Blocked, true),
+            (Done, false),
+            (Failed, false),
+            (Stopped, false),
+        ];
+        for (state, runs) in cases {
+            let data = with_bg(vec![bg("5e5e5e5e", "sess", Some(state.clone()))]);
+            assert_eq!(
+                data.background_runs("5e5e5e5e"),
+                runs,
+                "{state:?} by short id"
+            );
+            assert_eq!(
+                data.background_runs("sess"),
+                runs,
+                "{state:?} by session id"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unknown_or_missing_background_state_counts_as_running() {
+        // A word Claude Code adds later (or "idle") keeps counting rather
+        // than let the card say Idle while work may run; leaving Agent
+        // View still settles it.
+        let data = with_bg(vec![
+            bg("aaaa", "s-a", Some(BackgroundState::Other("idle".into()))),
+            bg("bbbb", "s-b", None),
+        ]);
+        assert!(data.background_runs("aaaa"));
+        assert!(data.background_runs("s-b"));
+    }
+
+    #[test]
+    fn a_background_session_gone_from_agent_view_has_settled() {
+        let data = with_bg(vec![bg("aaaa", "s-a", Some(BackgroundState::Working))]);
+        assert!(!data.background_runs("bbbb"));
+        assert!(!data.background_runs("aaa"), "no match on part of an id");
+        assert!(!data.background_runs(""));
+        assert!(!Data::default().background_runs("aaaa"), "no list at all");
+        let nameless = with_bg(vec![BackgroundSession {
+            state: Some(BackgroundState::Working),
+            ..BackgroundSession::default()
+        }]);
+        assert!(!nameless.background_runs(""));
+    }
+
+    #[test]
+    fn background_sessions_read_back_the_same_and_are_left_out_when_none() {
+        let mut first = bg("aaaa", "s-a", Some(BackgroundState::Other("queued".into())));
+        first.cwd = Some("/w".into());
+        first.started_epoch = Some(1_794_459_510.38);
+        let data = with_bg(vec![first, bg("bbbb", "s-b", Some(BackgroundState::Done))]);
+        let written = serde_json::to_value(&data).unwrap();
+        assert_eq!(written["backgroundSessions"][0]["sessionId"], "s-a");
+        assert_eq!(written["backgroundSessions"][0]["state"], "queued");
+        assert_eq!(
+            written["backgroundSessions"][1]["startedEpoch"],
+            serde_json::Value::Null
+        );
+        let back: Data = serde_json::from_value(written).unwrap();
+        assert_eq!(back, data);
+
+        let none = serde_json::to_value(Data::default()).unwrap();
+        assert!(none.get("backgroundSessions").is_none());
+    }
+
+    #[test]
+    fn a_background_entry_that_does_not_fit_is_dropped_not_the_frame() {
+        let json = r#"{"backgroundSessions": [7, {"id": "aaaa", "state": 3},
+            {"id": "bbbb", "state": "working", "startedEpoch": "soon"}]}"#;
+        let data: Data = serde_json::from_str(json).unwrap();
+        let list = data.background_list();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].state, None);
+        assert_eq!(list[1].started_epoch, None);
+        assert!(data.background_runs("bbbb"));
     }
 }
