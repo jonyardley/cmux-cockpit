@@ -534,6 +534,73 @@ session id only, so its card stops counting at a clear. A shell
 whose output the chat read to the end with `TaskOutput` may get no
 notification, and then shows until the 12 hour prune.
 
+## Background work
+
+One record for every kind of background work a chat has running, built
+from the task list Claude Code hands its `Stop` and `SubagentStop` hooks
+(`background_tasks`, issue #356). `scripts/hooks/report-background.ts`
+saves it in `background`: workspace id to a list of `{"id", "type",
+"status", "description", "session", "startedEpoch", "seenEpoch"}`, at most
+`MAX_TASKS` (20) per workspace. The map is left out while it is empty.
+Nothing on a card reads it yet: the status and words take it up in #359,
+and the `shells` and `subagents` maps above carry on unchanged until #361.
+
+What the list holds (real payloads, Claude Code 2.1.322, in
+`test/fixtures/background/`):
+
+- It is on `Stop` and `SubagentStop` only. `SubagentStop`'s list is the
+  parent chat's, under the chat's `session_id`; `agent_id` marks the agent.
+- It is a full snapshot of the chat's work in flight. A finished task drops
+  out rather than changing its status, so only `running` has been seen,
+  and the last `Stop` has `[]`. A finishing task wakes its chat, and that
+  turn ends in a `Stop`, so each end reaches the record within a turn.
+- A background agent's own shell is listed as a plain shell of the chat,
+  with nothing tying it to the agent, and can outlive the agent's entry.
+  An agent that pauses with work of its own running drops out of the list
+  and comes back when that work wakes it, so its `startedEpoch` restarts.
+- A monitor is listed as `type: "shell"`, its watch command as the
+  description, so a monitor cannot be told from a shell.
+- A `claude --bg` session is never listed.
+
+The `type` set is Claude Code's own labels, as its hooks reference lists
+them (`shell`, `subagent`, `monitor`, `workflow`, `teammate`,
+`cloud session`, `MCP task`), plus `session` for a `claude --bg` session,
+which a later hook saves (#357), and `other` for any label Claude Code
+adds later: the entry is kept, typed `other`, not dropped.
+`scripts/state-config.ts` (`TASK_TYPES`, `savedTask`) and
+`native/core/src/persist.rs` (`TaskType`, `tasks_map`) read the map the
+same way: a task that does not fit is dropped on its own, the last 20 are
+kept, and a workspace left with none is dropped.
+
+Each snapshot replaces the entries saved under its session wholesale. A
+task already saved keeps its `startedEpoch`; every listed task gets a new
+`seenEpoch`. A task listed that was saved under another session in the
+workspace (the same chat after a `/clear`) moves to this one. Entries of
+type `session` are kept through every replace, since no list holds them.
+A `Stop` with no list, or something other than a list in its place, which
+Claude Code sends when its task registry is unreachable, leaves the record
+alone; only `[]` empties it. A write that only moves `seenEpoch` asks for
+no rebuild; the map is in the bundle's `UNREAD` list in any case, so the
+agents panel never reloads for it.
+
+A missed end is caught two ways. The core counts a task only for the chat
+that owns its session, under any id that chat ran under
+(`native/core/src/owner.rs`), and only while that chat is open
+(`live_tasks` in `native/core/src/background.rs`), so closing a chat
+clears its work at once. Then, on the next write, the hook prunes any task
+no snapshot has listed for `MAX_AGE_S` (12 hours); the core never writes
+this map, so the prune is what takes the entry out of the file. A
+monitor's own deadline (30 minutes at most) cannot apply, since a monitor
+is listed as a shell.
+
+Known gap: no fixture covers a `/clear`. Work started before a clear
+moves to the new session once a snapshot after the clear lists it, and
+then ends with the list as usual. An entry no snapshot after the clear
+lists (work that finished before the next `Stop`, or all of it, if the
+list stops holding pre-clear work) stays under the old session and counts
+for the chat (owner.rs) until the chat closes or the prune takes it. A
+capture of a `Stop` after a clear with work still running would settle it.
+
 ## Published pages and docs
 
 cmux knows nothing about the pages and docs agents publish on claude.ai

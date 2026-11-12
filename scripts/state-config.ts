@@ -56,6 +56,14 @@ export interface State {
    */
   shells?: Record<string, SavedShell[]>;
   /**
+   * wsId -> the background work its chats have running, as Claude Code
+   * lists it on Stop and SubagentStop (`background_tasks`), recorded by
+   * scripts/hooks/report-background.ts because cmux sends custom sidebars
+   * none. Each snapshot replaces its chat's entries. Written only by the
+   * hook, never by a URL. Left out while nothing is saved.
+   */
+  background?: Record<string, SavedTask[]>;
+  /**
    * Claude Code session id -> the name its agent row shows, recorded by
    * scripts/hooks/report-rename.ts because cmux's own agent title is the
    * first message, which it cannot read for every Claude folder. Oldest
@@ -252,6 +260,42 @@ export interface SavedShell {
   startedEpoch: number;
 }
 
+/**
+ * What kind of background work a task is. The first seven are Claude Code's
+ * own labels for a `background_tasks` entry, as its hooks reference lists
+ * them; `session` is a `claude --bg` session, which that list never holds,
+ * saved by a later hook; `other` is any label Claude Code adds after these.
+ */
+export const TASK_TYPES = [
+  "shell",
+  "subagent",
+  "monitor",
+  "workflow",
+  "teammate",
+  "cloud session",
+  "MCP task",
+  "session",
+  "other",
+] as const;
+export type TaskType = (typeof TASK_TYPES)[number];
+
+/** One piece of background work a chat has running, as report-background.ts saves it. */
+export interface SavedTask {
+  /** Claude Code's task id (a shell's task id, an agent's agent id). */
+  id: string;
+  type: TaskType;
+  /** Claude Code's status word; only "running" has been seen, since a finished task leaves the list. */
+  status: string;
+  /** Claude Code's description, at most MAX_LABEL characters. */
+  description: string;
+  /** The Claude Code session whose Stop or SubagentStop last listed it: the chat's, never an agent's. */
+  session: string;
+  /** Epoch seconds a snapshot first listed it. */
+  startedEpoch: number;
+  /** Epoch seconds a snapshot last listed it; the prune counts from here. */
+  seenEpoch: number;
+}
+
 /** Where a session's name came from: a `/rename`, or its first real prompt. */
 export type NameSource = "title" | "prompt";
 
@@ -329,6 +373,11 @@ export const MAX_DECISIONS = 9;
 
 /** Shells kept per workspace, newest kept, so a runaway loop cannot bloat the file. */
 export const MAX_SHELLS = 10;
+
+/** Background tasks kept per workspace, the last listed kept, so a runaway loop cannot bloat the file. */
+export const MAX_TASKS = 20;
+/** The longest task status word kept. */
+export const MAX_STATUS = 32;
 
 /** Agent tabs kept asleep per workspace, so a bad write cannot bloat the file. */
 export const MAX_ASLEEP = 10;
@@ -762,6 +811,24 @@ function savedShells(v: unknown): SavedShell[] | null {
   return shells.length ? shells : null;
 }
 
+const KNOWN_TYPES: readonly unknown[] = TASK_TYPES;
+const isTaskType = (v: unknown): v is TaskType => KNOWN_TYPES.includes(v);
+
+/** A saved task type: a known one as it is, any other word read as `other`, so a new kind is kept, not dropped. */
+export const taskType = (v: unknown): TaskType => (isTaskType(v) ? v : "other");
+
+function savedTask(v: unknown): SavedTask[] {
+  if (!isRecord(v) || !isIdText(v.id) || !isIdText(v.session) || typeof v.type !== "string") return [];
+  const { status, description, startedEpoch, seenEpoch } = v;
+  if (!isText(status, MAX_STATUS) || !isLabel(description) || !isEpoch(startedEpoch) || !isEpoch(seenEpoch)) return [];
+  return [{ id: v.id, type: taskType(v.type), status, description, session: v.session, startedEpoch, seenEpoch }];
+}
+
+function savedTasks(v: unknown): SavedTask[] | null {
+  const tasks = Array.isArray(v) ? v.flatMap(savedTask).slice(-MAX_TASKS) : [];
+  return tasks.length ? tasks : null;
+}
+
 function savedAsleep(v: unknown): SavedAsleep | null {
   if (!isRecord(v) || !Array.isArray(v.surfaces) || !isEpoch(v.since)) return null;
   const surfaces = v.surfaces.filter(isIdText);
@@ -790,6 +857,7 @@ export function validateState(raw: unknown): State {
   const v = isRecord(raw) ? raw : {};
   const poll = savedPoll(v.poll);
   const shells = cleanMap(v.shells, savedShells);
+  const background = cleanMap(v.background, savedTasks);
   const laneNames = cleanMap(v.laneNames, laneName);
   const asleep = cleanMap(v.asleep, savedAsleep);
   return {
@@ -806,6 +874,7 @@ export function validateState(raw: unknown): State {
     moves: cleanMap(v.moves, savedMove),
     ui: uiState(v.ui),
     ...(Object.keys(shells).length ? { shells } : {}),
+    ...(Object.keys(background).length ? { background } : {}),
     ...(Object.keys(laneNames).length ? { laneNames } : {}),
     ...(Object.keys(asleep).length ? { asleep } : {}),
     ...(poll ? { poll } : {}),

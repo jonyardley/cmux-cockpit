@@ -128,6 +128,96 @@ pub struct SavedShell {
     pub started_epoch: f64,
 }
 
+/// What kind of background work a task is (state-config.ts's TASK_TYPES):
+/// Claude Code's own labels for a `background_tasks` entry, `session` for
+/// a `claude --bg` session, and `other` for any word Claude Code adds
+/// later, so a new kind is kept rather than dropping its entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+pub enum TaskType {
+    #[serde(rename = "shell")]
+    Shell,
+    #[serde(rename = "subagent")]
+    Subagent,
+    #[serde(rename = "monitor")]
+    Monitor,
+    #[serde(rename = "workflow")]
+    Workflow,
+    #[serde(rename = "teammate")]
+    Teammate,
+    #[serde(rename = "cloud session")]
+    CloudSession,
+    #[serde(rename = "MCP task")]
+    McpTask,
+    #[serde(rename = "session")]
+    Session,
+    #[serde(rename = "other", other)]
+    Other,
+}
+
+/// One piece of background work a chat has running, as
+/// scripts/hooks/report-background.ts saves it.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedTask {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub kind: TaskType,
+    pub status: String,
+    pub description: String,
+    /// The chat session whose Stop or SubagentStop last listed it.
+    pub session: String,
+    pub started_epoch: f64,
+    /// When a snapshot last listed it; the hook's prune counts from here.
+    pub seen_epoch: f64,
+}
+
+/// Background tasks kept per workspace, the last listed kept (MAX_TASKS).
+pub const MAX_TASKS: usize = 20;
+/// The longest status word kept (MAX_STATUS).
+pub const MAX_STATUS: usize = 32;
+/// The longest description kept (MAX_LABEL).
+const MAX_LABEL: usize = 120;
+
+impl SavedTask {
+    /// Every field within the bounds state-config.ts's savedTask holds it to.
+    fn fits(&self) -> bool {
+        let epoch = |e: f64| e.is_finite() && e >= 0.0;
+        is_id(&self.id)
+            && is_id(&self.session)
+            && is_text(&self.status, MAX_STATUS)
+            && is_text(&self.description, MAX_LABEL)
+            && epoch(self.started_epoch)
+            && epoch(self.seen_epoch)
+    }
+}
+
+/// The `background` map as validateState reads it: a task that does not
+/// fit is dropped on its own, the last MAX_TASKS kept, and a workspace
+/// left with none dropped.
+fn tasks_map<'de, D>(d: D) -> Result<BTreeMap<String, Vec<SavedTask>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let lists: BTreeMap<String, Value> = crate::lenient::map(d)?;
+    Ok(lists
+        .into_iter()
+        .filter(|(ws, _)| is_id(ws))
+        .filter_map(|(ws, list)| {
+            let Value::Array(items) = list else {
+                return None;
+            };
+            let tasks: Vec<SavedTask> = items
+                .into_iter()
+                .filter_map(|v| serde_json::from_value::<SavedTask>(v).ok())
+                .filter(SavedTask::fits)
+                .collect();
+            let skip = tasks.len().saturating_sub(MAX_TASKS);
+            let kept: Vec<SavedTask> = tasks.into_iter().skip(skip).collect();
+            (!kept.is_empty()).then_some((ws, kept))
+        })
+        .collect())
+}
+
 /// Why an agent stopped to ask, as the notification hook saves it.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SavedAsk {
@@ -218,6 +308,13 @@ pub struct SavedState {
     /// Left out of the file while nothing is saved.
     #[serde(deserialize_with = "crate::lenient::map")]
     pub shells: BTreeMap<String, Vec<SavedShell>>,
+    /// wsId to the background work its chats have running, from the Stop
+    /// hooks' task lists (crate::background). Left out while empty.
+    #[serde(
+        deserialize_with = "tasks_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub background: BTreeMap<String, Vec<SavedTask>>,
     #[serde(deserialize_with = "crate::lenient::map")]
     pub names: BTreeMap<String, Value>,
     #[serde(deserialize_with = "crate::lenient::map")]
@@ -474,6 +571,55 @@ mod tests {
             Some(SavedProject::Removed { .. })
         ));
         assert!(s.shells.is_empty());
+    }
+
+    #[test]
+    fn reads_background_tasks_as_validate_state_does() {
+        // The same sample as test/report-background.test.ts's validateState test.
+        let task = |id: &str, kind: &str| {
+            serde_json::json!({"id": id, "type": kind, "status": "running", "description": id,
+                "session": "s1", "startedEpoch": 10, "seenEpoch": 10})
+        };
+        let many: Vec<Value> = (0..MAX_TASKS + 3)
+            .map(|i| task(&format!("b{i}"), "shell"))
+            .collect();
+        let mut no_epoch = task("no epoch", "shell");
+        no_epoch["seenEpoch"] = Value::from(-1);
+        let mut bad_status = task("bad status", "shell");
+        bad_status["status"] = Value::from("");
+        let mut bad_words = task("bad words", "shell");
+        bad_words["description"] = Value::from(" padded ");
+        let mut json = serde_json::json!({"background": {
+            "w1": many,
+            "w2": [task("kept", "a new kind"), task("cloud", "cloud session"), task("mcp", "MCP task"),
+                   no_epoch, bad_status, bad_words, task("no type", "x"), "junk"],
+            "w3": [{"id": "x"}],
+            "w4": "not a list",
+            "__proto__": [task("p", "shell")]
+        }});
+        json["background"]["w2"][6]["type"] = Value::from(3);
+        let s = SavedState::from_json(&json.to_string()).unwrap();
+        let w1 = &s.background["w1"];
+        assert_eq!(w1.len(), MAX_TASKS);
+        assert_eq!(w1[0].id, "b3");
+        let w2: Vec<(&str, TaskType)> = s.background["w2"]
+            .iter()
+            .map(|t| (t.id.as_str(), t.kind))
+            .collect();
+        assert_eq!(
+            w2,
+            [
+                ("kept", TaskType::Other),
+                ("cloud", TaskType::CloudSession),
+                ("mcp", TaskType::McpTask)
+            ]
+        );
+        assert_eq!(s.background.keys().collect::<Vec<_>>(), ["w1", "w2"]);
+        let out = serde_json::to_value(&s).unwrap();
+        assert_eq!(out["background"]["w2"][0]["type"], "other");
+        assert_eq!(out["background"]["w2"][1]["type"], "cloud session");
+        let empty = serde_json::to_value(SavedState::default()).unwrap();
+        assert!(empty.get("background").is_none());
     }
 
     #[test]

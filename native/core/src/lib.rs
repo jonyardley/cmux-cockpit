@@ -11,6 +11,7 @@
 pub mod activity;
 pub mod anchors;
 pub mod app;
+pub mod background;
 pub mod by_project;
 pub mod card_chips;
 pub mod chips;
