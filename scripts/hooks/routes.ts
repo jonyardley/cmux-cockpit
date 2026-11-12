@@ -20,6 +20,7 @@ export const ROUTES: Readonly<Record<string, readonly Route[]>> = {
     { script: "report-notification.ts", matcher: "AskUserQuestion|ExitPlanMode" },
   ],
   PostToolUse: [
+    { script: "report-subagent.ts", matcher: "Agent" },
     { script: "report-pr.ts", matcher: "Bash" },
     { script: "report-shell.ts", matcher: "Bash|KillShell|TaskStop" },
     {

@@ -23,7 +23,8 @@ const STATE: &str = r#"{
         "both": [{"id": "t1", "session": "chat", "label": "Alongside", "startedEpoch": 100}],
         "quiet": [{"id": "t1", "session": "chat", "label": "Checks", "startedEpoch": 100}],
         "said": [{"id": "t1", "session": "chat", "label": "Checks", "startedEpoch": 100}],
-        "prReady": [{"id": "t1", "session": "chat", "label": "Checks", "startedEpoch": 100}]
+        "prReady": [{"id": "t1", "session": "chat", "label": "Checks", "startedEpoch": 100}],
+        "theirs": [{"id": "t1", "session": "other-chat", "label": "Theirs", "startedEpoch": 100}]
     },
     "shells": {
         "both": [{"id": "b1", "session": "chat", "startedEpoch": 100}]
@@ -94,6 +95,29 @@ mod background_agents_on_the_card {
         assert_eq!(s.status_line(&data, Some(&done)), "Idle 4m");
         let none = ws("none").agents(vec![idle(&mut fx)]);
         assert_eq!(s.status_line(&data, Some(&none)), "Idle 4m");
+    }
+
+    #[test]
+    fn reads_idle_when_only_another_chat_in_the_workspace_runs_a_background_agent() {
+        let (mut s, _, mut fx) = setup();
+        let other = fx.agent(Idle).id("other-chat").since(NOW - 600.0);
+        let w = ws("theirs").agents(vec![idle(&mut fx), other]);
+        let a = idle(&mut fx);
+        assert!(!s.is_helper_running(Some(&a), Some(&w)));
+        assert_eq!(s.own_run_count(Some(&w), &a), 0);
+        assert_eq!(
+            s.live_run_count(Some(&w)),
+            1,
+            "the workspace still counts it"
+        );
+    }
+
+    #[test]
+    fn counts_no_saved_run_whose_chat_is_not_in_the_workspace() {
+        let (mut s, _, mut fx) = setup();
+        let w = ws("theirs").agents(vec![idle(&mut fx)]);
+        let a = idle(&mut fx);
+        assert_eq!(s.own_run_count(Some(&w), &a), 0);
     }
 
     #[test]

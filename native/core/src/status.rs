@@ -398,7 +398,7 @@ impl Session {
         let a = self.finished_agent(w)?;
         let runs_on = quiet_move(&self.saved, &a, Some(w)).is_some()
             && (live_shell_count(&self.saved, Some(w), Some(&a)) > 0
-                || self.live_run_count(Some(w)) > 0);
+                || self.own_run_count(Some(w), &a) > 0);
         (!runs_on).then_some(a)
     }
 
@@ -420,10 +420,10 @@ impl Session {
     }
 
     /// True when the agent is idle while a background agent (a subagent
-    /// run) in its workspace still runs: the chat waits on it, so the card
-    /// is not at rest. A run that never reports is pruned by the hook.
+    /// run) its own chat started still runs: the chat waits on it, so the
+    /// card is not at rest. A run that never reports is pruned by the hook.
     pub fn is_helper_running(&mut self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
-        a.is_some_and(|a| a.status == Some(AgentStatus::Idle)) && self.live_run_count(w) > 0
+        a.is_some_and(|a| a.status == Some(AgentStatus::Idle) && self.own_run_count(w, a) > 0)
     }
 
     /// Whether the card says Ready to merge: its PR is ready and its agent,
@@ -643,7 +643,10 @@ impl Session {
                 let n = live_shell_count(&self.saved, w, a.as_ref());
                 (format!("{line} {}", shell_text(n)), line)
             }
-            StatusKind::HelperRunning => (format!("{line} {}", self.helper_text(w)), line),
+            StatusKind::HelperRunning => {
+                let n = self.agent_of(w).map_or(0, |a| self.own_run_count(w, &a));
+                (format!("{line} {}", helpers_words(n)), line)
+            }
             StatusKind::Quiet => {
                 let a = self.agent_of(w);
                 let suffix = self.quiet_suffix(data, a.as_ref(), w);
@@ -688,11 +691,7 @@ impl Session {
 
     /// "· 3 helpers" while subagent runs are live, else "".
     pub fn helper_text(&mut self, w: Option<&Workspace>) -> String {
-        match self.live_run_count(w) {
-            0 => String::new(),
-            1 => "· 1 helper".to_string(),
-            n => format!("· {n} helpers"),
-        }
+        helpers_words(self.live_run_count(w))
     }
 
     /// "You: " and your last prompt, for a card that shows where you left off; "" with none.
@@ -720,6 +719,15 @@ impl Session {
             }
         };
         clip(&text, DETAIL_MAX)
+    }
+}
+
+/// "· 1 helper", "· 3 helpers", or "" for none.
+fn helpers_words(n: usize) -> String {
+    match n {
+        0 => String::new(),
+        1 => "· 1 helper".to_string(),
+        n => format!("· {n} helpers"),
     }
 }
 

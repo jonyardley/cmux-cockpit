@@ -331,10 +331,10 @@ break taps silently.
 ## Subagent runs: the map no URL writes either
 
 cmux sends custom sidebars no subagent data at all (#6), so
-`scripts/hooks/report-subagent.ts` records them itself, from three Claude
+`scripts/hooks/report-subagent.ts` records them itself, from four Claude
 Code hook events, in a fifth map, `subagents`: workspace id to a list of runs,
 oldest first, each `{"id", "session", "agentId"?, "type"?, "label",
-"startedEpoch", "endedEpoch"?}`. `src/shared/subagents.ts` reads it back for
+"startedEpoch", "endedEpoch"?, "background"?}`. `src/shared/subagents.ts` reads it back for
 the agents model while cmux carries no agent's own subagent runs
 (`children`) of its own.
 
@@ -360,6 +360,25 @@ row for it is still open or it ended under `RESUME_MIN_GAP_S` ago (both a
 duplicate delivery). `SubagentStop` sets `endedEpoch` on every open row with
 that `agentId`, and does nothing when none is open (a duplicate delivery of
 the same Stop).
+
+A background agent's Stop can be a pause. Claude Code sends `SubagentStop`
+every time a background agent ends its turn to wait on a shell or monitor
+of its own, and starts it again when that work reports, so on 2026-11-12
+the #2800 qualify-4b agent read as finished while it waited on its checks,
+and its chat's card said Idle. A run is flagged `background` when its call
+had `run_in_background`, or when the call's `PostToolUse` result says
+`isAsync` or `async_launched` (that agent's call had no
+`run_in_background`; only its result said so). A flagged run's Stop reads
+the agent's own transcript (`scripts/hooks/subagent-work.ts`: the event's
+`agent_transcript_path`, else `<session>/subagents/agent-<id>.jsonl` beside
+the chat's) and leaves the run open while a background shell there has no
+finished notification (one with a `<status>`) and no stop, or a monitor is
+inside its timeout, unless the agent's last call was its hand-back
+(`SubagentHandback`), which always ends it. A monitor's events are
+notifications without a status, so they never end it, and a persistent
+monitor never holds a run open. The start that wakes it finds the row
+still open, a duplicate. Neither flag nor pause is a visible change, so
+neither costs a rebuild. An unreadable transcript ends the run, as before.
 
 **Residual cases for resumes:** once a finished row is pruned (ten minutes
 after its Stop, below), a later resume looks like a first start and pairs
@@ -492,7 +511,8 @@ A background agent works the same way from the saved subagent runs
 run still live reads "Helper running 4m · 1 helper" in working blue, sorts
 with the working cards and never says Ready to merge, and a "Nothing for
 you" turn stays Helper running until the run ends. A shell or monitor the
-background agent starts is not saved (above), so the run stands in for it.
+background agent starts is not saved (above), so the run stands in for it,
+held open across its pauses (Subagent runs, above).
 A shell its own chat runs wins: the card then says Shell running.
 
 Known gaps: after `/clear` the chat runs under a new session id, so a

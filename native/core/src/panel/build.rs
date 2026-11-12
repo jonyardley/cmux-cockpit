@@ -210,7 +210,12 @@ fn looks(
         ready: !row && *kind == StatusKind::Ready,
         pinned: is_pinned(w),
         progress: progress_fraction(w),
-        helpers: session.helper_text(w),
+        // Helper running already says the count in the status line.
+        helpers: if *kind == StatusKind::HelperRunning {
+            String::new()
+        } else {
+            session.helper_text(w)
+        },
         age,
         status_has_age,
     }
@@ -1448,6 +1453,27 @@ mod tests {
         }
         let (_, ink) = detail_of(s, &data, w, Density::Row, None);
         assert_eq!(ink, Token::Secondary, "a row not waiting");
+    }
+
+    #[test]
+    fn says_the_helper_count_once_on_a_helper_running_card() {
+        let mut core = Model::default();
+        let s = &mut core.session;
+        s.saved = crate::persist::SavedState::from_json(
+            r#"{"subagents": {"W": [{"id": "t1", "session": "a0", "label": "Checks", "startedEpoch": 100}]}}"#,
+        )
+        .unwrap();
+        let data: Data = serde_json::from_value(serde_json::json!({"epoch": 400,
+            "workspaces": [{"id": "W", "title": "qualify",
+                "agents": [{"id": "a0", "status": "idle", "sinceEpoch": 100}]}]}))
+        .unwrap();
+        let w = data.ws_by_id("W");
+        let kind = s.status_kind(&data, w);
+        assert_eq!(kind, StatusKind::HelperRunning);
+        let status = s.status_line(&data, w);
+        assert!(status.ends_with(" · 1 helper"), "{status}");
+        let looks = looks(s, &data, w, Density::Full, &status, &kind);
+        assert_eq!(looks.helpers, "", "the status line already says it");
     }
 
     #[test]

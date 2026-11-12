@@ -236,6 +236,10 @@ export interface SavedSubagent {
   startedEpoch: number;
   /** Epoch seconds the run stopped; absent while it runs. */
   endedEpoch?: number;
+  /** True for an Agent call made with run_in_background: its Stop may be
+   * a pause while it waits on its own background work
+   * (scripts/hooks/subagent-work.ts). Absent for a foreground run. */
+  background?: true;
 }
 
 /** A background shell a chat started, as report-shell.ts saves it. */
@@ -551,7 +555,7 @@ const isOptionalId = (v: unknown): boolean => v === undefined || (typeof v === "
 
 function savedSubagent(v: unknown): SavedSubagent[] {
   if (!isRecord(v) || !isLabel(v.label) || !isEpoch(v.startedEpoch)) return [];
-  const { id, session, agentId, type, endedEpoch } = v;
+  const { id, session, agentId, type, endedEpoch, background } = v;
   if (typeof id !== "string" || !isId(id) || typeof session !== "string" || !isId(session)) return [];
   if (!isOptionalId(agentId) || !isOptionalId(type)) return [];
   if (endedEpoch !== undefined && !isEpoch(endedEpoch)) return [];
@@ -559,6 +563,7 @@ function savedSubagent(v: unknown): SavedSubagent[] {
   if (typeof agentId === "string") run.agentId = agentId;
   if (typeof type === "string") run.type = type;
   if (isEpoch(endedEpoch)) run.endedEpoch = endedEpoch;
+  if (background === true) run.background = true;
   return [run];
 }
 
