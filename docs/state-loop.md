@@ -579,7 +579,7 @@ its session, and those its Claude process saved under an earlier session
 one goes last; every listed task gets a new `seenEpoch`. A task listed that
 was saved under another session in the workspace moves to this one. A task
 listed twice is saved once, and one listed as `completed`, `failed` or
-`killed` is not saved. Entries of type `session` are kept through every
+`killed` is not saved, and takes out any saved copy as a listed task would. Entries of type `session` are kept through every
 replace, since no list holds them, but the prune below takes them like any
 other entry, so the hook that saves them (#357) must restamp `seenEpoch`
 while the session runs. A snapshot never pushes out another chat's entries
@@ -618,7 +618,12 @@ counts for the chat through `owner.rs`, which is right while it runs and
 wrong for at most one turn once it has finished. `CLAUDE_PID` is not in
 Claude Code's hooks reference; if it goes, the record falls back to the
 session-only replace, and a finished pre-clear task counts until the chat
-closes or the prune takes it. Two lists racing (a `SubagentStop` and the
+closes or the prune takes it. `CLAUDE_PID` is also in the environment of
+every command the chat runs, so a nested Claude Code that stopped setting
+its own would carry the chat's: its lists would replace the chat's entries
+until the chat's next `Stop` put them back, with new start times. A pid
+reused by a later Claude process in the same workspace only takes out
+entries of a process that has exited, which the core already ignores. Two lists racing (a `SubagentStop` and the
 parent's `Stop` a moment apart, each run as its own process) are applied in
 the order they take the state lock, since a payload carries no time of its
 own; a stale list that lands second holds a finished task until the next

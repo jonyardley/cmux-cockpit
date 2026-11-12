@@ -604,7 +604,8 @@ mod tests {
             "w2": [task("kept", "a new kind"), task("cloud", "cloud session"), task("mcp", "MCP task"),
                    no_epoch, bad_status, bad_words, task("no type", "x"), "junk",
                    pid("pid", Value::from(4242)), pid("null pid", Value::Null), pid("zero pid", Value::from(0)),
-                   pid("text pid", Value::from("42")), pid("minus pid", Value::from(-1))],
+                   pid("text pid", Value::from("42")), pid("minus pid", Value::from(-1)),
+                   pid("big pid", Value::from(4_294_967_296_u64)), pid("half pid", Value::from(4.5))],
             "w3": [{"id": "x"}],
             "w4": "not a list",
             "__proto__": [task("p", "shell")]

@@ -70,10 +70,11 @@ const LISTING_EVENTS: readonly unknown[] = ["Stop", "SubagentStop"];
  */
 const ENDED: readonly unknown[] = ["completed", "failed", "killed"];
 
+const hasEnded = (t: ListedTask): boolean => ENDED.includes(t.status);
+
 function listedTask(v: unknown): ListedTask[] {
   if (!isRecord(v) || typeof v.id !== "string" || !isId(v.id)) return [];
   const status = cleanLabel(v.status);
-  if (ENDED.includes(status)) return [];
   // `session` is this cockpit's word for a `claude --bg` session, which
   // only the later hook saves and every replace keeps; a listed task
   // calling itself that would never leave with the list.
@@ -102,7 +103,8 @@ function firstOfEach(tasks: readonly ListedTask[]): ListedTask[] {
  * The tasks a Stop or SubagentStop lists, or null for any other event, or
  * one without a list: Claude Code leaves it out when its task registry is
  * unreachable, which says nothing about what is running. An entry that
- * cannot be read, or says it has ended, is dropped on its own.
+ * cannot be read is dropped on its own. One that says it has ended is
+ * kept here, so it still takes out a saved copy, and is never saved.
  */
 export function listedTasks(event: unknown): ListedTask[] | null {
   if (!LISTING_EVENTS.includes(field(event, "hook_event_name"))) return null;
@@ -155,7 +157,7 @@ export function applySnapshot(map: BackgroundMap, wsId: string, snap: Snapshot, 
     startedEpoch: before?.startedEpoch ?? now,
     seenEpoch: now,
   });
-  const byId = new Map(snap.listed.map((t) => [t.id, t]));
+  const byId = new Map(snap.listed.filter((t) => !hasEnded(t)).map((t) => [t.id, t]));
   const next: SavedTask[] = [];
   for (const t of saved) {
     const listed = byId.get(t.id);
@@ -197,10 +199,14 @@ export const unstamped = (map: BackgroundMap): string =>
     (key, value: unknown) => (key === "seenEpoch" ? undefined : value),
   );
 
-/** One event folded in, then the prune: what the hook writes. */
+/** One snapshot folded in, then the prune: what the hook writes. */
+const fold = (map: BackgroundMap, wsId: string, snap: Snapshot, now: number): BackgroundMap =>
+  prune(applySnapshot(map, wsId, snap, now), now);
+
+/** One event folded in, as `main` folds it once it has read the snapshot. */
 export function update(map: BackgroundMap, wsId: string, event: unknown, now: number, pid?: number): BackgroundMap {
   const snap = snapshotOf(event, pid);
-  return snap ? prune(applySnapshot(map, wsId, snap, now), now) : map;
+  return snap ? fold(map, wsId, snap, now) : map;
 }
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -222,7 +228,7 @@ async function main(): Promise<void> {
   let result: ReturnType<typeof writeBackground>;
   try {
     result = writeBackground(STATE_PATH, (map) => {
-      const next = prune(applySnapshot(map, wsId, snap, now), now);
+      const next = fold(map, wsId, snap, now);
       moved = unstamped(next) !== unstamped(map);
       return next;
     });

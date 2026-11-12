@@ -58,24 +58,33 @@ test("the replay covers every fixture", () => {
   assert.deepEqual([...files].sort(), [...RUN].sort());
 });
 
-test("replaying the captured run fills the record, follows each list and empties it", () => {
+/** The captured run replayed, with the record after each list. */
+function replay(pid?: number): { map: BackgroundMap; seen: [string, BackgroundMap][] } {
   let map: BackgroundMap = {};
-  const seen: [string, string[]][] = [];
+  const seen: [string, BackgroundMap][] = [];
   RUN.forEach((file, i) => {
     const before = map;
-    map = update(map, "ws1", payload(file), 1000 + i * 10);
+    map = update(map, "ws1", payload(file), 1000 + i * 10, pid);
     if (listedTasks(payload(file)) === null) assert.equal(map, before, `${file} changes nothing`);
-    else seen.push([file, ids(map)]);
+    else seen.push([file, map]);
   });
-  assert.deepEqual(seen, [
-    ["stop-turn-end-tasks-running.json", ["b8cvj4dry", AGENT, "byeh6pasn", "bujdab8j6"]],
-    ["subagent-stop-tasks-running.json", ["b8cvj4dry", AGENT, "byeh6pasn", "bujdab8j6"]],
-    ["stop-agent-ended-its-shell-in-parent-list.json", ["b8cvj4dry", "byeh6pasn", "bujdab8j6"]],
-    ["subagent-stop-agent-woken-again.json", ["b8cvj4dry", "byeh6pasn", AGENT]],
-    ["stop-shell-and-monitor-left.json", ["b8cvj4dry", "byeh6pasn"]],
-    ["stop-one-shell-left.json", ["b8cvj4dry"]],
-    ["stop-all-done.json", []],
-  ]);
+  return { map, seen };
+}
+
+test("replaying the captured run fills the record, follows each list and empties it", () => {
+  const { map, seen } = replay();
+  assert.deepEqual(
+    seen.map(([file, m]) => [file, ids(m)]),
+    [
+      ["stop-turn-end-tasks-running.json", ["b8cvj4dry", AGENT, "byeh6pasn", "bujdab8j6"]],
+      ["subagent-stop-tasks-running.json", ["b8cvj4dry", AGENT, "byeh6pasn", "bujdab8j6"]],
+      ["stop-agent-ended-its-shell-in-parent-list.json", ["b8cvj4dry", "byeh6pasn", "bujdab8j6"]],
+      ["subagent-stop-agent-woken-again.json", ["b8cvj4dry", "byeh6pasn", AGENT]],
+      ["stop-shell-and-monitor-left.json", ["b8cvj4dry", "byeh6pasn"]],
+      ["stop-one-shell-left.json", ["b8cvj4dry"]],
+      ["stop-all-done.json", []],
+    ],
+  );
   assert.deepEqual(map, {}, "the workspace key goes once nothing runs");
 });
 
@@ -254,6 +263,8 @@ test("validateState keeps the last MAX_TASKS tasks, drops bad ones on their own,
         { ...saved("zero pid", "s1"), pid: 0 },
         { ...saved("text pid", "s1"), pid: "42" },
         { ...saved("minus pid", "s1"), pid: -1 },
+        { ...saved("big pid", "s1"), pid: 4294967296 },
+        { ...saved("half pid", "s1"), pid: 4.5 },
       ],
       ws3: [{ id: "x" }],
       ws4: "not a list",
@@ -359,4 +370,32 @@ test("a task listed twice is saved once, and one listed as ended is not saved", 
     map.ws1?.map((t) => [t.id, t.description]),
     [["b1", "run b1"]],
   );
+});
+
+test("the captured run replays the same with a pid, which every saved task then carries", () => {
+  const strip = (m: BackgroundMap) => JSON.stringify(m, (key, value: unknown) => (key === "pid" ? undefined : value));
+  const plain = replay().seen;
+  const withPid = replay(4242).seen;
+  assert.deepEqual(
+    withPid.map(([file, m]) => [file, strip(m)]),
+    plain.map(([file, m]) => [file, strip(m)]),
+  );
+  for (const [, m] of withPid) assert.ok((m.ws1 ?? []).every((t) => t.pid === 4242));
+});
+
+test("after a /clear, an empty list from the same process keeps a claude --bg session it saved", () => {
+  const bg = saved("5e5e5e5e", "s0", { type: "session", pid: 4242 });
+  const before = update({ ws1: [bg] }, "ws1", payload("stop-turn-end-tasks-running.json"), 100, 4242);
+  assert.deepEqual(update(before, "ws1", stop(CLEARED, []), 200, 4242), { ws1: [bg] });
+});
+
+test("the same pid in another workspace is left alone", () => {
+  const map = { ws2: [saved("elsewhere", "s0", { pid: 4242, seenEpoch: 150 })] };
+  assert.deepEqual(update(map, "ws1", stop(CLEARED, []), 200, 4242), map);
+});
+
+test("a task listed as ended takes out its saved copy under another session", () => {
+  const map = { ws1: [saved("b1", "s0"), saved("b2", "s0")] };
+  const next = update(map, "ws1", stop("s1", [{ ...shell("b1"), status: "completed" }]), 50);
+  assert.deepEqual(ids(next), ["b2"]);
 });
