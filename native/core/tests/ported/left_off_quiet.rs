@@ -66,6 +66,42 @@ mod a_quiet_agent {
     }
 
     #[test]
+    fn holds_off_while_its_own_background_work_runs() {
+        let (_, data, mut fx) = setup();
+        let mut s = session(
+            r#"{"background": {"w": [{"id": "b1", "type": "monitor", "status": "running",
+                "description": "watch", "session": "chat", "startedEpoch": 999000, "seenEpoch": 999000}]}}"#,
+        );
+        let w = ws("w").agents(vec![
+            fx.agent(Working)
+                .id("chat")
+                .since(NOW - 42.0 * 60.0)
+                .activity(NOW - 17.0 * 60.0),
+        ]);
+        assert_eq!(s.status_line(&data, Some(&w)), "Working 42m");
+    }
+
+    #[test]
+    fn goes_quiet_when_only_another_chat_in_the_workspace_runs_a_helper() {
+        let (_, data, mut fx) = setup();
+        let mut s = session(
+            r#"{"subagents": {"w": [{"id": "t1", "session": "other", "label": "Theirs", "startedEpoch": 999000}]}}"#,
+        );
+        let w = ws("w").agents(vec![
+            fx.agent(Working)
+                .id("chat")
+                .since(NOW - 42.0 * 60.0)
+                .activity(NOW - 17.0 * 60.0),
+            fx.agent(Idle)
+                .id("other")
+                .since(NOW - 3600.0)
+                .activity(NOW - 3600.0),
+        ]);
+        assert_eq!(s.live_run_count(Some(&w)), 1, "the workspace still has it");
+        assert_eq!(s.status_line(&data, Some(&w)), "Working 42m · quiet 17m");
+    }
+
+    #[test]
     fn never_marks_an_agent_that_is_not_working_or_one_with_no_activity_time() {
         let (mut s, data, mut fx) = setup();
         let idle = ws("i").agents(vec![

@@ -45,6 +45,7 @@ pub mod project_table;
 pub mod projects;
 pub mod prs;
 pub mod quiet;
+pub mod running;
 pub mod saved;
 pub mod session;
 pub mod shells;

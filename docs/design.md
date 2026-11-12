@@ -524,7 +524,7 @@ Status dot, the status words in the core's ink, the live helpers in
 are in `metaText` too ([asleep](#asleep)).
 On a narrow card the status falls back to the core's short form
 (`status_short`), its tail dropped whole and marked with an ellipsis, so
-"Shell running 4m · 1 shell" reads "Shell running 4m…", never "1 s…"
+"Running 4m · 1 shell, 1 agent" reads "Running 4m…", never "1 s…"
 (`CardText.statusForms`); the terminal pane does the same (`fit_status`).
 A waiting card's question has no short form and is cut as before.
 Where: `Views/CardView.swift` (`StatusLine`).
@@ -550,12 +550,31 @@ The words, ring and order are the core's (`native/core/src/sleep.rs`,
 `StatusKind::Asleep` and `Waking` in `native/core/src/status.rs`); the
 views draw them as any status and detail.
 
-The blue status for an idle agent whose background shell still runs says
-"Shell running" (`SHELL_RUNNING_WORD`, `native/core/src/words.rs`), so
-"waiting" only ever means waiting on you (D15 a). One whose background
-agent (a subagent run) still runs says "Helper running 4m · 1 helper"
-(`HELPER_RUNNING_WORD`) in the same blue; a running shell wins when both
-run.
+### Running
+
+The blue status for an idle agent whose chat still runs background work
+of any kind says "Running" (`RUNNING_WORD`, `native/core/src/words.rs`),
+so "waiting" only ever means waiting on you (D15 a). It replaced "Shell
+running" and "Helper running" (#359). After the word comes how long since
+the earliest running piece of work started, then one count per kind after
+a dot, the kinds a comma apart, each in the singular or plural: "Running
+4m · 1 shell, 1 agent", "Running 12m · 2 sessions". The kinds, always in
+this order: shell (a monitor counts as one, since Claude Code lists it as
+a shell), agent, session (a `claude --bg` session), workflow, teammate,
+cloud session, MCP task, and task for a kind Claude Code adds later
+(`task_word`). It draws as working: blue dot with halo, `blueText`, and
+sorts with the working cards.
+
+What counts is the chat's whole tree (`native/core/src/running.rs`): its
+shells and monitors, its agents and their own shells, and `claude --bg`
+sessions it or its agents started, under any session id the chat ran
+under, until the chat ends. A `claude --bg` session counts only once a
+hook saved it against the chat, and only while Agent View has it working
+or blocked. The same rule keeps the card off Ready to merge, keeps a
+"Nothing for you" turn (one from before a `/clear` too) off Ready, holds
+off Quiet, and sorts the card with the working ones. The live helpers
+words after the status are left off while it says Running, since it
+already counts the agents.
 
 ### Waiting tab line
 
@@ -841,7 +860,7 @@ Every card is decided as option a; where that changes a rule, the rule says
     prints nothing: "Not sent" is `redText`, the helper-down band sits on
     `countBg` (D5 a), and Next is green (D9 a).
 13. **"Waiting" means waiting on you, and nothing else.** The blue status
-    for a running shell says "Shell running" (D15 a, [gap T](#known-gaps)).
+    for running background work says "Running" (D15 a, [gap T](#known-gaps), #359).
     Two uses are left on purpose: the helper-down band's "Waiting for the
     panel" (`Model/Words.swift`), which waits on the helper and names no
     card, and lane names, which are Jon's own words in `config/lanes.json`.
@@ -858,8 +877,7 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Your turn | clay dot with halo, `clayText` words, clay needs dot | same, age and reason in `clayText` | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `status.rs` `plain_style`, `waiting_tokens`; `panel/build.rs` `header_dot` |
 | Asking | amber dot with halo, `amberText` words, amber needs dot | same | amber glyph **≠**; `amberCount` pill | waiting count amber while every waiting card asks | `status.rs` `StatusKind::style`; `panel/build.rs` `needs_tone` |
 | Working | blue dot with halo, `blueText`; blue progress bar | blue dot | blue glyph; `blueCount` pill | | `status.rs:109` |
-| Shell running | as working, the word "Shell running" | as working | as working | | `status.rs` `StatusKind::ShellRunning`; `words.rs` |
-| Helper running | as working, the word "Helper running" | as working | as working | | `status.rs` `StatusKind::HelperRunning`; `words.rs` |
+| Running | as working, "Running 4m · 1 shell, 1 agent"; no live helpers words beside it | as working, the age alone | as working | | `status.rs` `StatusKind::Running`; `running.rs`; `words.rs` `running_text` |
 | Quiet working | hollow blue ring, `blueText` | same | hollow glyph | | `status.rs:160-165` |
 | Finished, Ready | olive dot, no halo, `greenText`; Ready pill `greenText` on `Own.readyBg` | olive dot; no Ready pill **≠** | olive glyph | Next in `greenText` | `status.rs`; `panel/build.rs` `ready_ink` |
 | Idle, no agent | hollow grey; `metaText` idle and no agent | hollow grey | hollow grey glyph | | `status.rs` `plain_style` |
@@ -921,9 +939,9 @@ in; the sidebar sets the count's number in `Own.onFill` on the fill.
 
 New words go in `Words.swift`, or come from the core.
 
-"Waiting" in any form means a card waits on you. The blue status for a
-running shell says "Shell running" (`SHELL_RUNNING_WORD`,
-`native/core/src/words.rs`, D15 a).
+"Waiting" in any form means a card waits on you. The blue status for
+running background work says "Running" (`RUNNING_WORD`,
+`native/core/src/words.rs`, D15 a, #359).
 
 ## The code is right if
 
@@ -994,7 +1012,7 @@ follow-up PR.
 | Q | Selection had five looks. **Built: D13 a**, the heading outline in the panel (the anchor badge outlined, `Own.anchorSelected` gone), system looks for the switch and the editor | closed |
 | R | Faint ink was also a state ("No agent") and two controls; 0.55 meant both empty and cannot click. **Built: D12 a**, three named faint and fade meanings | closed |
 | S | A quiet PR's words were `secondary` on a compact card; the PR chip faces are never drawn. **Built: D14 a**, quiet PR words and every age in `metaText`. Left: the chip faces, undrawn by design | `native/core/src/pr_colors.rs` `pr_chip_colors` |
-| T | "Waiting" names a blue status (a shell still running) and, everywhere else, a card that waits on you. **Built: D15 a**, the blue status says "Shell running". Left on purpose: the helper-down band's words and lane names (rule 13) | closed |
+| T | "Waiting" names a blue status (a shell still running) and, everywhere else, a card that waits on you. **Built: D15 a**, the blue status says "Shell running", and since #359 "Running" for any kind of background work. Left on purpose: the helper-down band's words and lane names (rule 13) | closed |
 | U | Views picked or copied what the core picks. **Built: D8 a**, the Ready pill's ink, the empty and Quiet pills, the halo and the drop hint come from the panel model | closed |
 
 ## Follow-up work
@@ -1067,7 +1085,8 @@ are under `native/mac/Sidebar/` unless they start with `native/`.
     PR words and a card's title row age shift to the meta grey; hard to see.
     Files: `native/core/src/panel/build.rs`, `Views/CardView.swift`.
 15. **Rename the "Waiting" status (D15).** Built. On screen: a blue card with a
-    running shell says "Shell running" instead of "Waiting". Files:
+    running shell says "Shell running" instead of "Waiting" (since #359,
+    "Running", [Running](#running)). Files:
     `native/core/src/words.rs`, `native/core/src/status.rs` tests.
 16. **Unused colours go (gap F, no card).** Built: the sidebar's own
     colours, then `amberRowEdge` and `needsRowEdge` with the core's colour

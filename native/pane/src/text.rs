@@ -40,7 +40,7 @@ pub fn fit(text: &str, max: usize) -> String {
 
 /// A status fitted as [`fit`] does, but when it is cut and the core gave
 /// a shorter form (the tail dropped whole), that form with an ellipsis, so
-/// "Shell running 4m · 1 shell" never ends on a bare "1…".
+/// "Running 4m · 1 shell, 1 agent" never ends on a bare "1…".
 pub fn fit_status(full: &str, short: &str, max: usize) -> String {
     let whole = fit(full, max);
     if short.is_empty() || !whole.ends_with(ELLIPSIS) {
@@ -192,10 +192,10 @@ mod tests {
 
     #[test]
     fn falls_back_to_the_short_status_whole_or_cuts_the_full_one() {
-        let (line, short) = ("Shell running 4m · 1 shell", "Shell running 4m");
-        assert_eq!(fit_status(line, short, 26), line);
-        assert_eq!(fit_status(line, short, 22), "Shell running 4m…");
-        assert_eq!(fit_status(line, short, 10), "Shell…");
+        let (line, short) = ("Running 4m · 1 shell, 1 agent", "Running 4m");
+        assert_eq!(fit_status(line, short, 29), line);
+        assert_eq!(fit_status(line, short, 22), "Running 4m…");
+        assert_eq!(fit_status(line, short, 9), "Running…");
     }
 
     #[test]

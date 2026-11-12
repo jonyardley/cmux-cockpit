@@ -21,7 +21,7 @@ use crate::status::{
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
 use crate::ui::QUIET_PILL;
-use crate::words::HELPER_RUNNING_WORD;
+use crate::words::RUNNING_WORD;
 
 use super::{
     AddMenu, AddProject, Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT,
@@ -211,9 +211,9 @@ fn looks(
         ready: !row && *kind == StatusKind::Ready,
         pinned: is_pinned(w),
         progress: progress_fraction(w),
-        // A Helper running status line already says the count; a waiting
-        // card's or a row's status does not, so those keep the words.
-        helpers: if *kind == StatusKind::HelperRunning && status.starts_with(HELPER_RUNNING_WORD) {
+        // A Running status line already counts the chat's agents; a
+        // waiting card's or a row's status does not, so those keep the words.
+        helpers: if *kind == StatusKind::Running && status.starts_with(RUNNING_WORD) {
             String::new()
         } else {
             session.helper_text(w)
@@ -328,16 +328,21 @@ fn lane_picks(session: &Session) -> Vec<(LaneKey, String)> {
 }
 
 /// A card's chips row, for the kind of card it is.
-fn chips_row(session: &mut Session, w: Option<&Workspace>, kind: ChipsFor) -> Vec<Chip> {
+fn chips_row(
+    session: &mut Session,
+    data: &Data,
+    w: Option<&Workspace>,
+    kind: ChipsFor,
+) -> Vec<Chip> {
     let mut out: Vec<Chip> = match kind {
         // A row has no chips row.
         ChipsFor::Row => return Vec::new(),
         ChipsFor::Full | ChipsFor::Project => session
-            .chips_for(w, true)
+            .chips_for(data, w, true)
             .iter()
             .flat_map(chip_views)
             .collect(),
-        ChipsFor::Compact => compact_pr(session, w),
+        ChipsFor::Compact => compact_pr(session, data, w),
     };
     // Only once the shell has said where home is: until then the home
     // folder itself would be offered as a project.
@@ -356,12 +361,12 @@ fn chips_row(session: &mut Session, w: Option<&Workspace>, kind: ChipsFor) -> Ve
 /// size, faint, as a chip of its own. The sidebar runs them on from the
 /// status line after a "·"; here they have a line of their own, so they
 /// have none.
-fn compact_pr(session: &mut Session, w: Option<&Workspace>) -> Vec<Chip> {
+fn compact_pr(session: &mut Session, data: &Data, w: Option<&Workspace>) -> Vec<Chip> {
     let Some(pr) = pr_summary(&session.saved, w) else {
         return Vec::new();
     };
     let words = piece(
-        session.card_pr_words(w, &pr),
+        session.card_pr_words(data, w, &pr),
         pr_text_color(&pr, draft_of(&session.saved, w)),
     );
     let chip = Chip {
@@ -612,7 +617,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
     } else {
         String::new()
     };
-    let chips = chips_row(session, w, chips_for_density(density));
+    let chips = chips_row(session, data, w, chips_for_density(density));
     let looks = looks(session, data, w, density, &status, &kind);
     let (detail, detail_ink) = detail_of(session, data, w, density, waiting);
     Card {
@@ -790,7 +795,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         age: looks.age,
         status_has_age: status_carries_age(Density::Full, waiting, looks.status_has_age),
         left_off: String::new(),
-        chips: chips_row(session, w, ChipsFor::Project),
+        chips: chips_row(session, data, w, ChipsFor::Project),
         row_pr: None,
         detail: unless_waiting(waiting, whole_words(&wanted, 0)),
         detail_ink: Token::Secondary,
@@ -923,8 +928,7 @@ mod tests {
         assert_eq!(halo(StatusKind::Plain(Status::NeedsInput)), Token::ClayHalo);
         assert_eq!(halo(StatusKind::Asking), Token::AmberHalo);
         assert_eq!(halo(StatusKind::MergeReady), Token::MergeHalo);
-        assert_eq!(halo(StatusKind::ShellRunning), Token::BlueHalo);
-        assert_eq!(halo(StatusKind::HelperRunning), Token::BlueHalo);
+        assert_eq!(halo(StatusKind::Running), Token::BlueHalo);
         assert_eq!(halo(StatusKind::Ready), Token::Clear, "finished green");
         assert_eq!(halo(StatusKind::Quiet), Token::Clear, "hollow blue");
         assert_eq!(halo(StatusKind::Plain(Status::Idle)), Token::Clear);
@@ -1458,11 +1462,13 @@ mod tests {
     }
 
     #[test]
-    fn says_the_helper_count_once_on_a_helper_running_card() {
+    fn says_the_agent_count_once_on_a_running_card() {
         let mut core = Model::default();
         let s = &mut core.session;
         s.saved = crate::persist::SavedState::from_json(
-            r#"{"subagents": {"W": [{"id": "t1", "session": "a0", "label": "Checks", "startedEpoch": 100}]}}"#,
+            r#"{"subagents": {"W": [{"id": "t1", "session": "a0", "label": "Checks", "startedEpoch": 100}]},
+                "background": {"W": [{"id": "t1", "type": "subagent", "status": "running",
+                    "description": "Checks", "session": "a0", "startedEpoch": 160, "seenEpoch": 300}]}}"#,
         )
         .unwrap();
         let data: Data = serde_json::from_value(serde_json::json!({"epoch": 400,
@@ -1471,9 +1477,9 @@ mod tests {
         .unwrap();
         let w = data.ws_by_id("W");
         let kind = s.status_kind(&data, w);
-        assert_eq!(kind, StatusKind::HelperRunning);
+        assert_eq!(kind, StatusKind::Running);
         let status = s.status_line(&data, w);
-        assert!(status.ends_with(" · 1 helper"), "{status}");
+        assert_eq!(status, "Running 4m · 1 agent");
         let full = looks(s, &data, w, Density::Full, &status, &kind);
         assert_eq!(full.helpers, "", "the status line already says it");
         let row = looks(s, &data, w, Density::Row, "4m", &kind);
@@ -1559,6 +1565,7 @@ mod tests {
             ..Workspace::default()
         };
         let (r, q, none) = (ws("r"), ws("q"), ws("n"));
+        let data = Data::default();
         assert_eq!(
             row_pr(s, Some(&r), Density::Row),
             Some(RowPr {
@@ -1581,15 +1588,15 @@ mod tests {
         assert_eq!(ink("d"), Some(Token::MetaText), "a draft's number grey");
         assert_eq!(ink("m"), Some(Token::MergedText), "a merged one's purple");
         assert_eq!(row_pr(s, Some(&none), Density::Row), None, "no PR");
-        let compact = compact_pr(s, Some(&q));
+        let compact = compact_pr(s, &data, Some(&q));
         assert_eq!(
             compact[0].pieces[0].ink,
             Token::OpenText,
             "a compact card's quiet open PR words in the open green, as on a chip and a row"
         );
-        let draft = compact_pr(s, Some(&ws("d")));
+        let draft = compact_pr(s, &data, Some(&ws("d")));
         assert_eq!(draft[0].pieces[0].ink, Token::MetaText, "a draft's grey");
-        let compact = compact_pr(s, Some(&r));
+        let compact = compact_pr(s, &data, Some(&r));
         assert_eq!(compact[0].pieces[0].ink, Token::MergeText, "a ready one");
         for d in [Density::Full, Density::Compact] {
             assert_eq!(row_pr(s, Some(&r), d), None, "{d:?}: its chips carry it");

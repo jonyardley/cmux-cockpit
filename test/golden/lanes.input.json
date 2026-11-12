@@ -146,6 +146,28 @@
   ],
   "state": {
     "asking": { "asking": { "epoch": 999880, "reason": "allow git push?" } },
+    "background": {
+      "waiting": [
+        {
+          "description": "npm run soak",
+          "id": "b1",
+          "seenEpoch": 999760,
+          "session": "shell-chat",
+          "startedEpoch": 999700,
+          "status": "running",
+          "type": "shell"
+        },
+        {
+          "description": "Watch the batch",
+          "id": "t1",
+          "seenEpoch": 999760,
+          "session": "shell-chat",
+          "startedEpoch": 999740,
+          "status": "running",
+          "type": "subagent"
+        }
+      ]
+    },
     "dismissed": {},
     "moves": {},
     "names": {},

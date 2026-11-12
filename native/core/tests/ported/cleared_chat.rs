@@ -2,7 +2,8 @@
 //! the clear gives the chat a new session id in the same process, the
 //! runner hands the core the ids that process ran under before, and the
 //! card counts a shell or background agent saved under any of them until
-//! it ends.
+//! it ends. The status reads the `background` record (#359); the
+//! `subagents` map still feeds the agent run counts.
 
 use cockpit_core::data::{Agent, Data};
 use cockpit_core::session::Session;
@@ -12,9 +13,16 @@ use crate::support::*;
 const NOW: f64 = 1_000_000.0;
 
 const STATE: &str = r#"{
-    "shells": {
-        "shell": [{"id": "b1", "session": "before", "startedEpoch": 100}],
-        "both": [{"id": "b1", "session": "before", "startedEpoch": 100}]
+    "background": {
+        "shell": [{"id": "b1", "type": "shell", "status": "running", "description": "d", "session": "before", "startedEpoch": 999760, "seenEpoch": 999900}],
+        "helper": [{"id": "t1", "type": "subagent", "status": "running", "description": "d", "session": "before", "startedEpoch": 999760, "seenEpoch": 999900}],
+        "both": [{"id": "b1", "type": "shell", "status": "running", "description": "d", "session": "before", "startedEpoch": 999760, "seenEpoch": 999900}, {"id": "t1", "type": "subagent", "status": "running", "description": "d", "session": "before", "startedEpoch": 999800, "seenEpoch": 999900}],
+        "quietBefore": [{"id": "b1", "type": "shell", "status": "running", "description": "d", "session": "before", "startedEpoch": 999760, "seenEpoch": 999900}],
+        "askedBefore": [{"id": "b1", "type": "shell", "status": "running", "description": "d", "session": "before", "startedEpoch": 999760, "seenEpoch": 999900}]
+    },
+    "moves": {
+        "quietBefore": {"text": "the rounds take about 20 minutes.", "epoch": 1000, "session": "before", "idle": true},
+        "askedBefore": {"text": "Your move: say go.", "epoch": 1000, "session": "before"}
     },
     "subagents": {
         "helper": [{"id": "t1", "session": "before", "label": "Checks", "startedEpoch": 100}],
@@ -43,26 +51,23 @@ mod work_started_before_a_clear {
     use super::*;
 
     #[test]
-    fn a_shell_keeps_the_cleared_card_on_shell_running() {
+    fn a_shell_keeps_the_cleared_card_on_running() {
         let (mut s, data, mut fx) = setup();
         let w = ws("shell").agents(vec![chat(&mut fx, "after", &["before"])]);
-        assert_eq!(s.status_line(&data, Some(&w)), "Shell running 4m · 1 shell");
+        assert_eq!(s.status_line(&data, Some(&w)), "Running 4m · 1 shell");
     }
 
     #[test]
-    fn a_background_agent_keeps_the_cleared_card_on_helper_running() {
+    fn a_background_agent_keeps_the_cleared_card_on_running() {
         let (mut s, data, mut fx) = setup();
         let w = ws("helper").agents(vec![chat(&mut fx, "after", &["before"])]);
-        assert_eq!(
-            s.status_line(&data, Some(&w)),
-            "Helper running 4m · 1 helper"
-        );
+        assert_eq!(s.status_line(&data, Some(&w)), "Running 4m · 1 agent");
     }
 
     #[test]
     fn the_card_rests_once_the_work_has_ended() {
         let (mut s, data, mut fx) = setup();
-        let ended = ws("helperDone").agents(vec![chat(&mut fx, "after", &["before"])]);
+        let ended = ws("none").agents(vec![chat(&mut fx, "after", &["before"])]);
         assert_eq!(s.status_line(&data, Some(&ended)), "Idle 4m");
         let mut s = session("{}");
         let gone = ws("shell").agents(vec![chat(&mut fx, "after", &["before"])]);
@@ -70,10 +75,13 @@ mod work_started_before_a_clear {
     }
 
     #[test]
-    fn a_shell_still_wins_over_a_background_agent() {
+    fn a_shell_and_a_background_agent_are_both_counted() {
         let (mut s, data, mut fx) = setup();
         let w = ws("both").agents(vec![chat(&mut fx, "after", &["before"])]);
-        assert_eq!(s.status_line(&data, Some(&w)), "Shell running 4m · 1 shell");
+        assert_eq!(
+            s.status_line(&data, Some(&w)),
+            "Running 4m · 1 shell, 1 agent"
+        );
     }
 
     #[test]
@@ -91,7 +99,7 @@ mod work_started_before_a_clear {
             ..Agent::default()
         };
         let w = ws("shell").agents(vec![chat(&mut fx, "after", &["before"]), stale]);
-        assert_eq!(s.status_line(&data, Some(&w)), "Shell running 4m · 1 shell");
+        assert_eq!(s.status_line(&data, Some(&w)), "Running 4m · 1 shell");
     }
 
     #[test]
@@ -103,5 +111,45 @@ mod work_started_before_a_clear {
         assert_eq!(s.own_run_count(Some(&w), &cleared), 0);
         assert_eq!(s.own_run_count(Some(&w), &resumed), 1);
         assert_eq!(s.live_run_count(Some(&w)), 1);
+    }
+
+    /// The chat idle under "after", its newest turn ended before a /clear
+    /// under "before", with unread output.
+    fn cleared_after_a_turn(fx: &mut Fx, id: &str) -> cockpit_core::data::Workspace {
+        let a = chat(fx, "after", &["before"]).kind("claude");
+        ws(id).unread(1.0).latest_at(950.0).agents(vec![a])
+    }
+
+    #[test]
+    fn a_nothing_for_you_turn_from_before_the_clear_keeps_the_card_off_ready_while_its_work_runs() {
+        let (mut s, data, mut fx) = setup();
+        let w = cleared_after_a_turn(&mut fx, "quietBefore");
+        assert!(!s.is_ready(&data, Some(&w)));
+        assert_eq!(s.status_line(&data, Some(&w)), "Running 4m · 1 shell");
+        assert_eq!(
+            s.move_of(Some(&w)),
+            None,
+            "the move still shows on the current id only"
+        );
+    }
+
+    #[test]
+    fn a_turn_from_before_the_clear_that_asked_something_stays_ready() {
+        let (mut s, data, mut fx) = setup();
+        let w = cleared_after_a_turn(&mut fx, "askedBefore");
+        assert!(
+            s.is_ready(&data, Some(&w)),
+            "a turn that asks Jon is worth reading"
+        );
+    }
+
+    #[test]
+    fn the_cleared_card_is_ready_once_its_work_has_ended() {
+        let (_, data, mut fx) = setup();
+        let mut s = session(
+            r#"{"moves": {"quietBefore": {"text": "the rounds take about 20 minutes.", "epoch": 1000, "session": "before", "idle": true}}}"#,
+        );
+        let w = cleared_after_a_turn(&mut fx, "quietBefore");
+        assert!(s.is_ready(&data, Some(&w)));
     }
 }

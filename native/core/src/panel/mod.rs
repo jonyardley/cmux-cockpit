@@ -212,8 +212,8 @@ pub struct Card {
     pub helpers: String,
     /// The status and its age, "Working 14m"; a row's age alone.
     pub status: String,
-    /// The shorter status a narrow card falls back to, its tail (the shell
-    /// count or quiet time) dropped whole: "Shell running 4m". "" when the
+    /// The shorter status a narrow card falls back to, its tail (the work's
+    /// counts or quiet time) dropped whole: "Running 4m". "" when the
     /// status has no tail to drop, such as a waiting card's question.
     pub status_short: String,
     pub status_ink: Token,

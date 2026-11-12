@@ -559,9 +559,9 @@ if let panel = load("lanes") {
         if case .card(let c) = r { return c }
         return nil
     }
-    let shell = cards.first { $0.status.hasPrefix("Shell running") }
-    check(shell.map(CardText.statusForms) == ["Shell running 4m · 1 shell", "Shell running 4m…"],
-          "a shell count gives way whole, marked with an ellipsis")
+    let running = cards.first { $0.status.hasPrefix("Running") }
+    check(running.map(CardText.statusForms) == ["Running 5m · 1 shell, 1 agent", "Running 5m…"],
+          "the work's counts give way whole, marked with an ellipsis")
     let asking = cards.first { $0.status.hasPrefix("Asking") || $0.status.hasPrefix("Your turn") }
     check(asking.map { CardText.statusForms($0).count } == 1, "a waiting card's question has one form")
 }

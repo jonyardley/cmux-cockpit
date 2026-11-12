@@ -11,6 +11,7 @@ use regex::Regex;
 
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::js::{positive, truthy};
+use crate::owner::owns;
 use crate::persist::{SavedMove, SavedState, move_of_description};
 use crate::saved::saved_for;
 
@@ -66,6 +67,34 @@ fn owns_move(m: &SavedMove, a: &Agent, _w: &Workspace) -> bool {
     m.session.is_some()
         && a.kind.as_deref() == Some("claude")
         && m.session.as_deref() == Some(a.id.as_str())
+}
+
+/// A move is `a`'s chat's when `a` is a Claude session and saved it under
+/// any session id its chat ran under (`crate::owner`), so a turn from
+/// before a /clear is still the chat's.
+fn chat_owns_move(m: &SavedMove, a: &Agent, w: &Workspace) -> bool {
+    let agents = w.agent_list().filter(|x| x.status.is_some());
+    a.kind.as_deref() == Some("claude") && m.session.as_deref().is_some_and(|s| owns(agents, a, s))
+}
+
+/// The move `a`'s chat's last turn ended on when it asks nothing of Jon,
+/// matched on any session id the chat ran under, with the same freshness
+/// rule as waiting_move. Only the Ready guard reads it: a turn that ended
+/// on "Nothing for you" before a /clear still keeps the card off Ready
+/// while its work runs. What a card shows as waiting stays on the current
+/// id, since a clear starts afresh.
+pub fn chat_quiet_move(saved: &SavedState, a: &Agent, w: &Workspace) -> Option<SavedMove> {
+    if !at_turn_end(a) {
+        return None;
+    }
+    let prompt_at = w.latest_at.unwrap_or(0.0);
+    if !positive(prompt_at) {
+        return None;
+    }
+    let m = saved_move_for(saved, w)?;
+    saved_for(Some(&m), a, w, prompt_at, chat_owns_move)
+        .filter(|m| asks_nothing(m))
+        .cloned()
 }
 
 /// The move `a` is waiting on, or None. Pass `a` as the sidebars show it

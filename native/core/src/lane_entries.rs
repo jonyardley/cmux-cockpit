@@ -131,16 +131,13 @@ impl Session {
         if s == Status::NeedsInput {
             return 0;
         }
-        if self.is_ready(data, w) {
+        let (ready, running) = self.ready_or_running(data, w);
+        if ready {
             return 1;
         }
-        // A Shell or Helper running card is drawn in working blue, so it
-        // sorts with the working.
-        let a = self.agent_of(w);
-        if s == Status::Working
-            || self.is_shell_running(a.as_ref(), w)
-            || self.is_helper_running(a.as_ref(), w)
-        {
+        // A Running card is drawn in working blue, so it sorts with the
+        // working.
+        if s == Status::Working || running {
             2
         } else {
             3

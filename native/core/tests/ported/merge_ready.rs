@@ -2,7 +2,7 @@
 //! cards whose saved PR GitHub would merge now, and the words at the
 //! header's trailing edge.
 
-use cockpit_core::data::Data;
+use cockpit_core::data::{BackgroundSession, BackgroundState, Data};
 use cockpit_core::lane_entries::{HeaderHint, LaneEntry};
 use cockpit_core::lanes::LaneKey;
 use cockpit_core::session::Session;
@@ -25,8 +25,9 @@ const STATE: &str = r#"{"prs": {
     "blocked": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 10, "mergeable": false},
     "noChecks": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [], "number": 11, "mergeable": true},
     "anchor-parked": {"url": "https://github.com/o/r/pull/1", "status": "open", "branch": "feat", "checks": [{"name": "build", "state": "pass"}], "number": 12, "mergeable": true}
-}, "shells": {
-    "ready2": [{"id": "b1", "session": "shell-chat", "startedEpoch": 100}]
+}, "background": {
+    "ready2": [{"id": "b1", "type": "shell", "status": "running", "description": "build", "session": "shell-chat", "startedEpoch": 1000040, "seenEpoch": 1000000}],
+    "readyMain": [{"id": "bg:aaaaaaaa", "type": "session", "status": "running", "description": "claude --bg", "session": "bg-chat", "startedEpoch": 999140, "seenEpoch": 1000000}]
 }}"#;
 
 fn setup() -> (Session, Data, Fx) {
@@ -223,7 +224,7 @@ mod merge_ready_status {
     }
 
     #[test]
-    fn leaves_a_working_or_shell_running_card_its_own_status() {
+    fn leaves_a_working_or_running_card_its_own_status() {
         let (mut s, mut data, mut fx) = setup();
         let working = card(&mut data, "ready1", vec![at(&mut fx, Working, 60.0)], 0.0);
         let turn = card(
@@ -286,10 +287,10 @@ mod merge_ready_status {
         let (mut s, mut data, mut fx) = setup();
         let words = |s: &mut Session, w: &Workspace| {
             let pr = pr_summary(&s.saved, Some(w)).expect("a PR");
-            compact_pr_text(Some(&s.card_pr_words(Some(w), &pr)))
+            compact_pr_text(Some(&s.card_pr_words(&Data::default(), Some(w), &pr)))
         };
         let state = |s: &mut Session, w: &Workspace| {
-            s.chips_for(Some(w), true)
+            s.chips_for(&Data::default(), Some(w), true)
                 .into_iter()
                 .find_map(|c| match c {
                     Chip::Pr { tag, state, .. } => Some((tag, state)),
@@ -307,22 +308,20 @@ mod merge_ready_status {
         let busy = card(&mut data, "ready2", vec![at(&mut fx, Working, 60.0)], 0.0);
         assert_eq!(words(&mut s, &busy), "· #2 · ready");
         assert_eq!(state(&mut s, &busy), Some(("#2".into(), "ready".into())));
-        // Idle on a shell its own chat still runs, the status says Shell running,
+        // Idle on a shell its own chat still runs, the status says Running,
         // so the chip keeps "ready" there too.
         let shell = fx.agent(Idle).id("shell-chat").since(NOW - 60.0);
         let running = card(&mut data, "ready2", vec![shell], 0.0);
-        assert_eq!(
-            s.status_kind(&data, Some(&running)),
-            StatusKind::ShellRunning
-        );
+        assert_eq!(s.status_kind(&data, Some(&running)), StatusKind::Running);
         assert_eq!(words(&mut s, &running), "· #2 · ready");
         assert_eq!(state(&mut s, &running), Some(("#2".into(), "ready".into())));
     }
 
     #[test]
     fn drops_the_words_exactly_when_the_status_says_ready_to_merge() {
-        // shows_merge_ready takes no Data, so it copies status_kind's first
-        // rule rather than asking it: this holds the two to one answer.
+        // shows_merge_ready copies status_kind's first rule rather than
+        // asking it: this holds the two to one answer, a `claude --bg`
+        // session the runner still has running included.
         let (mut s, mut data, mut fx) = setup();
         let cards = [
             ("ready1", vec![at(&mut fx, Idle, 180.0)], 0.0),
@@ -334,11 +333,17 @@ mod merge_ready_status {
             ("ready2", vec![fx.agent(Idle).id("shell-chat")], 0.0),
             ("failing", vec![at(&mut fx, Idle, 120.0)], 2.0),
             ("draft", vec![at(&mut fx, Idle, 60.0)], 0.0),
+            ("readyMain", vec![fx.agent(Idle).id("bg-chat")], 0.0),
         ];
+        data.background_sessions = Some(vec![BackgroundSession {
+            id: "aaaaaaaa".into(),
+            state: Some(BackgroundState::Blocked),
+            ..BackgroundSession::default()
+        }]);
         for (id, agents, unread) in cards {
             let w = card(&mut data, id, agents, unread);
             let says = s.status_kind(&data, Some(&w)) == StatusKind::MergeReady;
-            assert_eq!(s.shows_merge_ready(Some(&w)), says, "{id}");
+            assert_eq!(s.shows_merge_ready(&data, Some(&w)), says, "{id}");
         }
     }
 
@@ -347,5 +352,42 @@ mod merge_ready_status {
         let (mut s, mut data, mut fx) = setup();
         let w = card(&mut data, "ready1", vec![at(&mut fx, Idle, 60.0)], 0.0);
         assert_eq!(s.urgency_of(&data, Some(&w)), Urgency::Quiet);
+    }
+}
+
+mod background_sessions_and_ready_to_merge {
+    use super::*;
+    use cockpit_core::data::{Agent, Workspace};
+    use cockpit_core::status::StatusKind;
+
+    fn bg_card(data: &mut Data) -> Workspace {
+        let w = ws_mut(data, "readyMain");
+        w.agents = Some(vec![Some(Agent {
+            id: "bg-chat".into(),
+            status: Some(cockpit_core::data::AgentStatus::Idle),
+            since_epoch: Some(NOW - 60.0),
+            ..Agent::default()
+        })]);
+        w.clone()
+    }
+
+    #[test]
+    fn says_running_not_ready_to_merge_while_its_saved_session_runs_and_ready_once_it_settles() {
+        let (mut s, mut data, _) = setup();
+        let w = bg_card(&mut data);
+        let running = |state| {
+            Some(vec![BackgroundSession {
+                id: "aaaaaaaa".into(),
+                state: Some(state),
+                ..BackgroundSession::default()
+            }])
+        };
+        data.background_sessions = running(BackgroundState::Working);
+        assert_eq!(s.status_kind(&data, Some(&w)), StatusKind::Running);
+        assert!(!s.shows_merge_ready(&data, Some(&w)));
+        assert_eq!(s.status_line(&data, Some(&w)), "Running 16m · 1 session");
+        data.background_sessions = running(BackgroundState::Done);
+        assert_eq!(s.status_kind(&data, Some(&w)), StatusKind::MergeReady);
+        assert!(s.shows_merge_ready(&data, Some(&w)));
     }
 }
