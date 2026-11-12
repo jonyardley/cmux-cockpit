@@ -231,7 +231,8 @@ export function writePrEntries(path: string, set: State["prs"], remove: readonly
 
 /**
  * The native core's background verdicts (scripts/running-save.ts, #360),
- * the one writer of the `running` map: each id in `set` takes its
+ * the one writer of its verdicts (writeBackground only drops one whose
+ * workspace has no work): each id in `set` takes its
  * verdict, each id in `remove` loses its entry, every other entry stays,
  * in the same locked read-modify-write step as every other write. `set`
  * must already be clean (validateState's `running`).

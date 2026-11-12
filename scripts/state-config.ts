@@ -68,7 +68,9 @@ export interface State {
    * card's agent, when its earliest running work started, and a count per
    * kind, so the agents panel says Running when the card does. Written
    * only by scripts/running-save.ts, from the core's SaveRunning effect,
-   * never by a URL. Left out while nothing is saved.
+   * never by a URL; the background hook's write drops the verdict of a
+   * workspace it leaves with no work (writeBackground). Left out while
+   * nothing is saved.
    */
   running?: Record<string, SavedRunning>;
   /**

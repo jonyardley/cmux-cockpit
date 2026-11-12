@@ -1,6 +1,7 @@
 // Saves the native core's background verdicts in config/state.json's
 // `running` map (#360), so the agents panel, which reads only the file,
-// says Running when the card does. The core is the one writer of the map.
+// says Running when the card does. The core is the one writer of verdicts;
+// the background hook's write only drops one whose workspace has no work.
 //   node scripts/running-save.ts '<json>'
 // The JSON is the core's SaveRunning effect's `running`: workspace id to
 // a verdict to set, or null to delete. Each verdict is cleaned by the
