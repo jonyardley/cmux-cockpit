@@ -223,5 +223,5 @@ function sessionOf(w: Workspace): PrSession {
   const lead = mostActive(agentsOf(w));
   const here = !!w.selected;
   const name = here ? "This chat" : displayTitle(w) || "Another chat";
-  return { name, dot: dotFor(lead, w), hollow: hollowDot(lead), chat: chatWs(w, lead), here };
+  return { name, dot: dotFor(lead, w), hollow: hollowDot(lead, w), chat: chatWs(w, lead), here };
 }

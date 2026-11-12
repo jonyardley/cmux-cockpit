@@ -223,6 +223,59 @@ where
         .collect())
 }
 
+/// How many of one kind of background work a chat runs, in a saved verdict.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SavedCount {
+    #[serde(rename = "type")]
+    pub kind: TaskType,
+    pub n: usize,
+}
+
+/// The core's background verdict for a workspace's card (#360), saved so
+/// the agents panel, which reads only the file, says what the card says:
+/// the chat it is about (the card's agent), when its earliest running
+/// work started, and how many of each kind run, in the card's order. The
+/// panel applies the card's rule on top: Running while that agent is idle.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SavedRunning {
+    pub agent: String,
+    pub since: f64,
+    pub counts: Vec<SavedCount>,
+}
+
+/// The most kinds a saved verdict counts: one per task type (MAX_COUNTS).
+pub const MAX_COUNTS: usize = 9;
+
+impl SavedRunning {
+    /// Every field within the bounds state-config.ts's savedRunning holds
+    /// it to: an id, an epoch, and one to MAX_COUNTS counts of 1 to
+    /// MAX_TASKS each.
+    fn fits(&self) -> bool {
+        is_id(&self.agent)
+            && self.since.is_finite()
+            && self.since >= 0.0
+            && (1..=MAX_COUNTS).contains(&self.counts.len())
+            && self.counts.iter().all(|c| (1..=MAX_TASKS).contains(&c.n))
+    }
+}
+
+/// The `running` map as validateState reads it: an entry that does not
+/// fit is dropped on its own.
+fn running_map<'de, D>(d: D) -> Result<BTreeMap<String, SavedRunning>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let entries: BTreeMap<String, Value> = crate::lenient::map(d)?;
+    Ok(entries
+        .into_iter()
+        .filter(|(ws, _)| is_id(ws))
+        .filter_map(|(ws, v)| {
+            let r = serde_json::from_value::<SavedRunning>(v).ok()?;
+            r.fits().then_some((ws, r))
+        })
+        .collect())
+}
+
 /// Why an agent stopped to ask, as the notification hook saves it.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SavedAsk {
@@ -320,6 +373,14 @@ pub struct SavedState {
         skip_serializing_if = "BTreeMap::is_empty"
     )]
     pub background: BTreeMap<String, Vec<SavedTask>>,
+    /// wsId to the core's background verdict for its card (#360), which
+    /// the core writes through the runner (running_save.rs) and the agents
+    /// panel reads. Left out while empty.
+    #[serde(
+        deserialize_with = "running_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub running: BTreeMap<String, SavedRunning>,
     #[serde(deserialize_with = "crate::lenient::map")]
     pub names: BTreeMap<String, Value>,
     #[serde(deserialize_with = "crate::lenient::map")]
@@ -576,6 +637,39 @@ mod tests {
             Some(SavedProject::Removed { .. })
         ));
         assert!(s.shells.is_empty());
+    }
+
+    #[test]
+    fn reads_running_verdicts_as_validate_state_does() {
+        // The same sample as test/running-save.test.ts's validateState test.
+        let json = r#"{"running": {
+            "w1": {"agent": "s1", "since": 100, "counts": [{"type": "shell", "n": 2}, {"type": "a new kind", "n": 1}], "extra": 1},
+            "no counts": {"agent": "s1", "since": 100, "counts": []},
+            "zero": {"agent": "s1", "since": 100, "counts": [{"type": "shell", "n": 0}]},
+            "too many": {"agent": "s1", "since": 100, "counts": [{"type": "shell", "n": 21}]},
+            "half": {"agent": "s1", "since": 100, "counts": [{"type": "shell", "n": 1.5}]},
+            "no type": {"agent": "s1", "since": 100, "counts": [{"type": 3, "n": 1}]},
+            "bad since": {"agent": "s1", "since": -1, "counts": [{"type": "shell", "n": 1}]},
+            "no agent": {"agent": "", "since": 100, "counts": [{"type": "shell", "n": 1}]},
+            "junk": "x",
+            "__proto__": {"agent": "s1", "since": 100, "counts": [{"type": "shell", "n": 1}]}
+        }}"#;
+        let s = SavedState::from_json(json).unwrap();
+        assert_eq!(s.running.keys().collect::<Vec<_>>(), ["w1"]);
+        let counts: Vec<(TaskType, usize)> = s.running["w1"]
+            .counts
+            .iter()
+            .map(|c| (c.kind, c.n))
+            .collect();
+        assert_eq!(counts, [(TaskType::Shell, 2), (TaskType::Other, 1)]);
+        let out = serde_json::to_value(&s).unwrap();
+        assert_eq!(
+            out["running"]["w1"],
+            serde_json::json!({"agent": "s1", "since": 100.0,
+                "counts": [{"type": "shell", "n": 2}, {"type": "other", "n": 1}]})
+        );
+        let empty = serde_json::to_value(SavedState::default()).unwrap();
+        assert!(empty.get("running").is_none(), "left out while empty");
     }
 
     #[test]

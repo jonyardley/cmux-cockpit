@@ -55,6 +55,19 @@ describe("saved helper count", () => {
     assert.equal(liveRunCount(ended), 2);
   });
 
+  it("counts only a chat's own runs when given the chat, as the card's quiet rule does (#360)", () => {
+    const owner = agent("working", { id: "owner" });
+    const other = agent("working");
+    const w = ws("matched", { agents: [owner, other] });
+    assert.equal(liveRunCount(w, owner), 1, "saved under its session");
+    assert.equal(liveRunCount(w, other), 0, "another chat's run");
+    const kids = ws("matched", {
+      agents: [owner, agent("working", { children: [{ id: "x", running: true }] })],
+    });
+    assert.equal(liveRunCount(kids, owner), 1, "its unclaimed saved run, not the other's child");
+    assert.equal(liveRunCount(kids), 2);
+  });
+
   it("counts nothing for a workspace with no saved runs", () => {
     r.data.epoch += 1;
     assert.equal(liveRunCount(ws("none", { agents: [agent("working")] })), 0);

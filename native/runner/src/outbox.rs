@@ -16,7 +16,9 @@
 //! - the PR poll's answers for config/state.json's `prs` map (#300), as
 //!   `scripts/pr-save.sh '<json>'` beside the config folder: it finds node
 //!   and runs pr-save.ts, which writes them under the state file's lock
-//!   and schedules the sidebars' rebuild, so it returns at once.
+//!   and schedules the sidebars' rebuild, so it returns at once;
+//! - the core's background verdicts for config/state.json's `running` map
+//!   (#360), as `scripts/running-save.sh '<json>'`, the same way.
 //!
 //! One worker thread takes them in the order asked, so a reorder always
 //! reaches cmux before the group join that follows it, and a slow cmux
@@ -26,7 +28,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 
-use cockpit_core::app::{AgentMessage, CmuxCall, CopyText, OpenUrl, PrSave, StateSet};
+use cockpit_core::app::{AgentMessage, CmuxCall, CopyText, OpenUrl, PrSave, RunningSave, StateSet};
 use cockpit_core::session::Param;
 use serde::Serialize;
 
@@ -44,6 +46,8 @@ pub enum Outgoing {
     AgentMessage(AgentMessage),
     /// The PR poll's answers for the state file.
     SavePrs(PrSave),
+    /// The core's background verdicts for the state file.
+    SaveRunning(RunningSave),
 }
 
 /// Puts its first argument on the clipboard as it is, with no newline.
@@ -57,11 +61,12 @@ pub const MESSAGE_FROM: &str = "Cockpit";
 /// The script that saves the PR poll's answers: in the repo that holds
 /// `config`, as the TypeScript poll's is.
 pub fn pr_save_script(config: &Path) -> PathBuf {
-    config
-        .parent()
-        .unwrap_or(config)
-        .join("scripts")
-        .join("pr-save.sh")
+    repo_script(config, "pr-save.sh")
+}
+
+/// A script in the repo that holds `config`.
+fn repo_script(config: &Path, name: &str) -> PathBuf {
+    config.parent().unwrap_or(config).join("scripts").join(name)
 }
 
 /// The program and arguments that carry out a request, or why it cannot
@@ -131,6 +136,15 @@ pub fn command_for(
                 vec![pr_save_script(config).display().to_string(), json],
             ))
         }
+        Outgoing::SaveRunning(save) => {
+            let json = serde_json::to_string(&save.running)
+                .map_err(|e| format!("running save not sent: {e}"))?;
+            let script = repo_script(config, "running-save.sh");
+            Ok((
+                "/bin/sh".to_string(),
+                vec![script.display().to_string(), json],
+            ))
+        }
     }
 }
 
@@ -145,6 +159,7 @@ fn describe(o: &Outgoing) -> String {
         Outgoing::AgentMessage(_) => "cmux agent message".to_string(),
         // How many, never which PR: a title can be anything.
         Outgoing::SavePrs(save) => format!("pr save of {}", save.prs.len()),
+        Outgoing::SaveRunning(save) => format!("running save of {}", save.running.len()),
     }
 }
 
@@ -189,7 +204,8 @@ pub fn perform<L: Fn(String), F: Fn(String)>(
             | Outgoing::OpenUrl(_)
             | Outgoing::Copy(_)
             | Outgoing::AgentMessage(_)
-            | Outgoing::SavePrs(_) => None,
+            | Outgoing::SavePrs(_)
+            | Outgoing::SaveRunning(_) => None,
         };
         match command_for(&o, token.as_deref(), config) {
             Ok((program, args)) => {
@@ -316,6 +332,22 @@ mod tests {
             ["/u/.config/cmux/scripts/pr-save.sh", r#"{"W2":null}"#]
         );
         assert_eq!(describe(&save), "pr save of 1");
+        assert_eq!(workspace_of(&save), None);
+    }
+
+    #[test]
+    fn a_running_save_runs_the_repos_script_with_the_verdicts_as_json() {
+        let mut running = std::collections::BTreeMap::new();
+        running.insert("W2".to_string(), None);
+        let save = Outgoing::SaveRunning(RunningSave { running });
+        let (program, args) =
+            command_for(&save, None, Path::new("/u/.config/cmux/config")).unwrap();
+        assert_eq!(program, "/bin/sh");
+        assert_eq!(
+            args,
+            ["/u/.config/cmux/scripts/running-save.sh", r#"{"W2":null}"#]
+        );
+        assert_eq!(describe(&save), "running save of 1");
         assert_eq!(workspace_of(&save), None);
     }
 

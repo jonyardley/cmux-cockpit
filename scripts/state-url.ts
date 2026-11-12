@@ -230,6 +230,25 @@ export function writePrEntries(path: string, set: State["prs"], remove: readonly
 }
 
 /**
+ * The native core's background verdicts (scripts/running-save.ts, #360),
+ * the one writer of the `running` map: each id in `set` takes its
+ * verdict, each id in `remove` loses its entry, every other entry stays,
+ * in the same locked read-modify-write step as every other write. `set`
+ * must already be clean (validateState's `running`).
+ */
+export function writeRunningEntries(
+  path: string,
+  set: NonNullable<State["running"]>,
+  remove: readonly string[],
+): ApplyResult {
+  return readUpdateWrite(path, (before) => {
+    const running = { ...before.running, ...set };
+    for (const id of remove) delete running[id];
+    return { ok: true, state: validateState({ ...before, running: sortedByKey(running) }) };
+  });
+}
+
+/**
  * The `prs` a poll writes: a whole map to replace it, or a function from
  * the map as it stands under the lock to the next one, so a write that
  * landed since the poll read the file is never undone.

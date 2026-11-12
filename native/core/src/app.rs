@@ -24,9 +24,10 @@ use crate::lane_entries::LaneEntry;
 use crate::lanes::{LaneConfig, LaneKey};
 use crate::menu::MenuEvent;
 use crate::panel::Panel;
-use crate::persist::{SavedPr, SavedState, ViewMode, persist_url};
+use crate::persist::{SavedPr, SavedRunning, SavedState, ViewMode, persist_url};
 use crate::pr_poll::{PrPolled, shown_in};
 use crate::projects::Project;
+use crate::running_save::{RunningSaves, verdicts};
 use crate::session::{Outbound, Param, Session};
 use crate::sleep::SleepAnswer;
 
@@ -185,6 +186,8 @@ pub struct Model {
     pub view: ViewModel,
     /// Whether the view carries the panel (`Event::PanelOn`).
     pub panel_on: bool,
+    /// The background verdicts sent for the state file (running_save.rs).
+    pub running_saves: RunningSaves,
 }
 
 /// Needs you as the shell draws it, workspaces by id, longest waiting
@@ -356,6 +359,22 @@ impl Operation for PrSave {
     type Output = ();
 }
 
+/// The core's background verdicts for config/state.json's `running` map
+/// (#360), by workspace id: a verdict to set, or null to delete. The
+/// shell hands them to scripts/running-save.ts, which writes them under
+/// the state file's lock and rebuilds the sidebars, so the agents panel
+/// says Running when the card does. Only what changed comes this way
+/// (running_save.rs).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RunningSave {
+    pub running: BTreeMap<String, Option<SavedRunning>>,
+}
+
+impl Operation for RunningSave {
+    type Output = ();
+}
+
 /// A link for the shell to open in the browser, as the sidebar's
 /// `openURL`: the card menu's Open PR.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -405,6 +424,7 @@ pub enum Effect {
     Copy(CopyText),
     AgentMessage(AgentMessage),
     SavePrs(PrSave),
+    SaveRunning(RunningSave),
 }
 
 /// A request from the session's outbox as the command that hands it to the shell.
@@ -570,6 +590,18 @@ impl Model {
         Command::all(out)
     }
 
+    /// The background verdicts the state file lacks, as one save. Only the
+    /// core that draws the sidebar writes them, so the pane's never
+    /// doubles a write, and never before a frame lists its workspaces.
+    fn running_writes(&mut self) -> Option<Command<Effect, Event>> {
+        if !self.panel_on {
+            return None;
+        }
+        let now = verdicts(&mut self.session, self.data.as_ref()?)?;
+        let running = self.running_saves.writes(&self.session.saved.running, &now);
+        (!running.is_empty()).then(|| Command::notify_shell(RunningSave { running }).into())
+    }
+
     /// Moves the frame's clock on to `now`, never back.
     fn advance_clock(&mut self, now: f64) {
         if let Some(data) = &mut self.data {
@@ -621,6 +653,7 @@ impl App for Cockpit {
                 let s = &mut model.session;
                 s.pr_poll.file_read(&saved.prs, model.data.as_ref());
                 s.reseed(*saved);
+                model.running_saves.file_read();
             }
             Event::Projects(projects) => model.session.set_projects(projects),
             Event::Lanes(lanes) => model.session.set_lanes(&lanes),
@@ -650,7 +683,12 @@ impl App for Cockpit {
         let now = model.data.as_ref().and_then(|d| d.epoch);
         let asks = model.asks(now);
         let out = model.session.take_outbox().into_iter().map(send_out);
-        Command::all(out.chain(asks).chain(std::iter::once(render())))
+        let saves = model.running_writes();
+        Command::all(
+            out.chain(asks)
+                .chain(saves)
+                .chain(std::iter::once(render())),
+        )
     }
 
     fn view(&self, model: &Model) -> ViewModel {
@@ -802,6 +840,10 @@ mod tests {
                 Effect::SavePrs(r) => {
                     let ids: Vec<&str> = r.operation.prs.keys().map(String::as_str).collect();
                     format!("save {}", ids.join(" "))
+                }
+                Effect::SaveRunning(r) => {
+                    let ids: Vec<&str> = r.operation.running.keys().map(String::as_str).collect();
+                    format!("running {}", ids.join(" "))
                 }
                 Effect::Cmux(_)
                 | Effect::Persist(_)
@@ -982,6 +1024,68 @@ mod tests {
             },
             epoch,
         }))
+    }
+
+    /// A frame where `a`'s chat `c` sits idle, and a state file where it
+    /// runs one shell.
+    fn idle_chat() -> Event {
+        let data = serde_json::json!({ "epoch": 1000, "workspaces": [
+            { "id": "a", "agents": [{ "id": "c", "status": "idle" }] }, { "id": "b" },
+        ]});
+        Event::Data(serde_json::from_value(data).unwrap())
+    }
+
+    fn running_shell(extra: &str) -> Event {
+        let json = format!(
+            r#"{{"background": {{"a": [{{"id": "b1", "type": "shell", "status": "running",
+                "description": "d", "session": "c", "startedEpoch": 900, "seenEpoch": 950}}]}}{extra}}}"#
+        );
+        Event::State(Box::new(SavedState::from_json(&json).unwrap()))
+    }
+
+    #[test]
+    fn the_sidebars_core_saves_a_background_verdict_once_until_the_file_shows_it() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let mut pane = Model::default();
+        let _ = app.update(running_shell(""), &mut pane);
+        assert_eq!(
+            asked(&app, &mut pane, idle_chat()),
+            ["render"],
+            "the pane never saves"
+        );
+
+        let _ = app.update(Event::PanelOn, &mut model);
+        let _ = app.update(running_shell(""), &mut model);
+        let mut cmd = app.update(idle_chat(), &mut model);
+        let saved: Vec<RunningSave> = cmd
+            .effects()
+            .filter_map(|e| match e {
+                Effect::SaveRunning(r) => Some(r.operation),
+                _ => None,
+            })
+            .collect();
+        let [save] = saved.as_slice() else {
+            panic!("one save, got {saved:?}")
+        };
+        let v = save.running.get("a").cloned().flatten();
+        assert_eq!(
+            v.as_ref().map(|v| (v.agent.as_str(), v.since)),
+            Some(("c", 900.0))
+        );
+        assert_eq!(save.running.len(), 1, "b runs nothing");
+        assert_eq!(
+            asked(&app, &mut model, idle_chat()),
+            ["render"],
+            "sent already"
+        );
+
+        // The file shows it: nothing more. The work ends: a delete.
+        let shown = r#", "running": {"a": {"agent": "c", "since": 900, "counts": [{"type": "shell", "n": 1}]}}"#;
+        assert_eq!(asked(&app, &mut model, running_shell(shown)), ["render"]);
+        let ended = r#"{"running": {"a": {"agent": "c", "since": 900, "counts": [{"type": "shell", "n": 1}]}}}"#;
+        let ended = Event::State(Box::new(SavedState::from_json(ended).unwrap()));
+        assert_eq!(asked(&app, &mut model, ended), ["running a", "render"]);
     }
 
     #[test]

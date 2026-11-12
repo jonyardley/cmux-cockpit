@@ -46,6 +46,7 @@ pub mod projects;
 pub mod prs;
 pub mod quiet;
 pub mod running;
+pub mod running_save;
 pub mod saved;
 pub mod session;
 pub mod shells;
@@ -63,7 +64,7 @@ pub mod words;
 
 pub use app::{
     AgentMessage, CmuxCall, Cockpit, CopyText, Effect, Event, Model, OpenUrl, PrAsk, PrSave,
-    StateSet, ViewModel,
+    RunningSave, StateSet, ViewModel,
 };
 pub use data::{Data, Workspace};
 pub use edit::EditEvent;

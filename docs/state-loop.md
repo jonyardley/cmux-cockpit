@@ -670,6 +670,23 @@ the order they take the state lock, since a payload carries no time of its
 own; a stale list that lands second holds a finished task until the next
 `Stop`.
 
+### The core's verdict for the agents panel
+
+The native core decides from this record whether a card says Running
+(`native/core/src/running.rs`), and saves what it found in a `running` map
+(#360), as the PR poll saves `prs` since #300, so the agents panel says
+the same: workspace id to `{"agent", "since", "counts": [{"type", "n"}]}`,
+the card's agent, when its earliest running work started, and a count per
+kind in the card's order. It saves the record, never the status: the panel
+says Running while that agent is idle, from cmux's live status
+(`src/shared/running.ts`). Only the core that draws the sidebar writes it,
+only an entry the file as last read does not hold, and only once until the
+file is read again (`native/core/src/running_save.rs`): its `SaveRunning`
+effect goes to the runner, which hands it to `scripts/running-save.sh` and
+`scripts/running-save.ts`, the same locked write and rebuild as
+`pr-save.ts`. The panel lags the card by that rebuild, about 20 seconds,
+and a verdict goes stale while no Cockpit sidebar runs. No URL writes it.
+
 ## Published pages and docs
 
 cmux knows nothing about the pages and docs agents publish on claude.ai

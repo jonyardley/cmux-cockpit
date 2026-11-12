@@ -12,10 +12,11 @@ import { type PrTone, prTone, shownTone } from "../shared/pr-colors.ts";
 import { type Project, projectOf, savedProjectFor } from "../shared/projects.ts";
 import { fromPoller, type PrSummary, prOf, prSummary } from "../shared/prs.ts";
 import { quietSuffix } from "../shared/quiet.ts";
+import { runningFor, shownStatus } from "../shared/running.ts";
 import { cardMessage, promptText } from "../shared/text.ts";
 import { ageSince, finishedAt, nowEpoch } from "../shared/time.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
-import { ASKING_WORD, NO_AGENT_WORD, STATUS_WORD, withAge } from "../shared/words.ts";
+import { ASKING_WORD, NO_AGENT_WORD, RUNNING_WORD, runningText, STATUS_WORD, withAge } from "../shared/words.ts";
 import { STATUS_DOT, T } from "./theme.ts";
 
 // ---- This workspace -------------------------------------------------------
@@ -104,8 +105,9 @@ export const cardLine = computed((): string => (currentAsk() ? "" : cardMessage(
  * message (issue #80), kept through a harness turn (shared/text.ts). */
 export const askedLine = computed((): string => promptText(cur().ws));
 
-/** Idle and no agent draw a hollow ring, as the left sidebar does. */
-export const hollowDot = (a: Agent | null): boolean => !a || a.status === "idle";
+/** Idle and no agent draw a hollow ring, as the left sidebar does; an idle
+ * agent that reads Running draws as working (shared/running.ts). */
+export const hollowDot = (a: Agent | null, w: Workspace = cur().ws): boolean => !a || shownStatus(a, w) === "idle";
 
 // The halo colour for each of shared/ui.ts's two haloed statuses; every
 // other status reads "clear" (haloColor falls back to it via haloStatus),
@@ -119,46 +121,62 @@ const isAsking = (a: Agent | null, w: Workspace): boolean => askReason(a, w) !==
 /** Board 1's soft halo round a live dot: working and needs only, as the left
  * sidebar rings them, amber while the agent is asking. */
 export const haloFor = (a: Agent | null, w: Workspace = cur().ws): string =>
-  isAsking(a, w) ? T.amberHalo : haloColor(a?.status, HALO_COLOR);
+  isAsking(a, w) ? T.amberHalo : haloColor(a ? shownStatus(a, w) : undefined, HALO_COLOR);
 
 /** An agent's dot: its status colour, amber while asking, grey without one. */
 export function dotFor(a: Agent | null, w: Workspace = cur().ws): string {
   if (!a) return T.grey;
-  return isAsking(a, w) ? T.amber : (a.status && STATUS_DOT[a.status]) || T.grey;
+  const s = shownStatus(a, w);
+  return isAsking(a, w) ? T.amber : (s && STATUS_DOT[s]) || T.grey;
 }
 
 /** The card head's status colour, amber while asking. */
 export function statusColor(a: Agent | null, w: Workspace = cur().ws): string {
   if (!a) return T.secondary;
-  return isAsking(a, w) ? T.amberText : (a.status && STATUS_TEXT[a.status]) || T.secondary;
+  const s = shownStatus(a, w);
+  return isAsking(a, w) ? T.amberText : (s && STATUS_TEXT[s]) || T.secondary;
 }
 
-// Idle and ended agents count from when they finished (issue #98), as the
-// cockpit's cards do; the rest from the start of their current status.
-function statusSince(a: Agent): number | undefined {
+// Running counts from when its earliest work started, as the card does;
+// idle and ended agents from when they finished (issue #98); the rest from
+// the start of their current status.
+function statusSince(a: Agent, w: Workspace): number | undefined {
+  const running = runningFor(a, w);
+  if (running) return running.since;
   return a.status === "idle" || a.status === "ended" ? finishedAt(a) : (a.sinceEpoch ?? a.lastActivityAt);
 }
 
-/** Short form for agent rows, the card head's words in lower case: "working 12m", "finished 3m". */
+/** Short form for agent rows, the card head's words in lower case: "working 12m", "running 4m", "finished 3m". */
 export function statusLine(a: Agent | null, w: Workspace = cur().ws): string {
-  return a ? withAge(statusWord(a, w).toLowerCase(), sinceAge(a)) : "";
+  return a ? withAge(statusWord(a, w).toLowerCase(), sinceAge(a, w)) : "";
 }
 
 /** The one age format the card shows: "<1m", "12m", counted from the
- * start of the status (idle and ended from when they finished); "" without
- * an agent or a timestamp. */
-export function sinceAge(a: Agent | null): string {
-  return a ? ageSince(statusSince(a)) : "";
+ * start of the status (Running from its earliest work, idle and ended from
+ * when they finished); "" without an agent or a timestamp. */
+export function sinceAge(a: Agent | null, w: Workspace = cur().ws): string {
+  return a ? ageSince(statusSince(a, w)) : "";
 }
 
-/** The card head's status, in the words the cockpit uses: "Working 14m", "Asking 2m", "Finished 3m", "No agent". */
+/** The card head's status, in the words the cockpit uses: "Working 14m",
+ * "Running 4m · 1 shell, 1 agent", "Asking 2m", "Finished 3m", "No agent". */
 export function headStatus(a: Agent | null, w: Workspace = cur().ws): string {
-  return a ? withAge(statusWord(a, w), sinceAge(a)) + quietSuffix(a, w) : NO_AGENT_WORD;
+  return a ? withAge(statusWord(a, w), sinceAge(a, w)) + runningTail(a, w) + quietSuffix(a, w) : NO_AGENT_WORD;
 }
 
-// The shared word for the agent's status, Asking while it asks.
-const statusWord = (a: Agent, w: Workspace): string =>
-  isAsking(a, w) ? ASKING_WORD : a.status ? (STATUS_WORD[a.status] ?? a.status) : NO_AGENT_WORD;
+// " · 1 shell, 1 agent" after a Running status, else "".
+function runningTail(a: Agent, w: Workspace): string {
+  const text = runningText(runningFor(a, w)?.counts ?? []);
+  return text ? " " + text : "";
+}
+
+// The shared word for the agent's status, Asking while it asks, Running
+// while the core's verdict says its chat still runs work.
+function statusWord(a: Agent, w: Workspace): string {
+  if (isAsking(a, w)) return ASKING_WORD;
+  if (runningFor(a, w)) return RUNNING_WORD;
+  return a.status ? (STATUS_WORD[a.status] ?? a.status) : NO_AGENT_WORD;
+}
 
 // The card's details
 

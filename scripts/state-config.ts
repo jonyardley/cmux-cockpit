@@ -64,6 +64,14 @@ export interface State {
    */
   background?: Record<string, SavedTask[]>;
   /**
+   * wsId -> the native core's background verdict for its card (#360): the
+   * card's agent, when its earliest running work started, and a count per
+   * kind, so the agents panel says Running when the card does. Written
+   * only by scripts/running-save.ts, from the core's SaveRunning effect,
+   * never by a URL. Left out while nothing is saved.
+   */
+  running?: Record<string, SavedRunning>;
+  /**
    * Claude Code session id -> the name its agent row shows, recorded by
    * scripts/hooks/report-rename.ts because cmux's own agent title is the
    * first message, which it cannot read for every Claude folder. Oldest
@@ -305,6 +313,27 @@ export interface SavedTask {
 /** Where a session's name came from: a `/rename`, or its first real prompt. */
 export type NameSource = "title" | "prompt";
 
+/** How many of one kind of background work a chat runs, in a saved verdict. */
+export interface SavedCount {
+  type: TaskType;
+  n: number;
+}
+
+/**
+ * The native core's background verdict for a card (native/core/src/running_save.rs):
+ * the chat it is about, when its earliest running work started, and how
+ * many of each kind run, in the card's order ("1 shell, 1 agent"). The
+ * panel says Running from it while that agent is idle, as the card does.
+ */
+export interface SavedRunning {
+  /** The card's agent: the chat whose work it counts. */
+  agent: string;
+  /** Epoch seconds the earliest of the work started. */
+  since: number;
+  /** One to MAX_COUNTS counts, each 1 to MAX_TASKS. */
+  counts: SavedCount[];
+}
+
 /** A session's name, as the hook saves it. */
 export interface SavedName {
   /** At most MAX_LABEL characters, cleaned as cleanLabel does. */
@@ -384,6 +413,9 @@ export const MAX_SHELLS = 10;
 export const MAX_TASKS = 20;
 /** The longest task status word kept. */
 export const MAX_STATUS = 32;
+
+/** The most kinds a saved verdict counts: one per task type (persist.rs MAX_COUNTS). */
+export const MAX_COUNTS = TASK_TYPES.length;
 
 /** Agent tabs kept asleep per workspace, so a bad write cannot bloat the file. */
 export const MAX_ASLEEP = 10;
@@ -855,6 +887,22 @@ function savedTasks(v: unknown): SavedTask[] | null {
   return tasks.length ? tasks : null;
 }
 
+function savedCount(v: unknown): SavedCount | null {
+  if (!isRecord(v) || typeof v.type !== "string") return null;
+  const { n } = v;
+  return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= MAX_TASKS
+    ? { type: taskType(v.type), n }
+    : null;
+}
+
+/** A saved verdict as persist.rs's running_map reads it: dropped whole if any part does not fit. */
+function savedRunning(v: unknown): SavedRunning | null {
+  if (!isRecord(v) || !isIdText(v.agent) || !isEpoch(v.since) || !Array.isArray(v.counts)) return null;
+  const counts = v.counts.map(savedCount);
+  const fits = counts.length >= 1 && counts.length <= MAX_COUNTS && counts.every((c) => c !== null);
+  return fits ? { agent: v.agent, since: v.since, counts: counts.filter((c) => c !== null) } : null;
+}
+
 function savedAsleep(v: unknown): SavedAsleep | null {
   if (!isRecord(v) || !Array.isArray(v.surfaces) || !isEpoch(v.since)) return null;
   const surfaces = v.surfaces.filter(isIdText);
@@ -884,6 +932,7 @@ export function validateState(raw: unknown): State {
   const poll = savedPoll(v.poll);
   const shells = cleanMap(v.shells, savedShells);
   const background = cleanMap(v.background, savedTasks);
+  const running = cleanMap(v.running, savedRunning);
   const laneNames = cleanMap(v.laneNames, laneName);
   const asleep = cleanMap(v.asleep, savedAsleep);
   return {
@@ -901,6 +950,7 @@ export function validateState(raw: unknown): State {
     ui: uiState(v.ui),
     ...(Object.keys(shells).length ? { shells } : {}),
     ...(Object.keys(background).length ? { background } : {}),
+    ...(Object.keys(running).length ? { running } : {}),
     ...(Object.keys(laneNames).length ? { laneNames } : {}),
     ...(Object.keys(asleep).length ? { asleep } : {}),
     ...(poll ? { poll } : {}),
@@ -909,7 +959,7 @@ export function validateState(raw: unknown): State {
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
+// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
 type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves" | "laneNames" | "asleep";
