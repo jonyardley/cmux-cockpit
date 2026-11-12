@@ -10,8 +10,10 @@
 //! gone ends its work here at once; the hook's prune removes the entry
 //! from the file later, since the core never writes this map.
 //!
-//! Nothing reads this yet: the card's status and words take it up in a
-//! later change (#359).
+//! The card's Running status reads it through `crate::running`, and the
+//! core saves what it found for the agents panel (`crate::running_save`).
+//! It is the one record of background work: the old `shells` map and the
+//! subagent pause check retired in #361.
 
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::owner::owns;
@@ -30,8 +32,8 @@ pub fn live_tasks<'s>(
     if a.status == Some(AgentStatus::Ended) {
         return Vec::new();
     }
-    // The same agents a saved shell is matched against (`crate::shells`):
-    // those cmux reports a status for.
+    // The same agents a saved subagent run is matched against
+    // (`Session::agents_of`): those cmux reports a status for.
     let agents = w.agent_list().filter(|x| x.status.is_some());
     saved.background.get(&w.id).map_or_else(Vec::new, |tasks| {
         tasks
@@ -109,6 +111,17 @@ mod tests {
         let saved = SavedState::from_json(STATE).unwrap();
         let a = agent("new", Some(AgentStatus::Idle), &[]);
         let w = workspace(std::slice::from_ref(&a));
+        assert!(live_tasks(&saved, Some(&w), Some(&a)).is_empty());
+    }
+
+    #[test]
+    fn a_workspace_with_nothing_saved_counts_nothing() {
+        let saved = SavedState::from_json(STATE).unwrap();
+        let a = agent("now", Some(AgentStatus::Idle), &["before"]);
+        let w = Workspace {
+            id: "w2".to_string(),
+            ..workspace(std::slice::from_ref(&a))
+        };
         assert!(live_tasks(&saved, Some(&w), Some(&a)).is_empty());
     }
 }

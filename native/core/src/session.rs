@@ -22,6 +22,7 @@ use crate::persist::{ProjectSpec, SavedState, ViewMode, persist_url};
 use crate::pr_poll::PrPoll;
 use crate::projects::{Project, is_project_key};
 use crate::state::{DragState, SelectOverride};
+use crate::status::CardRunning;
 use crate::text::PromptMemory;
 
 /// A value in a cmux request's parameters.
@@ -183,6 +184,14 @@ pub struct Session {
     // cockpit/lane-entries.ts: the rank each card last had while not
     // selected, so an opened card keeps its place until Jon moves on.
     pub(crate) held_rank: HashMap<String, u8>,
+
+    /// Each card's agent and the background work its chat runs, by
+    /// workspace id, read once while a frame is built (`Model::rebuild`,
+    /// and `Panel::from_core` for the terminal pane's own panel):
+    /// the status, its line and age, the chips, the helper words, lane
+    /// order and the saved verdicts all ask the same question of a card
+    /// (#359). None between frames, so a read outside one is always fresh.
+    pub(crate) card_memo: Option<HashMap<String, CardRunning>>,
 
     // cockpit/next.ts: the last workspace Next opened, and what followed it.
     pub(crate) last_jump: Option<LastJump>,

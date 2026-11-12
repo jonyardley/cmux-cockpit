@@ -598,3 +598,12 @@ test("asleep keeps each workspace's sleeping agent tabs, and is left out while e
   assert.equal(urlMaySet("asleep.w1"), true);
   assert.equal(rebuildsOn("asleep.w1"), false);
 });
+
+test("validateState drops the retired shells map and a run's background flag (#361)", () => {
+  const run = { id: "toolu_1", session: "s1", label: "Review", startedEpoch: 100 };
+  for (const shells of [{ w1: [{ id: "b1", session: "s1", startedEpoch: 100 }] }, 3, null, "x"]) {
+    const state = validateState({ shells, subagents: { w1: [{ ...run, background: true }] } });
+    assert.equal(Object.hasOwn(state, "shells"), false);
+    assert.deepEqual(state.subagents, { w1: [run] });
+  }
+});

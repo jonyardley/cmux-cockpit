@@ -48,14 +48,6 @@ export interface State {
    */
   subagents: Record<string, SavedSubagent[]>;
   /**
-   * wsId -> the background shells its chats have running, oldest first,
-   * recorded by scripts/hooks/report-shell.ts because cmux sends custom
-   * sidebars none. A shell is removed once Claude Code reports it done.
-   * Written only by the hook, never by a URL. Left out while nothing is
-   * saved, so a file from before it existed reads the same.
-   */
-  shells?: Record<string, SavedShell[]>;
-  /**
    * wsId -> the background work its chats have running, as Claude Code
    * lists it on Stop and SubagentStop (`background_tasks`), recorded by
    * scripts/hooks/report-background.ts because cmux sends custom sidebars
@@ -254,20 +246,6 @@ export interface SavedSubagent {
   startedEpoch: number;
   /** Epoch seconds the run stopped; absent while it runs. */
   endedEpoch?: number;
-  /** True for an Agent call made with run_in_background: its Stop may be
-   * a pause while it waits on its own background work
-   * (scripts/hooks/subagent-work.ts). Absent for a foreground run. */
-  background?: true;
-}
-
-/** A background shell a chat started, as report-shell.ts saves it. */
-export interface SavedShell {
-  /** Claude Code's task id for it, which its task-notification names. */
-  id: string;
-  /** The Claude Code session that started it. */
-  session: string;
-  /** Epoch seconds it started. */
-  startedEpoch: number;
 }
 
 /**
@@ -407,9 +385,6 @@ export interface SavedMove {
 export const MAX_MOVE = 200;
 /** The most decisions one reply is counted as laying out. */
 export const MAX_DECISIONS = 9;
-
-/** Shells kept per workspace, newest kept, so a runaway loop cannot bloat the file. */
-export const MAX_SHELLS = 10;
 
 /** Background tasks kept per workspace, the last listed kept, so a runaway loop cannot bloat the file. */
 export const MAX_TASKS = 20;
@@ -644,7 +619,7 @@ const isOptionalId = (v: unknown): boolean => v === undefined || (typeof v === "
 
 function savedSubagent(v: unknown): SavedSubagent[] {
   if (!isRecord(v) || !isLabel(v.label) || !isEpoch(v.startedEpoch)) return [];
-  const { id, session, agentId, type, endedEpoch, background } = v;
+  const { id, session, agentId, type, endedEpoch } = v;
   if (typeof id !== "string" || !isId(id) || typeof session !== "string" || !isId(session)) return [];
   if (!isOptionalId(agentId) || !isOptionalId(type)) return [];
   if (endedEpoch !== undefined && !isEpoch(endedEpoch)) return [];
@@ -652,7 +627,6 @@ function savedSubagent(v: unknown): SavedSubagent[] {
   if (typeof agentId === "string") run.agentId = agentId;
   if (typeof type === "string") run.type = type;
   if (isEpoch(endedEpoch)) run.endedEpoch = endedEpoch;
-  if (background === true) run.background = true;
   return [run];
 }
 
@@ -841,16 +815,6 @@ function savedName(v: unknown): SavedName | null {
   return isRecord(v) && isLabel(v.name) && isSource(v.from) ? { name: v.name, from: v.from } : null;
 }
 
-function savedShell(v: unknown): SavedShell[] {
-  if (!isRecord(v) || !isIdText(v.id) || !isIdText(v.session) || !isEpoch(v.startedEpoch)) return [];
-  return [{ id: v.id, session: v.session, startedEpoch: v.startedEpoch }];
-}
-
-function savedShells(v: unknown): SavedShell[] | null {
-  const shells = Array.isArray(v) ? v.flatMap(savedShell).slice(-MAX_SHELLS) : [];
-  return shells.length ? shells : null;
-}
-
 const KNOWN_TYPES: readonly unknown[] = TASK_TYPES;
 const isTaskType = (v: unknown): v is TaskType => KNOWN_TYPES.includes(v);
 
@@ -928,11 +892,15 @@ function cleanMap<T>(v: unknown, clean: (value: unknown, id: string) => T | null
   return Object.fromEntries(kept.slice(-MAX_ENTRIES));
 }
 
-/** Reads whatever is in the file into a State, dropping anything malformed. */
+/**
+ * Reads whatever is in the file into a State, dropping anything malformed.
+ * A map or field it no longer keeps (the `shells` map and a run's
+ * `background` flag, retired in #361) is dropped, so the next write takes
+ * it out of the file.
+ */
 export function validateState(raw: unknown): State {
   const v = isRecord(raw) ? raw : {};
   const poll = savedPoll(v.poll);
-  const shells = cleanMap(v.shells, savedShells);
   const background = cleanMap(v.background, savedTasks);
   const running = cleanMap(v.running, savedRunning);
   const laneNames = cleanMap(v.laneNames, laneName);
@@ -950,7 +918,6 @@ export function validateState(raw: unknown): State {
     asking: cleanMap(v.asking, savedAsk),
     moves: cleanMap(v.moves, savedMove),
     ui: uiState(v.ui),
-    ...(Object.keys(shells).length ? { shells } : {}),
     ...(Object.keys(background).length ? { background } : {}),
     ...(Object.keys(running).length ? { running } : {}),
     ...(Object.keys(laneNames).length ? { laneNames } : {}),

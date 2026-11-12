@@ -43,14 +43,11 @@ describe("matches", () => {
 describe("scriptsFor", () => {
   it("picks tool events' scripts by tool name", () => {
     assert.deepEqual(scriptsFor("PreToolUse", { tool_name: "Agent" }), ["report-subagent.ts"]);
-    assert.deepEqual(scriptsFor("PostToolUse", { tool_name: "Agent" }), ["report-subagent.ts"]);
+    assert.deepEqual(scriptsFor("PostToolUse", { tool_name: "Agent" }), []);
+    assert.deepEqual(scriptsFor("PostToolUse", { tool_name: "KillShell" }), []);
     assert.deepEqual(scriptsFor("PreToolUse", { tool_name: "ExitPlanMode" }), ["report-notification.ts"]);
     assert.deepEqual(scriptsFor("PreToolUse", { tool_name: "Read" }), []);
-    assert.deepEqual(scriptsFor("PostToolUse", { tool_name: "Bash" }), [
-      "report-pr.ts",
-      "report-shell.ts",
-      "report-background.ts",
-    ]);
+    assert.deepEqual(scriptsFor("PostToolUse", { tool_name: "Bash" }), ["report-pr.ts", "report-background.ts"]);
     assert.deepEqual(scriptsFor("PostToolUse", { tool_name: "mcp__claude_ai_Claude_Docs__update" }), [
       "report-published.ts",
     ]);
@@ -64,12 +61,7 @@ describe("scriptsFor", () => {
   });
 
   it("runs an unmatched route every time, even when the input did not parse", () => {
-    assert.deepEqual(scriptsFor("Stop", {}), [
-      "report-move.ts",
-      "report-rename.ts",
-      "report-shell.ts",
-      "report-background.ts",
-    ]);
+    assert.deepEqual(scriptsFor("Stop", {}), ["report-move.ts", "report-rename.ts", "report-background.ts"]);
     assert.deepEqual(scriptsFor("SubagentStop", null), ["report-subagent.ts", "report-background.ts"]);
     assert.deepEqual(scriptsFor("PermissionRequest", { tool_name: "Bash" }), ["report-notification.ts"]);
     assert.deepEqual(scriptsFor("SessionStart", null), ["report-rename.ts"]);

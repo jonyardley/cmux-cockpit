@@ -56,7 +56,6 @@ fn a_state_with_every_entry_reads_back_the_same() {
         "ownPrs": {"x": {"any": 1}},
         "subagents": {"w": [{"id": "s", "session": "a", "type": "task", "label": "L",
                              "startedEpoch": 5, "endedEpoch": 6}]},
-        "shells": {"w": [{"id": "sh", "session": "a", "startedEpoch": 5}]},
         "names": {"a": "Name"},
         "published": {"a": 1},
         "prOrigins": {"a": "o"},

@@ -41,7 +41,7 @@ import { logLine } from "../state-log.ts";
 import { readApplyWrite } from "../state-url.ts";
 import { type DescriptionRead, readDescription, withDescriptionLock, writeDescription } from "./description.ts";
 import { field } from "./gh-command.ts";
-import { readTail, replyFrom, sleep } from "./transcript.ts";
+import { readTail, replyFrom, sleep, TAIL_BYTES } from "./transcript.ts";
 
 // The line's label as Jon's rules write it: "Your move:" when the turn
 // waits on Jon, "Nothing for you:" when it waits on the agent. Markdown the
@@ -230,8 +230,6 @@ export function lastReply(lines: readonly string[]): string {
 }
 
 const STATE_PATH = join(import.meta.dirname, "..", "..", "config", "state.json");
-/** The most of a transcript read: the final reply is at its end. */
-const TAIL_BYTES = 2 * 1024 * 1024;
 // How long to wait for the final reply to be flushed before the one reread.
 const RETRY_MS = 1500;
 

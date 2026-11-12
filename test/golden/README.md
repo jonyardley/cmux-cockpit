@@ -68,11 +68,10 @@ What the scene starts from: the three things the sidebar reads.
 | `projects[].color` | string | Its colour, hex. |
 | `projects[].icon` | string | Its SF Symbol name. |
 | `projects[].root` | string | The folder a new session opens in; absent when it has none. |
-| `state` | object | The saved state the build bakes in (scripts/state-config.ts `State`). Every required field is present, as an empty object when nothing is saved. The optional ones (`shells`, `background`, `poll`, and `ui.mode` and `ui.collapsed` inside `ui`) are left out when unset: read a missing one as empty, and a missing `ui.mode` as "all". |
+| `state` | object | The saved state the build bakes in (scripts/state-config.ts `State`). Every required field is present, as an empty object when nothing is saved. The optional ones (`background`, `poll`, and `ui.mode` and `ui.collapsed` inside `ui`) are left out when unset: read a missing one as empty, and a missing `ui.mode` as "all". |
 | `state.asking` | object | wsId to `{ reason, epoch }`: why its agent last stopped to ask. |
 | `state.moves` | object | wsId to the "Your move" line its chat last ended on: `text`, `epoch`, `session`, optionally `decisions`, `leans`. |
 | `state.prs` | object | wsId to the poller's PR for its branch: `url`, `number`, `status`, `branch`, `title`, `checks` (`{ name, state }`, state "pass", "fail" or "pending"), optionally `mergeable`, `conflicts`, `draft`, `additions`, `deletions`. |
-| `state.shells` | object, optional | wsId to its running background shells: `id`, `session` (the agent id that started it), `startedEpoch`. The card's status no longer reads it (#359); kept until #361 retires it. |
 | `state.background` | object, optional | wsId to the background work its chats run (docs/state-loop.md, Background work): `id`, `type` ("shell", "subagent", "session" and the rest), `status`, `description`, `session` (the chat that listed it), `startedEpoch`, `seenEpoch`. The card's Running status reads it. |
 | `state.ui` | object | `mode` ("all" or "projects", optional) and `collapsed` (optional: "lane:<key>" or "project:<key>" to 1 folded, 0 unfolded). |
 | `state.poll` | object, optional | How the PR poller's last runs went: `okEpoch` (its last success) and `error` ("unavailable", "signed-out" or "missing"). Unset in every scene here. |

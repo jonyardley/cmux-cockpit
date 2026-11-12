@@ -127,6 +127,7 @@ describe("settledPr", () => {
     for (const tool_response of [
       { stdout: "", backgroundTaskId: "b1", timedOutAfterMs: 600000 },
       { stdout: "", backgroundTaskId: "b1" },
+      { stdout: "", backgroundTaskId: "b1", backgroundedToDeliverMessage: true },
     ]) {
       assert.equal(settledPr({ ...event, tool_response }), false);
     }

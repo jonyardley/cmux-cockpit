@@ -49,7 +49,6 @@ pub mod running;
 pub mod running_save;
 pub mod saved;
 pub mod session;
-pub mod shells;
 pub mod sleep;
 pub mod state;
 pub mod status;

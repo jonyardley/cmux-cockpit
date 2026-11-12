@@ -14,12 +14,12 @@ import {
   foldFor,
   type ListedTask,
   listedTasks,
+  MAX_AGE_S,
   pidFrom,
   prune,
   unstamped,
   update,
 } from "../scripts/hooks/report-background.ts";
-import { MAX_AGE_S } from "../scripts/hooks/report-shell.ts";
 import { isRecord, MAX_TASKS, type SavedTask, type State, validateState } from "../scripts/state-config.ts";
 
 type BackgroundMap = NonNullable<State["background"]>;

@@ -14,8 +14,7 @@ import {
   type SessionStates,
   sessionStates,
 } from "../scripts/hooks/bg-sessions.ts";
-import { foldFor, type Reads } from "../scripts/hooks/report-background.ts";
-import { MAX_AGE_S } from "../scripts/hooks/report-shell.ts";
+import { foldFor, MAX_AGE_S, type Reads } from "../scripts/hooks/report-background.ts";
 import { isRecord, MAX_TASKS, type SavedTask, type State, validateState } from "../scripts/state-config.ts";
 
 type BackgroundMap = NonNullable<State["background"]>;

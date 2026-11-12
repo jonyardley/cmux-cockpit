@@ -612,7 +612,22 @@ impl Model {
         }
     }
 
+    /// Builds the frame's view, reading each card's work once.
     fn rebuild(&mut self) {
+        self.framed(Model::build);
+    }
+
+    /// Runs `f` inside a frame (`Session::framed`), with the whole model.
+    fn framed<R>(&mut self, f: impl FnOnce(&mut Model) -> R) -> R {
+        let opened = self.session.begin_frame();
+        let out = f(self);
+        if opened {
+            self.session.end_frame();
+        }
+        out
+    }
+
+    fn build(&mut self) {
         if let Some(data) = &self.data {
             self.session.close_stale_menu(data);
         }
@@ -682,11 +697,14 @@ impl App for Cockpit {
         }
         model.session.tend_filter();
         model.overlay();
-        model.rebuild();
+        // The verdicts read the same cards as the view, in the same frame.
+        let saves = model.framed(|m| {
+            m.build();
+            m.running_writes()
+        });
         let now = model.data.as_ref().and_then(|d| d.epoch);
         let asks = model.asks(now);
         let out = model.session.take_outbox().into_iter().map(send_out);
-        let saves = model.running_writes();
         Command::all(
             out.chain(asks)
                 .chain(saves)
@@ -1089,6 +1107,75 @@ mod tests {
         let ended = r#"{"running": {"a": {"agent": "c", "since": 900, "counts": [{"type": "shell", "n": 1}]}}}"#;
         let ended = Event::State(Box::new(SavedState::from_json(ended).unwrap()));
         assert_eq!(asked(&app, &mut model, ended), ["running a", "render"]);
+    }
+
+    /// Card `id` as the sidebar's panel shows it.
+    fn card_in(model: &Model, id: &str) -> Option<crate::panel::Card> {
+        let panel = model.view.panel.as_ref();
+        let rows = panel
+            .into_iter()
+            .flat_map(|p| &p.lanes)
+            .flat_map(|l| &l.rows);
+        rows.map(crate::panel::Row::card)
+            .find(|c| c.ws_id == id)
+            .cloned()
+    }
+
+    /// The frame `update` built, its cards' work read once and shared by
+    /// lane order, the panel and the verdicts, against lane order built
+    /// with no memo and a panel built on a memo of its own: lane order,
+    /// headers and every card's words agree. Then card `a`'s status line,
+    /// read inside a frame (a memo hit) and outside one: the same.
+    fn agreed_status(model: &mut Model) -> String {
+        assert!(model.session.card_memo.is_none(), "no memo between frames");
+        let Some(data) = model.data.clone() else {
+            panic!("the frame is held")
+        };
+        let mut lanes = build_view(&mut model.session, &data);
+        lanes.panel = model.view.panel.clone();
+        assert_eq!(lanes, model.view, "lane order and headers");
+        let fresh = Panel::from_core(model);
+        assert_eq!(Some(fresh), model.view.panel, "every card's words");
+        assert!(
+            model.session.card_memo.is_none(),
+            "the panel closed its own"
+        );
+
+        let w = data.ws_by_id("a");
+        assert!(model.session.begin_frame());
+        let _ = build_view(&mut model.session, &data);
+        let memo = model.session.card_memo.as_ref();
+        assert!(memo.is_some_and(|m| m.contains_key("a")), "a was read");
+        assert!(!model.session.begin_frame(), "a nested open leaves it be");
+        let _ = Panel::from_core(model);
+        assert!(model.session.card_memo.is_some(), "and so does the panel");
+        let inside = model.session.status_line(&data, w);
+        model.session.end_frame();
+        let outside = model.session.status_line(&data, w);
+        assert_eq!(inside, outside);
+        outside
+    }
+
+    #[test]
+    fn a_frame_reads_each_cards_work_once_and_the_next_frame_reads_it_afresh() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(Event::PanelOn, &mut model);
+        let _ = app.update(running_shell(""), &mut model);
+        let _ = app.update(idle_chat(), &mut model);
+        assert_eq!(agreed_status(&mut model), "Running 1m · 1 shell");
+        let running = card_in(&model, "a");
+        assert!(running.is_some(), "the card is drawn");
+
+        // The work ends between frames: every reader moves with it.
+        let shown = r#"{"running": {"a": {"agent": "c", "since": 900, "counts": [{"type": "shell", "n": 1}]}}}"#;
+        let ended = Event::State(Box::new(SavedState::from_json(shown).unwrap()));
+        assert_eq!(asked(&app, &mut model, ended), ["running a", "render"]);
+        assert!(agreed_status(&mut model).starts_with("Idle"));
+        assert_ne!(card_in(&model, "a"), running, "the card moved too");
+        let _ = app.update(running_shell(""), &mut model);
+        assert_eq!(agreed_status(&mut model), "Running 1m · 1 shell");
+        assert_eq!(card_in(&model, "a"), running);
     }
 
     #[test]

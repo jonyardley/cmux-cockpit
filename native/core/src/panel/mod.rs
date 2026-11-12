@@ -589,6 +589,9 @@ pub struct Panel {
 impl Panel {
     /// The pane's model for the core's current frame. With no frame yet,
     /// only the lanes' frame of headers is unknown, so the pane is empty.
+    /// Each card's work is read once for the whole panel: inside the
+    /// sidebar's frame that is the frame's read, and the terminal pane,
+    /// which builds its panel after the frame, reads it once here.
     pub fn from_core(core: &mut Model) -> Panel {
         let Model {
             session,
@@ -597,7 +600,7 @@ impl Panel {
             ..
         } = core;
         match data {
-            Some(data) => build::build(session, data, view),
+            Some(data) => session.framed(|s| build::build(s, data, view)),
             None => Panel {
                 view: view_of(view),
                 ..Panel::default()

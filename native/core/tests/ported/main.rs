@@ -30,6 +30,6 @@ mod next;
 mod projects_edit;
 mod ready;
 mod reveal;
-mod shells_saved;
+mod running_saved;
 mod state_seed;
 mod ui_seed;

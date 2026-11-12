@@ -177,7 +177,6 @@
     "projects": {},
     "prs": {},
     "published": {},
-    "shells": { "waiting": [{ "id": "b1", "session": "shell-chat", "startedEpoch": 999700 }] },
     "subagents": {},
     "ui": {}
   }

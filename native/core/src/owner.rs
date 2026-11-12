@@ -1,10 +1,10 @@
 //! Which chat a saved piece of background work belongs to. The hooks save
-//! shells and subagent runs under the session id they started in, but
+//! background tasks and subagent runs under the session id they started in, but
 //! `/clear` gives a chat a new session id in the same Claude process while
 //! that work runs on. So a chat owns work saved under its current session
 //! id or any id its process ran under before (`Agent::earlier_sessions`,
-//! from the runner's memory of Agent View). Every match of a saved shell
-//! or subagent run to a chat goes through here. Saved asks and moves stay
+//! from the runner's memory of Agent View). Every match of a saved
+//! background task or subagent run to a chat goes through here. Saved asks and moves stay
 //! on the current id: they belong to a turn, and a clear starts afresh.
 //! The one exception is the Ready guard's "Nothing for you" check
 //! (`crate::moves::chat_quiet_move`), which looks under earlier ids too.
