@@ -325,7 +325,11 @@ export function writeShells(
 /**
  * Folds `update` over the whole `background` map
  * (scripts/hooks/report-background.ts), under the same lock, with keys
- * sorted as writeShells sorts them.
+ * sorted as writeShells sorts them. A workspace left with no work also
+ * loses the native core's verdict for it (#360): the core never says
+ * Running without work in this record, and only the core that draws the
+ * Cockpit sidebar deletes a verdict, so with the Cockpit closed the
+ * agents panel would otherwise say Running until it next opens.
  */
 export function writeBackground(
   path: string,
@@ -333,7 +337,12 @@ export function writeBackground(
 ): ApplyResult {
   return readUpdateWrite(path, (before) => {
     const background = sortedByKey(update(before.background ?? {}));
-    return { ok: true, state: validateState({ ...before, background }) };
+    const running = Object.fromEntries(
+      Object.entries(before.running ?? {}).filter(
+        ([ws]) => !!(Object.hasOwn(background, ws) && background[ws]?.length),
+      ),
+    );
+    return { ok: true, state: validateState({ ...before, background, running }) };
   });
 }
 

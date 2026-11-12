@@ -71,6 +71,13 @@ describe("saved helper count", () => {
   it("counts a run under a session no agent has for each chat, as it may be from before a /clear", () => {
     const now = agent("working", { id: "after-clear" });
     assert.equal(liveRunCount(ws("w1", { agents: [now] }), now), 2);
+    // Two chats: the panel cannot tell whose it was, so each counts it,
+    // where the core gives it to the one that ran under that id. Neither
+    // reads quiet until the hook prunes the run.
+    const second = agent("working", { id: "second" });
+    const both = ws("w1", { agents: [now, second] });
+    assert.equal(liveRunCount(both, now), 2);
+    assert.equal(liveRunCount(both, second), 2);
   });
 
   it("counts nothing for a workspace with no saved runs", () => {

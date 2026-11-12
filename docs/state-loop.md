@@ -680,12 +680,18 @@ the card's agent, when its earliest running work started, and a count per
 kind in the card's order. It saves the record, never the status: the panel
 says Running while that agent is idle, from cmux's live status
 (`src/shared/running.ts`). Only the core that draws the sidebar writes it,
-only an entry the file as last read does not hold, and only once until the
-file is read again (`native/core/src/running_save.rs`): its `SaveRunning`
-effect goes to the runner, which hands it to `scripts/running-save.sh` and
+only an entry the file as last read does not hold and the file's contract
+keeps, and only once until the file is read again or a minute passes
+without the file showing it, so a save that failed goes out again
+(`native/core/src/running_save.rs`): its `SaveRunning` effect goes to the
+runner, which hands it to `scripts/running-save.sh` and
 `scripts/running-save.ts`, the same locked write and rebuild as
-`pr-save.ts`. The panel lags the card by that rebuild, about 20 seconds,
-and a verdict goes stale while no Cockpit sidebar runs. No URL writes it.
+`pr-save.ts`. The panel lags the card by that rebuild, about 20 seconds.
+A verdict could go stale while no Cockpit sidebar runs, so the background
+hook's own write (`writeBackground`) also drops the verdict of a
+workspace it leaves with no work: the core never says Running without it.
+A `claude --bg` session is the gap, since only the runner can say it has
+settled; the hook's 12 hour prune bounds it. No URL writes it.
 
 ## Published pages and docs
 

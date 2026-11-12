@@ -597,8 +597,11 @@ impl Model {
         if !self.panel_on {
             return None;
         }
-        let now = verdicts(&mut self.session, self.data.as_ref()?)?;
-        let running = self.running_saves.writes(&self.session.saved.running, &now);
+        let data = self.data.as_ref()?;
+        let now = verdicts(&mut self.session, data)?;
+        let running = self
+            .running_saves
+            .writes(&self.session.saved.running, &now, data.epoch);
         (!running.is_empty()).then(|| Command::notify_shell(RunningSave { running }).into())
     }
 

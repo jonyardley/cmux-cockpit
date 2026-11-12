@@ -17,14 +17,22 @@
 use std::collections::BTreeMap;
 
 use crate::data::Data;
-use crate::persist::{SavedCount, SavedRunning};
+use crate::persist::{SavedCount, SavedRunning, is_id};
 use crate::running::running_work;
 use crate::session::Session;
 
-/// What the core sent for the `running` map since it last read the file.
+/// How long a sent write waits for the file to show it before it goes
+/// out again, in seconds of the frame's clock: a save that failed (the
+/// state file's lock held, no node) is retried rather than lost until some
+/// other writer changes the file. Well past the watcher's poll and the
+/// script's own lock wait, so a save that worked is never sent twice.
+pub const RESEND_SECS: f64 = 60.0;
+
+/// What the core sent for the `running` map since it last read the file,
+/// and when, by the frame's clock.
 #[derive(Debug, Clone, Default)]
 pub struct RunningSaves {
-    sent: BTreeMap<String, Option<SavedRunning>>,
+    sent: BTreeMap<String, (Option<SavedRunning>, Option<f64>)>,
 }
 
 impl RunningSaves {
@@ -35,14 +43,27 @@ impl RunningSaves {
         self.sent.clear();
     }
 
+    /// Whether `v` went out for `id` less than RESEND_SECS before `epoch`.
+    /// Without a clock on either side, a send holds until the next read.
+    fn sent_lately(&self, id: &str, v: &Option<SavedRunning>, epoch: Option<f64>) -> bool {
+        match self.sent.get(id) {
+            Some((was, at)) if was == v => match (*at, epoch) {
+                (Some(at), Some(now)) => now - at < RESEND_SECS,
+                _ => true,
+            },
+            _ => false,
+        }
+    }
+
     /// The writes that bring `file` (the `running` map as last read) to
     /// `now`: each verdict it does not hold, and None for each entry it
-    /// holds that `now` has not, less what was already sent. Marks them
-    /// sent.
+    /// holds that `now` has not, less what was sent within RESEND_SECS of
+    /// `epoch` (the frame's clock). Marks them sent at `epoch`.
     pub fn writes(
         &mut self,
         file: &BTreeMap<String, SavedRunning>,
         now: &BTreeMap<String, SavedRunning>,
+        epoch: Option<f64>,
     ) -> BTreeMap<String, Option<SavedRunning>> {
         let set = now
             .iter()
@@ -54,10 +75,10 @@ impl RunningSaves {
             .map(|id| (id.clone(), None));
         let out: BTreeMap<String, Option<SavedRunning>> = set
             .chain(gone)
-            .filter(|(id, v)| self.sent.get(id) != Some(v))
+            .filter(|(id, v)| !self.sent_lately(id, v, epoch))
             .collect();
         self.sent
-            .extend(out.iter().map(|(id, v)| (id.clone(), v.clone())));
+            .extend(out.iter().map(|(id, v)| (id.clone(), (v.clone(), epoch))));
         out
     }
 }
@@ -65,7 +86,9 @@ impl RunningSaves {
 /// Each workspace's verdict in `data`: its card's agent and the work that
 /// agent's chat runs, for every workspace whose chat runs any. None when
 /// the frame lists no workspaces, so a frame that briefly lacks them
-/// never deletes every saved verdict.
+/// never deletes every saved verdict. Only a verdict the state file's
+/// contract keeps (`SavedRunning::fits`, an id for the workspace) is
+/// given, so the script never refuses one that would then go out again.
 pub fn verdicts(session: &mut Session, data: &Data) -> Option<BTreeMap<String, SavedRunning>> {
     let list = data.workspaces.as_deref().filter(|l| !l.is_empty())?;
     let mut out = BTreeMap::new();
@@ -81,14 +104,14 @@ pub fn verdicts(session: &mut Session, data: &Data) -> Option<BTreeMap<String, S
             .into_iter()
             .map(|(kind, n)| SavedCount { kind, n })
             .collect();
-        out.insert(
-            w.id.clone(),
-            SavedRunning {
-                agent: a.id.clone(),
-                since: r.since,
-                counts,
-            },
-        );
+        let v = SavedRunning {
+            agent: a.id.clone(),
+            since: r.since,
+            counts,
+        };
+        if is_id(&w.id) && v.fits() {
+            out.insert(w.id.clone(), v);
+        }
     }
     Some(out)
 }
@@ -188,25 +211,85 @@ mod tests {
         let file = map(&[("w1", one.clone()), ("w9", one.clone())]);
         let now = map(&[("w1", one.clone()), ("w2", two.clone())]);
 
-        let first = saves.writes(&file, &now);
+        let first = saves.writes(&file, &now, Some(1000.0));
         let want: BTreeMap<String, Option<SavedRunning>> = [
             ("w2".to_string(), Some(two.clone())),
             ("w9".to_string(), None),
         ]
         .into();
         assert_eq!(first, want, "w1 is in the file already");
-        assert!(saves.writes(&file, &now).is_empty(), "sent, not yet read");
+        assert!(
+            saves.writes(&file, &now, Some(1000.0)).is_empty(),
+            "sent, not yet read"
+        );
 
         // A change before the file catches up still goes out.
         let changed = map(&[("w1", one.clone()), ("w2", one.clone())]);
-        let next = saves.writes(&file, &changed);
+        let next = saves.writes(&file, &changed, Some(1000.0));
         assert_eq!(next.get("w2"), Some(&Some(one.clone())));
         assert_eq!(next.len(), 1);
 
         // A read that still lacks it sends it again; one that holds it, nothing.
         saves.file_read();
-        assert_eq!(saves.writes(&file, &changed).len(), 2);
+        assert_eq!(saves.writes(&file, &changed, Some(1000.0)).len(), 2);
         saves.file_read();
-        assert!(saves.writes(&changed, &changed).is_empty());
+        assert!(saves.writes(&changed, &changed, Some(1000.0)).is_empty());
+    }
+
+    #[test]
+    fn sends_a_write_the_file_still_lacks_again_after_a_minute() {
+        let mut saves = RunningSaves::default();
+        let one = verdict("c", 100.0, &[(TaskType::Shell, 1)]);
+        let file = BTreeMap::new();
+        let now = map(&[("w1", one.clone())]);
+        assert_eq!(saves.writes(&file, &now, Some(1000.0)).len(), 1);
+        let soon = 1000.0 + RESEND_SECS - 1.0;
+        assert!(saves.writes(&file, &now, Some(soon)).is_empty(), "too soon");
+        let late = 1000.0 + RESEND_SECS;
+        assert_eq!(
+            saves.writes(&file, &now, Some(late)).len(),
+            1,
+            "the save failed"
+        );
+        assert!(
+            saves.writes(&file, &now, Some(late + 1.0)).is_empty(),
+            "sent again, held again"
+        );
+        // Once the file shows it, nothing, however late.
+        saves.file_read();
+        assert!(saves.writes(&now, &now, Some(late + 600.0)).is_empty());
+        // With no clock, a send holds until the next read.
+        let mut quiet = RunningSaves::default();
+        assert_eq!(quiet.writes(&file, &now, None).len(), 1);
+        assert!(quiet.writes(&file, &now, None).is_empty());
+    }
+
+    #[test]
+    fn never_gives_a_verdict_the_file_would_refuse() {
+        // The file's own reader never yields such a workspace id, so the
+        // state is built past it, as a bad write could leave it in memory.
+        let json = r#"{"background": {"w1": [
+            {"id": "b1", "type": "shell", "status": "running", "description": "d",
+             "session": "c", "startedEpoch": 200, "seenEpoch": 900}
+        ]}}"#;
+        let mut state = SavedState::from_json(json).unwrap();
+        let long = "w".repeat(129);
+        let tasks = state.background.get("w1").cloned().unwrap_or_default();
+        state.background.insert(long.clone(), tasks);
+        let mut s = Session::default();
+        s.reseed(state);
+        let data = Data {
+            workspaces: Some(vec![
+                ws("w1", &[chat("c", AgentStatus::Idle)]),
+                ws(&long, &[chat("c", AgentStatus::Idle)]),
+            ]),
+            ..Data::default()
+        };
+        let got = verdicts(&mut s, &data).unwrap_or_default();
+        assert_eq!(
+            got.keys().collect::<Vec<_>>(),
+            ["w1"],
+            "an id past 128 would be refused"
+        );
     }
 }

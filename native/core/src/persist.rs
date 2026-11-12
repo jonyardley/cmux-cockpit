@@ -249,8 +249,9 @@ pub const MAX_COUNTS: usize = 9;
 impl SavedRunning {
     /// Every field within the bounds state-config.ts's savedRunning holds
     /// it to: an id, an epoch, and one to MAX_COUNTS counts of 1 to
-    /// MAX_TASKS each.
-    fn fits(&self) -> bool {
+    /// MAX_TASKS each. The core sends only a verdict that fits, so the
+    /// script never refuses one and leaves it to be sent again.
+    pub(crate) fn fits(&self) -> bool {
         is_id(&self.agent)
             && self.since.is_finite()
             && self.since >= 0.0
@@ -500,7 +501,7 @@ pub(crate) fn is_text(v: &str, max: usize) -> bool {
     v.trim() == v && len > 0 && len <= max && v.chars().all(|c| c >= ' ' && c != '\u{7f}')
 }
 
-fn is_id(v: &str) -> bool {
+pub(crate) fn is_id(v: &str) -> bool {
     let len = utf16_len(v);
     len > 0 && len <= 128 && !["__proto__", "constructor", "prototype"].contains(&v)
 }

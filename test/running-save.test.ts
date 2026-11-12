@@ -11,8 +11,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, beforeEach, describe, it } from "node:test";
 import { parseRunningSave } from "../scripts/running-save.ts";
-import { MAX_COUNTS, type SavedRunning, validateState } from "../scripts/state-config.ts";
-import { writeRunningEntries } from "../scripts/state-url.ts";
+import { MAX_COUNTS, MAX_TASKS, type SavedRunning, validateState } from "../scripts/state-config.ts";
+import { writeBackground, writeRunningEntries } from "../scripts/state-url.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "running-save-"));
 after(() => rmSync(dir, { recursive: true, force: true }));
@@ -122,6 +122,26 @@ describe("writeRunningEntries", () => {
     writeRunningEntries(path, {}, ["a", "c"]);
     assert.equal("running" in read(path), false, "an emptied map is left out");
   });
+
+  it("loses a workspace's verdict when the background hook leaves it no work", () => {
+    const task = (id: string) => ({
+      id,
+      type: "shell",
+      status: "running",
+      description: "d",
+      session: "c1",
+      startedEpoch: NOW - 60,
+      seenEpoch: NOW - 30,
+    });
+    const path = fileIn("ended.json", { background: { a: [task("b1")], b: [task("b2")] } });
+    const one = verdict("c1", NOW - 60, [{ type: "shell", n: 1 }]);
+    writeRunningEntries(path, { a: one, b: one, c: one }, []);
+    // The Cockpit is closed: only the hook writes. b's shell ends.
+    writeBackground(path, (map) => ({ a: map.a ?? [] }));
+    assert.deepEqual(Object.keys(read(path).running ?? {}), ["a"], "b's work ended, c had none");
+    writeBackground(path, () => ({}));
+    assert.equal("running" in read(path), false);
+  });
 });
 
 // The agents panel, baked from a file the core wrote: W1's chat c1 is
@@ -189,5 +209,17 @@ describe("the agents panel reads the core's verdict (issue #360)", () => {
     );
     assert.equal(taskWord("workflow", 1) + " " + taskWord("teammate", 2), "workflow teammates");
     assert.equal(runningText([]), "");
+  });
+
+  it("words the sample words.rs's test reads, with the same limits", () => {
+    const path = join(import.meta.dirname, "..", "native", "core", "tests", "running-words.json");
+    const sample = JSON.parse(readFileSync(path, "utf8")) as {
+      maxCounts: number;
+      maxTasks: number;
+      samples: { counts: SavedRunning["counts"]; text: string }[];
+    };
+    assert.equal(MAX_COUNTS, sample.maxCounts);
+    assert.equal(MAX_TASKS, sample.maxTasks);
+    for (const { counts, text } of sample.samples) assert.equal(runningText(counts), text);
   });
 });
