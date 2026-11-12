@@ -369,8 +369,11 @@ every time a background agent ends its turn to wait on a shell or monitor
 of its own, and starts it again when that work reports. The Stop ends its
 row like any other, and the Start that wakes it reopens the row from then
 (a resume, above), so a helper row shows the agent settled while it
-waits. The card still says Running through the wait, since the paused
-work is in the background record. Until #361 a run was flagged
+waits. A wake under `RESUME_MIN_GAP_S` after the pause reads as a late
+duplicate and reopens nothing, so that row stays settled while the agent
+works on, until its next pause and wake; the helper words and the quiet
+rule's count miss it meanwhile. The card still says Running through
+either, since the paused work and the agent are in the background record. Until #361 a run was flagged
 `background` and its Stop read the agent's transcript to keep the row
 open; both validators now drop that flag.
 
@@ -624,7 +627,8 @@ Running line already counts an agent.
 The status, its line and age, the chips, the helper words, lane order and
 the saved verdicts all ask the same question of a card, so a frame reads
 it once: `Session::card_memo` holds each card's agent and work while
-`Model::rebuild` builds the frame and the verdicts are worked out, and is
+`Model::rebuild` builds the frame and the verdicts are worked out, and
+while `Panel::from_core` builds the terminal pane's panel after it. It is
 empty between frames, so a read outside one is always fresh.
 
 After `/clear` the chat runs under a new session id in the same Claude

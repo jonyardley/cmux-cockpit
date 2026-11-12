@@ -186,7 +186,8 @@ pub struct Session {
     pub(crate) held_rank: HashMap<String, u8>,
 
     /// Each card's agent and the background work its chat runs, by
-    /// workspace id, read once while a frame is built (`Model::rebuild`):
+    /// workspace id, read once while a frame is built (`Model::rebuild`,
+    /// and `Panel::from_core` for the terminal pane's own panel):
     /// the status, its line and age, the chips, the helper words, lane
     /// order and the saved verdicts all ask the same question of a card
     /// (#359). None between frames, so a read outside one is always fresh.

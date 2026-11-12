@@ -404,8 +404,14 @@ impl Session {
     }
 
     /// Reads each card's work once a frame from now until `end_frame`.
-    pub(crate) fn begin_frame(&mut self) {
+    /// False when a frame is already open, so a nested builder leaves the
+    /// closing to whoever opened it.
+    pub(crate) fn begin_frame(&mut self) -> bool {
+        if self.card_memo.is_some() {
+            return false;
+        }
         self.card_memo = Some(HashMap::new());
+        true
     }
 
     /// Ends the frame `begin_frame` began: the next read is fresh.

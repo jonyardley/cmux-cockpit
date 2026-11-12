@@ -207,6 +207,18 @@ test("a background agent's pause ends its row, and its wake reopens it", () => {
   );
 });
 
+// The cost of dropping the pause check: a wake under RESUME_MIN_GAP_S after
+// the pause reads as a late duplicate of the first Start, so the row stays
+// ended while the agent works on, until its next pause and wake. The card's
+// Running status is unaffected; the helper row and words miss it.
+test("a background agent woken under RESUME_MIN_GAP_S after its pause keeps an ended row", () => {
+  let map = applyEvent(EMPTY, "w1", preToolUse("s1", "toolu_1", "Run the checks"), 100);
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 101);
+  map = applyEvent(map, "w1", subagentStop("agent_1"), 200);
+  assert.equal(applyEvent(map, "w1", subagentStart("s1", "agent_1"), 200 + RESUME_MIN_GAP_S - 2), map);
+  assert.equal(map.w1?.[0]?.endedEpoch, 200);
+});
+
 test("a repeated Start while the agent's row is live is a no-op", () => {
   let map = applyEvent(EMPTY, "w1", preToolUse("s1", "toolu_1", "First"), 100);
   map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 101);
