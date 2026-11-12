@@ -3,40 +3,39 @@
 //! `/clear` gives a chat a new session id in the same Claude process while
 //! that work runs on. So a chat owns work saved under its current session
 //! id or any id its process ran under before (`Agent::earlier_sessions`,
-//! from the runner's memory of Agent View). Every match of saved work to a
-//! chat goes through here.
+//! from the runner's memory of Agent View). Every match of a saved shell
+//! or subagent run to a chat goes through here. Saved asks and moves stay
+//! on the current id: they belong to a turn, and a clear starts afresh.
 
 use crate::data::Agent;
 
-/// The session ids that belong to the agent's chat: its current one
-/// first, then the ones its process ran under before, newest first.
-pub fn chat_sessions(a: &Agent) -> impl Iterator<Item = &str> {
-    std::iter::once(a.id.as_str()).chain(earlier(a))
-}
-
-fn earlier(a: &Agent) -> impl Iterator<Item = &str> {
-    a.earlier_sessions.iter().flatten().map(String::as_str)
-}
-
 fn ran_before(a: &Agent, session: &str) -> bool {
-    earlier(a).any(|id| id == session)
+    a.earlier_sessions.iter().flatten().any(|id| id == session)
 }
 
 /// The agent among `agents` whose chat `session` belongs to. A current id
 /// wins over another agent's earlier one, since a resumed session runs
 /// again under its old id in a new process; between earlier ids, the
-/// first agent listed.
-pub fn owner<'a>(agents: &'a [Agent], session: &str) -> Option<&'a Agent> {
+/// first agent listed. `agents` is any list of agents that can be walked
+/// twice, so callers need not copy theirs into a slice.
+pub fn owner<'a, I>(agents: I, session: &str) -> Option<&'a Agent>
+where
+    I: IntoIterator<Item = &'a Agent> + Clone,
+{
     agents
-        .iter()
+        .clone()
+        .into_iter()
         .find(|a| a.id == session)
-        .or_else(|| agents.iter().find(|a| ran_before(a, session)))
+        .or_else(|| agents.into_iter().find(|a| ran_before(a, session)))
 }
 
 /// Whether `session` belongs to `a`'s chat, among the workspace's
 /// `agents`: its current id always does; an earlier one does unless
 /// `owner` gives it to another agent. `a` need not be in `agents`.
-pub fn owns(agents: &[Agent], a: &Agent, session: &str) -> bool {
+pub fn owns<'a, I>(agents: I, a: &Agent, session: &str) -> bool
+where
+    I: IntoIterator<Item = &'a Agent> + Clone,
+{
     a.id == session
         || (ran_before(a, session) && owner(agents, session).is_none_or(|o| o.id == a.id))
 }
@@ -57,12 +56,9 @@ mod tests {
     #[test]
     fn a_chat_owns_its_current_session_and_those_before_a_clear() {
         let a = agent("now", &["before", "first"]);
-        assert_eq!(
-            chat_sessions(&a).collect::<Vec<_>>(),
-            ["now", "before", "first"]
-        );
         let agents = [a.clone(), agent("other", &[])];
         assert!(owns(&agents, &a, "now"));
+        assert!(owns(&agents, &a, "before"));
         assert!(owns(&agents, &a, "first"));
         assert!(!owns(&agents, &a, "other"));
         assert_eq!(owner(&agents, "before").map(|o| o.id.as_str()), Some("now"));
@@ -72,9 +68,10 @@ mod tests {
     #[test]
     fn a_chat_with_no_history_owns_only_its_current_session() {
         let a = agent("now", &[]);
-        assert_eq!(chat_sessions(&a).collect::<Vec<_>>(), ["now"]);
-        assert!(owns(&[], &a, "now"));
-        assert!(!owns(&[], &a, "before"));
+        let none: [Agent; 0] = [];
+        assert!(owns(&none, &a, "now"));
+        assert!(!owns(&none, &a, "before"));
+        assert!(owns(std::slice::from_ref(&a), &a, "now"));
     }
 
     #[test]

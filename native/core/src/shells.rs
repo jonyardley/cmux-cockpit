@@ -16,10 +16,12 @@ pub fn live_shell_count(saved: &SavedState, w: Option<&Workspace>, a: Option<&Ag
         return 0;
     }
     saved.shells.get(&w.id).map_or(0, |shells| {
-        let agents: Vec<Agent> = w.agent_list().cloned().collect();
+        // The same agents subagent runs are matched against
+        // (`Session::agents_of`): those cmux reports a status for.
+        let agents = w.agent_list().filter(|x| x.status.is_some());
         shells
             .iter()
-            .filter(|s| owns(&agents, a, &s.session))
+            .filter(|s| owns(agents.clone(), a, &s.session))
             .count()
     })
 }

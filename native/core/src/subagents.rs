@@ -54,7 +54,7 @@ fn same_label(run: &SavedSubagent, c: &SubagentRun) -> bool {
 /// A run whose session is a workspace agent's chat's pairs only with that
 /// agent's children; one with no such agent may pair with any.
 fn may_pair(run: &SavedSubagent, parent: &Agent, agents: &[Agent]) -> bool {
-    owns(agents, parent, &run.session) || owner(agents, &run.session).is_none()
+    owner(agents, &run.session).is_none_or(|o| o.id == parent.id)
 }
 
 /// A child of an agent, by position: (agent index, child index).

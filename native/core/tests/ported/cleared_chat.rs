@@ -84,6 +84,17 @@ mod work_started_before_a_clear {
     }
 
     #[test]
+    fn an_agent_cmux_sends_no_status_for_takes_no_shell() {
+        let (mut s, data, mut fx) = setup();
+        let stale = Agent {
+            id: "before".to_string(),
+            ..Agent::default()
+        };
+        let w = ws("shell").agents(vec![chat(&mut fx, "after", &["before"]), stale]);
+        assert_eq!(s.status_line(&data, Some(&w)), "Shell running 4m · 1 shell");
+    }
+
+    #[test]
     fn a_session_running_again_in_another_chat_counts_for_that_chat_only() {
         let (mut s, _, mut fx) = setup();
         let cleared = chat(&mut fx, "after", &["before"]);

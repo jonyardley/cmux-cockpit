@@ -219,7 +219,7 @@ impl Workspace {
     }
 
     /// The agents cmux sent, skipping holes.
-    pub fn agent_list(&self) -> impl Iterator<Item = &Agent> {
+    pub fn agent_list(&self) -> impl Iterator<Item = &Agent> + Clone {
         self.agents.iter().flatten().flatten()
     }
 
