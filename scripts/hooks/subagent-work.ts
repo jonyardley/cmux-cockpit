@@ -15,14 +15,14 @@
 
 import { dirname, join } from "node:path";
 import { field } from "./gh-command.ts";
-import { readTail } from "./transcript.ts";
+import { readTail, TAIL_BYTES } from "./transcript.ts";
 
 const HANDBACK_TOOL = "SubagentHandback";
 const STOP_TOOLS: readonly unknown[] = ["KillShell", "TaskStop"];
 const NOTIFICATION = /<task-notification>([\s\S]*?)<\/task-notification>/g;
 const TASK_ID = /<task-id>([\w-]+)<\/task-id>/;
-/** The tail read for the pause check; a subagent's transcript is rarely longer. */
-export const TAIL_BYTES = 2 * 1024 * 1024;
+/** A line holds nothing pendingWork reads unless it has one of these. */
+const MAY_MATTER = ["task-notification", "backgroundTaskId", '"taskId"', '"tool_use"'];
 
 interface Work {
   /** Background shells started, by task id. */
@@ -62,9 +62,12 @@ function noteStarted(work: Work, entry: unknown): void {
 }
 
 // A monitor's every event is a task-notification too; only one carrying a
-// status says the task finished.
-function noteFinished(work: Work, line: string): void {
+// status says the task finished. Only an entry Claude Code delivered counts:
+// the agent's own words, or a tool's output that prints a notification (a
+// log, a quoted transcript), never ends a task.
+function noteFinished(work: Work, line: string, entry: unknown): void {
   if (!line.includes("task-notification")) return;
+  if (field(entry, "type") === "assistant" || field(entry, "toolUseResult") !== undefined) return;
   for (const m of line.matchAll(NOTIFICATION)) {
     const body = m[1] ?? "";
     const id = TASK_ID.exec(body)?.[1];
@@ -87,9 +90,10 @@ function noteTools(work: Work, entry: unknown): void {
 export function pendingWork(lines: readonly string[], nowMs: number): boolean {
   const work: Work = { shells: new Set(), monitors: new Map(), done: new Set(), lastTool: undefined };
   for (const line of lines) {
-    noteFinished(work, line);
+    if (!MAY_MATTER.some((s) => line.includes(s))) continue;
     const entry = parse(line);
     if (entry === undefined) continue;
+    noteFinished(work, line, entry);
     noteStarted(work, entry);
     noteTools(work, entry);
   }

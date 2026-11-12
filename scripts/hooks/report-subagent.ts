@@ -252,11 +252,14 @@ async function main(): Promise<void> {
     return;
   }
   const now = Math.floor(Date.now() / 1000);
+  // Read before the state lock is taken, so a long transcript never holds
+  // up the other writers; only a Stop can be a pause.
+  const pausing = field(event, "hook_event_name") === "SubagentStop" && stillWorking(event, Date.now());
   let changed = false;
   let result: ReturnType<typeof writeSubagents>;
   try {
     result = writeSubagents(STATE_PATH, (subagents) => {
-      const applied = processEvent(subagents, wsId, event, now, (e) => stillWorking(e, Date.now()));
+      const applied = processEvent(subagents, wsId, event, now, () => pausing);
       changed = applied.changed;
       return applied.after;
     });

@@ -506,9 +506,10 @@ its turn is unread, since a shell can be a dev server that never exits,
 unless the turn ended on "Nothing for you": that card stays Shell running until
 the shell ends or a new turn saves another line.
 
-A background agent works the same way from the saved subagent runs
-(`live_run_count` in `native/core/src/subagents.rs`): an idle chat with a
-run still live reads "Helper running 4m · 1 helper" in working blue, sorts
+A background agent works the same way from the saved subagent runs its
+own chat started (`own_run_count` in `native/core/src/subagents.rs`, not
+the workspace-wide `live_run_count` the helper words use): an idle chat
+with a run still live reads "Helper running 4m · 1 helper" in working blue, sorts
 with the working cards and never says Ready to merge, and a "Nothing for
 you" turn stays Helper running until the run ends. A shell or monitor the
 background agent starts is not saved (above), so the run stands in for it,

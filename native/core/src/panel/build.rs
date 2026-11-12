@@ -21,6 +21,7 @@ use crate::status::{
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
 use crate::ui::QUIET_PILL;
+use crate::words::HELPER_RUNNING_WORD;
 
 use super::{
     AddMenu, AddProject, Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT,
@@ -210,8 +211,9 @@ fn looks(
         ready: !row && *kind == StatusKind::Ready,
         pinned: is_pinned(w),
         progress: progress_fraction(w),
-        // Helper running already says the count in the status line.
-        helpers: if *kind == StatusKind::HelperRunning {
+        // A Helper running status line already says the count; a waiting
+        // card's or a row's status does not, so those keep the words.
+        helpers: if *kind == StatusKind::HelperRunning && status.starts_with(HELPER_RUNNING_WORD) {
             String::new()
         } else {
             session.helper_text(w)
@@ -1472,8 +1474,10 @@ mod tests {
         assert_eq!(kind, StatusKind::HelperRunning);
         let status = s.status_line(&data, w);
         assert!(status.ends_with(" · 1 helper"), "{status}");
-        let looks = looks(s, &data, w, Density::Full, &status, &kind);
-        assert_eq!(looks.helpers, "", "the status line already says it");
+        let full = looks(s, &data, w, Density::Full, &status, &kind);
+        assert_eq!(full.helpers, "", "the status line already says it");
+        let row = looks(s, &data, w, Density::Row, "4m", &kind);
+        assert_eq!(row.helpers, "· 1 helper", "a row's status is its age alone");
     }
 
     #[test]

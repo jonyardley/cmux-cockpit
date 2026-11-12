@@ -25,7 +25,7 @@ import type { SavedShell, State } from "../state-config.ts";
 import { writeShells } from "../state-url.ts";
 import { backgroundTaskId, secondsBeforeBackground } from "./background.ts";
 import { field } from "./gh-command.ts";
-import { readTail } from "./transcript.ts";
+import { readTail, TAIL_BYTES } from "./transcript.ts";
 
 type ShellMap = NonNullable<State["shells"]>;
 
@@ -35,7 +35,6 @@ export const MAX_AGE_S = 12 * 60 * 60;
 // The transcript tail a Stop reads. A notification lands in the turn that
 // ends in this Stop, so it sits near the end; the margin covers a turn
 // that read large files after it.
-const TAIL_BYTES = 2 * 1024 * 1024;
 
 /**
  * The task id of a main-chat Bash call that went to the background by any
