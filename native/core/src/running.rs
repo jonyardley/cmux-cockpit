@@ -278,4 +278,17 @@ mod tests {
             assert!(!shows_running(Some(&chat("c", s)), Some(&r)));
         }
     }
+    #[test]
+    fn says_it_counts_agents_only_with_an_agent_among_its_kinds() {
+        let shells = Running {
+            counts: vec![(TaskType::Shell, 2)],
+            since: 1.0,
+        };
+        assert!(!shells.counts_agents());
+        let both = Running {
+            counts: vec![(TaskType::Shell, 1), (TaskType::Subagent, 1)],
+            since: 1.0,
+        };
+        assert!(both.counts_agents());
+    }
 }

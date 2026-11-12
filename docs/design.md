@@ -575,8 +575,11 @@ or blocked. The same rule keeps the card off Ready to merge, keeps a
 sorts the card with the working ones. Quiet holds off for the chat's own
 agent runs alone (`native/core/src/quiet.rs`), since the background
 record is written only when a turn ends. The live helpers
-words after the status are left off while it says Running, since it
-already counts the agents.
+words after the status are left off while its Running line counts an
+agent, since it already says them; a line counting shells alone keeps
+them. The time counts from the earliest piece still running, so it
+can drop when that one ends, and can run longer than the agent has
+been idle.
 
 ### Waiting tab line
 
@@ -879,7 +882,7 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Your turn | clay dot with halo, `clayText` words, clay needs dot | same, age and reason in `clayText` | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `status.rs` `plain_style`, `waiting_tokens`; `panel/build.rs` `header_dot` |
 | Asking | amber dot with halo, `amberText` words, amber needs dot | same | amber glyph **≠**; `amberCount` pill | waiting count amber while every waiting card asks | `status.rs` `StatusKind::style`; `panel/build.rs` `needs_tone` |
 | Working | blue dot with halo, `blueText`; blue progress bar | blue dot | blue glyph; `blueCount` pill | | `status.rs:109` |
-| Running | as working, "Running 4m · 1 shell, 1 agent"; no live helpers words beside it | as working, the age alone | as working | | `status.rs` `StatusKind::Running`; `running.rs`; `words.rs` `running_text` |
+| Running | as working, "Running 4m · 1 shell, 1 agent"; no live helpers words beside it once it counts an agent | as working, the age alone | as working | | `status.rs` `StatusKind::Running`; `running.rs`; `words.rs` `running_text` |
 | Quiet working | hollow blue ring, `blueText` | same | hollow glyph | | `status.rs:160-165` |
 | Finished, Ready | olive dot, no halo, `greenText`; Ready pill `greenText` on `Own.readyBg` | olive dot; no Ready pill **≠** | olive glyph | Next in `greenText` | `status.rs`; `panel/build.rs` `ready_ink` |
 | Idle, no agent | hollow grey; `metaText` idle and no agent | hollow grey | hollow grey glyph | | `status.rs` `plain_style` |
