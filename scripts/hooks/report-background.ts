@@ -42,7 +42,10 @@ const LISTING_EVENTS: readonly unknown[] = ["Stop", "SubagentStop"];
 
 function listedTask(v: unknown): ListedTask[] {
   if (!isRecord(v) || typeof v.id !== "string" || !isId(v.id)) return [];
-  const type = taskType(v.type);
+  // `session` is this cockpit's word for a `claude --bg` session, which
+  // only the later hook saves and every replace keeps; a listed task
+  // calling itself that would never leave with the list.
+  const type = v.type === "session" ? "other" : taskType(v.type);
   const status = cleanLabel(v.status);
   return [
     {

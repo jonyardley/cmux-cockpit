@@ -203,6 +203,17 @@ test("a claude --bg session survives every snapshot, since no list holds it", ()
   assert.deepEqual(next.ws1, [bg]);
 });
 
+test("a listed task calling itself session is saved as other, so it still leaves with the list", () => {
+  const listing = stop("s1", [{ id: "x", type: "session", status: "running" }]);
+  let map = update({}, "ws1", listing, 10);
+  map = update(map, "ws1", listing, 20);
+  assert.deepEqual(
+    map.ws1?.map((t) => [t.id, t.type]),
+    [["x", "other"]],
+  );
+  assert.deepEqual(update(map, "ws1", stop("s1", []), 30), {});
+});
+
 test("the prune drops what no list has confirmed for MAX_AGE_S, and keeps a long task still listed", () => {
   const now = 100_000;
   const old = now - MAX_AGE_S - 1;
