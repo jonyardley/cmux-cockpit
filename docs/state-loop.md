@@ -331,12 +331,15 @@ break taps silently.
 ## Subagent runs: the map no URL writes either
 
 cmux sends custom sidebars no subagent data at all (#6), so
-`scripts/hooks/report-subagent.ts` records them itself, from four Claude
+`scripts/hooks/report-subagent.ts` records them itself, from three Claude
 Code hook events, in a fifth map, `subagents`: workspace id to a list of runs,
 oldest first, each `{"id", "session", "agentId"?, "type"?, "label",
-"startedEpoch", "endedEpoch"?, "background"?}`. `src/shared/subagents.ts` reads it back for
+"startedEpoch", "endedEpoch"?}`. `src/shared/subagents.ts` reads it back for
 the agents model while cmux carries no agent's own subagent runs
-(`children`) of its own.
+(`children`) of its own. The runs feed the helper rows, the helper words
+on a card ("· 2 helpers") and the quiet rule's count of the chat's own
+agents (`native/core/src/quiet.rs`); whether a card says Running comes
+from the background record instead (Background work, below).
 
 A run is keyed by the Agent tool call rather than the agent, since Claude
 Code names the call before it can name the run: `PreToolUse` (matcher
@@ -361,24 +364,15 @@ duplicate delivery). `SubagentStop` sets `endedEpoch` on every open row with
 that `agentId`, and does nothing when none is open (a duplicate delivery of
 the same Stop).
 
-A background agent's Stop can be a pause. Claude Code sends `SubagentStop`
+A background agent's Stop can be a pause: Claude Code sends `SubagentStop`
 every time a background agent ends its turn to wait on a shell or monitor
-of its own, and starts it again when that work reports, so on 2026-11-12
-the #2800 qualify-4b agent read as finished while it waited on its checks,
-and its chat's card said Idle. A run is flagged `background` when its call
-had `run_in_background`, or when the call's `PostToolUse` result says
-`isAsync` or `async_launched` (that agent's call had no
-`run_in_background`; only its result said so). A flagged run's Stop reads
-the agent's own transcript (`scripts/hooks/subagent-work.ts`: the event's
-`agent_transcript_path`, else `<session>/subagents/agent-<id>.jsonl` beside
-the chat's) and leaves the run open while a background shell there has no
-finished notification (one with a `<status>`) and no stop, or a monitor is
-inside its timeout, unless the agent's last call was its hand-back
-(`SubagentHandback`), which always ends it. A monitor's events are
-notifications without a status, so they never end it, and a persistent
-monitor never holds a run open. The start that wakes it finds the row
-still open, a duplicate. Neither flag nor pause is a visible change, so
-neither costs a rebuild. An unreadable transcript ends the run, as before.
+of its own, and starts it again when that work reports. The Stop ends its
+row like any other, and the Start that wakes it reopens the row from then
+(a resume, above), so a helper row shows the agent settled while it
+waits. The card still says Running through the wait, since the paused
+work is in the background record. Until #361 a run was flagged
+`background` and its Stop read the agent's transcript to keep the row
+open; both validators now drop that flag.
 
 **Residual cases for resumes:** once a finished row is pruned (ten minutes
 after its Stop, below), a later resume looks like a first start and pairs
@@ -471,69 +465,6 @@ build is going then gets another pass from that holder, so the last bundle
 written is built from the newest source, even in a clone without the git
 hooks installed.
 
-## Background shells
-
-cmux sends custom sidebars nothing about the shells a chat leaves running
-in the background, so `scripts/hooks/report-shell.ts` records them in
-`shells`: workspace id to a list of `{"id", "session", "startedEpoch"}`,
-oldest first, at most `MAX_SHELLS`. The map is left out while it is empty,
-so a file from before it existed reads the same.
-
-`PostToolUse` on `Bash` saves a call that went to the background, keyed
-by the task id Claude Code gave it. A call gets there four ways: started
-with `run_in_background`, sent there with Ctrl+B, moved there on timeout,
-or moved there so a message the person sent could be delivered. All four
-carry `tool_response.backgroundTaskId`; only a call started with
-`run_in_background` falls back to the id in its stdout text
-(`scripts/hooks/background.ts`). A call moved there on timeout is dated
-back by `timedOutAfterMs`, so the card's clock counts from its real start.
-A subagent's Bash call is skipped, since its finish never reaches the main
-chat's Stop.
-`PostToolUse` on `KillShell` or `TaskStop` drops the shell it stopped.
-`Stop`, when the workspace has shells saved, reads the transcript's last
-2 MB for `<task-notification>` blocks, which Claude Code writes when a
-background task finishes or is stopped, and drops the shells they name.
-Every other event exits before touching the state file. A finished shell wakes its chat, and that turn ends in a
-`Stop`, so the drop lands within a turn. A shell older than `MAX_AGE_S`
-(12 hours) is pruned on the next event, for a notification that was missed.
-
-`src/shared/shells.ts` counts the shells of the card's own agent while it
-is open, so closing a chat, which kills its shells, clears them from the
-card at once, and one chat's shell never marks another's card. An idle
-agent with a shell counted reads "Shell running 4m · 1 shell" in working blue on
-its cockpit card and sorts with the working cards. Ready still wins while
-its turn is unread, since a shell can be a dev server that never exits,
-unless the turn ended on "Nothing for you": that card stays Shell running until
-the shell ends or a new turn saves another line.
-
-A background agent works the same way from the saved subagent runs its
-own chat started (`own_run_count` in `native/core/src/subagents.rs`, not
-the workspace-wide `live_run_count` the helper words use): an idle chat
-with a run still live reads "Helper running 4m · 1 helper" in working blue, sorts
-with the working cards and never says Ready to merge, and a "Nothing for
-you" turn stays Helper running until the run ends. A shell or monitor the
-background agent starts is not saved (above), so the run stands in for it,
-held open across its pauses (Subagent runs, above).
-A shell its own chat runs wins: the card then says Shell running.
-
-After `/clear` the chat runs under a new session id in the same Claude
-process, while the shells and agents it started before the clear run on
-under the old one. The native runner remembers, per process, every
-session id `claude agents --json` has reported for it (keyed by pid and
-the process's `startedAt`, so a reused pid starts again; at most 16 ids,
-forgotten with the pid), and hands the core the earlier ones on the agent
-(`earlierSessions`). `native/core/src/owner.rs` then counts a shell or
-subagent run saved under any of them as the chat's, so the Cockpit card
-keeps saying Shell running or Helper running until the work ends.
-
-Known gaps: that memory lives only in the running Cockpit, so after a
-Cockpit restart, or for a clear that came before Agent View's next poll
-saw the old id, work from before the clear stops counting while it still
-runs. The agents panel (`src/shared/shells.ts`) still matches the current
-session id only, so its card stops counting at a clear. A shell
-whose output the chat read to the end with `TaskOutput` may get no
-notification, and then shows until the 12 hour prune.
-
 ## Background work
 
 One record for every kind of background work a chat has running, built
@@ -543,8 +474,16 @@ saves it in `background`: workspace id to a list of `{"id", "type",
 "status", "description", "session", "pid", "startedEpoch", "seenEpoch"}`
 (`pid` left out when the hook was given none), at most
 `MAX_TASKS` (20) per workspace. The map is left out while it is empty.
-Nothing on a card reads it yet: the status and words take it up in #359,
-and the `shells` and `subagents` maps above carry on unchanged until #361.
+
+It is the one path for background work: the hooks fill the record, a
+`claude --bg` session is saved into it (below), the native core reads it
+for the card's Running status, and the core saves its verdict for the
+agents panel. The old `shells` map (`scripts/hooks/report-shell.ts`) and
+the subagent pause check (`scripts/hooks/subagent-work.ts`) retired in
+#361, since the record lists shells, monitors, agents and an agent's own
+shells. `scripts/state-config.ts` and `native/core/src/persist.rs` drop a
+saved `shells` map, whatever its shape, and a run's `background` flag, so
+the next write that changes the file takes them out of it.
 
 What the list holds (real payloads, Claude Code 2.1.322, in
 `test/fixtures/background/`):
@@ -669,6 +608,36 @@ parent's `Stop` a moment apart, each run as its own process) are applied in
 the order they take the state lock, since a payload carries no time of its
 own; a stale list that lands second holds a finished task until the next
 `Stop`.
+
+### On the card
+
+An idle agent whose chat runs any of this work reads "Running 4m · 1
+shell, 1 agent" in working blue on its Cockpit card
+(`native/core/src/running.rs`, the words in `docs/design.md`), sorts with
+the working cards and never says Ready to merge. Ready still wins while
+its turn is unread, since a shell can be a dev server that never exits,
+unless the turn ended on "Nothing for you": that card stays Running until
+the work ends or a new turn saves another line. The helper words after the
+status ("· 1 helper", from the subagent runs above) are left off while the
+Running line already counts an agent.
+
+The status, its line and age, the chips, the helper words, lane order and
+the saved verdicts all ask the same question of a card, so a frame reads
+it once: `Session::card_memo` holds each card's agent and work while
+`Model::rebuild` builds the frame and the verdicts are worked out, and is
+empty between frames, so a read outside one is always fresh.
+
+After `/clear` the chat runs under a new session id in the same Claude
+process, while the work it started before the clear runs on under the old
+one. The native runner remembers, per process, every session id
+`claude agents --json` has reported for it (keyed by pid and the process's
+`startedAt`, so a reused pid starts again; at most 16 ids, forgotten with
+the pid), and hands the core the earlier ones on the agent
+(`earlierSessions`). `native/core/src/owner.rs` then counts a task saved
+under any of them as the chat's. That memory lives only in the running
+Cockpit, so after a Cockpit restart, or for a clear that came before Agent
+View's next poll saw the old id, work from before the clear counts only
+once the chat's next `Stop` lists it under the new id.
 
 ### The core's verdict for the agents panel
 

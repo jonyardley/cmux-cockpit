@@ -38,9 +38,6 @@ const STATE: &str = r#"{
         "prReady": [{"id": "t1", "type": "subagent", "status": "running", "description": "d", "session": "chat", "startedEpoch": 999760, "seenEpoch": 999900}],
         "theirs": [{"id": "t1", "type": "subagent", "status": "running", "description": "d", "session": "other-chat", "startedEpoch": 999760, "seenEpoch": 999900}]
     },
-    "shells": {
-        "both": [{"id": "b1", "session": "chat", "startedEpoch": 100}]
-    },
     "moves": {
         "quiet": {"text": "the checks agent is still waiting on its check session.", "epoch": 1000, "session": "chat", "idle": true}
     },

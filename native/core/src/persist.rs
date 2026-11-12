@@ -119,15 +119,6 @@ pub struct SavedSubagent {
     pub ended_epoch: Option<f64>,
 }
 
-/// A background shell a chat started.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SavedShell {
-    pub id: String,
-    pub session: String,
-    pub started_epoch: f64,
-}
-
 /// What kind of background work a task is (state-config.ts's TASK_TYPES):
 /// Claude Code's own labels for a `background_tasks` entry, `session` for
 /// a `claude --bg` session, and `other` for any word Claude Code adds
@@ -364,9 +355,6 @@ pub struct SavedState {
     pub own_prs: BTreeMap<String, Value>,
     #[serde(deserialize_with = "crate::lenient::map")]
     pub subagents: BTreeMap<String, Vec<SavedSubagent>>,
-    /// Left out of the file while nothing is saved.
-    #[serde(deserialize_with = "crate::lenient::map")]
-    pub shells: BTreeMap<String, Vec<SavedShell>>,
     /// wsId to the background work its chats have running, from the Stop
     /// hooks' task lists (crate::background). Left out while empty.
     #[serde(
@@ -637,7 +625,31 @@ mod tests {
             s.projects.get("/c/d"),
             Some(SavedProject::Removed { .. })
         ));
-        assert!(s.shells.is_empty());
+    }
+
+    #[test]
+    fn drops_the_retired_shells_map_and_run_flag_whatever_their_shape() {
+        // #361 retired the `shells` map and a subagent run's `background`
+        // flag: an old file still reads, and neither is written back.
+        let run =
+            r#"{"id": "t", "session": "s", "label": "L", "startedEpoch": 5, "background": true}"#;
+        for shells in [
+            r#"{"w": [{"id": "b1", "session": "s", "startedEpoch": 5}]}"#,
+            "3",
+            "null",
+            r#""x""#,
+            "[1, 2]",
+        ] {
+            let json = format!(r#"{{"shells": {shells}, "subagents": {{"w": [{run}]}}}}"#);
+            let s = SavedState::from_json(&json).unwrap();
+            assert_eq!(s.subagents["w"].len(), 1, "{shells}");
+            let out = serde_json::to_value(&s).unwrap();
+            assert!(out.get("shells").is_none(), "{shells}");
+            assert!(
+                out["subagents"]["w"][0].get("background").is_none(),
+                "{shells}"
+            );
+        }
     }
 
     #[test]

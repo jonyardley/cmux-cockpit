@@ -252,6 +252,22 @@ describe("writeSubagents", () => {
     assert.deepEqual(result, { ok: true, changed: true });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")).subagents, {});
   });
+
+  it("takes the retired shells map and a run's background flag out of the file on its next write (#361)", () => {
+    const path = tempFile();
+    const shells = { w1: [{ id: "b1", session: "s1", startedEpoch: 100 }] };
+    writeFileSync(path, JSON.stringify({ shells, subagents: { w1: [{ ...run, background: true }] } }));
+    // A write that changes nothing the validator keeps leaves the file be.
+    assert.deepEqual(
+      writeSubagents(path, (subagents) => subagents),
+      { ok: true, changed: false },
+    );
+    const second = { ...run, id: "toolu_2" };
+    writeSubagents(path, (subagents) => ({ w1: [...(subagents.w1 ?? []), second] }));
+    const saved = JSON.parse(readFileSync(path, "utf8"));
+    assert.equal(Object.hasOwn(saved, "shells"), false);
+    assert.deepEqual(saved.subagents, { w1: [run, second] });
+  });
 });
 
 describe("writePublished", () => {

@@ -18,7 +18,6 @@ use std::collections::BTreeMap;
 
 use crate::data::Data;
 use crate::persist::{SavedCount, SavedRunning, is_id};
-use crate::running::running_work;
 use crate::session::Session;
 
 /// How long a sent write waits for the file to show it before it goes
@@ -93,10 +92,8 @@ pub fn verdicts(session: &mut Session, data: &Data) -> Option<BTreeMap<String, S
     let list = data.workspaces.as_deref().filter(|l| !l.is_empty())?;
     let mut out = BTreeMap::new();
     for w in list {
-        let Some(a) = session.agent_of(Some(w)) else {
-            continue;
-        };
-        let Some(r) = running_work(&session.saved, data, Some(w), Some(&a)) else {
+        let card = session.card_running(data, Some(w));
+        let (Some(a), Some(r)) = (card.agent, card.running) else {
             continue;
         };
         let counts = r

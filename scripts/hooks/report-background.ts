@@ -57,7 +57,9 @@ import {
   settle,
 } from "./bg-sessions.ts";
 import { field } from "./gh-command.ts";
-import { MAX_AGE_S } from "./report-shell.ts";
+
+/** How long an entry no snapshot has listed is kept, for a chat whose last Stop never came. */
+export const MAX_AGE_S = 12 * 60 * 60;
 
 type BackgroundMap = NonNullable<State["background"]>;
 

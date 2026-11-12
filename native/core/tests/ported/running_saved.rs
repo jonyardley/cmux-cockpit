@@ -1,11 +1,10 @@
-//! test/shells-saved.test.ts: a card whose chat is idle on a background
-//! shell still running reads "Running 4m · 1 shell" in working blue (#359:
-//! the status reads the `background` record; the `shells` map is still
-//! counted by `live_shell_count` until #361 retires it).
+//! A card whose chat is idle on a background shell still running reads
+//! "Running 4m · 1 shell" in working blue (#359: the status reads the
+//! `background` record; the old `shells` map retired in #361 and is never
+//! read).
 
 use cockpit_core::data::{Agent, Data};
 use cockpit_core::session::Session;
-use cockpit_core::shells::live_shell_count;
 use cockpit_core::theme::Token;
 use cockpit_core::ui::Urgency;
 
@@ -14,12 +13,6 @@ use crate::support::*;
 const NOW: f64 = 1_000_000.0;
 
 const STATE: &str = r#"{
-    "shells": {
-        "one": [{"id": "b1", "session": "chat", "startedEpoch": 100}],
-        "two": [{"id": "b1", "session": "chat", "startedEpoch": 100}, {"id": "b2", "session": "chat", "startedEpoch": 100}],
-        "other": [{"id": "b1", "session": "someone-else", "startedEpoch": 100}],
-        "quiet": [{"id": "b1", "session": "chat", "startedEpoch": 100}]
-    },
     "background": {
         "one": [{"id": "b1", "type": "shell", "status": "running", "description": "build", "session": "chat", "startedEpoch": 999760, "seenEpoch": 999900}],
         "two": [{"id": "b1", "type": "shell", "status": "running", "description": "build", "session": "chat", "startedEpoch": 999760, "seenEpoch": 999900},
@@ -46,31 +39,6 @@ fn idle(fx: &mut Fx) -> Agent {
 
 mod background_shells_on_the_card {
     use super::*;
-
-    #[test]
-    fn counts_the_saved_shells_of_the_chat_that_started_them() {
-        let (s, _, mut fx) = setup();
-        let a = idle(&mut fx);
-        let one = ws("one").agents(vec![a.clone()]);
-        let two = ws("two").agents(vec![a.clone()]);
-        assert_eq!(live_shell_count(&s.saved, Some(&one), Some(&a)), 1);
-        assert_eq!(live_shell_count(&s.saved, Some(&two), Some(&a)), 2);
-    }
-
-    #[test]
-    fn counts_none_for_another_chat_an_ended_one_or_none() {
-        let (s, _, mut fx) = setup();
-        let a = idle(&mut fx);
-        let other = ws("other").agents(vec![a.clone()]);
-        assert_eq!(live_shell_count(&s.saved, Some(&other), Some(&a)), 0);
-        let ended = fx.agent(Ended).id("chat");
-        let one = ws("one").agents(vec![ended.clone()]);
-        assert_eq!(live_shell_count(&s.saved, Some(&one), Some(&ended)), 0);
-        let none = ws("none").agents(vec![a.clone()]);
-        assert_eq!(live_shell_count(&s.saved, Some(&none), Some(&a)), 0);
-        assert_eq!(live_shell_count(&s.saved, Some(&ws("one")), None), 0);
-        assert_eq!(live_shell_count(&s.saved, None, Some(&a)), 0);
-    }
 
     #[test]
     fn does_not_turn_another_chats_card_to_running() {
@@ -157,8 +125,6 @@ mod background_shells_on_the_card {
             r#"{"shells": {"one": [{"id": "b1", "session": "chat", "startedEpoch": 100}]}}"#,
         );
         let w = ws("one").agents(vec![idle(&mut fx)]);
-        let a = idle(&mut fx);
-        assert_eq!(live_shell_count(&old.saved, Some(&w), Some(&a)), 1);
         assert_eq!(old.status_line(&data, Some(&w)), "Idle 4m");
         assert!(s.status_line(&data, Some(&w)).starts_with("Running"));
     }

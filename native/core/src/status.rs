@@ -2,6 +2,8 @@
 //! agent, with idle nudges and "needs you" dismissals applied (needs.rs),
 //! and what the card says about it. Colours are tokens (theme.rs).
 
+use std::collections::HashMap;
+
 use crate::activity::most_active;
 use crate::data::{Agent, AgentStatus, Data, Workspace};
 use crate::js::{non_empty, positive, truthy};
@@ -385,11 +387,30 @@ impl Session {
     }
 
     /// The card's agent and the background work its chat runs, read once
-    /// for every rule a pass asks of it.
-    fn card_running(&mut self, data: &Data, w: Option<&Workspace>) -> CardRunning {
+    /// for every rule a pass asks of it, and once a frame while one is
+    /// built (`Session::card_memo`).
+    pub(crate) fn card_running(&mut self, data: &Data, w: Option<&Workspace>) -> CardRunning {
+        let memo = self.card_memo.as_ref();
+        if let Some(card) = w.and_then(|w| memo.and_then(|m| m.get(&w.id))) {
+            return card.clone();
+        }
         let agent = self.agent_of(w);
         let running = running_work(&self.saved, data, w, agent.as_ref());
-        CardRunning { agent, running }
+        let card = CardRunning { agent, running };
+        if let (Some(w), Some(memo)) = (w, self.card_memo.as_mut()) {
+            memo.insert(w.id.clone(), card.clone());
+        }
+        card
+    }
+
+    /// Reads each card's work once a frame from now until `end_frame`.
+    pub(crate) fn begin_frame(&mut self) {
+        self.card_memo = Some(HashMap::new());
+    }
+
+    /// Ends the frame `begin_frame` began: the next read is fresh.
+    pub(crate) fn end_frame(&mut self) {
+        self.card_memo = None;
     }
 
     /// ready_agent, with the card's work already read.
@@ -762,9 +783,10 @@ impl Session {
 
 /// A card's agent as the sidebars show it, and the background work its
 /// chat runs, read once per pass over the card.
-struct CardRunning {
-    agent: Option<Agent>,
-    running: Option<Running>,
+#[derive(Debug, Clone)]
+pub(crate) struct CardRunning {
+    pub(crate) agent: Option<Agent>,
+    pub(crate) running: Option<Running>,
 }
 
 /// "· 1 helper", "· 3 helpers", or "" for none.

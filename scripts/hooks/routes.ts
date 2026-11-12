@@ -20,21 +20,14 @@ export const ROUTES: Readonly<Record<string, readonly Route[]>> = {
     { script: "report-notification.ts", matcher: "AskUserQuestion|ExitPlanMode" },
   ],
   PostToolUse: [
-    { script: "report-subagent.ts", matcher: "Agent" },
     { script: "report-pr.ts", matcher: "Bash" },
-    { script: "report-shell.ts", matcher: "Bash|KillShell|TaskStop" },
     { script: "report-background.ts", matcher: "Bash" },
     {
       script: "report-published.ts",
       matcher: "Artifact|mcp__claude_ai_Claude_Docs__batch|mcp__claude_ai_Claude_Docs__update",
     },
   ],
-  Stop: [
-    { script: "report-move.ts" },
-    { script: "report-rename.ts" },
-    { script: "report-shell.ts" },
-    { script: "report-background.ts" },
-  ],
+  Stop: [{ script: "report-move.ts" }, { script: "report-rename.ts" }, { script: "report-background.ts" }],
   UserPromptSubmit: [{ script: "report-rename.ts", sendsBack: true }],
   SessionStart: [{ script: "report-rename.ts" }],
   SubagentStart: [{ script: "report-subagent.ts" }],

@@ -181,6 +181,32 @@ test("a Start for an agent already saved reopens its row, and the next Stop ends
   );
 });
 
+// Since #361 nothing reads a background agent's transcript: its Stop while
+// it waits on a shell of its own ends the row like any Stop, and the Start
+// that wakes it reopens the row from then. The card's Running status reads
+// the background record instead, which lists the shell it waits on.
+test("a background agent's pause ends its row, and its wake reopens it", () => {
+  const call = preToolUse("s1", "toolu_1", "Run the checks");
+  const background = { ...call, tool_input: { ...call.tool_input, run_in_background: true } };
+  let map = applyEvent(EMPTY, "w1", background, 100);
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 101);
+  const asyncResult = {
+    hook_event_name: "PostToolUse",
+    tool_name: "Agent",
+    tool_use_id: "toolu_1",
+    tool_response: { isAsync: true, status: "async_launched" },
+  };
+  assert.equal(applyEvent(map, "w1", asyncResult, 102), map, "the call's result changes nothing");
+  assert.equal(Object.hasOwn(map.w1?.[0] ?? {}, "background"), false, "no flag is saved");
+  map = applyEvent(map, "w1", subagentStop("agent_1"), 200);
+  assert.equal(map.w1?.[0]?.endedEpoch, 200, "the pause ends the row");
+  map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 300);
+  assert.deepEqual(
+    map.w1?.map((r) => [r.label, r.startedEpoch, r.endedEpoch]),
+    [["Run the checks", 300, undefined]],
+  );
+});
+
 test("a repeated Start while the agent's row is live is a no-op", () => {
   let map = applyEvent(EMPTY, "w1", preToolUse("s1", "toolu_1", "First"), 100);
   map = applyEvent(map, "w1", subagentStart("s1", "agent_1"), 101);
