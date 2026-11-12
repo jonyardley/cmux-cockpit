@@ -534,6 +534,11 @@ impl Join {
             groups: self.groups.as_ref().map(|g| g.list.clone()),
             selected_id: self.selected.clone(),
             workspaces,
+            background_sessions: self
+                .agents
+                .as_ref()
+                .filter(|v| !v.background.is_empty())
+                .map(|v| v.background.clone()),
         }
     }
 }
@@ -559,6 +564,7 @@ fn pid_of(v: &Value) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cockpit_core::data::BackgroundSession;
     use serde_json::json;
 
     fn ack(after: u64, latest: u64) -> Value {
@@ -593,6 +599,7 @@ mod tests {
                 .map(|(p, _, s)| (*p, (*s).to_string()))
                 .collect(),
             started: HashMap::new(),
+            background: Vec::new(),
         }
     }
 
@@ -1383,6 +1390,55 @@ mod tests {
             .map(|a| a.earlier_sessions.clone())
             .collect();
         assert_eq!(ids, vec![Some(vec!["before".to_string()])]);
+    }
+
+    /// An Agent View with one interactive process and these background
+    /// sessions, each a short id and its state.
+    fn with_bg(sessions: &[(&str, &str)]) -> AgentView {
+        let mut v = view(&[(7, false, "chat")]);
+        v.background = sessions
+            .iter()
+            .map(|(id, state)| BackgroundSession {
+                id: (*id).to_string(),
+                session_id: Some(format!("s-{id}")),
+                state: serde_json::from_value(json!(state)).ok(),
+                ..BackgroundSession::default()
+            })
+            .collect();
+        v
+    }
+
+    #[test]
+    fn background_sessions_reach_the_sidebars_core_with_their_state() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        assert!(j.agents(with_bg(&[])));
+        let json = serde_json::to_value(j.frame(0.0)).unwrap();
+        assert!(
+            json.get("backgroundSessions").is_none(),
+            "none, so left out"
+        );
+
+        assert!(j.agents(with_bg(&[("aaaa", "working"), ("bbbb", "done")])));
+        assert!(!j.agents(with_bg(&[("aaaa", "working"), ("bbbb", "done")])));
+        assert!(
+            j.agents(with_bg(&[("aaaa", "stopped"), ("bbbb", "done")])),
+            "a change of state alone is a new frame"
+        );
+        assert!(j.agents(with_bg(&[("aaaa", "working"), ("bbbb", "done")])));
+
+        // data.json carries the frame to the sidebar's own core.
+        let json = serde_json::to_value(j.frame(0.0)).unwrap();
+        let back: Data = serde_json::from_value(json).unwrap();
+        assert_eq!(back.background_list().len(), 2);
+        assert!(back.background_runs("aaaa"));
+        assert!(back.background_runs("s-aaaa"));
+        assert!(!back.background_runs("bbbb"));
+        assert_eq!(
+            statuses(&back),
+            statuses(&j.frame(0.0)),
+            "the interactive agents are as before"
+        );
     }
 
     #[test]
