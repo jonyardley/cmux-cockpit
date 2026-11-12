@@ -16,7 +16,7 @@ import {
 } from "../scripts/hooks/bg-sessions.ts";
 import { foldFor, type Reads } from "../scripts/hooks/report-background.ts";
 import { MAX_AGE_S } from "../scripts/hooks/report-shell.ts";
-import { isRecord, MAX_TASKS, type SavedTask, type State } from "../scripts/state-config.ts";
+import { isRecord, MAX_TASKS, type SavedTask, type State, validateState } from "../scripts/state-config.ts";
 
 type BackgroundMap = NonNullable<State["background"]>;
 
@@ -84,6 +84,7 @@ test("the captured call, with its warning line first, saves the session under th
       seenEpoch: 1000,
     },
   ]);
+  assert.deepEqual(validateState({ background: map }).background, map, "the saved entry reads back unchanged");
 });
 
 test("the line without a warning reads the same, and a printed name is the description", () => {

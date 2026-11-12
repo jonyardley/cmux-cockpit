@@ -88,7 +88,7 @@ function listedTask(v: unknown): ListedTask[] {
   if (!isRecord(v) || typeof v.id !== "string" || !isId(v.id)) return [];
   const status = cleanLabel(v.status);
   // `session` is this cockpit's word for a `claude --bg` session, which
-  // only the later hook saves and every replace keeps; a listed task
+  // only a Bash call's output saves and every replace keeps; a listed task
   // calling itself that would never leave with the list.
   const type = v.type === "session" ? "other" : taskType(v.type);
   return [
@@ -187,8 +187,8 @@ export function applySnapshot(map: BackgroundMap, wsId: string, snap: Snapshot, 
 
 /**
  * Drops tasks no snapshot has listed for MAX_AGE_S across every workspace,
- * and any workspace left with none. `session` entries too: the hook that
- * saves them restamps seenEpoch while the session runs.
+ * and any workspace left with none. `session` entries too: the chat's
+ * Stop restamps seenEpoch while the session runs (see foldFor).
  */
 export function prune(map: BackgroundMap, now: number): BackgroundMap {
   const out: BackgroundMap = {};
