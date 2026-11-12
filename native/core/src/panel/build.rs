@@ -917,6 +917,7 @@ mod tests {
         assert_eq!(halo(StatusKind::Asking), Token::AmberHalo);
         assert_eq!(halo(StatusKind::MergeReady), Token::MergeHalo);
         assert_eq!(halo(StatusKind::ShellRunning), Token::BlueHalo);
+        assert_eq!(halo(StatusKind::HelperRunning), Token::BlueHalo);
         assert_eq!(halo(StatusKind::Ready), Token::Clear, "finished green");
         assert_eq!(halo(StatusKind::Quiet), Token::Clear, "hollow blue");
         assert_eq!(halo(StatusKind::Plain(Status::Idle)), Token::Clear);

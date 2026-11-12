@@ -16,6 +16,7 @@ mod cockpit;
 mod count_tint_saved;
 mod drop;
 mod halo;
+mod helpers_running;
 mod helpers_saved;
 mod lane_table;
 mod left_off_quiet;

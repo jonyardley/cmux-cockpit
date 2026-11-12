@@ -134,9 +134,13 @@ impl Session {
         if self.is_ready(data, w) {
             return 1;
         }
-        // A Shell running card is drawn in working blue, so it sorts with the working.
+        // A Shell or Helper running card is drawn in working blue, so it
+        // sorts with the working.
         let a = self.agent_of(w);
-        if s == Status::Working || self.is_shell_running(a.as_ref(), w) {
+        if s == Status::Working
+            || self.is_shell_running(a.as_ref(), w)
+            || self.is_helper_running(a.as_ref(), w)
+        {
             2
         } else {
             3
