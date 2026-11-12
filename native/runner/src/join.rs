@@ -1374,6 +1374,15 @@ mod tests {
             earlier(&j),
             vec![("after".into(), Some(vec!["before".into()]))]
         );
+
+        // data.json carries the frame to the sidebar's own core.
+        let json = serde_json::to_value(j.frame(0.0)).unwrap();
+        let back: Data = serde_json::from_value(json).unwrap();
+        let ids: Vec<_> = back.workspace_list()[0]
+            .agent_list()
+            .map(|a| a.earlier_sessions.clone())
+            .collect();
+        assert_eq!(ids, vec![Some(vec!["before".to_string()])]);
     }
 
     #[test]
