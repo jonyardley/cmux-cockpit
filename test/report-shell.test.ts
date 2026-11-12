@@ -40,13 +40,24 @@ test("a background Bash call's id comes from the tool result, or failing that it
   assert.equal(backgroundId(bash("s1", true, { backgroundTaskId: "b1" })), "b1");
   const text = { stdout: "Command running in background with ID: bq7x. Output is being written to: /tmp/x" };
   assert.equal(backgroundId(bash("s1", true, text)), "bq7x");
-  assert.equal(backgroundId(bash("s1", false, { backgroundTaskId: "b1" })), null);
   assert.equal(backgroundId(bash("s1", true, { stdout: "done" })), null);
+  assert.equal(backgroundId(bash("s1", false, { stdout: "done" })), null, "a foreground call");
+  assert.equal(backgroundId(bash("s1", false, text)), null, "a foreground call's text is never trusted");
   assert.equal(
     backgroundId({ ...bash("s1", true, { backgroundTaskId: "b1" }), agent_id: "sub" }),
     null,
     "a subagent's",
   );
+});
+
+// The result Claude Code gives a call that outran its timeout (2.1.322):
+// run_in_background is false, but the task id is there.
+test("a call Claude Code moved to the background when it timed out is saved", () => {
+  const timedOut = { stdout: "partial", backgroundTaskId: "b4tocmbdv", timedOutAfterMs: 600000 };
+  assert.equal(backgroundId(bash("s1", false, timedOut)), "b4tocmbdv");
+  assert.equal(mayChange(bash("s1", false, timedOut)), true);
+  const saved = applyEvent({}, "w1", bash("s1", false, timedOut), 10);
+  assert.deepEqual(saved, { w1: [{ id: "b4tocmbdv", session: "s1", startedEpoch: 10 }] });
 });
 
 test("a KillShell or TaskStop call names the task it stopped", () => {

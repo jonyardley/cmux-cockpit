@@ -5,7 +5,7 @@
 //
 // Run by scripts/hooks/dispatch.ts on two Claude Code events, as
 // scripts/hooks/routes.ts lists them. PostToolUse on Bash saves a shell
-// when the call ran in the background, keyed by the task id Claude Code
+// when the call went to the background, keyed by the task id Claude Code
 // gave it, and PostToolUse on KillShell or TaskStop drops the one stopped. Stop reads the transcript's tail for task-notifications, which
 // Claude Code enqueues when a background task finishes or is stopped, and
 // drops the shells they name. A finished shell always wakes its chat, and
@@ -39,16 +39,24 @@ const TAIL_BYTES = 2 * 1024 * 1024;
 // Claude Code's text when the tool result carries no backgroundTaskId.
 const ID_IN_TEXT = /running in background with ID: ([\w-]+)/;
 
-/** The task id of a main-chat Bash call that went to the background, or null for anything else. */
+/**
+ * The task id of a main-chat Bash call that went to the background, or null
+ * for anything else. A call goes there three ways: started with
+ * run_in_background, sent there mid-run with Ctrl+B, or moved there by
+ * Claude Code when it outran its timeout. Only the first sets
+ * run_in_background, but all three carry backgroundTaskId in the result.
+ */
 export function backgroundId(event: unknown): string | null {
   if (field(event, "tool_name") !== "Bash") return null;
   // A subagent's shell reports its finish to the subagent, never to the
   // Stop this hook reads, so it would never clear.
   if (field(event, "agent_id") !== undefined) return null;
-  if (field(field(event, "tool_input"), "run_in_background") !== true) return null;
   const response = field(event, "tool_response");
   const id = field(response, "backgroundTaskId");
   if (typeof id === "string" && id) return id;
+  // The text is only trusted for a call started in the background: a
+  // foreground command's own output could print anything.
+  if (field(field(event, "tool_input"), "run_in_background") !== true) return null;
   const text = field(response, "stdout");
   return typeof text === "string" ? (ID_IN_TEXT.exec(text)?.[1] ?? null) : null;
 }
