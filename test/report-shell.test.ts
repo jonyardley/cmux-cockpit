@@ -52,12 +52,30 @@ test("a background Bash call's id comes from the tool result, or failing that it
 
 // The result Claude Code gives a call that outran its timeout (2.1.322):
 // run_in_background is false, but the task id is there.
-test("a call Claude Code moved to the background when it timed out is saved", () => {
+// Its clock counts from when it really started, the timeout before now.
+test("a call Claude Code moved to the background when it timed out is saved from its real start", () => {
   const timedOut = { stdout: "partial", backgroundTaskId: "b4tocmbdv", timedOutAfterMs: 600000 };
   assert.equal(backgroundId(bash("s1", false, timedOut)), "b4tocmbdv");
   assert.equal(mayChange(bash("s1", false, timedOut)), true);
-  const saved = applyEvent({}, "w1", bash("s1", false, timedOut), 10);
-  assert.deepEqual(saved, { w1: [{ id: "b4tocmbdv", session: "s1", startedEpoch: 10 }] });
+  const saved = applyEvent({}, "w1", bash("s1", false, timedOut), 1000);
+  assert.deepEqual(saved, { w1: [{ id: "b4tocmbdv", session: "s1", startedEpoch: 400 }] });
+});
+
+// Ctrl+B and a move to deliver a message: an id, no timeout, so dated now.
+test("a call sent to the background with Ctrl+B or to deliver a message is saved", () => {
+  for (const response of [
+    { stdout: "", backgroundTaskId: "bctrl" },
+    { stdout: "", backgroundTaskId: "bctrl", backgroundedToDeliverMessage: true },
+  ]) {
+    assert.equal(backgroundId(bash("s1", false, response)), "bctrl");
+    const saved = applyEvent({}, "w1", bash("s1", false, response), 1000);
+    assert.deepEqual(saved, { w1: [{ id: "bctrl", session: "s1", startedEpoch: 1000 }] });
+  }
+});
+
+test("the text fallback reads Claude Code's moved wording too", () => {
+  const moved = { stdout: "Command was moved to the background (ID: bmv1). Output is being written to: /tmp/x" };
+  assert.equal(backgroundId(bash("s1", true, moved)), "bmv1");
 });
 
 test("a KillShell or TaskStop call names the task it stopped", () => {

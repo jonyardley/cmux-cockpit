@@ -122,6 +122,16 @@ describe("settledPr", () => {
     assert.equal(settledPr({ ...event, tool_input: { ...event.tool_input, run_in_background: true } }), false);
   });
 
+  it("leaves a call moved to the background mid-run to the turn-end poll too", () => {
+    const event = bash("npm run check && gh pr ready 70");
+    for (const tool_response of [
+      { stdout: "", backgroundTaskId: "b1", timedOutAfterMs: 600000 },
+      { stdout: "", backgroundTaskId: "b1" },
+    ]) {
+      assert.equal(settledPr({ ...event, tool_response }), false);
+    }
+  });
+
   it("ignores mentions, other gh pr commands, other tools and junk", () => {
     assert.equal(settledPr(bash('grep -rn "gh pr ready" docs')), false);
     assert.equal(settledPr(bash("gh pr view 68")), false);
