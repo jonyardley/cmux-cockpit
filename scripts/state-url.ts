@@ -304,6 +304,21 @@ export function writeShells(
 }
 
 /**
+ * Folds `update` over the whole `background` map
+ * (scripts/hooks/report-background.ts), under the same lock, with keys
+ * sorted as writeShells sorts them.
+ */
+export function writeBackground(
+  path: string,
+  update: (background: NonNullable<State["background"]>) => NonNullable<State["background"]>,
+): ApplyResult {
+  return readUpdateWrite(path, (before) => {
+    const background = sortedByKey(update(before.background ?? {}));
+    return { ok: true, state: validateState({ ...before, background }) };
+  });
+}
+
+/**
  * Folds `update` over the whole `published` map
  * (scripts/hooks/report-published.ts), under the same lock. Keys are not
  * sorted: the map is kept oldest first, so validateState's cap drops the

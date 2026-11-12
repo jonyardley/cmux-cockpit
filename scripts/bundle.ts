@@ -16,7 +16,7 @@ export type Entry = (typeof ENTRIES)[number];
 
 /** The saved-state maps each sidebar never reads, so a change to them never reloads it. */
 export const UNREAD: Record<Entry, readonly (keyof State)[]> = {
-  agents: ["projects", "ui", "laneNames", "shells"],
+  agents: ["projects", "ui", "laneNames", "shells", "background"],
 };
 
 /** `state` without the maps `entry` never reads. */

@@ -43,6 +43,7 @@ const LEGACY_SCRIPTS = [
   "report-move.ts",
   "report-rename.ts",
   "report-shell.ts",
+  "report-background.ts",
   "report-mention.ts",
 ];
 
