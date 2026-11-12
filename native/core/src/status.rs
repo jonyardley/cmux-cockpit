@@ -501,7 +501,7 @@ impl Session {
     }
 
     /// status_kind, with the card's work read once for Ready to merge,
-    /// Ready, the quiet rule and Running.
+    /// Ready and Running.
     fn kind_with(&mut self, data: &Data, w: Option<&Workspace>, card: &CardRunning) -> StatusKind {
         let a = card.agent.as_ref();
         if self.merge_ready(w, card) {
@@ -518,7 +518,7 @@ impl Session {
         if ask_reason(&self.saved, a, w).is_some() {
             return StatusKind::Asking;
         }
-        if self.quiet_with(data, a, w, card.running.is_some()) > 0.0 {
+        if self.quiet_since(data, a, w) > 0.0 {
             return StatusKind::Quiet;
         }
         if shows_running(a, card.running.as_ref()) {
@@ -679,11 +679,17 @@ impl Session {
         }
     }
 
-    /// True when the status line carries a time, so a card leaves its top-right one off.
-    pub fn status_has_age(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+    /// How long the card's status has held, as its status line says it
+    /// ("5m" from the earliest work while Running).
+    pub fn status_age(&mut self, data: &Data, w: Option<&Workspace>) -> String {
         let card = self.card_running(data, w);
         let kind = self.kind_with(data, w, &card);
-        !self.age_with(data, w, &kind, &card).is_empty()
+        self.age_with(data, w, &kind, &card)
+    }
+
+    /// True when the status line carries a time, so a card leaves its top-right one off.
+    pub fn status_has_age(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        !self.status_age(data, w).is_empty()
     }
 
     /// A Running card counts from when its earliest work started, a Ready

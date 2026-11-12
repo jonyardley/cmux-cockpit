@@ -66,18 +66,18 @@ mod a_quiet_agent {
     }
 
     #[test]
-    fn holds_off_while_its_own_background_work_runs() {
+    fn holds_off_while_its_own_agent_from_before_a_clear_runs() {
         let (_, data, mut fx) = setup();
         let mut s = session(
-            r#"{"background": {"w": [{"id": "b1", "type": "monitor", "status": "running",
-                "description": "watch", "session": "chat", "startedEpoch": 999000, "seenEpoch": 999000}]}}"#,
+            r#"{"subagents": {"w": [{"id": "t1", "session": "before", "label": "Checks", "startedEpoch": 999000}]}}"#,
         );
-        let w = ws("w").agents(vec![
-            fx.agent(Working)
-                .id("chat")
-                .since(NOW - 42.0 * 60.0)
-                .activity(NOW - 17.0 * 60.0),
-        ]);
+        let mut a = fx
+            .agent(Working)
+            .id("chat")
+            .since(NOW - 42.0 * 60.0)
+            .activity(NOW - 17.0 * 60.0);
+        a.earlier_sessions = Some(vec!["before".to_string()]);
+        let w = ws("w").agents(vec![a]);
         assert_eq!(s.status_line(&data, Some(&w)), "Working 42m");
     }
 

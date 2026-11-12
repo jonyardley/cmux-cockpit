@@ -151,6 +151,19 @@ mod background_shells_on_the_card {
     }
 
     #[test]
+    fn reads_only_the_background_record_never_the_old_shell_map() {
+        let (mut s, data, mut fx) = setup();
+        let mut old = session(
+            r#"{"shells": {"one": [{"id": "b1", "session": "chat", "startedEpoch": 100}]}}"#,
+        );
+        let w = ws("one").agents(vec![idle(&mut fx)]);
+        let a = idle(&mut fx);
+        assert_eq!(live_shell_count(&old.saved, Some(&w), Some(&a)), 1);
+        assert_eq!(old.status_line(&data, Some(&w)), "Idle 4m");
+        assert!(s.status_line(&data, Some(&w)).starts_with("Running"));
+    }
+
+    #[test]
     fn leaves_a_working_chat_as_working() {
         let (mut s, data, mut fx) = setup();
         let w = ws("one").agents(vec![fx.agent(Working).id("chat").since(NOW - 60.0)]);

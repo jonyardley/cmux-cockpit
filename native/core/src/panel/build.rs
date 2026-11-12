@@ -605,6 +605,10 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
     // status with the age, or while it waits on Jon, why.
     let (status, status_short, status_ink) = match (density, waiting) {
         (Density::Row, Some(wt)) => (session.age_of(data, w), String::new(), wt.ink),
+        // A Running row counts from the earliest work, as its card does.
+        (Density::Row, None) if kind == StatusKind::Running => {
+            (session.status_age(data, w), String::new(), Token::MetaText)
+        }
         (Density::Row, None) => (session.age_of(data, w), String::new(), Token::MetaText),
         (_, Some(wt)) => with_no_short(needs_status(session, data, w, wt)),
         (_, None) => {
@@ -1484,6 +1488,12 @@ mod tests {
         assert_eq!(full.helpers, "", "the status line already says it");
         let row = looks(s, &data, w, Density::Row, "4m", &kind);
         assert_eq!(row.helpers, "· 1 helper", "a row's status is its age alone");
+        assert_eq!(s.age_of(&data, w), "5m", "the agent went idle 5m ago");
+        assert_eq!(
+            s.status_age(&data, w),
+            "4m",
+            "a Running row counts from its work"
+        );
     }
 
     #[test]

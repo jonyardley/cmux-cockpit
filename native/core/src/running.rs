@@ -1,6 +1,7 @@
 //! Whether background work runs for a card, and what (issue #359): the
-//! one rule the status, Ready, Ready to merge, the quiet rule and lane
-//! order all read, so they never disagree on it.
+//! one rule the status, Ready, Ready to merge and lane order all read, so
+//! they never disagree on it. The quiet rule (`crate::quiet`) keeps to the
+//! chat's own agent runs, since this record is written on Stop only.
 //!
 //! The work is the chat's whole tree as `crate::background::live_tasks`
 //! gives it: its shells and monitors, its agents and their own shells,
