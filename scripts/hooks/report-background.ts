@@ -2,8 +2,9 @@
 // monitors, background agents and their own work, as Claude Code lists it.
 // cmux sends custom sidebars none of this, so this hook is the only source.
 //
-// Run by scripts/hooks/dispatch.ts on Stop and SubagentStop, as
-// scripts/hooks/routes.ts lists them. Both carry `background_tasks`, a full
+// Run by scripts/hooks/dispatch.ts on Stop, SubagentStop and PostToolUse
+// Bash, as scripts/hooks/routes.ts lists them; the Bash call and the Stop
+// settle are for `claude --bg` sessions (scripts/hooks/bg-sessions.ts). Both carry `background_tasks`, a full
 // snapshot of the chat's work in flight (SubagentStop's is the parent
 // chat's, under the chat's session id): a finished task drops out of the
 // list rather than changing its status. So each snapshot replaces, in
@@ -17,9 +18,10 @@
 // - A monitor is listed as `shell`, so a monitor's own deadline cannot end
 //   it; it ends with the list like any shell.
 // - A `claude --bg` session is never listed. Its entries (type `session`,
-//   saved by a later hook) are kept through every replace, but pruned like
-//   any other entry, so that hook must restamp seenEpoch while the session
-//   runs.
+//   saved from the Bash call that started it) are kept through every
+//   replace, but pruned like any other entry, so the chat's Stop restamps
+//   seenEpoch while `claude agents --json` says the session runs, and
+//   drops it once that says it has settled.
 // - After a `/clear` the chat lists under a new session id, but from the
 //   same Claude process, so a snapshot also replaces the entries saved by
 //   its process (CLAUDE_PID, which Claude Code sets for every hook it runs).
@@ -42,8 +44,18 @@ import {
   type SavedTask,
   type State,
   taskType,
+  validateState,
 } from "../state-config.ts";
 import { writeBackground } from "../state-url.ts";
+import {
+  launchedSessions,
+  ownerOf,
+  ownsSessions,
+  readSessionStates,
+  type SessionStates,
+  saveLaunched,
+  settle,
+} from "./bg-sessions.ts";
 import { field } from "./gh-command.ts";
 import { MAX_AGE_S } from "./report-shell.ts";
 
@@ -76,7 +88,7 @@ function listedTask(v: unknown): ListedTask[] {
   if (!isRecord(v) || typeof v.id !== "string" || !isId(v.id)) return [];
   const status = cleanLabel(v.status);
   // `session` is this cockpit's word for a `claude --bg` session, which
-  // only the later hook saves and every replace keeps; a listed task
+  // only a Bash call's output saves and every replace keeps; a listed task
   // calling itself that would never leave with the list.
   const type = v.type === "session" ? "other" : taskType(v.type);
   return [
@@ -175,8 +187,8 @@ export function applySnapshot(map: BackgroundMap, wsId: string, snap: Snapshot, 
 
 /**
  * Drops tasks no snapshot has listed for MAX_AGE_S across every workspace,
- * and any workspace left with none. `session` entries too: the hook that
- * saves them restamps seenEpoch while the session runs.
+ * and any workspace left with none. `session` entries too: the chat's
+ * Stop restamps seenEpoch while the session runs (see foldFor).
  */
 export function prune(map: BackgroundMap, now: number): BackgroundMap {
   const out: BackgroundMap = {};
@@ -199,18 +211,64 @@ export const unstamped = (map: BackgroundMap): string =>
     (key, value: unknown) => (key === "seenEpoch" ? undefined : value),
   );
 
-/** One snapshot folded in, then the prune: what the hook writes. */
-const fold = (map: BackgroundMap, wsId: string, snap: Snapshot, now: number): BackgroundMap =>
-  prune(applySnapshot(map, wsId, snap, now), now);
-
-/** One event folded in, as `main` folds it once it has read the snapshot. */
+/**
+ * One event folded in through `foldFor`, the path `main` takes, with the
+ * record as `map` and no agents read: what the hook writes when no saved
+ * session needs settling.
+ */
 export function update(map: BackgroundMap, wsId: string, event: unknown, now: number, pid?: number): BackgroundMap {
+  const apply = foldFor(event, wsId, now, { saved: () => map, states: () => null }, pid);
+  return apply === null ? map : apply(map);
+}
+
+/** What `foldFor` may read beyond the event: the record as it stands, and what `claude agents --json` says. */
+export interface Reads {
+  saved: () => BackgroundMap;
+  states: () => SessionStates | null;
+}
+
+/**
+ * What one event does to the record, as a fold for the locked write, or
+ * null for nothing. A PostToolUse Bash call that started `claude --bg`
+ * sessions saves them (scripts/hooks/bg-sessions.ts). A Stop or
+ * SubagentStop applies its list. A chat's own Stop first settles the
+ * `session` entries it owns, but reads `claude agents --json` only when
+ * it owns one, and before the lock; a failed read settles nothing. The
+ * settle comes before the prune, so a session still running is never
+ * pruned for want of a list that cannot hold it.
+ */
+export function foldFor(
+  event: unknown,
+  wsId: string,
+  now: number,
+  reads: Reads,
+  pid?: number,
+): ((map: BackgroundMap) => BackgroundMap) | null {
+  const owner = ownerOf(event, pid);
+  if (owner === null) return null;
+  const launched = launchedSessions(event);
+  if (launched.length) return (map) => prune(saveLaunched(map, wsId, owner, launched, now), now);
   const snap = snapshotOf(event, pid);
-  return snap ? fold(map, wsId, snap, now) : map;
+  const isStop = field(event, "hook_event_name") === "Stop";
+  const states = isStop && ownsSessions(reads.saved(), wsId, owner) ? reads.states() : null;
+  if (snap === null && states === null) return null;
+  return (map) => {
+    const settledMap = states === null ? map : settle(map, wsId, owner, states, now);
+    return prune(snap === null ? settledMap : applySnapshot(settledMap, wsId, snap, now), now);
+  };
 }
 
 const ROOT = join(import.meta.dirname, "..", "..");
 const STATE_PATH = join(ROOT, "config", "state.json");
+
+/** The record as it stands, read without the lock, or none when the file cannot be read. */
+function peek(): BackgroundMap {
+  try {
+    return validateState(JSON.parse(readFileSync(STATE_PATH, "utf8"))).background ?? {};
+  } catch {
+    return {};
+  }
+}
 
 async function main(): Promise<void> {
   const wsId = process.env.CMUX_WORKSPACE_ID;
@@ -221,14 +279,15 @@ async function main(): Promise<void> {
   } catch {
     return;
   }
-  const snap = snapshotOf(event, pidFrom(process.env.CLAUDE_PID));
-  if (snap === null) return;
   const now = Math.floor(Date.now() / 1000);
+  const reads: Reads = { saved: peek, states: readSessionStates };
+  const apply = foldFor(event, wsId, now, reads, pidFrom(process.env.CLAUDE_PID));
+  if (apply === null) return;
   let moved = false;
   let result: ReturnType<typeof writeBackground>;
   try {
     result = writeBackground(STATE_PATH, (map) => {
-      const next = fold(map, wsId, snap, now);
+      const next = apply(map);
       moved = unstamped(next) !== unstamped(map);
       return next;
     });

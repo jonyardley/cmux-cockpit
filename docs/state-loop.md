@@ -566,7 +566,7 @@ What the list holds (real payloads, Claude Code 2.1.322, in
 The `type` set is Claude Code's own labels, as its hooks reference lists
 them (`shell`, `subagent`, `monitor`, `workflow`, `teammate`,
 `cloud session`, `MCP task`), plus `session` for a `claude --bg` session,
-which a later hook saves (#357), and `other` for any label Claude Code
+saved as the section below says (#357), and `other` for any label Claude Code
 adds later: the entry is kept, typed `other`, not dropped.
 `scripts/state-config.ts` (`TASK_TYPES`, `savedTask`) and
 `native/core/src/persist.rs` (`TaskType`, `tasks_map`) read the map the
@@ -581,8 +581,8 @@ was saved under another session in the workspace moves to this one. A task
 listed twice is saved once, and one listed as `completed`, `failed` or
 `killed` is not saved, and takes out any saved copy as a listed task would. Entries of type `session` are kept through every
 replace, since no list holds them, but the prune below takes them like any
-other entry, so the hook that saves them (#357) must restamp `seenEpoch`
-while the session runs. A snapshot never pushes out another chat's entries
+other entry, so the chat's `Stop` restamps `seenEpoch` while the session
+runs (below). A snapshot never pushes out another chat's entries
 or a `session` entry: when the workspace would pass 20, the snapshot's own
 newest tasks are left out, so the validators' cut never fires on a hook
 write. A `Stop` with no list, or something other than a list in its place,
@@ -590,6 +590,47 @@ which Claude Code sends when its task registry is unreachable, leaves the
 record alone; only `[]` empties it. A write that only moves `seenEpoch`
 asks for no rebuild; the map is in the bundle's `UNREAD` list in any case,
 so the agents panel never reloads for it.
+
+A `claude --bg` session started from a chat, or from one of its agents,
+counts as that chat's work (#357, `scripts/hooks/bg-sessions.ts`, run by
+the same hook). No list holds one, so the record learns of it two ways:
+
+- **Started:** a `PostToolUse` Bash call whose command has `--bg` as a word
+  and whose output has a line `backgrounded · <8 hex>`, optionally
+  followed by ` · <name>` (a warning line can come before it; stdout and
+  stderr are both read). Each such session is saved as a `session` task
+  with the id `bg:<8 hex>`, so no id Claude Code gives its own tasks can
+  match it; the native side strips `bg:` to compare with the short id
+  `claude agents --json` gives. It is owned by the payload's `session_id`
+  and `CLAUDE_PID`, which an agent's hooks give as the chat's own; its
+  description is the printed name, else the Bash call's own description,
+  never the command (it can carry a token); its status stays
+  `running`. Saved again, it keeps its place and start. A workspace
+  already at 20 leaves the new session out.
+- **Settled:** on the chat's own `Stop` (not `SubagentStop`), if it owns a
+  `session` entry in the workspace, saved under its session or by its
+  process before a `/clear`, the hook reads `claude agents --json` once,
+  before taking the state lock, with a five second limit. Its background
+  entries give each short id a `state`. One `done`, `failed` or `stopped`
+  is dropped; any other word (`working`, `blocked`, or one Claude Code adds
+  later, as the core's `runs()` reads it) gets a new `seenEpoch`; one not
+  listed is dropped once a minute has passed since it was saved
+  (`GONE_GRACE_S`), since a save by one of the chat's agents can cross the
+  read. A failed read (an error, a timeout, a non-zero exit, or output
+  that is not a list) settles nothing. The settle runs in the same locked
+  write as the `Stop`'s list, before the prune, so a running session is
+  never pruned for want of a list. `~/.claude/jobs/` is never read: it is
+  not a stable interface.
+
+What this misses: a session started by a wrapper script that does not
+have `--bg` on its command line, or by a Bash call run in the background
+(its `PostToolUse` comes before the output) or one that exits non-zero
+after the launch (`PostToolUseFailure`, which this hook does not take); a
+session started while the workspace holds 20 tasks, never retried; a
+session started under another `CLAUDE_CONFIG_DIR` than the chat's, which
+the chat's agents read cannot list, so it is dropped a minute after
+saving; and a chat with no `Stop` for 12 hours loses its running sessions
+to the prune for good.
 
 A missed end is caught two ways. The core counts a task only for the chat
 that owns its session, under any id that chat ran under
