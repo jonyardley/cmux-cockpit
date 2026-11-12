@@ -46,7 +46,11 @@ describe("scriptsFor", () => {
     assert.deepEqual(scriptsFor("PostToolUse", { tool_name: "Agent" }), ["report-subagent.ts"]);
     assert.deepEqual(scriptsFor("PreToolUse", { tool_name: "ExitPlanMode" }), ["report-notification.ts"]);
     assert.deepEqual(scriptsFor("PreToolUse", { tool_name: "Read" }), []);
-    assert.deepEqual(scriptsFor("PostToolUse", { tool_name: "Bash" }), ["report-pr.ts", "report-shell.ts"]);
+    assert.deepEqual(scriptsFor("PostToolUse", { tool_name: "Bash" }), [
+      "report-pr.ts",
+      "report-shell.ts",
+      "report-background.ts",
+    ]);
     assert.deepEqual(scriptsFor("PostToolUse", { tool_name: "mcp__claude_ai_Claude_Docs__update" }), [
       "report-published.ts",
     ]);
