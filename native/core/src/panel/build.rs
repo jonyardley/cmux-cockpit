@@ -21,6 +21,7 @@ use crate::status::{
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
 use crate::ui::QUIET_PILL;
+use crate::words::HELPER_RUNNING_WORD;
 
 use super::{
     AddMenu, AddProject, Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT,
@@ -210,7 +211,13 @@ fn looks(
         ready: !row && *kind == StatusKind::Ready,
         pinned: is_pinned(w),
         progress: progress_fraction(w),
-        helpers: session.helper_text(w),
+        // A Helper running status line already says the count; a waiting
+        // card's or a row's status does not, so those keep the words.
+        helpers: if *kind == StatusKind::HelperRunning && status.starts_with(HELPER_RUNNING_WORD) {
+            String::new()
+        } else {
+            session.helper_text(w)
+        },
         age,
         status_has_age,
     }
@@ -917,6 +924,7 @@ mod tests {
         assert_eq!(halo(StatusKind::Asking), Token::AmberHalo);
         assert_eq!(halo(StatusKind::MergeReady), Token::MergeHalo);
         assert_eq!(halo(StatusKind::ShellRunning), Token::BlueHalo);
+        assert_eq!(halo(StatusKind::HelperRunning), Token::BlueHalo);
         assert_eq!(halo(StatusKind::Ready), Token::Clear, "finished green");
         assert_eq!(halo(StatusKind::Quiet), Token::Clear, "hollow blue");
         assert_eq!(halo(StatusKind::Plain(Status::Idle)), Token::Clear);
@@ -1447,6 +1455,29 @@ mod tests {
         }
         let (_, ink) = detail_of(s, &data, w, Density::Row, None);
         assert_eq!(ink, Token::Secondary, "a row not waiting");
+    }
+
+    #[test]
+    fn says_the_helper_count_once_on_a_helper_running_card() {
+        let mut core = Model::default();
+        let s = &mut core.session;
+        s.saved = crate::persist::SavedState::from_json(
+            r#"{"subagents": {"W": [{"id": "t1", "session": "a0", "label": "Checks", "startedEpoch": 100}]}}"#,
+        )
+        .unwrap();
+        let data: Data = serde_json::from_value(serde_json::json!({"epoch": 400,
+            "workspaces": [{"id": "W", "title": "qualify",
+                "agents": [{"id": "a0", "status": "idle", "sinceEpoch": 100}]}]}))
+        .unwrap();
+        let w = data.ws_by_id("W");
+        let kind = s.status_kind(&data, w);
+        assert_eq!(kind, StatusKind::HelperRunning);
+        let status = s.status_line(&data, w);
+        assert!(status.ends_with(" · 1 helper"), "{status}");
+        let full = looks(s, &data, w, Density::Full, &status, &kind);
+        assert_eq!(full.helpers, "", "the status line already says it");
+        let row = looks(s, &data, w, Density::Row, "4m", &kind);
+        assert_eq!(row.helpers, "· 1 helper", "a row's status is its age alone");
     }
 
     #[test]

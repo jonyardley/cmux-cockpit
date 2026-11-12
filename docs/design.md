@@ -552,7 +552,10 @@ views draw them as any status and detail.
 
 The blue status for an idle agent whose background shell still runs says
 "Shell running" (`SHELL_RUNNING_WORD`, `native/core/src/words.rs`), so
-"waiting" only ever means waiting on you (D15 a).
+"waiting" only ever means waiting on you (D15 a). One whose background
+agent (a subagent run) still runs says "Helper running 4m · 1 helper"
+(`HELPER_RUNNING_WORD`) in the same blue; a running shell wins when both
+run.
 
 ### Waiting tab line
 
@@ -856,6 +859,7 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Asking | amber dot with halo, `amberText` words, amber needs dot | same | amber glyph **≠**; `amberCount` pill | waiting count amber while every waiting card asks | `status.rs` `StatusKind::style`; `panel/build.rs` `needs_tone` |
 | Working | blue dot with halo, `blueText`; blue progress bar | blue dot | blue glyph; `blueCount` pill | | `status.rs:109` |
 | Shell running | as working, the word "Shell running" | as working | as working | | `status.rs` `StatusKind::ShellRunning`; `words.rs` |
+| Helper running | as working, the word "Helper running" | as working | as working | | `status.rs` `StatusKind::HelperRunning`; `words.rs` |
 | Quiet working | hollow blue ring, `blueText` | same | hollow glyph | | `status.rs:160-165` |
 | Finished, Ready | olive dot, no halo, `greenText`; Ready pill `greenText` on `Own.readyBg` | olive dot; no Ready pill **≠** | olive glyph | Next in `greenText` | `status.rs`; `panel/build.rs` `ready_ink` |
 | Idle, no agent | hollow grey; `metaText` idle and no agent | hollow grey | hollow grey glyph | | `status.rs` `plain_style` |

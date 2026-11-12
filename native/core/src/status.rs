@@ -16,8 +16,8 @@ use crate::theme::Token;
 use crate::time::{age_since, finished_at};
 use crate::ui::{PillColors, URGENCY_RANK, Urgency, count_tint};
 use crate::words::{
-    ASKING_WORD, ASLEEP_WORD, MERGE_READY_WORD, NO_AGENT_WORD, SHELL_RUNNING_WORD, WAKING_WORD,
-    YOU_WORD, shell_text, status_word, with_age,
+    ASKING_WORD, ASLEEP_WORD, HELPER_RUNNING_WORD, MERGE_READY_WORD, NO_AGENT_WORD,
+    SHELL_RUNNING_WORD, WAKING_WORD, YOU_WORD, shell_text, status_word, with_age,
 };
 
 /// A workspace's status: its agent's, or none.
@@ -77,6 +77,8 @@ pub enum StatusKind {
     Quiet,
     /// Idle on a background shell its own chat still runs.
     ShellRunning,
+    /// Idle while a background agent it started still runs.
+    HelperRunning,
     /// Put to sleep when its card was parked (issue #328), or on its way.
     Asleep,
     /// Asked to wake, until its agent is back.
@@ -170,6 +172,10 @@ impl StatusKind {
             },
             StatusKind::ShellRunning => StatusStyle {
                 label: SHELL_RUNNING_WORD,
+                ..plain_style(&Status::Working)
+            },
+            StatusKind::HelperRunning => StatusStyle {
+                label: HELPER_RUNNING_WORD,
                 ..plain_style(&Status::Working)
             },
             // Sleep is no state that wants Jon, so no hue: a hollow dot
@@ -377,7 +383,7 @@ impl Session {
     /// The agent a Ready card reports, or None when the workspace is not
     /// Ready: finished while Jon was elsewhere, with output he has not
     /// read, not selected, never a real ask, and not a "Nothing for you"
-    /// turn whose shell still runs.
+    /// turn whose shell or background agent still runs.
     pub fn ready_agent(&mut self, data: &Data, w: Option<&Workspace>) -> Option<Agent> {
         let w = w?;
         if !positive(w.unread.unwrap_or(0.0))
@@ -390,9 +396,10 @@ impl Session {
             return None;
         }
         let a = self.finished_agent(w)?;
-        let runs_its_shell = quiet_move(&self.saved, &a, Some(w)).is_some()
-            && live_shell_count(&self.saved, Some(w), Some(&a)) > 0;
-        (!runs_its_shell).then_some(a)
+        let runs_on = quiet_move(&self.saved, &a, Some(w)).is_some()
+            && (live_shell_count(&self.saved, Some(w), Some(&a)) > 0
+                || self.own_run_count(Some(w), &a) > 0);
+        (!runs_on).then_some(a)
     }
 
     /// Whether the workspace is Ready.
@@ -412,12 +419,20 @@ impl Session {
             && live_shell_count(&self.saved, w, a) > 0
     }
 
+    /// True when the agent is idle while a background agent (a subagent
+    /// run) its own chat started still runs: the chat waits on it, so the
+    /// card is not at rest. A run that never reports is pruned by the hook.
+    pub fn is_helper_running(&mut self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
+        a.is_some_and(|a| a.status == Some(AgentStatus::Idle) && self.own_run_count(w, a) > 0)
+    }
+
     /// Whether the card says Ready to merge: its PR is ready and its agent,
     /// if any, is idle or finished, not asking, and not idle on a shell
-    /// it still runs. Working (quiet too), Your turn, Asking and Shell
-    /// running keep their status, since they come first, and so does a
-    /// status cmux names that the core does not know, which may yet be busy.
-    fn merge_ready(&self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
+    /// or a background agent it still runs. Working (quiet too), Your
+    /// turn, Asking, Shell running and Helper running keep their status,
+    /// since they come first, and so does a status cmux names that the
+    /// core does not know, which may yet be busy.
+    fn merge_ready(&mut self, a: Option<&Agent>, w: Option<&Workspace>) -> bool {
         if pr_health(&self.saved, w) != PrHealth::Ready {
             return false;
         }
@@ -427,7 +442,10 @@ impl Session {
                 None | Some(AgentStatus::Idle | AgentStatus::Ended)
             )
         });
-        at_rest && ask_reason(&self.saved, a, w).is_none() && !self.is_shell_running(a, w)
+        at_rest
+            && ask_reason(&self.saved, a, w).is_none()
+            && !self.is_shell_running(a, w)
+            && !self.is_helper_running(a, w)
     }
 
     /// True when the card's status says Ready to merge (issue #299): the
@@ -475,6 +493,9 @@ impl Session {
         }
         if self.is_shell_running(a.as_ref(), w) {
             return StatusKind::ShellRunning;
+        }
+        if self.is_helper_running(a.as_ref(), w) {
+            return StatusKind::HelperRunning;
         }
         StatusKind::Plain(Status::of(a.as_ref()))
     }
@@ -603,7 +624,8 @@ impl Session {
     }
 
     /// The status and how long it has held ("Working 14m", "Finished 6m"),
-    /// with the shell count while Shell running and the quiet time while Quiet.
+    /// with the shell count while Shell running, the helper count while
+    /// Helper running and the quiet time while Quiet.
     pub fn status_line(&mut self, data: &Data, w: Option<&Workspace>) -> String {
         self.status_forms(data, w).0
     }
@@ -620,6 +642,10 @@ impl Session {
                 let a = self.agent_of(w);
                 let n = live_shell_count(&self.saved, w, a.as_ref());
                 (format!("{line} {}", shell_text(n)), line)
+            }
+            StatusKind::HelperRunning => {
+                let n = self.agent_of(w).map_or(0, |a| self.own_run_count(w, &a));
+                (format!("{line} {}", helpers_words(n)), line)
             }
             StatusKind::Quiet => {
                 let a = self.agent_of(w);
@@ -665,11 +691,7 @@ impl Session {
 
     /// "· 3 helpers" while subagent runs are live, else "".
     pub fn helper_text(&mut self, w: Option<&Workspace>) -> String {
-        match self.live_run_count(w) {
-            0 => String::new(),
-            1 => "· 1 helper".to_string(),
-            n => format!("· {n} helpers"),
-        }
+        helpers_words(self.live_run_count(w))
     }
 
     /// "You: " and your last prompt, for a card that shows where you left off; "" with none.
@@ -697,6 +719,15 @@ impl Session {
             }
         };
         clip(&text, DETAIL_MAX)
+    }
+}
+
+/// "· 1 helper", "· 3 helpers", or "" for none.
+fn helpers_words(n: usize) -> String {
+    match n {
+        0 => String::new(),
+        1 => "· 1 helper".to_string(),
+        n => format!("· {n} helpers"),
     }
 }
 

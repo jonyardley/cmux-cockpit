@@ -61,8 +61,8 @@ type ChildAt = (usize, usize);
 /// cmux's children beside the saved runs: each live saved run claims the
 /// one child that is the same run, by id first and then by label; the claim
 /// vouches for the child unless its owner has ended. Returns the vouched
-/// children and how many live saved runs no child claims.
-fn pair_live(saved: &SavedState, ws_id: &str, agents: &[Agent]) -> (Vec<ChildAt>, usize) {
+/// children and the sessions of the live saved runs no child claims.
+fn pair_live(saved: &SavedState, ws_id: &str, agents: &[Agent]) -> (Vec<ChildAt>, Vec<String>) {
     let mut unclaimed: Vec<&SavedSubagent> = saved_runs(saved, ws_id)
         .iter()
         .filter(|run| saved_running(run, agents))
@@ -100,19 +100,34 @@ fn pair_live(saved: &SavedState, ws_id: &str, agents: &[Agent]) -> (Vec<ChildAt>
             }
         }
     }
-    (vouched, unclaimed.len())
+    let unclaimed = unclaimed.iter().map(|run| run.session.clone()).collect();
+    (vouched, unclaimed)
 }
 
 impl Session {
     /// How many subagent runs are live in the workspace.
     pub fn live_run_count(&mut self, w: Option<&Workspace>) -> usize {
+        self.live_runs(w, None)
+    }
+
+    /// How many subagent runs the agent's own chat has live in the
+    /// workspace: its children, and the saved runs its session started. A
+    /// saved run whose session is no workspace agent's counts for none.
+    pub fn own_run_count(&mut self, w: Option<&Workspace>, a: &Agent) -> usize {
+        self.live_runs(w, Some(&a.id))
+    }
+
+    /// The live runs in the workspace, all of them or only `owner`'s.
+    fn live_runs(&mut self, w: Option<&Workspace>, owner: Option<&str>) -> usize {
         let Some(w) = w else { return 0 };
+        let mine = |id: &str| owner.is_none_or(|o| o == id);
         let agents = self.agents_of(Some(w));
         if agents.iter().any(|a| a.child_runs().next().is_some()) {
             let (vouched, unclaimed) = pair_live(&self.saved, &w.id, &agents);
             let live: usize = agents
                 .iter()
                 .enumerate()
+                .filter(|(_, a)| mine(&a.id))
                 .map(|(ai, a)| {
                     a.children
                         .iter()
@@ -126,11 +141,11 @@ impl Session {
                         .count()
                 })
                 .sum();
-            return live + unclaimed;
+            return live + unclaimed.iter().filter(|s| mine(s)).count();
         }
         saved_runs(&self.saved, &w.id)
             .iter()
-            .filter(|run| saved_running(run, &agents))
+            .filter(|run| mine(&run.session) && saved_running(run, &agents))
             .count()
     }
 }

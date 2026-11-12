@@ -26,6 +26,9 @@ pub const MERGE_READY_WORD: &str = "Ready to merge";
 /// An idle agent whose background shell is still running.
 pub const SHELL_RUNNING_WORD: &str = "Shell running";
 
+/// An idle agent whose background agent (a subagent run) is still running.
+pub const HELPER_RUNNING_WORD: &str = "Helper running";
+
 /// An agent the cockpit put to sleep when its card was parked (#328).
 pub const ASLEEP_WORD: &str = "Asleep";
 

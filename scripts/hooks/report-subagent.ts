@@ -1,9 +1,9 @@
 // Tells cmux about a workspace's subagent runs (#6): custom sidebars get no
 // subagent data from cmux at all, so this hook is the only source.
 //
-// Run by scripts/hooks/dispatch.ts on three Claude Code events, as
-// scripts/hooks/routes.ts lists them: PreToolUse (matcher "Agent"),
-// SubagentStart and SubagentStop. Each invocation gets one event as JSON
+// Run by scripts/hooks/dispatch.ts on four Claude Code events, as
+// scripts/hooks/routes.ts lists them: PreToolUse and PostToolUse (matcher
+// "Agent"), SubagentStart and SubagentStop. Each invocation gets one event as JSON
 // on stdin and the workspace id from CMUX_WORKSPACE_ID, and folds it into
 // config/state.json's `subagents` map (scripts/state-config.ts) under the
 // same file lock a URL write or a PR poll uses (state-url.ts's
@@ -37,6 +37,7 @@ import { scheduleLateBuild } from "../hook-build.ts";
 import { labelFrom, type SavedSubagent, type State, validateState } from "../state-config.ts";
 import { writeSubagents } from "../state-url.ts";
 import { prune } from "../subagent-runs.ts";
+import { stillWorking } from "./subagent-work.ts";
 
 // Re-exported so this hook stays the one place both its own tests and
 // pr-poll.ts's need to reach the retention policy from.
@@ -70,7 +71,35 @@ function onPreToolUse(runs: SavedSubagent[], event: unknown, now: number): Saved
   const subagentType = field(input, "subagent_type");
   const label = labelFrom("subagent", field(input, "description"), subagentType);
   const type = typeOf(subagentType);
-  return [...runs, { id: toolUseId, session, label, startedEpoch: now, ...(type ? { type } : {}) }];
+  const background = field(input, "run_in_background") === true;
+  return [
+    ...runs,
+    {
+      id: toolUseId,
+      session,
+      label,
+      startedEpoch: now,
+      ...(type ? { type } : {}),
+      ...(background ? { background } : {}),
+    },
+  ];
+}
+
+// PostToolUse on the Agent tool: a call Claude Code ran in the background
+// says so in its result (isAsync, status "async_launched"), with or without
+// run_in_background in its input, so its run is flagged here: its Stops may
+// be pauses (onSubagentStop). A foreground call's result arrives once the
+// agent has finished, and changes nothing.
+function onPostToolUse(runs: SavedSubagent[], event: unknown): SavedSubagent[] {
+  if (field(event, "tool_name") !== "Agent") return runs;
+  const response = field(event, "tool_response");
+  const async = field(response, "isAsync") === true || field(response, "status") === "async_launched";
+  const toolUseId = field(event, "tool_use_id");
+  if (!async || typeof toolUseId !== "string") return runs;
+  const index = runs.findIndex((r) => r.id === toolUseId);
+  const row = runs[index];
+  if (!row || row.background) return runs;
+  return runs.map((r, i) => (i === index ? { ...r, background: true } : r));
 }
 
 // SubagentStart: gives the oldest run in that session with no agentId yet,
@@ -130,34 +159,56 @@ function onResume(runs: SavedSubagent[], agentId: string, session: string, now: 
 // now, so rows a resume added before onResume existed close too. A miss (no
 // open run has it, as with a duplicate delivery of the same Stop) returns
 // runs unchanged rather than an equal-looking copy or a bumped endedEpoch.
-function onSubagentStop(runs: SavedSubagent[], event: unknown, now: number): SavedSubagent[] {
+// A background run whose agent is only pausing on its own background work
+// (`pausing`, which reads its transcript) stays open: Claude Code sends a
+// Stop at every such pause, and the agent is still working for its chat.
+function onSubagentStop(
+  runs: SavedSubagent[],
+  event: unknown,
+  now: number,
+  pausing: (event: unknown) => boolean,
+): SavedSubagent[] {
   const agentId = field(event, "agent_id");
   if (typeof agentId !== "string") return runs;
   const open = openFor(agentId);
   if (!runs.some(open)) return runs;
+  if (runs.some((r) => open(r) && r.background) && pausing(event)) return runs;
   return runs.map((r) => (open(r) ? { ...r, endedEpoch: now } : r));
 }
 
+/** Reads whether a stopped subagent is only pausing; never, unless main() gives it the transcript. */
+export type Pausing = (event: unknown) => boolean;
+const NEVER_PAUSING: Pausing = () => false;
+
 /** Folds one hook event into a workspace's runs. An event this hook does not know is a no-op. */
-export function applyEvent(map: SubagentMap, wsId: string, event: unknown, now: number): SubagentMap {
+export function applyEvent(
+  map: SubagentMap,
+  wsId: string,
+  event: unknown,
+  now: number,
+  pausing: Pausing = NEVER_PAUSING,
+): SubagentMap {
   const runs = map[wsId] ?? [];
   const hookName = field(event, "hook_event_name");
   const next =
     hookName === "PreToolUse"
       ? onPreToolUse(runs, event, now)
-      : hookName === "SubagentStart"
-        ? onSubagentStart(runs, event, now)
-        : hookName === "SubagentStop"
-          ? onSubagentStop(runs, event, now)
-          : runs;
+      : hookName === "PostToolUse"
+        ? onPostToolUse(runs, event)
+        : hookName === "SubagentStart"
+          ? onSubagentStart(runs, event, now)
+          : hookName === "SubagentStop"
+            ? onSubagentStop(runs, event, now, pausing)
+            : runs;
   return next === runs ? map : { ...map, [wsId]: next };
 }
 
-// agentId is bookkeeping for pairing a Start to its PreToolUse row; the
-// sidebar never shows it (src/shared/subagents.ts), so pairing one on its
-// own must not cost a rebuild.
-function withoutAgentId(run: SavedSubagent): Omit<SavedSubagent, "agentId"> {
-  const { agentId, ...rest } = run;
+// agentId and background are bookkeeping, for pairing a Start to its
+// PreToolUse row and reading a Stop; the sidebar never shows either
+// (src/shared/subagents.ts), so setting one on its own must not cost a
+// rebuild.
+function withoutAgentId(run: SavedSubagent): Omit<SavedSubagent, "agentId" | "background"> {
+  const { agentId, background, ...rest } = run;
   return rest;
 }
 
@@ -184,9 +235,10 @@ export function processEvent(
   wsId: string,
   event: unknown,
   now: number,
+  pausing: Pausing = NEVER_PAUSING,
 ): { before: SubagentMap; after: SubagentMap; changed: boolean } {
   const before = validateState({ subagents }).subagents;
-  const after = validateState({ subagents: prune(applyEvent(subagents, wsId, event, now), now) }).subagents;
+  const after = validateState({ subagents: prune(applyEvent(subagents, wsId, event, now, pausing), now) }).subagents;
   return { before, after, changed: visibleChange(before, after) };
 }
 
@@ -200,11 +252,14 @@ async function main(): Promise<void> {
     return;
   }
   const now = Math.floor(Date.now() / 1000);
+  // Read before the state lock is taken, so a long transcript never holds
+  // up the other writers; only a Stop can be a pause.
+  const pausing = field(event, "hook_event_name") === "SubagentStop" && stillWorking(event, Date.now());
   let changed = false;
   let result: ReturnType<typeof writeSubagents>;
   try {
     result = writeSubagents(STATE_PATH, (subagents) => {
-      const applied = processEvent(subagents, wsId, event, now);
+      const applied = processEvent(subagents, wsId, event, now, () => pausing);
       changed = applied.changed;
       return applied.after;
     });

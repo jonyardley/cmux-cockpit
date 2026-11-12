@@ -43,6 +43,9 @@ export function tailLines(text: string, midFile: boolean): string[] {
   return midFile ? lines.slice(1) : lines;
 }
 
+/** How much of a transcript's end the hooks read: enough for a long turn's tail. */
+export const TAIL_BYTES = 2 * 1024 * 1024;
+
 /** The last `maxBytes` of the file, as lines. A short read is read on from where it stopped. */
 export function readTail(path: string, maxBytes: number): string[] {
   const fd = openSync(path, "r");
