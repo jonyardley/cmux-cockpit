@@ -1,0 +1,38 @@
+{
+  "maxCounts": 9,
+  "maxTasks": 20,
+  "samples": [
+    { "counts": [], "text": "" },
+    { "counts": [{ "type": "shell", "n": 0 }], "text": "" },
+    {
+      "counts": [{ "type": "shell", "n": 1 }, { "type": "subagent", "n": 1 }],
+      "text": "· 1 shell, 1 agent"
+    },
+    {
+      "counts": [
+        { "type": "shell", "n": 2 },
+        { "type": "subagent", "n": 2 },
+        { "type": "session", "n": 1 },
+        { "type": "workflow", "n": 1 },
+        { "type": "teammate", "n": 2 },
+        { "type": "cloud session", "n": 1 },
+        { "type": "MCP task", "n": 2 },
+        { "type": "other", "n": 1 }
+      ],
+      "text": "· 2 shells, 2 agents, 1 session, 1 workflow, 2 teammates, 1 cloud session, 2 MCP tasks, 1 task"
+    },
+    {
+      "counts": [
+        { "type": "monitor", "n": 2 },
+        { "type": "subagent", "n": 1 },
+        { "type": "session", "n": 2 },
+        { "type": "workflow", "n": 2 },
+        { "type": "teammate", "n": 1 },
+        { "type": "cloud session", "n": 2 },
+        { "type": "MCP task", "n": 1 },
+        { "type": "other", "n": 2 }
+      ],
+      "text": "· 2 shells, 1 agent, 2 sessions, 2 workflows, 1 teammate, 2 cloud sessions, 1 MCP task, 2 tasks"
+    }
+  ]
+}

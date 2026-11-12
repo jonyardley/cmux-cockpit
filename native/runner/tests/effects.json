@@ -23,5 +23,17 @@
         "W2": null
       }
     }
+  },
+  {
+    "SaveRunning": {
+      "running": {
+        "W1": {
+          "agent": "s1",
+          "since": 1791229800.0,
+          "counts": [{ "type": "shell", "n": 1 }, { "type": "subagent", "n": 2 }]
+        },
+        "W2": null
+      }
+    }
   }
 ]

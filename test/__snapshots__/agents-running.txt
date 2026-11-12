@@ -1,0 +1,68 @@
+VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(14)
+  VStack spacing: 8, alignment: leading
+    HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
+      Text "T\u200aH\u200aI\u200aS W\u200aO\u200aR\u200aK\u200aS\u200aP\u200aA\u200aC\u200aE · A\u200ap\u200ap O\u200an\u200ae" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
+      Text "" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(0) .paddingVertical(1) .background(clear) .cornerRadius(10)
+      Spacer
+    VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
+      VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
+        VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
+          VStack spacing: 0, alignment: leading .padding(14) .frame(maxWidth: infinity, alignment: leading)
+            HStack spacing: 8 .frame(maxWidth: infinity, alignment: leading)
+              ZStack .frame(width: 13, height: 13)
+                Circle size: 13 .fill(blueHalo)
+                Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
+              HStack spacing: 6 .frame(maxWidth: infinity, alignment: leading) .layoutPriority(1)
+                Text "Running 4m · 1 shell, 1 agent" .font(12.5) .weight(medium) .color(blueText) .lineLimit(1) .layoutPriority(1)
+                Spacer minLength: 4
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
+              Text "Started the tests in the background; I will report when they finish." .font(12) .color(secondary|neutralChip.fg) .lineLimit(4) .truncation(tail) .paddingHorizontal(8) .paddingVertical(6) .frame(maxWidth: infinity, alignment: leading) .background(quote) .cornerRadius(6)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
+              VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(16) .paddingBottom(12)
+                Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+              HStack spacing: 6 .frame(maxWidth: infinity, alignment: leading)
+                Image arrow.branch .font(10) .color(tertiary)
+                Text "bg-panel-verdict" .font(11) .weight(regular) .color(tertiary) .lineLimit(1) .truncation(middle)
+          Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+        Reorderable spacing: 0
+          VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+            HStack spacing: 8 .paddingHorizontal(12) .paddingVertical(7) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              ZStack .frame(width: 13, height: 13)
+                Circle size: 13 .fill(blueHalo)
+                Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
+              Text "Background work 6" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+              Spacer minLength: 4
+              Text "running 4m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+            Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+          VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+            HStack spacing: 8 .paddingHorizontal(12) .paddingVertical(7) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              ZStack .frame(width: 13, height: 13)
+                Circle size: 13 .fill(clear)
+                Circle size: 7 .fill(clear) .stroke(grey) .strokeWidth(1.5)
+              Text "Check the card words" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+              Spacer minLength: 4
+              Text "idle 10m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+            Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
+  VStack spacing: 8, alignment: leading
+    HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
+      Text "P\u200aU\u200aL\u200aL R\u200aE\u200aQ\u200aU\u200aE\u200aS\u200aT\u200aS" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
+      Text "0" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
+      Spacer
+  Text "No helpers or published links yet" .font(11) .color(tertiary) .lineLimit(2) .paddingHorizontal(4) .frame(maxWidth: infinity, alignment: leading)
+  Spacer
+
+Colours
+blue #3B6FB6
+blueHalo #3B6FB62E
+blueText #2F5690
+countBg #E5E2D6
+grey #A09E95
+hover #7F7F7F0F
+metaText #6B6A64
+panel|onClay #FFFFFF
+panelEdge #1414131A
+quote #1414130A
+rule #F0EEE6
+secondary|neutralChip.fg #5E5D59
+tertiary #73726C
+text #141413

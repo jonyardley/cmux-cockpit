@@ -132,4 +132,32 @@ mod tests {
         assert_eq!(running_text(&[]), "");
         assert_eq!(running_text(&[(TaskType::Shell, 0)]), "");
     }
+
+    /// The sample test/running-save.test.ts reads too, so the agents
+    /// panel's words.ts names each kind as the card does (#360).
+    #[test]
+    fn words_the_shared_sample_as_the_agents_panel_does() {
+        use crate::persist::{MAX_COUNTS, MAX_TASKS, SavedCount};
+
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Sample {
+            counts: Vec<SavedCount>,
+            text: String,
+        }
+        #[derive(serde::Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct File {
+            max_counts: usize,
+            max_tasks: usize,
+            samples: Vec<Sample>,
+        }
+        let file: File = serde_json::from_str(include_str!("../tests/running-words.json")).unwrap();
+        assert_eq!(file.max_counts, MAX_COUNTS);
+        assert_eq!(file.max_tasks, MAX_TASKS);
+        for s in file.samples {
+            let counts: Vec<(TaskType, usize)> = s.counts.iter().map(|c| (c.kind, c.n)).collect();
+            assert_eq!(running_text(&counts), s.text);
+        }
+    }
 }

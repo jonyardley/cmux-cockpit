@@ -36,6 +36,15 @@ describe("a quiet agent", () => {
     assert.equal(head(w), "Working 42m");
   });
 
+  it("is not held off by another chat's helper, as the card's quiet.rs counts the chat's own (#360)", () => {
+    const w = working(17 * 60);
+    const other = agent("idle", {
+      children: [{ id: "h2", label: "explore", running: true, startedEpoch: NOW - 60 }],
+    });
+    w.agents = [...(w.agents ?? []), other];
+    assert.equal(head(w), "Working 42m · quiet 17m");
+  });
+
   it("never marks an agent that is not working, or one with no activity time", () => {
     const idle = ws("i", { agents: [agent("idle", { sinceEpoch: NOW - 3600, lastActivityAt: NOW - 3600 })] });
     assert.equal(head(idle), "Idle 1h");

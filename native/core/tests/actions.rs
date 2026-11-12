@@ -86,6 +86,7 @@ fn asked(app: &Cockpit, model: &mut Model, event: Event) -> Vec<String> {
             Effect::Copy(r) => format!("copy {}", r.operation.text),
             Effect::AgentMessage(r) => format!("message {}", r.operation.workspace),
             Effect::SavePrs(r) => format!("save {} prs", r.operation.prs.len()),
+            Effect::SaveRunning(r) => format!("save {} running", r.operation.running.len()),
         })
         .collect()
 }

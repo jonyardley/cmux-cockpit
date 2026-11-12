@@ -1,6 +1,8 @@
 // A quiet agent: still working, but with no activity for a while, and no
-// helper running for it. The native Cockpit keeps the same rule, so the
-// same agent reads quiet on each side.
+// helper of its own chat running for it. The native Cockpit keeps the same
+// rule (native/core/src/quiet.rs), so the same agent reads quiet on each
+// side: another chat's helpers in the workspace never hold it off, and nor
+// does the background record, which is written only when a turn ends.
 
 import { liveRunCount } from "./subagents.ts";
 import { ageSince, nowEpoch } from "./time.ts";
@@ -15,14 +17,14 @@ export const QUIET_SECS = 10 * 60;
 
 /**
  * When `a` last showed activity, if it is working, that was at least
- * QUIET_SECS ago, and none of `w`'s helpers is running (an agent waiting
- * on its helpers is busy, not stalled); else 0.
+ * QUIET_SECS ago, and none of its own chat's helpers is running in `w`
+ * (an agent waiting on its helpers is busy, not stalled); else 0.
  */
 export function quietSince(a: Agent | null | undefined, w: Workspace | undefined): number {
-  const last = a?.status === "working" ? (a.lastActivityAt ?? 0) : 0;
-  const now = nowEpoch();
-  if (!(last > 0 && now - last >= QUIET_SECS)) return 0;
-  return liveRunCount(w) > 0 ? 0 : last;
+  if (a?.status !== "working") return 0;
+  const last = a.lastActivityAt ?? 0;
+  if (!(last > 0 && nowEpoch() - last >= QUIET_SECS)) return 0;
+  return liveRunCount(w, a) > 0 ? 0 : last;
 }
 
 /** " · quiet 17m" after a quiet agent's status, else "". */

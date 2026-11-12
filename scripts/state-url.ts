@@ -230,6 +230,26 @@ export function writePrEntries(path: string, set: State["prs"], remove: readonly
 }
 
 /**
+ * The native core's background verdicts (scripts/running-save.ts, #360),
+ * the one writer of its verdicts (writeBackground only drops one whose
+ * workspace has no work): each id in `set` takes its
+ * verdict, each id in `remove` loses its entry, every other entry stays,
+ * in the same locked read-modify-write step as every other write. `set`
+ * must already be clean (validateState's `running`).
+ */
+export function writeRunningEntries(
+  path: string,
+  set: NonNullable<State["running"]>,
+  remove: readonly string[],
+): ApplyResult {
+  return readUpdateWrite(path, (before) => {
+    const running = { ...before.running, ...set };
+    for (const id of remove) delete running[id];
+    return { ok: true, state: validateState({ ...before, running: sortedByKey(running) }) };
+  });
+}
+
+/**
  * The `prs` a poll writes: a whole map to replace it, or a function from
  * the map as it stands under the lock to the next one, so a write that
  * landed since the poll read the file is never undone.
@@ -306,15 +326,23 @@ export function writeShells(
 /**
  * Folds `update` over the whole `background` map
  * (scripts/hooks/report-background.ts), under the same lock, with keys
- * sorted as writeShells sorts them.
+ * sorted as writeShells sorts them. A workspace left with no work also
+ * loses the native core's verdict for it (#360): the core never says
+ * Running without work in this record, and only the core that draws the
+ * Cockpit sidebar deletes a verdict, so with the Cockpit closed the
+ * agents panel would otherwise say Running until it next opens.
  */
 export function writeBackground(
   path: string,
   update: (background: NonNullable<State["background"]>) => NonNullable<State["background"]>,
 ): ApplyResult {
   return readUpdateWrite(path, (before) => {
-    const background = sortedByKey(update(before.background ?? {}));
-    return { ok: true, state: validateState({ ...before, background }) };
+    const state = validateState({ ...before, background: sortedByKey(update(before.background ?? {})) });
+    // Judged on the cleaned record, so a workspace whose every task the
+    // contract drops loses its verdict too.
+    const left = state.background ?? {};
+    const running = Object.fromEntries(Object.entries(state.running ?? {}).filter(([ws]) => Object.hasOwn(left, ws)));
+    return { ok: true, state: validateState({ ...state, running }) };
   });
 }
 

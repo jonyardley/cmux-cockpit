@@ -266,6 +266,7 @@ impl Feed {
                 Effect::Copy(r) => Outgoing::Copy(r.operation),
                 Effect::AgentMessage(r) => Outgoing::AgentMessage(r.operation),
                 Effect::SavePrs(r) => Outgoing::SavePrs(r.operation),
+                Effect::SaveRunning(r) => Outgoing::SaveRunning(r.operation),
             };
             self.hand(out);
         }
@@ -303,6 +304,7 @@ impl Feed {
             EffectFile::OpenUrl(url) => self.hand(Outgoing::OpenUrl(url)),
             EffectFile::AgentMessage(m) => self.hand(Outgoing::AgentMessage(m)),
             EffectFile::SavePrs(p) => self.hand(Outgoing::SavePrs(p)),
+            EffectFile::SaveRunning(r) => self.hand(Outgoing::SaveRunning(r)),
         }
     }
 
@@ -1114,6 +1116,7 @@ mod tests {
                 Outgoing::Copy(c) => format!("copy {}", c.text),
                 Outgoing::AgentMessage(m) => format!("message {}", m.workspace),
                 Outgoing::SavePrs(p) => format!("save {} prs", p.prs.len()),
+                Outgoing::SaveRunning(r) => format!("save {} running", r.running.len()),
             })
             .collect()
     }

@@ -99,17 +99,26 @@ export function pairLive(wsId: string, agents: Agent[]): { vouched: Set<Subagent
   return { vouched, unclaimed };
 }
 
-/** How many subagent runs are live in the workspace: cmux's own `children`
- * while any agent carries a real one, each counted live when cmux says so or
- * a saved run vouches for it, plus the live saved runs no child claims;
- * else the saved runs. */
-export function liveRunCount(w: Workspace | undefined): number {
+/** How many subagent runs are live in the workspace, or with `chat` only
+ * that chat's own: cmux's own `children` while any agent carries a real
+ * one, each counted live when cmux says so or a saved run vouches for it,
+ * plus the live saved runs no child claims; else the saved runs. A chat's
+ * own are its children and the runs saved under its session id, as the
+ * native core's own_run_count counts them. The core also counts the ids
+ * the chat ran under before a /clear, which cmux never sends here, so a
+ * run saved under a session no agent in the workspace has counts for
+ * every chat: it may be this one's from before a clear. */
+export function liveRunCount(w: Workspace | undefined, chat?: Agent): number {
   if (!w) return 0;
   const agents = agentsOf(w);
+  const mine = (run: SavedRun): boolean =>
+    !chat || run.session === chat.id || !agents.some((a) => a.id === run.session);
   if (agents.some((a) => (a.children ?? []).some((c) => c))) {
     const { vouched, unclaimed } = pairLive(w.id, agents);
     const live = (c: SubagentRun, a: Agent): boolean => childRunning(c, a) || vouched.has(c);
-    return agents.reduce((n, a) => n + (a.children ?? []).filter((c) => c && live(c, a)).length, unclaimed.length);
+    const rows = chat ? agents.filter((a) => a.id === chat.id) : agents;
+    const own = unclaimed.filter(mine).length;
+    return rows.reduce((n, a) => n + (a.children ?? []).filter((c) => c && live(c, a)).length, own);
   }
-  return savedRuns(w.id).filter((run) => savedRunning(run, agents)).length;
+  return savedRuns(w.id).filter((run) => mine(run) && savedRunning(run, agents)).length;
 }
