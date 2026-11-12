@@ -446,11 +446,12 @@ impl Session {
         )
     }
 
-    /// True when the card says Running: its agent is idle while its chat
-    /// runs background work (`crate::running`).
-    pub fn is_running(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
-        let card = self.card_running(data, w);
-        shows_running(card.agent.as_ref(), card.running.as_ref())
+    /// Whether the background work the card's chat runs counts any agent,
+    /// so a Running status line already says them.
+    pub fn running_counts_agents(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        self.card_running(data, w)
+            .running
+            .is_some_and(|r| r.counts_agents())
     }
 
     /// Whether the card says Ready to merge: its PR is ready and its agent,

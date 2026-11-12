@@ -211,9 +211,13 @@ fn looks(
         ready: !row && *kind == StatusKind::Ready,
         pinned: is_pinned(w),
         progress: progress_fraction(w),
-        // A Running status line already counts the chat's agents; a
-        // waiting card's or a row's status does not, so those keep the words.
-        helpers: if *kind == StatusKind::Running && status.starts_with(RUNNING_WORD) {
+        // A Running status line that counts the chat's agents already says
+        // them; one counting shells alone, a waiting card's and a row's
+        // status do not, so those keep the words.
+        helpers: if *kind == StatusKind::Running
+            && status.starts_with(RUNNING_WORD)
+            && session.running_counts_agents(data, w)
+        {
             String::new()
         } else {
             session.helper_text(w)
@@ -1493,6 +1497,31 @@ mod tests {
             s.status_age(&data, w),
             "4m",
             "a Running row counts from its work"
+        );
+    }
+
+    #[test]
+    fn keeps_the_helper_words_on_a_running_card_that_counts_shells_alone() {
+        let mut core = Model::default();
+        let s = &mut core.session;
+        s.saved = crate::persist::SavedState::from_json(
+            r#"{"subagents": {"W": [{"id": "t1", "session": "a0", "label": "Checks", "startedEpoch": 100}]},
+                "background": {"W": [{"id": "b1", "type": "shell", "status": "running",
+                    "description": "tests", "session": "a0", "startedEpoch": 160, "seenEpoch": 300}]}}"#,
+        )
+        .unwrap();
+        let data: Data = serde_json::from_value(serde_json::json!({"epoch": 400,
+            "workspaces": [{"id": "W", "title": "qualify",
+                "agents": [{"id": "a0", "status": "idle", "sinceEpoch": 100}]}]}))
+        .unwrap();
+        let w = data.ws_by_id("W");
+        let kind = s.status_kind(&data, w);
+        let status = s.status_line(&data, w);
+        assert_eq!(status, "Running 4m · 1 shell");
+        let full = looks(s, &data, w, Density::Full, &status, &kind);
+        assert_eq!(
+            full.helpers, "· 1 helper",
+            "the status line counts no agent"
         );
     }
 

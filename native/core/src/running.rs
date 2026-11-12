@@ -32,6 +32,16 @@ pub struct Running {
     pub since: f64,
 }
 
+impl Running {
+    /// Whether it counts any of the chat's agents, so the card's status
+    /// line already says them.
+    pub fn counts_agents(&self) -> bool {
+        self.counts
+            .iter()
+            .any(|(k, n)| *k == TaskType::Subagent && *n > 0)
+    }
+}
+
 /// The order kinds are named in, so the words hold still between frames.
 const KIND_ORDER: [TaskType; 8] = [
     TaskType::Shell,

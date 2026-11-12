@@ -6,7 +6,7 @@
 
 use cockpit_core::data::{Agent, Data};
 use cockpit_core::session::Session;
-use cockpit_core::status::StatusKind;
+use cockpit_core::status::{Status, StatusKind};
 use cockpit_core::theme::Token;
 use cockpit_core::ui::Urgency;
 
@@ -123,8 +123,9 @@ mod background_agents_on_the_card {
             .activity(NOW - 600.0);
         let w = ws("theirs").agents(vec![idle(&mut fx), other]);
         let a = idle(&mut fx);
-        assert!(
-            !s.is_running(&data, Some(&w)),
+        assert_eq!(
+            s.status_kind(&data, Some(&w)),
+            StatusKind::Plain(Status::Idle),
             "the card speaks for the newer chat"
         );
         assert_eq!(s.status_line(&data, Some(&w)), "Idle 4m");
