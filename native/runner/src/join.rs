@@ -28,7 +28,7 @@ use cockpit_core::hooks::{Hooked, moves_activity, status_from_hook};
 use cockpit_core::program::{Record, Report, resolve, status_of_records};
 use serde_json::Value;
 
-use super::parse::{AgentView, Groups, iso_epoch};
+use super::parse::{AgentView, Groups, SessionHistory, iso_epoch};
 
 /// How many Agent Views running may leave a pid out before the join
 /// forgets it. More than one, so a new session's first hook is not lost
@@ -93,6 +93,10 @@ pub struct Join {
     /// forgets its pid, or when a new session's hook claims the tab.
     program: HashMap<String, Report>,
     agents: Option<AgentView>,
+    /// Each pid's session ids over time, so work started before a
+    /// `/clear` stays its chat's. Kept across a new cmux boot, since the
+    /// Claude processes outlive it; forgotten with the pid.
+    history: SessionHistory,
     /// pid to how many Agent Views running have left it out.
     absent: HashMap<u32, u8>,
 }
@@ -158,6 +162,7 @@ impl Join {
 
     /// Takes a new Agent View; false when it matches the last one.
     pub fn agents(&mut self, view: AgentView) -> bool {
+        self.history.record(&view);
         self.forget_absent(&view);
         if self.agents.as_ref() == Some(&view) {
             return false;
@@ -210,6 +215,7 @@ impl Join {
             .chain(self.sessions.keys())
             .chain(self.surface_of.keys())
             .copied()
+            .chain(self.history.pids())
             .collect();
         pids.sort_unstable();
         pids.dedup();
@@ -227,6 +233,7 @@ impl Join {
                     self.forget_report_unless_held(&surface);
                 }
                 self.sessions.remove(&pid);
+                self.history.forget(pid);
             }
         }
     }
@@ -451,9 +458,12 @@ impl Join {
     fn agent(&self, pid: u32, now: f64) -> Option<Agent> {
         let view = self.agents.as_ref();
         let busy = view.and_then(|v| v.busy.get(&pid).copied());
-        let id = view
-            .and_then(|a| a.session.get(&pid).cloned())
-            .unwrap_or_else(|| format!("pid:{pid}"));
+        let session = view.and_then(|a| a.session.get(&pid).cloned());
+        let earlier = session
+            .as_deref()
+            .map(|id| self.history.earlier(pid, id))
+            .filter(|ids| !ids.is_empty());
+        let id = session.unwrap_or_else(|| format!("pid:{pid}"));
         let surface = self.surface_of.get(&pid).map(|(s, _)| s.clone());
         let tab_title = surface.as_ref().and_then(|s| self.titles.get(s)).cloned();
         let mut a = Agent {
@@ -461,6 +471,7 @@ impl Join {
             kind: Some("claude".to_string()),
             surface_id: surface,
             tab_title,
+            earlier_sessions: earlier,
             ..Agent::default()
         };
         let program = a.surface_id.as_ref().and_then(|s| self.program.get(s));
@@ -581,6 +592,7 @@ mod tests {
                 .iter()
                 .map(|(p, _, s)| (*p, (*s).to_string()))
                 .collect(),
+            started: HashMap::new(),
         }
     }
 
@@ -1333,5 +1345,66 @@ mod tests {
             Some(AgentStatus::Working)
         );
         assert_eq!(statuses(&j.frame(200.0))[0].1[0].1, Some(AgentStatus::Idle));
+    }
+
+    /// One process, `pid`, under `session`, started at `started`.
+    fn started(pid: u32, session: &str, started: u64) -> AgentView {
+        let mut v = view(&[(pid, false, session)]);
+        v.started.insert(pid, started);
+        v
+    }
+
+    /// Workspace A's agents, each with the sessions its process ran before.
+    fn earlier(j: &Join) -> Vec<(String, Option<Vec<String>>)> {
+        j.frame(0.0).workspace_list()[0]
+            .agent_list()
+            .map(|a| (a.id.clone(), a.earlier_sessions.clone()))
+            .collect()
+    }
+
+    #[test]
+    fn a_clear_hands_the_core_the_chats_earlier_session() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(started(7, "before", 100));
+        j.event(&hook(1, "Stop", 7, "A", None));
+        assert_eq!(earlier(&j), vec![("before".into(), None)]);
+        j.agents(started(7, "after", 100));
+        assert_eq!(
+            earlier(&j),
+            vec![("after".into(), Some(vec!["before".into()]))]
+        );
+    }
+
+    #[test]
+    fn a_reused_pid_inside_the_forget_window_carries_no_earlier_session() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(started(7, "theirs", 100));
+        j.event(&hook(1, "Stop", 7, "A", None));
+        j.agents(view(&[]));
+        j.agents(started(7, "mine", 200));
+        assert_eq!(earlier(&j), vec![("mine".into(), None)]);
+    }
+
+    #[test]
+    fn the_history_outlives_a_new_cmux_boot_but_not_its_pid() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, false, "before")]));
+        j.agents(view(&[(7, false, "after")]));
+        j.event(&ack(0, 0));
+        j.event(&hook(1, "Stop", 7, "A", None));
+        assert_eq!(
+            earlier(&j),
+            vec![("after".into(), Some(vec!["before".into()]))],
+            "Claude processes outlive a cmux boot"
+        );
+        for _ in 0..FORGET_AFTER {
+            j.agents(view(&[]));
+        }
+        j.agents(view(&[(7, false, "fresh")]));
+        j.event(&hook(2, "Stop", 7, "A", None));
+        assert_eq!(earlier(&j), vec![("fresh".into(), None)]);
     }
 }

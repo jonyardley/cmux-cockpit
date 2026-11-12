@@ -516,8 +516,21 @@ background agent starts is not saved (above), so the run stands in for it,
 held open across its pauses (Subagent runs, above).
 A shell its own chat runs wins: the card then says Shell running.
 
-Known gaps: after `/clear` the chat runs under a new session id, so a
-shell started before the clear stops counting while it still runs. A shell
+After `/clear` the chat runs under a new session id in the same Claude
+process, while the shells and agents it started before the clear run on
+under the old one. The native runner remembers, per process, every
+session id `claude agents --json` has reported for it (keyed by pid and
+the process's `startedAt`, so a reused pid starts again; at most 16 ids,
+forgotten with the pid), and hands the core the earlier ones on the agent
+(`earlierSessions`). `native/core/src/owner.rs` then counts a shell or
+subagent run saved under any of them as the chat's, so the Cockpit card
+keeps saying Shell running or Helper running until the work ends.
+
+Known gaps: that memory lives only in the running Cockpit, so after a
+Cockpit restart, or for a clear that came before Agent View's next poll
+saw the old id, work from before the clear stops counting while it still
+runs. The agents panel (`src/shared/shells.ts`) still matches the current
+session id only, so its card stops counting at a clear. A shell
 whose output the chat read to the end with `TaskOutput` may get no
 notification, and then shows until the 12 hour prune.
 

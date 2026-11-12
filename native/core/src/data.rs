@@ -111,6 +111,15 @@ pub struct Agent {
     /// Subagent runs under this session, oldest first.
     #[serde(deserialize_with = "crate::lenient::slots")]
     pub children: Option<Vec<Option<SubagentRun>>>,
+    /// The session ids the same Claude process ran under before this one,
+    /// newest first, from the runner's memory of Agent View: `/clear`
+    /// starts a new session in the same process, and work saved under the
+    /// old id is still this chat's (`crate::owner`). cmux never sends it.
+    #[serde(
+        deserialize_with = "crate::lenient::list",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub earlier_sessions: Option<Vec<String>>,
 }
 
 impl Agent {

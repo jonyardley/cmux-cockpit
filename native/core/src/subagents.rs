@@ -3,6 +3,7 @@
 //! runs (#83); else the saved runs alone.
 
 use crate::data::{Agent, AgentStatus, SubagentRun, Workspace};
+use crate::owner::{owner, owns};
 use crate::persist::{SavedState, SavedSubagent};
 use crate::session::Session;
 use crate::text::readable;
@@ -19,13 +20,14 @@ pub fn child_running(c: &SubagentRun, owner: &Agent) -> bool {
             .unwrap_or(c.ended_epoch.is_none_or(|e| e == 0.0 || e.is_nan()))
 }
 
-/// A saved run's owner is the agent whose id matches its session; with
-/// none, it is live while it has no end and any workspace agent is live.
+/// A saved run's owner is the agent whose chat its session belongs to
+/// (`crate::owner`); with none, it is live while it has no end and any
+/// workspace agent is live.
 pub fn saved_running(run: &SavedSubagent, agents: &[Agent]) -> bool {
     if run.ended_epoch.is_some() {
         return false;
     }
-    match agents.iter().find(|a| a.id == run.session) {
+    match owner(agents, &run.session) {
         Some(owner) => !ended(owner),
         None => agents.iter().any(|a| !ended(a)),
     }
@@ -49,10 +51,10 @@ fn same_label(run: &SavedSubagent, c: &SubagentRun) -> bool {
     !label.is_empty() && label != "subagent" && label == readable(Some(&run.label))
 }
 
-/// A run whose session is a workspace agent's pairs only with that
+/// A run whose session is a workspace agent's chat's pairs only with that
 /// agent's children; one with no such agent may pair with any.
-fn may_pair(run: &SavedSubagent, owner: &Agent, agents: &[Agent]) -> bool {
-    run.session == owner.id || !agents.iter().any(|a| a.id == run.session)
+fn may_pair(run: &SavedSubagent, parent: &Agent, agents: &[Agent]) -> bool {
+    owns(agents, parent, &run.session) || owner(agents, &run.session).is_none()
 }
 
 /// A child of an agent, by position: (agent index, child index).
@@ -111,23 +113,26 @@ impl Session {
     }
 
     /// How many subagent runs the agent's own chat has live in the
-    /// workspace: its children, and the saved runs its session started. A
-    /// saved run whose session is no workspace agent's counts for none.
+    /// workspace: its children, and the saved runs its chat started under
+    /// any of its session ids, so a run from before a `/clear` still
+    /// counts. A saved run whose session is no workspace agent's chat's
+    /// counts for none.
     pub fn own_run_count(&mut self, w: Option<&Workspace>, a: &Agent) -> usize {
-        self.live_runs(w, Some(&a.id))
+        self.live_runs(w, Some(a))
     }
 
-    /// The live runs in the workspace, all of them or only `owner`'s.
-    fn live_runs(&mut self, w: Option<&Workspace>, owner: Option<&str>) -> usize {
+    /// The live runs in the workspace, all of them or only `chat`'s.
+    fn live_runs(&mut self, w: Option<&Workspace>, chat: Option<&Agent>) -> usize {
         let Some(w) = w else { return 0 };
-        let mine = |id: &str| owner.is_none_or(|o| o == id);
         let agents = self.agents_of(Some(w));
+        let mine = |session: &str| chat.is_none_or(|c| owns(&agents, c, session));
+        let my_row = |a: &Agent| chat.is_none_or(|c| c.id == a.id);
         if agents.iter().any(|a| a.child_runs().next().is_some()) {
             let (vouched, unclaimed) = pair_live(&self.saved, &w.id, &agents);
             let live: usize = agents
                 .iter()
                 .enumerate()
-                .filter(|(_, a)| mine(&a.id))
+                .filter(|(_, a)| my_row(a))
                 .map(|(ai, a)| {
                     a.children
                         .iter()

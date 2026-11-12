@@ -12,6 +12,7 @@ mod support;
 
 mod asking_saved;
 mod card;
+mod cleared_chat;
 mod cockpit;
 mod count_tint_saved;
 mod drop;
