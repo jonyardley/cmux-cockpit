@@ -6,9 +6,10 @@
 // scripts/hooks/routes.ts lists them. Both carry `background_tasks`, a full
 // snapshot of the chat's work in flight (SubagentStop's is the parent
 // chat's, under the chat's session id): a finished task drops out of the
-// list rather than changing its status. So each snapshot replaces the
-// entries saved under its session wholesale, keeping a task's startedEpoch
-// while it stays listed. It never fails the hook: a missing workspace id,
+// list rather than changing its status. So each snapshot replaces, in
+// place, the entries its chat saved (under its session, or by its Claude
+// process before a /clear), keeping a task's place and startedEpoch while
+// it stays listed. It never fails the hook: a missing workspace id,
 // bad JSON or an event with no list is a quiet exit 0; anything else wrong
 // goes to stderr.
 //
@@ -62,9 +63,10 @@ export interface Snapshot {
 const LISTING_EVENTS: readonly unknown[] = ["Stop", "SubagentStop"];
 
 /**
- * Claude Code's words for a task that has ended. Only `running` has been
- * seen, since an ended task leaves the list, but one listed with these
- * words is not running work.
+ * Claude Code's words for a task that has ended (its status set is
+ * pending, running, completed, failed, killed and paused). Only `running`
+ * has been seen in a list, since an ended task leaves it, but one listed
+ * with these words is not running work.
  */
 const ENDED: readonly unknown[] = ["completed", "failed", "killed"];
 

@@ -17,9 +17,9 @@ a second Stop with the same list as
 when it was woken again, and two tool calls the agent made that started no
 background work.
 
-These are frozen captures: nothing reads them yet, so nothing checks their
-shape. The first PR whose code reads them adds the test, and any change to a
-file goes in that same PR.
+These are frozen captures. `test/report-background.test.ts` replays them
+in the order below, so any change to a file goes in the same PR as the
+test change it needs.
 
 | File | What it shows |
 | --- | --- |
