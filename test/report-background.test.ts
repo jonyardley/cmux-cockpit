@@ -8,8 +8,10 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
+import { ID_PREFIX, launchedSessions, type SessionStates } from "../scripts/hooks/bg-sessions.ts";
 import {
   applySnapshot,
+  foldFor,
   type ListedTask,
   listedTasks,
   pidFrom,
@@ -58,15 +60,24 @@ test("the replay covers every fixture", () => {
   assert.deepEqual([...files].sort(), [...RUN].sort());
 });
 
-/** The captured run replayed, with the record after each list. */
+const BG = `${ID_PREFIX}5e5e5e5e`;
+
+/** What `claude agents --json` says of the captured `claude --bg` session at each event: working, then done by the last Stop. */
+const agentsAt = (file: string): SessionStates =>
+  new Map([["5e5e5e5e", file === "stop-all-done.json" ? "done" : "working"]]);
+
+/** The captured run replayed through the hook's own fold, with the record after each list. */
 function replay(pid?: number): { map: BackgroundMap; seen: [string, BackgroundMap][] } {
   let map: BackgroundMap = {};
   const seen: [string, BackgroundMap][] = [];
   RUN.forEach((file, i) => {
     const before = map;
-    map = update(map, "ws1", payload(file), 1000 + i * 10, pid);
-    if (listedTasks(payload(file)) === null) assert.equal(map, before, `${file} changes nothing`);
-    else seen.push([file, map]);
+    const event = payload(file);
+    const apply = foldFor(event, "ws1", 1000 + i * 10, { saved: () => before, states: () => agentsAt(file) }, pid);
+    map = apply === null ? map : apply(map);
+    if (listedTasks(event) !== null) seen.push([file, map]);
+    else if (launchedSessions(event).length) assert.deepEqual(ids(map), [BG], `${file} saves the session`);
+    else assert.equal(map, before, `${file} changes nothing`);
   });
   return { map, seen };
 }
@@ -76,12 +87,12 @@ test("replaying the captured run fills the record, follows each list and empties
   assert.deepEqual(
     seen.map(([file, m]) => [file, ids(m)]),
     [
-      ["stop-turn-end-tasks-running.json", ["b8cvj4dry", AGENT, "byeh6pasn", "bujdab8j6"]],
-      ["subagent-stop-tasks-running.json", ["b8cvj4dry", AGENT, "byeh6pasn", "bujdab8j6"]],
-      ["stop-agent-ended-its-shell-in-parent-list.json", ["b8cvj4dry", "byeh6pasn", "bujdab8j6"]],
-      ["subagent-stop-agent-woken-again.json", ["b8cvj4dry", "byeh6pasn", AGENT]],
-      ["stop-shell-and-monitor-left.json", ["b8cvj4dry", "byeh6pasn"]],
-      ["stop-one-shell-left.json", ["b8cvj4dry"]],
+      ["stop-turn-end-tasks-running.json", [BG, "b8cvj4dry", AGENT, "byeh6pasn", "bujdab8j6"]],
+      ["subagent-stop-tasks-running.json", [BG, "b8cvj4dry", AGENT, "byeh6pasn", "bujdab8j6"]],
+      ["stop-agent-ended-its-shell-in-parent-list.json", [BG, "b8cvj4dry", "byeh6pasn", "bujdab8j6"]],
+      ["subagent-stop-agent-woken-again.json", [BG, "b8cvj4dry", "byeh6pasn", AGENT]],
+      ["stop-shell-and-monitor-left.json", [BG, "b8cvj4dry", "byeh6pasn"]],
+      ["stop-one-shell-left.json", [BG, "b8cvj4dry"]],
       ["stop-all-done.json", []],
     ],
   );

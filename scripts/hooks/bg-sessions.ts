@@ -71,10 +71,13 @@ export function launchedSessions(event: unknown): Launched[] {
   if (field(event, "hook_event_name") !== "PostToolUse" || field(event, "tool_name") !== "Bash") return [];
   const command = field(field(event, "tool_input"), "command");
   if (typeof command !== "string" || !STARTS_BG.test(command)) return [];
+  // The Bash call's own description, never the command, which can carry a
+  // token or a key that has no place in the record or on the card.
+  const fallback = cleanLabel(field(field(event, "tool_input"), "description")) ?? "claude --bg";
   const found = new Map<string, Launched>();
   for (const [, short, name] of printed(field(event, "tool_response")).matchAll(LAUNCHED)) {
     if (short === undefined || found.has(short)) continue;
-    found.set(short, { short, description: cleanLabel(name) ?? cleanLabel(command) ?? "claude --bg" });
+    found.set(short, { short, description: cleanLabel(name) ?? fallback });
   }
   return [...found.values()];
 }

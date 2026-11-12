@@ -77,7 +77,7 @@ test("the captured call, with its warning line first, saves the session under th
       id: `${ID_PREFIX}5e5e5e5e`,
       type: "session",
       status: "running",
-      description: 'claude --bg "reply with the word ok and stop" 2>&1',
+      description: "Start a background Claude session that replies ok",
       session: CHAT,
       pid: PID,
       startedEpoch: 1000,
@@ -89,10 +89,20 @@ test("the captured call, with its warning line first, saves the session under th
 
 test("the line without a warning reads the same, and a printed name is the description", () => {
   assert.deepEqual(launchedSessions(bash("claude --bg go", `backgrounded · 0a1b2c3d${HINTS}`)), [
-    { short: "0a1b2c3d", description: "claude --bg go" },
+    { short: "0a1b2c3d", description: "claude --bg" },
   ]);
   const named = bash("claude --bg --name x go", `backgrounded · 0a1b2c3d · Fix the  flaky test\r\n`);
   assert.deepEqual(launchedSessions(named), [{ short: "0a1b2c3d", description: "Fix the flaky test" }]);
+});
+
+test("the command is never the description, so a token in it stays out of the record", () => {
+  const secret = bash("API_TOKEN=abc123 claude --bg go", `backgrounded · 0a1b2c3d${HINTS}`);
+  assert.deepEqual(launchedSessions(secret), [{ short: "0a1b2c3d", description: "claude --bg" }]);
+  const described = {
+    ...secret,
+    tool_input: { command: "API_TOKEN=abc123 claude --bg go", description: "Start a fix" },
+  };
+  assert.deepEqual(launchedSessions(described), [{ short: "0a1b2c3d", description: "Start a fix" }]);
 });
 
 test("a session printed on stderr, or two in one call, are each saved once", () => {

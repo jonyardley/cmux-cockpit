@@ -264,7 +264,8 @@ export interface SavedShell {
  * What kind of background work a task is. The first seven are Claude Code's
  * own labels for a `background_tasks` entry, as its hooks reference lists
  * them; `session` is a `claude --bg` session, which that list never holds,
- * saved by a later hook; `other` is any label Claude Code adds after these.
+ * saved from the Bash call that started it (scripts/hooks/bg-sessions.ts);
+ * `other` is any label Claude Code adds after these.
  */
 export const TASK_TYPES = [
   "shell",

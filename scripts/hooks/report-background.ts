@@ -211,14 +211,14 @@ export const unstamped = (map: BackgroundMap): string =>
     (key, value: unknown) => (key === "seenEpoch" ? undefined : value),
   );
 
-/** One snapshot folded in, then the prune: what the hook writes. */
-const fold = (map: BackgroundMap, wsId: string, snap: Snapshot, now: number): BackgroundMap =>
-  prune(applySnapshot(map, wsId, snap, now), now);
-
-/** One event folded in, as `main` folds it once it has read the snapshot. */
+/**
+ * One event folded in through `foldFor`, the path `main` takes, with the
+ * record as `map` and no agents read: what the hook writes when no saved
+ * session needs settling.
+ */
 export function update(map: BackgroundMap, wsId: string, event: unknown, now: number, pid?: number): BackgroundMap {
-  const snap = snapshotOf(event, pid);
-  return snap ? fold(map, wsId, snap, now) : map;
+  const apply = foldFor(event, wsId, now, { saved: () => map, states: () => null }, pid);
+  return apply === null ? map : apply(map);
 }
 
 /** What `foldFor` may read beyond the event: the record as it stands, and what `claude agents --json` says. */

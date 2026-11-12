@@ -603,7 +603,8 @@ the same hook). No list holds one, so the record learns of it two ways:
   match it; the native side strips `bg:` to compare with the short id
   `claude agents --json` gives. It is owned by the payload's `session_id`
   and `CLAUDE_PID`, which an agent's hooks give as the chat's own; its
-  description is the printed name, else the command; its status stays
+  description is the printed name, else the Bash call's own description,
+  never the command (it can carry a token); its status stays
   `running`. Saved again, it keeps its place and start. A workspace
   already at 20 leaves the new session out.
 - **Settled:** on the chat's own `Stop` (not `SubagentStop`), if it owns a
@@ -623,8 +624,13 @@ the same hook). No list holds one, so the record learns of it two ways:
 
 What this misses: a session started by a wrapper script that does not
 have `--bg` on its command line, or by a Bash call run in the background
-(its `PostToolUse` comes before the output); and a chat with no `Stop`
-for 12 hours loses its running sessions to the prune for good.
+(its `PostToolUse` comes before the output) or one that exits non-zero
+after the launch (`PostToolUseFailure`, which this hook does not take); a
+session started while the workspace holds 20 tasks, never retried; a
+session started under another `CLAUDE_CONFIG_DIR` than the chat's, which
+the chat's agents read cannot list, so it is dropped a minute after
+saving; and a chat with no `Stop` for 12 hours loses its running sessions
+to the prune for good.
 
 A missed end is caught two ways. The core counts a task only for the chat
 that owns its session, under any id that chat ran under
