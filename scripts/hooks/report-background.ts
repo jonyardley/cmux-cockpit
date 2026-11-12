@@ -16,7 +16,12 @@
 // - A monitor is listed as `shell`, so a monitor's own deadline cannot end
 //   it; it ends with the list like any shell.
 // - A `claude --bg` session is never listed. Its entries (type `session`,
-//   saved by a later hook) are kept through every replace.
+//   saved by a later hook) are kept through every replace, but pruned like
+//   any other entry, so that hook must restamp seenEpoch while the session
+//   runs.
+// - After a `/clear` the chat lists under a new session id, but from the
+//   same Claude process, so a snapshot also replaces the entries saved by
+//   its process (CLAUDE_PID, which Claude Code sets for every hook it runs).
 // - The chat's process gone ends its work: the core counts a task only
 //   while the chat owning its session (native/core/src/owner.rs) is open
 //   (native/core/src/background.rs).
@@ -26,27 +31,51 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { scheduleBuild } from "../hook-build.ts";
-import { cleanLabel, isId, isRecord, MAX_STATUS, type SavedTask, type State, taskType } from "../state-config.ts";
+import {
+  cleanLabel,
+  isId,
+  isPid,
+  isRecord,
+  MAX_STATUS,
+  MAX_TASKS,
+  type SavedTask,
+  type State,
+  taskType,
+} from "../state-config.ts";
 import { writeBackground } from "../state-url.ts";
 import { field } from "./gh-command.ts";
+import { MAX_AGE_S } from "./report-shell.ts";
 
 type BackgroundMap = NonNullable<State["background"]>;
 
 /** One task as a snapshot lists it, before it is stamped and saved. */
 export type ListedTask = Pick<SavedTask, "id" | "type" | "status" | "description">;
 
-/** A task no snapshot has listed for this long is taken as missed and dropped. */
-export const MAX_AGE_S = 12 * 60 * 60;
+/** One Stop or SubagentStop's list, with the chat session and Claude process that listed it. */
+export interface Snapshot {
+  session: string;
+  /** The Claude process's id (CLAUDE_PID), when the hook was given one. */
+  pid?: number;
+  listed: ListedTask[];
+}
 
 const LISTING_EVENTS: readonly unknown[] = ["Stop", "SubagentStop"];
 
+/**
+ * Claude Code's words for a task that has ended. Only `running` has been
+ * seen, since an ended task leaves the list, but one listed with these
+ * words is not running work.
+ */
+const ENDED: readonly unknown[] = ["completed", "failed", "killed"];
+
 function listedTask(v: unknown): ListedTask[] {
   if (!isRecord(v) || typeof v.id !== "string" || !isId(v.id)) return [];
+  const status = cleanLabel(v.status);
+  if (ENDED.includes(status)) return [];
   // `session` is this cockpit's word for a `claude --bg` session, which
   // only the later hook saves and every replace keeps; a listed task
   // calling itself that would never leave with the list.
   const type = v.type === "session" ? "other" : taskType(v.type);
-  const status = cleanLabel(v.status);
   return [
     {
       id: v.id,
@@ -57,43 +86,94 @@ function listedTask(v: unknown): ListedTask[] {
   ];
 }
 
+/** The first of each id, so a task listed twice is saved once. */
+function firstOfEach(tasks: readonly ListedTask[]): ListedTask[] {
+  const seen = new Set<string>();
+  return tasks.filter((t) => {
+    if (seen.has(t.id)) return false;
+    seen.add(t.id);
+    return true;
+  });
+}
+
 /**
  * The tasks a Stop or SubagentStop lists, or null for any other event, or
  * one without a list: Claude Code leaves it out when its task registry is
  * unreachable, which says nothing about what is running. An entry that
- * cannot be read is dropped on its own.
+ * cannot be read, or says it has ended, is dropped on its own.
  */
 export function listedTasks(event: unknown): ListedTask[] | null {
   if (!LISTING_EVENTS.includes(field(event, "hook_event_name"))) return null;
   const list = field(event, "background_tasks");
-  return Array.isArray(list) ? list.flatMap(listedTask) : null;
+  return Array.isArray(list) ? firstOfEach(list.flatMap(listedTask)) : null;
+}
+
+/** The pid a hook was given as text (CLAUDE_PID), or undefined when it is missing or not one. */
+export function pidFrom(text: string | undefined): number | undefined {
+  const pid = text && /^\d+$/.test(text) ? Number(text) : undefined;
+  return isPid(pid) ? pid : undefined;
+}
+
+/** The snapshot an event carries, or null when it has no list or no session to save it under. */
+export function snapshotOf(event: unknown, pid?: number): Snapshot | null {
+  const listed = listedTasks(event);
+  const session = field(event, "session_id");
+  if (listed === null || typeof session !== "string" || !isId(session)) return null;
+  return pid === undefined ? { session, listed } : { session, pid, listed };
 }
 
 /**
- * Replaces the entries `session` saved in a workspace with `listed`. A
- * task listed under another session too (the same chat after a /clear)
- * moves to this one. `session` entries, which no list holds, are kept.
+ * Whether `snap` replaces a saved task: one saved under its session, or by
+ * its Claude process (the same chat before a /clear), or one it lists (a
+ * task saved under another session moves to this one). A `session` entry
+ * is never replaced, since no list holds it.
  */
-export function applySnapshot(
-  map: BackgroundMap,
-  wsId: string,
-  session: string,
-  listed: readonly ListedTask[],
-  now: number,
-): BackgroundMap {
+function replaces(snap: Snapshot, listedIds: ReadonlySet<string>, t: SavedTask): boolean {
+  if (t.type === "session") return false;
+  const sameProcess = snap.pid !== undefined && t.pid === snap.pid;
+  return t.session === snap.session || sameProcess || listedIds.has(t.id);
+}
+
+/**
+ * Replaces the entries `snap` owns in a workspace (see `replaces`) with
+ * its list, in place, so the order is stable: a task already saved keeps
+ * its place and startedEpoch, and a new one goes last. Other chats'
+ * entries and `session` entries are never pushed out: when the workspace
+ * would pass MAX_TASKS, this chat's newest tasks are the ones left out.
+ */
+export function applySnapshot(map: BackgroundMap, wsId: string, snap: Snapshot, now: number): BackgroundMap {
   const saved = map[wsId] ?? [];
-  const ids = new Set(listed.map((t) => t.id));
-  const kept = saved.filter((t) => t.type === "session" || (t.session !== session && !ids.has(t.id)));
-  const fresh = listed.map((t): SavedTask => {
-    const before = saved.find((s) => s.id === t.id && s.type !== "session");
-    return { ...t, session, startedEpoch: before?.startedEpoch ?? now, seenEpoch: now };
+  const listedIds = new Set(snap.listed.map((t) => t.id));
+  const others = saved.filter((t) => !replaces(snap, listedIds, t));
+  let room = MAX_TASKS - others.length;
+  const stamp = (t: ListedTask, before?: SavedTask): SavedTask => ({
+    ...t,
+    session: snap.session,
+    ...(snap.pid === undefined ? {} : { pid: snap.pid }),
+    startedEpoch: before?.startedEpoch ?? now,
+    seenEpoch: now,
   });
-  const next = [...kept, ...fresh];
+  const byId = new Map(snap.listed.map((t) => [t.id, t]));
+  const next: SavedTask[] = [];
+  for (const t of saved) {
+    const listed = byId.get(t.id);
+    if (!replaces(snap, listedIds, t)) next.push(t);
+    else if (listed && room > 0) {
+      next.push(stamp(listed, t));
+      byId.delete(t.id);
+      room--;
+    }
+  }
+  next.push(...[...byId.values()].slice(0, Math.max(room, 0)).map((t) => stamp(t)));
   const { [wsId]: _, ...rest } = map;
   return next.length ? { ...rest, [wsId]: next } : rest;
 }
 
-/** Drops tasks no snapshot has listed for MAX_AGE_S across every workspace, and any workspace left with none. */
+/**
+ * Drops tasks no snapshot has listed for MAX_AGE_S across every workspace,
+ * and any workspace left with none. `session` entries too: the hook that
+ * saves them restamps seenEpoch while the session runs.
+ */
 export function prune(map: BackgroundMap, now: number): BackgroundMap {
   const out: BackgroundMap = {};
   for (const [wsId, tasks] of Object.entries(map)) {
@@ -116,11 +196,9 @@ export const unstamped = (map: BackgroundMap): string =>
   );
 
 /** One event folded in, then the prune: what the hook writes. */
-export function update(map: BackgroundMap, wsId: string, event: unknown, now: number): BackgroundMap {
-  const listed = listedTasks(event);
-  const session = field(event, "session_id");
-  if (listed === null || typeof session !== "string" || !isId(session)) return map;
-  return prune(applySnapshot(map, wsId, session, listed, now), now);
+export function update(map: BackgroundMap, wsId: string, event: unknown, now: number, pid?: number): BackgroundMap {
+  const snap = snapshotOf(event, pid);
+  return snap ? prune(applySnapshot(map, wsId, snap, now), now) : map;
 }
 
 const ROOT = join(import.meta.dirname, "..", "..");
@@ -135,13 +213,14 @@ async function main(): Promise<void> {
   } catch {
     return;
   }
-  if (listedTasks(event) === null) return;
+  const snap = snapshotOf(event, pidFrom(process.env.CLAUDE_PID));
+  if (snap === null) return;
   const now = Math.floor(Date.now() / 1000);
   let moved = false;
   let result: ReturnType<typeof writeBackground>;
   try {
     result = writeBackground(STATE_PATH, (map) => {
-      const next = update(map, wsId, event, now);
+      const next = prune(applySnapshot(map, wsId, snap, now), now);
       moved = unstamped(next) !== unstamped(map);
       return next;
     });

@@ -290,6 +290,11 @@ export interface SavedTask {
   description: string;
   /** The Claude Code session whose Stop or SubagentStop last listed it: the chat's, never an agent's. */
   session: string;
+  /**
+   * The Claude process that listed it (CLAUDE_PID), which a /clear keeps
+   * while the session id changes; absent when the hook was given none.
+   */
+  pid?: number;
   /** Epoch seconds a snapshot first listed it. */
   startedEpoch: number;
   /** Epoch seconds a snapshot last listed it; the prune counts from here. */
@@ -817,11 +822,31 @@ const isTaskType = (v: unknown): v is TaskType => KNOWN_TYPES.includes(v);
 /** A saved task type: a known one as it is, any other word read as `other`, so a new kind is kept, not dropped. */
 export const taskType = (v: unknown): TaskType => (isTaskType(v) ? v : "other");
 
+/** The largest process id kept: persist.rs reads it as a u32. */
+const MAX_PID = 0xffff_ffff;
+
+/** A process id as a saved task holds it: a whole number from 1 to MAX_PID. */
+export const isPid = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v > 0 && v <= MAX_PID;
+
+/**
+ * A saved task's pid as persist.rs reads it: missing or null is no pid
+ * ({}), a good one is kept, and anything else is null, which drops the
+ * task as serde does.
+ */
+function savedPid(v: unknown): { pid?: number } | null {
+  if (v === undefined || v === null) return {};
+  return isPid(v) ? { pid: v } : null;
+}
+
 function savedTask(v: unknown): SavedTask[] {
   if (!isRecord(v) || !isIdText(v.id) || !isIdText(v.session) || typeof v.type !== "string") return [];
   const { status, description, startedEpoch, seenEpoch } = v;
   if (!isText(status, MAX_STATUS) || !isLabel(description) || !isEpoch(startedEpoch) || !isEpoch(seenEpoch)) return [];
-  return [{ id: v.id, type: taskType(v.type), status, description, session: v.session, startedEpoch, seenEpoch }];
+  const pid = savedPid(v.pid);
+  if (pid === null) return [];
+  return [
+    { id: v.id, type: taskType(v.type), status, description, session: v.session, ...pid, startedEpoch, seenEpoch },
+  ];
 }
 
 function savedTasks(v: unknown): SavedTask[] | null {

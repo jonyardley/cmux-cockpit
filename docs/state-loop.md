@@ -540,7 +540,8 @@ One record for every kind of background work a chat has running, built
 from the task list Claude Code hands its `Stop` and `SubagentStop` hooks
 (`background_tasks`, issue #356). `scripts/hooks/report-background.ts`
 saves it in `background`: workspace id to a list of `{"id", "type",
-"status", "description", "session", "startedEpoch", "seenEpoch"}`, at most
+"status", "description", "session", "pid", "startedEpoch", "seenEpoch"}`
+(`pid` left out when the hook was given none), at most
 `MAX_TASKS` (20) per workspace. The map is left out while it is empty.
 Nothing on a card reads it yet: the status and words take it up in #359,
 and the `shells` and `subagents` maps above carry on unchanged until #361.
@@ -572,16 +573,23 @@ adds later: the entry is kept, typed `other`, not dropped.
 same way: a task that does not fit is dropped on its own, the last 20 are
 kept, and a workspace left with none is dropped.
 
-Each snapshot replaces the entries saved under its session wholesale. A
-task already saved keeps its `startedEpoch`; every listed task gets a new
-`seenEpoch`. A task listed that was saved under another session in the
-workspace (the same chat after a `/clear`) moves to this one. Entries of
-type `session` are kept through every replace, since no list holds them.
-A `Stop` with no list, or something other than a list in its place, which
-Claude Code sends when its task registry is unreachable, leaves the record
-alone; only `[]` empties it. A write that only moves `seenEpoch` asks for
-no rebuild; the map is in the bundle's `UNREAD` list in any case, so the
-agents panel never reloads for it.
+Each snapshot replaces, in place, the entries its chat saved: those under
+its session, and those its Claude process saved under an earlier session
+(below). A task already saved keeps its place and its `startedEpoch`; a new
+one goes last; every listed task gets a new `seenEpoch`. A task listed that
+was saved under another session in the workspace moves to this one. A task
+listed twice is saved once, and one listed as `completed`, `failed` or
+`killed` is not saved. Entries of type `session` are kept through every
+replace, since no list holds them, but the prune below takes them like any
+other entry, so the hook that saves them (#357) must restamp `seenEpoch`
+while the session runs. A snapshot never pushes out another chat's entries
+or a `session` entry: when the workspace would pass 20, the snapshot's own
+newest tasks are left out, so the validators' cut never fires on a hook
+write. A `Stop` with no list, or something other than a list in its place,
+which Claude Code sends when its task registry is unreachable, leaves the
+record alone; only `[]` empties it. A write that only moves `seenEpoch`
+asks for no rebuild; the map is in the bundle's `UNREAD` list in any case,
+so the agents panel never reloads for it.
 
 A missed end is caught two ways. The core counts a task only for the chat
 that owns its session, under any id that chat ran under
@@ -593,13 +601,28 @@ this map, so the prune is what takes the entry out of the file. A
 monitor's own deadline (30 minutes at most) cannot apply, since a monitor
 is listed as a shell.
 
-Known gap: no fixture covers a `/clear`. Work started before a clear
-moves to the new session once a snapshot after the clear lists it, and
-then ends with the list as usual. An entry no snapshot after the clear
-lists (work that finished before the next `Stop`, or all of it, if the
-list stops holding pre-clear work) stays under the old session and counts
-for the chat (owner.rs) until the chat closes or the prune takes it. A
-capture of a `Stop` after a clear with work still running would settle it.
+After a `/clear` the chat lists under a new session id from the same
+Claude process, and every list is a full snapshot of that process's work.
+So each task also saves `pid`, the Claude process id Claude Code hands
+every hook it runs (`CLAUDE_PID`), and a snapshot replaces the entries its
+process saved under any session: a task that finished before the first
+`Stop` after a clear goes with that list, even an empty one. A nested
+`claude -p` or a `claude --bg` session started from the chat inherits the
+chat's cmux ids but runs its hooks under its own `CLAUDE_PID`, so its lists
+never touch the chat's entries (checked by hand on Claude Code 2.1.322: a
+nested run's Stop hook saw its own pid, not its parent's). A hook given no
+pid replaces its own session's entries only, as before.
+
+What is left: until the first `Stop` after a clear, work from before it
+counts for the chat through `owner.rs`, which is right while it runs and
+wrong for at most one turn once it has finished. `CLAUDE_PID` is not in
+Claude Code's hooks reference; if it goes, the record falls back to the
+session-only replace, and a finished pre-clear task counts until the chat
+closes or the prune takes it. Two lists racing (a `SubagentStop` and the
+parent's `Stop` a moment apart, each run as its own process) are applied in
+the order they take the state lock, since a payload carries no time of its
+own; a stale list that lands second holds a finished task until the next
+`Stop`.
 
 ## Published pages and docs
 

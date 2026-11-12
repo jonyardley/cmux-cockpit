@@ -166,6 +166,10 @@ pub struct SavedTask {
     pub description: String,
     /// The chat session whose Stop or SubagentStop last listed it.
     pub session: String,
+    /// The Claude process that listed it (CLAUDE_PID), which a /clear
+    /// keeps; absent when the hook was given none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pid: Option<u32>,
     pub started_epoch: f64,
     /// When a snapshot last listed it; the hook's prune counts from here.
     pub seen_epoch: f64,
@@ -186,6 +190,7 @@ impl SavedTask {
             && is_id(&self.session)
             && is_text(&self.status, MAX_STATUS)
             && is_text(&self.description, MAX_LABEL)
+            && self.pid != Some(0)
             && epoch(self.started_epoch)
             && epoch(self.seen_epoch)
     }
@@ -589,10 +594,17 @@ mod tests {
         bad_status["status"] = Value::from("");
         let mut bad_words = task("bad words", "shell");
         bad_words["description"] = Value::from(" padded ");
+        let pid = |id: &str, pid: Value| {
+            let mut t = task(id, "shell");
+            t["pid"] = pid;
+            t
+        };
         let mut json = serde_json::json!({"background": {
             "w1": many,
             "w2": [task("kept", "a new kind"), task("cloud", "cloud session"), task("mcp", "MCP task"),
-                   no_epoch, bad_status, bad_words, task("no type", "x"), "junk"],
+                   no_epoch, bad_status, bad_words, task("no type", "x"), "junk",
+                   pid("pid", Value::from(4242)), pid("null pid", Value::Null), pid("zero pid", Value::from(0)),
+                   pid("text pid", Value::from("42")), pid("minus pid", Value::from(-1))],
             "w3": [{"id": "x"}],
             "w4": "not a list",
             "__proto__": [task("p", "shell")]
@@ -611,13 +623,19 @@ mod tests {
             [
                 ("kept", TaskType::Other),
                 ("cloud", TaskType::CloudSession),
-                ("mcp", TaskType::McpTask)
+                ("mcp", TaskType::McpTask),
+                ("pid", TaskType::Shell),
+                ("null pid", TaskType::Shell)
             ]
         );
+        assert_eq!(s.background["w2"][3].pid, Some(4242));
+        assert_eq!(s.background["w2"][4].pid, None);
         assert_eq!(s.background.keys().collect::<Vec<_>>(), ["w1", "w2"]);
         let out = serde_json::to_value(&s).unwrap();
         assert_eq!(out["background"]["w2"][0]["type"], "other");
         assert_eq!(out["background"]["w2"][1]["type"], "cloud session");
+        assert_eq!(out["background"]["w2"][3]["pid"], 4242);
+        assert!(out["background"]["w2"][4].get("pid").is_none());
         let empty = serde_json::to_value(SavedState::default()).unwrap();
         assert!(empty.get("background").is_none());
     }

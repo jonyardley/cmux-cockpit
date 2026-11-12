@@ -12,11 +12,12 @@ import {
   applySnapshot,
   type ListedTask,
   listedTasks,
-  MAX_AGE_S,
+  pidFrom,
   prune,
   unstamped,
   update,
 } from "../scripts/hooks/report-background.ts";
+import { MAX_AGE_S } from "../scripts/hooks/report-shell.ts";
 import { isRecord, MAX_TASKS, type SavedTask, type State, validateState } from "../scripts/state-config.ts";
 
 type BackgroundMap = NonNullable<State["background"]>;
@@ -70,7 +71,7 @@ test("replaying the captured run fills the record, follows each list and empties
     ["stop-turn-end-tasks-running.json", ["b8cvj4dry", AGENT, "byeh6pasn", "bujdab8j6"]],
     ["subagent-stop-tasks-running.json", ["b8cvj4dry", AGENT, "byeh6pasn", "bujdab8j6"]],
     ["stop-agent-ended-its-shell-in-parent-list.json", ["b8cvj4dry", "byeh6pasn", "bujdab8j6"]],
-    ["subagent-stop-agent-woken-again.json", ["b8cvj4dry", AGENT, "byeh6pasn"]],
+    ["subagent-stop-agent-woken-again.json", ["b8cvj4dry", "byeh6pasn", AGENT]],
     ["stop-shell-and-monitor-left.json", ["b8cvj4dry", "byeh6pasn"]],
     ["stop-one-shell-left.json", ["b8cvj4dry"]],
     ["stop-all-done.json", []],
@@ -185,7 +186,7 @@ test("a snapshot replaces only its own session's entries, and moves a task liste
     ws1: [saved("mine", "s1"), saved("other chat", "s2"), saved("before clear", "s0")],
     ws2: [saved("elsewhere", "s1")],
   };
-  const next = applySnapshot(map, "ws1", "s1", [listed("before clear"), listed("new")], 50);
+  const next = applySnapshot(map, "ws1", { session: "s1", listed: [listed("before clear"), listed("new")] }, 50);
   assert.deepEqual(
     next.ws1?.map((t) => [t.id, t.session, t.startedEpoch]),
     [
@@ -248,6 +249,11 @@ test("validateState keeps the last MAX_TASKS tasks, drops bad ones on their own,
         { ...saved("bad words", "s1"), description: " padded " },
         { ...saved("no type", "s1"), type: 3 },
         "junk",
+        { ...saved("pid", "s1"), pid: 4242 },
+        { ...saved("null pid", "s1"), pid: null },
+        { ...saved("zero pid", "s1"), pid: 0 },
+        { ...saved("text pid", "s1"), pid: "42" },
+        { ...saved("minus pid", "s1"), pid: -1 },
       ],
       ws3: [{ id: "x" }],
       ws4: "not a list",
@@ -262,8 +268,95 @@ test("validateState keeps the last MAX_TASKS tasks, drops bad ones on their own,
       ["kept", "other"],
       ["cloud", "cloud session"],
       ["mcp", "MCP task"],
+      ["pid", "shell"],
+      ["null pid", "shell"],
     ],
   );
+  assert.equal(state.background?.ws2?.[3]?.pid, 4242);
+  assert.equal("pid" in (state.background?.ws2?.[4] ?? {}), false, "a null pid reads as none");
   assert.deepEqual(Object.keys(state.background ?? {}), ["ws1", "ws2"]);
   assert.equal("background" in validateState({ background: {} }), false, "left out while empty");
+});
+
+// A /clear replayed on the captured run: the same Claude process (pid 4242)
+// lists under a new session id after the clear.
+const CLEARED = "00000000-0000-4000-8000-00000000a002";
+const relisted = (file: string, session: string) => {
+  const p = payload(file);
+  assert.ok(isRecord(p));
+  return { ...p, session_id: session };
+};
+
+test("after a /clear, the process's first list retires what it no longer holds and moves the rest", () => {
+  const before = update({}, "ws1", payload("stop-turn-end-tasks-running.json"), 100, 4242);
+  const after = update(before, "ws1", relisted("stop-one-shell-left.json", CLEARED), 200, 4242);
+  assert.deepEqual(
+    after.ws1?.map((t) => [t.id, t.session, t.startedEpoch, t.pid]),
+    [["b8cvj4dry", CLEARED, 100, 4242]],
+  );
+});
+
+test("after a /clear, an empty list from the same process clears what it saved before", () => {
+  const before = update({}, "ws1", payload("stop-turn-end-tasks-running.json"), 100, 4242);
+  assert.deepEqual(update(before, "ws1", stop(CLEARED, []), 200, 4242), {});
+});
+
+test("another Claude process in the workspace, a nested one included, leaves the chat's work alone", () => {
+  const before = update({}, "ws1", payload("stop-turn-end-tasks-running.json"), 100, 4242);
+  const nested = update(before, "ws1", stop("nested", [shell("its own")]), 200, 5151);
+  assert.deepEqual(ids(nested), ["b8cvj4dry", AGENT, "byeh6pasn", "bujdab8j6", "its own"]);
+  assert.deepEqual(ids(update(nested, "ws1", stop("nested", []), 300, 5151)), ids(before));
+});
+
+test("with no pid, a list replaces its own session only, as before", () => {
+  const before = update({}, "ws1", payload("stop-turn-end-tasks-running.json"), 100);
+  assert.deepEqual(ids(update(before, "ws1", stop(CLEARED, []), 200)), ids(before));
+  assert.equal(
+    before.ws1?.some((t) => "pid" in t),
+    false,
+  );
+});
+
+test("the pid is read from CLAUDE_PID only when it is a whole number in range", () => {
+  assert.equal(pidFrom("4242"), 4242);
+  for (const bad of [undefined, "", "0", "-1", "4.2", "42x", "4294967296"])
+    assert.equal(pidFrom(bad), undefined, String(bad));
+});
+
+test("two chats taking turns keep the saved order, so restamping asks for no build", () => {
+  let map = update({}, "ws1", stop("s1", [shell("a")]), 10);
+  map = update(map, "ws1", stop("s2", [shell("b")]), 20);
+  const settled = unstamped(map);
+  map = update(map, "ws1", stop("s1", [shell("a")]), 30);
+  map = update(map, "ws1", stop("s2", [shell("b")]), 40);
+  assert.equal(unstamped(map), settled);
+  assert.deepEqual(ids(map), ["a", "b"]);
+});
+
+test("a busy chat never pushes out another chat's work or a claude --bg session", () => {
+  const theirs = [saved("theirs", "s2"), saved("5e5e5e5e", "s1", { type: "session" })];
+  const many = Array.from({ length: MAX_TASKS + 5 }, (_, i) => shell(`b${i}`));
+  const map = update({ ws1: theirs }, "ws1", stop("s1", many), 50);
+  assert.equal(map.ws1?.length, MAX_TASKS);
+  assert.deepEqual(ids(map).slice(0, 3), ["theirs", "5e5e5e5e", "b0"]);
+  assert.equal(validateState({ background: map }).background?.ws1?.length, MAX_TASKS, "the validator cuts nothing");
+});
+
+test("a task listed twice is saved once, and one listed as ended is not saved", () => {
+  const map = update(
+    {},
+    "ws1",
+    stop("s1", [
+      shell("b1"),
+      { ...shell("b1"), description: "again" },
+      { ...shell("b2"), status: "completed" },
+      { ...shell("b3"), status: "failed" },
+      { ...shell("b4"), status: "killed" },
+    ]),
+    50,
+  );
+  assert.deepEqual(
+    map.ws1?.map((t) => [t.id, t.description]),
+    [["b1", "run b1"]],
+  );
 });
