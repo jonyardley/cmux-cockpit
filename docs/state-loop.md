@@ -372,10 +372,15 @@ row like any other, and the Start that wakes it reopens the row from then
 waits. A wake under `RESUME_MIN_GAP_S` after the pause reads as a late
 duplicate and reopens nothing, so that row stays settled while the agent
 works on, until its next pause and wake; the helper words and the quiet
-rule's count miss it meanwhile. The card still says Running through
-either, since the paused work and the agent are in the background record. Until #361 a run was flagged
-`background` and its Stop read the agent's transcript to keep the row
-open; both validators now drop that flag.
+rule's count miss it meanwhile. An idle chat's card still says Running
+through either: the pausing Stop lists the agent and the work it waits on,
+and the chat's next Stop still lists that work after the agent drops out
+of the list (test/fixtures/background/README.md). Running is only ever an
+idle chat's status: a chat still working itself while its agent pauses
+can now read quiet once it has shown no activity for the quiet limit,
+since the quiet rule counts only open runs. Until #361 a run was flagged `background` and its
+Stop read the agent's transcript to keep the row open; both validators
+now drop that flag.
 
 **Residual cases for resumes:** once a finished row is pruned (ten minutes
 after its Stop, below), a later resume looks like a first start and pairs

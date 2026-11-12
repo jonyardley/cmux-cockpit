@@ -113,4 +113,15 @@ mod tests {
         let w = workspace(std::slice::from_ref(&a));
         assert!(live_tasks(&saved, Some(&w), Some(&a)).is_empty());
     }
+
+    #[test]
+    fn a_workspace_with_nothing_saved_counts_nothing() {
+        let saved = SavedState::from_json(STATE).unwrap();
+        let a = agent("now", Some(AgentStatus::Idle), &["before"]);
+        let w = Workspace {
+            id: "w2".to_string(),
+            ..workspace(std::slice::from_ref(&a))
+        };
+        assert!(live_tasks(&saved, Some(&w), Some(&a)).is_empty());
+    }
 }

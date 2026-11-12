@@ -419,6 +419,17 @@ impl Session {
         self.card_memo = None;
     }
 
+    /// Runs `f` inside a frame, opening one when none is open and closing
+    /// only the one it opened, whatever way `f` returns.
+    pub(crate) fn framed<R>(&mut self, f: impl FnOnce(&mut Session) -> R) -> R {
+        let opened = self.begin_frame();
+        let out = f(self);
+        if opened {
+            self.end_frame();
+        }
+        out
+    }
+
     /// ready_agent, with the card's work already read.
     fn ready_with(
         &mut self,

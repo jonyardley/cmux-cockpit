@@ -599,18 +599,13 @@ impl Panel {
             view,
             ..
         } = core;
-        let opened = session.begin_frame();
-        let panel = match data {
-            Some(data) => build::build(session, data, view),
+        match data {
+            Some(data) => session.framed(|s| build::build(s, data, view)),
             None => Panel {
                 view: view_of(view),
                 ..Panel::default()
             },
-        };
-        if opened {
-            session.end_frame();
         }
-        panel
     }
 
     /// The rows the cursor moves between in Projects, top to bottom: each

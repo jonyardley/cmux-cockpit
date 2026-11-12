@@ -614,11 +614,17 @@ impl Model {
 
     /// Builds the frame's view, reading each card's work once.
     fn rebuild(&mut self) {
+        self.framed(Model::build);
+    }
+
+    /// Runs `f` inside a frame (`Session::framed`), with the whole model.
+    fn framed<R>(&mut self, f: impl FnOnce(&mut Model) -> R) -> R {
         let opened = self.session.begin_frame();
-        self.build();
+        let out = f(self);
         if opened {
             self.session.end_frame();
         }
+        out
     }
 
     fn build(&mut self) {
@@ -692,12 +698,10 @@ impl App for Cockpit {
         model.session.tend_filter();
         model.overlay();
         // The verdicts read the same cards as the view, in the same frame.
-        let opened = model.session.begin_frame();
-        model.build();
-        let saves = model.running_writes();
-        if opened {
-            model.session.end_frame();
-        }
+        let saves = model.framed(|m| {
+            m.build();
+            m.running_writes()
+        });
         let now = model.data.as_ref().and_then(|d| d.epoch);
         let asks = model.asks(now);
         let out = model.session.take_outbox().into_iter().map(send_out);
