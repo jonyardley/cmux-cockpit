@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, beforeEach, describe, it } from "node:test";
 import { parseRunningSave } from "../scripts/running-save.ts";
-import { MAX_COUNTS, MAX_TASKS, type SavedRunning, validateState } from "../scripts/state-config.ts";
+import { MAX_COUNTS, MAX_TASKS, type SavedRunning, type SavedTask, validateState } from "../scripts/state-config.ts";
 import { writeBackground, writeRunningEntries } from "../scripts/state-url.ts";
 
 const dir = mkdtempSync(join(tmpdir(), "running-save-"));
@@ -124,7 +124,7 @@ describe("writeRunningEntries", () => {
   });
 
   it("loses a workspace's verdict when the background hook leaves it no work", () => {
-    const task = (id: string) => ({
+    const task = (id: string): SavedTask => ({
       id,
       type: "shell",
       status: "running",
@@ -139,8 +139,9 @@ describe("writeRunningEntries", () => {
     // The Cockpit is closed: only the hook writes. b's shell ends.
     writeBackground(path, (map) => ({ a: map.a ?? [] }));
     assert.deepEqual(Object.keys(read(path).running ?? {}), ["a"], "b's work ended, c had none");
-    writeBackground(path, () => ({}));
-    assert.equal("running" in read(path), false);
+    // A task the contract drops leaves no work behind it either.
+    writeBackground(path, () => ({ a: [{ ...task("b3"), session: "" }] }));
+    assert.equal("running" in read(path), false, "a's only task was refused");
   });
 });
 

@@ -336,13 +336,12 @@ export function writeBackground(
   update: (background: NonNullable<State["background"]>) => NonNullable<State["background"]>,
 ): ApplyResult {
   return readUpdateWrite(path, (before) => {
-    const background = sortedByKey(update(before.background ?? {}));
-    const running = Object.fromEntries(
-      Object.entries(before.running ?? {}).filter(
-        ([ws]) => !!(Object.hasOwn(background, ws) && background[ws]?.length),
-      ),
-    );
-    return { ok: true, state: validateState({ ...before, background, running }) };
+    const state = validateState({ ...before, background: sortedByKey(update(before.background ?? {})) });
+    // Judged on the cleaned record, so a workspace whose every task the
+    // contract drops loses its verdict too.
+    const left = state.background ?? {};
+    const running = Object.fromEntries(Object.entries(state.running ?? {}).filter(([ws]) => Object.hasOwn(left, ws)));
+    return { ok: true, state: validateState({ ...state, running }) };
   });
 }
 
