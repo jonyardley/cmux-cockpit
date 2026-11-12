@@ -68,6 +68,11 @@ describe("saved helper count", () => {
     assert.equal(liveRunCount(kids), 2);
   });
 
+  it("counts a run under a session no agent has for each chat, as it may be from before a /clear", () => {
+    const now = agent("working", { id: "after-clear" });
+    assert.equal(liveRunCount(ws("w1", { agents: [now] }), now), 2);
+  });
+
   it("counts nothing for a workspace with no saved runs", () => {
     r.data.epoch += 1;
     assert.equal(liveRunCount(ws("none", { agents: [agent("working")] })), 0);
