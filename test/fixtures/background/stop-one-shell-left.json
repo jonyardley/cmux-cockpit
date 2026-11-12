@@ -1,0 +1,27 @@
+{
+  "capture_event": "Stop",
+  "payload": {
+    "session_id": "00000000-0000-4000-8000-00000000a001",
+    "transcript_path": "/Users/me/.claude/projects/p/s.jsonl",
+    "cwd": "/Users/me/work",
+    "scratchpad_dir": "/tmp/scratchpad",
+    "prompt_id": "00000000-0000-4000-8000-00000000b005",
+    "permission_mode": "auto",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "Stop",
+    "stop_hook_active": false,
+    "last_assistant_message": "(message text removed)",
+    "background_tasks": [
+      {
+        "id": "b8cvj4dry",
+        "type": "shell",
+        "status": "running",
+        "description": "Sleep 200 seconds in background",
+        "command": "sleep 200"
+      }
+    ],
+    "session_crons": []
+  }
+}

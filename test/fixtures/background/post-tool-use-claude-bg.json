@@ -1,0 +1,29 @@
+{
+  "capture_event": "PostToolUse",
+  "payload": {
+    "session_id": "00000000-0000-4000-8000-00000000a001",
+    "transcript_path": "/Users/me/.claude/projects/p/s.jsonl",
+    "cwd": "/Users/me/work",
+    "scratchpad_dir": "/tmp/scratchpad",
+    "prompt_id": "00000000-0000-4000-8000-00000000b001",
+    "permission_mode": "auto",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "claude --bg \"reply with the word ok and stop\" 2>&1",
+      "description": "Start a background Claude session that replies ok"
+    },
+    "tool_response": {
+      "stdout": "warning: --bg manages the session id; ignoring --session-id (use --resume <id> to continue an existing session)\nbackgrounded \u00b7 5e5e5e5e\n  claude agents             list sessions\n  claude attach 5e5e5e5e    open in this terminal\n  claude logs 5e5e5e5e      show recent output\n  claude stop 5e5e5e5e      stop this session",
+      "stderr": "",
+      "interrupted": false,
+      "isImage": false,
+      "noOutputExpected": false
+    },
+    "tool_use_id": "toolu_FAKE_839476",
+    "duration_ms": 769
+  }
+}
