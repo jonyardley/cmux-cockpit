@@ -131,10 +131,14 @@ mod move_of {
     use super::*;
 
     #[test]
-    fn shows_at_idle_straight_after_stop_when_the_move_is_newer_than_the_last_prompt() {
+    fn shows_straight_after_stop_when_the_move_is_newer_than_the_last_prompt() {
         let (mut s, _, mut fx) = setup();
         let w = at("quick", vec![stopped(&mut fx, "quick", 1000.0)]);
-        assert_eq!(s.agent_of(Some(&w)).and_then(|a| a.status), Some(Idle));
+        assert_eq!(
+            s.agent_of(Some(&w)).and_then(|a| a.status),
+            Some(NeedsInput),
+            "a move that asks Jon something is his turn from the Stop, not the nudge"
+        );
         let want = "the work is finished. Run /clear now.";
         assert_eq!(text_of(s.move_of(Some(&w))).as_deref(), Some(want));
         assert_eq!(s.card_detail(Some(&w)), want);
@@ -438,10 +442,19 @@ mod a_turn_that_ended_on_nothing_for_you {
     }
 
     #[test]
-    fn is_ready_with_unread_output_when_the_turn_ended_on_a_your_move_line() {
+    fn is_your_turn_not_ready_with_unread_output_when_the_turn_ended_on_a_your_move_line() {
         let (mut s, data, mut fx) = setup();
         let w = at("quick", vec![stopped(&mut fx, "quick", 1000.0)]).unread(1.0);
-        assert!(s.is_ready(&data, Some(&w)));
+        assert!(!s.is_ready(&data, Some(&w)), "Your turn outranks Ready");
+        assert_eq!(
+            s.status_of(Some(&w)),
+            cockpit_core::status::Status::NeedsInput
+        );
+        let idle = at("quiet", vec![stopped(&mut fx, "quiet", 1000.0)]).unread(1.0);
+        assert!(
+            s.is_ready(&data, Some(&idle)),
+            "a Nothing for you turn stays Ready"
+        );
     }
 
     #[test]

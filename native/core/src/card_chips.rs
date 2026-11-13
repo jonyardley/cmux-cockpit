@@ -75,7 +75,10 @@ impl Session {
         let mut out = Vec::new();
         let Some(w) = w else { return out };
         // First, so what answering takes reads before where the work is.
-        if let Some(m) = self.move_of(Some(w))
+        // Only on a card that waits on Jon, so it always wears the wait's
+        // colour: a dismissed wait keeps its move as the detail, not the chip.
+        if self.waits_on_you(Some(w))
+            && let Some(m) = self.move_of(Some(w))
             && let Some(size) = move_size(&m)
         {
             let text = move_size_text(size, m.decisions.unwrap_or(0.0));

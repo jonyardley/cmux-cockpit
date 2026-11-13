@@ -3,6 +3,15 @@
 //! Claude Code's idle nudge (issue #4), when Jon has dismissed it, or when
 //! the turn ended on "Nothing for you". Asking or your turn (issue #81)
 //! comes from the saved asks.
+//!
+//! The Cockpit also reads a turn end as Jon's turn from its closing line,
+//! not from the nudge: an idle or nudged agent whose turn ended on a move
+//! that asks something of him (`waiting_turn`) reads as needs_input from
+//! the moment the turn ended. The runner never moves the last activity on
+//! a Notification, so the nudge alone always reads as idle there, and
+//! Claude Code may send none while background work runs. Every rule that
+//! asks whether a card waits on Jon reads the agent this gives, so Needs
+//! you, the status, the waiting look and the size chip cannot disagree.
 
 use indexmap::IndexMap;
 use serde_json::{Map, Value};
@@ -10,7 +19,7 @@ use serde_json::{Map, Value};
 use crate::activity::since_or_activity;
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::js::{json_num, truthy};
-use crate::moves::quiet_turn;
+use crate::moves::{asks_nothing, quiet_turn, waiting_move};
 use crate::persist::{SavedAsk, SavedMove, SavedState};
 use crate::saved::saved_for;
 use crate::session::Session;
@@ -62,13 +71,39 @@ fn quiet_of(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Option<Save
 }
 
 /// The saved ask that explains `a`'s current needs_input spell, if any.
+/// One saved before the end of the turn `a` waits on was answered within
+/// that turn: a turn that waits on Jon reads as needs_input from its end
+/// (`effective_agent`), so the slack alone would let it through.
 fn fresh_ask<'s>(saved: &'s SavedState, a: &Agent, w: Option<&Workspace>) -> Option<&'s SavedAsk> {
     let w = w?;
     if !needs_input(a) {
         return None;
     }
     let since = truthy(a.since_epoch)?;
-    saved_for(saved.asking.get(&w.id), a, w, since, is_own_saved)
+    let ask = saved_for(saved.asking.get(&w.id), a, w, since, is_own_saved)?;
+    let turn_end = waiting_move(saved, Some(a), Some(w), false).map(|m| m.epoch);
+    turn_end.is_none_or(|end| ask.epoch >= end).then_some(ask)
+}
+
+/// The move `a`'s turn ended on when it waits on Jon: `a`'s own, current
+/// (no prompt since), not an ask, and asking something of him. A reply
+/// with no label counts, as a turn with no closing line still waits on
+/// him (#322); only "Nothing for you" does not. None otherwise.
+pub fn waiting_turn(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Option<SavedMove> {
+    let asking = fresh_ask(saved, a, w).is_some();
+    waiting_move(saved, Some(a), w, asking).filter(|m| !asks_nothing(m))
+}
+
+/// When `a`'s wait on Jon began, which a dismissal is keyed on: the end
+/// of `turn`, the turn that waits on him, so the nudge landing a minute
+/// on keeps the dismissal, else the start of its needs_input spell.
+fn start_of(turn: Option<&SavedMove>, a: &Agent) -> f64 {
+    turn.map_or_else(|| since_or_activity(a), |m| m.epoch)
+}
+
+/// `start_of`, reading the turn.
+fn wait_start(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> f64 {
+    start_of(waiting_turn(saved, a, w).as_ref(), a)
 }
 
 /// Why the agent is asking ("allow git push?"), or None when its
@@ -83,23 +118,41 @@ fn not_jons(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> bool {
     is_idle_nudge(saved, a, w) || quiet_of(saved, a, w).is_some()
 }
 
-/// The workspace's real asks: needs_input agents that are not a nudge.
+/// Whether `a` waits on Jon, dismissals aside: a turn that ended on a move
+/// asking something of him, or a needs_input that is not a nudge.
+fn waits_on_jon(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> bool {
+    waiting_turn(saved, a, w).is_some() || (needs_input(a) && !not_jons(saved, a, w))
+}
+
+/// The workspace's agents that wait on Jon, its real asks among them.
 fn asking<'w>(saved: &SavedState, w: Option<&'w Workspace>) -> Vec<&'w Agent> {
     let Some(w) = w else { return Vec::new() };
     w.agent_list()
-        .filter(|a| needs_input(a) && !not_jons(saved, a, Some(w)))
+        .filter(|a| waits_on_jon(saved, a, Some(w)))
         .collect()
 }
 
 impl Session {
+    /// Whether Jon dismissed `a`'s wait that began at `start`.
+    fn dismissed_at(&self, w: Option<&Workspace>, a: &Agent, start: f64) -> bool {
+        w.and_then(|w| self.dismissed.get(&w.id))
+            .and_then(|starts| starts.get(&a.id))
+            .is_some_and(|s| *s == start)
+    }
+
     fn is_dismissed(&self, w: Option<&Workspace>, a: &Agent) -> bool {
-        let Some(w) = w else { return false };
-        needs_input(a)
-            && self
-                .dismissed
-                .get(&w.id)
-                .and_then(|starts| starts.get(&a.id))
-                .is_some_and(|start| *start == since_or_activity(a))
+        let turn = waiting_turn(&self.saved, a, w);
+        self.is_dismissed_with(w, a, turn.as_ref())
+    }
+
+    /// is_dismissed, with `a`'s waiting turn already read.
+    fn is_dismissed_with(
+        &self,
+        w: Option<&Workspace>,
+        a: &Agent,
+        turn: Option<&SavedMove>,
+    ) -> bool {
+        (needs_input(a) || turn.is_some()) && self.dismissed_at(w, a, start_of(turn, a))
     }
 
     /// Drops dismissals whose spell has ended, for agents the workspace
@@ -112,7 +165,7 @@ impl Session {
         }
         let live: IndexMap<String, f64> = asking(&self.saved, Some(w))
             .into_iter()
-            .map(|a| (a.id.clone(), since_or_activity(a)))
+            .map(|a| (a.id.clone(), wait_start(&self.saved, a, Some(w))))
             .collect();
         let Some(by_agent) = self.dismissed.get_mut(&w.id) else {
             return;
@@ -126,9 +179,23 @@ impl Session {
         }
     }
 
-    /// The agent as the sidebars show it: needs_input reads as idle when it
-    /// is a nudge, dismissed, or a turn that ended on "Nothing for you".
+    /// The agent as the sidebars show it: a turn that ended on a move
+    /// asking something of Jon reads as needs_input from its end, idle or
+    /// nudged; any other needs_input reads as idle when it is a nudge,
+    /// dismissed, or a turn that ended on "Nothing for you".
     pub fn effective_agent(&self, a: &Agent, w: Option<&Workspace>) -> Agent {
+        // Ahead of Running too: background work never hides a turn that
+        // asks Jon something. A dismissed one reads as it would without it.
+        let turn = waiting_turn(&self.saved, a, w);
+        if let Some(turn) = &turn
+            && !self.dismissed_at(w, a, turn.epoch)
+        {
+            return Agent {
+                status: Some(AgentStatus::NeedsInput),
+                since_epoch: Some(turn.epoch),
+                ..a.clone()
+            };
+        }
         if !needs_input(a) {
             return a.clone();
         }
@@ -146,7 +213,7 @@ impl Session {
         if let Some(quiet) = quiet_of(&self.saved, a, w) {
             return idle(Some(quiet.epoch));
         }
-        if nudge || self.is_dismissed(w, a) {
+        if nudge || self.is_dismissed_with(w, a, turn.as_ref()) {
             return idle(a.since_epoch);
         }
         a.clone()
@@ -181,7 +248,7 @@ impl Session {
         let Some(w) = w else { return };
         let starts: IndexMap<String, f64> = asking(&self.saved, Some(w))
             .into_iter()
-            .map(|a| (a.id.clone(), since_or_activity(a)))
+            .map(|a| (a.id.clone(), wait_start(&self.saved, a, Some(w))))
             .collect();
         if starts.is_empty() {
             return;
@@ -208,8 +275,91 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
+    use super::waiting_turn;
     use crate::data::{Agent, AgentStatus, Workspace};
+    use crate::persist::SavedState;
     use crate::session::Session;
+
+    /// Whether `c`'s turn, ended at 1000 on `move_json`, waits on Jon,
+    /// with `asking_json` as the workspace's saved ask.
+    fn waits(move_json: &str, asking_json: &str, status: AgentStatus) -> bool {
+        let saved = SavedState::from_json(&format!(
+            r#"{{"moves": {{"w": {move_json}}}, "asking": {{{asking_json}}}}}"#
+        ))
+        .unwrap();
+        let a = Agent {
+            id: "c".into(),
+            kind: Some("claude".into()),
+            status: Some(status),
+            since_epoch: Some(1000.0),
+            last_activity_at: Some(1000.0),
+            ..Agent::default()
+        };
+        let w = Workspace {
+            id: "w".into(),
+            latest_at: Some(900.0),
+            agents: Some(vec![Some(a.clone())]),
+            ..Workspace::default()
+        };
+        waiting_turn(&saved, &a, Some(&w)).is_some()
+    }
+
+    #[test]
+    fn a_turn_waits_on_jon_unless_it_asks_nothing_is_an_ask_or_is_not_its_own() {
+        let idle = || AgentStatus::Idle;
+        let asks = r#"{"text": "Your move: go", "epoch": 1000, "session": "c"}"#;
+        assert!(waits(asks, "", idle()));
+        let bare =
+            r#"{"text": "Shall I go on?", "unlabelled": true, "epoch": 1000, "session": "c"}"#;
+        assert!(
+            waits(bare, "", idle()),
+            "a reply with no label still waits (#322)"
+        );
+        let quiet =
+            r#"{"text": "Nothing for you: CI runs.", "idle": true, "epoch": 1000, "session": "c"}"#;
+        assert!(!waits(quiet, "", idle()));
+        let other = r#"{"text": "Your move: go", "epoch": 1000, "session": "d"}"#;
+        assert!(!waits(other, "", idle()), "another session's move");
+        let ask = r#""w": {"reason": "allow git push?", "epoch": 1000}"#;
+        assert!(
+            waits(asks, ask, idle()),
+            "an ask only counts while needs_input"
+        );
+        assert!(
+            !waits(asks, ask, AgentStatus::NeedsInput),
+            "Asking, not Your turn"
+        );
+        assert!(!waits(asks, "", AgentStatus::Working), "only at a turn end");
+    }
+
+    #[test]
+    fn an_ask_answered_just_before_the_turn_ended_is_not_asking() {
+        let saved = SavedState::from_json(
+            r#"{"moves": {"w": {"text": "Your move: go", "epoch": 1002, "session": "c"}},
+                "asking": {"w": {"reason": "allow git push?", "epoch": 1000}}}"#,
+        )
+        .unwrap();
+        let a = Agent {
+            id: "c".into(),
+            kind: Some("claude".into()),
+            status: Some(AgentStatus::Idle),
+            since_epoch: Some(1002.0),
+            last_activity_at: Some(1002.0),
+            ..Agent::default()
+        };
+        let w = Workspace {
+            id: "w".into(),
+            latest_at: Some(900.0),
+            agents: Some(vec![Some(a)]),
+            ..Workspace::default()
+        };
+        let mut s = Session::new(Vec::new(), saved);
+        assert_eq!(s.ask_of(Some(&w)), None, "within the slack, but answered");
+        assert_eq!(
+            s.move_of(Some(&w)).map(|m| m.text).as_deref(),
+            Some("Your move: go")
+        );
+    }
 
     #[test]
     fn saves_a_dismissal_in_the_workspaces_agent_order() {

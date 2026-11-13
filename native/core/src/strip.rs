@@ -48,6 +48,13 @@ impl Session {
         waiting
     }
 
+    /// Whether the card waits on Jon: its agent, as the sidebars show it
+    /// (`Session::effective_agent`), needs input. Needs you, the card's
+    /// waiting look and the size chip all go by it.
+    pub fn waits_on_you(&mut self, w: Option<&Workspace>) -> bool {
+        self.status_of(w) == Status::NeedsInput
+    }
+
     /// Needs you for this frame.
     pub fn needs<'d>(&mut self, data: &'d Data) -> NeedsStrip<'d> {
         let waiting = self.waiting(data);

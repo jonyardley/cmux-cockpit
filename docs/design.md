@@ -98,7 +98,7 @@ dark-mode screenshot; nothing here changes before then.
 |-|-|-|-|
 | `text` | 141413 | F0EEE6 | card titles, the chosen tab, notice titles |
 | `heading` (also `select`, `laneMain`) | 3D3D3A | D6D4CA | project header names, a selected card's outline, "Drop here" |
-| `secondary` (also `laneReview`) | 5E5D59 | B7B5A9 | lane names, detail lines, chip glyphs, the size chip on a card waiting on nobody, the tab not chosen, the fold chevron, a quiet row's "+" |
+| `secondary` (also `laneReview`) | 5E5D59 | B7B5A9 | lane names, detail lines, chip glyphs, the tab not chosen, the fold chevron, a quiet row's "+" |
 | `metaText` | 6B6A64 | A3A199 | Next's place, every age while its card waits on nobody, Idle and No agent, a draft or closed PR's words (and one with no status), the Quiet pill |
 | `faint` (also `laneBackground`) | 8A8880 | 8A8880 | pin, QUIET, a faint or empty lane's name, a row's PR title, the diff, editor labels ([gap L](#known-gaps)) |
 | `Own.tertiary` | 73726C | 9C9A92 | where you left off, live helpers, the editor's "Or one you have open" |
@@ -580,6 +580,18 @@ and Claude Code 2.1.322 listed it as a shell), agent, session (a
 task for a kind Claude Code adds later (`task_word`). It draws as
 working: blue dot with halo, `blueText`, and sorts with the working cards.
 
+Running never stands over a turn that waits on you. A turn that ended on
+a line asking something of you ("Your move:", decisions laid out, or a
+reply with no label, which still waits on you since #322) is Your turn
+from the moment it ended, whether or not its work runs on and whether or
+not Claude Code's idle nudge has come: clay, the waiting look, the size
+chip, the waiting count on All and its age from the turn end, not from
+the earliest work. Only a "Nothing for you" turn says Running while its
+work runs. The rule is `waiting_turn` in `native/core/src/needs.rs`,
+which `Session::effective_agent` turns into needs input, so every place
+that asks whether a card waits reads the same answer. A dismissed wait
+reads as it would without the line: Running while its work runs.
+
 What counts is the chat's whole tree (`native/core/src/running.rs`): its
 shells and monitors, its agents and their own shells, and `claude --bg`
 sessions it or its agents started, under any session id the chat ran
@@ -690,7 +702,7 @@ Where: `Views/CardView.swift:331-342`.
 All chips are 11 (`Font.meta`) and share one frame: padding 6 by 1, radius
 `Radius.chip` 6, a hairline edge (`chipFrame`, `Views/ChipsView.swift`). The
 face and edge are the core's, `Chip.face` and `Chip.edge`: `chipFace` and
-`chipEdge` on every chip but the size chip on a waiting card.
+`chipEdge` on every chip but the size chip, which only a waiting card draws.
 The chips row puts everything on one line when it fits, else the branch line
 under the PR line; only then does the diff give way, then the branch name.
 Where: `Views/ChipsView.swift:43-173`.
@@ -716,8 +728,12 @@ it does not open.
 On a card waiting on you, how big answering is: "Quick", "Decide · 2" or
 "Review". It leads the chips row, and takes the wait's colour: on a Your
 turn card a `clayChipFace` face, `clayChipEdge` edge and `clayText` words;
-on an Asking card the amber three; words medium. On a card waiting on
-nobody it is a quiet chip, `secondary` on `chipFace`. D10 a (a neutral
+on an Asking card the amber three; words medium. A card waiting on
+nobody draws none, even with a move saved (a dismissed wait keeps its
+move as the detail): the core gives the chip only while the card waits
+(`Session::waits_on_you`, `native/core/src/strip.rs`, read by
+`chips_for` in `native/core/src/card_chips.rs`), and `chip_views` drops
+one with no wait, so a size chip is never quiet. D10 a (a neutral
 size chip) was reversed on 13 November 2026, because the card's clay
 alone was too faint on screen to tell at a glance which cards wait. The
 core picks all three (`size_chip` and `chip_views`,
@@ -899,9 +915,9 @@ Every card is decided as option a; where that changes a rule, the rule says
    not an error, not a warning. Failures are red and the helper-down band
    is neutral (D5 a). Passes: Next is in Ready's green, as it only leads
    to a Ready card (D9 a). The move size chip takes the wait's colour
-   only on a card that waits, so its clay or amber still says Your turn
-   or Asking, not a size (D10 reversed, 13 November 2026); on any other
-   card it is neutral.
+   and shows only on a card that waits, so its clay or amber still says
+   Your turn or Asking, not a size (D10 reversed, 13 November 2026); no
+   other card draws one.
 4. **A state on a header is the same dot as on a card.** Today headers and
    the anchor badge draw a text glyph ([gap H](#known-gaps)).
 5. **A count is a pill**, coloured by how urgent what it counts is
@@ -948,6 +964,9 @@ Every card is decided as option a; where that changes a rule, the rule says
     `countBg` (D5 a), and Next is green (D9 a).
 13. **"Waiting" means waiting on you, and nothing else.** The blue status
     for running background work says "Running" (D15 a, [gap T](#known-gaps), #359).
+    It never stands over a wait: a turn that ended on a line asking
+    something of you is Your turn while its work runs on
+    ([Running](#running)).
     Two uses are left on purpose: the helper-down band's "Waiting for the
     panel" (`Model/Words.swift`), which waits on the helper and names no
     card, and lane names, which are Jon's own words in `config/lanes.json`.
@@ -961,10 +980,10 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 
 | Meaning | Cards (full, compact, Projects) | Dense row | Headers and anchor | Elsewhere | Chosen at |
 |-|-|-|-|-|-|
-| Your turn | clay dot with halo, `clayText` words, clay needs dot; `clayCardEdge` edge and clay stripe | same, age and reason in `clayText`; `clayWash` face | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `status.rs` `plain_style`, `waiting_tokens`; `panel/build.rs` `header_dot` |
+| Your turn | clay dot with halo, `clayText` words, clay needs dot; `clayCardEdge` edge and clay stripe | same, age and reason in `clayText`; `clayWash` face | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `needs.rs` `waiting_turn`, `effective_agent`; `status.rs` `plain_style`, `waiting_tokens`; `panel/build.rs` `header_dot` |
 | Asking | amber dot with halo, `amberText` words, amber needs dot; `amberCardEdge` edge and amber stripe | same; `amberWash` face | amber glyph **≠**; `amberCount` pill | waiting count amber while every waiting card asks | `status.rs` `StatusKind::style`; `panel/build.rs` `needs_tone` |
 | Working | blue dot with halo, `blueText`; blue progress bar | blue dot | blue glyph; `blueCount` pill | | `status.rs:109` |
-| Running | as working, "Running 4m · 1 shell, 1 agent"; no live helpers words beside it once it counts an agent | as working, the age alone | as working | | `status.rs` `StatusKind::Running`; `running.rs`; `words.rs` `running_text` |
+| Running | as working, "Running 4m · 1 shell, 1 agent"; no live helpers words beside it once it counts an agent; never over a turn that asks you | as working, the age alone | as working | | `status.rs` `StatusKind::Running`; `running.rs`; `words.rs` `running_text` |
 | Quiet working | hollow blue ring, `blueText` | same | hollow glyph | | `status.rs:160-165` |
 | Finished, Ready | olive dot, no halo, `greenText`; Ready pill `greenText` on `Own.readyBg` | olive dot; no Ready pill **≠** | olive glyph | Next in `greenText` | `status.rs`; `panel/build.rs` `ready_ink` |
 | Idle, no agent | hollow grey; `metaText` idle and no agent | hollow grey | hollow grey glyph | | `status.rs` `plain_style` |
@@ -976,7 +995,7 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | PR merged | chip state `mergedText`; compact words `mergedText` | number `mergedText` | | agents panel chip `mergedText` on `mergedChipFace` | as above |
 | Checks failing, conflict | chip words `redText` on a neutral chip | number `redText` | | | `pr_colors.rs` `pr_ink` |
 | Checks running | chip words `blueText` (blue also means working) | number `blueText` | | | `pr_colors.rs` `pr_ink` |
-| Move size | first chip; on a waiting card the wait's colour (`clayText` on `clayChipFace` for Your turn, `amberText` on `amberChipFace` for Asking), else `secondary` on the quiet chip; none on a compact card | not drawn | | | `panel/build.rs` `size_chip` |
+| Move size | first chip, only on a waiting card, in the wait's colour (`clayText` on `clayChipFace` for Your turn, `amberText` on `amberChipFace` for Asking); none on a compact card | not drawn | | | `card_chips.rs` `chips_for`; `panel/build.rs` `size_chip` |
 | Unread | grey badge | grey badge | the same badge on the anchor | | `CardView.swift` `UnreadBadge` |
 | Needs dot | on the badge corner; leads the title on a Projects card | on the 14 badge | glyph on headers **≠** | | `status.rs:248`; `panel/build.rs:568` |
 | Selected | `select` outline at 2, over a waiting card's edge, its stripe inside | face (no wash), outline, medium title | `select` outline at 1 on the anchor | chosen tab: white face; editor: `text` ring or `countBg` cell (the named exceptions) | `CardView.swift` `Outline`, `LaneView.swift` `AnchorBadge`, `EditorSheet.swift` |

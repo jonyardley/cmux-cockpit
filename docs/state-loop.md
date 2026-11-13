@@ -649,9 +649,11 @@ own; a stale list that lands second holds a finished task until the next
 An idle agent whose chat runs any of this work reads "Running 4m · 1
 shell, 1 agent" in working blue on its Cockpit card
 (`native/core/src/running.rs`, the words in `docs/design.md`), sorts with
-the working cards and never says Ready to merge. Ready still wins while
-its turn is unread, since a shell can be a dev server that never exits,
-unless the turn ended on "Nothing for you": that card stays Running until
+the working cards and never says Ready to merge. A turn that ended on a
+line asking something of Jon is Your turn instead, while the work runs
+on (`docs/design.md`, Running). Ready still wins over Running
+while a turn that saved no line is unread, since a shell can be a dev
+server that never exits; a turn that ended on "Nothing for you" stays Running until
 the work ends or a new turn saves another line. The helper words after the
 status ("· 1 helper", from the subagent runs above) are left off while the
 Running line already counts an agent.
@@ -985,10 +987,22 @@ so the move is often the only reply text a card has. The Needs you row
 falls back to the message and then to "Waiting for your reply", the card
 to the message and then to the description.
 
-"Your turn" only appears after the nudge, about 60s after the turn ends;
-until then the agent is idle and the card reads idle, with the move and
-its chip already showing. That is cmux's behaviour, not the sidebar's. A
-dismissal reads as idle too, so it no longer hides the move.
+In the agents panel "Your turn" only appears after the nudge, about 60s
+after the turn ends; until then the agent is idle and the card reads
+idle, with the move and its chip already showing. That is cmux's
+behaviour, not the sidebar's. A dismissal reads as idle too, so it no
+longer hides the move.
+
+The Cockpit reads the move instead: an idle or nudged agent whose current
+move asks something of Jon (anything but "Nothing for you", a reply with
+no label included) reads as needs input from the turn end
+(`waiting_turn` and `Session::effective_agent` in
+`native/core/src/needs.rs`), ahead of Running. The runner never moves
+the last activity on a Notification, so the nudge alone always reads as
+idle there, and Claude Code may send none while the chat's background
+work runs. A dismissal of that wait is keyed on the turn end, so the
+nudge landing a minute on keeps it. The size chip shows only while the
+card waits.
 
 Ownership is stricter than for asks: the move shows only on a Claude agent
 whose id is the move's session. A move saved with no session, a new

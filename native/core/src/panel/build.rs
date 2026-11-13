@@ -38,7 +38,8 @@ const LEFT_OFF_LEAD: &str = "You: ";
 /// `waiting` says how. The size takes the wait's colour, face, edge and
 /// words, so a waiting card says
 /// what answering takes in the colour that says it waits (D10 reversed,
-/// 13 November 2026); on a card waiting on nobody it is a quiet chip. The
+/// 13 November 2026); on a card waiting on nobody it is dropped, never
+/// drawn quiet (the core gives none there either, `chips_for`). The
 /// PR's number in the quiet chip's ink and its state in its tone's, then
 /// its diff size as a chip of its own, faint, as the sidebar sets it
 /// beside the PR; the branch with its dirty dot, and the ports, in the
@@ -46,7 +47,7 @@ const LEFT_OFF_LEAD: &str = "You: ";
 pub fn chip_views(c: &CoreChip, waiting: Option<Waiting>) -> Vec<Chip> {
     let quiet = Token::Secondary;
     match c {
-        CoreChip::Size { text, .. } => vec![size_chip(text, waiting)],
+        CoreChip::Size { text, .. } => waiting.map(|wt| size_chip(text, wt)).into_iter().collect(),
         CoreChip::Pr {
             tag,
             state,
@@ -83,14 +84,13 @@ pub fn chip_views(c: &CoreChip, waiting: Option<Waiting>) -> Vec<Chip> {
     }
 }
 
-/// The move size chip: in the wait's colour while its card waits on Jon,
-/// clay for Your turn and amber for Asking (`Waiting::chip`), its words in
-/// the wait's ink; else quiet.
-fn size_chip(text: &str, waiting: Option<Waiting>) -> Chip {
-    let (ink, (face, edge)) = match waiting {
-        None => (Token::Secondary, (Token::ChipFace, Token::ChipEdge)),
-        Some(wt) => (wt.ink, wt.chip()),
-    };
+/// The move size chip, in the wait's colour, clay for Your turn and
+/// amber for Asking (`Waiting::chip`), its words in the wait's ink. Only a
+/// card that waits on Jon draws one (`Session::waits_on_you`), so a size
+/// chip is never quiet: `chip_views` drops one with no wait.
+fn size_chip(text: &str, wt: Waiting) -> Chip {
+    let (face, edge) = wt.chip();
+    let ink = wt.ink;
     Chip {
         face,
         edge,
@@ -1236,8 +1236,8 @@ mod tests {
     }
 
     /// The size chip's ink, face and edge for each size, on a card that
-    /// waits as `asks` says (None: on nobody).
-    fn size_tokens(asks: Option<bool>) -> Vec<(Token, Token, Token)> {
+    /// waits as `asks` says.
+    fn size_tokens(asks: bool) -> Vec<(Token, Token, Token)> {
         [
             ("Quick", MoveSize::Quick),
             ("Decide \u{b7} 2", MoveSize::Decide),
@@ -1250,7 +1250,7 @@ mod tests {
                     text: text.into(),
                     size,
                 },
-                asks.map(Waiting::of),
+                Some(Waiting::of(asks)),
             );
             assert_eq!(chip.len(), 1);
             assert_eq!(chip[0].kind, ChipKind::Size);
@@ -1263,11 +1263,17 @@ mod tests {
     #[test]
     fn colours_the_size_chip_as_its_card_waits() {
         let turn = (Token::ClayText, Token::ClayChipFace, Token::ClayChipEdge);
-        assert_eq!(size_tokens(Some(false)), [turn; 3], "Your turn: clay");
+        assert_eq!(size_tokens(false), [turn; 3], "Your turn: clay");
         let asking = (Token::AmberText, Token::AmberChipFace, Token::AmberChipEdge);
-        assert_eq!(size_tokens(Some(true)), [asking; 3], "Asking: amber");
-        let quiet = (Token::Secondary, Token::ChipFace, Token::ChipEdge);
-        assert_eq!(size_tokens(None), [quiet; 3], "waiting on nobody: quiet");
+        assert_eq!(size_tokens(true), [asking; 3], "Asking: amber");
+        let quick = CoreChip::Size {
+            text: "Quick".into(),
+            size: MoveSize::Quick,
+        };
+        assert!(
+            chip_views(&quick, None).is_empty(),
+            "waiting on nobody: no size chip, never a quiet one"
+        );
         // Its words take the same ink as the card's reason.
         assert_eq!(turn.0, Waiting::of(false).ink);
         assert_eq!(asking.0, Waiting::of(true).ink);
@@ -1340,6 +1346,103 @@ mod tests {
         let _effects = Cockpit.update(Event::Data(data), &mut core);
         let panel = Panel::from_core(&mut core);
         panel.lane_cards().find(|c| c.ws_id == "W").unwrap().clone()
+    }
+
+    /// A chat whose turn ended at 1000 on `move_json`, its agent as
+    /// `agent_json` says, while a shell it started at 100 still runs: the
+    /// core after that frame, `dismiss` dismissing its wait first.
+    fn after_turn(move_json: &str, agent_json: &str, dismiss: bool) -> Model {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = Model::default();
+        core.session.saved = crate::persist::SavedState::from_json(&format!(
+            r#"{{"moves": {{"W": {move_json}}},
+                "background": {{"W": [{{"id": "b1", "type": "shell", "status": "running",
+                    "description": "dev server", "session": "c", "startedEpoch": 100,
+                    "seenEpoch": 1000}}]}}}}"#
+        ))
+        .unwrap();
+        let _effects = Cockpit.update(Event::Data(turn_data(agent_json)), &mut core);
+        if dismiss {
+            let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        }
+        core
+    }
+
+    fn turn_data(agent_json: &str) -> Data {
+        serde_json::from_str(&format!(
+            r#"{{"epoch": 1100, "workspaces": [{{"id": "W", "title": "fix login",
+                "latestAt": 900, "agents": [{agent_json}]}}]}}"#
+        ))
+        .unwrap()
+    }
+
+    /// The card for W, and the size chips the core gives it.
+    fn card_and_sizes(core: &mut Model) -> (Card, Vec<CoreChip>) {
+        let panel = Panel::from_core(core);
+        let card = panel.lane_cards().find(|c| c.ws_id == "W").unwrap().clone();
+        let data = core.data.clone().unwrap_or_default();
+        let sizes = core
+            .session
+            .chips_for(&data, data.ws_by_id("W"), false)
+            .into_iter()
+            .filter(|c| matches!(c, CoreChip::Size { .. }))
+            .collect();
+        (card, sizes)
+    }
+
+    fn running_kind(core: &mut Model) -> StatusKind {
+        let data = core.data.clone().unwrap_or_default();
+        core.session.status_kind(&data, data.ws_by_id("W"))
+    }
+
+    const STOPPED: &str = r#"{"id": "c", "kind": "claude", "status": "idle",
+        "sinceEpoch": 1000, "lastActivityAt": 1000}"#;
+    const NUDGED: &str = r#"{"id": "c", "kind": "claude", "status": "needs_input",
+        "sinceEpoch": 1060, "lastActivityAt": 1000}"#;
+    const QUICK_MOVE: &str =
+        r#"{"text": "Your move: go once the left panel redraws.", "epoch": 1000, "session": "c"}"#;
+
+    #[test]
+    fn a_turn_that_asks_jon_waits_in_clay_with_its_size_chip_while_a_shell_runs() {
+        for agent in [STOPPED, NUDGED] {
+            let mut core = after_turn(QUICK_MOVE, agent, false);
+            let (card, sizes) = card_and_sizes(&mut core);
+            assert_eq!(card.waiting, Some(Waiting::of(false)), "{agent}");
+            assert_eq!(card.status_ink, Token::ClayText);
+            assert_eq!(card.age, "1m", "from the turn end, not the shell's start");
+            assert_eq!(sizes.len(), 1);
+            let drawn = chip_views(&sizes[0], card.waiting);
+            assert_eq!(drawn[0].pieces[0].text, "Quick");
+            assert_eq!(drawn[0].pieces[0].ink, Token::ClayText);
+        }
+    }
+
+    #[test]
+    fn a_dismissed_wait_says_running_with_no_size_chip_and_stays_dismissed_past_the_nudge() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = after_turn(QUICK_MOVE, STOPPED, true);
+        let (card, sizes) = card_and_sizes(&mut core);
+        assert_eq!(card.waiting, None);
+        assert_eq!(running_kind(&mut core), StatusKind::Running);
+        assert!(sizes.is_empty(), "no chip on a card that does not wait");
+        // The nudge lands a minute on: the dismissal holds.
+        let _effects = Cockpit.update(Event::Data(turn_data(NUDGED)), &mut core);
+        let (card, _) = card_and_sizes(&mut core);
+        assert_eq!(card.waiting, None);
+        assert_eq!(running_kind(&mut core), StatusKind::Running);
+    }
+
+    #[test]
+    fn a_nothing_for_you_turn_says_running_and_draws_no_size_chip() {
+        let quiet = r#"{"text": "Nothing for you: go on.", "idle": true, "epoch": 1000,
+            "session": "c"}"#;
+        let mut core = after_turn(quiet, STOPPED, false);
+        let (card, sizes) = card_and_sizes(&mut core);
+        assert_eq!(card.waiting, None);
+        assert_eq!(running_kind(&mut core), StatusKind::Running);
+        assert!(sizes.is_empty());
     }
 
     #[test]
