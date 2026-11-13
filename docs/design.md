@@ -689,8 +689,10 @@ once, a restart included, and a new wait on the same card posts again. A
 CI wait is keyed on its checks too: a rerun that fails again posts anew,
 while a session beside it ending, which moves the card's age, does not.
 When the wait leaves Needs you (answered, fixed, merged, dismissed, put
-to sleep, or the card closed), the notification is taken down, and the
-dock badge drops with it. The rules are `native/core/src/notify.rs`.
+to sleep, or the card closed or gone from this window), the notification
+is taken down, and the dock badge drops with it. A card that comes back
+with the same wait within a week does not post it again. The rules are
+`native/core/src/notify.rs`.
 
 ### Running
 
