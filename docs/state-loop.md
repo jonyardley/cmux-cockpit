@@ -853,7 +853,7 @@ for saved subagent runs), only that agent is asking; otherwise the ask
 belongs to the workspace. A fresh ask also overrides the idle-nudge rule
 (issue #4), so an ask after a long quiet build is not read as idle. The cockpit then shows the card and its Needs you row amber,
 "Asking", with the reason under the title; the agents panel heads the
-workspace "Asking" in amber and puts the reason over Open chat. Any other
+workspace "Asking" in amber and puts the reason over Dismiss. Any other
 needs_input is "Your turn" in clay, and red stays for failing checks. No
 write clears an ask: once the agent works again and stops, its new spell
 starts after the ask, so it reads as its turn. Without the hook, or for an

@@ -177,18 +177,10 @@ describe("currentAsk", () => {
     const a = agent("needs_input", { sinceEpoch: 900, surfaceId: "s1" });
     r.data.workspaces = [selected(a, { latestMessage: "Shall I push?", latestPrompt: "Fix it" })];
     assert.deepEqual(m.currentAsk(), {
-      a,
       text: "Shall I push?",
       count: 1,
-      canOpenChat: true,
       dismissLabel: "Dismiss",
     });
-  });
-
-  it("offers Open chat only when the asker has a terminal to focus", () => {
-    r.data.workspaces = [selected(agent("needs_input"), { latestMessage: "Shall I push?" })];
-    assert.equal(m.currentAsk()?.canOpenChat, false);
-    assert.equal(m.currentAsk()?.dismissLabel, "Dismiss");
   });
 
   it("shows the workspace message only when the asker is the one live agent", () => {
@@ -220,8 +212,9 @@ describe("currentAsk", () => {
     const older = agent("needs_input", { lastActivityAt: 100, surfaceId: "old" });
     const newer = agent("needs_input", { lastActivityAt: 500, surfaceId: "new" });
     r.data.workspaces = [ws("sel", { selected: true, agents: [older, newer] })];
-    assert.equal(m.currentAsk()?.a.id, newer.id);
-    assert.equal(m.currentAsk()?.a.surfaceId, "new");
+    assert.equal(m.currentAsk()?.count, 2);
+    assert.equal(m.current()?.a?.id, newer.id);
+    assert.equal(m.current()?.a?.surfaceId, "new");
   });
 
   it("has no text when there is only the generic fallback", () => {
@@ -242,7 +235,8 @@ describe("currentAsk", () => {
 
   it("follows the most active agent, as the Needs you strip does", () => {
     r.data.workspaces = [ws("sel", { selected: true, agents: [agent("idle"), agent("needs_input")] })];
-    assert.equal(m.currentAsk()?.a.status, "needs_input");
+    assert.notEqual(m.currentAsk(), null);
+    assert.equal(m.current()?.a?.status, "needs_input");
   });
 
   it("is null for the idle nudge and for a dismissed ask", () => {

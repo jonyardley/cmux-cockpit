@@ -102,7 +102,8 @@ The Cockpit has two views, All and Projects:
   to hide it until the agent next needs you.
 
 The agents panel shows the selected workspace: each agent's status and
-latest message, an Open chat button when one is waiting, ports and checks.
+latest message, the question and Dismiss when one is waiting, ports and
+checks.
 Under it are your open pull requests and "Made here", the pages and docs
 your agents published.
 

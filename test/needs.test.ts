@@ -164,7 +164,8 @@ describe("the agents panel applies the rule", () => {
     assert.equal(agents.currentAsk(), null);
     assert.equal(agents.current()?.a?.status, "idle");
     r.data.workspaces = [ws("real", { selected: true, agents: [claude(1000, 1001)] })];
-    assert.equal(agents.currentAsk()?.a.status, "needs_input");
+    assert.notEqual(agents.currentAsk(), null);
+    assert.equal(agents.current()?.a?.status, "needs_input");
   });
 
   it("the agents panel drops a dismissed ask from This workspace", () => {

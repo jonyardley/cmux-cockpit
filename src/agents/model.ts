@@ -55,18 +55,13 @@ export const cur = (): Current =>
 
 /** The selected workspace's open question. */
 export interface Ask {
-  /** The most active asking agent: Open chat focuses its terminal. */
-  a: Agent;
-  /** The line over the buttons: "2 agents need you" when several do,
+  /** The line over Dismiss: "2 agents need you" when several do,
    * else why it is asking ("allow git push?"), else the agent's words, or
    * "" when there are none beyond the generic "waiting for your reply", or
    * when they may be another agent's. */
   text: string;
   /** How many agents in the workspace are asking. */
   count: number;
-  /** Open chat shows only with a terminal to focus: without one it would only
-   * select the workspace, which is already selected. */
-  canOpenChat: boolean;
   /** Dismiss clears every ask in the workspace, so it says so when there are several. */
   dismissLabel: string;
 }
@@ -90,10 +85,8 @@ export const currentAsk = computed((): Ask | null => {
   if (c?.a?.status !== "needs_input") return null;
   const count = c.agents.filter((a) => a.status === "needs_input").length;
   return {
-    a: c.a,
     text: askText(c, count),
     count,
-    canOpenChat: !!c.a.surfaceId,
     dismissLabel: count > 1 ? "Dismiss all" : "Dismiss",
   };
 });
@@ -221,8 +214,7 @@ export const currentPrTone = computed((): PrTone => {
 });
 
 /** The workspace a row's right-click Open chat goes to, by id; none for the
- * selected workspace with no terminal to focus, where it would do nothing
- * (as canOpenChat). */
+ * selected workspace with no terminal to focus, where it would do nothing. */
 export function chatWs(w: Workspace, lead: Agent | null): string | undefined {
   return w.selected && !lead?.surfaceId ? undefined : w.id;
 }
