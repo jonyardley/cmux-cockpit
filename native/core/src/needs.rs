@@ -71,13 +71,18 @@ fn quiet_of(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Option<Save
 }
 
 /// The saved ask that explains `a`'s current needs_input spell, if any.
+/// One saved before the end of the turn `a` waits on was answered within
+/// that turn: a turn that waits on Jon reads as needs_input from its end
+/// (`effective_agent`), so the slack alone would let it through.
 fn fresh_ask<'s>(saved: &'s SavedState, a: &Agent, w: Option<&Workspace>) -> Option<&'s SavedAsk> {
     let w = w?;
     if !needs_input(a) {
         return None;
     }
     let since = truthy(a.since_epoch)?;
-    saved_for(saved.asking.get(&w.id), a, w, since, is_own_saved)
+    let ask = saved_for(saved.asking.get(&w.id), a, w, since, is_own_saved)?;
+    let turn_end = waiting_move(saved, Some(a), Some(w), false).map(|m| m.epoch);
+    turn_end.is_none_or(|end| ask.epoch >= end).then_some(ask)
 }
 
 /// The move `a`'s turn ended on when it waits on Jon: `a`'s own, current
@@ -90,10 +95,15 @@ pub fn waiting_turn(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Opt
 }
 
 /// When `a`'s wait on Jon began, which a dismissal is keyed on: the end
-/// of a turn that waits on him, so the nudge landing a minute on keeps
-/// the dismissal, else the start of its needs_input spell.
+/// of `turn`, the turn that waits on him, so the nudge landing a minute
+/// on keeps the dismissal, else the start of its needs_input spell.
+fn start_of(turn: Option<&SavedMove>, a: &Agent) -> f64 {
+    turn.map_or_else(|| since_or_activity(a), |m| m.epoch)
+}
+
+/// `start_of`, reading the turn.
 fn wait_start(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> f64 {
-    waiting_turn(saved, a, w).map_or_else(|| since_or_activity(a), |m| m.epoch)
+    start_of(waiting_turn(saved, a, w).as_ref(), a)
 }
 
 /// Why the agent is asking ("allow git push?"), or None when its
@@ -132,10 +142,17 @@ impl Session {
 
     fn is_dismissed(&self, w: Option<&Workspace>, a: &Agent) -> bool {
         let turn = waiting_turn(&self.saved, a, w);
-        let start = turn
-            .as_ref()
-            .map_or_else(|| since_or_activity(a), |m| m.epoch);
-        (needs_input(a) || turn.is_some()) && self.dismissed_at(w, a, start)
+        self.is_dismissed_with(w, a, turn.as_ref())
+    }
+
+    /// is_dismissed, with `a`'s waiting turn already read.
+    fn is_dismissed_with(
+        &self,
+        w: Option<&Workspace>,
+        a: &Agent,
+        turn: Option<&SavedMove>,
+    ) -> bool {
+        (needs_input(a) || turn.is_some()) && self.dismissed_at(w, a, start_of(turn, a))
     }
 
     /// Drops dismissals whose spell has ended, for agents the workspace
@@ -169,7 +186,8 @@ impl Session {
     pub fn effective_agent(&self, a: &Agent, w: Option<&Workspace>) -> Agent {
         // Ahead of Running too: background work never hides a turn that
         // asks Jon something. A dismissed one reads as it would without it.
-        if let Some(turn) = waiting_turn(&self.saved, a, w)
+        let turn = waiting_turn(&self.saved, a, w);
+        if let Some(turn) = &turn
             && !self.dismissed_at(w, a, turn.epoch)
         {
             return Agent {
@@ -195,7 +213,7 @@ impl Session {
         if let Some(quiet) = quiet_of(&self.saved, a, w) {
             return idle(Some(quiet.epoch));
         }
-        if nudge || self.is_dismissed(w, a) {
+        if nudge || self.is_dismissed_with(w, a, turn.as_ref()) {
             return idle(a.since_epoch);
         }
         a.clone()
@@ -312,6 +330,35 @@ mod tests {
             "Asking, not Your turn"
         );
         assert!(!waits(asks, "", AgentStatus::Working), "only at a turn end");
+    }
+
+    #[test]
+    fn an_ask_answered_just_before_the_turn_ended_is_not_asking() {
+        let saved = SavedState::from_json(
+            r#"{"moves": {"w": {"text": "Your move: go", "epoch": 1002, "session": "c"}},
+                "asking": {"w": {"reason": "allow git push?", "epoch": 1000}}}"#,
+        )
+        .unwrap();
+        let a = Agent {
+            id: "c".into(),
+            kind: Some("claude".into()),
+            status: Some(AgentStatus::Idle),
+            since_epoch: Some(1002.0),
+            last_activity_at: Some(1002.0),
+            ..Agent::default()
+        };
+        let w = Workspace {
+            id: "w".into(),
+            latest_at: Some(900.0),
+            agents: Some(vec![Some(a)]),
+            ..Workspace::default()
+        };
+        let mut s = Session::new(Vec::new(), saved);
+        assert_eq!(s.ask_of(Some(&w)), None, "within the slack, but answered");
+        assert_eq!(
+            s.move_of(Some(&w)).map(|m| m.text).as_deref(),
+            Some("Your move: go")
+        );
     }
 
     #[test]

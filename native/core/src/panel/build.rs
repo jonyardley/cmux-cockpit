@@ -38,7 +38,8 @@ const LEFT_OFF_LEAD: &str = "You: ";
 /// `waiting` says how. The size takes the wait's colour, face, edge and
 /// words, so a waiting card says
 /// what answering takes in the colour that says it waits (D10 reversed,
-/// 13 November 2026); on a card waiting on nobody it is a quiet chip. The
+/// 13 November 2026); on a card waiting on nobody it is dropped, never
+/// drawn quiet (the core gives none there either, `chips_for`). The
 /// PR's number in the quiet chip's ink and its state in its tone's, then
 /// its diff size as a chip of its own, faint, as the sidebar sets it
 /// beside the PR; the branch with its dirty dot, and the ports, in the
