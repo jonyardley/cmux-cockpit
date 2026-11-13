@@ -16,6 +16,13 @@
 //! gives each tab's title, so a workspace with several agents can name
 //! the one waiting.
 //!
+//! A session that stops without handing back (issue #376) is marked on
+//! its agent (cockpit_core::stopped): a turn cmux reports ended on an
+//! error, by tab, until the next prompt there; a process that left Agent
+//! View mid-turn, kept as a card instead of hidden, only for a pid seen
+//! alive since the runner started, so a replay never raises old ghosts;
+//! and a working session silent past `SILENT_SECS`.
+//!
 //! Claude Code also reports its own state per tab, as cmux's
 //! `program_status.changed` (issue #326). The join keeps the latest per
 //! surface and cockpit_core::program decides, for each session, whether
@@ -26,6 +33,7 @@ use std::collections::HashMap;
 use cockpit_core::data::{Agent, AgentStatus, Data, Workspace};
 use cockpit_core::hooks::{Hooked, moves_activity, status_from_hook};
 use cockpit_core::program::{Record, Report, resolve, status_of_records};
+use cockpit_core::stopped::{Stop, StopCause, gone_mid_turn, silent_since};
 use serde_json::Value;
 
 use super::parse::{AgentView, Groups, SessionHistory, iso_epoch};
@@ -99,6 +107,15 @@ pub struct Join {
     history: SessionHistory,
     /// pid to how many Agent Views running have left it out.
     absent: HashMap<u32, u8>,
+    /// Surface id to when cmux said a turn there ended on an error: the
+    /// first of a run of retries, until a prompt or a new session there.
+    errors: HashMap<String, f64>,
+    /// pid to Agent View's last word on it, busy and its session id. A
+    /// pid here has been seen alive since the runner started.
+    seen: HashMap<u32, (bool, Option<String>)>,
+    /// pid to a session whose process went mid-turn: its workspace and
+    /// its agent as the card keeps showing it, stopped.
+    gone: HashMap<u32, (String, Agent)>,
 }
 
 /// A workspace event that can change the list: anything but a
@@ -146,6 +163,9 @@ impl Join {
             self.sessions.clear();
             self.program.clear();
             self.absent.clear();
+            self.errors.clear();
+            self.seen.clear();
+            self.gone.clear();
             self.health.last_seq = 0;
         } else {
             // Nothing before `after` will come, so a start with --after
@@ -163,12 +183,25 @@ impl Join {
     /// Takes a new Agent View; false when it matches the last one.
     pub fn agents(&mut self, view: AgentView) -> bool {
         self.history.record(&view);
-        self.forget_absent(&view);
-        if self.agents.as_ref() == Some(&view) {
-            return false;
+        // A pid back in Agent View is a live process again, not the one that went.
+        let gone_before = self.gone.len();
+        self.gone.retain(|pid, _| !view.busy.contains_key(pid));
+        let mut changed = self.forget_absent(&view) || self.gone.len() != gone_before;
+        for (pid, busy) in &view.busy {
+            let session = view.session.get(pid);
+            let same = self
+                .seen
+                .get(pid)
+                .is_some_and(|(b, s)| b == busy && s.as_ref() == session);
+            if !same {
+                self.seen.insert(*pid, (*busy, session.cloned()));
+            }
         }
-        self.agents = Some(view);
-        true
+        if self.agents.as_ref() != Some(&view) {
+            self.agents = Some(view);
+            changed = true;
+        }
+        changed
     }
 
     /// Takes a workspace list, asked for at `asked` (epoch seconds);
@@ -207,8 +240,10 @@ impl Join {
 
     /// Counts the pids this Agent View leaves out, and forgets those it
     /// has left out `FORGET_AFTER` times running. They are hidden already,
-    /// so forgetting them changes no frame.
-    fn forget_absent(&mut self, view: &AgentView) {
+    /// so forgetting one changes no frame, unless it went mid-turn: it is
+    /// kept as a stopped card, and that is news (true).
+    fn forget_absent(&mut self, view: &AgentView) -> bool {
+        let mut kept = false;
         let mut pids: Vec<u32> = self
             .tab_of
             .keys()
@@ -227,6 +262,11 @@ impl Join {
             let n = self.absent.entry(pid).or_default();
             *n = n.saturating_add(1);
             if *n >= FORGET_AFTER {
+                if let Some(gone) = self.gone_record(pid) {
+                    self.gone.insert(pid, gone);
+                    kept = true;
+                }
+                self.seen.remove(&pid);
                 self.absent.remove(&pid);
                 self.tab_of.remove(&pid);
                 if let Some((surface, _)) = self.surface_of.remove(&pid) {
@@ -236,6 +276,90 @@ impl Join {
                 self.history.forget(pid);
             }
         }
+        kept
+    }
+
+    /// The stopped card a pid leaves when its process went mid-turn
+    /// (`gone_mid_turn`, with Agent View's last word on it), placed where
+    /// it ran; None when it ended cleanly, was idle, or was never seen
+    /// alive since the runner started (a replayed session long gone), or
+    /// when a new session already runs in its tab.
+    fn gone_record(&self, pid: u32) -> Option<(String, Agent)> {
+        let (busy, session) = self.seen.get(&pid)?;
+        let h = self.sessions.get(&pid)?;
+        let surface = self.surface_of.get(&pid).map(|(s, _)| s.clone());
+        let taken = surface.as_ref().is_some_and(|s| {
+            self.surface_of
+                .iter()
+                .any(|(p, (other, _))| *p != pid && other == s)
+        });
+        if taken {
+            return None;
+        }
+        let program = surface.as_ref().and_then(|s| self.program.get(s));
+        if !gone_mid_turn(h, program, Some(*busy)) {
+            return None;
+        }
+        let ws = self.placed(pid)?.to_string();
+        let id = session.clone().unwrap_or_else(|| format!("pid:{pid}"));
+        let earlier = Some(self.history.earlier(pid, &id)).filter(|ids| !ids.is_empty());
+        let agent = Agent {
+            id,
+            kind: Some("claude".to_string()),
+            surface_id: surface,
+            earlier_sessions: earlier,
+            status: Some(AgentStatus::Idle),
+            since_epoch: Some(h.last_hook).filter(|t| *t > 0.0),
+            last_activity_at: Some(h.last_activity).filter(|t| *t > 0.0),
+            stopped: Some(Stop {
+                cause: StopCause::Gone,
+                since: h.last_hook,
+            }),
+            ..Agent::default()
+        };
+        Some((ws, agent))
+    }
+
+    /// cmux's word that a turn ended on an error (StopFailure, which its
+    /// own hooks catch): an `agent.notification.decision` of kind
+    /// `agent.error.reported`, reason `accepted`, from Claude, naming the
+    /// tab but no workspace or pid. A retry before any prompt keeps the
+    /// first time. Kept, and news for a frame, only in a tab some session
+    /// runs in: a session's SessionStart always comes before its error.
+    fn error_reported(&mut self, e: &Value, seq: u64) -> (bool, Option<Change>) {
+        let p = &e["payload"];
+        if p["kind"] != "agent.error.reported"
+            || p["reason"] != "accepted"
+            || p["agent"] != "claude"
+        {
+            return (false, None);
+        }
+        let at = e["occurred_at"].as_str().and_then(iso_epoch);
+        let (Some(surface), Some(at)) = (e["surface_id"].as_str(), at) else {
+            return (false, None);
+        };
+        if self.errors.contains_key(surface) || !self.held(surface) {
+            return (false, None);
+        }
+        self.errors.insert(surface.to_string(), at);
+        let change = Change {
+            seq,
+            hook: "agent.error.reported".to_string(),
+            at: Some(at),
+        };
+        (true, Some(change))
+    }
+
+    /// A new session (`pid`'s SessionStart) in the tab `surface`: a
+    /// stopped card another process left there gives way to it. Any other
+    /// hook claims nothing, so a second process that shares the tab (a
+    /// `claude -p` a hook runs, say) never clears a stop. The error
+    /// clears in `hook` on the same SessionStart. Whether a card went.
+    fn claim_tab(&mut self, pid: u32, surface: &str) -> bool {
+        let before = self.gone.len();
+        self.gone
+            .retain(|p, (_, a)| *p == pid || a.surface_id.as_deref() != Some(surface));
+        self.gone.len() != before
     }
 
     /// Applies one event frame. Returns whether anything in the frame
@@ -260,6 +384,9 @@ impl Join {
         }
         if name == "program_status.changed" {
             return self.program_status(e, seq);
+        }
+        if name == "agent.notification.decision" {
+            return self.error_reported(e, seq);
         }
         if name == "workspace.selected" {
             let at = e["occurred_at"].as_str().and_then(iso_epoch);
@@ -337,10 +464,12 @@ impl Join {
         changed
     }
 
-    /// Forgets a tab's report once no session is placed in it.
+    /// Forgets a tab's report and any error there once no session is
+    /// placed in it.
     fn forget_report_unless_held(&mut self, surface: &str) {
         if !self.held(surface) {
             self.program.remove(surface);
+            self.errors.remove(surface);
         }
     }
 
@@ -419,10 +548,21 @@ impl Join {
         let Some(pid) = pid_of(&p["_ppid"]) else {
             return (false, false);
         };
+        let released = self.gone.remove(&pid).is_some()
+            | (hook == "SessionStart"
+                && p["surface_id"]
+                    .as_str()
+                    .is_some_and(|s| self.claim_tab(pid, s)));
         let surface_moved = p["surface_id"].as_str().is_some_and(|s| {
             self.forget_report_on_claim(pid, s, at);
             self.set_surface(pid, s, false)
-        });
+        }) || released;
+        // A new prompt, or a new session, ends a stop on an error there.
+        if matches!(hook, "UserPromptSubmit" | "SessionStart")
+            && let Some((surface, _)) = self.surface_of.get(&pid)
+        {
+            self.errors.remove(surface);
+        }
         let Some(status) = status_from_hook(hook, p["tool_name"].as_str()) else {
             return (surface_moved, false);
         };
@@ -476,6 +616,17 @@ impl Join {
         };
         let program = a.surface_id.as_ref().and_then(|s| self.program.get(s));
         let r = resolve(self.sessions.get(&pid), program, busy, now)?;
+        let error = a.surface_id.as_ref().and_then(|s| self.errors.get(s));
+        a.stopped = match error {
+            Some(at) => Some(Stop {
+                cause: StopCause::Error,
+                since: *at,
+            }),
+            None => silent_since(&r.status, r.last_activity, now).map(|since| Stop {
+                cause: StopCause::Silent,
+                since,
+            }),
+        };
         a.status = Some(r.status);
         a.since_epoch = Some(r.since).filter(|t| *t > 0.0);
         a.last_activity_at = Some(r.last_activity).filter(|t| *t > 0.0);
@@ -506,6 +657,17 @@ impl Join {
                 continue;
             };
             out.entry(ws).or_default().push(agent);
+        }
+        let mut gone: Vec<(&u32, &(String, Agent))> = self.gone.iter().collect();
+        gone.sort_unstable_by_key(|(pid, _)| **pid);
+        for (_, (ws, agent)) in gone {
+            let mut agent = agent.clone();
+            agent.tab_title = agent
+                .surface_id
+                .as_ref()
+                .and_then(|s| self.titles.get(s))
+                .cloned();
+            out.entry(ws.as_str()).or_default().push(agent);
         }
         out
     }
@@ -1471,5 +1633,341 @@ mod tests {
         j.agents(view(&[(7, false, "fresh")]));
         j.event(&hook(2, "Stop", 7, "A", None));
         assert_eq!(earlier(&j), vec![("fresh".into(), None)]);
+    }
+
+    /// A fixture from the spike for #376 (native/fixtures/stopped/).
+    fn fixture(name: &str) -> Value {
+        let text = match name {
+            "error" => include_str!("../../fixtures/stopped/error-reported-decision.json"),
+            "stop" => include_str!("../../fixtures/stopped/ordinary-stop-hook.json"),
+            "end" => include_str!("../../fixtures/stopped/session-end-hook.json"),
+            _ => panic!("no fixture {name}"),
+        };
+        serde_json::from_str(text).unwrap()
+    }
+
+    /// The error fixture's tab, and when cmux reported it.
+    const ERROR_TAB: &str = "E1248C60-050B-421C-9742-65C4A5C24868";
+    const ERROR_AT: f64 = 1_794_565_070.863;
+
+    /// `name` from pid 7 in workspace A, in the error fixture's tab, at
+    /// epoch second `at`.
+    fn tab_hook(seq: u64, name: &str, at: f64) -> Value {
+        let mut e = hook_in(seq, name, 7, "A", ERROR_TAB);
+        e["occurred_at"] = json!(iso(at));
+        e
+    }
+
+    fn iso(at: f64) -> String {
+        let ms = (at * 1000.0).round() as i64;
+        chrono_free_iso(ms)
+    }
+
+    /// Epoch ms as cmux's ISO time, without a date crate: days from the
+    /// civil calendar (Howard Hinnant's algorithm).
+    fn chrono_free_iso(ms: i64) -> String {
+        let secs = ms.div_euclid(1000);
+        let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
+        let z = days + 719_468;
+        let era = z.div_euclid(146_097);
+        let doe = z - era * 146_097;
+        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = doy - (153 * mp + 2) / 5 + 1;
+        let m = if mp < 10 { mp + 3 } else { mp - 9 };
+        let y = yoe + era * 400 + i64::from(m <= 2);
+        format!(
+            "{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{:03}Z",
+            rem / 3600,
+            rem % 3600 / 60,
+            rem % 60,
+            ms.rem_euclid(1000)
+        )
+    }
+
+    /// Workspace A's one agent at epoch `now`, if any.
+    fn agent_at(j: &Join, now: f64) -> Option<Agent> {
+        j.frame(now)
+            .workspace_list()
+            .iter()
+            .find(|w| w.id == "A")
+            .and_then(|w| w.agent_list().next().cloned())
+    }
+
+    /// A join with pid 7 working in the error fixture's tab since `at`,
+    /// Agent View listing it busy.
+    fn working_from(at: f64) -> Join {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&tab_hook(1, "UserPromptSubmit", at));
+        j.event(&tab_hook(2, "PreToolUse", at + 1.0));
+        j
+    }
+
+    #[test]
+    fn the_time_helper_reads_back_as_cmux_writes_it() {
+        assert_eq!(iso(ERROR_AT), "2026-11-13T10:17:50.863Z");
+        assert_eq!(iso_epoch(&iso(ERROR_AT)), Some(ERROR_AT));
+    }
+
+    #[test]
+    fn an_error_cmux_reports_stops_the_tabs_session_until_its_next_prompt() {
+        let mut j = working_from(ERROR_AT - 60.0);
+        let (changed, change) = j.event(&fixture("error"));
+        assert!(changed, "a session runs in that tab");
+        assert_eq!(
+            change.map(|c| c.hook).as_deref(),
+            Some("agent.error.reported")
+        );
+        let stop = agent_at(&j, ERROR_AT + 5.0).and_then(|a| a.stopped);
+        assert_eq!(
+            stop,
+            Some(Stop {
+                cause: StopCause::Error,
+                since: ERROR_AT
+            })
+        );
+        // A retry before any prompt keeps the first time, so a dismissal holds.
+        let mut again = fixture("error");
+        again["occurred_at"] = json!(iso(ERROR_AT + 30.0));
+        assert_eq!(j.event(&again), (false, None));
+        assert_eq!(
+            agent_at(&j, ERROR_AT + 40.0)
+                .and_then(|a| a.stopped)
+                .map(|s| s.since),
+            Some(ERROR_AT)
+        );
+        // The idle nudge clears nothing; the next prompt does.
+        j.event(&tab_hook(3, "Notification", ERROR_AT + 60.0));
+        assert!(
+            agent_at(&j, ERROR_AT + 61.0)
+                .and_then(|a| a.stopped)
+                .is_some()
+        );
+        j.event(&tab_hook(4, "UserPromptSubmit", ERROR_AT + 120.0));
+        assert_eq!(agent_at(&j, ERROR_AT + 121.0).and_then(|a| a.stopped), None);
+    }
+
+    #[test]
+    fn an_error_that_was_not_accepted_or_in_no_sessions_tab_changes_nothing() {
+        let mut j = working_from(ERROR_AT - 60.0);
+        let mut stale = fixture("error");
+        stale["payload"]["reason"] = json!("stale");
+        assert_eq!(j.event(&stale), (false, None));
+        let mut elsewhere = fixture("error");
+        elsewhere["surface_id"] = json!("OTHER");
+        assert_eq!(j.event(&elsewhere), (false, None));
+        assert_eq!(agent_at(&j, ERROR_AT + 1.0).and_then(|a| a.stopped), None);
+    }
+
+    /// The stop on workspace A's session `id` at epoch `now`.
+    fn stop_of(j: &Join, id: &str, now: f64) -> Option<Stop> {
+        j.frame(now)
+            .ws_by_id("A")
+            .and_then(|w| w.agent_list().find(|a| a.id == id).cloned())
+            .and_then(|a| a.stopped)
+    }
+
+    /// `name` from `pid` in the error fixture's tab at epoch second `at`.
+    fn pid_hook(seq: u64, name: &str, pid: u32, at: f64) -> Value {
+        let mut e = hook_in(seq, name, pid, "A", ERROR_TAB);
+        e["occurred_at"] = json!(iso(at));
+        e
+    }
+
+    #[test]
+    fn another_agents_error_marks_nothing() {
+        let mut j = working_from(ERROR_AT - 60.0);
+        let mut codex = fixture("error");
+        codex["payload"]["agent"] = json!("codex");
+        assert_eq!(j.event(&codex), (false, None));
+        assert_eq!(stop_of(&j, "s7", ERROR_AT + 1.0), None);
+    }
+
+    #[test]
+    fn a_second_process_in_the_tab_clears_no_error_until_it_starts_a_session() {
+        let mut j = working_from(ERROR_AT - 60.0);
+        j.agents(view(&[(7, true, "s7"), (8, true, "s8")]));
+        j.event(&pid_hook(3, "PreToolUse", 8, ERROR_AT - 30.0));
+        j.event(&fixture("error"));
+        // A tool call from the other process is no new prompt here.
+        j.event(&pid_hook(4, "PreToolUse", 8, ERROR_AT + 10.0));
+        j.event(&pid_hook(5, "PostToolUse", 8, ERROR_AT + 11.0));
+        assert_eq!(
+            stop_of(&j, "s7", ERROR_AT + 12.0).map(|s| s.cause),
+            Some(StopCause::Error)
+        );
+        j.event(&pid_hook(6, "SessionStart", 8, ERROR_AT + 20.0));
+        assert_eq!(stop_of(&j, "s7", ERROR_AT + 21.0), None);
+    }
+
+    #[test]
+    fn a_gone_card_gives_way_to_a_new_session_not_to_any_hook() {
+        let at = 1_794_567_000.0;
+        let mut j = working_from(at);
+        for _ in 0..FORGET_AFTER {
+            j.agents(view(&[]));
+        }
+        j.agents(view(&[(8, true, "s8")]));
+        j.event(&pid_hook(5, "PreToolUse", 8, at + 30.0));
+        assert_eq!(
+            stop_of(&j, "s7", at + 31.0).map(|s| s.cause),
+            Some(StopCause::Gone)
+        );
+        j.event(&pid_hook(6, "SessionStart", 8, at + 40.0));
+        assert_eq!(stop_of(&j, "s7", at + 41.0), None);
+        assert!(
+            j.frame(at + 41.0)
+                .ws_by_id("A")
+                .is_some_and(|w| w.agent_list().all(|a| a.id != "s7")),
+            "the card went"
+        );
+    }
+
+    #[test]
+    fn an_error_goes_with_the_tabs_last_session_and_is_never_kept_for_an_empty_tab() {
+        // The session that met the error is forgotten: a later process in
+        // the tab, whose first hook here is not a SessionStart, is not stopped.
+        // Agent View last saw it idle, so it leaves no Gone card to claim.
+        let mut j = working_from(ERROR_AT - 60.0);
+        j.event(&fixture("error"));
+        j.agents(view(&[(7, false, "s7")]));
+        for _ in 0..FORGET_AFTER {
+            j.agents(view(&[]));
+        }
+        assert!(
+            j.frame(ERROR_AT + 20.0)
+                .ws_by_id("A")
+                .is_some_and(|w| w.agent_list().count() == 0)
+        );
+        j.agents(view(&[(8, true, "s8")]));
+        j.event(&pid_hook(5, "PreToolUse", 8, ERROR_AT + 30.0));
+        assert_eq!(stop_of(&j, "s8", ERROR_AT + 31.0), None);
+        // An error in a tab no session holds is not kept for a later one.
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        assert_eq!(j.event(&fixture("error")), (false, None));
+        j.agents(view(&[(8, true, "s8")]));
+        j.event(&pid_hook(1, "PreToolUse", 8, ERROR_AT + 30.0));
+        assert_eq!(stop_of(&j, "s8", ERROR_AT + 31.0), None);
+    }
+
+    #[test]
+    fn a_process_gone_mid_turn_keeps_its_card_stopped() {
+        let at = 1_794_567_000.0;
+        let mut j = working_from(at);
+        for _ in 0..FORGET_AFTER - 1 {
+            j.agents(view(&[]));
+        }
+        assert!(
+            agent_at(&j, at + 10.0).is_none(),
+            "hidden while it may come back"
+        );
+        assert!(j.agents(view(&[])), "kept as a stopped card: news");
+        let a = agent_at(&j, at + 20.0).unwrap();
+        assert_eq!(a.id, "s7", "its session id, so a dismissal holds");
+        assert_eq!(a.surface_id.as_deref(), Some(ERROR_TAB));
+        assert_eq!(
+            a.stopped,
+            Some(Stop {
+                cause: StopCause::Gone,
+                since: at + 1.0
+            })
+        );
+        // A new session in the tab takes its place.
+        let mut fresh = hook_in(9, "SessionStart", 8, "A", ERROR_TAB);
+        fresh["occurred_at"] = json!(iso(at + 30.0));
+        j.agents(view(&[(8, false, "s8")]));
+        j.event(&fresh);
+        let ids: Vec<String> = j.frame(at + 31.0).workspace_list()[0]
+            .agent_list()
+            .map(|a| a.id.clone())
+            .collect();
+        assert_eq!(ids, ["s8"]);
+    }
+
+    #[test]
+    fn a_session_restarted_in_the_tab_before_the_kill_is_noticed_leaves_no_card() {
+        let at = 1_794_567_000.0;
+        let mut j = working_from(at);
+        j.agents(view(&[]));
+        let mut fresh = hook_in(9, "SessionStart", 8, "A", ERROR_TAB);
+        fresh["occurred_at"] = json!(iso(at + 3.0));
+        j.event(&fresh);
+        for _ in 1..FORGET_AFTER {
+            j.agents(view(&[(8, false, "s8")]));
+        }
+        let ids: Vec<String> = j.frame(at + 10.0).workspace_list()[0]
+            .agent_list()
+            .map(|a| a.id.clone())
+            .collect();
+        assert_eq!(ids, ["s8"]);
+    }
+
+    #[test]
+    fn a_replayed_session_never_seen_alive_raises_no_ghost() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.event(&tab_hook(1, "UserPromptSubmit", 1000.0));
+        for _ in 0..FORGET_AFTER {
+            j.agents(view(&[]));
+        }
+        assert!(agent_at(&j, 1010.0).is_none());
+    }
+
+    #[test]
+    fn a_clean_end_from_the_fixtures_stays_out() {
+        let stop = fixture("stop");
+        let pid = 4607;
+        let ws_id = stop["workspace_id"].as_str().unwrap().to_string();
+        let surface = stop["surface_id"].as_str().unwrap().to_string();
+        // The SessionEnd fixture came from another session: put it in this one.
+        let mut end = fixture("end");
+        end["payload"]["_ppid"] = json!(pid);
+        end["payload"]["workspace_id"] = json!(ws_id);
+        end["payload"]["surface_id"] = json!(surface);
+        for ends in [vec![stop.clone()], vec![stop.clone(), end]] {
+            let mut j = Join::default();
+            j.workspaces(vec![ws(&ws_id)], 0.0);
+            j.agents(view(&[(pid, true, "s")]));
+            let mut prompt = hook_in(1, "UserPromptSubmit", pid, &ws_id, &surface);
+            prompt["occurred_at"] = json!("2026-11-13T08:30:00Z");
+            j.event(&prompt);
+            for e in &ends {
+                j.event(e);
+            }
+            j.agents(view(&[(pid, false, "s")]));
+            for _ in 0..FORGET_AFTER {
+                j.agents(view(&[]));
+            }
+            let agents: Vec<Agent> = j
+                .frame(1_794_560_000.0)
+                .workspace_list()
+                .iter()
+                .flat_map(|w| w.agent_list().cloned())
+                .collect();
+            assert!(agents.is_empty(), "{} hooks", ends.len());
+        }
+    }
+
+    #[test]
+    fn a_working_session_silent_past_the_limit_is_stopped_from_its_last_hook() {
+        use cockpit_core::stopped::SILENT_SECS;
+        let at = 1_794_567_000.0;
+        let j = working_from(at);
+        let last = at + 1.0;
+        assert_eq!(
+            agent_at(&j, last + SILENT_SECS - 1.0).and_then(|a| a.stopped),
+            None
+        );
+        assert_eq!(
+            agent_at(&j, last + SILENT_SECS).and_then(|a| a.stopped),
+            Some(Stop {
+                cause: StopCause::Silent,
+                since: last
+            })
+        );
     }
 }

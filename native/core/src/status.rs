@@ -18,8 +18,8 @@ use crate::theme::Token;
 use crate::time::{age_since, finished_at};
 use crate::ui::{PillColors, URGENCY_RANK, Urgency, count_tint};
 use crate::words::{
-    ASKING_WORD, ASLEEP_WORD, MERGE_READY_WORD, NO_AGENT_WORD, RUNNING_WORD, WAKING_WORD, YOU_WORD,
-    running_text, status_word, with_age,
+    ASKING_WORD, ASLEEP_WORD, MERGE_READY_WORD, NO_AGENT_WORD, RUNNING_WORD, STOPPED_WORD,
+    WAKING_WORD, YOU_WORD, running_text, status_word, stop_words, with_age, with_detail,
 };
 
 /// A workspace's status: its agent's, or none.
@@ -75,6 +75,9 @@ pub enum StatusKind {
     Ready,
     /// needs_input on a permission or a question (issue #81).
     Asking,
+    /// Stopped without handing back: an error, its process gone mid-turn,
+    /// or silent too long (issue #376, stopped.rs). Your turn's clay.
+    Stopped,
     /// Still working, but silent a while.
     Quiet,
     /// Idle while background work of any kind its chat started still
@@ -155,6 +158,10 @@ impl StatusKind {
             StatusKind::Ready => StatusStyle {
                 halo: Token::Clear,
                 ..plain_style(&Status::Ended)
+            },
+            StatusKind::Stopped => StatusStyle {
+                label: STOPPED_WORD,
+                ..plain_style(&Status::NeedsInput)
             },
             StatusKind::Asking => StatusStyle {
                 label: ASKING_WORD,
@@ -551,6 +558,10 @@ impl Session {
         if let Some(kind) = w.and_then(|w| self.sleep_kind(&w.id)) {
             return kind;
         }
+        // Waiting on Jon, so never Ready, and ahead of any ask.
+        if a.is_some_and(|a| a.stopped.is_some()) {
+            return StatusKind::Stopped;
+        }
         if self.ready_with(data, w, card).is_some() {
             return StatusKind::Ready;
         }
@@ -633,13 +644,29 @@ impl Session {
     /// The "Your move" line the chat ended its turn on, while that turn still waits on Jon.
     pub fn move_of(&mut self, w: Option<&Workspace>) -> Option<SavedMove> {
         let a = self.agent_of(w);
+        // A stopped turn ended on no move: an older one asks nothing now.
+        if a.as_ref().is_some_and(|a| a.stopped.is_some()) {
+            return None;
+        }
         let asking = ask_reason(&self.saved, a.as_ref(), w).is_some();
         waiting_move(&self.saved, a.as_ref(), w, asking)
     }
 
+    /// What a stopped card says ahead of its detail, "Stopped on an
+    /// error", or None when the card's agent has not stopped (or Jon
+    /// dismissed it).
+    pub fn stop_words_of(&mut self, data: &Data, w: Option<&Workspace>) -> Option<String> {
+        let stop = self.agent_of(w)?.stopped?;
+        Some(stop_words(stop.cause, &age_since(data, Some(stop.since))))
+    }
+
     /// A waiting card's reason: why the agent asks, else what it
-    /// wants, else its latest message.
+    /// wants, else its latest message. A stopped one's is its last words
+    /// alone, "" with none: its stop says the rest.
     pub fn needs_detail(&mut self, w: Option<&Workspace>) -> String {
+        if self.agent_of(w).is_some_and(|a| a.stopped.is_some()) {
+            return one_line(Some(&card_message(w)), NEEDS_DETAIL_MAX);
+        }
         if let Some(ask) = self.ask_of(w) {
             return ask;
         }
@@ -660,12 +687,18 @@ impl Session {
     /// True when the waiting chat's reply had no "Your move" label, so its
     /// line is the reply's last line, quoted bare and grey (SavedMove::unlabelled).
     pub fn unlabelled(&mut self, w: Option<&Workspace>) -> bool {
+        if self.agent_of(w).is_some_and(|a| a.stopped.is_some()) {
+            return false;
+        }
         self.ask_of(w).is_none() && self.move_of(w).is_some_and(|m| m.unlabelled == Some(true))
     }
 
     /// A waiting card's reason with its status in front: "Asking: allow git
     /// push?". A reply's last line, quoted for want of a label, goes bare.
     pub fn needs_line(&mut self, data: &Data, w: Option<&Workspace>) -> String {
+        if let Some(words) = self.stop_words_of(data, w) {
+            return with_detail(&words, &self.needs_detail(w));
+        }
         if self.unlabelled(w) {
             return self.needs_detail(w);
         }

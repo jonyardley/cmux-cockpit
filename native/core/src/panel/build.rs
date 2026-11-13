@@ -22,7 +22,7 @@ use crate::strip::{is_late, wait_secs};
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
 use crate::ui::QUIET_PILL;
-use crate::words::{RUNNING_WORD, WAITING_WORD};
+use crate::words::{RUNNING_WORD, WAITING_WORD, with_detail};
 
 use super::{
     AddMenu, AddProject, Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT,
@@ -563,6 +563,9 @@ fn needs_status(
     wt: Waiting,
 ) -> (String, Token) {
     let detail = whole_words(&session.needs_detail(w), NEEDS_DETAIL_MAX);
+    if let Some(words) = session.stop_words_of(data, w) {
+        return (with_detail(&words, &detail), wt.ink);
+    }
     if session.unlabelled(w) {
         return (detail, Token::Secondary);
     }
@@ -1443,6 +1446,209 @@ mod tests {
         assert_eq!(card.waiting, None);
         assert_eq!(running_kind(&mut core), StatusKind::Running);
         assert!(sizes.is_empty());
+    }
+
+    /// The core after a frame at epoch `now` with one workspace "W"
+    /// whose agent "c" is `status` and stopped as `stop` says (cause and
+    /// start), its last words "Please run /login", Jon on another
+    /// workspace; dismissing W's wait first when `dismiss`.
+    fn stopped_core(now: f64, status: &str, stop: (&str, f64), dismiss: bool) -> Model {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = Model::default();
+        let data = stopped_data(now, status, stop);
+        let _effects = Cockpit.update(Event::Data(data), &mut core);
+        if dismiss {
+            let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        }
+        core
+    }
+
+    fn stopped_data(now: f64, status: &str, (cause, since): (&str, f64)) -> Data {
+        serde_json::from_value(serde_json::json!({"epoch": now,
+            "workspaces": [
+                {"id": "W", "title": "fix login", "latestMessage": "Please run /login",
+                 "agents": [{"id": "c", "kind": "claude", "status": status,
+                     "sinceEpoch": 900, "lastActivityAt": 900,
+                     "stopped": {"cause": cause, "since": since}}]},
+                {"id": "X", "title": "other", "selected": true}]}))
+        .unwrap()
+    }
+
+    fn w_card(core: &mut Model) -> (Card, Needs) {
+        let panel = Panel::from_core(core);
+        let card = panel.lane_cards().find(|c| c.ws_id == "W").unwrap().clone();
+        (card, panel.needs)
+    }
+
+    /// W's waiting line as any card shape says it: a row's in its detail.
+    fn w_line(core: &mut Model) -> String {
+        let (card, _) = w_card(core);
+        if card.density == Density::Row {
+            card.detail
+        } else {
+            card.status
+        }
+    }
+
+    /// W's status line, as a full card would say it.
+    fn w_status(core: &mut Model) -> String {
+        let data = core.data.clone().unwrap_or_default();
+        core.session.status_line(&data, data.ws_by_id("W"))
+    }
+
+    #[test]
+    fn a_stopped_session_waits_in_clay_with_its_cause_and_last_words() {
+        let mut core = stopped_core(1000.0 + 120.0, "working", ("error", 1000.0), false);
+        let (card, needs) = w_card(&mut core);
+        assert_eq!(card.waiting, Some(Waiting::of(false)), "clay, never amber");
+        assert_eq!(w_line(&mut core), "Stopped on an error: Please run /login");
+        assert_eq!(card.status_ink, Token::ClayText);
+        assert_eq!(card.icon.ink, Some(Token::Clay));
+        assert_eq!(card.age, "2m", "from the stop");
+        assert_eq!((needs.count, needs.fill), (1, Token::Clay));
+        let data = core.data.clone().unwrap_or_default();
+        assert_eq!(
+            core.session.status_kind(&data, data.ws_by_id("W")),
+            StatusKind::Stopped
+        );
+        let gone = w_line(&mut stopped_core(1060.0, "idle", ("gone", 1000.0), false));
+        assert_eq!(gone, "Stopped mid-turn: Please run /login");
+        let silent = w_line(&mut stopped_core(
+            2400.0,
+            "working",
+            ("silent", 900.0),
+            false,
+        ));
+        assert_eq!(silent, "Stopped, silent 25m: Please run /login");
+        let late = w_card(&mut stopped_core(
+            1000.0 + 1800.0,
+            "idle",
+            ("gone", 1000.0),
+            false,
+        ))
+        .0;
+        assert_eq!(late.late.map(|l| l.text), Some("waiting 30m".to_string()));
+    }
+
+    #[test]
+    fn a_dismissed_stop_stays_dismissed_until_a_new_one() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = stopped_core(1060.0, "working", ("error", 1000.0), true);
+        let (card, needs) = w_card(&mut core);
+        assert_eq!((card.waiting, needs.count), (None, 0));
+        assert_eq!(w_status(&mut core), "Idle 1m", "the turn is over");
+        // Frames go on (prune runs on each): the dismissal holds.
+        for now in [1090.0, 1500.0] {
+            let data = stopped_data(now, "working", ("error", 1000.0));
+            let _effects = Cockpit.update(Event::Data(data), &mut core);
+            assert_eq!(w_card(&mut core).1.count, 0, "at {now}");
+        }
+        // A new stop, a later start: it waits again.
+        let data = stopped_data(1600.0, "working", ("error", 1550.0));
+        let _effects = Cockpit.update(Event::Data(data), &mut core);
+        assert_eq!(w_card(&mut core).1.count, 1);
+        // A dismissed silence is still working, quietly.
+        let mut silent = stopped_core(2400.0, "working", ("silent", 900.0), true);
+        let data = silent.data.clone().unwrap_or_default();
+        assert_eq!(
+            silent.session.status_kind(&data, data.ws_by_id("W")),
+            StatusKind::Quiet
+        );
+        assert_eq!(w_card(&mut silent).1.count, 0);
+    }
+
+    #[test]
+    fn the_card_menu_dismisses_a_stop_and_an_older_move_draws_no_size_chip() {
+        use crate::menu::{MenuAction, MenuEvent};
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = Model::default();
+        core.session.saved = crate::persist::SavedState::from_json(
+            r#"{"moves": {"W": {"text": "Your move: say go.", "epoch": 800, "session": "c"}}}"#,
+        )
+        .unwrap();
+        let data = stopped_data(1060.0, "working", ("error", 1000.0));
+        let _effects = Cockpit.update(Event::Data(data.clone()), &mut core);
+        let (card, _) = w_card(&mut core);
+        assert!(card.waiting.is_some());
+        let sizes = core.session.chips_for(&data, data.ws_by_id("W"), false);
+        assert!(
+            !sizes.iter().any(|c| matches!(c, CoreChip::Size { .. })),
+            "the move before the stop is no ask"
+        );
+        let has = |core: &mut Model, label: &str| {
+            let data = core.data.clone().unwrap_or_default();
+            core.session
+                .card_menu(&data, data.ws_by_id("W"))
+                .iter()
+                .any(|i| matches!(i, crate::menu::MenuItem::Item { label: l, .. } if l == label))
+        };
+        assert!(has(&mut core, "Dismiss needs you"));
+        let open = Event::Menu(MenuEvent::OpenCard { id: "W".into() });
+        let _effects = Cockpit.update(open, &mut core);
+        let pick = Event::Menu(MenuEvent::Pick(MenuAction::ToggleNeeds));
+        let _effects = Cockpit.update(pick, &mut core);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert!(has(&mut core, "Restore needs you"));
+    }
+
+    #[test]
+    fn an_asleep_workspace_never_waits_on_a_stop() {
+        let mut core = Model::default();
+        core.session.saved = crate::persist::SavedState::from_json(
+            r#"{"asleep": {"W": {"surfaces": ["S"], "since": 1000}}}"#,
+        )
+        .unwrap();
+        let data = stopped_data(1060.0, "idle", ("gone", 1000.0));
+        let _effects = {
+            use crate::{Cockpit, Event};
+            use crux_core::App;
+            Cockpit.update(Event::Data(data), &mut core)
+        };
+        assert_eq!(w_card(&mut core).1.count, 0);
+        // Asleep, the agent as shown carries no stop, so no rule reads one.
+        let data = core.data.clone().unwrap_or_default();
+        let shown = core.session.agent_of(data.ws_by_id("W"));
+        assert_eq!(shown.map(|a| a.stopped), Some(None));
+    }
+
+    #[test]
+    fn a_dismissed_session_gone_mid_turn_leaves_the_card_to_the_live_one() {
+        use crate::menu::{MenuAction, MenuEvent};
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let data: Data = serde_json::from_value(serde_json::json!({"epoch": 1060,
+            "workspaces": [
+                {"id": "W", "title": "fix login",
+                 "agents": [
+                     {"id": "c", "kind": "claude", "status": "idle", "surfaceId": "S1",
+                      "tabTitle": "old", "sinceEpoch": 1000, "lastActivityAt": 1000,
+                      "stopped": {"cause": "gone", "since": 1000}},
+                     {"id": "d", "kind": "claude", "status": "working", "surfaceId": "S2",
+                      "tabTitle": "new", "sinceEpoch": 1050, "lastActivityAt": 1055}]},
+                {"id": "X", "title": "other", "selected": true}]}))
+        .unwrap();
+        let mut core = Model::default();
+        let _effects = Cockpit.update(Event::Data(data.clone()), &mut core);
+        let w = data.ws_by_id("W");
+        assert_eq!(core.session.agent_of(w).map(|a| a.id), Some("c".into()));
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(core.session.agent_of(w).map(|a| a.id), Some("d".into()));
+        assert_eq!(
+            core.session.agent_tab_of(w),
+            None,
+            "one live agent names no tab"
+        );
+        assert_eq!(w_card(&mut core).1.count, 0);
+        // Restore needs you brings the stopped card back.
+        let open = Event::Menu(MenuEvent::OpenCard { id: "W".into() });
+        let _effects = Cockpit.update(open, &mut core);
+        let pick = Event::Menu(MenuEvent::Pick(MenuAction::ToggleNeeds));
+        let _effects = Cockpit.update(pick, &mut core);
+        assert_eq!(w_card(&mut core).1.count, 1);
+        assert_eq!(core.session.agent_of(w).map(|a| a.id), Some("c".into()));
     }
 
     #[test]

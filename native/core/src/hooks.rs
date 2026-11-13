@@ -66,6 +66,11 @@ pub struct Hooked {
     pub last_hook: f64,
     /// The workspace the hook named.
     pub workspace: String,
+    /// Whether the session's turn is open: its last hook that moved
+    /// activity was a prompt, a tool call or an ask, not a SessionStart,
+    /// Stop or SessionEnd. A Notification leaves it as it was, so the idle
+    /// nudge after a Stop keeps it closed (stopped.rs).
+    pub turn_open: bool,
 }
 
 impl Hooked {
@@ -89,12 +94,18 @@ impl Hooked {
             Some(p) if !activity => p.last_activity,
             _ => at,
         };
+        let turn_open = if activity {
+            matches!(status, AgentStatus::Working | AgentStatus::NeedsInput)
+        } else {
+            prev.is_some_and(|p| p.turn_open)
+        };
         Hooked {
             status,
             since,
             last_activity,
             last_hook: at,
             workspace: workspace.to_string(),
+            turn_open,
         }
     }
 
@@ -196,6 +207,20 @@ mod tests {
             first.last_activity, 50.0,
             "with nothing before, the hook's own time"
         );
+    }
+
+    #[test]
+    fn a_prompt_or_tool_opens_the_turn_and_a_stop_or_start_closes_it() {
+        let started = Hooked::after(None, AgentStatus::Idle, 100.0, true, "w");
+        assert!(!started.turn_open);
+        let prompt = Hooked::after(Some(&started), AgentStatus::Working, 101.0, true, "w");
+        assert!(prompt.turn_open);
+        let stop = Hooked::after(Some(&prompt), AgentStatus::Idle, 102.0, true, "w");
+        assert!(!stop.turn_open);
+        let nudge = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 160.0, false, "w");
+        assert!(!nudge.turn_open, "the idle nudge opens nothing");
+        let asked = Hooked::after(Some(&prompt), AgentStatus::NeedsInput, 103.0, true, "w");
+        assert!(asked.turn_open, "a permission ask is mid-turn");
     }
 
     #[test]

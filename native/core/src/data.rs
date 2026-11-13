@@ -120,6 +120,13 @@ pub struct Agent {
         skip_serializing_if = "Option::is_none"
     )]
     pub earlier_sessions: Option<Vec<String>>,
+    /// Why and since when the session stopped without handing back, from
+    /// the runner's join (stopped.rs). cmux never sends it.
+    #[serde(
+        deserialize_with = "crate::lenient::field",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub stopped: Option<crate::stopped::Stop>,
 }
 
 impl Agent {

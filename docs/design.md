@@ -25,7 +25,8 @@ otherwise. Line numbers are as of `12d4303`.
 
 ## Principles
 
-1. **Hue only ever means state.** Clay is your turn (or a wait gone late,
+1. **Hue only ever means state.** Clay is your turn (a session that
+   [stopped](#stopped) too, or a wait gone late,
    [late wait](#late-wait)), amber is asking, blue is
    working, the olive green is finished, the vivid merge green is ready to
    merge, red is failing. Nothing decorative takes one of these hues.
@@ -68,7 +69,7 @@ dark-mode screenshot; nothing here changes before then.
 
 | Token | Light | Dark | Means | Where drawn |
 |-|-|-|-|-|
-| `clay` | D97757 | E08A6D | your turn | the waiting count on the All tab while one waiting card is your turn (core picks, `Needs.fill`); a needs dot; the [stripe](#waiting-card) down a Your turn card |
+| `clay` | D97757 | E08A6D | your turn, and [stopped](#stopped) | the waiting count on the All tab while one waiting card is your turn (core picks, `Needs.fill`); a needs dot; the [stripe](#waiting-card) down a Your turn card |
 | `amber` | D9A03F | E3B260 | asking | needs dot, status dot, the waiting count while every waiting card asks (core picks); the [stripe](#waiting-card) down an Asking card |
 | `blue` | 3B6FB6 | 6A9BE0 | working | progress bar fill (`CardView.swift` `ProgressBar`), status dot |
 | `green` | 788C5D | 93A877 | finished | status dot (core picks) |
@@ -565,6 +566,38 @@ The words, ring and order are the core's (`native/core/src/sleep.rs`,
 `StatusKind::Asleep` and `Waking` in `native/core/src/status.rs`); the
 views draw them as any status and detail.
 
+### Stopped
+
+A session that stopped without handing back waits on you as surely as one
+that asks (issue #376), so it reads Stopped and joins Needs you: the
+waiting count, lane order, the [late wait](#late-wait) chip and Dismiss
+needs you all count it. It takes Your turn's look whole, clay dot with its
+halo, `clayText` words, the clay [waiting card](#waiting-card) edge,
+stripe and wash, never amber, since nothing asks. The status words say why
+in the closing line's shape, then the session's last words where the core
+has them (the workspace's latest message):
+
+- "Stopped on an error: Please run /login": cmux reported the turn ended
+  on an API error (Claude Code's StopFailure). Until the next prompt or a
+  new session in that tab, or until the tab has no session left.
+- "Stopped mid-turn": the process went with its turn open (a prompt or a
+  tool call, no Stop or SessionEnd since, and it last read working or
+  asking), a `kill -9` say. The card stays instead of vanishing, until a new
+  session starts in its tab or the Cockpit restarts. A clean end (Stop,
+  then SessionEnd) never reads so.
+- "Stopped, silent 25m": still working, with no hook for twenty minutes
+  (`SILENT_SECS`, `native/core/src/stopped.rs`), counted from its last
+  hook. Until any hook.
+
+Dismissed, it stays dismissed until a new stop with a later start: an
+error then reads Idle from the stop, a silence reads as working, quiet,
+and a process gone leaves the card, as it did before Stopped, so it never
+stands beside a live session in the same workspace. "Restore needs you"
+brings it back. An asleep or waking card never reads Stopped: its process
+is gone by design. The words are `stop_words` in
+`native/core/src/words.rs`; the rules are `native/core/src/stopped.rs`
+and the runner's join (`native/runner/src/join.rs`).
+
 ### Running
 
 The blue status for an idle agent whose chat still runs background work
@@ -801,10 +834,12 @@ Every card's face, edge, dimming and hover (`Views/CardView.swift:463-492`).
 
 ### Waiting card
 
-A card waiting on you (Your turn or Asking) stands out as a whole, not
-only by its dot and words, so the cards that wait can be told at a glance.
+A card waiting on you (Your turn, [Stopped](#stopped) or Asking) stands
+out as a whole, not only by its dot and words, so the cards that wait can
+be told at a glance.
 The core picks every token on the card's `Waiting` (`Waiting::of`,
-`native/core/src/panel/mod.rs`): clay for Your turn, amber for Asking.
+`native/core/src/panel/mod.rs`): clay for Your turn and Stopped, amber for
+Asking.
 
 - **Full, compact and Projects cards:** a 1 edge in `clayCardEdge` or
   `amberCardEdge` (the hue at 0x73, about 0.45) in place of `cardEdge`,
@@ -904,7 +939,8 @@ Every card is decided as option a; where that changes a rule, the rule says
    `Waiting.edge`, `Waiting.wash`, `Chip.face`, `Chip.edge`, `Card.late`).
 2. **A state is a dot plus words, and the dot and the words are a fixed
    pair:** `blue`/`blueText` working, `clay`/`clayText` your turn,
-   `amber`/`amberText` asking, `green`/`greenText` finished,
+   `amber`/`amberText` asking (stopped shares your turn's pair),
+   `green`/`greenText` finished,
    `mergeGreen`/`mergeText` ready to merge, no colour (`Own.grey`) with
    `metaText` idle. The pairs are set once in `status.rs:108-114` and
    `:136-170`. A filled dot in a live state (working, your turn, asking, ready
@@ -981,6 +1017,7 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Meaning | Cards (full, compact, Projects) | Dense row | Headers and anchor | Elsewhere | Chosen at |
 |-|-|-|-|-|-|
 | Your turn | clay dot with halo, `clayText` words, clay needs dot; `clayCardEdge` edge and clay stripe | same, age and reason in `clayText`; `clayWash` face | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `needs.rs` `waiting_turn`, `effective_agent`; `status.rs` `plain_style`, `waiting_tokens`; `panel/build.rs` `header_dot` |
+| Stopped | as Your turn: clay dot with halo, `clayText` words ("Stopped on an error: …", "Stopped mid-turn", "Stopped, silent 25m"), clay edge and stripe | as Your turn; the words lead the detail | as Your turn | counts in the clay waiting count | `stopped.rs`; `needs.rs` `stopped_agent`; `status.rs` `StatusKind::Stopped`; `words.rs` `stop_words` |
 | Asking | amber dot with halo, `amberText` words, amber needs dot; `amberCardEdge` edge and amber stripe | same; `amberWash` face | amber glyph **≠**; `amberCount` pill | waiting count amber while every waiting card asks | `status.rs` `StatusKind::style`; `panel/build.rs` `needs_tone` |
 | Working | blue dot with halo, `blueText`; blue progress bar | blue dot | blue glyph; `blueCount` pill | | `status.rs:109` |
 | Running | as working, "Running 4m · 1 shell, 1 agent"; no live helpers words beside it once it counts an agent; never over a turn that asks you | as working, the age alone | as working | | `status.rs` `StatusKind::Running`; `running.rs`; `words.rs` `running_text` |
