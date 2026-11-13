@@ -19,22 +19,24 @@ enum ChipLook {
 
 extension View {
     /// A chip's frame (docs/design.md#chips): the padding, the face, the 6pt
-    /// corners and the chip edge, shared by the quiet chips and the action
-    /// buttons so the two never drift apart.
-    func chipFrame(_ face: some View, padH: CGFloat = ChipLook.padH) -> some View {
+    /// corners and the edge the core gives (the chip edge, or a wait's),
+    /// shared by the chips, the action buttons and the late wait's age so
+    /// they never drift apart.
+    func chipFrame(_ face: some View, edge: Token = .chipEdge, padH: CGFloat = ChipLook.padH) -> some View {
         padding(.horizontal, padH)
             .padding(.vertical, ChipLook.padV)
             .background(face)
             .clipShape(.rect(cornerRadius: Metrics.Radius.chip))
             .overlay(
                 RoundedRectangle(cornerRadius: Metrics.Radius.chip)
-                    .strokeBorder(Color(Token.chipEdge), lineWidth: Metrics.hairline)
+                    .strokeBorder(Color(edge), lineWidth: Metrics.hairline)
             )
     }
 }
 
-/// One chip, drawn by its kind (docs/design.md#chips): the size in
-/// its state's ink; the PR with its glyph, its number in medium and its
+/// One chip, drawn by its kind (docs/design.md#chips), on the face and
+/// edge the core gives: the size first, in the wait's colour on a card
+/// waiting on Jon (docs/design.md#move-size-chip); the PR with its glyph, its number in medium and its
 /// state in its tone's ink; the branch with its glyph and a dot when it
 /// has uncommitted changes; a port; the diff size unframed and faint
 /// beside its PR; an action as a white button. A chip with somewhere to
@@ -62,7 +64,7 @@ struct ChipView: View {
     @ViewBuilder private var framed: some View {
         let face = HStack(spacing: ChipLook.inner) { inside }
             .lineLimit(1)
-            .chipFrame(Color(Token.chipFace).overlay { if lit { Color(Palette.Own.hover) } })
+            .chipFrame(Color(chip.face).overlay { if lit { Color(Palette.Own.hover) } }, edge: chip.edge)
         if case .open(let url) = tap {
             face
                 .contentShape(.rect)

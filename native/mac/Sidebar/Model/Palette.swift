@@ -100,6 +100,31 @@ enum Palette {
         Pair(RGBA(pair.light.hex, alpha), RGBA(pair.dark.hex, alpha))
     }
 
+    /// `pair` at `alpha` laid over `ground` and made solid, each side over
+    /// its own: a pale face whose words read the same whatever is under
+    /// it (a card, a card under the pointer, a waiting row's wash).
+    private static func solid(_ pair: Pair, _ alpha: UInt8, over ground: Pair) -> Pair {
+        Pair(
+            blend(RGBA(pair.light.hex, alpha), over: ground.light),
+            blend(RGBA(pair.dark.hex, alpha), over: ground.dark)
+        )
+    }
+
+    /// `top` laid over `ground`, solid: each channel mixed by the top's
+    /// alpha and rounded, the ground's own alpha ignored.
+    static func blend(_ top: RGBA, over ground: RGBA) -> RGBA {
+        let a = UInt32(top.alpha)
+        let mix = { (shift: UInt32) -> UInt32 in
+            let t = (top.hex >> shift) & 0xFF
+            let g = (ground.hex >> shift) & 0xFF
+            return ((t * a + g * (255 - a) + 127) / 255) << shift
+        }
+        return RGBA(mix(16) | mix(8) | mix(0))
+    }
+
+    /// A card's own face, which the solid chip faces are laid over.
+    private static let cardFace = Pair(RGBA(0xFFFFFF), RGBA(0x30302D))
+
     private static func pair(_ token: Token) -> Pair {
         switch token {
         case .clear: Pair(RGBA(0, 0), RGBA(0, 0))
@@ -148,6 +173,18 @@ enum Palette {
         case .mergedText: purple
         case .mergedChipFace: faint(purple, 0x1A)
         case .mergedChipEdge: faint(purple, 0x38)
+        // A chip in the wait's colour: the hue at 0x1A over the card, made
+        // solid so its words clear 4.5:1 on any ground; its edge at 0x38.
+        case .clayChipFace: solid(clay, 0x1A, over: cardFace)
+        case .clayChipEdge: faint(clay, 0x38)
+        case .amberChipFace: solid(amber, 0x1A, over: cardFace)
+        case .amberChipEdge: faint(amber, 0x38)
+        // A waiting card's edge, the hue at 0x73 (0.45); a waiting dense
+        // row's face, the hue at 0x29 (0.16).
+        case .clayCardEdge: faint(clay, 0x73)
+        case .amberCardEdge: faint(amber, 0x73)
+        case .clayWash: faint(clay, 0x29)
+        case .amberWash: faint(amber, 0x29)
         }
     }
 
@@ -159,7 +196,7 @@ enum Palette {
         case .badge: secondary
         case .onBadge: Pair(RGBA(0xFFFFFF), RGBA(0x1F1E1D))
         case .lift: Pair(RGBA(0x000000, 0x2E), RGBA(0x000000, 0x66))
-        case .card: Pair(RGBA(0xFFFFFF), RGBA(0x30302D))
+        case .card: cardFace
         case .readyEdge: faint(green, 0x47)
         case .onFill: Pair(RGBA(0xFFFFFF), RGBA(0xFFFFFF))
         case .cardHover: Pair(RGBA(0xF7F6F2), RGBA(0x383835))

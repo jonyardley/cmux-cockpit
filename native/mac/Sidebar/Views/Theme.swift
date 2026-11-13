@@ -12,6 +12,16 @@ extension Color {
         self.init(nsColor: Self.dynamic(light: Palette.rgba(own, dark: false), dark: Palette.rgba(own, dark: true)))
     }
 
+    /// A faint token laid over one of the panel's own colours, made solid:
+    /// what shows where both are drawn, such as a waiting row's wash over
+    /// the panel ground.
+    init(_ token: Token, over own: Palette.Own) {
+        self.init(nsColor: Self.dynamic(
+            light: Palette.blend(Palette.rgba(token, dark: false), over: Palette.rgba(own, dark: false)),
+            dark: Palette.blend(Palette.rgba(token, dark: true), over: Palette.rgba(own, dark: true))
+        ))
+    }
+
     /// A dot's colour: its token, or the grey outline with none.
     init(dot ink: Token?) {
         if let ink { self.init(ink) } else { self.init(Palette.Own.grey) }

@@ -182,6 +182,27 @@ extension CardText {
         card.waiting?.mark
     }
 
+    /// A card's edge at rest (docs/design.md#waiting-card): the wait's edge
+    /// on a card waiting on Jon, else the hairline; none on a dense row,
+    /// whose wait shows as its wash. The selected outline draws over it.
+    static func restEdge(_ card: Card, row: Bool) -> Token {
+        if row { return .clear }
+        return card.waiting?.edge ?? .cardEdge
+    }
+
+    /// The stripe down a waiting card's leading edge, in the wait's solid
+    /// hue (its mark); nil on a dense row and on a card waiting on nobody.
+    static func stripe(_ card: Card, row: Bool) -> Token? {
+        row ? nil : card.waiting?.mark
+    }
+
+    /// A waiting dense row's face at rest: the wait's wash, under the
+    /// pointer's hover; nil once selected, when it takes the card's face,
+    /// on any other card, and on a row waiting on nobody.
+    static func wash(_ card: Card, row: Bool) -> Token? {
+        row && !card.selected ? card.waiting?.wash : nil
+    }
+
     /// Whether the pointer shows the card's x, which dismisses its wait:
     /// only on a card waiting on Jon.
     static func dismissable(_ card: Card) -> Bool {
