@@ -396,6 +396,8 @@ mod tests {
                 text: text.into(),
                 ink: Token::Secondary,
             }],
+            face: Token::ChipFace,
+            edge: Token::ChipEdge,
             gives_way: false,
             url: None,
             is_action: false,

@@ -103,6 +103,14 @@ pub fn hex(t: Token) -> u32 {
         Token::MergedText => PURPLE,
         Token::MergedChipFace => blend(PURPLE, 0x1A, GROUND),
         Token::MergedChipEdge => blend(PURPLE, 0x38, GROUND),
+        Token::ClayChipFace => blend(CLAY, 0x1A, GROUND),
+        Token::ClayChipEdge => blend(CLAY, 0x38, GROUND),
+        Token::AmberChipFace => blend(AMBER, 0x1A, GROUND),
+        Token::AmberChipEdge => blend(AMBER, 0x38, GROUND),
+        Token::ClayCardEdge => blend(CLAY, 0x73, GROUND),
+        Token::AmberCardEdge => blend(AMBER, 0x73, GROUND),
+        Token::ClayWash => blend(CLAY, 0x29, GROUND),
+        Token::AmberWash => blend(AMBER, 0x29, GROUND),
     }
 }
 

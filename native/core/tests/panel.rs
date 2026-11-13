@@ -314,3 +314,53 @@ fn a_row_is_never_ready_and_its_age_is_its_status() {
         assert_eq!(c.status_has_age, !c.status.is_empty(), "{}", c.ws_id);
     }
 }
+
+#[test]
+fn a_waiting_card_carries_its_waits_colour_and_its_size_chip_leads() {
+    use cockpit_core::panel::{ChipKind, Token, Waiting};
+    let cards = every_card();
+    let mut sized = 0;
+    let mut late = 0;
+    for c in &cards {
+        // Waiting comes whole from whether it asks: clay or amber edge,
+        // stripe (its mark) and a dense row's wash together.
+        if let Some(wt) = c.waiting {
+            assert!(
+                wt == Waiting::of(true) || wt == Waiting::of(false),
+                "{}: {wt:?}",
+                c.ws_id
+            );
+        }
+        for (i, chip) in c.chips.iter().enumerate() {
+            if chip.kind != ChipKind::Size {
+                assert_eq!(
+                    chip.edge,
+                    Token::ChipEdge,
+                    "{}: only the size takes a wait",
+                    c.ws_id
+                );
+                continue;
+            }
+            sized += 1;
+            assert_eq!(i, 0, "{}: the size chip leads its row", c.ws_id);
+            let want = match c.waiting {
+                Some(wt) if wt.mark == Token::Amber => (Token::AmberText, Token::AmberChipFace),
+                Some(_) => (Token::ClayText, Token::ClayChipFace),
+                None => (Token::Secondary, Token::ChipFace),
+            };
+            assert_eq!((chip.pieces[0].ink, chip.face), want, "{}", c.ws_id);
+        }
+        if let Some(l) = &c.late {
+            late += 1;
+            assert!(
+                c.waiting.is_some(),
+                "{}: only a waiting card is late",
+                c.ws_id
+            );
+            assert_eq!(l.text, format!("waiting {}", c.age), "{}", c.ws_id);
+            assert_eq!((l.ink, l.face), (Token::ClayText, Token::ClayChipFace));
+        }
+    }
+    assert!(sized > 0, "some scene has a size chip");
+    assert!(late > 0, "some scene has a wait past the half hour");
+}

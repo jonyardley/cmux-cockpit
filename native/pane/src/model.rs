@@ -328,10 +328,8 @@ pub(crate) mod fixtures {
             detail: String::new(),
             detail_ink: Token::Secondary,
             detail_lines: 1,
-            waiting: waiting.then_some(Waiting {
-                mark: Token::Clay,
-                ink: Token::ClayText,
-            }),
+            waiting: waiting.then_some(Waiting::of(false)),
+            late: None,
             waiting_tab: None,
             rank,
             movable: true,
