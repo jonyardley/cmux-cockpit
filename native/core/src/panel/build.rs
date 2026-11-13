@@ -942,9 +942,11 @@ fn projects(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Project
 mod tests {
     use super::*;
     use crate::Model;
+    use crate::ci_wait::CiTrouble;
     use crate::data::{Agent, AgentStatus};
     use crate::moves::MoveSize;
     use crate::persist::SavedState;
+    use crate::status::Status;
     use crate::ui::Urgency;
 
     fn style(dot: Option<Token>, ring: Option<Token>) -> StatusStyle {
@@ -1655,6 +1657,205 @@ mod tests {
         let _effects = Cockpit.update(pick, &mut core);
         assert_eq!(w_card(&mut core).1.count, 1);
         assert_eq!(core.session.agent_of(w).map(|a| a.id), Some("c".into()));
+    }
+
+    /// The core after a frame at epoch `now` with one workspace "W" on
+    /// branch feat, whose PR #12 "Docs layout" has `checks` and whose
+    /// agents are `agents`, Jon on another workspace; `extra` is more of
+    /// the saved state's JSON (with a trailing comma).
+    fn ci_core(now: f64, agents: &str, checks: &str, extra: &str) -> Model {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = Model::default();
+        core.session.saved = crate::persist::SavedState::from_json(&format!(
+            r#"{{{extra} "prs": {{"W": {{"number": 12, "url": "https://github.com/o/r/pull/12",
+                "status": "open", "branch": "feat", "title": "Docs layout", "checks": {checks}}}}}}}"#
+        ))
+        .unwrap();
+        let _effects = Cockpit.update(Event::Data(ci_data(now, agents)), &mut core);
+        core
+    }
+
+    fn ci_data(now: f64, agents: &str) -> Data {
+        serde_json::from_str(&format!(
+            r#"{{"epoch": {now}, "workspaces": [
+                {{"id": "W", "title": "docs", "branch": "feat", "agents": [{agents}]}},
+                {{"id": "X", "title": "other", "selected": true}}]}}"#
+        ))
+        .unwrap()
+    }
+
+    /// A frame at epoch `now` with W's agents as `agents`.
+    fn ci_frame(core: &mut Model, now: f64, agents: &str) {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let _effects = Cockpit.update(Event::Data(ci_data(now, agents)), core);
+    }
+
+    const IDLE: &str = r#"{"id": "c", "kind": "claude", "status": "idle", "sinceEpoch": 900, "lastActivityAt": 900}"#;
+    const WORKING: &str = r#"{"id": "c", "kind": "claude", "status": "working", "sinceEpoch": 950, "lastActivityAt": 990}"#;
+    const FAILED: &str = r#"[{"name": "build", "state": "fail", "started": 800}]"#;
+
+    fn w_kind(core: &mut Model) -> StatusKind {
+        let data = core.data.clone().unwrap_or_default();
+        core.session.status_kind(&data, data.ws_by_id("W"))
+    }
+
+    /// W's PR chip words, as a compact card says them.
+    fn w_pr(core: &mut Model) -> String {
+        let data = core.data.clone().unwrap_or_default();
+        let w = data.ws_by_id("W");
+        let pr = pr_summary(&core.session.saved, w, now_epoch(&data)).unwrap();
+        core.session.card_pr_words(&data, w, &pr)
+    }
+
+    #[test]
+    fn red_ci_with_an_idle_session_waits_in_clay_naming_the_pr() {
+        let mut core = ci_core(1020.0, IDLE, FAILED, "");
+        let (card, needs) = w_card(&mut core);
+        assert_eq!(card.waiting, Some(Waiting::of(false)), "clay, never amber");
+        assert_eq!(w_line(&mut core), "CI failed on Docs layout, nobody fixing");
+        assert_eq!(card.status_ink, Token::ClayText);
+        assert_eq!(card.icon.ink, Some(Token::Clay));
+        assert_eq!(card.age, "2m", "from when the session went idle");
+        assert_eq!((needs.count, needs.fill), (1, Token::Clay));
+        assert_eq!(w_kind(&mut core), StatusKind::Ci(CiTrouble::Failing));
+        assert_eq!(w_pr(&mut core), "#12 · 1 failing");
+        // Half an hour on, the late chip.
+        let mut late = ci_core(900.0 + 1800.0, IDLE, FAILED, "");
+        let card = w_card(&mut late).0;
+        assert_eq!(card.late.map(|l| l.text), Some("waiting 30m".to_string()));
+    }
+
+    #[test]
+    fn red_ci_with_a_working_session_stays_out_as_that_session_owns_it() {
+        let mut core = ci_core(1020.0, WORKING, FAILED, "");
+        let (card, needs) = w_card(&mut core);
+        assert_eq!((card.waiting, needs.count), (None, 0));
+        assert_eq!(w_kind(&mut core), StatusKind::Plain(Status::Working));
+        // Idle, with a shell its chat started still running: on it too.
+        let shell = r#""background": {"W": [{"id": "b1", "type": "shell", "status": "running",
+            "description": "gh pr checks --watch", "session": "c", "startedEpoch": 950,
+            "seenEpoch": 1000}]},"#;
+        let mut watching = ci_core(1020.0, IDLE, FAILED, shell);
+        assert_eq!(w_card(&mut watching).1.count, 0);
+        // A second session idle beside the working one changes nothing.
+        let both = format!(
+            "{WORKING}, {}",
+            IDLE.replace(r#""id": "c""#, r#""id": "d""#)
+        );
+        let mut two = ci_core(1020.0, &both, FAILED, "");
+        assert_eq!(w_card(&mut two).1.count, 0);
+    }
+
+    #[test]
+    fn green_ci_waits_on_nobody() {
+        let pass = r#"[{"name": "build", "state": "pass", "started": 800}]"#;
+        let mut core = ci_core(5000.0, IDLE, pass, "");
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert_eq!(w_kind(&mut core), StatusKind::Plain(Status::Idle));
+    }
+
+    #[test]
+    fn a_check_queued_ten_minutes_joins_needs_you_as_stuck() {
+        let queued = r#"[{"name": "mac", "state": "pending", "queued": 1000}]"#;
+        let mut core = ci_core(1599.0, IDLE, queued, "");
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert_eq!(w_pr(&mut core), "#12 · running");
+        // The same saved PR, the clock moved on: no answer needed.
+        ci_frame(&mut core, 1600.0, IDLE);
+        let (card, needs) = w_card(&mut core);
+        assert_eq!(needs.count, 1);
+        assert_eq!(card.waiting, Some(Waiting::of(false)));
+        assert_eq!(w_line(&mut core), "CI stuck 10m on Docs layout: rerun?");
+        assert_eq!(card.age, "<1m", "from when it went stuck");
+        assert_eq!(w_kind(&mut core), StatusKind::Ci(CiTrouble::Stuck));
+        assert_eq!(w_pr(&mut core), "#12 · stuck");
+        ci_frame(&mut core, 1000.0 + 40.0 * 60.0, IDLE);
+        assert_eq!(w_line(&mut core), "CI stuck 40m on Docs layout: rerun?");
+    }
+
+    #[test]
+    fn a_check_running_past_45_minutes_joins_needs_you_as_stuck() {
+        let running = r#"[{"name": "mac", "state": "pending", "started": 1000}]"#;
+        let mut core = ci_core(1000.0 + 2699.0, IDLE, running, "");
+        assert_eq!(w_card(&mut core).1.count, 0);
+        ci_frame(&mut core, 1000.0 + 2700.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 1);
+        assert_eq!(w_line(&mut core), "CI stuck 45m on Docs layout: rerun?");
+    }
+
+    #[test]
+    fn a_dismissed_ci_wait_holds_until_the_checks_change() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = ci_core(1020.0, IDLE, FAILED, "");
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert_eq!(w_kind(&mut core), StatusKind::Plain(Status::Idle));
+        assert_eq!(
+            core.session.pending.last(),
+            Some(&(
+                "dismissed.W".to_string(),
+                Some(serde_json::json!({"ci": 800}))
+            )),
+            "saved under the CI key, at the failed check's start"
+        );
+        let data = core.data.clone().unwrap_or_default();
+        let menu = core.session.card_menu(&data, data.ws_by_id("W"));
+        let restore = |m: &crate::menu::MenuItem| matches!(m, crate::menu::MenuItem::Item { label, .. } if label == "Restore needs you");
+        assert!(menu.iter().any(restore));
+        // Frames go on, a session works on it and stops again: still out.
+        ci_frame(&mut core, 1500.0, WORKING);
+        ci_frame(&mut core, 1600.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        // A rerun fails again, a later start: it waits again.
+        core.session.saved = crate::persist::SavedState::from_json(
+            r#"{"dismissed": {"W": {"ci": 800}}, "prs": {"W": {"number": 12,
+                "url": "https://github.com/o/r/pull/12", "status": "open", "branch": "feat",
+                "title": "Docs layout", "checks": [{"name": "build", "state": "fail", "started": 1550}]}}}"#,
+        )
+        .unwrap();
+        ci_frame(&mut core, 1700.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 1);
+        assert_eq!(
+            core.session.dismissed.get("W"),
+            None,
+            "the old dismissal is let go"
+        );
+    }
+
+    #[test]
+    fn red_ci_with_no_session_left_waits_on_a_stand_in() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = ci_core(1020.0, "", FAILED, "");
+        let (card, needs) = w_card(&mut core);
+        assert_eq!(needs.count, 1);
+        assert_eq!(card.waiting, Some(Waiting::of(false)));
+        assert_eq!(w_line(&mut core), "CI failed on Docs layout, nobody fixing");
+        assert_eq!(card.age, "3m", "from the failed check's start");
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert_eq!(w_kind(&mut core), StatusKind::Plain(Status::None));
+    }
+
+    #[test]
+    fn an_asleep_workspace_never_waits_on_its_ci() {
+        let asleep = r#""asleep": {"W": {"surfaces": ["S"], "since": 1000}},"#;
+        let mut core = ci_core(1020.0, IDLE, FAILED, asleep);
+        assert_eq!(w_card(&mut core).1.count, 0);
+    }
+
+    #[test]
+    fn saved_checks_from_before_the_times_still_load_and_never_read_stuck() {
+        let old = r#"[{"name": "mac", "state": "pending"}]"#;
+        let mut core = ci_core(1e10, IDLE, old, "");
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert_eq!(w_pr(&mut core), "#12 · running");
+        let red = r#"[{"name": "build", "state": "fail"}]"#;
+        let mut core = ci_core(1020.0, IDLE, red, "");
+        assert_eq!(w_line(&mut core), "CI failed on Docs layout, nobody fixing");
     }
 
     #[test]

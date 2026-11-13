@@ -808,7 +808,7 @@
               },
               {
                 "Item": {
-                  "label": "Dismiss needs you",
+                  "label": "Restore needs you",
                   "action": "ToggleNeeds"
                 }
               }

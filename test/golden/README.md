@@ -25,7 +25,7 @@ renamed or dropped here is a breaking change there.
 | `lanes` | A card in every state across the four lane groups and Unsorted, a folded Parked lane, a selected card, merged PRs, a background shell and agent keeping an idle card at Running. |
 | `needs-and-next` | Five sessions waiting (the strip's cap of four plus "+N more"), saved asks and moves, a Ready card, and the Next queue. No lane groups, so every card is Unsorted. |
 | `projects` | The Projects view: cards under two projects and Other, a waiting session's placeholder, a quiet project. |
-| `review-verdicts` | The For review lane with a PR in every merge state, and the header's "N ready to merge". |
+| `review-verdicts` | The For review lane with a PR in every merge state, and the header's "N ready to merge". Nothing waits: the failing PR's CI wait (issue #377) is dismissed. |
 
 ## `<scene>.input.json`
 
@@ -75,7 +75,7 @@ What the scene starts from: the three things the sidebar reads.
 | `state.background` | object, optional | wsId to the background work its chats run (docs/state-loop.md, Background work): `id`, `type` ("shell", "subagent", "session" and the rest), `status`, `description`, `session` (the chat that listed it), `startedEpoch`, `seenEpoch`. The card's Running status reads it. |
 | `state.ui` | object | `mode` ("all" or "projects", optional) and `collapsed` (optional: "lane:<key>" or "project:<key>" to 1 folded, 0 unfolded). |
 | `state.poll` | object, optional | How the PR poller's last runs went: `okEpoch` (its last success) and `error` ("unavailable", "signed-out" or "missing"). Unset in every scene here. |
-| `state.dismissed` | object | wsId to agent id to the start of a dismissed ask. |
+| `state.dismissed` | object | wsId to agent id to the start of a dismissed ask; the key `ci` holds a dismissed CI wait's check time (issue #377). |
 | `state.projectOverride` | object | wsId to the project key chosen by "Move to project". |
 | `state.projects` | object | Project key to a project made or edited in the sidebar. |
 | `state.ownPrs`, `state.subagents`, `state.names`, `state.published`, `state.prOrigins` | object | Saved for the agents sidebar; empty in every scene here. |

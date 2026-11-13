@@ -15,6 +15,7 @@ pub mod background;
 pub mod by_project;
 pub mod card_chips;
 pub mod chips;
+pub mod ci_wait;
 pub mod data;
 pub mod edit;
 pub mod filter;

@@ -127,6 +127,14 @@ pub struct Agent {
         skip_serializing_if = "Option::is_none"
     )]
     pub stopped: Option<crate::stopped::Stop>,
+    /// What is wrong with its workspace's PR's CI, while that waits on
+    /// Jon with nobody on it (ci_wait.rs): set by the core on the agent as
+    /// the sidebars show it, never by cmux or the runner.
+    #[serde(
+        deserialize_with = "crate::lenient::field",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ci: Option<crate::ci_wait::CiTrouble>,
 }
 
 impl Agent {

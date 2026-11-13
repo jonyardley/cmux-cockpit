@@ -1,6 +1,7 @@
 //! An agent's status in words, one copy for both sidebars (issue #82;
 //! src/shared/words.ts).
 
+use crate::ci_wait::CiTrouble;
 use crate::data::AgentStatus;
 use crate::persist::TaskType;
 use crate::stopped::StopCause;
@@ -48,6 +49,23 @@ pub fn stop_words(cause: StopCause, silent_for: &str) -> String {
         StopCause::Error => format!("{STOPPED_WORD} on an error"),
         StopCause::Gone => format!("{STOPPED_WORD} mid-turn"),
         StopCause::Silent => with_age(&format!("{STOPPED_WORD}, silent"), silent_for),
+    }
+}
+
+/// CI stuck too long on a PR nobody is on (issue #377).
+pub const CI_STUCK_WORD: &str = "CI stuck";
+
+/// CI failed on a PR nobody is on (issue #377).
+pub const CI_FAILED_WORD: &str = "CI failed";
+
+/// What a CI wait says, in the closing line's shape, naming the PR by
+/// its title or number: "CI stuck 40m on Docs layout: rerun?" with how
+/// long the stuck check has waited or run, or "CI failed on Docs layout,
+/// nobody fixing".
+pub fn ci_words(trouble: CiTrouble, pr: &str, stuck_for: &str) -> String {
+    match trouble {
+        CiTrouble::Stuck => format!("{} on {pr}: rerun?", with_age(CI_STUCK_WORD, stuck_for)),
+        CiTrouble::Failing => format!("{CI_FAILED_WORD} on {pr}, nobody fixing"),
     }
 }
 

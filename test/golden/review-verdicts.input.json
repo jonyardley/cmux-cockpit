@@ -27,7 +27,7 @@
   ],
   "state": {
     "asking": {},
-    "dismissed": {},
+    "dismissed": { "failing": { "ci": 999000 } },
     "moves": {},
     "names": {},
     "ownPrs": {},
@@ -74,7 +74,7 @@
       },
       "failing": {
         "branch": "feat-3",
-        "checks": [{ "name": "build", "state": "fail" }],
+        "checks": [{ "name": "build", "state": "fail", "started": 999000 }],
         "mergeable": true,
         "number": 3,
         "status": "open",

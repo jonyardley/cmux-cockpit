@@ -5,6 +5,7 @@
 use std::collections::HashMap;
 
 use crate::activity::most_active;
+use crate::ci_wait::CiTrouble;
 use crate::data::{Agent, AgentStatus, Data, Workspace};
 use crate::js::{non_empty, positive, truthy};
 use crate::moves::{chat_quiet_move, waiting_move};
@@ -13,13 +14,14 @@ use crate::persist::{SavedMove, is_move_description, without_context};
 use crate::prs::{PrHealth, PrSummary, pr_health};
 use crate::running::{Running, running_work, shows_running};
 use crate::session::Session;
-use crate::text::{card_message, clip, one_line, readable};
+use crate::text::{card_message, clip, one_line, readable, whole_words};
 use crate::theme::Token;
 use crate::time::{age_since, finished_at};
 use crate::ui::{PillColors, URGENCY_RANK, Urgency, count_tint};
 use crate::words::{
-    ASKING_WORD, ASLEEP_WORD, MERGE_READY_WORD, NO_AGENT_WORD, RUNNING_WORD, STOPPED_WORD,
-    WAKING_WORD, YOU_WORD, running_text, status_word, stop_words, with_age, with_detail,
+    ASKING_WORD, ASLEEP_WORD, CI_FAILED_WORD, CI_STUCK_WORD, MERGE_READY_WORD, NO_AGENT_WORD,
+    RUNNING_WORD, STOPPED_WORD, WAKING_WORD, YOU_WORD, ci_words, running_text, status_word,
+    stop_words, with_age, with_detail,
 };
 
 /// A workspace's status: its agent's, or none.
@@ -78,6 +80,9 @@ pub enum StatusKind {
     /// Stopped without handing back: an error, its process gone mid-turn,
     /// or silent too long (issue #376, stopped.rs). Your turn's clay.
     Stopped,
+    /// Its PR's CI is stuck or failing with nobody on it (issue #377,
+    /// ci_wait.rs). Your turn's clay, as Stopped.
+    Ci(CiTrouble),
     /// Still working, but silent a while.
     Quiet,
     /// Idle while background work of any kind its chat started still
@@ -161,6 +166,13 @@ impl StatusKind {
             },
             StatusKind::Stopped => StatusStyle {
                 label: STOPPED_WORD,
+                ..plain_style(&Status::NeedsInput)
+            },
+            StatusKind::Ci(trouble) => StatusStyle {
+                label: match trouble {
+                    CiTrouble::Stuck => CI_STUCK_WORD,
+                    CiTrouble::Failing => CI_FAILED_WORD,
+                },
                 ..plain_style(&Status::NeedsInput)
             },
             StatusKind::Asking => StatusStyle {
@@ -305,6 +317,13 @@ fn own_description(w: Option<&Workspace>) -> String {
     } else {
         readable(d.map(without_context))
     }
+}
+
+/// Whether `a`, as the sidebars show it, waits on Jon in words of its
+/// own rather than a move or an ask: it stopped (stopped.rs), or carries
+/// its workspace's CI (ci_wait.rs).
+fn speaks_for_itself(a: &Agent) -> bool {
+    a.stopped.is_some() || a.ci.is_some()
 }
 
 /// When the status of `a`, the workspace's agent as shown, began.
@@ -562,6 +581,9 @@ impl Session {
         if a.is_some_and(|a| a.stopped.is_some()) {
             return StatusKind::Stopped;
         }
+        if let Some(trouble) = a.and_then(|a| a.ci) {
+            return StatusKind::Ci(trouble);
+        }
         if self.ready_with(data, w, card).is_some() {
             return StatusKind::Ready;
         }
@@ -645,7 +667,8 @@ impl Session {
     pub fn move_of(&mut self, w: Option<&Workspace>) -> Option<SavedMove> {
         let a = self.agent_of(w);
         // A stopped turn ended on no move: an older one asks nothing now.
-        if a.as_ref().is_some_and(|a| a.stopped.is_some()) {
+        // Nor does a finished one's while it carries its CI.
+        if a.as_ref().is_some_and(speaks_for_itself) {
             return None;
         }
         let asking = ask_reason(&self.saved, a.as_ref(), w).is_some();
@@ -653,18 +676,32 @@ impl Session {
     }
 
     /// What a stopped card says ahead of its detail, "Stopped on an
-    /// error", or None when the card's agent has not stopped (or Jon
+    /// error", or a CI wait's whole line, "CI failed on Docs layout,
+    /// nobody fixing"; None when the card's agent has neither (or Jon
     /// dismissed it).
     pub fn stop_words_of(&mut self, data: &Data, w: Option<&Workspace>) -> Option<String> {
-        let stop = self.agent_of(w)?.stopped?;
-        Some(stop_words(stop.cause, &age_since(data, Some(stop.since))))
+        let a = self.agent_of(w)?;
+        if let Some(stop) = a.stopped {
+            return Some(stop_words(stop.cause, &age_since(data, Some(stop.since))));
+        }
+        let trouble = a.ci?;
+        let ci = self.ci_shown(w)?;
+        let pr = whole_words(&clip(&ci.pr, NEEDS_DETAIL_MAX), NEEDS_DETAIL_MAX);
+        Some(ci_words(trouble, &pr, &age_since(data, Some(ci.key))))
     }
 
     /// A waiting card's reason: why the agent asks, else what it
     /// wants, else its latest message. A stopped one's is its last words
     /// alone, "" with none: its stop says the rest.
     pub fn needs_detail(&mut self, w: Option<&Workspace>) -> String {
-        if self.agent_of(w).is_some_and(|a| a.stopped.is_some()) {
+        let a = self.agent_of(w);
+        // A CI wait's words say it all.
+        if a.as_ref()
+            .is_some_and(|a| a.stopped.is_none() && a.ci.is_some())
+        {
+            return String::new();
+        }
+        if a.is_some_and(|a| a.stopped.is_some()) {
             return one_line(Some(&card_message(w)), NEEDS_DETAIL_MAX);
         }
         if let Some(ask) = self.ask_of(w) {
@@ -687,7 +724,7 @@ impl Session {
     /// True when the waiting chat's reply had no "Your move" label, so its
     /// line is the reply's last line, quoted bare and grey (SavedMove::unlabelled).
     pub fn unlabelled(&mut self, w: Option<&Workspace>) -> bool {
-        if self.agent_of(w).is_some_and(|a| a.stopped.is_some()) {
+        if self.agent_of(w).as_ref().is_some_and(speaks_for_itself) {
             return false;
         }
         self.ask_of(w).is_none() && self.move_of(w).is_some_and(|m| m.unlabelled == Some(true))

@@ -74,7 +74,7 @@ pub enum SavedProject {
 
 /// One CI check as the poller saves it: its name, its state ("pass",
 /// "fail" or "pending"), and, so the core can time a check that hangs
-/// (prs.rs `stuck_since`), when it was queued and when it started, in
+/// (prs.rs `stuck`), when it was queued and when it started, in
 /// epoch seconds. A state file from before the times were kept reads
 /// with none.
 #[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]

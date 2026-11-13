@@ -19,7 +19,7 @@ use crate::text::clean_title;
 pub enum PrHealth {
     Failing,
     Conflicts,
-    /// A check has waited for a runner, or run, too long (`stuck_since`).
+    /// A check has waited for a runner, or run, too long (`stuck`).
     Stuck,
     Running,
     Ready,
@@ -200,31 +200,43 @@ pub const QUEUED_STUCK_SECS: f64 = 10.0 * 60.0;
 /// A check running this long or more is stuck. To tune.
 pub const RUNNING_STUCK_SECS: f64 = 45.0 * 60.0;
 
-/// When the longest stuck of `checks` was queued or started, at epoch
-/// `now`: a check still running `RUNNING_STUCK_SECS` or more after it
-/// started, or still waiting for a runner `QUEUED_STUCK_SECS` or more
-/// after it was queued. None when none is, or a check carries no time
-/// (a state file from before the times were kept). The time is the
-/// check's own, never the clock's, so it holds from frame to frame and
-/// changes only with a new run.
-pub fn stuck_since(checks: &[SavedCheck], now: f64) -> Option<f64> {
+/// A stuck check: when it was queued, or started when it is running.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Stuck {
+    pub since: f64,
+    pub running: bool,
+}
+
+/// The longest stuck of `checks` at epoch `now`: a check still running
+/// `RUNNING_STUCK_SECS` or more after it started, or still waiting for a
+/// runner `QUEUED_STUCK_SECS` or more after it was queued. None when none
+/// is, or a check carries no time (a state file from before the times
+/// were kept). The time is the check's own, never the clock's, so it
+/// holds from frame to frame and changes only with a new run.
+pub fn stuck(checks: &[SavedCheck], now: f64) -> Option<Stuck> {
     let positive = |t: Option<f64>| t.filter(|t| *t > 0.0);
     checks
         .iter()
         .filter(|c| c.state == "pending")
         .filter_map(|c| match (positive(c.started), positive(c.queued)) {
-            (Some(started), _) => (now - started >= RUNNING_STUCK_SECS).then_some(started),
-            (None, Some(queued)) => (now - queued >= QUEUED_STUCK_SECS).then_some(queued),
+            (Some(since), _) => (now - since >= RUNNING_STUCK_SECS).then_some(Stuck {
+                since,
+                running: true,
+            }),
+            (None, Some(since)) => (now - since >= QUEUED_STUCK_SECS).then_some(Stuck {
+                since,
+                running: false,
+            }),
             (None, None) => None,
         })
-        .min_by(f64::total_cmp)
+        .min_by(|a, b| a.since.total_cmp(&b.since))
 }
 
 /// `health_of` at epoch `now`: running checks of which one is stuck
 /// read as stuck.
 pub fn health_at(pr: &PullRequest, checks: &[SavedCheck], now: f64) -> PrHealth {
     match health_of(pr, checks) {
-        PrHealth::Running if stuck_since(checks, now).is_some() => PrHealth::Stuck,
+        PrHealth::Running if stuck(checks, now).is_some() => PrHealth::Stuck,
         health => health,
     }
 }
@@ -575,6 +587,11 @@ mod tests {
         assert_eq!(PrHealth::Ready.as_str(), "ready");
     }
 
+    /// When the longest stuck of `checks` was queued or started.
+    fn since_of(checks: &[SavedCheck], now: f64) -> Option<f64> {
+        stuck(checks, now).map(|s| s.since)
+    }
+
     /// A pending check queued at `queued` and started at `started`.
     fn waiting(queued: Option<f64>, started: Option<f64>) -> SavedCheck {
         SavedCheck {
@@ -588,8 +605,14 @@ mod tests {
     #[test]
     fn a_check_queued_ten_minutes_is_stuck() {
         let queued = [waiting(Some(1000.0), None)];
-        assert_eq!(stuck_since(&queued, 1000.0 + 599.0), None);
-        assert_eq!(stuck_since(&queued, 1000.0 + 600.0), Some(1000.0));
+        assert_eq!(since_of(&queued, 1000.0 + 599.0), None);
+        assert_eq!(
+            stuck(&queued, 1000.0 + 600.0),
+            Some(Stuck {
+                since: 1000.0,
+                running: false
+            })
+        );
         let open = PullRequest {
             number: Some(9.0),
             status: Some(PrStatus::Open),
@@ -610,11 +633,17 @@ mod tests {
     fn a_check_running_past_45_minutes_is_stuck() {
         let running = [waiting(Some(900.0), Some(1000.0))];
         assert_eq!(
-            stuck_since(&running, 1000.0 + 2699.0),
+            since_of(&running, 1000.0 + 2699.0),
             None,
             "queued long ago, but running"
         );
-        assert_eq!(stuck_since(&running, 1000.0 + 2700.0), Some(1000.0));
+        assert_eq!(
+            stuck(&running, 1000.0 + 2700.0),
+            Some(Stuck {
+                since: 1000.0,
+                running: true
+            })
+        );
         // The longest stuck leads; a finished check or one with no time never is.
         let mixed = [
             waiting(Some(500.0), None),
@@ -625,9 +654,9 @@ mod tests {
                 ..check_in("pass")
             },
         ];
-        assert_eq!(stuck_since(&mixed, 5000.0), Some(500.0));
+        assert_eq!(since_of(&mixed, 5000.0), Some(500.0));
         assert_eq!(
-            stuck_since(&[waiting(None, None)], 1e10),
+            since_of(&[waiting(None, None)], 1e10),
             None,
             "old saved data"
         );
