@@ -691,7 +691,7 @@ while a session beside it ending, which moves the card's age, does not.
 When the wait leaves Needs you (answered, fixed, merged, dismissed, put
 to sleep, or the card closed or gone from this window), the notification
 is taken down, and the dock badge drops with it. A card that comes back
-with the same wait within a week does not post it again. The rules are
+with the same wait within a week of that does not post it again. The rules are
 `native/core/src/notify.rs`.
 
 ### Running
