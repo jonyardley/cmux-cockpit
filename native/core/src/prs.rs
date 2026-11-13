@@ -207,12 +207,25 @@ pub struct Stuck {
     pub running: bool,
 }
 
-/// The longest stuck of `checks` at epoch `now`: a check still running
-/// `RUNNING_STUCK_SECS` or more after it started, or still waiting for a
-/// runner `QUEUED_STUCK_SECS` or more after it was queued. None when none
-/// is, or a check carries no time (a state file from before the times
-/// were kept). The time is the check's own, never the clock's, so it
-/// holds from frame to frame and changes only with a new run.
+impl Stuck {
+    /// When it went stuck: its time plus its own limit.
+    pub fn went_stuck(&self) -> f64 {
+        self.since
+            + if self.running {
+                RUNNING_STUCK_SECS
+            } else {
+                QUEUED_STUCK_SECS
+            }
+    }
+}
+
+/// The longest stuck of `checks` at epoch `now`, the one that went stuck
+/// first: a check still running `RUNNING_STUCK_SECS` or more after it
+/// started, or still waiting for a runner `QUEUED_STUCK_SECS` or more
+/// after it was queued. None when none is, or a check carries no time (a
+/// state file from before the times were kept). The time is the check's
+/// own, never the clock's, so it holds from frame to frame and changes
+/// only with a new run; a check going stuck later never displaces it.
 pub fn stuck(checks: &[SavedCheck], now: f64) -> Option<Stuck> {
     let positive = |t: Option<f64>| t.filter(|t| *t > 0.0);
     checks
@@ -229,7 +242,7 @@ pub fn stuck(checks: &[SavedCheck], now: f64) -> Option<Stuck> {
             }),
             (None, None) => None,
         })
-        .min_by(|a, b| a.since.total_cmp(&b.since))
+        .min_by(|a, b| a.went_stuck().total_cmp(&b.went_stuck()))
 }
 
 /// `health_of` at epoch `now`: running checks of which one is stuck
@@ -668,6 +681,26 @@ mod tests {
             ..PullRequest::default()
         };
         assert_eq!(health_at(&conflicted, &running, 1e10), PrHealth::Conflicts);
+    }
+
+    #[test]
+    fn the_check_that_went_stuck_first_leads_whichever_kind() {
+        // Queued at 1000, stuck from 1600; running since 500, stuck from 3200.
+        let checks = [
+            waiting(Some(1000.0), None),
+            waiting(Some(400.0), Some(500.0)),
+        ];
+        let queued = Stuck {
+            since: 1000.0,
+            running: false,
+        };
+        assert_eq!(stuck(&checks, 1600.0), Some(queued));
+        assert_eq!(
+            stuck(&checks, 3300.0),
+            Some(queued),
+            "the running one going stuck later moves nothing"
+        );
+        assert_eq!(queued.went_stuck(), 1600.0);
     }
 
     fn check_in(state: &str) -> SavedCheck {

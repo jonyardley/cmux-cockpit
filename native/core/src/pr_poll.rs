@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::data::{Data, PrStatus, PullRequest, Workspace};
 use crate::js::non_empty;
-use crate::persist::{SavedCheck, SavedPr};
+use crate::persist::{SavedCheck, SavedPr, UNTIMED};
 use crate::prs::{PrHealth, health_of};
 
 /// The shortest wait between two asks for one directory.
@@ -273,9 +273,9 @@ impl Target {
 }
 
 /// Gives each check of `pr` still waiting for a runner with no queue time
-/// from GitHub the one the poll saw it waiting since: the time `before`
-/// (the same PR as last answered, or as the state file holds it after a
-/// restart) had for a waiting check of that name, else `now`, when the
+/// from GitHub (`UNTIMED`) the one the poll saw it waiting since: the
+/// time `before` (the same PR as last answered, or as the state file holds
+/// it after a restart) had for a waiting check of that name, else `now`, when the
 /// poll first saw it. So the clock on a check stuck in the queue runs from
 /// the first answer that showed it, and holds from answer to answer.
 fn stamp_queued(pr: &mut SavedPr, before: Option<&SavedPr>, now: f64) {
@@ -289,7 +289,7 @@ fn stamp_queued(pr: &mut SavedPr, before: Option<&SavedPr>, now: f64) {
             .queued
     };
     for check in pr.checks.iter_mut().flatten() {
-        if waiting(check) && check.queued.is_none() {
+        if waiting(check) && check.queued == Some(UNTIMED) {
             check.queued = Some(earlier(&check.name).unwrap_or(now));
         }
     }
@@ -810,9 +810,13 @@ mod tests {
         let mut p = on();
         assert!(p.writes(&d, "/a").is_empty(), "nothing answered yet");
         let _ = p.due(&d, 0.0);
-        p.record(answered("/a", Some(pr(&["pending"])), 0.0));
+        let untimed = queued_at(pr(&["pending"]), &[Some(UNTIMED)]);
+        p.record(PrPolled {
+            epoch: 5.0,
+            ..answered("/a", Some(untimed), 0.0)
+        });
         // The waiting check is written with when the poll first saw it.
-        let stamped = queued_at(pr(&["pending"]), &[Some(0.0)]);
+        let stamped = queued_at(pr(&["pending"]), &[Some(5.0)]);
         let want: BTreeMap<String, Option<SavedPr>> = [
             ("a".to_string(), Some(stamped.clone())),
             ("b".to_string(), Some(stamped.clone())),
@@ -859,8 +863,12 @@ mod tests {
     fn times_a_waiting_check_from_when_the_poll_first_saw_it() {
         let d = data(vec![ws("a", "/a")]);
         let mut p = on();
-        // c0 waits with no time from GitHub, c1 has one, c2 is running.
-        let mut first = queued_at(pr(&["pending", "pending", "pending"]), &[None, Some(5.0)]);
+        // c0 waits for a runner with no time from GitHub, c1 has one, c2
+        // is running, and c3 is held at a gate, waiting for an approval.
+        let mut first = queued_at(
+            pr(&["pending", "pending", "pending", "pending"]),
+            &[Some(UNTIMED), Some(5.0)],
+        );
         if let Some(c) = first.checks.as_mut().and_then(|c| c.get_mut(2)) {
             c.started = Some(8.0);
         }
@@ -874,12 +882,12 @@ mod tests {
                 .map(|c| c.queued)
                 .collect::<Vec<_>>()
         };
-        assert_eq!(times(&p), [Some(100.0), Some(5.0), None]);
+        assert_eq!(times(&p), [Some(100.0), Some(5.0), None, None]);
 
         // The next answer, still waiting, keeps the first sighting.
         let _ = p.due(&d, 130.0);
         p.record(answered("/a", Some(first.clone()), 130.0));
-        assert_eq!(times(&p), [Some(100.0), Some(5.0), None]);
+        assert_eq!(times(&p), [Some(100.0), Some(5.0), None, None]);
 
         // After a restart the state file's time carries on.
         let mut fresh = on();
@@ -888,14 +896,14 @@ mod tests {
         fresh.file_read(&file, Some(&d));
         let _ = fresh.due(&d, 900.0);
         fresh.record(answered("/a", Some(first.clone()), 900.0));
-        assert_eq!(times(&fresh), [Some(100.0), Some(5.0), None]);
+        assert_eq!(times(&fresh), [Some(100.0), Some(5.0), None, None]);
 
         // Another PR on the branch is a new wait.
         let _ = p.due(&d, 400.0);
         let mut other = first;
         other.url = "https://github.com/o/r/pull/8".into();
         p.record(answered("/a", Some(other), 400.0));
-        assert_eq!(times(&p), [Some(400.0), Some(5.0), None]);
+        assert_eq!(times(&p), [Some(400.0), Some(5.0), None, None]);
     }
 
     /// An answer for `/a` to the ask made at `asked`.

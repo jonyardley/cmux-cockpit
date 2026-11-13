@@ -1826,6 +1826,98 @@ mod tests {
     }
 
     #[test]
+    fn a_ci_dismissal_outlasts_a_frame_where_the_pr_cannot_be_read() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = ci_core(1020.0, IDLE, FAILED, "");
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        // cmux reports W before its branch settles: no saved PR matches.
+        let unsettled = ci_data(1030.0, IDLE);
+        let mut unsettled: serde_json::Value = serde_json::to_value(&unsettled).unwrap();
+        unsettled["workspaces"][0]["branch"] = "main".into();
+        let unsettled: Data = serde_json::from_value(unsettled).unwrap();
+        let _effects = Cockpit.update(Event::Data(unsettled), &mut core);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        // Back on its branch with the same red checks: still dismissed.
+        ci_frame(&mut core, 1040.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 0, "the dismissal held");
+        // The PR read with no checks says nothing either way: kept.
+        let with_checks = |checks: &str| {
+            crate::persist::SavedState::from_json(&format!(
+                r#"{{"dismissed": {{"W": {{"ci": 800}}}}, "prs": {{"W": {{"number": 12,
+                "url": "https://github.com/o/r/pull/12", "status": "open", "branch": "feat",
+                "title": "Docs layout"{checks}}}}}}}"#
+            ))
+            .unwrap()
+        };
+        core.session.saved = with_checks("");
+        ci_frame(&mut core, 1050.0, IDLE);
+        assert!(core.session.dismissed.contains_key("W"), "no checks: kept");
+        // Checks read and green: let go.
+        core.session.saved =
+            with_checks(r#", "checks": [{"name": "build", "state": "pass", "started": 900}]"#);
+        ci_frame(&mut core, 1060.0, IDLE);
+        assert_eq!(core.session.dismissed.get("W"), None, "green lets it go");
+    }
+
+    #[test]
+    fn only_the_agent_the_card_speaks_through_carries_the_ci_wait() {
+        let ended = r#"{"id": "e", "kind": "claude", "status": "ended", "sinceEpoch": 500,
+            "lastActivityAt": 500, "surfaceId": "S1", "tabTitle": "old"}"#;
+        let idle = IDLE.replace('}', r#", "surfaceId": "S2", "tabTitle": "live"}"#);
+        let mut core = ci_core(1020.0, &format!("{ended}, {idle}"), FAILED, "");
+        let data = core.data.clone().unwrap_or_default();
+        let w = data.ws_by_id("W");
+        let shown: Vec<(String, Option<AgentStatus>, Option<CiTrouble>)> = core
+            .session
+            .agents_of(w)
+            .into_iter()
+            .map(|a| (a.id, a.status, a.ci))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("e".to_string(), Some(AgentStatus::Ended), None),
+                (
+                    "c".to_string(),
+                    Some(AgentStatus::NeedsInput),
+                    Some(CiTrouble::Failing)
+                ),
+            ],
+            "the ended one stays ended"
+        );
+        assert_eq!(
+            core.session.agent_tab_of(w),
+            None,
+            "one live session, no tab line"
+        );
+        let ended_agent = w
+            .and_then(|w| w.agent_list().find(|a| a.id == "e"))
+            .cloned();
+        assert_eq!(
+            ended_agent.map(|a| core.session.effective_agent(&a, w).status),
+            Some(Some(AgentStatus::Ended)),
+            "effective_agent agrees"
+        );
+        assert_eq!(w_line(&mut core), "CI failed, nobody fixing: Docs layout");
+        // Every session ended: the latest carries it.
+        let older = ended
+            .replace(r#""id": "e""#, r#""id": "f""#)
+            .replace("500", "400");
+        let mut gone = ci_core(1020.0, &format!("{older}, {ended}"), FAILED, "");
+        let data = gone.data.clone().unwrap_or_default();
+        let carriers: Vec<String> = gone
+            .session
+            .agents_of(data.ws_by_id("W"))
+            .into_iter()
+            .filter(|a| a.ci.is_some())
+            .map(|a| a.id)
+            .collect();
+        assert_eq!(carriers, ["e"]);
+        assert_eq!(w_card(&mut gone).1.count, 1);
+    }
+
+    #[test]
     fn dismissing_another_wait_keeps_the_ci_dismissal() {
         use crate::{Cockpit, Event};
         use crux_core::App;

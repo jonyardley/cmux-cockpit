@@ -11,7 +11,7 @@ use serde_json::{Map, Value};
 
 use super::{GhFailure, PollAnswer};
 use crate::data::PrStatus;
-use crate::persist::{SavedCheck, SavedPr};
+use crate::persist::{SavedCheck, SavedPr, UNTIMED};
 use crate::time::iso_epoch;
 
 /// The fields the PR pick reads (pickPr in scripts/pr-poll.ts reads the same).
@@ -320,12 +320,15 @@ fn gh_time(at: &str) -> Option<f64> {
 }
 
 /// When a check was queued and when it started, as far as gh says. A
-/// check run waiting for a runner (any status but in progress or
-/// completed) is queued: GitHub stamps its `startedAt` when it is made,
-/// and moves it to the real start once it runs (seen on #385), so the
-/// status says which time it is. With no time, the poll stamps when it
-/// first saw it waiting (pr_poll.rs). A status context has no queue: it
-/// started when it was made.
+/// check run waiting for a runner (queued or requested) is queued: GitHub
+/// stamps its `startedAt` when it is made, and moves it to the real start
+/// once it runs (seen on #385), so the status says which time it is. With
+/// no time it is queued at 0, `UNTIMED`, for the poll to stamp with when
+/// it first saw it waiting (pr_poll.rs). A run held at a gate (waiting for
+/// an approval, or pending behind another run in its concurrency group)
+/// waits for a person or another run, not a runner, so it carries no time
+/// and never reads stuck. A status context has no queue: it started when
+/// it was made.
 fn check_times(c: &Map<String, Value>, started_at: &str) -> (Option<f64>, Option<f64>) {
     let at = gh_time(started_at);
     if text(c, "__typename") == Some("StatusContext") {
@@ -333,7 +336,8 @@ fn check_times(c: &Map<String, Value>, started_at: &str) -> (Option<f64>, Option
     }
     match text(c, "status") {
         Some("IN_PROGRESS" | "COMPLETED") => (None, at),
-        _ => (at, None),
+        Some("QUEUED" | "REQUESTED") => (Some(at.unwrap_or(UNTIMED)), None),
+        _ => (None, None),
     }
 }
 
@@ -568,7 +572,9 @@ mod tests {
             {"__typename": "CheckRun", "name": "linux", "status": "QUEUED", "startedAt": "2026-11-13T12:00:00Z"},
             {"__typename": "CheckRun", "name": "check", "status": "IN_PROGRESS", "startedAt": "2026-11-13T12:01:00Z"},
             {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-11-13T11:59:00Z"},
-            {"__typename": "StatusContext", "context": "deploy", "state": "PENDING", "startedAt": "2026-11-13T12:02:00Z"}
+            {"__typename": "StatusContext", "context": "deploy", "state": "PENDING", "startedAt": "2026-11-13T12:02:00Z"},
+            {"__typename": "CheckRun", "name": "approve", "status": "WAITING", "startedAt": "2026-11-13T12:00:00Z"},
+            {"__typename": "CheckRun", "name": "behind", "status": "PENDING", "startedAt": "0001-01-01T00:00:00Z"}
         ]"#,
         )
         .unwrap();
@@ -582,13 +588,15 @@ mod tests {
         assert_eq!(
             times,
             [
+                at("approve", None, None),
+                at("behind", None, None),
                 at("check", None, Some(noon + 60.0)),
                 at("deploy", None, Some(noon + 120.0)),
                 at("lint", None, Some(noon - 60.0)),
                 at("linux", Some(noon), None),
-                at("mac", None, None),
+                at("mac", Some(UNTIMED), None),
             ],
-            "a queued run with no time is stamped by the poll, not here"
+            "a queued run with no time is stamped by the poll, not here; a gated one never"
         );
     }
 

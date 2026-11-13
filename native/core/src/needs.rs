@@ -17,7 +17,7 @@ use indexmap::IndexMap;
 use serde_json::{Map, Value};
 
 use crate::activity::since_or_activity;
-use crate::ci_wait::CI_KEY;
+use crate::ci_wait::{CI_KEY, ci_carrier};
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::js::{json_num, truthy};
 use crate::moves::{asks_nothing, quiet_turn, waiting_move};
@@ -207,15 +207,20 @@ impl Session {
     /// dismissal is saved under and when it began: its agents' asks, turns
     /// and stops, and its CI's wait (ci_wait.rs).
     fn waits(&self, w: &Workspace) -> IndexMap<String, f64> {
-        let mut waits: IndexMap<String, f64> = self
-            .asking(Some(w))
-            .into_iter()
-            .map(|a| (a.id.clone(), self.wait_start_of(a, Some(w))))
-            .collect();
+        let mut waits = self.agent_waits(w);
         if let Some(ci) = self.ci_waiting(w) {
             waits.insert(CI_KEY.to_string(), ci.key);
         }
         waits
+    }
+
+    /// The agent half of `waits`: each agent really asking, by its id,
+    /// and when its wait began.
+    fn agent_waits(&self, w: &Workspace) -> IndexMap<String, f64> {
+        self.asking(Some(w))
+            .into_iter()
+            .map(|a| (a.id.clone(), self.wait_start_of(a, Some(w))))
+            .collect()
     }
 
     /// Whether Jon dismissed `a`'s needs_input or waiting turn, with that
@@ -237,21 +242,20 @@ impl Session {
         if !self.dismissed.contains_key(&w.id) {
             return;
         }
-        let live: IndexMap<String, f64> = self
-            .asking(Some(w))
-            .into_iter()
-            .map(|a| (a.id.clone(), self.wait_start_of(a, Some(w))))
-            .collect();
+        let live = self.agent_waits(w);
         // CI's dismissal holds while its trouble does, whoever is on it,
-        // until the checks change; before the first read it is kept.
-        let ci = self.ci.get(&w.id).map(|ci| ci.key);
-        let ci_read = self.ci_read;
+        // until a read shows the checks changed (ci_wait.rs).
+        let ci_holds = self
+            .dismissed
+            .get(&w.id)
+            .and_then(|starts| starts.get(CI_KEY))
+            .is_none_or(|key| self.ci_dismissal_holds(w, *key));
         let Some(by_agent) = self.dismissed.get_mut(&w.id) else {
             return;
         };
         by_agent.retain(|id, start| {
             if id == CI_KEY {
-                return !ci_read || ci == Some(*start);
+                return ci_holds;
             }
             let reported = w.agent_list().any(|a| &a.id == id);
             !reported || live.get(id) == Some(start)
@@ -268,7 +272,11 @@ impl Session {
     /// A finished one carries its workspace's CI wait, when that shows
     /// (ci_wait.rs).
     pub fn effective_agent(&self, a: &Agent, w: Option<&Workspace>) -> Agent {
-        self.with_ci(self.own_agent(a, w), w)
+        let own = self.own_agent(a, w);
+        match w {
+            Some(w) if self.carries_ci(w, &a.id) => self.with_ci(own, Some(w)),
+            _ => own,
+        }
     }
 
     /// `effective_agent` before CI: the agent's own wait, or none.
@@ -328,10 +336,17 @@ impl Session {
     pub fn agents_of(&mut self, w: Option<&Workspace>) -> Vec<Agent> {
         let Some(w) = w else { return Vec::new() };
         self.prune(w);
-        let agents: Vec<Agent> = self
-            .shown_agents(w)
+        let own = self.shown_agents(w);
+        let carrier = ci_carrier(&own).map(str::to_string);
+        let agents: Vec<Agent> = own
             .into_iter()
-            .map(|a| self.with_ci(a, Some(w)))
+            .map(|a| {
+                if carrier.as_deref() == Some(a.id.as_str()) {
+                    self.with_ci(a, Some(w))
+                } else {
+                    a
+                }
+            })
             .collect();
         if agents.is_empty() {
             return self.ci_stand_in(Some(w)).into_iter().collect();

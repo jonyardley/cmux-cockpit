@@ -617,11 +617,16 @@ cuts the tail still says what is wrong:
 - "CI stuck 40m: rerun Docs layout?": a check has waited for a runner
   ten minutes or more (`QUEUED_STUCK_SECS`), or run 45 minutes or more
   (`RUNNING_STUCK_SECS`, both in `native/core/src/prs.rs`, to tune); the
-  time is how long that check has waited or run.
+  time is how long that check has waited or run. With several, the one
+  that went stuck first speaks. A run held at a gate (waiting for an
+  approval, or behind another run in its concurrency group) waits for a
+  person or another run, not a runner, and never reads stuck.
 
 The card's age counts from when the wait began: the later of the failure
 (or going stuck) and the last session going idle. A workspace with no
-session left shows the wait on a stand-in, so its card reads the same. A
+session left shows the wait on a stand-in, so its card reads the same,
+and only the session the card speaks through carries the wait: an ended
+one beside it stays ended. A
 session working on it keeps it out of Needs you, since that session owns
 the red; an asleep card never shows it. Dismissed, the card reads as it
 would without it, and stays dismissed while a session works on it and

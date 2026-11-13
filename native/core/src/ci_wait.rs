@@ -19,10 +19,11 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::activity::most_active;
 use crate::data::{Agent, AgentStatus, Data, PrStatus, Workspace};
 use crate::js::{num_text, truthy};
 use crate::persist::{SavedCheck, SavedState};
-use crate::prs::{QUEUED_STUCK_SECS, RUNNING_STUCK_SECS, checks_of, pr_of, stuck};
+use crate::prs::{checks_of, pr_of, stuck};
 use crate::session::Session;
 use crate::text::clean_title;
 use crate::time::now_epoch;
@@ -69,13 +70,7 @@ fn trouble_of(checks: &[SavedCheck], now: f64) -> Option<(CiTrouble, f64, f64)> 
         return Some((CiTrouble::Failing, key, key));
     }
     let s = stuck(checks, now)?;
-    let began = s.since
-        + if s.running {
-            RUNNING_STUCK_SECS
-        } else {
-            QUEUED_STUCK_SECS
-        };
-    Some((CiTrouble::Stuck, s.since, began))
+    Some((CiTrouble::Stuck, s.since, s.went_stuck()))
 }
 
 /// The CI trouble of the workspace's first PR at epoch `now`: an open
@@ -107,6 +102,20 @@ fn is_on_it(saved: &SavedState, data: &Data, w: &Workspace, a: &Agent) -> bool {
         }
         _ => false,
     }
+}
+
+fn finished(a: &Agent) -> bool {
+    matches!(a.status, Some(AgentStatus::Idle | AgentStatus::Ended))
+}
+
+/// The id of the agent among `own` (a workspace's agents as shown before
+/// CI) that carries its CI wait: the one the card speaks through
+/// (`most_active`), when it has finished. One only, so an ended session
+/// beside an idle one stays ended and counts as no live tab.
+pub(crate) fn ci_carrier(own: &[Agent]) -> Option<&str> {
+    most_active(own)
+        .filter(|a| finished(a))
+        .map(|a| a.id.as_str())
 }
 
 impl Session {
@@ -145,6 +154,26 @@ impl Session {
         self.ci_read = true;
     }
 
+    /// Whether a CI dismissal saved at `key` still holds for `w`: its
+    /// trouble is read with that key, or nothing says it changed. It lapses
+    /// only on what a read shows: trouble with another key, a PR no longer
+    /// open, or checks that give no trouble. A frame where the PR cannot be
+    /// read (before the first read, or cmux reporting the workspace before
+    /// its branch settles) or carries no checks keeps it.
+    pub(crate) fn ci_dismissal_holds(&self, w: &Workspace, key: f64) -> bool {
+        if !self.ci_read {
+            return true;
+        }
+        if let Some(ci) = self.ci.get(&w.id) {
+            return ci.key == key;
+        }
+        match pr_of(&self.saved, Some(w)).and_then(|pr| pr.status) {
+            Some(PrStatus::Merged | PrStatus::Closed) => false,
+            Some(PrStatus::Open) => checks_of(&self.saved, w).is_empty(),
+            Some(PrStatus::Unknown) | None => true,
+        }
+    }
+
     /// The workspace's CI wait as the sidebars show it: waiting on Jon and
     /// not dismissed.
     pub fn ci_shown(&self, w: Option<&Workspace>) -> Option<&CiWait> {
@@ -160,13 +189,18 @@ impl Session {
         self.ci.get(&w.id).filter(|ci| ci.waits)
     }
 
+    /// Whether the agent with id `id` carries `w`'s CI wait: the wait
+    /// shows and it is the one the card speaks through (`ci_carrier`).
+    pub(crate) fn carries_ci(&self, w: &Workspace, id: &str) -> bool {
+        self.ci_shown(Some(w)).is_some() && ci_carrier(&self.shown_agents(w)) == Some(id)
+    }
+
     /// `own`, an agent as the sidebars show it before CI, carrying the
     /// workspace's CI wait when it has finished (idle or ended) and the
-    /// wait shows.
+    /// wait shows. Only its carrier is given it (`ci_carrier`).
     pub(crate) fn with_ci(&self, own: Agent, w: Option<&Workspace>) -> Agent {
-        let finished = matches!(own.status, Some(AgentStatus::Idle | AgentStatus::Ended));
         match self.ci_shown(w) {
-            Some(ci) if finished => Agent {
+            Some(ci) if finished(&own) => Agent {
                 status: Some(AgentStatus::NeedsInput),
                 since_epoch: Some(ci.since),
                 ci: Some(ci.trouble),
