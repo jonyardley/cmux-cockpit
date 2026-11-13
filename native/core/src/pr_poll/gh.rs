@@ -321,10 +321,11 @@ fn gh_time(at: &str) -> Option<f64> {
 
 /// When a check was queued and when it started, as far as gh says. A
 /// check run waiting for a runner (any status but in progress or
-/// completed) is queued: GitHub may stamp its `startedAt` when it is made,
-/// which is then its queue time, and with none the poll stamps when it
-/// first saw it (pr_poll.rs). A running or finished one started at its
-/// `startedAt`. A status context has no queue: it started when it was made.
+/// completed) is queued: GitHub stamps its `startedAt` when it is made,
+/// and moves it to the real start once it runs (seen on #385), so the
+/// status says which time it is. With no time, the poll stamps when it
+/// first saw it waiting (pr_poll.rs). A status context has no queue: it
+/// started when it was made.
 fn check_times(c: &Map<String, Value>, started_at: &str) -> (Option<f64>, Option<f64>) {
     let at = gh_time(started_at);
     if text(c, "__typename") == Some("StatusContext") {
