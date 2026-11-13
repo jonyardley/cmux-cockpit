@@ -394,20 +394,23 @@ pub struct SavedNote {
     pub ci: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    /// Taken down: its wait cleared, or its card left the list.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub down: bool,
+    /// When it was taken down, in epoch seconds: its wait cleared, or its
+    /// card left the list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub down: Option<f64>,
 }
 
 impl SavedNote {
     /// Whether the state handler keeps it (savedNote in
     /// scripts/state-config.ts): a start after the zero time, a CI key
-    /// that is a time, and an id in cmux's UUID shape.
+    /// that is a time, an id in cmux's UUID shape, and a take down after
+    /// the zero time.
     pub fn fits(&self) -> bool {
         self.since.is_finite()
             && self.since > 0.0
             && self.ci.is_none_or(|k| k.is_finite() && k >= 0.0)
             && self.id.as_deref().is_none_or(is_uuid)
+            && self.down.is_none_or(|t| t.is_finite() && t > 0.0)
     }
 }
 
@@ -712,7 +715,8 @@ mod tests {
             r#"{{"notified": {{
                 "W1": {{"since": 1000, "ci": 800, "id": "{id}"}},
                 "W2": {{"since": 1000}},
-                "W3": {{"since": 1000, "ci": 800, "down": true}},
+                "W3": {{"since": 1000, "ci": 800, "down": 1100}},
+                "early": {{"since": 1000, "down": 0}},
                 "zero": {{"since": 0}},
                 "odd": {{"since": 1000, "id": "--all-read"}},
                 "bad": {{"since": "soon"}},
@@ -723,7 +727,8 @@ mod tests {
         let kept: Vec<&str> = saved.notified.keys().map(String::as_str).collect();
         assert_eq!(kept, ["W1", "W2", "W3"]);
         assert_eq!(saved.notified["W1"].id.as_deref(), Some(id));
-        assert!(!saved.notified["W1"].down && saved.notified["W3"].down);
+        assert_eq!(saved.notified["W1"].down, None);
+        assert_eq!(saved.notified["W3"].down, Some(1100.0));
         assert_eq!(saved.notified["W1"].ci, Some(800.0));
         // Written back as read, and left out while empty.
         let text = serde_json::to_string(&saved).unwrap();

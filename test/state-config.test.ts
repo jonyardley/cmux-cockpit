@@ -638,16 +638,10 @@ test("notified keeps each card's notification record, and is left out while empt
   const bare = applySet(set.state, "notified.w1", JSON.stringify({ since: 1_791_229_800 }));
   assert.ok(bare.ok);
   assert.deepEqual(bare.state.notified, { w1: { since: 1_791_229_800 } }, "the id goes once dismissed");
-  const down = applySet(
-    set.state,
-    "notified.w1",
-    JSON.stringify({ since: 1_791_229_800, ci: 1_791_229_000, down: true }),
-  );
+  const taken = { since: 1_791_229_800, ci: 1_791_229_000, down: 1_791_230_000 };
+  const down = applySet(set.state, "notified.w1", JSON.stringify(taken));
   assert.ok(down.ok);
-  assert.deepEqual(down.state.notified, { w1: { since: 1_791_229_800, ci: 1_791_229_000, down: true } }, "taken down");
-  const up = applySet(set.state, "notified.w1", JSON.stringify({ since: 1_791_229_800, down: false }));
-  assert.ok(up.ok);
-  assert.deepEqual(up.state.notified, { w1: { since: 1_791_229_800 } }, "down only while true");
+  assert.deepEqual(down.state.notified, { w1: taken }, "taken down, with when");
   const cleared = applySet(set.state, "notified.w1", null);
   assert.ok(cleared.ok);
   assert.equal(Object.hasOwn(cleared.state, "notified"), false);
@@ -666,7 +660,8 @@ test("notified keeps each card's notification record, and is left out while empt
     { since: "soon" },
     { since: 1, id: 7 },
     { since: 1, id: `${id}0` },
-    { since: 1, down: "yes" },
+    { since: 1, down: true },
+    { since: 1, down: 0 },
   ])
     assert.equal(applySet(emptyState(), "notified.w1", JSON.stringify(bad)).ok, false, JSON.stringify(bad));
   assert.equal(urlMaySet("notified.w1"), true);

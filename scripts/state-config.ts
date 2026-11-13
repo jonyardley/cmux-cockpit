@@ -143,13 +143,13 @@ export interface SavedAsleep {
 /**
  * One card's desktop notification (persist.rs SavedNote): the wait's start in
  * epoch seconds, a CI wait's own key, cmux's id for it while it is up, and
- * whether it has been taken down.
+ * when it was taken down.
  */
 export interface SavedNote {
   since: number;
   ci?: number;
   id?: string;
-  down?: true;
+  down?: number;
 }
 
 /** Why a poll could not reach gh: it failed, it is signed out, or it is not installed. */
@@ -925,12 +925,12 @@ function savedNote(v: unknown): SavedNote | null {
   if (!isRecord(v) || !isEpoch(v.since) || v.since <= 0) return null;
   if (v.ci !== undefined && !isEpoch(v.ci)) return null;
   if (v.id !== undefined && !isUuid(v.id)) return null;
-  if (v.down !== undefined && typeof v.down !== "boolean") return null;
+  if (v.down !== undefined && (!isEpoch(v.down) || v.down <= 0)) return null;
   return {
     since: v.since,
     ...(v.ci !== undefined ? { ci: v.ci } : {}),
     ...(v.id !== undefined ? { id: v.id } : {}),
-    ...(v.down === true ? { down: true } : {}),
+    ...(v.down !== undefined ? { down: v.down } : {}),
   };
 }
 
@@ -1107,7 +1107,7 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
       const note = savedNote(parsed);
       return note
         ? { ...state, notified: { ...state.notified, [id]: note } }
-        : "notified wants {since: epoch, ci?: epoch, id?: uuid, down?: boolean}";
+        : "notified wants {since: epoch, ci?: epoch, id?: uuid, down?: epoch}";
     }
   }
 }

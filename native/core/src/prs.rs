@@ -154,6 +154,12 @@ fn first_saved<'s>(saved: &'s SavedState, w: &Workspace) -> Option<&'s SavedPr> 
     }
 }
 
+/// The poller's saved PR when it is still the workspace's first: on its
+/// branch, and cmux's own first PR, when cmux sends one.
+pub fn saved_pr_of<'s>(saved: &'s SavedState, w: &Workspace) -> Option<&'s SavedPr> {
+    first_saved(saved, w)
+}
+
 /// Whether the workspace's first PR carries the poller's saved data, so
 /// it ages with it: cmux sends none, or its first is the saved one.
 pub fn from_poller(saved: &SavedState, w: &Workspace) -> bool {
