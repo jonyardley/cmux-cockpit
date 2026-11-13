@@ -154,7 +154,8 @@ impl Session {
             MenuAction::TogglePin,
         ));
         items.push(MenuItem::item("Mark read", MenuAction::MarkRead));
-        let pr = pr_summary(&self.saved, w);
+        // Only its tag and link, which no clock moves.
+        let pr = pr_summary(&self.saved, w, 0.0);
         let link = pr.as_ref().and_then(PrSummary::web_link);
         // Worded from the link the click opens, so a PR whose link is no
         // web link says it has none rather than offering a dead Open PR.
@@ -324,7 +325,7 @@ impl Session {
 
     /// The card's PR link, for Open PR and Copy PR link alike.
     fn pr_link(&self, w: Option<&Workspace>) -> Option<String> {
-        pr_summary(&self.saved, w)
+        pr_summary(&self.saved, w, 0.0)
             .as_ref()
             .and_then(PrSummary::web_link)
     }

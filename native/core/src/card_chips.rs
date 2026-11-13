@@ -9,6 +9,7 @@ use crate::moves::{MoveSize, move_size, move_size_text};
 use crate::pr_colors::{PrTone, draft_of, pr_tone};
 use crate::prs::pr_summary;
 use crate::session::Session;
+use crate::time::now_epoch;
 
 /// One chip, as the TypeScript's `Chip` writes it.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -84,7 +85,7 @@ impl Session {
             let text = move_size_text(size, m.decisions.unwrap_or(0.0));
             out.push(Chip::Size { text, size });
         }
-        if let Some(pr) = pr_summary(&self.saved, Some(w)) {
+        if let Some(pr) = pr_summary(&self.saved, Some(w), now_epoch(data)) {
             // Its state words go once the status says Ready to merge:
             // "ready" would only say it again, so the chip keeps its
             // number (issue #299).

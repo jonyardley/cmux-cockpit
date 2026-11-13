@@ -21,6 +21,7 @@ use crate::status::{
 use crate::strip::{is_late, wait_secs};
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
+use crate::time::now_epoch;
 use crate::ui::QUIET_PILL;
 use crate::words::{RUNNING_WORD, WAITING_WORD, with_detail};
 
@@ -385,7 +386,7 @@ fn chips_row(
 /// status line after a "·"; here they have a line of their own, so they
 /// have none.
 fn compact_pr(session: &mut Session, data: &Data, w: Option<&Workspace>) -> Vec<Chip> {
-    let Some(pr) = pr_summary(&session.saved, w) else {
+    let Some(pr) = pr_summary(&session.saved, w, now_epoch(data)) else {
         return Vec::new();
     };
     let words = piece(
@@ -403,11 +404,16 @@ fn compact_pr(session: &mut Session, data: &Data, w: Option<&Workspace>) -> Vec<
 
 /// A row's PR: its number in its tone's ink (grey draft and closed, green
 /// open, purple merged) and its title. Only a row has one; a card's chips carry its PR.
-fn row_pr(session: &Session, w: Option<&Workspace>, density: Density) -> Option<RowPr> {
+fn row_pr(
+    session: &Session,
+    data: &Data,
+    w: Option<&Workspace>,
+    density: Density,
+) -> Option<RowPr> {
     if density != Density::Row {
         return None;
     }
-    let pr = pr_summary(&session.saved, w)?;
+    let pr = pr_summary(&session.saved, w, now_epoch(data))?;
     Some(RowPr {
         ink: pr_text_color(&pr, draft_of(&session.saved, w)),
         tag: pr.tag,
@@ -697,7 +703,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         status_has_age: status_carries_age(density, waiting, looks.status_has_age),
         left_off,
         chips,
-        row_pr: row_pr(session, w, density),
+        row_pr: row_pr(session, data, w, density),
         detail,
         detail_ink,
         detail_lines: detail_lines(density),
@@ -2102,7 +2108,7 @@ mod tests {
         let (r, q, none) = (ws("r"), ws("q"), ws("n"));
         let data = Data::default();
         assert_eq!(
-            row_pr(s, Some(&r), Density::Row),
+            row_pr(s, &data, Some(&r), Density::Row),
             Some(RowPr {
                 tag: "#171".into(),
                 title: "Row cards show their PR".into(),
@@ -2111,7 +2117,7 @@ mod tests {
             "a ready PR's number in the merge green, its title cleaned"
         );
         assert_eq!(
-            row_pr(s, Some(&q), Density::Row),
+            row_pr(s, &data, Some(&q), Density::Row),
             Some(RowPr {
                 tag: "#9".into(),
                 title: String::new(),
@@ -2119,10 +2125,10 @@ mod tests {
             }),
             "a quiet open PR's number in the open green, and no title"
         );
-        let ink = |id: &str| row_pr(s, Some(&ws(id)), Density::Row).map(|p| p.ink);
+        let ink = |id: &str| row_pr(s, &data, Some(&ws(id)), Density::Row).map(|p| p.ink);
         assert_eq!(ink("d"), Some(Token::MetaText), "a draft's number grey");
         assert_eq!(ink("m"), Some(Token::MergedText), "a merged one's purple");
-        assert_eq!(row_pr(s, Some(&none), Density::Row), None, "no PR");
+        assert_eq!(row_pr(s, &data, Some(&none), Density::Row), None, "no PR");
         let compact = compact_pr(s, &data, Some(&q));
         assert_eq!(
             compact[0].pieces[0].ink,
@@ -2134,7 +2140,11 @@ mod tests {
         let compact = compact_pr(s, &data, Some(&r));
         assert_eq!(compact[0].pieces[0].ink, Token::MergeText, "a ready one");
         for d in [Density::Full, Density::Compact] {
-            assert_eq!(row_pr(s, Some(&r), d), None, "{d:?}: its chips carry it");
+            assert_eq!(
+                row_pr(s, &data, Some(&r), d),
+                None,
+                "{d:?}: its chips carry it"
+            );
         }
     }
 

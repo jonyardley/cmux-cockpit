@@ -249,8 +249,8 @@ mod a_ready_cards_pr_words_issue_79 {
 
     /// The compact card's PR words for `w`.
     fn text(s: &mut Session, w: &Workspace) -> String {
-        let words =
-            pr_summary(&s.saved, Some(w)).map(|p| s.card_pr_words(&Data::default(), Some(w), &p));
+        let words = pr_summary(&s.saved, Some(w), 0.0)
+            .map(|p| s.card_pr_words(&Data::default(), Some(w), &p));
         compact_pr_text(words.as_deref())
     }
 

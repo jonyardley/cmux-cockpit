@@ -62,7 +62,8 @@ pub fn pr_tone(status: Option<PrStatus>, draft: bool, health: PrHealth) -> PrTon
     match health {
         PrHealth::Failing => PrTone::Failing,
         PrHealth::Conflicts => PrTone::Conflicts,
-        PrHealth::Running => PrTone::Running,
+        // Still running, too long: the waiting card says so (ci_wait.rs).
+        PrHealth::Running | PrHealth::Stuck => PrTone::Running,
         PrHealth::Ready => PrTone::Ready,
         PrHealth::Quiet => match status {
             Some(PrStatus::Merged) => PrTone::Merged,
@@ -149,6 +150,11 @@ mod tests {
         assert_eq!(pr_tone(open, true, PrHealth::Failing), PrTone::Failing);
         assert_eq!(pr_tone(open, true, PrHealth::Conflicts), PrTone::Conflicts);
         assert_eq!(pr_tone(open, true, PrHealth::Running), PrTone::Running);
+        assert_eq!(
+            pr_tone(open, false, PrHealth::Stuck),
+            PrTone::Running,
+            "blue words, a clay card"
+        );
         assert_eq!(pr_tone(open, false, PrHealth::Ready), PrTone::Ready);
     }
 
