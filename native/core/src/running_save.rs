@@ -190,6 +190,37 @@ mod tests {
     }
 
     #[test]
+    fn clears_the_saved_verdict_once_the_last_task_goes_stale() {
+        // A monitor last listed at 1000: past its limit, the file's verdict
+        // for w1 goes out as a removal (#371).
+        let mut s = session(
+            r#"{"background": {"w1": [
+                {"id": "m1", "type": "monitor", "status": "running", "description": "d",
+                 "session": "c", "startedEpoch": 900, "seenEpoch": 1000}
+            ]}}"#,
+        );
+        let frame = |epoch: f64| Data {
+            epoch: Some(epoch),
+            workspaces: Some(vec![ws("w1", &[chat("c", AgentStatus::Idle)])]),
+            ..Data::default()
+        };
+        let held = map(&[("w1", verdict("c", 900.0, &[(TaskType::Shell, 1)]))]);
+        let mut saves = RunningSaves::default();
+
+        let fresh = verdicts(&mut s, &frame(1600.0));
+        assert_eq!(fresh.as_ref(), Some(&held));
+        let Some(fresh) = fresh else { return };
+        assert!(saves.writes(&held, &fresh, Some(1600.0)).is_empty());
+
+        let late = 1000.0 + crate::running::MONITOR_MAX_AGE_S + 1.0;
+        let stale = verdicts(&mut s, &frame(late));
+        assert_eq!(stale, Some(BTreeMap::new()));
+        let Some(stale) = stale else { return };
+        let want: BTreeMap<String, Option<SavedRunning>> = [("w1".to_string(), None)].into();
+        assert_eq!(saves.writes(&held, &stale, Some(late)), want);
+    }
+
+    #[test]
     fn says_nothing_for_a_frame_with_no_workspaces() {
         let mut s = Session::default();
         assert_eq!(verdicts(&mut s, &Data::default()), None);

@@ -559,8 +559,8 @@ running" and "Helper running" (#359). After the word comes how long since
 the earliest running piece of work started, then one count per kind after
 a dot, the kinds a comma apart, each in the singular or plural: "Running
 4m · 1 shell, 1 agent", "Running 12m · 2 sessions". The kinds, always in
-this order: shell (a monitor counts as one, since Claude Code lists it as
-a shell), agent, session (a `claude --bg` session), workflow, teammate,
+this order: shell (a monitor counts as one: it watches a shell command,
+and Claude Code 2.1.322 listed it as a shell), agent, session (a `claude --bg` session), workflow, teammate,
 cloud session, MCP task, and task for a kind Claude Code adds later
 (`task_word`). It draws as working: blue dot with halo, `blueText`, and
 sorts with the working cards.
