@@ -170,13 +170,11 @@ pub fn checks_of<'s>(saved: &'s SavedState, w: &Workspace) -> &'s [SavedCheck] {
 }
 
 /// When the poll first saw the workspace's first PR merge-ready, while it
-/// still reads so (persist.rs `SavedPr::ready_since`). Like the checks,
-/// only the poller saves it, so a PR of cmux's own that is not the saved
-/// one has none.
+/// still holds (persist.rs `SavedPr::ready_since`; merge_wait.rs
+/// `ready_time` says which count). Like the checks, only the poller saves
+/// it, so a PR of cmux's own that is not the saved one has none.
 pub fn ready_since_of(saved: &SavedState, w: &Workspace) -> Option<f64> {
-    first_saved(saved, w)
-        .and_then(|pr| pr.ready_since)
-        .filter(|t| *t > 0.0)
+    first_saved(saved, w).and_then(|pr| pr.ready_since)
 }
 
 /// Only an open PR has a health, its worst state: failing checks, then

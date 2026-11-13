@@ -7,10 +7,15 @@
 //!
 //! The clock runs from when the poll first saw the PR merge-ready
 //! (persist.rs `SavedPr::ready_since`, stamped by pr_poll.rs
-//! `stamp_ready`), so a restart keeps it, and an answer that shows the PR
-//! merged, red, running or blocked clears it. The wait is dated from the
-//! four-hour mark, so the waiting clock and the late chip count from when
-//! it began to wait, and that instant holds from frame to frame.
+//! `stamp_ready`), so a restart keeps it. An answer that shows the PR
+//! itself change clears it: merged or closed, red, running, in conflict,
+//! back in draft, or its checks run again. GitHub's verdict alone going
+//! unsure (UNKNOWN while it recomputes after main moves, or BLOCKED or
+//! BEHIND) keeps it, though the PR does not read Ready while it lasts, so
+//! neither the green status nor the wait shows until the verdict comes
+//! back. The wait is dated from the four-hour mark, so the waiting clock
+//! and the late chip count from when it began to wait, and that instant
+//! holds from frame to frame.
 
 use crate::data::PullRequest;
 use crate::persist::SavedCheck;
@@ -18,6 +23,12 @@ use crate::prs::{PrHealth, health_of};
 
 /// How long a change reads merge-ready before it waits on Jon. To tune.
 pub const MERGE_WAIT_SECS: f64 = 4.0 * 60.0 * 60.0;
+
+/// A saved ready time that counts: any after the zero time. The one rule
+/// both the poll's stamp and the wait read it by.
+pub(crate) fn ready_time(ready_since: Option<f64>) -> Option<f64> {
+    ready_since.filter(|t| *t > 0.0)
+}
 
 /// The merge-ready wait of `pr`, with its saved `checks` and the time it
 /// first read merge-ready (`ready_since`), at epoch `now`: that time, which
@@ -33,7 +44,7 @@ pub(crate) fn merge_wait(
     if health_of(pr, checks) != PrHealth::Ready {
         return None;
     }
-    let start = ready_since.filter(|t| *t > 0.0)?;
+    let start = ready_time(ready_since)?;
     let due = start + MERGE_WAIT_SECS;
     (now >= due).then_some((start, due))
 }
