@@ -9,12 +9,11 @@
 //                    agent needs you, the card carries the question and
 //                    Dismiss (local to this panel, src/shared/needs.ts); no
 //                    Open chat, as its chat is the one on screen (#383).
-//                    No Allow/Deny: that needs
-//                    the real diff/tool-call payload, which this data
-//                    context does not carry, so it is not faked. Other
-//                    workspaces that need you do not appear in this panel at
-//                    all, by design: the cockpit's Needs you strip is their
-//                    one home.
+//                    No Allow/Deny: that needs the real diff/tool-call
+//                    payload, which this data context does not carry, so it
+//                    is not faked. Other workspaces that need you do not
+//                    appear in this panel at all, by design: the cockpit's
+//                    Needs you strip is their one home.
 //   Pull requests  - every PR across workspaces, tap opens the url. A faint
 //                    line under the heading says when the saved PR data is
 //                    old or gh is down, and those chips dim (#78).
