@@ -185,7 +185,9 @@ impl Session {
     /// only on what a read shows: trouble with another key, a PR no longer
     /// open, or checks that give no trouble. A frame where the PR cannot be
     /// read (before the first read, or cmux reporting the workspace before
-    /// its branch settles) or carries no checks keeps it.
+    /// its branch settles) or carries no checks keeps it, and so does one
+    /// where a merge wait's ready time still holds while GitHub's verdict
+    /// is unsure (pr_poll.rs `stamp_ready`).
     pub(crate) fn ci_dismissal_holds(&self, w: &Workspace, key: f64) -> bool {
         if !self.ci_read {
             return true;
@@ -195,7 +197,9 @@ impl Session {
         }
         match pr_of(&self.saved, Some(w)).and_then(|pr| pr.status) {
             Some(PrStatus::Merged | PrStatus::Closed) => false,
-            Some(PrStatus::Open) => checks_of(&self.saved, w).is_empty(),
+            Some(PrStatus::Open) => {
+                checks_of(&self.saved, w).is_empty() || ready_since_of(&self.saved, w) == Some(key)
+            }
             Some(PrStatus::Unknown) | None => true,
         }
     }

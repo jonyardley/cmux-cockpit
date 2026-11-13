@@ -2121,6 +2121,39 @@ mod tests {
     }
 
     #[test]
+    fn an_unsure_merge_verdict_neither_shows_the_wait_nor_lets_its_dismissal_go() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        // GitHub recomputing after main moved: no CLEAN verdict, but the
+        // poll keeps the ready time (pr_poll.rs `stamp_ready`).
+        let unsure = r#"[{"name": "build", "state": "pass", "started": 800}],
+            "readySince": 1000"#;
+        let mut core = ci_core(MARK, IDLE, READY, "");
+        assert_eq!(w_card(&mut core).1.count, 1);
+        core.session.saved = w_saved("open", unsure);
+        ci_frame(&mut core, MARK + 60.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 0, "not merge-ready while unsure");
+        core.session.saved = w_saved("open", READY);
+        ci_frame(&mut core, MARK + 120.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 1, "back, from the same mark");
+        assert_eq!(w_wait_since(&core), Some(MARK));
+        // Dismissed, an unsure frame does not let the dismissal go.
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        core.session.saved = w_saved("open", unsure);
+        ci_frame(&mut core, MARK + 180.0, IDLE);
+        core.session.saved = w_saved("open", READY);
+        ci_frame(&mut core, MARK + 240.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 0, "the dismissal held");
+        assert_eq!(w_kind(&mut core), StatusKind::MergeReady, "green again");
+        // Once the ready time goes (the PR itself changed), it lapses.
+        let gone = r#"[{"name": "build", "state": "pass", "started": 800}]"#;
+        core.session.saved = w_saved("open", gone);
+        ci_frame(&mut core, MARK + 300.0, IDLE);
+        assert_eq!(core.session.dismissed.get("W"), None, "let go");
+    }
+
+    #[test]
     fn saved_checks_from_before_the_times_still_load_and_never_read_stuck() {
         let old = r#"[{"name": "mac", "state": "pending"}]"#;
         let mut core = ci_core(1e10, IDLE, old, "");
