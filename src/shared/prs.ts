@@ -62,7 +62,11 @@ function copySent<K extends keyof PullRequest>(out: PullRequest, pr: PullRequest
 // from the saved copy. A hole in cmux's list passes through as it came.
 function withSaved(pr: PullRequest, saved: SavedPr | undefined): PullRequest {
   if (!pr || !saved || !isSaved(pr, saved)) return pr;
-  const { checks: _checks, ...out }: PullRequest & Pick<SavedPr, "checks"> = saved;
+  const {
+    checks: _checks,
+    readySince: _readySince,
+    ...out
+  }: PullRequest & Pick<SavedPr, "checks" | "readySince"> = saved;
   for (const k of FIELD_NAMES) copySent(out, pr, k);
   return out;
 }

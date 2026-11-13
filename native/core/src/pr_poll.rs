@@ -295,6 +295,26 @@ fn stamp_queued(pr: &mut SavedPr, before: Option<&SavedPr>, now: f64) {
     }
 }
 
+/// Gives `pr` the time it has read merge-ready since (issue #380): while
+/// GitHub would merge it, the time `before` (the same PR as last answered,
+/// or as the state file holds it after a restart) carried when it was
+/// ready too, else `now`, when the poll first saw it ready; none while it
+/// is not. So the clock on a change left unmerged runs from the first
+/// answer that showed it ready, holds from answer to answer, and starts
+/// afresh once an answer shows it merged, red, running or blocked.
+fn stamp_ready(pr: &mut SavedPr, before: Option<&SavedPr>, now: f64) {
+    let ready = |p: &SavedPr| shown(p).health == PrHealth::Ready;
+    pr.ready_since = if ready(pr) {
+        let earlier = before
+            .filter(|b| ready(b))
+            .and_then(|b| b.ready_since)
+            .filter(|t| *t > 0.0);
+        Some(earlier.unwrap_or(now))
+    } else {
+        None
+    };
+}
+
 /// The wait after `failures` failed asks in a row: FLOOR_SECS doubled
 /// each time, up to BACKOFF_CAP_SECS.
 fn backoff(failures: u32) -> f64 {
@@ -413,6 +433,7 @@ impl PrPoll {
                 _ => self.file.values().find(|f| f.url == pr.url),
             };
             stamp_queued(pr, before, polled.epoch);
+            stamp_ready(pr, before, polled.epoch);
         }
         t.record(answer);
     }
@@ -526,6 +547,7 @@ mod tests {
                     })
                     .collect(),
             ),
+            ready_since: None,
         }
     }
 
@@ -904,6 +926,64 @@ mod tests {
         other.url = "https://github.com/o/r/pull/8".into();
         p.record(answered("/a", Some(other), 400.0));
         assert_eq!(times(&p), [Some(400.0), Some(5.0), None, None]);
+    }
+
+    #[test]
+    fn times_a_merge_ready_pr_from_the_first_answer_that_showed_it_ready() {
+        let d = data(vec![ws("a", "/a")]);
+        let mut p = on();
+        let since = |p: &PrPoll| {
+            let held = p.targets.get("/a").and_then(|t| t.known.clone().flatten());
+            held.and_then(|pr| pr.ready_since)
+        };
+        let ask = |p: &mut PrPoll, pr: SavedPr, at: f64| {
+            let _ = p.due(&d, at);
+            p.record(answered("/a", Some(pr), at));
+        };
+        ask(&mut p, pr(&["pending"]), 100.0);
+        assert_eq!(since(&p), None, "running: not ready yet");
+        ask(&mut p, pr(&["pass"]), 1000.0);
+        assert_eq!(since(&p), Some(1000.0), "first seen ready");
+        ask(&mut p, pr(&["pass"]), 2000.0);
+        assert_eq!(since(&p), Some(1000.0), "held from answer to answer");
+        assert!(
+            p.writes(&d, "/a").contains_key("a"),
+            "the time is written to the file"
+        );
+
+        // After a restart the state file's time carries on, and an answer
+        // the same as the file writes nothing.
+        let mut fresh = on();
+        let stamped = SavedPr {
+            ready_since: Some(1000.0),
+            ..pr(&["pass"])
+        };
+        let text = serde_json::to_string(&file_of(&["a"], &stamped)).unwrap_or_default();
+        let file: BTreeMap<String, SavedPr> = serde_json::from_str(&text).unwrap();
+        fresh.file_read(&file, Some(&d));
+        ask(&mut fresh, pr(&["pass"]), 9000.0);
+        assert_eq!(since(&fresh), Some(1000.0));
+        assert!(fresh.writes(&d, "/a").is_empty(), "nothing new to write");
+
+        // A new red check clears it; green again starts afresh.
+        ask(&mut p, pr(&["pass", "fail"]), 3000.0);
+        assert_eq!(since(&p), None);
+        ask(&mut p, pr(&["pass"]), 4000.0);
+        assert_eq!(since(&p), Some(4000.0), "a fresh time");
+
+        // Merged clears it too.
+        let merged = SavedPr {
+            status: PrStatus::Merged,
+            ..pr(&["pass"])
+        };
+        ask(&mut p, merged, 5000.0);
+        assert_eq!(since(&p), None);
+
+        // A gh failure keeps the answer held, time and all.
+        ask(&mut p, pr(&["pass"]), 6000.0);
+        let _ = p.due(&d, 7000.0);
+        p.record(failed("/a", GhFailure::Unavailable, 7000.0));
+        assert_eq!(since(&p), Some(6000.0));
     }
 
     /// An answer for `/a` to the ask made at `asked`.

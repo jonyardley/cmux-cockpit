@@ -194,6 +194,13 @@ export interface SavedPr {
   deletions?: number;
   /** Its CI checks, failing first (pr-poll.ts's checksFrom); left out when it has none. */
   checks?: SavedCheck[];
+  /**
+   * While GitHub would merge it, when the native poll first saw it so
+   * (epoch seconds), so the Cockpit can tell a change left merge-ready
+   * four hours (#380). Set once per spell, so going ready and leaving it
+   * are the only extra writes.
+   */
+  readySince?: number;
 }
 
 /**
@@ -535,6 +542,9 @@ const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
 /** A diff's line count: a whole number, never negative. */
 export const isLineCount = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
 
+/** When a PR first read merge-ready: an epoch after 1970, never the zero time. */
+const isReadyTime = (v: unknown): v is number => isEpoch(v) && v > 0;
+
 function savedPr(v: unknown): SavedPr | null {
   if (!isRecord(v) || !isPrUrl(v.url) || !isPrStatus(v.status)) return null;
   const { number, branch } = v;
@@ -551,6 +561,7 @@ function savedPr(v: unknown): SavedPr | null {
     ...(isLabel(v.title) ? { title: v.title } : {}),
     ...(isLineCount(v.additions) ? { additions: v.additions } : {}),
     ...(isLineCount(v.deletions) ? { deletions: v.deletions } : {}),
+    ...(isReadyTime(v.readySince) ? { readySince: v.readySince } : {}),
   };
   const checks = Array.isArray(v.checks) ? v.checks.flatMap(savedCheck).slice(0, MAX_CHECKS) : [];
   return checks.length ? { ...pr, checks } : pr;

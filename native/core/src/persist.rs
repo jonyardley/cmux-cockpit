@@ -129,6 +129,19 @@ pub struct SavedPr {
     pub deletions: Option<f64>,
     #[serde(default)]
     pub checks: Option<Vec<SavedCheck>>,
+    /// While GitHub would merge it (prs.rs `health_of` reads Ready), when
+    /// the poll first saw it so, in epoch seconds (pr_poll.rs
+    /// `stamp_ready`): carried from answer to answer and, through the
+    /// state file, across a restart, so the core can tell a change left
+    /// merge-ready four hours (issue #380). None while it is not, so a
+    /// later return to ready starts a fresh time.
+    #[serde(
+        default,
+        rename = "readySince",
+        deserialize_with = "crate::lenient::field",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ready_since: Option<f64>,
 }
 
 /// A subagent run as the hook saves it.

@@ -440,6 +440,8 @@ fn listed(p: &Value) -> Option<Listed> {
         additions: line_count(p.get("additions")),
         deletions: line_count(p.get("deletions")),
         checks: (!checks.is_empty()).then_some(checks),
+        // Stamped by the poll once it keeps the answer (pr_poll.rs).
+        ready_since: None,
     };
     Some(Listed {
         pr,
