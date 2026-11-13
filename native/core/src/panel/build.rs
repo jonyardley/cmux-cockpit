@@ -1608,6 +1608,47 @@ mod tests {
             Cockpit.update(Event::Data(data), &mut core)
         };
         assert_eq!(w_card(&mut core).1.count, 0);
+        // Asleep, the agent as shown carries no stop, so no rule reads one.
+        let data = core.data.clone().unwrap_or_default();
+        let shown = core.session.agent_of(data.ws_by_id("W"));
+        assert_eq!(shown.map(|a| a.stopped), Some(None));
+    }
+
+    #[test]
+    fn a_dismissed_session_gone_mid_turn_leaves_the_card_to_the_live_one() {
+        use crate::menu::{MenuAction, MenuEvent};
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let data: Data = serde_json::from_value(serde_json::json!({"epoch": 1060,
+            "workspaces": [
+                {"id": "W", "title": "fix login",
+                 "agents": [
+                     {"id": "c", "kind": "claude", "status": "idle", "surfaceId": "S1",
+                      "tabTitle": "old", "sinceEpoch": 1000, "lastActivityAt": 1000,
+                      "stopped": {"cause": "gone", "since": 1000}},
+                     {"id": "d", "kind": "claude", "status": "working", "surfaceId": "S2",
+                      "tabTitle": "new", "sinceEpoch": 1050, "lastActivityAt": 1055}]},
+                {"id": "X", "title": "other", "selected": true}]}))
+        .unwrap();
+        let mut core = Model::default();
+        let _effects = Cockpit.update(Event::Data(data.clone()), &mut core);
+        let w = data.ws_by_id("W");
+        assert_eq!(core.session.agent_of(w).map(|a| a.id), Some("c".into()));
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(core.session.agent_of(w).map(|a| a.id), Some("d".into()));
+        assert_eq!(
+            core.session.agent_tab_of(w),
+            None,
+            "one live agent names no tab"
+        );
+        assert_eq!(w_card(&mut core).1.count, 0);
+        // Restore needs you brings the stopped card back.
+        let open = Event::Menu(MenuEvent::OpenCard { id: "W".into() });
+        let _effects = Cockpit.update(open, &mut core);
+        let pick = Event::Menu(MenuEvent::Pick(MenuAction::ToggleNeeds));
+        let _effects = Cockpit.update(pick, &mut core);
+        assert_eq!(w_card(&mut core).1.count, 1);
+        assert_eq!(core.session.agent_of(w).map(|a| a.id), Some("c".into()));
     }
 
     #[test]

@@ -188,8 +188,14 @@ impl Join {
         self.gone.retain(|pid, _| !view.busy.contains_key(pid));
         let mut changed = self.forget_absent(&view) || self.gone.len() != gone_before;
         for (pid, busy) in &view.busy {
-            self.seen
-                .insert(*pid, (*busy, view.session.get(pid).cloned()));
+            let session = view.session.get(pid);
+            let same = self
+                .seen
+                .get(pid)
+                .is_some_and(|(b, s)| b == busy && s.as_ref() == session);
+            if !same {
+                self.seen.insert(*pid, (*busy, session.cloned()));
+            }
         }
         if self.agents.as_ref() != Some(&view) {
             self.agents = Some(view);
@@ -316,47 +322,44 @@ impl Join {
 
     /// cmux's word that a turn ended on an error (StopFailure, which its
     /// own hooks catch): an `agent.notification.decision` of kind
-    /// `agent.error.reported`, reason `accepted`, naming the tab but no
-    /// workspace or pid. A retry before any prompt keeps the first time.
-    /// News for a frame only in a tab some session runs in.
+    /// `agent.error.reported`, reason `accepted`, from Claude, naming the
+    /// tab but no workspace or pid. A retry before any prompt keeps the
+    /// first time. Kept, and news for a frame, only in a tab some session
+    /// runs in: a session's SessionStart always comes before its error.
     fn error_reported(&mut self, e: &Value, seq: u64) -> (bool, Option<Change>) {
         let p = &e["payload"];
-        if p["kind"] != "agent.error.reported" || p["reason"] != "accepted" {
+        if p["kind"] != "agent.error.reported"
+            || p["reason"] != "accepted"
+            || p["agent"] != "claude"
+        {
             return (false, None);
         }
         let at = e["occurred_at"].as_str().and_then(iso_epoch);
         let (Some(surface), Some(at)) = (e["surface_id"].as_str(), at) else {
             return (false, None);
         };
-        if self.errors.contains_key(surface) {
+        if self.errors.contains_key(surface) || !self.held(surface) {
             return (false, None);
         }
         self.errors.insert(surface.to_string(), at);
-        let held = self.held(surface);
-        let change = held.then(|| Change {
+        let change = Change {
             seq,
             hook: "agent.error.reported".to_string(),
             at: Some(at),
-        });
-        (held, change)
+        };
+        (true, Some(change))
     }
 
-    /// A hook from `pid` in the tab `surface`: a stopped card another
-    /// process left there gives way to it, and so does an error another
-    /// session met there. Whether a card went.
+    /// A new session (`pid`'s SessionStart) in the tab `surface`: a
+    /// stopped card another process left there gives way to it. Any other
+    /// hook claims nothing, so a second process that shares the tab (a
+    /// `claude -p` a hook runs, say) never clears a stop. The error
+    /// clears in `hook` on the same SessionStart. Whether a card went.
     fn claim_tab(&mut self, pid: u32, surface: &str) -> bool {
-        let other = self
-            .surface_of
-            .iter()
-            .any(|(p, (s, _))| *p != pid && s == surface);
         let before = self.gone.len();
         self.gone
             .retain(|p, (_, a)| *p == pid || a.surface_id.as_deref() != Some(surface));
-        let released = self.gone.len() != before;
-        if other || released {
-            self.errors.remove(surface);
-        }
-        released
+        self.gone.len() != before
     }
 
     /// Applies one event frame. Returns whether anything in the frame
@@ -461,10 +464,12 @@ impl Join {
         changed
     }
 
-    /// Forgets a tab's report once no session is placed in it.
+    /// Forgets a tab's report and any error there once no session is
+    /// placed in it.
     fn forget_report_unless_held(&mut self, surface: &str) {
         if !self.held(surface) {
             self.program.remove(surface);
+            self.errors.remove(surface);
         }
     }
 
@@ -544,9 +549,10 @@ impl Join {
             return (false, false);
         };
         let released = self.gone.remove(&pid).is_some()
-            | p["surface_id"]
-                .as_str()
-                .is_some_and(|s| self.claim_tab(pid, s));
+            | (hook == "SessionStart"
+                && p["surface_id"]
+                    .as_str()
+                    .is_some_and(|s| self.claim_tab(pid, s)));
         let surface_moved = p["surface_id"].as_str().is_some_and(|s| {
             self.forget_report_on_claim(pid, s, at);
             self.set_surface(pid, s, false)
@@ -1754,6 +1760,98 @@ mod tests {
         elsewhere["surface_id"] = json!("OTHER");
         assert_eq!(j.event(&elsewhere), (false, None));
         assert_eq!(agent_at(&j, ERROR_AT + 1.0).and_then(|a| a.stopped), None);
+    }
+
+    /// The stop on workspace A's session `id` at epoch `now`.
+    fn stop_of(j: &Join, id: &str, now: f64) -> Option<Stop> {
+        j.frame(now)
+            .ws_by_id("A")
+            .and_then(|w| w.agent_list().find(|a| a.id == id).cloned())
+            .and_then(|a| a.stopped)
+    }
+
+    /// `name` from `pid` in the error fixture's tab at epoch second `at`.
+    fn pid_hook(seq: u64, name: &str, pid: u32, at: f64) -> Value {
+        let mut e = hook_in(seq, name, pid, "A", ERROR_TAB);
+        e["occurred_at"] = json!(iso(at));
+        e
+    }
+
+    #[test]
+    fn another_agents_error_marks_nothing() {
+        let mut j = working_from(ERROR_AT - 60.0);
+        let mut codex = fixture("error");
+        codex["payload"]["agent"] = json!("codex");
+        assert_eq!(j.event(&codex), (false, None));
+        assert_eq!(stop_of(&j, "s7", ERROR_AT + 1.0), None);
+    }
+
+    #[test]
+    fn a_second_process_in_the_tab_clears_no_error_until_it_starts_a_session() {
+        let mut j = working_from(ERROR_AT - 60.0);
+        j.agents(view(&[(7, true, "s7"), (8, true, "s8")]));
+        j.event(&pid_hook(3, "PreToolUse", 8, ERROR_AT - 30.0));
+        j.event(&fixture("error"));
+        // A tool call from the other process is no new prompt here.
+        j.event(&pid_hook(4, "PreToolUse", 8, ERROR_AT + 10.0));
+        j.event(&pid_hook(5, "PostToolUse", 8, ERROR_AT + 11.0));
+        assert_eq!(
+            stop_of(&j, "s7", ERROR_AT + 12.0).map(|s| s.cause),
+            Some(StopCause::Error)
+        );
+        j.event(&pid_hook(6, "SessionStart", 8, ERROR_AT + 20.0));
+        assert_eq!(stop_of(&j, "s7", ERROR_AT + 21.0), None);
+    }
+
+    #[test]
+    fn a_gone_card_gives_way_to_a_new_session_not_to_any_hook() {
+        let at = 1_794_567_000.0;
+        let mut j = working_from(at);
+        for _ in 0..FORGET_AFTER {
+            j.agents(view(&[]));
+        }
+        j.agents(view(&[(8, true, "s8")]));
+        j.event(&pid_hook(5, "PreToolUse", 8, at + 30.0));
+        assert_eq!(
+            stop_of(&j, "s7", at + 31.0).map(|s| s.cause),
+            Some(StopCause::Gone)
+        );
+        j.event(&pid_hook(6, "SessionStart", 8, at + 40.0));
+        assert_eq!(stop_of(&j, "s7", at + 41.0), None);
+        assert!(
+            j.frame(at + 41.0)
+                .ws_by_id("A")
+                .is_some_and(|w| w.agent_list().all(|a| a.id != "s7")),
+            "the card went"
+        );
+    }
+
+    #[test]
+    fn an_error_goes_with_the_tabs_last_session_and_is_never_kept_for_an_empty_tab() {
+        // The session that met the error is forgotten: a later process in
+        // the tab, whose first hook here is not a SessionStart, is not stopped.
+        // Agent View last saw it idle, so it leaves no Gone card to claim.
+        let mut j = working_from(ERROR_AT - 60.0);
+        j.event(&fixture("error"));
+        j.agents(view(&[(7, false, "s7")]));
+        for _ in 0..FORGET_AFTER {
+            j.agents(view(&[]));
+        }
+        assert!(
+            j.frame(ERROR_AT + 20.0)
+                .ws_by_id("A")
+                .is_some_and(|w| w.agent_list().count() == 0)
+        );
+        j.agents(view(&[(8, true, "s8")]));
+        j.event(&pid_hook(5, "PreToolUse", 8, ERROR_AT + 30.0));
+        assert_eq!(stop_of(&j, "s8", ERROR_AT + 31.0), None);
+        // An error in a tab no session holds is not kept for a later one.
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        assert_eq!(j.event(&fixture("error")), (false, None));
+        j.agents(view(&[(8, true, "s8")]));
+        j.event(&pid_hook(1, "PreToolUse", 8, ERROR_AT + 30.0));
+        assert_eq!(stop_of(&j, "s8", ERROR_AT + 31.0), None);
     }
 
     #[test]

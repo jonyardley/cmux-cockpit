@@ -579,7 +579,7 @@ has them (the workspace's latest message):
 
 - "Stopped on an error: Please run /login": cmux reported the turn ended
   on an API error (Claude Code's StopFailure). Until the next prompt or a
-  new session in that tab.
+  new session in that tab, or until the tab has no session left.
 - "Stopped mid-turn": the process went with its turn open (a prompt or a
   tool call, no Stop or SessionEnd since, and it last read working or
   asking), a `kill -9` say. The card stays instead of vanishing, until a new
@@ -590,8 +590,10 @@ has them (the workspace's latest message):
   hook. Until any hook.
 
 Dismissed, it stays dismissed until a new stop with a later start: an
-error or a process gone then reads Idle from the stop, a silence reads as
-working, quiet. An asleep or waking card never reads Stopped: its process
+error then reads Idle from the stop, a silence reads as working, quiet,
+and a process gone leaves the card, as it did before Stopped, so it never
+stands beside a live session in the same workspace. "Restore needs you"
+brings it back. An asleep or waking card never reads Stopped: its process
 is gone by design. The words are `stop_words` in
 `native/core/src/words.rs`; the rules are `native/core/src/stopped.rs`
 and the runner's join (`native/runner/src/join.rs`).

@@ -154,11 +154,22 @@ impl Session {
             .map_or_else(|| wait_start(&self.saved, a, w), |stop| stop.since)
     }
 
+    /// Whether `a` is a session whose process went mid-turn and Jon
+    /// dismissed its stop: the sidebars leave it out, as they did before
+    /// stops, so a card the runner keeps for a dead process never ranks
+    /// beside a live one or names its tab. It still counts for "Restore
+    /// needs you".
+    fn is_dismissed_gone(&self, a: &Agent, w: Option<&Workspace>) -> bool {
+        self.stop_of(a, w).is_some_and(|stop| {
+            stop.cause == StopCause::Gone && self.dismissed_at(w, a, stop.since)
+        })
+    }
+
     /// A stopped agent as the sidebars show it: needs input from its stop
     /// until Jon dismisses it. Dismissed, it reads as it would with no
-    /// stop: idle from the stop when its turn is over (an error, a process
-    /// gone), still working (quiet) when it only went silent. A new stop
-    /// has a new start, so it waits on Jon again.
+    /// stop: idle from the stop after an error, still working (quiet) when
+    /// it only went silent; a process gone is left out (`agents_of`). A
+    /// new stop has a new start, so it waits on Jon again.
     fn stopped_agent(&self, a: &Agent, w: Option<&Workspace>, stop: Stop) -> Agent {
         if !self.dismissed_at(w, a, stop.since) {
             return Agent {
@@ -235,6 +246,14 @@ impl Session {
         if let Some(stop) = self.stop_of(a, w) {
             return self.stopped_agent(a, w, stop);
         }
+        // Asleep, a stop does not hold: the agent as shown carries none.
+        if a.stopped.is_some() {
+            let plain = Agent {
+                stopped: None,
+                ..a.clone()
+            };
+            return self.effective_agent(&plain, w);
+        }
         // Ahead of Running too: background work never hides a turn that
         // asks Jon something. A dismissed one reads as it would without it.
         let turn = waiting_turn(&self.saved, a, w);
@@ -271,12 +290,13 @@ impl Session {
     }
 
     /// A workspace's agents with nudges and dismissals applied, in the
-    /// app's order. An agent sent with no status is left out (issue #7).
+    /// app's order. An agent sent with no status is left out (issue #7),
+    /// and so is a dismissed session whose process went mid-turn.
     pub fn agents_of(&mut self, w: Option<&Workspace>) -> Vec<Agent> {
         let Some(w) = w else { return Vec::new() };
         self.prune(w);
         w.agent_list()
-            .filter(|a| a.status.is_some())
+            .filter(|a| a.status.is_some() && !self.is_dismissed_gone(a, Some(w)))
             .map(|a| self.effective_agent(a, Some(w)))
             .collect()
     }

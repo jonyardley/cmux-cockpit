@@ -6,12 +6,13 @@
 //!
 //! | Cause | Signal | Clears on |
 //! | --- | --- | --- |
-//! | Error | cmux's `agent.notification.decision` of kind `agent.error.reported`, reason `accepted`, in the session's tab | the next UserPromptSubmit or SessionStart there, or a new session in the tab |
+//! | Error | cmux's `agent.notification.decision` of kind `agent.error.reported`, reason `accepted`, agent `claude`, in a tab a session holds | the next UserPromptSubmit or SessionStart in the tab, or the tab's last session forgotten |
 //! | Gone | the process left Agent View with its turn still open (`gone_mid_turn`) | a new session in the tab, the pid coming back, or a restart |
 //! | Silent | working with no activity for `SILENT_SECS` (`silent_since`) | any activity |
 //!
 //! A clean end (Stop, then SessionEnd) closes the turn first, so it never
-//! reads as Gone.
+//! reads as Gone. Dismissed, a Gone session leaves the sidebars
+//! (`Session::agents_of`) until "Restore needs you".
 
 use serde::{Deserialize, Serialize};
 
