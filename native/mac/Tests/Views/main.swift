@@ -437,7 +437,19 @@ for dark in [false, true] {
             check(contrast(ink(t), ground) >= 4.5, "\(scheme): \(n) reads at 4.5 on the \(name) wash")
         }
         check(contrast(ink(.metaText), ground) >= 3, "\(scheme): metaText reads on the \(name) wash")
+        // A badge's needs dot is ringed in what the row shows: the wash at
+        // rest, and the hover wash over the wash under the pointer, not
+        // the hover wash over the bare ground.
+        check(Palette.rowGround(wash: wash, hovering: false, dark: dark) == ground, "\(scheme): the ring on a row washed \(name) is its wash at rest")
+        let lit = Palette.rowGround(wash: wash, hovering: true, dark: dark)
+        check(lit == Palette.blend(Palette.rgba(Palette.Own.hover, dark: dark), over: ground)
+                  && lit != Palette.rowGround(wash: nil, hovering: true, dark: dark),
+              "\(scheme): under the pointer the ring on a row washed \(name) keeps its wash")
     }
+    let bare = Palette.rgba(.panelGround, dark: dark)
+    check(Palette.rowGround(wash: nil, hovering: false, dark: dark) == bare
+              && Palette.rowGround(wash: nil, hovering: true, dark: dark) == Palette.blend(Palette.rgba(Palette.Own.hover, dark: dark), over: bare),
+          "\(scheme): a row waiting on nobody rings in the ground, or the hover over it")
     // A waiting card's edge shows on its face at least as plainly as the
     // hairline it replaces.
     for edge in [Token.clayCardEdge, .amberCardEdge] {

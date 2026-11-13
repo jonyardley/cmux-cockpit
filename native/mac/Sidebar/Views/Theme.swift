@@ -12,13 +12,13 @@ extension Color {
         self.init(nsColor: Self.dynamic(light: Palette.rgba(own, dark: false), dark: Palette.rgba(own, dark: true)))
     }
 
-    /// A faint token laid over one of the panel's own colours, made solid:
-    /// what shows where both are drawn, such as a waiting row's wash over
-    /// the panel ground.
-    init(_ token: Token, over own: Palette.Own) {
+    /// What shows under a quiet row that is not selected, solid
+    /// (Palette.rowGround): the panel's ground with a waiting row's wash
+    /// and the pointer's hover wash laid over it.
+    init(rowGround wash: Token?, hovering: Bool) {
         self.init(nsColor: Self.dynamic(
-            light: Palette.blend(Palette.rgba(token, dark: false), over: Palette.rgba(own, dark: false)),
-            dark: Palette.blend(Palette.rgba(token, dark: true), over: Palette.rgba(own, dark: true))
+            light: Palette.rowGround(wash: wash, hovering: hovering, dark: false),
+            dark: Palette.rowGround(wash: wash, hovering: hovering, dark: true)
         ))
     }
 

@@ -122,6 +122,18 @@ enum Palette {
         return RGBA(mix(16) | mix(8) | mix(0))
     }
 
+    /// What shows under a quiet row that is not selected, made solid: the
+    /// panel's ground, a waiting row's `wash` over it, and the pointer's
+    /// hover wash over both (docs/design.md#waiting-card). A badge's needs
+    /// dot is ringed in it, so the ring matches the row at rest and under
+    /// the pointer alike.
+    static func rowGround(wash: Token?, hovering: Bool, dark: Bool) -> RGBA {
+        var ground = rgba(Own.panelGround, dark: dark)
+        if let wash { ground = blend(rgba(wash, dark: dark), over: ground) }
+        if hovering { ground = blend(rgba(Own.hover, dark: dark), over: ground) }
+        return ground
+    }
+
     /// A card's own face, which the solid chip faces are laid over.
     private static let cardFace = Pair(RGBA(0xFFFFFF), RGBA(0x30302D))
 

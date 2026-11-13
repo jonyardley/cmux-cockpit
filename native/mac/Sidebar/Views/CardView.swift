@@ -622,11 +622,12 @@ struct CardChrome: ViewModifier {
         }
     }
 
-    /// The colour under a badge's needs dot: the face, or where a quiet row
-    /// at rest has none, the panel's ground with any wash laid over it.
+    /// The colour under a badge's needs dot: the face, or on a quiet row
+    /// not selected, which has none, the panel's ground with its wait's
+    /// wash and, under the pointer, the hover wash laid over it.
     private var ring: Color {
-        if quiet && !card.selected && !hovering {
-            return CardText.wash(card, row: quiet).map { Color($0, over: .panelGround) } ?? Color(Palette.Own.panelGround)
+        if quiet && !card.selected {
+            return Color(rowGround: CardText.wash(card, row: quiet), hovering: hovering)
         }
         return face
     }
