@@ -20,6 +20,14 @@ const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open",
   prs: {
     w1: saved,
     green: { ...saved, number: 8, mergeable: true, checks: [{ name: "build", state: "pass" }] },
+    // Merge-ready since the native poll first saw it so (#380).
+    timed: {
+      ...saved,
+      number: 23,
+      mergeable: true,
+      readySince: 1794571200,
+      checks: [{ name: "build", state: "pass" }],
+    },
     // Saved before the poller kept draft or the merge verdict: never ready.
     legacy: { ...saved, number: 13, checks: [{ name: "build", state: "pass" }] },
     draft: { ...saved, number: 9, draft: true, mergeable: true, checks: [{ name: "build", state: "pass" }] },
@@ -111,6 +119,14 @@ describe("prsOf", () => {
     // The saved PR sent as cmux's own is filled from itself: a PR, so no checks.
     const { checks: _checks, ...savedPr } = saved;
     assert.deepEqual(prsOf(ws("w1", { branch: "feat", prs: [own, saved] })), [own, savedPr]);
+  });
+
+  it("leaves the saved ready time out of cmux's own PR it fills, as it does the checks", () => {
+    const own = { number: 23, url: saved.url };
+    const filled = prOf(ws("timed", { branch: "feat", pr: own }));
+    assert.equal(filled?.mergeable, true, "filled from the saved PR");
+    assert.equal(filled && "readySince" in filled, false);
+    assert.equal(filled && "checks" in filled, false);
   });
 
   it("has nothing for an unknown workspace", () => {

@@ -136,11 +136,14 @@ verdict or checks, and the CLI the native cockpit reads has none at all
 (#7), so the native cockpit's PR poll
 (`native/core/src/pr_poll.rs`) finds it instead and keeps it in a fourth
 map, `prs`: workspace id to
-`{"number", "url", "status": "open|merged|closed", "branch", "title"?, "draft"?, "mergeable"?, "conflicts"?, "checks"?}`.
+`{"number", "url", "status": "open|merged|closed", "branch", "title"?, "draft"?, "mergeable"?, "conflicts"?, "checks"?, "readySince"?}`.
 `title` is the PR's own title, cleaned as an own PR's is and left out when
 nothing readable is left; `draft`, `mergeable` (gh's `mergeStateStatus`
 CLEAN) and `conflicts` (DIRTY) are saved only as `true`, so the chips can
-say a PR's worst state. Since #300 the native poll is the one writer of
+say a PR's worst state. `readySince` is when the native poll first saw the
+PR merge-ready, carried from answer to answer while it stays so and
+dropped once it is not, so the Cockpit can tell a change left unmerged
+four hours (#380). Since #300 the native poll is the one writer of
 these verdicts, so the card and the agents panel, which reads only this
 file, say the same thing: an answer that differs from the file goes out as
 the core's `SavePrs` effect, and the runner hands it to

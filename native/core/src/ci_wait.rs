@@ -36,7 +36,8 @@ use crate::text::clean_title;
 use crate::time::now_epoch;
 
 /// The dismissal key a workspace's CI wait is saved under, beside its
-/// agents' ids. No session id takes this shape.
+/// agents' ids, a merge wait's too (the two never coincide). No session
+/// id takes this shape.
 pub const CI_KEY: &str = "ci";
 
 /// What is wrong with a PR's CI.
