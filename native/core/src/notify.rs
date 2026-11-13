@@ -23,16 +23,20 @@
 //! the id, so a restart neither posts it again nor loses the id. The id is
 //! forgotten as the dismiss goes out, whatever cmux answers: a
 //! notification Jon already cleared answers not_found, and nothing tries
-//! again. The record keeps its start after that, so a wait that comes
+//! again. The record stays after that, marked down, so a wait that comes
 //! back (Restore needs you, say) never posts twice; a new wait on the same
 //! card has a new start and posts again. A CI wait is keyed on its checks'
 //! own time too (`same_wait`): a rerun that fails again posts anew, and a
-//! start that moves only because a session beside it ended does not.
+//! start that moves only because a session beside it ended does not,
+//! whether the post is up, on its way or failed.
 //!
-//! Nothing is decided on a frame that lists no workspaces, nor before the
-//! state file is read. A CI wait whose PR cannot be read this frame
+//! A card missing from the list may be in another window, so it is taken
+//! down but its record kept a week. Nothing is decided on a frame that
+//! lists no workspaces, nor before the state file is read. A CI wait
+//! whose PR, still on the card's branch, cannot be read this frame
 //! (`Session::ci_unsure`) keeps its notification, as it keeps its
-//! dismissal, since nothing says it ended.
+//! dismissal, since nothing says it ended, unless something else took it
+//! off the card: a session at it, sleep, or a dismissal.
 
 use crux_core::capability::Operation;
 use serde::{Deserialize, Serialize};
@@ -40,11 +44,17 @@ use serde::{Deserialize, Serialize};
 use crate::data::{AgentStatus, Data, Workspace};
 use crate::js::truthy;
 use crate::persist::{SavedNote, is_uuid};
+use crate::prs::pr_of;
 use crate::session::{Outbound, Session};
 use crate::text::clean_title;
 
 /// A card's title when it has none worth showing.
 pub const NO_TITLE: &str = "A session";
+
+/// How long a record outlives its card leaving the list, from its wait's
+/// start: a week. A card that comes back sooner with the same wait never
+/// posts it again.
+pub const FORGET_GONE_SECS: f64 = 7.0 * 24.0 * 60.0 * 60.0;
 
 /// One desktop notification for the runner to post, as `cmux notify
 /// --workspace <workspace> --title <title> --body <body> --json`. The
@@ -98,15 +108,16 @@ struct Wait {
 
 /// Whether `note` was posted for `wait`. A stop is its start. A CI wait
 /// is its checks' key too, so a rerun that fails again is a new wait; and
-/// while its notification is up, the key alone, since a stuck or red
-/// wait's start moves with its sessions' (ci_wait.rs `CiWait::since`): an
-/// idle session ending, or another finishing beside it, moves it without
-/// a new wait. Once taken down (a session took it up), a new start is a
-/// new wait.
+/// until it is taken down (up, on its way, or failed), the key alone,
+/// since a stuck or red wait's start moves with its sessions' (ci_wait.rs
+/// `CiWait::since`): an idle session ending, or another finishing beside
+/// it, moves it without a new wait. Once taken down (a session took it
+/// up), a new start is a new wait; the take down records the start it
+/// had then (`take_down`).
 fn same_wait(note: &SavedNote, wait: &Wait) -> bool {
     match (note.ci, wait.ci) {
         (None, None) => note.since == wait.since,
-        (Some(was), Some(now)) => was == now && (note.since == wait.since || note.id.is_some()),
+        (Some(was), Some(now)) => was == now && (note.since == wait.since || !note.down),
         (Some(_), None) | (None, Some(_)) => false,
     }
 }
@@ -163,18 +174,47 @@ impl Session {
     }
 
     /// Whether a notification recorded as `note` stays up in `w`, whose
-    /// card shows no wait that notifies: a CI wait whose PR this frame
-    /// could not read (`ci_unsure`), or before the PR poll's first read.
-    fn note_holds(&self, w: &Workspace, note: &SavedNote) -> bool {
+    /// card shows no wait that notifies: a CI wait before the PR poll's
+    /// first read, or one whose PR, still this branch's, this frame could
+    /// not read (`ci_unsure`) when nothing else took the wait off the card
+    /// (a session at it, sleep, or a dismissal: `ci_would_wait`).
+    fn note_holds(&self, data: &Data, w: &Workspace, note: &SavedNote) -> bool {
         let Some(key) = note.ci else { return false };
-        !self.ci_read || (!self.ci.contains_key(&w.id) && self.ci_unsure(w, key))
+        !self.ci_read
+            || (!self.ci.contains_key(&w.id)
+                && pr_of(&self.saved, Some(w)).is_some()
+                && self.ci_unsure(w, key)
+                && self.ci_would_wait(data, w, key))
+    }
+
+    /// Takes a card's notification down: dismissed by its id when it has
+    /// one, and its record kept, marked down, so the same wait never posts
+    /// again. A CI record takes the start its wait reads now, so the wait
+    /// restored after a session beside it moved that start is still the
+    /// same wait.
+    fn take_down(&mut self, ws: &str, note: SavedNote) {
+        if let Some(id) = note.id.clone() {
+            self.dismiss_note(id);
+        }
+        let since = self
+            .ci
+            .get(ws)
+            .filter(|ci| note.ci == Some(ci.key))
+            .map_or(note.since, |ci| ci.since);
+        let down = SavedNote {
+            since,
+            id: None,
+            down: true,
+            ..note
+        };
+        self.set_note(ws, Some(down));
     }
 
     /// Sets or deletes a workspace's record, here at once and in the state file.
     fn set_note(&mut self, ws: &str, note: Option<SavedNote>) {
         let value = match note.map(serde_json::to_value).transpose() {
             Ok(v) => v,
-            // A record is three plain fields, so this never happens.
+            // A record is four plain fields, so this never happens.
             Err(_) => return,
         };
         let key = format!("notified.{ws}");
@@ -190,7 +230,10 @@ impl Session {
 
     /// Posts and dismisses each card's notification as its wait begins and
     /// clears (the module's rules). Only the core that draws the sidebar
-    /// calls it, once a frame, after the view is built.
+    /// calls it, once a frame, after the view is built. A card missing
+    /// from the list may only be in another window, or moving between
+    /// two, so its notification comes down but its record stays, for a
+    /// week from its wait's start (`FORGET_GONE_SECS`).
     pub(crate) fn tend_notify(&mut self, data: &Data) {
         if !self.state_read {
             return;
@@ -198,18 +241,20 @@ impl Session {
         let Some(list) = data.workspaces.as_deref().filter(|l| !l.is_empty()) else {
             return;
         };
-        let gone: Vec<String> = self
+        let gone: Vec<(String, SavedNote)> = self
             .saved
             .notified
-            .keys()
-            .filter(|ws| !list.iter().any(|w| w.id == **ws))
-            .cloned()
+            .iter()
+            .filter(|(ws, _)| !list.iter().any(|w| w.id == **ws))
+            .map(|(ws, note)| (ws.clone(), note.clone()))
             .collect();
-        for ws in gone {
-            if let Some(id) = self.saved.notified.get(&ws).and_then(|n| n.id.clone()) {
-                self.dismiss_note(id);
+        let now = data.epoch;
+        for (ws, note) in gone {
+            if !note.down {
+                self.take_down(&ws, note);
+            } else if now.is_some_and(|now| now - note.since >= FORGET_GONE_SECS) {
+                self.set_note(&ws, None);
             }
-            self.set_note(&ws, None);
         }
         for w in list {
             self.tend_card(data, w);
@@ -220,7 +265,7 @@ impl Session {
     fn tend_card(&mut self, data: &Data, w: &Workspace) {
         let note = self.saved.notified.get(&w.id).cloned();
         match (self.notifying_wait(data, w), note) {
-            // Posted already, or on its way, or cleared and back.
+            // Posted already, or on its way, or failed, or cleared and back.
             (Some(wait), Some(note)) if same_wait(&note, &wait) => {}
             (Some(wait), note) => {
                 if let Some(id) = note.and_then(|n| n.id) {
@@ -230,6 +275,7 @@ impl Session {
                     since: wait.since,
                     ci: wait.ci,
                     id: None,
+                    down: false,
                 };
                 self.set_note(&w.id, Some(fresh));
                 self.outbox.push(Outbound::Notify(NotifyPost {
@@ -239,11 +285,8 @@ impl Session {
                     body: wait.body,
                 }));
             }
-            (None, Some(note)) if note.id.is_some() && !self.note_holds(w, &note) => {
-                if let Some(id) = note.id.clone() {
-                    self.dismiss_note(id);
-                }
-                self.set_note(&w.id, Some(SavedNote { id: None, ..note }));
+            (None, Some(note)) if !note.down && !self.note_holds(data, w, &note) => {
+                self.take_down(&w.id, note);
             }
             (None, _) => {}
         }
@@ -251,15 +294,15 @@ impl Session {
 
     /// The runner's answer to a post. The id is kept when the record still
     /// holds that wait, for the frame's `tend_notify` to dismiss once the
-    /// wait clears, which may be at once; a wait already replaced, or a
-    /// card already gone, has it dismissed now. An id not in cmux's shape
+    /// wait clears; a wait already taken down or replaced, or a card
+    /// already forgotten, has it dismissed now. An id not in cmux's shape
     /// never reaches a command line.
     pub fn notified(&mut self, answer: Notified) {
         let Some(id) = answer.id.filter(|id| is_uuid(id)) else {
             return;
         };
         match self.saved.notified.get(&answer.workspace).cloned() {
-            Some(note) if note.since == answer.since => {
+            Some(note) if note.since == answer.since && !note.down => {
                 // A second answer for one post would leave the first
                 // notification with no way to clear it.
                 if let Some(old) = note.id.clone().filter(|old| *old != id) {
@@ -397,7 +440,7 @@ mod tests {
             frame(&mut core, data(1100.0, working(1100.0))),
             [
                 format!("dismiss {ID}"),
-                r#"set notified.W {"since":1000.0}"#.to_string()
+                r#"set notified.W {"since":1000.0,"down":true}"#.to_string()
             ]
         );
         assert!(frame(&mut core, data(1130.0, working(1100.0))).is_empty());
@@ -412,22 +455,9 @@ mod tests {
             asked(&mut core, Event::Dismiss { id: "W".into() }),
             [
                 format!("dismiss {ID}"),
-                r#"set notified.W {"since":1000.0}"#.to_string()
+                r#"set notified.W {"since":1000.0,"down":true}"#.to_string()
             ]
         );
-    }
-
-    #[test]
-    fn a_card_gone_takes_its_notification_and_record_with_it() {
-        let mut core = posted();
-        let only_x: Data = serde_json::from_value(serde_json::json!({"epoch": 1100,
-            "workspaces": [{"id": "X", "title": "other", "selected": true}]}))
-        .unwrap();
-        assert_eq!(
-            frame(&mut core, only_x),
-            [format!("dismiss {ID}"), "set notified.W delete".to_string()]
-        );
-        assert!(core.session.saved.notified.is_empty());
     }
 
     #[test]
@@ -477,7 +507,7 @@ mod tests {
             frame(&mut again, data(1300.0, working(1300.0))),
             [
                 format!("dismiss {ID}"),
-                r#"set notified.W {"since":1000.0}"#.to_string()
+                r#"set notified.W {"since":1000.0,"down":true}"#.to_string()
             ]
         );
         // And restarted once more after the dismiss, still never twice.
@@ -514,17 +544,14 @@ mod tests {
     fn an_answer_after_the_wait_cleared_dismisses_at_once() {
         let mut core = sidebar("{}");
         assert_eq!(frame(&mut core, data(1060.0, stopped(1000.0))).len(), 2);
-        assert!(
-            frame(&mut core, data(1100.0, working(1100.0))).is_empty(),
-            "no id yet"
+        assert_eq!(
+            frame(&mut core, data(1100.0, working(1100.0))),
+            [r#"set notified.W {"since":1000.0,"down":true}"#],
+            "no id yet: marked down, nothing to dismiss"
         );
         assert_eq!(
             answer(&mut core, 1000.0, Some(ID)),
-            [
-                format!(r#"set notified.W {{"since":1000.0,"id":"{ID}"}}"#),
-                format!("dismiss {ID}"),
-                r#"set notified.W {"since":1000.0}"#.to_string()
-            ]
+            [format!("dismiss {ID}")]
         );
         // One for a wait already replaced goes straight away too.
         assert_eq!(frame(&mut core, data(2060.0, stopped(2000.0))).len(), 2);
@@ -541,7 +568,11 @@ mod tests {
         assert!(answer(&mut core, 1000.0, None).is_empty());
         assert!(answer(&mut core, 1000.0, Some("--all-read")).is_empty());
         assert!(frame(&mut core, data(1090.0, stopped(1000.0))).is_empty());
-        assert!(frame(&mut core, data(1100.0, working(1100.0))).is_empty());
+        assert_eq!(
+            frame(&mut core, data(1100.0, working(1100.0))),
+            [r#"set notified.W {"since":1000.0,"down":true}"#],
+            "nothing to dismiss"
+        );
     }
 
     #[test]
@@ -675,18 +706,127 @@ mod tests {
             asked(&mut core, Event::State(Box::new(merged))),
             [
                 format!("dismiss {ID}"),
-                r#"set notified.W {"since":900.0,"ci":800.0}"#.to_string()
+                r#"set notified.W {"since":900.0,"ci":800.0,"down":true}"#.to_string()
             ]
         );
-        // A session at work on it takes it down too.
+        // A session at work on it takes it down too, at the start the
+        // wait reads now.
         let mut fixing = red_posted();
         assert_eq!(
             frame(&mut fixing, data(1070.0, working(1060.0))),
             [
                 format!("dismiss {ID}"),
-                r#"set notified.W {"since":900.0,"ci":800.0}"#.to_string()
+                r#"set notified.W {"since":1060.0,"ci":800.0,"down":true}"#.to_string()
             ]
         );
+    }
+
+    /// W's ended session, which moves a red wait's start to 1100.
+    fn ended() -> serde_json::Value {
+        serde_json::json!({"id": "c", "kind": "claude", "status": "ended",
+            "sinceEpoch": 1100, "lastActivityAt": 900})
+    }
+
+    #[test]
+    fn a_ci_start_that_moves_before_the_id_is_back_never_posts_again() {
+        let mut core = ci_sidebar(FAILED, "");
+        assert_eq!(frame(&mut core, data(1020.0, idle())).len(), 2);
+        assert!(
+            frame(&mut core, data(1200.0, ended())).is_empty(),
+            "the post is on its way"
+        );
+        assert_eq!(
+            answer(&mut core, 900.0, Some(ID)),
+            [format!(
+                r#"set notified.W {{"since":900.0,"ci":800.0,"id":"{ID}"}}"#
+            )],
+            "and its id is kept"
+        );
+        // A post that failed is not tried again when the start moves.
+        let mut failed = ci_sidebar(FAILED, "");
+        assert_eq!(frame(&mut failed, data(1020.0, idle())).len(), 2);
+        assert!(answer(&mut failed, 900.0, None).is_empty());
+        assert!(frame(&mut failed, data(1200.0, ended())).is_empty());
+    }
+
+    #[test]
+    fn a_ci_wait_dismissed_after_its_start_moved_never_posts_on_restore() {
+        let mut core = red_posted();
+        assert!(frame(&mut core, data(1200.0, ended())).is_empty());
+        assert_eq!(
+            asked(&mut core, Event::Dismiss { id: "W".into() }),
+            [
+                format!("dismiss {ID}"),
+                r#"set notified.W {"since":1100.0,"ci":800.0,"down":true}"#.to_string()
+            ]
+        );
+        let seen = core.data.clone().unwrap_or_default();
+        core.session.restore_needs(seen.ws_by_id("W"));
+        assert!(frame(&mut core, data(1300.0, ended())).is_empty());
+    }
+
+    #[test]
+    fn a_ci_notification_comes_down_once_the_card_leaves_its_branch() {
+        let mut core = red_posted();
+        let moved: Data = serde_json::from_value(serde_json::json!({"epoch": 1100,
+            "workspaces": [
+                {"id": "W", "title": "fix login", "branch": "other", "agents": [idle()]},
+                {"id": "X", "title": "other", "selected": true}]}))
+        .unwrap();
+        assert_eq!(
+            frame(&mut core, moved),
+            [
+                format!("dismiss {ID}"),
+                r#"set notified.W {"since":900.0,"ci":800.0,"down":true}"#.to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn a_session_taking_up_a_ci_wait_takes_it_down_while_its_pr_is_unreadable() {
+        let mut core = red_posted();
+        let mut unsure = core.session.saved.clone();
+        if let Some(pr) = unsure.prs.get_mut("W") {
+            pr.status = crate::data::PrStatus::Unknown;
+        }
+        assert!(asked(&mut core, Event::State(Box::new(unsure))).is_empty());
+        assert_eq!(
+            frame(&mut core, data(1070.0, working(1060.0))),
+            [
+                format!("dismiss {ID}"),
+                r#"set notified.W {"since":900.0,"ci":800.0,"down":true}"#.to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn a_card_that_leaves_the_list_and_comes_back_never_posts_twice() {
+        let mut core = posted();
+        let only_x = |now: f64| -> Data {
+            serde_json::from_value(serde_json::json!({"epoch": now,
+                "workspaces": [{"id": "X", "title": "other", "selected": true}]}))
+            .unwrap_or_default()
+        };
+        assert_eq!(
+            frame(&mut core, only_x(1100.0)),
+            [
+                format!("dismiss {ID}"),
+                r#"set notified.W {"since":1000.0,"down":true}"#.to_string()
+            ]
+        );
+        assert!(frame(&mut core, only_x(1130.0)).is_empty());
+        assert!(
+            frame(&mut core, data(1160.0, stopped(1000.0))).is_empty(),
+            "back, with the same wait"
+        );
+        // Gone for good: the record goes once its wait is a week old.
+        let _ = frame(&mut core, only_x(1200.0));
+        assert!(frame(&mut core, only_x(1000.0 + FORGET_GONE_SECS - 1.0)).is_empty());
+        assert_eq!(
+            frame(&mut core, only_x(1000.0 + FORGET_GONE_SECS)),
+            ["set notified.W delete"]
+        );
+        assert!(core.session.saved.notified.is_empty());
     }
 
     #[test]

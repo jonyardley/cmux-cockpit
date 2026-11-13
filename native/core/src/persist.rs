@@ -384,8 +384,9 @@ pub struct SavedAsleep {
 /// The desktop notification the cockpit posted for one workspace's wait
 /// (notify.rs, #379): when the wait began, which keys it, the CI wait's
 /// own key for a CI wait (ci_wait.rs `CiWait::key`), and the id cmux gave
-/// it, kept until it is dismissed. Kept with no id after, so the same
-/// wait never notifies twice.
+/// it, kept until it is dismissed. Kept with no id after, marked `down`,
+/// so the same wait never notifies twice. A record with no id that is not
+/// down is a post on its way, or one that failed.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SavedNote {
     pub since: f64,
@@ -393,6 +394,9 @@ pub struct SavedNote {
     pub ci: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
+    /// Taken down: its wait cleared, or its card left the list.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub down: bool,
 }
 
 impl SavedNote {
@@ -708,6 +712,7 @@ mod tests {
             r#"{{"notified": {{
                 "W1": {{"since": 1000, "ci": 800, "id": "{id}"}},
                 "W2": {{"since": 1000}},
+                "W3": {{"since": 1000, "ci": 800, "down": true}},
                 "zero": {{"since": 0}},
                 "odd": {{"since": 1000, "id": "--all-read"}},
                 "bad": {{"since": "soon"}},
@@ -716,8 +721,9 @@ mod tests {
         ))
         .unwrap();
         let kept: Vec<&str> = saved.notified.keys().map(String::as_str).collect();
-        assert_eq!(kept, ["W1", "W2"]);
+        assert_eq!(kept, ["W1", "W2", "W3"]);
         assert_eq!(saved.notified["W1"].id.as_deref(), Some(id));
+        assert!(!saved.notified["W1"].down && saved.notified["W3"].down);
         assert_eq!(saved.notified["W1"].ci, Some(800.0));
         // Written back as read, and left out while empty.
         let text = serde_json::to_string(&saved).unwrap();

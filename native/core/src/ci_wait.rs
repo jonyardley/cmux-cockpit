@@ -212,6 +212,17 @@ impl Session {
         }
     }
 
+    /// Whether a CI wait keyed `key` in `w` would wait on Jon were its PR
+    /// read: no session at it, the card awake, and the wait not dismissed.
+    pub(crate) fn ci_would_wait(&self, data: &Data, w: &Workspace, key: f64) -> bool {
+        self.sleep_kind(&w.id).is_none()
+            && !self.dismissed_key(&w.id, CI_KEY, key)
+            && !self
+                .shown_agents(w)
+                .iter()
+                .any(|a| is_on_it(&self.saved, data, w, a))
+    }
+
     /// The workspace's CI wait as the sidebars show it: waiting on Jon and
     /// not dismissed.
     pub fn ci_shown(&self, w: Option<&Workspace>) -> Option<&CiWait> {
