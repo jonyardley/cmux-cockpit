@@ -1109,6 +1109,29 @@ mod tests {
         assert_eq!(asked(&app, &mut model, ended), ["running a", "render"]);
     }
 
+    /// The sidebar's two-second tick moves the clock with no new frame or
+    /// file, and that alone takes back a verdict whose last task has gone
+    /// unlisted past its age (#371).
+    #[test]
+    fn a_tick_alone_clears_the_verdict_once_its_task_goes_stale() {
+        let app = Cockpit;
+        let mut model = Model::default();
+        let _ = app.update(Event::PanelOn, &mut model);
+        let shown = r#", "running": {"a": {"agent": "c", "since": 900, "counts": [{"type": "shell", "n": 1}]}}"#;
+        let _ = app.update(running_shell(shown), &mut model);
+        assert_eq!(asked(&app, &mut model, idle_chat()), ["render"]);
+        let tick = |now: f64| Event::At {
+            now,
+            event: Box::new(Event::Refresh),
+        };
+        let limit = 950.0 + crate::running::MAX_AGE_S;
+        assert_eq!(asked(&app, &mut model, tick(limit)), ["render"]);
+        assert_eq!(
+            asked(&app, &mut model, tick(limit + 1.0)),
+            ["running a", "render"]
+        );
+    }
+
     /// Card `id` as the sidebar's panel shows it.
     fn card_in(model: &Model, id: &str) -> Option<crate::panel::Card> {
         let panel = model.view.panel.as_ref();

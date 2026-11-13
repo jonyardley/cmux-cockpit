@@ -286,7 +286,7 @@ export interface SavedTask {
   pid?: number;
   /** Epoch seconds a snapshot first listed it. */
   startedEpoch: number;
-  /** Epoch seconds a snapshot last listed it; the prune counts from here. */
+  /** Epoch seconds a snapshot last listed it; the prune and the core's age limit count from here. */
   seenEpoch: number;
 }
 

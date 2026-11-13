@@ -7,8 +7,10 @@
 //! this is the fallback for an end it missed: a task counts only for the
 //! chat that owns its session, under any id that chat ran under
 //! (`crate::owner`), and only while that chat is open. The chat's process
-//! gone ends its work here at once; the hook's prune removes the entry
-//! from the file later, since the core never writes this map.
+//! gone ends its work here at once. A task left unlisted past its kind's
+//! age stops counting too (`crate::running`, #371), for a chat still open
+//! whose last turn came before the task ended; the hook's prune removes
+//! the entry from the file later, since the core never writes this map.
 //!
 //! The card's Running status reads it through `crate::running`, and the
 //! core saves what it found for the agents panel (`crate::running_save`).

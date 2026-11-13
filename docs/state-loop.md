@@ -588,7 +588,8 @@ clears its work at once. The core also stops counting a task no snapshot
 has listed for its kind's age (`still_runs` in `native/core/src/running.rs`,
 #371), by the frame's clock, so a chat whose last turn came before the
 task ended (no expiry woke it, or it never had another turn) lets go of
-it within one paced rebuild of the limit. Then, on the next write, the
+it on the sidebar's next tick past the limit (every two seconds,
+`Heartbeat.pollInterval`), with no new frame or file needed. Then, on the next write, the
 hook prunes any task past the same age (`prune` in
 `scripts/hooks/report-background.ts`); the core never writes this map, so
 the prune is what takes the entry out of the file.

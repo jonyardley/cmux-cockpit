@@ -162,7 +162,8 @@ pub struct SavedTask {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
     pub started_epoch: f64,
-    /// When a snapshot last listed it; the hook's prune counts from here.
+    /// When a snapshot last listed it; the hook's prune and the core's age
+    /// limit (`crate::running`) count from here.
     pub seen_epoch: f64,
 }
 
