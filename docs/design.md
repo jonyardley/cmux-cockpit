@@ -13,7 +13,8 @@ inconsistency say so and link to the [known gaps](#known-gaps).
 
 Decisions D1 to D15 on the audit page are all decided, each as option a
 (11 October 2026). D10 a was reversed on 13 November 2026: the
-[move size chip](#move-size-chip) takes the wait's colour again. Where one sets a rule for future work, the section says so
+[move size chip](#move-size-chip) takes the wait's colour again. Where one
+sets a rule for future work, the section says so
 in a line that starts **Target (Dn a, not built yet)**. That line is the rule
 to build towards; everything else in the section describes main today. A
 target becomes today's description in the PR that builds it, listed in
@@ -503,8 +504,8 @@ left off and the detail, indented to the title. No face until selected
 (a waiting row takes its wait's wash, [waiting card](#waiting-card)); grey
 wash under the pointer. Title `Font.title` 12.5 regular (medium when
 selected); age in `metaText`, or the waiting ink while it waits, or the
-[late wait](#late-wait) chip once the wait reaches half an hour. Padding 25 leading, 12 trailing, 5 above and
-below; radius `Radius.row` 9. Where: `Views/CardView.swift:126-170`.
+[late wait](#late-wait) chip once the wait reaches half an hour. Padding
+25 leading, 12 trailing, 5 above and below; radius `Radius.row` 9. Where: `Views/CardView.swift:126-170`.
 
 A row has no status words, so a sleeping or waking row says it at the
 head of its detail, "Asleep · Tests pass" (or "Asleep" alone), in the
@@ -795,8 +796,9 @@ The core picks every token on the card's `Waiting` (`Waiting::of`,
   down the leading edge, inside the card's rounded shape.
 - **Dense row:** no edge or stripe; its face at rest is `clayWash` or
   `amberWash` (the hue at 0x29, about 0.16), with the grey hover wash over
-  it under the pointer. A badge's needs dot is ringed in the wash laid
-  over the panel ground.
+  it under the pointer. A badge's needs dot is ringed in what the row
+  shows: the wash over the panel ground, and the hover wash over that
+  under the pointer (`Palette.rowGround`).
 - **Selected:** the `select` outline at 2 wins. On a card the stripe moves
   in by the outline's width, so the outline stays whole and the stripe
   sits inside it; a selected row takes `Own.card` like any selected row,
