@@ -1,0 +1,17 @@
+{
+  "category": "agent",
+  "name": "agent.notification.decision",
+  "occurred_at": "2026-11-13T10:17:50.863Z",
+  "payload": {
+    "agent": "claude",
+    "event_id": "34A96EC5-C333-4CB0-98FC-FA74B8E43204",
+    "identity": "8a2e6829e5864a420ce3728c197a790ba89ca658f99421224ac3cb79155b4179",
+    "kind": "agent.error.reported",
+    "reason": "accepted"
+  },
+  "seq": 509022,
+  "source": "journal",
+  "surface_id": "E1248C60-050B-421C-9742-65C4A5C24868",
+  "type": "event",
+  "workspace_id": null
+}

@@ -1,0 +1,26 @@
+{
+  "category": "notification",
+  "name": "notification.created",
+  "occurred_at": "2026-11-13T10:17:50.864Z",
+  "payload": {
+    "body": null,
+    "body_length": 67,
+    "created_at": "2026-11-13T10:17:50.863Z",
+    "delivery": "store",
+    "is_read": false,
+    "notification_id": "A10B0241-B0AA-4C95-A06A-952212CB0BA7",
+    "redacted_fields": ["title", "subtitle", "body"],
+    "replaced_notification_ids": [],
+    "subtitle": null,
+    "subtitle_length": 10,
+    "surface_id": "E1248C60-050B-421C-9742-65C4A5C24868",
+    "title": null,
+    "title_length": 11,
+    "workspace_id": "CC030FF9-E020-4B62-896A-080F25375309"
+  },
+  "seq": 509024,
+  "source": "notification.store",
+  "surface_id": "E1248C60-050B-421C-9742-65C4A5C24868",
+  "type": "event",
+  "workspace_id": "CC030FF9-E020-4B62-896A-080F25375309"
+}
