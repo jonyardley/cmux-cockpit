@@ -81,7 +81,8 @@ pub enum StatusKind {
     /// or silent too long (issue #376, stopped.rs). Your turn's clay.
     Stopped,
     /// Its PR's CI is stuck or failing with nobody on it (issue #377,
-    /// ci_wait.rs). Your turn's clay, as Stopped.
+    /// ci_wait.rs), or it has read merge-ready four hours unmerged (issue
+    /// #380, merge_wait.rs). Your turn's clay, as Stopped.
     Ci(CiTrouble),
     /// Still working, but silent a while.
     Quiet,
@@ -172,6 +173,9 @@ impl StatusKind {
                 label: match trouble {
                     CiTrouble::Stuck => CI_STUCK_WORD,
                     CiTrouble::Failing => CI_FAILED_WORD,
+                    // Past four hours it waits on Jon: Your turn's clay,
+                    // in the same words (issue #380).
+                    CiTrouble::MergeReady => MERGE_READY_WORD,
                 },
                 ..plain_style(&Status::NeedsInput)
             },
@@ -546,12 +550,25 @@ impl Session {
         self.merge_ready(w, &card)
     }
 
+    /// Whether the card's status says Ready to merge in either hue: green
+    /// (`shows_merge_ready`), or clay once the change has waited four hours
+    /// and its card's agent carries that wait (issue #380). Where it does,
+    /// the PR chip's "ready" would only say it again.
+    pub fn says_merge_ready(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        let card = self.card_running(data, w);
+        let waits = card
+            .agent
+            .as_ref()
+            .is_some_and(|a| a.ci == Some(CiTrouble::MergeReady));
+        waits || self.merge_ready(w, &card)
+    }
+
     /// The PR's words a compact card runs on from its status: the number
     /// alone once the status says Ready to merge, since the PR's "ready"
     /// would only say it again and crowd the line ("Ready to merge 3m ·
     /// #1"); else its full words ("#45 · 1 failing").
     pub fn card_pr_words(&mut self, data: &Data, w: Option<&Workspace>, pr: &PrSummary) -> String {
-        if self.shows_merge_ready(data, w) {
+        if self.says_merge_ready(data, w) {
             pr.tag.clone()
         } else {
             pr.text.clone()

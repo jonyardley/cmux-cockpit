@@ -1977,6 +1977,149 @@ mod tests {
         assert_eq!(w_card(&mut core).1.count, 0);
     }
 
+    /// W's PR as the poll saves it merge-ready since 1000 (issue #380):
+    /// every check passed and GitHub would merge it. Put in `ci_core`'s
+    /// checks slot, so it carries the PR's other fields too.
+    const READY: &str = r#"[{"name": "build", "state": "pass", "started": 800}],
+        "mergeable": true, "readySince": 1000"#;
+    /// When W's merge-ready PR begins to wait on Jon: four hours on.
+    const MARK: f64 = 1000.0 + crate::merge_wait::MERGE_WAIT_SECS;
+
+    /// When W's shown PR wait began to wait on Jon, the instant a
+    /// notification keys on (#379).
+    fn w_wait_since(core: &Model) -> Option<f64> {
+        let data = core.data.clone().unwrap_or_default();
+        core.session.ci_shown(data.ws_by_id("W")).map(|ci| ci.since)
+    }
+
+    #[test]
+    fn a_merge_ready_change_stays_green_and_out_for_four_hours() {
+        let mut core = ci_core(MARK - 1.0, IDLE, READY, "");
+        let (card, needs) = w_card(&mut core);
+        assert_eq!((card.waiting, needs.count), (None, 0));
+        assert_eq!(w_kind(&mut core), StatusKind::MergeReady);
+        assert_eq!(w_pr(&mut core), "#12", "the status says ready");
+        assert_eq!(w_wait_since(&core), None);
+    }
+
+    #[test]
+    fn past_four_hours_it_joins_needs_you_dated_from_the_mark() {
+        let mut core = ci_core(MARK, IDLE, READY, "");
+        let (card, needs) = w_card(&mut core);
+        assert_eq!((needs.count, needs.fill), (1, Token::Clay));
+        assert_eq!(card.waiting, Some(Waiting::of(false)), "clay, never amber");
+        assert_eq!(w_line(&mut core), "Ready to merge: Docs layout, merge?");
+        assert_eq!(w_kind(&mut core), StatusKind::Ci(CiTrouble::MergeReady));
+        assert_eq!(card.status_ink, Token::ClayText);
+        assert_eq!(card.age, "<1m", "from the four-hour mark");
+        assert_eq!(w_pr(&mut core), "#12", "the status still says ready");
+        assert_eq!(w_wait_since(&core), Some(MARK));
+        // Half an hour on, the late chip; the instant has not moved.
+        ci_frame(&mut core, MARK + 1800.0, IDLE);
+        let card = w_card(&mut core).0;
+        assert_eq!(card.late.map(|l| l.text), Some("waiting 30m".to_string()));
+        assert_eq!(w_wait_since(&core), Some(MARK));
+        // No session left: a stand-in carries it.
+        let mut none = ci_core(MARK, "", READY, "");
+        assert_eq!(w_card(&mut none).1.count, 1);
+        assert_eq!(w_line(&mut none), "Ready to merge: Docs layout, merge?");
+    }
+
+    #[test]
+    fn a_merge_wait_stays_out_while_a_session_is_on_it_or_the_card_sleeps() {
+        let mut working = ci_core(MARK, WORKING, READY, "");
+        assert_eq!(w_card(&mut working).1.count, 0);
+        assert_ne!(w_kind(&mut working), StatusKind::Ci(CiTrouble::MergeReady));
+        let asleep = r#""asleep": {"W": {"surfaces": ["S"], "since": 1000}},"#;
+        let mut parked = ci_core(MARK, IDLE, READY, asleep);
+        assert_eq!(w_card(&mut parked).1.count, 0);
+    }
+
+    #[test]
+    fn a_restart_keeps_the_merge_timer() {
+        let core = ci_core(MARK - 60.0, IDLE, READY, "");
+        let text = serde_json::to_string(&core.session.saved).unwrap_or_default();
+        let mut restarted = Model::default();
+        restarted.session.saved = SavedState::from_json(&text).unwrap();
+        ci_frame(&mut restarted, MARK, IDLE);
+        assert_eq!(w_card(&mut restarted).1.count, 1);
+        assert_eq!(w_wait_since(&restarted), Some(MARK));
+    }
+
+    /// W's saved PR #12, open or as `status` says, with `checks` (the
+    /// rest of the PR's fields riding along, as in `READY`).
+    fn w_saved(status: &str, checks: &str) -> SavedState {
+        SavedState::from_json(&format!(
+            r#"{{"prs": {{"W": {{"number": 12, "url": "https://github.com/o/r/pull/12",
+                "status": "{status}", "branch": "feat", "title": "Docs layout",
+                "checks": {checks}}}}}}}"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn merging_or_a_new_red_check_takes_it_out() {
+        let mut core = ci_core(MARK, IDLE, READY, "");
+        assert_eq!(w_card(&mut core).1.count, 1);
+        // Merged, even before the poll lets its time go.
+        core.session.saved = w_saved("merged", READY);
+        ci_frame(&mut core, MARK + 60.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert_eq!(w_wait_since(&core), None);
+        // A new red check: no longer merge-ready, though the time lingers;
+        // it waits as red CI instead.
+        let red = r#"[{"name": "build", "state": "fail", "started": 1500}],
+            "mergeable": true, "readySince": 1000"#;
+        let mut core = ci_core(MARK, IDLE, READY, "");
+        core.session.saved = w_saved("open", red);
+        ci_frame(&mut core, MARK + 60.0, IDLE);
+        assert_eq!(w_kind(&mut core), StatusKind::Ci(CiTrouble::Failing));
+        assert_eq!(w_line(&mut core), "CI failed, nobody fixing: Docs layout");
+    }
+
+    #[test]
+    fn a_frame_with_no_pr_data_neither_resets_the_merge_timer_nor_its_dismissal() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let blind = |core: &mut Model, now: f64| {
+            let mut v: serde_json::Value = serde_json::to_value(ci_data(now, IDLE)).unwrap();
+            v["workspaces"][0]["branch"] = "main".into();
+            let data: Data = serde_json::from_value(v).unwrap();
+            let _effects = Cockpit.update(Event::Data(data), core);
+        };
+        let mut core = ci_core(MARK - 60.0, IDLE, READY, "");
+        // cmux reports W before its branch settles: no saved PR matches.
+        blind(&mut core, MARK);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        ci_frame(&mut core, MARK + 10.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 1, "still four hours on");
+        assert_eq!(w_wait_since(&core), Some(MARK), "the same instant");
+        // Dismissed, it stays dismissed across a blind frame.
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(
+            core.session.pending.last(),
+            Some(&(
+                "dismissed.W".to_string(),
+                Some(serde_json::json!({"ci": 1000}))
+            )),
+            "saved under the PR wait's key, at when it first read ready"
+        );
+        blind(&mut core, MARK + 20.0);
+        ci_frame(&mut core, MARK + 30.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 0, "the dismissal held");
+        assert_eq!(w_kind(&mut core), StatusKind::MergeReady, "green again");
+        // Ready afresh later (it went red and back between): a new wait.
+        let fresh = READY.replace("1000", "50000");
+        core.session.saved = w_saved("open", &fresh);
+        ci_frame(
+            &mut core,
+            50_000.0 + crate::merge_wait::MERGE_WAIT_SECS,
+            IDLE,
+        );
+        assert_eq!(w_card(&mut core).1.count, 1, "a fresh timer waits again");
+        assert_eq!(core.session.dismissed.get("W"), None, "the old one let go");
+    }
+
     #[test]
     fn saved_checks_from_before_the_times_still_load_and_never_read_stuck() {
         let old = r#"[{"name": "mac", "state": "pending"}]"#;

@@ -16,14 +16,21 @@
 //! checks' own times (`CiWait::key`): it holds while a session works on it
 //! and after, and lapses only when the PR's checks change (a rerun, a new
 //! push, going green).
+//!
+//! A change left merge-ready four hours waits on its PR the same way
+//! (issue #380, merge_wait.rs): `CiTrouble::MergeReady`, keyed on when it
+//! first read merge-ready. It never coincides with stuck or red CI, since
+//! a merge-ready PR has every check passed, so the one wait, dismissal
+//! and stand-in serve both.
 
 use serde::{Deserialize, Serialize};
 
 use crate::activity::most_active;
 use crate::data::{Agent, AgentStatus, Data, PrStatus, Workspace};
 use crate::js::{num_text, truthy};
+use crate::merge_wait::merge_wait;
 use crate::persist::{SavedCheck, SavedState};
-use crate::prs::{checks_of, pr_of, stuck};
+use crate::prs::{checks_of, pr_of, ready_since_of, stuck};
 use crate::session::Session;
 use crate::text::clean_title;
 use crate::time::now_epoch;
@@ -40,6 +47,10 @@ pub enum CiTrouble {
     Stuck,
     /// A check failed.
     Failing,
+    /// Every check passed and GitHub would merge it, and it has read so
+    /// four hours or more with nobody merging it (issue #380,
+    /// merge_wait.rs).
+    MergeReady,
 }
 
 /// A workspace's PR whose CI is in trouble, as the last frame read it.
@@ -48,11 +59,14 @@ pub struct CiWait {
     pub trouble: CiTrouble,
     /// The checks' own time the trouble is keyed on: the stuck check's
     /// queue or start time, else the latest start of a failing check (0
-    /// with none known). It moves only when the checks do, so a dismissal
-    /// keyed on it holds until the PR's state changes.
+    /// with none known), else when a merge-ready PR first read so. It
+    /// moves only when the PR does, so a dismissal keyed on it holds until
+    /// the PR's state changes.
     pub key: f64,
     /// When it began to wait on Jon: the later of when the trouble began
-    /// and when the workspace's last session stopped working.
+    /// and when the workspace's last session stopped working; for a
+    /// merge-ready PR, the four-hour mark alone, an instant that never
+    /// moves while it waits (issue #380).
     pub since: f64,
     /// The PR as the words name it: its title, else its number, "#12".
     pub pr: String,
@@ -74,14 +88,19 @@ fn trouble_of(checks: &[SavedCheck], now: f64) -> Option<(CiTrouble, f64, f64)> 
 }
 
 /// The CI trouble of the workspace's first PR at epoch `now`: an open
-/// numbered PR with the poller's checks. None for any other.
+/// numbered PR with the poller's checks, stuck or red, else left
+/// merge-ready four hours (merge_wait.rs). None for any other.
 fn ci_of(saved: &SavedState, w: &Workspace, now: f64) -> Option<(CiTrouble, f64, f64, String)> {
     let pr = pr_of(saved, Some(w))?;
     let number = truthy(pr.number)?;
     if pr.status != Some(PrStatus::Open) {
         return None;
     }
-    let (trouble, key, began) = trouble_of(checks_of(saved, w), now)?;
+    let checks = checks_of(saved, w);
+    let (trouble, key, began) = trouble_of(checks, now).or_else(|| {
+        merge_wait(&pr, checks, ready_since_of(saved, w), now)
+            .map(|(key, began)| (CiTrouble::MergeReady, key, began))
+    })?;
     let title = clean_title(pr.title.as_deref());
     let name = if title.is_empty() {
         format!("#{}", num_text(number))
@@ -139,12 +158,18 @@ impl Session {
                 .iter()
                 .filter_map(|a| truthy(a.since_epoch))
                 .fold(0.0, f64::max);
+            // A merge wait is dated from its four-hour mark alone, so the
+            // instant a notification keys on never moves (#379).
+            let since = match trouble {
+                CiTrouble::MergeReady => began,
+                CiTrouble::Stuck | CiTrouble::Failing => began.max(stopped_working),
+            };
             found.insert(
                 w.id.clone(),
                 CiWait {
                     trouble,
                     key,
-                    since: began.max(stopped_working),
+                    since,
                     pr,
                     waits: !on_it && !asleep,
                 },
