@@ -511,6 +511,7 @@ mod tests {
         let check = |state: &str| SavedCheck {
             name: "build".into(),
             state: state.into(),
+            ..SavedCheck::default()
         };
         let open = PullRequest {
             number: Some(1.0),
@@ -582,6 +583,7 @@ mod tests {
         let pending = [SavedCheck {
             name: "b".into(),
             state: "pending".into(),
+            ..SavedCheck::default()
         }];
         let s = summary_of(&pr(PrStatus::Open, true), &pending).unwrap();
         assert_eq!(

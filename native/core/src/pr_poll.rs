@@ -35,7 +35,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::data::{Data, PrStatus, PullRequest, Workspace};
 use crate::js::non_empty;
-use crate::persist::SavedPr;
+use crate::persist::{SavedCheck, SavedPr};
 use crate::prs::{PrHealth, health_of};
 
 /// The shortest wait between two asks for one directory.
@@ -272,6 +272,29 @@ impl Target {
     }
 }
 
+/// Gives each check of `pr` still waiting for a runner with no queue time
+/// from GitHub the one the poll saw it waiting since: the time `before`
+/// (the same PR as last answered, or as the state file holds it after a
+/// restart) had for a waiting check of that name, else `now`, when the
+/// poll first saw it. So the clock on a check stuck in the queue runs from
+/// the first answer that showed it, and holds from answer to answer.
+fn stamp_queued(pr: &mut SavedPr, before: Option<&SavedPr>, now: f64) {
+    let waiting = |c: &SavedCheck| c.state == "pending" && c.started.is_none();
+    let earlier = |name: &str| {
+        before?
+            .checks
+            .as_deref()?
+            .iter()
+            .find(|c| c.name == name && waiting(c))?
+            .queued
+    };
+    for check in pr.checks.iter_mut().flatten() {
+        if waiting(check) && check.queued.is_none() {
+            check.queued = Some(earlier(&check.name).unwrap_or(now));
+        }
+    }
+}
+
 /// The wait after `failures` failed asks in a row: FLOOR_SECS doubled
 /// each time, up to BACKOFF_CAP_SECS.
 fn backoff(failures: u32) -> f64 {
@@ -377,11 +400,21 @@ impl PrPoll {
     /// Takes an answer. One for a directory no workspace is in any more,
     /// or a late one to an ask already made again, is dropped.
     pub fn record(&mut self, polled: PrPolled) {
-        if let Some(t) = self.targets.get_mut(&polled.directory)
-            && t.asked == Some(polled.asked)
-        {
-            t.record(polled.answer);
+        let Some(t) = self.targets.get_mut(&polled.directory) else {
+            return;
+        };
+        if t.asked != Some(polled.asked) {
+            return;
         }
+        let mut answer = polled.answer;
+        if let PollAnswer::Answered { pr: Some(pr), .. } = &mut answer {
+            let before = match &t.known {
+                Some(Some(known)) if known.url == pr.url => Some(known),
+                _ => self.file.values().find(|f| f.url == pr.url),
+            };
+            stamp_queued(pr, before, polled.epoch);
+        }
+        t.record(answer);
     }
 
     /// A new state file: where it changed a workspace's PR since it was
@@ -489,6 +522,7 @@ mod tests {
                     .map(|(i, s)| SavedCheck {
                         name: format!("c{i}"),
                         state: (*s).into(),
+                        ..SavedCheck::default()
                     })
                     .collect(),
             ),
@@ -777,18 +811,21 @@ mod tests {
         assert!(p.writes(&d, "/a").is_empty(), "nothing answered yet");
         let _ = p.due(&d, 0.0);
         p.record(answered("/a", Some(pr(&["pending"])), 0.0));
+        // The waiting check is written with when the poll first saw it.
+        let stamped = queued_at(pr(&["pending"]), &[Some(0.0)]);
         let want: BTreeMap<String, Option<SavedPr>> = [
-            ("a".to_string(), Some(pr(&["pending"]))),
-            ("b".to_string(), Some(pr(&["pending"]))),
+            ("a".to_string(), Some(stamped.clone())),
+            ("b".to_string(), Some(stamped.clone())),
         ]
         .into();
         assert_eq!(p.writes(&d, "/a"), want, "c is in another directory");
 
-        // The file catches up with the write: nothing more to write, and
-        // the answer is still held, so a failure next keeps showing it.
+        // The file catches up with the write, times and all: nothing more
+        // to write, and the answer is still held, so a failure next keeps
+        // showing it.
         let file: BTreeMap<String, SavedPr> = [
-            ("a".to_string(), pr(&["pending"])),
-            ("b".to_string(), pr(&["pending"])),
+            ("a".to_string(), stamped.clone()),
+            ("b".to_string(), stamped),
         ]
         .into();
         p.file_read(&file, Some(&d));
@@ -808,6 +845,57 @@ mod tests {
         p.file_read(&other, Some(&d));
         assert!(p.targets.get("/a").is_some_and(|t| t.known.is_none()));
         assert!(p.writes(&d, "/a").is_empty());
+    }
+
+    /// `pr` with its checks' queue times set, in order.
+    fn queued_at(mut pr: SavedPr, times: &[Option<f64>]) -> SavedPr {
+        for (check, at) in pr.checks.iter_mut().flatten().zip(times) {
+            check.queued = *at;
+        }
+        pr
+    }
+
+    #[test]
+    fn times_a_waiting_check_from_when_the_poll_first_saw_it() {
+        let d = data(vec![ws("a", "/a")]);
+        let mut p = on();
+        // c0 waits with no time from GitHub, c1 has one, c2 is running.
+        let mut first = queued_at(pr(&["pending", "pending", "pending"]), &[None, Some(5.0)]);
+        if let Some(c) = first.checks.as_mut().and_then(|c| c.get_mut(2)) {
+            c.started = Some(8.0);
+        }
+        let _ = p.due(&d, 100.0);
+        p.record(answered("/a", Some(first.clone()), 100.0));
+        let times = |p: &PrPoll| {
+            let held = p.targets.get("/a").and_then(|t| t.known.clone().flatten());
+            held.and_then(|pr| pr.checks)
+                .unwrap_or_default()
+                .iter()
+                .map(|c| c.queued)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(times(&p), [Some(100.0), Some(5.0), None]);
+
+        // The next answer, still waiting, keeps the first sighting.
+        let _ = p.due(&d, 130.0);
+        p.record(answered("/a", Some(first.clone()), 130.0));
+        assert_eq!(times(&p), [Some(100.0), Some(5.0), None]);
+
+        // After a restart the state file's time carries on.
+        let mut fresh = on();
+        let file: BTreeMap<String, SavedPr> =
+            [("a".to_string(), queued_at(first.clone(), &[Some(100.0)]))].into();
+        fresh.file_read(&file, Some(&d));
+        let _ = fresh.due(&d, 900.0);
+        fresh.record(answered("/a", Some(first.clone()), 900.0));
+        assert_eq!(times(&fresh), [Some(100.0), Some(5.0), None]);
+
+        // Another PR on the branch is a new wait.
+        let _ = p.due(&d, 400.0);
+        let mut other = first;
+        other.url = "https://github.com/o/r/pull/8".into();
+        p.record(answered("/a", Some(other), 400.0));
+        assert_eq!(times(&p), [Some(400.0), Some(5.0), None]);
     }
 
     /// An answer for `/a` to the ask made at `asked`.

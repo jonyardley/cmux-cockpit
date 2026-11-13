@@ -18,7 +18,7 @@
           "title": "Poll",
           "additions": 3.0,
           "deletions": 1.0,
-          "checks": [{ "name": "check", "state": "pass" }]
+          "checks": [{ "name": "check", "state": "pass", "started": 1794571140.0 }]
         },
         "W2": null
       }
