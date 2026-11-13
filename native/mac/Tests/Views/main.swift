@@ -191,6 +191,23 @@ if let text = try? String(contentsOf: snapshots.appendingPathComponent("needs-an
     for c in rows where c.waiting == nil {
         check(c.detailInk == .secondary, "\(c.title): a detail not waiting is secondary")
     }
+    // A waiting row's face is the wait's wash, with no edge or stripe; once
+    // selected it takes the card's face and the outline.
+    for c in waitingRows {
+        check(CardText.wash(c, row: true) == c.waiting?.wash && CardText.restEdge(c, row: true) == .clear && CardText.stripe(c, row: true) == nil,
+              "\(c.title): a waiting row is washed in its wait's colour")
+        var picked = c
+        picked.selected = true
+        check(CardText.wash(picked, row: true) == nil, "\(c.title): selected, it takes the card's face")
+    }
+    // A wait of half an hour or more says so on a clay chip; a shorter one
+    // keeps its plain age.
+    let late = rows.filter { $0.late != nil }
+    check(late.map(\.title) == ["Oldest question"], "needs-and-next: only the 30m wait is late")
+    for c in late {
+        check(c.late == LateWait(text: "waiting \(c.age)", ink: .clayText, face: .clayChipFace, edge: .clayChipEdge),
+              "\(c.title): \"waiting \(c.age)\" on the clay chip")
+    }
     var quiet = panel
     quiet.needs.count = 0
     quiet.needs.target = nil
@@ -223,18 +240,44 @@ if let panel = load("lanes") {
         check(CardText.mark(chip) == .clay && chip.status.hasPrefix("Your turn: "), "Your turn draws a clay dot and its reason")
         check(CardText.dismissable(chip), "a waiting card shows its x under the pointer")
         check(CardText.ageInk(chip) == .clayText && CardText.titleAge(chip) == chip.age && !chip.age.isEmpty, "its age on the title row, in clay")
-        check(chip.chips.allSatisfy { $0.kind != .size || $0.pieces.allSatisfy { $0.ink == .secondary } }, "its size chip is neutral, not a state ink")
+        check(chip.chips.allSatisfy { $0.kind != .size || ($0.face == .clayChipFace && $0.edge == .clayChipEdge && $0.pieces.allSatisfy { $0.ink == .clayText }) },
+              "its size chip takes Your turn's clay")
+        // It stands out as a whole (docs/design.md#waiting-card): the clay
+        // edge and stripe, and no wash, which is a dense row's.
+        check(CardText.restEdge(chip, row: false) == .clayCardEdge && CardText.stripe(chip, row: false) == .clay && CardText.wash(chip, row: false) == nil,
+              "Your turn: a clay edge and stripe")
     } else {
         check(false, "lanes: Chip colours waits")
     }
     if let ask = waiting.first(where: { $0.title == "Release notes" }) {
         check(CardText.mark(ask) == .amber && ask.status == "Asking: allow git push?", "Asking draws an amber dot and its reason")
+        check(CardText.restEdge(ask, row: false) == .amberCardEdge && CardText.stripe(ask, row: false) == .amber, "Asking: an amber edge and stripe")
+        var picked = ask
+        picked.selected = true
+        check(CardText.stripe(picked, row: false) == .amber, "a selected waiting card keeps its stripe, inside the outline")
     } else {
         check(false, "lanes: Release notes asks")
     }
     for c in cards where c.waiting == nil {
         check(CardText.mark(c) == nil && CardText.ageInk(c) == .metaText && !CardText.dismissable(c),
               "\(c.title): no dot, no x and its age in the meta ink while it waits on nobody")
+        let row = c.density == .row
+        check(CardText.restEdge(c, row: row) == (row ? .clear : .cardEdge) && CardText.stripe(c, row: row) == nil
+                  && CardText.wash(c, row: row) == nil && c.late == nil,
+              "\(c.title): the plain edge, no stripe, no wash and no late chip while it waits on nobody")
+    }
+}
+
+// The size chip leads a Projects card's chips and takes the wait's colour.
+if let panel = load("projects") {
+    let sized = panel.projects.compactMap { r -> Card? in
+        if case .card(let c) = r, c.chips.contains(where: { $0.kind == .size }) { return c }
+        return nil
+    }
+    check(!sized.isEmpty, "projects: a card with a size chip")
+    for c in sized {
+        let face: Token = c.waiting == nil ? .chipFace : (c.waiting?.mark == .amber ? .amberChipFace : .clayChipFace)
+        check(c.chips.first?.kind == .size && c.chips.first?.face == face, "\(c.title): its size chip leads, in its wait's colour")
     }
 }
 
@@ -360,6 +403,60 @@ for (own, hex) in [(Palette.Own.tertiary, 0x73726C), (.grey, 0xA09E95)] as [(Pal
     check(Palette.rgba(own, dark: false) == RGBA(hex), "light \(own) is \(String(format: "%06X", hex))")
 }
 check(Palette.rgba(Token.clayHalo, dark: false).hex == Palette.rgba(Token.clay, dark: false).hex, "a halo is its hue at an alpha")
+
+// A waiting card's colours (docs/design.md#waiting-card), light side
+// pinned here: its edge at 0x73, a row's wash at 0x29, and the chips in
+// the wait's colour solid, the hue at 0x1A over the card.
+let waitLight: [(Token, RGBA)] = [
+    (.clayCardEdge, RGBA(0xD97757, 0x73)), (.amberCardEdge, RGBA(0xD9A03F, 0x73)),
+    (.clayWash, RGBA(0xD97757, 0x29)), (.amberWash, RGBA(0xD9A03F, 0x29)),
+    (.clayChipFace, RGBA(0xFBF1EE)), (.amberChipFace, RGBA(0xFBF5EB)),
+    (.clayChipEdge, RGBA(0xD97757, 0x38)), (.amberChipEdge, RGBA(0xD9A03F, 0x38)),
+]
+for (token, pinned) in waitLight {
+    check(Palette.rgba(token, dark: false) == pinned, "light \(token) is pinned")
+}
+check(Palette.rgba(.clayChipFace, dark: true) == RGBA(0x423934) && Palette.rgba(.amberChipFace, dark: true) == RGBA(0x423D32),
+      "dark chip faces are the hue at 0x1A over the dark card")
+for dark in [false, true] {
+    let scheme = dark ? "dark" : "light"
+    let ink = { (t: Token) in Palette.rgba(t, dark: dark) }
+    // A chip in the wait's colour (the size chip, the late chip): its words
+    // at body strength on its face, which is solid, so they read the same
+    // on a card, under the pointer and on a waiting row's wash.
+    for (words, face, name) in [(Token.clayText, Token.clayChipFace, "clay"), (.amberText, .amberChipFace, "amber")] {
+        check(ink(face).alpha == 0xFF, "\(scheme): the \(name) chip face is solid")
+        check(contrast(ink(words), ink(face)) >= 4.5, "\(scheme): \(name) words read at 4.5 on the \(name) chip (\(String(format: "%.2f", contrast(ink(words), ink(face)))))")
+    }
+    // A waiting dense row's words on its wash over the panel ground: the
+    // title and its reason at body strength, its age and PR at the state
+    // inks' 3.
+    for (wash, words, name) in [(Token.clayWash, Token.clayText, "clay"), (.amberWash, .amberText, "amber")] {
+        let ground = Palette.blend(ink(wash), over: Palette.rgba(.panelGround, dark: dark))
+        for (t, n) in [(words, "its reason"), (.text, "text"), (.secondary, "secondary")] {
+            check(contrast(ink(t), ground) >= 4.5, "\(scheme): \(n) reads at 4.5 on the \(name) wash")
+        }
+        check(contrast(ink(.metaText), ground) >= 3, "\(scheme): metaText reads on the \(name) wash")
+        // A badge's needs dot is ringed in what the row shows: the wash at
+        // rest, and the hover wash over the wash under the pointer, not
+        // the hover wash over the bare ground.
+        check(Palette.rowGround(wash: wash, hovering: false, dark: dark) == ground, "\(scheme): the ring on a row washed \(name) is its wash at rest")
+        let lit = Palette.rowGround(wash: wash, hovering: true, dark: dark)
+        check(lit == Palette.blend(Palette.rgba(Palette.Own.hover, dark: dark), over: ground)
+                  && lit != Palette.rowGround(wash: nil, hovering: true, dark: dark),
+              "\(scheme): under the pointer the ring on a row washed \(name) keeps its wash")
+    }
+    let bare = Palette.rgba(.panelGround, dark: dark)
+    check(Palette.rowGround(wash: nil, hovering: false, dark: dark) == bare
+              && Palette.rowGround(wash: nil, hovering: true, dark: dark) == Palette.blend(Palette.rgba(Palette.Own.hover, dark: dark), over: bare),
+          "\(scheme): a row waiting on nobody rings in the ground, or the hover over it")
+    // A waiting card's edge shows on its face at least as plainly as the
+    // hairline it replaces.
+    for edge in [Token.clayCardEdge, .amberCardEdge] {
+        let card = Palette.rgba(.card, dark: dark)
+        check(contrast(ink(edge), card) > contrast(ink(.cardEdge), card), "\(scheme): \(edge) shows more than the hairline")
+    }
+}
 
 // MARK: Projects
 
@@ -546,7 +643,7 @@ if let code = try? String(contentsOf: sheet, encoding: .utf8) {
 // MARK: Chips and the card's parts
 
 func chipOf(_ kind: ChipKind, _ text: String, url: String? = nil, action: Bool = false) -> Chip {
-    Chip(kind: kind, pieces: [Piece(text: text, ink: .secondary)], givesWay: kind == .branch, url: url, isAction: action)
+    Chip(kind: kind, pieces: [Piece(text: text, ink: .secondary)], face: .chipFace, edge: .chipEdge, givesWay: kind == .branch, url: url, isAction: action)
 }
 let glued = ChipFit.glued([chipOf(.pr, "#3"), chipOf(.diff, "+1"), chipOf(.branch, "feat"), chipOf(.diff, "+2")])
 check(glued.map(CardText.chip) == ["#3 +1", "feat", "+2"], "a diff size joins only the PR before it")
@@ -577,7 +674,7 @@ check(ChipLines([]).isEmpty && !split.isEmpty, "no chips, no lines")
 
 // A dirty branch's mark is drawn as a dot, not words.
 let dirty = Chip(kind: .branch, pieces: [Piece(text: "feat", ink: .secondary), Piece(text: ChipFit.dirtyMark, ink: .secondary)],
-                 givesWay: true, url: nil, isAction: false)
+                 face: .chipFace, edge: .chipEdge, givesWay: true, url: nil, isAction: false)
 check(ChipFit.branch(dirty).dirty && ChipFit.branch(dirty).pieces.map(\.text) == ["feat"], "a dirty branch: its name, and a dot")
 check(!ChipFit.branch(chipOf(.branch, "feat")).dirty, "a clean branch has no dot")
 
@@ -642,7 +739,7 @@ for name in ["lanes", "projects"] {
 }
 var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil, halo: .clear), title: "t", density: .full, badge: Badge(icon: "terminal", color: nil),
                unread: "", ready: false, readyInk: .greenText, pinned: false, progress: 1.5, helpers: "", status: "", statusShort: "", statusInk: .faint, age: "",
-               statusHasAge: false, leftOff: "", chips: [], rowPr: nil, detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, waitingTab: nil, rank: 0,
+               statusHasAge: false, leftOff: "", chips: [], rowPr: nil, detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, late: nil, waitingTab: nil, rank: 0,
                movable: true, dimmed: false, selected: false, menu: [])
 check(CardText.progress(bar) == 1, "a bar past the end stops full")
 bar.progress = -0.5

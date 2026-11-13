@@ -144,11 +144,62 @@ pub struct NeedsTarget {
 /// Why a card waits on Jon: its mark, clay for Your turn and amber for
 /// Asking, and the ink of its status line, which then says the reason
 /// ("Asking: allow git push?"). The sidebar draws the mark as a dot on
-/// the card's badge, the pane as a bar down its lead.
+/// the card's badge and as a stripe down a card's leading edge, the pane
+/// as a bar down its lead. So a waiting card stands out as a whole, a
+/// card's edge takes `edge` in place of the hairline, and a dense row,
+/// which has no face at rest, takes `wash` as its face.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Waiting {
     pub mark: Token,
     pub ink: Token,
+    pub edge: Token,
+    pub wash: Token,
+}
+
+impl Waiting {
+    /// A waiting card's tokens, from whether its agent asks: amber for
+    /// Asking, clay for Your turn.
+    pub fn of(asks: bool) -> Waiting {
+        let (mark, ink) = crate::status::waiting_tokens(asks);
+        let (edge, wash) = if asks {
+            (Token::AmberCardEdge, Token::AmberWash)
+        } else {
+            (Token::ClayCardEdge, Token::ClayWash)
+        };
+        Waiting {
+            mark,
+            ink,
+            edge,
+            wash,
+        }
+    }
+
+    /// Whether its agent asks: its mark is Asking's amber, as `of` gave it.
+    pub fn asks(&self) -> bool {
+        self.mark == Token::Amber
+    }
+
+    /// The face and edge of a chip in this wait's colour, the move size
+    /// chip's on a waiting card; its words take `ink`.
+    pub fn chip(&self) -> (Token, Token) {
+        if self.asks() {
+            (Token::AmberChipFace, Token::AmberChipEdge)
+        } else {
+            (Token::ClayChipFace, Token::ClayChipEdge)
+        }
+    }
+}
+
+/// A wait that has lasted half an hour or more, as a chip in place of the
+/// card's plain age: "waiting 45m" in `ink` on `face` inside `edge`. Clay
+/// for Your turn and Asking alike, as late is the urgent tone the All
+/// tab's count takes too.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
+pub struct LateWait {
+    pub text: String,
+    pub ink: Token,
+    pub face: Token,
+    pub edge: Token,
 }
 
 /// The tab of the agent a waiting card waits on, in a workspace running
@@ -248,6 +299,10 @@ pub struct Card {
     /// draws the mark, its status line the reason. Its title row's age
     /// takes the same ink.
     pub waiting: Option<Waiting>,
+    /// While it has waited on Jon half an hour or more, the chip its age
+    /// becomes on the title row or the dense row; None otherwise. `age`
+    /// keeps the plain age.
+    pub late: Option<LateWait>,
     /// While it waits and its workspace runs two or more agents, the tab
     /// of the one waiting; None otherwise.
     pub waiting_tab: Option<WaitingTab>,
@@ -298,11 +353,16 @@ pub enum ChipKind {
     Action,
 }
 
-/// One chip: its pieces, a space apart.
+/// One chip: its pieces, a space apart, on its face inside its edge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, facet::Facet)]
 pub struct Chip {
     pub kind: ChipKind,
     pub pieces: Vec<Piece>,
+    /// The quiet chip's face and edge, or on a card waiting on Jon the
+    /// size chip's in the wait's colour. An action draws its own white
+    /// button face on this edge; the unframed diff draws neither.
+    pub face: Token,
+    pub edge: Token,
     /// It goes first when the line is too narrow: the branch, as the
     /// sidebar's branch chip gives way to the PR, ports and actions.
     pub gives_way: bool,
@@ -319,6 +379,8 @@ impl Chip {
         Chip {
             kind,
             pieces,
+            face: Token::ChipFace,
+            edge: Token::ChipEdge,
             gives_way: false,
             url: None,
             is_action: false,

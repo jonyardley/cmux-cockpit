@@ -172,8 +172,11 @@
             "detail_lines": 1,
             "waiting": {
               "mark": "clay",
-              "ink": "clayText"
+              "ink": "clayText",
+              "edge": "clayCardEdge",
+              "wash": "clayWash"
             },
+            "late": null,
             "waiting_tab": null,
             "rank": 0,
             "movable": true,
@@ -329,6 +332,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 1,
             "movable": true,
@@ -496,6 +500,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 5,
             "movable": true,
@@ -663,6 +668,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -826,6 +832,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -1024,6 +1031,8 @@
                 "ink": "metaText"
               }
             ],
+            "face": "chipFace",
+            "edge": "chipEdge",
             "gives_way": false,
             "url": "https://github.com/o/r/pull/148",
             "is_action": false
@@ -1036,6 +1045,8 @@
                 "ink": "faint"
               }
             ],
+            "face": "chipFace",
+            "edge": "chipEdge",
             "gives_way": false,
             "url": null,
             "is_action": false
@@ -1048,6 +1059,8 @@
                 "ink": "secondary"
               }
             ],
+            "face": "chipFace",
+            "edge": "chipEdge",
             "gives_way": true,
             "url": null,
             "is_action": false
@@ -1058,6 +1071,7 @@
         "detail_ink": "secondary",
         "detail_lines": 2,
         "waiting": null,
+        "late": null,
         "waiting_tab": null,
         "rank": 5,
         "movable": true,
@@ -1221,9 +1235,11 @@
             "pieces": [
               {
                 "text": "Review",
-                "ink": "secondary"
+                "ink": "clayText"
               }
             ],
+            "face": "clayChipFace",
+            "edge": "clayChipEdge",
             "gives_way": false,
             "url": null,
             "is_action": false
@@ -1235,8 +1251,11 @@
         "detail_lines": 2,
         "waiting": {
           "mark": "clay",
-          "ink": "clayText"
+          "ink": "clayText",
+          "edge": "clayCardEdge",
+          "wash": "clayWash"
         },
+        "late": null,
         "waiting_tab": null,
         "rank": 0,
         "movable": true,
@@ -1427,6 +1446,8 @@
                 "ink": "openText"
               }
             ],
+            "face": "chipFace",
+            "edge": "chipEdge",
             "gives_way": false,
             "url": "https://github.com/o/r/pull/12",
             "is_action": false
@@ -1439,6 +1460,8 @@
                 "ink": "secondary"
               }
             ],
+            "face": "chipFace",
+            "edge": "chipEdge",
             "gives_way": true,
             "url": null,
             "is_action": false
@@ -1449,6 +1472,7 @@
         "detail_ink": "secondary",
         "detail_lines": 2,
         "waiting": null,
+        "late": null,
         "waiting_tab": null,
         "rank": 1,
         "movable": true,
@@ -1619,6 +1643,8 @@
                 "ink": "mergedText"
               }
             ],
+            "face": "chipFace",
+            "edge": "chipEdge",
             "gives_way": false,
             "url": "https://github.com/o/r/pull/14",
             "is_action": false
@@ -1631,6 +1657,8 @@
                 "ink": "secondary"
               }
             ],
+            "face": "chipFace",
+            "edge": "chipEdge",
             "gives_way": true,
             "url": null,
             "is_action": false
@@ -1641,6 +1669,7 @@
         "detail_ink": "secondary",
         "detail_lines": 2,
         "waiting": null,
+        "late": null,
         "waiting_tab": null,
         "rank": 6,
         "movable": true,
@@ -1832,6 +1861,8 @@
                 "ink": "secondary"
               }
             ],
+            "face": "chipFace",
+            "edge": "chipEdge",
             "gives_way": false,
             "url": null,
             "is_action": true
@@ -1842,6 +1873,7 @@
         "detail_ink": "secondary",
         "detail_lines": 2,
         "waiting": null,
+        "late": null,
         "waiting_tab": null,
         "rank": 6,
         "movable": true,

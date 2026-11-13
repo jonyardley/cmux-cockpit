@@ -172,7 +172,15 @@
             "detail_lines": 1,
             "waiting": {
               "mark": "clay",
-              "ink": "clayText"
+              "ink": "clayText",
+              "edge": "clayCardEdge",
+              "wash": "clayWash"
+            },
+            "late": {
+              "text": "waiting 30m",
+              "ink": "clayText",
+              "face": "clayChipFace",
+              "edge": "clayChipEdge"
             },
             "waiting_tab": null,
             "rank": 0,
@@ -326,8 +334,11 @@
             "detail_lines": 1,
             "waiting": {
               "mark": "amber",
-              "ink": "amberText"
+              "ink": "amberText",
+              "edge": "amberCardEdge",
+              "wash": "amberWash"
             },
+            "late": null,
             "waiting_tab": null,
             "rank": 0,
             "movable": true,
@@ -480,8 +491,11 @@
             "detail_lines": 1,
             "waiting": {
               "mark": "clay",
-              "ink": "clayText"
+              "ink": "clayText",
+              "edge": "clayCardEdge",
+              "wash": "clayWash"
             },
+            "late": null,
             "waiting_tab": null,
             "rank": 0,
             "movable": true,
@@ -634,8 +648,11 @@
             "detail_lines": 1,
             "waiting": {
               "mark": "clay",
-              "ink": "clayText"
+              "ink": "clayText",
+              "edge": "clayCardEdge",
+              "wash": "clayWash"
             },
+            "late": null,
             "waiting_tab": null,
             "rank": 0,
             "movable": true,
@@ -788,8 +805,11 @@
             "detail_lines": 1,
             "waiting": {
               "mark": "clay",
-              "ink": "clayText"
+              "ink": "clayText",
+              "edge": "clayCardEdge",
+              "wash": "clayWash"
             },
+            "late": null,
             "waiting_tab": null,
             "rank": 0,
             "movable": true,
@@ -941,6 +961,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 4,
             "movable": true,
@@ -1092,6 +1113,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 5,
             "movable": true,

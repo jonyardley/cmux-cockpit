@@ -80,8 +80,11 @@
             "detail_lines": 2,
             "waiting": {
               "mark": "clay",
-              "ink": "clayText"
+              "ink": "clayText",
+              "edge": "clayCardEdge",
+              "wash": "clayWash"
             },
+            "late": null,
             "waiting_tab": null,
             "rank": 0,
             "movable": true,
@@ -234,8 +237,11 @@
             "detail_lines": 2,
             "waiting": {
               "mark": "amber",
-              "ink": "amberText"
+              "ink": "amberText",
+              "edge": "amberCardEdge",
+              "wash": "amberWash"
             },
+            "late": null,
             "waiting_tab": null,
             "rank": 0,
             "movable": true,
@@ -387,6 +393,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 3,
             "movable": true,
@@ -538,6 +545,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 4,
             "movable": true,
@@ -696,6 +704,8 @@
                     "ink": "metaText"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/130",
                 "is_action": false
@@ -708,6 +718,8 @@
                     "ink": "faint"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": null,
                 "is_action": false
@@ -724,6 +736,8 @@
                     "ink": "secondary"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": true,
                 "url": null,
                 "is_action": false
@@ -734,6 +748,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 5,
             "movable": true,
@@ -897,6 +912,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 5,
             "movable": true,
@@ -1048,6 +1064,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 5,
             "movable": true,
@@ -1206,6 +1223,8 @@
                     "ink": "mergedText"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/176",
                 "is_action": false
@@ -1218,6 +1237,8 @@
                     "ink": "secondary"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": true,
                 "url": null,
                 "is_action": false
@@ -1228,6 +1249,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -1415,6 +1437,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 3,
             "movable": true,
@@ -1566,6 +1589,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -1741,6 +1765,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 5,
             "movable": true,
@@ -1892,6 +1917,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -2100,6 +2126,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 2,
             "movable": true,
@@ -2255,6 +2282,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,

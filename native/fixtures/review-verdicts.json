@@ -68,6 +68,8 @@
                     "ink": "secondary"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/9",
                 "is_action": false
@@ -80,6 +82,8 @@
                     "ink": "secondary"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": true,
                 "url": null,
                 "is_action": false
@@ -90,6 +94,7 @@
             "detail_ink": "secondary",
             "detail_lines": 2,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -280,6 +285,8 @@
                     "ink": "mergeText"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/1",
                 "is_action": false
@@ -292,6 +299,8 @@
                     "ink": "faint"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": null,
                 "is_action": false
@@ -302,6 +311,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -468,6 +478,8 @@
                     "ink": "metaText"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/2",
                 "is_action": false
@@ -480,6 +492,8 @@
                     "ink": "faint"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": null,
                 "is_action": false
@@ -490,6 +504,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -656,6 +671,8 @@
                     "ink": "redText"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/3",
                 "is_action": false
@@ -666,6 +683,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -832,6 +850,8 @@
                     "ink": "blueText"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/4",
                 "is_action": false
@@ -842,6 +862,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -1008,6 +1029,8 @@
                     "ink": "redText"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/5",
                 "is_action": false
@@ -1018,6 +1041,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -1184,6 +1208,8 @@
                     "ink": "openText"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/6",
                 "is_action": false
@@ -1194,6 +1220,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -1360,6 +1387,8 @@
                     "ink": "mergedText"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/7",
                 "is_action": false
@@ -1370,6 +1399,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,
@@ -1536,6 +1566,8 @@
                     "ink": "metaText"
                   }
                 ],
+                "face": "chipFace",
+                "edge": "chipEdge",
                 "gives_way": false,
                 "url": "https://github.com/o/r/pull/8",
                 "is_action": false
@@ -1546,6 +1578,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 6,
             "movable": true,

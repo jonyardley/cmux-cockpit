@@ -167,6 +167,7 @@
             "detail_ink": "secondary",
             "detail_lines": 1,
             "waiting": null,
+            "late": null,
             "waiting_tab": null,
             "rank": 2,
             "movable": true,

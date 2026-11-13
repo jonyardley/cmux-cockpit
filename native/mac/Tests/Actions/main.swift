@@ -60,7 +60,7 @@ for name in names {
 
 check(actionsSeen > 0, "the fixtures hold a Make project chip to check (\(actionsSeen))")
 
-let park = Chip(kind: .action, pieces: [Piece(text: "Park", ink: .secondary)], givesWay: false, url: nil, isAction: true)
+let park = Chip(kind: .action, pieces: [Piece(text: "Park", ink: .secondary)], face: .chipFace, edge: .chipEdge, givesWay: false, url: nil, isAction: true)
 check(ChipTap.of(park, id: "W1") == ChipTap.none, "a Park chip from an older core sends nothing")
 
 check(

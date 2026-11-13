@@ -83,6 +83,21 @@ pub enum Token {
     MergedText,
     MergedChipFace,
     MergedChipEdge,
+    /// A chip in a wait's colour: the move size chip on a card waiting on
+    /// Jon, and a late wait's age chip (clay alone). A pale face of the
+    /// hue, made solid so its words read the same on any ground, and an
+    /// edge of it.
+    ClayChipFace,
+    ClayChipEdge,
+    AmberChipFace,
+    AmberChipEdge,
+    /// A waiting card's edge, the wait's hue at a little under half, in
+    /// place of the hairline.
+    ClayCardEdge,
+    AmberCardEdge,
+    /// A waiting dense row's face: the wait's hue, faint.
+    ClayWash,
+    AmberWash,
 }
 
 /// A project's own colour, "#D97757" as the table writes it, as six hex

@@ -12,7 +12,9 @@ it in the same PR when the look changes. Sections that describe a known
 inconsistency say so and link to the [known gaps](#known-gaps).
 
 Decisions D1 to D15 on the audit page are all decided, each as option a
-(11 October 2026). Where one sets a rule for future work, the section says so
+(11 October 2026). D10 a was reversed on 13 November 2026: the
+[move size chip](#move-size-chip) takes the wait's colour again. Where one
+sets a rule for future work, the section says so
 in a line that starts **Target (Dn a, not built yet)**. That line is the rule
 to build towards; everything else in the section describes main today. A
 target becomes today's description in the PR that builds it, listed in
@@ -23,7 +25,8 @@ otherwise. Line numbers are as of `12d4303`.
 
 ## Principles
 
-1. **Hue only ever means state.** Clay is your turn, amber is asking, blue is
+1. **Hue only ever means state.** Clay is your turn (or a wait gone late,
+   [late wait](#late-wait)), amber is asking, blue is
    working, the olive green is finished, the vivid merge green is ready to
    merge, red is failing. Nothing decorative takes one of these hues.
 2. **Neutral ink for everything else.** Selection, lanes, headings, counts and
@@ -65,8 +68,8 @@ dark-mode screenshot; nothing here changes before then.
 
 | Token | Light | Dark | Means | Where drawn |
 |-|-|-|-|-|
-| `clay` | D97757 | E08A6D | your turn | the waiting count on the All tab while one waiting card is your turn (core picks, `Needs.fill`); a needs dot |
-| `amber` | D9A03F | E3B260 | asking | needs dot, status dot, the waiting count while every waiting card asks (core picks) |
+| `clay` | D97757 | E08A6D | your turn | the waiting count on the All tab while one waiting card is your turn (core picks, `Needs.fill`); a needs dot; the [stripe](#waiting-card) down a Your turn card |
+| `amber` | D9A03F | E3B260 | asking | needs dot, status dot, the waiting count while every waiting card asks (core picks); the [stripe](#waiting-card) down an Asking card |
 | `blue` | 3B6FB6 | 6A9BE0 | working | progress bar fill (`CardView.swift` `ProgressBar`), status dot |
 | `green` | 788C5D | 93A877 | finished | status dot (core picks) |
 | `mergeGreen` | 1DB954 | 3DD171 | ready to merge | status dot (core picks) |
@@ -80,8 +83,8 @@ dark-mode screenshot; nothing here changes before then.
 
 | Token | Light | Dark | Where drawn |
 |-|-|-|-|
-| `clayText` | A34A2A | E8997C | status words, a waiting card's age (core picks) |
-| `amberText` | 8A5A0B | E8BC6E | status words (core picks) |
+| `clayText` | A34A2A | E8997C | status words, a waiting card's age, the size chip's words on a Your turn card, the [late wait](#late-wait) chip's words (core picks) |
+| `amberText` | 8A5A0B | E8BC6E | status words, the size chip's words on an Asking card (core picks) |
 | `blueText` | 2F5690 | 8FB4EC | status words (core picks) |
 | `greenText` | 5E7A40 | A3BC85 | the Ready pill and Next's line (core picks: `Card.ready_ink`, the `NextLine` step's `ink`) |
 | `mergeText` | 12873B | 5FD98A | "Ready to merge" in words, a lane's merge line, a PR chip's "ready", a dense row's ready PR number (core picks) |
@@ -95,7 +98,7 @@ dark-mode screenshot; nothing here changes before then.
 |-|-|-|-|
 | `text` | 141413 | F0EEE6 | card titles, the chosen tab, notice titles |
 | `heading` (also `select`, `laneMain`) | 3D3D3A | D6D4CA | project header names, a selected card's outline, "Drop here" |
-| `secondary` (also `laneReview`) | 5E5D59 | B7B5A9 | lane names, detail lines, chip glyphs, the size chip, the tab not chosen, the fold chevron, a quiet row's "+" |
+| `secondary` (also `laneReview`) | 5E5D59 | B7B5A9 | lane names, detail lines, chip glyphs, the size chip on a card waiting on nobody, the tab not chosen, the fold chevron, a quiet row's "+" |
 | `metaText` | 6B6A64 | A3A199 | Next's place, every age while its card waits on nobody, Idle and No agent, a draft or closed PR's words (and one with no status), the Quiet pill |
 | `faint` (also `laneBackground`) | 8A8880 | 8A8880 | pin, QUIET, a faint or empty lane's name, a row's PR title, the diff, editor labels ([gap L](#known-gaps)) |
 | `Own.tertiary` | 73726C | 9C9A92 | where you left off, live helpers, the editor's "Or one you have open" |
@@ -119,6 +122,8 @@ dark-mode screenshot; nothing here changes before then.
 | `Own.zoneLit` | E7E4D9 | 3A3935 | an empty lane's drop zone while a card is over it |
 | `Own.filterEdge` | = `blue` | = `blue` | the [filter button](#filter-button)'s ring and the [filter chip](#filter-chip)'s while All is filtered |
 | `Own.lift` | 000000 / 0x2E | 000000 / 0x66 | the shadow under a dragged card |
+| `clayCardEdge`, `amberCardEdge` | hue / 0x73 | same | a [waiting card](#waiting-card)'s edge in place of `cardEdge` (core picks, `Waiting.edge`) |
+| `clayWash`, `amberWash` | hue / 0x29 | same | a waiting [dense row](#dense-row)'s face while not selected (core picks, `Waiting.wash`) |
 
 ### Counts, chips and badges
 
@@ -133,6 +138,9 @@ dark-mode screenshot; nothing here changes before then.
 | `greenChipFace`, `greenChipEdge` | green / 0x29, greenDeep / 0x59 | same | not drawn, as above |
 | `openChipFace`, `openChipEdge` | openText / 0x1A, 0x38 | same | not drawn, as above (the agents panel draws its own from `palette.ts`) |
 | `mergedChipFace`, `mergedChipEdge` | mergedText / 0x1A, 0x38 | same | not drawn, as above |
+| `clayChipFace` | FBF1EE | 423934 | the size chip's face on a Your turn card, and the [late wait](#late-wait) chip's: clay at 0x1A over the card face, made solid so its words read the same on a card, under the pointer and on a row's wash (core picks) |
+| `amberChipFace` | FBF5EB | 423D32 | the size chip's face on an Asking card: amber at 0x1A over the card face, solid (core picks) |
+| `clayChipEdge`, `amberChipEdge` | hue / 0x38 | same | the edges of those chips (core picks) |
 
 ### Lanes
 
@@ -149,7 +157,10 @@ dark-mode screenshot; nothing here changes before then.
 
 Every unused colour has gone ([gap F](#known-gaps)): the core's
 `amberRowEdge` and `needsRowEdge`, and the sidebar's `Own.ground`,
-`Own.cardFace`, `Own.needsEdge` and `Own.needsHover`. The views test
+`Own.cardFace`, `Own.needsEdge` and `Own.needsHover`. A waiting card's
+edge and a waiting row's face are drawn again, from new core tokens
+(`clayCardEdge`, `amberCardEdge`, `clayWash`, `amberWash`, the
+[waiting card](#waiting-card)). The views test
 checks contrast on `Own.card`, the face cards are drawn on. The ten PR
 chip faces and edges (`redChipFace` to `mergedChipEdge`) are chosen by a
 core function nothing calls, so a PR's tone shows only in the ink of
@@ -233,6 +244,7 @@ In `Views/CardView.swift`.
 | `hollowRing` | 1.5 | a hollow status dot's ring |
 | `titleLine` | 1.2 | a title's first line as a share of its size, where a leading needs dot centres |
 | `dimmed` | 0.6 | a merged card nothing in it wants |
+| `stripe` | 3 | the stripe down a [waiting card](#waiting-card)'s leading edge |
 
 ### Chips (`ChipLook`)
 
@@ -488,10 +500,12 @@ Where: `Views/CardView.swift` (`CompactCard`).
 
 One line: status dot (7), a 14 badge (glyph 8, radius 4), the title, its PR's
 title faint after it, then unread, PR number, age, dismiss x, pin; under it
-left off and the detail, indented to the title. No face until selected; grey
+left off and the detail, indented to the title. No face until selected
+(a waiting row takes its wait's wash, [waiting card](#waiting-card)); grey
 wash under the pointer. Title `Font.title` 12.5 regular (medium when
-selected); age in `metaText`. Padding 25 leading, 12 trailing, 5 above and
-below; radius `Radius.row` 9. Where: `Views/CardView.swift:126-170`.
+selected); age in `metaText`, or the waiting ink while it waits, or the
+[late wait](#late-wait) chip once the wait reaches half an hour. Padding
+25 leading, 12 trailing, 5 above and below; radius `Radius.row` 9. Where: `Views/CardView.swift:126-170`.
 
 A row has no status words, so a sleeping or waking row says it at the
 head of its detail, "Asleep · Tests pass" (or "Asleep" alone), in the
@@ -512,8 +526,9 @@ The title takes the slack; at its end the Ready pill, the unread badge, the
 age (only when the status line has none), the dismiss x and the pin. Spacing
 6. Title semibold in `text`, one line cut in the middle, two lines cut at the
 end. Age `MetaText` 11 monospaced in `metaText`, as on a dense row, or the
-waiting ink while the card waits (D14 a, `CardText.ageInk`). Where:
-`Views/CardView.swift` (`TitleRow`).
+waiting ink while the card waits (D14 a, `CardText.ageInk`), or the
+[late wait](#late-wait) chip in its place once the wait reaches half an
+hour. Where: `Views/CardView.swift` (`TitleRow`).
 
 ### Status line
 
@@ -650,7 +665,7 @@ Where: `Views/CardView.swift` (`ReadyPill`).
 ### Unread badge
 
 The unread count, white on grey in both appearances so clay only ever means
-your turn. `Font.tiny` 10 bold, not monospaced; the
+your turn or a late wait. `Font.tiny` 10 bold, not monospaced; the
 [count pill](#count-pill)'s shape (D1 a); `Own.badge` face, `Own.onBadge`
 ink. A card's title row, a dense row and the anchor badge draw the same
 view. Where: `Views/CardView.swift` (`UnreadBadge`).
@@ -673,7 +688,9 @@ Where: `Views/CardView.swift:331-342`.
 ### Chips
 
 All chips are 11 (`Font.meta`) and share one frame: padding 6 by 1, radius
-`Radius.chip` 6, `chipEdge` hairline (`chipFrame`, `Views/ChipsView.swift:24-33`).
+`Radius.chip` 6, a hairline edge (`chipFrame`, `Views/ChipsView.swift`). The
+face and edge are the core's, `Chip.face` and `Chip.edge`: `chipFace` and
+`chipEdge` on every chip but the size chip on a waiting card.
 The chips row puts everything on one line when it fits, else the branch line
 under the PR line; only then does the diff give way, then the branch name.
 Where: `Views/ChipsView.swift:43-173`.
@@ -696,10 +713,16 @@ it does not open.
 
 #### Move size chip
 
-On a card waiting on you, how big answering is: "quick", "decide" or
-"review". A quiet chip (D10 a): the size is in `secondary` on the neutral
-chip, like the branch; the card's own clay or amber already says it
-waits (`chip_views`, `native/core/src/panel/build.rs`).
+On a card waiting on you, how big answering is: "Quick", "Decide · 2" or
+"Review". It leads the chips row, and takes the wait's colour: on a Your
+turn card a `clayChipFace` face, `clayChipEdge` edge and `clayText` words;
+on an Asking card the amber three; words medium. On a card waiting on
+nobody it is a quiet chip, `secondary` on `chipFace`. D10 a (a neutral
+size chip) was reversed on 13 November 2026, because the card's clay
+alone was too faint on screen to tell at a glance which cards wait. The
+core picks all three (`size_chip` and `chip_views`,
+`native/core/src/panel/build.rs`). A compact card has no chips row, so
+no size chip.
 
 #### Branch chip
 
@@ -749,12 +772,59 @@ Where: `Views/CardView.swift:428-445`.
 Every card's face, edge, dimming and hover (`Views/CardView.swift:463-492`).
 
 - **Face:** `Own.card`, `Own.cardHover` under the pointer. A dense row has no
-  face at rest and takes the `Own.hover` wash.
-- **Edge at rest:** `cardEdge` hairline; none on a dense row.
+  face at rest (a waiting one has its wait's wash) and takes the
+  `Own.hover` wash under the pointer.
+- **Edge at rest:** `cardEdge` hairline, or the wait's edge on a
+  [waiting card](#waiting-card); none on a dense row.
+- **Stripe:** a waiting card's, below.
 - **Selected outline:** `select` (the heading ink) at 2, drawn inside so
-  nothing moves (`Outline`, `CardView.swift:524-533`).
+  nothing moves, over the wait's edge and stripe (`Outline`,
+  `CardView.swift`).
 - **Dimmed:** a merged card nothing in it wants sits at 0.6, full strength
   under the pointer.
+
+### Waiting card
+
+A card waiting on you (Your turn or Asking) stands out as a whole, not
+only by its dot and words, so the cards that wait can be told at a glance.
+The core picks every token on the card's `Waiting` (`Waiting::of`,
+`native/core/src/panel/mod.rs`): clay for Your turn, amber for Asking.
+
+- **Full, compact and Projects cards:** a 1 edge in `clayCardEdge` or
+  `amberCardEdge` (the hue at 0x73, about 0.45) in place of `cardEdge`,
+  and a 3 (`CardLook.stripe`) stripe of the solid hue (`Waiting.mark`)
+  down the leading edge, inside the card's rounded shape.
+- **Dense row:** no edge or stripe; its face at rest is `clayWash` or
+  `amberWash` (the hue at 0x29, about 0.16), with the grey hover wash over
+  it under the pointer. A badge's needs dot is ringed in what the row
+  shows: the wash over the panel ground, and the hover wash over that
+  under the pointer (`Palette.rowGround`).
+- **Selected:** the `select` outline at 2 wins. On a card the stripe moves
+  in by the outline's width, so the outline stays whole and the stripe
+  sits inside it; a selected row takes `Own.card` like any selected row,
+  with no wash.
+- **Contrast:** on the wash over the panel ground, the title, `secondary`
+  and the waiting ink clear 4.5:1 and `metaText` 3:1 in light and dark;
+  each wait's edge shows more than the hairline. The views test checks
+  all of these.
+
+Where: `Views/CardView.swift` (`CardChrome`), `Model/CardText.swift`
+(`restEdge`, `stripe`, `wash`).
+
+### Late wait
+
+Once a card has waited on you for half an hour or more
+(`NEEDS_LATE_SECS`, `native/core/src/strip.rs`, the rule the All tab's
+[waiting count](#needs-count) turns clay on), its age on the title row,
+or on a dense row, becomes a chip: "waiting 45m", the card's own age
+after the word. `Font.meta` 11 semibold with monospaced digits,
+`clayText` on `clayChipFace` inside `clayChipEdge`, the chip's frame.
+Clay whether it is Your turn or Asking, as late is the urgent tone the
+waiting count takes too. The core decides lateness per card and words
+it (`Card.late`, `late_of` and `late_wait` in
+`native/core/src/panel/build.rs`); `Card.age` keeps the plain age.
+Contrast of the words on the solid face: 5.30 light, 4.97 dark.
+Where: `Views/CardView.swift` (`LateChip`).
 
 ### Drag
 
@@ -805,14 +875,17 @@ Every card is decided as option a; where that changes a rule, the rule says
 
 1. **The core chooses state tokens; views draw them as given.** A view never
    names a state hue or state ink itself.
-   `grep -rnE "Token\.(clay|amber|blue|green|mergeGreen|greenDeep|clayText|amberText|blueText|greenText|mergeText|amberHalo|clayHalo|blueHalo)\b" Views`
+   `grep -rnE "Token\.(clay|amber|blue|green|mergeGreen|greenDeep|clayText|amberText|blueText|greenText|mergeText|amberHalo|clayHalo|blueHalo|clayChipFace|clayChipEdge|amberChipFace|amberChipEdge|clayCardEdge|amberCardEdge|clayWash|amberWash)\b" Views`
    should print only the progress bar's fill (`CardView.swift`
    `ProgressBar`, blue for working). Passes (D8 a): the waiting count, the
    Ready pill's ink, Next's ink (D9 a), the empty and Quiet pills, the
    halo, "Drop here" and the merge line all take the core's value, from
    panel model fields (`Needs.fill`, `Card.ready_ink`, the `NextLine`
    step's `ink`, `Lane.pill`, the Quiet row's `pill`, `Icon.halo`,
-   `Lane.drop_hint`, `Lane.merge_ink`).
+   `Lane.drop_hint`, `Lane.merge_ink`), and so do a
+   [waiting card](#waiting-card)'s edge, stripe and wash, a chip's face
+   and edge and the [late wait](#late-wait) chip (`Waiting.mark`,
+   `Waiting.edge`, `Waiting.wash`, `Chip.face`, `Chip.edge`, `Card.late`).
 2. **A state is a dot plus words, and the dot and the words are a fixed
    pair:** `blue`/`blueText` working, `clay`/`clayText` your turn,
    `amber`/`amberText` asking, `green`/`greenText` finished,
@@ -822,11 +895,13 @@ Every card is decided as option a; where that changes a rule, the rule says
    to merge) carries its halo; a quiet one (finished, idle) does not; a
    hollow dot means the agent is there but not active (quiet working in blue,
    idle and no agent in grey, asleep and waking in `metaText`).
-3. **A state hue marks that state and nothing else.** Not a queue (Next), not
-   a size (the move size chip), not an error, not a warning. Failures are
-   red and the helper-down band is neutral (D5 a). Passes: Next is in
-   Ready's green, as it only leads to a Ready card (D9 a), and the size
-   chip is neutral (D10 a).
+3. **A state hue marks that state and nothing else.** Not a queue (Next),
+   not an error, not a warning. Failures are red and the helper-down band
+   is neutral (D5 a). Passes: Next is in Ready's green, as it only leads
+   to a Ready card (D9 a). The move size chip takes the wait's colour
+   only on a card that waits, so its clay or amber still says Your turn
+   or Asking, not a size (D10 reversed, 13 November 2026); on any other
+   card it is neutral.
 4. **A state on a header is the same dot as on a card.** Today headers and
    the anchor badge draw a text glyph ([gap H](#known-gaps)).
 5. **A count is a pill**, coloured by how urgent what it counts is
@@ -856,7 +931,9 @@ Every card is decided as option a; where that changes a rule, the rule says
    pointer. Nothing is both faint and faded: an empty lane's count takes
    the core's tint, only faded.
 10. **An age is `MetaText` in `metaText`**, or the waiting ink while the card
-    waits, on a title row and a dense row alike (D14 a, `CardText.ageInk`).
+    waits, on a title row and a dense row alike (D14 a, `CardText.ageInk`);
+    once the wait reaches half an hour it is the clay
+    [late wait](#late-wait) chip.
     `Own.tertiary` is where you left off and live helpers.
 11. **A PR's state is words in its tone's ink** (`pr_colors.rs` `pr_tone`,
     `pr_ink`): `redText` failing or conflicting, `blueText` checks
@@ -884,8 +961,8 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 
 | Meaning | Cards (full, compact, Projects) | Dense row | Headers and anchor | Elsewhere | Chosen at |
 |-|-|-|-|-|-|
-| Your turn | clay dot with halo, `clayText` words, clay needs dot | same, age and reason in `clayText` | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `status.rs` `plain_style`, `waiting_tokens`; `panel/build.rs` `header_dot` |
-| Asking | amber dot with halo, `amberText` words, amber needs dot | same | amber glyph **≠**; `amberCount` pill | waiting count amber while every waiting card asks | `status.rs` `StatusKind::style`; `panel/build.rs` `needs_tone` |
+| Your turn | clay dot with halo, `clayText` words, clay needs dot; `clayCardEdge` edge and clay stripe | same, age and reason in `clayText`; `clayWash` face | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `status.rs` `plain_style`, `waiting_tokens`; `panel/build.rs` `header_dot` |
+| Asking | amber dot with halo, `amberText` words, amber needs dot; `amberCardEdge` edge and amber stripe | same; `amberWash` face | amber glyph **≠**; `amberCount` pill | waiting count amber while every waiting card asks | `status.rs` `StatusKind::style`; `panel/build.rs` `needs_tone` |
 | Working | blue dot with halo, `blueText`; blue progress bar | blue dot | blue glyph; `blueCount` pill | | `status.rs:109` |
 | Running | as working, "Running 4m · 1 shell, 1 agent"; no live helpers words beside it once it counts an agent | as working, the age alone | as working | | `status.rs` `StatusKind::Running`; `running.rs`; `words.rs` `running_text` |
 | Quiet working | hollow blue ring, `blueText` | same | hollow glyph | | `status.rs:160-165` |
@@ -899,11 +976,11 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | PR merged | chip state `mergedText`; compact words `mergedText` | number `mergedText` | | agents panel chip `mergedText` on `mergedChipFace` | as above |
 | Checks failing, conflict | chip words `redText` on a neutral chip | number `redText` | | | `pr_colors.rs` `pr_ink` |
 | Checks running | chip words `blueText` (blue also means working) | number `blueText` | | | `pr_colors.rs` `pr_ink` |
-| Move size | chip words `secondary` on the quiet chip | not drawn | | | `panel/build.rs` `chip_views` |
+| Move size | first chip; on a waiting card the wait's colour (`clayText` on `clayChipFace` for Your turn, `amberText` on `amberChipFace` for Asking), else `secondary` on the quiet chip; none on a compact card | not drawn | | | `panel/build.rs` `size_chip` |
 | Unread | grey badge | grey badge | the same badge on the anchor | | `CardView.swift` `UnreadBadge` |
 | Needs dot | on the badge corner; leads the title on a Projects card | on the 14 badge | glyph on headers **≠** | | `status.rs:248`; `panel/build.rs:568` |
-| Selected | `select` outline at 2 | face, outline, medium title | `select` outline at 1 on the anchor | chosen tab: white face; editor: `text` ring or `countBg` cell (the named exceptions) | `CardView.swift` `Outline`, `LaneView.swift` `AnchorBadge`, `EditorSheet.swift` |
-| Age | `metaText`, or the waiting ink | `metaText`, or the waiting ink | | Next's place `metaText` | `CardText.ageInk` |
+| Selected | `select` outline at 2, over a waiting card's edge, its stripe inside | face (no wash), outline, medium title | `select` outline at 1 on the anchor | chosen tab: white face; editor: `text` ring or `countBg` cell (the named exceptions) | `CardView.swift` `Outline`, `LaneView.swift` `AnchorBadge`, `EditorSheet.swift` |
+| Age | `metaText`, or the waiting ink; the clay late chip from half an hour | `metaText`, or the waiting ink; the clay late chip from half an hour | | Next's place `metaText` | `CardText.ageInk`; `panel/build.rs` `late_of` |
 | Error | | | | editor `redText`; "Not sent" `redText` | `EditorSheet.swift:59`, `Actions.swift:105` |
 | Notice | | | | neutral words; stale band on `countBg` | `PanelView.swift` `SidebarView` |
 
@@ -1017,7 +1094,7 @@ follow-up PR.
 | L | Dark mode is the extension's own: ground unsampled, `faint` one hex for both. **Decided: D4 a**, sample from a dark capture of cmux; blocked on a dark-mode screenshot from Jon | `Palette.swift`: `panelGround`'s dark side, the `faint` pair |
 | M | The waiting count on All was always clay. **Built: D8 a**, it takes the core's `Needs.fill`, amber while every waiting card asks | closed |
 | N | Next was drawn in your turn's clay, though it always leads to a Ready card. **Built: D9 a**, Next in Ready's green | closed |
-| O | The move size chip borrowed three state inks. **Built: D10 a**, the size chip is neutral | closed |
+| O | The move size chip borrowed three state inks. **Built: D10 a**, the size chip went neutral; **reversed 13 November 2026**: on a waiting card it takes the wait's colour, as the card's clay alone was too faint on screen | closed |
 | P | Ready to merge was `greenDeep` on the lane's merge line and a PR chip's "ready". **Built: D11 a**, `mergeText` for ready to merge everywhere | closed |
 | Q | Selection had five looks. **Built: D13 a**, the heading outline in the panel (the anchor badge outlined, `Own.anchorSelected` gone), system looks for the switch and the editor | closed |
 | R | Faint ink was also a state ("No agent") and two controls; 0.55 meant both empty and cannot click. **Built: D12 a**, three named faint and fade meanings | closed |
@@ -1071,9 +1148,12 @@ are under `native/mac/Sidebar/` unless they start with `native/`.
    `needsHover`), and the core, which picks Next's ink under grammar rule 1
    (`native/core/src/panel/`, adding the field to the panel model if it is
    missing).
-10. **The size chip goes neutral (D10).** Built. On screen: "quick", "decide" and
-    "review" turn grey. Files: `native/core/src/panel/build.rs` (`size_ink`
-    and its test).
+10. **The size chip goes neutral (D10).** Built, then reversed on 13
+    November 2026: on a waiting card the size chip takes the wait's colour,
+    alongside the [waiting card](#waiting-card)'s edge, stripe and wash and
+    the [late wait](#late-wait) chip. Files: `native/core/src/panel/build.rs`,
+    `native/core/src/panel/mod.rs`, `native/core/src/theme.rs`,
+    `Views/CardView.swift`, `Views/ChipsView.swift`, `Model/Palette.swift`.
 11. **One green for ready to merge (D11).** Built; `greenDeep` stays,
     only under the undrawn `greenChipEdge`. On screen: the lane's "ready to
     merge" line, a PR chip's "ready" and a dense row's ready PR number

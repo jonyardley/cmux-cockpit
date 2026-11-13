@@ -17,7 +17,7 @@ func check(_ ok: Bool, _ what: String) {
 func card(_ id: String, rank: UInt8 = 1) -> Card {
     Card(wsId: id, icon: Icon(glyph: "o", ink: nil, halo: .clear), title: id, density: .full, badge: Badge(icon: "terminal", color: nil),
          unread: "", ready: false, readyInk: .greenText, pinned: false, progress: nil, helpers: "", status: "", statusShort: "", statusInk: .clear, age: "", statusHasAge: false, leftOff: "",
-         chips: [], rowPr: nil, detail: "", detailInk: .secondary, detailLines: 1, waiting: nil, waitingTab: nil, rank: rank, movable: true, dimmed: false, selected: false, menu: [])
+         chips: [], rowPr: nil, detail: "", detailInk: .secondary, detailLines: 1, waiting: nil, late: nil, waitingTab: nil, rank: rank, movable: true, dimmed: false, selected: false, menu: [])
 }
 
 func row(_ id: String, rank: UInt8 = 1) -> Row { .card(card(id, rank: rank)) }
@@ -51,7 +51,7 @@ check(DropRule.before(rows: ranked, dragged: card("X", rank: 0), slot: 4) == "R1
 check(DropRule.before(rows: ranked, dragged: card("X", rank: 5), slot: 3) == "R2",
       "with none of its state in the lane it goes above the row under the slot")
 var asking = card("G")
-asking.waiting = Waiting(mark: .amber, ink: .amberText)
+asking.waiting = Waiting(mark: .amber, ink: .amberText, edge: .amberCardEdge, wash: .amberWash)
 let waited: [Row] = [row("A"), .card(asking), row("C")]
 check(DropRule.before(rows: waited, dragged: card("X"), slot: 1) == "G", "a waiting card anchors a drop as any card does")
 

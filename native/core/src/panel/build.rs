@@ -18,33 +18,35 @@ use crate::status::{
     DETAIL_MAX, LEFT_OFF_MAX, NEEDS_DETAIL_MAX, StatusKind, StatusStyle, progress_fraction,
     waiting_halo, waiting_tokens,
 };
+use crate::strip::{is_late, wait_secs};
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
 use crate::ui::QUIET_PILL;
-use crate::words::RUNNING_WORD;
+use crate::words::{RUNNING_WORD, WAITING_WORD};
 
 use super::{
     AddMenu, AddProject, Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT,
-    EditorView, FilterMenu, FilterProject, HOLLOW, Icon, Lane, Needs, NeedsTarget, NextLine,
-    PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow, QUIET_ROW, Row, RowPr, Waiting,
-    WaitingTab, piece,
+    EditorView, FilterMenu, FilterProject, HOLLOW, Icon, Lane, LateWait, Needs, NeedsTarget,
+    NextLine, PROJECT_ROW, Panel, PanelView, ProjectHead, ProjectRow, QUIET_ROW, Row, RowPr,
+    Waiting, WaitingTab, piece,
 };
 
 /// Before the left-off prompt (words.rs `YOU_WORD` and its colon).
 const LEFT_OFF_LEAD: &str = "You: ";
 
-/// A core chip as the panel draws it: the size in the quiet chip's ink,
-/// as the card's own clay or amber already says it waits; the PR's number
-/// in the quiet chip's ink and its state in its tone's, then its diff
-/// size as a chip of its own, faint, as the sidebar sets it beside the PR;
-/// the branch with its dirty dot, and the ports, in the quiet chip's ink.
-/// The PR and the port carry where a tap opens.
-pub fn chip_views(c: &CoreChip) -> Vec<Chip> {
+/// A core chip as the panel draws it, on a card that waits on Jon when
+/// `waiting` says how. The size takes the wait's colour, face, edge and
+/// words, so a waiting card says
+/// what answering takes in the colour that says it waits (D10 reversed,
+/// 13 November 2026); on a card waiting on nobody it is a quiet chip. The
+/// PR's number in the quiet chip's ink and its state in its tone's, then
+/// its diff size as a chip of its own, faint, as the sidebar sets it
+/// beside the PR; the branch with its dirty dot, and the ports, in the
+/// quiet chip's ink. The PR and the port carry where a tap opens.
+pub fn chip_views(c: &CoreChip, waiting: Option<Waiting>) -> Vec<Chip> {
     let quiet = Token::Secondary;
     match c {
-        CoreChip::Size { text, .. } => {
-            vec![Chip::new(ChipKind::Size, vec![piece(text, quiet)])]
-        }
+        CoreChip::Size { text, .. } => vec![size_chip(text, waiting)],
         CoreChip::Pr {
             tag,
             state,
@@ -78,6 +80,21 @@ pub fn chip_views(c: &CoreChip) -> Vec<Chip> {
             url: Some(url.clone()),
             ..Chip::new(ChipKind::Port, vec![piece(text, quiet)])
         }],
+    }
+}
+
+/// The move size chip: in the wait's colour while its card waits on Jon,
+/// clay for Your turn and amber for Asking (`Waiting::chip`), its words in
+/// the wait's ink; else quiet.
+fn size_chip(text: &str, waiting: Option<Waiting>) -> Chip {
+    let (ink, (face, edge)) = match waiting {
+        None => (Token::Secondary, (Token::ChipFace, Token::ChipEdge)),
+        Some(wt) => (wt.ink, wt.chip()),
+    };
+    Chip {
+        face,
+        edge,
+        ..Chip::new(ChipKind::Size, vec![piece(text, ink)])
     }
 }
 
@@ -331,12 +348,14 @@ fn lane_picks(session: &Session) -> Vec<(LaneKey, String)> {
         .collect()
 }
 
-/// A card's chips row, for the kind of card it is.
+/// A card's chips row, for the kind of card it is, on a card that waits
+/// on Jon as `waiting` says.
 fn chips_row(
     session: &mut Session,
     data: &Data,
     w: Option<&Workspace>,
     kind: ChipsFor,
+    waiting: Option<Waiting>,
 ) -> Vec<Chip> {
     let mut out: Vec<Chip> = match kind {
         // A row has no chips row.
@@ -344,7 +363,7 @@ fn chips_row(
         ChipsFor::Full | ChipsFor::Project => session
             .chips_for(data, w, true)
             .iter()
-            .flat_map(chip_views)
+            .flat_map(|c| chip_views(c, waiting))
             .collect(),
         ChipsFor::Compact => compact_pr(session, data, w),
     };
@@ -484,15 +503,42 @@ pub fn needs_tone(count: usize, all_asking: bool, late: bool) -> (Token, Token) 
     }
 }
 
-/// A waiting card's mark and status ink, None while it waits on nobody.
-/// Whether its agent asks is worked out once, and both come from that.
+/// How a card waits on Jon, None while it waits on nobody. Whether its
+/// agent asks is worked out once; its mark, inks, edge, wash and size
+/// chip all come from that.
 fn waiting_of(session: &mut Session, view: &ViewModel, w: Option<&Workspace>) -> Option<Waiting> {
     let id = w?.id.as_str();
     if !view.needs.list.iter().any(|n| n == id) {
         return None;
     }
-    let (mark, ink) = waiting_tokens(session.ask_of(w).is_some());
-    Some(Waiting { mark, ink })
+    Some(Waiting::of(session.ask_of(w).is_some()))
+}
+
+/// A waiting card's `age`, the one the card already shows, as the late
+/// chip, "waiting 45m", once its wait has lasted NEEDS_LATE_SECS
+/// (strip.rs) or more; None before that, with no age, or while it waits
+/// on nobody.
+fn late_of(
+    session: &mut Session,
+    data: &Data,
+    w: Option<&Workspace>,
+    waiting: Option<Waiting>,
+    age: &str,
+) -> Option<LateWait> {
+    waiting?;
+    let secs = wait_secs(data, session.since_of(w))?;
+    late_wait(age, secs)
+}
+
+/// The late chip for an age of `age` after `secs` of waiting: clay
+/// whether it is Your turn or Asking, as the late count is.
+fn late_wait(age: &str, secs: f64) -> Option<LateWait> {
+    (is_late(secs) && !age.is_empty()).then(|| LateWait {
+        text: format!("{WAITING_WORD} {age}"),
+        ink: Token::ClayText,
+        face: Token::ClayChipFace,
+        edge: Token::ClayChipEdge,
+    })
 }
 
 /// The tab a waiting card names, from its workspace's agents.
@@ -625,9 +671,10 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
     } else {
         String::new()
     };
-    let chips = chips_row(session, data, w, chips_for_density(density));
+    let chips = chips_row(session, data, w, chips_for_density(density), waiting);
     let looks = looks(session, data, w, density, &status, &kind);
     let (detail, detail_ink) = detail_of(session, data, w, density, waiting);
+    let late = late_of(session, data, w, waiting, &looks.age);
     Card {
         ws_id: id.to_string(),
         icon: icon_of(&style),
@@ -652,6 +699,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         detail_ink,
         detail_lines: detail_lines(density),
         waiting,
+        late,
         waiting_tab: waiting_tab_of(session, w, waiting),
         rank: session.state_rank(data, w),
         movable: !is_foreign_anchor(session, data, id),
@@ -785,6 +833,7 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         }
     };
     let looks = looks(session, data, w, Density::Full, &status, &kind);
+    let late = late_of(session, data, w, waiting, &looks.age);
     Card {
         ws_id: id.to_string(),
         icon: icon_of(&style),
@@ -803,12 +852,13 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         age: looks.age,
         status_has_age: status_carries_age(Density::Full, waiting, looks.status_has_age),
         left_off: String::new(),
-        chips: chips_row(session, data, w, ChipsFor::Project),
+        chips: chips_row(session, data, w, ChipsFor::Project, waiting),
         row_pr: None,
         detail: unless_waiting(waiting, whole_words(&wanted, 0)),
         detail_ink: Token::Secondary,
         detail_lines: 2,
         waiting,
+        late,
         waiting_tab: waiting_tab_of(session, w, waiting),
         rank: session.state_rank(data, w),
         movable: !is_foreign_anchor(session, data, id),
@@ -1107,13 +1157,23 @@ mod tests {
     #[test]
     fn inks_a_prs_number_quietly_its_state_by_tone_and_its_diff_faint_on_its_own() {
         use crate::pr_colors::PrTone;
-        let chips = chip_views(&CoreChip::Pr {
-            tag: "#3".into(),
-            state: "1 failing".into(),
-            tone: PrTone::Failing,
-            diff: "+1 \u{2212}2".into(),
-            url: Some("https://github.com/o/r/pull/3".into()),
-        });
+        // On a card waiting on Jon: only the size takes the wait's colour.
+        let chips = chip_views(
+            &CoreChip::Pr {
+                tag: "#3".into(),
+                state: "1 failing".into(),
+                tone: PrTone::Failing,
+                diff: "+1 \u{2212}2".into(),
+                url: Some("https://github.com/o/r/pull/3".into()),
+            },
+            Some(Waiting::of(false)),
+        );
+        assert!(
+            chips
+                .iter()
+                .all(|c| (c.face, c.edge) == (Token::ChipFace, Token::ChipEdge)),
+            "a PR keeps the quiet chip's face and edge on a waiting card"
+        );
         assert_eq!(chips.len(), 2, "the PR, then its diff size");
         assert_eq!(chips[0].kind, ChipKind::Pr);
         assert_eq!(
@@ -1128,49 +1188,182 @@ mod tests {
         assert_eq!(inks(&chips[1]), [("+1 \u{2212}2", Token::Faint)]);
         assert_eq!(chips[1].url, None);
         assert!(chips.iter().all(|c| !c.is_action && !c.gives_way));
-        let bare = chip_views(&CoreChip::Pr {
-            tag: "#6".into(),
-            state: String::new(),
-            tone: PrTone::Open,
-            diff: String::new(),
-            url: None,
-        });
+        let bare = chip_views(
+            &CoreChip::Pr {
+                tag: "#6".into(),
+                state: String::new(),
+                tone: PrTone::Open,
+                diff: String::new(),
+                url: None,
+            },
+            None,
+        );
         assert_eq!(bare.len(), 1, "no diff, no diff chip");
         assert_eq!(bare[0].pieces.len(), 1, "no state, no state words");
         assert_eq!(bare[0].url, None, "a PR with no link opens nothing");
     }
 
     #[test]
-    fn marks_a_dirty_branch_and_inks_every_size_in_the_quiet_chips_ink() {
-        let br = chip_views(&CoreChip::Branch {
-            text: "feat".into(),
-            dirty: true,
-        });
+    fn marks_a_dirty_branch_and_keeps_a_port_quiet() {
+        let br = chip_views(
+            &CoreChip::Branch {
+                text: "feat".into(),
+                dirty: true,
+            },
+            Some(Waiting::of(true)),
+        );
         let words: Vec<&str> = br[0].pieces.iter().map(|p| p.text.as_str()).collect();
         assert_eq!(words, ["feat", DIRTY_MARK]);
         assert_eq!(br[0].kind, ChipKind::Branch);
         assert!(br[0].gives_way, "the branch goes first on a narrow line");
         assert_eq!(br[0].url, None);
-        for (text, size) in [
-            ("Quick", MoveSize::Quick),
-            ("Decide", MoveSize::Decide),
-            ("Review", MoveSize::Review),
-        ] {
-            let chip = chip_views(&CoreChip::Size {
-                text: text.into(),
-                size,
-            });
-            assert_eq!(chip[0].kind, ChipKind::Size);
-            assert_eq!(chip[0].pieces[0].ink, Token::Secondary, "{text}: neutral");
-        }
-        let port = chip_views(&CoreChip::Port {
-            text: ":5173 \u{2197}".into(),
-            url: "http://localhost:5173".into(),
-        });
+        assert_eq!(
+            (br[0].face, br[0].edge),
+            (Token::ChipFace, Token::ChipEdge),
+            "a branch stays quiet on a waiting card"
+        );
+        let port = chip_views(
+            &CoreChip::Port {
+                text: ":5173 \u{2197}".into(),
+                url: "http://localhost:5173".into(),
+            },
+            None,
+        );
         assert_eq!(port[0].kind, ChipKind::Port);
         assert_eq!(port[0].pieces[0].ink, Token::Secondary);
         assert_eq!(port[0].url.as_deref(), Some("http://localhost:5173"));
         assert!(!port[0].is_action, "a port opens a page, it does not act");
+    }
+
+    /// The size chip's ink, face and edge for each size, on a card that
+    /// waits as `asks` says (None: on nobody).
+    fn size_tokens(asks: Option<bool>) -> Vec<(Token, Token, Token)> {
+        [
+            ("Quick", MoveSize::Quick),
+            ("Decide \u{b7} 2", MoveSize::Decide),
+            ("Review", MoveSize::Review),
+        ]
+        .into_iter()
+        .map(|(text, size)| {
+            let chip = chip_views(
+                &CoreChip::Size {
+                    text: text.into(),
+                    size,
+                },
+                asks.map(Waiting::of),
+            );
+            assert_eq!(chip.len(), 1);
+            assert_eq!(chip[0].kind, ChipKind::Size);
+            assert_eq!(chip[0].pieces[0].text, text);
+            (chip[0].pieces[0].ink, chip[0].face, chip[0].edge)
+        })
+        .collect()
+    }
+
+    #[test]
+    fn colours_the_size_chip_as_its_card_waits() {
+        let turn = (Token::ClayText, Token::ClayChipFace, Token::ClayChipEdge);
+        assert_eq!(size_tokens(Some(false)), [turn; 3], "Your turn: clay");
+        let asking = (Token::AmberText, Token::AmberChipFace, Token::AmberChipEdge);
+        assert_eq!(size_tokens(Some(true)), [asking; 3], "Asking: amber");
+        let quiet = (Token::Secondary, Token::ChipFace, Token::ChipEdge);
+        assert_eq!(size_tokens(None), [quiet; 3], "waiting on nobody: quiet");
+        // Its words take the same ink as the card's reason.
+        assert_eq!(turn.0, Waiting::of(false).ink);
+        assert_eq!(asking.0, Waiting::of(true).ink);
+    }
+
+    #[test]
+    fn edges_strips_and_washes_a_waiting_card_in_its_waits_colour() {
+        assert_eq!(
+            Waiting::of(false),
+            Waiting {
+                mark: Token::Clay,
+                ink: Token::ClayText,
+                edge: Token::ClayCardEdge,
+                wash: Token::ClayWash,
+            },
+            "Your turn"
+        );
+        assert_eq!(
+            Waiting::of(true),
+            Waiting {
+                mark: Token::Amber,
+                ink: Token::AmberText,
+                edge: Token::AmberCardEdge,
+                wash: Token::AmberWash,
+            },
+            "Asking"
+        );
+        // Its chip's face and edge come from the same wait, and it knows
+        // which wait it is.
+        assert!(Waiting::of(true).asks() && !Waiting::of(false).asks());
+        assert_eq!(
+            Waiting::of(true).chip(),
+            (Token::AmberChipFace, Token::AmberChipEdge)
+        );
+        assert_eq!(
+            Waiting::of(false).chip(),
+            (Token::ClayChipFace, Token::ClayChipEdge)
+        );
+    }
+
+    #[test]
+    fn turns_a_wait_of_half_an_hour_into_a_clay_chip() {
+        assert_eq!(late_wait("29m", 29.0 * 60.0 + 59.0), None, "29m59s");
+        let late = LateWait {
+            text: "waiting 30m".into(),
+            ink: Token::ClayText,
+            face: Token::ClayChipFace,
+            edge: Token::ClayChipEdge,
+        };
+        assert_eq!(late_wait("30m", 30.0 * 60.0), Some(late), "30m");
+        assert_eq!(late_wait("", 3600.0), None, "no age to say");
+    }
+
+    /// One workspace "W" whose agent has waited `secs` (needs_input, or
+    /// asking on a permission when `asks`), and the panel's card for it.
+    fn waited(secs: f64, asks: bool) -> Card {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = Model::default();
+        if asks {
+            core.session.saved = crate::persist::SavedState::from_json(
+                r#"{"asking": {"W": {"reason": "allow git push?", "epoch": 1000}}}"#,
+            )
+            .unwrap();
+        }
+        let data: Data = serde_json::from_value(serde_json::json!({"epoch": 1000.0 + secs,
+            "workspaces": [{"id": "W", "title": "fix login",
+                "agents": [{"id": "a0", "status": "needs_input", "sinceEpoch": 1000}]}]}))
+        .unwrap();
+        let _effects = Cockpit.update(Event::Data(data), &mut core);
+        let panel = Panel::from_core(&mut core);
+        panel.lane_cards().find(|c| c.ws_id == "W").unwrap().clone()
+    }
+
+    #[test]
+    fn a_card_waiting_half_an_hour_or_more_says_so_in_clay() {
+        let just = waited(29.0 * 60.0 + 59.0, false);
+        assert!(just.waiting.is_some());
+        assert_eq!(just.late, None, "29m59s: the plain age");
+        assert_eq!(just.age, "29m");
+        let late = waited(30.0 * 60.0, false);
+        assert_eq!(
+            late.late.as_ref().map(|l| l.text.as_str()),
+            Some("waiting 30m")
+        );
+        assert_eq!(late.age, "30m", "the plain age stays");
+        assert_eq!(late.waiting, Some(Waiting::of(false)));
+        let asking = waited(45.0 * 60.0, true);
+        assert_eq!(asking.waiting, Some(Waiting::of(true)), "it asks");
+        let chip = asking.late.unwrap();
+        assert_eq!(chip.text, "waiting 45m");
+        assert_eq!(
+            (chip.ink, chip.face, chip.edge),
+            (Token::ClayText, Token::ClayChipFace, Token::ClayChipEdge),
+            "late is clay on an Asking card too"
+        );
     }
 
     #[test]
@@ -1448,10 +1641,7 @@ mod tests {
         let s = &mut core.session;
         let data = three_on("c");
         let w = data.ws_by_id("a");
-        let wt = Some(Waiting {
-            mark: Token::Clay,
-            ink: Token::ClayText,
-        });
+        let wt = Some(Waiting::of(false));
         let (detail, ink) = detail_of(s, &data, w, Density::Row, wt);
         assert!(
             detail.contains(": "),
@@ -1571,10 +1761,7 @@ mod tests {
 
     #[test]
     fn moves_a_waiting_cards_age_to_its_title_row_and_drops_its_detail() {
-        let wt = Some(Waiting {
-            mark: Token::Clay,
-            ink: Token::ClayText,
-        });
+        let wt = Some(Waiting::of(false));
         assert!(!status_carries_age(Density::Full, wt, true));
         assert!(!status_carries_age(Density::Compact, wt, true));
         assert!(

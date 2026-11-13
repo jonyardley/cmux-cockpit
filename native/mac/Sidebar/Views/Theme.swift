@@ -12,6 +12,16 @@ extension Color {
         self.init(nsColor: Self.dynamic(light: Palette.rgba(own, dark: false), dark: Palette.rgba(own, dark: true)))
     }
 
+    /// What shows under a quiet row that is not selected, solid
+    /// (Palette.rowGround): the panel's ground with a waiting row's wash
+    /// and the pointer's hover wash laid over it.
+    init(rowGround wash: Token?, hovering: Bool) {
+        self.init(nsColor: Self.dynamic(
+            light: Palette.rowGround(wash: wash, hovering: hovering, dark: false),
+            dark: Palette.rowGround(wash: wash, hovering: hovering, dark: true)
+        ))
+    }
+
     /// A dot's colour: its token, or the grey outline with none.
     init(dot ink: Token?) {
         if let ink { self.init(ink) } else { self.init(Palette.Own.grey) }

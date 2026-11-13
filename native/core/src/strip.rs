@@ -55,7 +55,7 @@ impl Session {
         NeedsStrip {
             list: waiting.into_iter().map(|(_, w)| w).collect(),
             wait_text: wait.map(fmt_age).unwrap_or_default(),
-            late: wait.unwrap_or(0.0) >= NEEDS_LATE_SECS,
+            late: wait.is_some_and(is_late),
         }
     }
 
@@ -83,8 +83,21 @@ fn oldest_wait(data: &Data, waiting: &[(f64, &Workspace)]) -> Option<f64> {
         .iter()
         .map(|(since, _)| *since)
         .find(|t| positive(*t))?;
+    wait_secs(data, at)
+}
+
+/// How long a wait that began at `since` has lasted, in seconds; None
+/// for an untimed wait or with no clock. A start ahead of the clock
+/// counts as no time yet.
+pub fn wait_secs(data: &Data, since: f64) -> Option<f64> {
     let now = now_epoch(data);
-    (now != 0.0 && !now.is_nan()).then(|| (now - at).max(0.0))
+    (positive(since) && now != 0.0 && !now.is_nan()).then(|| (now - since).max(0.0))
+}
+
+/// Whether a wait of `secs` is late: NEEDS_LATE_SECS or more. The All
+/// tab's count and each waiting card's age chip share it.
+pub fn is_late(secs: f64) -> bool {
+    secs >= NEEDS_LATE_SECS
 }
 
 #[cfg(test)]
@@ -160,5 +173,26 @@ mod tests {
         assert!(raw.iter().all(|st| *st == Some(AgentStatus::NeedsInput)));
         let mut s = Session::new(Vec::new(), saved);
         assert_eq!(ids(&s.needs_list(&data)), ["real"]);
+    }
+
+    #[test]
+    fn a_wait_is_late_from_the_half_hour_on() {
+        use super::{NEEDS_LATE_SECS, is_late, wait_secs};
+        assert!(!is_late(29.0 * 60.0 + 59.0), "29m59s is not late");
+        assert!(is_late(NEEDS_LATE_SECS), "30m is");
+        let data = frame(5000.0, Vec::new());
+        assert_eq!(wait_secs(&data, 3200.0), Some(1800.0));
+        assert_eq!(wait_secs(&data, 6000.0), Some(0.0), "ahead of the clock");
+        assert_eq!(wait_secs(&data, 0.0), None, "untimed");
+        assert_eq!(wait_secs(&frame(0.0, Vec::new()), 3200.0), None, "no clock");
+    }
+
+    #[test]
+    fn the_count_is_late_on_the_same_rule() {
+        let mut s = Session::default();
+        let just = frame(1000.0 + 1799.0, vec![asking("x", 1000.0)]);
+        assert!(!s.needs(&just).late, "29m59s");
+        let late = frame(1000.0 + 1800.0, vec![asking("x", 1000.0)]);
+        assert!(s.needs(&late).late, "30m");
     }
 }

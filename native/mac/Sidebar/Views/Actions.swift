@@ -158,7 +158,7 @@ struct ActionChip: View {
             .foregroundStyle(Color(chip.pieces.first?.ink ?? .secondary))
             .lineLimit(1)
             .fixedSize()
-            .chipFrame(Color(hovering ? Palette.Own.cardHover : Palette.Own.card), padH: Self.padH)
+            .chipFrame(Color(hovering ? Palette.Own.cardHover : Palette.Own.card), edge: chip.edge, padH: Self.padH)
             .contentShape(.rect)
     }
 }

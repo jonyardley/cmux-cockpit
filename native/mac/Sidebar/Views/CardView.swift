@@ -60,6 +60,8 @@ private enum CardLook {
     static let titleLine: CGFloat = 1.2
     /// A merged card while nothing in it wants Jon (docs/design.md#card-chrome).
     static let dimmed: Double = 0.6
+    /// The stripe down a waiting card's leading edge (docs/design.md#waiting-card).
+    static let stripe: CGFloat = 3
 }
 
 /// A lane's card at its lane's density.
@@ -181,7 +183,11 @@ struct DenseRow: View {
                 if let pr = card.rowPr {
                     MetaText(text: pr.tag, ink: Color(pr.ink)).layoutPriority(2)
                 }
-                if !card.age.isEmpty { MetaText(text: card.age, ink: Color(CardText.ageInk(card))) }
+                if let late = card.late {
+                    LateChip(late: late)
+                } else if !card.age.isEmpty {
+                    MetaText(text: card.age, ink: Color(CardText.ageInk(card)))
+                }
                 DismissX(card: card)
                 if card.pinned { PinMark() }
             }
@@ -252,7 +258,13 @@ struct TitleRow: View {
             if card.ready { ReadyPill(ink: card.readyInk) }
             if !card.unread.isEmpty { UnreadBadge(count: card.unread) }
             let age = CardText.titleAge(card)
-            if !age.isEmpty { MetaText(text: age, ink: Color(CardText.ageInk(card))) }
+            if !age.isEmpty {
+                if let late = card.late {
+                    LateChip(late: late)
+                } else {
+                    MetaText(text: age, ink: Color(CardText.ageInk(card)))
+                }
+            }
             DismissX(card: card)
             if card.pinned { PinMark() }
         }
@@ -428,6 +440,22 @@ struct MetaText: View {
     }
 }
 
+/// A wait of half an hour or more in place of the age
+/// (docs/design.md#late-wait): "waiting 45m" on a chip in the core's ink,
+/// face and edge, semibold with its digits monospaced, never cut.
+struct LateChip: View {
+    let late: LateWait
+
+    var body: some View {
+        Text(late.text)
+            .font(.system(size: Metrics.Font.meta, weight: .semibold).monospacedDigit())
+            .foregroundStyle(Color(late.ink))
+            .lineLimit(1)
+            .fixedSize()
+            .chipFrame(Color(late.face), edge: late.edge)
+    }
+}
+
 /// The x on a card waiting on Jon, under the pointer only (issue #314):
 /// a click dismisses its wait with the core's Dismiss, so the dot goes and
 /// the card reads Idle until its agent asks again. Its own button, so the
@@ -542,11 +570,14 @@ extension View {
 
 /// A card's opaque white face with the hairline edge, or the select ink's
 /// on cmux's selected workspace (docs/design.md#card-chrome); a step darker under
-/// the pointer. A quiet row has no face or edge until it is selected, and
-/// takes the hover wash. A merged card nothing in wants sits dimmed, at
-/// full strength under the pointer. The pointer also shows a waiting
-/// card's x (DismissX), read from the environment, and the face goes the
-/// same way to ring a badge's needs dot (BadgeTile).
+/// the pointer. A card waiting on Jon takes the wait's edge and a stripe of
+/// its hue down the leading edge, inside the outline when selected, so the
+/// outline stays whole (docs/design.md#waiting-card). A quiet row has no
+/// face or edge until it is selected, and takes the hover wash; a waiting
+/// one takes the wait's wash under it. A merged card nothing in wants sits
+/// dimmed, at full strength under the pointer. The pointer also shows a
+/// waiting card's x (DismissX), read from the environment, and the face
+/// goes the same way to ring a badge's needs dot (BadgeTile).
 struct CardChrome: ViewModifier {
     let card: Card
     let radius: CGFloat
@@ -559,7 +590,9 @@ struct CardChrome: ViewModifier {
             .environment(\.cardHovering, hovering)
             .environment(\.cardFace, ring)
             .background(face, in: .rect(cornerRadius: radius))
-            .overlay(Outline(selected: card.selected, radius: radius, rest: quiet ? .clear : .cardEdge))
+            .background(wash, in: .rect(cornerRadius: radius))
+            .overlay { stripe }
+            .overlay(Outline(selected: card.selected, radius: radius, rest: CardText.restEdge(card, row: quiet)))
             .opacity(card.dimmed && !hovering ? CardLook.dimmed : 1)
             .onHover { hovering = $0 }
             .cardActions(card)
@@ -570,10 +603,32 @@ struct CardChrome: ViewModifier {
         return Color(hovering ? Palette.Own.cardHover : Palette.Own.card)
     }
 
-    /// The colour under a badge's needs dot: the face, or the panel's
-    /// ground where a quiet row at rest has none.
+    /// A waiting row's wash, under the face; clear on anything else.
+    private var wash: Color {
+        CardText.wash(card, row: quiet).map { Color($0) } ?? .clear
+    }
+
+    /// The stripe in the wait's hue down the leading edge, clipped to the
+    /// card's corners; inset by the outline's width when selected.
+    @ViewBuilder private var stripe: some View {
+        if let hue = CardText.stripe(card, row: quiet) {
+            Rectangle()
+                .fill(Color(hue))
+                .frame(width: CardLook.stripe)
+                .padding(.leading, card.selected ? Metrics.selectWidth : 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .clipShape(.rect(cornerRadius: radius))
+                .allowsHitTesting(false)
+        }
+    }
+
+    /// The colour under a badge's needs dot: the face, or on a quiet row
+    /// not selected, which has none, the panel's ground with its wait's
+    /// wash and, under the pointer, the hover wash laid over it.
     private var ring: Color {
-        if quiet && !card.selected && !hovering { return Color(Palette.Own.panelGround) }
+        if quiet && !card.selected {
+            return Color(rowGround: CardText.wash(card, row: quiet), hovering: hovering)
+        }
         return face
     }
 }

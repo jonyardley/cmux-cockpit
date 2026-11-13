@@ -1380,10 +1380,7 @@ fn a_drag_holds_when_its_card_starts_asking_and_ends_when_it_goes() {
         if let cockpit_pane::model::Row::Card(c) = row
             && c.ws_id == snapshot
         {
-            c.waiting = Some(cockpit_pane::model::Waiting {
-                mark: Token::Amber,
-                ink: Token::AmberText,
-            });
+            c.waiting = Some(cockpit_pane::model::Waiting::of(true));
         }
     }
     pane.set_view_model(asking.clone());

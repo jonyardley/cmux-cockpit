@@ -39,6 +39,10 @@ pub const QUIET_WORD: &str = "quiet";
 /// Your last prompt, on a card that shows where you left off.
 pub const YOU_WORD: &str = "You";
 
+/// Before a late wait's age, "waiting 45m", on a card that has waited on
+/// Jon for half an hour or more. "Waiting" only ever means waiting on him.
+pub const WAITING_WORD: &str = "waiting";
+
 /// One kind of background work in words, singular and plural. A monitor
 /// watches a shell command, and Claude Code 2.1.322 listed it as a shell,
 /// so it reads as one; a kind Claude Code adds later reads as a task.
