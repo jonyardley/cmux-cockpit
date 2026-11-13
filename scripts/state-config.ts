@@ -197,8 +197,8 @@ export interface SavedPr {
   /**
    * While GitHub would merge it, when the native poll first saw it so
    * (epoch seconds), so the Cockpit can tell a change left merge-ready
-   * four hours (#380). Set once per spell, so going ready and leaving it
-   * are the only extra writes.
+   * four hours (#380). Set once per spell, kept while only GitHub's merge
+   * state is unsure, so going ready and leaving it are the only extra writes.
    */
   readySince?: number;
 }

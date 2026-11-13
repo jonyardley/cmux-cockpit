@@ -141,9 +141,11 @@ map, `prs`: workspace id to
 nothing readable is left; `draft`, `mergeable` (gh's `mergeStateStatus`
 CLEAN) and `conflicts` (DIRTY) are saved only as `true`, so the chips can
 say a PR's worst state. `readySince` is when the native poll first saw the
-PR merge-ready, carried from answer to answer while it stays so and
-dropped once it is not, so the Cockpit can tell a change left unmerged
-four hours (#380). Since #300 the native poll is the one writer of
+PR merge-ready, carried from answer to answer while it stays so, kept
+through an answer where only GitHub's merge state is unsure (UNKNOWN,
+BLOCKED or BEHIND), and dropped once the PR itself changes (merged or
+closed, red, running, in conflict, back in draft, or its checks run
+again), so the Cockpit can tell a change left unmerged four hours (#380). Since #300 the native poll is the one writer of
 these verdicts, so the card and the agents panel, which reads only this
 file, say the same thing: an answer that differs from the file goes out as
 the core's `SavePrs` effect, and the runner hands it to

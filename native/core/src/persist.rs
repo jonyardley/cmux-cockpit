@@ -133,8 +133,9 @@ pub struct SavedPr {
     /// the poll first saw it so, in epoch seconds (pr_poll.rs
     /// `stamp_ready`): carried from answer to answer and, through the
     /// state file, across a restart, so the core can tell a change left
-    /// merge-ready four hours (issue #380). None while it is not, so a
-    /// later return to ready starts a fresh time.
+    /// merge-ready four hours (issue #380). Kept while only GitHub's merge
+    /// verdict is unsure; None once the PR itself changes, so a later
+    /// return to ready starts a fresh time.
     #[serde(
         default,
         rename = "readySince",

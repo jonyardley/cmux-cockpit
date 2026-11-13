@@ -657,11 +657,16 @@ The four hours count from the first poll answer that showed the PR
 merge-ready, saved on the PR in the state file (`readySince`), so a
 restart keeps them. The card's age and the late chip count from the
 four-hour mark, an instant that never moves while it waits. It leaves
-Needs you when the PR merges, or an answer shows it no longer
-merge-ready (a new red check, a new push running, conflicts, blocked);
+Needs you when the PR merges, or an answer shows the PR itself change (a
+new red check, checks running or run again, conflicts, back in draft);
 that answer lets the time go, so a later return to ready starts four
-fresh hours. A frame that cannot read the PR changes neither the time
-nor a dismissal, which lapses only with a new time.
+fresh hours. An answer where only GitHub's merge state is unsure
+(UNKNOWN while it recomputes after main moves, or BLOCKED or BEHIND)
+takes the card out of green and out of Needs you while it lasts, as it
+always did for green, but keeps the time, so the wait comes back from
+the same mark once GitHub settles. A frame that cannot read the PR, or
+one with an unsure merge state, changes neither the time nor a
+dismissal, which lapses only with a new time.
 
 ### Running
 
