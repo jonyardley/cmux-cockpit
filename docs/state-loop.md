@@ -690,10 +690,10 @@ says Running while that agent is idle as the panel shows it
 corrections applied (`agentsOf` in `src/shared/needs.ts`), so a turn that
 ended on a line asking something of Jon is Your turn there too, as on the
 card, and only a "Nothing for you" turn or a dismissed wait says Running.
-Only the core that draws the sidebar writes it,
-only an entry the file as last read does not hold and the file's contract
-keeps, and only once until the file is read again or a minute passes
-without the file showing it, so a save that failed goes out again
+Only the core that draws the sidebar writes it, only an entry the file as
+last read does not hold and the file's contract keeps, and only once
+until the file is read again or a minute passes without the file showing
+it, so a save that failed goes out again
 (`native/core/src/running_save.rs`): its `SaveRunning` effect goes to the
 runner, which hands it to `scripts/running-save.sh` and
 `scripts/running-save.ts`, the same locked write and rebuild as
@@ -998,12 +998,12 @@ for you", a reply with no label included) reads as needs input from the
 turn end, ahead of Running (`waiting_turn` and
 `Session::effective_agent` in `native/core/src/needs.rs` for the Cockpit,
 `waitingTurn` and `effectiveAgent` in `src/shared/needs.ts` for the
-agents panel's This workspace card and its question block). The runner never moves
-the last activity on a Notification, so the nudge alone always reads as
-idle there, and Claude Code may send none while the chat's background
-work runs. A dismissal of that wait is keyed on the turn end, so the
-nudge landing a minute on keeps it. The size chip shows only while the
-card waits.
+agents panel's This workspace card and its question block). The runner
+never moves the last activity on a Notification, so the nudge alone
+always reads as idle there, and Claude Code may send none while the
+chat's background work runs. A dismissal of that wait is keyed on the
+turn end, so the nudge landing a minute on keeps it. The size chip shows
+only while the card waits.
 
 Ownership is stricter than for asks: the move shows only on a Claude agent
 whose id is the move's session. A move saved with no session, a new
