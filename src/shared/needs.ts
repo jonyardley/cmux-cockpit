@@ -2,10 +2,18 @@
 // agent's needs_input reads as idle when it is Claude Code's idle nudge
 // (issue #4) or when Jon has dismissed it. The agents panel holds its own
 // dismissals, and a reload forgets them (issues #3 and #5).
+//
+// A turn end is read from its closing line too, not from the nudge alone,
+// as the Cockpit reads it (`waiting_turn` and `Session::effective_agent` in
+// native/core/src/needs.rs, #374): an idle or nudged agent whose turn ended
+// on a move asking something of Jon (waitingTurn) reads as needs_input from
+// the moment the turn ended. So the panel's This workspace card says Your
+// turn, not Running, while the chat's background work runs on, and only a
+// "Nothing for you" turn or a dismissed wait says Running there.
 
 import type { SavedAsk, SavedMove } from "../../scripts/state-config.ts";
 import { sinceOrActivity } from "./activity.ts";
-import { quietTurn } from "./move.ts";
+import { asksNothing, quietTurn, waitingMove } from "./move.ts";
 import { persistSet, SAVED_STATE } from "./persist.ts";
 import { savedFor } from "./saved.ts";
 
@@ -48,14 +56,44 @@ const bump = () => setTick(tick() + 1);
 // that ended on "Nothing for you" (quietOf).
 const notJons = (a: Agent, w: Workspace | undefined): boolean => isIdleNudge(a, w) || quietOf(a, w) !== null;
 
-// Real asks only: a nudge or a quiet turn already reads as idle, so there is nothing to dismiss.
-const asking = (w: Workspace | undefined): Agent[] =>
-  (w?.agents ?? []).filter((a) => a?.status === "needs_input" && !notJons(a, w));
+// Whether `a` waits on Jon, dismissals aside: a turn that ended on a move
+// asking something of him, or a needs_input that is not a nudge.
+const waitsOnJon = (a: Agent, w: Workspace | undefined): boolean =>
+  waitingTurn(a, w) !== null || (a.status === "needs_input" && !notJons(a, w));
 
-function isDismissed(w: Workspace | undefined, a: Agent): boolean {
-  tick();
-  return !!w && a.status === "needs_input" && dismissed.get(w.id)?.get(a.id) === sinceOrActivity(a);
+// The workspace's agents that wait on Jon, its real asks among them: a nudge
+// or a quiet turn already reads as idle, so there is nothing to dismiss.
+const asking = (w: Workspace | undefined): Agent[] => (w?.agents ?? []).filter((a) => waitsOnJon(a, w));
+
+/**
+ * The move `a`'s turn ended on when it waits on Jon: `a`'s own, current (no
+ * prompt since), not an ask, and asking something of him. A reply with no
+ * label counts, as a turn with no closing line still waits on him (#322);
+ * only "Nothing for you" does not. Null otherwise. Pass `a` as cmux sends
+ * it. The Cockpit's `waiting_turn` (native/core/src/needs.rs).
+ */
+function waitingTurn(a: Agent, w: Workspace | undefined): SavedMove | null {
+  const m = waitingMove(a, w, freshAsk(a, w) !== null);
+  return m && !asksNothing(m) ? m : null;
 }
+
+// When `a`'s wait on Jon began, which a dismissal is keyed on: the end of
+// `turn`, the turn that waits on him, so the nudge landing a minute on keeps
+// the dismissal, else the start of its needs_input spell.
+const startOf = (turn: SavedMove | null, a: Agent): number => turn?.epoch ?? sinceOrActivity(a);
+
+// startOf, reading the turn.
+const waitStart = (a: Agent, w: Workspace | undefined): number => startOf(waitingTurn(a, w), a);
+
+// Whether Jon dismissed `a`'s wait that began at `start`.
+function dismissedAt(w: Workspace | undefined, a: Agent, start: number): boolean {
+  tick();
+  return !!w && dismissed.get(w.id)?.get(a.id) === start;
+}
+
+// Whether `a`'s wait is dismissed, with its waiting turn already read.
+const isDismissed = (w: Workspace | undefined, a: Agent, turn: SavedMove | null): boolean =>
+  (a.status === "needs_input" || turn !== null) && dismissedAt(w, a, startOf(turn, a));
 
 // Drops dismissals whose spell has ended, so a later ask with the same start
 // (or none) is not hidden. Only for agents the workspace reports: straight
@@ -68,16 +106,22 @@ function prune(w: Workspace): void {
   const byAgent = dismissed.get(w.id);
   if (!byAgent) return;
   const reported = new Set((w.agents ?? []).filter((a) => !!a).map((a) => a.id));
-  const live = new Map(asking(w).map((a) => [a.id, sinceOrActivity(a)]));
+  const live = new Map(asking(w).map((a) => [a.id, waitStart(a, w)]));
   for (const [id, start] of byAgent) if (reported.has(id) && live.get(id) !== start) byAgent.delete(id);
   if (!byAgent.size) dismissed.delete(w.id);
 }
 
 /**
- * The agent as the sidebars show it: needs_input reads as idle when it is a
- * nudge, dismissed, or a turn that ended on "Nothing for you".
+ * The agent as the sidebars show it: a turn that ended on a move asking
+ * something of Jon reads as needs_input from its end, idle or nudged; any
+ * other needs_input reads as idle when it is a nudge, dismissed, or a turn
+ * that ended on "Nothing for you".
  */
 export function effectiveAgent(a: Agent, w?: Workspace): Agent {
+  // Ahead of Running too: background work never hides a turn that asks Jon
+  // something. A dismissed one reads as it would without it.
+  const turn = waitingTurn(a, w);
+  if (turn && !dismissedAt(w, a, turn.epoch)) return { ...a, status: "needs_input", sinceEpoch: turn.epoch };
   if (a.status !== "needs_input") return a;
   // A nudge's idle spell began when the turn ended, not when the nudge landed.
   if (isIdleNudge(a, w) && a.lastActivityAt) return { ...a, status: "idle", sinceEpoch: a.lastActivityAt };
@@ -85,7 +129,7 @@ export function effectiveAgent(a: Agent, w?: Workspace): Agent {
   // since that turn ended, not since the nudge.
   const quiet = quietOf(a, w);
   if (quiet) return { ...a, status: "idle", sinceEpoch: quiet.epoch };
-  return isIdleNudge(a, w) || isDismissed(w, a) ? { ...a, status: "idle" } : a;
+  return isIdleNudge(a, w) || isDismissed(w, a, turn) ? { ...a, status: "idle" } : a;
 }
 
 // --- Asking or your turn (issue #81) -----------------------------------------------------
@@ -130,10 +174,16 @@ function quietOf(a: Agent, w: Workspace | undefined): SavedMove | null {
   return a.status === "needs_input" && !freshAsk(a, w) ? quietTurn(a, w) : null;
 }
 
-// The saved ask that explains `a`'s current needs_input spell, if any.
+// The saved ask that explains `a`'s current needs_input spell, if any. One
+// saved before the end of the turn `a` waits on was answered within that
+// turn: a turn that waits on Jon reads as needs_input from its end
+// (effectiveAgent), so the slack alone would let it through.
 function freshAsk(a: Agent, w: Workspace | undefined): SavedAsk | null {
   if (!w || a.status !== "needs_input" || !a.sinceEpoch) return null;
-  return savedFor(savedAskFor(w.id), a, w, a.sinceEpoch, isOwnSaved);
+  const ask = savedFor(savedAskFor(w.id), a, w, a.sinceEpoch, isOwnSaved);
+  if (!ask) return null;
+  const end = waitingMove(a, w, false)?.epoch;
+  return end === undefined || ask.epoch >= end ? ask : null;
 }
 
 /** A workspace's agents with nudges and dismissals applied, in the app's order. */
@@ -149,7 +199,7 @@ export function agentsOf(w: Workspace | undefined): Agent[] {
 export function dismissNeeds(w: Workspace | undefined): void {
   const list = asking(w);
   if (!w || !list.length) return;
-  const starts = new Map(list.map((a) => [a.id, sinceOrActivity(a)]));
+  const starts = new Map(list.map((a) => [a.id, waitStart(a, w)]));
   dismissed.set(w.id, starts);
   bump();
   // A start of 0 means the agent had no timestamp, so a later ask without one

@@ -67,9 +67,11 @@ beforeEach(() => {
 });
 
 describe("moveOf", () => {
-  it("shows at idle straight after Stop, when the move is newer than the last prompt", () => {
+  it("shows straight after Stop, when the move is newer than the last prompt", () => {
     const w = at("quick", [stopped("quick", 1000)]);
-    assert.equal(shown(w)?.status, "idle");
+    // As the Cockpit's ported twin (native/core/tests/ported/move_saved.rs, #374).
+    assert.equal(shown(w)?.status, "needs_input", "a move that asks Jon something is his turn from the Stop");
+    assert.equal(shown(w)?.sinceEpoch, 1000, "dated from the turn end");
     assert.equal(moveOf(w)?.text, "the work is finished. Run /clear now.");
     assert.ok(
       moveOf(at("quick", [stopped("quick", 1000)], { latestAt: 1000 + 3 })),
