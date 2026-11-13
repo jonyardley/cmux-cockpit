@@ -1838,6 +1838,21 @@ mod tests {
         let unsettled: Data = serde_json::from_value(unsettled).unwrap();
         let _effects = Cockpit.update(Event::Data(unsettled), &mut core);
         assert_eq!(w_card(&mut core).1.count, 0);
+        // Jon dismisses the session's own ask in that frame: the CI
+        // dismissal is kept beside it.
+        let asks = r#"{"id": "c", "kind": "claude", "status": "needs_input", "sinceEpoch": 1030, "lastActivityAt": 1030}"#;
+        let mut asking: serde_json::Value = serde_json::to_value(ci_data(1035.0, asks)).unwrap();
+        asking["workspaces"][0]["branch"] = "main".into();
+        let asking: Data = serde_json::from_value(asking).unwrap();
+        let _effects = Cockpit.update(Event::Data(asking), &mut core);
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(
+            core.session.pending.last(),
+            Some(&(
+                "dismissed.W".to_string(),
+                Some(serde_json::json!({"c": 1030, "ci": 800}))
+            ))
+        );
         // Back on its branch with the same red checks: still dismissed.
         ci_frame(&mut core, 1040.0, IDLE);
         assert_eq!(w_card(&mut core).1.count, 0, "the dismissal held");

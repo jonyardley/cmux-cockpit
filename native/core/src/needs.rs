@@ -387,10 +387,16 @@ impl Session {
         if starts.is_empty() {
             return;
         }
-        // A CI wait dismissed earlier and still the same trouble stays
-        // dismissed, though a session on it keeps it out of `waits` now.
-        let ci = self.ci.get(&w.id).map(|ci| ci.key);
-        if let Some(key) = ci.filter(|key| self.dismissed_key(&w.id, CI_KEY, *key)) {
+        // A CI wait dismissed earlier that still holds stays dismissed,
+        // though a session on it, or a frame that cannot read the PR,
+        // keeps it out of `waits` now.
+        let earlier = self
+            .dismissed
+            .get(&w.id)
+            .and_then(|starts| starts.get(CI_KEY))
+            .copied()
+            .filter(|key| self.ci_dismissal_holds(w, *key));
+        if let Some(key) = earlier {
             starts.entry(CI_KEY.to_string()).or_insert(key);
         }
         let dated: Map<String, Value> = starts
