@@ -541,26 +541,15 @@ impl Session {
         at_rest && ask_reason(&self.saved, a, w).is_none() && card.running.is_none()
     }
 
-    /// True when the card's status says Ready to merge (issue #299): the
-    /// same rule status_kind puts first, without the rest of its pass.
-    /// status_kind must keep merge_ready first for the two to agree, and a
-    /// test in tests/ported/merge_ready.rs holds them to it.
-    pub fn shows_merge_ready(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
-        let card = self.card_running(data, w);
-        self.merge_ready(w, &card)
-    }
-
-    /// Whether the card's status says Ready to merge in either hue: green
-    /// (`shows_merge_ready`), or clay once the change has waited four hours
-    /// and its card's agent carries that wait (issue #380). Where it does,
-    /// the PR chip's "ready" would only say it again.
+    /// Whether the card's status says Ready to merge (issue #299), in
+    /// either hue: green, or clay once the change has waited four hours
+    /// (issue #380). Where it does, the PR chip's "ready" would only say it
+    /// again. It asks status_kind itself, so the two cannot disagree.
     pub fn says_merge_ready(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
-        let card = self.card_running(data, w);
-        let waits = card
-            .agent
-            .as_ref()
-            .is_some_and(|a| a.ci == Some(CiTrouble::MergeReady));
-        waits || self.merge_ready(w, &card)
+        matches!(
+            self.status_kind(data, w),
+            StatusKind::MergeReady | StatusKind::Ci(CiTrouble::MergeReady)
+        )
     }
 
     /// The PR's words a compact card runs on from its status: the number
