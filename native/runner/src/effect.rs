@@ -13,6 +13,8 @@
 //! {"AgentMessage": {"workspace": "W1", "text": "Rebase when free."}}
 //! {"SavePrs": {"prs": {"W1": {"number": 7, "url": "...", ...}, "W2": null}}}
 //! {"SaveRunning": {"running": {"W1": {"agent": "s1", "since": 1791229800, "counts": [{"type": "shell", "n": 1}]}, "W2": null}}}
+//! {"Notify": {"workspace": "W1", "since": 1791229800, "title": "Docs layout", "body": "CI stuck 40m: rerun?"}}
+//! {"DismissNotification": {"id": "74D64488-9CB8-4B8D-900F-1908FF44B8BB"}}
 //! ```
 //!
 //! `Render` is the shell's own business and never comes this way, nor
@@ -24,7 +26,10 @@
 //! some of these bring back (a cmux call that failed, a PR) go to inbox/
 //! (inbox.rs).
 
-use cockpit_core::{AgentMessage, CmuxCall, OpenUrl, PrAsk, PrSave, RunningSave, StateSet};
+use cockpit_core::{
+    AgentMessage, CmuxCall, NotifyDismiss, NotifyPost, OpenUrl, PrAsk, PrSave, RunningSave,
+    StateSet,
+};
 use serde::{Deserialize, Serialize};
 
 /// An effect file's contents: every effect of the core but `Render` and
@@ -38,6 +43,8 @@ pub enum EffectFile {
     AgentMessage(AgentMessage),
     SavePrs(PrSave),
     SaveRunning(RunningSave),
+    Notify(NotifyPost),
+    DismissNotification(NotifyDismiss),
 }
 
 impl EffectFile {
@@ -57,6 +64,8 @@ impl EffectFile {
             EffectFile::AgentMessage(_) => "AgentMessage",
             EffectFile::SavePrs(_) => "SavePrs",
             EffectFile::SaveRunning(_) => "SaveRunning",
+            EffectFile::Notify(_) => "Notify",
+            EffectFile::DismissNotification(_) => "DismissNotification",
         }
     }
 }
@@ -86,9 +95,11 @@ mod tests {
             EffectFile::AgentMessage(_) => 4,
             EffectFile::SavePrs(_) => 5,
             EffectFile::SaveRunning(_) => 6,
+            EffectFile::Notify(_) => 7,
+            EffectFile::DismissNotification(_) => 8,
         }
     }
-    const EFFECTS: usize = 7;
+    const EFFECTS: usize = 9;
 
     /// The core's own effect for a file, as the core's update makes it.
     fn as_core(file: EffectFile) -> Effect {
@@ -100,6 +111,8 @@ mod tests {
             EffectFile::AgentMessage(op) => Command::notify_shell(op).into(),
             EffectFile::SavePrs(op) => Command::notify_shell(op).into(),
             EffectFile::SaveRunning(op) => Command::notify_shell(op).into(),
+            EffectFile::Notify(op) => Command::notify_shell(op).into(),
+            EffectFile::DismissNotification(op) => Command::notify_shell(op).into(),
         };
         cmd.effects().next().unwrap()
     }
@@ -165,13 +178,15 @@ mod tests {
         use crate::outbox::Outgoing;
         for want in samples() {
             let out = match EffectFile::parse(&want.to_string()).unwrap() {
-                EffectFile::PrPoll(_) => continue,
+                // Each goes to its own thread, never the worker.
+                EffectFile::PrPoll(_) | EffectFile::Notify(_) => continue,
                 EffectFile::Cmux(c) => Outgoing::Cmux(c),
                 EffectFile::Persist(p) => Outgoing::Persist(p),
                 EffectFile::OpenUrl(u) => Outgoing::OpenUrl(u),
                 EffectFile::AgentMessage(m) => Outgoing::AgentMessage(m),
                 EffectFile::SavePrs(p) => Outgoing::SavePrs(p),
                 EffectFile::SaveRunning(r) => Outgoing::SaveRunning(r),
+                EffectFile::DismissNotification(d) => Outgoing::DismissNotification(d),
             };
             assert_eq!(serde_json::to_value(&out).unwrap(), want);
         }
@@ -205,6 +220,9 @@ mod tests {
             r#"{"SavePrs": {"prs": {"W1": {"number": 7}}}}"#,
             r#"{"SaveRunning": {"running": {}, "typo": 1}}"#,
             r#"{"SaveRunning": {"running": {"W1": {"agent": "s1"}}}}"#,
+            r#"{"Notify": {"workspace": "W1", "since": 1, "title": "t"}}"#,
+            r#"{"Notify": {"workspace": "W1", "since": 1, "title": "t", "body": "b", "desktop": false}}"#,
+            r#"{"DismissNotification": {"id": "x", "workspace": "W1"}}"#,
             r#"{"OpenUrl": "#,
             "",
         ] {

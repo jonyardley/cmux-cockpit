@@ -30,6 +30,7 @@ fn variants(e: &Event) -> Option<Vec<(&'static str, usize, usize)>> {
         | Event::PanelOn
         | Event::PrPolled(_)
         | Event::Slept(_)
+        | Event::Notified(_)
         | Event::CmuxFailed { .. }
         | Event::At { .. } => return None,
         Event::MoveCard { .. } => 0,
