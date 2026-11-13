@@ -23,6 +23,7 @@ use crate::js::json_num;
 use crate::lane_entries::LaneEntry;
 use crate::lanes::{LaneConfig, LaneKey};
 use crate::menu::MenuEvent;
+use crate::notify::{Notified, NotifyDismiss, NotifyPost};
 use crate::panel::Panel;
 use crate::persist::{SavedPr, SavedRunning, SavedState, ViewMode, persist_url};
 use crate::pr_poll::{PrPolled, shown_in};
@@ -133,6 +134,10 @@ pub enum Event {
     /// which the shell carries out off the frame thread.
     #[facet(skip)]
     Slept(#[facet(opaque)] Box<SleepAnswer>),
+    /// The id cmux gave a desktop notification the core asked for
+    /// (notify.rs), which the shell posts off the frame thread.
+    #[facet(skip)]
+    Notified(#[facet(opaque)] Box<Notified>),
 }
 
 impl Event {
@@ -154,6 +159,7 @@ impl Event {
             | Event::PanelOn
             | Event::PrPolled(_)
             | Event::Slept(_)
+            | Event::Notified(_)
             | Event::CmuxFailed { .. } => false,
             Event::MoveCard { .. }
             | Event::SwitchTo { .. }
@@ -425,6 +431,8 @@ pub enum Effect {
     AgentMessage(AgentMessage),
     SavePrs(PrSave),
     SaveRunning(RunningSave),
+    Notify(NotifyPost),
+    DismissNotification(NotifyDismiss),
 }
 
 /// A request from the session's outbox as the command that hands it to the shell.
@@ -439,6 +447,8 @@ fn send_out(o: Outbound) -> Command<Effect, Event> {
         Outbound::AgentMessage { workspace, text } => {
             Command::notify_shell(AgentMessage { workspace, text }).into()
         }
+        Outbound::Notify(post) => Command::notify_shell(post).into(),
+        Outbound::DismissNotification(d) => Command::notify_shell(d).into(),
     }
 }
 
@@ -607,6 +617,15 @@ impl Model {
         (!running.is_empty()).then(|| Command::notify_shell(RunningSave { running }).into())
     }
 
+    /// Posts and dismisses the frame's desktop notifications (notify.rs).
+    /// Only the core that draws the sidebar does, so the pane's never
+    /// doubles a banner.
+    fn notify_writes(&mut self) {
+        if let (true, Some(data)) = (self.panel_on, &self.data) {
+            self.session.tend_notify(data);
+        }
+    }
+
     /// Moves the frame's clock on to `now`, never back.
     fn advance_clock(&mut self, now: f64) {
         if let Some(data) = &mut self.data {
@@ -690,6 +709,7 @@ impl App for Cockpit {
                     model.session.sleep_answered(data, *answer);
                 }
             }
+            Event::Notified(answer) => model.session.notified(*answer),
             action => model.act(action),
         }
         if let Some(data) = &model.data {
@@ -702,6 +722,7 @@ impl App for Cockpit {
         // The verdicts read the same cards as the view, in the same frame.
         let saves = model.framed(|m| {
             m.build();
+            m.notify_writes();
             m.running_writes()
         });
         let now = model.data.as_ref().and_then(|d| d.epoch);
@@ -872,7 +893,9 @@ mod tests {
                 | Effect::Persist(_)
                 | Effect::OpenUrl(_)
                 | Effect::Copy(_)
-                | Effect::AgentMessage(_) => "other".to_string(),
+                | Effect::AgentMessage(_)
+                | Effect::Notify(_)
+                | Effect::DismissNotification(_) => "other".to_string(),
             })
             .collect()
     }

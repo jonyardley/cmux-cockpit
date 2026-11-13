@@ -36,6 +36,8 @@
 //! - Each sleep call the core makes (`agent.hibernate`, `agent.wake`),
 //!   on a thread per call, off the ordered worker (sleep_ask.rs), its
 //!   answer coming back as an input.
+//! - Each desktop notification the core posts (`cmux notify`), the same
+//!   way (notify_ask.rs), its answer the id cmux gave it.
 //!
 //! The join (join.rs) turns the first five into one frame of the core's
 //! data; a fresh frame goes in when any of them changed, and every 30
@@ -56,6 +58,7 @@
 pub mod effect;
 pub mod inbox;
 pub mod join;
+pub mod notify_ask;
 pub mod outbox;
 pub mod parse;
 pub mod pr_ask;
@@ -83,7 +86,7 @@ use cockpit_core::pr_poll::PrPolled;
 use cockpit_core::project_table::merge_projects;
 use cockpit_core::projects::Project;
 use cockpit_core::sleep::{SleepAnswer, sleep_call};
-use cockpit_core::{CmuxCall, Cockpit, Effect, Event, Model, PrAsk};
+use cockpit_core::{CmuxCall, Cockpit, Effect, Event, Model, Notified, NotifyPost, PrAsk};
 use crux_core::App;
 use serde::Serialize;
 use serde_json::Value;
@@ -134,6 +137,8 @@ pub enum Input {
     PrPolled(Box<PrPolled>),
     /// cmux's answer to a sleep call (sleep_ask.rs).
     Slept(Box<SleepAnswer>),
+    /// The id cmux gave a notification the core posted (notify_ask.rs).
+    Notified(Box<Notified>),
 }
 
 /// What `on_frame` is called with besides the feed.
@@ -234,6 +239,10 @@ pub struct Feed {
     sleeper: Option<Sender<CmuxCall>>,
     /// Sleep calls made with no sleeper to take them, oldest first.
     pub unslept: Vec<CmuxCall>,
+    /// Where the core's notifications go, while `run` drives the feed.
+    notifier: Option<Sender<NotifyPost>>,
+    /// Notifications made with no notifier to take them, oldest first.
+    pub unnotified: Vec<NotifyPost>,
     /// Without a core: the answers to the effects carried out, oldest
     /// first, for the publisher to write to inbox/ and take.
     pub answers: Vec<Answer>,
@@ -260,6 +269,10 @@ impl Feed {
                     self.ask(r.operation);
                     continue;
                 }
+                Effect::Notify(r) => {
+                    self.notify(r.operation);
+                    continue;
+                }
                 Effect::Cmux(r) => Outgoing::Cmux(r.operation),
                 Effect::Persist(r) => Outgoing::Persist(r.operation),
                 Effect::OpenUrl(r) => Outgoing::OpenUrl(r.operation),
@@ -267,6 +280,7 @@ impl Feed {
                 Effect::AgentMessage(r) => Outgoing::AgentMessage(r.operation),
                 Effect::SavePrs(r) => Outgoing::SavePrs(r.operation),
                 Effect::SaveRunning(r) => Outgoing::SaveRunning(r.operation),
+                Effect::DismissNotification(r) => Outgoing::DismissNotification(r.operation),
             };
             self.hand(out);
         }
@@ -305,6 +319,19 @@ impl Feed {
             EffectFile::AgentMessage(m) => self.hand(Outgoing::AgentMessage(m)),
             EffectFile::SavePrs(p) => self.hand(Outgoing::SavePrs(p)),
             EffectFile::SaveRunning(r) => self.hand(Outgoing::SaveRunning(r)),
+            EffectFile::Notify(p) => self.notify(p),
+            EffectFile::DismissNotification(d) => self.hand(Outgoing::DismissNotification(d)),
+        }
+    }
+
+    fn notify(&mut self, post: NotifyPost) {
+        match &self.notifier {
+            Some(n) => {
+                if let Err(mpsc::SendError(p)) = n.send(post) {
+                    self.unnotified.push(p);
+                }
+            }
+            None => self.unnotified.push(post),
         }
     }
 
@@ -383,6 +410,10 @@ impl Feed {
                 self.answers.push(Answer::Slept(answer));
                 (false, false, None)
             }
+            Input::Notified(answer) if self.no_core => {
+                self.answers.push(Answer::Notified(answer));
+                (false, false, None)
+            }
             Input::CmuxFailed(id) => {
                 self.send(Event::CmuxFailed { id });
                 (true, false, None)
@@ -390,6 +421,7 @@ impl Feed {
             // Only an answer that moves what a card shows is news.
             Input::PrPolled(polled) => (self.send(Event::PrPolled(polled)), false, None),
             Input::Slept(answer) => (self.send(Event::Slept(answer)), false, None),
+            Input::Notified(answer) => (self.send(Event::Notified(answer)), false, None),
             // `run` logs these itself before they reach the feed.
             Input::Poke | Input::Log(_) => (false, false, None),
         }
@@ -805,6 +837,12 @@ fn run_with(
         feed.sleeper = Some(sleep_tx);
         thread::spawn(move || sleep_ask::serve(&sleep_rx, &tx, sleep_ask::run));
     }
+    {
+        let (notify_tx, notify_rx) = mpsc::channel();
+        let tx = tx.clone();
+        feed.notifier = Some(notify_tx);
+        thread::spawn(move || notify_ask::serve(&notify_rx, &tx, notify_ask::run));
+    }
     thread::spawn(move || {
         poll_layout(&tx, &nudge_rx, WORKSPACES_EVERY, read_list, read_groups);
     });
@@ -1117,6 +1155,7 @@ mod tests {
                 Outgoing::AgentMessage(m) => format!("message {}", m.workspace),
                 Outgoing::SavePrs(p) => format!("save {} prs", p.prs.len()),
                 Outgoing::SaveRunning(r) => format!("save {} running", r.running.len()),
+                Outgoing::DismissNotification(d) => format!("dismiss {}", d.id),
             })
             .collect()
     }
@@ -1233,6 +1272,36 @@ mod tests {
         assert!(
             matches!(feed.answers.as_slice(), [Answer::Slept(a)] if a.refused.as_deref() == Some("agent_busy")),
             "kept for inbox/, never a failed call: {:?}",
+            feed.answers
+        );
+    }
+
+    #[test]
+    fn a_notification_goes_to_the_notifier_its_dismiss_to_the_worker_and_its_id_to_the_inbox() {
+        let id = "74D64488-9CB8-4B8D-900F-1908FF44B8BB";
+        let post = NotifyPost {
+            workspace: "Q".into(),
+            since: 1000.0,
+            title: "Docs layout".into(),
+            body: "CI stuck 40m: rerun?".into(),
+        };
+        let mut feed = Feed::without_core(Some("/h".into()));
+        feed.carry(EffectFile::Notify(post.clone()));
+        assert!(feed.unsent.is_empty(), "never the ordered worker");
+        assert_eq!(feed.unnotified, [post]);
+        let dismiss = cockpit_core::NotifyDismiss { id: id.into() };
+        feed.carry(EffectFile::DismissNotification(dismiss));
+        assert_eq!(methods(&feed.unsent), [format!("dismiss {id}")]);
+        let answer = Box::new(Notified {
+            workspace: "Q".into(),
+            since: 1000.0,
+            id: Some(id.into()),
+        });
+        let (changed, _, _) = feed.input(Input::Notified(answer));
+        assert!(!changed);
+        assert!(
+            matches!(feed.answers.as_slice(), [Answer::Notified(a)] if a.id.as_deref() == Some(id)),
+            "kept for inbox/: {:?}",
             feed.answers
         );
     }

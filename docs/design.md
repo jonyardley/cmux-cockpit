@@ -668,6 +668,32 @@ the same mark once GitHub settles. A frame that cannot read the PR, or
 one with an unsure merge state, changes neither the time nor a
 dismissal, which lapses only with a new time.
 
+### Wait notification
+
+The waits no session announces also post one macOS notification each
+through cmux (issue #379): a session that [stopped](#stopped), CI
+[stuck or red with nobody on it](#ci-waiting), and a change
+[left merge-ready four hours](#merge-waiting). Asking and Your turn never
+do: Claude Code already posts cmux notifications for those. Nothing in
+the sidebar draws it; it is cmux's banner, its Notifications panel entry
+and its red dock badge, and a click on it opens the card's workspace.
+
+It posts when the card joins Needs you with one of those waits, and only
+then: an asleep card, a dismissed wait or one a session is on never
+posts. The title is the change in plain words (the PR's title, else its
+number) or, for a stopped session, the card's title; the body is the
+card's waiting line: "CI stuck 40m: rerun?", "CI failed, nobody fixing",
+"Ready to merge: merge?", "Stopped on an error: Please run /login". It is
+keyed on the card and the instant the wait began, so one wait posts
+once, a restart included, and a new wait on the same card posts again. A
+CI wait is keyed on its checks too: a rerun that fails again posts anew,
+while a session beside it ending, which moves the card's age, does not.
+When the wait leaves Needs you (answered, fixed, merged, dismissed, put
+to sleep, or the card closed or gone from this window), the notification
+is taken down, and the dock badge drops with it. A card that comes back
+with the same wait within a week of that does not post it again. The rules are
+`native/core/src/notify.rs`.
+
 ### Running
 
 The blue status for an idle agent whose chat still runs background work

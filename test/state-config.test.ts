@@ -629,6 +629,45 @@ test("asleep keeps each workspace's sleeping agent tabs, and is left out while e
   assert.equal(rebuildsOn("asleep.w1"), false);
 });
 
+test("notified keeps each card's notification record, and is left out while empty", () => {
+  const id = "74D64488-9CB8-4B8D-900F-1908FF44B8BB";
+  const record = { since: 1_791_229_800, ci: 1_791_229_000, id };
+  const set = applySet(emptyState(), "notified.w1", JSON.stringify(record));
+  assert.ok(set.ok);
+  assert.deepEqual(set.state.notified, { w1: record });
+  const bare = applySet(set.state, "notified.w1", JSON.stringify({ since: 1_791_229_800 }));
+  assert.ok(bare.ok);
+  assert.deepEqual(bare.state.notified, { w1: { since: 1_791_229_800 } }, "the id goes once dismissed");
+  const taken = { since: 1_791_229_800, ci: 1_791_229_000, down: 1_791_230_000 };
+  const down = applySet(set.state, "notified.w1", JSON.stringify(taken));
+  assert.ok(down.ok);
+  assert.deepEqual(down.state.notified, { w1: taken }, "taken down, with when");
+  const cleared = applySet(set.state, "notified.w1", null);
+  assert.ok(cleared.ok);
+  assert.equal(Object.hasOwn(cleared.state, "notified"), false);
+  assert.equal(Object.hasOwn(validateState({}), "notified"), false);
+  const read = validateState({
+    notified: {
+      w1: record,
+      zero: { since: 0 },
+      odd: { since: 1, id: "--all-read" },
+      bad: { since: 1, ci: -1 },
+    },
+  });
+  assert.deepEqual(read.notified, { w1: record });
+  for (const bad of [
+    { id },
+    { since: "soon" },
+    { since: 1, id: 7 },
+    { since: 1, id: `${id}0` },
+    { since: 1, down: true },
+    { since: 1, down: 0 },
+  ])
+    assert.equal(applySet(emptyState(), "notified.w1", JSON.stringify(bad)).ok, false, JSON.stringify(bad));
+  assert.equal(urlMaySet("notified.w1"), true);
+  assert.equal(rebuildsOn("notified.w1"), false);
+});
+
 test("validateState drops the retired shells map and a run's background flag (#361)", () => {
   const run = { id: "toolu_1", session: "s1", label: "Review", startedEpoch: 100 };
   for (const shells of [{ w1: [{ id: "b1", session: "s1", startedEpoch: 100 }] }, 3, null, "x"]) {

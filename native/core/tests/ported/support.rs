@@ -270,7 +270,9 @@ pub fn calls(s: &Session) -> Vec<(String, Vec<(String, String)>)> {
             Outbound::Persist { .. }
             | Outbound::OpenUrl { .. }
             | Outbound::Copy { .. }
-            | Outbound::AgentMessage { .. } => None,
+            | Outbound::AgentMessage { .. }
+            | Outbound::Notify(_)
+            | Outbound::DismissNotification(_) => None,
         })
         .collect()
 }
@@ -318,7 +320,9 @@ pub fn sent(s: &Session) -> Vec<(String, Option<serde_json::Value>)> {
             Outbound::Cmux { .. }
             | Outbound::OpenUrl { .. }
             | Outbound::Copy { .. }
-            | Outbound::AgentMessage { .. } => None,
+            | Outbound::AgentMessage { .. }
+            | Outbound::Notify(_)
+            | Outbound::DismissNotification(_) => None,
         })
         .collect()
 }

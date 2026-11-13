@@ -1,5 +1,5 @@
 //! The answers to a sidebar core's effects, back as files. The helper
-//! carries out the effects the sidebar's core asks for (effect.rs); two
+//! carries out the effects the sidebar's core asks for (effect.rs); some
 //! of them answer, and each answer goes into the shared folder's inbox/
 //! as one file holding the core event it is, in the JSON the core's
 //! bridge reads, so the sidebar hands it to its core as it is and deletes
@@ -9,6 +9,7 @@
 //! {"CmuxFailed": {"id": "W1"}}
 //! {"PrPolled": {"directory": "/dev/cockpit", "asked": 1791229864.5, "answer": "NoBranch", "epoch": 1791229866.0}}
 //! {"Slept": {"workspace": "W1", "surface": "S1", "wake": false, "refused": "visible"}}
+//! {"Notified": {"workspace": "W1", "since": 1791229800.0, "id": "74D64488-9CB8-4B8D-900F-1908FF44B8BB"}}
 //! ```
 //!
 //! A file is named as the outbox's are, `<13 digit epoch ms>-<6 digit
@@ -23,6 +24,7 @@ use std::fs;
 use std::io::{self, ErrorKind};
 use std::path::{Path, PathBuf};
 
+use cockpit_core::Notified;
 use cockpit_core::pr_poll::PrPolled;
 use cockpit_core::sleep::SleepAnswer;
 use serde::Serialize;
@@ -46,6 +48,8 @@ pub enum Answer {
     PrPolled(Box<PrPolled>),
     /// cmux's answer to putting an agent to sleep or waking it.
     Slept(Box<SleepAnswer>),
+    /// The id cmux gave a desktop notification (notify_ask.rs).
+    Notified(Box<Notified>),
 }
 
 impl Answer {
@@ -55,6 +59,7 @@ impl Answer {
             Answer::CmuxFailed { .. } => "CmuxFailed",
             Answer::PrPolled(_) => "PrPolled",
             Answer::Slept(_) => "Slept",
+            Answer::Notified(_) => "Notified",
         }
     }
 }
@@ -196,6 +201,16 @@ mod tests {
                 wake: false,
                 refused: Some("visible".into()),
             })),
+            Answer::Notified(Box::new(Notified {
+                workspace: "W1".into(),
+                since: 1_791_229_800.0,
+                id: Some("74D64488-9CB8-4B8D-900F-1908FF44B8BB".into()),
+            })),
+            Answer::Notified(Box::new(Notified {
+                workspace: "W1".into(),
+                since: 1_791_229_800.0,
+                id: None,
+            })),
         ];
         for a in &answers {
             let path = inbox.write(a, 1_791_229_864_123).unwrap();
@@ -204,6 +219,7 @@ mod tests {
                 (Answer::CmuxFailed { id }, Event::CmuxFailed { id: got }) => assert_eq!(*id, got),
                 (Answer::PrPolled(want), Event::PrPolled(got)) => assert_eq!(*want, got),
                 (Answer::Slept(want), Event::Slept(got)) => assert_eq!(*want, got),
+                (Answer::Notified(want), Event::Notified(got)) => assert_eq!(*want, got),
                 (a, e) => panic!("{} came back as {e:?}", a.name()),
             }
         }

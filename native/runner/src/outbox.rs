@@ -18,7 +18,12 @@
 //!   and runs pr-save.ts, which writes them under the state file's lock
 //!   and schedules the sidebars' rebuild, so it returns at once;
 //! - the core's background verdicts for config/state.json's `running` map
-//!   (#360), as `scripts/running-save.sh '<json>'`, the same way.
+//!   (#360), as `scripts/running-save.sh '<json>'`, the same way;
+//! - a desktop notification to take down once its wait clears (#379), as
+//!   `cmux dismiss-notification --id <id>`. One already gone (Jon clicked
+//!   or cleared it) fails as not_found, which is only logged: the core
+//!   forgot the id as it asked, so nothing tries again. Posting one needs
+//!   its answer, so that goes on its own thread (notify_ask.rs).
 //!
 //! One worker thread takes them in the order asked, so a reorder always
 //! reaches cmux before the group join that follows it, and a slow cmux
@@ -28,7 +33,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 
+use cockpit_core::NotifyDismiss;
 use cockpit_core::app::{AgentMessage, CmuxCall, CopyText, OpenUrl, PrSave, RunningSave, StateSet};
+use cockpit_core::persist::is_uuid;
 use cockpit_core::session::Param;
 use serde::Serialize;
 
@@ -48,6 +55,8 @@ pub enum Outgoing {
     SavePrs(PrSave),
     /// The core's background verdicts for the state file.
     SaveRunning(RunningSave),
+    /// A desktop notification to dismiss.
+    DismissNotification(NotifyDismiss),
 }
 
 /// Puts its first argument on the clipboard as it is, with no newline.
@@ -145,6 +154,18 @@ pub fn command_for(
                 vec![script.display().to_string(), json],
             ))
         }
+        // Only an id in cmux's UUID shape reaches the command line.
+        Outgoing::DismissNotification(d) if is_uuid(&d.id) => Ok((
+            "cmux".to_string(),
+            vec![
+                "dismiss-notification".to_string(),
+                "--id".to_string(),
+                d.id.clone(),
+            ],
+        )),
+        Outgoing::DismissNotification(_) => {
+            Err("notification not dismissed: its id is not a UUID".to_string())
+        }
     }
 }
 
@@ -160,6 +181,7 @@ fn describe(o: &Outgoing) -> String {
         // How many, never which PR: a title can be anything.
         Outgoing::SavePrs(save) => format!("pr save of {}", save.prs.len()),
         Outgoing::SaveRunning(save) => format!("running save of {}", save.running.len()),
+        Outgoing::DismissNotification(_) => "dismissing a notification".to_string(),
     }
 }
 
@@ -205,7 +227,8 @@ pub fn perform<L: Fn(String), F: Fn(String)>(
             | Outgoing::Copy(_)
             | Outgoing::AgentMessage(_)
             | Outgoing::SavePrs(_)
-            | Outgoing::SaveRunning(_) => None,
+            | Outgoing::SaveRunning(_)
+            | Outgoing::DismissNotification(_) => None,
         };
         match command_for(&o, token.as_deref(), config) {
             Ok((program, args)) => {
@@ -349,6 +372,28 @@ mod tests {
         );
         assert_eq!(describe(&save), "running save of 1");
         assert_eq!(workspace_of(&save), None);
+    }
+
+    #[test]
+    fn a_dismiss_goes_to_cmux_dismiss_notification_by_its_id_alone() {
+        let id = "74D64488-9CB8-4B8D-900F-1908FF44B8BB";
+        let dismiss = Outgoing::DismissNotification(NotifyDismiss { id: id.into() });
+        let (program, args) = command_for(&dismiss, None, Path::new("/c")).unwrap();
+        assert_eq!(program, "cmux");
+        assert_eq!(args, ["dismiss-notification", "--id", id]);
+        assert_eq!(describe(&dismiss), "dismissing a notification");
+        assert_eq!(
+            workspace_of(&dismiss),
+            None,
+            "one already gone never unpins a card's move"
+        );
+        for bad in ["--all-read", "", "74D64488"] {
+            let odd = Outgoing::DismissNotification(NotifyDismiss { id: bad.into() });
+            assert!(
+                command_for(&odd, None, Path::new("/c")).is_err(),
+                "{bad:?} reached the command line"
+            );
+        }
     }
 
     #[test]

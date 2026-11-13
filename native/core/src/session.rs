@@ -18,6 +18,7 @@ use std::collections::BTreeSet;
 
 use crate::lanes::{LaneConfig, LaneKey, Lanes};
 use crate::menu::MenuTarget;
+use crate::notify::{NotifyDismiss, NotifyPost};
 use crate::persist::{ProjectSpec, SavedState, ViewMode, persist_url};
 use crate::pr_poll::PrPoll;
 use crate::projects::{Project, is_project_key};
@@ -52,6 +53,10 @@ pub enum Outbound {
     /// Jon's words to the agent in a workspace, as `cmux agent message`
     /// sends them (message.rs).
     AgentMessage { workspace: String, text: String },
+    /// A desktop notification for a new wait (notify.rs).
+    Notify(NotifyPost),
+    /// A notification to take down once its wait clears (notify.rs).
+    DismissNotification(NotifyDismiss),
 }
 
 impl Outbound {
@@ -62,7 +67,9 @@ impl Outbound {
             Outbound::Cmux { .. }
             | Outbound::OpenUrl { .. }
             | Outbound::Copy { .. }
-            | Outbound::AgentMessage { .. } => None,
+            | Outbound::AgentMessage { .. }
+            | Outbound::Notify(_)
+            | Outbound::DismissNotification(_) => None,
         }
     }
 }

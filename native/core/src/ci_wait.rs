@@ -195,6 +195,14 @@ impl Session {
         if let Some(ci) = self.ci.get(&w.id) {
             return ci.key == key;
         }
+        self.ci_unsure(w, key)
+    }
+
+    /// Whether a CI wait keyed `key` in `w` may still be on, though this
+    /// frame read no trouble there: the PR cannot be read or carries no
+    /// checks, or its ready time holds while GitHub's verdict is unsure.
+    /// False once the PR is merged or closed, or its checks give no trouble.
+    pub(crate) fn ci_unsure(&self, w: &Workspace, key: f64) -> bool {
         match pr_of(&self.saved, Some(w)).and_then(|pr| pr.status) {
             Some(PrStatus::Merged | PrStatus::Closed) => false,
             Some(PrStatus::Open) => {
@@ -202,6 +210,17 @@ impl Session {
             }
             Some(PrStatus::Unknown) | None => true,
         }
+    }
+
+    /// Whether a CI wait keyed `key` in `w` would wait on Jon were its PR
+    /// read: no session at it, the card awake, and the wait not dismissed.
+    pub(crate) fn ci_would_wait(&self, data: &Data, w: &Workspace, key: f64) -> bool {
+        self.sleep_kind(&w.id).is_none()
+            && !self.dismissed_key(&w.id, CI_KEY, key)
+            && !self
+                .shown_agents(w)
+                .iter()
+                .any(|a| is_on_it(&self.saved, data, w, a))
     }
 
     /// The workspace's CI wait as the sidebars show it: waiting on Jon and

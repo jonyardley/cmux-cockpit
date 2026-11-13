@@ -83,6 +83,7 @@ sidebars send on every set.
 | `projects`        | `{"name", "color": "#rrggbb", "icon": "<SF Symbol>", "root"?}`, or `{"removed": true}` | #9    |
 | `ui`              | `ui.mode`: `"all"` or `"projects"`; `ui.collapsed`: `{"lane:<key>" or "project:<key>": 0 or 1}` |       |
 | `asleep`          | `{"surfaces": ["<surface id>", ...], "since": <epoch>}`: the agent tabs the cockpit put to sleep when the card was parked, so it still reads Asleep after a reload; no rebuild | #328  |
+| `notified`        | `{"since": <epoch>, "ci"?: <epoch>, "id"?: "<uuid>", "down"?: <epoch>}`: the desktop notification the native core posted for the card's wait, keyed on when the wait began, with cmux's id until it is dismissed and when it was taken down, so a restart neither posts it again nor loses the id; no rebuild | #379  |
 
 The id is a workspace id, except for `projects`, where it is the project's
 first match (lowercase, at least two segments deep: a sidebar-made
