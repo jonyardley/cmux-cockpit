@@ -685,7 +685,9 @@ number) or, for a stopped session, the card's title; the body is the
 card's waiting line: "CI stuck 40m: rerun?", "CI failed, nobody fixing",
 "Ready to merge: merge?", "Stopped on an error: Please run /login". It is
 keyed on the card and the instant the wait began, so one wait posts
-once, a restart included, and a new wait on the same card posts again.
+once, a restart included, and a new wait on the same card posts again. A
+CI wait is keyed on its checks too: a rerun that fails again posts anew,
+while a session beside it ending, which moves the card's age, does not.
 When the wait leaves Needs you (answered, fixed, merged, dismissed, put
 to sleep, or the card closed), the notification is taken down, and the
 dock badge drops with it. The rules are `native/core/src/notify.rs`.

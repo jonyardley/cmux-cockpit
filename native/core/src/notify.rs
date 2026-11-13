@@ -25,7 +25,9 @@
 //! notification Jon already cleared answers not_found, and nothing tries
 //! again. The record keeps its start after that, so a wait that comes
 //! back (Restore needs you, say) never posts twice; a new wait on the same
-//! card has a new start and posts again.
+//! card has a new start and posts again. A CI wait is keyed on its checks'
+//! own time too (`same_wait`): a rerun that fails again posts anew, and a
+//! start that moves only because a session beside it ended does not.
 //!
 //! Nothing is decided on a frame that lists no workspaces, nor before the
 //! state file is read. A CI wait whose PR cannot be read this frame
@@ -92,6 +94,21 @@ struct Wait {
     ci: Option<f64>,
     title: String,
     body: String,
+}
+
+/// Whether `note` was posted for `wait`. A stop is its start. A CI wait
+/// is its checks' key too, so a rerun that fails again is a new wait; and
+/// while its notification is up, the key alone, since a stuck or red
+/// wait's start moves with its sessions' (ci_wait.rs `CiWait::since`): an
+/// idle session ending, or another finishing beside it, moves it without
+/// a new wait. Once taken down (a session took it up), a new start is a
+/// new wait.
+fn same_wait(note: &SavedNote, wait: &Wait) -> bool {
+    match (note.ci, wait.ci) {
+        (None, None) => note.since == wait.since,
+        (Some(was), Some(now)) => was == now && (note.since == wait.since || note.id.is_some()),
+        (Some(_), None) | (None, Some(_)) => false,
+    }
 }
 
 /// A workspace's title in plain words, else its agent tab's, else
@@ -204,7 +221,7 @@ impl Session {
         let note = self.saved.notified.get(&w.id).cloned();
         match (self.notifying_wait(data, w), note) {
             // Posted already, or on its way, or cleared and back.
-            (Some(wait), Some(note)) if note.since == wait.since => {}
+            (Some(wait), Some(note)) if same_wait(&note, &wait) => {}
             (Some(wait), note) => {
                 if let Some(id) = note.and_then(|n| n.id) {
                     self.dismiss_note(id);
@@ -571,24 +588,77 @@ mod tests {
         );
     }
 
-    #[test]
-    fn a_ci_wait_keeps_its_notification_while_its_pr_cannot_be_read() {
+    /// The sidebar's core with W's red CI posted at 900 and answered with `ID`.
+    fn red_posted() -> Model {
         let mut core = ci_sidebar(FAILED, "");
         assert_eq!(frame(&mut core, data(1020.0, idle())).len(), 2);
-        let _ = asked(
-            &mut core,
-            Event::Notified(Box::new(Notified {
-                workspace: "W".into(),
-                since: 900.0,
-                id: Some(ID.into()),
-            })),
+        let _ = answer(&mut core, 900.0, Some(ID));
+        core
+    }
+
+    #[test]
+    fn a_ci_wait_whose_start_moves_with_its_sessions_never_posts_again() {
+        let mut core = red_posted();
+        let ended = serde_json::json!({"id": "c", "kind": "claude", "status": "ended",
+            "sinceEpoch": 1100, "lastActivityAt": 900});
+        assert!(
+            frame(&mut core, data(1200.0, ended)).is_empty(),
+            "the session ended"
         );
+        let seen = core.data.clone().unwrap_or_default();
+        assert_eq!(
+            core.session.status_and_since(seen.ws_by_id("W")).1,
+            1100.0,
+            "the start did move"
+        );
+        let two: Data = serde_json::from_value(serde_json::json!({"epoch": 1300,
+            "workspaces": [
+                {"id": "W", "title": "fix login", "branch": "feat", "agents": [idle(),
+                    {"id": "d", "kind": "claude", "status": "idle",
+                     "sinceEpoch": 1250, "lastActivityAt": 1250}]},
+                {"id": "X", "title": "other", "selected": true}]}))
+        .unwrap();
+        assert!(
+            frame(&mut core, two).is_empty(),
+            "another finished beside it"
+        );
+    }
+
+    #[test]
+    fn red_ci_failing_again_or_left_again_posts_anew() {
+        let mut core = red_posted();
+        // A rerun failed again: the checks' key moved.
+        let rerun = r#"[{"name": "build", "state": "fail", "started": 850}]"#;
+        let mut again = core.session.saved.clone();
+        again.prs = ci_sidebar(rerun, "").session.saved.prs;
+        assert_eq!(
+            asked(&mut core, Event::State(Box::new(again))),
+            [
+                format!("dismiss {ID}"),
+                r#"set notified.W {"since":900.0,"ci":850.0}"#.to_string(),
+                "notify W 900 Docs layout | CI failed, nobody fixing".to_string()
+            ]
+        );
+        // A session took it up, then left it red: a new wait.
+        let mut left = red_posted();
+        assert_eq!(frame(&mut left, data(1040.0, working(1040.0))).len(), 2);
+        let after = serde_json::json!({"id": "c", "kind": "claude", "status": "idle",
+            "sinceEpoch": 1500, "lastActivityAt": 1500});
+        assert_eq!(
+            frame(&mut left, data(1560.0, after))[1],
+            "notify W 1500 Docs layout | CI failed, nobody fixing"
+        );
+    }
+
+    #[test]
+    fn a_ci_wait_keeps_its_notification_while_its_pr_cannot_be_read() {
+        let mut core = red_posted();
         // The PR read as unknown for a while: nothing says CI ended.
         let mut unsure = core.session.saved.clone();
         if let Some(pr) = unsure.prs.get_mut("W") {
             pr.status = crate::data::PrStatus::Unknown;
         }
-        let _ = Cockpit.update(Event::State(Box::new(unsure)), &mut core);
+        assert!(asked(&mut core, Event::State(Box::new(unsure))).is_empty());
         assert!(frame(&mut core, data(1050.0, idle())).is_empty());
         let seen = core.data.clone().unwrap_or_default();
         assert!(
@@ -596,21 +666,22 @@ mod tests {
             "the wait is off the card"
         );
         assert_eq!(core.session.saved.notified["W"].id.as_deref(), Some(ID));
-        // A session at work on it takes it down.
-        let on_it = serde_json::json!({"id": "c", "kind": "claude", "status": "working",
-            "sinceEpoch": 1060, "lastActivityAt": 1060});
-        let mut fixing = ci_sidebar(FAILED, "");
-        let _ = frame(&mut fixing, data(1020.0, idle()));
-        let _ = asked(
-            &mut fixing,
-            Event::Notified(Box::new(Notified {
-                workspace: "W".into(),
-                since: 900.0,
-                id: Some(ID.into()),
-            })),
-        );
+        // Merged, it goes.
+        let mut merged = core.session.saved.clone();
+        if let Some(pr) = merged.prs.get_mut("W") {
+            pr.status = crate::data::PrStatus::Merged;
+        }
         assert_eq!(
-            frame(&mut fixing, data(1070.0, on_it)),
+            asked(&mut core, Event::State(Box::new(merged))),
+            [
+                format!("dismiss {ID}"),
+                r#"set notified.W {"since":900.0,"ci":800.0}"#.to_string()
+            ]
+        );
+        // A session at work on it takes it down too.
+        let mut fixing = red_posted();
+        assert_eq!(
+            frame(&mut fixing, data(1070.0, working(1060.0))),
             [
                 format!("dismiss {ID}"),
                 r#"set notified.W {"since":900.0,"ci":800.0}"#.to_string()
