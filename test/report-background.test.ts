@@ -15,6 +15,7 @@ import {
   type ListedTask,
   listedTasks,
   MAX_AGE_S,
+  MONITOR_MAX_AGE_S,
   pidFrom,
   prune,
   unstamped,
@@ -246,6 +247,28 @@ test("the prune drops what no list has confirmed for MAX_AGE_S, and keeps a long
   assert.deepEqual(next.ws1?.[0]?.startedEpoch, old, "listed again: kept, its clock unchanged");
   assert.deepEqual(ids(next, "ws2"), ["fresh"]);
   assert.deepEqual(prune({ ws3: [saved("gone", "s3", { seenEpoch: old })] }, now), {});
+});
+
+test("the prune drops a monitor once its deadline has surely passed, and one saved as a shell at the shell's age", () => {
+  const now = 100_000;
+  const monitor = (id: string, ago: number): SavedTask => saved(id, "s1", { type: "monitor", seenEpoch: now - ago });
+  const map: BackgroundMap = {
+    ws1: [
+      monitor("ten minutes", 10 * 60),
+      monitor("at the limit", MONITOR_MAX_AGE_S),
+      monitor("past the limit", MONITOR_MAX_AGE_S + 1),
+      monitor("seventeen hours", 17 * 60 * 60),
+      saved("old capture's monitor", "s1", { seenEpoch: now - 11 * 60 * 60 }),
+    ],
+  };
+  assert.deepEqual(ids(prune(map, now)), ["ten minutes", "at the limit", "old capture's monitor"]);
+});
+
+test("the prune ages are the native core's, from the shared sample", () => {
+  const path = join(import.meta.dirname, "..", "native", "core", "tests", "running-words.json");
+  const sample = JSON.parse(readFileSync(path, "utf8")) as { maxAgeS: number; monitorMaxAgeS: number };
+  assert.equal(MAX_AGE_S, sample.maxAgeS);
+  assert.equal(MONITOR_MAX_AGE_S, sample.monitorMaxAgeS);
 });
 
 test("restamping alone reads as no change, in any key order", () => {

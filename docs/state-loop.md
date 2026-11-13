@@ -506,8 +506,9 @@ What the list holds (real payloads, Claude Code 2.1.322, in
   with nothing tying it to the agent, and can outlive the agent's entry.
   An agent that pauses with work of its own running drops out of the list
   and comes back when that work wakes it, so its `startedEpoch` restarts.
-- A monitor is listed as `type: "shell"`, its watch command as the
-  description, so a monitor cannot be told from a shell.
+- In that capture a monitor was listed as `type: "shell"`, its watch
+  command as the description. Later payloads carry `type: "monitor"`
+  (#371); a monitor saved as `shell` is treated as one throughout.
 - A `claude --bg` session is never listed.
 
 The `type` set is Claude Code's own labels, as its hooks reference lists
@@ -579,15 +580,41 @@ the chat's agents read cannot list, so it is dropped a minute after
 saving; and a chat with no `Stop` for 12 hours loses its running sessions
 to the prune for good.
 
-A missed end is caught two ways. The core counts a task only for the chat
+A missed end is caught three ways. The core counts a task only for the chat
 that owns its session, under any id that chat ran under
 (`native/core/src/owner.rs`), and only while that chat is open
 (`live_tasks` in `native/core/src/background.rs`), so closing a chat
-clears its work at once. Then, on the next write, the hook prunes any task
-no snapshot has listed for `MAX_AGE_S` (12 hours); the core never writes
-this map, so the prune is what takes the entry out of the file. A
-monitor's own deadline (30 minutes at most) cannot apply, since a monitor
-is listed as a shell.
+clears its work at once. The core also stops counting a task no snapshot
+has listed for its kind's age (`still_runs` in `native/core/src/running.rs`,
+#371), by the frame's clock, so a chat whose last turn came before the
+task ended (no expiry woke it, or it never had another turn) lets go of
+it on the sidebar's next tick past the limit (every two seconds,
+`Heartbeat.pollInterval`), with no new frame or file needed. Then, on the next write, the
+hook prunes any task past the same age (`prune` in
+`scripts/hooks/report-background.ts`); the core never writes this map, so
+the prune is what takes the entry out of the file.
+
+The ages, the same on both sides:
+
+- **A monitor** (`type: "monitor"`): 35 minutes since last listed
+  (`MONITOR_MAX_AGE_S`). Claude Code kills every monitor at its deadline,
+  at most 30 minutes after it started (the Monitor tool's own description
+  caps `timeout_ms` at 30 minutes and has no lasting mode), and no list
+  shows a task before it
+  starts; the five minutes on top cover the hook's clock against the
+  frame's. A monitor saved as `shell` keeps the shell's age.
+- **Anything else**: 12 hours (`MAX_AGE_S`), for a chat whose last `Stop`
+  never came; a dev server left running longer than that between turns
+  drops off the card.
+- **A `session` entry**: no age in the core, which counts it while the
+  runner's Agent View list has it working or blocked; the hook's 12 hour
+  prune still takes it, so the chat's `Stop` restamps it (below).
+
+Each age is a constant in both `native/core/src/running.rs` and
+`scripts/hooks/report-background.ts`, and both test suites check them
+against `maxAgeS` and `monitorMaxAgeS` in
+`native/core/tests/running-words.json`, so one cannot move alone. Before
+the frame's first tick the core has no clock and counts every task.
 
 After a `/clear` the chat lists under a new session id from the same
 Claude process, and every list is a full snapshot of that process's work.
@@ -669,7 +696,9 @@ A verdict could go stale while no Cockpit sidebar runs, so the background
 hook's own write (`writeBackground`) also drops the verdict of a
 workspace it leaves with no work: the core never says Running without it.
 A `claude --bg` session is the gap, since only the runner can say it has
-settled; the hook's 12 hour prune bounds it. No URL writes it.
+settled; the hook's 12 hour prune bounds it. A task past its age (above)
+drops out of the core's verdict on the next paced rebuild, with no hook
+write, so a stale entry never holds the verdict either. No URL writes it.
 
 ## Published pages and docs
 

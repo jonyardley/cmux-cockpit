@@ -1,9 +1,12 @@
 {
   "maxCounts": 9,
   "maxTasks": 20,
+  "maxAgeS": 43200,
+  "monitorMaxAgeS": 2100,
   "samples": [
     { "counts": [], "text": "" },
     { "counts": [{ "type": "shell", "n": 0 }], "text": "" },
+    { "counts": [{ "type": "monitor", "n": 1 }], "text": "· 1 shell" },
     {
       "counts": [{ "type": "shell", "n": 1 }, { "type": "subagent", "n": 1 }],
       "text": "· 1 shell, 1 agent"

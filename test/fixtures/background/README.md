@@ -43,6 +43,6 @@ What the captures say, in short:
 - `background_tasks` is on Stop and SubagentStop only, never on PostToolUse or SubagentStart.
 - Only `status: "running"` appeared; a finished task is removed, not marked.
 - An agent drops out of the list when it pauses with work of its own running, and comes back when that work wakes it (a second SubagentStart, then SubagentStop). Absent from the list is not the same as finished.
-- A monitor is listed as `type: "shell"` with its watch command, not as `monitor`.
+- A monitor is listed as `type: "shell"` with its watch command, not as `monitor` (Claude Code 2.1.322; later payloads carry `monitor`, #371).
 - The list never held the `claude --bg` session.
 - `session_crons` is present and was `[]`.

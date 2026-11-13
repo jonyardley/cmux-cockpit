@@ -22,7 +22,8 @@ export const NO_AGENT_WORD = "No agent";
 export const RUNNING_WORD = "Running";
 
 // Each kind in words, singular and plural, as words.rs's task_word has
-// them: a monitor reads as a shell, a kind Claude Code adds later as a task.
+// them: a monitor reads as a shell (it watches a shell command), a kind
+// Claude Code adds later as a task.
 const TASK_WORDS: Record<TaskType, readonly [string, string]> = {
   shell: ["shell", "shells"],
   monitor: ["shell", "shells"],

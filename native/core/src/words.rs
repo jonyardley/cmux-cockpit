@@ -40,8 +40,8 @@ pub const QUIET_WORD: &str = "quiet";
 pub const YOU_WORD: &str = "You";
 
 /// One kind of background work in words, singular and plural. A monitor
-/// is listed as a shell, so it reads as one; a kind Claude Code adds
-/// later reads as a task.
+/// watches a shell command, and Claude Code 2.1.322 listed it as a shell,
+/// so it reads as one; a kind Claude Code adds later reads as a task.
 pub fn task_word(kind: TaskType, n: usize) -> &'static str {
     let (one, many) = match kind {
         TaskType::Shell | TaskType::Monitor => ("shell", "shells"),

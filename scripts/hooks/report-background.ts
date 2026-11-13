@@ -15,8 +15,11 @@
 // goes to stderr.
 //
 // What a snapshot cannot say, and how a missed end is caught instead:
-// - A monitor is listed as `shell`, so a monitor's own deadline cannot end
-//   it; it ends with the list like any shell.
+// - A monitor's end wakes its chat only when the expiry does: Claude Code
+//   kills every monitor at its deadline, at most 30 minutes after it
+//   started, so one listed as `monitor` is pruned after MONITOR_MAX_AGE_S
+//   (#371). Claude Code 2.1.322 listed a monitor as `shell`; one saved
+//   that way keeps the shell's age.
 // - A `claude --bg` session is never listed. Its entries (type `session`,
 //   saved from the Bash call that started it) are kept through every
 //   replace, but pruned like any other entry, so the chat's Stop restamps
@@ -29,7 +32,10 @@
 //   while the chat owning its session (native/core/src/owner.rs) is open
 //   (native/core/src/background.rs).
 // - Anything a snapshot has not listed for MAX_AGE_S is pruned on the next
-//   write, for a chat whose last Stop never came.
+//   write, for a chat whose last Stop never came. The native core stops
+//   counting a task at the same ages (native/core/src/running.rs), so a
+//   chat with no more hook writes still lets go of it; both are pinned to
+//   native/core/tests/running-words.json.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -60,6 +66,16 @@ import { field } from "./gh-command.ts";
 
 /** How long an entry no snapshot has listed is kept, for a chat whose last Stop never came. */
 export const MAX_AGE_S = 12 * 60 * 60;
+
+/**
+ * How long a monitor no snapshot has listed is kept: its deadline (30
+ * minutes at most from its start, which comes before any listing) and five
+ * minutes for the clocks and the core's paced rebuild.
+ */
+export const MONITOR_MAX_AGE_S = 35 * 60;
+
+/** The age past which a task no snapshot has listed is pruned. */
+const maxAge = (t: SavedTask): number => (t.type === "monitor" ? MONITOR_MAX_AGE_S : MAX_AGE_S);
 
 type BackgroundMap = NonNullable<State["background"]>;
 
@@ -188,14 +204,14 @@ export function applySnapshot(map: BackgroundMap, wsId: string, snap: Snapshot, 
 }
 
 /**
- * Drops tasks no snapshot has listed for MAX_AGE_S across every workspace,
- * and any workspace left with none. `session` entries too: the chat's
+ * Drops tasks no snapshot has listed for their kind's age (`maxAge`) across
+ * every workspace, and any workspace left with none. `session` entries too: the chat's
  * Stop restamps seenEpoch while the session runs (see foldFor).
  */
 export function prune(map: BackgroundMap, now: number): BackgroundMap {
   const out: BackgroundMap = {};
   for (const [wsId, tasks] of Object.entries(map)) {
-    const kept = tasks.filter((t) => now - t.seenEpoch <= MAX_AGE_S);
+    const kept = tasks.filter((t) => now - t.seenEpoch <= maxAge(t));
     if (kept.length) out[wsId] = kept;
   }
   return out;

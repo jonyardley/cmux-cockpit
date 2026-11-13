@@ -13,6 +13,13 @@
 //! never reaches a card. No age limit applies on top: a saved session
 //! counts only while the chat that started it is open, so a session left
 //! blocked for weeks shows only on a chat that is itself still open.
+//!
+//! Every other task counts only while it is fresh (#371): the record is
+//! refreshed by a Stop alone, so a task whose end never woke its chat
+//! would otherwise hold the card on Running for as long as the chat stays
+//! open. A task no snapshot has listed for `MAX_AGE_S` has ended, as the
+//! hook's prune says (`scripts/hooks/report-background.ts`), and a
+//! monitor sooner, by its own deadline (`MONITOR_MAX_AGE_S`).
 
 use crate::background::live_tasks;
 use crate::data::{Agent, AgentStatus, Data, Workspace};
@@ -26,7 +33,8 @@ const SESSION_PREFIX: &str = "bg:";
 #[derive(Debug, Clone, PartialEq)]
 pub struct Running {
     /// How many run of each kind, in `KIND_ORDER`, none left out at 0.
-    /// A monitor counts as a shell, since Claude Code lists it as one.
+    /// A monitor counts as a shell: it watches a command, and Claude Code
+    /// 2.1.322 listed it as one.
     pub counts: Vec<(TaskType, usize)>,
     /// When the earliest of them started, in epoch seconds.
     pub since: f64,
@@ -62,11 +70,38 @@ fn counted_as(kind: TaskType) -> TaskType {
     }
 }
 
+/// How long a task no snapshot has listed still counts, in seconds: the
+/// hook's prune age (`MAX_AGE_S` in scripts/hooks/report-background.ts),
+/// so the card lets go of a task when the file would. Both are pinned to
+/// native/core/tests/running-words.json.
+pub const MAX_AGE_S: f64 = 12.0 * 60.0 * 60.0;
+
+/// How long a monitor no snapshot has listed still counts, in seconds.
+/// Claude Code kills every monitor at its deadline, at most 30 minutes
+/// after it started, and a task is never seen before it starts, so 30
+/// minutes past `seenEpoch` is never before the deadline. The five
+/// minutes on top cover the hook's clock against the frame's and the
+/// paced rebuild. A monitor an older Claude Code saved as `shell` keeps
+/// the shell's limit.
+pub const MONITOR_MAX_AGE_S: f64 = 35.0 * 60.0;
+
+/// Whether a saved task was listed recently enough to count at `now`, the
+/// frame's clock: within its kind's limit, or always before the first
+/// tick or with a stamp ahead of the clock. Kept while `now - seenEpoch`
+/// is at most the limit, as the hook's prune keeps it.
+fn fresh(t: &SavedTask, now: Option<f64>) -> bool {
+    let limit = match t.kind {
+        TaskType::Monitor => MONITOR_MAX_AGE_S,
+        _ => MAX_AGE_S,
+    };
+    now.is_none_or(|now| now - t.seen_epoch <= limit)
+}
+
 /// Whether a saved task still runs: a `claude --bg` session only while
-/// the runner's data says so, anything else while it is saved.
+/// the runner's data says so, at any age; anything else while it is fresh.
 fn still_runs(data: &Data, t: &SavedTask) -> bool {
     if t.kind != TaskType::Session {
-        return true;
+        return fresh(t, data.epoch);
     }
     let id = t.id.strip_prefix(SESSION_PREFIX).unwrap_or(&t.id);
     data.background_runs(id)
@@ -278,6 +313,103 @@ mod tests {
             assert!(!shows_running(Some(&chat("c", s)), Some(&r)));
         }
     }
+    /// A task of `kind` last listed at `seen`, started an hour before.
+    fn seen(id: &str, kind: &str, seen: f64) -> String {
+        let started = seen - 3600.0;
+        format!(
+            r#"{{"id": "{id}", "type": "{kind}", "status": "running", "description": "d",
+                "session": "c", "startedEpoch": {started}, "seenEpoch": {seen}}}"#
+        )
+    }
+
+    const NOW: f64 = 1_794_553_000.0;
+    const MINUTE: f64 = 60.0;
+    const HOUR: f64 = 3600.0;
+
+    fn at(now: f64) -> Data {
+        Data {
+            epoch: Some(now),
+            ..Data::default()
+        }
+    }
+
+    /// Whether a lone task of `kind`, last listed `ago` seconds before
+    /// NOW, holds an idle card on Running.
+    fn counts_after(kind: &str, ago: f64) -> bool {
+        let s = saved(&[seen("t1", kind, NOW - ago)]);
+        let a = chat("c", AgentStatus::Idle);
+        let w = workspace(std::slice::from_ref(&a));
+        running_work(&s, &at(NOW), Some(&w), Some(&a)).is_some()
+    }
+
+    #[test]
+    fn a_monitor_counts_until_its_deadline_has_surely_passed() {
+        assert!(counts_after("monitor", 10.0 * MINUTE));
+        assert!(counts_after("monitor", MONITOR_MAX_AGE_S));
+        assert!(!counts_after("monitor", MONITOR_MAX_AGE_S + 1.0));
+        assert!(!counts_after("monitor", 17.0 * HOUR), "issue #371");
+    }
+
+    #[test]
+    fn any_other_task_counts_for_the_hooks_prune_age() {
+        for kind in ["shell", "subagent", "workflow", "something new"] {
+            assert!(counts_after(kind, 11.0 * HOUR), "{kind}");
+            assert!(counts_after(kind, MAX_AGE_S), "{kind}");
+            assert!(!counts_after(kind, 13.0 * HOUR), "{kind}");
+        }
+    }
+
+    #[test]
+    fn every_task_counts_before_the_first_tick_or_with_a_stamp_ahead() {
+        let s = saved(&[seen("m1", "monitor", NOW - 17.0 * HOUR)]);
+        let a = chat("c", AgentStatus::Idle);
+        let w = workspace(std::slice::from_ref(&a));
+        assert!(running_work(&s, &Data::default(), Some(&w), Some(&a)).is_some());
+        assert!(running_work(&s, &at(0.0), Some(&w), Some(&a)).is_some());
+        assert!(counts_after("monitor", -5.0 * MINUTE));
+    }
+
+    #[test]
+    fn a_saved_session_counts_at_any_age_while_the_runner_has_it() {
+        let s = saved(&[seen("bg:68166394", "session", NOW - 30.0 * HOUR)]);
+        let a = chat("c", AgentStatus::Idle);
+        let w = workspace(std::slice::from_ref(&a));
+        let data = Data {
+            epoch: Some(NOW),
+            ..with_sessions(vec![bg("68166394", BackgroundState::Working)])
+        };
+        assert!(running_work(&s, &data, Some(&w), Some(&a)).is_some());
+    }
+
+    #[test]
+    fn a_stale_task_leaves_the_counts_and_the_start_to_the_fresh_ones() {
+        // The stale monitor started first, so `since` shows it is left out.
+        let s = saved(&[
+            seen("m1", "monitor", NOW - 17.0 * HOUR),
+            seen("b1", "shell", NOW - 10.0 * MINUTE),
+        ]);
+        let a = chat("c", AgentStatus::Idle);
+        let w = workspace(std::slice::from_ref(&a));
+        assert_eq!(
+            running_work(&s, &at(NOW), Some(&w), Some(&a)),
+            Some(Running {
+                counts: vec![(TaskType::Shell, 1)],
+                since: NOW - 10.0 * MINUTE - HOUR,
+            })
+        );
+    }
+
+    /// The hook's prune ages (scripts/hooks/report-background.ts) are
+    /// pinned to the same sample, so the card and the file let go of a
+    /// task together.
+    #[test]
+    fn keeps_to_the_hooks_prune_ages() {
+        let file: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/running-words.json")).unwrap();
+        assert_eq!(file["maxAgeS"].as_f64(), Some(MAX_AGE_S));
+        assert_eq!(file["monitorMaxAgeS"].as_f64(), Some(MONITOR_MAX_AGE_S));
+    }
+
     #[test]
     fn says_it_counts_agents_only_with_an_agent_among_its_kinds() {
         let shells = Running {
