@@ -818,6 +818,7 @@ fn helpers_words(n: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::persist::SavedState;
 
     #[test]
     fn keeps_cmuxs_word_for_a_status_it_does_not_know_and_draws_it_as_no_agent() {
@@ -839,6 +840,74 @@ mod tests {
         assert_eq!(none.text, Token::MetaText);
         assert_eq!(none.text, idle.text);
         assert_eq!((none.dot, none.ring), (None, None), "a grey outline");
+    }
+
+    /// Jon's 13 November report: a chat ended its turn on "Your move:"
+    /// while a shell from earlier in the session still ran. The card's
+    /// agent is idle (Stop, and no nudge it reads as Jon's), its move is
+    /// fresh and its own, and the shell is the chat's.
+    fn ended_turn_with_a_shell(move_json: &str) -> (Session, Data) {
+        let saved = SavedState::from_json(&format!(
+            r#"{{
+                "moves": {{"w1": {move_json}}},
+                "background": {{"w1": [{{"id": "b1", "type": "shell", "status": "running",
+                    "description": "dev server", "session": "c", "startedEpoch": 100,
+                    "seenEpoch": 1000}}]}}
+            }}"#
+        ))
+        .unwrap();
+        let agent = Agent {
+            id: "c".into(),
+            kind: Some("claude".into()),
+            status: Some(AgentStatus::Idle),
+            since_epoch: Some(1000.0),
+            last_activity_at: Some(1000.0),
+            ..Agent::default()
+        };
+        let w = Workspace {
+            id: "w1".into(),
+            latest_at: Some(900.0),
+            agents: Some(vec![Some(agent)]),
+            ..Workspace::default()
+        };
+        let data = Data {
+            epoch: Some(1100.0),
+            workspaces: Some(vec![w]),
+            ..Data::default()
+        };
+        (Session::new(Vec::new(), saved), data)
+    }
+
+    #[test]
+    fn a_turn_that_asks_jon_is_your_turn_while_its_shell_runs() {
+        let (mut s, data) = ended_turn_with_a_shell(
+            r#"{"text": "Your move: answer yes or no once the left panel redraws.",
+                "epoch": 1000, "session": "c"}"#,
+        );
+        let w = data.ws_by_id("w1");
+        assert_eq!(
+            s.status_kind(&data, w),
+            StatusKind::Plain(Status::NeedsInput)
+        );
+        let style = s.status_info(&data, w);
+        assert_eq!((style.label, style.urgency), ("Your turn", Urgency::Needs));
+        assert_eq!(
+            s.status_line(&data, w),
+            "Your turn 1m",
+            "the wait's age, not the shell's"
+        );
+        assert_eq!(s.needs_list(&data).len(), 1);
+    }
+
+    #[test]
+    fn a_nothing_for_you_turn_still_says_running_while_its_shell_runs() {
+        let (mut s, data) = ended_turn_with_a_shell(
+            r#"{"text": "Nothing for you: the dev server runs on.", "idle": true,
+                "epoch": 1000, "session": "c"}"#,
+        );
+        let w = data.ws_by_id("w1");
+        assert_eq!(s.status_kind(&data, w), StatusKind::Running);
+        assert!(s.needs_list(&data).is_empty());
     }
 
     #[test]
