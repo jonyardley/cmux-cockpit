@@ -115,6 +115,14 @@ export interface State {
    * Left out while nothing is saved.
    */
   asleep?: Record<string, SavedAsleep>;
+  /**
+   * wsId -> the desktop notification the native core posted for its card's
+   * wait (issue #379): when the wait began, which keys it, a CI wait's own
+   * key, and the id cmux gave it until it is dismissed, so a restart
+   * neither posts it again nor loses the id. Written only by the sidebar's
+   * core. Left out while nothing is saved.
+   */
+  notified?: Record<string, SavedNote>;
   /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
   ui: UiState;
   /**
@@ -130,6 +138,16 @@ export interface State {
 export interface SavedAsleep {
   surfaces: string[];
   since: number;
+}
+
+/**
+ * One card's desktop notification (persist.rs SavedNote): the wait's start in
+ * epoch seconds, a CI wait's own key, and cmux's id for it while it is up.
+ */
+export interface SavedNote {
+  since: number;
+  ci?: number;
+  id?: string;
 }
 
 /** Why a poll could not reach gh: it failed, it is signed out, or it is not installed. */
@@ -896,6 +914,22 @@ function savedAsleep(v: unknown): SavedAsleep | null {
   return fits ? { surfaces, since: v.since } : null;
 }
 
+/** A notification id as cmux writes one, a UUID, the only shape that may reach a command line (persist.rs is_uuid). */
+const isUuid = (v: unknown): v is string =>
+  typeof v === "string" && /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/.test(v);
+
+/** A notification record as persist.rs's notes_map reads it: dropped whole if any part does not fit. */
+function savedNote(v: unknown): SavedNote | null {
+  if (!isRecord(v) || !isEpoch(v.since) || v.since <= 0) return null;
+  if (v.ci !== undefined && !isEpoch(v.ci)) return null;
+  if (v.id !== undefined && !isUuid(v.id)) return null;
+  return {
+    since: v.since,
+    ...(v.ci !== undefined ? { ci: v.ci } : {}),
+    ...(v.id !== undefined ? { id: v.id } : {}),
+  };
+}
+
 function savedSubagents(v: unknown): SavedSubagent[] | null {
   const runs = Array.isArray(v) ? v.flatMap(savedSubagent).slice(-MAX_SUBAGENTS) : [];
   return runs.length ? runs : null;
@@ -925,6 +959,7 @@ export function validateState(raw: unknown): State {
   const running = cleanMap(v.running, savedRunning);
   const laneNames = cleanMap(v.laneNames, laneName);
   const asleep = cleanMap(v.asleep, savedAsleep);
+  const notified = cleanMap(v.notified, savedNote);
   return {
     dismissed: cleanMap(v.dismissed, agentStarts),
     projectOverride: cleanMap(v.projectOverride, projectKey),
@@ -942,6 +977,7 @@ export function validateState(raw: unknown): State {
     ...(Object.keys(running).length ? { running } : {}),
     ...(Object.keys(laneNames).length ? { laneNames } : {}),
     ...(Object.keys(asleep).length ? { asleep } : {}),
+    ...(Object.keys(notified).length ? { notified } : {}),
     ...(poll ? { poll } : {}),
   };
 }
@@ -951,7 +987,16 @@ export type SetResult = { ok: true; state: State } | { ok: false; error: string 
 // The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
-type MapName = "dismissed" | "projectOverride" | "projects" | "ui" | "asking" | "moves" | "laneNames" | "asleep";
+type MapName =
+  | "dismissed"
+  | "projectOverride"
+  | "projects"
+  | "ui"
+  | "asking"
+  | "moves"
+  | "laneNames"
+  | "asleep"
+  | "notified";
 const MAPS: readonly MapName[] = [
   "dismissed",
   "projectOverride",
@@ -961,6 +1006,7 @@ const MAPS: readonly MapName[] = [
   "moves",
   "laneNames",
   "asleep",
+  "notified",
 ];
 const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
 
@@ -1006,6 +1052,11 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       const left = without(asleep ?? {}, id);
       return Object.keys(left).length ? { ...rest, asleep: left } : rest;
     }
+    case "notified": {
+      const { notified, ...rest } = state;
+      const left = without(notified ?? {}, id);
+      return Object.keys(left).length ? { ...rest, notified: left } : rest;
+    }
     case "ui":
       return { ...state, ui: Object.fromEntries(Object.entries(state.ui).filter(([key]) => key !== id)) };
   }
@@ -1047,6 +1098,12 @@ function withEntry(state: State, map: MapName, id: string, parsed: unknown): Sta
       return record
         ? { ...state, asleep: { ...state.asleep, [id]: record } }
         : "asleep wants {surfaces: [surface id], since: epoch}";
+    }
+    case "notified": {
+      const note = savedNote(parsed);
+      return note
+        ? { ...state, notified: { ...state.notified, [id]: note } }
+        : "notified wants {since: epoch, ci?: epoch, id?: uuid}";
     }
   }
 }
@@ -1101,8 +1158,10 @@ function isKeyFor(map: MapName, id: string): boolean {
  * sidebar under the tap. A `laneNames` set is the sidebar's own record of
  * what it already acted on, so it needs no rebuild either, and nor does an
  * `asleep` set: the sidebar's core shows its card asleep before it writes.
+ * Nor a `notified` set: no card shows it, it only keeps a notification from
+ * posting twice.
  */
-const WRITE_ONLY: readonly string[] = ["ui", "laneNames", "asleep"];
+const WRITE_ONLY: readonly string[] = ["ui", "laneNames", "asleep", "notified"];
 export const rebuildsOn = (key: string): boolean => !WRITE_ONLY.some((map) => key.startsWith(`${map}.`));
 
 /**

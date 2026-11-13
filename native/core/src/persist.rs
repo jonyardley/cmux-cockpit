@@ -311,6 +311,18 @@ where
         .collect())
 }
 
+/// The `notified` map, each entry kept only while it fits (`SavedNote::fits`).
+fn notes_map<'de, D>(d: D) -> Result<BTreeMap<String, SavedNote>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let entries: BTreeMap<String, SavedNote> = crate::lenient::map(d)?;
+    Ok(entries
+        .into_iter()
+        .filter(|(ws, n)| is_id(ws) && n.fits())
+        .collect())
+}
+
 /// Why an agent stopped to ask, as the notification hook saves it.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct SavedAsk {
@@ -367,6 +379,43 @@ impl Stamped for SavedMove {
 pub struct SavedAsleep {
     pub surfaces: Vec<String>,
     pub since: f64,
+}
+
+/// The desktop notification the cockpit posted for one workspace's wait
+/// (notify.rs, #379): when the wait began, which keys it, the CI wait's
+/// own key for a CI wait (ci_wait.rs `CiWait::key`), and the id cmux gave
+/// it, kept until it is dismissed. Kept with no id after, so the same
+/// wait never notifies twice.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SavedNote {
+    pub since: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ci: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+}
+
+impl SavedNote {
+    /// Whether the state handler keeps it (savedNote in
+    /// scripts/state-config.ts): a start after the zero time, a CI key
+    /// that is a time, and an id in cmux's UUID shape.
+    pub fn fits(&self) -> bool {
+        self.since.is_finite()
+            && self.since > 0.0
+            && self.ci.is_none_or(|k| k.is_finite() && k >= 0.0)
+            && self.id.as_deref().is_none_or(is_uuid)
+    }
+}
+
+/// Whether `v` is a UUID as cmux writes one, "74D64488-9CB8-4B8D-900F-1908FF44B8BB",
+/// in either case: the only shape a notification id may take before it
+/// reaches a command line.
+pub fn is_uuid(v: &str) -> bool {
+    v.len() == 36
+        && v.char_indices().all(|(i, c)| match i {
+            8 | 13 | 18 | 23 => c == '-',
+            _ => c.is_ascii_hexdigit(),
+        })
 }
 
 /// How the PR poller's last runs went.
@@ -434,6 +483,14 @@ pub struct SavedState {
         skip_serializing_if = "BTreeMap::is_empty"
     )]
     pub asleep: BTreeMap<String, SavedAsleep>,
+    /// wsId to the desktop notification posted for its wait (notify.rs),
+    /// so a restart neither posts it again nor loses the id that dismisses
+    /// it. Left out while empty.
+    #[serde(
+        deserialize_with = "notes_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub notified: BTreeMap<String, SavedNote>,
     #[serde(deserialize_with = "crate::lenient::field")]
     pub ui: UiState,
     #[serde(deserialize_with = "crate::lenient::field")]
@@ -448,7 +505,7 @@ impl SavedState {
 
     /// Makes one of the cockpit's own writes here, as the handler's
     /// applySet makes it in the file: `dismissed.<ws>`, `projectOverride.<ws>`,
-    /// `projects.<key>`, `laneNames.<id>`, `asleep.<ws>`, `ui.mode`, `ui.collapsed` or `ui.filter`, set, or deleted with
+    /// `projects.<key>`, `laneNames.<id>`, `asleep.<ws>`, `notified.<ws>`, `ui.mode`, `ui.collapsed` or `ui.filter`, set, or deleted with
     /// no value. False
     /// for any other key or a value of the wrong shape, leaving the state
     /// as it was.
@@ -478,6 +535,7 @@ impl SavedState {
                 .map(|v| put(&mut self.lane_names, id, v))
                 .is_ok(),
             ("asleep", _) => parse(value).map(|v| put(&mut self.asleep, id, v)).is_ok(),
+            ("notified", _) => parse(value).map(|v| put(&mut self.notified, id, v)).is_ok(),
             ("ui", "mode") => parse(value).map(|v| self.ui.mode = v).is_ok(),
             ("ui", "filter") => parse(value).map(|v| self.ui.filter = v).is_ok(),
             ("ui", "collapsed") => parse(value)
@@ -642,6 +700,35 @@ pub fn move_description(m: &SavedMove) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_each_notification_record_that_fits_and_drops_the_rest() {
+        let id = "74D64488-9CB8-4B8D-900F-1908FF44B8BB";
+        let saved = SavedState::from_json(&format!(
+            r#"{{"notified": {{
+                "W1": {{"since": 1000, "ci": 800, "id": "{id}"}},
+                "W2": {{"since": 1000}},
+                "zero": {{"since": 0}},
+                "odd": {{"since": 1000, "id": "--all-read"}},
+                "bad": {{"since": "soon"}},
+                "__proto__": {{"since": 1000}}
+            }}}}"#
+        ))
+        .unwrap();
+        let kept: Vec<&str> = saved.notified.keys().map(String::as_str).collect();
+        assert_eq!(kept, ["W1", "W2"]);
+        assert_eq!(saved.notified["W1"].id.as_deref(), Some(id));
+        assert_eq!(saved.notified["W1"].ci, Some(800.0));
+        // Written back as read, and left out while empty.
+        let text = serde_json::to_string(&saved).unwrap();
+        assert_eq!(SavedState::from_json(&text).unwrap(), saved);
+        let empty = serde_json::to_value(SavedState::default()).unwrap();
+        assert!(empty.get("notified").is_none());
+        assert!(is_uuid(&id.to_lowercase()));
+        assert!(!is_uuid("74D64488-9CB8-4B8D-900F-1908FF44B8B"));
+        assert!(!is_uuid("74D64488x9CB8-4B8D-900F-1908FF44B8BB"));
+        assert!(!is_uuid("G4D64488-9CB8-4B8D-900F-1908FF44B8BB"));
+    }
 
     #[test]
     fn every_pattern_compiles() {
