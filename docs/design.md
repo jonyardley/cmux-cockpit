@@ -570,9 +570,14 @@ shells and monitors, its agents and their own shells, and `claude --bg`
 sessions it or its agents started, under any session id the chat ran
 under, until the chat ends. A `claude --bg` session counts only once a
 hook saved it against the chat, and only while Agent View has it working
-or blocked. The same rule keeps the card off Ready to merge, keeps a
-"Nothing for you" turn (one from before a `/clear` too) off Ready, and
-sorts the card with the working ones. Quiet holds off for the chat's own
+or blocked. Any other task stops counting once no turn has listed it
+for its kind's age, since its end may never have woken the chat: 35
+minutes for a monitor, 12 hours for the rest, so a dev server left
+running longer than that with no new turn drops Running and the card
+shows its idle status until a later turn lists it again (#371). The
+same rule keeps the card off Ready to merge, keeps a "Nothing for
+you" turn (one from before a `/clear` too) off Ready, and sorts the
+card with the working ones. Quiet holds off for the chat's own
 agent runs alone (`native/core/src/quiet.rs`), since the background
 record is written only when a turn ends. The live helpers
 words after the status are left off while its Running line counts an

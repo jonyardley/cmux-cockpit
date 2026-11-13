@@ -1130,6 +1130,9 @@ mod tests {
             asked(&app, &mut model, tick(limit + 1.0)),
             ["running a", "render"]
         );
+        // The next tick, with the file not yet rewritten, asks again for
+        // nothing: the removal is sent once, not on every tick.
+        assert_eq!(asked(&app, &mut model, tick(limit + 3.0)), ["render"]);
     }
 
     /// Card `id` as the sidebar's panel shows it.

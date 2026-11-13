@@ -598,7 +598,9 @@ The ages, the same on both sides:
 
 - **A monitor** (`type: "monitor"`): 35 minutes since last listed
   (`MONITOR_MAX_AGE_S`). Claude Code kills every monitor at its deadline,
-  at most 30 minutes after it started, and no list shows a task before it
+  at most 30 minutes after it started (the Monitor tool's own description
+  caps `timeout_ms` at 30 minutes and has no lasting mode), and no list
+  shows a task before it
   starts; the five minutes on top cover the hook's clock against the
   frame's. A monitor saved as `shell` keeps the shell's age.
 - **Anything else**: 12 hours (`MAX_AGE_S`), for a chat whose last `Stop`

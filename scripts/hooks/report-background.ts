@@ -75,7 +75,7 @@ export const MAX_AGE_S = 12 * 60 * 60;
 export const MONITOR_MAX_AGE_S = 35 * 60;
 
 /** The age past which a task no snapshot has listed is pruned. */
-export const maxAge = (t: SavedTask): number => (t.type === "monitor" ? MONITOR_MAX_AGE_S : MAX_AGE_S);
+const maxAge = (t: SavedTask): number => (t.type === "monitor" ? MONITOR_MAX_AGE_S : MAX_AGE_S);
 
 type BackgroundMap = NonNullable<State["background"]>;
 
