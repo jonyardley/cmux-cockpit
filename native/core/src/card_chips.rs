@@ -89,7 +89,7 @@ impl Session {
             // Its state words go once the status says Ready to merge:
             // "ready" would only say it again, so the chip keeps its
             // number (issue #299).
-            let state = if self.shows_merge_ready(data, Some(w)) {
+            let state = if self.says_merge_ready(data, Some(w)) {
                 String::new()
             } else {
                 pr.state

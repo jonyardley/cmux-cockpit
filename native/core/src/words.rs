@@ -61,10 +61,20 @@ pub const CI_FAILED_WORD: &str = "CI failed";
 /// What a CI wait says, in the closing line's shape, with the PR's title
 /// or number as its detail: "CI failed, nobody fixing: Docs layout", or
 /// "CI stuck 40m: rerun Docs layout?" with how long the stuck check has
-/// waited or run. The words lead, so a narrow card that cuts the tail
-/// still says what is wrong. With no detail, "CI stuck 40m: rerun?".
+/// waited or run, or "Ready to merge: Docs layout, merge?" for a change
+/// left merge-ready four hours (issue #380). The words lead, so a narrow
+/// card that cuts the tail still says what is wrong. With no detail,
+/// "CI stuck 40m: rerun?" and "Ready to merge: merge?".
 pub fn ci_line(trouble: CiTrouble, stuck_for: &str, pr: &str) -> String {
     match trouble {
+        CiTrouble::MergeReady => {
+            let merge = if pr.is_empty() {
+                "merge?".to_string()
+            } else {
+                format!("{pr}, merge?")
+            };
+            with_detail(MERGE_READY_WORD, &merge)
+        }
         CiTrouble::Failing => with_detail(&format!("{CI_FAILED_WORD}, nobody fixing"), pr),
         CiTrouble::Stuck => {
             let rerun = if pr.is_empty() {
@@ -153,6 +163,14 @@ mod tests {
         assert_eq!(
             ci_line(CiTrouble::Failing, "", ""),
             "CI failed, nobody fixing"
+        );
+        assert_eq!(
+            ci_line(CiTrouble::MergeReady, "", "Docs layout"),
+            "Ready to merge: Docs layout, merge?"
+        );
+        assert_eq!(
+            ci_line(CiTrouble::MergeReady, "", ""),
+            "Ready to merge: merge?"
         );
     }
 

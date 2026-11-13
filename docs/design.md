@@ -26,8 +26,8 @@ otherwise. Line numbers are as of `12d4303`.
 ## Principles
 
 1. **Hue only ever means state.** Clay is your turn (a session that
-   [stopped](#stopped) too, [CI with nobody on it](#ci-waiting), or a wait
-   gone late,
+   [stopped](#stopped) too, [CI with nobody on it](#ci-waiting), a change
+   [left merge-ready four hours](#merge-waiting), or a wait gone late,
    [late wait](#late-wait)), amber is asking, blue is
    working, the olive green is finished, the vivid merge green is ready to
    merge, red is failing. Nothing decorative takes one of these hues.
@@ -70,7 +70,7 @@ dark-mode screenshot; nothing here changes before then.
 
 | Token | Light | Dark | Means | Where drawn |
 |-|-|-|-|-|
-| `clay` | D97757 | E08A6D | your turn, [stopped](#stopped) and [CI waiting](#ci-waiting) | the waiting count on the All tab while one waiting card is your turn (core picks, `Needs.fill`); a needs dot; the [stripe](#waiting-card) down a Your turn card |
+| `clay` | D97757 | E08A6D | your turn, [stopped](#stopped), [CI waiting](#ci-waiting) and [merge waiting](#merge-waiting) | the waiting count on the All tab while one waiting card is your turn (core picks, `Needs.fill`); a needs dot; the [stripe](#waiting-card) down a Your turn card |
 | `amber` | D9A03F | E3B260 | asking | needs dot, status dot, the waiting count while every waiting card asks (core picks); the [stripe](#waiting-card) down an Asking card |
 | `blue` | 3B6FB6 | 6A9BE0 | working | progress bar fill (`CardView.swift` `ProgressBar`), status dot |
 | `green` | 788C5D | 93A877 | finished | status dot (core picks) |
@@ -635,6 +635,39 @@ you" brings it back. The [PR chip](#pr-chip) of a stuck PR says "stuck" in
 running's `blueText`. The rules are `native/core/src/ci_wait.rs`; the words
 are `ci_line` in `native/core/src/words.rs`.
 
+### Merge waiting
+
+A change GitHub would merge (every check passed, out of draft, merge
+state clean) shows Ready to merge in `mergeText`
+([Status line](#status-line)) and stays out of Needs you, however long
+it sits. Once it has read
+merge-ready four hours (`MERGE_WAIT_SECS`, `native/core/src/merge_wait.rs`,
+to tune) with nobody on it, it waits on you (issue #380), as
+[CI waiting](#ci-waiting) does and on the same terms: nobody on it, never
+asleep, a stand-in when no session is left, Your turn's look whole (clay
+dot with its halo, `clayText` words, the clay
+[waiting card](#waiting-card) edge, stripe and wash), the waiting count,
+lane order, the [late wait](#late-wait) chip and Dismiss needs you. The
+words keep the status and ask for the merge, the PR's title (else its
+number) between: "Ready to merge: Docs layout, merge?". The status still
+says Ready to merge, so the [PR chip](#pr-chip) keeps its number alone,
+as it does in green.
+
+The four hours count from the first poll answer that showed the PR
+merge-ready, saved on the PR in the state file (`readySince`), so a
+restart keeps them. The card's age and the late chip count from the
+four-hour mark, an instant that never moves while it waits. It leaves
+Needs you when the PR merges, or an answer shows the PR itself change (a
+new red check, checks running or run again, conflicts, back in draft);
+that answer lets the time go, so a later return to ready starts four
+fresh hours. An answer where only GitHub's merge state is unsure
+(UNKNOWN while it recomputes after main moves, or BLOCKED or BEHIND)
+takes the card out of green and out of Needs you while it lasts, as it
+always did for green, but keeps the time, so the wait comes back from
+the same mark once GitHub settles. A frame that cannot read the PR, or
+one with an unsure merge state, changes neither the time nor a
+dismissal, which lapses only with a new time.
+
 ### Running
 
 The blue status for an idle agent whose chat still runs background work
@@ -874,11 +907,11 @@ Every card's face, edge, dimming and hover (`Views/CardView.swift:463-492`).
 ### Waiting card
 
 A card waiting on you (Your turn, [Stopped](#stopped),
-[CI waiting](#ci-waiting) or Asking) stands out as a whole, not only by its dot and words, so the cards that wait can
+[CI waiting](#ci-waiting), [merge waiting](#merge-waiting) or Asking) stands out as a whole, not only by its dot and words, so the cards that wait can
 be told at a glance.
 The core picks every token on the card's `Waiting` (`Waiting::of`,
-`native/core/src/panel/mod.rs`): clay for Your turn, Stopped and CI
-waiting, amber for Asking.
+`native/core/src/panel/mod.rs`): clay for Your turn, Stopped, CI
+waiting and merge waiting, amber for Asking.
 
 - **Full, compact and Projects cards:** a 1 edge in `clayCardEdge` or
   `amberCardEdge` (the hue at 0x73, about 0.45) in place of `cardEdge`,
@@ -978,8 +1011,8 @@ Every card is decided as option a; where that changes a rule, the rule says
    `Waiting.edge`, `Waiting.wash`, `Chip.face`, `Chip.edge`, `Card.late`).
 2. **A state is a dot plus words, and the dot and the words are a fixed
    pair:** `blue`/`blueText` working, `clay`/`clayText` your turn,
-   `amber`/`amberText` asking (stopped and CI waiting share your turn's
-   pair),
+   `amber`/`amberText` asking (stopped, CI waiting and merge waiting
+   share your turn's pair),
    `green`/`greenText` finished,
    `mergeGreen`/`mergeText` ready to merge, no colour (`Own.grey`) with
    `metaText` idle. The pairs are set once in `status.rs:108-114` and
@@ -1059,6 +1092,7 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 | Your turn | clay dot with halo, `clayText` words, clay needs dot; `clayCardEdge` edge and clay stripe | same, age and reason in `clayText`; `clayWash` face | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `needs.rs` `waiting_turn`, `effective_agent`; `status.rs` `plain_style`, `waiting_tokens`; `panel/build.rs` `header_dot` |
 | Stopped | as Your turn: clay dot with halo, `clayText` words ("Stopped on an error: …", "Stopped mid-turn", "Stopped, silent 25m"), clay edge and stripe | as Your turn; the words lead the detail | as Your turn | counts in the clay waiting count | `stopped.rs`; `needs.rs` `stopped_agent`; `status.rs` `StatusKind::Stopped`; `words.rs` `stop_words` |
 | CI waiting | as Your turn: clay dot with halo, `clayText` words ("CI failed, nobody fixing: Docs layout", "CI stuck 40m: rerun Docs layout?"), clay edge and stripe | as Your turn; the words lead the detail | as Your turn | counts in the clay waiting count | `ci_wait.rs`; `needs.rs` `effective_agent`; `status.rs` `StatusKind::Ci`; `words.rs` `ci_line` |
+| Merge waiting | as Your turn: clay dot with halo, `clayText` words ("Ready to merge: Docs layout, merge?"), clay edge and stripe; the PR chip its number alone | as Your turn; the words lead the detail | as Your turn | counts in the clay waiting count | `merge_wait.rs`; `ci_wait.rs`; `status.rs` `StatusKind::Ci`; `words.rs` `ci_line` |
 | Asking | amber dot with halo, `amberText` words, amber needs dot; `amberCardEdge` edge and amber stripe | same; `amberWash` face | amber glyph **≠**; `amberCount` pill | waiting count amber while every waiting card asks | `status.rs` `StatusKind::style`; `panel/build.rs` `needs_tone` |
 | Working | blue dot with halo, `blueText`; blue progress bar | blue dot | blue glyph; `blueCount` pill | | `status.rs:109` |
 | Running | as working, "Running 4m · 1 shell, 1 agent"; no live helpers words beside it once it counts an agent; never over a turn that asks you | as working, the age alone | as working | | `status.rs` `StatusKind::Running`; `running.rs`; `words.rs` `running_text` |

@@ -28,6 +28,7 @@ pub mod lane_rename;
 pub mod lanes;
 pub mod lenient;
 pub mod menu;
+pub mod merge_wait;
 pub mod merged;
 pub mod message;
 pub mod model;

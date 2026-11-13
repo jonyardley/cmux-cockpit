@@ -35,6 +35,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::data::{Data, PrStatus, PullRequest, Workspace};
 use crate::js::non_empty;
+use crate::merge_wait::ready_time;
 use crate::persist::{SavedCheck, SavedPr, UNTIMED};
 use crate::prs::{PrHealth, health_of};
 
@@ -138,9 +139,8 @@ pub struct Shown {
     pub failing: usize,
 }
 
-/// What a card shows of `pr`.
-pub fn shown(pr: &SavedPr) -> Shown {
-    let open = pr.status == PrStatus::Open;
+/// The health of `pr` as the poll saved it.
+fn saved_health(pr: &SavedPr) -> PrHealth {
     let as_pr = PullRequest {
         number: Some(pr.number),
         status: Some(pr.status),
@@ -149,8 +149,14 @@ pub fn shown(pr: &SavedPr) -> Shown {
         conflicts: pr.conflicts,
         ..PullRequest::default()
     };
+    health_of(&as_pr, pr.checks.as_deref().unwrap_or(&[]))
+}
+
+/// What a card shows of `pr`.
+pub fn shown(pr: &SavedPr) -> Shown {
+    let open = pr.status == PrStatus::Open;
     let checks = pr.checks.as_deref().unwrap_or(&[]);
-    let health = health_of(&as_pr, checks);
+    let health = saved_health(pr);
     let failing = match health {
         PrHealth::Failing => checks.iter().filter(|c| c.state == "fail").count(),
         _ => 0,
@@ -295,6 +301,57 @@ fn stamp_queued(pr: &mut SavedPr, before: Option<&SavedPr>, now: f64) {
     }
 }
 
+/// Whether `pr` reads all but merge-ready for want of GitHub's verdict
+/// alone: open, out of draft, clear of conflicts, with checks that all
+/// finished and none failed, but no CLEAN merge state. GitHub answers
+/// UNKNOWN for a while after main moves, as it recomputes, and BLOCKED or
+/// BEHIND for reasons outside the PR's own state.
+fn unsure_verdict(pr: &SavedPr) -> bool {
+    saved_health(pr) == PrHealth::Quiet
+        && pr.status == PrStatus::Open
+        && pr.draft != Some(true)
+        && pr.checks.as_ref().is_some_and(|c| !c.is_empty())
+}
+
+/// The latest start among `pr`'s checks, when any gives one.
+fn latest_start(pr: &SavedPr) -> Option<f64> {
+    let starts = pr.checks.iter().flatten().filter_map(|c| c.started);
+    starts.reduce(f64::max)
+}
+
+/// Whether `pr`'s checks have run again since `before`: one started later
+/// than any of `before`'s. A new push or a rerun, even one that finished
+/// green between two answers, so no answer saw it running.
+fn checks_ran_again(pr: &SavedPr, before: &SavedPr) -> bool {
+    match (latest_start(pr), latest_start(before)) {
+        (Some(now), Some(then)) => now > then,
+        _ => false,
+    }
+}
+
+/// Gives `pr` the time it has read merge-ready since (issue #380). While
+/// GitHub would merge it, the time `before` (the same PR as last answered,
+/// or as the state file holds it after a restart) carried, else `now`,
+/// when the poll first saw it ready. While only GitHub's verdict is unsure
+/// (`unsure_verdict`), the time `before` carried, so one UNKNOWN answer
+/// after main moves does not restart the four hours. None once an answer
+/// shows the PR itself change: merged or closed, red, running, in
+/// conflict, back in draft. Checks run again since `before` start afresh
+/// too, so a push that went green between answers, or while the Cockpit
+/// was not running, never inherits the old time.
+fn stamp_ready(pr: &mut SavedPr, before: Option<&SavedPr>, now: f64) {
+    let earlier = before
+        .filter(|b| !checks_ran_again(pr, b))
+        .and_then(|b| ready_time(b.ready_since));
+    pr.ready_since = if saved_health(pr) == PrHealth::Ready {
+        Some(earlier.unwrap_or(now))
+    } else if unsure_verdict(pr) {
+        earlier
+    } else {
+        None
+    };
+}
+
 /// The wait after `failures` failed asks in a row: FLOOR_SECS doubled
 /// each time, up to BACKOFF_CAP_SECS.
 fn backoff(failures: u32) -> f64 {
@@ -413,6 +470,7 @@ impl PrPoll {
                 _ => self.file.values().find(|f| f.url == pr.url),
             };
             stamp_queued(pr, before, polled.epoch);
+            stamp_ready(pr, before, polled.epoch);
         }
         t.record(answer);
     }
@@ -526,6 +584,7 @@ mod tests {
                     })
                     .collect(),
             ),
+            ready_since: None,
         }
     }
 
@@ -904,6 +963,194 @@ mod tests {
         other.url = "https://github.com/o/r/pull/8".into();
         p.record(answered("/a", Some(other), 400.0));
         assert_eq!(times(&p), [Some(400.0), Some(5.0), None, None]);
+    }
+
+    #[test]
+    fn times_a_merge_ready_pr_from_the_first_answer_that_showed_it_ready() {
+        let d = data(vec![ws("a", "/a")]);
+        let mut p = on();
+        let since = |p: &PrPoll| {
+            let held = p.targets.get("/a").and_then(|t| t.known.clone().flatten());
+            held.and_then(|pr| pr.ready_since)
+        };
+        let ask = |p: &mut PrPoll, pr: SavedPr, at: f64| {
+            let _ = p.due(&d, at);
+            p.record(answered("/a", Some(pr), at));
+        };
+        ask(&mut p, pr(&["pending"]), 100.0);
+        assert_eq!(since(&p), None, "running: not ready yet");
+        ask(&mut p, pr(&["pass"]), 1000.0);
+        assert_eq!(since(&p), Some(1000.0), "first seen ready");
+        ask(&mut p, pr(&["pass"]), 2000.0);
+        assert_eq!(since(&p), Some(1000.0), "held from answer to answer");
+        assert!(
+            p.writes(&d, "/a").contains_key("a"),
+            "the time is written to the file"
+        );
+
+        // After a restart the state file's time carries on, and an answer
+        // the same as the file writes nothing.
+        let mut fresh = on();
+        let stamped = SavedPr {
+            ready_since: Some(1000.0),
+            ..pr(&["pass"])
+        };
+        let text = serde_json::to_string(&file_of(&["a"], &stamped)).unwrap_or_default();
+        let file: BTreeMap<String, SavedPr> = serde_json::from_str(&text).unwrap();
+        fresh.file_read(&file, Some(&d));
+        ask(&mut fresh, pr(&["pass"]), 9000.0);
+        assert_eq!(since(&fresh), Some(1000.0));
+        assert!(fresh.writes(&d, "/a").is_empty(), "nothing new to write");
+
+        // A new red check clears it; green again starts afresh.
+        ask(&mut p, pr(&["pass", "fail"]), 3000.0);
+        assert_eq!(since(&p), None);
+        ask(&mut p, pr(&["pass"]), 4000.0);
+        assert_eq!(since(&p), Some(4000.0), "a fresh time");
+
+        // Merged clears it too.
+        let merged = SavedPr {
+            status: PrStatus::Merged,
+            ..pr(&["pass"])
+        };
+        ask(&mut p, merged, 5000.0);
+        assert_eq!(since(&p), None);
+
+        // A gh failure keeps the answer held, time and all.
+        ask(&mut p, pr(&["pass"]), 6000.0);
+        let _ = p.due(&d, 7000.0);
+        p.record(failed("/a", GhFailure::Unavailable, 7000.0));
+        assert_eq!(since(&p), Some(6000.0));
+    }
+
+    /// `pr(&["pass"])` with its one check started at `started`, GitHub's
+    /// merge verdict CLEAN when `clean`, else unsure (UNKNOWN, BLOCKED or
+    /// BEHIND all save as no verdict).
+    fn green(started: f64, clean: bool) -> SavedPr {
+        let mut p = pr(&["pass"]);
+        p.mergeable = clean.then_some(true);
+        for c in p.checks.iter_mut().flatten() {
+            c.started = Some(started);
+        }
+        p
+    }
+
+    #[test]
+    fn keeps_the_ready_time_while_only_githubs_verdict_is_unsure() {
+        let d = data(vec![ws("a", "/a")]);
+        let mut p = on();
+        let since = |p: &PrPoll| {
+            let held = p.targets.get("/a").and_then(|t| t.known.clone().flatten());
+            held.and_then(|pr| pr.ready_since)
+        };
+        let ask = |p: &mut PrPoll, pr: SavedPr, at: f64| {
+            let _ = p.due(&d, at);
+            p.record(answered("/a", Some(pr), at));
+        };
+        ask(&mut p, green(50.0, true), 1000.0);
+        assert_eq!(since(&p), Some(1000.0));
+        // Main moved: one UNKNOWN answer keeps the time, and CLEAN again
+        // carries it on rather than starting four fresh hours.
+        ask(&mut p, green(50.0, false), 2000.0);
+        assert_eq!(since(&p), Some(1000.0), "kept through UNKNOWN");
+        ask(&mut p, green(50.0, true), 3000.0);
+        assert_eq!(since(&p), Some(1000.0), "carried on once CLEAN");
+        // Unsure from the first: no time to keep, none started.
+        let mut fresh = on();
+        ask(&mut fresh, green(50.0, false), 1000.0);
+        assert_eq!(since(&fresh), None, "never ready, never timed");
+
+        // A restart while unsure keeps the time from the state file.
+        let kept = SavedPr {
+            ready_since: Some(1000.0),
+            ..green(50.0, false)
+        };
+        let mut restarted = on();
+        restarted.file_read(&file_of(&["a"], &kept), Some(&d));
+        ask(&mut restarted, green(50.0, true), 9000.0);
+        assert_eq!(since(&restarted), Some(1000.0), "kept across a restart");
+
+        // Unsure, then the PR itself changes: each clears the time.
+        let changed = [
+            (
+                "red",
+                SavedPr {
+                    mergeable: None,
+                    ..pr(&["pass", "fail"])
+                },
+            ),
+            (
+                "running",
+                SavedPr {
+                    mergeable: None,
+                    ..pr(&["pending"])
+                },
+            ),
+            (
+                "draft",
+                SavedPr {
+                    draft: Some(true),
+                    ..green(50.0, false)
+                },
+            ),
+            (
+                "merged",
+                SavedPr {
+                    status: PrStatus::Merged,
+                    ..green(50.0, false)
+                },
+            ),
+            (
+                "conflicts",
+                SavedPr {
+                    conflicts: Some(true),
+                    ..green(50.0, false)
+                },
+            ),
+        ];
+        for (why, answer) in changed {
+            let mut q = on();
+            ask(&mut q, green(50.0, true), 1000.0);
+            ask(&mut q, green(50.0, false), 2000.0);
+            ask(&mut q, answer, 3000.0);
+            assert_eq!(since(&q), None, "{why} clears it");
+        }
+    }
+
+    #[test]
+    fn starts_the_ready_time_afresh_when_checks_run_again_unseen() {
+        let d = data(vec![ws("a", "/a")]);
+        let since = |p: &PrPoll| {
+            let held = p.targets.get("/a").and_then(|t| t.known.clone().flatten());
+            held.and_then(|pr| pr.ready_since)
+        };
+        let ask = |p: &mut PrPoll, pr: SavedPr, at: f64| {
+            let _ = p.due(&d, at);
+            p.record(answered("/a", Some(pr), at));
+        };
+        // A push that went green between two answers: no answer saw it
+        // running, but its checks started later.
+        let mut p = on();
+        ask(&mut p, green(50.0, true), 1000.0);
+        ask(&mut p, green(1500.0, true), 2000.0);
+        assert_eq!(since(&p), Some(2000.0), "a fresh time");
+        // The same checks, seen again: the time holds.
+        ask(&mut p, green(1500.0, true), 3000.0);
+        assert_eq!(since(&p), Some(2000.0));
+        // Unsure with checks run again: nothing to keep.
+        ask(&mut p, green(2500.0, false), 4000.0);
+        assert_eq!(since(&p), None);
+
+        // The same while the Cockpit was off: the state file's time is not
+        // inherited by a PR whose checks ran again since it was saved.
+        let saved = SavedPr {
+            ready_since: Some(1000.0),
+            ..green(50.0, true)
+        };
+        let mut restarted = on();
+        restarted.file_read(&file_of(&["a"], &saved), Some(&d));
+        ask(&mut restarted, green(5000.0, true), 9000.0);
+        assert_eq!(since(&restarted), Some(9000.0));
     }
 
     /// An answer for `/a` to the ask made at `asked`.

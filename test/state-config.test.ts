@@ -221,6 +221,18 @@ test("validateState keeps a check's queue and start times, and drops a bad one",
   ]);
 });
 
+test("validateState keeps when a PR first read merge-ready, and drops a bad time", () => {
+  const pr = (extra: Record<string, unknown>) => ({
+    prs: { w: { number: 7, url: "https://github.com/o/r/pull/7", status: "open", branch: "feat", ...extra } },
+  });
+  assert.equal(validateState(pr({ readySince: 1794571200 })).prs.w?.readySince, 1794571200);
+  for (const bad of ["soon", -1, 0, Number.NaN, null]) {
+    const kept = validateState(pr({ readySince: bad })).prs.w;
+    assert.ok(kept, "the PR itself stays");
+    assert.equal("readySince" in kept, false, String(bad));
+  }
+});
+
 test("applySet sets, replaces and deletes an entry without changing its input", () => {
   const start = emptyState();
   const set = applySet(start, "projectOverride.w1", '"alpha"');

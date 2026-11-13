@@ -185,7 +185,7 @@ mod background_agents_on_the_card {
     fn never_says_ready_to_merge_while_its_background_agent_runs() {
         let (mut s, data, mut fx) = setup();
         let w = ws("prReady").agents(vec![idle(&mut fx)]);
-        assert!(!s.shows_merge_ready(&data, Some(&w)));
+        assert!(!s.says_merge_ready(&data, Some(&w)));
         assert_eq!(s.status_kind(&data, Some(&w)), StatusKind::Running);
     }
 

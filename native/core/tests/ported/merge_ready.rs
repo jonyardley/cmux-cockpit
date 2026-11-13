@@ -319,9 +319,9 @@ mod merge_ready_status {
 
     #[test]
     fn drops_the_words_exactly_when_the_status_says_ready_to_merge() {
-        // shows_merge_ready copies status_kind's first rule rather than
-        // asking it: this holds the two to one answer, a `claude --bg`
-        // session the runner still has running included.
+        // says_merge_ready asks status_kind; this pins the answer on each
+        // card shape, a `claude --bg` session the runner still has running
+        // included, should it ever copy the rule instead.
         let (mut s, mut data, mut fx) = setup();
         let cards = [
             ("ready1", vec![at(&mut fx, Idle, 180.0)], 0.0),
@@ -343,7 +343,7 @@ mod merge_ready_status {
         for (id, agents, unread) in cards {
             let w = card(&mut data, id, agents, unread);
             let says = s.status_kind(&data, Some(&w)) == StatusKind::MergeReady;
-            assert_eq!(s.shows_merge_ready(&data, Some(&w)), says, "{id}");
+            assert_eq!(s.says_merge_ready(&data, Some(&w)), says, "{id}");
         }
     }
 
@@ -384,10 +384,10 @@ mod background_sessions_and_ready_to_merge {
         };
         data.background_sessions = running(BackgroundState::Working);
         assert_eq!(s.status_kind(&data, Some(&w)), StatusKind::Running);
-        assert!(!s.shows_merge_ready(&data, Some(&w)));
+        assert!(!s.says_merge_ready(&data, Some(&w)));
         assert_eq!(s.status_line(&data, Some(&w)), "Running 16m · 1 session");
         data.background_sessions = running(BackgroundState::Done);
         assert_eq!(s.status_kind(&data, Some(&w)), StatusKind::MergeReady);
-        assert!(s.shows_merge_ready(&data, Some(&w)));
+        assert!(s.says_merge_ready(&data, Some(&w)));
     }
 }
