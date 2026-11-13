@@ -52,6 +52,7 @@ pub mod session;
 pub mod sleep;
 pub mod state;
 pub mod status;
+pub mod stopped;
 pub mod strip;
 pub mod subagents;
 pub mod symbols;

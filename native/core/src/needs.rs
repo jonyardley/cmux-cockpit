@@ -23,6 +23,7 @@ use crate::moves::{asks_nothing, quiet_turn, waiting_move};
 use crate::persist::{SavedAsk, SavedMove, SavedState};
 use crate::saved::saved_for;
 use crate::session::Session;
+use crate::stopped::{Stop, StopCause};
 
 /// Seconds between an agent's last activity and a needs_input that is only a nudge.
 pub const NUDGE_GAP: f64 = 45.0;
@@ -110,7 +111,12 @@ fn wait_start(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> f64 {
 /// needs_input is only its turn. Pass the agent as the sidebars show it, so
 /// a nudge or a dismissal is never an ask.
 pub fn ask_reason(saved: &SavedState, a: Option<&Agent>, w: Option<&Workspace>) -> Option<String> {
-    fresh_ask(saved, a?, w).map(|s| s.reason.clone())
+    let a = a?;
+    // A stopped session asks nothing, whatever an old saved ask says.
+    if a.stopped.is_some() {
+        return None;
+    }
+    fresh_ask(saved, a, w).map(|s| s.reason.clone())
 }
 
 /// A needs_input that is not Jon's: the idle nudge, or a quiet turn's nudge.
@@ -124,15 +130,52 @@ fn waits_on_jon(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> bool {
     waiting_turn(saved, a, w).is_some() || (needs_input(a) && !not_jons(saved, a, w))
 }
 
-/// The workspace's agents that wait on Jon, its real asks among them.
-fn asking<'w>(saved: &SavedState, w: Option<&'w Workspace>) -> Vec<&'w Agent> {
-    let Some(w) = w else { return Vec::new() };
-    w.agent_list()
-        .filter(|a| waits_on_jon(saved, a, Some(w)))
-        .collect()
-}
-
 impl Session {
+    /// `a`'s stop (stopped.rs), unless its workspace is asleep, on its
+    /// way or waking: a sleeping agent's process is gone by design.
+    pub fn stop_of(&self, a: &Agent, w: Option<&Workspace>) -> Option<Stop> {
+        let asleep = w.is_some_and(|w| self.sleep_kind(&w.id).is_some());
+        a.stopped.filter(|_| !asleep)
+    }
+
+    /// The workspace's agents that wait on Jon, its real asks and its
+    /// stopped sessions among them.
+    fn asking<'w>(&self, w: Option<&'w Workspace>) -> Vec<&'w Agent> {
+        let Some(w) = w else { return Vec::new() };
+        w.agent_list()
+            .filter(|a| self.stop_of(a, Some(w)).is_some() || waits_on_jon(&self.saved, a, Some(w)))
+            .collect()
+    }
+
+    /// When `a`'s wait on Jon began, which a dismissal is keyed on: its
+    /// stop's start, else `wait_start`'s.
+    fn wait_start_of(&self, a: &Agent, w: Option<&Workspace>) -> f64 {
+        self.stop_of(a, w)
+            .map_or_else(|| wait_start(&self.saved, a, w), |stop| stop.since)
+    }
+
+    /// A stopped agent as the sidebars show it: needs input from its stop
+    /// until Jon dismisses it. Dismissed, it reads as it would with no
+    /// stop: idle from the stop when its turn is over (an error, a process
+    /// gone), still working (quiet) when it only went silent. A new stop
+    /// has a new start, so it waits on Jon again.
+    fn stopped_agent(&self, a: &Agent, w: Option<&Workspace>, stop: Stop) -> Agent {
+        if !self.dismissed_at(w, a, stop.since) {
+            return Agent {
+                status: Some(AgentStatus::NeedsInput),
+                since_epoch: Some(stop.since),
+                ..a.clone()
+            };
+        }
+        let mut shown = a.clone();
+        shown.stopped = None;
+        if stop.cause != StopCause::Silent {
+            shown.status = Some(AgentStatus::Idle);
+            shown.since_epoch = Some(stop.since);
+        }
+        shown
+    }
+
     /// Whether Jon dismissed `a`'s wait that began at `start`.
     fn dismissed_at(&self, w: Option<&Workspace>, a: &Agent, start: f64) -> bool {
         w.and_then(|w| self.dismissed.get(&w.id))
@@ -141,6 +184,9 @@ impl Session {
     }
 
     fn is_dismissed(&self, w: Option<&Workspace>, a: &Agent) -> bool {
+        if let Some(stop) = self.stop_of(a, w) {
+            return self.dismissed_at(w, a, stop.since);
+        }
         let turn = waiting_turn(&self.saved, a, w);
         self.is_dismissed_with(w, a, turn.as_ref())
     }
@@ -163,9 +209,10 @@ impl Session {
         if !self.dismissed.contains_key(&w.id) {
             return;
         }
-        let live: IndexMap<String, f64> = asking(&self.saved, Some(w))
+        let live: IndexMap<String, f64> = self
+            .asking(Some(w))
             .into_iter()
-            .map(|a| (a.id.clone(), wait_start(&self.saved, a, Some(w))))
+            .map(|a| (a.id.clone(), self.wait_start_of(a, Some(w))))
             .collect();
         let Some(by_agent) = self.dismissed.get_mut(&w.id) else {
             return;
@@ -184,6 +231,10 @@ impl Session {
     /// nudged; any other needs_input reads as idle when it is a nudge,
     /// dismissed, or a turn that ended on "Nothing for you".
     pub fn effective_agent(&self, a: &Agent, w: Option<&Workspace>) -> Agent {
+        // A stop comes first: nothing about the turn before it still holds.
+        if let Some(stop) = self.stop_of(a, w) {
+            return self.stopped_agent(a, w, stop);
+        }
         // Ahead of Running too: background work never hides a turn that
         // asks Jon something. A dismissed one reads as it would without it.
         let turn = waiting_turn(&self.saved, a, w);
@@ -232,12 +283,12 @@ impl Session {
 
     /// True while any agent in the workspace is really asking, dismissed or not.
     pub fn has_real_ask(&self, w: Option<&Workspace>) -> bool {
-        !asking(&self.saved, w).is_empty()
+        !self.asking(w).is_empty()
     }
 
     /// True when dismissals are all that keep the workspace from showing needs you.
     pub fn is_needs_dismissed(&self, w: Option<&Workspace>) -> bool {
-        let list = asking(&self.saved, w);
+        let list = self.asking(w);
         !list.is_empty() && list.iter().all(|a| self.is_dismissed(w, a))
     }
 
@@ -246,9 +297,10 @@ impl Session {
     /// cannot stay hidden across reloads.
     pub fn dismiss_needs(&mut self, w: Option<&Workspace>) {
         let Some(w) = w else { return };
-        let starts: IndexMap<String, f64> = asking(&self.saved, Some(w))
+        let starts: IndexMap<String, f64> = self
+            .asking(Some(w))
             .into_iter()
-            .map(|a| (a.id.clone(), wait_start(&self.saved, a, Some(w))))
+            .map(|a| (a.id.clone(), self.wait_start_of(a, Some(w))))
             .collect();
         if starts.is_empty() {
             return;

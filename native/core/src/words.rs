@@ -3,6 +3,7 @@
 
 use crate::data::AgentStatus;
 use crate::persist::TaskType;
+use crate::stopped::StopCause;
 
 /// The status word for each agent status, as a card head or status line
 /// starts. None for a status this port does not know.
@@ -35,6 +36,29 @@ pub const WAKING_WORD: &str = "Waking";
 
 /// A working agent with no activity for a while.
 pub const QUIET_WORD: &str = "quiet";
+
+/// A session that stopped without handing back (issue #376).
+pub const STOPPED_WORD: &str = "Stopped";
+
+/// Why a session stopped, in the closing line's shape: "Stopped on an
+/// error", "Stopped mid-turn" (its process went), "Stopped, silent 25m"
+/// with how long it has been silent.
+pub fn stop_words(cause: StopCause, silent_for: &str) -> String {
+    match cause {
+        StopCause::Error => format!("{STOPPED_WORD} on an error"),
+        StopCause::Gone => format!("{STOPPED_WORD} mid-turn"),
+        StopCause::Silent => with_age(&format!("{STOPPED_WORD}, silent"), silent_for),
+    }
+}
+
+/// "Stopped on an error: last words", or the words alone with no detail.
+pub fn with_detail(words: &str, detail: &str) -> String {
+    if detail.is_empty() {
+        words.to_string()
+    } else {
+        format!("{words}: {detail}")
+    }
+}
 
 /// Your last prompt, on a card that shows where you left off.
 pub const YOU_WORD: &str = "You";
