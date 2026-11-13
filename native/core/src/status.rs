@@ -644,6 +644,10 @@ impl Session {
     /// The "Your move" line the chat ended its turn on, while that turn still waits on Jon.
     pub fn move_of(&mut self, w: Option<&Workspace>) -> Option<SavedMove> {
         let a = self.agent_of(w);
+        // A stopped turn ended on no move: an older one asks nothing now.
+        if a.as_ref().is_some_and(|a| a.stopped.is_some()) {
+            return None;
+        }
         let asking = ask_reason(&self.saved, a.as_ref(), w).is_some();
         waiting_move(&self.saved, a.as_ref(), w, asking)
     }

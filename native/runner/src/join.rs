@@ -276,11 +276,20 @@ impl Join {
     /// The stopped card a pid leaves when its process went mid-turn
     /// (`gone_mid_turn`, with Agent View's last word on it), placed where
     /// it ran; None when it ended cleanly, was idle, or was never seen
-    /// alive since the runner started (a replayed session long gone).
+    /// alive since the runner started (a replayed session long gone), or
+    /// when a new session already runs in its tab.
     fn gone_record(&self, pid: u32) -> Option<(String, Agent)> {
         let (busy, session) = self.seen.get(&pid)?;
         let h = self.sessions.get(&pid)?;
         let surface = self.surface_of.get(&pid).map(|(s, _)| s.clone());
+        let taken = surface.as_ref().is_some_and(|s| {
+            self.surface_of
+                .iter()
+                .any(|(p, (other, _))| *p != pid && other == s)
+        });
+        if taken {
+            return None;
+        }
         let program = surface.as_ref().and_then(|s| self.program.get(s));
         if !gone_mid_turn(h, program, Some(*busy)) {
             return None;
@@ -1775,6 +1784,24 @@ mod tests {
         j.agents(view(&[(8, false, "s8")]));
         j.event(&fresh);
         let ids: Vec<String> = j.frame(at + 31.0).workspace_list()[0]
+            .agent_list()
+            .map(|a| a.id.clone())
+            .collect();
+        assert_eq!(ids, ["s8"]);
+    }
+
+    #[test]
+    fn a_session_restarted_in_the_tab_before_the_kill_is_noticed_leaves_no_card() {
+        let at = 1_794_567_000.0;
+        let mut j = working_from(at);
+        j.agents(view(&[]));
+        let mut fresh = hook_in(9, "SessionStart", 8, "A", ERROR_TAB);
+        fresh["occurred_at"] = json!(iso(at + 3.0));
+        j.event(&fresh);
+        for _ in 1..FORGET_AFTER {
+            j.agents(view(&[(8, false, "s8")]));
+        }
+        let ids: Vec<String> = j.frame(at + 10.0).workspace_list()[0]
             .agent_list()
             .map(|a| a.id.clone())
             .collect();

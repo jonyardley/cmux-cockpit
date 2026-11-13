@@ -1560,6 +1560,41 @@ mod tests {
     }
 
     #[test]
+    fn the_card_menu_dismisses_a_stop_and_an_older_move_draws_no_size_chip() {
+        use crate::menu::{MenuAction, MenuEvent};
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = Model::default();
+        core.session.saved = crate::persist::SavedState::from_json(
+            r#"{"moves": {"W": {"text": "Your move: say go.", "epoch": 800, "session": "c"}}}"#,
+        )
+        .unwrap();
+        let data = stopped_data(1060.0, "working", ("error", 1000.0));
+        let _effects = Cockpit.update(Event::Data(data.clone()), &mut core);
+        let (card, _) = w_card(&mut core);
+        assert!(card.waiting.is_some());
+        let sizes = core.session.chips_for(&data, data.ws_by_id("W"), false);
+        assert!(
+            !sizes.iter().any(|c| matches!(c, CoreChip::Size { .. })),
+            "the move before the stop is no ask"
+        );
+        let has = |core: &mut Model, label: &str| {
+            let data = core.data.clone().unwrap_or_default();
+            core.session
+                .card_menu(&data, data.ws_by_id("W"))
+                .iter()
+                .any(|i| matches!(i, crate::menu::MenuItem::Item { label: l, .. } if l == label))
+        };
+        assert!(has(&mut core, "Dismiss needs you"));
+        let open = Event::Menu(MenuEvent::OpenCard { id: "W".into() });
+        let _effects = Cockpit.update(open, &mut core);
+        let pick = Event::Menu(MenuEvent::Pick(MenuAction::ToggleNeeds));
+        let _effects = Cockpit.update(pick, &mut core);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert!(has(&mut core, "Restore needs you"));
+    }
+
+    #[test]
     fn an_asleep_workspace_never_waits_on_a_stop() {
         let mut core = Model::default();
         core.session.saved = crate::persist::SavedState::from_json(
