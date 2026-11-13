@@ -14,13 +14,13 @@ use crate::persist::{SavedMove, is_move_description, without_context};
 use crate::prs::{PrHealth, PrSummary, pr_health};
 use crate::running::{Running, running_work, shows_running};
 use crate::session::Session;
-use crate::text::{card_message, clip, one_line, readable, whole_words};
+use crate::text::{card_message, clip, one_line, readable};
 use crate::theme::Token;
 use crate::time::{age_since, finished_at};
 use crate::ui::{PillColors, URGENCY_RANK, Urgency, count_tint};
 use crate::words::{
     ASKING_WORD, ASLEEP_WORD, CI_FAILED_WORD, CI_STUCK_WORD, MERGE_READY_WORD, NO_AGENT_WORD,
-    RUNNING_WORD, STOPPED_WORD, WAKING_WORD, YOU_WORD, ci_words, running_text, status_word,
+    RUNNING_WORD, STOPPED_WORD, WAKING_WORD, YOU_WORD, ci_line, running_text, status_word,
     stop_words, with_age, with_detail,
 };
 
@@ -675,31 +675,37 @@ impl Session {
         waiting_move(&self.saved, a.as_ref(), w, asking)
     }
 
-    /// What a stopped card says ahead of its detail, "Stopped on an
-    /// error", or a CI wait's whole line, "CI failed on Docs layout,
-    /// nobody fixing"; None when the card's agent has neither (or Jon
-    /// dismissed it).
-    pub fn stop_words_of(&mut self, data: &Data, w: Option<&Workspace>) -> Option<String> {
+    /// A stopped or CI waiting card's whole line around `detail`, its
+    /// `needs_detail` as the caller cut it: "Stopped on an error: Please
+    /// run /login", "CI failed, nobody fixing: Docs layout"; None when the
+    /// card's agent has neither (or Jon dismissed it).
+    pub fn wait_line(
+        &mut self,
+        data: &Data,
+        w: Option<&Workspace>,
+        detail: &str,
+    ) -> Option<String> {
         let a = self.agent_of(w)?;
         if let Some(stop) = a.stopped {
-            return Some(stop_words(stop.cause, &age_since(data, Some(stop.since))));
+            let words = stop_words(stop.cause, &age_since(data, Some(stop.since)));
+            return Some(with_detail(&words, detail));
         }
         let trouble = a.ci?;
         let ci = self.ci_shown(w)?;
-        let pr = whole_words(&clip(&ci.pr, NEEDS_DETAIL_MAX), NEEDS_DETAIL_MAX);
-        Some(ci_words(trouble, &pr, &age_since(data, Some(ci.key))))
+        Some(ci_line(trouble, &age_since(data, Some(ci.key)), detail))
     }
 
     /// A waiting card's reason: why the agent asks, else what it
     /// wants, else its latest message. A stopped one's is its last words
-    /// alone, "" with none: its stop says the rest.
+    /// alone, "" with none: its stop says the rest. A CI wait's is its
+    /// PR's title or number.
     pub fn needs_detail(&mut self, w: Option<&Workspace>) -> String {
         let a = self.agent_of(w);
-        // A CI wait's words say it all.
         if a.as_ref()
             .is_some_and(|a| a.stopped.is_none() && a.ci.is_some())
         {
-            return String::new();
+            let pr = self.ci_shown(w).map(|ci| ci.pr.clone()).unwrap_or_default();
+            return clip(&pr, NEEDS_DETAIL_MAX);
         }
         if a.is_some_and(|a| a.stopped.is_some()) {
             return one_line(Some(&card_message(w)), NEEDS_DETAIL_MAX);
@@ -733,14 +739,15 @@ impl Session {
     /// A waiting card's reason with its status in front: "Asking: allow git
     /// push?". A reply's last line, quoted for want of a label, goes bare.
     pub fn needs_line(&mut self, data: &Data, w: Option<&Workspace>) -> String {
-        if let Some(words) = self.stop_words_of(data, w) {
-            return with_detail(&words, &self.needs_detail(w));
+        let detail = self.needs_detail(w);
+        if let Some(line) = self.wait_line(data, w, &detail) {
+            return line;
         }
         if self.unlabelled(w) {
-            return self.needs_detail(w);
+            return detail;
         }
         let label = self.status_info(data, w).label;
-        format!("{label}: {}", self.needs_detail(w))
+        format!("{label}: {detail}")
     }
 
     /// Whether the card shows the green Ready pill: Ready, and not Ready

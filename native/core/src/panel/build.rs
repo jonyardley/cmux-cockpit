@@ -23,7 +23,7 @@ use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
 use crate::time::now_epoch;
 use crate::ui::QUIET_PILL;
-use crate::words::{RUNNING_WORD, WAITING_WORD, with_detail};
+use crate::words::{RUNNING_WORD, WAITING_WORD};
 
 use super::{
     AddMenu, AddProject, Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT,
@@ -569,8 +569,8 @@ fn needs_status(
     wt: Waiting,
 ) -> (String, Token) {
     let detail = whole_words(&session.needs_detail(w), NEEDS_DETAIL_MAX);
-    if let Some(words) = session.stop_words_of(data, w) {
-        return (with_detail(&words, &detail), wt.ink);
+    if let Some(line) = session.wait_line(data, w, &detail) {
+        return (line, wt.ink);
     }
     if session.unlabelled(w) {
         return (detail, Token::Secondary);
@@ -1714,7 +1714,7 @@ mod tests {
         let mut core = ci_core(1020.0, IDLE, FAILED, "");
         let (card, needs) = w_card(&mut core);
         assert_eq!(card.waiting, Some(Waiting::of(false)), "clay, never amber");
-        assert_eq!(w_line(&mut core), "CI failed on Docs layout, nobody fixing");
+        assert_eq!(w_line(&mut core), "CI failed, nobody fixing: Docs layout");
         assert_eq!(card.status_ink, Token::ClayText);
         assert_eq!(card.icon.ink, Some(Token::Clay));
         assert_eq!(card.age, "2m", "from when the session went idle");
@@ -1767,12 +1767,12 @@ mod tests {
         let (card, needs) = w_card(&mut core);
         assert_eq!(needs.count, 1);
         assert_eq!(card.waiting, Some(Waiting::of(false)));
-        assert_eq!(w_line(&mut core), "CI stuck 10m on Docs layout: rerun?");
+        assert_eq!(w_line(&mut core), "CI stuck 10m: rerun Docs layout?");
         assert_eq!(card.age, "<1m", "from when it went stuck");
         assert_eq!(w_kind(&mut core), StatusKind::Ci(CiTrouble::Stuck));
         assert_eq!(w_pr(&mut core), "#12 · stuck");
         ci_frame(&mut core, 1000.0 + 40.0 * 60.0, IDLE);
-        assert_eq!(w_line(&mut core), "CI stuck 40m on Docs layout: rerun?");
+        assert_eq!(w_line(&mut core), "CI stuck 40m: rerun Docs layout?");
     }
 
     #[test]
@@ -1782,7 +1782,7 @@ mod tests {
         assert_eq!(w_card(&mut core).1.count, 0);
         ci_frame(&mut core, 1000.0 + 2700.0, IDLE);
         assert_eq!(w_card(&mut core).1.count, 1);
-        assert_eq!(w_line(&mut core), "CI stuck 45m on Docs layout: rerun?");
+        assert_eq!(w_line(&mut core), "CI stuck 45m: rerun Docs layout?");
     }
 
     #[test]
@@ -1826,6 +1826,29 @@ mod tests {
     }
 
     #[test]
+    fn dismissing_another_wait_keeps_the_ci_dismissal() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = ci_core(1020.0, IDLE, FAILED, "");
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        // The session asks something, and Jon dismisses that too.
+        let asks = r#"{"id": "c", "kind": "claude", "status": "needs_input", "sinceEpoch": 1100, "lastActivityAt": 1100}"#;
+        ci_frame(&mut core, 1110.0, asks);
+        assert_eq!(w_card(&mut core).1.count, 1, "the ask waits");
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(
+            core.session.pending.last(),
+            Some(&(
+                "dismissed.W".to_string(),
+                Some(serde_json::json!({"c": 1100, "ci": 800}))
+            ))
+        );
+        // Idle again with the checks unchanged: the CI wait stays dismissed.
+        ci_frame(&mut core, 1200.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 0);
+    }
+
+    #[test]
     fn red_ci_with_no_session_left_waits_on_a_stand_in() {
         use crate::{Cockpit, Event};
         use crux_core::App;
@@ -1833,7 +1856,7 @@ mod tests {
         let (card, needs) = w_card(&mut core);
         assert_eq!(needs.count, 1);
         assert_eq!(card.waiting, Some(Waiting::of(false)));
-        assert_eq!(w_line(&mut core), "CI failed on Docs layout, nobody fixing");
+        assert_eq!(w_line(&mut core), "CI failed, nobody fixing: Docs layout");
         assert_eq!(card.age, "3m", "from the failed check's start");
         let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
         assert_eq!(w_card(&mut core).1.count, 0);
@@ -1855,7 +1878,7 @@ mod tests {
         assert_eq!(w_pr(&mut core), "#12 · running");
         let red = r#"[{"name": "build", "state": "fail"}]"#;
         let mut core = ci_core(1020.0, IDLE, red, "");
-        assert_eq!(w_line(&mut core), "CI failed on Docs layout, nobody fixing");
+        assert_eq!(w_line(&mut core), "CI failed, nobody fixing: Docs layout");
     }
 
     #[test]

@@ -58,14 +58,22 @@ pub const CI_STUCK_WORD: &str = "CI stuck";
 /// CI failed on a PR nobody is on (issue #377).
 pub const CI_FAILED_WORD: &str = "CI failed";
 
-/// What a CI wait says, in the closing line's shape, naming the PR by
-/// its title or number: "CI stuck 40m on Docs layout: rerun?" with how
-/// long the stuck check has waited or run, or "CI failed on Docs layout,
-/// nobody fixing".
-pub fn ci_words(trouble: CiTrouble, pr: &str, stuck_for: &str) -> String {
+/// What a CI wait says, in the closing line's shape, with the PR's title
+/// or number as its detail: "CI failed, nobody fixing: Docs layout", or
+/// "CI stuck 40m: rerun Docs layout?" with how long the stuck check has
+/// waited or run. The words lead, so a narrow card that cuts the tail
+/// still says what is wrong. With no detail, "CI stuck 40m: rerun?".
+pub fn ci_line(trouble: CiTrouble, stuck_for: &str, pr: &str) -> String {
     match trouble {
-        CiTrouble::Stuck => format!("{} on {pr}: rerun?", with_age(CI_STUCK_WORD, stuck_for)),
-        CiTrouble::Failing => format!("{CI_FAILED_WORD} on {pr}, nobody fixing"),
+        CiTrouble::Failing => with_detail(&format!("{CI_FAILED_WORD}, nobody fixing"), pr),
+        CiTrouble::Stuck => {
+            let rerun = if pr.is_empty() {
+                "rerun?".to_string()
+            } else {
+                format!("rerun {pr}?")
+            };
+            with_detail(&with_age(CI_STUCK_WORD, stuck_for), &rerun)
+        }
     }
 }
 
@@ -129,6 +137,24 @@ pub fn with_age(word: &str, age: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_ci_wait_says_what_is_wrong_first_and_the_pr_after() {
+        use crate::ci_wait::CiTrouble;
+        assert_eq!(
+            ci_line(CiTrouble::Failing, "", "Docs layout"),
+            "CI failed, nobody fixing: Docs layout"
+        );
+        assert_eq!(
+            ci_line(CiTrouble::Stuck, "40m", "Docs layout"),
+            "CI stuck 40m: rerun Docs layout?"
+        );
+        assert_eq!(ci_line(CiTrouble::Stuck, "40m", ""), "CI stuck 40m: rerun?");
+        assert_eq!(
+            ci_line(CiTrouble::Failing, "", ""),
+            "CI failed, nobody fixing"
+        );
+    }
 
     #[test]
     fn words_a_status_and_its_age() {

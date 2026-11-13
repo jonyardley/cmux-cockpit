@@ -609,11 +609,12 @@ nobody). Then it joins Needs you as [Stopped](#stopped) does, and takes
 Your turn's look whole: clay dot with its halo, `clayText` words, the clay
 [waiting card](#waiting-card) edge, stripe and wash. It counts in the
 waiting count, lane order, the [late wait](#late-wait) chip and Dismiss
-needs you. The words are the whole status line, in the closing line's
-shape, naming the PR by its title (its number when it has none):
+needs you. The words lead, in the closing line's shape, and the PR's
+title (its number when it has none) is the detail, so a narrow card that
+cuts the tail still says what is wrong:
 
-- "CI failed on Docs layout, nobody fixing": a check failed.
-- "CI stuck 40m on Docs layout: rerun?": a check has waited for a runner
+- "CI failed, nobody fixing: Docs layout": a check failed.
+- "CI stuck 40m: rerun Docs layout?": a check has waited for a runner
   ten minutes or more (`QUEUED_STUCK_SECS`), or run 45 minutes or more
   (`RUNNING_STUCK_SECS`, both in `native/core/src/prs.rs`, to tune); the
   time is how long that check has waited or run.
@@ -627,7 +628,7 @@ would without it, and stays dismissed while a session works on it and
 after, until the PR's checks change (a rerun, a new push); "Restore needs
 you" brings it back. The [PR chip](#pr-chip) of a stuck PR says "stuck" in
 running's `blueText`. The rules are `native/core/src/ci_wait.rs`; the words
-are `ci_words` in `native/core/src/words.rs`.
+are `ci_line` in `native/core/src/words.rs`.
 
 ### Running
 
@@ -1052,7 +1053,7 @@ core's ● or ○ drawn as text; "dot" is a drawn circle. A mismatch is marked
 |-|-|-|-|-|-|
 | Your turn | clay dot with halo, `clayText` words, clay needs dot; `clayCardEdge` edge and clay stripe | same, age and reason in `clayText`; `clayWash` face | clay glyph **≠**; `clayCount` pill | clay waiting count on All | `needs.rs` `waiting_turn`, `effective_agent`; `status.rs` `plain_style`, `waiting_tokens`; `panel/build.rs` `header_dot` |
 | Stopped | as Your turn: clay dot with halo, `clayText` words ("Stopped on an error: …", "Stopped mid-turn", "Stopped, silent 25m"), clay edge and stripe | as Your turn; the words lead the detail | as Your turn | counts in the clay waiting count | `stopped.rs`; `needs.rs` `stopped_agent`; `status.rs` `StatusKind::Stopped`; `words.rs` `stop_words` |
-| CI waiting | as Your turn: clay dot with halo, `clayText` words ("CI failed on Docs layout, nobody fixing", "CI stuck 40m on Docs layout: rerun?"), clay edge and stripe | as Your turn; the words are the detail | as Your turn | counts in the clay waiting count | `ci_wait.rs`; `needs.rs` `effective_agent`; `status.rs` `StatusKind::Ci`; `words.rs` `ci_words` |
+| CI waiting | as Your turn: clay dot with halo, `clayText` words ("CI failed, nobody fixing: Docs layout", "CI stuck 40m: rerun Docs layout?"), clay edge and stripe | as Your turn; the words lead the detail | as Your turn | counts in the clay waiting count | `ci_wait.rs`; `needs.rs` `effective_agent`; `status.rs` `StatusKind::Ci`; `words.rs` `ci_line` |
 | Asking | amber dot with halo, `amberText` words, amber needs dot; `amberCardEdge` edge and amber stripe | same; `amberWash` face | amber glyph **≠**; `amberCount` pill | waiting count amber while every waiting card asks | `status.rs` `StatusKind::style`; `panel/build.rs` `needs_tone` |
 | Working | blue dot with halo, `blueText`; blue progress bar | blue dot | blue glyph; `blueCount` pill | | `status.rs:109` |
 | Running | as working, "Running 4m · 1 shell, 1 agent"; no live helpers words beside it once it counts an agent; never over a turn that asks you | as working, the age alone | as working | | `status.rs` `StatusKind::Running`; `running.rs`; `words.rs` `running_text` |

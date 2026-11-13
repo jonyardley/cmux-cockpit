@@ -368,9 +368,15 @@ impl Session {
     /// cannot stay hidden across reloads.
     pub fn dismiss_needs(&mut self, w: Option<&Workspace>) {
         let Some(w) = w else { return };
-        let starts = self.waits(w);
+        let mut starts = self.waits(w);
         if starts.is_empty() {
             return;
+        }
+        // A CI wait dismissed earlier and still the same trouble stays
+        // dismissed, though a session on it keeps it out of `waits` now.
+        let ci = self.ci.get(&w.id).map(|ci| ci.key);
+        if let Some(key) = ci.filter(|key| self.dismissed_key(&w.id, CI_KEY, *key)) {
+            starts.entry(CI_KEY.to_string()).or_insert(key);
         }
         let dated: Map<String, Value> = starts
             .iter()
