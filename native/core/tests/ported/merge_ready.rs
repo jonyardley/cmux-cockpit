@@ -286,7 +286,7 @@ mod merge_ready_status {
     fn drops_the_prs_state_words_once_the_status_says_it_keeping_its_number_decided_1a() {
         let (mut s, mut data, mut fx) = setup();
         let words = |s: &mut Session, w: &Workspace| {
-            let pr = pr_summary(&s.saved, Some(w)).expect("a PR");
+            let pr = pr_summary(&s.saved, Some(w), 0.0).expect("a PR");
             compact_pr_text(Some(&s.card_pr_words(&Data::default(), Some(w), &pr)))
         };
         let state = |s: &mut Session, w: &Workspace| {

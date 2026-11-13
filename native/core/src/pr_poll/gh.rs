@@ -11,7 +11,8 @@ use serde_json::{Map, Value};
 
 use super::{GhFailure, PollAnswer};
 use crate::data::PrStatus;
-use crate::persist::{SavedCheck, SavedPr};
+use crate::persist::{SavedCheck, SavedPr, UNTIMED};
+use crate::time::iso_epoch;
 
 /// The fields the PR pick reads (pickPr in scripts/pr-poll.ts reads the same).
 pub const PR_FIELDS: &str = "number,state,url,headRefName,updatedAt,isCrossRepository,isDraft,mergeStateStatus,statusCheckRollup,title,additions,deletions";
@@ -298,14 +299,46 @@ fn rolled(c: &Value) -> Option<Rolled> {
     }
     let workflow = text(c, "workflowName").unwrap_or("");
     let shown = cut_to(name.trim(), MAX_CHECK_NAME).trim().to_string();
+    let started_at = text(c, "startedAt").unwrap_or("");
+    let (queued, started) = check_times(c, started_at);
     Some(Rolled {
         id: format!("{workflow}\n{name}"),
-        started_at: text(c, "startedAt").unwrap_or("").to_string(),
+        started_at: started_at.to_string(),
         check: SavedCheck {
             name: shown,
             state: check_state(c).to_string(),
+            queued,
+            started,
         },
     })
+}
+
+/// A time gh gives, in epoch seconds; None for none, or for the zero time
+/// gh writes when GitHub has none (`0001-01-01T00:00:00Z`).
+fn gh_time(at: &str) -> Option<f64> {
+    iso_epoch(at).filter(|t| *t > 0.0)
+}
+
+/// When a check was queued and when it started, as far as gh says. A
+/// check run waiting for a runner (queued or requested) is queued: GitHub
+/// stamps its `startedAt` when it is made, and moves it to the real start
+/// once it runs (seen on #385), so the status says which time it is. With
+/// no time it is queued at 0, `UNTIMED`, for the poll to stamp with when
+/// it first saw it waiting (pr_poll.rs). A run held at a gate (waiting for
+/// an approval, or pending behind another run in its concurrency group)
+/// waits for a person or another run, not a runner, so it carries no time
+/// and never reads stuck. A status context has no queue: it started when
+/// it was made.
+fn check_times(c: &Map<String, Value>, started_at: &str) -> (Option<f64>, Option<f64>) {
+    let at = gh_time(started_at);
+    if text(c, "__typename") == Some("StatusContext") {
+        return (None, at);
+    }
+    match text(c, "status") {
+        Some("IN_PROGRESS" | "COMPLETED") => (None, at),
+        Some("QUEUED" | "REQUESTED") => (Some(at.unwrap_or(UNTIMED)), None),
+        _ => (None, None),
+    }
 }
 
 /// A queued run has no start yet, and is its check's newest, so it sorts last.
@@ -528,6 +561,42 @@ mod tests {
             checks,
             [("deploy", "fail"), ("build", "pending"), ("Lint", "pass")],
             "the latest run of build wins, failing first"
+        );
+    }
+
+    #[test]
+    fn keeps_when_each_check_was_queued_and_started() {
+        let rollup: Value = serde_json::from_str(
+            r#"[
+            {"__typename": "CheckRun", "name": "mac", "status": "QUEUED", "startedAt": "0001-01-01T00:00:00Z"},
+            {"__typename": "CheckRun", "name": "linux", "status": "QUEUED", "startedAt": "2026-11-13T12:00:00Z"},
+            {"__typename": "CheckRun", "name": "check", "status": "IN_PROGRESS", "startedAt": "2026-11-13T12:01:00Z"},
+            {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "FAILURE", "startedAt": "2026-11-13T11:59:00Z"},
+            {"__typename": "StatusContext", "context": "deploy", "state": "PENDING", "startedAt": "2026-11-13T12:02:00Z"},
+            {"__typename": "CheckRun", "name": "approve", "status": "WAITING", "startedAt": "2026-11-13T12:00:00Z"},
+            {"__typename": "CheckRun", "name": "behind", "status": "PENDING", "startedAt": "0001-01-01T00:00:00Z"}
+        ]"#,
+        )
+        .unwrap();
+        let noon = 1_794_571_200.0;
+        let mut times: Vec<(String, Option<f64>, Option<f64>)> = checks_from(Some(&rollup))
+            .into_iter()
+            .map(|c| (c.name, c.queued, c.started))
+            .collect();
+        times.sort_by(|a, b| a.0.cmp(&b.0));
+        let at = |n: &str, q: Option<f64>, s: Option<f64>| (n.to_string(), q, s);
+        assert_eq!(
+            times,
+            [
+                at("approve", None, None),
+                at("behind", None, None),
+                at("check", None, Some(noon + 60.0)),
+                at("deploy", None, Some(noon + 120.0)),
+                at("lint", None, Some(noon - 60.0)),
+                at("linux", Some(noon), None),
+                at("mac", Some(UNTIMED), None),
+            ],
+            "a queued run with no time is stamped by the poll, not here; a gated one never"
         );
     }
 

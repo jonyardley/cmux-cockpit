@@ -67,9 +67,74 @@ pub fn finished_at(a: &Agent) -> f64 {
         .unwrap_or(0.0)
 }
 
+/// Epoch seconds from cmux's or GitHub's `2026-10-04T15:17:37.889Z`;
+/// None for any other shape. Only UTC with a `Z`, which is all cmux and
+/// gh write.
+pub fn iso_epoch(s: &str) -> Option<f64> {
+    let s = s.strip_suffix('Z')?;
+    let (date, time) = s.split_once('T')?;
+    let mut d = date.splitn(3, '-').map(|p| p.parse::<i64>().ok());
+    let (Some(Some(y)), Some(Some(mo)), Some(Some(day))) = (d.next(), d.next(), d.next()) else {
+        return None;
+    };
+    let (hms, frac) = time.split_once('.').unwrap_or((time, ""));
+    let mut t = hms.splitn(3, ':').map(|p| p.parse::<i64>().ok());
+    let (Some(Some(h)), Some(Some(mi)), Some(Some(sec))) = (t.next(), t.next(), t.next()) else {
+        return None;
+    };
+    if !(1..=12).contains(&mo) || !(1..=31).contains(&day) || h > 23 || mi > 59 || sec > 60 {
+        return None;
+    }
+    let frac = if frac.is_empty() {
+        0.0
+    } else {
+        format!("0.{frac}").parse::<f64>().ok()?
+    };
+    let days = days_from_civil(y, mo, day);
+    let secs = days * 86_400 + h * 3600 + mi * 60 + sec;
+    // Epoch seconds fit an f64 exactly for any date cmux will write.
+    Some(secs as f64 + frac)
+}
+
+/// Days since 1970-01-01 for a proleptic Gregorian date (Howard Hinnant's
+/// days_from_civil).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_cmux_timestamps_as_epoch_seconds() {
+        assert_eq!(iso_epoch("1970-01-01T00:00:00Z"), Some(0.0));
+        assert_eq!(iso_epoch("2000-03-01T00:00:00Z"), Some(951_868_800.0));
+        let t = iso_epoch("2026-10-04T15:17:37.889Z").unwrap();
+        assert!((t - 1_791_127_057.889).abs() < 1e-3, "{t}");
+    }
+
+    #[test]
+    fn rejects_other_timestamp_shapes() {
+        for s in [
+            "",
+            "2026-10-04",
+            "2026-10-04T15:17:37",
+            "2026-10-04T15:17:37+01:00",
+            "2026-13-04T15:17:37Z",
+            "2026-10-04T25:17:37Z",
+            "2026-10-04Tab:17:37Z",
+            "2026-10-04T15:17:37.xZ",
+        ] {
+            assert_eq!(iso_epoch(s), None, "{s}");
+        }
+    }
 
     #[test]
     fn formats_coarse_ages() {

@@ -19,6 +19,8 @@ use crate::text::clean_title;
 pub enum PrHealth {
     Failing,
     Conflicts,
+    /// A check has waited for a runner, or run, too long (`stuck`).
+    Stuck,
     Running,
     Ready,
     Quiet,
@@ -30,6 +32,7 @@ impl PrHealth {
         match self {
             PrHealth::Failing => "failing",
             PrHealth::Conflicts => "conflicts",
+            PrHealth::Stuck => "stuck",
             PrHealth::Running => "running",
             PrHealth::Ready => "ready",
             PrHealth::Quiet => "quiet",
@@ -190,6 +193,67 @@ pub fn health_of(pr: &PullRequest, checks: &[SavedCheck]) -> PrHealth {
     }
 }
 
+/// A check waiting for a runner this long or more is stuck (issue #377).
+/// To tune.
+pub const QUEUED_STUCK_SECS: f64 = 10.0 * 60.0;
+
+/// A check running this long or more is stuck. To tune.
+pub const RUNNING_STUCK_SECS: f64 = 45.0 * 60.0;
+
+/// A stuck check: when it was queued, or started when it is running.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Stuck {
+    pub since: f64,
+    pub running: bool,
+}
+
+impl Stuck {
+    /// When it went stuck: its time plus its own limit.
+    pub fn went_stuck(&self) -> f64 {
+        self.since
+            + if self.running {
+                RUNNING_STUCK_SECS
+            } else {
+                QUEUED_STUCK_SECS
+            }
+    }
+}
+
+/// The longest stuck of `checks` at epoch `now`, the one that went stuck
+/// first: a check still running `RUNNING_STUCK_SECS` or more after it
+/// started, or still waiting for a runner `QUEUED_STUCK_SECS` or more
+/// after it was queued. None when none is, or a check carries no time (a
+/// state file from before the times were kept). The time is the check's
+/// own, never the clock's, so it holds from frame to frame and changes
+/// only with a new run; a check going stuck later never displaces it.
+pub fn stuck(checks: &[SavedCheck], now: f64) -> Option<Stuck> {
+    let positive = |t: Option<f64>| t.filter(|t| *t > 0.0);
+    checks
+        .iter()
+        .filter(|c| c.state == "pending")
+        .filter_map(|c| match (positive(c.started), positive(c.queued)) {
+            (Some(since), _) => (now - since >= RUNNING_STUCK_SECS).then_some(Stuck {
+                since,
+                running: true,
+            }),
+            (None, Some(since)) => (now - since >= QUEUED_STUCK_SECS).then_some(Stuck {
+                since,
+                running: false,
+            }),
+            (None, None) => None,
+        })
+        .min_by(|a, b| a.went_stuck().total_cmp(&b.went_stuck()))
+}
+
+/// `health_of` at epoch `now`: running checks of which one is stuck
+/// read as stuck.
+pub fn health_at(pr: &PullRequest, checks: &[SavedCheck], now: f64) -> PrHealth {
+    match health_of(pr, checks) {
+        PrHealth::Running if stuck(checks, now).is_some() => PrHealth::Stuck,
+        health => health,
+    }
+}
+
 /// The health of the workspace's first numbered PR; quiet with none.
 pub fn pr_health(saved: &SavedState, w: Option<&Workspace>) -> PrHealth {
     let Some(w) = w else {
@@ -308,11 +372,12 @@ pub fn diff_text(pr: &PullRequest) -> String {
     format!("+{} \u{2212}{}", lines(add), lines(del))
 }
 
-/// A PR as a view shows it, with the checks saved for it; None without a number.
-pub fn summary_of(pr: &PullRequest, checks: &[SavedCheck]) -> Option<PrSummary> {
+/// A PR as a view shows it at epoch `now`, with the checks saved for it;
+/// None without a number.
+pub fn summary_of(pr: &PullRequest, checks: &[SavedCheck], now: f64) -> Option<PrSummary> {
     let number = truthy(pr.number)?;
     let failing = checks.iter().filter(|c| c.state == "fail").count();
-    let health = health_of(pr, checks);
+    let health = health_at(pr, checks, now);
     let words = words_of(pr, health, failing);
     let tag = format!("#{}", num_text(number));
     let text = std::iter::once(tag.clone())
@@ -341,11 +406,12 @@ pub fn summary_of(pr: &PullRequest, checks: &[SavedCheck]) -> Option<PrSummary> 
     })
 }
 
-/// The workspace's first PR as a view shows it; None without a numbered PR.
-pub fn pr_summary(saved: &SavedState, w: Option<&Workspace>) -> Option<PrSummary> {
+/// The workspace's first PR as a view shows it at epoch `now`; None
+/// without a numbered PR.
+pub fn pr_summary(saved: &SavedState, w: Option<&Workspace>, now: f64) -> Option<PrSummary> {
     let w = w?;
     let pr = pr_of(saved, Some(w))?;
-    summary_of(&pr, checks_of(saved, w))
+    summary_of(&pr, checks_of(saved, w), now)
 }
 
 #[cfg(test)]
@@ -366,7 +432,7 @@ mod tests {
         };
         let link = |url: &str| {
             let s = saved(&READY.replace(r#""url": "u""#, &format!(r#""url": "{url}""#)));
-            pr_summary(&s, Some(&w)).and_then(|p| p.web_link())
+            pr_summary(&s, Some(&w), 0.0).and_then(|p| p.web_link())
         };
         assert_eq!(link("u"), None);
         assert_eq!(link("file:///x"), None);
@@ -436,7 +502,7 @@ mod tests {
     fn fills_cmuxs_own_pr_from_the_saved_one_with_the_same_url() {
         let s = saved(HELD);
         let w = holding(cmuxs_347());
-        let summary = pr_summary(&s, Some(&w));
+        let summary = pr_summary(&s, Some(&w), 0.0);
         assert_eq!(
             summary.as_ref().map(|p| p.text.as_str()),
             Some("#347 · draft · 1 failing")
@@ -511,6 +577,7 @@ mod tests {
         let check = |state: &str| SavedCheck {
             name: "build".into(),
             state: state.into(),
+            ..SavedCheck::default()
         };
         let open = PullRequest {
             number: Some(1.0),
@@ -531,6 +598,117 @@ mod tests {
         assert_eq!(health_of(&clean, &[check("pending")]), PrHealth::Running);
         assert_eq!(health_of(&clean, &[]), PrHealth::Quiet);
         assert_eq!(PrHealth::Ready.as_str(), "ready");
+    }
+
+    /// When the longest stuck of `checks` was queued or started.
+    fn since_of(checks: &[SavedCheck], now: f64) -> Option<f64> {
+        stuck(checks, now).map(|s| s.since)
+    }
+
+    /// A pending check queued at `queued` and started at `started`.
+    fn waiting(queued: Option<f64>, started: Option<f64>) -> SavedCheck {
+        SavedCheck {
+            name: "build".into(),
+            state: "pending".into(),
+            queued,
+            started,
+        }
+    }
+
+    #[test]
+    fn a_check_queued_ten_minutes_is_stuck() {
+        let queued = [waiting(Some(1000.0), None)];
+        assert_eq!(since_of(&queued, 1000.0 + 599.0), None);
+        assert_eq!(
+            stuck(&queued, 1000.0 + 600.0),
+            Some(Stuck {
+                since: 1000.0,
+                running: false
+            })
+        );
+        let open = PullRequest {
+            number: Some(9.0),
+            status: Some(PrStatus::Open),
+            ..PullRequest::default()
+        };
+        assert_eq!(health_at(&open, &queued, 1599.0), PrHealth::Running);
+        assert_eq!(health_at(&open, &queued, 1600.0), PrHealth::Stuck);
+        let s = summary_of(&open, &queued, 1600.0).unwrap();
+        assert_eq!(s.text, "#9 · stuck");
+        assert_eq!(
+            health_of(&open, &queued),
+            PrHealth::Running,
+            "no clock, no stuck"
+        );
+    }
+
+    #[test]
+    fn a_check_running_past_45_minutes_is_stuck() {
+        let running = [waiting(Some(900.0), Some(1000.0))];
+        assert_eq!(
+            since_of(&running, 1000.0 + 2699.0),
+            None,
+            "queued long ago, but running"
+        );
+        assert_eq!(
+            stuck(&running, 1000.0 + 2700.0),
+            Some(Stuck {
+                since: 1000.0,
+                running: true
+            })
+        );
+        // The longest stuck leads; a finished check or one with no time never is.
+        let mixed = [
+            waiting(Some(500.0), None),
+            running[0].clone(),
+            waiting(None, None),
+            SavedCheck {
+                started: Some(1.0),
+                ..check_in("pass")
+            },
+        ];
+        assert_eq!(since_of(&mixed, 5000.0), Some(500.0));
+        assert_eq!(
+            since_of(&[waiting(None, None)], 1e10),
+            None,
+            "old saved data"
+        );
+        // Failing and conflicts outrank stuck.
+        let conflicted = PullRequest {
+            number: Some(9.0),
+            status: Some(PrStatus::Open),
+            conflicts: Some(true),
+            ..PullRequest::default()
+        };
+        assert_eq!(health_at(&conflicted, &running, 1e10), PrHealth::Conflicts);
+    }
+
+    #[test]
+    fn the_check_that_went_stuck_first_leads_whichever_kind() {
+        // Queued at 1000, stuck from 1600; running since 500, stuck from 3200.
+        let checks = [
+            waiting(Some(1000.0), None),
+            waiting(Some(400.0), Some(500.0)),
+        ];
+        let queued = Stuck {
+            since: 1000.0,
+            running: false,
+        };
+        assert_eq!(stuck(&checks, 1600.0), Some(queued));
+        assert_eq!(
+            stuck(&checks, 3300.0),
+            Some(queued),
+            "the running one going stuck later moves nothing"
+        );
+        assert_eq!(queued.went_stuck(), 1600.0);
+    }
+
+    fn check_in(state: &str) -> SavedCheck {
+        SavedCheck {
+            name: "lint".into(),
+            state: state.into(),
+            ..SavedCheck::default()
+        }
     }
 
     #[test]
@@ -582,22 +760,23 @@ mod tests {
         let pending = [SavedCheck {
             name: "b".into(),
             state: "pending".into(),
+            ..SavedCheck::default()
         }];
-        let s = summary_of(&pr(PrStatus::Open, true), &pending).unwrap();
+        let s = summary_of(&pr(PrStatus::Open, true), &pending, 0.0).unwrap();
         assert_eq!(
             (s.text.as_str(), s.state.as_str()),
             ("#9 · draft · running", "draft · running")
         );
-        let s = summary_of(&pr(PrStatus::Open, false), &[]).unwrap();
+        let s = summary_of(&pr(PrStatus::Open, false), &[], 0.0).unwrap();
         assert_eq!((s.text.as_str(), s.state.as_str()), ("#9", "open"));
-        let s = summary_of(&pr(PrStatus::Merged, false), &[]).unwrap();
+        let s = summary_of(&pr(PrStatus::Merged, false), &[], 0.0).unwrap();
         assert_eq!(
             (s.text.as_str(), s.state.as_str()),
             ("#9 · merged", "merged")
         );
-        let s = summary_of(&pr(PrStatus::Unknown, false), &[]).unwrap();
+        let s = summary_of(&pr(PrStatus::Unknown, false), &[], 0.0).unwrap();
         assert_eq!((s.text.as_str(), s.state.as_str()), ("#9", ""));
-        assert!(summary_of(&PullRequest::default(), &[]).is_none());
+        assert!(summary_of(&PullRequest::default(), &[], 0.0).is_none());
         assert!(is_merged_pr(Some(&pr(PrStatus::Merged, false))));
         assert!(!is_merged_pr(Some(&pr(PrStatus::Open, false))));
         assert!(!is_merged_pr(None));

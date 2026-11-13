@@ -72,11 +72,39 @@ pub enum SavedProject {
     Removed { removed: bool },
 }
 
-/// One CI check as the poller saves it.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+/// A check run's queue time as gh's answer is read when GitHub gives
+/// none: queued for a runner, time unknown. The poll replaces it with when
+/// it first saw the run waiting (pr_poll.rs `stamp_queued`) before it
+/// keeps the answer, so it is never saved.
+pub const UNTIMED: f64 = 0.0;
+
+/// One CI check as the poller saves it: its name, its state ("pass",
+/// "fail" or "pending"), and, so the core can time a check that hangs
+/// (prs.rs `stuck`), when it was queued and when it started, in
+/// epoch seconds. A state file from before the times were kept reads
+/// with none.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize, Serialize)]
 pub struct SavedCheck {
     pub name: String,
     pub state: String,
+    /// When a check still waiting for a runner was queued: GitHub's own
+    /// time when it gives one, else when the poll first saw it waiting
+    /// (pr_poll.rs). None once it has started, and for a run held at a
+    /// gate (an approval, a concurrency group), which never reads stuck.
+    /// `UNTIMED` only between gh's answer and the poll's stamp.
+    #[serde(
+        default,
+        deserialize_with = "crate::lenient::field",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub queued: Option<f64>,
+    /// When a running or finished check started (gh's `startedAt`).
+    #[serde(
+        default,
+        deserialize_with = "crate::lenient::field",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub started: Option<f64>,
 }
 
 /// A pull request as the poller saves it.

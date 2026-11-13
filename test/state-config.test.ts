@@ -203,6 +203,24 @@ test("validateState keeps only the newest MAX_ENTRIES per map", () => {
   assert.equal(kept[0], "w5");
 });
 
+test("validateState keeps a check's queue and start times, and drops a bad one", () => {
+  const pr = (checks: unknown[]) => ({
+    prs: { w: { number: 7, url: "https://github.com/o/r/pull/7", status: "open", branch: "feat", checks } },
+  });
+  const raw = pr([
+    { name: "mac", state: "pending", queued: 1794571200 },
+    { name: "check", state: "fail", started: 1794571140 },
+    { name: "old", state: "pass" },
+    { name: "bad", state: "pending", queued: "soon", started: -1 },
+  ]);
+  assert.deepEqual(validateState(raw).prs.w?.checks, [
+    { name: "mac", state: "pending", queued: 1794571200 },
+    { name: "check", state: "fail", started: 1794571140 },
+    { name: "old", state: "pass" },
+    { name: "bad", state: "pending" },
+  ]);
+});
+
 test("applySet sets, replaces and deletes an entry without changing its input", () => {
   const start = emptyState();
   const set = applySet(start, "projectOverride.w1", '"alpha"');

@@ -40,7 +40,7 @@ const native = (Array.isArray(effects) ? effects : []).find((e) => e && typeof e
   ?.SavePrs?.prs;
 
 describe("parsePrSave", () => {
-  it("reads the native effect's JSON, nulls and whole floats included, as the contract's PRs", () => {
+  it("reads the native effect's JSON, nulls, whole floats and a check's start included, as the contract's PRs", () => {
     assert.ok(native, "effects.json holds a SavePrs entry");
     const input = parsePrSave(JSON.stringify(native));
     assert.ok(input.ok);
@@ -52,7 +52,7 @@ describe("parsePrSave", () => {
         title: "Poll",
         additions: 3,
         deletions: 1,
-        checks: [{ name: "check", state: "pass" }],
+        checks: [{ name: "check", state: "pass", started: 1794571140 }],
       }),
     });
   });

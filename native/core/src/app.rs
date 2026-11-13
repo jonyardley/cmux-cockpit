@@ -531,11 +531,13 @@ impl Model {
     }
 
     /// Makes the poll's answers over the saved PRs, so a new frame or
-    /// state file never hides a fresher answer.
+    /// state file never hides a fresher answer, then reads their CI at
+    /// the frame's clock (ci_wait.rs), which a check goes stuck by.
     fn overlay(&mut self) {
         if let Some(data) = &self.data {
             let s = &mut self.session;
             s.pr_poll.overlay(&mut s.saved.prs, data);
+            s.tend_ci(data);
         }
     }
 

@@ -17,6 +17,7 @@ use indexmap::IndexMap;
 use serde_json::{Map, Value};
 
 use crate::activity::since_or_activity;
+use crate::ci_wait::{CI_KEY, ci_carrier};
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::js::{json_num, truthy};
 use crate::moves::{asks_nothing, quiet_turn, waiting_move};
@@ -112,8 +113,9 @@ fn wait_start(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> f64 {
 /// a nudge or a dismissal is never an ask.
 pub fn ask_reason(saved: &SavedState, a: Option<&Agent>, w: Option<&Workspace>) -> Option<String> {
     let a = a?;
-    // A stopped session asks nothing, whatever an old saved ask says.
-    if a.stopped.is_some() {
+    // A stopped session asks nothing, whatever an old saved ask says, and
+    // nor does one that only carries its workspace's CI.
+    if a.stopped.is_some() || a.ci.is_some() {
         return None;
     }
     fresh_ask(saved, a, w).map(|s| s.reason.clone())
@@ -189,20 +191,40 @@ impl Session {
 
     /// Whether Jon dismissed `a`'s wait that began at `start`.
     fn dismissed_at(&self, w: Option<&Workspace>, a: &Agent, start: f64) -> bool {
-        w.and_then(|w| self.dismissed.get(&w.id))
-            .and_then(|starts| starts.get(&a.id))
+        w.is_some_and(|w| self.dismissed_key(&w.id, &a.id, start))
+    }
+
+    /// Whether Jon dismissed the wait saved under `key` (an agent's id, or
+    /// `CI_KEY`) in workspace `ws` that began at `start`.
+    pub(crate) fn dismissed_key(&self, ws: &str, key: &str, start: f64) -> bool {
+        self.dismissed
+            .get(ws)
+            .and_then(|starts| starts.get(key))
             .is_some_and(|s| *s == start)
     }
 
-    fn is_dismissed(&self, w: Option<&Workspace>, a: &Agent) -> bool {
-        if let Some(stop) = self.stop_of(a, w) {
-            return self.dismissed_at(w, a, stop.since);
+    /// Every wait on Jon in the workspace, dismissed or not, by the key a
+    /// dismissal is saved under and when it began: its agents' asks, turns
+    /// and stops, and its CI's wait (ci_wait.rs).
+    fn waits(&self, w: &Workspace) -> IndexMap<String, f64> {
+        let mut waits = self.agent_waits(w);
+        if let Some(ci) = self.ci_waiting(w) {
+            waits.insert(CI_KEY.to_string(), ci.key);
         }
-        let turn = waiting_turn(&self.saved, a, w);
-        self.is_dismissed_with(w, a, turn.as_ref())
+        waits
     }
 
-    /// is_dismissed, with `a`'s waiting turn already read.
+    /// The agent half of `waits`: each agent really asking, by its id,
+    /// and when its wait began.
+    fn agent_waits(&self, w: &Workspace) -> IndexMap<String, f64> {
+        self.asking(Some(w))
+            .into_iter()
+            .map(|a| (a.id.clone(), self.wait_start_of(a, Some(w))))
+            .collect()
+    }
+
+    /// Whether Jon dismissed `a`'s needs_input or waiting turn, with that
+    /// turn already read.
     fn is_dismissed_with(
         &self,
         w: Option<&Workspace>,
@@ -220,15 +242,21 @@ impl Session {
         if !self.dismissed.contains_key(&w.id) {
             return;
         }
-        let live: IndexMap<String, f64> = self
-            .asking(Some(w))
-            .into_iter()
-            .map(|a| (a.id.clone(), self.wait_start_of(a, Some(w))))
-            .collect();
+        let live = self.agent_waits(w);
+        // CI's dismissal holds while its trouble does, whoever is on it,
+        // until a read shows the checks changed (ci_wait.rs).
+        let ci_holds = self
+            .dismissed
+            .get(&w.id)
+            .and_then(|starts| starts.get(CI_KEY))
+            .is_none_or(|key| self.ci_dismissal_holds(w, *key));
         let Some(by_agent) = self.dismissed.get_mut(&w.id) else {
             return;
         };
         by_agent.retain(|id, start| {
+            if id == CI_KEY {
+                return ci_holds;
+            }
             let reported = w.agent_list().any(|a| &a.id == id);
             !reported || live.get(id) == Some(start)
         });
@@ -241,7 +269,18 @@ impl Session {
     /// asking something of Jon reads as needs_input from its end, idle or
     /// nudged; any other needs_input reads as idle when it is a nudge,
     /// dismissed, or a turn that ended on "Nothing for you".
+    /// A finished one carries its workspace's CI wait, when that shows
+    /// (ci_wait.rs).
     pub fn effective_agent(&self, a: &Agent, w: Option<&Workspace>) -> Agent {
+        let own = self.own_agent(a, w);
+        match w {
+            Some(w) if self.carries_ci(w, &a.id) => self.with_ci(own, Some(w)),
+            _ => own,
+        }
+    }
+
+    /// `effective_agent` before CI: the agent's own wait, or none.
+    fn own_agent(&self, a: &Agent, w: Option<&Workspace>) -> Agent {
         // A stop comes first: nothing about the turn before it still holds.
         if let Some(stop) = self.stop_of(a, w) {
             return self.stopped_agent(a, w, stop);
@@ -252,7 +291,7 @@ impl Session {
                 stopped: None,
                 ..a.clone()
             };
-            return self.effective_agent(&plain, w);
+            return self.own_agent(&plain, w);
         }
         // Ahead of Running too: background work never hides a turn that
         // asks Jon something. A dismissed one reads as it would without it.
@@ -292,24 +331,51 @@ impl Session {
     /// A workspace's agents with nudges and dismissals applied, in the
     /// app's order. An agent sent with no status is left out (issue #7),
     /// and so is a dismissed session whose process went mid-turn.
+    /// A workspace with none left whose CI waits on Jon shows a stand-in
+    /// for the wait (ci_wait.rs).
     pub fn agents_of(&mut self, w: Option<&Workspace>) -> Vec<Agent> {
         let Some(w) = w else { return Vec::new() };
         self.prune(w);
+        let own = self.shown_agents(w);
+        let carrier = ci_carrier(&own).map(str::to_string);
+        let agents: Vec<Agent> = own
+            .into_iter()
+            .map(|a| {
+                if carrier.as_deref() == Some(a.id.as_str()) {
+                    self.with_ci(a, Some(w))
+                } else {
+                    a
+                }
+            })
+            .collect();
+        if agents.is_empty() {
+            return self.ci_stand_in(Some(w)).into_iter().collect();
+        }
+        agents
+    }
+
+    /// `agents_of` before CI and with no pruning: each agent's own wait.
+    pub(crate) fn shown_agents(&self, w: &Workspace) -> Vec<Agent> {
         w.agent_list()
             .filter(|a| a.status.is_some() && !self.is_dismissed_gone(a, Some(w)))
-            .map(|a| self.effective_agent(a, Some(w)))
+            .map(|a| self.own_agent(a, Some(w)))
             .collect()
     }
 
-    /// True while any agent in the workspace is really asking, dismissed or not.
+    /// True while anything in the workspace really waits on Jon, an
+    /// agent or its CI, dismissed or not.
     pub fn has_real_ask(&self, w: Option<&Workspace>) -> bool {
-        !self.asking(w).is_empty()
+        w.is_some_and(|w| !self.waits(w).is_empty())
     }
 
     /// True when dismissals are all that keep the workspace from showing needs you.
     pub fn is_needs_dismissed(&self, w: Option<&Workspace>) -> bool {
-        let list = self.asking(w);
-        !list.is_empty() && list.iter().all(|a| self.is_dismissed(w, a))
+        let Some(w) = w else { return false };
+        let waits = self.waits(w);
+        !waits.is_empty()
+            && waits
+                .iter()
+                .all(|(key, start)| self.dismissed_key(&w.id, key, *start))
     }
 
     /// Dismisses every real ask in the workspace; each comes back when that
@@ -317,13 +383,21 @@ impl Session {
     /// cannot stay hidden across reloads.
     pub fn dismiss_needs(&mut self, w: Option<&Workspace>) {
         let Some(w) = w else { return };
-        let starts: IndexMap<String, f64> = self
-            .asking(Some(w))
-            .into_iter()
-            .map(|a| (a.id.clone(), self.wait_start_of(a, Some(w))))
-            .collect();
+        let mut starts = self.waits(w);
         if starts.is_empty() {
             return;
+        }
+        // A CI wait dismissed earlier that still holds stays dismissed,
+        // though a session on it, or a frame that cannot read the PR,
+        // keeps it out of `waits` now.
+        let earlier = self
+            .dismissed
+            .get(&w.id)
+            .and_then(|starts| starts.get(CI_KEY))
+            .copied()
+            .filter(|key| self.ci_dismissal_holds(w, *key));
+        if let Some(key) = earlier {
+            starts.entry(CI_KEY.to_string()).or_insert(key);
         }
         let dated: Map<String, Value> = starts
             .iter()

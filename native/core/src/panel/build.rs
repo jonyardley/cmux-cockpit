@@ -21,8 +21,9 @@ use crate::status::{
 use crate::strip::{is_late, wait_secs};
 use crate::text::whole_words;
 use crate::theme::{Token, parse_hex};
+use crate::time::now_epoch;
 use crate::ui::QUIET_PILL;
-use crate::words::{RUNNING_WORD, WAITING_WORD, with_detail};
+use crate::words::{RUNNING_WORD, WAITING_WORD};
 
 use super::{
     AddMenu, AddProject, Anchor, Badge, Card, Chip, ChipKind, ChipsFor, DIRTY_MARK, DOT,
@@ -385,7 +386,7 @@ fn chips_row(
 /// status line after a "·"; here they have a line of their own, so they
 /// have none.
 fn compact_pr(session: &mut Session, data: &Data, w: Option<&Workspace>) -> Vec<Chip> {
-    let Some(pr) = pr_summary(&session.saved, w) else {
+    let Some(pr) = pr_summary(&session.saved, w, now_epoch(data)) else {
         return Vec::new();
     };
     let words = piece(
@@ -403,11 +404,16 @@ fn compact_pr(session: &mut Session, data: &Data, w: Option<&Workspace>) -> Vec<
 
 /// A row's PR: its number in its tone's ink (grey draft and closed, green
 /// open, purple merged) and its title. Only a row has one; a card's chips carry its PR.
-fn row_pr(session: &Session, w: Option<&Workspace>, density: Density) -> Option<RowPr> {
+fn row_pr(
+    session: &Session,
+    data: &Data,
+    w: Option<&Workspace>,
+    density: Density,
+) -> Option<RowPr> {
     if density != Density::Row {
         return None;
     }
-    let pr = pr_summary(&session.saved, w)?;
+    let pr = pr_summary(&session.saved, w, now_epoch(data))?;
     Some(RowPr {
         ink: pr_text_color(&pr, draft_of(&session.saved, w)),
         tag: pr.tag,
@@ -563,8 +569,8 @@ fn needs_status(
     wt: Waiting,
 ) -> (String, Token) {
     let detail = whole_words(&session.needs_detail(w), NEEDS_DETAIL_MAX);
-    if let Some(words) = session.stop_words_of(data, w) {
-        return (with_detail(&words, &detail), wt.ink);
+    if let Some(line) = session.wait_line(data, w, &detail) {
+        return (line, wt.ink);
     }
     if session.unlabelled(w) {
         return (detail, Token::Secondary);
@@ -697,7 +703,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         status_has_age: status_carries_age(density, waiting, looks.status_has_age),
         left_off,
         chips,
-        row_pr: row_pr(session, w, density),
+        row_pr: row_pr(session, data, w, density),
         detail,
         detail_ink,
         detail_lines: detail_lines(density),
@@ -936,9 +942,11 @@ fn projects(session: &mut Session, data: &Data, view: &ViewModel) -> Vec<Project
 mod tests {
     use super::*;
     use crate::Model;
+    use crate::ci_wait::CiTrouble;
     use crate::data::{Agent, AgentStatus};
     use crate::moves::MoveSize;
     use crate::persist::SavedState;
+    use crate::status::Status;
     use crate::ui::Urgency;
 
     fn style(dot: Option<Token>, ring: Option<Token>) -> StatusStyle {
@@ -1651,6 +1659,335 @@ mod tests {
         assert_eq!(core.session.agent_of(w).map(|a| a.id), Some("c".into()));
     }
 
+    /// The core after a frame at epoch `now` with one workspace "W" on
+    /// branch feat, whose PR #12 "Docs layout" has `checks` and whose
+    /// agents are `agents`, Jon on another workspace; `extra` is more of
+    /// the saved state's JSON (with a trailing comma).
+    fn ci_core(now: f64, agents: &str, checks: &str, extra: &str) -> Model {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = Model::default();
+        core.session.saved = crate::persist::SavedState::from_json(&format!(
+            r#"{{{extra} "prs": {{"W": {{"number": 12, "url": "https://github.com/o/r/pull/12",
+                "status": "open", "branch": "feat", "title": "Docs layout", "checks": {checks}}}}}}}"#
+        ))
+        .unwrap();
+        let _effects = Cockpit.update(Event::Data(ci_data(now, agents)), &mut core);
+        core
+    }
+
+    fn ci_data(now: f64, agents: &str) -> Data {
+        serde_json::from_str(&format!(
+            r#"{{"epoch": {now}, "workspaces": [
+                {{"id": "W", "title": "docs", "branch": "feat", "agents": [{agents}]}},
+                {{"id": "X", "title": "other", "selected": true}}]}}"#
+        ))
+        .unwrap()
+    }
+
+    /// A frame at epoch `now` with W's agents as `agents`.
+    fn ci_frame(core: &mut Model, now: f64, agents: &str) {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let _effects = Cockpit.update(Event::Data(ci_data(now, agents)), core);
+    }
+
+    const IDLE: &str = r#"{"id": "c", "kind": "claude", "status": "idle", "sinceEpoch": 900, "lastActivityAt": 900}"#;
+    const WORKING: &str = r#"{"id": "c", "kind": "claude", "status": "working", "sinceEpoch": 950, "lastActivityAt": 990}"#;
+    const FAILED: &str = r#"[{"name": "build", "state": "fail", "started": 800}]"#;
+
+    fn w_kind(core: &mut Model) -> StatusKind {
+        let data = core.data.clone().unwrap_or_default();
+        core.session.status_kind(&data, data.ws_by_id("W"))
+    }
+
+    /// W's PR chip words, as a compact card says them.
+    fn w_pr(core: &mut Model) -> String {
+        let data = core.data.clone().unwrap_or_default();
+        let w = data.ws_by_id("W");
+        let pr = pr_summary(&core.session.saved, w, now_epoch(&data)).unwrap();
+        core.session.card_pr_words(&data, w, &pr)
+    }
+
+    #[test]
+    fn red_ci_with_an_idle_session_waits_in_clay_naming_the_pr() {
+        let mut core = ci_core(1020.0, IDLE, FAILED, "");
+        let (card, needs) = w_card(&mut core);
+        assert_eq!(card.waiting, Some(Waiting::of(false)), "clay, never amber");
+        assert_eq!(w_line(&mut core), "CI failed, nobody fixing: Docs layout");
+        assert_eq!(card.status_ink, Token::ClayText);
+        assert_eq!(card.icon.ink, Some(Token::Clay));
+        assert_eq!(card.age, "2m", "from when the session went idle");
+        assert_eq!((needs.count, needs.fill), (1, Token::Clay));
+        assert_eq!(w_kind(&mut core), StatusKind::Ci(CiTrouble::Failing));
+        assert_eq!(w_pr(&mut core), "#12 · 1 failing");
+        // Half an hour on, the late chip.
+        let mut late = ci_core(900.0 + 1800.0, IDLE, FAILED, "");
+        let card = w_card(&mut late).0;
+        assert_eq!(card.late.map(|l| l.text), Some("waiting 30m".to_string()));
+    }
+
+    #[test]
+    fn red_ci_with_a_working_session_stays_out_as_that_session_owns_it() {
+        let mut core = ci_core(1020.0, WORKING, FAILED, "");
+        let (card, needs) = w_card(&mut core);
+        assert_eq!((card.waiting, needs.count), (None, 0));
+        assert_eq!(w_kind(&mut core), StatusKind::Plain(Status::Working));
+        // Idle, with a shell its chat started still running: on it too.
+        let shell = r#""background": {"W": [{"id": "b1", "type": "shell", "status": "running",
+            "description": "gh pr checks --watch", "session": "c", "startedEpoch": 950,
+            "seenEpoch": 1000}]},"#;
+        let mut watching = ci_core(1020.0, IDLE, FAILED, shell);
+        assert_eq!(w_card(&mut watching).1.count, 0);
+        // A second session idle beside the working one changes nothing.
+        let both = format!(
+            "{WORKING}, {}",
+            IDLE.replace(r#""id": "c""#, r#""id": "d""#)
+        );
+        let mut two = ci_core(1020.0, &both, FAILED, "");
+        assert_eq!(w_card(&mut two).1.count, 0);
+    }
+
+    #[test]
+    fn green_ci_waits_on_nobody() {
+        let pass = r#"[{"name": "build", "state": "pass", "started": 800}]"#;
+        let mut core = ci_core(5000.0, IDLE, pass, "");
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert_eq!(w_kind(&mut core), StatusKind::Plain(Status::Idle));
+    }
+
+    #[test]
+    fn a_check_queued_ten_minutes_joins_needs_you_as_stuck() {
+        let queued = r#"[{"name": "mac", "state": "pending", "queued": 1000}]"#;
+        let mut core = ci_core(1599.0, IDLE, queued, "");
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert_eq!(w_pr(&mut core), "#12 · running");
+        // The same saved PR, the clock moved on: no answer needed.
+        ci_frame(&mut core, 1600.0, IDLE);
+        let (card, needs) = w_card(&mut core);
+        assert_eq!(needs.count, 1);
+        assert_eq!(card.waiting, Some(Waiting::of(false)));
+        assert_eq!(w_line(&mut core), "CI stuck 10m: rerun Docs layout?");
+        assert_eq!(card.age, "<1m", "from when it went stuck");
+        assert_eq!(w_kind(&mut core), StatusKind::Ci(CiTrouble::Stuck));
+        assert_eq!(w_pr(&mut core), "#12 · stuck");
+        ci_frame(&mut core, 1000.0 + 40.0 * 60.0, IDLE);
+        assert_eq!(w_line(&mut core), "CI stuck 40m: rerun Docs layout?");
+    }
+
+    #[test]
+    fn a_check_running_past_45_minutes_joins_needs_you_as_stuck() {
+        let running = r#"[{"name": "mac", "state": "pending", "started": 1000}]"#;
+        let mut core = ci_core(1000.0 + 2699.0, IDLE, running, "");
+        assert_eq!(w_card(&mut core).1.count, 0);
+        ci_frame(&mut core, 1000.0 + 2700.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 1);
+        assert_eq!(w_line(&mut core), "CI stuck 45m: rerun Docs layout?");
+    }
+
+    #[test]
+    fn a_dismissed_ci_wait_holds_until_the_checks_change() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = ci_core(1020.0, IDLE, FAILED, "");
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert_eq!(w_kind(&mut core), StatusKind::Plain(Status::Idle));
+        assert_eq!(
+            core.session.pending.last(),
+            Some(&(
+                "dismissed.W".to_string(),
+                Some(serde_json::json!({"ci": 800}))
+            )),
+            "saved under the CI key, at the failed check's start"
+        );
+        let data = core.data.clone().unwrap_or_default();
+        let menu = core.session.card_menu(&data, data.ws_by_id("W"));
+        let restore = |m: &crate::menu::MenuItem| matches!(m, crate::menu::MenuItem::Item { label, .. } if label == "Restore needs you");
+        assert!(menu.iter().any(restore));
+        // Frames go on, a session works on it and stops again: still out.
+        ci_frame(&mut core, 1500.0, WORKING);
+        ci_frame(&mut core, 1600.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        // A rerun fails again, a later start: it waits again.
+        core.session.saved = crate::persist::SavedState::from_json(
+            r#"{"dismissed": {"W": {"ci": 800}}, "prs": {"W": {"number": 12,
+                "url": "https://github.com/o/r/pull/12", "status": "open", "branch": "feat",
+                "title": "Docs layout", "checks": [{"name": "build", "state": "fail", "started": 1550}]}}}"#,
+        )
+        .unwrap();
+        ci_frame(&mut core, 1700.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 1);
+        assert_eq!(
+            core.session.dismissed.get("W"),
+            None,
+            "the old dismissal is let go"
+        );
+    }
+
+    #[test]
+    fn a_ci_dismissal_outlasts_a_frame_where_the_pr_cannot_be_read() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = ci_core(1020.0, IDLE, FAILED, "");
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        // cmux reports W before its branch settles: no saved PR matches.
+        let unsettled = ci_data(1030.0, IDLE);
+        let mut unsettled: serde_json::Value = serde_json::to_value(&unsettled).unwrap();
+        unsettled["workspaces"][0]["branch"] = "main".into();
+        let unsettled: Data = serde_json::from_value(unsettled).unwrap();
+        let _effects = Cockpit.update(Event::Data(unsettled), &mut core);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        // Jon dismisses the session's own ask in that frame: the CI
+        // dismissal is kept beside it.
+        let asks = r#"{"id": "c", "kind": "claude", "status": "needs_input", "sinceEpoch": 1030, "lastActivityAt": 1030}"#;
+        let mut asking: serde_json::Value = serde_json::to_value(ci_data(1035.0, asks)).unwrap();
+        asking["workspaces"][0]["branch"] = "main".into();
+        let asking: Data = serde_json::from_value(asking).unwrap();
+        let _effects = Cockpit.update(Event::Data(asking), &mut core);
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(
+            core.session.pending.last(),
+            Some(&(
+                "dismissed.W".to_string(),
+                Some(serde_json::json!({"c": 1030, "ci": 800}))
+            ))
+        );
+        // Back on its branch with the same red checks: still dismissed.
+        ci_frame(&mut core, 1040.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 0, "the dismissal held");
+        // The PR read with no checks says nothing either way: kept.
+        let with_checks = |checks: &str| {
+            crate::persist::SavedState::from_json(&format!(
+                r#"{{"dismissed": {{"W": {{"ci": 800}}}}, "prs": {{"W": {{"number": 12,
+                "url": "https://github.com/o/r/pull/12", "status": "open", "branch": "feat",
+                "title": "Docs layout"{checks}}}}}}}"#
+            ))
+            .unwrap()
+        };
+        core.session.saved = with_checks("");
+        ci_frame(&mut core, 1050.0, IDLE);
+        assert!(core.session.dismissed.contains_key("W"), "no checks: kept");
+        // Checks read and green: let go.
+        core.session.saved =
+            with_checks(r#", "checks": [{"name": "build", "state": "pass", "started": 900}]"#);
+        ci_frame(&mut core, 1060.0, IDLE);
+        assert_eq!(core.session.dismissed.get("W"), None, "green lets it go");
+    }
+
+    #[test]
+    fn only_the_agent_the_card_speaks_through_carries_the_ci_wait() {
+        let ended = r#"{"id": "e", "kind": "claude", "status": "ended", "sinceEpoch": 500,
+            "lastActivityAt": 500, "surfaceId": "S1", "tabTitle": "old"}"#;
+        let idle = IDLE.replace('}', r#", "surfaceId": "S2", "tabTitle": "live"}"#);
+        let mut core = ci_core(1020.0, &format!("{ended}, {idle}"), FAILED, "");
+        let data = core.data.clone().unwrap_or_default();
+        let w = data.ws_by_id("W");
+        let shown: Vec<(String, Option<AgentStatus>, Option<CiTrouble>)> = core
+            .session
+            .agents_of(w)
+            .into_iter()
+            .map(|a| (a.id, a.status, a.ci))
+            .collect();
+        assert_eq!(
+            shown,
+            [
+                ("e".to_string(), Some(AgentStatus::Ended), None),
+                (
+                    "c".to_string(),
+                    Some(AgentStatus::NeedsInput),
+                    Some(CiTrouble::Failing)
+                ),
+            ],
+            "the ended one stays ended"
+        );
+        assert_eq!(
+            core.session.agent_tab_of(w),
+            None,
+            "one live session, no tab line"
+        );
+        let ended_agent = w
+            .and_then(|w| w.agent_list().find(|a| a.id == "e"))
+            .cloned();
+        assert_eq!(
+            ended_agent.map(|a| core.session.effective_agent(&a, w).status),
+            Some(Some(AgentStatus::Ended)),
+            "effective_agent agrees"
+        );
+        assert_eq!(w_line(&mut core), "CI failed, nobody fixing: Docs layout");
+        // Every session ended: the latest carries it.
+        let older = ended
+            .replace(r#""id": "e""#, r#""id": "f""#)
+            .replace("500", "400");
+        let mut gone = ci_core(1020.0, &format!("{older}, {ended}"), FAILED, "");
+        let data = gone.data.clone().unwrap_or_default();
+        let carriers: Vec<String> = gone
+            .session
+            .agents_of(data.ws_by_id("W"))
+            .into_iter()
+            .filter(|a| a.ci.is_some())
+            .map(|a| a.id)
+            .collect();
+        assert_eq!(carriers, ["e"]);
+        assert_eq!(w_card(&mut gone).1.count, 1);
+    }
+
+    #[test]
+    fn dismissing_another_wait_keeps_the_ci_dismissal() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = ci_core(1020.0, IDLE, FAILED, "");
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        // The session asks something, and Jon dismisses that too.
+        let asks = r#"{"id": "c", "kind": "claude", "status": "needs_input", "sinceEpoch": 1100, "lastActivityAt": 1100}"#;
+        ci_frame(&mut core, 1110.0, asks);
+        assert_eq!(w_card(&mut core).1.count, 1, "the ask waits");
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(
+            core.session.pending.last(),
+            Some(&(
+                "dismissed.W".to_string(),
+                Some(serde_json::json!({"c": 1100, "ci": 800}))
+            ))
+        );
+        // Idle again with the checks unchanged: the CI wait stays dismissed.
+        ci_frame(&mut core, 1200.0, IDLE);
+        assert_eq!(w_card(&mut core).1.count, 0);
+    }
+
+    #[test]
+    fn red_ci_with_no_session_left_waits_on_a_stand_in() {
+        use crate::{Cockpit, Event};
+        use crux_core::App;
+        let mut core = ci_core(1020.0, "", FAILED, "");
+        let (card, needs) = w_card(&mut core);
+        assert_eq!(needs.count, 1);
+        assert_eq!(card.waiting, Some(Waiting::of(false)));
+        assert_eq!(w_line(&mut core), "CI failed, nobody fixing: Docs layout");
+        assert_eq!(card.age, "3m", "from the failed check's start");
+        let _effects = Cockpit.update(Event::Dismiss { id: "W".into() }, &mut core);
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert_eq!(w_kind(&mut core), StatusKind::Plain(Status::None));
+    }
+
+    #[test]
+    fn an_asleep_workspace_never_waits_on_its_ci() {
+        let asleep = r#""asleep": {"W": {"surfaces": ["S"], "since": 1000}},"#;
+        let mut core = ci_core(1020.0, IDLE, FAILED, asleep);
+        assert_eq!(w_card(&mut core).1.count, 0);
+    }
+
+    #[test]
+    fn saved_checks_from_before_the_times_still_load_and_never_read_stuck() {
+        let old = r#"[{"name": "mac", "state": "pending"}]"#;
+        let mut core = ci_core(1e10, IDLE, old, "");
+        assert_eq!(w_card(&mut core).1.count, 0);
+        assert_eq!(w_pr(&mut core), "#12 · running");
+        let red = r#"[{"name": "build", "state": "fail"}]"#;
+        let mut core = ci_core(1020.0, IDLE, red, "");
+        assert_eq!(w_line(&mut core), "CI failed, nobody fixing: Docs layout");
+    }
+
     #[test]
     fn a_card_waiting_half_an_hour_or_more_says_so_in_clay() {
         let just = waited(29.0 * 60.0 + 59.0, false);
@@ -2102,7 +2439,7 @@ mod tests {
         let (r, q, none) = (ws("r"), ws("q"), ws("n"));
         let data = Data::default();
         assert_eq!(
-            row_pr(s, Some(&r), Density::Row),
+            row_pr(s, &data, Some(&r), Density::Row),
             Some(RowPr {
                 tag: "#171".into(),
                 title: "Row cards show their PR".into(),
@@ -2111,7 +2448,7 @@ mod tests {
             "a ready PR's number in the merge green, its title cleaned"
         );
         assert_eq!(
-            row_pr(s, Some(&q), Density::Row),
+            row_pr(s, &data, Some(&q), Density::Row),
             Some(RowPr {
                 tag: "#9".into(),
                 title: String::new(),
@@ -2119,10 +2456,10 @@ mod tests {
             }),
             "a quiet open PR's number in the open green, and no title"
         );
-        let ink = |id: &str| row_pr(s, Some(&ws(id)), Density::Row).map(|p| p.ink);
+        let ink = |id: &str| row_pr(s, &data, Some(&ws(id)), Density::Row).map(|p| p.ink);
         assert_eq!(ink("d"), Some(Token::MetaText), "a draft's number grey");
         assert_eq!(ink("m"), Some(Token::MergedText), "a merged one's purple");
-        assert_eq!(row_pr(s, Some(&none), Density::Row), None, "no PR");
+        assert_eq!(row_pr(s, &data, Some(&none), Density::Row), None, "no PR");
         let compact = compact_pr(s, &data, Some(&q));
         assert_eq!(
             compact[0].pieces[0].ink,
@@ -2134,7 +2471,11 @@ mod tests {
         let compact = compact_pr(s, &data, Some(&r));
         assert_eq!(compact[0].pieces[0].ink, Token::MergeText, "a ready one");
         for d in [Density::Full, Density::Compact] {
-            assert_eq!(row_pr(s, Some(&r), d), None, "{d:?}: its chips carry it");
+            assert_eq!(
+                row_pr(s, &data, Some(&r), d),
+                None,
+                "{d:?}: its chips carry it"
+            );
         }
     }
 

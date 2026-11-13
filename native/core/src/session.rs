@@ -222,6 +222,13 @@ pub struct Session {
     /// `saved.prs` on every read; a new state file never resets it.
     pub pr_poll: PrPoll,
 
+    /// Each workspace's CI trouble and whether anyone is on it, read once
+    /// a frame at its clock (ci_wait.rs `Session::tend_ci`).
+    pub(crate) ci: HashMap<String, crate::ci_wait::CiWait>,
+    /// `ci` has been read since the session began, so a CI dismissal
+    /// with no trouble behind it is stale rather than not read yet.
+    pub(crate) ci_read: bool,
+
     /// Sleep calls on their way and refusals to show (sleep.rs); the
     /// record of what sleeps is the state file's `asleep`.
     pub(crate) sleep: crate::sleep::Sleep,

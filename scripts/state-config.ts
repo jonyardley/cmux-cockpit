@@ -214,12 +214,17 @@ export interface SavedOwnPr {
 }
 
 /**
- * One CI check, cut down to three states so only a real change of state
- * (never a timestamp or a rerun's id) rewrites the file and rebuilds.
+ * One CI check, cut down to three states so a rerun's id never rewrites
+ * the file. The native poll also keeps when a check was queued and when
+ * it started (epoch seconds), so the Cockpit can tell a check stuck in the
+ * queue or running too long (#377). Each is set once per run, so a check
+ * moving from queued to running is the only extra write.
  */
 export interface SavedCheck {
   name: string;
   state: CheckState;
+  queued?: number;
+  started?: number;
 }
 
 export type CheckState = "pass" | "fail" | "pending";
@@ -519,7 +524,11 @@ const CHECK_STATES: readonly unknown[] = ["pass", "fail", "pending"];
 const isCheckState = (v: unknown): v is CheckState => CHECK_STATES.includes(v);
 
 function savedCheck(v: unknown): SavedCheck[] {
-  return isRecord(v) && isName(v.name) && isCheckState(v.state) ? [{ name: v.name, state: v.state }] : [];
+  if (!isRecord(v) || !isName(v.name) || !isCheckState(v.state)) return [];
+  const check: SavedCheck = { name: v.name, state: v.state };
+  if (isEpoch(v.queued)) check.queued = v.queued;
+  if (isEpoch(v.started)) check.started = v.started;
+  return [check];
 }
 
 const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
