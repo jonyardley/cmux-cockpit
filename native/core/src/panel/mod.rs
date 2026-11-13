@@ -173,6 +173,21 @@ impl Waiting {
             wash,
         }
     }
+
+    /// Whether its agent asks: its mark is Asking's amber, as `of` gave it.
+    pub fn asks(&self) -> bool {
+        self.mark == Token::Amber
+    }
+
+    /// The face and edge of a chip in this wait's colour, the move size
+    /// chip's on a waiting card; its words take `ink`.
+    pub fn chip(&self) -> (Token, Token) {
+        if self.asks() {
+            (Token::AmberChipFace, Token::AmberChipEdge)
+        } else {
+            (Token::ClayChipFace, Token::ClayChipEdge)
+        }
+    }
 }
 
 /// A wait that has lasted half an hour or more, as a chip in place of the
