@@ -146,7 +146,7 @@ function helpersBlock(): View {
 }
 
 // Types a fix prompt into the agent: only on a failed check, and only while
-// the agent can take typing (checks.ts fixTarget). Open chat's clay face.
+// the agent can take typing (checks.ts fixTarget). A clay face.
 function fixButton(e: () => CheckRow): View {
   return Text("Fix")
     .font(11)
@@ -230,22 +230,6 @@ function checksBlock(): View {
   );
 }
 
-// Selects the workspace and focuses the asking agent's terminal. One face,
-// no ring: a ring's rim would show round the hover colour.
-function openChatButton(): View {
-  return Text("Open chat")
-    .font(12)
-    .weight("semibold")
-    .color(T.onClay)
-    .lineLimit(1)
-    .paddingHorizontal(12)
-    .paddingVertical(4)
-    .background(T.clayButton)
-    .hoverBackground(T.clayButtonHover)
-    .cornerRadius(8)
-    .onTap(() => jump(cur().ws.id, currentAsk()?.a.surfaceId));
-}
-
 // Local to this panel: the cockpit's dismissals are not visible here (issue #3).
 function dismissButton(): View {
   return Text(() => currentAsk()?.dismissLabel ?? "Dismiss")
@@ -262,8 +246,9 @@ function dismissButton(): View {
 
 // The question, when the agent needs you: its words (none when there is only
 // the generic fallback or they may be another agent's), or how many agents
-// ask, then Open chat (only with a terminal to focus) and Dismiss. The title is
-// not repeated: the highlighted card on the left already shows it.
+// ask, then Dismiss. No button to open the chat: the panel already shows
+// the selected workspace, so its chat is the one on screen (#383). The
+// title is not repeated: the highlighted card on the left already shows it.
 function askBlock(): View {
   return when(
     "cur-ask",
@@ -281,14 +266,7 @@ function askBlock(): View {
               .truncation("tail")
               .frame({ maxWidth: "infinity", alignment: "leading" }),
         ),
-        HStack({ spacing: 6 }, [
-          when("cur-ask-open-chat", () => !!currentAsk()?.canOpenChat, openChatButton)
-            // Priority on the when() result, the HStack's child, so the label
-            // never wraps; a priority inside it does not reach this HStack.
-            .layoutPriority(2),
-          dismissButton(),
-          Spacer(),
-        ]).frame({ maxWidth: "infinity" }),
+        HStack({ spacing: 6 }, [dismissButton(), Spacer()]).frame({ maxWidth: "infinity" }),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
         .paddingTop(LINE_GAP),
