@@ -24,7 +24,8 @@ otherwise. Line numbers are as of `12d4303`.
 
 ## Principles
 
-1. **Hue only ever means state.** Clay is your turn, amber is asking, blue is
+1. **Hue only ever means state.** Clay is your turn (or a wait gone late,
+   [late wait](#late-wait)), amber is asking, blue is
    working, the olive green is finished, the vivid merge green is ready to
    merge, red is failing. Nothing decorative takes one of these hues.
 2. **Neutral ink for everything else.** Selection, lanes, headings, counts and
@@ -155,7 +156,10 @@ dark-mode screenshot; nothing here changes before then.
 
 Every unused colour has gone ([gap F](#known-gaps)): the core's
 `amberRowEdge` and `needsRowEdge`, and the sidebar's `Own.ground`,
-`Own.cardFace`, `Own.needsEdge` and `Own.needsHover`. The views test
+`Own.cardFace`, `Own.needsEdge` and `Own.needsHover`. A waiting card's
+edge and a waiting row's face are drawn again, from new core tokens
+(`clayCardEdge`, `amberCardEdge`, `clayWash`, `amberWash`, the
+[waiting card](#waiting-card)). The views test
 checks contrast on `Own.card`, the face cards are drawn on. The ten PR
 chip faces and edges (`redChipFace` to `mergedChipEdge`) are chosen by a
 core function nothing calls, so a PR's tone shows only in the ink of
@@ -660,7 +664,7 @@ Where: `Views/CardView.swift` (`ReadyPill`).
 ### Unread badge
 
 The unread count, white on grey in both appearances so clay only ever means
-your turn. `Font.tiny` 10 bold, not monospaced; the
+your turn or a late wait. `Font.tiny` 10 bold, not monospaced; the
 [count pill](#count-pill)'s shape (D1 a); `Own.badge` face, `Own.onBadge`
 ink. A card's title row, a dense row and the anchor badge draw the same
 view. Where: `Views/CardView.swift` (`UnreadBadge`).
@@ -869,14 +873,17 @@ Every card is decided as option a; where that changes a rule, the rule says
 
 1. **The core chooses state tokens; views draw them as given.** A view never
    names a state hue or state ink itself.
-   `grep -rnE "Token\.(clay|amber|blue|green|mergeGreen|greenDeep|clayText|amberText|blueText|greenText|mergeText|amberHalo|clayHalo|blueHalo)\b" Views`
+   `grep -rnE "Token\.(clay|amber|blue|green|mergeGreen|greenDeep|clayText|amberText|blueText|greenText|mergeText|amberHalo|clayHalo|blueHalo|clayChipFace|clayChipEdge|amberChipFace|amberChipEdge|clayCardEdge|amberCardEdge|clayWash|amberWash)\b" Views`
    should print only the progress bar's fill (`CardView.swift`
    `ProgressBar`, blue for working). Passes (D8 a): the waiting count, the
    Ready pill's ink, Next's ink (D9 a), the empty and Quiet pills, the
    halo, "Drop here" and the merge line all take the core's value, from
    panel model fields (`Needs.fill`, `Card.ready_ink`, the `NextLine`
    step's `ink`, `Lane.pill`, the Quiet row's `pill`, `Icon.halo`,
-   `Lane.drop_hint`, `Lane.merge_ink`).
+   `Lane.drop_hint`, `Lane.merge_ink`), and so do a
+   [waiting card](#waiting-card)'s edge, stripe and wash, a chip's face
+   and edge and the [late wait](#late-wait) chip (`Waiting.mark`,
+   `Waiting.edge`, `Waiting.wash`, `Chip.face`, `Chip.edge`, `Card.late`).
 2. **A state is a dot plus words, and the dot and the words are a fixed
    pair:** `blue`/`blueText` working, `clay`/`clayText` your turn,
    `amber`/`amberText` asking, `green`/`greenText` finished,
