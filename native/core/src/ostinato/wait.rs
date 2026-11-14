@@ -28,8 +28,8 @@ use crate::data::{Agent, AgentStatus, Data, Workspace};
 use crate::session::Session;
 use crate::text::clip;
 
-use super::RecordState;
 use super::run::RunState;
+use super::{Record, RecordState};
 
 /// The dismissal key a workspace's parks are saved under, beside its
 /// agents' ids and CI's. No session id takes this shape.
@@ -98,13 +98,8 @@ impl Session {
                 .values()
                 .any(|d| d.contains_key(OSTINATO_KEY))
         {
-            for (w, state) in &read {
-                let waiting: Vec<f64> = state
-                    .run
-                    .iter()
-                    .flat_map(|run| run.waiting.iter().map(|p| p.at))
-                    .collect();
-                self.carry_park_dismissal(data, w, &waiting);
+            for (w, _) in &read {
+                self.carry_park_dismissal(data, w);
             }
         }
         let mut found = std::collections::HashMap::new();
@@ -129,46 +124,47 @@ impl Session {
         self.park_cards = cards;
     }
 
-    /// Moves any park dismissal saved on another workspace in the
-    /// checkout onto `carrier`, the one carrying the record now, so a
-    /// dismissal follows the run rather than staying where it was made.
-    /// One left on a workspace open on no main checkout (closed, before a
-    /// restart even) moves too when its key is one of `waiting`, the
-    /// record's waiting parks' times: a key is the time of a park it was
-    /// made on, so it names its record. Two meet as the later key, which
-    /// covers what both did. A dismissal saved before this moves the same
-    /// way.
-    fn carry_park_dismissal(&mut self, data: &Data, carrier: &Workspace, waiting: &[f64]) {
-        let mut from: Vec<String> = self
-            .in_checkout(data, carrier)
-            .into_iter()
-            .map(|other| other.id.clone())
-            .collect();
-        let stray: Vec<String> = self
+    /// Moves each park dismissal made on this record's parks, wherever
+    /// it is saved, onto `carrier`, the workspace carrying the record now,
+    /// so a dismissal follows the run rather than staying where it was
+    /// made: on another workspace in the checkout, or one that has closed
+    /// (before a restart even). A dismissal's key is the time of a park
+    /// it was made on, so the record that parked then is its own; one
+    /// with no such park here stays where it is. A workspace open on a
+    /// checkout whose own record also parked then keeps its dismissal,
+    /// so two records that parked in the same second never trade one
+    /// back and forth. Two meet as the later key, which covers what both
+    /// did. A dismissal saved before this moves the same way.
+    fn carry_park_dismissal(&mut self, data: &Data, carrier: &Workspace) {
+        let Some(record) = carrier
+            .directory
+            .as_deref()
+            .and_then(|d| self.ostinato.record_for(d))
+        else {
+            return;
+        };
+        let from: Vec<String> = self
             .dismissed
             .iter()
-            .filter(|(_, d)| d.get(OSTINATO_KEY).is_some_and(|k| waiting.contains(k)))
-            .filter(|(id, _)| !self.on_main_checkout(data, id))
+            .filter(|(id, _)| **id != carrier.id)
+            .filter_map(|(id, d)| d.get(OSTINATO_KEY).map(|key| (id, *key)))
+            .filter(|(id, key)| {
+                record.parked_at(*key) && !self.parked_elsewhere(data, id, *key, record)
+            })
             .map(|(id, _)| id.clone())
             .collect();
-        for id in stray {
-            if !from.contains(&id) {
-                from.push(id);
-            }
-        }
-        from.retain(|id| *id != carrier.id && self.park_dismissal(id).is_some());
         for id in from {
             self.move_park_dismissal(&id, &carrier.id);
         }
     }
 
-    /// Whether workspace `ws` is open on a main checkout Ostinato knows:
-    /// a dismissal there is its own record's, to move only in its checkout.
-    fn on_main_checkout(&self, data: &Data, ws: &str) -> bool {
+    /// Whether workspace `ws` is open on a main checkout whose own record,
+    /// not `record`, parked at `key` too.
+    fn parked_elsewhere(&self, data: &Data, ws: &str, key: f64, record: &Record) -> bool {
         data.ws_by_id(ws)
             .and_then(|w| w.directory.as_deref())
-            .and_then(|d| self.ostinato.repo_of(d))
-            .is_some()
+            .and_then(|d| self.ostinato.record_for(d))
+            .is_some_and(|own| !std::ptr::eq(own, record) && own.parked_at(key))
     }
 
     /// Moves workspace `from`'s park dismissal to workspace `to`, saving
@@ -941,7 +937,7 @@ mod tests {
     }
 
     #[test]
-    fn a_stray_dismissal_that_names_no_waiting_park_stays_where_it_is() {
+    fn a_stray_dismissal_that_names_no_park_here_stays_where_it_is() {
         // Its key is no park of this record: another record's, say.
         let other = at("2026-11-10T09:31:10Z") - 60.0;
         let json = format!(r#"{{"dismissed": {{"gone": {{"ostinato": {other}}}}}}}"#);
@@ -952,30 +948,68 @@ mod tests {
         assert_eq!(written(&m, "dismissed.gone"), None);
     }
 
-    #[test]
-    fn a_dismissal_on_another_checkout_stays_there_though_its_key_matches() {
-        // w2 is open on another main checkout: its dismissal is that
-        // record's, to move only there.
-        let park = at("2026-11-10T09:31:10Z");
-        let json = format!(r#"{{"dismissed": {{"w2": {{"ostinato": {park}}}}}}}"#);
+    /// A model as the sidebar's core over the state file `json` and four
+    /// workspaces: `w` (idle agent "a") and `w2` on /dev/notes-app, then
+    /// `w3` and `w4` on /dev/other-app, whose record parked
+    /// other-app#7 at `other_park`.
+    fn two_checkouts(json: &str, other_park: &str) -> Model {
         let mut d = two_frame();
         if let Some(ws) = d.workspaces.as_mut() {
-            for x in ws.iter_mut().filter(|x| x.id == "w2") {
-                x.directory = Some("/dev/other-app".into());
+            for id in ["w3", "w4"] {
+                ws.push(Workspace {
+                    id: id.into(),
+                    directory: Some("/dev/other-app".into()),
+                    ..Workspace::default()
+                });
             }
         }
-        let saved = crate::persist::SavedState::from_json(&json).unwrap();
+        let other: String = PARKED
+            .lines()
+            .take(5)
+            .collect::<Vec<_>>()
+            .join("\n")
+            .replace("notes-app", "other-app")
+            .replace("#41", "#7")
+            .replace("2026-11-10T09:31:10Z", other_park);
+        let mut f = feed(5);
+        f.records.insert(
+            "example/other-app".into(),
+            RecordText::from_bytes(other.as_bytes()),
+        );
+        f.checkouts
+            .insert("/dev/other-app".into(), "example/other-app".into());
+        let saved = crate::persist::SavedState::from_json(json).unwrap();
         let mut m = sidebar(Model {
             session: Session::new(Vec::new(), saved),
             ..Model::default()
         });
-        let mut f = feed(5);
-        f.checkouts
-            .insert("/dev/other-app".into(), "example/other-app".into());
         let _ = Cockpit.update(Event::Ostinato(Box::new(f)), &mut m);
         let _ = Cockpit.update(Event::Data(d), &mut m);
+        m
+    }
+
+    #[test]
+    fn a_dismissal_on_another_checkout_goes_to_its_own_record_and_hides_nothing_there() {
+        // w4, on other-app's checkout, holds notes-app's dismissal (it was
+        // open on notes-app's when it was made). other-app#7 parked
+        // earlier than that key, so on w3 it would hide #7.
+        let park = at("2026-11-10T09:31:10Z");
+        let json = format!(r#"{{"dismissed": {{"w4": {{"ostinato": {park}}}}}}}"#);
+        let mut m = two_checkouts(&json, "2026-11-10T09:20:00Z");
+        assert_eq!(park_dismissals(&m), [("w".to_string(), park)]);
+        assert_eq!(needs(&mut m), ["w3"], "#7 waits on other-app's carrier");
+    }
+
+    #[test]
+    fn two_records_that_parked_in_the_same_second_keep_their_own_dismissals() {
+        // Both records parked at 09:31:10: w3's dismissal is its own
+        // record's, and stays, written nowhere.
+        let park = at("2026-11-10T09:31:10Z");
+        let json = format!(r#"{{"dismissed": {{"w3": {{"ostinato": {park}}}}}}}"#);
+        let mut m = two_checkouts(&json, "2026-11-10T09:31:10Z");
+        assert_eq!(park_dismissals(&m), [("w3".to_string(), park)]);
+        assert_eq!(written(&m, "dismissed.w3"), None);
         assert_eq!(needs(&mut m), ["w"]);
-        assert_eq!(park_dismissals(&m), [("w2".to_string(), park)]);
     }
 
     #[test]

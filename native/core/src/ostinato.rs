@@ -84,6 +84,14 @@ impl Record {
         }
     }
 
+    /// Whether a line of it parked an item at epoch `at`: a park
+    /// dismissal's key is always such a time, so the key names its record.
+    pub(crate) fn parked_at(&self, at: f64) -> bool {
+        self.lines
+            .iter()
+            .any(|l| l.at == at && matches!(l.event, Event::Parked { .. }))
+    }
+
     /// Where it stands at epoch `now`.
     pub fn state(&self, now: f64) -> RecordState {
         RecordState {
@@ -614,5 +622,16 @@ mod tests {
         let _ = app.update(Input::Ostinato(Box::new(feed("/dev/app-one"))), &mut m);
         let _ = app.update(Input::State(Box::default()), &mut m);
         assert!(m.session.ostinato.record_for("/dev/app-one").is_some());
+    }
+
+    #[test]
+    fn a_park_dismissal_key_names_the_record_that_parked_then() {
+        let r = record(PARKED);
+        assert!(r.parked_at(at("2026-11-10T09:31:10Z")), "#41 parked then");
+        assert!(
+            !r.parked_at(at("2026-11-10T09:31:12Z")),
+            "an attempt ended then"
+        );
+        assert!(!r.parked_at(at("2026-11-10T09:31:11Z")));
     }
 }

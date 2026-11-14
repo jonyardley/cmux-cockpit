@@ -697,8 +697,10 @@ dismissed; "Restore needs you" brings a dismissed one back. The
 dismissal follows the run: when another workspace in the checkout
 carries it (the one it was made on fell asleep or closed), the parks stay
 dismissed there, and "Restore needs you" on that card brings them back.
-One left on a workspace that closed, even before a restart, moves to the
-carrier while the park it was made on still waits. A dismissed
+A dismissal moves only to the record whose park it was made on, from
+wherever it is saved: a workspace that closed, even before a restart,
+or one since opened on another checkout, whose own parks it never
+hides. A dismissed
 park no longer keeps the card from reading Ready, since it can stand for
 days, until its item is picked again. While a park shows, its question
 is on the card, so a card mid-run can sit in Needs you for an earlier
