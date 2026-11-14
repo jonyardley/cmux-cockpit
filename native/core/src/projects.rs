@@ -4,6 +4,8 @@
 //! that overrides the path match (the project-of-a-workspace part of
 //! src/cockpit/by-project.ts; by_project.rs has the rest).
 
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -191,13 +193,39 @@ pub fn is_project_key(projects: &[Project], key: &str) -> bool {
     projects.iter().any(|p| p.id() == key)
 }
 
+/// The folder beside a project's where worktrunk puts its worktrees.
+const WORKTREES_SUFFIX: &str = "-worktrees/";
+
+/// True when `d` (lowercased, ending "/") sits in folder match `m`'s
+/// worktrees folder ("/dev/app/" takes "/dev/app-worktrees/"). False for a
+/// match that is not a folder. Lowercases `m` only when it has capitals.
+fn in_worktrees_of(d: &str, m: &str) -> bool {
+    let m: Cow<str> = if m.chars().any(char::is_uppercase) {
+        Cow::Owned(m.to_lowercase())
+    } else {
+        Cow::Borrowed(m)
+    };
+    let Some(base) = m.strip_suffix('/').filter(|b| !b.is_empty()) else {
+        return false;
+    };
+    d.match_indices(base)
+        .any(|(i, _)| d[i + base.len()..].starts_with(WORKTREES_SUFFIX))
+}
+
 /// The matching project, or None when none matches. The trailing "/" lets
-/// a folder match ("/dev/app/") skip "/dev/app-old".
+/// a folder match ("/dev/app/") skip "/dev/app-old". A folder match also
+/// takes its worktrees folder ("/dev/app-worktrees/"), after every direct
+/// match, so a project made for that folder itself still wins.
 pub fn project_of<'p>(projects: &'p [Project], directory: Option<&str>) -> Option<&'p Project> {
     let d = format!("{}/", directory.unwrap_or_default().to_lowercase());
     projects
         .iter()
         .find(|p| p.matches_of().iter().any(|m| d.contains(m.as_str())))
+        .or_else(|| {
+            projects
+                .iter()
+                .find(|p| p.matches_of().iter().any(|m| in_worktrees_of(&d, m)))
+        })
 }
 
 /// A workspace's project: the Move to project choice while it names a
@@ -284,6 +312,28 @@ mod tests {
         assert_eq!(project_of(&t, None), None);
         assert!(is_project_key(&t, "/dev/two"));
         assert!(!is_project_key(&t, "/.config/two"));
+    }
+
+    #[test]
+    fn a_folder_match_takes_its_worktrees_folder_after_any_direct_match() {
+        let t: Vec<Project> = serde_json::from_str(
+            r##"[{"match": "/users/x/dev/osti/", "name": "Osti", "color": "#000000", "icon": "x"},
+                {"match": "/users/x/dev/osti-worktrees/own/", "name": "Own", "color": "#000000", "icon": "x"}]"##,
+        )
+        .unwrap();
+        let of = |d: &str| project_of(&t, Some(d)).map(|p| p.name.as_str());
+        assert_eq!(of("/Users/x/Dev/Osti-worktrees/fix-quotes"), Some("Osti"));
+        assert_eq!(of("/Users/x/Dev/Osti-worktrees/own"), Some("Own"));
+        assert_eq!(of("/Users/x/Dev/Osti-old"), None);
+        assert_eq!(of("/Users/x/Dev/Osti-worktreesish/a"), None);
+        let caps: Vec<Project> = serde_json::from_str(
+            r##"[{"match": "/Users/x/Dev/Pianola/", "name": "Pianola", "color": "#000000", "icon": "x"}]"##,
+        )
+        .unwrap();
+        assert_eq!(
+            project_of(&caps, Some("/users/x/dev/pianola-worktrees/a")).map(|p| p.name.as_str()),
+            Some("Pianola")
+        );
     }
 
     #[test]
