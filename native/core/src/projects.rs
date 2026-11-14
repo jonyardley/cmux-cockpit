@@ -4,6 +4,8 @@
 //! that overrides the path match (the project-of-a-workspace part of
 //! src/cockpit/by-project.ts; by_project.rs has the rest).
 
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -192,13 +194,22 @@ pub fn is_project_key(projects: &[Project], key: &str) -> bool {
 }
 
 /// The folder beside a project's where worktrunk puts its worktrees.
-pub const WORKTREES_SUFFIX: &str = "-worktrees/";
+const WORKTREES_SUFFIX: &str = "-worktrees/";
 
-/// A folder match's worktrees folder ("/dev/app/" gives
-/// "/dev/app-worktrees/"), or None for a match that is not a folder.
-fn worktrees_of(m: &str) -> Option<String> {
-    let base = m.strip_suffix('/')?;
-    (!base.is_empty()).then(|| format!("{base}{WORKTREES_SUFFIX}"))
+/// True when `d` (lowercased, ending "/") sits in folder match `m`'s
+/// worktrees folder ("/dev/app/" takes "/dev/app-worktrees/"). False for a
+/// match that is not a folder. Lowercases `m` only when it has capitals.
+fn in_worktrees_of(d: &str, m: &str) -> bool {
+    let m: Cow<str> = if m.chars().any(char::is_uppercase) {
+        Cow::Owned(m.to_lowercase())
+    } else {
+        Cow::Borrowed(m)
+    };
+    let Some(base) = m.strip_suffix('/').filter(|b| !b.is_empty()) else {
+        return false;
+    };
+    d.match_indices(base)
+        .any(|(i, _)| d[i + base.len()..].starts_with(WORKTREES_SUFFIX))
 }
 
 /// The matching project, or None when none matches. The trailing "/" lets
@@ -211,12 +222,9 @@ pub fn project_of<'p>(projects: &'p [Project], directory: Option<&str>) -> Optio
         .iter()
         .find(|p| p.matches_of().iter().any(|m| d.contains(m.as_str())))
         .or_else(|| {
-            projects.iter().find(|p| {
-                p.matches_of()
-                    .iter()
-                    .filter_map(|m| worktrees_of(m))
-                    .any(|w| d.contains(w.as_str()))
-            })
+            projects
+                .iter()
+                .find(|p| p.matches_of().iter().any(|m| in_worktrees_of(&d, m)))
         })
 }
 
@@ -318,6 +326,14 @@ mod tests {
         assert_eq!(of("/Users/x/Dev/Osti-worktrees/own"), Some("Own"));
         assert_eq!(of("/Users/x/Dev/Osti-old"), None);
         assert_eq!(of("/Users/x/Dev/Osti-worktreesish/a"), None);
+        let caps: Vec<Project> = serde_json::from_str(
+            r##"[{"match": "/Users/x/Dev/Pianola/", "name": "Pianola", "color": "#000000", "icon": "x"}]"##,
+        )
+        .unwrap();
+        assert_eq!(
+            project_of(&caps, Some("/users/x/dev/pianola-worktrees/a")).map(|p| p.name.as_str()),
+            Some("Pianola")
+        );
     }
 
     #[test]
