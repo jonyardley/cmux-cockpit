@@ -454,7 +454,7 @@ impl Feed {
     }
 
     /// The folders of the workspaces in the latest frame, each once, with
-    /// no trailing slash, for the Ostinato watch to ask git about.
+    /// no trailing slash, for the Ostinato watch to look up.
     pub fn open_folders(&self) -> Vec<String> {
         let mut dirs: Vec<String> = self
             .inputs
