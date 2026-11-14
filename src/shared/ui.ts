@@ -80,8 +80,11 @@ export function projectBadge(p: () => Project, size: number, font: number, radiu
  * face sits inset by the edge width. A borderWidth stroke is clipped by the
  * corner radius and thins out round every corner. `hug` keeps the face at
  * its content width (chips, buttons) instead of filling the row. Without
- * it the full-width frame comes before the face, so the face reaches the
- * edge whether or not the content fills its own width (issue #93).
+ * it, `view` must fill its own width: a stack holding a full-width child
+ * or a Spacer. cmux applies a node's background before its frame whatever
+ * the chain order, so the full-width frame added here widens the node
+ * after the face is painted, and the face of a bare Text hugs the word
+ * (issue #397).
  */
 export function ring(
   view: View,

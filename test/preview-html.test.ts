@@ -24,15 +24,15 @@ it("lays a stack out as flex with its spacing and alignment", () => {
   assert.equal(out, '<div class="row" style="gap:6px;align-items:flex-start"><div class="t">a</div></div>');
 });
 
-it("wraps each layout modifier round what came before, in call order", () => {
+it("wraps each layout modifier round what came before, in cmux's fixed order", () => {
   const out = body(
     node(
       "Text",
       ["a"],
       [
-        ["color", "#112233"],
-        ["padding", 4],
         ["background", "#FFEEDD"],
+        ["padding", 4],
+        ["color", "#112233"],
       ],
     ),
   );
@@ -40,6 +40,54 @@ it("wraps each layout modifier round what came before, in call order", () => {
     out,
     '<div class="w" style="background:#FFEEDD"><div class="w" style="padding:4px"><div class="t" style="color:#112233">a</div></div></div>',
   );
+});
+
+it("lets a background hug the content even when a frame was chained before it", () => {
+  const framed = (mods: [string, unknown?][]): string => body(node("Text", ["a"], mods));
+  const before = framed([
+    ["frame", { maxWidth: "infinity" }],
+    ["background", "#FFEEDD"],
+  ]);
+  const after = framed([
+    ["background", "#FFEEDD"],
+    ["frame", { maxWidth: "infinity" }],
+  ]);
+  assert.equal(before, after);
+  assert.match(before, /^<div class="w fw" style="align-items:flex-start"><div class="w" style="background:#FFEEDD">/);
+});
+
+it("places a maxWidth frame's content leading whatever alignment it asks for", () => {
+  const out = body(node("Text", ["a"], [["frame", { maxWidth: "infinity", alignment: "center" }]]));
+  assert.match(out, /^<div class="w fw" style="align-items:flex-start">/);
+});
+
+it("merges a second frame on one node into the first, key by key", () => {
+  const out = body(
+    node(
+      "Text",
+      ["a"],
+      [
+        ["frame", { maxWidth: "infinity", height: 20 }],
+        ["frame", { height: 24 }],
+      ],
+    ),
+  );
+  assert.match(out, /^<div class="w fw" style="height:24px[^"]*"><div class="w fw" style="align-items:flex-start">/);
+  assert.doesNotMatch(out, /height:20px/);
+});
+
+it("keeps only the last of a repeated modifier", () => {
+  const out = body(
+    node(
+      "Text",
+      ["a"],
+      [
+        ["background", "#111111"],
+        ["background", "#222222"],
+      ],
+    ),
+  );
+  assert.equal(out, '<div class="w" style="background:#222222"><div class="t">a</div></div>');
 });
 
 it("marks a maxWidth: infinity frame, and the stack holding it, as filling", () => {
