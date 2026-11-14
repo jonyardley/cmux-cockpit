@@ -3,15 +3,19 @@
 // selected workspace, plus what belongs to no single card. Two tabs at the
 // top (#397), remembered per workspace until reload: Now, the sections
 // below, and Details (views/details.ts), the selected workspace's whole
-// story: every session, helper and check, its move, ports and pages.
+// story: what the Cockpit has waiting on Jon, every session, helper and
+// check, its move, ports and pages.
 // Now's sections:
 //   This workspace - the selected workspace in detail (views/current.ts),
 //                    headed with its project; its name is the highlighted
 //                    card on the left. What that card has no room for: its
 //                    agent's latest message, running helpers, ports, the PR
 //                    and its checks, and a faint branch footer. When its
-//                    agent needs you, the card carries the question and
-//                    Dismiss (local to this panel, src/shared/needs.ts); no
+//                    agent needs you, or a wait the Cockpit saved
+//                    (src/shared/waits.ts), the card carries the question,
+//                    and Dismiss for an agent's own ask (local to this
+//                    panel, src/shared/needs.ts; the Cockpit dismisses its
+//                    saved waits); no
 //                    Open chat, as its chat is the one on screen (#383).
 //                    No Allow/Deny: that needs the real diff/tool-call
 //                    payload, which this data context does not carry, so it

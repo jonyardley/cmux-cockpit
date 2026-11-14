@@ -3,19 +3,20 @@
 // tab shows is panel state, remembered per workspace until reload; the rest
 // are pure reads of `data` and the saved state, so each is testable alone.
 
-import type { SavedCheck } from "../../scripts/state-config.ts";
+import type { SavedCheck, SavedWait } from "../../scripts/state-config.ts";
 import type { Last } from "../shared/list.ts";
 import { markLast } from "../shared/list.ts";
 import { asksNothing, waitingMove } from "../shared/move.ts";
 import { askReason } from "../shared/needs.ts";
 import { checksOf, diffText, prOf } from "../shared/prs.ts";
 import { ageSince } from "../shared/time.ts";
-import { withAge } from "../shared/words.ts";
+import { waitDetail } from "../shared/waits.ts";
+import { WAIT_WORD, withAge } from "../shared/words.ts";
 import { backgroundRows } from "./background.ts";
 import { keyedChecks } from "./checks.ts";
 import { markLastBefore } from "./lists.ts";
 import { madeOwn } from "./made.ts";
-import { cur, current, currentPr } from "./model.ts";
+import { cur, current, currentPr, currentWaited } from "./model.ts";
 import { agentLabels, type SubagentRow, subagents } from "./team.ts";
 import { STATUS_DOT, T } from "./theme.ts";
 
@@ -257,15 +258,48 @@ export const portRows = computed((): Last<PortRow>[] =>
   markLast((cur().ws.ports ?? []).map((n) => ({ key: "p" + n, label: ":" + n, url: "http://localhost:" + n }))),
 );
 
+// ---- Waiting on you -------------------------------------------------------------
+
+export interface WaitRow {
+  key: string;
+  /** "CI stuck", "Stopped", "Ready to merge". */
+  word: string;
+  /** How long it has waited, "40m"; "" without a clock. */
+  age: string;
+  /** "build queued at 11:20, no runner since", "Codex, on an error"; "" with nothing to say. */
+  detail: string;
+}
+
+/** The Cockpit's saved waits on Jon that land on the selected workspace
+ * as its card shows them (shared/waits.ts), in the saved order: a stop by
+ * its session, then CI, then the park. */
+export const waitRows = computed((): Last<WaitRow>[] => {
+  const { ws, inOrder } = cur();
+  const labels = agentLabels(inOrder);
+  // A stop names its session as the Sessions card does: "Codex, on an error".
+  const detail = (v: SavedWait): string =>
+    [v.agent ? labels.get(v.agent) : "", waitDetail(v, ws)].filter(Boolean).join(", ");
+  return markLast(
+    currentWaited().shown.map((v) => ({
+      key: `w:${v.kind}:${v.agent ?? ""}`,
+      word: WAIT_WORD[v.kind],
+      age: ageSince(v.since),
+      detail: detail(v),
+    })),
+  );
+});
+
 // ---- Which cards show ---------------------------------------------------------------
 
 /** The Details tab's cards, in the issue's order, Background work after
- * the move as the plan's mock-up has it (#398). */
-export type DetailsCard = "sessions" | "helpers" | "pr" | "move" | "background" | "ports" | "made";
+ * the move as the plan's mock-up has it (#398), and what waits on Jon
+ * first, since it asks something of him (#388). */
+export type DetailsCard = "waits" | "sessions" | "helpers" | "pr" | "move" | "background" | "ports" | "made";
 
 /** Whether each card shows: the view mounts each card by its entry here,
  * and the note below reads the same entries, so the two cannot drift. */
 export const cardShows: Readonly<Record<DetailsCard, () => boolean>> = {
+  waits: () => waitRows().length > 0,
   sessions: () => sessionRows().length > 0,
   helpers: () => helperRows().length > 0,
   pr: () => !!currentPr(),

@@ -4,7 +4,7 @@
 // Who is working and who is idle lives on the cockpit's cards, not here.
 // Pure reads of `data`, so each is testable alone.
 
-import { byActivity } from "../shared/activity.ts";
+import { byActivity, mostActive } from "../shared/activity.ts";
 import { prFreshness } from "../shared/freshness.ts";
 import { agentsOf, askReason } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
@@ -16,6 +16,7 @@ import { runningFor, shownStatus } from "../shared/running.ts";
 import { cardMessage, promptText } from "../shared/text.ts";
 import { ageSince, finishedAt, nowEpoch } from "../shared/time.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
+import { type Waited, waitLine, waitsFor, withWaits } from "../shared/waits.ts";
 import { ASKING_WORD, NO_AGENT_WORD, RUNNING_WORD, runningText, STATUS_WORD, withAge } from "../shared/words.ts";
 import { STATUS_DOT, T } from "./theme.ts";
 
@@ -58,36 +59,53 @@ export interface Ask {
   /** The line over Dismiss: "2 agents need you" when several do,
    * else why it is asking ("allow git push?"), else the agent's words, or
    * "" when there are none beyond the generic "waiting for your reply", or
-   * when they may be another agent's. */
+   * when they may be another agent's. A saved wait alone says itself
+   * ("CI stuck: build queued at 11:20, no runner since"). */
   text: string;
-  /** How many agents in the workspace are asking. */
+  /** How many wait on Jon in the workspace: its asking agents, and the
+   * Cockpit's saved waits that land on no agent already asking. */
   count: number;
-  /** Dismiss clears every ask in the workspace, so it says so when there are several. */
+  /** Dismiss clears every ask in the workspace, so it says so when there
+   * are several; "" when only the Cockpit's saved waits ask, which only
+   * the Cockpit dismisses. */
   dismissLabel: string;
 }
 
 // The workspace's latestMessage is workspace-wide (Agent carries no message
 // of its own), so it is the asker's words only when no other live agent
 // could have written it.
-function askText(c: Current, count: number): string {
-  if (count > 1) return `${count} agents need you`;
+function askText(c: Current, own: number, waited: Waited): string {
+  const count = own + waited.added.length;
+  if (count > 1) return own === count ? `${count} agents need you` : `${count} things wait on you`;
+  const wait = waited.added[0];
+  if (wait) return waitLine(wait, c.ws);
   const reason = askReason(c.a, c.ws);
   if (reason) return reason;
   const live = c.agents.filter((a) => a.status !== "ended").length;
   return live === 1 ? cardMessage(c.ws) : "";
 }
 
+/** The selected workspace's agents with the Cockpit's saved waits laid on
+ * them (shared/waits.ts), as its card reads them. */
+export const currentWaited = computed((): Waited => {
+  const c = cur();
+  return withWaits(c.agents, waitsFor(c.ws.id));
+});
+
 /** Whether the selected workspace needs you, by the Needs you strip's rule:
  * its most active agent reads needs_input once nudges and dismissals are
- * applied (src/shared/needs.ts). Null otherwise. */
+ * applied (src/shared/needs.ts) and the Cockpit's saved waits laid on, or
+ * a saved wait stands in for an agent it has none of. Null otherwise. */
 export const currentAsk = computed((): Ask | null => {
   const c = current();
-  if (c?.a?.status !== "needs_input") return null;
-  const count = c.agents.filter((a) => a.status === "needs_input").length;
+  if (!c) return null;
+  const waited = currentWaited();
+  if (!waited.standIn && mostActive(waited.agents)?.status !== "needs_input") return null;
+  const own = c.agents.filter((a) => a.status === "needs_input").length;
   return {
-    text: askText(c, count),
-    count,
-    dismissLabel: count > 1 ? "Dismiss all" : "Dismiss",
+    text: askText(c, own, waited),
+    count: own + waited.added.length,
+    dismissLabel: own === 0 ? "" : own > 1 ? "Dismiss all" : "Dismiss",
   };
 });
 
