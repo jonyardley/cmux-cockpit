@@ -124,11 +124,15 @@ impl Ostinato {
     }
 
     /// The record whose card `directory`, a workspace's folder, holds.
+    /// When two records are about its repo (one file left from before a
+    /// rename, say), the one with the newest line.
     pub fn record_for(&self, directory: &str) -> Option<&Record> {
         let repo = self.checkouts.get(trim_slash(directory))?;
+        let newest = |r: &Record| r.lines.last().map_or(f64::MIN, |l| l.at);
         self.records
             .values()
-            .find(|r| r.project.eq_ignore_ascii_case(repo))
+            .filter(|r| r.project.eq_ignore_ascii_case(repo))
+            .max_by(|a, b| newest(a).total_cmp(&newest(b)))
     }
 }
 
@@ -473,6 +477,21 @@ mod tests {
         assert!(o.record_for("/dev/app-one").is_none(), "its project moved");
         o.take(OstinatoFeed::default());
         assert!(o.records.is_empty());
+    }
+
+    #[test]
+    fn two_records_about_one_repo_give_the_newest() {
+        let mut o = Ostinato::default();
+        let mut f = feed("/dev/app-one");
+        // An older file whose run_started also names the repo, sorting first.
+        let old = ONE_ISSUE.replace("2026-11-13", "2026-10-13");
+        f.records.insert(
+            "aaa/old-name".into(),
+            RecordText::from_bytes(old.as_bytes()),
+        );
+        o.take(f);
+        let r = o.record_for("/dev/app-one").unwrap();
+        assert_eq!(r.text.text, ONE_ISSUE);
     }
 
     #[test]
