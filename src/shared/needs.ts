@@ -199,7 +199,12 @@ export function agentsOf(w: Workspace | undefined): Agent[] {
 export function dismissNeeds(w: Workspace | undefined): void {
   const list = asking(w);
   if (!w || !list.length) return;
-  const starts = new Map(list.map((a) => [a.id, waitStart(a, w)]));
+  // A saved key that is no agent here keeps its dismissal, as prune keeps
+  // it: the Cockpit's CI and Ostinato waits ("ci", "ostinato"), which this
+  // panel does not read, so a dismissal here never brings those back.
+  const reported = new Set((w.agents ?? []).filter((a) => !!a).map((a) => a.id));
+  const kept = [...(dismissed.get(w.id) ?? [])].filter(([id]) => !reported.has(id));
+  const starts = new Map([...kept, ...list.map((a): [string, number] => [a.id, waitStart(a, w)])]);
   dismissed.set(w.id, starts);
   bump();
   // A start of 0 means the agent had no timestamp, so a later ask without one
