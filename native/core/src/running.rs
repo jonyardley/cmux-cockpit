@@ -6,7 +6,9 @@
 //! The work is the chat's whole tree as `crate::background::live_tasks`
 //! gives it: its shells and monitors, its agents and their own shells,
 //! under any session id the chat ran under (`crate::owner`), and nothing
-//! once the chat has ended. A `claude --bg` session counts only when a
+//! once the chat has ended, less any artifact watch (the monitor the
+//! Artifact tool leaves waiting for comments on a published page, which
+//! is not work: `artifact_watch`). A `claude --bg` session counts only when a
 //! hook saved it against the chat (a `session` entry) and the runner's
 //! Agent View list still has it working or blocked
 //! (`Data::background_runs`); one Agent View lists but no chat saved
@@ -355,12 +357,11 @@ mod tests {
         running_work(&s, &at(NOW), Some(&w), Some(&a)).is_some()
     }
 
-    fn described(id: &str, kind: &str, description: &str) -> String {
+    fn described(id: &str, kind: &str, description: &str, start: f64) -> String {
         format!(
             r#"{{"id": "{id}", "type": "{kind}", "status": "running",
                 "description": "{description}", "session": "c",
                 "startedEpoch": {start}, "seenEpoch": {seen}}}"#,
-            start = NOW - HOUR,
             seen = NOW - MINUTE,
         )
     }
@@ -370,21 +371,30 @@ mod tests {
         let watch = "live updates for artifact https://claude.ai/artifact/9WmDG6FAxeCh7H3fbZ2PmK (auto-armed on publish)";
         let a = chat("c", AgentStatus::Idle);
         let w = workspace(std::slice::from_ref(&a));
-        let alone = saved(&[described("m1", "monitor", watch)]);
+        let alone = saved(&[described("m1", "monitor", watch, NOW - HOUR)]);
         assert_eq!(running_work(&alone, &at(NOW), Some(&w), Some(&a)), None);
+        // The watch started first, so `since` shows it is left out.
         let beside = saved(&[
-            described("m1", "monitor", watch),
-            described("m2", "monitor", "tail -f build.log"),
+            described("m1", "monitor", watch, NOW - HOUR),
+            described("m2", "monitor", "tail -f build.log", NOW - 10.0 * MINUTE),
         ]);
         assert_eq!(
-            running_work(&beside, &at(NOW), Some(&w), Some(&a)).map(|r| r.counts),
-            Some(vec![(TaskType::Shell, 1)])
+            running_work(&beside, &at(NOW), Some(&w), Some(&a)),
+            Some(Running {
+                counts: vec![(TaskType::Shell, 1)],
+                since: NOW - 10.0 * MINUTE,
+            })
         );
     }
 
     #[test]
     fn a_shell_described_like_an_artifact_watch_still_counts() {
-        let s = saved(&[described("b1", "shell", "live updates for artifact x")]);
+        let s = saved(&[described(
+            "b1",
+            "shell",
+            "live updates for artifact x",
+            NOW - HOUR,
+        )]);
         let a = chat("c", AgentStatus::Idle);
         let w = workspace(std::slice::from_ref(&a));
         assert!(running_work(&s, &at(NOW), Some(&w), Some(&a)).is_some());
