@@ -21,17 +21,22 @@ export interface CheckRow {
 }
 
 /**
- * Rows for saved checks, keyed by name so a check keeps its row when the
- * poller re-sorts by state. Two checks can share a name (one per workflow),
- * so a repeat takes its count among same-named checks.
+ * Each saved check with its row key, keyed by name so a check keeps its row
+ * when the poller re-sorts by state. Two checks can share a name (one per
+ * workflow), so a repeat takes its count among same-named checks.
  */
-export function checkRows(list: readonly { name: string; state: CheckState }[]): CheckRow[] {
+export function keyedChecks<C extends { name: string }>(list: readonly C[]): { key: string; check: C }[] {
   const seen = new Map<string, number>();
-  return list.map((c) => {
-    const n = seen.get(c.name) ?? 0;
-    seen.set(c.name, n + 1);
-    return { key: "c:" + c.name + ":" + n, name: c.name, state: c.state };
+  return list.map((check) => {
+    const n = seen.get(check.name) ?? 0;
+    seen.set(check.name, n + 1);
+    return { key: "c:" + check.name + ":" + n, check };
   });
+}
+
+/** Rows for saved checks, under keyedChecks' keys. */
+export function checkRows(list: readonly { name: string; state: CheckState }[]): CheckRow[] {
+  return keyedChecks(list).map(({ key, check }) => ({ key, name: check.name, state: check.state }));
 }
 
 /** The selected workspace's CI checks, as the poller last saved them. */
