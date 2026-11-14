@@ -64,7 +64,8 @@ fn list(dir: &Path) -> Vec<(PathBuf, String)> {
     };
     entries
         .flatten()
-        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+        // Through a link too, as `stamp` and `fs::read` follow one.
+        .filter(|e| fs::metadata(e.path()).is_ok_and(|m| m.is_file()))
         .filter_map(|e| {
             let project = record_project(e.file_name().to_str()?)?;
             Some((e.path(), project))
@@ -305,6 +306,7 @@ mod tests {
         let line = "{\"v\":1}\n";
         fs::write(dir.join("example__app-one.jsonl"), line).unwrap();
         fs::write(dir.join("notes.txt"), "not a record").unwrap();
+        fs::create_dir_all(dir.join("folder.jsonl")).unwrap();
         let feed = w.check(ask).unwrap();
         assert_eq!(feed.records.len(), 1);
         assert_eq!(feed.records["example/app-one"].text, line);
@@ -347,6 +349,17 @@ mod tests {
         c.learn(&[], |_| None);
         c.learn(&open, |_| Some("example/a".into()));
         assert_eq!(c.map(&open)["/dev/a"], "example/a", "forgotten on close");
+    }
+
+    #[test]
+    fn a_linked_record_is_read_through_its_link() {
+        let dir = temp("linked-record");
+        let real = temp("linked-record-source").join("kept.jsonl");
+        fs::write(&real, "{\"v\":1}\n").unwrap();
+        std::os::unix::fs::symlink(&real, dir.join("example__app-one.jsonl")).unwrap();
+        let mut records = Records::new(Some(dir));
+        assert!(records.check());
+        assert!(records.texts().contains_key("example/app-one"));
     }
 
     #[test]
