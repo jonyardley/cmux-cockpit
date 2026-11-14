@@ -880,7 +880,8 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
     }
 }
 
-/// The Ostinato run on the card, for a card with room for it.
+/// The Ostinato run on the card, for a card with room for it, with the
+/// question of a park waiting in Needs you (`Session::park_question`).
 fn run_of(
     session: &Session,
     data: &Data,
@@ -891,7 +892,11 @@ fn run_of(
         return None;
     }
     let state = session.ostinato_run(data, w?)?;
-    run_card(&state, now_epoch(data)).map(Box::new)
+    let mut card = run_card(&state, now_epoch(data))?;
+    if let Some(q) = state.run.as_ref().and_then(|r| session.park_question(w, r)) {
+        card.question = q.to_string();
+    }
+    Some(Box::new(card))
 }
 
 /// A project's header: its look from the table, and the cards it counts.

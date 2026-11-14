@@ -5,7 +5,9 @@
 //! with the run's own unknown events from before it, plus what the day's
 //! spend needs from older runs: their `attempt_ended` lines of the last
 //! 24 hours, and before those, each session's latest earlier figure, the
-//! base its next share is worked out from (run.rs `shares`).
+//! base its next share is worked out from (run.rs `shares`). An earlier
+//! run's `parked` line stays while no later line picks its item again,
+//! as that park still waits on Jon (wait.rs).
 //!
 //! Each kept line keeps its number in the file (`RecordText::numbers`),
 //! so an error still names the line Jon would open.
@@ -74,6 +76,17 @@ fn kept_before(lines: &[Line], heard: &[(usize, &str)], now: f64) -> (usize, BTr
             .find(|l| priced(l).is_some_and(|c| c.contains_key(s)));
         keep.extend(base.map(|l| l.number));
     }
+    // An earlier run's park no later line picks again still waits on Jon
+    // (run.rs `waiting_parks`).
+    let mut parked: Vec<(&str, usize)> = Vec::new();
+    for (i, l) in lines.iter().enumerate() {
+        match &l.event {
+            Event::Parked { item, .. } if i < start => parked.push((item, l.number)),
+            Event::Picked { item, .. } => parked.retain(|(waits, _)| waits != item),
+            _ => {}
+        }
+    }
+    keep.extend(parked.iter().map(|(_, n)| *n));
     // The run's own unknown events before its start still say it is alive.
     keep.extend(
         heard
@@ -259,6 +272,47 @@ mod tests {
         let small = bound(&text(PARKED), at("2026-11-12T09:00:00Z"));
         let second: Vec<usize> = (14..=PARKED.lines().count()).collect();
         assert_eq!(small.numbers, second);
+    }
+
+    #[test]
+    fn an_earlier_park_not_picked_again_is_kept_and_a_picked_one_is_not() {
+        // Day 2 parks app-one#4, never picked again, and app-one#5, which
+        // day 3 picks again.
+        let mut lines: Vec<String> = long_record().lines().map(String::from).collect();
+        let park = |secs: u64, item: &str| {
+            format!(
+                r#"{{"v":1,"at":"{}","run":"r-2","event":"parked","item":"{item}","reason":"needs_decision","question":"Which?"}}"#,
+                iso(secs)
+            )
+        };
+        let day2 = 2 * 86_400 + 9 * 3600;
+        lines.insert(30, park(day2, "app-one#4"));
+        lines.insert(31, park(day2 + 60, "app-one#5"));
+        let again = format!(
+            r#"{{"v":1,"at":"{}","run":"r-3","event":"picked","item":"app-one#5","attempt":2}}"#,
+            iso(3 * 86_400 + 9 * 3600)
+        );
+        lines.insert(42, again);
+        let whole = format!("{}\n", lines.join("\n"));
+        let now = at("2026-11-20T09:00:00Z");
+        let small = same_state(&whole, now, &[now - MARGIN_SECS, now, now + 86_400.0]);
+        assert!(small.numbers.contains(&31), "#4's park waits");
+        assert!(!small.numbers.contains(&32), "#5 was picked again");
+        let state = Record::read("x", small).state(now).run.unwrap();
+        let waiting: Vec<&str> = state.waiting.iter().map(|p| p.item.as_str()).collect();
+        assert_eq!(waiting, ["app-one#4"]);
+    }
+
+    #[test]
+    fn a_torn_last_line_after_many_runs_reads_the_same_bounded() {
+        let whole = format!(
+            "{}{}",
+            long_record(),
+            r#"{"v":1,"at":"2026-11-20T09:30:00Z","run":"r-19","event":"stage","item":"app-one#38","sta"#
+        );
+        let now = at("2026-11-20T09:40:00Z");
+        let small = same_state(&whole, now, &[now - MARGIN_SECS, now, now + 86_400.0]);
+        assert!(small.numbers.len() < whole.lines().count());
     }
 
     #[test]

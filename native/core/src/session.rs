@@ -238,6 +238,10 @@ pub struct Session {
     /// Each workspace's parked Ostinato attempts, read once a frame at its
     /// clock (ostinato/wait.rs `Session::tend_parks`).
     pub(crate) parks: HashMap<String, crate::ostinato::wait::ParkWait>,
+    /// The workspaces whose card carried a record at the last read, parks
+    /// or none: a park dismissal on one of these lapses once nothing
+    /// waits there.
+    pub(crate) park_cards: std::collections::HashSet<String>,
 
     /// Sleep calls on their way and refusals to show (sleep.rs); the
     /// record of what sleeps is the state file's `asleep`.

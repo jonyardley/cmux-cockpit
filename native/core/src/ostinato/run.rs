@@ -179,6 +179,11 @@ pub struct RunState {
     /// The run's drafts and parks, oldest first.
     pub drafts: Vec<DraftMade>,
     pub parks: Vec<Park>,
+    /// The parks of every run read that no later line picks again,
+    /// oldest first: what still waits on Jon (wait.rs). A park stays
+    /// past the run that wrote it, until it is dismissed or its item is
+    /// picked again.
+    pub waiting: Vec<Park>,
     /// What the run cost: each session once at its latest figure, plus
     /// any attempt priced only as a whole.
     pub cost: Cost,
@@ -227,6 +232,31 @@ pub fn shares(lines: &[Line]) -> Vec<Share> {
             usd,
             known: cost_usd.is_some(),
         });
+    }
+    out
+}
+
+/// The parks in `lines`, any run's, with no `picked` line for their item
+/// after them in the file, oldest first.
+pub fn waiting_parks(lines: &[Line]) -> Vec<Park> {
+    let mut out: Vec<Park> = Vec::new();
+    for l in lines {
+        match &l.event {
+            Event::Parked {
+                item,
+                reason,
+                question,
+                attempt,
+            } => out.push(Park {
+                item: item.clone(),
+                attempt: *attempt,
+                reason: reason.clone(),
+                question: question.clone(),
+                at: l.at,
+            }),
+            Event::Picked { item, .. } => out.retain(|p| &p.item != item),
+            _ => {}
+        }
     }
     out
 }
@@ -423,6 +453,7 @@ pub fn run_state(lines: &[Line], heard: &[Heard], shares: &[Share], now: f64) ->
         phase,
         drafts: walk.drafts,
         parks: walk.parks,
+        waiting: waiting_parks(lines),
         cost,
         length,
     })

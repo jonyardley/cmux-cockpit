@@ -681,15 +681,16 @@ edge, stripe and wash, and counts in the waiting count, lane order, the
 with more than one; the question itself is on the
 [Ostinato run](#ostinato-run).
 
-A park waits while the run has not picked its item again since; the
-latest run's parks are the ones read, so a new run starting takes the
-last one's out. Unlike [CI waiting](#ci-waiting), a session at work in
+A park waits, whichever run wrote it, until a later line picks its item
+again, so a new run starting leaves an earlier run's park waiting; the
+runner keeps such a park's line when it cuts the record. Unlike [CI waiting](#ci-waiting), a session at work in
 the workspace does not hide it: the loop runs unattended, so nobody else
 will answer. A session waiting on you for its own reason (a stop, an
 ask, a turn, CI) keeps its words, and the park still counts towards
 dismissing. A workspace with no session shows it on a stand-in; an
 asleep card never shows it. One dismissal covers the workspace's parks,
-keyed on the newest park's time, so a new park brings the card back;
+keyed on the newest park's time, so only a newer park brings the card
+back (picking the newest again leaves the older ones dismissed);
 "Restore needs you" brings a dismissed one back. A dismissed park no
 longer keeps the card from reading Ready, since it can stand until the
 next run. No notification posts
@@ -948,8 +949,8 @@ own lines on a full, compact or Projects card; a dense row has no room
 and draws none. Only the card of the workspace open on the project's
 main checkout carries it: the folder whose `.git` is a directory and
 whose `origin` is the record's GitHub repo (or a folder inside it). With
-two workspaces open there, the first in tab order carries it, so one
-park never waits twice. The core says every word and
+two workspaces open there, the first awake one in tab order carries it
+(the first, when all sleep), so one park never waits twice. The core says every word and
 token (`native/core/src/ostinato/card.rs`); the view lays them out
 (`Views/RunView.swift`), 4 above, its lines 5 apart:
 
@@ -982,9 +983,12 @@ token (`native/core/src/ostinato/card.rs`); the view lays them out
   order, its key in `text` and its newest attempt's outcome at the right
   in `metaText` ("draft app-one#57"), a park's in `clayText` ("parked,
   needs a decision").
-- **Question:** the newest waiting park's question, at 11 in
+- **Question:** the run's newest waiting park's question, at 11 in
   `secondary` on a `clayWash` face, radius 6, padded 7 by 5. It stays
-  while the park waits, during the run and after.
+  while the park waits, during the run and after, dismissed or not, as
+  part of the run's summary. While a park shows in Needs you, the
+  newest waiting park's question shows instead, though an earlier run
+  parked it.
 - **No end written:** a run with no end line whose last line is older
   than the attempt cap (three hours with none) reads "Ostinato run, no
   end written" in `faint`, a `faint` dot and "Last line 3h 20m ago".
