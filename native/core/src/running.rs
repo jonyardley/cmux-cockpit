@@ -97,6 +97,19 @@ fn fresh(t: &SavedTask, now: Option<f64>) -> bool {
     now.is_none_or(|now| now - t.seen_epoch <= limit)
 }
 
+/// How Claude Code describes the monitor the Artifact tool starts when a
+/// chat publishes or reopens a page ("live updates for artifact
+/// https://claude.ai/artifact/... (auto-armed on publish)").
+const ARTIFACT_WATCH_PREFIX: &str = "live updates for artifact ";
+
+/// Whether a saved task is an artifact watch: a monitor that waits for
+/// comments on a page the chat published, for as long as the chat stays
+/// open. It is not work the chat is doing, so it never holds a card on
+/// Running.
+fn artifact_watch(t: &SavedTask) -> bool {
+    t.kind == TaskType::Monitor && t.description.starts_with(ARTIFACT_WATCH_PREFIX)
+}
+
 /// Whether a saved task still runs: a `claude --bg` session only while
 /// the runner's data says so, at any age; anything else while it is fresh.
 fn still_runs(data: &Data, t: &SavedTask) -> bool {
@@ -116,7 +129,7 @@ pub fn running_work(
 ) -> Option<Running> {
     let live: Vec<&SavedTask> = live_tasks(saved, w, a)
         .into_iter()
-        .filter(|t| still_runs(data, t))
+        .filter(|t| !artifact_watch(t) && still_runs(data, t))
         .collect();
     let since = live
         .iter()
@@ -340,6 +353,41 @@ mod tests {
         let a = chat("c", AgentStatus::Idle);
         let w = workspace(std::slice::from_ref(&a));
         running_work(&s, &at(NOW), Some(&w), Some(&a)).is_some()
+    }
+
+    fn described(id: &str, kind: &str, description: &str) -> String {
+        format!(
+            r#"{{"id": "{id}", "type": "{kind}", "status": "running",
+                "description": "{description}", "session": "c",
+                "startedEpoch": {start}, "seenEpoch": {seen}}}"#,
+            start = NOW - HOUR,
+            seen = NOW - MINUTE,
+        )
+    }
+
+    #[test]
+    fn an_artifact_watch_never_holds_the_card_on_running() {
+        let watch = "live updates for artifact https://claude.ai/artifact/9WmDG6FAxeCh7H3fbZ2PmK (auto-armed on publish)";
+        let a = chat("c", AgentStatus::Idle);
+        let w = workspace(std::slice::from_ref(&a));
+        let alone = saved(&[described("m1", "monitor", watch)]);
+        assert_eq!(running_work(&alone, &at(NOW), Some(&w), Some(&a)), None);
+        let beside = saved(&[
+            described("m1", "monitor", watch),
+            described("m2", "monitor", "tail -f build.log"),
+        ]);
+        assert_eq!(
+            running_work(&beside, &at(NOW), Some(&w), Some(&a)).map(|r| r.counts),
+            Some(vec![(TaskType::Shell, 1)])
+        );
+    }
+
+    #[test]
+    fn a_shell_described_like_an_artifact_watch_still_counts() {
+        let s = saved(&[described("b1", "shell", "live updates for artifact x")]);
+        let a = chat("c", AgentStatus::Idle);
+        let w = workspace(std::slice::from_ref(&a));
+        assert!(running_work(&s, &at(NOW), Some(&w), Some(&a)).is_some());
     }
 
     #[test]
