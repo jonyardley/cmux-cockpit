@@ -741,7 +741,7 @@ for name in ["lanes", "projects"] {
 var bar = Card(wsId: "W", icon: Icon(glyph: "○", ink: nil, halo: .clear), title: "t", density: .full, badge: Badge(icon: "terminal", color: nil),
                unread: "", ready: false, readyInk: .greenText, pinned: false, progress: 1.5, helpers: "", status: "", statusShort: "", statusInk: .faint, age: "",
                statusHasAge: false, leftOff: "", chips: [], rowPr: nil, detail: "", detailInk: .secondary, detailLines: 2, waiting: nil, late: nil, waitingTab: nil, rank: 0,
-               movable: true, dimmed: false, selected: false, menu: [])
+               movable: true, dimmed: false, selected: false, menu: [], run: nil)
 check(CardText.progress(bar) == 1, "a bar past the end stops full")
 bar.progress = -0.5
 check(CardText.progress(bar) == 0, "a bar before the start stays empty")
@@ -877,6 +877,40 @@ check(ProjectText.hex("#d75") == 0xDD7755, "three digits read doubled, not grey"
 check(ProjectText.hex("#D9775780") == 0xD97757, "eight digits read, their alpha dropped, not grey")
 for bad in ["D97757", "#D975", "#D9775", "#D97757A", "#D9775G", "#+97757", "#", ""] {
     check(ProjectText.hex(bad) == nil, "\(bad.debugDescription) is no colour")
+}
+
+// MARK: The Ostinato run (issue #390)
+
+// The ostinato scene's three cards carry their runs, each in its words;
+// an ended run's title takes its end in the Mac's own time.
+if let panel = load("ostinato") {
+    var runs: [String: RunCard] = [:]
+    for row in panel.lanes.flatMap(\.rows) {
+        if case .card(let card) = row, let run = card.run { runs[card.wsId] = run }
+    }
+    check(runs.count == 3, "three cards carry a run")
+    let utc = TimeZone(identifier: "UTC") ?? .current
+    if let ended = runs["parked"] {
+        // 999280 is 13:34:40 UTC on 12 January 1970.
+        check(RunText.title(ended, zone: utc) == "Ostinato run ended 13:34", "the end's local time follows the title")
+        let words = RunText.words(ended, zone: utc)
+        check(words.contains("1 parked") && words.contains("parked, needs a decision"), "a park shows its chip and reason")
+    } else {
+        check(false, "the parked card carries its run")
+    }
+    if let running = runs["running"] {
+        check(RunText.title(running, zone: utc) == "Ostinato run, issue 2 of 3", "a run in progress keeps the core's title")
+        check(running.strip?.done == 2, "the strip fills to built")
+    } else {
+        check(false, "the running card carries its run")
+    }
+    if let silent = runs["silent"] {
+        check(RunText.words(silent).last == "Ostinato record unreadable at line 4", "a broken line is named last")
+    } else {
+        check(false, "the silent card carries its run")
+    }
+} else {
+    check(false, "the ostinato fixture decodes")
 }
 
 exit(failures == 0 ? 0 : 1)
