@@ -1,18 +1,20 @@
 // A recorded view tree as an HTML page, for npm run preview.
 //
 // An approximation of the renderer's SwiftUI layout in flexbox, close enough
-// to judge a design by: stacks are flex rows and columns. cmux keeps a
-// node's modifiers as props in one dictionary and applies them in a fixed
-// order, whatever order the code chained them in (CmuxSwiftRenderUI,
-// SceneNodeView.swift): text styles, padding, background, corner radius,
-// frame, then opacity. So a background hugs the content even when a frame
-// was chained before it, a maxWidth frame is always leading-aligned, and a
-// second call of a modifier on one node overwrites the first (a frame key
-// by key).
-// Each layout modifier wraps what came before it in that order. Text
-// styles are CSS that the children inherit. Colours print as their real hex. A modifier or view this file
+// to judge a design by: stacks are flex rows and columns, and each layout
+// modifier wraps what came before it. Text styles are CSS that the children
+// inherit. Colours print as their real hex. A modifier or view this file
 // does not know is outlined dashed on the page and listed in `unknown`, so
 // a scene that renders cleanly here has nothing silently dropped.
+//
+// The wrapping follows cmux's model, not the chain order. cmux keeps a
+// node's modifiers as props in one dictionary and applies them in a fixed
+// order (CmuxSwiftRenderUI, SceneNodeView.swift, read at cmux commit
+// 12023d89f): text styles, padding, background, corner radius, frame, then
+// opacity. So a background hugs the content even when a frame was chained
+// before it, a maxWidth frame is always leading-aligned, and a second call
+// of a modifier on one node replaces the first (frames merge key by key).
+// If cmux changes that file, change this model and its tests with it.
 
 import type { ViewNode } from "./renderer.ts";
 
@@ -158,13 +160,12 @@ function frames(f: Opts): Frame[] {
   const flex: string[] = [];
   const inner: Frame = { css: "" };
   if (num(f.minHeight) !== undefined) flex.push(`min-height:${num(f.minHeight)}px;justify-content:center`);
-  if (f.maxHeight === 0) flex.push("max-height:0;overflow:hidden");
+  if (num(f.maxHeight) !== undefined) flex.push(`max-height:${num(f.maxHeight)}px;overflow:hidden`);
   if (f.maxHeight === "infinity") inner.fillH = true;
-  if (f.maxWidth === "infinity") {
-    flex.push("align-items:flex-start");
-    inner.fillW = true;
-  }
-  inner.css = flex.join(";");
+  if (num(f.maxWidth) !== undefined) flex.push(`max-width:${num(f.maxWidth)}px`);
+  if (f.maxWidth === "infinity") inner.fillW = true;
+  const hasInner = ["minHeight", "maxHeight", "maxWidth"].some((k) => f[k] !== undefined);
+  inner.css = ["align-items:flex-start", ...flex].join(";");
   const fixed: string[] = [];
   const outer: Frame = { css: "" };
   const width = num(f.width);
@@ -178,9 +179,7 @@ function frames(f: Opts): Frame[] {
     outer.fillH = false;
   }
   outer.css = fixed.join(";");
-  const hasInner = inner.css !== "" || inner.fillW !== undefined || inner.fillH !== undefined;
-  const hasOuter = width !== undefined || height !== undefined;
-  return [...(hasInner ? [inner] : []), ...(hasOuter ? [outer] : [])];
+  return [...(hasInner ? [inner] : []), ...(fixed.length ? [outer] : [])];
 }
 
 // Puts `css` into the style of the outermost tag of `markup`.

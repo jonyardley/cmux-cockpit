@@ -134,7 +134,8 @@ describe("the tab switch", () => {
     const node = nodeOf(tabSwitch());
     assert.ok(node);
     const page = toPage(node, "tabs", 300, "#FFFFFF").html;
-    const faces = [...page.matchAll(new RegExp(`<div class="([^"]*)" style="background:${SWITCH.tab}"`, "g"))];
+    const token = SWITCH.tab.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const faces = [...page.matchAll(new RegExp(`<div class="([^"]*)" style="[^"]*\\bbackground:${token}[;"]`, "g"))];
     assert.equal(faces.length, 1);
     assert.match(faces[0]?.[1] ?? "", /\bfw\b/);
     assert.match(

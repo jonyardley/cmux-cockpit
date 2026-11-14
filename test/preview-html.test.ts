@@ -184,3 +184,11 @@ it("keeps an empty Reorderable's slot, as it is a stack of its own", () => {
   const out = body(node("HStack", [{ spacing: 5 }], [], [empty, node("Text", ["a"])]));
   assert.doesNotMatch(out, /class="contents"/);
 });
+
+it("keeps a numeric maxWidth as a cap, and draws an alignment-only frame as nothing", () => {
+  assert.match(
+    body(node("Text", ["a"], [["frame", { maxWidth: 200 }]])),
+    /^<div class="w" style="[^"]*max-width:200px/,
+  );
+  assert.equal(body(node("Text", ["a"], [["frame", { alignment: "center" }]])), '<div class="t">a</div>');
+});
