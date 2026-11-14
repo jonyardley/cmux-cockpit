@@ -10,7 +10,9 @@
 //! either; none of that is an error.
 //!
 //! Only the config file itself is read: an `include` or `includeIf`, or
-//! a `url.<base>.insteadOf` rewrite, is not followed.
+//! a `url.<base>.insteadOf` rewrite, is not followed, and an ssh host
+//! alias (`git@github.com-work:owner/repo`, named in ~/.ssh/config) is
+//! not GitHub's host, so it matches nothing either.
 
 /// The hosts that are GitHub itself, not an enterprise server.
 fn is_github(host: &str) -> bool {
@@ -113,7 +115,10 @@ pub fn origin_url(config: &str) -> Option<String> {
     for line in config.lines() {
         let mut line = line.trim();
         if let Some(rest) = line.strip_prefix('[') {
-            let (header, after) = rest.split_once(']')?;
+            // No closing bracket: no header git would take, so not one.
+            let Some((header, after)) = rest.split_once(']') else {
+                continue;
+            };
             in_origin = is_origin_section(header);
             // A variable may follow the header on the same line.
             line = after.trim();
@@ -217,6 +222,9 @@ mod tests {
         assert_eq!(checkout_repo(old).as_deref(), Some("example/app-one"));
         let same_line = "[remote \"origin\"] url = git@github.com:example/app-one\n";
         assert_eq!(checkout_repo(same_line).as_deref(), Some("example/app-one"));
+        let odd =
+            "[core]\n[odd line\n[remote \"origin\"]\n\turl = git@github.com:example/app-one\n";
+        assert_eq!(checkout_repo(odd).as_deref(), Some("example/app-one"));
         assert_eq!(config_value(r#" "a b" c\"d ;x"#), r#"a b c"d"#);
     }
 
@@ -231,6 +239,7 @@ mod tests {
             "[remote \"origin\"]\n\turl = https://gitlab.com/example/app-one.git\n",
             "[remote \"origin\"]\n\t# url = git@github.com:example/app-one.git\n",
             "[remote \"origin\"\n\turl = git@github.com:example/app-one.git\n",
+            "[remote \"origin\"]\n\turl = git@github.com-work:example/app-one.git\n",
         ] {
             assert_eq!(checkout_repo(config), None, "{config}");
         }
