@@ -4,7 +4,7 @@
 
 import type { SavedPublished } from "../../scripts/state-config.ts";
 import { mostActive } from "../shared/activity.ts";
-import type { Last } from "../shared/list.ts";
+import { type Last, markLast } from "../shared/list.ts";
 import { agentsOf } from "../shared/needs.ts";
 import { type Project, savedProjectFor } from "../shared/projects.ts";
 import { savedPublished } from "../shared/published.ts";
@@ -104,6 +104,15 @@ export const madeHere = computed((): Last<MadeEntry>[] => {
   };
   const rows = [...own.map((e) => madeEntry(e, wsOf, true)), ...others.map((e) => madeEntry(e, wsOf, false))];
   return markLastBefore(rows, madeOver());
+});
+
+/** The selected workspace's own pages and docs, newest first, every one
+ * still fresh rather than the Now tab's first few: the Details tab's list. */
+export const madeOwn = computed((): Last<MadeEntry>[] => {
+  const f = freshMade();
+  const sel = f.workspaces.find((w) => w.selected);
+  const made: MadeWs = { directory: sel?.directory, chat: undefined };
+  return markLast(f.own.map((e) => madeEntry(e, () => made, true)));
 });
 
 /** Every fresh page and doc, before the caps, for the heading's count. */

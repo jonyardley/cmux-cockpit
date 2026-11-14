@@ -1,0 +1,233 @@
+VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(14)
+  VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|neutralChip.edge) .cornerRadius(10)
+    HStack spacing: 0 .padding(2) .frame(maxWidth: infinity, alignment: leading) .background(countBg) .cornerRadius(9)
+      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(7) .onTap()
+        Text "Now" .font(12) .weight(medium) .color(secondary|neutralChip.fg) .lineLimit(1) .frame(maxWidth: infinity, height: 24) .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(6) .hoverBackground(hover)
+      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(7) .onTap()
+        Text "Details" .font(12) .weight(medium) .color(text) .lineLimit(1) .frame(maxWidth: infinity, height: 24) .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(6) .hoverBackground(panel|onClay)
+  VStack spacing: 18, alignment: leading .frame(maxWidth: infinity, alignment: leading)
+    VStack spacing: 8, alignment: leading
+      HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
+        Text "S\u200aE\u200aS\u200aS\u200aI\u200aO\u200aN\u200aS" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
+        Text "3" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
+        Spacer
+      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
+        VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
+          Reorderable spacing: 0
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                HStack spacing: 9
+                  ZStack .frame(width: 13, height: 13)
+                    Circle size: 13 .fill(clayHalo)
+                    Circle size: 7 .fill(clay) .stroke(clear) .strokeWidth(1.5)
+                  Text "Build the Details tab" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "your turn 1m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+                Text "Claude, last activity 1m ago" .font(11) .color(tertiary) .lineLimit(1) .truncation(tail) .paddingLeading(22)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                HStack spacing: 9
+                  ZStack .frame(width: 13, height: 13)
+                    Circle size: 13 .fill(clear)
+                    Circle size: 7 .fill(clear) .stroke(grey) .strokeWidth(1.5)
+                  Text "Codex" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "idle 10m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+                Text "Codex, last activity 10m ago" .font(11) .color(tertiary) .lineLimit(1) .truncation(tail) .paddingLeading(22)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                HStack spacing: 9
+                  ZStack .frame(width: 13, height: 13)
+                    Circle size: 13 .fill(clear)
+                    Circle size: 7 .fill(green) .stroke(clear) .strokeWidth(1.5)
+                  Text "Plan the tab" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "finished 2h" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+                Text "Claude, last activity 2h ago" .font(11) .color(tertiary) .lineLimit(1) .truncation(tail) .paddingLeading(22)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
+    VStack spacing: 8, alignment: leading
+      HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
+        Text "H\u200aE\u200aL\u200aP\u200aE\u200aR\u200aS" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
+        Text "3" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
+        Spacer
+      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
+        VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
+          Reorderable spacing: 0
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .frame(maxWidth: infinity, alignment: leading)
+                HStack spacing: 9
+                  ZStack .frame(width: 13, height: 13)
+                    Circle size: 13 .fill(clear)
+                    Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
+                  Text "Review the diff" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "running 1m 10s" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .frame(maxWidth: infinity, alignment: leading)
+                HStack spacing: 9
+                  ZStack .frame(width: 13, height: 13)
+                    Circle size: 13 .fill(clear)
+                    Circle size: 7 .fill(grey) .stroke(clear) .strokeWidth(1.5)
+                  Text "Lint sweep" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "took 40s" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .frame(maxWidth: infinity, alignment: leading)
+                HStack spacing: 9
+                  ZStack .frame(width: 13, height: 13)
+                    Circle size: 13 .fill(clear)
+                    Circle size: 7 .fill(grey) .stroke(clear) .strokeWidth(1.5)
+                  Text "Inventory the panel data" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "took 2m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
+    VStack spacing: 8, alignment: leading
+      HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
+        Text "P\u200aU\u200aL\u200aL R\u200aE\u200aQ\u200aU\u200aE\u200aS\u200aT" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
+        Text "4" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
+        Spacer
+      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
+        VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
+          VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
+            VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              HStack spacing: 9
+                Text "Now and Details tabs in the agents panel" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                Spacer minLength: 4
+                Text "#12" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Text "1 failing" .font(11) .color(redText) .lineLimit(1) .truncation(tail) .paddingLeading(0)
+            Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+          VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .opacity(1)
+            Reorderable spacing: 0
+              VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                  HStack spacing: 9
+                    ZStack .frame(width: 13, height: 13)
+                      Circle size: 13 .fill(clear)
+                      Circle size: 7 .fill(red) .stroke(clear) .strokeWidth(1.5)
+                    Text "lint" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                    Spacer minLength: 4
+                    Text "failed, started 14m ago" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+                Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+              VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                  HStack spacing: 9
+                    ZStack .frame(width: 13, height: 13)
+                      Circle size: 13 .fill(clear)
+                      Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
+                    Text "build" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                    Spacer minLength: 4
+                    Text "running 3m 10s" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+                Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+              VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                  HStack spacing: 9
+                    ZStack .frame(width: 13, height: 13)
+                      Circle size: 13 .fill(clear)
+                      Circle size: 7 .fill(blue) .stroke(clear) .strokeWidth(1.5)
+                    Text "mac" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                    Spacer minLength: 4
+                    Text "queued 1m 15s" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+                Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+              VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                  HStack spacing: 9
+                    ZStack .frame(width: 13, height: 13)
+                      Circle size: 13 .fill(clear)
+                      Circle size: 7 .fill(green) .stroke(clear) .strokeWidth(1.5)
+                    Text "secrets" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                    Spacer minLength: 4
+                    Text "passed, started 50m ago" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+                Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
+            Text "Mergeable, no conflicts, +412 −38" .font(11) .color(secondary|neutralChip.fg) .lineLimit(2) .paddingHorizontal(12) .paddingVertical(8) .frame(maxWidth: infinity, alignment: leading)
+    VStack spacing: 8, alignment: leading
+      HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
+        Text "Y\u200aO\u200aU\u200aR M\u200aO\u200aV\u200aE" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
+        Text "" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(0) .paddingVertical(1) .background(clear) .cornerRadius(10)
+        Spacer
+      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
+        VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
+          VStack spacing: 4, alignment: leading .paddingHorizontal(12) .paddingVertical(10) .frame(maxWidth: infinity, alignment: leading)
+            Text "pick the tab look and the card order, then I build the cards." .font(12.5) .color(text) .lineLimit(6) .truncation(tail) .frame(maxWidth: infinity, alignment: leading)
+            Text "2 decisions open, leaning 1a 2b" .font(11) .color(secondary|neutralChip.fg) .lineLimit(1) .truncation(tail)
+    VStack spacing: 8, alignment: leading
+      HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
+        Text "P\u200aO\u200aR\u200aT\u200aS" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
+        Text "4" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
+        Spacer
+      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
+        VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
+          Reorderable spacing: 0
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                HStack spacing: 9
+                  Text ":5173" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "localhost" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                HStack spacing: 9
+                  Text ":6006" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "localhost" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                HStack spacing: 9
+                  Text ":8080" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "localhost" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                HStack spacing: 9
+                  Text ":3000" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "localhost" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
+    VStack spacing: 8, alignment: leading
+      HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
+        Text "M\u200aA\u200aD\u200aE H\u200aE\u200aR\u200aE" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
+        Text "2" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
+        Spacer
+      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
+        VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
+          Reorderable spacing: 0
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                HStack spacing: 9
+                  Text "Tab switch mock-up" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "15m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                HStack spacing: 9
+                  Text "Details tab plan" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "1h" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
+  Spacer
+
+Colours
+blue #3B6FB6
+chipEdge|neutralChip.edge #E2DFD3
+clay #D97757
+clayHalo #D9775738
+countBg #E5E2D6
+green #788C5D
+grey #A09E95
+hover #7F7F7F0F
+metaText #6B6A64
+panel|onClay #FFFFFF
+panelEdge #1414131A
+red #C0453A
+redText #9E2F27
+rule #F0EEE6
+secondary|neutralChip.fg #5E5D59
+tertiary #73726C
+text #141413

@@ -28,11 +28,12 @@ function savedName(a: Agent): string {
   return names && Object.hasOwn(names, a.id) ? readable(names[a.id]?.name) : "";
 }
 
-// The saved session name wins, then cmux's title (its first message, when
-// it could read one); otherwise agents sharing a fallback label are numbered
-// in cmux's own order, ended ones included, so a number holds still as
-// activity changes and as earlier agents end.
-function labelsFor(inOrder: Agent[]): Map<string, string> {
+/** Each agent's row name by id: the saved session name wins, then cmux's
+ * title (its first message, when it could read one); otherwise agents
+ * sharing a fallback label are numbered in cmux's own order, ended ones
+ * included, so a number holds still as activity changes and as earlier
+ * agents end. The Details tab's Sessions rows name them the same way. */
+export function agentLabels(inOrder: Agent[]): Map<string, string> {
   const plain = inOrder.map((a) => ({ a, title: savedName(a) || readable(a.title), base: fallbackLabel(a) }));
   const count = new Map<string, number>();
   for (const e of plain) if (!e.title) count.set(e.base, (count.get(e.base) ?? 0) + 1);
@@ -57,7 +58,7 @@ export const agentRows = computed((): Last<AgentRow>[] => {
   const { agents, inOrder } = cur();
   const live = agents.filter((a) => a.status !== "ended");
   if (live.length < 2) return [];
-  const labels = labelsFor(inOrder);
+  const labels = agentLabels(inOrder);
   return markLast(live.slice(0, 6).map((a) => ({ key: "a:" + a.id, a, label: labels.get(a.id) ?? fallbackLabel(a) })));
 });
 

@@ -1,6 +1,10 @@
 // agents: Jon's right panel. Each fact lives in one place: the cockpit on
 // the left is the roster of every workspace, so this panel is only about the
-// selected workspace, plus what belongs to no single card. Sections:
+// selected workspace, plus what belongs to no single card. Two tabs at the
+// top (#397), remembered per workspace until reload: Now, the sections
+// below, and Details (views/details.ts), the selected workspace's whole
+// story: every session, helper and check, its move, ports and pages.
+// Now's sections:
 //   This workspace - the selected workspace in detail (views/current.ts),
 //                    headed with its project; its name is the highlighted
 //                    card on the left. What that card has no room for: its
@@ -31,9 +35,9 @@
 //   cmux right-sidebar set custom agents
 
 import { stateNotice } from "../shared/freshness.ts";
-import { faintLine } from "../shared/notice.ts";
 import { motionList, when } from "../shared/ui.ts";
 import { contextMeters } from "./context.ts";
+import { tabOf } from "./details.ts";
 import { toggleExpanded } from "./lists.ts";
 import { emptyNote, madeCount, madeFoot, madeHere } from "./made.ts";
 import { current, currentHeading } from "./model.ts";
@@ -41,8 +45,11 @@ import { prCount, prFoot, prNote, prs } from "./pr-list.ts";
 import { T } from "./theme.ts";
 import { meterRow } from "./views/context.ts";
 import { currentPanel } from "./views/current.ts";
+import { detailsPanel } from "./views/details.ts";
 import { panel, sectionHeader } from "./views/parts.ts";
-import { footRow, madeRow, prRow } from "./views/rows.ts";
+import { madeRow, prRow } from "./views/rows.ts";
+import { faintNote, listSection } from "./views/sections.ts";
+import { tabSwitch } from "./views/tabs.ts";
 
 function currentSection(): View {
   return when(
@@ -52,86 +59,54 @@ function currentSection(): View {
   );
 }
 
-// A faint note in the panel's quiet colour, lined up with the headings.
-const faintNote = (key: string, text: () => string, color: string = T.tertiary): View => faintLine(key, text, color, 4);
-
-interface ListSection<T extends { key: string; last: boolean }> {
-  label: string;
-  key: string;
-  count: () => number;
-  rows: () => T[];
-  row: (e: () => T) => View;
-  /** The closing "+N more" or "Show less" line ("" for none) and what a tap
-   * on it does; no line by default. One field, so a line always has its tap. */
-  foot?: { text: () => string; toggle: () => void };
-  /** A faint line under the heading; none by default. */
-  note?: () => string;
-}
-
-// A heading with its count, over a card of rows only while there are some,
-// the card ending in "+N more" when the list was cut, "Show less" once open.
-function listSection<T extends { key: string; last: boolean }>(s: ListSection<T>): View {
-  const foot = s.foot;
-  return VStack({ spacing: 8, alignment: "leading" }, [
-    sectionHeader(s.label, () => String(s.count())),
-    ...(s.note ? [faintNote(s.key + "-note", s.note)] : []),
+// Today's panel: the selected workspace, every PR, what agents made, and
+// the Context card.
+function nowPanel(): View {
+  return VStack({ spacing: 18, alignment: "leading" }, [
+    currentSection(),
+    listSection({
+      label: "PULL REQUESTS",
+      key: "prs",
+      count: prCount,
+      rows: prs,
+      row: prRow,
+      foot: { text: prFoot, toggle: () => toggleExpanded("prs") },
+      note: prNote,
+    }),
     when(
-      s.key,
-      () => s.rows().length > 0,
+      "made-section",
+      () => madeCount() > 0,
       () =>
-        panel([
-          motionList({ items: s.rows, key: (e) => e.key, spacing: 0 }, (e) => s.row(e)),
-          ...(foot
-            ? [
-                when(
-                  s.key + "-more",
-                  () => foot.text() !== "",
-                  () => footRow(foot.text, foot.toggle),
-                ),
-              ]
-            : []),
+        listSection({
+          label: "MADE HERE",
+          key: "made",
+          count: madeCount,
+          rows: madeHere,
+          row: madeRow,
+          foot: { text: madeFoot, toggle: () => toggleExpanded("made") },
+        }),
+    ),
+    faintNote("empty-note", emptyNote),
+    when(
+      "context-section",
+      () => contextMeters().length > 0,
+      () =>
+        VStack({ spacing: 8, alignment: "leading" }, [
+          sectionHeader("CONTEXT"),
+          panel([motionList({ items: contextMeters, key: (m) => m.key, spacing: 0 }, meterRow)]),
         ]),
     ),
-  ]);
+  ]).frame({ maxWidth: "infinity", alignment: "leading" });
 }
 
+// The switch, then the chosen tab, each mounted only while chosen.
 sidebar(
   () =>
     VStack({ spacing: 18, alignment: "leading" }, [
+      tabSwitch(),
       faintNote("state-notice", stateNotice, T.clayText),
-      currentSection(),
-      listSection({
-        label: "PULL REQUESTS",
-        key: "prs",
-        count: prCount,
-        rows: prs,
-        row: prRow,
-        foot: { text: prFoot, toggle: () => toggleExpanded("prs") },
-        note: prNote,
-      }),
-      when(
-        "made-section",
-        () => madeCount() > 0,
-        () =>
-          listSection({
-            label: "MADE HERE",
-            key: "made",
-            count: madeCount,
-            rows: madeHere,
-            row: madeRow,
-            foot: { text: madeFoot, toggle: () => toggleExpanded("made") },
-          }),
-      ),
-      faintNote("empty-note", emptyNote),
-      when(
-        "context-section",
-        () => contextMeters().length > 0,
-        () =>
-          VStack({ spacing: 8, alignment: "leading" }, [
-            sectionHeader("CONTEXT"),
-            panel([motionList({ items: contextMeters, key: (m) => m.key, spacing: 0 }, meterRow)]),
-          ]),
-      ),
+      when("tab-now", () => tabOf() === "now", nowPanel),
+      when("tab-details", () => tabOf() === "details", detailsPanel),
       Spacer(),
     ])
       .paddingHorizontal(14)

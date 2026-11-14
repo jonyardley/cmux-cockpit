@@ -20,6 +20,18 @@ export const T = {
   quote: "#1414130A",
 } as const;
 
+/** The Now and Details switch, as the Cockpit's All and Projects switch
+ * (docs/design.md, View switch): a ringed track on the count pill's face,
+ * the chosen tab a card face with a hairline edge, the other lit grey
+ * under the pointer. */
+export const SWITCH = {
+  track: P.countBg,
+  trackEdge: P.chipEdge,
+  tab: T.panel,
+  tabEdge: T.panelEdge,
+  hover: T.hover,
+} as const;
+
 /** The face behind this chat's own rows in Pull requests and Made here
  * (issue #183): faint ink, since hue only ever means state. hoverBackground
  * replaces it under the pointer, so the hover face is a step on from it. */
