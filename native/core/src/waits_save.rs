@@ -24,7 +24,8 @@ use std::collections::BTreeMap;
 
 use crate::ci_wait::CiTrouble;
 use crate::data::{Data, Workspace};
-use crate::persist::{MAX_WAIT_DETAIL, MAX_WAITS, SavedWait, WaitKind, is_id, is_text, waits_fit};
+use crate::ostinato::wait::OSTINATO_KEY;
+use crate::persist::{MAX_WAIT_DETAIL, MAX_WAITS, SavedWait, WaitKind, is_id, is_text};
 use crate::prs::saved_pr_of;
 use crate::running_save::Saves;
 use crate::session::Session;
@@ -51,19 +52,16 @@ impl WaitSaves {
     }
 
     /// Whether a park the file holds still stands in for one not yet fed,
-    /// at the frame's clock `epoch`.
+    /// at the frame's clock `epoch`. The minute counts from the first
+    /// frame after the state file is read; with no clock there is no
+    /// grace, so a park is never kept for good.
     fn park_grace(&mut self, session: &Session, epoch: Option<f64>) -> bool {
-        if session.ostinato.fed() {
+        if session.ostinato.fed() || !session.state_read {
             return false;
         }
-        match (self.first, epoch) {
-            (Some(first), Some(now)) => now - first < PARK_GRACE_SECS,
-            (None, Some(now)) => {
-                self.first = Some(now);
-                true
-            }
-            (_, None) => true,
-        }
+        let Some(now) = epoch else { return false };
+        let first = *self.first.get_or_insert(now);
+        now - first < PARK_GRACE_SECS
     }
 
     /// The writes that bring the file's `waits` to the frame's: None
@@ -155,7 +153,7 @@ fn ci(session: &Session, data: &Data, w: &Workspace) -> Vec<SavedWait> {
             key: ci.key,
             agent: None,
             detail: detail(&ci.pr),
-            check: ci.check.clone().filter(|_| stuck),
+            check: ci.check.clone(),
             queued: stuck.then_some(ci.key),
         }];
     }
@@ -183,7 +181,10 @@ fn park(session: &Session, w: &Workspace, grace: bool) -> Vec<SavedWait> {
         }];
     }
     if grace && session.sleep_kind(&w.id).is_none() {
-        return held(session, w, |k| k == WaitKind::Park);
+        return held(session, w, |k| k == WaitKind::Park)
+            .into_iter()
+            .filter(|v| !session.dismissed_key(&w.id, OSTINATO_KEY, v.key))
+            .collect();
     }
     Vec::new()
 }
@@ -211,7 +212,7 @@ pub fn waits(
         found.extend(park(session, w, grace));
         let mut kept: Vec<SavedWait> = found.into_iter().filter(SavedWait::fits).collect();
         kept.truncate(MAX_WAITS);
-        if waits_fit(&kept) {
+        if !kept.is_empty() {
             out.insert(w.id.clone(), kept);
         }
     }
@@ -400,6 +401,53 @@ mod tests {
             [serde_json::json!({"W": null})],
             "no feed came"
         );
+    }
+
+    #[test]
+    fn a_feed_ends_the_grace_and_a_dismissed_park_is_never_kept() {
+        let park = r#"{"waits": {"W": [{"kind": "park", "since": 500, "key": 500}]}}"#;
+        let mut m = core(park, true);
+        assert!(saved(&mut m, frame(1000.0, idle())).is_empty());
+        let feed = crate::ostinato::OstinatoFeed::default();
+        assert_eq!(
+            saved(&mut m, Event::Ostinato(Box::new(feed))),
+            [serde_json::json!({"W": null})],
+            "the feed holds no park"
+        );
+        let dismissed = r#"{"waits": {"W": [{"kind": "park", "since": 500, "key": 500}]},
+            "dismissed": {"W": {"ostinato": 500}}}"#;
+        let mut m = core(dismissed, true);
+        assert_eq!(
+            saved(&mut m, frame(1000.0, idle())),
+            [serde_json::json!({"W": null})]
+        );
+    }
+
+    #[test]
+    fn stops_go_in_agent_order_and_a_list_is_capped() {
+        let agents: Vec<serde_json::Value> = (0..=crate::persist::MAX_WAITS)
+            .rev()
+            .map(|i| {
+                serde_json::json!({"id": format!("a{i:02}"), "kind": "claude", "status": "working",
+                    "sinceEpoch": 900, "lastActivityAt": 900,
+                    "stopped": {"cause": "gone", "since": 1000}})
+            })
+            .collect();
+        let data: Data = serde_json::from_value(serde_json::json!({"epoch": 1060,
+            "workspaces": [{"id": "W", "agents": agents}]}))
+        .unwrap();
+        let mut m = core("{}", true);
+        let got = saved(&mut m, Event::Data(data));
+        let ids: Vec<&str> = got
+            .first()
+            .and_then(|v| v["W"].as_array())
+            .into_iter()
+            .flatten()
+            .filter_map(|w| w["agent"].as_str())
+            .collect();
+        assert_eq!(ids.len(), crate::persist::MAX_WAITS);
+        assert_eq!(ids.first(), Some(&"a00"));
+        assert_eq!(ids.last(), Some(&"a19"));
     }
 
     #[test]
