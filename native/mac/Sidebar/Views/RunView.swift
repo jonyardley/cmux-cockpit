@@ -31,10 +31,14 @@ struct RunSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: RunLook.column) {
-            Text(RunText.title(run))
-                .font(.system(size: Metrics.Font.control, weight: .semibold))
-                .foregroundStyle(Color(run.titleInk))
-                .lineLimit(1)
+            // Each minute, so an ended run's day moves on at midnight
+            // with nothing else on the card changing.
+            TimelineView(.everyMinute) { context in
+                Text(RunText.title(run, now: context.date))
+                    .font(.system(size: Metrics.Font.control, weight: .semibold))
+                    .foregroundStyle(Color(run.titleInk))
+                    .lineLimit(1)
+            }
             if !run.status.isEmpty { status }
             if !run.item.isEmpty { RunItem(text: run.item, url: run.url) }
             if let strip = run.strip { StripView(strip: strip) }

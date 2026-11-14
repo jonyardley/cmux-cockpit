@@ -17,11 +17,13 @@ enum RunText {
     /// before, and "12 Nov" before that, "12 Nov 2025" in another year.
     /// Days are `zone`'s calendar days, so 00:30 after an end at 23:30 is
     /// the next day. An end after `now` (a clock running ahead) reads as
-    /// the same day.
+    /// the same day. The words are fixed English, whatever the Mac's
+    /// language: en_US_POSIX keeps "Sep" three letters where a locale's
+    /// own data may write "Sept".
     static func ended(_ end: Date, zone: TimeZone, now: Date) -> String {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = zone
-        calendar.locale = Locale(identifier: "en_GB")
+        calendar.locale = Locale(identifier: "en_US_POSIX")
         let parts = calendar.dateComponents([.hour, .minute], from: end)
         let time = String(format: "%02d:%02d", parts.hour ?? 0, parts.minute ?? 0)
         let endDay = calendar.startOfDay(for: end)

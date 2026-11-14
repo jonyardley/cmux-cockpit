@@ -556,7 +556,7 @@ impl Model {
             let s = &mut self.session;
             s.pr_poll.overlay(&mut s.saved.prs, data);
             s.tend_ci(data);
-            s.tend_parks(data);
+            s.tend_parks(data, self.panel_on);
         }
     }
 

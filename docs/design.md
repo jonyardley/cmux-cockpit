@@ -696,7 +696,9 @@ back, and once that one is picked again the parks dismissed before stay
 dismissed; "Restore needs you" brings a dismissed one back. The
 dismissal follows the run: when another workspace in the checkout
 carries it (the one it was made on fell asleep or closed), the parks stay
-dismissed there, and "Restore needs you" on that card brings them back. A dismissed
+dismissed there, and "Restore needs you" on that card brings them back.
+One left on a workspace that closed, even before a restart, moves to the
+carrier while the park it was made on still waits. A dismissed
 park no longer keeps the card from reading Ready, since it can stand for
 days, until its item is picked again. While a park shows, its question
 is on the card, so a card mid-run can sit in Needs you for an earlier
@@ -969,7 +971,9 @@ token (`native/core/src/ostinato/card.rs`); the view lays them out
   14:40" two to six days before, then "ended 12 Nov", with the year
   ("ended 12 Nov 2025") only when it is not this year. Days are the
   Mac's calendar days, so a run that ended at 23:30 reads "yesterday"
-  at 00:30.
+  at 00:30; the title reads the clock each minute, so the day moves on
+  at midnight. Weekdays and months are three letters in English
+  whatever the Mac's language ("Sep", never "Sept").
 - **Status:** a 6 dot in `blue`, the last stage done in `blueText`
   medium ("Built", "QA", or a stage outside the strip by its name,
   "Criteria") and how long ago in `metaText`, at `Font.meta` 11. A stage

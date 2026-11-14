@@ -19,8 +19,9 @@
 //! only the parks newer than it. The dismissal is saved on the workspace
 //! that carries the record and follows the run: when another workspace
 //! in the checkout takes the record over (its carrier fell asleep or
-//! closed, say), the dismissal moves to it. The park is read once a frame, at the
-//! frame's clock (`Session::tend_parks`).
+//! closed, say), the dismissal moves to it. Only the core that draws the
+//! sidebar moves one; the pane's takes the move from the state file. The
+//! park is read once a frame, at the frame's clock (`Session::tend_parks`).
 
 use crate::activity::most_active;
 use crate::data::{Agent, AgentStatus, Data, Workspace};
@@ -42,9 +43,6 @@ pub struct ParkWait {
     pub key: f64,
     /// The newest park's item, "notes-app#41".
     pub item: String,
-    /// The oldest waiting park's time: a dismissal made at or after it
-    /// still covers that park, though a newer one shows now.
-    pub oldest: f64,
     /// Each waiting park's time.
     pub times: Vec<f64>,
     /// The workspace is awake: an asleep one waits on nobody by design.
@@ -52,6 +50,12 @@ pub struct ParkWait {
 }
 
 impl ParkWait {
+    /// The oldest waiting park's time: a dismissal made at or after it
+    /// still covers that park, though a newer one shows now.
+    pub fn oldest(&self) -> f64 {
+        self.times.iter().copied().fold(self.key, f64::min)
+    }
+
     /// What the card says waits, `dismissed` the key of the dismissal on
     /// its parks: "Ostinato parked notes-app#41", or "Ostinato parked 2
     /// issues". Only the parks newer than the dismissal count, as those
@@ -77,15 +81,31 @@ fn park_carrier(agents: &[Agent]) -> Option<&str> {
 
 impl Session {
     /// Reads each workspace's parked attempts at the frame's clock,
-    /// first moving a park dismissal to the workspace carrying its record.
-    pub(crate) fn tend_parks(&mut self, data: &Data) {
+    /// first moving a park dismissal to the workspace carrying its record
+    /// when `owns`: only the core that draws the sidebar moves and saves
+    /// one, so the pane's, which can see a sleep call's carrier a moment
+    /// apart, never moves it back; it takes the move from the state file.
+    pub(crate) fn tend_parks(&mut self, data: &Data, owns: bool) {
         let read: Vec<(&Workspace, RecordState)> = data
             .workspace_list()
             .iter()
             .filter_map(|w| self.ostinato_run(data, w).map(|state| (w, state)))
             .collect();
-        for (w, _) in &read {
-            self.carry_park_dismissal(data, w);
+        // Most frames have no park dismissal to move.
+        if owns
+            && self
+                .dismissed
+                .values()
+                .any(|d| d.contains_key(OSTINATO_KEY))
+        {
+            for (w, state) in &read {
+                let waiting: Vec<f64> = state
+                    .run
+                    .iter()
+                    .flat_map(|run| run.waiting.iter().map(|p| p.at))
+                    .collect();
+                self.carry_park_dismissal(data, w, &waiting);
+            }
         }
         let mut found = std::collections::HashMap::new();
         let mut cards = std::collections::HashSet::new();
@@ -95,13 +115,11 @@ impl Session {
             let Some(newest) = run.waiting.iter().max_by(|a, b| a.at.total_cmp(&b.at)) else {
                 continue;
             };
-            let oldest = run.waiting.iter().map(|p| p.at).fold(newest.at, f64::min);
             found.insert(
                 w.id.clone(),
                 ParkWait {
                     key: self.park_key(&w.id, newest.at),
                     item: newest.item.clone(),
-                    oldest,
                     times: run.waiting.iter().map(|p| p.at).collect(),
                     waits: self.sleep_kind(&w.id).is_none(),
                 },
@@ -112,35 +130,45 @@ impl Session {
     }
 
     /// Moves any park dismissal saved on another workspace in the
-    /// checkout, or on the record's carrier at the last read though it
-    /// has closed since, onto `carrier`, the one carrying the record now,
-    /// so a dismissal follows the run rather than staying where it was
-    /// made. Two meet as the later key, which covers what both did. A
-    /// dismissal saved before this, on any workspace there, moves the
-    /// same way.
-    fn carry_park_dismissal(&mut self, data: &Data, carrier: &Workspace) {
-        let repo = carrier
-            .directory
-            .as_deref()
-            .and_then(|d| self.ostinato.repo_of(d))
-            .map(str::to_ascii_lowercase);
-        let last = repo
-            .as_ref()
-            .and_then(|r| self.park_carriers.get(r))
-            .cloned();
+    /// checkout onto `carrier`, the one carrying the record now, so a
+    /// dismissal follows the run rather than staying where it was made.
+    /// One left on a workspace open on no main checkout (closed, before a
+    /// restart even) moves too when its key is one of `waiting`, the
+    /// record's waiting parks' times: a key is the time of a park it was
+    /// made on, so it names its record. Two meet as the later key, which
+    /// covers what both did. A dismissal saved before this moves the same
+    /// way.
+    fn carry_park_dismissal(&mut self, data: &Data, carrier: &Workspace, waiting: &[f64]) {
         let mut from: Vec<String> = self
             .in_checkout(data, carrier)
             .into_iter()
             .map(|other| other.id.clone())
             .collect();
-        from.extend(last.filter(|id| !from.contains(id)));
+        let stray: Vec<String> = self
+            .dismissed
+            .iter()
+            .filter(|(_, d)| d.get(OSTINATO_KEY).is_some_and(|k| waiting.contains(k)))
+            .filter(|(id, _)| !self.on_main_checkout(data, id))
+            .map(|(id, _)| id.clone())
+            .collect();
+        for id in stray {
+            if !from.contains(&id) {
+                from.push(id);
+            }
+        }
         from.retain(|id| *id != carrier.id && self.park_dismissal(id).is_some());
         for id in from {
             self.move_park_dismissal(&id, &carrier.id);
         }
-        if let Some(repo) = repo {
-            self.park_carriers.insert(repo, carrier.id.clone());
-        }
+    }
+
+    /// Whether workspace `ws` is open on a main checkout Ostinato knows:
+    /// a dismissal there is its own record's, to move only in its checkout.
+    fn on_main_checkout(&self, data: &Data, ws: &str) -> bool {
+        data.ws_by_id(ws)
+            .and_then(|w| w.directory.as_deref())
+            .and_then(|d| self.ostinato.repo_of(d))
+            .is_some()
     }
 
     /// Moves workspace `from`'s park dismissal to workspace `to`, saving
@@ -189,7 +217,7 @@ impl Session {
     /// there). It lapses once no park it covers waits.
     pub(crate) fn park_dismissal_holds(&self, w: &Workspace, key: f64) -> bool {
         match self.parks.get(&w.id) {
-            Some(p) => p.key == key || p.oldest <= key,
+            Some(p) => p.key == key || p.oldest() <= key,
             None => !self.park_cards.contains(&w.id),
         }
     }
@@ -496,7 +524,6 @@ mod tests {
         let p = ParkWait {
             key: 30.0,
             item: "notes-app#43".into(),
-            oldest: 10.0,
             times: vec![10.0, 20.0, 30.0],
             waits: true,
         };
@@ -699,6 +726,13 @@ mod tests {
         d
     }
 
+    /// `m` as the core that draws the sidebar, the one that moves a
+    /// park dismissal.
+    fn sidebar(mut m: Model) -> Model {
+        let _ = Cockpit.update(Event::PanelOn, &mut m);
+        m
+    }
+
     fn asleep() -> crate::persist::SavedAsleep {
         crate::persist::SavedAsleep {
             surfaces: Vec::new(),
@@ -728,7 +762,7 @@ mod tests {
     #[test]
     fn a_dismissal_follows_the_run_to_another_workspace_in_the_checkout() {
         let d = two_frame();
-        let mut m = model(5, d.clone());
+        let mut m = sidebar(model(5, d.clone()));
         let w = d.ws_by_id("w").cloned();
         let w2 = d.ws_by_id("w2").cloned();
         m.session.dismiss_needs(w.as_ref());
@@ -768,7 +802,7 @@ mod tests {
     #[test]
     fn a_moved_dismissal_lapses_once_no_park_it_covers_waits() {
         let d = two_frame();
-        let mut m = model(5, d.clone());
+        let mut m = sidebar(model(5, d.clone()));
         let w = d.ws_by_id("w").cloned();
         m.session.dismiss_needs(w.as_ref());
         m.session.saved.asleep.insert("w".into(), asleep());
@@ -786,7 +820,7 @@ mod tests {
     #[test]
     fn a_dismissal_follows_the_run_when_its_workspace_closes() {
         let d = two_frame();
-        let mut m = model(5, d.clone());
+        let mut m = sidebar(model(5, d.clone()));
         let w = d.ws_by_id("w").cloned();
         m.session.dismiss_needs(w.as_ref());
         // w closes: w2 carries the run, and the park stays dismissed.
@@ -820,11 +854,20 @@ mod tests {
     /// A model seeded with the saved state `json` (as a state file holds
     /// it), then fed the record's first five lines and `d`.
     fn seeded(json: &str, d: &crate::data::Data) -> Model {
+        seeded_in(json, d, true)
+    }
+
+    /// `seeded`, as the core that draws the sidebar when `panel`, else
+    /// as the pane's.
+    fn seeded_in(json: &str, d: &crate::data::Data, panel: bool) -> Model {
         let saved = crate::persist::SavedState::from_json(json).unwrap();
         let mut m = Model {
             session: Session::new(Vec::new(), saved),
             ..Model::default()
         };
+        if panel {
+            m = sidebar(m);
+        }
         let _ = Cockpit.update(Event::Ostinato(Box::new(feed(5))), &mut m);
         let _ = Cockpit.update(Event::Data(d.clone()), &mut m);
         m
@@ -880,6 +923,81 @@ mod tests {
         let mut m = seeded(&json, &d);
         assert_eq!(park_dismissals(&m), [("w".to_string(), park)]);
         assert!(needs(&mut m).is_empty());
+    }
+
+    #[test]
+    fn a_dismissal_left_on_a_workspace_closed_before_a_restart_moves_to_the_carrier() {
+        // Saved on "gone", which closed before this session began.
+        let park = at("2026-11-10T09:31:10Z");
+        let json = format!(r#"{{"dismissed": {{"gone": {{"a": 1, "ostinato": {park}}}}}}}"#);
+        let d = two_frame();
+        let mut m = seeded(&json, &d);
+        assert!(needs(&mut m).is_empty(), "w carries it, dismissed");
+        assert_eq!(park_dismissals(&m), [("w".to_string(), park)]);
+        assert_eq!(
+            written(&m, "dismissed.gone"),
+            Some(Some(serde_json::json!({ "a": 1 })))
+        );
+    }
+
+    #[test]
+    fn a_stray_dismissal_that_names_no_waiting_park_stays_where_it_is() {
+        // Its key is no park of this record: another record's, say.
+        let other = at("2026-11-10T09:31:10Z") - 60.0;
+        let json = format!(r#"{{"dismissed": {{"gone": {{"ostinato": {other}}}}}}}"#);
+        let d = two_frame();
+        let mut m = seeded(&json, &d);
+        assert_eq!(needs(&mut m), ["w"]);
+        assert_eq!(park_dismissals(&m), [("gone".to_string(), other)]);
+        assert_eq!(written(&m, "dismissed.gone"), None);
+    }
+
+    #[test]
+    fn a_dismissal_on_another_checkout_stays_there_though_its_key_matches() {
+        // w2 is open on another main checkout: its dismissal is that
+        // record's, to move only there.
+        let park = at("2026-11-10T09:31:10Z");
+        let json = format!(r#"{{"dismissed": {{"w2": {{"ostinato": {park}}}}}}}"#);
+        let mut d = two_frame();
+        if let Some(ws) = d.workspaces.as_mut() {
+            for x in ws.iter_mut().filter(|x| x.id == "w2") {
+                x.directory = Some("/dev/other-app".into());
+            }
+        }
+        let saved = crate::persist::SavedState::from_json(&json).unwrap();
+        let mut m = sidebar(Model {
+            session: Session::new(Vec::new(), saved),
+            ..Model::default()
+        });
+        let mut f = feed(5);
+        f.checkouts
+            .insert("/dev/other-app".into(), "example/other-app".into());
+        let _ = Cockpit.update(Event::Ostinato(Box::new(f)), &mut m);
+        let _ = Cockpit.update(Event::Data(d), &mut m);
+        assert_eq!(needs(&mut m), ["w"]);
+        assert_eq!(park_dismissals(&m), [("w2".to_string(), park)]);
+    }
+
+    #[test]
+    fn the_panes_core_leaves_the_move_to_the_sidebars() {
+        // Dismissed on w, asleep since: the pane's core moves nothing and
+        // saves nothing, so it never moves a dismissal back while it sees
+        // a different carrier for a moment.
+        let park = at("2026-11-10T09:31:10Z");
+        let asleep = r#""asleep": {"w": {"surfaces": [], "since": 1}}"#;
+        let json = format!(r#"{{"dismissed": {{"w": {{"ostinato": {park}}}}}, {asleep}}}"#);
+        let d = two_frame();
+        let mut m = seeded_in(&json, &d, false);
+        assert_eq!(park_dismissals(&m), [("w".to_string(), park)]);
+        assert!(m.session.pending.is_empty(), "{:?}", m.session.pending);
+        assert_eq!(needs(&mut m), ["w2"]);
+        // The sidebar's move reaches it through the state file.
+        let moved = format!(r#"{{"dismissed": {{"w2": {{"ostinato": {park}}}}}, {asleep}}}"#);
+        m.session
+            .reseed(crate::persist::SavedState::from_json(&moved).unwrap());
+        let _ = Cockpit.update(Event::Data(d), &mut m);
+        assert!(needs(&mut m).is_empty());
+        assert_eq!(park_dismissals(&m), [("w2".to_string(), park)]);
     }
 
     #[test]

@@ -951,6 +951,19 @@ do {
     let newYork = TimeZone(identifier: "America/New_York") ?? utc
     check(RunText.ended(end, zone: newYork, now: at(1, 3)) == "08:34", "a zone behind UTC keeps the end's day for longer")
     check(RunText.ended(end, zone: utc, now: at(1, 3)) == "yesterday 13:34", "while UTC has moved on a day")
+    // September keeps three letters: 12 September 2025, 10:00 UTC, read
+    // a month on.
+    let september = Date(timeIntervalSince1970: 1_757_671_200)
+    let october = september.addingTimeInterval(30 * day)
+    check(RunText.ended(september, zone: utc, now: october) == "12 Sep", "September as Sep, not Sept")
+    check(RunText.ended(september, zone: utc, now: october.addingTimeInterval(4 * day)) == "12 Sep", "a later October day the same")
+    // London's clocks go forward at 01:00 on Sunday 29 March 2026: an
+    // end at 23:30 on the Saturday reads yesterday at 00:30 on the
+    // Sunday, and Sat once the 23 hour day has passed.
+    let london = TimeZone(identifier: "Europe/London") ?? utc
+    let saturday = Date(timeIntervalSince1970: 1_774_740_600)
+    check(RunText.ended(saturday, zone: london, now: saturday.addingTimeInterval(3600)) == "yesterday 23:30", "past midnight before the clocks change")
+    check(RunText.ended(saturday, zone: london, now: saturday.addingTimeInterval(24.5 * 3600)) == "Sat 23:30", "two days on across the short day")
 }
 
 exit(failures == 0 ? 0 : 1)
