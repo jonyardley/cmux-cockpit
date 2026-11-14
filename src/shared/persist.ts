@@ -5,9 +5,12 @@
 
 // State's shape is scripts/state-config.ts's contract; imported as a type
 // only, so esbuild erases it and a sidebar never bundles the script itself.
-import type { SavedProject, State } from "../../scripts/state-config.ts";
+import type { SidebarState } from "../../scripts/bundle.ts";
+import type { SavedProject } from "../../scripts/state-config.ts";
 
-declare const __STATE__: State;
+// What the build bakes (scripts/bundle.ts's stateFor): background tasks
+// come without their seenEpoch stamps, so the type has none to read.
+declare const __STATE__: SidebarState;
 // Baked in beside __STATE__ (issue #78). Read through typeof, so a bundle or
 // test that never defines it reads false rather than throwing.
 declare const __STATE_UNREADABLE__: boolean | undefined;
@@ -18,7 +21,7 @@ declare const __URL_TOKEN__: string | undefined;
 const URL_TOKEN: string = typeof __URL_TOKEN__ === "string" ? __URL_TOKEN__ : "";
 
 /** Whatever config/state.json held at the last build; empty if there was none. */
-export const SAVED_STATE: State = __STATE__;
+export const SAVED_STATE: SidebarState = __STATE__;
 
 /**
  * True when config/state.json was there at the last build but could not be

@@ -20,10 +20,13 @@ export const UNREAD: Record<Entry, readonly (keyof State)[]> = {
 };
 
 /** A saved background task as a sidebar is given it: without its seenEpoch stamp. */
-type BakedTask = Omit<SavedTask, "seenEpoch">;
+export type BakedTask = Omit<SavedTask, "seenEpoch">;
 
-/** The saved state a sidebar is given: the maps it reads, background tasks unstamped. */
-export type BakedState = Omit<Partial<State>, "background"> & { background?: Record<string, BakedTask[]> };
+/** The saved state as a sidebar reads it (src/shared/persist.ts): background tasks unstamped. */
+export type SidebarState = Omit<State, "background"> & { background?: Record<string, BakedTask[]> };
+
+/** What stateFor bakes: SidebarState less the maps the sidebar never reads. */
+export type BakedState = Partial<SidebarState>;
 
 // The background hook restamps each task's seenEpoch on every turn end and
 // asks for no build when only the stamps moved (report-background.ts's

@@ -68,6 +68,7 @@ const r = seed({
     background: {
       here: [bgTask("b2", "monitor", "Watch CI on #12", ago(540)), bgTask("b1", "shell", "npm run check", ago(120))],
     },
+    running: { here: { agent: "c1", since: ago(540), counts: [{ type: "shell", n: 2 }] } },
     published: Object.fromEntries(
       [page("p1", "Details tab plan", ago(5400)), page("p2", "Tab switch mock-up", ago(900))].map((e) => [e.url, e]),
     ),

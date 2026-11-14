@@ -1,5 +1,6 @@
 // The Details tab's Background work card (#398): the selected workspace's
-// saved background tasks as rows, oldest first, each with its kind and age.
+// saved background tasks as rows, oldest first, each with its kind and age,
+// while the core's saved verdict says work runs there.
 // The saved state is seeded before the panel's modules load, as they read
 // it at import.
 
@@ -24,9 +25,25 @@ const r = seed({
       sel: [
         task("b2", "monitor", "Watch CI on #12", ago(540)),
         task("b1", "shell", "npm run check", ago(120)),
-        task("a9", "subagent", "  ", ago(540)),
+        task("a8", "monitor", "Watch CI on #13", ago(540)),
+        task("s1", "session", "Fix the flaky test", ago(30)),
+        task("a9", "subagent", "Review the diff", ago(540)),
+        task(
+          "w1",
+          "monitor",
+          "live updates for artifact https://claude.ai/artifact/x (auto-armed on publish)",
+          ago(60),
+        ),
+        task("old", "shell", "npm run dev", ago(7200)),
       ],
       other: [task("o1", "shell", "cargo test", ago(60))],
+      // Saved, but the core says nothing runs here: its chat ended, or its age passed.
+      none: [task("n1", "shell", "sleep 600", ago(60))],
+    },
+    running: {
+      sel: { agent: "c1", since: ago(540), counts: [{ type: "shell", n: 3 }] },
+      other: { agent: "c1", since: ago(60), counts: [{ type: "shell", n: 1 }] },
+      bare: { agent: "c1", since: ago(60), counts: [{ type: "shell", n: 1 }] },
     },
   },
 });
@@ -39,6 +56,7 @@ function select(id: string): void {
     ws("sel", { selected: id === "sel" }),
     ws("other", { selected: id === "other" }),
     ws("none", { selected: id === "none" }),
+    ws("bare", { selected: id === "bare" }),
   ];
 }
 
@@ -52,10 +70,12 @@ describe("background work", () => {
     assert.deepEqual(
       bg.backgroundRows().map((x) => [x.key, x.label, x.figure, x.last]),
       [
-        ["bg:c1:a9", "Background task", "agent, 9m", false],
+        ["bg:c1:a8", "Watch CI on #13", "monitor, 9m", false],
         ["bg:c1:b2", "Watch CI on #12", "monitor, 9m", false],
-        ["bg:c1:b1", "npm run check", "shell, 2m", true],
+        ["bg:c1:b1", "npm run check", "shell, 2m", false],
+        ["bg:c1:s1", "Fix the flaky test", "session, <1m", true],
       ],
+      "no agent (Helpers lists it), no artifact watch, nothing older than the verdict's earliest work",
     );
     assert.equal(d.cardShows.background(), true);
   });
@@ -68,10 +88,12 @@ describe("background work", () => {
     );
   });
 
-  it("hides the card for a workspace with none saved, or none selected", () => {
+  it("hides the card while the core says nothing runs, with none saved, or none selected", () => {
     select("none");
-    assert.deepEqual(bg.backgroundRows(), []);
+    assert.deepEqual(bg.backgroundRows(), [], "tasks saved, no verdict");
     assert.equal(d.cardShows.background(), false);
+    select("bare");
+    assert.deepEqual(bg.backgroundRows(), [], "a verdict, no tasks saved");
     r.data.workspaces = [];
     assert.deepEqual(bg.backgroundRows(), []);
   });
