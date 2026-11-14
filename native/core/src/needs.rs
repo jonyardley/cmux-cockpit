@@ -21,6 +21,7 @@ use crate::ci_wait::{CI_KEY, ci_carrier};
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::js::{json_num, truthy};
 use crate::moves::{asks_nothing, quiet_turn, waiting_move};
+use crate::ostinato::wait::OSTINATO_KEY;
 use crate::persist::{SavedAsk, SavedMove, SavedState};
 use crate::saved::saved_for;
 use crate::session::Session;
@@ -114,8 +115,8 @@ fn wait_start(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> f64 {
 pub fn ask_reason(saved: &SavedState, a: Option<&Agent>, w: Option<&Workspace>) -> Option<String> {
     let a = a?;
     // A stopped session asks nothing, whatever an old saved ask says, and
-    // nor does one that only carries its workspace's CI.
-    if a.stopped.is_some() || a.ci.is_some() {
+    // nor does one that only carries its workspace's CI or parks.
+    if a.stopped.is_some() || a.ci.is_some() || a.ostinato_park {
         return None;
     }
     fresh_ask(saved, a, w).map(|s| s.reason.clone())
@@ -205,11 +206,15 @@ impl Session {
 
     /// Every wait on Jon in the workspace, dismissed or not, by the key a
     /// dismissal is saved under and when it began: its agents' asks, turns
-    /// and stops, and its CI's wait (ci_wait.rs).
+    /// and stops, its CI's wait (ci_wait.rs) and its Ostinato parks
+    /// (ostinato/wait.rs).
     fn waits(&self, w: &Workspace) -> IndexMap<String, f64> {
         let mut waits = self.agent_waits(w);
         if let Some(ci) = self.ci_waiting(w) {
             waits.insert(CI_KEY.to_string(), ci.key);
+        }
+        if let Some(park) = self.park_waiting(w) {
+            waits.insert(OSTINATO_KEY.to_string(), park.key);
         }
         waits
     }
@@ -250,12 +255,21 @@ impl Session {
             .get(&w.id)
             .and_then(|starts| starts.get(CI_KEY))
             .is_none_or(|key| self.ci_dismissal_holds(w, *key));
+        // A park's holds until the record shows a newer park or none.
+        let park_holds = self
+            .dismissed
+            .get(&w.id)
+            .and_then(|starts| starts.get(OSTINATO_KEY))
+            .is_none_or(|key| self.park_dismissal_holds(w, *key));
         let Some(by_agent) = self.dismissed.get_mut(&w.id) else {
             return;
         };
         by_agent.retain(|id, start| {
             if id == CI_KEY {
                 return ci_holds;
+            }
+            if id == OSTINATO_KEY {
+                return park_holds;
             }
             let reported = w.agent_list().any(|a| &a.id == id);
             !reported || live.get(id) == Some(start)
@@ -270,13 +284,20 @@ impl Session {
     /// nudged; any other needs_input reads as idle when it is a nudge,
     /// dismissed, or a turn that ended on "Nothing for you".
     /// A finished one carries its workspace's CI wait, when that shows
-    /// (ci_wait.rs).
+    /// (ci_wait.rs), and the one the card speaks through its Ostinato
+    /// parks (ostinato/wait.rs).
     pub fn effective_agent(&self, a: &Agent, w: Option<&Workspace>) -> Agent {
         let own = self.own_agent(a, w);
-        match w {
-            Some(w) if self.carries_ci(w, &a.id) => self.with_ci(own, Some(w)),
-            _ => own,
+        let Some(w) = w else { return own };
+        let shown = if self.carries_ci(w, &a.id) {
+            self.with_ci(own, Some(w))
+        } else {
+            own
+        };
+        if self.park_shown(Some(w)).is_some() && self.carries_park(w, &self.with_ci_all(w), &a.id) {
+            return self.with_park(shown, w);
         }
+        shown
     }
 
     /// `effective_agent` before CI: the agent's own wait, or none.
@@ -331,15 +352,27 @@ impl Session {
     /// A workspace's agents with nudges and dismissals applied, in the
     /// app's order. An agent sent with no status is left out (issue #7),
     /// and so is a dismissed session whose process went mid-turn.
-    /// A workspace with none left whose CI waits on Jon shows a stand-in
-    /// for the wait (ci_wait.rs).
+    /// A workspace with none left whose CI or Ostinato parks wait on Jon
+    /// shows a stand-in for the wait (ci_wait.rs, ostinato/wait.rs).
     pub fn agents_of(&mut self, w: Option<&Workspace>) -> Vec<Agent> {
         let Some(w) = w else { return Vec::new() };
         self.prune(w);
+        let agents = self.with_parks(self.with_ci_all(w), w);
+        if agents.is_empty() {
+            return self
+                .ci_stand_in(Some(w))
+                .or_else(|| self.park_stand_in(Some(w)))
+                .into_iter()
+                .collect();
+        }
+        agents
+    }
+
+    /// `shown_agents` with the CI wait on its carrier.
+    fn with_ci_all(&self, w: &Workspace) -> Vec<Agent> {
         let own = self.shown_agents(w);
         let carrier = ci_carrier(&own).map(str::to_string);
-        let agents: Vec<Agent> = own
-            .into_iter()
+        own.into_iter()
             .map(|a| {
                 if carrier.as_deref() == Some(a.id.as_str()) {
                     self.with_ci(a, Some(w))
@@ -347,11 +380,7 @@ impl Session {
                     a
                 }
             })
-            .collect();
-        if agents.is_empty() {
-            return self.ci_stand_in(Some(w)).into_iter().collect();
-        }
-        agents
+            .collect()
     }
 
     /// `agents_of` before CI and with no pruning: each agent's own wait.

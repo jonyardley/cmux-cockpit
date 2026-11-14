@@ -10,12 +10,16 @@
 //! (remote.rs): the record's `owner/repo`, from its latest `run_started`
 //! or else its file name, matched to the folder's GitHub `origin`.
 //!
-//! This much reads the record; the card that shows it comes next.
+//! The runner hands on only what a card reads of each record (bound.rs).
+//! The card's words and tokens come from card.rs, and a parked attempt
+//! waits on Jon in Needs you (wait.rs).
 
 pub mod bound;
+pub mod card;
 pub mod line;
 pub mod remote;
 pub mod run;
+pub mod wait;
 
 use std::collections::BTreeMap;
 
@@ -205,6 +209,7 @@ mod tests {
                 attempt: 1,
                 started: at("2026-11-13T14:22:47Z"),
                 last_stage: mark(Stage::Draft, "2026-11-13T14:39:48Z"),
+                steps: 5,
                 ended: Some(AttemptEnd {
                     outcome: Outcome::Draft,
                     at: at("2026-11-13T14:40:05Z"),
