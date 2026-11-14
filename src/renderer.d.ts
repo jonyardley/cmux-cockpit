@@ -16,8 +16,9 @@ interface FrameOptions {
   maxWidth?: Reactive<number | "infinity">;
   minHeight?: Reactive<number>;
   maxHeight?: Reactive<number | "infinity">;
-  /** Honoured with maxWidth, but a fixed width centres its content regardless:
-   * nest a maxWidth frame inside to place it. */
+  /** Not read by cmux (SceneNodeView.swift at 12023d89f): a maxWidth frame
+   * always places its content leading, and a fixed width or height centres
+   * it. A second frame() on one node merges into the first, key by key. */
   alignment?: Alignment;
 }
 

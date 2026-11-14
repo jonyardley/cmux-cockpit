@@ -66,7 +66,8 @@ const r = seed({
 const { agent, ws } = await import("./support/fixtures.ts");
 const d = await import("../src/agents/details.ts");
 const { madeOwn } = await import("../src/agents/made.ts");
-const { STATUS_DOT, T } = await import("../src/agents/theme.ts");
+const { STATUS_DOT, SWITCH, T } = await import("../src/agents/theme.ts");
+const { toPage } = await import("./support/html.ts");
 const { nodeOf, taps } = await import("./support/renderer.ts");
 const { tabSwitch } = await import("../src/agents/views/tabs.ts");
 const { detailsPanel } = await import("../src/agents/views/details.ts");
@@ -123,6 +124,24 @@ describe("the tab switch", () => {
     assert.equal(d.tabOf(), "details");
     fire(now);
     assert.equal(d.tabOf(), "now");
+  });
+
+  // cmux paints a node's background before its frame, so a face on a node
+  // that only a frame widens hugs the word (the switch PR #401 shipped).
+  // The preview mapping draws that order; the chosen face must fill its
+  // half by its own content, with the words between two spacers.
+  it("gives the chosen tab a face as wide as its half, the words centred", () => {
+    const node = nodeOf(tabSwitch());
+    assert.ok(node);
+    const page = toPage(node, "tabs", 300, "#FFFFFF").html;
+    const token = SWITCH.tab.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const faces = [...page.matchAll(new RegExp(`<div class="([^"]*)" style="[^"]*\\bbackground:${token}[;"]`, "g"))];
+    assert.equal(faces.length, 1);
+    assert.match(faces[0]?.[1] ?? "", /\bfw\b/);
+    assert.match(
+      page,
+      /<div class="sp[^"]*"[^>]*><\/div><div class="w"[^>]*><div class="t"[^>]*>Now<\/div><\/div><div class="sp/,
+    );
   });
 });
 

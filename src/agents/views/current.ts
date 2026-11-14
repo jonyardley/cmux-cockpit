@@ -344,8 +344,10 @@ function labelled(
 ): View {
   return when(key, show, () =>
     HStack({ spacing: LABEL_GAP, alignment }, [
-      // A fixed-width frame centres its content whatever the alignment, so the
-      // label first fills the column with the maxWidth frame that does honour it.
+      // A fixed-width frame centres its content, so the label first fills
+      // the column with a maxWidth frame, which cmux always places leading.
+      // The two calls merge on one node, and cmux draws the fixed frame
+      // outside the maxWidth one.
       Text(label)
         .font(META_FONT)
         .color(T.tertiary)
