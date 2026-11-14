@@ -611,10 +611,12 @@ mod tests {
     /// through `Feed::projects`, so "~" roots expand against home.
     fn fed_at(scene_name: &str, home: Option<&str>) -> Feed {
         // Roots as typed: the feed expands them itself.
+        // No golden scene this file reads carries Ostinato records.
         let Scene {
             projects,
             saved,
             data,
+            ..
         } = scene(scene_name, None).unwrap();
         let mut feed = Feed::with_home(home.map(str::to_string));
         feed.projects(projects);

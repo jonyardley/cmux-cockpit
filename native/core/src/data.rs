@@ -135,6 +135,11 @@ pub struct Agent {
         skip_serializing_if = "Option::is_none"
     )]
     pub ci: Option<crate::ci_wait::CiTrouble>,
+    /// Carries its workspace's parked Ostinato attempts, which wait on Jon
+    /// (ostinato/wait.rs): set by the core on the agent as the sidebars
+    /// show it, never by cmux or the runner.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub ostinato_park: bool,
 }
 
 impl Agent {

@@ -8,6 +8,7 @@ use crate::filter::NO_PROJECT;
 use crate::lane_entries::{LaneEntry, drop_hint, merge_ink, shows_left_off};
 use crate::lanes::{self, Density, LaneKey};
 use crate::model::card_density;
+use crate::ostinato::card::{RunCard, run_card};
 use crate::persist::ViewMode;
 use crate::placement::is_foreign_anchor;
 use crate::pr_colors::{draft_of, pr_ink, pr_text_color};
@@ -715,6 +716,7 @@ fn card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) -> Card 
         dimmed: is_dimmed(session, data, w),
         selected: session.is_selected(data, w),
         menu: session.card_menu(data, w),
+        run: run_of(session, data, w, density),
     }
 }
 
@@ -874,7 +876,27 @@ fn project_card(session: &mut Session, data: &Data, view: &ViewModel, id: &str) 
         dimmed: is_dimmed(session, data, w),
         selected: session.is_selected(data, w),
         menu: session.card_menu(data, w),
+        run: run_of(session, data, w, Density::Full),
     }
+}
+
+/// The Ostinato run on the card, for a card with room for it, with the
+/// question of a park waiting in Needs you (`Session::park_question`).
+fn run_of(
+    session: &Session,
+    data: &Data,
+    w: Option<&Workspace>,
+    d: Density,
+) -> Option<Box<RunCard>> {
+    if d == Density::Row {
+        return None;
+    }
+    let state = session.ostinato_run(data, w?)?;
+    let mut card = run_card(&state, now_epoch(data))?;
+    if let Some(q) = state.run.as_ref().and_then(|r| session.park_question(w, r)) {
+        card.question = q.to_string();
+    }
+    Some(Box::new(card))
 }
 
 /// A project's header: its look from the table, and the cards it counts.

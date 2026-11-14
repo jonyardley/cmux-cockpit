@@ -10,7 +10,10 @@
 # helper first (pkill -x Cockpit), or start it with no publisher:
 #   open native/mac/build/Build/Products/Debug/Cockpit.app --args --no-publish
 # The sidebar moves the core's clock to now every two seconds, so the
-# scene's ages read from today, not from the scene's own clock.
+# scene's ages read from today, not from the scene's own clock. A scene
+# with Ostinato records (ostinato) has every record line's time moved by
+# the same step, so a run in progress still reads as one:
+#   native/mac/dev-fixture.sh ostinato
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
 golden="$here/../../test/golden"
@@ -25,12 +28,27 @@ fi
 group="${COCKPIT_GROUP_DIR:-$HOME/Library/Group Containers/9S5FG4LQAF.dev.jonyardley.cockpit}"
 mkdir -p "$group"
 tmp="$group/.data.json.dev.tmp"
-# data.json's envelope around the scene's projects, state and data.
+# data.json's envelope around the scene's projects, state, Ostinato
+# records and data, each record line's time moved from the scene's clock
+# to now.
 python3 -c '
-import json, sys, time
+import datetime, json, sys, time
 scene = json.load(open(sys.argv[1]))
-out = {"seq": 0, "written_at_ms": int(time.time() * 1000), "home": sys.argv[2]}
-out.update({k: scene.get(k) for k in ("projects", "state", "data")})
+now = time.time()
+out = {"seq": 0, "written_at_ms": int(now * 1000), "home": sys.argv[2]}
+out.update({k: scene.get(k) for k in ("projects", "state", "ostinato", "data")})
+step = now - (scene.get("data") or {}).get("epoch", now)
+def moved(line):
+    try:
+        row = json.loads(line)
+        at = datetime.datetime.strptime(row["at"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc)
+    except (ValueError, KeyError, TypeError):
+        return line
+    when = datetime.datetime.fromtimestamp(at.timestamp() + step, datetime.timezone.utc)
+    row["at"] = when.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return json.dumps(row, separators=(",", ":"))
+for record in ((out.get("ostinato") or {}).get("records") or {}).values():
+    record["text"] = "".join(moved(l) + "\n" for l in record["text"].splitlines())
 json.dump(out, open(sys.argv[3], "w"))
 ' "$golden/$1.input.json" "$HOME" "$tmp"
 mv "$tmp" "$group/data.json"

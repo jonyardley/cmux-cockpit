@@ -325,9 +325,9 @@ fn own_description(w: Option<&Workspace>) -> String {
 
 /// Whether `a`, as the sidebars show it, waits on Jon in words of its
 /// own rather than a move or an ask: it stopped (stopped.rs), or carries
-/// its workspace's CI (ci_wait.rs).
+/// its workspace's CI (ci_wait.rs) or Ostinato parks (ostinato/wait.rs).
 fn speaks_for_itself(a: &Agent) -> bool {
-    a.stopped.is_some() || a.ci.is_some()
+    a.stopped.is_some() || a.ci.is_some() || a.ostinato_park
 }
 
 /// When the status of `a`, the workspace's agent as shown, began.
@@ -713,8 +713,11 @@ impl Session {
             let pr = self.ci_shown(w).map(|ci| ci.pr.clone()).unwrap_or_default();
             return clip(&pr, NEEDS_DETAIL_MAX);
         }
-        if a.is_some_and(|a| a.stopped.is_some()) {
+        if a.as_ref().is_some_and(|a| a.stopped.is_some()) {
             return one_line(Some(&card_message(w)), NEEDS_DETAIL_MAX);
+        }
+        if a.is_some_and(|a| a.ostinato_park) {
+            return self.park_detail(w, NEEDS_DETAIL_MAX);
         }
         if let Some(ask) = self.ask_of(w) {
             return ask;

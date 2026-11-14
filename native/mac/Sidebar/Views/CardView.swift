@@ -89,7 +89,7 @@ struct LaneCard: View {
 
 /// The full card (docs/design.md#full-card): the project's badge beside the title
 /// row; the status on its own line; the chips; the detail over two lines;
-/// the progress bar along the bottom.
+/// an Ostinato run (RunView.swift); the progress bar along the bottom.
 struct FullCard: View {
     let card: Card
 
@@ -105,6 +105,7 @@ struct FullCard: View {
                 WaitingTabLine(card: card)
                 if ChipsRow.shows(card) { ChipsRow(card: card, prOpens: false) }
                 Detail(text: card.detail, lines: CardText.detailLines(card))
+                if let run = card.run { RunSection(run: run) }
                 ProgressBar(card: card)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -136,6 +137,7 @@ struct CompactCard: View {
                 WaitingTabLine(card: card)
                 LeftOff(text: card.leftOff)
                 Detail(text: card.detail, lines: CardText.detailLines(card))
+                if let run = card.run { RunSection(run: run) }
                 ProgressBar(card: card)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -221,6 +223,7 @@ struct CardView: View {
             if ChipsRow.shows(card) {
                 ChipsRow(card: card).padding(.top, CardLook.projectGap)
             }
+            if let run = card.run { RunSection(run: run) }
             ProgressBar(card: card).padding(.top, card.progress == nil ? 0 : CardLook.projectGap)
         }
         .padding(CardLook.projectPad)

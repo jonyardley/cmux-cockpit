@@ -133,7 +133,7 @@ mod tests {
     use facet_generate::reflection::format::ContainerFormat;
 
     /// Every type the panel reaches, as the Swift names them.
-    const TYPES: [&str; 32] = [
+    const TYPES: [&str; 37] = [
         "AddMenu",
         "AddProject",
         "Anchor",
@@ -145,6 +145,7 @@ mod tests {
         "EditorView",
         "FilterMenu",
         "FilterProject",
+        "Gauge",
         "Icon",
         "Lane",
         "LateWait",
@@ -163,6 +164,10 @@ mod tests {
         "ProjectRow",
         "Row",
         "RowPr",
+        "RunCard",
+        "RunChip",
+        "RunRow",
+        "Strip",
         "Token",
         "Waiting",
         "WaitingTab",

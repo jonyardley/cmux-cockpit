@@ -481,7 +481,8 @@ Where: `Views/ProjectsView.swift:218-243`.
 ### Full card
 
 The badge tile (26, glyph 12, radius 8) beside a column of: the title row, the
-status line, the chips, the detail over up to two lines, the progress bar.
+status line, the chips, the detail over up to two lines, an
+[Ostinato run](#ostinato-run) when it has one, the progress bar.
 Badge to text 10; padding 10 leading, 12 trailing, 11 above and below; column
 spacing `fullColumn` 4. Title `Font.cardTitle` 13.5 semibold over two lines;
 status `Font.control` 12 medium with a 7 dot. Radius `Radius.card` 12, with
@@ -491,7 +492,7 @@ the [card chrome](#card-chrome). Where: `Views/CardView.swift:66-90`.
 
 A smaller badge (22, glyph 11, radius 7), the title on one line, the status
 line with the PR in words and its diff faint after it, where you left off,
-the detail, the progress bar. Badge to text 9; same padding as the full card;
+the detail, an [Ostinato run](#ostinato-run), the progress bar. Badge to text 9; same padding as the full card;
 column spacing `compactColumn` 3. Title `Font.compactTitle` 13 semibold; status
 `Font.next` 11.5 regular with a 6 dot. A quiet PR's words are `metaText`,
 as on a chip and a dense row (D14 a, `compact_pr` in
@@ -519,7 +520,7 @@ writes it (`row_detail` in `native/core/src/panel/build.rs`).
 The one shape every card takes in Projects. No badge (the header has it), so a
 waiting card's needs dot leads its title. Title row at 12.5 semibold over two
 lines, status line at 12 medium with a 7 dot, the detail, the chips (whose PR
-opens on a click), the progress bar. Padding 10 all round; radius
+opens on a click), an [Ostinato run](#ostinato-run), the progress bar. Padding 10 all round; radius
 `Radius.row` 9. Where: `Views/CardView.swift:176-193`.
 
 ### Title row
@@ -667,6 +668,35 @@ always did for green, but keeps the time, so the wait comes back from
 the same mark once GitHub settles. A frame that cannot read the PR, or
 one with an unsure merge state, changes neither the time nor a
 dismissal, which lapses only with a new time.
+
+### Ostinato waiting
+
+An Ostinato attempt that parked with a question waits on you (issue
+#390), as a [stopped](#stopped) session does: the card on the project's
+main checkout joins Needs you and takes Your turn's look whole, clay dot
+with its halo, `clayText` words, the clay [waiting card](#waiting-card)
+edge, stripe and wash, and counts in the waiting count, lane order, the
+[late wait](#late-wait) chip and Dismiss needs you. Its status says
+"Your turn: Ostinato parked notes-app#41", or "Ostinato parked 2 issues"
+with more than one; the question itself is on the
+[Ostinato run](#ostinato-run).
+
+A park waits, whichever run wrote it, until a later line picks its item
+again, so a new run starting leaves an earlier run's park waiting; the
+runner keeps such a park's line when it cuts the record. Unlike [CI waiting](#ci-waiting), a session at work in
+the workspace does not hide it: the loop runs unattended, so nobody else
+will answer. A session waiting on you for its own reason (a stop, an
+ask, a turn, CI) keeps its words, and the park still counts towards
+dismissing. A workspace with no session shows it on a stand-in; an
+asleep card never shows it. One dismissal covers the workspace's parks,
+keyed on the newest park's time, so only a newer park brings the card
+back, and once that one is picked again the parks dismissed before stay
+dismissed; "Restore needs you" brings a dismissed one back. A dismissed
+park no longer keeps the card from reading Ready, since it can stand for
+days, until its item is picked again. While a park shows, its question
+is on the card, so a card mid-run can sit in Needs you for an earlier
+run's park. No notification posts
+for a park yet. The rules are `native/core/src/ostinato/wait.rs`.
 
 ### Wait notification
 
@@ -914,6 +944,65 @@ Where: `Views/CardView.swift:393-425`.
 A 4 high capsule: `countBg` track, `blue` fill, 2 above.
 Where: `Views/CardView.swift:428-445`.
 
+### Ostinato run
+
+An unattended Ostinato run on its card (issue #390), under the card's
+own lines on a full, compact or Projects card; a dense row has no room
+and draws none. Only the card of the workspace open on the project's
+main checkout carries it: the folder whose `.git` is a directory and
+whose `origin` is the record's GitHub repo (or a folder inside it). With
+two workspaces open there, the first awake one in tab order carries it
+(the first, when all sleep), so one park never waits twice. The core says every word and
+token (`native/core/src/ostinato/card.rs`); the view lays them out
+(`Views/RunView.swift`), 4 above, its lines 5 apart:
+
+- **Title:** `Font.control` 12 semibold in `text`. "Ostinato run, issue
+  2 of 3" while it runs ("issue 2" with no issues cap), "Ostinato run
+  ended 14:40" after its end line, the time in the Mac's own zone
+  (`Model/RunText.swift`, as the core has no zone).
+- **Status:** a 6 dot in `blue`, the last stage done in `blueText`
+  medium ("Built", "QA", or a stage outside the strip by its name,
+  "Criteria") and how long ago in `metaText`, at `Font.meta` 11. A stage
+  line means a stage finished; nothing says one is in progress.
+- **Item:** "app-one#2806, attempt 1" at 12 in `secondary`; a click
+  opens its issue. Only an https link with a host opens; the core drops
+  any other (a `file:` path, another app's scheme), as a loop, not Jon,
+  writes the record (`web_link`).
+- **Strip:** five 4 high capsules 3 apart, the steps reached (brief,
+  built, reviewed, qa, draft) in `blue`, the rest `countBg`, their names
+  under them at `Font.tiny` 10 in `metaText`. Drawn while an attempt
+  runs. A send back never empties a step.
+- **Gauges:** "Attempt" with the attempt's time against the session
+  hours cap, "Last 24h" with the spend of attempts ended in the last 24
+  hours (each shared session counted once) against the daily cap, at 11
+  in `metaText` with tabular figures. A bar (4 high, `countBg` track,
+  `secondary` fill) only where there is a cap. A spend with an unpriced
+  attempt says "or more".
+- **After a run:** chips on the [quiet chip](#quiet-chip) frame, "2
+  drafts" in `mergeText`, "1 parked" in `clayText` on `clayChipFace`
+  inside `clayChipEdge`, the cost in `secondary` ("cost unknown" when an
+  attempt has none) and the run's length. Then a row per item in pick
+  order, its key in `text` and its newest attempt's outcome at the right
+  in `metaText` ("draft app-one#57"), a park's in `clayText` ("parked,
+  needs a decision").
+- **Question:** the run's newest waiting park's question, at 11 in
+  `secondary` on a `clayWash` face, radius 6, padded 7 by 5. It stays
+  while the park waits, during the run and after, dismissed or not, as
+  part of the run's summary. While a park shows in Needs you, the
+  newest waiting park's question shows instead, though an earlier run
+  parked it.
+- **No end written:** a run with no end line whose last line is older
+  than the attempt cap (three hours with none) reads "Ostinato run, no
+  end written" in `faint`, a `faint` dot and "Last line 3h 20m ago".
+- **Unreadable:** a line that breaks the record format adds "Ostinato
+  record unreadable at line 14" at 11 in `clayText` under what came
+  before it; with nothing before it, that is the title, in `faint`.
+
+The runner hands on only the lines a card reads, each keeping its number
+in the file (`native/core/src/ostinato/bound.rs`). The `ostinato` golden
+scene draws all three states; `native/mac/dev-fixture.sh ostinato` shows
+it in the sidebar with the record times moved to today.
+
 ### Card chrome
 
 Every card's face, edge, dimming and hover (`Views/CardView.swift:463-492`).
@@ -933,7 +1022,8 @@ Every card's face, edge, dimming and hover (`Views/CardView.swift:463-492`).
 ### Waiting card
 
 A card waiting on you (Your turn, [Stopped](#stopped),
-[CI waiting](#ci-waiting), [merge waiting](#merge-waiting) or Asking) stands out as a whole, not only by its dot and words, so the cards that wait can
+[CI waiting](#ci-waiting), [merge waiting](#merge-waiting),
+[Ostinato waiting](#ostinato-waiting) or Asking) stands out as a whole, not only by its dot and words, so the cards that wait can
 be told at a glance.
 The core picks every token on the card's `Waiting` (`Waiting::of`,
 `native/core/src/panel/mod.rs`): clay for Your turn, Stopped, CI

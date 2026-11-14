@@ -57,7 +57,22 @@ pub enum Stage {
     Other(String),
 }
 
+/// The card's strip of steps, in order.
+pub const STRIP: [Stage; 5] = [
+    Stage::Brief,
+    Stage::Built,
+    Stage::Reviewed,
+    Stage::Qa,
+    Stage::Draft,
+];
+
 impl Stage {
+    /// How many of the strip's steps reaching it fills: 1 for brief to 5
+    /// for draft; None for a stage outside the strip.
+    pub fn steps(&self) -> Option<usize> {
+        STRIP.iter().position(|s| s == self).map(|i| i + 1)
+    }
+
     fn of(name: &str) -> Stage {
         match name {
             "brief" => Stage::Brief,
@@ -94,6 +109,10 @@ pub struct Attempt {
     pub started: f64,
     /// Its newest stage or draft line.
     pub last_stage: Option<StageMark>,
+    /// How many of the strip's steps it has filled: the furthest strip
+    /// stage it reached, so a stage outside the strip or a send back
+    /// never empties one.
+    pub steps: usize,
     /// None while it runs.
     pub ended: Option<AttemptEnd>,
 }
@@ -151,6 +170,8 @@ pub struct RunState {
     pub picked: usize,
     /// The newest attempt still running, else the newest one picked.
     pub current: Option<Attempt>,
+    /// Every attempt the run picked, oldest first.
+    pub attempts: Vec<Attempt>,
     /// What the attempts ended in the 24 hours to the clock cost, in any
     /// run, each attempt's share of a shared session counted once.
     pub spend_24h: Cost,
@@ -158,6 +179,11 @@ pub struct RunState {
     /// The run's drafts and parks, oldest first.
     pub drafts: Vec<DraftMade>,
     pub parks: Vec<Park>,
+    /// The parks of every run read that no later line picks again,
+    /// oldest first: what still waits on Jon (wait.rs). A park stays
+    /// past the run that wrote it, until it is dismissed or its item is
+    /// picked again.
+    pub waiting: Vec<Park>,
     /// What the run cost: each session once at its latest figure, plus
     /// any attempt priced only as a whole.
     pub cost: Cost,
@@ -206,6 +232,31 @@ pub fn shares(lines: &[Line]) -> Vec<Share> {
             usd,
             known: cost_usd.is_some(),
         });
+    }
+    out
+}
+
+/// The parks in `lines`, any run's, with no `picked` line for their item
+/// after them in the file, oldest first.
+pub fn waiting_parks(lines: &[Line]) -> Vec<Park> {
+    let mut out: Vec<Park> = Vec::new();
+    for l in lines {
+        match &l.event {
+            Event::Parked {
+                item,
+                reason,
+                question,
+                attempt,
+            } => out.push(Park {
+                item: item.clone(),
+                attempt: *attempt,
+                reason: reason.clone(),
+                question: question.clone(),
+                at: l.at,
+            }),
+            Event::Picked { item, .. } => out.retain(|p| &p.item != item),
+            _ => {}
+        }
     }
     out
 }
@@ -267,6 +318,7 @@ struct Walk {
 impl Walk {
     fn stage(&mut self, item: &str, attempt: Option<u32>, stage: Stage, at: f64) {
         if let Some(a) = attempt_of(&mut self.attempts, item, attempt) {
+            a.steps = a.steps.max(stage.steps().unwrap_or(0));
             a.last_stage = Some(StageMark { stage, at });
         }
     }
@@ -284,6 +336,7 @@ impl Walk {
                 attempt: *attempt,
                 started: l.at,
                 last_stage: None,
+                steps: 0,
                 ended: None,
             }),
             Event::Stage {
@@ -395,10 +448,12 @@ pub fn run_state(lines: &[Line], heard: &[Heard], shares: &[Share], now: f64) ->
         started: walk.started,
         caps: walk.caps,
         current,
+        attempts: walk.attempts,
         spend_24h,
         phase,
         drafts: walk.drafts,
         parks: walk.parks,
+        waiting: waiting_parks(lines),
         cost,
         length,
     })
