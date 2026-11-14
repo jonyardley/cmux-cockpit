@@ -12,6 +12,7 @@
 //!
 //! This much reads the record; the card that shows it comes next.
 
+pub mod bound;
 pub mod line;
 pub mod remote;
 pub mod run;

@@ -22,7 +22,8 @@ use crate::time::iso_epoch;
 /// with the numbers (from 1) of any line that was not, which is an
 /// error on that line, and of any line cut in the middle of a character
 /// at its end. Built by `RecordText::from_bytes`, so the runner and the
-/// reader number lines the same way.
+/// reader number lines the same way, then cut down to the lines a card
+/// reads (bound.rs), each keeping its number in the file.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, Deserialize)]
 pub struct RecordText {
     pub text: String,
@@ -33,6 +34,11 @@ pub struct RecordText {
     /// middle of a JSON value, else not UTF-8.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cut: Vec<usize>,
+    /// Each line's number in the file, in order, when the text holds only
+    /// some of its lines (bound.rs); empty when it holds them all, line
+    /// one first. `not_utf8` and `cut` count in the file's numbers too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub numbers: Vec<usize>,
 }
 
 impl RecordText {
@@ -66,6 +72,7 @@ impl RecordText {
             text,
             not_utf8,
             cut,
+            numbers: Vec::new(),
         }
     }
 }
@@ -209,6 +216,8 @@ pub struct Line {
 /// was heard from at its time.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Heard {
+    /// Its number in the file, from 1.
+    pub number: usize,
     pub at: f64,
     pub run: String,
 }
@@ -244,7 +253,7 @@ pub fn read(record: &RecordText) -> Read {
     let mut out = Read::default();
     // The text after the last newline is a line only when it is not empty.
     for (i, raw) in record.text.split_terminator('\n').enumerate() {
-        let number = i + 1;
+        let number = record.numbers.get(i).copied().unwrap_or(i + 1);
         let got = if record.not_utf8.contains(&number) {
             Err(Broken::NotUtf8)
         } else if record.cut.contains(&number) {
@@ -264,7 +273,7 @@ pub fn read(record: &RecordText) -> Read {
                 run,
                 event,
             }),
-            Ok(Got::Heard(at, run)) => out.heard.push(Heard { at, run }),
+            Ok(Got::Heard(at, run)) => out.heard.push(Heard { number, at, run }),
             Ok(Got::Skipped) => {}
             Err(broken) => {
                 out.error = Some(RecordError {
@@ -621,6 +630,7 @@ mod tests {
         assert_eq!(
             r.heard,
             [Heard {
+                number: 3,
                 at: iso_epoch("2026-11-13T14:22:41Z").unwrap(),
                 run: "r-1".into()
             }]

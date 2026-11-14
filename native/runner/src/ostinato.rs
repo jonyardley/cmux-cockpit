@@ -9,6 +9,9 @@
 //! - It is polled every `FILES_EVERY`, as watch.rs polls the config
 //!   files: each file's size and modified time, and a file is read only
 //!   when they moved. A missing folder is no records, and no error.
+//! - Only what a card reads of a record is handed on, cut at the wall
+//!   clock of the read (cockpit_core::ostinato::bound): its latest run
+//!   and the day's spend, not the whole file, which only grows.
 //! - Only while there is a record, each open folder is looked up once
 //!   while it stays open (cached, and forgotten when its workspace
 //!   closes, so reopening it looks again): the nearest `.git` at or above it, a directory for a main
@@ -24,11 +27,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 
+use cockpit_core::ostinato::bound::bound;
 use cockpit_core::ostinato::remote::checkout_repo;
 use cockpit_core::ostinato::{OstinatoFeed, RecordText};
 
 use crate::watch::{Stamp, stamp};
-use crate::{FILES_EVERY, Input};
+use crate::{FILES_EVERY, Input, now_epoch};
 
 /// Names the records folder.
 pub const HOME_ENV: &str = "OSTINATO_HOME";
@@ -100,6 +104,12 @@ impl Records {
     /// last check; true when any did. One that will not read is tried
     /// again on the next check.
     pub fn check(&mut self) -> bool {
+        self.check_at(now_epoch())
+    }
+
+    /// `check`, cutting each record read to what its card reads at epoch
+    /// `clock` and after.
+    fn check_at(&mut self, clock: f64) -> bool {
         let found = self.dir.as_deref().map(list).unwrap_or_default();
         let before = self.files.len();
         self.files.retain(|p, _| found.iter().any(|(f, _)| f == p));
@@ -110,7 +120,7 @@ impl Records {
                 continue;
             }
             if let Ok(bytes) = fs::read(&path) {
-                let text = RecordText::from_bytes(&bytes);
+                let text = bound(&RecordText::from_bytes(&bytes), clock);
                 let kept = Kept {
                     stamp: now,
                     project,
@@ -303,7 +313,9 @@ mod tests {
         assert_eq!(w.check(ask), None, "no records: nothing, no lookups");
         assert_eq!(asked.get(), 0);
 
-        let line = "{\"v\":1}\n";
+        // A line the reader skips but reads past, so a second one is sent.
+        let line =
+            "{\"v\":1,\"at\":\"2026-11-13T14:00:00Z\",\"run\":\"r\",\"event\":\"board_synced\"}\n";
         fs::write(dir.join("example__app-one.jsonl"), line).unwrap();
         fs::write(dir.join("notes.txt"), "not a record").unwrap();
         fs::create_dir_all(dir.join("folder.jsonl")).unwrap();
@@ -360,6 +372,24 @@ mod tests {
         let mut records = Records::new(Some(dir));
         assert!(records.check());
         assert!(records.texts().contains_key("example/app-one"));
+    }
+
+    #[test]
+    fn a_long_record_is_handed_on_cut_to_its_latest_run() {
+        let dir = temp("bounded");
+        let run = |day: u32| {
+            format!(
+                "{{\"v\":1,\"at\":\"2026-11-{day:02}T08:00:00Z\",\"run\":\"r-{day}\",\"event\":\"run_started\",\"project\":\"example/app-one\"}}\n"
+            )
+        };
+        let whole: String = (1..=9).map(run).collect();
+        fs::write(dir.join("example__app-one.jsonl"), &whole).unwrap();
+        let mut records = Records::new(Some(dir));
+        let now = cockpit_core::time::iso_epoch("2026-11-09T09:00:00Z").unwrap();
+        assert!(records.check_at(now));
+        let sent = &records.texts()["example/app-one"];
+        assert_eq!(sent.text, run(9));
+        assert_eq!(sent.numbers, [9], "the line keeps its number in the file");
     }
 
     #[test]
