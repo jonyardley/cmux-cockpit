@@ -609,6 +609,11 @@ The ages, the same on both sides:
   shows a task before it
   starts; the five minutes on top cover the hook's clock against the
   frame's. A monitor saved as `shell` keeps the shell's age.
+- **An artifact watch** (a monitor described "live updates for artifact
+  ..."): never counts. The Artifact tool starts one when a chat publishes
+  or reopens a page, to wait for comments, and it lasts as long as the
+  chat; it is not work, so the card reads Idle beside it
+  (`artifact_watch` in `native/core/src/running.rs`).
 - **Anything else**: 12 hours (`MAX_AGE_S`), for a chat whose last `Stop`
   never came; a dev server left running longer than that between turns
   drops off the card.
