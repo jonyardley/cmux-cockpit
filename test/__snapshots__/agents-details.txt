@@ -161,6 +161,28 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
             Text "2 decisions open, leaning 1a 2b" .font(11) .color(secondary|neutralChip.fg) .lineLimit(1) .truncation(tail)
     VStack spacing: 8, alignment: leading
       HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
+        Text "B\u200aA\u200aC\u200aK\u200aG\u200aR\u200aO\u200aU\u200aN\u200aD W\u200aO\u200aR\u200aK" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
+        Text "2" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
+        Spacer
+      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
+        VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
+          Reorderable spacing: 0
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .frame(maxWidth: infinity, alignment: leading)
+                HStack spacing: 9
+                  Text "Watch CI on #12" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "monitor, 9m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .frame(maxWidth: infinity, alignment: leading)
+                HStack spacing: 9
+                  Text "npm run check" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "shell, 2m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
+    VStack spacing: 8, alignment: leading
+      HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
         Text "P\u200aO\u200aR\u200aT\u200aS" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
         Text "4" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
         Spacer

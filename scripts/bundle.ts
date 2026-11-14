@@ -9,19 +9,36 @@
 // key it leaves out fails it.
 
 import type { BuildOptions } from "esbuild";
-import type { State } from "./state-config.ts";
+import type { SavedTask, State } from "./state-config.ts";
 
 export const ENTRIES = ["agents"] as const;
 export type Entry = (typeof ENTRIES)[number];
 
 /** The saved-state maps each sidebar never reads, so a change to them never reloads it. */
 export const UNREAD: Record<Entry, readonly (keyof State)[]> = {
-  agents: ["projects", "ui", "laneNames", "background"],
+  agents: ["projects", "ui", "laneNames"],
 };
 
-/** `state` without the maps `entry` never reads. */
-export function stateFor(entry: Entry, state: State): Partial<State> {
-  const out: Partial<State> = { ...state };
+/** A saved background task as a sidebar is given it: without its seenEpoch stamp. */
+type BakedTask = Omit<SavedTask, "seenEpoch">;
+
+/** The saved state a sidebar is given: the maps it reads, background tasks unstamped. */
+export type BakedState = Omit<Partial<State>, "background"> & { background?: Record<string, BakedTask[]> };
+
+// The background hook restamps each task's seenEpoch on every turn end and
+// asks for no build when only the stamps moved (report-background.ts's
+// unstamped). No sidebar reads the stamp, so it is left out: baked in, a
+// build for any other reason would carry the moved stamps and reload the
+// panel for nothing.
+const unstamped = (tasks: readonly SavedTask[]): BakedTask[] => tasks.map(({ seenEpoch: _, ...t }) => t);
+
+/** `state` without the maps `entry` never reads, and without the background stamps. */
+export function stateFor(entry: Entry, state: State): BakedState {
+  const { background, ...rest } = state;
+  const out: BakedState = { ...rest };
+  if (background) {
+    out.background = Object.fromEntries(Object.entries(background).map(([ws, tasks]) => [ws, unstamped(tasks)]));
+  }
   for (const k of UNREAD[entry]) delete out[k];
   return out;
 }

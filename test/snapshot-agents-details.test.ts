@@ -2,7 +2,8 @@
 // whose chat ended its turn on a move with two decisions, beside a codex
 // session and one that has ended. A helper still runs and two have
 // finished; the PR has a failing, a running, a queued and a passing check
-// and can merge; four ports are open and the chat published two pages.
+// and can merge; a shell and a monitor run in the background, four ports
+// are open and the chat published two pages.
 // Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
@@ -15,6 +16,16 @@ const page = (id: string, title: string, epoch: number) => ({
   kind: "page" as const,
   workspace: "here",
   epoch,
+});
+
+const bgTask = (id: string, type: "shell" | "monitor", description: string, startedEpoch: number) => ({
+  id,
+  type,
+  status: "running",
+  description,
+  session: "c1",
+  startedEpoch,
+  seenEpoch: ago(30),
 });
 
 const r = seed({
@@ -53,6 +64,9 @@ const r = seed({
         decisions: 2,
         leans: "1a 2b",
       },
+    },
+    background: {
+      here: [bgTask("b2", "monitor", "Watch CI on #12", ago(540)), bgTask("b1", "shell", "npm run check", ago(120))],
     },
     published: Object.fromEntries(
       [page("p1", "Details tab plan", ago(5400)), page("p2", "Tab switch mock-up", ago(900))].map((e) => [e.url, e]),
