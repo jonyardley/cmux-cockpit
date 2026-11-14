@@ -10,9 +10,14 @@
 # helper first (pkill -x Cockpit), or start it with no publisher:
 #   open native/mac/build/Build/Products/Debug/Cockpit.app --args --no-publish
 # The sidebar moves the core's clock to now every two seconds, so the
-# scene's ages read from today, not from the scene's own clock. A scene
-# with Ostinato records (ostinato) has every record line's time moved by
-# the same step, so a run in progress still reads as one:
+# scene's ages must read from today, not from the scene's own clock. Every
+# scene therefore has data.epoch and every session time in data (an
+# agent's last activity and since time, a workspace's latest time, a
+# child's started and ended time, all in epoch seconds) moved by the gap
+# between now and the scene's clock, so a card reads the age the scene
+# intends. A scene with Ostinato records (ostinato) has every record
+# line's time moved by the same step, so a run in progress still reads as
+# one:
 #   native/mac/dev-fixture.sh ostinato
 set -eu
 here="$(cd "$(dirname "$0")" && pwd)"
@@ -29,8 +34,8 @@ group="${COCKPIT_GROUP_DIR:-$HOME/Library/Group Containers/9S5FG4LQAF.dev.jonyar
 mkdir -p "$group"
 tmp="$group/.data.json.dev.tmp"
 # data.json's envelope around the scene's projects, state, Ostinato
-# records and data, each record line's time moved from the scene's clock
-# to now.
+# records and data, the scene's times all moved from the scene's clock to
+# now.
 python3 -c '
 import datetime, json, sys, time
 scene = json.load(open(sys.argv[1]))
@@ -38,6 +43,22 @@ now = time.time()
 out = {"seq": 0, "written_at_ms": int(now * 1000), "home": sys.argv[2]}
 out.update({k: scene.get(k) for k in ("projects", "state", "ostinato", "data")})
 step = now - (scene.get("data") or {}).get("epoch", now)
+TIMES = ("lastActivityAt", "sinceEpoch", "latestAt", "startedEpoch", "endedEpoch")
+def shift(node):
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key in TIMES and isinstance(value, (int, float)) and not isinstance(value, bool):
+                node[key] = value + step
+            else:
+                shift(value)
+    elif isinstance(node, list):
+        for item in node:
+            shift(item)
+data = out.get("data")
+if isinstance(data, dict):
+    shift(data.get("workspaces"))
+    if isinstance(data.get("epoch"), (int, float)):
+        data["epoch"] = now
 def moved(line):
     try:
         row = json.loads(line)
