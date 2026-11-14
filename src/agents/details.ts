@@ -11,6 +11,7 @@ import { askReason } from "../shared/needs.ts";
 import { checksOf, diffText, prOf } from "../shared/prs.ts";
 import { ageSince } from "../shared/time.ts";
 import { withAge } from "../shared/words.ts";
+import { backgroundRows } from "./background.ts";
 import { keyedChecks } from "./checks.ts";
 import { markLastBefore } from "./lists.ts";
 import { madeOwn } from "./made.ts";
@@ -258,8 +259,9 @@ export const portRows = computed((): Last<PortRow>[] =>
 
 // ---- Which cards show ---------------------------------------------------------------
 
-/** The Details tab's cards, in the issue's order. */
-export type DetailsCard = "sessions" | "helpers" | "pr" | "move" | "ports" | "made";
+/** The Details tab's cards, in the issue's order, Background work after
+ * the move as the plan's mock-up has it (#398). */
+export type DetailsCard = "sessions" | "helpers" | "pr" | "move" | "background" | "ports" | "made";
 
 /** Whether each card shows: the view mounts each card by its entry here,
  * and the note below reads the same entries, so the two cannot drift. */
@@ -268,6 +270,7 @@ export const cardShows: Readonly<Record<DetailsCard, () => boolean>> = {
   helpers: () => helperRows().length > 0,
   pr: () => !!currentPr(),
   move: () => moveDetail() !== null,
+  background: () => backgroundRows().length > 0,
   ports: () => portRows().length > 0,
   made: () => madeOwn().length > 0,
 };

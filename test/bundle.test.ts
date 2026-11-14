@@ -46,6 +46,23 @@ describe("each sidebar's saved state", () => {
     assert.ok(!("ui" in agents) && !("projects" in agents));
     assert.ok("prs" in agents && "poll" in stateFor("agents", { ...state, poll: { okEpoch: 1 } }));
   });
+
+  it("gives the agents panel the background tasks without their seenEpoch stamps", () => {
+    const t = {
+      id: "b1",
+      type: "shell" as const,
+      status: "running",
+      description: "npm run check",
+      session: "c1",
+      startedEpoch: 100,
+      seenEpoch: 200,
+    };
+    const { seenEpoch: _, ...unstamped } = t;
+    const state = { ...emptyState(), background: { w1: [t] } };
+    assert.deepEqual(stateFor("agents", state).background, { w1: [unstamped] });
+    assert.equal(state.background.w1[0]?.seenEpoch, 200, "the saved state itself is left alone");
+    assert.ok(!("background" in stateFor("agents", emptyState())), "none saved gives none");
+  });
 });
 
 describe("the lane table", () => {

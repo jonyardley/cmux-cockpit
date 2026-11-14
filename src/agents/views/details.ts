@@ -1,11 +1,12 @@
 // The Details tab (#397): the selected workspace's whole story, one card
 // each for its sessions, helpers, pull request, the move its chat ended on,
-// its ports and the pages it made. A card shows only while it has
+// its background work, its ports and the pages it made. A card shows only while it has
 // something to say; every row with a link opens it.
 
 import type { Last } from "../../shared/list.ts";
 import { prChipColors } from "../../shared/pr-colors.ts";
 import { META_FONT, meta, motionList, openIfUrl, when } from "../../shared/ui.ts";
+import { type BackgroundRow, backgroundRows } from "../background.ts";
 import {
   type CheckDetail,
   cardShows,
@@ -133,6 +134,13 @@ function checkRow(e: () => Last<CheckDetail>): View {
   );
 }
 
+// A background task: its description, then its kind and how long it has
+// run ("shell, 2m"). No dot, as every listed task runs, and no tap, as
+// there is nowhere of its own to go.
+function backgroundRow(e: () => Last<BackgroundRow>): View {
+  return detailRow({ title: () => e().label, figure: () => e().figure }, () => e().last);
+}
+
 function portRow(e: () => Last<PortRow>): View {
   return detailRow(
     { title: () => e().label, figure: () => "localhost", tap: () => openIfUrl(e().url) },
@@ -244,6 +252,7 @@ const CARDS: Readonly<Record<DetailsCard, () => View>> = {
   helpers: () => listCard("HELPERS", "helpers", helperRows, helperRow),
   pr: prSection,
   move: moveSection,
+  background: () => listCard("BACKGROUND WORK", "background", backgroundRows, backgroundRow),
   ports: () => listCard("PORTS", "ports", portRows, portRow),
   made: () => listCard("MADE HERE", "made", madeOwn, madeRow),
 };
