@@ -384,7 +384,8 @@ pub fn web_link(url: &str) -> Option<String> {
         .filter(|s| s.eq_ignore_ascii_case("https://"))
         .and_then(|_| url.get(8..))?;
     let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
-    let ok = !host.is_empty()
+    // A host names something: punctuation alone ("https://:") is none.
+    let ok = host.bytes().any(|b| b.is_ascii_alphanumeric())
         && host
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b':'));
@@ -643,6 +644,8 @@ mod tests {
             "javascript:alert(1)",
             "https://",
             "https:///path",
+            "https://:",
+            "https://.-/x",
             "https://user@host/x",
             "https://host /x",
             "http://github.com/x",
