@@ -1,5 +1,5 @@
 //! Watches the Ostinato records folder (issue #390) on a thread of its
-//! own, and asks git which open workspace folders are main checkouts of
+//! own, and finds which open workspace folders are main checkouts of
 //! which GitHub repo, then hands the core both (`Input::Ostinato`)
 //! whenever either changed.
 //!
@@ -9,25 +9,25 @@
 //! - It is polled every `FILES_EVERY`, as watch.rs polls the config
 //!   files: each file's size and modified time, and a file is read only
 //!   when they moved. A missing folder is no records, and no error.
-//! - git runs only while there is a record, once per folder (cached),
-//!   with `git rev-parse` and `git remote get-url origin` there
-//!   (cockpit_core::ostinato::remote), with every `GIT_` variable the
-//!   runner inherited cleared, so git finds the repo from the folder
-//!   alone. A folder git could not answer for (past its time limit) is
-//!   asked again on the next check.
+//! - Only while there is a record, each open folder is looked up once
+//!   (cached): the nearest `.git` at or above it, a directory for a main
+//!   checkout, whose `config` names its `origin`
+//!   (cockpit_core::ostinato::remote). No git process runs, since git
+//!   run in a folder obeys that repo's own config, which can run
+//!   anything (`core.fsmonitor`, a pager). A `.git` file is a linked
+//!   worktree, which matches nothing.
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 
-use cockpit_core::ostinato::remote::{REMOTE_ARGS, REV_PARSE_ARGS, checkout_repo};
+use cockpit_core::ostinato::remote::checkout_repo;
 use cockpit_core::ostinato::{OstinatoFeed, RecordText};
 
 use crate::watch::{Stamp, stamp};
-use crate::{COMMAND_LIMIT, FILES_EVERY, Input, pr_ask};
+use crate::{FILES_EVERY, Input};
 
 /// Names the records folder.
 pub const HOME_ENV: &str = "OSTINATO_HOME";
@@ -134,23 +134,18 @@ impl Records {
     }
 }
 
-/// What git said of each folder: the repo it is the main checkout of, or
-/// None.
+/// Each folder looked up: the repo it is the main checkout of, or None.
 #[derive(Debug, Default)]
 pub struct Checkouts {
     known: HashMap<String, Option<String>>,
 }
 
 impl Checkouts {
-    /// Asks `ask` about each folder in `open` not answered yet. An answer
-    /// of None (git could not tell) leaves it to be asked again.
-    pub fn learn(&mut self, open: &[String], ask: impl Fn(&str) -> Option<Option<String>>) {
+    /// Looks up each folder in `open` not looked up yet, with `look`.
+    pub fn learn(&mut self, open: &[String], look: impl Fn(&str) -> Option<String>) {
         for dir in open {
-            if self.known.contains_key(dir) {
-                continue;
-            }
-            if let Some(answer) = ask(dir) {
-                self.known.insert(dir.clone(), answer);
+            if !self.known.contains_key(dir) {
+                self.known.insert(dir.clone(), look(dir));
             }
         }
     }
@@ -163,44 +158,26 @@ impl Checkouts {
     }
 }
 
-/// Asks git in `dir` which repo it is the main checkout of: Some(None)
-/// for none (no folder, not a checkout, a linked worktree, no GitHub
-/// `origin`), None when git could not answer (missing, or killed past
-/// `COMMAND_LIMIT`).
-pub fn ask_git(dir: &str) -> Option<Option<String>> {
-    if !Path::new(dir).is_dir() {
-        return Some(None);
-    }
-    let git = pr_ask::tool("git", &["/opt/homebrew/bin/git", "/usr/bin/git"]);
-    let run = |args: &[&str]| pr_ask::ran_command(git_in(&git, dir, args), COMMAND_LIMIT);
-    let rev = run(&REV_PARSE_ARGS);
-    match rev.status {
-        None => return None,
-        Some(0) => {}
-        Some(_) => return Some(None),
-    }
-    let remote = run(&REMOTE_ARGS);
-    let url = match remote.status {
-        None => return None,
-        Some(0) => Some(remote.stdout),
-        // No origin.
-        Some(_) => None,
-    };
-    Some(checkout_repo(&rev.stdout, url.as_deref()))
-}
-
-/// `git` with `args` in `dir`, clear of every `GIT_` variable the runner
-/// inherited: one such as `GIT_DIR`, which a git hook sets, would point
-/// it at another repo whatever the folder.
-pub fn git_in(git: &str, dir: &str, args: &[&str]) -> Command {
-    let mut cmd = Command::new(git);
-    cmd.args(args).current_dir(dir);
-    for (name, _) in std::env::vars_os() {
-        if name.to_string_lossy().starts_with("GIT_") {
-            cmd.env_remove(name);
+/// The config file of the main checkout `dir` is in: the nearest `.git`
+/// at or above it, when that is a directory. None when it is a file (a
+/// linked worktree, or a submodule) or there is none.
+fn main_config(dir: &Path) -> Option<PathBuf> {
+    for folder in dir.ancestors() {
+        let git = folder.join(".git");
+        match fs::metadata(&git) {
+            Ok(m) if m.is_dir() => return Some(git.join("config")),
+            Ok(_) => return None,
+            Err(_) => {}
         }
     }
-    cmd
+    None
+}
+
+/// The GitHub repo `dir` is in the main checkout of, read from its
+/// `.git/config` with no git process; None for none.
+pub fn checkout_of(dir: &str) -> Option<String> {
+    let config = fs::read_to_string(main_config(Path::new(dir))?).ok()?;
+    checkout_repo(&config)
 }
 
 /// The watch's state between checks.
@@ -223,13 +200,13 @@ impl Watch {
     }
 
     /// One check: the feed to hand on, when it moved since the last.
-    /// git is asked only while there is a record.
-    pub fn check(&mut self, ask: impl Fn(&str) -> Option<Option<String>>) -> Option<OstinatoFeed> {
+    /// Folders are looked up only while there is a record.
+    pub fn check(&mut self, look: impl Fn(&str) -> Option<String>) -> Option<OstinatoFeed> {
         let moved = self.records.check();
         let checkouts = if self.records.is_empty() {
             BTreeMap::new()
         } else {
-            self.checkouts.learn(&self.open, ask);
+            self.checkouts.learn(&self.open, look);
             self.checkouts.map(&self.open)
         };
         if !moved && checkouts == self.sent.checkouts {
@@ -252,7 +229,7 @@ impl Watch {
 pub fn watch(tx: &Sender<Input>, open: &Receiver<Vec<String>>, dir: Option<PathBuf>) {
     let mut w = Watch::new(dir);
     loop {
-        if let Some(feed) = w.check(ask_git)
+        if let Some(feed) = w.check(checkout_of)
             && tx.send(Input::Ostinato(Box::new(feed))).is_err()
         {
             return;
@@ -314,11 +291,11 @@ mod tests {
         let asked = Cell::new(0);
         let ask = |d: &str| {
             asked.set(asked.get() + 1);
-            Some((d == "/dev/app-one").then(|| "example/app-one".to_string()))
+            (d == "/dev/app-one").then(|| "example/app-one".to_string())
         };
         let mut w = Watch::new(Some(dir.clone()));
         w.open = vec!["/dev/app-one".into(), "/dev/feat".into()];
-        assert_eq!(w.check(ask), None, "no records: nothing, no git");
+        assert_eq!(w.check(ask), None, "no records: nothing, no lookups");
         assert_eq!(asked.get(), 0);
 
         let line = "{\"v\":1}\n";
@@ -353,98 +330,85 @@ mod tests {
     }
 
     #[test]
-    fn a_folder_git_could_not_answer_for_is_asked_again() {
+    fn each_folder_is_looked_up_once() {
         let mut c = Checkouts::default();
         let open = vec!["/dev/a".to_string()];
-        c.learn(&open, |_| None);
-        assert!(c.map(&open).is_empty());
-        c.learn(&open, |_| Some(Some("example/a".into())));
+        c.learn(&open, |_| Some("example/a".into()));
         assert_eq!(c.map(&open)["/dev/a"], "example/a");
-        c.learn(&open, |_| Some(None));
+        c.learn(&open, |_| None);
         assert_eq!(c.map(&open)["/dev/a"], "example/a", "cached");
     }
 
     #[test]
     fn a_missing_folder_is_no_records_and_no_error() {
         let mut w = Watch::new(Some(PathBuf::from("/nonexistent/ostinato/records")));
-        assert_eq!(w.check(|_| Some(None)), None);
+        assert_eq!(w.check(|_| None), None);
         let mut none = Watch::new(None);
-        assert_eq!(none.check(|_| Some(None)), None);
+        assert_eq!(none.check(|_| None), None);
     }
 
-    /// git in a folder of the test's own, never the repo the tests run
-    /// in: clear of the variables a git hook exports, and stopped from
-    /// looking above the test's folder.
-    fn git_ok(dir: &Path, root: &Path, args: &[&str]) -> bool {
-        let mut cmd = git_in("git", dir.to_str().unwrap(), args);
-        cmd.env("GIT_CEILING_DIRECTORIES", root);
-        cmd.output().is_ok_and(|o| o.status.success())
+    /// A checkout made by hand, with no git process: `.git` and its config.
+    fn checkout(root: &Path, name: &str, config: &str) -> PathBuf {
+        let dir = root.join(name);
+        fs::create_dir_all(dir.join(".git")).unwrap();
+        fs::write(dir.join(".git/config"), config).unwrap();
+        dir
     }
 
-    fn git(dir: &Path, root: &Path, args: &[&str]) {
-        assert!(git_ok(dir, root, args), "git {args:?}");
+    fn origin(url: &str) -> String {
+        format!("[core]\n\tbare = false\n[remote \"origin\"]\n\turl = {url}\n")
     }
 
     #[test]
-    fn git_names_a_main_checkouts_repo_and_not_a_worktrees() {
-        let root = temp("git");
-        let main = root.join("main");
-        fs::create_dir_all(&main).unwrap();
-        // A tripwire: were git to see any repo from here, init would
-        // change that one, so stop before it.
-        assert!(
-            !git_ok(&main, &root, &["rev-parse", "--git-dir"]),
-            "the test folder is inside a repo"
+    fn a_main_checkout_names_its_origin_and_a_worktree_nothing() {
+        let root = temp("checkouts");
+        let path = |p: &Path| p.to_str().unwrap().to_string();
+        for (name, url) in [
+            ("ssh", "git@github.com:Example/App-One.git"),
+            ("https", "https://github.com/example/app-one"),
+            ("dotgit", "https://github.com/example/APP-ONE.git"),
+        ] {
+            let dir = checkout(&root, name, &origin(url));
+            assert_eq!(
+                checkout_of(&path(&dir)).as_deref(),
+                Some("example/app-one"),
+                "{url}"
+            );
+        }
+        let main = checkout(&root, "main", &origin("git@github.com:example/app-one.git"));
+        let sub = main.join("src/deep");
+        fs::create_dir_all(&sub).unwrap();
+        assert_eq!(
+            checkout_of(&path(&sub)).as_deref(),
+            Some("example/app-one"),
+            "a folder inside the checkout"
         );
-        git(&main, &root, &["init", "-q"]);
-        let main_dir = main.to_str().unwrap();
-        assert_eq!(ask_git(main_dir), Some(None), "no origin");
-        git(
-            &main,
-            &root,
-            &[
-                "remote",
-                "add",
-                "origin",
-                "git@github.com:Example/App-One.git",
-            ],
-        );
-        assert_eq!(ask_git(main_dir), Some(Some("example/app-one".to_string())));
-        git(
-            &main,
-            &root,
-            &[
-                "-c",
-                "user.name=t",
-                "-c",
-                "user.email=t@t",
-                "-c",
-                "commit.gpgsign=false",
-                "commit",
-                "-q",
-                "--no-verify",
-                "--allow-empty",
-                "-m",
-                "first",
-            ],
-        );
+
         let linked = root.join("linked");
-        git(
-            &main,
+        fs::create_dir_all(&linked).unwrap();
+        fs::write(
+            linked.join(".git"),
+            "gitdir: /dev/app-one/.git/worktrees/linked\n",
+        )
+        .unwrap();
+        assert_eq!(checkout_of(&path(&linked)), None, "a linked worktree");
+        // A worktree inside the main checkout's folder is still a worktree.
+        let nested = main.join("worktrees/feat");
+        fs::create_dir_all(&nested).unwrap();
+        fs::write(nested.join(".git"), "gitdir: ../../.git/worktrees/feat\n").unwrap();
+        assert_eq!(checkout_of(&path(&nested)), None);
+
+        let bare = checkout(&root, "no-origin", "[core]\n\tbare = false\n");
+        assert_eq!(checkout_of(&path(&bare)), None, "no origin");
+        let other = checkout(
             &root,
-            &[
-                "worktree",
-                "add",
-                "-q",
-                "-b",
-                "feat",
-                linked.to_str().unwrap(),
-            ],
+            "gitlab",
+            &origin("https://gitlab.com/example/app-one"),
         );
-        assert_eq!(ask_git(linked.to_str().unwrap()), Some(None), "a worktree");
+        assert_eq!(checkout_of(&path(&other)), None, "not GitHub");
         let plain = root.join("plain");
         fs::create_dir_all(&plain).unwrap();
-        assert_eq!(ask_git(plain.to_str().unwrap()), Some(None));
-        assert_eq!(ask_git(root.join("gone").to_str().unwrap()), Some(None));
+        assert_eq!(checkout_of(&path(&plain)), None);
+        assert_eq!(checkout_of(&path(&root.join("gone"))), None);
     }
 }

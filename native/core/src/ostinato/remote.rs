@@ -1,32 +1,16 @@
 //! Which GitHub repo a folder is the main checkout of, so a run record
 //! (named by `owner/repo`) finds its workspace's card (issue #390,
-//! option a). The runner asks git in the folder, once per folder
-//! (`rev_parse_args`, `remote_args`), and reads the answers here. A
-//! folder that is not a git checkout, is a linked worktree, or has no
-//! GitHub `origin` matches no record; none of that is an error.
-
-/// `git rev-parse` asking for the folder's own git dir and the common one
-/// its checkouts share, as absolute paths, one to a line.
-pub const REV_PARSE_ARGS: [&str; 4] = [
-    "rev-parse",
-    "--path-format=absolute",
-    "--git-dir",
-    "--git-common-dir",
-];
-
-/// `git remote get-url origin`.
-pub const REMOTE_ARGS: [&str; 3] = ["remote", "get-url", "origin"];
-
-/// Whether `rev_parse`, git's answer to `REV_PARSE_ARGS`, is a main
-/// checkout's: its git dir is the common one. A linked worktree's git dir
-/// sits under the common one's `worktrees/`.
-pub fn is_main_checkout(rev_parse: &str) -> bool {
-    let mut lines = rev_parse.lines().map(str::trim);
-    match (lines.next(), lines.next()) {
-        (Some(own), Some(common)) => !own.is_empty() && own == common,
-        _ => false,
-    }
-}
+//! option a). No git process runs for it: git run in a folder obeys that
+//! repo's own config (`core.fsmonitor`, a pager, aliases), which a
+//! cloned repo may set to run anything. The runner instead finds the
+//! folder's `.git` itself, once per folder: a directory is a main
+//! checkout, whose `config` file it hands here (`checkout_repo`); a
+//! `.git` file is a linked worktree, which matches nothing. A folder with
+//! no `.git`, no `origin` or one that is not GitHub's matches no record
+//! either; none of that is an error.
+//!
+//! Only the config file itself is read: an `include` or `includeIf`, or
+//! a `url.<base>.insteadOf` rewrite, is not followed.
 
 /// The hosts that are GitHub itself, not an enterprise server.
 fn is_github(host: &str) -> bool {
@@ -77,14 +61,81 @@ pub fn github_repo(url: &str) -> Option<String> {
     (is_name(owner) && is_name(repo)).then(|| format!("{owner}/{repo}").to_ascii_lowercase())
 }
 
-/// The repo a folder is the main checkout of, from git's answers there:
-/// None for a linked worktree, a folder with no `origin`, or one that is
-/// not GitHub's.
-pub fn checkout_repo(rev_parse: &str, remote: Option<&str>) -> Option<String> {
-    if !is_main_checkout(rev_parse) {
-        return None;
+/// One value from a git config line: quotes taken off, `\\`, `\"`,
+/// `\n`, `\t` and `\b` read, and a `#` or `;` outside quotes ending it.
+fn config_value(raw: &str) -> String {
+    let mut out = String::new();
+    let mut quoted = false;
+    // Spaces outside quotes are kept only once something follows them.
+    let mut spaces = String::new();
+    let mut chars = raw.trim_start().chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => quoted = !quoted,
+            '\\' => {
+                let escaped = match chars.next() {
+                    Some('n') => '\n',
+                    Some('t') => '\t',
+                    Some('b') => '\u{8}',
+                    Some(other) => other,
+                    None => break,
+                };
+                out.push_str(&std::mem::take(&mut spaces));
+                out.push(escaped);
+            }
+            '#' | ';' if !quoted => break,
+            c if c.is_whitespace() && !quoted => spaces.push(c),
+            c => {
+                out.push_str(&std::mem::take(&mut spaces));
+                out.push(c);
+            }
+        }
     }
-    github_repo(remote?)
+    out
+}
+
+/// Whether a section header's insides (between `[` and `]`) name the
+/// `origin` remote: `remote "origin"`, the section's name in any case
+/// and the subsection's exactly, or the old `remote.origin`.
+fn is_origin_section(header: &str) -> bool {
+    let header = header.trim();
+    if let Some((name, sub)) = header.split_once(char::is_whitespace) {
+        let sub = sub.trim();
+        return name.eq_ignore_ascii_case("remote") && sub == "\"origin\"";
+    }
+    header.eq_ignore_ascii_case("remote.origin")
+}
+
+/// The `url` of `[remote "origin"]` in a git config file's text: the
+/// first one, as `git remote get-url origin` gives. None with no origin.
+pub fn origin_url(config: &str) -> Option<String> {
+    let mut in_origin = false;
+    for line in config.lines() {
+        let mut line = line.trim();
+        if let Some(rest) = line.strip_prefix('[') {
+            let (header, after) = rest.split_once(']')?;
+            in_origin = is_origin_section(header);
+            // A variable may follow the header on the same line.
+            line = after.trim();
+        }
+        if !in_origin || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        let (key, value) = line.split_once('=').unwrap_or((line, ""));
+        if key.trim().eq_ignore_ascii_case("url") {
+            let url = config_value(value);
+            if !url.is_empty() {
+                return Some(url);
+            }
+        }
+    }
+    None
+}
+
+/// The GitHub repo a main checkout's config file, `.git/config`, names
+/// as its `origin`, lower case; None with no origin or another host.
+pub fn checkout_repo(config: &str) -> Option<String> {
+    github_repo(&origin_url(config)?)
 }
 
 #[cfg(test)]
@@ -137,23 +188,51 @@ mod tests {
     }
 
     #[test]
-    fn only_a_main_checkout_counts() {
-        let main = "/dev/app-one/.git\n/dev/app-one/.git\n";
-        let worktree = "/dev/app-one/.git/worktrees/feat\n/dev/app-one/.git\n";
-        let remote = Some("git@github.com:example/app-one.git");
-        assert!(is_main_checkout(main));
-        assert!(!is_main_checkout(worktree));
-        assert!(!is_main_checkout(""));
-        assert!(!is_main_checkout("/dev/app-one/.git\n"));
+    fn reads_the_origin_url_from_a_config_file() {
+        let config = r#"[core]
+	repositoryformatversion = 0
+	bare = false
+[remote "upstream"]
+	url = git@github.com:other/app-one.git
+[Remote "origin"]
+	; a comment
+	URL = git@github.com:Example/App-One.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+	url = https://github.com/second/url.git
+[branch "main"]
+	remote = origin
+"#;
         assert_eq!(
-            checkout_repo(main, remote).as_deref(),
-            Some("example/app-one")
+            origin_url(config).as_deref(),
+            Some("git@github.com:Example/App-One.git")
         );
-        assert_eq!(checkout_repo(worktree, remote), None);
-        assert_eq!(checkout_repo(main, None), None, "no origin");
-        assert_eq!(
-            checkout_repo(main, Some("https://gitlab.com/example/app-one")),
-            None
-        );
+        assert_eq!(checkout_repo(config).as_deref(), Some("example/app-one"));
+    }
+
+    #[test]
+    fn reads_quoted_values_comments_and_the_old_header_form() {
+        let quoted = "[remote \"origin\"]\n\turl = \"https://github.com/example/app-one\" # main\n";
+        assert_eq!(checkout_repo(quoted).as_deref(), Some("example/app-one"));
+        let old = "[remote.origin]\nurl=https://github.com/example/app-one.git\n";
+        assert_eq!(checkout_repo(old).as_deref(), Some("example/app-one"));
+        let same_line = "[remote \"origin\"] url = git@github.com:example/app-one\n";
+        assert_eq!(checkout_repo(same_line).as_deref(), Some("example/app-one"));
+        assert_eq!(config_value(r#" "a b" c\"d ;x"#), r#"a b c"d"#);
+    }
+
+    #[test]
+    fn a_config_with_no_github_origin_names_no_repo() {
+        for config in [
+            "",
+            "[core]\n\tbare = false\n",
+            "[remote \"upstream\"]\n\turl = git@github.com:example/app-one.git\n",
+            "[remote \"Origin\"]\n\turl = git@github.com:example/app-one.git\n",
+            "[remote \"origin\"]\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n",
+            "[remote \"origin\"]\n\turl = https://gitlab.com/example/app-one.git\n",
+            "[remote \"origin\"]\n\t# url = git@github.com:example/app-one.git\n",
+            "[remote \"origin\"\n\turl = git@github.com:example/app-one.git\n",
+        ] {
+            assert_eq!(checkout_repo(config), None, "{config}");
+        }
     }
 }
