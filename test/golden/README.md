@@ -145,10 +145,12 @@ What the model computes, at the scene's clock.
 Ostinato run records (issue #390), copied from the kit's
 `fixtures/records/` in jonyardley/ostinato at c94d5e6, so the core's
 reader of the record format (docs/record-format.md there) is tested
-against the kit's own samples. One change: the kit's one-issue sample
-names a real project, which test/private.test.ts keeps out of the tree,
-so its copy, `one-issue.jsonl`, says `example/app-one` and `app-one#`
-in its place; every other byte is the kit's. native/core/src/ostinato/ reads them.
+against the kit's own samples. One change: the kit's single-issue
+sample, the one file there named for its project and issue 2806, names a
+real project, which test/private.test.ts keeps out of the tree. Its copy
+is renamed `one-issue.jsonl` and says `example/app-one` and `app-one#`
+in its place; every other byte is the kit's. Copy that sample over the
+same way: the real name never enters this repo. native/core/src/ostinato/ reads them.
 They are not laid out by Biome and must stay byte for byte as the kit
 wrote them: `torn-last-line.jsonl` ends without a newline on purpose.
 Copy a newer sample over by hand, in the same PR as the Rust that reads it.
