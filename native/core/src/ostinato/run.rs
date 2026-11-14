@@ -57,7 +57,22 @@ pub enum Stage {
     Other(String),
 }
 
+/// The card's strip of steps, in order.
+pub const STRIP: [Stage; 5] = [
+    Stage::Brief,
+    Stage::Built,
+    Stage::Reviewed,
+    Stage::Qa,
+    Stage::Draft,
+];
+
 impl Stage {
+    /// How many of the strip's steps reaching it fills: 1 for brief to 5
+    /// for draft; None for a stage outside the strip.
+    pub fn steps(&self) -> Option<usize> {
+        STRIP.iter().position(|s| s == self).map(|i| i + 1)
+    }
+
     fn of(name: &str) -> Stage {
         match name {
             "brief" => Stage::Brief,
@@ -94,6 +109,10 @@ pub struct Attempt {
     pub started: f64,
     /// Its newest stage or draft line.
     pub last_stage: Option<StageMark>,
+    /// How many of the strip's steps it has filled: the furthest strip
+    /// stage it reached, so a stage outside the strip or a send back
+    /// never empties one.
+    pub steps: usize,
     /// None while it runs.
     pub ended: Option<AttemptEnd>,
 }
@@ -151,6 +170,8 @@ pub struct RunState {
     pub picked: usize,
     /// The newest attempt still running, else the newest one picked.
     pub current: Option<Attempt>,
+    /// Every attempt the run picked, oldest first.
+    pub attempts: Vec<Attempt>,
     /// What the attempts ended in the 24 hours to the clock cost, in any
     /// run, each attempt's share of a shared session counted once.
     pub spend_24h: Cost,
@@ -267,6 +288,7 @@ struct Walk {
 impl Walk {
     fn stage(&mut self, item: &str, attempt: Option<u32>, stage: Stage, at: f64) {
         if let Some(a) = attempt_of(&mut self.attempts, item, attempt) {
+            a.steps = a.steps.max(stage.steps().unwrap_or(0));
             a.last_stage = Some(StageMark { stage, at });
         }
     }
@@ -284,6 +306,7 @@ impl Walk {
                 attempt: *attempt,
                 started: l.at,
                 last_stage: None,
+                steps: 0,
                 ended: None,
             }),
             Event::Stage {
@@ -395,6 +418,7 @@ pub fn run_state(lines: &[Line], heard: &[Heard], shares: &[Share], now: f64) ->
         started: walk.started,
         caps: walk.caps,
         current,
+        attempts: walk.attempts,
         spend_24h,
         phase,
         drafts: walk.drafts,
