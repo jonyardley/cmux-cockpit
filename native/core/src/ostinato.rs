@@ -128,11 +128,19 @@ impl Ostinato {
             .collect();
     }
 
+    /// The repo the folder `directory` is the main checkout of (or a
+    /// folder inside it), lower case; None for any other folder.
+    fn repo_of(&self, directory: &str) -> Option<&str> {
+        self.checkouts
+            .get(trim_slash(directory))
+            .map(String::as_str)
+    }
+
     /// The record whose card `directory`, a workspace's folder, holds.
     /// When two records are about its repo (one file left from before a
     /// rename, say), the one with the newest line.
     pub fn record_for(&self, directory: &str) -> Option<&Record> {
-        let repo = self.checkouts.get(trim_slash(directory))?;
+        let repo = self.repo_of(directory)?;
         let newest = |r: &Record| r.lines.last().map_or(f64::MIN, |l| l.at);
         self.records
             .values()
@@ -141,33 +149,28 @@ impl Ostinato {
     }
 }
 
-impl Ostinato {
-    /// The repo the folder `directory` is the main checkout of (or a
-    /// folder inside it), lower case; None for any other folder.
-    fn repo_of(&self, directory: &str) -> Option<&str> {
-        self.checkouts
-            .get(trim_slash(directory))
-            .map(String::as_str)
-    }
-}
-
 impl Session {
     /// Where the Ostinato run on `w`'s card stands at the frame's clock;
     /// None when no record is about the repo it is the main checkout of.
-    /// One card shows a record: the first in tab order of the workspaces
-    /// in that checkout, so two open there never both draw the run or
-    /// both wait on Jon for one park.
+    /// One card shows a record: the first awake one in tab order of the
+    /// workspaces in that checkout, else the first, so two open there
+    /// never both draw the run or both wait on Jon for one park, and an
+    /// asleep one never keeps a park from an awake one.
     pub fn ostinato_run(&self, data: &Data, w: &Workspace) -> Option<RecordState> {
         let directory = w.directory.as_deref()?;
         let repo = self.ostinato.repo_of(directory)?;
-        let first = data.workspace_list().iter().find(|other| {
+        let mut there = data.workspace_list().iter().filter(|other| {
             other
                 .directory
                 .as_deref()
                 .and_then(|d| self.ostinato.repo_of(d))
                 .is_some_and(|r| r.eq_ignore_ascii_case(repo))
-        })?;
-        if first.id != w.id {
+        });
+        let first = there.clone().next()?;
+        let carrier = there
+            .find(|other| self.sleep_kind(&other.id).is_none())
+            .unwrap_or(first);
+        if carrier.id != w.id {
             return None;
         }
         let record = self.ostinato.record_for(directory)?;
