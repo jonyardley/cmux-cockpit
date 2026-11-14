@@ -24,6 +24,7 @@ use crate::lane_entries::LaneEntry;
 use crate::lanes::{LaneConfig, LaneKey};
 use crate::menu::MenuEvent;
 use crate::notify::{Notified, NotifyDismiss, NotifyPost};
+use crate::ostinato::OstinatoFeed;
 use crate::panel::Panel;
 use crate::persist::{SavedPr, SavedRunning, SavedState, ViewMode, persist_url};
 use crate::pr_poll::{PrPolled, shown_in};
@@ -57,6 +58,11 @@ pub enum Event {
     /// last one in place.
     #[facet(skip)]
     Lanes(#[facet(opaque)] Vec<LaneConfig>),
+    /// The Ostinato run records and the folders that are main checkouts
+    /// of a GitHub repo, from the runner's watch of the records folder
+    /// (ostinato.rs). Only a record whose text changed is read again.
+    #[facet(skip)]
+    Ostinato(#[facet(opaque)] Box<OstinatoFeed>),
     /// Jon's home folder, which the runner reads from its environment and
     /// a sandboxed shell cannot: it expands a "~" root in the editor, sorts
     /// the home folder out of Projects and offers a folder as a project.
@@ -153,6 +159,7 @@ impl Event {
             | Event::State(_)
             | Event::Projects(_)
             | Event::Lanes(_)
+            | Event::Ostinato(_)
             | Event::Home { .. }
             | Event::Refresh
             | Event::PrPollOn
@@ -696,6 +703,7 @@ impl App for Cockpit {
             }
             Event::Projects(projects) => model.session.set_projects(projects),
             Event::Lanes(lanes) => model.session.set_lanes(&lanes),
+            Event::Ostinato(feed) => model.session.ostinato.take(*feed),
             Event::Home { home } => model.session.home = home,
             Event::Refresh => {}
             Event::PrPollOn => model.session.pr_poll.turn_on(),
@@ -777,6 +785,7 @@ mod tests {
         assert!(!Event::Projects(Vec::new()).is_action());
         assert!(!Event::Lanes(Vec::new()).is_action());
         assert!(!Event::Home { home: None }.is_action());
+        assert!(!Event::Ostinato(Box::default()).is_action());
     }
 
     #[test]

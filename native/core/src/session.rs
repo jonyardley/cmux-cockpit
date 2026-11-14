@@ -239,6 +239,10 @@ pub struct Session {
     /// Sleep calls on their way and refusals to show (sleep.rs); the
     /// record of what sleeps is the state file's `asleep`.
     pub(crate) sleep: crate::sleep::Sleep,
+
+    /// The Ostinato run records and the main checkouts they find their
+    /// cards by (ostinato.rs); a new state file never resets them.
+    pub ostinato: crate::ostinato::Ostinato,
 }
 
 impl Session {
