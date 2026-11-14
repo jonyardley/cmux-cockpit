@@ -882,7 +882,8 @@ for bad in ["D97757", "#D975", "#D9775", "#D97757A", "#D9775G", "#+97757", "#", 
 // MARK: The Ostinato run (issue #390)
 
 // The ostinato scene's three cards carry their runs, each in its words;
-// an ended run's title takes its end in the Mac's own time.
+// an ended run's title takes its end in the Mac's own time, with its day
+// when that is not today.
 if let panel = load("ostinato") {
     var runs: [String: RunCard] = [:]
     for row in panel.lanes.flatMap(\.rows) {
@@ -891,9 +892,10 @@ if let panel = load("ostinato") {
     check(runs.count == 3, "three cards carry a run")
     let utc = TimeZone(identifier: "UTC") ?? .current
     if let ended = runs["parked"] {
-        // 999280 is 13:34:40 UTC on 12 January 1970.
-        check(RunText.title(ended, zone: utc) == "Ostinato run ended 13:34", "the end's local time follows the title")
-        let words = RunText.words(ended, zone: utc)
+        // 999280 is 13:34:40 UTC on Monday 12 January 1970.
+        let evening = Date(timeIntervalSince1970: 999_280 + 6 * 3600)
+        check(RunText.title(ended, zone: utc, now: evening) == "Ostinato run ended 13:34", "the end's local time follows the title")
+        let words = RunText.words(ended, zone: utc, now: evening)
         check(words.contains("1 parked") && words.contains("parked, needs a decision"), "a park shows its chip and reason")
     } else {
         check(false, "the parked card carries its run")
@@ -911,6 +913,44 @@ if let panel = load("ostinato") {
     }
 } else {
     check(false, "the ostinato fixture decodes")
+}
+
+// An ended run's day, as the Mac's clock and zone see it.
+do {
+    let utc = TimeZone(identifier: "UTC") ?? .current
+    // Monday 12 January 1970, 13:34:40 UTC.
+    let end = Date(timeIntervalSince1970: 999_280)
+    let day: TimeInterval = 86400
+    func at(_ days: Double, _ hours: Double = 0) -> Date {
+        // Midnight UTC that starts the end's day, plus days and hours.
+        Date(timeIntervalSince1970: 950_400 + days * day + hours * 3600)
+    }
+    let cases: [(Date, String, String)] = [
+        (at(0, 23), "13:34", "later the same day, the time alone"),
+        (at(1, 9), "yesterday 13:34", "the day before, yesterday"),
+        (at(1, 0.25), "yesterday 13:34", "just past midnight is the next day, not 24 hours on"),
+        (at(3, 9), "Mon 13:34", "within the week, the short weekday"),
+        (at(6, 23), "Mon 13:34", "six days on, still the weekday"),
+        (at(7, 1), "12 Jan", "a week on, the date, so the weekday never names today"),
+        (at(48, 9), "12 Jan", "older in the same year, the date alone"),
+        (at(365, 9), "12 Jan 1970", "in another year, the date and its year"),
+        (end.addingTimeInterval(-3600), "13:34", "an end after now reads as today"),
+    ]
+    for (now, want, what) in cases {
+        let got = RunText.ended(end, zone: utc, now: now)
+        check(got == want, "\(what): \(got)")
+    }
+    // In Tokyo (UTC+9) the end is 22:34 on the 12th and 16:00 UTC is
+    // 01:00 on the 13th: yesterday there, the same day in UTC.
+    let tokyo = TimeZone(identifier: "Asia/Tokyo") ?? utc
+    let afternoon = at(0, 16)
+    check(RunText.ended(end, zone: tokyo, now: afternoon) == "yesterday 22:34", "the zone's own midnight divides the days")
+    check(RunText.ended(end, zone: utc, now: afternoon) == "13:34", "the same moments in UTC fall on one day")
+    // New York (UTC-5): the end is 08:34 on the 12th; 03:00 UTC on the
+    // 13th is still the 12th there.
+    let newYork = TimeZone(identifier: "America/New_York") ?? utc
+    check(RunText.ended(end, zone: newYork, now: at(1, 3)) == "08:34", "a zone behind UTC keeps the end's day for longer")
+    check(RunText.ended(end, zone: utc, now: at(1, 3)) == "yesterday 13:34", "while UTC has moved on a day")
 }
 
 exit(failures == 0 ? 0 : 1)

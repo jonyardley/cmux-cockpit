@@ -79,7 +79,8 @@ pub struct RunCard {
     /// at line 1".
     pub title: String,
     /// When the run ended, in epoch seconds, after its `run_ended` line:
-    /// the shell writes the local time after the title, "ended 14:40".
+    /// the shell writes the local time and day after the title, "ended
+    /// 14:40", "ended yesterday 14:40", "ended Thu 14:40", "ended 12 Nov".
     pub ended_at: Option<f64>,
     /// The title's ink: faint for a run with no end written.
     pub title_ink: Token,

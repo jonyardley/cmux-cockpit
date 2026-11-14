@@ -678,7 +678,9 @@ with its halo, `clayText` words, the clay [waiting card](#waiting-card)
 edge, stripe and wash, and counts in the waiting count, lane order, the
 [late wait](#late-wait) chip and Dismiss needs you. Its status says
 "Your turn: Ostinato parked notes-app#41", or "Ostinato parked 2 issues"
-with more than one; the question itself is on the
+with more than one; after a dismissal, only the parks newer than it
+count, so one new park beside two dismissed reads "Ostinato parked
+notes-app#43". The question itself is on the
 [Ostinato run](#ostinato-run).
 
 A park waits, whichever run wrote it, until a later line picks its item
@@ -688,10 +690,13 @@ the workspace does not hide it: the loop runs unattended, so nobody else
 will answer. A session waiting on you for its own reason (a stop, an
 ask, a turn, CI) keeps its words, and the park still counts towards
 dismissing. A workspace with no session shows it on a stand-in; an
-asleep card never shows it. One dismissal covers the workspace's parks,
+asleep card never shows it. One dismissal covers the record's parks,
 keyed on the newest park's time, so only a newer park brings the card
 back, and once that one is picked again the parks dismissed before stay
-dismissed; "Restore needs you" brings a dismissed one back. A dismissed
+dismissed; "Restore needs you" brings a dismissed one back. The
+dismissal follows the run: when another workspace in the checkout
+carries it (the one it was made on fell asleep, say), the parks stay
+dismissed there, and "Restore needs you" on that card brings them back. A dismissed
 park no longer keeps the card from reading Ready, since it can stand for
 days, until its item is picked again. While a park shows, its question
 is on the card, so a card mid-run can sit in Needs you for an earlier
@@ -959,7 +964,12 @@ token (`native/core/src/ostinato/card.rs`); the view lays them out
 - **Title:** `Font.control` 12 semibold in `text`. "Ostinato run, issue
   2 of 3" while it runs ("issue 2" with no issues cap), "Ostinato run
   ended 14:40" after its end line, the time in the Mac's own zone
-  (`Model/RunText.swift`, as the core has no zone).
+  (`Model/RunText.swift`, as the core has no zone). An end on an earlier
+  day says which: "ended yesterday 14:40" the day before, "ended Thu
+  14:40" two to six days before, then "ended 12 Nov", with the year
+  ("ended 12 Nov 2025") only when it is not this year. Days are the
+  Mac's calendar days, so a run that ended at 23:30 reads "yesterday"
+  at 00:30.
 - **Status:** a 6 dot in `blue`, the last stage done in `blueText`
   medium ("Built", "QA", or a stage outside the strip by its name,
   "Criteria") and how long ago in `metaText`, at `Font.meta` 11. A stage
@@ -981,7 +991,9 @@ token (`native/core/src/ostinato/card.rs`); the view lays them out
 - **After a run:** chips on the [quiet chip](#quiet-chip) frame, "2
   drafts" in `mergeText`, "1 parked" in `clayText` on `clayChipFace`
   inside `clayChipEdge`, the cost in `secondary` ("cost unknown" when an
-  attempt has none) and the run's length. Then a row per item in pick
+  attempt has none) and the run's length. The chips sum up what the run
+  made, so "1 parked" counts a dismissed park too; it is no wait count.
+  Then a row per item in pick
   order, its key in `text` and its newest attempt's outcome at the right
   in `metaText` ("draft app-one#57"), a park's in `clayText` ("parked,
   needs a decision").

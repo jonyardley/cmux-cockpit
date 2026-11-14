@@ -13,16 +13,21 @@
 //!
 //! A park waits, whichever run wrote it, until a later line picks its
 //! item again (run.rs `waiting_parks`). One dismissal covers the
-//! workspace's parks, under `OSTINATO_KEY`, keyed on the newest park's
+//! record's parks, under `OSTINATO_KEY`, keyed on the newest park's
 //! time: only a park newer than that brings the card back, so picking
-//! the newest again leaves the older ones dismissed. The park is read
-//! once a frame, at the frame's clock (`Session::tend_parks`).
+//! the newest again leaves the older ones dismissed, and the words count
+//! only the parks newer than it. The dismissal is saved on the workspace
+//! that carries the record and follows the run: when another workspace
+//! in the checkout takes the record over (its carrier fell asleep, say),
+//! the dismissal moves to it. The park is read once a frame, at the
+//! frame's clock (`Session::tend_parks`).
 
 use crate::activity::most_active;
 use crate::data::{Agent, AgentStatus, Data, Workspace};
 use crate::session::Session;
 use crate::text::clip;
 
+use super::RecordState;
 use super::run::RunState;
 
 /// The dismissal key a workspace's parks are saved under, beside its
@@ -40,17 +45,21 @@ pub struct ParkWait {
     /// The oldest waiting park's time: a dismissal made at or after it
     /// still covers that park, though a newer one shows now.
     pub oldest: f64,
-    /// How many parks wait.
-    pub count: usize,
+    /// Each waiting park's time.
+    pub times: Vec<f64>,
     /// The workspace is awake: an asleep one waits on nobody by design.
     pub waits: bool,
 }
 
 impl ParkWait {
-    /// What the card says waits: "Ostinato parked notes-app#41", or
-    /// "Ostinato parked 2 issues".
-    pub fn words(&self) -> String {
-        match self.count {
+    /// What the card says waits, `dismissed` the key of the dismissal on
+    /// its parks: "Ostinato parked notes-app#41", or "Ostinato parked 2
+    /// issues". Only the parks newer than the dismissal count, as those
+    /// are what brought the card back; with none newer, all of them.
+    pub fn words(&self, dismissed: Option<f64>) -> String {
+        let newer = dismissed.map_or(0, |key| self.times.iter().filter(|t| **t > key).count());
+        let count = if newer == 0 { self.times.len() } else { newer };
+        match count {
             1 => format!("Ostinato parked {}", self.item),
             n => format!("Ostinato parked {n} issues"),
         }
@@ -67,14 +76,20 @@ fn park_carrier(agents: &[Agent]) -> Option<&str> {
 }
 
 impl Session {
-    /// Reads each workspace's parked attempts at the frame's clock.
+    /// Reads each workspace's parked attempts at the frame's clock,
+    /// first moving a park dismissal to the workspace carrying its record.
     pub(crate) fn tend_parks(&mut self, data: &Data) {
+        let read: Vec<(&Workspace, RecordState)> = data
+            .workspace_list()
+            .iter()
+            .filter_map(|w| self.ostinato_run(data, w).map(|state| (w, state)))
+            .collect();
+        for (w, _) in &read {
+            self.carry_park_dismissal(data, w);
+        }
         let mut found = std::collections::HashMap::new();
         let mut cards = std::collections::HashSet::new();
-        for w in data.workspace_list() {
-            let Some(state) = self.ostinato_run(data, w) else {
-                continue;
-            };
+        for (w, state) in read {
             cards.insert(w.id.clone());
             let Some(run) = state.run else { continue };
             let Some(newest) = run.waiting.iter().max_by(|a, b| a.at.total_cmp(&b.at)) else {
@@ -87,7 +102,7 @@ impl Session {
                     key: self.park_key(&w.id, newest.at),
                     item: newest.item.clone(),
                     oldest,
-                    count: run.waiting.len(),
+                    times: run.waiting.iter().map(|p| p.at).collect(),
                     waits: self.sleep_kind(&w.id).is_none(),
                 },
             );
@@ -96,15 +111,56 @@ impl Session {
         self.park_cards = cards;
     }
 
+    /// Moves any park dismissal saved on another workspace in the
+    /// checkout onto `carrier`, the one carrying its record, so a
+    /// dismissal follows the run rather than staying where it was made.
+    /// Two meet as the later key, which covers what both did. A dismissal
+    /// saved before this, on any workspace there, moves the same way.
+    fn carry_park_dismissal(&mut self, data: &Data, carrier: &Workspace) {
+        let from: Vec<String> = self
+            .in_checkout(data, carrier)
+            .into_iter()
+            .filter(|other| other.id != carrier.id && self.park_dismissal(&other.id).is_some())
+            .map(|other| other.id.clone())
+            .collect();
+        for id in from {
+            self.move_park_dismissal(&id, &carrier.id);
+        }
+    }
+
+    /// Moves workspace `from`'s park dismissal to workspace `to`, saving
+    /// both.
+    fn move_park_dismissal(&mut self, from: &str, to: &str) {
+        let Some(starts) = self.dismissed.get_mut(from) else {
+            return;
+        };
+        let Some(key) = starts.shift_remove(OSTINATO_KEY) else {
+            return;
+        };
+        if starts.is_empty() {
+            self.dismissed.shift_remove(from);
+        }
+        let starts = self.dismissed.entry(to.to_string()).or_default();
+        let held = starts.get(OSTINATO_KEY).map_or(key, |k| k.max(key));
+        starts.insert(OSTINATO_KEY.to_string(), held);
+        self.persist_dismissed(from);
+        self.persist_dismissed(to);
+    }
+
+    /// The key of the park dismissal saved on workspace `ws`, if any.
+    fn park_dismissal(&self, ws: &str) -> Option<f64> {
+        self.dismissed
+            .get(ws)
+            .and_then(|d| d.get(OSTINATO_KEY))
+            .copied()
+    }
+
     /// The key `ws`'s parks wait under, `newest` the newest waiting
     /// park's time: a dismissal's own key while no park newer than the
     /// one it was made on waits, so picking the newest park again leaves
     /// the older ones dismissed; else `newest`.
     fn park_key(&self, ws: &str, newest: f64) -> f64 {
-        self.dismissed
-            .get(ws)
-            .and_then(|d| d.get(OSTINATO_KEY))
-            .copied()
+        self.park_dismissal(ws)
             .filter(|key| *key >= newest)
             .unwrap_or(newest)
     }
@@ -113,9 +169,9 @@ impl Session {
     /// park it covers still waits (one at or before `key`), though a
     /// newer one may show now and stays dismissed once that one is
     /// picked again; or `w`'s card carried no record at the last read
-    /// (none read yet, before the runner's first feed, say, or another
-    /// workspace in the checkout carries it). It lapses once no park it
-    /// covers waits.
+    /// (none read yet, before the runner's first feed, say; when another
+    /// workspace in the checkout carries it, the dismissal has moved
+    /// there). It lapses once no park it covers waits.
     pub(crate) fn park_dismissal_holds(&self, w: &Workspace, key: f64) -> bool {
         match self.parks.get(&w.id) {
             Some(p) => p.key == key || p.oldest <= key,
@@ -202,9 +258,10 @@ impl Session {
 
     /// The park's words for a waiting card, cut to `max`.
     pub(crate) fn park_detail(&self, w: Option<&Workspace>, max: usize) -> String {
-        self.park_shown(w)
-            .map(|p| clip(&p.words(), max))
-            .unwrap_or_default()
+        let (Some(w), Some(p)) = (w, self.park_shown(w)) else {
+            return String::new();
+        };
+        clip(&p.words(self.park_dismissal(&w.id)), max)
     }
 }
 
@@ -368,7 +425,71 @@ mod tests {
         let _ = Cockpit.update(Event::Ostinato(Box::new(f)), &mut m);
         let _ = Cockpit.update(Event::Data(data.clone()), &mut m);
         assert_eq!(needs(&mut m), ["w"]);
+        // Only the new park counts: #41 was dismissed.
+        assert_eq!(line(&mut m), "Your turn: Ostinato parked notes-app#42");
+        // Restored, both wait again.
+        m.session.restore_needs(w.as_ref());
         assert_eq!(line(&mut m), "Your turn: Ostinato parked 2 issues");
+    }
+
+    /// The parked sample's first five lines (#41 parked at 09:31:10),
+    /// then a park line for each of `parks`, an item and its time.
+    fn with_parks(parks: &[(&str, &str)]) -> String {
+        let mut text = PARKED.lines().take(5).collect::<Vec<_>>().join("\n");
+        for (item, when) in parks {
+            text.push('\n');
+            text.push_str(&format!(
+                r#"{{"v":1,"at":"{when}","run":"r-1110","event":"parked","item":"{item}","reason":"needs_decision","question":"Which?"}}"#
+            ));
+        }
+        text
+    }
+
+    #[test]
+    fn the_words_count_only_the_parks_newer_than_the_dismissal() {
+        let d = frame(vec![agent("a", AgentStatus::Idle)], "2026-11-10T10:30:00Z");
+        let two = with_parks(&[("notes-app#42", "2026-11-10T09:45:00Z")]);
+        let mut m = model_of(&two, d.clone());
+        assert_eq!(line(&mut m), "Your turn: Ostinato parked 2 issues");
+        let w = d.ws_by_id("w").cloned();
+        m.session.dismiss_needs(w.as_ref());
+        assert!(needs(&mut m).is_empty());
+
+        // Two newer parks: "2 issues", not the four that wait.
+        let four = with_parks(&[
+            ("notes-app#42", "2026-11-10T09:45:00Z"),
+            ("notes-app#43", "2026-11-10T10:00:00Z"),
+            ("notes-app#44", "2026-11-10T10:05:00Z"),
+        ]);
+        refeed(&mut m, &four, &d);
+        assert_eq!(needs(&mut m), ["w"]);
+        assert_eq!(line(&mut m), "Your turn: Ostinato parked 2 issues");
+        // #44 picked again: #43 alone is new, and named.
+        let picked = format!(
+            "{four}\n{}",
+            r#"{"v":1,"at":"2026-11-10T10:10:00Z","run":"r-1110","event":"picked","item":"notes-app#44","attempt":2}"#,
+        );
+        refeed(&mut m, &picked, &d);
+        assert_eq!(line(&mut m), "Your turn: Ostinato parked notes-app#43");
+        // Restored, all three that wait count.
+        m.session.restore_needs(w.as_ref());
+        assert_eq!(line(&mut m), "Your turn: Ostinato parked 3 issues");
+    }
+
+    #[test]
+    fn with_no_dismissal_every_waiting_park_counts() {
+        let p = ParkWait {
+            key: 30.0,
+            item: "notes-app#43".into(),
+            oldest: 10.0,
+            times: vec![10.0, 20.0, 30.0],
+            waits: true,
+        };
+        assert_eq!(p.words(None), "Ostinato parked 3 issues");
+        assert_eq!(p.words(Some(20.0)), "Ostinato parked notes-app#43");
+        assert_eq!(p.words(Some(10.0)), "Ostinato parked 2 issues");
+        // A dismissal covering them all (none shows then) counts them all.
+        assert_eq!(p.words(Some(30.0)), "Ostinato parked 3 issues");
     }
 
     #[test]
@@ -549,8 +670,9 @@ mod tests {
         assert!(needs(&mut m).is_empty());
     }
 
-    #[test]
-    fn a_dismissal_stays_with_its_workspace_while_another_carries_the_run() {
+    /// The frame with `w` (idle agent "a") and `w2` (no session) both
+    /// open on /dev/notes-app, `w` first in tab order.
+    fn two_frame() -> crate::data::Data {
         let mut d = frame(vec![agent("a", AgentStatus::Idle)], "2026-11-10T09:40:00Z");
         if let Some(ws) = d.workspaces.as_mut() {
             ws.push(Workspace {
@@ -559,19 +681,156 @@ mod tests {
                 ..Workspace::default()
             });
         }
+        d
+    }
+
+    fn asleep() -> crate::persist::SavedAsleep {
+        crate::persist::SavedAsleep {
+            surfaces: Vec::new(),
+            since: at("2026-11-10T09:41:00Z"),
+        }
+    }
+
+    /// The park dismissal saved on each workspace that has one.
+    fn park_dismissals(m: &Model) -> Vec<(String, f64)> {
+        m.session
+            .dismissed
+            .iter()
+            .filter_map(|(ws, d)| d.get(OSTINATO_KEY).map(|k| (ws.clone(), *k)))
+            .collect()
+    }
+
+    /// The write last asked for under `key`, if any.
+    fn written(m: &Model, key: &str) -> Option<Option<serde_json::Value>> {
+        m.session
+            .pending
+            .iter()
+            .rev()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.clone())
+    }
+
+    #[test]
+    fn a_dismissal_follows_the_run_to_another_workspace_in_the_checkout() {
+        let d = two_frame();
+        let mut m = model(5, d.clone());
+        let w = d.ws_by_id("w").cloned();
+        let w2 = d.ws_by_id("w2").cloned();
+        m.session.dismiss_needs(w.as_ref());
+        // w sleeps: w2 carries the run, and the park stays dismissed.
+        m.session.saved.asleep.insert("w".into(), asleep());
+        let _ = Cockpit.update(Event::Data(d.clone()), &mut m);
+        assert!(needs(&mut m).is_empty(), "the dismissal moved to w2");
+        let park = at("2026-11-10T09:31:10Z");
+        assert_eq!(park_dismissals(&m), [("w2".to_string(), park)]);
+        assert_eq!(written(&m, "dismissed.w"), Some(None));
+        assert_eq!(
+            written(&m, "dismissed.w2"),
+            Some(Some(
+                serde_json::json!({ "ostinato": crate::js::json_num(park) })
+            ))
+        );
+        // Restorable where it shows now.
+        assert!(m.session.is_needs_dismissed(w2.as_ref()));
+        m.session.restore_needs(w2.as_ref());
+        assert_eq!(needs(&mut m), ["w2"]);
+        m.session.dismiss_needs(w2.as_ref());
+        assert!(needs(&mut m).is_empty());
+
+        // w wakes and carries it again: the dismissal made on w2 comes too.
+        m.session.saved.asleep.clear();
+        let _ = Cockpit.update(Event::Data(d.clone()), &mut m);
+        assert!(needs(&mut m).is_empty(), "w carries it again, dismissed");
+        assert_eq!(park_dismissals(&m), [("w".to_string(), park)]);
+
+        // A newer park still brings the card back, on the carrier.
+        let newer = with_parks(&[("notes-app#42", "2026-11-10T09:45:00Z")]);
+        refeed(&mut m, &newer, &d);
+        assert_eq!(needs(&mut m), ["w"]);
+        assert_eq!(line(&mut m), "Your turn: Ostinato parked notes-app#42");
+    }
+
+    #[test]
+    fn a_moved_dismissal_lapses_once_no_park_it_covers_waits() {
+        let d = two_frame();
         let mut m = model(5, d.clone());
         let w = d.ws_by_id("w").cloned();
         m.session.dismiss_needs(w.as_ref());
-        let asleep = crate::persist::SavedAsleep {
-            surfaces: Vec::new(),
-            since: at("2026-11-10T09:41:00Z"),
-        };
-        m.session.saved.asleep.insert("w".into(), asleep);
+        m.session.saved.asleep.insert("w".into(), asleep());
+        // #41 is picked again while w2 carries the run.
+        let _ = Cockpit.update(Event::Ostinato(Box::new(feed(16))), &mut m);
         let _ = Cockpit.update(Event::Data(d.clone()), &mut m);
-        assert_eq!(needs(&mut m), ["w2"], "the dismissal stays with w");
+        assert!(needs(&mut m).is_empty());
+        assert!(park_dismissals(&m).is_empty(), "it lapsed on w2");
+        // w wakes to nothing dismissed for the run.
         m.session.saved.asleep.clear();
         let _ = Cockpit.update(Event::Data(d), &mut m);
-        assert!(needs(&mut m).is_empty(), "w carries it again, dismissed");
+        assert!(park_dismissals(&m).is_empty());
+    }
+
+    /// A model seeded with the saved state `json` (as a state file holds
+    /// it), then fed the record's first five lines and `d`.
+    fn seeded(json: &str, d: &crate::data::Data) -> Model {
+        let saved = crate::persist::SavedState::from_json(json).unwrap();
+        let mut m = Model {
+            session: Session::new(Vec::new(), saved),
+            ..Model::default()
+        };
+        let _ = Cockpit.update(Event::Ostinato(Box::new(feed(5))), &mut m);
+        let _ = Cockpit.update(Event::Data(d.clone()), &mut m);
+        m
+    }
+
+    #[test]
+    fn a_dismissal_saved_on_the_asleep_workspace_before_this_still_applies() {
+        // A state file from before: dismissed on w, and w asleep since.
+        let park = at("2026-11-10T09:31:10Z");
+        let json = format!(
+            r#"{{"dismissed": {{"w": {{"a": 1, "ostinato": {park}}}}},
+                "asleep": {{"w": {{"surfaces": [], "since": 1}}}}}}"#
+        );
+        let d = two_frame();
+        let mut m = seeded(&json, &d);
+        assert!(needs(&mut m).is_empty(), "w2 carries it, still dismissed");
+        assert_eq!(park_dismissals(&m), [("w2".to_string(), park)]);
+        // w keeps its agent's dismissal; only the park's moved.
+        assert_eq!(
+            written(&m, "dismissed.w"),
+            Some(Some(serde_json::json!({ "a": 1 })))
+        );
+        // A state file that has not caught up yet does not bring it back.
+        let stale = crate::persist::SavedState::from_json(&json).unwrap();
+        m.session.reseed(stale);
+        let _ = Cockpit.update(Event::Data(d), &mut m);
+        assert!(needs(&mut m).is_empty());
+        assert_eq!(park_dismissals(&m), [("w2".to_string(), park)]);
+    }
+
+    #[test]
+    fn a_dismissal_saved_on_a_workspace_that_does_not_carry_the_run_moves_to_the_one_that_does() {
+        // From before, made on w2 while w slept; w is awake now.
+        let park = at("2026-11-10T09:31:10Z");
+        let json = format!(r#"{{"dismissed": {{"w2": {{"ostinato": {park}}}}}}}"#);
+        let d = two_frame();
+        let mut m = seeded(&json, &d);
+        assert!(needs(&mut m).is_empty(), "w carries it, dismissed");
+        assert_eq!(park_dismissals(&m), [("w".to_string(), park)]);
+        assert_eq!(written(&m, "dismissed.w2"), Some(None));
+        let w = d.ws_by_id("w").cloned();
+        assert!(m.session.is_needs_dismissed(w.as_ref()));
+    }
+
+    #[test]
+    fn two_saved_dismissals_in_a_checkout_meet_as_the_later() {
+        let park = at("2026-11-10T09:31:10Z");
+        let earlier = park - 600.0;
+        let json = format!(
+            r#"{{"dismissed": {{"w": {{"ostinato": {earlier}}}, "w2": {{"ostinato": {park}}}}}}}"#
+        );
+        let d = two_frame();
+        let mut m = seeded(&json, &d);
+        assert_eq!(park_dismissals(&m), [("w".to_string(), park)]);
+        assert!(needs(&mut m).is_empty());
     }
 
     #[test]
