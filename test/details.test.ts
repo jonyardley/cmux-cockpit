@@ -25,6 +25,14 @@ const r = seed({
           { name: "build", state: "pending", queued: ago(30) },
         ],
       },
+      // No title and no diff or merge verdict, so no merge line.
+      other: {
+        url: "https://github.com/o/r/pull/13",
+        number: 13,
+        status: "open",
+        branch: "c",
+        checks: [{ name: "lint", state: "pass" }],
+      },
     },
     names: { c1: { name: "Build the tab", from: "prompt" } },
     subagents: {
@@ -58,6 +66,7 @@ const r = seed({
 const { agent, ws } = await import("./support/fixtures.ts");
 const d = await import("../src/agents/details.ts");
 const { madeOwn } = await import("../src/agents/made.ts");
+const { STATUS_DOT, T } = await import("../src/agents/theme.ts");
 const { nodeOf, taps } = await import("./support/renderer.ts");
 const { tabSwitch } = await import("../src/agents/views/tabs.ts");
 const { detailsPanel } = await import("../src/agents/views/details.ts");
@@ -89,6 +98,14 @@ describe("the tab switch", () => {
     select("sel");
     assert.equal(d.tabOf(), "details", "back on the first workspace, its choice holds");
     d.chooseTab("now");
+    assert.equal(d.tabOf(), "now");
+  });
+
+  it("keeps no choice with no workspace selected", () => {
+    r.data.workspaces = [];
+    d.chooseTab("details");
+    assert.equal(d.tabOf(), "now", "nothing selected shows Now, and the tap is not kept");
+    select("sel");
     assert.equal(d.tabOf(), "now");
   });
 
@@ -155,10 +172,10 @@ describe("sessions", () => {
 describe("helpers", () => {
   it("lists running runs first, then finished ones with how long they took", () => {
     assert.deepEqual(
-      d.helperRows().map((x) => [x.label, x.figure, x.running, x.last]),
+      d.helperRows().map((x) => [x.label, x.figure, x.running, x.dot, x.last]),
       [
-        ["Live one", "running 1m", true, false],
-        ["Done one", "took 1m 40s", false, true],
+        ["Live one", "running 1m", true, STATUS_DOT.working, false],
+        ["Done one", "took 1m 40s", false, T.grey, true],
       ],
     );
   });
@@ -173,13 +190,39 @@ describe("helpers", () => {
 describe("the pull request", () => {
   it("lists every check, passing ones too, each opening the PR's checks page", () => {
     assert.deepEqual(
-      d.checkDetails().map((c) => [c.key, c.figure, c.url, c.last]),
+      d.checkDetails().map((c) => [c.key, c.name, c.state, c.figure, c.url, c.last]),
       [
-        ["c:lint:0", "failed, started 2m ago", PR_URL + "/checks", false],
-        ["c:lint:1", "passed", PR_URL + "/checks", false],
-        ["c:build:0", "queued <1m", PR_URL + "/checks", true],
+        ["c:lint:0", "lint", "fail", "failed, started 2m ago", PR_URL + "/checks", false],
+        ["c:lint:1", "lint", "pass", "passed", PR_URL + "/checks", false],
+        // The merge line follows, so the last check keeps its rule above it.
+        ["c:build:0", "build", "pending", "queued <1m", PR_URL + "/checks", false],
       ],
     );
+    assert.equal(d.prHeadLast(), false);
+  });
+
+  it("ends the card on the last check when no merge line follows", () => {
+    select("other");
+    assert.equal(d.prMergeLine(), "");
+    assert.deepEqual(
+      d.checkDetails().map((c) => [c.key, c.last]),
+      [["c:lint:0", true]],
+    );
+    assert.equal(d.prHeadLast(), false, "a check follows the PR row");
+  });
+
+  it("titles the PR row, falling back on a plain name", () => {
+    assert.equal(d.prHeadTitle(), "Tabs");
+    select("other");
+    assert.equal(d.prHeadTitle(), "Pull request");
+  });
+
+  it("ends the card on the PR row with no check and no merge line", () => {
+    select("plain", { pr: { number: 14, status: "open", url: "https://github.com/o/r/pull/14" } });
+    assert.ok(d.cardShows.pr(), "the PR card shows");
+    assert.equal(d.checkDetails().length, 0);
+    assert.equal(d.prMergeLine(), "");
+    assert.equal(d.prHeadLast(), true);
   });
 
   it("says how long a check has run or queued", () => {
@@ -190,6 +233,11 @@ describe("the pull request", () => {
 
   it("links a GitHub PR's checks page, and any other link as it is", () => {
     assert.equal(d.checksUrl(PR_URL), PR_URL + "/checks");
+    assert.equal(d.checksUrl(PR_URL + "/"), PR_URL + "/checks");
+    assert.equal(d.checksUrl(PR_URL + "?w=1"), PR_URL + "/checks");
+    assert.equal(d.checksUrl(PR_URL + "/#top"), PR_URL + "/checks");
+    assert.equal(d.checksUrl(PR_URL + "/checks"), PR_URL + "/checks");
+    assert.equal(d.checksUrl(PR_URL + "/files"), PR_URL + "/files");
     assert.equal(d.checksUrl("https://example.com/pr"), "https://example.com/pr");
     assert.equal(d.checksUrl(undefined), undefined);
   });
@@ -248,9 +296,26 @@ describe("the note in place of the cards", () => {
 
   it("says when there is nothing to show, or no workspace", () => {
     select("plain");
+    assert.ok(Object.values(d.cardShows).every((shows) => !shows()));
     assert.equal(d.detailsNote(), "Nothing more to show for this workspace yet");
     r.data.workspaces = [];
     assert.equal(d.detailsNote(), "No workspace selected");
+  });
+
+  it("reads each card's own show rule, so any one card hides it", () => {
+    select("sel");
+    const shown = Object.entries(d.cardShows)
+      .filter(([, shows]) => shows())
+      .map(([card]) => card);
+    assert.deepEqual(shown, ["sessions", "helpers", "pr", "move", "ports", "made"]);
+    select("plain", { ports: [3000] });
+    assert.deepEqual(
+      Object.entries(d.cardShows)
+        .filter(([, shows]) => shows())
+        .map(([card]) => card),
+      ["ports"],
+    );
+    assert.equal(d.detailsNote(), "");
   });
 });
 

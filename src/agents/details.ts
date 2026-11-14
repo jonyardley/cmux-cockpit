@@ -11,10 +11,12 @@ import { askReason } from "../shared/needs.ts";
 import { checksOf, diffText, prOf } from "../shared/prs.ts";
 import { ageSince } from "../shared/time.ts";
 import { withAge } from "../shared/words.ts";
-import { checkRows } from "./checks.ts";
+import { keyedChecks } from "./checks.ts";
+import { markLastBefore } from "./lists.ts";
 import { madeOwn } from "./made.ts";
 import { cur, current, currentPr } from "./model.ts";
 import { agentLabels, type SubagentRow, subagents } from "./team.ts";
+import { STATUS_DOT, T } from "./theme.ts";
 
 // ---- The tab switch ------------------------------------------------------------
 
@@ -24,12 +26,19 @@ export type Tab = "now" | "details";
 // a reload lands every workspace back on Now.
 const [chosen, setChosen] = signal<ReadonlyMap<string, Tab>>(new Map());
 
-/** The tab the selected workspace shows: the one last chosen there, else Now. */
-export const tabOf = (): Tab => chosen().get(cur().ws.id) ?? "now";
+/** The tab the selected workspace shows: the one last chosen there, else
+ * Now. Always Now with none selected. */
+export function tabOf(): Tab {
+  const c = current();
+  return c ? (chosen().get(c.ws.id) ?? "now") : "now";
+}
 
-/** Shows tab `t` for the selected workspace, and remembers it there. */
+/** Shows tab `t` for the selected workspace, and remembers it there; does
+ * nothing with none selected, so no choice is kept for cur()'s stand-in. */
 export function chooseTab(t: Tab): void {
-  const id = cur().ws.id;
+  const c = current();
+  if (!c) return;
+  const id = c.ws.id;
   const next = new Map(chosen());
   if (t === "now") next.delete(id);
   else next.set(id, t);
@@ -97,6 +106,8 @@ export interface HelperRow {
   key: string;
   label: string;
   running: boolean;
+  /** Its dot: the working blue while it runs, grey once finished. */
+  dot: string;
   /** "running 4m", "took 1m 10s", "ended 3m ago" or "finished". */
   figure: string;
 }
@@ -115,7 +126,15 @@ export function helperFigure(s: Pick<SubagentRow, "running" | "startedEpoch" | "
  * running first, then the finished ones newest first, as team.ts ranks
  * them. Finished runs last only as long as their source keeps them. */
 export const helperRows = computed((): Last<HelperRow>[] =>
-  markLast(subagents().map((s) => ({ key: s.key, label: s.label, running: s.running, figure: helperFigure(s) }))),
+  markLast(
+    subagents().map((s) => ({
+      key: s.key,
+      label: s.label,
+      running: s.running,
+      dot: s.running ? STATUS_DOT.working : T.grey,
+      figure: helperFigure(s),
+    })),
+  ),
 );
 
 // ---- Pull request -----------------------------------------------------------------
@@ -147,25 +166,14 @@ export function checkFigure(c: SavedCheck): string {
   return started ? CHECK_WORD[c.state] + ", started " + started : CHECK_WORD[c.state];
 }
 
+// A PR's own page, with or without a trailing slash, query or fragment.
+const PR_PAGE = /^(.*\/pull\/\d+)\/?(?:[?#].*)?$/;
+
 /** A GitHub PR's checks page; the PR itself for any other link. */
 export function checksUrl(url: string | undefined): string | undefined {
-  return url && /\/pull\/\d+$/.test(url) ? url + "/checks" : url;
+  const page = url?.match(PR_PAGE)?.[1];
+  return page ? page + "/checks" : url;
 }
-
-/** Every check on the selected workspace's PR, passing ones too, in the
- * poller's order (failing first), each opening the PR's checks page. */
-export const checkDetails = computed((): Last<CheckDetail>[] => {
-  const ws = cur().ws;
-  const pr = prOf(ws);
-  const list = checksOf(ws, pr);
-  const url = checksUrl(pr?.url);
-  return markLast(
-    checkRows(list).map((row, i) => {
-      const saved = list[i];
-      return { ...row, figure: saved ? checkFigure(saved) : "", url };
-    }),
-  );
-});
 
 /**
  * The PR's merge state and size, "Mergeable, no conflicts, +412 −38". The
@@ -186,6 +194,30 @@ export function mergeLine(pr: PullRequest | undefined): string {
 
 /** The selected workspace's PR's merge line. */
 export const prMergeLine = computed((): string => mergeLine(prOf(cur().ws)));
+
+/** Every check on the selected workspace's PR, passing ones too, in the
+ * poller's order (failing first), each opening the PR's checks page. Each
+ * row is built from its own saved check, under the Now tab's key. The last
+ * check keeps its rule while the merge line follows it. */
+export const checkDetails = computed((): Last<CheckDetail>[] => {
+  const ws = cur().ws;
+  const pr = prOf(ws);
+  const url = checksUrl(pr?.url);
+  const rows = keyedChecks(checksOf(ws, pr)).map(({ key, check }) => ({
+    key,
+    name: check.name,
+    state: check.state,
+    figure: checkFigure(check),
+    url,
+  }));
+  return markLastBefore(rows, prMergeLine() ? 1 : 0);
+});
+
+/** The PR row's title: the PR's own, or "Pull request" when it has none. */
+export const prHeadTitle = computed((): string => currentPr()?.title || "Pull request");
+
+/** Whether the PR row closes its card: no check and no merge line under it. */
+export const prHeadLast = computed((): boolean => checkDetails().length === 0 && !prMergeLine());
 
 // ---- Your move --------------------------------------------------------------------
 
@@ -224,13 +256,25 @@ export const portRows = computed((): Last<PortRow>[] =>
   markLast((cur().ws.ports ?? []).map((n) => ({ key: "p" + n, label: ":" + n, url: "http://localhost:" + n }))),
 );
 
-// ---- Nothing to show ----------------------------------------------------------------
+// ---- Which cards show ---------------------------------------------------------------
+
+/** The Details tab's cards, in the issue's order. */
+export type DetailsCard = "sessions" | "helpers" | "pr" | "move" | "ports" | "made";
+
+/** Whether each card shows: the view mounts each card by its entry here,
+ * and the note below reads the same entries, so the two cannot drift. */
+export const cardShows: Readonly<Record<DetailsCard, () => boolean>> = {
+  sessions: () => sessionRows().length > 0,
+  helpers: () => helperRows().length > 0,
+  pr: () => !!currentPr(),
+  move: () => moveDetail() !== null,
+  ports: () => portRows().length > 0,
+  made: () => madeOwn().length > 0,
+};
 
 /** The faint line the Details tab shows in place of its cards: none
  * selected, or a workspace with nothing more to say; "" while any card shows. */
 export const detailsNote = computed((): string => {
   if (!current()) return "No workspace selected";
-  const lists = [sessionRows(), helperRows(), portRows(), madeOwn()];
-  const empty = lists.every((l) => l.length === 0) && !currentPr() && !moveDetail();
-  return empty ? "Nothing more to show for this workspace yet" : "";
+  return Object.values(cardShows).some((shows) => shows()) ? "" : "Nothing more to show for this workspace yet";
 });

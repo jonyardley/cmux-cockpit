@@ -44,8 +44,11 @@ README.md has the layout and commands.
   (checks and Fix), `pr-list.ts` (Pull requests) and `made.ts` (Made
   here) build on it. Never the other way round. A new module joins the
   coverage list in `package.json`.
+- `src/agents/details.ts`: the Now and Details tab choice and every Details card's rows and show rule.
 - `src/agents/views/`: view builders only. Keep logic out; if a view
   needs a decision, put it in the model and test it there.
+- `src/agents/views/tabs.ts`: the Now and Details switch at the top of the agents panel.
+- `src/agents/views/sections.ts`: the heading-over-card list section both tabs build from.
 - `src/agents/theme.ts`: colour tokens. No hex literals scattered in new
   code; add a token.
 - `src/renderer.d.ts`: the renderer contract. When code needs a renderer

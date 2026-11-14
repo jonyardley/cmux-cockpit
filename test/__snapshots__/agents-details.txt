@@ -141,7 +141,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                     Text "secrets" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                     Spacer minLength: 4
                     Text "passed, started 50m ago" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
-                Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
+                Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
             Text "Mergeable, no conflicts, +412 −38" .font(11) .color(secondary|neutralChip.fg) .lineLimit(2) .paddingHorizontal(12) .paddingVertical(8) .frame(maxWidth: infinity, alignment: leading)
     VStack spacing: 8, alignment: leading
       HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)

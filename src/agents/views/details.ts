@@ -8,20 +8,24 @@ import { prChipColors } from "../../shared/pr-colors.ts";
 import { META_FONT, meta, motionList, openIfUrl, when } from "../../shared/ui.ts";
 import {
   type CheckDetail,
+  cardShows,
   checkDetails,
+  type DetailsCard,
   detailsNote,
   type HelperRow,
   helperRows,
   moveDetail,
   type PortRow,
   portRows,
+  prHeadLast,
+  prHeadTitle,
   prMergeLine,
   type SessionRow,
   sessionRows,
 } from "../details.ts";
 import { type MadeEntry, madeAge, madeOwn } from "../made.ts";
 import { cur, currentPr, currentPrDim, currentPrTone, dotFor, haloFor, hollowDot, statusLine } from "../model.ts";
-import { CHECK_DOT, STALE_OPACITY, STATUS_DOT, T } from "../theme.ts";
+import { CHECK_DOT, STALE_OPACITY, T } from "../theme.ts";
 import { agentDot, jump, panel, ruled, sectionHeader } from "./parts.ts";
 import { faintNote, listSection } from "./sections.ts";
 
@@ -105,12 +109,11 @@ function sessionRow(e: () => Last<SessionRow>): View {
   );
 }
 
-// A helper: blue while it runs, grey once finished, with how long it has
-// run or took.
+// A helper: its dot, with how long it has run or took.
 function helperRow(e: () => Last<HelperRow>): View {
   return detailRow(
     {
-      lead: plainDot(() => (e().running ? STATUS_DOT.working : T.grey)),
+      lead: plainDot(() => e().dot),
       title: () => e().label,
       figure: () => e().figure,
     },
@@ -151,13 +154,13 @@ function prHead(): View {
   const pr = () => currentPr();
   return detailRow(
     {
-      title: () => pr()?.title || "Pull request",
+      title: prHeadTitle,
       figure: () => pr()?.tag ?? "",
       sub: () => pr()?.state ?? "",
       subColor: () => prChipColors(currentPrTone()).fg,
       tap: () => openIfUrl(pr()?.url),
     },
-    () => checkDetails().length === 0 && !prMergeLine(),
+    prHeadLast,
   );
 }
 
@@ -166,91 +169,90 @@ function prHead(): View {
 // data is stale, as the Now tab's do.
 function prSection(): View {
   const faded = () => (currentPrDim() ? STALE_OPACITY : 1);
-  return when(
-    "d-pr",
-    () => !!currentPr(),
-    () =>
-      VStack({ spacing: 8, alignment: "leading" }, [
-        sectionHeader("PULL REQUEST"),
-        panel([
-          prHead(),
-          VStack({ spacing: 0, alignment: "leading" }, [
-            motionList({ items: checkDetails, key: (e) => e.key, spacing: 0 }, checkRow),
-            when(
-              "d-pr-merge",
-              () => !!prMergeLine(),
-              () =>
-                Text(prMergeLine)
-                  .font(11)
-                  .color(T.secondary)
-                  .lineLimit(2)
-                  .paddingHorizontal(12)
-                  .paddingVertical(8)
-                  .frame({ maxWidth: "infinity", alignment: "leading" }),
-            ),
-          ])
-            .frame({ maxWidth: "infinity", alignment: "leading" })
-            .opacity(faded),
-        ]),
+  return when("d-pr", cardShows.pr, () =>
+    VStack({ spacing: 8, alignment: "leading" }, [
+      sectionHeader("PULL REQUEST"),
+      panel([
+        prHead(),
+        VStack({ spacing: 0, alignment: "leading" }, [
+          motionList({ items: checkDetails, key: (e) => e.key, spacing: 0 }, checkRow),
+          when(
+            "d-pr-merge",
+            () => !!prMergeLine(),
+            () =>
+              Text(prMergeLine)
+                .font(11)
+                .color(T.secondary)
+                .lineLimit(2)
+                .paddingHorizontal(12)
+                .paddingVertical(8)
+                .frame({ maxWidth: "infinity", alignment: "leading" }),
+          ),
+        ])
+          .frame({ maxWidth: "infinity", alignment: "leading" })
+          .opacity(faded),
       ]),
+    ]),
   );
 }
 
 // The move the chat ended its turn on, its decisions and leans under it.
 function moveSection(): View {
   const m = () => moveDetail();
-  return when(
-    "d-move",
-    () => !!m(),
-    () =>
-      VStack({ spacing: 8, alignment: "leading" }, [
-        sectionHeader("YOUR MOVE"),
-        panel([
-          VStack({ spacing: 4, alignment: "leading" }, [
-            Text(() => m()?.text ?? "")
-              .font(12.5)
-              .color(T.text)
-              .lineLimit(6)
-              .truncation("tail")
-              .frame({ maxWidth: "infinity", alignment: "leading" }),
-            when(
-              "d-move-meta",
-              () => !!m()?.meta,
-              () => faintText(() => m()?.meta ?? "", T.secondary),
-            ),
-          ])
-            .paddingHorizontal(12)
-            .paddingVertical(10)
+  return when("d-move", cardShows.move, () =>
+    VStack({ spacing: 8, alignment: "leading" }, [
+      sectionHeader("YOUR MOVE"),
+      panel([
+        VStack({ spacing: 4, alignment: "leading" }, [
+          Text(() => m()?.text ?? "")
+            .font(12.5)
+            .color(T.text)
+            .lineLimit(6)
+            .truncation("tail")
             .frame({ maxWidth: "infinity", alignment: "leading" }),
-        ]),
+          when(
+            "d-move-meta",
+            () => !!m()?.meta,
+            () => faintText(() => m()?.meta ?? "", T.secondary),
+          ),
+        ])
+          .paddingHorizontal(12)
+          .paddingVertical(10)
+          .frame({ maxWidth: "infinity", alignment: "leading" }),
       ]),
+    ]),
   );
 }
 
-// A list card that is left out altogether while its list is empty.
+// A list card, left out altogether while the model says it does not show.
 function listCard<T extends { key: string; last: boolean }>(
   label: string,
-  key: string,
+  card: DetailsCard,
   rows: () => T[],
   row: (e: () => T) => View,
 ): View {
-  return when(
-    key + "-section",
-    () => rows().length > 0,
-    () => listSection({ label, key, count: () => rows().length, rows, row }),
+  const key = "d-" + card;
+  return when(key + "-section", cardShows[card], () =>
+    listSection({ label, key, count: () => rows().length, rows, row }),
   );
 }
+
+// Each card by its name in the model's list, in the issue's order, so a
+// card added on one side and not the other fails the type check.
+const CARDS: Readonly<Record<DetailsCard, () => View>> = {
+  sessions: () => listCard("SESSIONS", "sessions", sessionRows, sessionRow),
+  helpers: () => listCard("HELPERS", "helpers", helperRows, helperRow),
+  pr: prSection,
+  move: moveSection,
+  ports: () => listCard("PORTS", "ports", portRows, portRow),
+  made: () => listCard("MADE HERE", "made", madeOwn, madeRow),
+};
 
 /** The Details tab's cards, in the issue's order, then a faint line when
  * there is nothing to show. */
 export function detailsPanel(): View {
   return VStack({ spacing: 18, alignment: "leading" }, [
-    listCard("SESSIONS", "d-sessions", sessionRows, sessionRow),
-    listCard("HELPERS", "d-helpers", helperRows, helperRow),
-    prSection(),
-    moveSection(),
-    listCard("PORTS", "d-ports", portRows, portRow),
-    listCard("MADE HERE", "d-made", madeOwn, madeRow),
+    ...Object.values(CARDS).map((card) => card()),
     faintNote("d-note", detailsNote),
   ]).frame({ maxWidth: "infinity", alignment: "leading" });
 }
