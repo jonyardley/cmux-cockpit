@@ -38,6 +38,24 @@
     }
   },
   {
+    "SaveWaits": {
+      "waits": {
+        "W1": [
+          { "kind": "stopped", "since": 1791229800.0, "key": 1791229800.0, "agent": "s1", "detail": "error" },
+          {
+            "kind": "ci_stuck",
+            "since": 1791229800.0,
+            "key": 1791229200.0,
+            "detail": "Docs layout",
+            "check": "build",
+            "queued": 1791229200.0
+          }
+        ],
+        "W2": null
+      }
+    }
+  },
+  {
     "Notify": {
       "workspace": "W1",
       "since": 1791229800.0,

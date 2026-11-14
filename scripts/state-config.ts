@@ -66,6 +66,15 @@ export interface State {
    */
   running?: Record<string, SavedRunning>;
   /**
+   * wsId -> the waits on Jon the native Cockpit's card shows (#388): a
+   * stopped session, CI stuck or red with nobody on it, a change left
+   * merge-ready four hours, parked Ostinato attempts; each only while it
+   * shows (not dismissed, the workspace awake). Written only by
+   * scripts/waits-save.ts, from the core's SaveWaits effect, never by a
+   * URL. Left out while nothing is saved.
+   */
+  waits?: Record<string, SavedWait[]>;
+  /**
    * Claude Code session id -> the name its agent row shows, recorded by
    * scripts/hooks/report-rename.ts because cmux's own agent title is the
    * first message, which it cannot read for every Claude folder. Oldest
@@ -346,6 +355,31 @@ export interface SavedRunning {
   counts: SavedCount[];
 }
 
+/** The kinds of wait the native core saves (persist.rs WaitKind). */
+export const WAIT_KINDS = ["stopped", "ci_stuck", "ci_failing", "merge_ready", "park"] as const;
+export type WaitKind = (typeof WAIT_KINDS)[number];
+
+/**
+ * One wait on Jon a Cockpit card shows (native/core/src/waits_save.rs).
+ * Nothing in it moves with the clock: the panel works out each age from
+ * `since`.
+ */
+export interface SavedWait {
+  kind: WaitKind;
+  /** Epoch seconds it began to wait on Jon. */
+  since: number;
+  /** The start a dismissal of it is saved at in `dismissed`. */
+  key: number;
+  /** A stop only, and always there: the stopped session, its dismissal's id. */
+  agent?: string;
+  /** A few words: a stop's cause ("error", "gone", "silent"), the PR's title or "#12", the park's words. */
+  detail?: string;
+  /** Stuck CI only: the stuck check's name. */
+  check?: string;
+  /** Stuck CI only: when the stuck check was queued, or started when it runs. */
+  queued?: number;
+}
+
 /** A session's name, as the hook saves it. */
 export interface SavedName {
   /** At most MAX_LABEL characters, cleaned as cleanLabel does. */
@@ -425,6 +459,9 @@ export const MAX_STATUS = 32;
 
 /** The most kinds a saved verdict counts: one per task type (persist.rs MAX_COUNTS). */
 export const MAX_COUNTS = TASK_TYPES.length;
+
+/** The most waits saved for one workspace (persist.rs MAX_WAITS). */
+export const MAX_WAITS = 20;
 
 /** Agent tabs kept asleep per workspace, so a bad write cannot bloat the file. */
 export const MAX_ASLEEP = 10;
@@ -909,6 +946,43 @@ function savedRunning(v: unknown): SavedRunning | null {
   return fits ? { agent: v.agent, since: v.since, counts: counts.filter((c) => c !== null) } : null;
 }
 
+const isWaitKind = (v: unknown): v is WaitKind => WAIT_KINDS.some((k) => k === v);
+
+/** An optional field as serde reads it: missing or null is absent, a value that fails `is` refuses the whole. */
+type Optional<T> = { ok: true; value?: T } | { ok: false };
+function optional<T>(v: unknown, is: (x: unknown) => x is T): Optional<T> {
+  if (v === undefined || v === null) return { ok: true };
+  return is(v) ? { ok: true, value: v } : { ok: false };
+}
+
+/** A saved wait as persist.rs's SavedWait::fits holds it: an agent on a stop and only there, a check and its time on stuck CI and only there. */
+function savedWait(v: unknown): SavedWait | null {
+  if (!isRecord(v) || !isWaitKind(v.kind) || !isEpoch(v.since) || !isEpoch(v.key)) return null;
+  const agent = optional(v.agent, isIdText);
+  const detail = optional(v.detail, isLabel);
+  const check = optional(v.check, isName);
+  const queued = optional(v.queued, isEpoch);
+  if (!agent.ok || !detail.ok || !check.ok || !queued.ok) return null;
+  if ((v.kind === "stopped") !== (agent.value !== undefined)) return null;
+  if (v.kind !== "ci_stuck" && (check.value !== undefined || queued.value !== undefined)) return null;
+  return {
+    kind: v.kind,
+    since: v.since,
+    key: v.key,
+    ...(agent.value !== undefined ? { agent: agent.value } : {}),
+    ...(detail.value !== undefined ? { detail: detail.value } : {}),
+    ...(check.value !== undefined ? { check: check.value } : {}),
+    ...(queued.value !== undefined ? { queued: queued.value } : {}),
+  };
+}
+
+/** A workspace's waits as persist.rs's waits_map reads them: dropped whole if any wait does not fit. */
+function savedWaits(v: unknown): SavedWait[] | null {
+  if (!Array.isArray(v) || v.length < 1 || v.length > MAX_WAITS) return null;
+  const waits = v.map(savedWait);
+  return waits.every((w) => w !== null) ? waits.filter((w) => w !== null) : null;
+}
+
 function savedAsleep(v: unknown): SavedAsleep | null {
   if (!isRecord(v) || !Array.isArray(v.surfaces) || !isEpoch(v.since)) return null;
   const surfaces = v.surfaces.filter(isIdText);
@@ -961,6 +1035,7 @@ export function validateState(raw: unknown): State {
   const poll = savedPoll(v.poll);
   const background = cleanMap(v.background, savedTasks);
   const running = cleanMap(v.running, savedRunning);
+  const waits = cleanMap(v.waits, savedWaits);
   const laneNames = cleanMap(v.laneNames, laneName);
   const asleep = cleanMap(v.asleep, savedAsleep);
   const notified = cleanMap(v.notified, savedNote);
@@ -979,6 +1054,7 @@ export function validateState(raw: unknown): State {
     ui: uiState(v.ui),
     ...(Object.keys(background).length ? { background } : {}),
     ...(Object.keys(running).length ? { running } : {}),
+    ...(Object.keys(waits).length ? { waits } : {}),
     ...(Object.keys(laneNames).length ? { laneNames } : {}),
     ...(Object.keys(asleep).length ? { asleep } : {}),
     ...(Object.keys(notified).length ? { notified } : {}),
@@ -988,7 +1064,7 @@ export function validateState(raw: unknown): State {
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
+// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `waits`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
 type MapName =

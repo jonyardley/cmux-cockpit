@@ -30,7 +30,7 @@ use crate::data::{Agent, AgentStatus, Data, PrStatus, Workspace};
 use crate::js::{num_text, truthy};
 use crate::merge_wait::merge_wait;
 use crate::persist::{SavedCheck, SavedState};
-use crate::prs::{checks_of, pr_of, ready_since_of, stuck};
+use crate::prs::{checks_of, pr_of, ready_since_of, stuck_check};
 use crate::session::Session;
 use crate::text::clean_title;
 use crate::time::now_epoch;
@@ -74,33 +74,59 @@ pub struct CiWait {
     /// No session in the workspace is on it, so it waits on Jon. False
     /// while one is: the trouble is still read, so a dismissal holds.
     pub waits: bool,
+    /// Stuck CI only: the stuck check's name (prs.rs `stuck_check`).
+    pub check: Option<String>,
+}
+
+/// What a read of a PR's checks found wrong: the trouble, its key, when
+/// it began, and the stuck check's name for stuck CI.
+#[derive(Debug, Clone, PartialEq)]
+struct Trouble {
+    trouble: CiTrouble,
+    key: f64,
+    began: f64,
+    check: Option<String>,
 }
 
 /// The trouble with `checks` at epoch `now`, its key, and when it began:
 /// failing first, then stuck. None when neither.
-fn trouble_of(checks: &[SavedCheck], now: f64) -> Option<(CiTrouble, f64, f64)> {
+fn trouble_of(checks: &[SavedCheck], now: f64) -> Option<Trouble> {
     let failing: Vec<&SavedCheck> = checks.iter().filter(|c| c.state == "fail").collect();
     if !failing.is_empty() {
         let key = failing.iter().filter_map(|c| c.started).fold(0.0, f64::max);
-        return Some((CiTrouble::Failing, key, key));
+        return Some(Trouble {
+            trouble: CiTrouble::Failing,
+            key,
+            began: key,
+            check: None,
+        });
     }
-    let s = stuck(checks, now)?;
-    Some((CiTrouble::Stuck, s.since, s.went_stuck()))
+    let (c, s) = stuck_check(checks, now)?;
+    Some(Trouble {
+        trouble: CiTrouble::Stuck,
+        key: s.since,
+        began: s.went_stuck(),
+        check: Some(c.name.clone()),
+    })
 }
 
 /// The CI trouble of the workspace's first PR at epoch `now`: an open
 /// numbered PR with the poller's checks, stuck or red, else left
 /// merge-ready four hours (merge_wait.rs). None for any other.
-fn ci_of(saved: &SavedState, w: &Workspace, now: f64) -> Option<(CiTrouble, f64, f64, String)> {
+fn ci_of(saved: &SavedState, w: &Workspace, now: f64) -> Option<(Trouble, String)> {
     let pr = pr_of(saved, Some(w))?;
     let number = truthy(pr.number)?;
     if pr.status != Some(PrStatus::Open) {
         return None;
     }
     let checks = checks_of(saved, w);
-    let (trouble, key, began) = trouble_of(checks, now).or_else(|| {
-        merge_wait(&pr, checks, ready_since_of(saved, w), now)
-            .map(|(key, began)| (CiTrouble::MergeReady, key, began))
+    let trouble = trouble_of(checks, now).or_else(|| {
+        merge_wait(&pr, checks, ready_since_of(saved, w), now).map(|(key, began)| Trouble {
+            trouble: CiTrouble::MergeReady,
+            key,
+            began,
+            check: None,
+        })
     })?;
     let title = clean_title(pr.title.as_deref());
     let name = if title.is_empty() {
@@ -108,7 +134,7 @@ fn ci_of(saved: &SavedState, w: &Workspace, now: f64) -> Option<(CiTrouble, f64,
     } else {
         title
     };
-    Some((trouble, key, began, name))
+    Some((trouble, name))
 }
 
 /// Whether `a`, as the sidebars show it, is on its workspace's work:
@@ -149,9 +175,15 @@ impl Session {
         let now = now_epoch(data);
         let mut found = std::collections::HashMap::new();
         for w in data.workspace_list() {
-            let Some((trouble, key, began, pr)) = ci_of(&self.saved, w, now) else {
+            let Some((t, pr)) = ci_of(&self.saved, w, now) else {
                 continue;
             };
+            let Trouble {
+                trouble,
+                key,
+                began,
+                check,
+            } = t;
             let agents = self.shown_agents(w);
             let on_it = agents.iter().any(|a| is_on_it(&self.saved, data, w, a));
             let asleep = self.sleep_kind(&w.id).is_some();
@@ -173,6 +205,7 @@ impl Session {
                     since,
                     pr,
                     waits: !on_it && !asleep,
+                    check,
                 },
             );
         }
@@ -287,6 +320,11 @@ mod tests {
         }
     }
 
+    /// `trouble_of`, as its trouble, key and start, and the check named.
+    fn read(checks: &[SavedCheck], now: f64) -> Option<(CiTrouble, f64, f64, Option<String>)> {
+        trouble_of(checks, now).map(|t| (t.trouble, t.key, t.began, t.check))
+    }
+
     #[test]
     fn failing_outranks_stuck_and_keys_on_the_latest_failed_start() {
         let checks = [
@@ -295,25 +333,39 @@ mod tests {
             check("fail", None, Some(200.0)),
         ];
         assert_eq!(
-            trouble_of(&checks, 10_000.0),
-            Some((CiTrouble::Failing, 300.0, 300.0))
+            read(&checks, 10_000.0),
+            Some((CiTrouble::Failing, 300.0, 300.0, None))
         );
         let stuck = [check("pending", Some(100.0), None)];
+        let build = Some("build".to_string());
         assert_eq!(
-            trouble_of(&stuck, 700.0),
-            Some((CiTrouble::Stuck, 100.0, 700.0)),
+            read(&stuck, 700.0),
+            Some((CiTrouble::Stuck, 100.0, 700.0, build.clone())),
             "began when it went stuck"
         );
         let running = [check("pending", Some(50.0), Some(100.0))];
         assert_eq!(
-            trouble_of(&running, 2800.0),
-            Some((CiTrouble::Stuck, 100.0, 2800.0))
+            read(&running, 2800.0),
+            Some((CiTrouble::Stuck, 100.0, 2800.0, build))
         );
-        assert_eq!(trouble_of(&[check("pass", None, Some(1.0))], 1e10), None);
+        assert_eq!(read(&[check("pass", None, Some(1.0))], 1e10), None);
         assert_eq!(
-            trouble_of(&[check("fail", None, None)], 1.0),
-            Some((CiTrouble::Failing, 0.0, 0.0)),
+            read(&[check("fail", None, None)], 1.0),
+            Some((CiTrouble::Failing, 0.0, 0.0, None)),
             "old saved data still fails"
+        );
+    }
+
+    #[test]
+    fn names_the_check_that_went_stuck_first() {
+        let named = |name: &str, queued: f64| SavedCheck {
+            name: name.into(),
+            ..check("pending", Some(queued), None)
+        };
+        let checks = [named("lint", 300.0), named("test", 100.0)];
+        assert_eq!(
+            read(&checks, 1000.0).and_then(|t| t.3),
+            Some("test".to_string())
         );
     }
 }

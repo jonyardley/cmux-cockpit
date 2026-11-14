@@ -250,6 +250,25 @@ export function writeRunningEntries(
 }
 
 /**
+ * The native core's waits on Jon (scripts/waits-save.ts, #388), the one
+ * writer of the `waits` map: each id in `set` takes its waits, each id in
+ * `remove` loses its entry, every other entry stays, in the same locked
+ * read-modify-write step as every other write. `set` must already be
+ * clean (validateState's `waits`).
+ */
+export function writeWaitEntries(
+  path: string,
+  set: NonNullable<State["waits"]>,
+  remove: readonly string[],
+): ApplyResult {
+  return readUpdateWrite(path, (before) => {
+    const waits = { ...before.waits, ...set };
+    for (const id of remove) delete waits[id];
+    return { ok: true, state: validateState({ ...before, waits: sortedByKey(waits) }) };
+  });
+}
+
+/**
  * The `prs` a poll writes: a whole map to replace it, or a function from
  * the map as it stands under the lock to the next one, so a write that
  * landed since the poll read the file is never undone.

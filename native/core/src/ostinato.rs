@@ -116,11 +116,14 @@ pub struct Ostinato {
     /// By file project, as the feed keys them.
     records: BTreeMap<String, Record>,
     checkouts: BTreeMap<String, String>,
+    /// A feed has come since the session began.
+    fed: bool,
 }
 
 impl Ostinato {
     /// Takes a new feed, reading only the records whose text changed.
     pub fn take(&mut self, feed: OstinatoFeed) {
+        self.fed = true;
         let mut old = std::mem::take(&mut self.records);
         for (key, text) in feed.records {
             let record = match old.remove(&key) {
@@ -134,6 +137,12 @@ impl Ostinato {
             .into_iter()
             .map(|(dir, repo)| (trim_slash(&dir).to_string(), repo))
             .collect();
+    }
+
+    /// Whether a feed has come since the session began: until then no
+    /// park can be read, so a saved one is not yet known to be over.
+    pub fn fed(&self) -> bool {
+        self.fed
     }
 
     /// The repo the folder `directory` is the main checkout of (or a

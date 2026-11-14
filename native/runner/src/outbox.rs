@@ -19,6 +19,8 @@
 //!   and schedules the sidebars' rebuild, so it returns at once;
 //! - the core's background verdicts for config/state.json's `running` map
 //!   (#360), as `scripts/running-save.sh '<json>'`, the same way;
+//! - the core's waits on Jon for its `waits` map (#388), as
+//!   `scripts/waits-save.sh '<json>'`, the same way;
 //! - a desktop notification to take down once its wait clears (#379), as
 //!   `cmux dismiss-notification --id <id>`. One already gone (Jon clicked
 //!   or cleared it) fails as not_found, which is only logged: the core
@@ -34,7 +36,9 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Receiver;
 
 use cockpit_core::NotifyDismiss;
-use cockpit_core::app::{AgentMessage, CmuxCall, CopyText, OpenUrl, PrSave, RunningSave, StateSet};
+use cockpit_core::app::{
+    AgentMessage, CmuxCall, CopyText, OpenUrl, PrSave, RunningSave, StateSet, WaitsSave,
+};
 use cockpit_core::persist::is_uuid;
 use cockpit_core::session::Param;
 use serde::Serialize;
@@ -55,6 +59,8 @@ pub enum Outgoing {
     SavePrs(PrSave),
     /// The core's background verdicts for the state file.
     SaveRunning(RunningSave),
+    /// The core's waits on Jon for the state file.
+    SaveWaits(WaitsSave),
     /// A desktop notification to dismiss.
     DismissNotification(NotifyDismiss),
 }
@@ -154,6 +160,15 @@ pub fn command_for(
                 vec![script.display().to_string(), json],
             ))
         }
+        Outgoing::SaveWaits(save) => {
+            let json = serde_json::to_string(&save.waits)
+                .map_err(|e| format!("waits save not sent: {e}"))?;
+            let script = repo_script(config, "waits-save.sh");
+            Ok((
+                "/bin/sh".to_string(),
+                vec![script.display().to_string(), json],
+            ))
+        }
         // Only an id in cmux's UUID shape reaches the command line.
         Outgoing::DismissNotification(d) if is_uuid(&d.id) => Ok((
             "cmux".to_string(),
@@ -181,6 +196,7 @@ fn describe(o: &Outgoing) -> String {
         // How many, never which PR: a title can be anything.
         Outgoing::SavePrs(save) => format!("pr save of {}", save.prs.len()),
         Outgoing::SaveRunning(save) => format!("running save of {}", save.running.len()),
+        Outgoing::SaveWaits(save) => format!("waits save of {}", save.waits.len()),
         Outgoing::DismissNotification(_) => "dismissing a notification".to_string(),
     }
 }
@@ -228,6 +244,7 @@ pub fn perform<L: Fn(String), F: Fn(String)>(
             | Outgoing::AgentMessage(_)
             | Outgoing::SavePrs(_)
             | Outgoing::SaveRunning(_)
+            | Outgoing::SaveWaits(_)
             | Outgoing::DismissNotification(_) => None,
         };
         match command_for(&o, token.as_deref(), config) {
@@ -371,6 +388,22 @@ mod tests {
             ["/u/.config/cmux/scripts/running-save.sh", r#"{"W2":null}"#]
         );
         assert_eq!(describe(&save), "running save of 1");
+        assert_eq!(workspace_of(&save), None);
+    }
+
+    #[test]
+    fn a_waits_save_runs_the_repos_script_with_the_waits_as_json() {
+        let mut waits = std::collections::BTreeMap::new();
+        waits.insert("W2".to_string(), None);
+        let save = Outgoing::SaveWaits(WaitsSave { waits });
+        let (program, args) =
+            command_for(&save, None, Path::new("/u/.config/cmux/config")).unwrap();
+        assert_eq!(program, "/bin/sh");
+        assert_eq!(
+            args,
+            ["/u/.config/cmux/scripts/waits-save.sh", r#"{"W2":null}"#]
+        );
+        assert_eq!(describe(&save), "waits save of 1");
         assert_eq!(workspace_of(&save), None);
     }
 

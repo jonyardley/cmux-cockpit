@@ -64,11 +64,12 @@ pub mod text;
 pub mod theme;
 pub mod time;
 pub mod ui;
+pub mod waits_save;
 pub mod words;
 
 pub use app::{
     AgentMessage, CmuxCall, Cockpit, CopyText, Effect, Event, Model, OpenUrl, PrAsk, PrSave,
-    RunningSave, StateSet, ViewModel,
+    RunningSave, StateSet, ViewModel, WaitsSave,
 };
 pub use data::{Data, Workspace};
 pub use edit::EditEvent;

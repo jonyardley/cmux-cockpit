@@ -26,12 +26,13 @@ use crate::menu::MenuEvent;
 use crate::notify::{Notified, NotifyDismiss, NotifyPost};
 use crate::ostinato::OstinatoFeed;
 use crate::panel::Panel;
-use crate::persist::{SavedPr, SavedRunning, SavedState, ViewMode, persist_url};
+use crate::persist::{SavedPr, SavedRunning, SavedState, SavedWait, ViewMode, persist_url};
 use crate::pr_poll::{PrPolled, shown_in};
 use crate::projects::Project;
 use crate::running_save::{RunningSaves, verdicts};
 use crate::session::{Outbound, Param, Session};
 use crate::sleep::SleepAnswer;
+use crate::waits_save::WaitSaves;
 
 /// What the shell can tell the core. native/typegen writes it in Swift for
 /// the sidebar to send; the core's own inputs (a frame, the state file, the
@@ -201,6 +202,8 @@ pub struct Model {
     pub panel_on: bool,
     /// The background verdicts sent for the state file (running_save.rs).
     pub running_saves: RunningSaves,
+    /// The waits sent for the state file (waits_save.rs).
+    pub wait_saves: WaitSaves,
 }
 
 /// Needs you as the shell draws it, workspaces by id, longest waiting
@@ -388,6 +391,21 @@ impl Operation for RunningSave {
     type Output = ();
 }
 
+/// The core's waits on Jon for config/state.json's `waits` map (#388),
+/// by workspace id: the card's waits to set, or null to delete. The shell
+/// hands them to scripts/waits-save.ts, which writes them under the state
+/// file's lock and rebuilds the sidebars, so the agents panel counts the
+/// waits the card shows. Only what changed comes this way (waits_save.rs).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct WaitsSave {
+    pub waits: BTreeMap<String, Option<Vec<SavedWait>>>,
+}
+
+impl Operation for WaitsSave {
+    type Output = ();
+}
+
 /// A link for the shell to open in the browser, as the sidebar's
 /// `openURL`: the card menu's Open PR.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -438,6 +456,7 @@ pub enum Effect {
     AgentMessage(AgentMessage),
     SavePrs(PrSave),
     SaveRunning(RunningSave),
+    SaveWaits(WaitsSave),
     Notify(NotifyPost),
     DismissNotification(NotifyDismiss),
 }
@@ -626,6 +645,17 @@ impl Model {
         (!running.is_empty()).then(|| Command::notify_shell(RunningSave { running }).into())
     }
 
+    /// The waits the state file lacks, as one save, on the same terms as
+    /// `running_writes`.
+    fn wait_writes(&mut self) -> Option<Command<Effect, Event>> {
+        if !self.panel_on {
+            return None;
+        }
+        let data = self.data.as_ref()?;
+        let waits = self.wait_saves.writes(&self.session, data)?;
+        (!waits.is_empty()).then(|| Command::notify_shell(WaitsSave { waits }).into())
+    }
+
     /// Posts and dismisses the frame's desktop notifications (notify.rs).
     /// Only the core that draws the sidebar does, so the pane's never
     /// doubles a banner.
@@ -702,6 +732,7 @@ impl App for Cockpit {
                 s.pr_poll.file_read(&saved.prs, model.data.as_ref());
                 s.reseed(*saved);
                 model.running_saves.file_read();
+                model.wait_saves.file_read();
             }
             Event::Projects(projects) => model.session.set_projects(projects),
             Event::Lanes(lanes) => model.session.set_lanes(&lanes),
@@ -733,7 +764,8 @@ impl App for Cockpit {
         let saves = model.framed(|m| {
             m.build();
             m.notify_writes();
-            m.running_writes()
+            let running = m.running_writes();
+            running.into_iter().chain(m.wait_writes())
         });
         let now = model.data.as_ref().and_then(|d| d.epoch);
         let asks = model.asks(now);
@@ -899,6 +931,10 @@ mod tests {
                 Effect::SaveRunning(r) => {
                     let ids: Vec<&str> = r.operation.running.keys().map(String::as_str).collect();
                     format!("running {}", ids.join(" "))
+                }
+                Effect::SaveWaits(r) => {
+                    let ids: Vec<&str> = r.operation.waits.keys().map(String::as_str).collect();
+                    format!("waits {}", ids.join(" "))
                 }
                 Effect::Cmux(_)
                 | Effect::Persist(_)

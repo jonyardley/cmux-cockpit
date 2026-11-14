@@ -717,6 +717,26 @@ settled; the hook's 12 hour prune bounds it. A task past its age (above)
 drops out of the core's verdict on the next paced rebuild, with no hook
 write, so a stale entry never holds the verdict either. No URL writes it.
 
+### The core's waits for the agents panel
+
+The native core also saves the waits on Jon each card shows (#388), in a
+`waits` map, so the agents panel can count and name the same ones:
+workspace id to a list of `{"kind", "since", "key"}`, kind one of
+`stopped`, `ci_stuck`, `ci_failing`, `merge_ready` or `park`, `since` when
+it began to wait on Jon and `key` the start its dismissal is saved at. A
+stop also carries `agent`, the stopped session (its dismissal's id); any
+wait may carry `detail`, a few words (the stop's cause, the PR's title or
+number, the park's words); stuck CI carries `check` and `queued`, the
+stuck check's name and when it was queued or started. Only waits that
+show are saved: not dismissed, the workspace awake. Asking, Your turn,
+the idle nudge and quiet are not: the panel reads those itself. Nothing
+in it moves with the clock, so an unchanged wait is never written again.
+A frame that cannot yet tell keeps what the file holds: a CI wait whose
+PR it cannot read, and a park for a minute before the first Ostinato
+feed. It goes the same way as `running` (`native/core/src/waits_save.rs`,
+its `SaveWaits` effect, `scripts/waits-save.sh` and
+`scripts/waits-save.ts`). No URL writes it.
+
 ## Published pages and docs
 
 cmux knows nothing about the pages and docs agents publish on claude.ai

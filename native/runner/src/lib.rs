@@ -295,6 +295,7 @@ impl Feed {
                 Effect::AgentMessage(r) => Outgoing::AgentMessage(r.operation),
                 Effect::SavePrs(r) => Outgoing::SavePrs(r.operation),
                 Effect::SaveRunning(r) => Outgoing::SaveRunning(r.operation),
+                Effect::SaveWaits(r) => Outgoing::SaveWaits(r.operation),
                 Effect::DismissNotification(r) => Outgoing::DismissNotification(r.operation),
             };
             self.hand(out);
@@ -334,6 +335,7 @@ impl Feed {
             EffectFile::AgentMessage(m) => self.hand(Outgoing::AgentMessage(m)),
             EffectFile::SavePrs(p) => self.hand(Outgoing::SavePrs(p)),
             EffectFile::SaveRunning(r) => self.hand(Outgoing::SaveRunning(r)),
+            EffectFile::SaveWaits(w) => self.hand(Outgoing::SaveWaits(w)),
             EffectFile::Notify(p) => self.notify(p),
             EffectFile::DismissNotification(d) => self.hand(Outgoing::DismissNotification(d)),
         }
@@ -1243,6 +1245,7 @@ mod tests {
                 Outgoing::AgentMessage(m) => format!("message {}", m.workspace),
                 Outgoing::SavePrs(p) => format!("save {} prs", p.prs.len()),
                 Outgoing::SaveRunning(r) => format!("save {} running", r.running.len()),
+                Outgoing::SaveWaits(w) => format!("save {} waits", w.waits.len()),
                 Outgoing::DismissNotification(d) => format!("dismiss {}", d.id),
             })
             .collect()
