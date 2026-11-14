@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use super::line::{Event, Line, Outcome};
+use super::line::{Event, Heard, Line, Outcome};
 
 /// How long a run with no end line reads as running after its last line
 /// when it has no `session_hours` cap: three hours, the kit's default.
@@ -335,19 +335,26 @@ impl Walk {
     }
 }
 
-/// Where the latest run in `lines` stands at epoch `now`; `shares` is
-/// `shares(lines)`, worked out once per read. None with no lines.
-pub fn run_state(lines: &[Line], shares: &[Share], now: f64) -> Option<RunState> {
+/// Where the latest run in `lines` stands at epoch `now`; `heard` is the
+/// record's unknown events, whose times count as the run's last line;
+/// `shares` is `shares(lines)`, worked out once per read. None with no
+/// lines.
+pub fn run_state(lines: &[Line], heard: &[Heard], shares: &[Share], now: f64) -> Option<RunState> {
     let (run, own) = latest_run(lines)?;
     let mut walk = Walk::default();
     for l in own.iter().filter(|l| l.run == run) {
         walk.take(l);
     }
-    let last = own
+    let read = own
         .iter()
         .rev()
         .find(|l| l.run == run)
         .map_or(0.0, |l| l.at);
+    // A newer loop's event this reader skips still shows the run is alive.
+    let last = heard
+        .iter()
+        .filter(|h| h.run == run)
+        .fold(read, |last, h| last.max(h.at));
     let phase = match walk.ended {
         Some(at) => Phase::Ended { at, silent: false },
         None if now - last > walk.caps.attempt_secs() => Phase::Ended {

@@ -28,7 +28,7 @@ use crate::time::now_epoch;
 pub use line::{Broken, RecordError, RecordText};
 pub use run::RunState;
 
-use line::{Event, Line, read};
+use line::{Event, Heard, Line, read};
 use run::{Share, run_state, shares};
 
 /// What the runner hands the core: every record in the folder, and the
@@ -51,6 +51,8 @@ pub struct Record {
     /// The text it was read from, so an unchanged one is not read again.
     text: RecordText,
     lines: Vec<Line>,
+    /// Unknown events' times and runs: skipped, but their run was heard.
+    heard: Vec<Heard>,
     error: Option<RecordError>,
     shares: Vec<Share>,
     /// The project it is about, lower case: the latest `run_started`'s,
@@ -70,6 +72,7 @@ impl Record {
         Record {
             shares: shares(&read.lines),
             lines: read.lines,
+            heard: read.heard,
             error: read.error,
             project,
             text,
@@ -79,7 +82,7 @@ impl Record {
     /// Where it stands at epoch `now`.
     pub fn state(&self, now: f64) -> RecordState {
         RecordState {
-            run: run_state(&self.lines, &self.shares, now),
+            run: run_state(&self.lines, &self.heard, &self.shares, now),
             error: self.error.clone(),
         }
     }
@@ -371,6 +374,26 @@ mod tests {
         assert_eq!(s.phase, Phase::Running);
         let s = state(&started, "2026-11-12T11:09:41Z");
         assert!(matches!(s.phase, Phase::Ended { silent: true, .. }));
+    }
+
+    #[test]
+    fn an_unknown_event_keeps_its_run_running() {
+        // The team's first lines, then only events this reader skips.
+        let mut lines: Vec<&str> = TEAM.lines().take(4).collect();
+        let heard = r#"{"v":1,"at":"2026-11-11T12:00:00Z","run":"team-1111","event":"board_synced","tickets":2}"#;
+        let other =
+            r#"{"v":1,"at":"2026-11-11T14:00:00Z","run":"elsewhere","event":"board_synced"}"#;
+        lines.extend([heard, other]);
+        let text = lines.join("\n");
+        assert_eq!(state(&text, "2026-11-11T14:59:59Z").phase, Phase::Running);
+        assert_eq!(
+            state(&text, "2026-11-11T15:00:01Z").phase,
+            Phase::Ended {
+                at: at("2026-11-11T12:00:00Z"),
+                silent: true
+            },
+            "another run's line is not this run's"
+        );
     }
 
     #[test]

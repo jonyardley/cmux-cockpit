@@ -2,7 +2,8 @@
 //! (docs/record-format.md in jonyardley/ostinato, its reading rules
 //! table being the contract):
 //!
-//! - a torn line, an unknown event or a `v` above 1 is skipped;
+//! - a torn line, an unknown event or a `v` above 1 is skipped, though
+//!   an unknown event's time still counts as its run being heard from;
 //! - an outcome this version does not know is kept as text;
 //! - a field the format does not name is tolerated, and a session named
 //!   twice or costs that do not add up are kept as they are;
@@ -19,24 +20,31 @@ use crate::time::iso_epoch;
 
 /// A record's text as the runner read it from disk: the file as UTF-8,
 /// with the numbers (from 1) of any line that was not, which is an
-/// error on that line. Built by `RecordText::from_bytes`, so the runner
-/// and the reader number lines the same way.
+/// error on that line, and of any line cut in the middle of a character
+/// at its end. Built by `RecordText::from_bytes`, so the runner and the
+/// reader number lines the same way.
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, Deserialize)]
 pub struct RecordText {
     pub text: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_utf8: Vec<usize>,
+    /// Lines whose last bytes were the start of a character and nothing
+    /// more, kept without them: torn when what comes before stops in the
+    /// middle of a JSON value, else not UTF-8.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cut: Vec<usize>,
 }
 
 impl RecordText {
     /// The file's bytes as text. A line cut in the middle of a character
     /// at its end, as a torn last line can be, keeps what comes before
-    /// the cut, so it reads as torn when that stops in the middle of a
-    /// JSON value. A line with a byte that is not UTF-8 anywhere else is
-    /// kept with the byte replaced, and its number noted.
+    /// the cut, and its number is noted in `cut`. A line with a byte that
+    /// is not UTF-8 anywhere else is kept with the byte replaced, and its
+    /// number noted in `not_utf8`.
     pub fn from_bytes(bytes: &[u8]) -> RecordText {
         let mut text = String::with_capacity(bytes.len());
         let mut not_utf8 = Vec::new();
+        let mut cut = Vec::new();
         for (i, part) in bytes.split(|b| *b == b'\n').enumerate() {
             if i > 0 {
                 text.push('\n');
@@ -46,6 +54,7 @@ impl RecordText {
                 Err(e) if e.error_len().is_none() => {
                     let good = part.get(..e.valid_up_to()).unwrap_or_default();
                     text.push_str(&String::from_utf8_lossy(good));
+                    cut.push(i + 1);
                 }
                 Err(_) => {
                     text.push_str(&String::from_utf8_lossy(part));
@@ -53,7 +62,11 @@ impl RecordText {
                 }
             }
         }
-        RecordText { text, not_utf8 }
+        RecordText {
+            text,
+            not_utf8,
+            cut,
+        }
     }
 }
 
@@ -192,46 +205,77 @@ pub struct Line {
     pub event: Event,
 }
 
-/// A record as read: every line kept, in file order, and the error that
-/// stopped the read, if one did.
+/// A line of an event this version does not know: skipped, but its run
+/// was heard from at its time.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Heard {
+    pub at: f64,
+    pub run: String,
+}
+
+/// A record as read: every line kept, in file order, each unknown event
+/// heard, and the error that stopped the read, if one did.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Read {
     pub lines: Vec<Line>,
+    pub heard: Vec<Heard>,
     pub error: Option<RecordError>,
+}
+
+/// What one line gave the reader.
+enum Got {
+    Line(f64, String, Event),
+    /// An unknown event whose `at` and `run` read.
+    Heard(f64, String),
+    /// A torn line, a newer version, or an unknown event whose `at` or
+    /// `run` did not read.
+    Skipped,
+}
+
+/// Whether a line stops in the middle of a JSON value: a writer did not
+/// finish it.
+fn is_torn(raw: &str) -> bool {
+    !raw.trim_matches(json_space).is_empty()
+        && serde_json::from_str::<Value>(raw).is_err_and(|e| e.is_eof())
 }
 
 /// Reads a record's text, as `RecordText::from_bytes` made it.
 pub fn read(record: &RecordText) -> Read {
-    let mut lines = Vec::new();
+    let mut out = Read::default();
     // The text after the last newline is a line only when it is not empty.
     for (i, raw) in record.text.split_terminator('\n').enumerate() {
         let number = i + 1;
-        let read = if record.not_utf8.contains(&number) {
+        let got = if record.not_utf8.contains(&number) {
             Err(Broken::NotUtf8)
+        } else if record.cut.contains(&number) {
+            // Cut mid character: torn only when what is left is unfinished.
+            if is_torn(raw) {
+                Ok(Got::Skipped)
+            } else {
+                Err(Broken::NotUtf8)
+            }
         } else {
             read_line(raw)
         };
-        match read {
-            Ok(Some((at, run, event))) => lines.push(Line {
+        match got {
+            Ok(Got::Line(at, run, event)) => out.lines.push(Line {
                 number,
                 at,
                 run,
                 event,
             }),
-            Ok(None) => {}
+            Ok(Got::Heard(at, run)) => out.heard.push(Heard { at, run }),
+            Ok(Got::Skipped) => {}
             Err(broken) => {
-                let error = RecordError {
+                out.error = Some(RecordError {
                     line: number,
                     broken,
-                };
-                return Read {
-                    lines,
-                    error: Some(error),
-                };
+                });
+                return out;
             }
         }
     }
-    Read { lines, error: None }
+    out
 }
 
 /// JSON's own whitespace, which is all a line may hold around its object.
@@ -239,16 +283,16 @@ fn json_space(c: char) -> bool {
     matches!(c, ' ' | '\t' | '\r')
 }
 
-/// One line: its time, run and event; None for a line skipped (torn, an
-/// unknown event, a newer version).
-fn read_line(raw: &str) -> Result<Option<(f64, String, Event)>, Broken> {
+/// One line: its time, run and event; for an unknown event, its time and
+/// run when they read; else skipped (torn, a newer version).
+fn read_line(raw: &str) -> Result<Got, Broken> {
     if raw.trim_matches(json_space).is_empty() {
         return Err(Broken::Empty);
     }
     let value: Value = match serde_json::from_str(raw) {
         Ok(v) => v,
         // It stops in the middle of a JSON value: a writer did not finish it.
-        Err(e) if e.is_eof() => return Ok(None),
+        Err(e) if e.is_eof() => return Ok(Got::Skipped),
         Err(e) => return Err(Broken::NotJson(e.to_string())),
     };
     if !value.is_object() {
@@ -257,27 +301,28 @@ fn read_line(raw: &str) -> Result<Option<(f64, String, Event)>, Broken> {
     let map = &value;
     match map.get("v").and_then(Value::as_u64) {
         Some(1) => {}
-        Some(v) if v > 1 => return Ok(None),
+        Some(v) if v > 1 => return Ok(Got::Skipped),
         _ => return Err(Broken::Version),
     }
     let Some(name) = map.get("event").and_then(Value::as_str) else {
         return Err(Broken::Event);
     };
-    if !KNOWN.contains(&name) {
-        return Ok(None);
-    }
-    let at = map
-        .get("at")
-        .and_then(Value::as_str)
-        .and_then(iso_epoch)
-        .ok_or(Broken::At)?;
+    let at = map.get("at").and_then(Value::as_str).and_then(iso_epoch);
     let run = map
         .get("run")
         .and_then(Value::as_str)
-        .filter(|r| !r.is_empty())
-        .ok_or(Broken::Run)?;
+        .filter(|r| !r.is_empty());
+    if !KNOWN.contains(&name) {
+        // Skipped either way, never an error: only its time is used.
+        return Ok(match (at, run) {
+            (Some(at), Some(run)) => Got::Heard(at, run.to_string()),
+            _ => Got::Skipped,
+        });
+    }
+    let at = at.ok_or(Broken::At)?;
+    let run = run.ok_or(Broken::Run)?;
     let event = event_of(name, map)?;
-    Ok(Some((at, run.to_string(), event)))
+    Ok(Got::Line(at, run.to_string(), event))
 }
 
 const KNOWN: [&str; 7] = [
@@ -520,7 +565,7 @@ mod tests {
     fn text(s: &str) -> RecordText {
         RecordText {
             text: s.to_string(),
-            not_utf8: Vec::new(),
+            ..RecordText::default()
         }
     }
 
@@ -572,6 +617,14 @@ mod tests {
         assert_eq!(r.error, None);
         let numbers: Vec<usize> = r.lines.iter().map(|l| l.number).collect();
         assert_eq!(numbers, [1, 5, 6]);
+        // The unknown event is heard from; the torn and newer lines are not.
+        assert_eq!(
+            r.heard,
+            [Heard {
+                at: iso_epoch("2026-11-13T14:22:41Z").unwrap(),
+                run: "r-1".into()
+            }]
+        );
         let Event::AttemptEnded { outcome, .. } = &r.lines[1].event else {
             panic!("an attempt_ended line");
         };
@@ -589,6 +642,20 @@ mod tests {
         assert!(torn.not_utf8.is_empty());
         let r = read(&torn);
         assert_eq!((r.lines.len(), r.error), (1, None));
+
+        // A whole object with a lone lead byte after it is no torn line,
+        // in the middle of the file or at its end.
+        for end in [&b"\n"[..], &b""[..]] {
+            let mut bytes = format!("{STARTED}\n{PICKED}").into_bytes();
+            bytes.push(0xE2);
+            bytes.extend_from_slice(end);
+            let r = read(&RecordText::from_bytes(&bytes));
+            assert_eq!(r.lines.len(), 1);
+            assert_eq!(
+                r.error.map(|e| (e.line, e.broken)),
+                Some((2, Broken::NotUtf8))
+            );
+        }
 
         let mut bytes = format!("{STARTED}\n").into_bytes();
         bytes.extend_from_slice(
