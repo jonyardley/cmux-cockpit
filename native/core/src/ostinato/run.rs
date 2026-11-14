@@ -35,9 +35,13 @@ impl Caps {
         }
     }
 
-    /// The attempt cap in seconds: `session_hours`, else three hours.
+    /// The attempt cap in seconds: `session_hours`, else three hours. A
+    /// cap of zero hours is taken as none, so a live run never reads as
+    /// ended the moment it writes a line.
     pub fn attempt_secs(&self) -> f64 {
-        self.session_hours.map_or(DEFAULT_CAP_SECS, |h| h * 3600.0)
+        self.session_hours
+            .filter(|h| *h > 0.0)
+            .map_or(DEFAULT_CAP_SECS, |h| h * 3600.0)
     }
 }
 

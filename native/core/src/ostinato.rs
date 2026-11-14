@@ -397,6 +397,12 @@ mod tests {
     }
 
     #[test]
+    fn a_cap_of_zero_hours_is_no_cap() {
+        let zero = TORN.replace(r#""caps":{"issues":1}"#, r#""caps":{"session_hours":0}"#);
+        assert_eq!(state(&zero, "2026-11-12T13:09:40Z").phase, Phase::Running);
+    }
+
+    #[test]
     fn a_broken_line_is_named_and_what_came_before_is_kept() {
         let mut lines: Vec<&str> = ONE_ISSUE.lines().collect();
         lines.insert(
