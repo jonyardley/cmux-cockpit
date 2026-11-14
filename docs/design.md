@@ -695,7 +695,7 @@ keyed on the newest park's time, so only a newer park brings the card
 back, and once that one is picked again the parks dismissed before stay
 dismissed; "Restore needs you" brings a dismissed one back. The
 dismissal follows the run: when another workspace in the checkout
-carries it (the one it was made on fell asleep, say), the parks stay
+carries it (the one it was made on fell asleep or closed), the parks stay
 dismissed there, and "Restore needs you" on that card brings them back. A dismissed
 park no longer keeps the card from reading Ready, since it can stand for
 days, until its item is picked again. While a park shows, its question

@@ -18,8 +18,8 @@
 //! the newest again leaves the older ones dismissed, and the words count
 //! only the parks newer than it. The dismissal is saved on the workspace
 //! that carries the record and follows the run: when another workspace
-//! in the checkout takes the record over (its carrier fell asleep, say),
-//! the dismissal moves to it. The park is read once a frame, at the
+//! in the checkout takes the record over (its carrier fell asleep or
+//! closed, say), the dismissal moves to it. The park is read once a frame, at the
 //! frame's clock (`Session::tend_parks`).
 
 use crate::activity::most_active;
@@ -112,19 +112,34 @@ impl Session {
     }
 
     /// Moves any park dismissal saved on another workspace in the
-    /// checkout onto `carrier`, the one carrying its record, so a
-    /// dismissal follows the run rather than staying where it was made.
-    /// Two meet as the later key, which covers what both did. A dismissal
-    /// saved before this, on any workspace there, moves the same way.
+    /// checkout, or on the record's carrier at the last read though it
+    /// has closed since, onto `carrier`, the one carrying the record now,
+    /// so a dismissal follows the run rather than staying where it was
+    /// made. Two meet as the later key, which covers what both did. A
+    /// dismissal saved before this, on any workspace there, moves the
+    /// same way.
     fn carry_park_dismissal(&mut self, data: &Data, carrier: &Workspace) {
-        let from: Vec<String> = self
+        let repo = carrier
+            .directory
+            .as_deref()
+            .and_then(|d| self.ostinato.repo_of(d))
+            .map(str::to_ascii_lowercase);
+        let last = repo
+            .as_ref()
+            .and_then(|r| self.park_carriers.get(r))
+            .cloned();
+        let mut from: Vec<String> = self
             .in_checkout(data, carrier)
             .into_iter()
-            .filter(|other| other.id != carrier.id && self.park_dismissal(&other.id).is_some())
             .map(|other| other.id.clone())
             .collect();
+        from.extend(last.filter(|id| !from.contains(id)));
+        from.retain(|id| *id != carrier.id && self.park_dismissal(id).is_some());
         for id in from {
             self.move_park_dismissal(&id, &carrier.id);
+        }
+        if let Some(repo) = repo {
+            self.park_carriers.insert(repo, carrier.id.clone());
         }
     }
 
@@ -766,6 +781,40 @@ mod tests {
         m.session.saved.asleep.clear();
         let _ = Cockpit.update(Event::Data(d), &mut m);
         assert!(park_dismissals(&m).is_empty());
+    }
+
+    #[test]
+    fn a_dismissal_follows_the_run_when_its_workspace_closes() {
+        let d = two_frame();
+        let mut m = model(5, d.clone());
+        let w = d.ws_by_id("w").cloned();
+        m.session.dismiss_needs(w.as_ref());
+        // w closes: w2 carries the run, and the park stays dismissed.
+        let mut closed = d.clone();
+        if let Some(ws) = closed.workspaces.as_mut() {
+            ws.retain(|x| x.id != "w");
+        }
+        let _ = Cockpit.update(Event::Data(closed), &mut m);
+        assert!(needs(&mut m).is_empty(), "the dismissal moved to w2");
+        let park = at("2026-11-10T09:31:10Z");
+        assert_eq!(park_dismissals(&m), [("w2".to_string(), park)]);
+        assert_eq!(written(&m, "dismissed.w"), Some(None));
+    }
+
+    #[test]
+    fn the_after_run_parked_chip_counts_a_dismissed_park_too() {
+        // The first run parks #41, drafts #42 and ends.
+        let text = PARKED.lines().take(13).collect::<Vec<_>>().join("\n");
+        let d = frame(vec![agent("a", AgentStatus::Idle)], "2026-11-10T11:00:00Z");
+        let mut m = model_of(&text, d.clone());
+        let w = d.ws_by_id("w").cloned();
+        m.session.dismiss_needs(w.as_ref());
+        assert!(needs(&mut m).is_empty());
+        let data = m.data.clone().unwrap();
+        let state = m.session.ostinato_run(&data, w.as_ref().unwrap()).unwrap();
+        let card = super::super::card::run_card(&state, at("2026-11-10T11:00:00Z")).unwrap();
+        let chips: Vec<&str> = card.chips.iter().map(|c| c.text.as_str()).collect();
+        assert!(chips.contains(&"1 parked"), "{chips:?}");
     }
 
     /// A model seeded with the saved state `json` (as a state file holds

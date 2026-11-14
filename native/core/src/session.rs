@@ -242,6 +242,10 @@ pub struct Session {
     /// or none: a park dismissal on one of these lapses once nothing
     /// waits there.
     pub(crate) park_cards: std::collections::HashSet<String>,
+    /// Each record's carrier at the last read, by its repo: a park
+    /// dismissal saved there moves to the next carrier even after that
+    /// workspace has closed.
+    pub(crate) park_carriers: HashMap<String, String>,
 
     /// Sleep calls on their way and refusals to show (sleep.rs); the
     /// record of what sleeps is the state file's `asleep`.
