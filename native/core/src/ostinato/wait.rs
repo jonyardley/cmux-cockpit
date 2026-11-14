@@ -410,6 +410,34 @@ mod tests {
     }
 
     #[test]
+    fn a_shown_park_is_saved_for_the_agents_panel_and_a_dismissed_one_is_not() {
+        let mut m = model(
+            5,
+            frame(
+                vec![agent("a", AgentStatus::Working)],
+                "2026-11-10T09:40:00Z",
+            ),
+        );
+        let saved = crate::persist::SavedState::default();
+        let _ = Cockpit.update(Event::State(Box::new(saved)), &mut m);
+        let data = m.data.clone().unwrap();
+        let waits = crate::waits_save::waits(&m.session, &data, false).unwrap_or_default();
+        let park = waits.get("w").and_then(|w| w.first()).cloned();
+        let key = park.as_ref().map_or(0.0, |p| p.key);
+        assert_eq!(
+            park.map(|p| (p.kind, p.since == key, p.detail)),
+            Some((
+                crate::persist::WaitKind::Park,
+                true,
+                Some("Ostinato parked notes-app#41".to_string())
+            ))
+        );
+        let _ = Cockpit.update(Event::Dismiss { id: "w".into() }, &mut m);
+        let waits = crate::waits_save::waits(&m.session, &data, false).unwrap_or_default();
+        assert!(waits.is_empty(), "dismissed");
+    }
+
+    #[test]
     fn with_no_session_a_stand_in_carries_it_and_an_ask_goes_first() {
         let mut m = model(5, frame(Vec::new(), "2026-11-10T09:40:00Z"));
         assert_eq!(needs(&mut m), ["w"]);

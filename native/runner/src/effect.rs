@@ -13,6 +13,7 @@
 //! {"AgentMessage": {"workspace": "W1", "text": "Rebase when free."}}
 //! {"SavePrs": {"prs": {"W1": {"number": 7, "url": "...", ...}, "W2": null}}}
 //! {"SaveRunning": {"running": {"W1": {"agent": "s1", "since": 1791229800, "counts": [{"type": "shell", "n": 1}]}, "W2": null}}}
+//! {"SaveWaits": {"waits": {"W1": [{"kind": "ci_stuck", "since": 1791229800, "key": 1791229200, "detail": "Docs layout", "check": "build", "queued": 1791229200}], "W2": null}}}
 //! {"Notify": {"workspace": "W1", "since": 1791229800, "title": "Docs layout", "body": "CI stuck 40m: rerun?"}}
 //! {"DismissNotification": {"id": "74D64488-9CB8-4B8D-900F-1908FF44B8BB"}}
 //! ```
@@ -28,7 +29,7 @@
 
 use cockpit_core::{
     AgentMessage, CmuxCall, NotifyDismiss, NotifyPost, OpenUrl, PrAsk, PrSave, RunningSave,
-    StateSet,
+    StateSet, WaitsSave,
 };
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +44,7 @@ pub enum EffectFile {
     AgentMessage(AgentMessage),
     SavePrs(PrSave),
     SaveRunning(RunningSave),
+    SaveWaits(WaitsSave),
     Notify(NotifyPost),
     DismissNotification(NotifyDismiss),
 }
@@ -64,6 +66,7 @@ impl EffectFile {
             EffectFile::AgentMessage(_) => "AgentMessage",
             EffectFile::SavePrs(_) => "SavePrs",
             EffectFile::SaveRunning(_) => "SaveRunning",
+            EffectFile::SaveWaits(_) => "SaveWaits",
             EffectFile::Notify(_) => "Notify",
             EffectFile::DismissNotification(_) => "DismissNotification",
         }
@@ -97,9 +100,10 @@ mod tests {
             EffectFile::SaveRunning(_) => 6,
             EffectFile::Notify(_) => 7,
             EffectFile::DismissNotification(_) => 8,
+            EffectFile::SaveWaits(_) => 9,
         }
     }
-    const EFFECTS: usize = 9;
+    const EFFECTS: usize = 10;
 
     /// The core's own effect for a file, as the core's update makes it.
     fn as_core(file: EffectFile) -> Effect {
@@ -111,6 +115,7 @@ mod tests {
             EffectFile::AgentMessage(op) => Command::notify_shell(op).into(),
             EffectFile::SavePrs(op) => Command::notify_shell(op).into(),
             EffectFile::SaveRunning(op) => Command::notify_shell(op).into(),
+            EffectFile::SaveWaits(op) => Command::notify_shell(op).into(),
             EffectFile::Notify(op) => Command::notify_shell(op).into(),
             EffectFile::DismissNotification(op) => Command::notify_shell(op).into(),
         };
@@ -186,6 +191,7 @@ mod tests {
                 EffectFile::AgentMessage(m) => Outgoing::AgentMessage(m),
                 EffectFile::SavePrs(p) => Outgoing::SavePrs(p),
                 EffectFile::SaveRunning(r) => Outgoing::SaveRunning(r),
+                EffectFile::SaveWaits(w) => Outgoing::SaveWaits(w),
                 EffectFile::DismissNotification(d) => Outgoing::DismissNotification(d),
             };
             assert_eq!(serde_json::to_value(&out).unwrap(), want);
@@ -220,6 +226,8 @@ mod tests {
             r#"{"SavePrs": {"prs": {"W1": {"number": 7}}}}"#,
             r#"{"SaveRunning": {"running": {}, "typo": 1}}"#,
             r#"{"SaveRunning": {"running": {"W1": {"agent": "s1"}}}}"#,
+            r#"{"SaveWaits": {"waits": {}, "typo": 1}}"#,
+            r#"{"SaveWaits": {"waits": {"W1": [{"kind": "asking", "since": 1, "key": 1}]}}}"#,
             r#"{"Notify": {"workspace": "W1", "since": 1, "title": "t"}}"#,
             r#"{"Notify": {"workspace": "W1", "since": 1, "title": "t", "body": "b", "desktop": false}}"#,
             r#"{"DismissNotification": {"id": "x", "workspace": "W1"}}"#,

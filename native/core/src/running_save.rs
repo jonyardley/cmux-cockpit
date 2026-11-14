@@ -27,14 +27,26 @@ use crate::session::Session;
 /// script's own lock wait, so a save that worked is never sent twice.
 pub const RESEND_SECS: f64 = 60.0;
 
-/// What the core sent for the `running` map since it last read the file,
-/// and when, by the frame's clock.
-#[derive(Debug, Clone, Default)]
-pub struct RunningSaves {
-    sent: BTreeMap<String, (Option<SavedRunning>, Option<f64>)>,
+/// What the core sent for one of the state file's maps since it last read
+/// the file, and when, by the frame's clock: the `running` map's verdicts
+/// here, the `waits` map's lists in waits_save.rs.
+#[derive(Debug, Clone)]
+pub struct Saves<T> {
+    sent: BTreeMap<String, (Option<T>, Option<f64>)>,
 }
 
-impl RunningSaves {
+impl<T> Default for Saves<T> {
+    fn default() -> Self {
+        Self {
+            sent: BTreeMap::new(),
+        }
+    }
+}
+
+/// The `running` map's sends.
+pub type RunningSaves = Saves<SavedRunning>;
+
+impl<T: Clone + PartialEq> Saves<T> {
     /// A new state file: what was sent is forgotten, so an entry the file
     /// still does not show (a write that failed, or another writer's) goes
     /// out again on the next update that differs from it.
@@ -44,7 +56,7 @@ impl RunningSaves {
 
     /// Whether `v` went out for `id` less than RESEND_SECS before `epoch`.
     /// Without a clock on either side, a send holds until the next read.
-    fn sent_lately(&self, id: &str, v: &Option<SavedRunning>, epoch: Option<f64>) -> bool {
+    fn sent_lately(&self, id: &str, v: &Option<T>, epoch: Option<f64>) -> bool {
         match self.sent.get(id) {
             Some((was, at)) if was == v => match (*at, epoch) {
                 (Some(at), Some(now)) => now - at < RESEND_SECS,
@@ -54,16 +66,16 @@ impl RunningSaves {
         }
     }
 
-    /// The writes that bring `file` (the `running` map as last read) to
-    /// `now`: each verdict it does not hold, and None for each entry it
-    /// holds that `now` has not, less what was sent within RESEND_SECS of
-    /// `epoch` (the frame's clock). Marks them sent at `epoch`.
+    /// The writes that bring `file` (the map as last read) to `now`: each
+    /// entry it does not hold, and None for each entry it holds that
+    /// `now` has not, less what was sent within RESEND_SECS of `epoch`
+    /// (the frame's clock). Marks them sent at `epoch`.
     pub fn writes(
         &mut self,
-        file: &BTreeMap<String, SavedRunning>,
-        now: &BTreeMap<String, SavedRunning>,
+        file: &BTreeMap<String, T>,
+        now: &BTreeMap<String, T>,
         epoch: Option<f64>,
-    ) -> BTreeMap<String, Option<SavedRunning>> {
+    ) -> BTreeMap<String, Option<T>> {
         let set = now
             .iter()
             .filter(|(id, v)| file.get(*id) != Some(*v))
@@ -72,7 +84,7 @@ impl RunningSaves {
             .keys()
             .filter(|id| !now.contains_key(*id))
             .map(|id| (id.clone(), None));
-        let out: BTreeMap<String, Option<SavedRunning>> = set
+        let out: BTreeMap<String, Option<T>> = set
             .chain(gone)
             .filter(|(id, v)| !self.sent_lately(id, v, epoch))
             .collect();

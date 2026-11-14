@@ -311,6 +311,108 @@ where
         .collect())
 }
 
+/// What kind of wait on Jon the core saved for a workspace (#388): a
+/// stopped session (stopped.rs), CI stuck or red with nobody on it, a
+/// change left merge-ready four hours (ci_wait.rs), or parked Ostinato
+/// attempts (ostinato/wait.rs).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WaitKind {
+    Stopped,
+    CiStuck,
+    CiFailing,
+    MergeReady,
+    Park,
+}
+
+/// One wait the Cockpit shows on a workspace's card, saved so the agents
+/// panel, which reads only the file, counts and names the same waits
+/// (#388). Nothing in it moves with the clock: the panel works out each
+/// age from `since`, so a saved wait is written once, not every minute.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SavedWait {
+    pub kind: WaitKind,
+    /// When it began to wait on Jon, in epoch seconds.
+    pub since: f64,
+    /// The start a dismissal of it is saved at, in `dismissed`.
+    pub key: f64,
+    /// The stopped session's id, which its dismissal is saved under; only
+    /// a stop carries one (CI's is `ci`, a park's `ostinato`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    /// A few words of what waits: a stop's cause ("error", "gone",
+    /// "silent"), the PR's title or "#12", the park's words.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// Stuck CI only: the stuck check's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check: Option<String>,
+    /// Stuck CI only: when the stuck check was queued, or started when it
+    /// runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub queued: Option<f64>,
+}
+
+/// The most waits saved for one workspace.
+pub const MAX_WAITS: usize = 20;
+/// The longest check name kept (state-config.ts's isName, MAX_NAME).
+pub const MAX_CHECK_NAME: usize = 64;
+/// The longest wait detail kept (MAX_LABEL).
+pub const MAX_WAIT_DETAIL: usize = MAX_LABEL;
+
+impl SavedWait {
+    /// Every field within the bounds state-config.ts's savedWait holds it
+    /// to: two epochs, an agent on a stop and only there, a detail of
+    /// plain text, and a check and its time on stuck CI and only there.
+    /// The core sends only a wait that fits, so the script never refuses
+    /// one and leaves it to be sent again.
+    pub(crate) fn fits(&self) -> bool {
+        let epoch = |e: f64| e.is_finite() && e >= 0.0;
+        let stuck = self.kind == WaitKind::CiStuck;
+        let agent = match (&self.agent, self.kind) {
+            (Some(a), WaitKind::Stopped) => is_id(a),
+            (None, WaitKind::Stopped) => false,
+            (a, _) => a.is_none(),
+        };
+        epoch(self.since)
+            && epoch(self.key)
+            && agent
+            && self
+                .detail
+                .as_deref()
+                .is_none_or(|d| is_text(d, MAX_WAIT_DETAIL))
+            && self
+                .check
+                .as_deref()
+                .is_none_or(|c| stuck && is_text(c, MAX_CHECK_NAME))
+            && self.queued.is_none_or(|q| stuck && epoch(q))
+    }
+}
+
+/// Whether `waits` fits as one workspace's list: one to MAX_WAITS waits,
+/// each of which fits.
+pub(crate) fn waits_fit(waits: &[SavedWait]) -> bool {
+    (1..=MAX_WAITS).contains(&waits.len()) && waits.iter().all(SavedWait::fits)
+}
+
+/// The `waits` map as validateState reads it: a workspace's list with
+/// any wait that does not fit is dropped whole, so the panel never counts
+/// part of what the Cockpit showed.
+fn waits_map<'de, D>(d: D) -> Result<BTreeMap<String, Vec<SavedWait>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let entries: BTreeMap<String, Value> = crate::lenient::map(d)?;
+    Ok(entries
+        .into_iter()
+        .filter(|(ws, _)| is_id(ws))
+        .filter_map(|(ws, v)| {
+            let w = serde_json::from_value::<Vec<SavedWait>>(v).ok()?;
+            waits_fit(&w).then_some((ws, w))
+        })
+        .collect())
+}
+
 /// The `notified` map, each entry kept only while it fits (`SavedNote::fits`).
 fn notes_map<'de, D>(d: D) -> Result<BTreeMap<String, SavedNote>, D::Error>
 where
@@ -469,6 +571,14 @@ pub struct SavedState {
         skip_serializing_if = "BTreeMap::is_empty"
     )]
     pub running: BTreeMap<String, SavedRunning>,
+    /// wsId to the waits on Jon its card shows (#388), which the core
+    /// writes through the runner (waits_save.rs) and the agents panel
+    /// reads. Left out while empty.
+    #[serde(
+        deserialize_with = "waits_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub waits: BTreeMap<String, Vec<SavedWait>>,
     #[serde(deserialize_with = "crate::lenient::map")]
     pub names: BTreeMap<String, Value>,
     #[serde(deserialize_with = "crate::lenient::map")]
@@ -791,6 +901,56 @@ mod tests {
                 "{shells}"
             );
         }
+    }
+
+    #[test]
+    fn reads_waits_as_validate_state_does() {
+        // The same sample as test/waits-save.test.ts's validateState test.
+        let long = "d".repeat(121);
+        let json = r#"{"waits": {
+            "w1": [
+                {"kind": "stopped", "since": 100, "key": 100, "agent": "s1", "detail": "error", "extra": 1},
+                {"kind": "ci_stuck", "since": 700, "key": 100, "detail": "Docs layout", "check": "build", "queued": 100},
+                {"kind": "park", "since": 50, "key": 50}
+            ],
+            "nulls": [{"kind": "ci_failing", "since": 1, "key": 0, "agent": null, "detail": null, "check": null, "queued": null}],
+            "unknown kind": [{"kind": "asking", "since": 1, "key": 1}],
+            "detail not text": [{"kind": "park", "since": 1, "key": 1, "detail": 5}],
+            "long detail": [{"kind": "park", "since": 1, "key": 1, "detail": "LONG"}],
+            "padded detail": [{"kind": "park", "since": 1, "key": 1, "detail": " x"}],
+            "check on red": [{"kind": "ci_failing", "since": 1, "key": 1, "check": "build"}],
+            "queued on a park": [{"kind": "park", "since": 1, "key": 1, "queued": 1}],
+            "stop with no agent": [{"kind": "stopped", "since": 1, "key": 1}],
+            "agent on ci": [{"kind": "merge_ready", "since": 1, "key": 1, "agent": "s1"}],
+            "one bad": [{"kind": "park", "since": 1, "key": 1}, {"kind": "park", "since": -1, "key": 1}],
+            "no key": [{"kind": "park", "since": 1}],
+            "empty": [],
+            "junk": "x",
+            "__proto__": [{"kind": "park", "since": 1, "key": 1}]
+        }}"#
+        .replace("LONG", &long);
+        let s = SavedState::from_json(&json).unwrap();
+        assert_eq!(s.waits.keys().collect::<Vec<_>>(), ["nulls", "w1"]);
+        let out = serde_json::to_value(&s).unwrap();
+        assert_eq!(
+            out["waits"],
+            serde_json::json!({
+                "w1": [
+                    {"kind": "stopped", "since": 100.0, "key": 100.0, "agent": "s1", "detail": "error"},
+                    {"kind": "ci_stuck", "since": 700.0, "key": 100.0, "detail": "Docs layout",
+                     "check": "build", "queued": 100.0},
+                    {"kind": "park", "since": 50.0, "key": 50.0}
+                ],
+                "nulls": [{"kind": "ci_failing", "since": 1.0, "key": 0.0}]
+            })
+        );
+        let many = format!(
+            r#"{{"waits": {{"w": [{}]}}}}"#,
+            vec![r#"{"kind": "park", "since": 1, "key": 1}"#; MAX_WAITS + 1].join(",")
+        );
+        assert!(SavedState::from_json(&many).unwrap().waits.is_empty());
+        let empty = serde_json::to_value(SavedState::default()).unwrap();
+        assert!(empty.get("waits").is_none(), "left out while empty");
     }
 
     #[test]

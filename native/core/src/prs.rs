@@ -241,22 +241,34 @@ impl Stuck {
 /// own, never the clock's, so it holds from frame to frame and changes
 /// only with a new run; a check going stuck later never displaces it.
 pub fn stuck(checks: &[SavedCheck], now: f64) -> Option<Stuck> {
+    stuck_check(checks, now).map(|(_, s)| s)
+}
+
+/// `stuck`, with the check it picked, whose name the saved wait carries
+/// (waits_save.rs).
+pub fn stuck_check(checks: &[SavedCheck], now: f64) -> Option<(&SavedCheck, Stuck)> {
     let positive = |t: Option<f64>| t.filter(|t| *t > 0.0);
     checks
         .iter()
         .filter(|c| c.state == "pending")
         .filter_map(|c| match (positive(c.started), positive(c.queued)) {
-            (Some(since), _) => (now - since >= RUNNING_STUCK_SECS).then_some(Stuck {
-                since,
-                running: true,
-            }),
-            (None, Some(since)) => (now - since >= QUEUED_STUCK_SECS).then_some(Stuck {
-                since,
-                running: false,
-            }),
+            (Some(since), _) => (now - since >= RUNNING_STUCK_SECS).then_some((
+                c,
+                Stuck {
+                    since,
+                    running: true,
+                },
+            )),
+            (None, Some(since)) => (now - since >= QUEUED_STUCK_SECS).then_some((
+                c,
+                Stuck {
+                    since,
+                    running: false,
+                },
+            )),
             (None, None) => None,
         })
-        .min_by(|a, b| a.went_stuck().total_cmp(&b.went_stuck()))
+        .min_by(|(_, a), (_, b)| a.went_stuck().total_cmp(&b.went_stuck()))
 }
 
 /// `health_of` at epoch `now`: running checks of which one is stuck
