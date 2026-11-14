@@ -258,7 +258,7 @@ export const portRows = computed((): Last<PortRow>[] =>
   markLast((cur().ws.ports ?? []).map((n) => ({ key: "p" + n, label: ":" + n, url: "http://localhost:" + n }))),
 );
 
-// ---- Waiting on you -------------------------------------------------------------
+// Waiting on you
 
 export interface WaitRow {
   key: string;
@@ -271,8 +271,8 @@ export interface WaitRow {
 }
 
 /** The Cockpit's saved waits on Jon that land on the selected workspace
- * as its card shows them (shared/waits.ts), in the saved order: a stop by
- * its session, then CI, then the park. */
+ * as its card shows them (shared/waits.ts), in the saved order: stops,
+ * then CI, then the park. */
 export const waitRows = computed((): Last<WaitRow>[] => {
   const { ws, inOrder } = cur();
   const labels = agentLabels(inOrder);

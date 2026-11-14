@@ -202,7 +202,8 @@ export function dismissNeeds(w: Workspace | undefined): void {
   // A saved key that is no agent here keeps its dismissal, as prune keeps
   // it: the Cockpit's CI and Ostinato waits ("ci", "ostinato"), which this
   // panel shows from the saved waits (shared/waits.ts) but never dismisses,
-  // so a dismissal here never brings those back.
+  // so a dismissal here never brings those back. A Cockpit dismissal of a
+  // reported agent's stop is not kept this way (prune drops it).
   const reported = new Set((w.agents ?? []).filter((a) => !!a).map((a) => a.id));
   const kept = [...(dismissed.get(w.id) ?? [])].filter(([id]) => !reported.has(id));
   const starts = new Map([...kept, ...list.map((a): [string, number] => [a.id, waitStart(a, w)])]);

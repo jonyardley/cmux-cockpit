@@ -231,7 +231,8 @@ function checksBlock(): View {
   );
 }
 
-// Local to this panel: the cockpit's dismissals are not visible here (issue #3).
+// Local to this panel (issue #3), and only for an agent's own ask: the
+// Cockpit's saved waits are dismissed in the Cockpit.
 function dismissButton(): View {
   return Text(() => currentAsk()?.dismissLabel ?? "Dismiss")
     .font(12)

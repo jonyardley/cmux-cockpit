@@ -31,7 +31,7 @@ const stop = (agent: string): SavedWait => ({
   detail: "error",
 });
 
-const pr = (checks: { name: string; state: "pending"; queued?: number; started?: number }[]) => ({
+const pr = (checks: { name: string; state: "pending" | "pass"; queued?: number; started?: number }[]) => ({
   url: "https://github.com/o/r/pull/12",
   number: 12,
   status: "open" as const,
@@ -45,6 +45,7 @@ const r = seed({
     prs: {
       idle: pr([{ name: "build", state: "pending", queued: ago(2400) }]),
       runs: pr([{ name: "build", state: "pending", queued: ago(2500), started: ago(2400) }]),
+      done: pr([{ name: "build", state: "pass" }]),
     },
     waits: {
       idle: [stuck],
@@ -77,7 +78,8 @@ const AGENTS: Record<string, () => Agent[]> = {
   gone: () => [idle("g1")],
   work: () => [working("w1")],
   ask: () => [asking("k1")],
-  stop: () => [working("s1"), idle("s2")],
+  // Still reported working from before it stopped.
+  stop: () => [agent("working", { id: "s1", sinceEpoch: ago(900), lastActivityAt: ago(300) }), idle("s2")],
   none: () => [],
   both: () => [idle("b1")],
   lone: () => [working("l1")],
@@ -191,6 +193,16 @@ describe("withWaits", () => {
     assert.deepEqual(out.added, [stop("y")]);
   });
 
+  it("drops a stop its session has worked past, and keeps the saved order", () => {
+    const back = agent("working", { id: "x", sinceEpoch: ago(60) });
+    assert.equal(w.withWaits([back], [stop("x")]).shown.length, 0);
+    const out = w.withWaits([idle("p"), idle("q")], [stop("q"), stop("p")]);
+    assert.deepEqual(
+      out.shown.map((v) => v.agent),
+      ["q", "p"],
+    );
+  });
+
   it("does not add a stop on an agent already asking, though it shows", () => {
     const out = w.withWaits([asking("x")], [stop("x")]);
     assert.equal(out.shown.length, 1);
@@ -217,6 +229,7 @@ describe("wait words", () => {
     assert.equal(w.waitDetail(ci("ci_stuck", 1), undefined), "");
     assert.equal(w.waitLine(ci("merge_ready", 1), undefined), "Ready to merge");
     assert.equal(w.waitDetail(ci("ci_stuck", 1, { queued: ago(60) }), undefined), "a check stuck since 13:45");
+    assert.equal(w.waitDetail(stuck, ws("done")), "build stuck since 13:06", "a check that has finished since");
   });
 
   it("reads a clock time in the Mac's zone, and none for a bad input", () => {

@@ -49,14 +49,26 @@ export interface Waited {
 // `a` carrying `wait`: needs_input from the wait's start.
 const carrying = (a: Agent, wait: SavedWait): Agent => ({ ...a, status: "needs_input", sinceEpoch: wait.since });
 
-// The workspace's stops on `agents`, each on its own session by id.
+// Whether `a` has worked again since `stop`: a working spell that began
+// after it. The saved map lags a rebuild behind, and with the Cockpit
+// closed it is never rewritten, so a stop the session has left behind is
+// dropped here rather than kept until then.
+const resumed = (a: Agent, stop: SavedWait): boolean => a.status === "working" && (a.sinceEpoch ?? 0) > stop.since;
+
+// The workspace's stops on `agents`, each on its own session by id, in the
+// saved order.
 function withStops(agents: Agent[], waits: readonly SavedWait[], out: Waited): Agent[] {
-  return agents.map((a) => {
-    const stop = waits.find((v) => v.kind === "stopped" && v.agent === a.id);
-    if (!stop) return a;
+  const landed = new Map<string, SavedWait>();
+  for (const stop of waits) {
+    const a = stop.kind === "stopped" ? agents.find((x) => x.id === stop.agent) : undefined;
+    if (!a || resumed(a, stop)) continue;
+    landed.set(a.id, stop);
     out.shown.push(stop);
     if (a.status !== "needs_input") out.added.push(stop);
-    return carrying(a, stop);
+  }
+  return agents.map((a) => {
+    const stop = landed.get(a.id);
+    return stop ? carrying(a, stop) : a;
   });
 }
 
@@ -93,7 +105,7 @@ export function withWaits(agents: Agent[], waits: readonly SavedWait[]): Waited 
   return out;
 }
 
-// ---- Words ------------------------------------------------------------------
+// Words
 
 /** A clock time, "11:20", in the Mac's own time zone; "" for a bad input. */
 export function clockTime(epoch: number): string {
@@ -108,12 +120,13 @@ const STOP_DETAIL: Record<string, string> = { error: "on an error", gone: "mid-t
 
 // A stuck check in words. The saved time is when it was queued, or when it
 // started once it runs, and the wait does not say which, so the PR's own
-// copy of the check, found by name, tells them apart.
+// copy of the check, found by name, tells them apart. A copy no longer
+// pending (the wait lags a rebuild) gets the neutral words.
 function stuckDetail(wait: SavedWait, w: Workspace | undefined): string {
   const at = clockTime(wait.queued ?? 0);
   if (!at) return wait.detail ?? "";
   const name = wait.check ?? "a check";
-  const check = w && wait.check ? checksOf(w).find((c) => c.name === wait.check) : undefined;
+  const check = w && wait.check ? checksOf(w).find((c) => c.name === wait.check && c.state === "pending") : undefined;
   if (check?.started) return `${name} running since ${at}`;
   if (check) return `${name} queued at ${at}, no runner since`;
   return `${name} stuck since ${at}`;
