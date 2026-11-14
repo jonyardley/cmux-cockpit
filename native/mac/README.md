@@ -150,7 +150,9 @@ in the group folder and posts the "changed" signal; the sidebar's core
 draws it, and clicks work on it. A running publisher replaces it at its
 next change, so stop the helper first or start it with `--no-publish`.
 The scene's ages read from today, since the sidebar moves the core's
-clock on every two seconds.
+clock on every two seconds: `dev-fixture.py` moves every time in the
+scene, in its data, saved state and Ostinato records, by one step to
+match.
 
 ## Switch it on in cmux
 

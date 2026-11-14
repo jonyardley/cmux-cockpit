@@ -15,7 +15,10 @@ renamed or dropped here is a breaking change there.
 - Keys are sorted at every level; arrays keep their order, which is
   meaningful (display order, longest waiting first, and so on).
 - The clock is fixed: `data.epoch` is 1000000 in every scene, and every
-  time in the input is a whole number of seconds before it.
+  time in the input is a whole number of seconds before it. A new time
+  field in an input also goes in native/mac/dev-fixture.py's lists, which
+  move a scene's times to today; test/dev-fixture.test.ts fails until it
+  does.
 - Workspaces are named by their `id` in the outputs, never copied.
 
 ## Scenes
