@@ -435,14 +435,23 @@ impl Session {
                 starts.entry(id.to_string()).or_insert(key);
             }
         }
-        let dated: Map<String, Value> = starts
-            .iter()
+        self.dismissed.insert(w.id.clone(), starts);
+        self.persist_dismissed(&w.id);
+    }
+
+    /// Saves workspace `ws`'s dismissals as they stand, deleting its
+    /// entry when none is dated.
+    pub(crate) fn persist_dismissed(&mut self, ws: &str) {
+        let dated: Map<String, Value> = self
+            .dismissed
+            .get(ws)
+            .into_iter()
+            .flatten()
             .filter(|(_, start)| **start > 0.0)
             .map(|(id, start)| (id.clone(), json_num(*start)))
             .collect();
-        self.dismissed.insert(w.id.clone(), starts);
         let value = (!dated.is_empty()).then_some(Value::Object(dated));
-        self.persist_set(format!("dismissed.{}", w.id), value);
+        self.persist_set(format!("dismissed.{ws}"), value);
     }
 
     /// Brings back the workspace's dismissed asks.

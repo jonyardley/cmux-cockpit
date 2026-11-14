@@ -84,6 +84,14 @@ impl Record {
         }
     }
 
+    /// Whether a line of it parked an item at epoch `at`: a park
+    /// dismissal's key is always such a time, so the key names its record.
+    pub(crate) fn parked_at(&self, at: f64) -> bool {
+        self.lines
+            .iter()
+            .any(|l| l.at == at && matches!(l.event, Event::Parked { .. }))
+    }
+
     /// Where it stands at epoch `now`.
     pub fn state(&self, now: f64) -> RecordState {
         RecordState {
@@ -158,16 +166,10 @@ impl Session {
     /// asleep one never keeps a park from an awake one.
     pub fn ostinato_run(&self, data: &Data, w: &Workspace) -> Option<RecordState> {
         let directory = w.directory.as_deref()?;
-        let repo = self.ostinato.repo_of(directory)?;
-        let mut there = data.workspace_list().iter().filter(|other| {
-            other
-                .directory
-                .as_deref()
-                .and_then(|d| self.ostinato.repo_of(d))
-                .is_some_and(|r| r.eq_ignore_ascii_case(repo))
-        });
-        let first = there.clone().next()?;
+        let there = self.in_checkout(data, w);
+        let first = there.first()?;
         let carrier = there
+            .iter()
             .find(|other| self.sleep_kind(&other.id).is_none())
             .unwrap_or(first);
         if carrier.id != w.id {
@@ -175,6 +177,29 @@ impl Session {
         }
         let record = self.ostinato.record_for(directory)?;
         Some(record.state(now_epoch(data)))
+    }
+
+    /// The workspaces open on the main checkout `w` is open on, `w`
+    /// among them, in tab order; none when `w`'s folder is no main
+    /// checkout.
+    pub(crate) fn in_checkout<'d>(&self, data: &'d Data, w: &Workspace) -> Vec<&'d Workspace> {
+        let Some(repo) = w
+            .directory
+            .as_deref()
+            .and_then(|d| self.ostinato.repo_of(d))
+        else {
+            return Vec::new();
+        };
+        data.workspace_list()
+            .iter()
+            .filter(|other| {
+                other
+                    .directory
+                    .as_deref()
+                    .and_then(|d| self.ostinato.repo_of(d))
+                    .is_some_and(|r| r.eq_ignore_ascii_case(repo))
+            })
+            .collect()
     }
 }
 
@@ -597,5 +622,16 @@ mod tests {
         let _ = app.update(Input::Ostinato(Box::new(feed("/dev/app-one"))), &mut m);
         let _ = app.update(Input::State(Box::default()), &mut m);
         assert!(m.session.ostinato.record_for("/dev/app-one").is_some());
+    }
+
+    #[test]
+    fn a_park_dismissal_key_names_the_record_that_parked_then() {
+        let r = record(PARKED);
+        assert!(r.parked_at(at("2026-11-10T09:31:10Z")), "#41 parked then");
+        assert!(
+            !r.parked_at(at("2026-11-10T09:31:12Z")),
+            "an attempt ended then"
+        );
+        assert!(!r.parked_at(at("2026-11-10T09:31:11Z")));
     }
 }
