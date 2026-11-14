@@ -191,13 +191,33 @@ pub fn is_project_key(projects: &[Project], key: &str) -> bool {
     projects.iter().any(|p| p.id() == key)
 }
 
+/// The folder beside a project's where worktrunk puts its worktrees.
+pub const WORKTREES_SUFFIX: &str = "-worktrees/";
+
+/// A folder match's worktrees folder ("/dev/app/" gives
+/// "/dev/app-worktrees/"), or None for a match that is not a folder.
+fn worktrees_of(m: &str) -> Option<String> {
+    let base = m.strip_suffix('/')?;
+    (!base.is_empty()).then(|| format!("{base}{WORKTREES_SUFFIX}"))
+}
+
 /// The matching project, or None when none matches. The trailing "/" lets
-/// a folder match ("/dev/app/") skip "/dev/app-old".
+/// a folder match ("/dev/app/") skip "/dev/app-old". A folder match also
+/// takes its worktrees folder ("/dev/app-worktrees/"), after every direct
+/// match, so a project made for that folder itself still wins.
 pub fn project_of<'p>(projects: &'p [Project], directory: Option<&str>) -> Option<&'p Project> {
     let d = format!("{}/", directory.unwrap_or_default().to_lowercase());
     projects
         .iter()
         .find(|p| p.matches_of().iter().any(|m| d.contains(m.as_str())))
+        .or_else(|| {
+            projects.iter().find(|p| {
+                p.matches_of()
+                    .iter()
+                    .filter_map(|m| worktrees_of(m))
+                    .any(|w| d.contains(w.as_str()))
+            })
+        })
 }
 
 /// A workspace's project: the Move to project choice while it names a
@@ -284,6 +304,20 @@ mod tests {
         assert_eq!(project_of(&t, None), None);
         assert!(is_project_key(&t, "/dev/two"));
         assert!(!is_project_key(&t, "/.config/two"));
+    }
+
+    #[test]
+    fn a_folder_match_takes_its_worktrees_folder_after_any_direct_match() {
+        let t: Vec<Project> = serde_json::from_str(
+            r##"[{"match": "/users/x/dev/osti/", "name": "Osti", "color": "#000000", "icon": "x"},
+                {"match": "/users/x/dev/osti-worktrees/own/", "name": "Own", "color": "#000000", "icon": "x"}]"##,
+        )
+        .unwrap();
+        let of = |d: &str| project_of(&t, Some(d)).map(|p| p.name.as_str());
+        assert_eq!(of("/Users/x/Dev/Osti-worktrees/fix-quotes"), Some("Osti"));
+        assert_eq!(of("/Users/x/Dev/Osti-worktrees/own"), Some("Own"));
+        assert_eq!(of("/Users/x/Dev/Osti-old"), None);
+        assert_eq!(of("/Users/x/Dev/Osti-worktreesish/a"), None);
     }
 
     #[test]
