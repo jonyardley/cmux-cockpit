@@ -1,11 +1,12 @@
 // The Details tab (#397): the selected workspace's whole story, one card
-// each for its sessions, helpers, pull request, the move its chat ended on,
-// its background work, its ports and the pages it made. A card shows only while it has
+// each for what the Cockpit has waiting on Jon (#388), its sessions,
+// helpers, pull request, the move its chat ended on, its background work,
+// its ports and the pages it made. A card shows only while it has
 // something to say; every row with a link opens it.
 
 import type { Last } from "../../shared/list.ts";
 import { prChipColors } from "../../shared/pr-colors.ts";
-import { META_FONT, meta, motionList, openIfUrl, when } from "../../shared/ui.ts";
+import { countPill, countTint, META_FONT, meta, motionList, openIfUrl, when } from "../../shared/ui.ts";
 import { type BackgroundRow, backgroundRows } from "../background.ts";
 import {
   type CheckDetail,
@@ -23,6 +24,8 @@ import {
   prMergeLine,
   type SessionRow,
   sessionRows,
+  type WaitRow,
+  waitRows,
 } from "../details.ts";
 import { type MadeEntry, madeAge, madeOwn } from "../made.ts";
 import { cur, currentPr, currentPrDim, currentPrTone, dotFor, haloFor, hollowDot, statusLine } from "../model.ts";
@@ -41,6 +44,8 @@ interface DetailRow {
   title: () => string;
   /** The faint words on the right: an age, a duration. */
   figure: () => string;
+  /** Drawn on the right in place of the figure's words: a wait's age pill. */
+  trail?: View;
   /** A faint line under the title; none when it says "". */
   sub?: () => string;
   /** The faint line's colour; tertiary by default. */
@@ -59,7 +64,7 @@ function detailRow(r: DetailRow, last: () => boolean): View {
     ...(r.lead ? [r.lead] : []),
     Text(r.title).font(12.5).color(T.text).lineLimit(1).truncation("tail").layoutPriority(1),
     Spacer({ minLength: 4 }),
-    meta(r.figure),
+    r.trail ?? meta(r.figure),
   ]);
   const sub = r.sub;
   const body = VStack({ spacing: 2, alignment: "leading" }, [
@@ -139,6 +144,26 @@ function checkRow(e: () => Last<CheckDetail>): View {
 // there is nowhere of its own to go.
 function backgroundRow(e: () => Last<BackgroundRow>): View {
   return detailRow({ title: () => e().label, figure: () => e().figure }, () => e().last);
+}
+
+// A wait on Jon the Cockpit saved: an amber dot, its word, how long in an
+// amber pill, then why under it. No tap and no Dismiss: the Cockpit
+// dismisses it, and the saved wait goes with that.
+function waitRow(e: () => Last<WaitRow>): View {
+  const amber = countTint("asking");
+  return detailRow(
+    {
+      lead: plainDot(() => T.amber),
+      title: () => e().word,
+      figure: () => e().age,
+      trail: countPill(
+        () => e().age,
+        () => amber,
+      ),
+      sub: () => e().detail,
+    },
+    () => e().last,
+  );
 }
 
 function portRow(e: () => Last<PortRow>): View {
@@ -248,6 +273,7 @@ function listCard<T extends { key: string; last: boolean }>(
 // Each card by its name in the model's list, in the issue's order, so a
 // card added on one side and not the other fails the type check.
 const CARDS: Readonly<Record<DetailsCard, () => View>> = {
+  waits: () => listCard("WAITING ON YOU", "waits", waitRows, waitRow),
   sessions: () => listCard("SESSIONS", "sessions", sessionRows, sessionRow),
   helpers: () => listCard("HELPERS", "helpers", helperRows, helperRow),
   pr: prSection,

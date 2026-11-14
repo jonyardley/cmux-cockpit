@@ -3,7 +3,8 @@
 // session and one that has ended. A helper still runs and two have
 // finished; the PR has a failing, a running, a queued and a passing check
 // and can merge; a shell and a monitor run in the background, four ports
-// are open and the chat published two pages.
+// are open and the chat published two pages. The codex session stopped on
+// an error five minutes ago, which the Cockpit saved as a wait on Jon.
 // Fixture data only; see test/support/snapshot.ts.
 
 import { it } from "node:test";
@@ -73,6 +74,7 @@ const r = seed({
       [page("p1", "Details tab plan", ago(5400)), page("p2", "Tab switch mock-up", ago(900))].map((e) => [e.url, e]),
     ),
     poll: { okEpoch: ago(60) },
+    waits: { here: [{ kind: "stopped", since: ago(300), key: ago(300), agent: "x1", detail: "error" }] },
   },
 });
 const { agent, ws } = await import("./support/fixtures.ts");

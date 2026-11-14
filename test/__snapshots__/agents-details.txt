@@ -14,6 +14,25 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
   VStack spacing: 18, alignment: leading .frame(maxWidth: infinity, alignment: leading)
     VStack spacing: 8, alignment: leading
       HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
+        Text "W\u200aA\u200aI\u200aT\u200aI\u200aN\u200aG O\u200aN Y\u200aO\u200aU" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
+        Text "1" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
+        Spacer
+      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
+        VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
+          Reorderable spacing: 0
+            VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .frame(maxWidth: infinity, alignment: leading)
+                HStack spacing: 9
+                  ZStack .frame(width: 13, height: 13)
+                    Circle size: 13 .fill(clear)
+                    Circle size: 7 .fill(amber) .stroke(clear) .strokeWidth(1.5)
+                  Text "Stopped" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
+                  Spacer minLength: 4
+                  Text "5m" .font(11) .weight(medium) .color(amberText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(amberCount) .cornerRadius(10)
+                Text "Codex, on an error" .font(11) .color(tertiary) .lineLimit(1) .truncation(tail) .paddingLeading(22)
+              Rectangle .fill(rule) .frame(maxWidth: infinity, height: 0)
+    VStack spacing: 8, alignment: leading
+      HStack spacing: 7 .paddingHorizontal(4) .paddingBottom(2)
         Text "S\u200aE\u200aS\u200aS\u200aI\u200aO\u200aN\u200aS" .font(10.5) .weight(semibold) .color(secondary|neutralChip.fg) .lineLimit(1)
         Text "3" .font(11) .weight(medium) .color(metaText) .lineLimit(1) .paddingHorizontal(7) .paddingVertical(1) .background(countBg) .cornerRadius(10)
         Spacer
@@ -242,6 +261,9 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
   Spacer
 
 Colours
+amber #D9A03F
+amberCount #D9A03F29
+amberText #8A5A0B
 blue #3B6FB6
 chipEdge|neutralChip.edge #E2DFD3
 clay #D97757

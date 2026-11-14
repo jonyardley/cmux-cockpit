@@ -231,7 +231,8 @@ function checksBlock(): View {
   );
 }
 
-// Local to this panel: the cockpit's dismissals are not visible here (issue #3).
+// Local to this panel (issue #3), and only for an agent's own ask: the
+// Cockpit's saved waits are dismissed in the Cockpit.
 function dismissButton(): View {
   return Text(() => currentAsk()?.dismissLabel ?? "Dismiss")
     .font(12)
@@ -247,7 +248,8 @@ function dismissButton(): View {
 
 // The question, when the agent needs you: its words (none when there is only
 // the generic fallback or they may be another agent's), or how many agents
-// ask, then Dismiss. No button to open the chat: the panel already shows
+// ask, then Dismiss while any of them is the panel's own to dismiss: a
+// wait the Cockpit saved (shared/waits.ts) is dismissed there. No button to open the chat: the panel already shows
 // the selected workspace, so its chat is the one on screen (#383). The
 // title is not repeated: the highlighted card on the left already shows it.
 function askBlock(): View {
@@ -267,7 +269,11 @@ function askBlock(): View {
               .truncation("tail")
               .frame({ maxWidth: "infinity", alignment: "leading" }),
         ),
-        HStack({ spacing: 6 }, [dismissButton(), Spacer()]).frame({ maxWidth: "infinity" }),
+        when(
+          "cur-ask-dismiss",
+          () => !!currentAsk()?.dismissLabel,
+          () => HStack({ spacing: 6 }, [dismissButton(), Spacer()]).frame({ maxWidth: "infinity" }),
+        ),
       ])
         .frame({ maxWidth: "infinity", alignment: "leading" })
         .paddingTop(LINE_GAP),

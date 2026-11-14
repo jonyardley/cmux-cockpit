@@ -737,6 +737,15 @@ feed. It goes the same way as `running` (`native/core/src/waits_save.rs`,
 its `SaveWaits` effect, `scripts/waits-save.sh` and
 `scripts/waits-save.ts`). No URL writes it.
 
+The agents panel (`src/shared/waits.ts`) lays each saved wait on the
+selected workspace's agents in the core's order, so its Needs you agrees
+with the Cockpit's and never counts a wait twice: a stop on its own
+session, CI on the most active agent once it has finished, the park on
+the most active agent not already waiting on Jon, and one stand-in when
+no agent is left. The waits that land fill the Details tab's Waiting on
+you card. The panel has no Dismiss for them: dismissing in the Cockpit
+clears the saved wait, and the next build bakes the map without it.
+
 ## Published pages and docs
 
 cmux knows nothing about the pages and docs agents publish on claude.ai

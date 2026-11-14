@@ -3,7 +3,7 @@
 // The native card's words are native/core/src/words.rs; the Running words
 // here match its own.
 
-import type { SavedCount, TaskType } from "../../scripts/state-config.ts";
+import type { SavedCount, TaskType, WaitKind } from "../../scripts/state-config.ts";
 
 /** The status word for each agent status, as a card head or status line starts. */
 export const STATUS_WORD: Record<AgentStatus, string> = {
@@ -50,3 +50,14 @@ export const QUIET_WORD = "quiet";
 
 /** The word and how long it has held, "Finished 3m"; the word alone without an age. */
 export const withAge = (word: string, age: string): string => (age ? word + " " + age : word);
+
+/** Each kind of saved wait on Jon (#388) in the Cockpit's own words
+ * (words.rs): a session that stopped without handing back, CI stuck or
+ * failed with nobody on it, a change left merge-ready, a parked attempt. */
+export const WAIT_WORD: Record<WaitKind, string> = {
+  stopped: "Stopped",
+  ci_stuck: "CI stuck",
+  ci_failing: "CI failed",
+  merge_ready: "Ready to merge",
+  park: "Parked",
+};
