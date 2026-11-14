@@ -528,6 +528,36 @@ mod tests {
     }
 
     #[test]
+    fn a_dismissal_made_while_asleep_keeps_the_park_dismissed() {
+        let d = frame(vec![agent("a", AgentStatus::Idle)], "2026-11-10T09:40:00Z");
+        let mut m = model(5, d);
+        let data = m.data.clone().unwrap();
+        let w = data.ws_by_id("w").cloned();
+        m.session.dismiss_needs(w.as_ref());
+        // Asleep, the park waits on nobody; an ask there is dismissed too.
+        m.session.saved.asleep.insert(
+            "w".into(),
+            crate::persist::SavedAsleep {
+                surfaces: Vec::new(),
+                since: at("2026-11-10T09:41:00Z"),
+            },
+        );
+        let asking = Agent {
+            since_epoch: Some(at("2026-11-10T09:42:00Z")),
+            last_activity_at: Some(at("2026-11-10T09:42:00Z")),
+            ..agent("a", AgentStatus::NeedsInput)
+        };
+        let d = frame(vec![asking], "2026-11-10T09:43:00Z");
+        let _ = Cockpit.update(Event::Data(d.clone()), &mut m);
+        let w = d.ws_by_id("w").cloned();
+        m.session.dismiss_needs(w.as_ref());
+        // Awake again: the park stays dismissed.
+        m.session.saved.asleep.clear();
+        let _ = Cockpit.update(Event::Data(d), &mut m);
+        assert!(m.session.park_shown(w.as_ref()).is_none());
+    }
+
+    #[test]
     fn a_dismissal_seeded_before_the_records_arrive_is_kept() {
         let s = Session::default();
         let w = Workspace {

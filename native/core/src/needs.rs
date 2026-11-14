@@ -422,17 +422,17 @@ impl Session {
         if starts.is_empty() {
             return;
         }
-        // A CI wait dismissed earlier that still holds stays dismissed,
-        // though a session on it, or a frame that cannot read the PR,
-        // keeps it out of `waits` now.
-        let earlier = self
-            .dismissed
-            .get(&w.id)
-            .and_then(|starts| starts.get(CI_KEY))
-            .copied()
-            .filter(|key| self.ci_dismissal_holds(w, *key));
-        if let Some(key) = earlier {
-            starts.entry(CI_KEY.to_string()).or_insert(key);
+        // A CI wait or park dismissed earlier that still holds stays
+        // dismissed, though something keeps it out of `waits` now: a
+        // session on the CI, a frame that cannot read the PR, a park on
+        // an asleep card.
+        let earlier = |key: &str| self.dismissed.get(&w.id).and_then(|s| s.get(key)).copied();
+        let ci = earlier(CI_KEY).filter(|key| self.ci_dismissal_holds(w, *key));
+        let park = earlier(OSTINATO_KEY).filter(|key| self.park_dismissal_holds(w, *key));
+        for (id, key) in [(CI_KEY, ci), (OSTINATO_KEY, park)] {
+            if let Some(key) = key {
+                starts.entry(id.to_string()).or_insert(key);
+            }
         }
         let dated: Map<String, Value> = starts
             .iter()
