@@ -36,6 +36,7 @@ pub mod moves;
 pub mod needs;
 pub mod next;
 pub mod notify;
+pub mod ostinato;
 pub mod owner;
 pub mod panel;
 pub mod persist;

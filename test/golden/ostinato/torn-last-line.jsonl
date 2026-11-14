@@ -1,0 +1,4 @@
+{"v":1,"at":"2026-11-12T10:00:00Z","run":"r-torn","event":"run_started","project":"example/tools","caps":{"issues":1}}
+{"v":1,"at":"2026-11-12T10:00:12Z","run":"r-torn","event":"picked","item":"tools#7","attempt":1}
+{"v":1,"at":"2026-11-12T10:09:40Z","run":"r-torn","event":"stage","item":"tools#7","stage":"brief","attempt":1,"sessions":["5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9"]}
+{"v":1,"at":"2026-11-12T10:15:02Z","run":"r-torn","event":"stage","item":"tools#7","sta

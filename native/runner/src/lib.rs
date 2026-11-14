@@ -29,6 +29,9 @@
 //!   agent runs in.
 //! - config/state.json, config/projects.json and config/lanes.json,
 //!   checked every 2 seconds.
+//! - The Ostinato records folder, checked every 2 seconds on a thread of
+//!   its own, with which open workspace folders are main checkouts of
+//!   which GitHub repo (ostinato.rs).
 //! - Each directory's PR, when the core asks (pr_ask.rs): `git` then `gh`
 //!   on a thread per ask, the answer coming back as an input. The core
 //!   decides when (cockpit_core::pr_poll), and only an answer that moves
@@ -59,6 +62,7 @@ pub mod effect;
 pub mod inbox;
 pub mod join;
 pub mod notify_ask;
+pub mod ostinato;
 pub mod outbox;
 pub mod parse;
 pub mod pr_ask;
@@ -81,6 +85,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use cockpit_core::data::{Data, Workspace};
 use cockpit_core::home::expand_home;
 use cockpit_core::lanes::LaneConfig;
+use cockpit_core::ostinato::OstinatoFeed;
 use cockpit_core::persist::{SavedProject, SavedState};
 use cockpit_core::pr_poll::PrPolled;
 use cockpit_core::project_table::merge_projects;
@@ -139,6 +144,9 @@ pub enum Input {
     Slept(Box<SleepAnswer>),
     /// The id cmux gave a notification the core posted (notify_ask.rs).
     Notified(Box<Notified>),
+    /// The Ostinato records and main checkouts, when either moved
+    /// (ostinato.rs).
+    Ostinato(Box<OstinatoFeed>),
 }
 
 /// What `on_frame` is called with besides the feed.
@@ -159,9 +167,10 @@ pub struct Latency {
 }
 
 /// What the core was last fed from the shell's own inputs: the lane
-/// table, the project table (each "~" root expanded), the state file and
-/// cmux's frame. Written out as data.json, so a core elsewhere fed these
-/// in this order (lanes, projects, state, data), with the home folder set
+/// table, the project table (each "~" root expanded), the state file, the
+/// Ostinato records and cmux's frame. Written out as data.json, so a core
+/// elsewhere fed these in this order (lanes, projects, state, ostinato,
+/// data), with the home folder set
 /// on its model first, builds the same panel. Each is None until first fed (a file that would
 /// not read, say), and is written as null then: a reader skips it.
 ///
@@ -177,6 +186,8 @@ pub struct Inputs {
     pub projects_seq: u64,
     pub state: Option<SavedState>,
     pub state_seq: u64,
+    pub ostinato: Option<OstinatoFeed>,
+    pub ostinato_seq: u64,
     pub data: Option<Data>,
     pub data_seq: u64,
 }
@@ -197,6 +208,10 @@ impl Inputs {
                 self.state = Some(SavedState::clone(s));
                 self.state_seq += 1;
             }
+            Event::Ostinato(o) => {
+                self.ostinato = Some(OstinatoFeed::clone(o));
+                self.ostinato_seq += 1;
+            }
             Event::Data(d) => {
                 self.data = Some(d.clone());
                 self.data_seq += 1;
@@ -208,7 +223,7 @@ impl Inputs {
     /// Moves whenever any input was fed, so an unchanged set is not
     /// written again.
     pub fn generation(&self) -> u64 {
-        self.lanes_seq + self.projects_seq + self.state_seq + self.data_seq
+        self.lanes_seq + self.projects_seq + self.state_seq + self.ostinato_seq + self.data_seq
     }
 }
 
@@ -422,6 +437,11 @@ impl Feed {
             Input::PrPolled(polled) => (self.send(Event::PrPolled(polled)), false, None),
             Input::Slept(answer) => (self.send(Event::Slept(answer)), false, None),
             Input::Notified(answer) => (self.send(Event::Notified(answer)), false, None),
+            // News for a frame with a core or without: data.json carries it.
+            Input::Ostinato(feed) => {
+                self.send(Event::Ostinato(feed));
+                (true, false, None)
+            }
             // `run` logs these itself before they reach the feed.
             Input::Poke | Input::Log(_) => (false, false, None),
         }
@@ -431,6 +451,23 @@ impl Feed {
     pub fn frame(&mut self, now: f64) {
         let data = self.join.frame(now);
         self.send(Event::Data(data));
+    }
+
+    /// The folders of the workspaces in the latest frame, each once, with
+    /// no trailing slash, for the Ostinato watch to look up.
+    pub fn open_folders(&self) -> Vec<String> {
+        let mut dirs: Vec<String> = self
+            .inputs
+            .data
+            .iter()
+            .flat_map(|d| d.workspace_list())
+            .filter_map(|w| w.directory.as_deref())
+            .map(|d| cockpit_core::trim_slash(d).to_string())
+            .filter(|d| !d.is_empty())
+            .collect();
+        dirs.sort();
+        dirs.dedup();
+        dirs
     }
 
     /// The lane table, as config/lanes.json lists it.
@@ -843,6 +880,17 @@ fn run_with(
         feed.notifier = Some(notify_tx);
         thread::spawn(move || notify_ask::serve(&notify_rx, &tx, notify_ask::run));
     }
+    let (open_tx, open_rx) = mpsc::channel();
+    {
+        let tx = tx.clone();
+        let home = opts
+            .home
+            .clone()
+            .or_else(|| std::env::var("HOME").ok())
+            .map(PathBuf::from);
+        let dir = ostinato::records_dir(std::env::var_os(ostinato::HOME_ENV), home.as_deref());
+        thread::spawn(move || ostinato::watch(&tx, &open_rx, dir));
+    }
     thread::spawn(move || {
         poll_layout(&tx, &nudge_rx, WORKSPACES_EVERY, read_list, read_groups);
     });
@@ -860,6 +908,8 @@ fn run_with(
     // Quiet is measured from the last input, not from any timeout, so a
     // check falling due mid-burst does not frame a half-read replay.
     let mut last_input = start;
+    // The workspace folders last sent to the Ostinato watch.
+    let mut open: Vec<String> = Vec::new();
 
     loop {
         // A PR ask falling due brings a frame then, not at the next clock tick.
@@ -919,6 +969,11 @@ fn run_with(
             pending = false;
             clock_due = now + CLOCK_EVERY;
             feed.frame(now_epoch());
+            let folders = feed.open_folders();
+            if folders != open {
+                let _ = open_tx.send(folders.clone());
+                open = folders;
+            }
             let latency = latest.take();
             let call = Call {
                 fresh: true,
@@ -986,6 +1041,39 @@ mod tests {
         );
         feed.frame(1_791_127_100.0);
         assert_eq!(feed.model.view.needs.list, vec!["B".to_string()]);
+    }
+
+    #[test]
+    fn the_ostinato_records_reach_the_core_and_data_json() {
+        use cockpit_core::ostinato::RecordText;
+        let mut feed = Feed::default();
+        let w = Workspace {
+            directory: Some("/dev/app-one/".into()),
+            ..ws("A")
+        };
+        feed.input(Input::Workspaces(vec![w.clone(), ws("B")], 0.0));
+        feed.frame(1_794_600_000.0);
+        assert_eq!(feed.open_folders(), ["/dev/app-one"]);
+
+        let record = r#"{"v":1,"at":"2026-11-13T14:22:30Z","run":"r-1","event":"run_started","project":"example/app-one"}"#;
+        let ostinato = OstinatoFeed {
+            records: BTreeMap::from([(
+                "example/app-one".to_string(),
+                RecordText::from_bytes(format!("{record}\n").as_bytes()),
+            )]),
+            checkouts: BTreeMap::from([(
+                "/dev/app-one".to_string(),
+                "example/app-one".to_string(),
+            )]),
+        };
+        let before = feed.inputs.generation();
+        let (changed, nudge, _) = feed.input(Input::Ostinato(Box::new(ostinato.clone())));
+        assert!(changed && !nudge);
+        assert_eq!(feed.inputs.ostinato.as_ref(), Some(&ostinato));
+        assert_eq!(feed.inputs.generation(), before + 1);
+        let data = feed.inputs.data.clone().unwrap();
+        let run = feed.model.session.ostinato_run(&data, &w).unwrap();
+        assert_eq!(run.run.unwrap().run, "r-1");
     }
 
     #[test]

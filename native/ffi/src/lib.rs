@@ -4,8 +4,9 @@
 //!
 //! - `cockpit_load`: the helper's data.json (runner/src/publish.rs) in. The
 //!   first load turns the panel and the PR poll on; each sends Home, the
-//!   project table, the state and cmux's data, in that order, only where
-//!   that part of the file differs from the last load's.
+//!   lane table, the project table, the state, the Ostinato records and
+//!   cmux's data, in that order, only where that part of the file differs
+//!   from the last load's.
 //! - `cockpit_update`: one event as JSON in (`{"At": {"now": …, "event":
 //!   …}}` for a click, an inbox/ answer as it is).
 //! - Both hand back what the core asked for as `Out`: whether to draw
@@ -144,6 +145,7 @@ struct DataFile {
     lanes: Option<Box<RawValue>>,
     projects: Option<Box<RawValue>>,
     state: Option<Box<RawValue>>,
+    ostinato: Option<Box<RawValue>>,
     data: Option<Box<RawValue>>,
 }
 
@@ -155,6 +157,7 @@ struct Loaded {
     lanes: Option<String>,
     projects: Option<String>,
     state: Option<String>,
+    ostinato: Option<String>,
     data: Option<String>,
 }
 
@@ -206,6 +209,12 @@ fn load_into(file: &[u8], out: &mut Out) -> Result<(), i32> {
         out,
     )?;
     send_part("State", file.state.as_deref(), &mut last.state, out)?;
+    send_part(
+        "Ostinato",
+        file.ostinato.as_deref(),
+        &mut last.ostinato,
+        out,
+    )?;
     send_part("Data", file.data.as_deref(), &mut last.data, out)?;
     if first {
         // After the inputs, so the first asks go out with a frame to ask

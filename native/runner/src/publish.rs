@@ -7,10 +7,11 @@
 //!   and atomically (a temp file renamed over it) when any input was fed
 //!   again, as `{"seq": 9, "written_at_ms": 1791229864123, "home":
 //!   "/Users/jon", "lanes": [...], "lanes_seq": 1, "projects": [...],
-//!   "projects_seq": 1, "state": {...}, "state_seq": 2, "data": {...},
-//!   "data_seq": 40}`. `seq` counts this process's writes from 1, and
-//!   `written_at_ms` is the wall clock at the write. The sidebar's core,
-//!   fed `lanes`, `projects`, `state`, then `data`,
+//!   "projects_seq": 1, "state": {...}, "state_seq": 2, "ostinato":
+//!   {...}, "ostinato_seq": 1, "data": {...}, "data_seq": 40}`. `seq`
+//!   counts this process's writes from 1, and `written_at_ms` is the
+//!   wall clock at the write. The sidebar's core, fed `lanes`,
+//!   `projects`, `state`, `ostinato`, then `data`,
 //!   with `home` set on its model first, builds the panel itself; a later
 //!   file is read by sending only the inputs whose `_seq` moved, and an
 //!   input still null is skipped. Then it posts the bare signal
