@@ -25,6 +25,7 @@ pub use editor::{EditorView, Field};
 // core's inner modules.
 pub use crate::lanes::{Density, LaneKey, Lanes};
 pub use crate::menu::{MenuAction, MenuItem, MenuTarget, MenuView};
+pub use crate::ostinato::card::{Gauge, RunCard, RunChip, RunRow, Strip};
 pub use crate::projects::PROJECT_COLORS;
 pub use crate::text::whole_words;
 pub use crate::theme::{Token, parse_hex};
@@ -324,6 +325,10 @@ pub struct Card {
     /// shell can show it the moment Jon right-clicks; a pick goes back as
     /// the menu opened on this card, then the item.
     pub menu: Vec<MenuItem>,
+    /// The Ostinato run on the project's main checkout, under the card's
+    /// own lines (issue #390, ostinato/card.rs); None on every other card
+    /// and on a row, which has no room for it.
+    pub run: Option<Box<RunCard>>,
 }
 
 /// A run of a chip's words in one ink.

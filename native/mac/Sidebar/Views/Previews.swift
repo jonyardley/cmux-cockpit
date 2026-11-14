@@ -21,6 +21,10 @@ private let width: CGFloat = 280
 #Preview("lanes, narrow") { SidebarView(showing: fixture("lanes")).frame(width: 200, height: 900) }
 #Preview("needs-and-next") { SidebarView(showing: fixture("needs-and-next")).frame(width: width, height: 900) }
 #Preview("review-verdicts") { SidebarView(showing: fixture("review-verdicts")).frame(width: width, height: 900) }
+#Preview("ostinato") { SidebarView(showing: fixture("ostinato")).frame(width: width, height: 900) }
+#Preview("ostinato, dark") {
+    SidebarView(showing: fixture("ostinato")).frame(width: width, height: 900).preferredColorScheme(.dark)
+}
 #Preview("card-menu") { SidebarView(showing: fixture("card-menu")).frame(width: width, height: 900) }
 #Preview("projects") { SidebarView(showing: fixture("projects")).frame(width: width, height: 400) }
 #Preview("editor") { SidebarView(showing: fixture("editor")).frame(width: width, height: 400) }

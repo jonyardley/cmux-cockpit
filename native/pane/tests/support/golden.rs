@@ -4,4 +4,10 @@
 pub use cockpit_core::fixture::scene_model;
 
 /// The scenes with golden files, in the README's order.
-pub const SCENES: [&str; 4] = ["lanes", "needs-and-next", "projects", "review-verdicts"];
+pub const SCENES: [&str; 5] = [
+    "lanes",
+    "needs-and-next",
+    "projects",
+    "review-verdicts",
+    "ostinato",
+];

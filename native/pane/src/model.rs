@@ -331,6 +331,7 @@ pub(crate) mod fixtures {
             waiting: waiting.then_some(Waiting::of(false)),
             late: None,
             waiting_tab: None,
+            run: None,
             rank,
             movable: true,
             dimmed: false,

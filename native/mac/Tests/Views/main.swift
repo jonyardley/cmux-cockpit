@@ -39,6 +39,7 @@ let sceneOf: [String: String] = [
     "projects": "projects",
     "editor": "projects",
     "new-project": "projects",
+    "ostinato": "ostinato",
 ]
 
 /// Fixtures whose cards are some of another fixture's: filtered is the

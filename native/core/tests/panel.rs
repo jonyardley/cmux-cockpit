@@ -1,4 +1,4 @@
-//! The panel model for each scene, as JSON in native/fixtures/: the four
+//! The panel model for each scene, as JSON in native/fixtures/: the five
 //! golden scenes as they load, then a card's menu open over lanes, the
 //! project editor open on a project and on a new one over projects, and
 //! the lanes filtered to one project.
@@ -47,7 +47,13 @@ fn first_project(panel: &Panel) -> String {
 /// Each fixture's name and the panel it holds.
 fn scenes() -> Vec<(&'static str, Panel)> {
     let mut out = Vec::new();
-    for scene in ["lanes", "needs-and-next", "projects", "review-verdicts"] {
+    for scene in [
+        "lanes",
+        "needs-and-next",
+        "projects",
+        "review-verdicts",
+        "ostinato",
+    ] {
         let mut model = loaded(scene);
         out.push((scene, Panel::from_core(&mut model)));
     }
@@ -110,7 +116,7 @@ fn every_fixture_has_a_scene() {
     }
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../fixtures");
     let names: Vec<String> = scenes().iter().map(|(n, _)| format!("{n}.json")).collect();
-    assert_eq!(names.len(), 8);
+    assert_eq!(names.len(), 9);
     for entry in std::fs::read_dir(&dir).unwrap() {
         let file = entry.unwrap().file_name().to_string_lossy().to_string();
         if !file.ends_with(".json") {

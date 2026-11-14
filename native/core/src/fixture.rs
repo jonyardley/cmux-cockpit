@@ -11,16 +11,19 @@ use crux_core::App;
 use serde_json::Value;
 
 use crate::home::expand_home;
+use crate::ostinato::OstinatoFeed;
 use crate::{Cockpit, Data, Event, Model, Project, SavedState};
 
 /// The home folder every fixture loads with: not a card's own folder, so a
 /// card outside it offers Make project, the one action chip.
 pub const FIXTURE_HOME: &str = "/Users/jon";
 
-/// A golden scene's input: the project table, the saved state and cmux's data.
+/// A golden scene's input: the project table, the saved state, the
+/// Ostinato records when the scene has any, and cmux's data.
 pub struct Scene {
     pub projects: Vec<Project>,
     pub saved: SavedState,
+    pub ostinato: Option<OstinatoFeed>,
     pub data: Data,
 }
 
@@ -37,28 +40,34 @@ pub fn scene(name: &str, home: Option<&str>) -> Result<Scene, Box<dyn Error>> {
     Ok(Scene {
         projects,
         saved: serde_json::from_value(input["state"].clone())?,
+        ostinato: serde_json::from_value(input["ostinato"].clone())?,
         data: serde_json::from_value(input["data"].clone())?,
     })
 }
 
 /// The core's model after a scene went in as a shell feeds it, at
-/// `FIXTURE_HOME`: the project table, the saved state, the home, then
-/// cmux's data.
+/// `FIXTURE_HOME`: the project table, the saved state, the home, the
+/// Ostinato records when the scene has any, then cmux's data.
 pub fn scene_model(name: &str) -> Result<Model, Box<dyn Error>> {
     let Scene {
         projects,
         saved,
+        ostinato,
         data,
     } = scene(name, Some(FIXTURE_HOME))?;
     let mut model = Model::default();
-    for event in [
+    let records = ostinato.map(|feed| Event::Ostinato(Box::new(feed)));
+    let events = [
         Event::Projects(projects),
         Event::State(Box::new(saved)),
         Event::Home {
             home: Some(FIXTURE_HOME.to_string()),
         },
-        Event::Data(data),
-    ] {
+    ]
+    .into_iter()
+    .chain(records)
+    .chain([Event::Data(data)]);
+    for event in events {
         // The only effects are renders and writes, which a fixture draws or
         // ignores itself.
         let _effects = Cockpit.update(event, &mut model);

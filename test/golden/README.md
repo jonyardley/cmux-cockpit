@@ -26,10 +26,12 @@ renamed or dropped here is a breaking change there.
 | `needs-and-next` | Five sessions waiting (the strip's cap of four plus "+N more"), saved asks and moves, a Ready card, and the Next queue. No lane groups, so every card is Unsorted. |
 | `projects` | The Projects view: cards under two projects and Other, a waiting session's placeholder, a quiet project. |
 | `review-verdicts` | The For review lane with a PR in every merge state, and the header's "N ready to merge". Nothing waits: the failing PR's CI wait (issue #377) is dismissed. |
+| `ostinato` | Three main checkouts, each with an Ostinato run record (issue #390): a run in progress, a run ended with a park that waits in Needs you, and a run with no end line past its cap whose record breaks at line 4. Native only: it has no `ostinato.json`, as the TypeScript cockpit never read records. |
 
 ## `<scene>.input.json`
 
-What the scene starts from: the three things the sidebar reads.
+What the scene starts from: the three things the sidebar reads, and in
+the `ostinato` scene a fourth.
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -79,6 +81,7 @@ What the scene starts from: the three things the sidebar reads.
 | `state.projectOverride` | object | wsId to the project key chosen by "Move to project". |
 | `state.projects` | object | Project key to a project made or edited in the sidebar. |
 | `state.ownPrs`, `state.subagents`, `state.names`, `state.published`, `state.prOrigins` | object | Saved for the agents sidebar; empty in every scene here. |
+| `ostinato` | object, optional | The Ostinato records and checkouts as the runner hands them on (data.json's `ostinato`): `records`, project to `{ text }`, the record's lines at times before the clock; `checkouts`, folder to the `owner/repo` it is the main checkout of. Only in the `ostinato` scene. native/mac/dev-fixture.sh moves its times to today. |
 
 ## `<scene>.json`
 
