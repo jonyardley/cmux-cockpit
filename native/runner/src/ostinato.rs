@@ -10,7 +10,8 @@
 //!   files: each file's size and modified time, and a file is read only
 //!   when they moved. A missing folder is no records, and no error.
 //! - Only while there is a record, each open folder is looked up once
-//!   (cached): the nearest `.git` at or above it, a directory for a main
+//!   while it stays open (cached, and forgotten when its workspace
+//!   closes, so reopening it looks again): the nearest `.git` at or above it, a directory for a main
 //!   checkout, whose `config` names its `origin`
 //!   (cockpit_core::ostinato::remote). No git process runs, since git
 //!   run in a folder obeys that repo's own config, which can run
@@ -141,8 +142,11 @@ pub struct Checkouts {
 }
 
 impl Checkouts {
-    /// Looks up each folder in `open` not looked up yet, with `look`.
+    /// Looks up each folder in `open` not looked up yet, with `look`, and
+    /// forgets those no longer open, so a folder cloned into or given its
+    /// origin after it was looked up is looked up again once reopened.
     pub fn learn(&mut self, open: &[String], look: impl Fn(&str) -> Option<String>) {
+        self.known.retain(|dir, _| open.contains(dir));
         for dir in open {
             if !self.known.contains_key(dir) {
                 self.known.insert(dir.clone(), look(dir));
@@ -337,6 +341,12 @@ mod tests {
         assert_eq!(c.map(&open)["/dev/a"], "example/a");
         c.learn(&open, |_| None);
         assert_eq!(c.map(&open)["/dev/a"], "example/a", "cached");
+        // Closed, then reopened once it has its origin: looked up again.
+        let mut c = Checkouts::default();
+        c.learn(&open, |_| None);
+        c.learn(&[], |_| None);
+        c.learn(&open, |_| Some("example/a".into()));
+        assert_eq!(c.map(&open)["/dev/a"], "example/a", "forgotten on close");
     }
 
     #[test]
