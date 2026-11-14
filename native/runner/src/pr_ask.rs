@@ -31,7 +31,7 @@ pub const QUIET: [(&str, &str); 2] = [("CMUX_QUIET", "1"), ("GH_PROMPT_DISABLED"
 const DRAIN: Duration = Duration::from_secs(1);
 
 /// The tool's usual install path when it has one, else its name for PATH.
-fn tool(name: &str, fallbacks: &[&str]) -> String {
+pub(crate) fn tool(name: &str, fallbacks: &[&str]) -> String {
     fallbacks
         .iter()
         .find(|p| Path::new(p).exists())
@@ -79,14 +79,19 @@ pub fn ran_within(
     limit: Duration,
 ) -> Ran {
     let mut cmd = Command::new(program);
-    cmd.args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .envs(env.iter().copied());
+    cmd.args(args).envs(env.iter().copied());
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
+    ran_command(cmd, limit)
+}
+
+/// Runs `cmd` as `ran_within` does, for a caller that shapes the command
+/// itself (ostinato.rs clears git's own variables).
+pub fn ran_command(mut cmd: Command, limit: Duration) -> Ran {
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     let mut child = match cmd.spawn() {
         Ok(child) => child,
         Err(e) => {

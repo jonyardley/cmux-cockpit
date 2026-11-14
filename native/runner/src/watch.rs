@@ -13,9 +13,9 @@ use cockpit_core::persist::SavedState;
 use cockpit_core::projects::Project;
 
 /// What identifies one version of a file: when it changed, and its size.
-type Stamp = Option<(SystemTime, u64)>;
+pub(crate) type Stamp = Option<(SystemTime, u64)>;
 
-fn stamp(path: &Path) -> Stamp {
+pub(crate) fn stamp(path: &Path) -> Stamp {
     let m = fs::metadata(path).ok()?;
     Some((m.modified().ok()?, m.len()))
 }
