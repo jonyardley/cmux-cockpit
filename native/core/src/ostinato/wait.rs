@@ -37,6 +37,9 @@ pub struct ParkWait {
     pub key: f64,
     /// The newest park's item, "notes-app#41".
     pub item: String,
+    /// The oldest waiting park's time: a dismissal made at or after it
+    /// still covers that park, though a newer one shows now.
+    pub oldest: f64,
     /// How many parks wait.
     pub count: usize,
     /// The workspace is awake: an asleep one waits on nobody by design.
@@ -77,11 +80,13 @@ impl Session {
             let Some(newest) = run.waiting.iter().max_by(|a, b| a.at.total_cmp(&b.at)) else {
                 continue;
             };
+            let oldest = run.waiting.iter().map(|p| p.at).fold(newest.at, f64::min);
             found.insert(
                 w.id.clone(),
                 ParkWait {
                     key: self.park_key(&w.id, newest.at),
                     item: newest.item.clone(),
+                    oldest,
                     count: run.waiting.len(),
                     waits: self.sleep_kind(&w.id).is_none(),
                 },
@@ -104,15 +109,16 @@ impl Session {
             .unwrap_or(newest)
     }
 
-    /// Whether a park dismissal saved at `key` still holds for `w`: no
-    /// park newer than the one it was made on waits, or `w`'s card
-    /// carried no record at the last read (none read yet, before the
-    /// runner's first feed, say, or another workspace in the checkout
-    /// carries it). It lapses once the record says otherwise: a newer
-    /// park, or none left.
+    /// Whether a park dismissal saved at `key` still holds for `w`: a
+    /// park it covers still waits (one at or before `key`), though a
+    /// newer one may show now and stays dismissed once that one is
+    /// picked again; or `w`'s card carried no record at the last read
+    /// (none read yet, before the runner's first feed, say, or another
+    /// workspace in the checkout carries it). It lapses once no park it
+    /// covers waits.
     pub(crate) fn park_dismissal_holds(&self, w: &Workspace, key: f64) -> bool {
         match self.parks.get(&w.id) {
-            Some(p) => p.key == key,
+            Some(p) => p.key == key || p.oldest <= key,
             None => !self.park_cards.contains(&w.id),
         }
     }
@@ -501,6 +507,71 @@ mod tests {
         let _ = Cockpit.update(Event::Ostinato(Box::new(f)), &mut m);
         let _ = Cockpit.update(Event::Data(d), &mut m);
         assert_eq!(needs(&mut m), ["w"]);
+    }
+
+    /// Feeds `text` as the record and `d` as the frame to `m`.
+    fn refeed(m: &mut Model, text: &str, d: &crate::data::Data) {
+        let mut f = feed(0);
+        f.records.insert(
+            "example/notes-app".into(),
+            RecordText::from_bytes(text.as_bytes()),
+        );
+        let _ = Cockpit.update(Event::Ostinato(Box::new(f)), m);
+        let _ = Cockpit.update(Event::Data(d.clone()), m);
+    }
+
+    #[test]
+    fn a_newer_park_picked_again_leaves_the_dismissed_ones_dismissed() {
+        let two = format!(
+            "{}\n{}",
+            PARKED.lines().take(5).collect::<Vec<_>>().join("\n"),
+            r#"{"v":1,"at":"2026-11-10T09:45:00Z","run":"r-1110","event":"parked","item":"notes-app#42","reason":"needs_decision","question":"Which?"}"#
+        );
+        let d = frame(vec![agent("a", AgentStatus::Idle)], "2026-11-10T10:30:00Z");
+        let mut m = model_of(&two, d.clone());
+        let w = d.ws_by_id("w").cloned();
+        m.session.dismiss_needs(w.as_ref());
+        assert!(needs(&mut m).is_empty());
+
+        // A third park brings the card back...
+        let three = format!(
+            "{two}\n{}",
+            r#"{"v":1,"at":"2026-11-10T10:00:00Z","run":"r-1110","event":"parked","item":"notes-app#43","reason":"needs_decision","question":"Where?"}"#,
+        );
+        refeed(&mut m, &three, &d);
+        assert_eq!(needs(&mut m), ["w"]);
+        // ...and once it is picked again, the two Jon dismissed stay so.
+        let picked = format!(
+            "{three}\n{}",
+            r#"{"v":1,"at":"2026-11-10T10:10:00Z","run":"r-1110","event":"picked","item":"notes-app#43","attempt":2}"#,
+        );
+        refeed(&mut m, &picked, &d);
+        assert!(needs(&mut m).is_empty());
+    }
+
+    #[test]
+    fn a_dismissal_stays_with_its_workspace_while_another_carries_the_run() {
+        let mut d = frame(vec![agent("a", AgentStatus::Idle)], "2026-11-10T09:40:00Z");
+        if let Some(ws) = d.workspaces.as_mut() {
+            ws.push(Workspace {
+                id: "w2".into(),
+                directory: Some("/dev/notes-app".into()),
+                ..Workspace::default()
+            });
+        }
+        let mut m = model(5, d.clone());
+        let w = d.ws_by_id("w").cloned();
+        m.session.dismiss_needs(w.as_ref());
+        let asleep = crate::persist::SavedAsleep {
+            surfaces: Vec::new(),
+            since: at("2026-11-10T09:41:00Z"),
+        };
+        m.session.saved.asleep.insert("w".into(), asleep);
+        let _ = Cockpit.update(Event::Data(d.clone()), &mut m);
+        assert_eq!(needs(&mut m), ["w2"], "the dismissal stays with w");
+        m.session.saved.asleep.clear();
+        let _ = Cockpit.update(Event::Data(d), &mut m);
+        assert!(needs(&mut m).is_empty(), "w carries it again, dismissed");
     }
 
     #[test]

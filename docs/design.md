@@ -690,10 +690,12 @@ ask, a turn, CI) keeps its words, and the park still counts towards
 dismissing. A workspace with no session shows it on a stand-in; an
 asleep card never shows it. One dismissal covers the workspace's parks,
 keyed on the newest park's time, so only a newer park brings the card
-back (picking the newest again leaves the older ones dismissed);
-"Restore needs you" brings a dismissed one back. A dismissed park no
-longer keeps the card from reading Ready, since it can stand until the
-next run. No notification posts
+back, and once that one is picked again the parks dismissed before stay
+dismissed; "Restore needs you" brings a dismissed one back. A dismissed
+park no longer keeps the card from reading Ready, since it can stand for
+days, until its item is picked again. While a park shows, its question
+is on the card, so a card mid-run can sit in Needs you for an earlier
+run's park. No notification posts
 for a park yet. The rules are `native/core/src/ostinato/wait.rs`.
 
 ### Wait notification

@@ -393,8 +393,9 @@ impl Session {
 
     /// True while anything in the workspace really waits on Jon, an
     /// agent or its CI, dismissed or not, or its Ostinato parks while not
-    /// dismissed: a park can stand for days, until the next run, and a
-    /// dismissed one must not keep the card from reading Ready.
+    /// dismissed: a park can stand for days, until its item is picked
+    /// again, and a dismissed one must not keep the card from reading
+    /// Ready.
     pub fn has_real_ask(&self, w: Option<&Workspace>) -> bool {
         w.is_some_and(|w| {
             self.waits(w)
