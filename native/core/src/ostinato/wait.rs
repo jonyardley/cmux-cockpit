@@ -337,6 +337,22 @@ mod tests {
     }
 
     #[test]
+    fn a_dismissed_park_leaves_the_card_free_to_read_ready() {
+        let mut d = frame(vec![agent("a", AgentStatus::Idle)], "2026-11-10T09:40:00Z");
+        if let Some(w) = d.workspaces.as_mut().and_then(|ws| ws.first_mut()) {
+            w.unread = Some(2.0);
+        }
+        let mut m = model(5, d);
+        let data = m.data.clone().unwrap();
+        let w = data.ws_by_id("w").cloned();
+        assert!(m.session.has_real_ask(w.as_ref()), "the park waits");
+        m.session.dismiss_needs(w.as_ref());
+        assert!(!m.session.has_real_ask(w.as_ref()));
+        assert!(m.session.is_needs_dismissed(w.as_ref()), "still restorable");
+        assert_eq!(m.session.status_kind(&data, w.as_ref()), StatusKind::Ready);
+    }
+
+    #[test]
     fn a_park_picked_again_waits_no_more_and_its_dismissal_lapses() {
         let mut m = model(
             5,

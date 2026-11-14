@@ -690,7 +690,9 @@ ask, a turn, CI) keeps its words, and the park still counts towards
 dismissing. A workspace with no session shows it on a stand-in; an
 asleep card never shows it. One dismissal covers the workspace's parks,
 keyed on the newest park's time, so a new park brings the card back;
-"Restore needs you" brings a dismissed one back. No notification posts
+"Restore needs you" brings a dismissed one back. A dismissed park no
+longer keeps the card from reading Ready, since it can stand until the
+next run. No notification posts
 for a park yet. The rules are `native/core/src/ostinato/wait.rs`.
 
 ### Wait notification
@@ -945,7 +947,9 @@ An unattended Ostinato run on its card (issue #390), under the card's
 own lines on a full, compact or Projects card; a dense row has no room
 and draws none. Only the card of the workspace open on the project's
 main checkout carries it: the folder whose `.git` is a directory and
-whose `origin` is the record's GitHub repo. The core says every word and
+whose `origin` is the record's GitHub repo (or a folder inside it). With
+two workspaces open there, the first in tab order carries it, so one
+park never waits twice. The core says every word and
 token (`native/core/src/ostinato/card.rs`); the view lays them out
 (`Views/RunView.swift`), 4 above, its lines 5 apart:
 
@@ -958,7 +962,9 @@ token (`native/core/src/ostinato/card.rs`); the view lays them out
   "Criteria") and how long ago in `metaText`, at `Font.meta` 11. A stage
   line means a stage finished; nothing says one is in progress.
 - **Item:** "app-one#2806, attempt 1" at 12 in `secondary`; a click
-  opens its issue.
+  opens its issue. Only an https link with a host opens; the core drops
+  any other (a `file:` path, another app's scheme), as a loop, not Jon,
+  writes the record (`web_link`).
 - **Strip:** five 4 high capsules 3 apart, the steps reached (brief,
   built, reviewed, qa, draft) in `blue`, the rest `countBg`, their names
   under them at `Font.tiny` 10 in `metaText`. Drawn while an attempt

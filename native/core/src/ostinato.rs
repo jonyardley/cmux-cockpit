@@ -141,11 +141,36 @@ impl Ostinato {
     }
 }
 
+impl Ostinato {
+    /// The repo the folder `directory` is the main checkout of (or a
+    /// folder inside it), lower case; None for any other folder.
+    fn repo_of(&self, directory: &str) -> Option<&str> {
+        self.checkouts
+            .get(trim_slash(directory))
+            .map(String::as_str)
+    }
+}
+
 impl Session {
     /// Where the Ostinato run on `w`'s card stands at the frame's clock;
     /// None when no record is about the repo it is the main checkout of.
+    /// One card shows a record: the first in tab order of the workspaces
+    /// in that checkout, so two open there never both draw the run or
+    /// both wait on Jon for one park.
     pub fn ostinato_run(&self, data: &Data, w: &Workspace) -> Option<RecordState> {
-        let record = self.ostinato.record_for(w.directory.as_deref()?)?;
+        let directory = w.directory.as_deref()?;
+        let repo = self.ostinato.repo_of(directory)?;
+        let first = data.workspace_list().iter().find(|other| {
+            other
+                .directory
+                .as_deref()
+                .and_then(|d| self.ostinato.repo_of(d))
+                .is_some_and(|r| r.eq_ignore_ascii_case(repo))
+        })?;
+        if first.id != w.id {
+            return None;
+        }
+        let record = self.ostinato.record_for(directory)?;
         Some(record.state(now_epoch(data)))
     }
 }
@@ -520,6 +545,7 @@ mod tests {
         };
         let data = |now: &str| Data {
             epoch: Some(at(now)),
+            workspaces: Some(vec![w.clone()]),
             ..Data::default()
         };
         let run = s.ostinato_run(&data("2026-11-14T15:00:00Z"), &w);
@@ -535,6 +561,28 @@ mod tests {
             s.ostinato_run(&data("2026-11-13T15:00:00Z"), &elsewhere),
             None
         );
+    }
+
+    #[test]
+    fn two_workspaces_in_one_checkout_give_the_run_to_the_first_in_tab_order() {
+        let mut s = Session::default();
+        let mut f = feed("/dev/app-one");
+        f.checkouts
+            .insert("/dev/app-one/src".into(), "example/app-one".into());
+        s.ostinato.take(f);
+        let ws = |id: &str, dir: &str| Workspace {
+            id: id.into(),
+            directory: Some(dir.into()),
+            ..Workspace::default()
+        };
+        let (a, b) = (ws("a", "/dev/app-one/src"), ws("b", "/dev/app-one"));
+        let data = Data {
+            epoch: Some(at("2026-11-13T15:00:00Z")),
+            workspaces: Some(vec![a.clone(), b.clone()]),
+            ..Data::default()
+        };
+        assert!(s.ostinato_run(&data, &a).is_some(), "first in tab order");
+        assert_eq!(s.ostinato_run(&data, &b), None);
     }
 
     #[test]

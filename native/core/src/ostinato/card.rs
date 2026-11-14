@@ -265,9 +265,26 @@ fn spend_words(cost: &Cost) -> String {
     }
 }
 
+/// What an item's newest attempt came to, for the chips' counts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Came {
+    Draft,
+    Parked,
+    Other,
+}
+
 /// How an item's newest attempt came out, and its ink.
-fn outcome_of(run: &RunState, a: &Attempt) -> (String, Token) {
-    let parked = |reason: &str| (format!("parked, {}", reason_words(reason)), Token::ClayText);
+fn outcome_of(run: &RunState, a: &Attempt) -> (String, Token, Came) {
+    let parked = |reason: &str| {
+        let words = reason_words(reason);
+        let text = if words.is_empty() {
+            "parked".to_string()
+        } else {
+            format!("parked, {words}")
+        };
+        (text, Token::ClayText, Came::Parked)
+    };
+    let plain = |text: String| (text, Token::MetaText, Came::Other);
     let park = run
         .parks
         .iter()
@@ -283,39 +300,41 @@ fn outcome_of(run: &RunState, a: &Attempt) -> (String, Token) {
     let Some(end) = &a.ended else {
         return match park {
             Some(p) => parked(&p.reason),
-            None if run.phase == Phase::Running => ("running".to_string(), Token::MetaText),
-            None => ("no end written".to_string(), Token::MetaText),
+            None if run.phase == Phase::Running => plain("running".to_string()),
+            None => plain("no end written".to_string()),
         };
     };
     match &end.outcome {
-        Outcome::Draft => (draft(), Token::MetaText),
+        Outcome::Draft => (draft(), Token::MetaText, Came::Draft),
         Outcome::Parked => parked(park.map_or("", |p| p.reason.as_str())),
-        Outcome::Stalled => ("stalled".to_string(), Token::MetaText),
-        Outcome::Capped => ("stopped at its cap".to_string(), Token::MetaText),
-        Outcome::Failed => ("failed".to_string(), Token::MetaText),
-        Outcome::Cancelled => ("cancelled".to_string(), Token::MetaText),
-        Outcome::Other(text) => (text.replace('_', " "), Token::MetaText),
+        Outcome::Stalled => plain("stalled".to_string()),
+        Outcome::Capped => plain("stopped at its cap".to_string()),
+        Outcome::Failed => plain("failed".to_string()),
+        Outcome::Cancelled => plain("cancelled".to_string()),
+        Outcome::Other(text) => plain(text.replace('_', " ")),
     }
 }
 
-/// One row per item, in pick order, from its newest attempt.
-fn rows(run: &RunState) -> Vec<RunRow> {
-    let mut out: Vec<RunRow> = Vec::new();
+/// One row per item, in pick order, from its newest attempt, with what
+/// it came to.
+fn rows(run: &RunState) -> Vec<(RunRow, Came)> {
+    let mut out: Vec<(RunRow, Came)> = Vec::new();
     for (i, a) in run.attempts.iter().enumerate() {
         let later = run.attempts.get(i + 1..).unwrap_or_default();
         if later.iter().any(|b| b.item == a.item) {
             continue;
         }
-        let (outcome, ink) = outcome_of(run, a);
-        out.push(RunRow {
+        let (outcome, ink, came) = outcome_of(run, a);
+        let row = RunRow {
             item: a.item.clone(),
             outcome,
             ink,
-        });
+        };
+        out.push((row, came));
     }
     // Pick order: by each item's first attempt.
     let first = |item: &str| run.attempts.iter().position(|a| a.item == item);
-    out.sort_by_key(|r| first(&r.item));
+    out.sort_by_key(|(r, _)| first(&r.item));
     out
 }
 
@@ -329,14 +348,14 @@ fn chip(text: String, ink: Token) -> RunChip {
 }
 
 /// After a run: its drafts, its parks, what it cost and how long it ran.
-fn chips(run: &RunState, rows: &[RunRow]) -> Vec<RunChip> {
-    let count = |lead: &str| rows.iter().filter(|r| r.outcome.starts_with(lead)).count();
+fn chips(run: &RunState, rows: &[(RunRow, Came)]) -> Vec<RunChip> {
+    let count = |kind: Came| rows.iter().filter(|(_, c)| *c == kind).count();
     let mut out = Vec::new();
-    let drafts = count("draft");
+    let drafts = count(Came::Draft);
     if drafts > 0 {
         out.push(chip(plural(drafts, "draft"), Token::MergeText));
     }
-    let parked = count("parked");
+    let parked = count(Came::Parked);
     if parked > 0 {
         out.push(RunChip {
             face: Token::ClayChipFace,
@@ -354,6 +373,22 @@ fn chips(run: &RunState, rows: &[RunRow]) -> Vec<RunChip> {
         out.push(chip(fmt_elapsed(length.max(0.0)), Token::Secondary));
     }
     out
+}
+
+/// `url` when it is a web page a click may open: https with a host. A
+/// record is written by a loop, not by Jon, so a `file:` path, another
+/// app's scheme or anything else opens nothing.
+pub fn web_link(url: &str) -> Option<String> {
+    let rest = url
+        .get(..8)
+        .filter(|s| s.eq_ignore_ascii_case("https://"))
+        .and_then(|_| url.get(8..))?;
+    let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let ok = !host.is_empty()
+        && host
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b':'));
+    (ok && !url.chars().any(char::is_whitespace)).then(|| url.to_string())
 }
 
 /// A card with no words yet, in its resting tokens.
@@ -387,7 +422,7 @@ fn running(run: &RunState, now: f64) -> RunCard {
         item: current.map_or_else(String::new, |a| {
             format!("{}, attempt {}", a.item, a.attempt)
         }),
-        url: current.and_then(|a| a.url.clone()),
+        url: current.and_then(|a| a.url.as_deref()).and_then(web_link),
         strip: open.map(|a| Strip {
             names: STRIP_NAMES.iter().map(|n| (*n).to_string()).collect(),
             done: a.steps,
@@ -406,7 +441,7 @@ fn ended(run: &RunState, at: f64) -> RunCard {
     RunCard {
         ended_at: Some(at),
         chips: chips(run, &rows),
-        rows,
+        rows: rows.into_iter().map(|(r, _)| r).collect(),
         ..blank(format!("{RUN_WORD} ended"))
     }
 }
@@ -594,6 +629,53 @@ mod tests {
         let c = card("not json\n", "2026-11-13T14:40:00Z");
         assert_eq!(c.title, "Ostinato record unreadable at line 1");
         assert_eq!(c.error, "");
+    }
+
+    #[test]
+    fn only_an_https_link_with_a_host_opens() {
+        let kept = "https://github.com/example/app-one/issues/2806";
+        assert_eq!(web_link(kept).as_deref(), Some(kept));
+        assert!(web_link("HTTPS://github.com/x").is_some());
+        assert!(web_link("https://localhost:8443/x?y#z").is_some());
+        for bad in [
+            "file:///etc/passwd",
+            "x-apple-calendar://open",
+            "javascript:alert(1)",
+            "https://",
+            "https:///path",
+            "https://user@host/x",
+            "https://host /x",
+            "http://github.com/x",
+            "github.com/x",
+            "",
+        ] {
+            assert_eq!(web_link(bad), None, "{bad}");
+        }
+        // A record's link that is no web page leaves the item with none.
+        let file = ONE_ISSUE.replace(
+            "https://github.com/example/app-one/issues/2806",
+            "file:///Applications/Calculator.app",
+        );
+        assert_eq!(card(&first(&file, 4), "2026-11-13T14:36:38Z").url, None);
+    }
+
+    #[test]
+    fn a_park_with_no_parked_line_reads_parked_and_an_unknown_outcome_is_no_draft() {
+        let ended = format!(
+            "{}\n{}\n{}",
+            first(ONE_ISSUE, 2),
+            r#"{"v":1,"at":"2026-11-13T14:30:00Z","run":"r-1422","event":"attempt_ended","item":"app-one#2806","outcome":"parked","attempt":1}"#,
+            r#"{"v":1,"at":"2026-11-13T14:31:00Z","run":"r-1422","event":"run_ended"}"#
+        );
+        let c = card(&ended, "2026-11-13T15:00:00Z");
+        assert_eq!(c.rows[0].outcome, "parked");
+        let other = ended.replace(r#""outcome":"parked""#, r#""outcome":"drafted_elsewhere""#);
+        let c = card(&other, "2026-11-13T15:00:00Z");
+        assert_eq!(c.rows[0].outcome, "drafted elsewhere");
+        assert!(
+            c.chips.iter().all(|c| !c.text.contains("draft")),
+            "no draft chip"
+        );
     }
 
     #[test]
