@@ -139,3 +139,23 @@ What the model computes, at the scene's clock.
 | `next` | object | The Next button. |
 | `next.queue` | string[] | What Next walks through: needs you, then Ready, each longest waiting first. |
 | `next.step` | object or null | Where the next press goes: `target` (a workspace id), `position` (1-based) and `total`; null when there is nowhere to go. |
+
+## `ostinato/*.jsonl`
+
+Ostinato run records (issue #390), copied from the kit's
+`fixtures/records/` in jonyardley/ostinato at c94d5e6, so the core's
+reader of the record format (docs/record-format.md there) is tested
+against the kit's own samples. One change: the kit's one-issue sample
+names a real project, which test/private.test.ts keeps out of the tree,
+so its copy, `one-issue.jsonl`, says `example/app-one` and `app-one#`
+in its place; every other byte is the kit's. native/core/src/ostinato/ reads them.
+They are not laid out by Biome and must stay byte for byte as the kit
+wrote them: `torn-last-line.jsonl` ends without a newline on purpose.
+Copy a newer sample over by hand, in the same PR as the Rust that reads it.
+
+| Record | What it covers |
+| --- | --- |
+| `one-issue` | One run, one issue from ready to a draft pull request, with each session's cost. |
+| `parked-then-picked` | Two runs: an item parked in the first and picked again in the second, costs with no `session_costs`, an extra field on a `picked` line. |
+| `standing-team` | One long run with overlapping attempts, sessions shared between attempts (counted once), stages outside the strip (`criteria`, `retro`), an unknown event and extra fields. |
+| `torn-last-line` | A run with no end whose last line was cut mid write. |
