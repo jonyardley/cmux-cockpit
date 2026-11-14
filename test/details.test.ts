@@ -35,6 +35,7 @@ const r = seed({
     },
     moves: {
       sel: { text: "pick one.", epoch: ago(60), session: "c1", decisions: 1, leans: "1a" },
+      q: { text: "waiting until CI lands.", epoch: ago(60), session: "c1", idle: true },
     },
     published: {
       "https://claude.ai/artifact/p1": {
@@ -59,6 +60,7 @@ const d = await import("../src/agents/details.ts");
 const { madeOwn } = await import("../src/agents/made.ts");
 const { nodeOf, taps } = await import("./support/renderer.ts");
 const { tabSwitch } = await import("../src/agents/views/tabs.ts");
+const { detailsPanel } = await import("../src/agents/views/details.ts");
 
 const lead = () =>
   agent("idle", { id: "c1", kind: "claude", name: "Claude", sinceEpoch: ago(60), lastActivityAt: ago(60) });
@@ -155,7 +157,7 @@ describe("helpers", () => {
     assert.deepEqual(
       d.helperRows().map((x) => [x.label, x.figure, x.running, x.last]),
       [
-        ["Live one", "running 1m 5s", true, false],
+        ["Live one", "running 1m", true, false],
         ["Done one", "took 1m 40s", false, true],
       ],
     );
@@ -175,13 +177,13 @@ describe("the pull request", () => {
       [
         ["c:lint:0", "failed, started 2m ago", PR_URL + "/checks", false],
         ["c:lint:1", "passed", PR_URL + "/checks", false],
-        ["c:build:0", "queued 30s", PR_URL + "/checks", true],
+        ["c:build:0", "queued <1m", PR_URL + "/checks", true],
       ],
     );
   });
 
   it("says how long a check has run or queued", () => {
-    assert.equal(d.checkFigure({ name: "x", state: "pending", started: ago(75) }), "running 1m 15s");
+    assert.equal(d.checkFigure({ name: "x", state: "pending", started: ago(75) }), "running 1m");
     assert.equal(d.checkFigure({ name: "x", state: "pending" }), "running");
     assert.equal(d.checkFigure({ name: "x", state: "pass", started: ago(20) }), "passed, started just now");
   });
@@ -206,11 +208,16 @@ describe("the pull request", () => {
 
 describe("your move", () => {
   it("shows the move the lead agent's turn ended on, with its decisions and leans", () => {
-    assert.deepEqual(d.moveDetail(), { text: "pick one.", meta: "1 decision open, leaning 1a", quiet: false });
+    assert.deepEqual(d.moveDetail(), { text: "pick one.", meta: "1 decision open, leaning 1a" });
   });
 
   it("hides a move a newer prompt has retired", () => {
     r.data.workspaces = [ws("sel", { selected: true, latestAt: ago(10), agents: [lead()] })];
+    assert.equal(d.moveDetail(), null);
+  });
+
+  it("hides a turn that asks nothing of Jon", () => {
+    r.data.workspaces = [ws("q", { selected: true, latestAt: ago(900), agents: [lead()] })];
     assert.equal(d.moveDetail(), null);
   });
 });
@@ -244,5 +251,37 @@ describe("the note in place of the cards", () => {
     assert.equal(d.detailsNote(), "Nothing more to show for this workspace yet");
     r.data.workspaces = [];
     assert.equal(d.detailsNote(), "No workspace selected");
+  });
+});
+
+describe("the Details tab's rows", () => {
+  it("opens what each row links to, and takes a session row to its terminal", () => {
+    r.data.workspaces = [
+      ws("sel", {
+        selected: true,
+        latestAt: ago(900),
+        ports: [5173],
+        agents: [{ ...lead(), surfaceId: "s1" }],
+      }),
+    ];
+    r.calls.length = 0;
+    const node = nodeOf(detailsPanel());
+    assert.ok(node);
+    for (const n of taps(node)) {
+      const tap = n.handlers.onTap;
+      if (typeof tap === "function") tap();
+    }
+    assert.deepEqual(r.opened, [
+      PR_URL,
+      PR_URL + "/checks",
+      PR_URL + "/checks",
+      PR_URL + "/checks",
+      "http://localhost:5173",
+      "https://claude.ai/artifact/p1",
+    ]);
+    assert.deepEqual(
+      r.calls.map((c) => c.method),
+      ["workspace.select", "surface.focus"],
+    );
   });
 });

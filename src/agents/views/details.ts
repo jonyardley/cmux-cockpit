@@ -171,7 +171,7 @@ function prSection(): View {
     () => !!currentPr(),
     () =>
       VStack({ spacing: 8, alignment: "leading" }, [
-        sectionHeader("PULL REQUEST", () => String(checkDetails().length)),
+        sectionHeader("PULL REQUEST"),
         panel([
           prHead(),
           VStack({ spacing: 0, alignment: "leading" }, [
@@ -209,7 +209,7 @@ function moveSection(): View {
           VStack({ spacing: 4, alignment: "leading" }, [
             Text(() => m()?.text ?? "")
               .font(12.5)
-              .color(() => (m()?.quiet ? T.secondary : T.text))
+              .color(T.text)
               .lineLimit(6)
               .truncation("tail")
               .frame({ maxWidth: "infinity", alignment: "leading" }),

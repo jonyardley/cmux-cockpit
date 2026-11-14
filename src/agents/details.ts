@@ -9,7 +9,7 @@ import { markLast } from "../shared/list.ts";
 import { asksNothing, waitingMove } from "../shared/move.ts";
 import { askReason } from "../shared/needs.ts";
 import { checksOf, diffText, prOf } from "../shared/prs.ts";
-import { ageSince, nowEpoch } from "../shared/time.ts";
+import { ageSince } from "../shared/time.ts";
 import { withAge } from "../shared/words.ts";
 import { checkRows } from "./checks.ts";
 import { madeOwn } from "./made.ts";
@@ -52,12 +52,6 @@ export function fmtSpan(secs: number): string {
   if (m < 60) return m + "m";
   const h = Math.floor(m / 60);
   return m % 60 ? `${h}h ${m % 60}m` : `${h}h`;
-}
-
-/** How long since `at` by the clock, as fmtSpan says it; "" without either. */
-function spanSince(at: number | undefined): string {
-  const now = nowEpoch();
-  return at && now ? fmtSpan(Math.max(0, now - at)) : "";
 }
 
 /** "2m ago", or "just now" under a minute; "" without a time or clock. */
@@ -107,10 +101,11 @@ export interface HelperRow {
   figure: string;
 }
 
-/** A helper's right-hand figure: how long it has run, how long it took, or
- * when it ended when its start is not known. */
+/** A helper's right-hand figure: how long it has run, as coarse as the
+ * Now tab's so it does not tick every second; how long it took, finely;
+ * or when it ended when its start is not known. */
 export function helperFigure(s: Pick<SubagentRow, "running" | "startedEpoch" | "endedEpoch">): string {
-  if (s.running) return withAge("running", spanSince(s.startedEpoch));
+  if (s.running) return withAge("running", ageSince(s.startedEpoch));
   if (s.startedEpoch && s.endedEpoch) return "took " + fmtSpan(Math.max(0, s.endedEpoch - s.startedEpoch));
   const ended = agoText(s.endedEpoch);
   return ended ? "ended " + ended : "finished";
@@ -140,12 +135,13 @@ const CHECK_WORD: Record<SavedCheck["state"], string> = { pass: "passed", fail: 
 /**
  * A check's right-hand words. The poller saves when a check was queued and
  * when it started, never when it ended, so a running or queued check says
- * for how long, and a finished one says when it started.
+ * for how long, as coarsely as an age so it does not tick every second,
+ * and a finished one says when it started.
  */
 export function checkFigure(c: SavedCheck): string {
   if (c.state === "pending") {
-    if (c.started) return withAge("running", spanSince(c.started));
-    return c.queued ? withAge("queued", spanSince(c.queued)) : "running";
+    if (c.started) return withAge("running", ageSince(c.started));
+    return c.queued ? withAge("queued", ageSince(c.queued)) : "running";
   }
   const started = agoText(c.started);
   return started ? CHECK_WORD[c.state] + ", started " + started : CHECK_WORD[c.state];
@@ -197,23 +193,22 @@ export interface MoveDetail {
   text: string;
   /** "2 decisions open, leaning 1b 2a"; "" when the reply laid out none. */
   meta: string;
-  /** The turn asks nothing of Jon ("Nothing for you"), so its words sit back. */
-  quiet: boolean;
 }
 
 /**
  * What the selected workspace's chat ended its turn on, with its open
  * decisions and leans, read through waitingMove, so a move a newer prompt
- * or an ask has retired never shows. Null without a current move.
+ * or an ask has retired never shows. Null without a current move, or when
+ * the turn asks nothing of Jon ("Nothing for you").
  */
 export const moveDetail = computed((): MoveDetail | null => {
   const { a, ws } = cur();
   const m = waitingMove(a, ws, askReason(a, ws) !== null);
-  if (!m) return null;
+  if (!m || asksNothing(m)) return null;
   const n = m.decisions ?? 0;
   const decisions = n > 0 ? (n === 1 ? "1 decision open" : n + " decisions open") : "";
   const leans = m.leans ? "leaning " + m.leans : "";
-  return { text: m.text, meta: [decisions, leans].filter(Boolean).join(", "), quiet: asksNothing(m) };
+  return { text: m.text, meta: [decisions, leans].filter(Boolean).join(", ") };
 });
 
 // ---- Ports -----------------------------------------------------------------------
