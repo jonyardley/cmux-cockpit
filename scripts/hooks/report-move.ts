@@ -1,0 +1,387 @@
+// Saves the "Your move" line a chat ends its turn on, so the cockpit's card
+// can quote what the chat wants from Jon. cmux keeps only the first 240
+// characters of a message, and Jon's chats put that line last, so the
+// sidebar never sees it without this hook.
+//
+// Run by scripts/hooks/dispatch.ts on Stop, once per turn. It takes the turn's final
+// reply from the event's last_assistant_message, or else the main-chat
+// reply that ends the transcript's tail, read once more after RETRY_MS when
+// no reply ends it yet (Stop can fire before the reply is flushed). The line
+// goes, with the count of numbered decisions the reply laid out and the
+// options it leaned to, into the workspace's cmux description, which the
+// sidebar reads live, so a turn end redraws nothing. When the description
+// holds Jon's own words, or cmux refuses or alters the write, the move is
+// saved in config/state.json's `moves` map instead, which rebuilds the
+// sidebars. A turn with no move line clears a move's description (never
+// Jon's words) and drops any saved move. The sidebar
+// shows a move only while no prompt has come since it was saved (cmux's
+// latestAt, src/shared/move.ts), so nothing here has to clear a stale one.
+//
+// A final reply with neither label is never sent back for one: its last
+// line is saved instead, marked unlabelled, and the card quotes it in grey,
+// so Jon still sees what the chat ended on without paying for a second turn.
+// It never fails the hook: every problem is a note on stderr and exit 0.
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { scheduleBuild } from "../hook-build.ts";
+import {
+  cleanMove,
+  isId,
+  isMoveDescription,
+  MAX_DECISIONS,
+  moveDescription,
+  type SavedContext,
+  type SavedMove,
+  splitContext,
+  validateState,
+  withContext,
+} from "../state-config.ts";
+import { logLine } from "../state-log.ts";
+import { readApplyWrite } from "../state-url.ts";
+import { type DescriptionRead, readDescription, withDescriptionLock, writeDescription } from "./description.ts";
+import { field } from "./gh-command.ts";
+import { readTail, replyFrom, sleep, TAIL_BYTES } from "./transcript.ts";
+
+// The line's label as Jon's rules write it: "Your move:" when the turn
+// waits on Jon, "Nothing for you:" when it waits on the agent. Markdown the
+// terminal would not show may wrap it (a quote, a list or step marker, bold
+// or italic with the colon inside or out), and "Jon, " may lead it. Nothing
+// else counts: a reply without the exact label is quoted by its last line
+// instead (lastLine), so loose wording costs nothing but the label. The
+// text after the colon may be empty: a bare header over steps, which
+// lastMove reads from the lines below.
+const EMPH = String.raw`(?:\*\*|__|\*|_)?`;
+const MOVE_LINE = new RegExp(
+  String.raw`^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?${EMPH}(your move|nothing for you)${EMPH}\s*:\s*${EMPH}\s*(.*)$`,
+  "i",
+);
+// A list or step marker at the start of a line: "1.", "2)", "-", "*", ">".
+const STEP_MARKER = /^\s*(?:>\s*)?(?:\d+[.)]|[-*])\s+/;
+// A decision's heading: "**1. Where the card gets the line**", or the same
+// as a bullet, "- **1. Where the card gets the line**".
+const DECISION = /^\s*(?:[-*]\s+)?\*\*([1-9])[.)]\s/;
+// An option under it: "> a) ...", "a) ...", "    a) ...", "> **a)** ...",
+// or a bullet with a bold letter, "    - **a.** ...". A bullet needs the bold,
+// so a situation bullet such as "- a) the card is cut" stays prose.
+const OPTION = /^\s*(?:>\s*)?(?:[-*]\s+(?=\*\*|__))?(?:\*\*|__)?([a-z])[.)](?:\*\*|__)?\s/;
+// The marker on the option the reply recommends: "**Lean.**", "(lean)",
+// "**Recommended**". Only a marker: "keep the card lean" is prose.
+const LEAN = /(?:\*\*|__)(?:lean|recommended)[.:]?(?:\*\*|__)|\((?:lean|recommended)\)/i;
+// The same marker inside the option's bold label: "- **a. Recommended.** ...".
+const LEAN_LABEL = /^\s*(?:>\s*)?(?:[-*]\s+)?(?:\*\*|__)[a-z][.)]\s+(?:lean|recommended)[.:]?(?:\*\*|__)/i;
+// What ends a decision's options: a rule or a markdown heading.
+const BREAK = /^\s*(?:-{3,}|\*{3,}|_{3,}|#{1,6}\s)/;
+// A code fence's opening or closing line, in a quote or not.
+const FENCE = /^\s*(?:>\s*)?(?:```|~~~)/;
+
+const unmark = (s: string): string =>
+  s
+    .replaceAll(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replaceAll(/\*\*|__|`/g, "")
+    .trim();
+
+// The reply's lines outside code fences: a fenced handoff opener can hold a
+// "Your move" line or a decision of its own that is not this reply's.
+function unfenced(text: string): string[] {
+  let inFence = false;
+  return text.split("\n").filter((line) => {
+    if (FENCE.test(line)) inFence = !inFence;
+    else if (!inFence) return true;
+    return false;
+  });
+}
+
+// The first non-blank line after a bare label header, as a step: marker and
+// markdown stripped. A rule, a heading or a decision there is no step, so
+// the header reads as empty rather than putting "---" on the card.
+function stepAfter(lines: readonly string[], from: number): string {
+  const next = lines.slice(from + 1).find((l) => l.trim() !== "");
+  if (next === undefined || BREAK.test(next) || DECISION.test(next)) return "";
+  return unmark(next.replace(STEP_MARKER, ""));
+}
+
+type Found = { line: string; idle: boolean };
+
+// The move a label on line `i` holds: its text, else the first step below a
+// bare header, else "" for a bare header with nothing under it.
+function labelMove(hit: RegExpExecArray, lines: readonly string[], i: number): Found {
+  const [, label = "", rest = ""] = hit;
+  return { line: cleanMove(unmark(rest) || stepAfter(lines, i)) ?? "", idle: !/^your move/i.test(label) };
+}
+
+/**
+ * The last labelled line in `text` outside a code fence, cleaned, with
+ * whether it asks nothing of Jon; "bare" for a label with nothing under it,
+ * which is no move but is no unlabelled reply either; null with no label.
+ */
+function lastMove(text: string): Found | "bare" | null {
+  const lines = unfenced(text);
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const hit = MOVE_LINE.exec(lines[i] ?? "");
+    if (!hit) continue;
+    const found = labelMove(hit, lines, i);
+    return found.line ? found : "bare";
+  }
+  return null;
+}
+
+/** The last "Your move" or "Nothing for you" line in `text` outside a code fence, cleaned, or null when there is none. */
+export function moveLine(text: string): string | null {
+  const found = lastMove(text);
+  return found === null || found === "bare" ? null : found.line;
+}
+
+// A table row: no line to quote on its own.
+const TABLE_ROW = /^\s*\|/;
+// A quote's marker, and italics around the whole line ("_Done._").
+const QUOTE = /^\s*>\s?/;
+const ITALIC = /^([*_])(.+)\1$/;
+
+/**
+ * A reply's last line outside a code fence, marker and markdown stripped,
+ * skipping rules, headings and table rows: what the card quotes when the
+ * reply has no label. Null when nothing is left.
+ */
+export function lastLine(text: string): string | null {
+  const line = unfenced(text)
+    .reverse()
+    .find((l) => l.trim() !== "" && !BREAK.test(l) && !TABLE_ROW.test(l));
+  if (line === undefined) return null;
+  const plain = unmark(line.replace(STEP_MARKER, "").replace(QUOTE, ""));
+  return cleanMove(plain.replace(ITALIC, "$2"));
+}
+
+/**
+ * How many decisions a reply lays out, and the letter it leans to under each
+ * ("1b 2a"). A heading counts only once a lettered option follows it, and a
+ * rule or a markdown heading ends its options.
+ */
+export function decisionsIn(text: string): { count: number; leans: string } {
+  const seen = new Set<string>();
+  const leans: string[] = [];
+  let current = "";
+  for (const line of unfenced(text)) {
+    const d = DECISION.exec(line)?.[1];
+    if (d || BREAK.test(line)) {
+      current = d ?? "";
+      continue;
+    }
+    const o = OPTION.exec(line)?.[1];
+    if (!current || !o) continue;
+    seen.add(current);
+    if ((LEAN.test(line) || LEAN_LABEL.test(line)) && !leans.some((l) => l.startsWith(current)))
+      leans.push(current + o);
+  }
+  return { count: Math.min(seen.size, MAX_DECISIONS), leans: leans.join(" ") };
+}
+
+/**
+ * What the hook saves for a reply: its labelled line, else, in an
+ * interactive chat (`attended`), its last line marked unlabelled; null for
+ * a bare label, or a headless run (claude -p, the SDK) with no label, whose
+ * output is no chat's move and must not replace one.
+ */
+export function moveFrom(text: string, now: number, session?: string, attended = true): SavedMove | null {
+  const found = lastMove(text);
+  if (found === "bare" || (found === null && !attended)) return null;
+  const line = found?.line ?? lastLine(text);
+  if (!line) return null;
+  const { count, leans } = decisionsIn(text);
+  return {
+    text: line,
+    epoch: now,
+    ...(session ? { session } : {}),
+    ...(count ? { decisions: count } : {}),
+    ...(leans ? { leans } : {}),
+    ...(found?.idle ? { idle: true } : {}),
+    ...(found ? {} : { unlabelled: true }),
+  };
+}
+
+// A main-chat user line: Jon's prompt (string content or a text block) or a
+// tool's result (an array of tool_result blocks). A helper's lines and the
+// meta lines Claude Code adds on its own are neither.
+function isUserTurn(line: string): boolean {
+  if (!line.includes('"user"')) return false;
+  let v: unknown;
+  try {
+    v = JSON.parse(line);
+  } catch {
+    return false;
+  }
+  return field(v, "type") === "user" && field(v, "isSidechain") !== true && field(v, "isMeta") !== true;
+}
+
+/**
+ * The reply that ends a transcript's lines, or "" when none ends it yet. A
+ * turn ends on a reply with no tool call, so when a prompt or a tool result
+ * comes after the last main-chat reply, that reply belongs to an earlier
+ * turn or is text before a tool call: the final reply is not flushed yet.
+ */
+export function lastReply(lines: readonly string[]): string {
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i] ?? "";
+    const reply = replyFrom(line);
+    if (reply) return reply.text;
+    if (isUserTurn(line)) return "";
+  }
+  return "";
+}
+
+const STATE_PATH = join(import.meta.dirname, "..", "..", "config", "state.json");
+// How long to wait for the final reply to be flushed before the one reread.
+const RETRY_MS = 1500;
+
+// The turn's final reply: the event's own copy when Claude Code sends one,
+// else the transcript's, read again once if no reply ends it yet. A reply
+// that is there but has no move line is final: there is nothing to wait for.
+function finalReply(event: unknown): string {
+  const given = field(event, "last_assistant_message");
+  if (typeof given === "string" && given) return given;
+  const transcript = field(event, "transcript_path");
+  if (typeof transcript !== "string") return "";
+  const first = lastReply(readTail(transcript, TAIL_BYTES));
+  if (first) return first;
+  sleep(RETRY_MS);
+  return lastReply(readTail(transcript, TAIL_BYTES));
+}
+
+// Read without the lock: it only saves a write when there is nothing to drop.
+function hasSaved(wsId: string): boolean {
+  try {
+    return Object.hasOwn(validateState(JSON.parse(readFileSync(STATE_PATH, "utf8"))).moves, wsId);
+  } catch {
+    return false;
+  }
+}
+
+// Records the turn's move; a note for stderr, or null. `now` is the hook's
+// entry time, taken before finalReply may sleep, so a prompt that lands
+// during that sleep is judged newer than the move.
+function record(event: unknown, wsId: string | undefined, now: number, attended: boolean): string | null {
+  if (!wsId || !isId(wsId) || field(event, "hook_event_name") !== "Stop") return null;
+  const raw = field(event, "session_id");
+  const session = typeof raw === "string" && isId(raw) ? raw : undefined;
+  const move = moveFrom(finalReply(event), now, session, attended);
+  // The lock keeps the status line's context writer from putting back the
+  // description it read before this move went in (description.ts). Waiting
+  // out a stuck holder costs at most the wait, then the move goes ahead.
+  return withDescriptionLock(
+    wsId,
+    3000,
+    () => deliver(wsId, move, REAL_DELIVERY),
+    () => deliver(wsId, move, REAL_DELIVERY),
+  );
+}
+
+export interface Delivery {
+  read: (wsId: string) => DescriptionRead;
+  /** Sets the description, or clears it for null; false when cmux refused. */
+  write: (wsId: string, description: string | null) => boolean;
+  hasSaved: (wsId: string) => boolean;
+  save: (wsId: string, move: SavedMove | null) => { ok: true; changed: boolean } | { ok: false; error: string };
+  build: () => void;
+  /** Says in the state log why a move went to the saved map, since a hook's stderr is not kept. */
+  log: (line: string) => void;
+}
+
+const REAL_DELIVERY: Delivery = {
+  read: readDescription,
+  write: (wsId, description) => writeDescription("report-move", wsId, description),
+  hasSaved,
+  save: (wsId, move) => readApplyWrite(STATE_PATH, `moves.${wsId}`, move ? JSON.stringify(move) : null),
+  build: () => scheduleBuild("report-move"),
+  log: (line) => logLine(`report-move ${line}`),
+};
+
+// Asks again once when cmux does not answer, since a busy cmux's one missed
+// answer would otherwise cost a rebuild of the agents panel. A workspace cmux
+// does not list is not asked about again: the answer would be the same.
+function readTwice(wsId: string, d: Delivery): DescriptionRead {
+  const first = d.read(wsId);
+  return !first.ok && first.why === "silent" ? d.read(wsId) : first;
+}
+
+// Why a read gave no description, for the state log; `what` names the read.
+const unread = (r: { why: "unlisted" | "silent" }, what: string): string =>
+  r.why === "unlisted" ? "cmux does not list the workspace" : `cmux did not answer the ${what}, twice`;
+
+// The description with no body, keeping the context tail: null (clear it)
+// when there is no context to keep.
+const contextOnly = (context: SavedContext | null): string | null => (context ? withContext("", context) : null);
+
+// Sets the move's description, keeping the context tail the status line
+// wrote, then reads it back: a description cmux cut or changed would read
+// as no move and show a broken tail, so the move is taken off again and the
+// caller falls back to the saved map. Only the move's part is compared, as
+// the status line may rewrite the context tail in between. The read-back is
+// asked twice too, so one missed answer never clears a description that
+// landed. Null when it landed, else why not.
+function describeMove(wsId: string, move: SavedMove, context: SavedContext | null, d: Delivery): string | null {
+  const body = moveDescription(move);
+  if (!d.write(wsId, withContext(body, context))) return "cmux refused the description";
+  const back = readTwice(wsId, d);
+  if (back.ok && splitContext(back.text).body === body) return null;
+  d.write(wsId, contextOnly(context));
+  return back.ok ? "cmux changed the description" : unread(back, "read-back");
+}
+
+// Why a move cannot go in the description, or null when it went: the
+// description holds Jon's words, cmux could not say what it holds, or
+// describeMove's reason.
+function described(wsId: string, move: SavedMove, d: Delivery): string | null {
+  const current = readTwice(wsId, d);
+  if (!current.ok) return unread(current, "read");
+  const { body, context } = splitContext(current.text);
+  if (body !== "" && !isMoveDescription(body)) return "the description holds other words";
+  return describeMove(wsId, move, context, d);
+}
+
+// Saves (or drops, for null) the workspace's move in the saved map and
+// rebuilds when that changed it; `why` is the reason a move went there, for
+// the state log, which says so only once the save has run.
+function save(wsId: string, move: SavedMove | null, d: Delivery, why?: string): string | null {
+  const result = d.save(wsId, move);
+  const id = wsId.slice(0, 8);
+  if (!result.ok) {
+    if (why) d.log(`could not save the move for ${id} (${why}): ${result.error}`);
+    return result.error;
+  }
+  if (why) d.log(`saved the move for ${id}: ${why}`);
+  if (result.changed) d.build();
+  return null;
+}
+
+/**
+ * Hands a turn's move to the cockpit, or retires the last one when the turn
+ * had none. The description comes first, since cmux sends it to the sidebar
+ * live and nothing is rebuilt, but only while it is empty or already holds a
+ * move: Jon's own words are never overwritten. Otherwise, or when cmux
+ * refuses or alters it, the move goes to the saved map, at the cost of a
+ * rebuild, and the state log says why. A turn with no move reads the
+ * description once: it only gates an optional clear. Returns a note for
+ * stderr, or null. Exported for testing.
+ */
+export function deliver(wsId: string, move: SavedMove | null, d: Delivery): string | null {
+  if (move) {
+    const why = described(wsId, move, d);
+    return why === null ? null : save(wsId, move, d, why);
+  }
+  const current = d.read(wsId);
+  if (current.ok && isMoveDescription(current.text)) d.write(wsId, contextOnly(splitContext(current.text).context));
+  return d.hasSaved(wsId) ? save(wsId, null, d) : null;
+}
+
+if (import.meta.main) {
+  const now = Math.floor(Date.now() / 1000);
+  // "cli" is an interactive chat; a headless run names another entry point.
+  const attended = process.env.CLAUDE_CODE_ENTRYPOINT === "cli";
+  let note: string | null;
+  try {
+    note = record(JSON.parse(readFileSync(0, "utf8")), process.env.CMUX_WORKSPACE_ID, now, attended);
+  } catch (err) {
+    note = err instanceof Error ? err.message : String(err);
+  }
+  if (note) console.error(`report-move: ${note}`);
+}

@@ -1,0 +1,28 @@
+{
+  "capture_event": "PostToolUse",
+  "payload": {
+    "session_id": "00000000-0000-4000-8000-00000000a001",
+    "transcript_path": "/Users/me/.claude/projects/p/s.jsonl",
+    "cwd": "/Users/me/work",
+    "scratchpad_dir": "/tmp/scratchpad",
+    "prompt_id": "00000000-0000-4000-8000-00000000b001",
+    "permission_mode": "auto",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Monitor",
+    "tool_input": {
+      "description": "190 second sleep then done",
+      "timeout_ms": 300000,
+      "command": "sleep 190; echo done"
+    },
+    "tool_response": {
+      "taskId": "byeh6pasn",
+      "timeoutMs": 300000,
+      "persistent": false
+    },
+    "tool_use_id": "toolu_FAKE_60731",
+    "duration_ms": 23
+  }
+}

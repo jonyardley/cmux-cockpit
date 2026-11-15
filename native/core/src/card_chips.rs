@@ -1,0 +1,157 @@
+//! A card's chips (src/cockpit/card-chips.ts): what answering the chat
+//! takes, the PR, the branch and the ports, in that order. How they fit a
+//! card's line is chips.rs.
+
+use serde::Serialize;
+
+use crate::data::{Data, Workspace};
+use crate::moves::{MoveSize, move_size, move_size_text};
+use crate::pr_colors::{PrTone, draft_of, pr_tone};
+use crate::prs::pr_summary;
+use crate::session::Session;
+use crate::time::now_epoch;
+
+/// One chip, as the TypeScript's `Chip` writes it.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "id", rename_all = "lowercase")]
+pub enum Chip {
+    /// What answering the chat takes: "Quick", "Review", "Decide · 2".
+    Size { text: String, size: MoveSize },
+    /// The PR: its number and its state words, each inked its own way.
+    Pr {
+        /// "#135", in the chip's own ink.
+        tag: String,
+        /// The words after the number ("draft", "1 failing"), in its
+        /// tone's ink; "" with none.
+        state: String,
+        /// What colours the words: its health with a hue, else its state
+        /// (grey draft and closed, green open, purple merged).
+        tone: PrTone,
+        /// "+120 −8", faint after the state; "" with none.
+        diff: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        url: Option<String>,
+    },
+    /// The branch, with its uncommitted-changes dot.
+    #[serde(rename = "br")]
+    Branch { text: String, dirty: bool },
+    /// The first port and how many more, opening the first on localhost.
+    Port { text: String, url: String },
+}
+
+/// A real port number: whole, and from 1 to 65535.
+fn is_port(p: f64) -> bool {
+    p.fract() == 0.0 && p > 0.0 && p < 65536.0
+}
+
+/// The ports chip: the first real port, and how many more, each once.
+fn port_chip(ports: Option<&[f64]>) -> Option<Chip> {
+    let mut list: Vec<f64> = Vec::new();
+    for p in ports.unwrap_or_default() {
+        if is_port(*p) && !list.contains(p) {
+            list.push(*p);
+        }
+    }
+    let first = crate::js::num_text(*list.first()?);
+    let more = if list.len() > 1 {
+        format!(" +{}", list.len() - 1)
+    } else {
+        String::new()
+    };
+    Some(Chip::Port {
+        text: format!(":{first}{more} \u{2197}"),
+        url: format!("http://localhost:{first}"),
+    })
+}
+
+impl Session {
+    /// A card's chips, in order: the size, the PR, the branch (when
+    /// asked for), the ports.
+    pub fn chips_for(
+        &mut self,
+        data: &Data,
+        w: Option<&Workspace>,
+        with_branch: bool,
+    ) -> Vec<Chip> {
+        let mut out = Vec::new();
+        let Some(w) = w else { return out };
+        // First, so what answering takes reads before where the work is.
+        // Only on a card that waits on Jon, so it always wears the wait's
+        // colour: a dismissed wait keeps its move as the detail, not the chip.
+        if self.waits_on_you(Some(w))
+            && let Some(m) = self.move_of(Some(w))
+            && let Some(size) = move_size(&m)
+        {
+            let text = move_size_text(size, m.decisions.unwrap_or(0.0));
+            out.push(Chip::Size { text, size });
+        }
+        if let Some(pr) = pr_summary(&self.saved, Some(w), now_epoch(data)) {
+            // Its state words go once the status says Ready to merge:
+            // "ready" would only say it again, so the chip keeps its
+            // number (issue #299).
+            let state = if self.says_merge_ready(data, Some(w)) {
+                String::new()
+            } else {
+                pr.state
+            };
+            let draft = draft_of(&self.saved, Some(w));
+            out.push(Chip::Pr {
+                tag: pr.tag,
+                state,
+                tone: pr_tone(pr.status, draft, pr.health),
+                diff: pr.diff,
+                url: pr.url.filter(|u| !u.is_empty()),
+            });
+        }
+        if with_branch && let Some(branch) = w.branch.as_deref().filter(|b| !b.is_empty()) {
+            out.push(Chip::Branch {
+                text: branch.to_string(),
+                dirty: w.dirty == Some(true),
+            });
+        }
+        out.extend(port_chip(w.ports.as_deref()));
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn takes_only_whole_ports_in_range() {
+        assert!(is_port(1.0) && is_port(65535.0));
+        assert!(!is_port(0.0) && !is_port(65536.0) && !is_port(1.5));
+        assert!(!is_port(f64::NAN));
+        assert_eq!(port_chip(None), None);
+    }
+
+    #[test]
+    fn writes_each_chip_as_the_typescript_does() {
+        let pr = Chip::Pr {
+            tag: "#7".into(),
+            state: "open".into(),
+            tone: PrTone::Open,
+            diff: String::new(),
+            url: None,
+        };
+        let json = serde_json::to_value(&pr).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"id": "pr", "tag": "#7", "state": "open", "tone": "open", "diff": ""})
+        );
+        let br = Chip::Branch {
+            text: "feat".into(),
+            dirty: true,
+        };
+        assert_eq!(
+            serde_json::to_value(&br).unwrap(),
+            serde_json::json!({"id": "br", "text": "feat", "dirty": true})
+        );
+        let size = Chip::Size {
+            text: "Quick".into(),
+            size: MoveSize::Quick,
+        };
+        assert_eq!(serde_json::to_value(&size).unwrap()["size"], "quick");
+    }
+}

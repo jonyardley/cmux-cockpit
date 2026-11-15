@@ -1,0 +1,30 @@
+{
+  "category": "agent",
+  "name": "agent.hook.Stop",
+  "occurred_at": "2026-11-13T08:37:18.043Z",
+  "payload": {
+    "_opencode_request_id": "claude-68b80881-20b0-4826-ab37-d51ee857879a-Stop-1794559038039",
+    "_ppid": 4607,
+    "_received_at": "2026-11-13T08:37:18.043Z",
+    "_source": "claude",
+    "context": null,
+    "context_length": 310,
+    "extra_fields": null,
+    "extra_fields_length": 34,
+    "hook_event_name": "Stop",
+    "is_error": null,
+    "phase": "received",
+    "redacted_fields": ["tool_input", "context", "extra_fields"],
+    "session_id": "cmux-feed-v1:Y2xhdWRl:NjhiODA4ODEtMjBiMC00ODI2LWFiMzctZDUxZWU4NTc4Nzlh",
+    "surface_id": "7D3262C3-2F83-48A7-BC63-0A649D165E18",
+    "tool_input": null,
+    "tool_input_length": 364,
+    "tool_name": null,
+    "workspace_id": "FDE694AB-7BB9-4CD0-B8F2-A0C27F37C472"
+  },
+  "seq": 506530,
+  "source": "claude",
+  "surface_id": "7D3262C3-2F83-48A7-BC63-0A649D165E18",
+  "type": "event",
+  "workspace_id": "FDE694AB-7BB9-4CD0-B8F2-A0C27F37C472"
+}

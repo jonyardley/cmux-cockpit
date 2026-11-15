@@ -1,0 +1,9 @@
+{"v":1,"at":"2026-11-13T14:22:30Z","run":"r-1422","event":"run_started","project":"example/app-one","caps":{"issues":3,"session_hours":3,"silence_min":45,"spend_24h_usd":150}}
+{"v":1,"at":"2026-11-13T14:22:47Z","run":"r-1422","event":"picked","item":"app-one#2806","url":"https://github.com/example/app-one/issues/2806","attempt":1}
+{"v":1,"at":"2026-11-13T14:23:31Z","run":"r-1422","event":"stage","item":"app-one#2806","stage":"brief","attempt":1,"sessions":["9f1c2a4e-0b7d-4c55-8e21-3a6d5b0c7e11"]}
+{"v":1,"at":"2026-11-13T14:24:38Z","run":"r-1422","event":"stage","item":"app-one#2806","stage":"built","attempt":1,"sessions":["9f1c2a4e-0b7d-4c55-8e21-3a6d5b0c7e11"]}
+{"v":1,"at":"2026-11-13T14:37:25Z","run":"r-1422","event":"stage","item":"app-one#2806","stage":"reviewed","attempt":1,"sessions":["9f1c2a4e-0b7d-4c55-8e21-3a6d5b0c7e11"]}
+{"v":1,"at":"2026-11-13T14:37:26Z","run":"r-1422","event":"stage","item":"app-one#2806","stage":"qa","attempt":1,"sessions":["9f1c2a4e-0b7d-4c55-8e21-3a6d5b0c7e11"]}
+{"v":1,"at":"2026-11-13T14:39:48Z","run":"r-1422","event":"draft","item":"app-one#2806","pr":"app-one#2848","attempt":1,"sessions":["9f1c2a4e-0b7d-4c55-8e21-3a6d5b0c7e11"]}
+{"v":1,"at":"2026-11-13T14:40:05Z","run":"r-1422","event":"attempt_ended","item":"app-one#2806","outcome":"draft","cost_usd":11.42,"attempt":1,"sessions":["9f1c2a4e-0b7d-4c55-8e21-3a6d5b0c7e11"],"session_costs":{"9f1c2a4e-0b7d-4c55-8e21-3a6d5b0c7e11":11.42}}
+{"v":1,"at":"2026-11-13T14:40:06Z","run":"r-1422","event":"run_ended","attempts":1}

@@ -1,0 +1,18 @@
+[package]
+name = "cockpit_typegen"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+default-run = "cockpit_typegen"
+description = "Writes the panel model's and the core events' Swift types, reading and writing serde_json's shapes"
+
+[lints]
+workspace = true
+
+[dependencies]
+cockpit_core = { path = "../core" }
+# The same exact pin as native/core's, for the generator's type bound.
+facet = "=0.46.5"
+facet_generate = { version = "0.19", default-features = false, features = ["swift"] }
+heck = "0.5"
+serde_json = "1.0.151"

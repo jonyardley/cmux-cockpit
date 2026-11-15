@@ -1,0 +1,18 @@
+#!/bin/sh
+# Installed by `npm run hooks`. Refuses to push anything to the public repo
+# that does not descend from its single root commit, so the private archive
+# history cannot leak into it from an old branch. Other remotes are not
+# checked.
+case "$2" in
+  *jonyardley/cmux-cockpit.git | *jonyardley/cmux-cockpit) ;;
+  *) exit 0 ;;
+esac
+ROOT=c727fd3
+while read -r _local sha _remote _rsha; do
+  [ "$sha" = 0000000000000000000000000000000000000000 ] && continue
+  if ! git merge-base --is-ancestor "$ROOT" "$sha" 2>/dev/null; then
+    echo "pre-push: refusing to push $sha to the public repo: it does not descend from $ROOT, so it would publish the private history." >&2
+    exit 1
+  fi
+done
+exit 0

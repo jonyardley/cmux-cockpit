@@ -1,0 +1,26 @@
+{
+  "category": "agent",
+  "name": "agent.hook.SessionEnd",
+  "occurred_at": "2026-11-13T09:22:42.958Z",
+  "payload": {
+    "_opencode_request_id": "claude-fc283066-9b85-46e9-8793-a71622e241f8-SessionEnd-1794561762955",
+    "_ppid": 61038,
+    "_received_at": "2026-11-13T09:22:42.957Z",
+    "_source": "claude",
+    "extra_fields": null,
+    "extra_fields_length": 34,
+    "hook_event_name": "SessionEnd",
+    "is_error": null,
+    "phase": "received",
+    "redacted_fields": ["extra_fields"],
+    "session_id": "cmux-feed-v1:Y2xhdWRl:ZmMyODMwNjYtOWI4NS00NmU5LTg3OTMtYTcxNjIyZTI0MWY4",
+    "surface_id": "03913F80-A2A9-485C-922A-BBB7030102F5",
+    "tool_name": null,
+    "workspace_id": "96900CCB-72FD-4A67-B7CB-8F343FD42574"
+  },
+  "seq": 508001,
+  "source": "claude",
+  "surface_id": "03913F80-A2A9-485C-922A-BBB7030102F5",
+  "type": "event",
+  "workspace_id": "96900CCB-72FD-4A67-B7CB-8F343FD42574"
+}

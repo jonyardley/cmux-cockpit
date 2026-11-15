@@ -1,0 +1,35 @@
+  All  Projects                  ? keys
+ Next  Chip colours              1 of 3
+
+ 2 need you                          5m
+
+ ▾ ■ MAIN ACTIVITY  8  ●
+▌▎ ● Chip colours  Your turn: Which… 5m
+ ▎ ● Release…     Asking: allow git… 2m
+   ○ Untimed card               Idle 5m
+   ● Tidy strip             Finished 6m
+     Done: the strip now groups by
+     repo.
+   ● Snapshot tests         Working 14m
+     #130 draft +342 −17  …
+     Recording the view tree as text.
+   ○ Long build Working 40m · quiet 17m
+   ● Selected card           Working 1m
+   ○ Card layout fit           Idle 15m
+     #176 merged  card-layout-fit
+
+ ▾ ■ FOR REVIEW  2
+   ● Ended agent           Finished 15m
+   ○ Left off                   Idle 1h
+
+ ▾ ■ BACKGROUND  2
+   ● Iteration timings      Running 5m…
+     You: hi
+     The batch resumes by itself once…
+   ○ No agent                  No agent
+
+ ▸ ■ PARKED  1  ●
+
+ ▾ ■ UNSORTED  2
+   ● Loose workspace                 3m
+   ○ Merged elsewhere · Row cards… #171

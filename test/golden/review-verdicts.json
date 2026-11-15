@@ -1,0 +1,300 @@
+{
+  "chips": {
+    "blocked": {
+      "cardOpacity": 1,
+      "chips": [
+        {
+          "diff": "",
+          "id": "pr",
+          "state": "open",
+          "tag": "#6",
+          "tone": "open",
+          "url": "https://github.com/o/r/pull/6"
+        },
+        { "dirty": false, "id": "br", "text": "feat-6" }
+      ],
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
+    },
+    "closed": {
+      "cardOpacity": 1,
+      "chips": [
+        {
+          "diff": "",
+          "id": "pr",
+          "state": "closed",
+          "tag": "#8",
+          "tone": "closed",
+          "url": "https://github.com/o/r/pull/8"
+        },
+        { "dirty": false, "id": "br", "text": "feat-8" }
+      ],
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
+    },
+    "conflicts": {
+      "cardOpacity": 1,
+      "chips": [
+        {
+          "diff": "",
+          "id": "pr",
+          "state": "conflicts",
+          "tag": "#5",
+          "tone": "conflicts",
+          "url": "https://github.com/o/r/pull/5"
+        },
+        { "dirty": false, "id": "br", "text": "feat-5" }
+      ],
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
+    },
+    "draft": {
+      "cardOpacity": 1,
+      "chips": [
+        {
+          "diff": "+1.2k −56",
+          "id": "pr",
+          "state": "draft",
+          "tag": "#2",
+          "tone": "draft",
+          "url": "https://github.com/o/r/pull/2"
+        },
+        { "dirty": false, "id": "br", "text": "feat-2" }
+      ],
+      "fullLine": { "fitsOneLine": false, "splits": true },
+      "projectLine": { "fitsOneLine": true, "splits": false }
+    },
+    "failing": {
+      "cardOpacity": 1,
+      "chips": [
+        {
+          "diff": "",
+          "id": "pr",
+          "state": "1 failing",
+          "tag": "#3",
+          "tone": "failing",
+          "url": "https://github.com/o/r/pull/3"
+        },
+        { "dirty": false, "id": "br", "text": "feat-3" }
+      ],
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
+    },
+    "merged": {
+      "cardOpacity": 0.6,
+      "chips": [
+        {
+          "diff": "",
+          "id": "pr",
+          "state": "merged",
+          "tag": "#7",
+          "tone": "merged",
+          "url": "https://github.com/o/r/pull/7"
+        },
+        { "dirty": false, "id": "br", "text": "feat-7" }
+      ],
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
+    },
+    "ready": {
+      "cardOpacity": 1,
+      "chips": [
+        {
+          "diff": "+120 −8",
+          "id": "pr",
+          "state": "",
+          "tag": "#1",
+          "tone": "ready",
+          "url": "https://github.com/o/r/pull/1"
+        },
+        { "dirty": false, "id": "br", "text": "feat-1" }
+      ],
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
+    },
+    "running": {
+      "cardOpacity": 1,
+      "chips": [
+        {
+          "diff": "",
+          "id": "pr",
+          "state": "running",
+          "tag": "#4",
+          "tone": "running",
+          "url": "https://github.com/o/r/pull/4"
+        },
+        { "dirty": false, "id": "br", "text": "feat-4" }
+      ],
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
+    },
+    "waiting": {
+      "cardOpacity": 1,
+      "chips": [
+        { "diff": "", "id": "pr", "state": "", "tag": "#9", "tone": "ready", "url": "https://github.com/o/r/pull/9" },
+        { "dirty": false, "id": "br", "text": "feat-9" }
+      ],
+      "fullLine": { "fitsOneLine": true, "splits": false },
+      "projectLine": { "fitsOneLine": true, "splits": false }
+    }
+  },
+  "laneEntries": [
+    { "anchorId": null, "id": "h:main", "kind": "header", "lane": "main" },
+    { "id": "w:waiting", "kind": "ws", "lane": "main", "wsId": "waiting" },
+    { "anchorId": null, "id": "h:review", "kind": "header", "lane": "review" },
+    { "id": "w:ready", "kind": "ws", "lane": "review", "wsId": "ready" },
+    { "id": "w:draft", "kind": "ws", "lane": "review", "wsId": "draft" },
+    { "id": "w:failing", "kind": "ws", "lane": "review", "wsId": "failing" },
+    { "id": "w:running", "kind": "ws", "lane": "review", "wsId": "running" },
+    { "id": "w:conflicts", "kind": "ws", "lane": "review", "wsId": "conflicts" },
+    { "id": "w:blocked", "kind": "ws", "lane": "review", "wsId": "blocked" },
+    { "id": "w:merged", "kind": "ws", "lane": "review", "wsId": "merged" },
+    { "id": "w:closed", "kind": "ws", "lane": "review", "wsId": "closed" },
+    { "id": "z:bg", "kind": "zone", "lane": "bg" },
+    { "id": "z:parked", "kind": "zone", "lane": "parked" },
+    { "id": "z:unsorted", "kind": "zone", "lane": "unsorted" }
+  ],
+  "laneHeaders": {
+    "bg": { "collapsed": false, "mergeReady": "", "workspaces": [] },
+    "main": { "collapsed": false, "mergeReady": "1 ready to merge", "workspaces": ["waiting"] },
+    "parked": { "collapsed": false, "mergeReady": "", "workspaces": [] },
+    "review": {
+      "collapsed": false,
+      "mergeReady": "1 ready to merge",
+      "workspaces": ["ready", "draft", "failing", "running", "conflicts", "blocked", "merged", "closed"]
+    },
+    "unsorted": { "collapsed": false, "mergeReady": "", "workspaces": [] }
+  },
+  "mode": "all",
+  "needs": { "inStrip": [], "late": false, "list": [], "more": 0, "shown": [], "waitText": "" },
+  "next": { "queue": [], "step": null },
+  "placement": {
+    "anchor-main": {
+      "actualLane": "main",
+      "card": false,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "status": "none",
+      "statusLine": "No agent"
+    },
+    "anchor-review": {
+      "actualLane": "review",
+      "card": false,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "none",
+      "statusLine": "No agent"
+    },
+    "blocked": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "none",
+      "statusLine": "No agent"
+    },
+    "closed": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "none",
+      "statusLine": "No agent"
+    },
+    "conflicts": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "none",
+      "statusLine": "No agent"
+    },
+    "draft": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "none",
+      "statusLine": "No agent"
+    },
+    "failing": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "none",
+      "statusLine": "No agent"
+    },
+    "merged": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "none",
+      "statusLine": "No agent"
+    },
+    "ready": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "none",
+      "statusLine": "Ready to merge"
+    },
+    "running": {
+      "actualLane": "review",
+      "card": true,
+      "density": "compact",
+      "lane": "review",
+      "project": "other",
+      "status": "none",
+      "statusLine": "No agent"
+    },
+    "waiting": {
+      "actualLane": "main",
+      "card": true,
+      "density": "full",
+      "lane": "main",
+      "project": "other",
+      "status": "none",
+      "statusLine": "Ready to merge"
+    }
+  },
+  "projectEntries": [
+    { "id": "p:other", "kind": "header", "project": "other" },
+    { "id": "waiting@p", "kind": "ws", "wsId": "waiting" },
+    { "id": "ready@p", "kind": "ws", "wsId": "ready" },
+    { "id": "draft@p", "kind": "ws", "wsId": "draft" },
+    { "id": "failing@p", "kind": "ws", "wsId": "failing" },
+    { "id": "running@p", "kind": "ws", "wsId": "running" },
+    { "id": "conflicts@p", "kind": "ws", "wsId": "conflicts" },
+    { "id": "blocked@p", "kind": "ws", "wsId": "blocked" },
+    { "id": "merged@p", "kind": "ws", "wsId": "merged" },
+    { "id": "closed@p", "kind": "ws", "wsId": "closed" },
+    { "id": "new", "kind": "newRow" },
+    { "id": "quiet", "kind": "quietHeader" },
+    { "id": "q:/dev/app-one", "kind": "quietRow", "project": "/dev/app-one" },
+    { "id": "q:/dev/app-two", "kind": "quietRow", "project": "/dev/app-two" },
+    { "id": "q:/dev/app-three", "kind": "quietRow", "project": "/dev/app-three" }
+  ],
+  "projectHeaders": {
+    "/dev/app-one": { "canOpen": true, "name": "App One", "workspaces": [] },
+    "/dev/app-three": { "canOpen": false, "name": "App Three", "workspaces": [] },
+    "/dev/app-two": { "canOpen": false, "name": "App Two", "workspaces": [] },
+    "other": {
+      "canOpen": false,
+      "name": "Other",
+      "workspaces": ["waiting", "ready", "draft", "failing", "running", "conflicts", "blocked", "merged", "closed"]
+    }
+  },
+  "quietProjects": ["/dev/app-one", "/dev/app-two", "/dev/app-three"]
+}

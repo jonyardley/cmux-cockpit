@@ -1,0 +1,1271 @@
+// The local state loop's contract (docs/state-loop.md): the shape of
+// config/state.json, how one `set` from the sidebar changes it, and how the
+// build reads it back. Shared by the URL handler (which writes) and build.ts
+// (which injects __STATE__), and kept apart from both so it can be tested.
+//
+// Any web page can open a cmux-cockpit:// URL, so every value arriving here is
+// untrusted: bad keys and values are refused, bad entries in the file are
+// dropped, and nothing here ever throws on input.
+
+import {
+  isCleanChar,
+  isHex,
+  isMatchKey,
+  isName,
+  isRoot,
+  isSymbol,
+  isText,
+  MAX_PROJECT_KEY,
+} from "../src/shared/project-rules.ts";
+
+export interface State {
+  /** wsId -> agent id -> start of the needs_input spell that was dismissed (issue #5). */
+  dismissed: Record<string, Record<string, number>>;
+  /** wsId -> project key chosen by "Move to project" (issue #8). */
+  projectOverride: Record<string, string>;
+  /**
+   * project key -> a project made or edited in the sidebar (issue #9). The
+   * key is a sidebar-made project's folder, or a projects.json project's
+   * first match; either way the saved entry wins over the file at build.
+   */
+  projects: Record<string, SavedProject>;
+  /**
+   * wsId -> the pull request for the workspace's branch, found by
+   * scripts/pr-poll.ts because cmux sends custom sidebars none (issue #7).
+   * Written only by the poller, never by a URL: a URL could plant a link.
+   */
+  prs: Record<string, SavedPr>;
+  /**
+   * url -> one of Jon's own open pull requests in a repo some workspace sits
+   * in, found by scripts/pr-poll.ts, so a PR still shows once its workspace
+   * is closed. Written only by the poller, never by a URL.
+   */
+  ownPrs: Record<string, SavedOwnPr>;
+  /**
+   * wsId -> the workspace's subagent runs, oldest first, recorded by
+   * scripts/hooks/report-subagent.ts because cmux sends custom sidebars none
+   * (issue #6). Written only by the hook, never by a URL.
+   */
+  subagents: Record<string, SavedSubagent[]>;
+  /**
+   * wsId -> the background work its chats have running, as Claude Code
+   * lists it on Stop and SubagentStop (`background_tasks`), recorded by
+   * scripts/hooks/report-background.ts because cmux sends custom sidebars
+   * none. Each snapshot replaces its chat's entries. Written only by the
+   * hook, never by a URL. Left out while nothing is saved.
+   */
+  background?: Record<string, SavedTask[]>;
+  /**
+   * wsId -> the native core's background verdict for its card (#360): the
+   * card's agent, when its earliest running work started, and a count per
+   * kind, so the agents panel says Running when the card does. Written
+   * only by scripts/running-save.ts, from the core's SaveRunning effect,
+   * never by a URL; the background hook's write drops the verdict of a
+   * workspace it leaves with no work (writeBackground). Left out while
+   * nothing is saved.
+   */
+  running?: Record<string, SavedRunning>;
+  /**
+   * wsId -> the waits on Jon the native Cockpit's card shows (#388): a
+   * stopped session, CI stuck or red with nobody on it, a change left
+   * merge-ready four hours, parked Ostinato attempts; each only while it
+   * shows (not dismissed, the workspace awake). Written only by
+   * scripts/waits-save.ts, from the core's SaveWaits effect, never by a
+   * URL. Left out while nothing is saved.
+   */
+  waits?: Record<string, SavedWait[]>;
+  /**
+   * Claude Code session id -> the name its agent row shows, recorded by
+   * scripts/hooks/report-rename.ts because cmux's own agent title is the
+   * first message, which it cannot read for every Claude folder. Oldest
+   * first, so the cap drops the sessions named longest ago. Written only
+   * by the hook, never by a URL: a URL could plant words as a chat's name.
+   */
+  names: Record<string, SavedName>;
+  /**
+   * url -> a page or doc an agent published, recorded by
+   * scripts/hooks/report-published.ts (issue #52), oldest first. Keyed by
+   * URL so a republish replaces its entry. Written only by the hook, never
+   * by a URL: a URL could plant a link.
+   */
+  published: Record<string, SavedPublished>;
+  /**
+   * url -> the chat that opened a pull request, recorded by
+   * scripts/hooks/report-pr.ts, oldest first. Written only by the hook,
+   * never by a URL: a URL could plant a link.
+   */
+  prOrigins: Record<string, SavedPrOrigin>;
+  /**
+   * wsId -> why its agent last stopped to ask (issue #81): a permission
+   * prompt, a question or an MCP form, recorded by
+   * scripts/hooks/report-notification.ts because cmux says only that an
+   * agent needs you, never why. Written through applySet, but refused from
+   * a URL (urlMaySet): a URL could plant a question.
+   */
+  asking: Record<string, SavedAsk>;
+  /**
+   * wsId -> the "Your move" line its chat last ended a turn on, recorded by
+   * scripts/hooks/report-move.ts, since cmux keeps only the start of a
+   * message and the line is always at its end. Hook-only, like `asking`:
+   * a URL could plant words the card shows as the chat's own.
+   */
+  moves: Record<string, SavedMove>;
+  /**
+   * lane id -> the name the cockpit last saw it under in config/lanes.json,
+   * so a rename there can rename the lane's cmux group (issue #294). Left
+   * out while nothing is saved, so a file from before it existed reads the
+   * same.
+   */
+  laneNames?: Record<string, string>;
+  /**
+   * wsId -> the agent tabs the cockpit put to sleep when its card was
+   * parked, and when (issue #328), so the card still reads Asleep after a
+   * reload: to cmux's own data a sleeping agent looks like one that ended.
+   * Left out while nothing is saved.
+   */
+  asleep?: Record<string, SavedAsleep>;
+  /**
+   * wsId -> the desktop notification the native core posted for its card's
+   * wait (issue #379): when the wait began, which keys it, a CI wait's own
+   * key, and the id cmux gave it until it is dismissed, so a restart
+   * neither posts it again nor loses the id. Written only by the sidebar's
+   * core. Left out while nothing is saved.
+   */
+  notified?: Record<string, SavedNote>;
+  /** The cockpit's view and what is folded, so a rebuild's reload keeps them. */
+  ui: UiState;
+  /**
+   * How the PR poller's last runs went (issue #78), so the sidebars can say
+   * when PR data is old or gh is down. Written only by scripts/pr-poll.ts,
+   * never by a URL. Left out while nothing is saved, so a file from before
+   * it existed reads the same.
+   */
+  poll?: SavedPoll;
+}
+
+/** The agent tabs (cmux surface ids) put to sleep in one workspace, and when, in epoch seconds. */
+export interface SavedAsleep {
+  surfaces: string[];
+  since: number;
+}
+
+/**
+ * One card's desktop notification (persist.rs SavedNote): the wait's start in
+ * epoch seconds, a CI wait's own key, cmux's id for it while it is up, and
+ * when it was taken down.
+ */
+export interface SavedNote {
+  since: number;
+  ci?: number;
+  id?: string;
+  down?: number;
+}
+
+/** Why a poll could not reach gh: it failed, it is signed out, or it is not installed. */
+export type PollError = "unavailable" | "signed-out" | "missing";
+
+/** The PR poller's last success and its current error, as it saves them. */
+export interface SavedPoll {
+  /** Epoch seconds of the last run whose gh lookups answered. */
+  okEpoch?: number;
+  /** Why the latest run could not reach gh; absent once a run gets through. */
+  error?: PollError;
+}
+
+export type ViewMode = "all" | "projects";
+
+/**
+ * The cockpit's own view state. Each rebuild hot-reloads the sidebar, which
+ * would otherwise land back on All with everything unfolded.
+ */
+export interface UiState {
+  mode?: ViewMode;
+  /** "lane:<key>" or "project:<key>" -> 1 folded, 0 unfolded. */
+  collapsed?: Record<string, number>;
+  /** The native sidebar's All view filter: a project's key, or "other" for the cards with no project. */
+  filter?: string;
+}
+
+/** A project made or edited in the sidebar. Its first match is the key it is stored under. */
+export interface ProjectSpec {
+  name: string;
+  color: string;
+  icon: string;
+  root?: string;
+}
+
+/** A projects.json project removed in the sidebar: deleting the entry would bring the file's back. */
+export interface ProjectRemoved {
+  removed: true;
+}
+
+export type SavedProject = ProjectSpec | ProjectRemoved;
+
+/** A pull request as the poller saves it, shaped like renderer.d.ts's PullRequest. */
+export interface SavedPr {
+  number: number;
+  url: string;
+  status: "open" | "merged" | "closed";
+  branch: string;
+  /** Set only while the PR is a draft, so a ready PR's entry is unchanged. */
+  draft?: true;
+  /**
+   * Set only while GitHub says the PR can merge as it stands
+   * (mergeStateStatus "CLEAN": no conflicts, no blocking review or check).
+   */
+  mergeable?: true;
+  /** Set only while GitHub says the PR has merge conflicts (mergeStateStatus "DIRTY"). */
+  conflicts?: true;
+  /** Its title (pr-poll.ts's cleanTitle), so a card can say what the PR does; left out when it has none. */
+  title?: string;
+  /** Lines added and removed across its diff; left out when gh sent no count. */
+  additions?: number;
+  deletions?: number;
+  /** Its CI checks, failing first (pr-poll.ts's checksFrom); left out when it has none. */
+  checks?: SavedCheck[];
+  /**
+   * While GitHub would merge it, when the native poll first saw it so
+   * (epoch seconds), so the Cockpit can tell a change left merge-ready
+   * four hours (#380). Set once per spell, kept while only GitHub's merge
+   * state is unsure, so going ready and leaving it are the only extra writes.
+   */
+  readySince?: number;
+}
+
+/**
+ * One of Jon's own open PRs. Only what the Pull requests list shows is
+ * kept (no checks or merge verdict), so CI on a PR no workspace holds never
+ * rewrites the file or rebuilds the sidebars.
+ */
+export interface SavedOwnPr {
+  number: number;
+  url: string;
+  status: "open";
+  branch: string;
+  draft?: true;
+  /** Its title, since no workspace names it. */
+  title: string;
+  /** The repo it was found in (git's common dir), so a failed lookup keeps only that repo's entries. */
+  repo: string;
+}
+
+/**
+ * One CI check, cut down to three states so a rerun's id never rewrites
+ * the file. The native poll also keeps when a check was queued and when
+ * it started (epoch seconds), so the Cockpit can tell a check stuck in the
+ * queue or running too long (#377). Each is set once per run, so a check
+ * moving from queued to running is the only extra write.
+ */
+export interface SavedCheck {
+  name: string;
+  state: CheckState;
+  queued?: number;
+  started?: number;
+}
+
+export type CheckState = "pass" | "fail" | "pending";
+
+/**
+ * A subagent run as the hook saves it, shaped like renderer.d.ts's
+ * SubagentRun. Its entry is made when the Agent tool is called, before the
+ * run has an agent id, so it is keyed by the call instead.
+ */
+export interface SavedSubagent {
+  /** The Agent tool call's tool_use_id. */
+  id: string;
+  /** The Claude Code session that called it. */
+  session: string;
+  /** Claude Code's agent_id, set when the run starts; SubagentStop names it. */
+  agentId?: string;
+  /** The Agent call's tool_input.subagent_type, so a SubagentStart with
+   * several unpaired calls in the same session pairs to the right one. */
+  type?: string;
+  /** The Agent call's description, at most MAX_LABEL characters. */
+  label: string;
+  /** Epoch seconds the Agent tool was called, or the latest resume
+   * restarted it (report-subagent.ts's onResume). */
+  startedEpoch: number;
+  /** Epoch seconds the run stopped; absent while it runs. */
+  endedEpoch?: number;
+}
+
+/**
+ * What kind of background work a task is. The first seven are Claude Code's
+ * own labels for a `background_tasks` entry, as its hooks reference lists
+ * them; `session` is a `claude --bg` session, which that list never holds,
+ * saved from the Bash call that started it (scripts/hooks/bg-sessions.ts);
+ * `other` is any label Claude Code adds after these.
+ */
+export const TASK_TYPES = [
+  "shell",
+  "subagent",
+  "monitor",
+  "workflow",
+  "teammate",
+  "cloud session",
+  "MCP task",
+  "session",
+  "other",
+] as const;
+export type TaskType = (typeof TASK_TYPES)[number];
+
+/** One piece of background work a chat has running, as report-background.ts saves it. */
+export interface SavedTask {
+  /** Claude Code's task id (a shell's task id, an agent's agent id). */
+  id: string;
+  type: TaskType;
+  /** Claude Code's status word; only "running" has been seen, since a finished task leaves the list. */
+  status: string;
+  /** Claude Code's description, at most MAX_LABEL characters. */
+  description: string;
+  /** The Claude Code session whose Stop or SubagentStop last listed it: the chat's, never an agent's. */
+  session: string;
+  /**
+   * The Claude process that listed it (CLAUDE_PID), which a /clear keeps
+   * while the session id changes; absent when the hook was given none.
+   */
+  pid?: number;
+  /** Epoch seconds a snapshot first listed it. */
+  startedEpoch: number;
+  /** Epoch seconds a snapshot last listed it; the prune and the core's age limit count from here. */
+  seenEpoch: number;
+}
+
+/** Where a session's name came from: a `/rename`, or its first real prompt. */
+export type NameSource = "title" | "prompt";
+
+/** How many of one kind of background work a chat runs, in a saved verdict. */
+export interface SavedCount {
+  type: TaskType;
+  n: number;
+}
+
+/**
+ * The native core's background verdict for a card (native/core/src/running_save.rs):
+ * the chat it is about, when its earliest running work started, and how
+ * many of each kind run, in the card's order ("1 shell, 1 agent"). The
+ * panel says Running from it while that agent is idle, as the card does.
+ */
+export interface SavedRunning {
+  /** The card's agent: the chat whose work it counts. */
+  agent: string;
+  /** Epoch seconds the earliest of the work started. */
+  since: number;
+  /** One to MAX_COUNTS counts, each 1 to MAX_TASKS. */
+  counts: SavedCount[];
+}
+
+/** The kinds of wait the native core saves (persist.rs WaitKind). */
+export const WAIT_KINDS = ["stopped", "ci_stuck", "ci_failing", "merge_ready", "park"] as const;
+export type WaitKind = (typeof WAIT_KINDS)[number];
+
+/**
+ * One wait on Jon a Cockpit card shows (native/core/src/waits_save.rs).
+ * Nothing in it moves with the clock: the panel works out each age from
+ * `since`.
+ */
+export interface SavedWait {
+  kind: WaitKind;
+  /** Epoch seconds it began to wait on Jon. */
+  since: number;
+  /** The start a dismissal of it is saved at in `dismissed`. */
+  key: number;
+  /** A stop only, and always there: the stopped session, its dismissal's id. */
+  agent?: string;
+  /** A few words: a stop's cause ("error", "gone", "silent"), the PR's title or "#12", the park's words. */
+  detail?: string;
+  /** Stuck CI only: the stuck check's name. */
+  check?: string;
+  /** Stuck CI only: when the stuck check was queued, or started when it runs. */
+  queued?: number;
+}
+
+/** A session's name, as the hook saves it. */
+export interface SavedName {
+  /** At most MAX_LABEL characters, cleaned as cleanLabel does. */
+  name: string;
+  from: NameSource;
+}
+
+/** What an agent published: a claude.ai page (Artifact) or doc (Claude Docs). */
+export type PublishedKind = "page" | "doc";
+
+/** A page or doc an agent published, as the hook saves it. */
+export interface SavedPublished {
+  /** Its claude.ai artifact link, the map key too. */
+  url: string;
+  /** Its title, at most MAX_LABEL characters. */
+  title: string;
+  kind: PublishedKind;
+  /** The cmux workspace the agent ran in (CMUX_WORKSPACE_ID) when it last
+   * published it, or edited it (a doc). */
+  workspace: string;
+  /** Epoch seconds it was last published, or edited (a doc). */
+  epoch: number;
+}
+
+/** Which chat opened a PR, as the PR hook saves it. */
+export interface SavedPrOrigin {
+  /** Its GitHub link, the map key too. */
+  url: string;
+  number: number;
+  /** The cmux workspace the agent ran in (CMUX_WORKSPACE_ID). */
+  workspace: string;
+  /** The terminal it ran in (CMUX_SURFACE_ID), for focusing it; absent when cmux gave none. */
+  surface?: string;
+  /** The Claude Code session that opened it. */
+  session: string;
+  /** Epoch seconds it was opened. */
+  epoch: number;
+}
+
+/** Why an agent stopped to ask, as the notification hook saves it. */
+export interface SavedAsk {
+  /** A short reason, e.g. "allow git push?", at most MAX_LABEL characters. */
+  reason: string;
+  /** Epoch seconds the hook heard the ask. */
+  epoch: number;
+  /** The Claude Code session that asked, so a later event can tell it is the same ask. */
+  session?: string;
+}
+
+/** What a chat last asked of Jon, as the Stop hook saves it. */
+export interface SavedMove {
+  /** The line after "Your move:", at most MAX_MOVE characters. */
+  text: string;
+  /** Epoch seconds the hook saw the turn end. */
+  epoch: number;
+  /** The Claude Code session whose turn it was. */
+  session?: string;
+  /** How many numbered decisions the reply laid out, when it laid any out. */
+  decisions?: number;
+  /** The reply's recommended answers in Jon's shorthand ("1b 2a"), when it marked any. */
+  leans?: string;
+  /** Set when the line was "Nothing for you:", not "Your move:": the turn waits on the agent. */
+  idle?: true;
+  /** Set when the reply had neither label: `text` is its last line, which the card shows in grey. */
+  unlabelled?: true;
+}
+
+/** The longest "Your move" line kept; the hook cuts one to this. */
+export const MAX_MOVE = 200;
+/** The most decisions one reply is counted as laying out. */
+export const MAX_DECISIONS = 9;
+
+/** Background tasks kept per workspace, the last listed kept, so a runaway loop cannot bloat the file. */
+export const MAX_TASKS = 20;
+/** The longest task status word kept. */
+export const MAX_STATUS = 32;
+
+/** The most kinds a saved verdict counts: one per task type (persist.rs MAX_COUNTS). */
+export const MAX_COUNTS = TASK_TYPES.length;
+
+/** The most waits saved for one workspace (persist.rs MAX_WAITS). */
+export const MAX_WAITS = 20;
+
+/** Agent tabs kept asleep per workspace, so a bad write cannot bloat the file. */
+export const MAX_ASLEEP = 10;
+
+/** Runs kept per workspace, newest kept, so a busy agent cannot bloat the file. */
+export const MAX_SUBAGENTS = 10;
+/** The longest label kept; the hook cuts a description to this. */
+export const MAX_LABEL = 120;
+
+/** Checks kept per PR, so one PR with a huge matrix cannot bloat the file. */
+export const MAX_CHECKS = 20;
+
+export const emptyState = (): State => ({
+  dismissed: {},
+  projectOverride: {},
+  projects: {},
+  prs: {},
+  ownPrs: {},
+  subagents: {},
+  names: {},
+  published: {},
+  prOrigins: {},
+  asking: {},
+  moves: {},
+  ui: {},
+});
+
+// renderer.d.ts puts no shape on workspace or agent ids, and a project key is
+// its first match path ("/dev/app"), so only length is bounded. Object
+// prototype names are refused, so no entry can land on a prototype.
+// Numeric-looking ids would sort first in Object.entries and so be evicted
+// first; cmux ids are UUIDs, so that is accepted rather than worked round.
+const RESERVED = new Set(["__proto__", "constructor", "prototype"]);
+export const isId = (v: string): boolean => v.length > 0 && v.length <= 128 && !RESERVED.has(v);
+/** Entries kept per map, so a flood of URLs cannot grow the file without bound. */
+export const MAX_ENTRIES = 256;
+
+export const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+const isEpoch = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
+
+function agentStarts(v: unknown): Record<string, number> | null {
+  if (!isRecord(v)) return null;
+  const out: Record<string, number> = {};
+  for (const [id, start] of Object.entries(v)) if (isId(id) && isEpoch(start)) out[id] = start;
+  return Object.keys(out).length ? out : null;
+}
+
+const projectKey = (v: unknown): string | null =>
+  typeof v === "string" && v.length > 0 && v.length <= MAX_PROJECT_KEY ? v : null;
+
+// Keeps whole code points (so a surrogate pair is never split in two) while
+// the UTF-16 length, the one isLabel measures, stays within `max`.
+function cutTo(text: string, max: number): string {
+  let out = "";
+  for (const c of text) {
+    if (out.length + c.length > max) break;
+    out += c;
+  }
+  return out;
+}
+
+// cleanLabel's rule at any length.
+function cleanText(raw: unknown, max: number): string | null {
+  if (typeof raw !== "string") return null;
+  const spaced = [...raw].map((c) => (isCleanChar(c) ? c : " ")).join("");
+  const cleaned = cutTo(spaced.replaceAll(/\s+/g, " "), max).trim();
+  return cleaned.length ? cleaned : null;
+}
+
+/**
+ * cleanLabel for a "Your move" line: the same rule, but a line over
+ * MAX_MOVE is cut to leave room for an ellipsis and ends in one, so the
+ * card shows it was cut. Both lengths are the UTF-16 one isText measures.
+ */
+export function cleanMove(raw: unknown): string | null {
+  const whole = cleanText(raw, Number.POSITIVE_INFINITY);
+  if (whole === null || whole.length <= MAX_MOVE) return whole;
+  return `${cutTo(whole, MAX_MOVE - 1).trimEnd()}…`;
+}
+
+/**
+ * Turns hook input into a label isLabel accepts: control characters and
+ * whitespace runs become one space, it is cut to MAX_LABEL, and only then
+ * trimmed, since trimming first and cutting after can leave a trailing
+ * space that isLabel refuses and validateState drops the entry over. Null
+ * for anything unusable. Shared by the subagent and published hooks.
+ */
+export function cleanLabel(raw: unknown): string | null {
+  return cleanText(raw, MAX_LABEL);
+}
+
+/** The first candidate that cleans up to a label, else `fallback`. */
+export function labelFrom(fallback: string, ...candidates: unknown[]): string {
+  for (const candidate of candidates) {
+    const cleaned = cleanLabel(candidate);
+    if (cleaned) return cleaned;
+  }
+  return fallback;
+}
+
+// Exactly {"removed": true}, so a spec with a stray flag is not read as a removal.
+const isRemovedEntry = (v: unknown): boolean => isRecord(v) && v.removed === true && Object.keys(v).length === 1;
+
+function savedProject(v: unknown): SavedProject | null {
+  return isRemovedEntry(v) ? { removed: true } : projectSpec(v);
+}
+
+function projectSpec(v: unknown): ProjectSpec | null {
+  if (!isRecord(v) || !isName(v.name) || !isHex(v.color) || !isSymbol(v.icon)) return null;
+  const spec: ProjectSpec = { name: v.name, color: v.color, icon: v.icon };
+  if (v.root === undefined) return spec;
+  return isRoot(v.root) ? { ...spec, root: v.root } : null;
+}
+
+// Only a GitHub pull request page, since the sidebar opens it on a tap.
+const isPrUrl = (v: unknown): v is string =>
+  typeof v === "string" && v.length <= 512 && /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+$/.test(v);
+const PR_STATUSES: readonly unknown[] = ["open", "merged", "closed"];
+const isPrStatus = (v: unknown): v is SavedPr["status"] => PR_STATUSES.includes(v);
+
+const CHECK_STATES: readonly unknown[] = ["pass", "fail", "pending"];
+const isCheckState = (v: unknown): v is CheckState => CHECK_STATES.includes(v);
+
+function savedCheck(v: unknown): SavedCheck[] {
+  if (!isRecord(v) || !isName(v.name) || !isCheckState(v.state)) return [];
+  const check: SavedCheck = { name: v.name, state: v.state };
+  if (isEpoch(v.queued)) check.queued = v.queued;
+  if (isEpoch(v.started)) check.started = v.started;
+  return [check];
+}
+
+const isLabel = (v: unknown): v is string => isText(v, MAX_LABEL);
+/** A diff's line count: a whole number, never negative. */
+export const isLineCount = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+
+/** When a PR first read merge-ready: an epoch after 1970, never the zero time. */
+const isReadyTime = (v: unknown): v is number => isEpoch(v) && v > 0;
+
+function savedPr(v: unknown): SavedPr | null {
+  if (!isRecord(v) || !isPrUrl(v.url) || !isPrStatus(v.status)) return null;
+  const { number, branch } = v;
+  if (typeof number !== "number" || !Number.isSafeInteger(number) || number < 1) return null;
+  if (typeof branch !== "string" || branch.length === 0 || branch.length > 256) return null;
+  const pr: SavedPr = {
+    number,
+    url: v.url,
+    status: v.status,
+    branch,
+    ...(v.draft === true ? { draft: true } : {}),
+    ...(v.mergeable === true ? { mergeable: true } : {}),
+    ...(v.conflicts === true ? { conflicts: true } : {}),
+    ...(isLabel(v.title) ? { title: v.title } : {}),
+    ...(isLineCount(v.additions) ? { additions: v.additions } : {}),
+    ...(isLineCount(v.deletions) ? { deletions: v.deletions } : {}),
+    ...(isReadyTime(v.readySince) ? { readySince: v.readySince } : {}),
+  };
+  const checks = Array.isArray(v.checks) ? v.checks.flatMap(savedCheck).slice(0, MAX_CHECKS) : [];
+  return checks.length ? { ...pr, checks } : pr;
+}
+
+const VIEW_MODES: readonly unknown[] = ["all", "projects"];
+const isViewMode = (v: unknown): v is ViewMode => VIEW_MODES.includes(v);
+
+// A fold key is "lane:<key>" or "project:<key>", and a project key can be a
+// match path as long as MAX_PROJECT_KEY, so it gets that bound plus room for
+// the prefix rather than isId's.
+const isFoldKey = (v: string): boolean => v.length > 0 && v.length <= MAX_PROJECT_KEY + 16 && !RESERVED.has(v);
+
+// A fold flag per section, bounded like any other map. Empty reads as none,
+// so an empty object is a delete rather than a set.
+function foldFlags(v: unknown): Record<string, number> | null {
+  if (!isRecord(v)) return null;
+  const kept = Object.entries(v).flatMap(([id, flag]): [string, number][] =>
+    isFoldKey(id) && (flag === 0 || flag === 1) ? [[id, flag]] : [],
+  );
+  return kept.length ? Object.fromEntries(kept.slice(-MAX_ENTRIES)) : null;
+}
+
+function uiState(v: unknown): UiState {
+  if (!isRecord(v)) return {};
+  const collapsed = foldFlags(v.collapsed);
+  const filter = projectKey(v.filter);
+  return {
+    ...(isViewMode(v.mode) ? { mode: v.mode } : {}),
+    ...(collapsed ? { collapsed } : {}),
+    ...(filter ? { filter } : {}),
+  };
+}
+
+const UI_KEYS: readonly string[] = ["mode", "collapsed", "filter"];
+
+// Any name lanes.json takes (trimmed, not empty), bounded only so a flood
+// of URLs cannot bloat the file; a tighter rule would refuse a lane's own
+// name and leave the sidebars asking to save it on every reload.
+const laneName = (v: unknown): string | null =>
+  typeof v === "string" && v.trim() === v && v.length > 0 && v.length <= 1024 ? v : null;
+
+const POLL_ERRORS: readonly unknown[] = ["unavailable", "signed-out", "missing"];
+const isPollError = (v: unknown): v is PollError => POLL_ERRORS.includes(v);
+
+// Each field stands alone: a bad one is dropped, the other kept. Null when
+// nothing usable is left, so the key is left out.
+function savedPoll(v: unknown): SavedPoll | null {
+  if (!isRecord(v)) return null;
+  const poll: SavedPoll = {};
+  if (isEpoch(v.okEpoch)) poll.okEpoch = v.okEpoch;
+  if (isPollError(v.error)) poll.error = v.error;
+  return Object.keys(poll).length ? poll : null;
+}
+
+const isRepoDir = (v: unknown): v is string =>
+  typeof v === "string" && v.startsWith("/") && v.length <= MAX_PROJECT_KEY;
+
+function savedOwnPr(v: unknown): SavedOwnPr | null {
+  const pr = savedPr(v);
+  if (pr?.status !== "open" || !isRecord(v) || !isLabel(v.title) || !isRepoDir(v.repo)) return null;
+  const own: SavedOwnPr = {
+    number: pr.number,
+    url: pr.url,
+    status: "open",
+    branch: pr.branch,
+    title: v.title,
+    repo: v.repo,
+  };
+  if (pr.draft) own.draft = true;
+  return own;
+}
+
+const isOptionalId = (v: unknown): boolean => v === undefined || (typeof v === "string" && isId(v));
+
+function savedSubagent(v: unknown): SavedSubagent[] {
+  if (!isRecord(v) || !isLabel(v.label) || !isEpoch(v.startedEpoch)) return [];
+  const { id, session, agentId, type, endedEpoch } = v;
+  if (typeof id !== "string" || !isId(id) || typeof session !== "string" || !isId(session)) return [];
+  if (!isOptionalId(agentId) || !isOptionalId(type)) return [];
+  if (endedEpoch !== undefined && !isEpoch(endedEpoch)) return [];
+  const run: SavedSubagent = { id, session, label: v.label, startedEpoch: v.startedEpoch };
+  if (typeof agentId === "string") run.agentId = agentId;
+  if (typeof type === "string") run.type = type;
+  if (isEpoch(endedEpoch)) run.endedEpoch = endedEpoch;
+  return [run];
+}
+
+/**
+ * Only a claude.ai artifact link, the form both an Artifact publish and a
+ * Claude Docs doc get, since the sidebar will open it on a tap.
+ */
+export const isPublishedUrl = (v: unknown): v is string =>
+  typeof v === "string" && v.length <= 512 && /^https:\/\/claude\.ai\/(?:code\/)?artifact\/[\w-]+$/.test(v);
+const KINDS: readonly unknown[] = ["page", "doc"];
+const isKind = (v: unknown): v is PublishedKind => KINDS.includes(v);
+
+function savedPublished(v: unknown): SavedPublished | null {
+  if (!isRecord(v) || !isPublishedUrl(v.url) || !isLabel(v.title) || !isKind(v.kind) || !isEpoch(v.epoch)) return null;
+  const { workspace } = v;
+  if (typeof workspace !== "string" || !isId(workspace)) return null;
+  return { url: v.url, title: v.title, kind: v.kind, workspace, epoch: v.epoch };
+}
+
+const isPrNumber = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 1;
+const isIdText = (v: unknown): v is string => typeof v === "string" && isId(v);
+
+// The number a PR link ends in, so a saved number can be held to its link.
+const prNumberOf = (url: string): number => Number(/\/pull\/(\d+)$/.exec(url)?.[1]);
+
+// A field it no longer keeps (the old `mention`) is dropped on the next write.
+function savedPrOrigin(v: unknown): SavedPrOrigin | null {
+  if (!isRecord(v) || !isPrUrl(v.url) || !isPrNumber(v.number) || !isEpoch(v.epoch)) return null;
+  if (prNumberOf(v.url) !== v.number) return null;
+  const { workspace, surface, session } = v;
+  if (!isIdText(workspace) || !isIdText(session) || !isOptionalId(surface)) return null;
+  const origin: SavedPrOrigin = { url: v.url, number: v.number, workspace, session, epoch: v.epoch };
+  if (typeof surface === "string") origin.surface = surface;
+  return origin;
+}
+
+// An origin kept only under its own link: the map key is what the rows look it up by.
+const originAt = (v: unknown, url: string): SavedPrOrigin | null => {
+  const o = savedPrOrigin(v);
+  return o?.url === url ? o : null;
+};
+
+function savedAsk(v: unknown): SavedAsk | null {
+  if (!isRecord(v) || !isLabel(v.reason) || !isEpoch(v.epoch)) return null;
+  const { session } = v;
+  if (session !== undefined && (typeof session !== "string" || !isId(session))) return null;
+  return { reason: v.reason, epoch: v.epoch, ...(typeof session === "string" ? { session } : {}) };
+}
+
+// Jon's shorthand for answers: a decision number and a letter, space apart.
+const isLeans = (v: unknown): v is string =>
+  typeof v === "string" && v.length <= 40 && /^[1-9][a-z](?: [1-9][a-z])*$/.test(v);
+const isDecisions = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= MAX_DECISIONS;
+
+// A move's optional fields: each absent or well formed, its flags only true.
+function movePartsOk(v: Record<string, unknown>): boolean {
+  const { session, decisions, leans, idle, unlabelled } = v;
+  if (session !== undefined && (typeof session !== "string" || !isId(session))) return false;
+  if (decisions !== undefined && !isDecisions(decisions)) return false;
+  if (leans !== undefined && !isLeans(leans)) return false;
+  return (idle === undefined || idle === true) && (unlabelled === undefined || unlabelled === true);
+}
+
+function savedMove(v: unknown): SavedMove | null {
+  if (!isRecord(v) || !isText(v.text, MAX_MOVE) || !isEpoch(v.epoch) || !movePartsOk(v)) return null;
+  const { session, decisions, leans, idle, unlabelled } = v;
+  return {
+    text: v.text,
+    epoch: v.epoch,
+    ...(typeof session === "string" ? { session } : {}),
+    ...(isDecisions(decisions) ? { decisions } : {}),
+    ...(isLeans(leans) ? { leans } : {}),
+    ...(idle === true ? { idle } : {}),
+    ...(unlabelled === true ? { unlabelled } : {}),
+  };
+}
+
+// A move rides to the cockpit in its workspace's cmux description, which the
+// sidebar reads live, so a turn end redraws nothing (docs/state-loop.md,
+// "What the chat wants"). The line comes first, so cmux's own list shows it;
+// the rest of the move follows in one bracketed JSON tail.
+const MOVE_TAIL = /^(.*) ⟦move (\{.*\})⟧$/s;
+
+/** A move as the workspace description the Stop hook sets. */
+export function moveDescription(m: SavedMove): string {
+  const { text, ...rest } = m;
+  return text + " ⟦move " + JSON.stringify(rest) + "⟧";
+}
+
+/** A chat's context and the plan's usage limits, as its status line last saw them. */
+export interface SavedContext {
+  /** Epoch seconds the status line reported it. */
+  epoch: number;
+  /** How full the chat's context window is, 0 to 100. */
+  used: number;
+  /** Tokens in the window now, and the window's size. */
+  tokens?: number;
+  size?: number;
+  /** The plan's 5-hour limit used, 0 to 100, and when it resets (epoch seconds). */
+  hour?: number;
+  hourReset?: number;
+  /** The plan's weekly limit used, 0 to 100, and when it resets (epoch seconds). */
+  week?: number;
+  weekReset?: number;
+  /** The Claude account the plan figures belong to, when not the main one: "acme" for ~/.claude-acme. */
+  account?: string;
+}
+
+// The context rides on the same description as the move, as a second tail
+// after it, so the line still comes first. Its JSON holds only numbers and
+// an account name of plain characters (isAccount), so no bracket can occur
+// inside it; the pattern refuses one, so a move whose
+// words happen to hold "⟦ctx {" is never mistaken for a tail. Stripping it
+// first leaves the move's own tail anchored at the end, where MOVE_TAIL looks.
+const CONTEXT_TAIL = /^(.*?) ?⟦ctx (\{[^⟦⟧]*\})⟧$/s;
+
+const isPercent = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 100;
+const isCount = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
+/** An account name: lower case letters, digits and hyphens, so it never breaks the tail. */
+export const isAccount = (v: unknown): v is string => typeof v === "string" && /^[a-z0-9-]{1,24}$/.test(v);
+
+type ContextNumber = "tokens" | "size" | "hour" | "hourReset" | "week" | "weekReset";
+const CONTEXT_FIELDS: readonly [ContextNumber, (v: unknown) => v is number][] = [
+  ["tokens", isCount],
+  ["size", isCount],
+  ["hour", isPercent],
+  ["hourReset", isEpoch],
+  ["week", isPercent],
+  ["weekReset", isEpoch],
+];
+
+/** A saved context from its parsed JSON, keeping only well formed optional fields; null without epoch and used. */
+export function savedContext(v: unknown): SavedContext | null {
+  if (!isRecord(v) || !isEpoch(v.epoch) || !isPercent(v.used)) return null;
+  const out: SavedContext = { epoch: v.epoch, used: v.used };
+  for (const [key, ok] of CONTEXT_FIELDS) {
+    const value = v[key];
+    if (ok(value)) out[key] = value;
+  }
+  if (isAccount(v.account)) out.account = v.account;
+  return out;
+}
+
+/** A description split into what precedes the context tail and the context it carries (null for none or a bad one). */
+export function splitContext(d: string): { body: string; context: SavedContext | null } {
+  const found = CONTEXT_TAIL.exec(d);
+  if (!found) return { body: d, context: null };
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(found[2] ?? "");
+  } catch {
+    parsed = null;
+  }
+  return { body: found[1] ?? "", context: savedContext(parsed) };
+}
+
+/** A description holding `body` then the context's tail; just `body` for no context. */
+export function withContext(body: string, c: SavedContext | null): string {
+  if (c === null) return body;
+  const tail = "⟦ctx " + JSON.stringify(c) + "⟧";
+  return body === "" ? tail : body + " " + tail;
+}
+
+/** The move a workspace description carries, or null when it carries none or a bad one. */
+export function moveOfDescription(d: string | undefined): SavedMove | null {
+  const found = d === undefined ? null : MOVE_TAIL.exec(splitContext(d).body);
+  if (!found) return null;
+  let rest: unknown;
+  try {
+    rest = JSON.parse(found[2] ?? "");
+  } catch {
+    return null;
+  }
+  return isRecord(rest) ? savedMove({ ...rest, text: found[1] }) : null;
+}
+
+/** True when a description is a move's, so it is never shown as Jon's own words. */
+export const isMoveDescription = (d: string | undefined): boolean =>
+  d !== undefined && MOVE_TAIL.test(splitContext(d).body);
+
+const SOURCES: readonly unknown[] = ["title", "prompt"];
+const isSource = (v: unknown): v is NameSource => SOURCES.includes(v);
+
+function savedName(v: unknown): SavedName | null {
+  return isRecord(v) && isLabel(v.name) && isSource(v.from) ? { name: v.name, from: v.from } : null;
+}
+
+const KNOWN_TYPES: readonly unknown[] = TASK_TYPES;
+const isTaskType = (v: unknown): v is TaskType => KNOWN_TYPES.includes(v);
+
+/** A saved task type: a known one as it is, any other word read as `other`, so a new kind is kept, not dropped. */
+export const taskType = (v: unknown): TaskType => (isTaskType(v) ? v : "other");
+
+/** The largest process id kept: persist.rs reads it as a u32. */
+const MAX_PID = 0xffff_ffff;
+
+/** A process id as a saved task holds it: a whole number from 1 to MAX_PID. */
+export const isPid = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v > 0 && v <= MAX_PID;
+
+/**
+ * A saved task's pid as persist.rs reads it: missing or null is no pid
+ * ({}), a good one is kept, and anything else is null, which drops the
+ * task as serde does.
+ */
+function savedPid(v: unknown): { pid?: number } | null {
+  if (v === undefined || v === null) return {};
+  return isPid(v) ? { pid: v } : null;
+}
+
+function savedTask(v: unknown): SavedTask[] {
+  if (!isRecord(v) || !isIdText(v.id) || !isIdText(v.session) || typeof v.type !== "string") return [];
+  const { status, description, startedEpoch, seenEpoch } = v;
+  if (!isText(status, MAX_STATUS) || !isLabel(description) || !isEpoch(startedEpoch) || !isEpoch(seenEpoch)) return [];
+  const pid = savedPid(v.pid);
+  if (pid === null) return [];
+  return [
+    { id: v.id, type: taskType(v.type), status, description, session: v.session, ...pid, startedEpoch, seenEpoch },
+  ];
+}
+
+function savedTasks(v: unknown): SavedTask[] | null {
+  const tasks = Array.isArray(v) ? v.flatMap(savedTask).slice(-MAX_TASKS) : [];
+  return tasks.length ? tasks : null;
+}
+
+function savedCount(v: unknown): SavedCount | null {
+  if (!isRecord(v) || typeof v.type !== "string") return null;
+  const { n } = v;
+  return typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= MAX_TASKS
+    ? { type: taskType(v.type), n }
+    : null;
+}
+
+/** A saved verdict as persist.rs's running_map reads it: dropped whole if any part does not fit. */
+function savedRunning(v: unknown): SavedRunning | null {
+  if (!isRecord(v) || !isIdText(v.agent) || !isEpoch(v.since) || !Array.isArray(v.counts)) return null;
+  const counts = v.counts.map(savedCount);
+  const fits = counts.length >= 1 && counts.length <= MAX_COUNTS && counts.every((c) => c !== null);
+  return fits ? { agent: v.agent, since: v.since, counts: counts.filter((c) => c !== null) } : null;
+}
+
+const isWaitKind = (v: unknown): v is WaitKind => WAIT_KINDS.some((k) => k === v);
+
+/** An optional field as serde reads it: missing or null is absent, a value that fails `is` refuses the whole. */
+type Optional<T> = { ok: true; value?: T } | { ok: false };
+function optional<T>(v: unknown, is: (x: unknown) => x is T): Optional<T> {
+  if (v === undefined || v === null) return { ok: true };
+  return is(v) ? { ok: true, value: v } : { ok: false };
+}
+
+/** A saved wait as persist.rs's SavedWait::fits holds it: an agent on a stop and only there, a check and its time on stuck CI and only there. */
+function savedWait(v: unknown): SavedWait | null {
+  if (!isRecord(v) || !isWaitKind(v.kind) || !isEpoch(v.since) || !isEpoch(v.key)) return null;
+  const agent = optional(v.agent, isIdText);
+  const detail = optional(v.detail, isLabel);
+  const check = optional(v.check, isName);
+  const queued = optional(v.queued, isEpoch);
+  if (!agent.ok || !detail.ok || !check.ok || !queued.ok) return null;
+  if ((v.kind === "stopped") !== (agent.value !== undefined)) return null;
+  if (v.kind !== "ci_stuck" && (check.value !== undefined || queued.value !== undefined)) return null;
+  return {
+    kind: v.kind,
+    since: v.since,
+    key: v.key,
+    ...(agent.value !== undefined ? { agent: agent.value } : {}),
+    ...(detail.value !== undefined ? { detail: detail.value } : {}),
+    ...(check.value !== undefined ? { check: check.value } : {}),
+    ...(queued.value !== undefined ? { queued: queued.value } : {}),
+  };
+}
+
+/** A workspace's waits as persist.rs's waits_map reads them: dropped whole if any wait does not fit. */
+function savedWaits(v: unknown): SavedWait[] | null {
+  if (!Array.isArray(v) || v.length < 1 || v.length > MAX_WAITS) return null;
+  const waits = v.map(savedWait);
+  return waits.every((w) => w !== null) ? waits.filter((w) => w !== null) : null;
+}
+
+function savedAsleep(v: unknown): SavedAsleep | null {
+  if (!isRecord(v) || !Array.isArray(v.surfaces) || !isEpoch(v.since)) return null;
+  const surfaces = v.surfaces.filter(isIdText);
+  const fits = surfaces.length > 0 && surfaces.length === v.surfaces.length && surfaces.length <= MAX_ASLEEP;
+  return fits ? { surfaces, since: v.since } : null;
+}
+
+/** A notification id as cmux writes one, a UUID, the only shape that may reach a command line (persist.rs is_uuid). */
+const isUuid = (v: unknown): v is string =>
+  typeof v === "string" && /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/.test(v);
+
+/** A notification record as persist.rs's notes_map reads it: dropped whole if any part does not fit. */
+function savedNote(v: unknown): SavedNote | null {
+  if (!isRecord(v) || !isEpoch(v.since) || v.since <= 0) return null;
+  if (v.ci !== undefined && !isEpoch(v.ci)) return null;
+  if (v.id !== undefined && !isUuid(v.id)) return null;
+  if (v.down !== undefined && (!isEpoch(v.down) || v.down <= 0)) return null;
+  return {
+    since: v.since,
+    ...(v.ci !== undefined ? { ci: v.ci } : {}),
+    ...(v.id !== undefined ? { id: v.id } : {}),
+    ...(v.down !== undefined ? { down: v.down } : {}),
+  };
+}
+
+function savedSubagents(v: unknown): SavedSubagent[] | null {
+  const runs = Array.isArray(v) ? v.flatMap(savedSubagent).slice(-MAX_SUBAGENTS) : [];
+  return runs.length ? runs : null;
+}
+
+// Keeps the last MAX_ENTRIES valid entries, in insertion order. `clean` is
+// handed the key too, for a map whose value must agree with it.
+function cleanMap<T>(v: unknown, clean: (value: unknown, id: string) => T | null, validId = isId): Record<string, T> {
+  if (!isRecord(v)) return {};
+  const kept = Object.entries(v).flatMap(([id, value]): [string, T][] => {
+    const c = validId(id) ? clean(value, id) : null;
+    return c === null ? [] : [[id, c]];
+  });
+  return Object.fromEntries(kept.slice(-MAX_ENTRIES));
+}
+
+/**
+ * Reads whatever is in the file into a State, dropping anything malformed.
+ * A map or field it no longer keeps (the `shells` map and a run's
+ * `background` flag, retired in #361) is dropped, so the next write takes
+ * it out of the file.
+ */
+export function validateState(raw: unknown): State {
+  const v = isRecord(raw) ? raw : {};
+  const poll = savedPoll(v.poll);
+  const background = cleanMap(v.background, savedTasks);
+  const running = cleanMap(v.running, savedRunning);
+  const waits = cleanMap(v.waits, savedWaits);
+  const laneNames = cleanMap(v.laneNames, laneName);
+  const asleep = cleanMap(v.asleep, savedAsleep);
+  const notified = cleanMap(v.notified, savedNote);
+  return {
+    dismissed: cleanMap(v.dismissed, agentStarts),
+    projectOverride: cleanMap(v.projectOverride, projectKey),
+    projects: cleanMap(v.projects, savedProject, isMatchKey),
+    prs: cleanMap(v.prs, savedPr),
+    ownPrs: cleanMap(v.ownPrs, savedOwnPr, isPrUrl),
+    subagents: cleanMap(v.subagents, savedSubagents),
+    names: cleanMap(v.names, savedName),
+    published: cleanMap(v.published, savedPublished, isPublishedUrl),
+    prOrigins: cleanMap(v.prOrigins, originAt, isPrUrl),
+    asking: cleanMap(v.asking, savedAsk),
+    moves: cleanMap(v.moves, savedMove),
+    ui: uiState(v.ui),
+    ...(Object.keys(background).length ? { background } : {}),
+    ...(Object.keys(running).length ? { running } : {}),
+    ...(Object.keys(waits).length ? { waits } : {}),
+    ...(Object.keys(laneNames).length ? { laneNames } : {}),
+    ...(Object.keys(asleep).length ? { asleep } : {}),
+    ...(Object.keys(notified).length ? { notified } : {}),
+    ...(poll ? { poll } : {}),
+  };
+}
+
+export type SetResult = { ok: true; state: State } | { ok: false; error: string };
+
+// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `waits`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
+// `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
+// set only by their hooks: the URL handler refuses them (urlMaySet).
+type MapName =
+  | "dismissed"
+  | "projectOverride"
+  | "projects"
+  | "ui"
+  | "asking"
+  | "moves"
+  | "laneNames"
+  | "asleep"
+  | "notified";
+const MAPS: readonly MapName[] = [
+  "dismissed",
+  "projectOverride",
+  "projects",
+  "ui",
+  "asking",
+  "moves",
+  "laneNames",
+  "asleep",
+  "notified",
+];
+const isMapName = (v: string): v is MapName => (MAPS as readonly string[]).includes(v);
+
+// Maps applySet takes from a hook but never from a URL.
+const HOOK_ONLY: readonly string[] = ["asking", "moves"];
+
+/**
+ * Whether a cmux-cockpit:// URL may make this set (scripts/state-set.ts
+ * checks it first). Any web page can open one, and an `asking` entry is
+ * text the sidebars show as the agent's own question.
+ */
+export const urlMaySet = (key: string): boolean => !HOOK_ONLY.includes(key.split(".", 1)[0] ?? "");
+
+/** An ask older than this beside a newer one is dropped, so closed workspaces do not linger. */
+export const ASK_MAX_AGE_S = 24 * 60 * 60;
+
+function without<T>(entries: Record<string, T>, id: string): Record<string, T> {
+  const next = { ...entries };
+  delete next[id];
+  return next;
+}
+
+// One case per map, so each keeps its own entry type.
+function withoutEntry(state: State, map: MapName, id: string): State {
+  switch (map) {
+    case "dismissed":
+      return { ...state, dismissed: without(state.dismissed, id) };
+    case "projectOverride":
+      return { ...state, projectOverride: without(state.projectOverride, id) };
+    case "projects":
+      return { ...state, projects: without(state.projects, id) };
+    case "asking":
+      return { ...state, asking: without(state.asking, id) };
+    case "moves":
+      return { ...state, moves: without(state.moves, id) };
+    case "laneNames": {
+      const { laneNames, ...rest } = state;
+      const left = without(laneNames ?? {}, id);
+      return Object.keys(left).length ? { ...rest, laneNames: left } : rest;
+    }
+    case "asleep": {
+      const { asleep, ...rest } = state;
+      const left = without(asleep ?? {}, id);
+      return Object.keys(left).length ? { ...rest, asleep: left } : rest;
+    }
+    case "notified": {
+      const { notified, ...rest } = state;
+      const left = without(notified ?? {}, id);
+      return Object.keys(left).length ? { ...rest, notified: left } : rest;
+    }
+    case "ui":
+      return { ...state, ui: Object.fromEntries(Object.entries(state.ui).filter(([key]) => key !== id)) };
+  }
+}
+
+// Adds one parsed entry, or says what the map wanted instead.
+function withEntry(state: State, map: MapName, id: string, parsed: unknown): State | string {
+  switch (map) {
+    case "dismissed": {
+      const starts = agentStarts(parsed);
+      return starts
+        ? { ...state, dismissed: { ...state.dismissed, [id]: starts } }
+        : "dismissed wants {agentId: epoch}";
+    }
+    case "projectOverride": {
+      const key = projectKey(parsed);
+      return key
+        ? { ...state, projectOverride: { ...state.projectOverride, [id]: key } }
+        : "projectOverride wants a project key string";
+    }
+    case "projects": {
+      const spec = savedProject(parsed);
+      return spec
+        ? { ...state, projects: { ...state.projects, [id]: spec } }
+        : "projects wants {name, color: #rrggbb, icon: SF Symbol, root?} or {removed: true}";
+    }
+    case "ui":
+      return uiEntry(state, id, parsed);
+    case "asking":
+      return askEntry(state, id, parsed);
+    case "moves":
+      return moveEntry(state, id, parsed);
+    case "laneNames": {
+      const name = laneName(parsed);
+      return name ? { ...state, laneNames: { ...state.laneNames, [id]: name } } : "laneNames wants a lane name string";
+    }
+    case "asleep": {
+      const record = savedAsleep(parsed);
+      return record
+        ? { ...state, asleep: { ...state.asleep, [id]: record } }
+        : "asleep wants {surfaces: [surface id], since: epoch}";
+    }
+    case "notified": {
+      const note = savedNote(parsed);
+      return note
+        ? { ...state, notified: { ...state.notified, [id]: note } }
+        : "notified wants {since: epoch, ci?: epoch, id?: uuid, down?: epoch}";
+    }
+  }
+}
+
+// Adds the ask last, as the newest, and drops every other ask a day older
+// than it, since nothing else ever clears one for a closed workspace.
+function askEntry(state: State, id: string, parsed: unknown): State | string {
+  const ask = savedAsk(parsed);
+  if (!ask) return "asking wants {reason, epoch, session?}";
+  const kept = Object.entries(state.asking).filter(([, a]) => a.epoch >= ask.epoch - ASK_MAX_AGE_S);
+  return { ...state, asking: { ...Object.fromEntries(kept), [id]: ask } };
+}
+
+/**
+ * Another workspace's move older than this, next to a new one, is dropped: a
+ * week, not ASK_MAX_AGE_S's day, since a chat can wait on Jon over a weekend.
+ * MAX_ENTRIES still caps the map.
+ */
+export const MOVE_MAX_AGE_S = 7 * 24 * 60 * 60;
+
+// As askEntry: the move goes last, and moves a week older than it are dropped.
+function moveEntry(state: State, id: string, parsed: unknown): State | string {
+  const move = savedMove(parsed);
+  if (!move) return "moves wants {text, epoch, session?, decisions?, leans?, idle?: true, unlabelled?: true}";
+  const kept = Object.entries(state.moves).filter(([, m]) => m.epoch >= move.epoch - MOVE_MAX_AGE_S);
+  return { ...state, moves: { ...Object.fromEntries(kept), [id]: move } };
+}
+
+function uiEntry(state: State, id: string, parsed: unknown): State | string {
+  if (id === "mode")
+    return isViewMode(parsed) ? { ...state, ui: { ...state.ui, mode: parsed } } : 'ui.mode wants "all" or "projects"';
+  if (id === "filter") {
+    const filter = projectKey(parsed);
+    return filter ? { ...state, ui: { ...state.ui, filter } } : "ui.filter wants a project key string";
+  }
+  const collapsed = foldFlags(parsed);
+  return collapsed ? { ...state, ui: { ...state.ui, collapsed } } : "ui.collapsed wants {section: 0 or 1}";
+}
+
+// Which ids a map takes: a match path for `projects`, a fixed name for `ui`,
+// a workspace id for the rest.
+function isKeyFor(map: MapName, id: string): boolean {
+  if (map === "projects") return isMatchKey(id);
+  if (map === "ui") return UI_KEYS.includes(id);
+  return isId(id);
+}
+
+/**
+ * Whether a set needs a rebuild to show. The sidebar already shows its own
+ * view and folds, and every rebuild bakes in the file as it stands, so a
+ * `ui` set only has to be written: rebuilding on each tap would reload the
+ * sidebar under the tap. A `laneNames` set is the sidebar's own record of
+ * what it already acted on, so it needs no rebuild either, and nor does an
+ * `asleep` set: the sidebar's core shows its card asleep before it writes.
+ * Nor a `notified` set: no card shows it, it only keeps a notification from
+ * posting twice.
+ */
+const WRITE_ONLY: readonly string[] = ["ui", "laneNames", "asleep", "notified"];
+export const rebuildsOn = (key: string): boolean => !WRITE_ONLY.some((map) => key.startsWith(`${map}.`));
+
+/**
+ * Applies one `set`: `key` is `<map>.<id>`, `value` the JSON for that entry,
+ * or null to delete it. The id is a workspace id, or for `projects` the
+ * project's match path. Returns a new State; the input is not changed.
+ */
+export function applySet(state: State, key: string, value: string | null): SetResult {
+  const dot = key.indexOf(".");
+  const map = key.slice(0, dot);
+  const id = key.slice(dot + 1);
+  if (dot < 1) return { ok: false, error: `bad key ${JSON.stringify(key)}` };
+  if (!isMapName(map)) return { ok: false, error: `unknown map ${map}` };
+  if (!isKeyFor(map, id)) return { ok: false, error: `bad key ${JSON.stringify(key)}` };
+
+  const cleared = withoutEntry(state, map, id);
+  if (value === null) return { ok: true, state: cleared };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return { ok: false, error: "value is not JSON" };
+  }
+  const next = withEntry(cleared, map, id, parsed);
+  return typeof next === "string" ? { ok: false, error: next } : { ok: true, state: validateState(next) };
+}

@@ -1,0 +1,31 @@
+{
+  "capture_event": "PostToolUse",
+  "payload": {
+    "session_id": "00000000-0000-4000-8000-00000000a001",
+    "transcript_path": "/Users/me/.claude/projects/p/s.jsonl",
+    "cwd": "/Users/me/work",
+    "scratchpad_dir": "/tmp/scratchpad",
+    "prompt_id": "00000000-0000-4000-8000-00000000b001",
+    "permission_mode": "auto",
+    "effort": {
+      "level": "high"
+    },
+    "hook_event_name": "PostToolUse",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "sleep 200",
+      "description": "Sleep 200 seconds in background",
+      "run_in_background": true
+    },
+    "tool_response": {
+      "stdout": "",
+      "stderr": "",
+      "interrupted": false,
+      "isImage": false,
+      "noOutputExpected": false,
+      "backgroundTaskId": "b8cvj4dry"
+    },
+    "tool_use_id": "toolu_FAKE_97245",
+    "duration_ms": 379
+  }
+}

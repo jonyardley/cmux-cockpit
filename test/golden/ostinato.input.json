@@ -1,0 +1,121 @@
+{
+  "data": {
+    "epoch": 1000000,
+    "groups": [
+      {
+        "anchorId": "anchor-main",
+        "id": "g-main",
+        "name": "Main activity"
+      }
+    ],
+    "selectedId": null,
+    "workspaces": [
+      {
+        "group": "g-main",
+        "id": "anchor-main",
+        "title": "Main activity"
+      },
+      {
+        "agents": [
+          {
+            "id": "5a0c1e2f-0000-4000-9000-000000000001",
+            "kind": "claude",
+            "lastActivityAt": 998200,
+            "sinceEpoch": 998200,
+            "status": "idle"
+          }
+        ],
+        "branch": "main",
+        "directory": "/Users/jon/dev/app-one",
+        "group": "g-main",
+        "id": "running",
+        "title": "app one main"
+      },
+      {
+        "agents": [
+          {
+            "id": "5a0c1e2f-0000-4000-9000-000000000002",
+            "kind": "claude",
+            "lastActivityAt": 992800,
+            "sinceEpoch": 992800,
+            "status": "idle"
+          }
+        ],
+        "branch": "main",
+        "directory": "/Users/jon/dev/app-two",
+        "group": "g-main",
+        "id": "parked",
+        "title": "app two main"
+      },
+      {
+        "agents": [
+          {
+            "id": "5a0c1e2f-0000-4000-9000-000000000003",
+            "kind": "claude",
+            "lastActivityAt": 988000,
+            "sinceEpoch": 988000,
+            "status": "idle"
+          }
+        ],
+        "branch": "main",
+        "directory": "/Users/jon/dev/app-three",
+        "group": "g-main",
+        "id": "silent",
+        "title": "app three main"
+      }
+    ]
+  },
+  "ostinato": {
+    "checkouts": {
+      "/Users/jon/dev/app-one": "example/app-one",
+      "/Users/jon/dev/app-three": "example/app-three",
+      "/Users/jon/dev/app-two": "example/app-two"
+    },
+    "records": {
+      "example/app-one": {
+        "text": "{\"v\":1,\"at\":\"1970-01-12T12:16:40Z\",\"run\":\"r-one\",\"event\":\"run_started\",\"project\":\"example/app-one\",\"caps\":{\"issues\":3,\"session_hours\":3,\"spend_24h_usd\":150}}\n{\"v\":1,\"at\":\"1970-01-12T12:17:00Z\",\"run\":\"r-one\",\"event\":\"picked\",\"item\":\"app-one#2804\",\"url\":\"https://github.com/example/app-one/issues/2804\",\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T12:33:20Z\",\"run\":\"r-one\",\"event\":\"stage\",\"item\":\"app-one#2804\",\"stage\":\"built\",\"attempt\":1,\"sessions\":[\"5a0c1e2f-0000-4000-8000-000000000001\"]}\n{\"v\":1,\"at\":\"1970-01-12T12:33:40Z\",\"run\":\"r-one\",\"event\":\"draft\",\"item\":\"app-one#2804\",\"pr\":\"app-one#2847\",\"attempt\":1,\"sessions\":[\"5a0c1e2f-0000-4000-8000-000000000001\"]}\n{\"v\":1,\"at\":\"1970-01-12T12:33:50Z\",\"run\":\"r-one\",\"event\":\"attempt_ended\",\"item\":\"app-one#2804\",\"outcome\":\"draft\",\"cost_usd\":41.2,\"attempt\":1,\"sessions\":[\"5a0c1e2f-0000-4000-8000-000000000001\"],\"session_costs\":{\"5a0c1e2f-0000-4000-8000-000000000001\":41.2}}\n{\"v\":1,\"at\":\"1970-01-12T12:34:40Z\",\"run\":\"r-one\",\"event\":\"picked\",\"item\":\"app-one#2806\",\"url\":\"https://github.com/example/app-one/issues/2806\",\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T12:56:40Z\",\"run\":\"r-one\",\"event\":\"stage\",\"item\":\"app-one#2806\",\"stage\":\"brief\",\"attempt\":1,\"sessions\":[\"5a0c1e2f-0000-4000-8000-000000000002\"]}\n{\"v\":1,\"at\":\"1970-01-12T13:34:40Z\",\"run\":\"r-one\",\"event\":\"stage\",\"item\":\"app-one#2806\",\"stage\":\"built\",\"attempt\":1,\"sessions\":[\"5a0c1e2f-0000-4000-8000-000000000002\"]}\n"
+      },
+      "example/app-three": {
+        "text": "{\"v\":1,\"at\":\"1970-01-12T10:10:00Z\",\"run\":\"r-three\",\"event\":\"run_started\",\"project\":\"example/app-three\",\"caps\":{\"issues\":1,\"session_hours\":3}}\n{\"v\":1,\"at\":\"1970-01-12T10:10:10Z\",\"run\":\"r-three\",\"event\":\"picked\",\"item\":\"app-three#7\",\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T10:26:40Z\",\"run\":\"r-three\",\"event\":\"stage\",\"item\":\"app-three#7\",\"stage\":\"brief\",\"attempt\":1,\"sessions\":[\"5a0c1e2f-0000-4000-8000-000000000003\"]}\nnot a record line\n"
+      },
+      "example/app-two": {
+        "text": "{\"v\":1,\"at\":\"1970-01-12T11:16:40Z\",\"run\":\"r-two\",\"event\":\"run_started\",\"project\":\"example/app-two\",\"caps\":{\"issues\":3,\"session_hours\":3}}\n{\"v\":1,\"at\":\"1970-01-12T11:16:50Z\",\"run\":\"r-two\",\"event\":\"picked\",\"item\":\"app-two#41\",\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T12:06:40Z\",\"run\":\"r-two\",\"event\":\"draft\",\"item\":\"app-two#41\",\"pr\":\"app-two#57\",\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T12:06:50Z\",\"run\":\"r-two\",\"event\":\"attempt_ended\",\"item\":\"app-two#41\",\"outcome\":\"draft\",\"cost_usd\":18.4,\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T12:07:00Z\",\"run\":\"r-two\",\"event\":\"picked\",\"item\":\"app-two#44\",\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T12:46:40Z\",\"run\":\"r-two\",\"event\":\"draft\",\"item\":\"app-two#44\",\"pr\":\"app-two#58\",\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T12:46:50Z\",\"run\":\"r-two\",\"event\":\"attempt_ended\",\"item\":\"app-two#44\",\"outcome\":\"draft\",\"cost_usd\":15.1,\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T12:47:00Z\",\"run\":\"r-two\",\"event\":\"picked\",\"item\":\"app-two#39\",\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T13:33:40Z\",\"run\":\"r-two\",\"event\":\"parked\",\"item\":\"app-two#39\",\"reason\":\"needs_decision\",\"question\":\"Should a shared note keep its old link after it moves folder?\",\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T13:33:50Z\",\"run\":\"r-two\",\"event\":\"attempt_ended\",\"item\":\"app-two#39\",\"outcome\":\"parked\",\"cost_usd\":8.3,\"attempt\":1}\n{\"v\":1,\"at\":\"1970-01-12T13:34:40Z\",\"run\":\"r-two\",\"event\":\"run_ended\",\"attempts\":3}\n"
+      }
+    }
+  },
+  "projects": [
+    {
+      "color": "#D97757",
+      "icon": "star.fill",
+      "match": "/dev/app-one",
+      "name": "App One",
+      "root": "~/dev/app-one"
+    },
+    {
+      "color": "#6A9BCC",
+      "icon": "cube.fill",
+      "match": ["/dev/app-two", "/.config/app-two"],
+      "name": "App Two"
+    },
+    {
+      "color": "#788C5D",
+      "icon": "leaf.fill",
+      "match": "/dev/app-three",
+      "name": "App Three"
+    }
+  ],
+  "state": {
+    "asking": {},
+    "dismissed": {},
+    "moves": {},
+    "names": {},
+    "ownPrs": {},
+    "prOrigins": {},
+    "projectOverride": {},
+    "projects": {},
+    "prs": {},
+    "published": {},
+    "subagents": {},
+    "ui": {}
+  }
+}

@@ -1,0 +1,25 @@
+[package]
+name = "cockpit_core"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+description = "The cockpit's shared core: a Crux app the pane and the Swift shell drive"
+
+[lints]
+workspace = true
+
+# crux's effect macro reads it; the bridge needs the serde form whatever
+# it is set to.
+[features]
+typegen = []
+
+[dependencies]
+crux_core = "0.20"
+# The panel model's shape for native/typegen. Pinned to the exact version
+# crux_core 0.20 pins, so the two never pull different facets.
+facet = "=0.46.5"
+fancy-regex = "0.19.2"
+indexmap = "2.14.2"
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.151", features = ["preserve_order"] }

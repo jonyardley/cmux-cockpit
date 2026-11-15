@@ -1,0 +1,41 @@
+{
+  "name": "cmux-cockpit",
+  "private": true,
+  "description": "The agents panel custom sidebar for cmux, beside the native Cockpit sidebar",
+  "type": "module",
+  "engines": {
+    "node": ">=24.2"
+  },
+  "scripts": {
+    "build": "node scripts/hook-build.ts --locked",
+    "dev": "node --watch-path=src scripts/build.ts",
+    "lint": "biome ci --error-on-warnings .",
+    "fix": "biome check --write .",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.node.json",
+    "knip": "knip",
+    "test": "node --test",
+    "coverage": "node --test --experimental-test-coverage --test-coverage-include='src/**/model.ts' --test-coverage-include='src/agents/{lists,team,checks,pr-list,made,context,details,background}.ts' --test-coverage-include='src/shared/**' --test-coverage-lines=98 --test-coverage-branches=95 --test-coverage-functions=98",
+    "validate": "node scripts/validate.ts",
+    "pr-body": "node scripts/pr-body.ts",
+    "pr-size": "node scripts/pr-size.ts",
+    "pre-review": "npm run check && npm run pr-size",
+    "snapshots": "UPDATE_SNAPSHOTS=1 node --test 'test/snapshot-*.test.ts'",
+    "preview": "node scripts/preview.ts",
+    "pr-visuals": "node scripts/pr-visuals.ts",
+    "rust": "cd native && cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings && cargo test --workspace --locked",
+    "check": "npm run lint && npm run typecheck && npm run knip && npm run build && npm run coverage && npm run validate && npm run rust",
+    "hooks": "git config core.hooksPath .githooks",
+    "helper": "node scripts/install-helper.ts",
+    "setup": "node scripts/setup.ts",
+    "doctor": "node scripts/doctor.ts",
+    "uninstall": "node scripts/uninstall.ts",
+    "agents": "cmux right-sidebar set custom agents"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "26.6.3",
+    "esbuild": "0.28.2",
+    "knip": "6.39.0",
+    "typescript": "7.0.2"
+  }
+}

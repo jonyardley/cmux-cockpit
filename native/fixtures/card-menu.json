@@ -1,0 +1,2611 @@
+{
+  "view": "All",
+  "next": {
+    "Step": {
+      "ws_id": "needs",
+      "title": "Chip colours",
+      "place": "1 of 3",
+      "ink": "greenText"
+    }
+  },
+  "needs": {
+    "count": 2,
+    "label": "2 need you",
+    "wait": "5m",
+    "late": false,
+    "fill": "clay",
+    "ink": "clayText",
+    "target": {
+      "ws_id": "needs",
+      "title": "Chip colours"
+    }
+  },
+  "lanes": [
+    {
+      "key": "main",
+      "empty": false,
+      "name": "MAIN ACTIVITY",
+      "faint": false,
+      "marker": "laneMain",
+      "anchor": null,
+      "count": 8,
+      "total": null,
+      "pill": {
+        "bg": "clayCount",
+        "fg": "clayText"
+      },
+      "dot": {
+        "glyph": "●",
+        "ink": "clay",
+        "halo": "clayHalo"
+      },
+      "collapsed": false,
+      "merge_ready": "",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
+      "rows": [
+        {
+          "Card": {
+            "ws_id": "needs",
+            "icon": {
+              "glyph": "●",
+              "ink": "clay",
+              "halo": "clayHalo"
+            },
+            "title": "Chip colours",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "Your turn: Which green should the ready chip use?",
+            "status_short": "",
+            "status_ink": "clayText",
+            "age": "5m",
+            "status_has_age": false,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 2,
+            "waiting": {
+              "mark": "clay",
+              "ink": "clayText",
+              "edge": "clayCardEdge",
+              "wash": "clayWash"
+            },
+            "late": null,
+            "waiting_tab": null,
+            "rank": 0,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "asking",
+            "icon": {
+              "glyph": "●",
+              "ink": "amber",
+              "halo": "amberHalo"
+            },
+            "title": "Release notes",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "Asking: allow git push?",
+            "status_short": "",
+            "status_ink": "amberText",
+            "age": "2m",
+            "status_has_age": false,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 2,
+            "waiting": {
+              "mark": "amber",
+              "ink": "amberText",
+              "edge": "amberCardEdge",
+              "wash": "amberWash"
+            },
+            "late": null,
+            "waiting_tab": null,
+            "rank": 0,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "untimed",
+            "icon": {
+              "glyph": "○",
+              "ink": null,
+              "halo": "clear"
+            },
+            "title": "Untimed card",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": true,
+            "progress": null,
+            "helpers": "",
+            "status": "Idle",
+            "status_short": "",
+            "status_ink": "metaText",
+            "age": "5m",
+            "status_has_age": false,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 2,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Unpin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "ready",
+            "icon": {
+              "glyph": "●",
+              "ink": "green",
+              "halo": "clear"
+            },
+            "title": "Tidy strip",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": true,
+            "ready_ink": "greenText",
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "Finished 6m",
+            "status_short": "",
+            "status_ink": "greenText",
+            "age": "6m",
+            "status_has_age": true,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "Done: the strip now groups by repo.",
+            "detail_ink": "secondary",
+            "detail_lines": 2,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 4,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "working",
+            "icon": {
+              "glyph": "●",
+              "ink": "blue",
+              "halo": "blueHalo"
+            },
+            "title": "Snapshot tests",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": false,
+            "progress": 0.4,
+            "helpers": "· 1 helper",
+            "status": "Working 14m",
+            "status_short": "",
+            "status_ink": "blueText",
+            "age": "14m",
+            "status_has_age": true,
+            "left_off": "",
+            "chips": [
+              {
+                "kind": "Pr",
+                "pieces": [
+                  {
+                    "text": "#130",
+                    "ink": "secondary"
+                  },
+                  {
+                    "text": "draft",
+                    "ink": "metaText"
+                  }
+                ],
+                "face": "chipFace",
+                "edge": "chipEdge",
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/130",
+                "is_action": false
+              },
+              {
+                "kind": "Diff",
+                "pieces": [
+                  {
+                    "text": "+342 −17",
+                    "ink": "faint"
+                  }
+                ],
+                "face": "chipFace",
+                "edge": "chipEdge",
+                "gives_way": false,
+                "url": null,
+                "is_action": false
+              },
+              {
+                "kind": "Branch",
+                "pieces": [
+                  {
+                    "text": "snapshot-tests",
+                    "ink": "secondary"
+                  },
+                  {
+                    "text": "●",
+                    "ink": "secondary"
+                  }
+                ],
+                "face": "chipFace",
+                "edge": "chipEdge",
+                "gives_way": true,
+                "url": null,
+                "is_action": false
+              }
+            ],
+            "row_pr": null,
+            "detail": "Recording the view tree as text.",
+            "detail_ink": "secondary",
+            "detail_lines": 2,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 5,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Open PR #130",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "quiet",
+            "icon": {
+              "glyph": "○",
+              "ink": "blue",
+              "halo": "clear"
+            },
+            "title": "Long build",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "Working 40m · quiet 17m",
+            "status_short": "Working 40m",
+            "status_ink": "blueText",
+            "age": "40m",
+            "status_has_age": true,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 2,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 5,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "selected",
+            "icon": {
+              "glyph": "●",
+              "ink": "blue",
+              "halo": "blueHalo"
+            },
+            "title": "Selected card",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "Working 1m",
+            "status_short": "",
+            "status_ink": "blueText",
+            "age": "1m",
+            "status_has_age": true,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 2,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 5,
+            "movable": true,
+            "dimmed": false,
+            "selected": true,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "merged",
+            "icon": {
+              "glyph": "○",
+              "ink": null,
+              "halo": "clear"
+            },
+            "title": "Card layout fit",
+            "density": "Full",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "Idle 15m",
+            "status_short": "",
+            "status_ink": "metaText",
+            "age": "15m",
+            "status_has_age": true,
+            "left_off": "",
+            "chips": [
+              {
+                "kind": "Pr",
+                "pieces": [
+                  {
+                    "text": "#176",
+                    "ink": "secondary"
+                  },
+                  {
+                    "text": "merged",
+                    "ink": "mergedText"
+                  }
+                ],
+                "face": "chipFace",
+                "edge": "chipEdge",
+                "gives_way": false,
+                "url": "https://github.com/o/r/pull/176",
+                "is_action": false
+              },
+              {
+                "kind": "Branch",
+                "pieces": [
+                  {
+                    "text": "card-layout-fit",
+                    "ink": "secondary"
+                  }
+                ],
+                "face": "chipFace",
+                "edge": "chipEdge",
+                "gives_way": true,
+                "url": null,
+                "is_action": false
+              }
+            ],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 2,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 6,
+            "movable": true,
+            "dimmed": true,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Open PR #176",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        }
+      ]
+    },
+    {
+      "key": "review",
+      "empty": false,
+      "name": "FOR REVIEW",
+      "faint": false,
+      "marker": "laneReview",
+      "anchor": null,
+      "count": 2,
+      "total": null,
+      "pill": {
+        "bg": "countBg",
+        "fg": "metaText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
+      "rows": [
+        {
+          "Card": {
+            "ws_id": "ended",
+            "icon": {
+              "glyph": "●",
+              "ink": "green",
+              "halo": "clear"
+            },
+            "title": "Ended agent",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": true,
+            "progress": null,
+            "helpers": "",
+            "status": "Finished 15m",
+            "status_short": "",
+            "status_ink": "greenText",
+            "age": "15m",
+            "status_has_age": true,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 1,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 3,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "✓ Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Unpin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "idle",
+            "icon": {
+              "glyph": "○",
+              "ink": null,
+              "halo": "clear"
+            },
+            "title": "Left off",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "1",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "Idle 1h",
+            "status_short": "",
+            "status_ink": "metaText",
+            "age": "1h",
+            "status_has_age": true,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 1,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 6,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "✓ Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        }
+      ]
+    },
+    {
+      "key": "bg",
+      "empty": false,
+      "name": "BACKGROUND",
+      "faint": false,
+      "marker": "laneBackground",
+      "anchor": null,
+      "count": 2,
+      "total": null,
+      "pill": {
+        "bg": "blueCount",
+        "fg": "blueText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
+      "rows": [
+        {
+          "Card": {
+            "ws_id": "waiting",
+            "icon": {
+              "glyph": "●",
+              "ink": "blue",
+              "halo": "blueHalo"
+            },
+            "title": "Iteration timings",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "Running 5m · 1 shell, 1 agent",
+            "status_short": "Running 5m",
+            "status_ink": "blueText",
+            "age": "4m",
+            "status_has_age": true,
+            "left_off": "You: hi",
+            "chips": [],
+            "row_pr": null,
+            "detail": "The batch resumes by itself once load drops.",
+            "detail_ink": "secondary",
+            "detail_lines": 1,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 5,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "✓ Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "none",
+            "icon": {
+              "glyph": "○",
+              "ink": null,
+              "halo": "clear"
+            },
+            "title": "No agent",
+            "density": "Compact",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "No agent",
+            "status_short": "",
+            "status_ink": "metaText",
+            "age": "",
+            "status_has_age": false,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 1,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 6,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "✓ Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        }
+      ]
+    },
+    {
+      "key": "parked",
+      "empty": false,
+      "name": "PARKED",
+      "faint": true,
+      "marker": "laneParked",
+      "anchor": null,
+      "count": 1,
+      "total": null,
+      "pill": {
+        "bg": "blueCount",
+        "fg": "blueText"
+      },
+      "dot": {
+        "glyph": "●",
+        "ink": "blue",
+        "halo": "blueHalo"
+      },
+      "collapsed": true,
+      "merge_ready": "",
+      "merge_ink": "faint",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
+      "rows": []
+    },
+    {
+      "key": "unsorted",
+      "empty": false,
+      "name": "UNSORTED",
+      "faint": false,
+      "marker": "laneUnsorted",
+      "anchor": null,
+      "count": 2,
+      "total": null,
+      "pill": {
+        "bg": "blueCount",
+        "fg": "blueText"
+      },
+      "dot": null,
+      "collapsed": false,
+      "merge_ready": "",
+      "merge_ink": "mergeText",
+      "drop_hint": {
+        "text": "Drop here",
+        "ink": "heading"
+      },
+      "rows": [
+        {
+          "Card": {
+            "ws_id": "loose",
+            "icon": {
+              "glyph": "●",
+              "ink": "blue",
+              "halo": "blueHalo"
+            },
+            "title": "Loose workspace",
+            "density": "Row",
+            "badge": {
+              "icon": "star.fill",
+              "color": 14251863
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": true,
+            "progress": null,
+            "helpers": "",
+            "status": "3m",
+            "status_short": "",
+            "status_ink": "metaText",
+            "age": "3m",
+            "status_has_age": true,
+            "left_off": "",
+            "chips": [],
+            "row_pr": null,
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 1,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 2,
+            "movable": true,
+            "dimmed": false,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session in App One",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "✓ Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "✓ Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Unpin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "No PR to open",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        },
+        {
+          "Card": {
+            "ws_id": "loose-merged",
+            "icon": {
+              "glyph": "○",
+              "ink": null,
+              "halo": "clear"
+            },
+            "title": "Merged elsewhere",
+            "density": "Row",
+            "badge": {
+              "icon": "terminal",
+              "color": 10526357
+            },
+            "unread": "",
+            "ready": false,
+            "ready_ink": "greenText",
+            "pinned": false,
+            "progress": null,
+            "helpers": "",
+            "status": "",
+            "status_short": "",
+            "status_ink": "metaText",
+            "age": "",
+            "status_has_age": false,
+            "left_off": "",
+            "chips": [],
+            "row_pr": {
+              "tag": "#171",
+              "title": "Row cards show their PR",
+              "ink": "mergedText"
+            },
+            "detail": "",
+            "detail_ink": "secondary",
+            "detail_lines": 1,
+            "waiting": null,
+            "late": null,
+            "waiting_tab": null,
+            "rank": 6,
+            "movable": true,
+            "dimmed": true,
+            "selected": false,
+            "menu": [
+              {
+                "Item": {
+                  "label": "New session (project has no folder)",
+                  "action": "NewSession"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Lane: Main activity",
+                  "action": {
+                    "Lane": "main"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: For review",
+                  "action": {
+                    "Lane": "review"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Background",
+                  "action": {
+                    "Lane": "bg"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Lane: Parked",
+                  "action": {
+                    "Lane": "parked"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "✓ Lane: Unsorted",
+                  "action": {
+                    "Lane": "unsorted"
+                  }
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Project: App One",
+                  "action": {
+                    "Project": "/dev/app-one"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Two",
+                  "action": {
+                    "Project": "/dev/app-two"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "Project: App Three",
+                  "action": {
+                    "Project": "/dev/app-three"
+                  }
+                }
+              },
+              {
+                "Item": {
+                  "label": "No project override set",
+                  "action": "ClearProjectOverride"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "New project (folder has one, or none)",
+                  "action": "NewProjectFromFolder"
+                }
+              },
+              "Divider",
+              {
+                "Item": {
+                  "label": "Pin",
+                  "action": "TogglePin"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Mark read",
+                  "action": "MarkRead"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Open PR #171",
+                  "action": "OpenPr"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy PR link",
+                  "action": "CopyPrLink"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Copy branch",
+                  "action": "CopyBranch"
+                }
+              },
+              {
+                "Item": {
+                  "label": "Dismiss needs you",
+                  "action": "ToggleNeeds"
+                }
+              }
+            ],
+            "run": null
+          }
+        }
+      ]
+    }
+  ],
+  "projects": [],
+  "menu": {
+    "target": {
+      "Card": {
+        "id": "needs"
+      }
+    },
+    "items": [
+      {
+        "Item": {
+          "label": "New session (project has no folder)",
+          "action": "NewSession"
+        }
+      },
+      "Divider",
+      {
+        "Item": {
+          "label": "✓ Lane: Main activity",
+          "action": {
+            "Lane": "main"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Lane: For review",
+          "action": {
+            "Lane": "review"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Lane: Background",
+          "action": {
+            "Lane": "bg"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Lane: Parked",
+          "action": {
+            "Lane": "parked"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Lane: Unsorted",
+          "action": {
+            "Lane": "unsorted"
+          }
+        }
+      },
+      "Divider",
+      {
+        "Item": {
+          "label": "Project: App One",
+          "action": {
+            "Project": "/dev/app-one"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Project: App Two",
+          "action": {
+            "Project": "/dev/app-two"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "Project: App Three",
+          "action": {
+            "Project": "/dev/app-three"
+          }
+        }
+      },
+      {
+        "Item": {
+          "label": "No project override set",
+          "action": "ClearProjectOverride"
+        }
+      },
+      "Divider",
+      {
+        "Item": {
+          "label": "New project (folder has one, or none)",
+          "action": "NewProjectFromFolder"
+        }
+      },
+      "Divider",
+      {
+        "Item": {
+          "label": "Pin",
+          "action": "TogglePin"
+        }
+      },
+      {
+        "Item": {
+          "label": "Mark read",
+          "action": "MarkRead"
+        }
+      },
+      {
+        "Item": {
+          "label": "No PR to open",
+          "action": "OpenPr"
+        }
+      },
+      {
+        "Item": {
+          "label": "Dismiss needs you",
+          "action": "ToggleNeeds"
+        }
+      }
+    ]
+  },
+  "add": {
+    "projects": [
+      {
+        "key": "/dev/app-one",
+        "name": "App One",
+        "color": 14251863,
+        "icon": "star.fill",
+        "can_open": true,
+        "chosen": false
+      },
+      {
+        "key": "/dev/app-two",
+        "name": "App Two",
+        "color": 6986700,
+        "icon": "cube.fill",
+        "can_open": false,
+        "chosen": false
+      },
+      {
+        "key": "/dev/app-three",
+        "name": "App Three",
+        "color": 7900253,
+        "icon": "leaf.fill",
+        "can_open": false,
+        "chosen": false
+      }
+    ],
+    "home": true,
+    "home_chosen": false
+  },
+  "filter": {
+    "projects": [
+      {
+        "key": "/dev/app-one",
+        "name": "App One",
+        "color": 14251863,
+        "icon": "star.fill",
+        "chosen": false
+      },
+      {
+        "key": "/dev/app-two",
+        "name": "App Two",
+        "color": 6986700,
+        "icon": "cube.fill",
+        "chosen": false
+      },
+      {
+        "key": "/dev/app-three",
+        "name": "App Three",
+        "color": 7900253,
+        "icon": "leaf.fill",
+        "chosen": false
+      }
+    ],
+    "no_project": "other",
+    "no_project_chosen": false
+  }
+}

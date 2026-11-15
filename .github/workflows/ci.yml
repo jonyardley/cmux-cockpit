@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Actions are pinned to commit SHAs, since a tag can be moved under us.
+# Dependabot keeps the SHAs and the trailing version comments current.
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # The Rust toolchain pinned in rust-toolchain.toml, with rustfmt and
+      # clippy. With no argument, rustup installs the toolchain that file names.
+      - run: rustup toolchain install
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            native/target
+          # The source hash makes a fresh save after each change; the
+          # fallback only restores a cache built by the same toolchain and
+          # lock file, so a toolchain bump starts clean.
+          key: rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'native/Cargo.lock') }}-${{ hashFiles('native/**/Cargo.toml', 'native/**/*.rs') }}
+          restore-keys: rust-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'native/Cargo.lock') }}-
+      - run: cp config/projects.example.json config/projects.json
+      # Lint, types, dead code, build, tests with a coverage floor, then
+      # rustfmt, clippy and the Rust tests under native/.
+      # `cmux sidebar validate` needs the macOS app, so it runs in the
+      # pre-commit hook on main only.
+      - run: npm run check
+      # Network bound, so CI only rather than the pre-commit hook.
+      - run: npm audit --audit-level=high
+
+  # The helper app and the Cockpit sidebar extension in native/mac: an
+  # XcodeGen project, so it needs a macOS runner. Builds both targets
+  # unsigned (building the app builds and embeds the extension), then runs
+  # the heartbeat rule's checks and decodes every fixture with the
+  # generated panel types. Both steps run cargo to write the panel types.
+  mac:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: native/mac
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - run: xcodebuild -version
+      # The toolchain rust-toolchain.toml names, found from native/mac
+      # upwards.
+      - run: rustup toolchain install
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            native/target
+          key: rust-mac-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'native/Cargo.lock') }}-${{ hashFiles('native/**/Cargo.toml', 'native/**/*.rs') }}
+          restore-keys: rust-mac-${{ runner.os }}-${{ hashFiles('rust-toolchain.toml', 'native/Cargo.lock') }}-
+      - run: brew install xcodegen
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+      # build.sh first, on the fresh checkout with no generated types, so
+      # the Xcode pre-build step is what writes them.
+      - run: ./build.sh
+        env:
+          UNSIGNED: "1"
+      - run: ./test.sh
+      - run: test -d build/Build/Products/Debug/Cockpit.app/Contents/Extensions/CockpitSidebar.appex
+      - run: test -x build/Build/Products/Debug/Cockpit.app/Contents/MacOS/cockpit-publish

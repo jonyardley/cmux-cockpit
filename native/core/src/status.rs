@@ -1,0 +1,1007 @@
+//! A workspace's status (src/cockpit/status.ts): from its most active
+//! agent, with idle nudges and "needs you" dismissals applied (needs.rs),
+//! and what the card says about it. Colours are tokens (theme.rs).
+
+use std::collections::HashMap;
+
+use crate::activity::most_active;
+use crate::ci_wait::CiTrouble;
+use crate::data::{Agent, AgentStatus, Data, Workspace};
+use crate::js::{non_empty, positive, truthy};
+use crate::moves::{chat_quiet_move, waiting_move};
+use crate::needs::ask_reason;
+use crate::persist::{SavedMove, is_move_description, without_context};
+use crate::prs::{PrHealth, PrSummary, pr_health};
+use crate::running::{Running, running_work, shows_running};
+use crate::session::Session;
+use crate::text::{card_message, clip, one_line, readable};
+use crate::theme::Token;
+use crate::time::{age_since, finished_at};
+use crate::ui::{PillColors, URGENCY_RANK, Urgency, count_tint};
+use crate::words::{
+    ASKING_WORD, ASLEEP_WORD, CI_FAILED_WORD, CI_STUCK_WORD, MERGE_READY_WORD, NO_AGENT_WORD,
+    RUNNING_WORD, STOPPED_WORD, WAKING_WORD, YOU_WORD, ci_line, running_text, status_word,
+    stop_words, with_age, with_detail,
+};
+
+/// A workspace's status: its agent's, or none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Status {
+    NeedsInput,
+    Working,
+    Idle,
+    Ended,
+    /// A status cmux sent that this port does not know, in cmux's word.
+    Other(String),
+    /// No agent.
+    None,
+}
+
+impl Status {
+    fn of(a: Option<&Agent>) -> Status {
+        match a.and_then(|a| a.status.clone()) {
+            Some(AgentStatus::NeedsInput) => Status::NeedsInput,
+            Some(AgentStatus::Working) => Status::Working,
+            Some(AgentStatus::Idle) => Status::Idle,
+            Some(AgentStatus::Ended) => Status::Ended,
+            Some(AgentStatus::Other(s)) => Status::Other(s),
+            None => Status::None,
+        }
+    }
+
+    /// The status as the TypeScript names it.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Status::NeedsInput => "needs_input",
+            Status::Working => "working",
+            Status::Idle => "idle",
+            Status::Ended => "ended",
+            Status::Other(s) => s,
+            Status::None => "none",
+        }
+    }
+
+    /// Idle or ended: the agent finished.
+    fn finished(&self) -> bool {
+        matches!(self, Status::Idle | Status::Ended)
+    }
+}
+
+/// Which of the card's status looks applies.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StatusKind {
+    /// Its PR is one GitHub would merge now, and no agent there works,
+    /// waits on Jon or asks (issue #299).
+    MergeReady,
+    /// Finished and not yet looked at (issue #53).
+    Ready,
+    /// needs_input on a permission or a question (issue #81).
+    Asking,
+    /// Stopped without handing back: an error, its process gone mid-turn,
+    /// or silent too long (issue #376, stopped.rs). Your turn's clay.
+    Stopped,
+    /// Its PR's CI is stuck or failing with nobody on it (issue #377,
+    /// ci_wait.rs), or it has read merge-ready four hours unmerged (issue
+    /// #380, merge_wait.rs). Your turn's clay, as Stopped.
+    Ci(CiTrouble),
+    /// Still working, but silent a while.
+    Quiet,
+    /// Idle while background work of any kind its chat started still
+    /// runs: shells, monitors, agents, `claude --bg` sessions (#359).
+    Running,
+    /// Put to sleep when its card was parked (issue #328), or on its way.
+    Asleep,
+    /// Asked to wake, until its agent is back.
+    Waking,
+    /// The agent's own status, or none.
+    Plain(Status),
+}
+
+/// How a status draws: its word, dot, halo, text colour and urgency.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StatusStyle {
+    pub label: &'static str,
+    pub dot: Option<Token>,
+    /// The soft halo round a live dot: working and needs only.
+    pub halo: Token,
+    pub text: Token,
+    /// The ring round a hollow dot.
+    pub ring: Option<Token>,
+    /// What the style means for a header's count pill.
+    pub urgency: Urgency,
+}
+
+/// The halo token for a status: working and needs only, else clear.
+pub fn halo_color(status: &Status) -> Token {
+    match status {
+        Status::Working => Token::BlueHalo,
+        Status::NeedsInput => Token::ClayHalo,
+        _ => Token::Clear,
+    }
+}
+
+fn plain_style(s: &Status) -> StatusStyle {
+    let (dot, text, urgency) = match s {
+        Status::Working => (Some(Token::Blue), Token::BlueText, Urgency::Working),
+        Status::NeedsInput => (Some(Token::Clay), Token::ClayText, Urgency::Needs),
+        Status::Idle => (None, Token::MetaText, Urgency::Quiet),
+        Status::Ended => (Some(Token::Green), Token::GreenText, Urgency::Quiet),
+        // No agent reads with Idle, in the meta ink: faint is never a state.
+        Status::Other(_) | Status::None => (None, Token::MetaText, Urgency::Quiet),
+    };
+    let label = match s {
+        Status::Working => status_word(&AgentStatus::Working),
+        Status::NeedsInput => status_word(&AgentStatus::NeedsInput),
+        Status::Idle => status_word(&AgentStatus::Idle),
+        Status::Ended => status_word(&AgentStatus::Ended),
+        Status::Other(_) | Status::None => None,
+    };
+    StatusStyle {
+        label: label.unwrap_or(NO_AGENT_WORD),
+        dot,
+        halo: halo_color(s),
+        text,
+        ring: None,
+        urgency,
+    }
+}
+
+impl StatusKind {
+    /// The look this kind draws with.
+    pub fn style(&self) -> StatusStyle {
+        match self {
+            // Its own vivid green, never the finished olive, and quiet for
+            // a header's pill, which it leaves as it was.
+            StatusKind::MergeReady => StatusStyle {
+                label: MERGE_READY_WORD,
+                dot: Some(Token::MergeGreen),
+                halo: Token::MergeHalo,
+                text: Token::MergeText,
+                ring: None,
+                urgency: Urgency::Quiet,
+            },
+            // The finished green and word: Ready adds no hue of its own.
+            StatusKind::Ready => StatusStyle {
+                halo: Token::Clear,
+                ..plain_style(&Status::Ended)
+            },
+            StatusKind::Stopped => StatusStyle {
+                label: STOPPED_WORD,
+                ..plain_style(&Status::NeedsInput)
+            },
+            StatusKind::Ci(trouble) => StatusStyle {
+                label: match trouble {
+                    CiTrouble::Stuck => CI_STUCK_WORD,
+                    CiTrouble::Failing => CI_FAILED_WORD,
+                    // Past four hours it waits on Jon: Your turn's clay,
+                    // in the same words (issue #380).
+                    CiTrouble::MergeReady => MERGE_READY_WORD,
+                },
+                ..plain_style(&Status::NeedsInput)
+            },
+            StatusKind::Asking => StatusStyle {
+                label: ASKING_WORD,
+                dot: Some(Token::Amber),
+                halo: Token::AmberHalo,
+                text: Token::AmberText,
+                ring: None,
+                urgency: Urgency::Asking,
+            },
+            // Blue keeps its one meaning, so the dot goes hollow in blue.
+            StatusKind::Quiet => StatusStyle {
+                dot: None,
+                halo: Token::Clear,
+                ring: Some(Token::Blue),
+                ..plain_style(&Status::Working)
+            },
+            StatusKind::Running => StatusStyle {
+                label: RUNNING_WORD,
+                ..plain_style(&Status::Working)
+            },
+            // Sleep is no state that wants Jon, so no hue: a hollow dot
+            // ringed in the meta ink its words take, set apart from Idle's
+            // grey ring.
+            StatusKind::Asleep => StatusStyle {
+                label: ASLEEP_WORD,
+                ring: Some(Token::MetaText),
+                ..plain_style(&Status::None)
+            },
+            StatusKind::Waking => StatusStyle {
+                label: WAKING_WORD,
+                ring: Some(Token::MetaText),
+                ..plain_style(&Status::None)
+            },
+            StatusKind::Plain(s) => plain_style(s),
+        }
+    }
+}
+
+/// What a lane or project header shows beside its count.
+#[derive(Debug, Clone, PartialEq)]
+pub struct HeaderStatus<'w> {
+    pub tint: PillColors,
+    /// Whose dot shows while folded: none while open or all quiet.
+    pub dot: Option<&'w Workspace>,
+}
+
+/// A PR as the card menu names it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PrRef<'a> {
+    pub tag: &'a str,
+    pub url: Option<&'a str>,
+}
+
+/// An outline: its colour and width in points.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Outline {
+    pub color: Token,
+    pub width: f64,
+}
+
+/// The widest an outline gets, which every ring that draws it holds steady.
+pub const OUTLINE_MAX: f64 = 2.0;
+
+/// About two lines of card text at the full card's width.
+pub const DETAIL_MAX: usize = 140;
+
+/// About one line of a compact card's text.
+pub const LEFT_OFF_MAX: usize = 90;
+
+/// About one line of a waiting card's reason.
+pub const NEEDS_DETAIL_MAX: usize = 80;
+
+/// The outline of a card, row or needs-you row: ink at the widest on the
+/// selected workspace, ink just under it while dragged, the row's own
+/// resting edge at 1pt otherwise.
+pub fn outline(selected: bool, dragged: bool, rest: Token) -> Outline {
+    if dragged {
+        return Outline {
+            color: Token::Select,
+            width: 1.5,
+        };
+    }
+    if selected {
+        Outline {
+            color: Token::Select,
+            width: OUTLINE_MAX,
+        }
+    } else {
+        Outline {
+            color: rest,
+            width: 1.0,
+        }
+    }
+}
+
+/// The PR as text in a compact card's status line ("· #45 · 1 failing"), else "".
+pub fn compact_pr_text(text: Option<&str>) -> String {
+    non_empty(text).map_or_else(String::new, |t| format!("· {t}"))
+}
+
+/// The card menu's PR item; with no PR, or one with no link, it says so.
+pub fn open_pr_label(pr: Option<PrRef<'_>>) -> String {
+    match pr {
+        None => "No PR to open".to_string(),
+        Some(pr) if non_empty(pr.url).is_some() => format!("Open PR {}", pr.tag),
+        Some(pr) => format!("PR {} has no link", pr.tag),
+    }
+}
+
+/// A waiting card's leading edge and the ink of its reason, from whether
+/// its agent asks: amber for Asking, else clay for Your turn (issue #281).
+pub fn waiting_tokens(asks: bool) -> (Token, Token) {
+    if asks {
+        (Token::Amber, Token::AmberText)
+    } else {
+        (Token::Clay, Token::ClayText)
+    }
+}
+
+/// The halo round a waiting mark drawn as a dot: Asking's amber or Your
+/// turn's clay, faint, as the status dot of each has.
+pub fn waiting_halo(asks: bool) -> Token {
+    if asks {
+        Token::AmberHalo
+    } else {
+        Token::ClayHalo
+    }
+}
+
+/// The progress bar's fraction, held to 0 to 1; None when no value is sent.
+pub fn progress_fraction(w: Option<&Workspace>) -> Option<f64> {
+    let v = w?.progress.as_ref()?.value?;
+    v.is_finite().then(|| v.clamp(0.0, 1.0))
+}
+
+/// The description as Jon wrote it: a move's description is never shown as plain words.
+fn own_description(w: Option<&Workspace>) -> String {
+    let d = w.and_then(|w| w.description.as_deref());
+    if is_move_description(d) {
+        String::new()
+    } else {
+        readable(d.map(without_context))
+    }
+}
+
+/// Whether `a`, as the sidebars show it, waits on Jon in words of its
+/// own rather than a move or an ask: it stopped (stopped.rs), or carries
+/// its workspace's CI (ci_wait.rs) or Ostinato parks (ostinato/wait.rs).
+fn speaks_for_itself(a: &Agent) -> bool {
+    a.stopped.is_some() || a.ci.is_some() || a.ostinato_park
+}
+
+/// When the status of `a`, the workspace's agent as shown, began.
+fn since_from(a: Option<&Agent>, w: Option<&Workspace>) -> f64 {
+    a.and_then(|a| truthy(a.since_epoch).or(truthy(a.last_activity_at)))
+        .or(truthy(w.and_then(|w| w.latest_at)))
+        .unwrap_or(0.0)
+}
+
+impl Session {
+    /// The workspace's most active agent, as the sidebars show it.
+    pub fn agent_of(&mut self, w: Option<&Workspace>) -> Option<Agent> {
+        most_active(&self.agents_of(w)).cloned()
+    }
+
+    /// The tab of the agent a workspace's card speaks for, as its title
+    /// and surface id, while the workspace runs two or more agents that
+    /// have not ended, so a waiting card can say which one waits. The
+    /// title is "" when the tab has none worth showing: the card then
+    /// draws no line, but a click still selects the tab. None with one
+    /// agent, or when the runner has not placed that agent in a tab.
+    pub fn agent_tab_of(&mut self, w: Option<&Workspace>) -> Option<(String, String)> {
+        let agents = self.agents_of(w);
+        let running = agents
+            .iter()
+            .filter(|a| a.status != Some(AgentStatus::Ended))
+            .count();
+        if running < 2 {
+            return None;
+        }
+        let a = most_active(&agents)?;
+        let surface = a.surface_id.clone()?;
+        let title = a.tab_title.as_deref().map(str::trim).unwrap_or_default();
+        Some((title.to_string(), surface))
+    }
+
+    /// The workspace's status.
+    pub fn status_of(&mut self, w: Option<&Workspace>) -> Status {
+        Status::of(self.agent_of(w).as_ref())
+    }
+
+    /// When the current status began: agent start, else its activity, else the workspace's.
+    pub fn since_of(&mut self, w: Option<&Workspace>) -> f64 {
+        let a = self.agent_of(w);
+        since_from(a.as_ref(), w)
+    }
+
+    /// The status and when it began, from one read of the agents, for a
+    /// caller that needs both for every workspace each frame.
+    pub fn status_and_since(&mut self, w: Option<&Workspace>) -> (Status, f64) {
+        let a = self.agent_of(w);
+        (Status::of(a.as_ref()), since_from(a.as_ref(), w))
+    }
+
+    /// How long the status has held, "12m".
+    pub fn age_of(&mut self, data: &Data, w: Option<&Workspace>) -> String {
+        let since = self.since_of(w);
+        age_since(data, Some(since))
+    }
+
+    /// The agent whose finish a Ready card reports: of the agents that
+    /// settled on idle or ended after working, the latest active.
+    fn finished_agent(&mut self, w: &Workspace) -> Option<Agent> {
+        let mut best: Option<Agent> = None;
+        for a in self.agents_of(Some(w)) {
+            let last = a.last_activity_at.unwrap_or(0.0);
+            if !Status::of(Some(&a)).finished() || !positive(last) {
+                continue;
+            }
+            if best
+                .as_ref()
+                .is_none_or(|b| last > b.last_activity_at.unwrap_or(0.0))
+            {
+                best = Some(a);
+            }
+        }
+        best
+    }
+
+    /// The agent a Ready card reports, or None when the workspace is not
+    /// Ready: finished while Jon was elsewhere, with output he has not
+    /// read, not selected, never a real ask, and not a "Nothing for you"
+    /// turn whose chat still runs background work.
+    pub fn ready_agent(&mut self, data: &Data, w: Option<&Workspace>) -> Option<Agent> {
+        let card = self.card_running(data, w);
+        self.ready_with(data, w, &card)
+    }
+
+    /// The card's agent and the background work its chat runs, read once
+    /// for every rule a pass asks of it, and once a frame while one is
+    /// built (`Session::card_memo`).
+    pub(crate) fn card_running(&mut self, data: &Data, w: Option<&Workspace>) -> CardRunning {
+        let memo = self.card_memo.as_ref();
+        if let Some(card) = w.and_then(|w| memo.and_then(|m| m.get(&w.id))) {
+            return card.clone();
+        }
+        let agent = self.agent_of(w);
+        let running = running_work(&self.saved, data, w, agent.as_ref());
+        let card = CardRunning { agent, running };
+        if let (Some(w), Some(memo)) = (w, self.card_memo.as_mut()) {
+            memo.insert(w.id.clone(), card.clone());
+        }
+        card
+    }
+
+    /// Reads each card's work once a frame from now until `end_frame`.
+    /// False when a frame is already open, so a nested builder leaves the
+    /// closing to whoever opened it.
+    pub(crate) fn begin_frame(&mut self) -> bool {
+        if self.card_memo.is_some() {
+            return false;
+        }
+        self.card_memo = Some(HashMap::new());
+        true
+    }
+
+    /// Ends the frame `begin_frame` began: the next read is fresh.
+    pub(crate) fn end_frame(&mut self) {
+        self.card_memo = None;
+    }
+
+    /// Runs `f` inside a frame, opening one when none is open and closing
+    /// only the one it opened, whatever way `f` returns.
+    pub(crate) fn framed<R>(&mut self, f: impl FnOnce(&mut Session) -> R) -> R {
+        let opened = self.begin_frame();
+        let out = f(self);
+        if opened {
+            self.end_frame();
+        }
+        out
+    }
+
+    /// ready_agent, with the card's work already read.
+    fn ready_with(
+        &mut self,
+        data: &Data,
+        w: Option<&Workspace>,
+        card: &CardRunning,
+    ) -> Option<Agent> {
+        let w = w?;
+        if !positive(w.unread.unwrap_or(0.0))
+            || self.is_selected(data, Some(w))
+            || self.has_real_ask(Some(w))
+        {
+            return None;
+        }
+        if !self.status_of(Some(w)).finished() {
+            return None;
+        }
+        let a = self.finished_agent(w)?;
+        // The finished agent is almost always the card's; another one's
+        // work is read for it alone.
+        let runs = if card.agent.as_ref().is_some_and(|c| c.id == a.id) {
+            card.running.is_some()
+        } else {
+            running_work(&self.saved, data, Some(w), Some(&a)).is_some()
+        };
+        // A "Nothing for you" turn has nothing to read while its work
+        // runs; one from before a /clear counts too (#359). A turn with no
+        // such line stays Ready, since its work may never end.
+        let runs_on = runs && chat_quiet_move(&self.saved, &a, w).is_some();
+        (!runs_on).then_some(a)
+    }
+
+    /// Whether the workspace is Ready.
+    pub fn is_ready(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        self.ready_agent(data, w).is_some()
+    }
+
+    /// Why the workspace's agent is asking ("allow git push?"), or None.
+    pub fn ask_of(&mut self, w: Option<&Workspace>) -> Option<String> {
+        let a = self.agent_of(w);
+        ask_reason(&self.saved, a.as_ref(), w)
+    }
+
+    /// Whether the card is Ready, and whether it says Running, from one
+    /// read of its work: what lane order sorts on.
+    pub fn ready_or_running(&mut self, data: &Data, w: Option<&Workspace>) -> (bool, bool) {
+        let card = self.card_running(data, w);
+        let ready = self.ready_with(data, w, &card).is_some();
+        (
+            ready,
+            shows_running(card.agent.as_ref(), card.running.as_ref()),
+        )
+    }
+
+    /// Whether the background work the card's chat runs counts any agent,
+    /// so a Running status line already says them.
+    pub fn running_counts_agents(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        self.card_running(data, w)
+            .running
+            .is_some_and(|r| r.counts_agents())
+    }
+
+    /// Whether the card says Ready to merge: its PR is ready and its agent,
+    /// if any, is idle or finished, not asking, and its chat runs no
+    /// background work. Working (quiet too), Your turn, Asking and
+    /// Running keep their status, since they come first, and so does a
+    /// status cmux names that the core does not know, which may yet be busy.
+    fn merge_ready(&mut self, w: Option<&Workspace>, card: &CardRunning) -> bool {
+        let a = card.agent.as_ref();
+        if pr_health(&self.saved, w) != PrHealth::Ready {
+            return false;
+        }
+        let at_rest = a.is_none_or(|a| {
+            matches!(
+                a.status,
+                None | Some(AgentStatus::Idle | AgentStatus::Ended)
+            )
+        });
+        at_rest && ask_reason(&self.saved, a, w).is_none() && card.running.is_none()
+    }
+
+    /// Whether the card's status says Ready to merge (issue #299), in
+    /// either hue: green, or clay once the change has waited four hours
+    /// (issue #380). Where it does, the PR chip's "ready" would only say it
+    /// again. It asks status_kind itself, so the two cannot disagree.
+    pub fn says_merge_ready(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        matches!(
+            self.status_kind(data, w),
+            StatusKind::MergeReady | StatusKind::Ci(CiTrouble::MergeReady)
+        )
+    }
+
+    /// The PR's words a compact card runs on from its status: the number
+    /// alone once the status says Ready to merge, since the PR's "ready"
+    /// would only say it again and crowd the line ("Ready to merge 3m ·
+    /// #1"); else its full words ("#45 · 1 failing").
+    pub fn card_pr_words(&mut self, data: &Data, w: Option<&Workspace>, pr: &PrSummary) -> String {
+        if self.says_merge_ready(data, w) {
+            pr.tag.clone()
+        } else {
+            pr.text.clone()
+        }
+    }
+
+    /// Which status look the card takes. Ready to merge wins over Ready:
+    /// the unread badge still says there is output.
+    pub fn status_kind(&mut self, data: &Data, w: Option<&Workspace>) -> StatusKind {
+        let card = self.card_running(data, w);
+        self.kind_with(data, w, &card)
+    }
+
+    /// status_kind, with the card's work read once for Ready to merge,
+    /// Ready and Running.
+    fn kind_with(&mut self, data: &Data, w: Option<&Workspace>, card: &CardRunning) -> StatusKind {
+        let a = card.agent.as_ref();
+        if self.merge_ready(w, card) {
+            return StatusKind::MergeReady;
+        }
+        // To cmux a sleeping agent looks ended, so the cockpit's own
+        // record speaks for it (sleep.rs).
+        if let Some(kind) = w.and_then(|w| self.sleep_kind(&w.id)) {
+            return kind;
+        }
+        // Waiting on Jon, so never Ready, and ahead of any ask.
+        if a.is_some_and(|a| a.stopped.is_some()) {
+            return StatusKind::Stopped;
+        }
+        if let Some(trouble) = a.and_then(|a| a.ci) {
+            return StatusKind::Ci(trouble);
+        }
+        if self.ready_with(data, w, card).is_some() {
+            return StatusKind::Ready;
+        }
+        if ask_reason(&self.saved, a, w).is_some() {
+            return StatusKind::Asking;
+        }
+        if self.quiet_since(data, a, w) > 0.0 {
+            return StatusKind::Quiet;
+        }
+        if shows_running(a, card.running.as_ref()) {
+            return StatusKind::Running;
+        }
+        StatusKind::Plain(Status::of(a))
+    }
+
+    /// How the card's status draws.
+    pub fn status_info(&mut self, data: &Data, w: Option<&Workspace>) -> StatusStyle {
+        self.status_kind(data, w).style()
+    }
+
+    /// A workspace's urgency: the one its card's status carries.
+    pub fn urgency_of(&mut self, data: &Data, w: Option<&Workspace>) -> Urgency {
+        self.status_info(data, w).urgency
+    }
+
+    /// The first of the workspaces at the highest urgency above quiet, or
+    /// None when all are quiet: whose dot a folded header shows.
+    pub fn most_urgent_of<'w>(
+        &mut self,
+        data: &Data,
+        ws: &[&'w Workspace],
+    ) -> Option<&'w Workspace> {
+        let rank = |u: Urgency| {
+            URGENCY_RANK
+                .iter()
+                .position(|x| *x == u)
+                .unwrap_or(URGENCY_RANK.len())
+        };
+        let mut best = URGENCY_RANK.len() - 1;
+        let mut lead = None;
+        for w in ws {
+            let r = rank(self.urgency_of(data, Some(w)));
+            if r >= best {
+                continue;
+            }
+            best = r;
+            lead = Some(*w);
+            if best == 0 {
+                break;
+            }
+        }
+        lead
+    }
+
+    /// The most urgent of the workspaces' urgencies; quiet with none.
+    pub fn most_urgent(&mut self, data: &Data, ws: &[&Workspace]) -> Urgency {
+        let lead = self.most_urgent_of(data, ws);
+        self.urgency_of(data, lead)
+    }
+
+    /// A count pill's colours for the workspaces it counts.
+    pub fn count_colors(&mut self, data: &Data, ws: &[&Workspace]) -> PillColors {
+        count_tint(self.most_urgent(data, ws))
+    }
+
+    /// A header's pill tint and, folded, its lead's dot, from one walk over its cards.
+    pub fn header_status<'w>(
+        &mut self,
+        data: &Data,
+        ws: &[&'w Workspace],
+        folded: bool,
+    ) -> HeaderStatus<'w> {
+        let lead = self.most_urgent_of(data, ws);
+        HeaderStatus {
+            tint: count_tint(self.urgency_of(data, lead)),
+            dot: if folded { lead } else { None },
+        }
+    }
+
+    /// The "Your move" line the chat ended its turn on, while that turn still waits on Jon.
+    pub fn move_of(&mut self, w: Option<&Workspace>) -> Option<SavedMove> {
+        let a = self.agent_of(w);
+        // A stopped turn ended on no move: an older one asks nothing now.
+        // Nor does a finished one's while it carries its CI.
+        if a.as_ref().is_some_and(speaks_for_itself) {
+            return None;
+        }
+        let asking = ask_reason(&self.saved, a.as_ref(), w).is_some();
+        waiting_move(&self.saved, a.as_ref(), w, asking)
+    }
+
+    /// A stopped or CI waiting card's whole line around `detail`, its
+    /// `needs_detail` as the caller cut it: "Stopped on an error: Please
+    /// run /login", "CI failed, nobody fixing: Docs layout"; None when the
+    /// card's agent has neither (or Jon dismissed it).
+    pub fn wait_line(
+        &mut self,
+        data: &Data,
+        w: Option<&Workspace>,
+        detail: &str,
+    ) -> Option<String> {
+        let a = self.agent_of(w)?;
+        if let Some(stop) = a.stopped {
+            let words = stop_words(stop.cause, &age_since(data, Some(stop.since)));
+            return Some(with_detail(&words, detail));
+        }
+        let trouble = a.ci?;
+        let ci = self.ci_shown(w)?;
+        Some(ci_line(trouble, &age_since(data, Some(ci.key)), detail))
+    }
+
+    /// A waiting card's reason: why the agent asks, else what it
+    /// wants, else its latest message. A stopped one's is its last words
+    /// alone, "" with none: its stop says the rest. A CI wait's is its
+    /// PR's title or number.
+    pub fn needs_detail(&mut self, w: Option<&Workspace>) -> String {
+        let a = self.agent_of(w);
+        if a.as_ref()
+            .is_some_and(|a| a.stopped.is_none() && a.ci.is_some())
+        {
+            let pr = self.ci_shown(w).map(|ci| ci.pr.clone()).unwrap_or_default();
+            return clip(&pr, NEEDS_DETAIL_MAX);
+        }
+        if a.as_ref().is_some_and(|a| a.stopped.is_some()) {
+            return one_line(Some(&card_message(w)), NEEDS_DETAIL_MAX);
+        }
+        if a.is_some_and(|a| a.ostinato_park) {
+            return self.park_detail(w, NEEDS_DETAIL_MAX);
+        }
+        if let Some(ask) = self.ask_of(w) {
+            return ask;
+        }
+        let wanted = clip(
+            &self.move_of(w).map(|m| m.text).unwrap_or_default(),
+            NEEDS_DETAIL_MAX,
+        );
+        if !wanted.is_empty() {
+            return wanted;
+        }
+        let message = one_line(Some(&card_message(w)), NEEDS_DETAIL_MAX);
+        if !message.is_empty() {
+            return message;
+        }
+        "Waiting for your reply".to_string()
+    }
+
+    /// True when the waiting chat's reply had no "Your move" label, so its
+    /// line is the reply's last line, quoted bare and grey (SavedMove::unlabelled).
+    pub fn unlabelled(&mut self, w: Option<&Workspace>) -> bool {
+        if self.agent_of(w).as_ref().is_some_and(speaks_for_itself) {
+            return false;
+        }
+        self.ask_of(w).is_none() && self.move_of(w).is_some_and(|m| m.unlabelled == Some(true))
+    }
+
+    /// A waiting card's reason with its status in front: "Asking: allow git
+    /// push?". A reply's last line, quoted for want of a label, goes bare.
+    pub fn needs_line(&mut self, data: &Data, w: Option<&Workspace>) -> String {
+        let detail = self.needs_detail(w);
+        if let Some(line) = self.wait_line(data, w, &detail) {
+            return line;
+        }
+        if self.unlabelled(w) {
+            return detail;
+        }
+        let label = self.status_info(data, w).label;
+        format!("{label}: {detail}")
+    }
+
+    /// Whether the card shows the green Ready pill: Ready, and not Ready
+    /// to merge, which wins the card and leaves the badge to say there is
+    /// output.
+    pub fn shows_ready(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        self.status_kind(data, w) == StatusKind::Ready
+    }
+
+    /// The unread count a card's badge shows: none while the Ready pill stands in for it.
+    pub fn badge_count(&mut self, data: &Data, w: Option<&Workspace>) -> f64 {
+        if self.shows_ready(data, w) {
+            0.0
+        } else {
+            w.and_then(|w| w.unread).unwrap_or(0.0)
+        }
+    }
+
+    /// The status and how long it has held ("Working 14m", "Finished 6m"),
+    /// with the count of each kind of work while Running ("Running 4m ·
+    /// 1 shell, 1 agent") and the quiet time while Quiet.
+    pub fn status_line(&mut self, data: &Data, w: Option<&Workspace>) -> String {
+        self.status_forms(data, w).0
+    }
+
+    /// The status line, and the shorter form a narrow card falls back to:
+    /// the word and age without the work's counts or the quiet time, so
+    /// the tail goes whole rather than cut. "" when there is no tail to drop.
+    pub fn status_forms(&mut self, data: &Data, w: Option<&Workspace>) -> (String, String) {
+        let card = self.card_running(data, w);
+        let kind = self.kind_with(data, w, &card);
+        let age = self.age_with(data, w, &kind, &card);
+        let line = with_age(kind.style().label, &age);
+        match (&kind, &card.running) {
+            (StatusKind::Running, Some(r)) => (format!("{line} {}", running_text(&r.counts)), line),
+            (StatusKind::Quiet, _) => {
+                let suffix = self.quiet_suffix(data, card.agent.as_ref(), w);
+                if suffix.is_empty() {
+                    (line, String::new())
+                } else {
+                    (format!("{line}{suffix}"), line)
+                }
+            }
+            _ => (line, String::new()),
+        }
+    }
+
+    /// How long the card's status has held, as its status line says it
+    /// ("5m" from the earliest work while Running).
+    pub fn status_age(&mut self, data: &Data, w: Option<&Workspace>) -> String {
+        let card = self.card_running(data, w);
+        let kind = self.kind_with(data, w, &card);
+        self.age_with(data, w, &kind, &card)
+    }
+
+    /// True when the status line carries a time, so a card leaves its top-right one off.
+    pub fn status_has_age(&mut self, data: &Data, w: Option<&Workspace>) -> bool {
+        !self.status_age(data, w).is_empty()
+    }
+
+    /// A Running card counts from when its earliest work started, a Ready
+    /// card from when its finished agent finished, an idle or ended one
+    /// from when its agent finished; otherwise only the agent's
+    /// sinceEpoch says when the status began.
+    fn age_with(
+        &mut self,
+        data: &Data,
+        w: Option<&Workspace>,
+        kind: &StatusKind,
+        card: &CardRunning,
+    ) -> String {
+        // Asleep counts from when it went to sleep; on its way, and while
+        // waking, there is no time to give yet.
+        match w.and_then(|w| self.sleep_kind(&w.id).map(|k| (k, &w.id))) {
+            Some((StatusKind::Asleep, id)) => return age_since(data, self.asleep_since(id)),
+            Some(_) => return String::new(),
+            None => {}
+        }
+        if let (StatusKind::Running, Some(r)) = (kind, &card.running) {
+            return age_since(data, Some(r.since));
+        }
+        if let Some(ready) = self.ready_with(data, w, card) {
+            return age_since(data, Some(finished_at(&ready)));
+        }
+        let Some(a) = card.agent.as_ref() else {
+            return String::new();
+        };
+        if Status::of(Some(a)).finished() {
+            age_since(data, Some(finished_at(a)))
+        } else {
+            age_since(data, a.since_epoch)
+        }
+    }
+
+    /// "· 3 helpers" while subagent runs are live, else "".
+    pub fn helper_text(&mut self, w: Option<&Workspace>) -> String {
+        helpers_words(self.live_run_count(w))
+    }
+
+    /// "You: " and your last prompt, for a card that shows where you left off; "" with none.
+    pub fn left_off_text(&mut self, w: Option<&Workspace>) -> String {
+        let t = self.prompts.prompt_text(w);
+        if t.is_empty() {
+            String::new()
+        } else {
+            format!("{YOU_WORD}: {}", clip(&t, LEFT_OFF_MAX))
+        }
+    }
+
+    /// What the waiting chat wants, else the agent's latest message (never
+    /// a prompt echo), else the description.
+    pub fn card_detail(&mut self, w: Option<&Workspace>) -> String {
+        let wanted = self.move_of(w).map(|m| m.text).unwrap_or_default();
+        let text = if !wanted.is_empty() {
+            wanted
+        } else {
+            let message = card_message(w);
+            if message.is_empty() {
+                own_description(w)
+            } else {
+                message
+            }
+        };
+        clip(&text, DETAIL_MAX)
+    }
+}
+
+/// A card's agent as the sidebars show it, and the background work its
+/// chat runs, read once per pass over the card.
+#[derive(Debug, Clone)]
+pub(crate) struct CardRunning {
+    pub(crate) agent: Option<Agent>,
+    pub(crate) running: Option<Running>,
+}
+
+/// "· 1 helper", "· 3 helpers", or "" for none.
+fn helpers_words(n: usize) -> String {
+    match n {
+        0 => String::new(),
+        1 => "· 1 helper".to_string(),
+        n => format!("· {n} helpers"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::persist::SavedState;
+
+    #[test]
+    fn keeps_cmuxs_word_for_a_status_it_does_not_know_and_draws_it_as_no_agent() {
+        let a = Agent {
+            id: "a".into(),
+            status: Some(AgentStatus::Other("thinking".into())),
+            ..Agent::default()
+        };
+        let s = Status::of(Some(&a));
+        assert_eq!(s.as_str(), "thinking");
+        assert_eq!(halo_color(&s), Token::Clear);
+        assert_eq!(StatusKind::Plain(s).style().label, NO_AGENT_WORD);
+    }
+
+    #[test]
+    fn inks_no_agent_with_idle_in_the_meta_ink_never_faint() {
+        let none = StatusKind::Plain(Status::None).style();
+        let idle = StatusKind::Plain(Status::Idle).style();
+        assert_eq!(none.text, Token::MetaText);
+        assert_eq!(none.text, idle.text);
+        assert_eq!((none.dot, none.ring), (None, None), "a grey outline");
+    }
+
+    /// Jon's 13 November report: a chat ended its turn on "Your move:"
+    /// while a shell from earlier in the session still ran. The card's
+    /// agent is idle (Stop, and no nudge it reads as Jon's), its move is
+    /// fresh and its own, and the shell is the chat's.
+    fn ended_turn_with_a_shell(move_json: &str) -> (Session, Data) {
+        let saved = SavedState::from_json(&format!(
+            r#"{{
+                "moves": {{"w1": {move_json}}},
+                "background": {{"w1": [{{"id": "b1", "type": "shell", "status": "running",
+                    "description": "dev server", "session": "c", "startedEpoch": 100,
+                    "seenEpoch": 1000}}]}}
+            }}"#
+        ))
+        .unwrap();
+        let agent = Agent {
+            id: "c".into(),
+            kind: Some("claude".into()),
+            status: Some(AgentStatus::Idle),
+            since_epoch: Some(1000.0),
+            last_activity_at: Some(1000.0),
+            ..Agent::default()
+        };
+        let w = Workspace {
+            id: "w1".into(),
+            latest_at: Some(900.0),
+            agents: Some(vec![Some(agent)]),
+            ..Workspace::default()
+        };
+        let data = Data {
+            epoch: Some(1100.0),
+            workspaces: Some(vec![w]),
+            ..Data::default()
+        };
+        (Session::new(Vec::new(), saved), data)
+    }
+
+    #[test]
+    fn a_turn_that_asks_jon_is_your_turn_while_its_shell_runs() {
+        let (mut s, data) = ended_turn_with_a_shell(
+            r#"{"text": "Your move: answer yes or no once the left panel redraws.",
+                "epoch": 1000, "session": "c"}"#,
+        );
+        let w = data.ws_by_id("w1");
+        assert_eq!(
+            s.status_kind(&data, w),
+            StatusKind::Plain(Status::NeedsInput)
+        );
+        let style = s.status_info(&data, w);
+        assert_eq!((style.label, style.urgency), ("Your turn", Urgency::Needs));
+        assert_eq!(
+            s.status_line(&data, w),
+            "Your turn 1m",
+            "the wait's age, not the shell's"
+        );
+        assert_eq!(s.needs_list(&data).len(), 1);
+    }
+
+    #[test]
+    fn a_nothing_for_you_turn_still_says_running_while_its_shell_runs() {
+        let (mut s, data) = ended_turn_with_a_shell(
+            r#"{"text": "Nothing for you: the dev server runs on.", "idle": true,
+                "epoch": 1000, "session": "c"}"#,
+        );
+        let w = data.ws_by_id("w1");
+        assert_eq!(s.status_kind(&data, w), StatusKind::Running);
+        assert!(s.needs_list(&data).is_empty());
+    }
+
+    #[test]
+    fn haloes_a_waiting_mark_as_its_status_dot_is() {
+        assert_eq!(waiting_halo(true), StatusKind::Asking.style().halo);
+        assert_eq!(
+            waiting_halo(false),
+            StatusKind::Plain(Status::NeedsInput).style().halo
+        );
+    }
+}

@@ -1,0 +1,126 @@
+import SwiftUI
+
+/// The All view: the five lanes. A card waiting on Jon stays in its lane
+/// with a dot on its badge (issue #314); the All tab counts them.
+/// Each lane header carries its own section gap above it, so the lanes
+/// sit flush and their drop areas meet. While the project filter is on,
+/// its chip sits above the lanes (docs/design.md#filter-chip).
+struct AllView: View {
+    let panel: Panel
+    @State private var tops: [String: CGFloat] = [:]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let menu = FilterText.menu(panel), let chip = FilterText.chip(menu) {
+                FilterChip(label: chip.label, color: chip.color)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(panel.lanes, id: \.key) { lane in
+                    LaneView(lane: lane, top: tops[String(describing: lane.key)] ?? 0)
+                }
+            }
+            .coordinateSpace(name: FloatingCard.space)
+            .overlay(alignment: .topLeading) { FloatingCard(state: DragState.shared, lanes: panel.lanes) }
+            .onPreferenceChange(LaneTops.self) { next in
+                MainActor.assumeIsolated { if next != tops { tops = next } }
+            }
+        }
+    }
+}
+
+/// The whole panel: the view switch, with the filter and add buttons after
+/// it in All, and Next (only while nothing waits and there is a next step), then the
+/// view the core has on (docs/design.md#view-switch,
+/// docs/design.md#filter-button, docs/design.md#add-button,
+/// docs/design.md#next), and the project editor
+/// as a sheet over it while the core has one open. Closing the sheet asks
+/// the core to close the editor; the sheet goes when the panel says it has.
+struct PanelBody: View {
+    let panel: Panel
+
+    var body: some View {
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: Metrics.addGap) {
+                    ViewSwitch(view: panel.view, needs: panel.needs)
+                    if let menu = FilterText.menu(panel) { FilterButton(menu: menu) }
+                    if let menu = AddText.menu(panel) { AddButton(menu: menu) }
+                }
+                .padding(.horizontal, Self.switchMargin)
+                .padding(.bottom, Metrics.switchGap)
+                if TopText.showsNext(panel) {
+                    NextView(next: panel.next).padding(.top, Metrics.topGap)
+                }
+                Group {
+                    switch panel.view {
+                    case .all: AllView(panel: panel)
+                    case .projects: ProjectsView(panel: panel)
+                    }
+                }
+                .padding(.top, Metrics.topGap)
+            }
+            .padding(Metrics.gutter)
+        }
+        .sheet(item: editorKey) { _ in
+            if let editor = ProjectText.editor(panel) {
+                EditorSheet(editor: editor) { SidebarCore.send(.edit($0)) }
+            }
+        }
+    }
+
+    /// The switch's outer margin: 14 in from the sidebar's edge, past the
+    /// gutter. Metrics.switchInset is the track's inner padding.
+    private static let switchMargin: CGFloat = 14 - Metrics.gutter
+
+    private var editorKey: Binding<EditorKey?> {
+        Binding(
+            get: { ProjectText.editor(panel).map { EditorKey(id: $0.key) } },
+            // Only while the core still has it open: a sheet going because
+            // the core closed it (Save, Remove) sends nothing.
+            set: { if $0 == nil, ProjectText.editor(panel) != nil { SidebarCore.send(.edit(.close)) } }
+        )
+    }
+}
+
+/// Two lines of words: a heading and why.
+struct Notice: View {
+    let title: String
+    let why: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.noticeGap) {
+            Text(title).font(.system(size: Metrics.Font.control, weight: .semibold)).foregroundStyle(Color(Token.text))
+            Text(why).font(.system(size: Metrics.Font.control)).foregroundStyle(Color(Token.secondary))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// What the sidebar shows: the panel whenever there is one, with a notice
+/// on a neutral band on top while the helper is down (a notice, not an
+/// ask, so no state hue; docs/design.md#notices); else why there is none.
+struct SidebarView: View {
+    let showing: Showing
+
+    var body: some View {
+        Group {
+            switch showing {
+            case .notRunning:
+                Notice(title: Words.notRunning, why: Words.startIt).padding(Metrics.gutter)
+            case .waiting:
+                Notice(title: Words.waiting, why: Words.waitingWhy).padding(Metrics.gutter)
+            case .panel(let panel, let stale):
+                VStack(alignment: .leading, spacing: 0) {
+                    if stale {
+                        Notice(title: Words.notRunning, why: Words.startIt)
+                            .padding(Metrics.gutter)
+                            .background(Color(Token.countBg))
+                    }
+                    PanelBody(panel: panel)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color(Palette.Own.panelGround))
+    }
+}
