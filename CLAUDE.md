@@ -142,8 +142,8 @@ Work on a branch and open a PR, as a draft first. `npm run hooks` once per
 clone installs the git hooks, including the pre-commit check.
 
 Review, models, effort, lane size and the pre-review gate follow
-~/.claude/CLAUDE.md, "Subagents, review and lane size"; this file keeps
-only the local detail:
+~/.claude/CLAUDE.md, "Subagents, review and lane size" and "Speed and
+reliability"; this file keeps only the local detail:
 
 - Pre-review command: `npm run pre-review` (`npm run check`). Review
   starts only once it passes.
