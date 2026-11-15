@@ -141,20 +141,18 @@ or `Metrics`, and update it in the same PR when the look changes.
 Work on a branch and open a PR, as a draft first. `npm run hooks` once per
 clone installs the git hooks, including the pre-commit check.
 
-Review, models, effort, lane size, PR size and the pre-review gate follow
-~/.claude/CLAUDE.md, "Subagents, review and lane size" and "Speed and
-reliability"; this file keeps only the local detail:
+Review, models, effort, lane size and the pre-review gate follow
+~/.claude/CLAUDE.md, "Subagents, review and lane size"; this file keeps
+only the local detail:
 
-- Pre-review command: `npm run pre-review` (`npm run check`, then
-  `npm run pr-size`). Review starts only once it passes.
+- Pre-review command: `npm run pre-review` (`npm run check`). Review
+  starts only once it passes.
 - Reviewer: `/code-review medium`, run by the builder; a fresh Fix agent
   fixes or answers each finding.
 - Sensitive surfaces (these also get the second reviewer):
   `.claude/settings.json`, `scripts/hooks/`, `scripts/pr-body.ts`,
-  `scripts/pr-size.ts`, `.github/workflows/`, and the config the Never
-  list protects (`tsconfig.json`, `biome.json`).
-- The `PR size` check (`scripts/pr-size.ts`) enforces the PR size rule
-  in ~/.claude/CLAUDE.md, "Speed and reliability". It runs on drafts too.
+  `.github/workflows/`, and the config the Never list protects
+  (`tsconfig.json`, `biome.json`).
 
 Before ready, every CI check is green on the last commit and the
 description's `## Look at after reload` and `## Review` sections hold real
