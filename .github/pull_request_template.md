@@ -20,6 +20,8 @@ check by eye after `cmux sidebar reload`, or write "nothing on screen". -->
 it found, and what happened to each finding: fixed, or why not. Write
 "no findings" if it was clean. -->
 
+<!-- Optional: over 800 added lines, add a "## Size" section saying why. -->
+
 ## Checklist
 
 - [ ] `npm run check` passes locally

@@ -29,30 +29,49 @@ export function added(numstat: string): number {
     .reduce((sum, n) => sum + (Number.isNaN(n) ? 0 : n), 0);
 }
 
-// The message to fail with, or null to pass. `body` is only read when over.
-export function sizeMessage(lines: number, body: () => string): string | null {
-  if (lines <= LIMIT || filled(body(), "Size")) return null;
+// The message to fail with, or null to pass. `body` is only read when over;
+// an Error from it is reported as such, not read as an empty description.
+export function sizeMessage(lines: number, body: () => string | Error): string | null {
+  if (lines <= LIMIT) return null;
+  const b = body();
+  if (b instanceof Error) {
+    return `pr-size: ${lines} added lines is over ${LIMIT}, and the description could not be read to look for a "## Size" section. ${b.message}`;
+  }
+  if (filled(b, "Size")) return null;
   return `pr-size: ${lines} added lines is over ${LIMIT}. Split the PR, or say why in a "## Size" section of the description.`;
 }
 
-// In CI it diffs the merge commit against its first parent, the base, and
-// reads the event. By hand (`npm run pr-size`) it diffs the working tree
-// against where it left origin/main, and reads the live description only
-// when over.
+// What to diff against. In CI the merge commit's first parent is the tip of
+// the PR's own base branch, so a stacked PR is measured against its parent
+// PR. By hand it is where the working tree left `base`, origin/main unless
+// given; the local count is a hint (untracked files are not counted and
+// nothing is fetched), CI is the authority.
+export function diffRange(ci: boolean, base?: string): string[] {
+  return ci ? ["HEAD^1", "HEAD"] : ["--merge-base", base ?? "origin/main"];
+}
+
+// The description from the event file GitHub hands the job, or an Error
+// saying why it could not be read.
+function ciBody(path: string): string | Error {
+  try {
+    return eventBody(JSON.parse(readFileSync(path, "utf8")));
+  } catch (e) {
+    return new Error(`Could not read the event file ${path}: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+// In CI it reads the event. By hand (`npm run pr-size [-- <base>]`) it
+// reads the live description, and only when over.
 function main(): number {
   const ci = process.env.GITHUB_EVENT_PATH;
-  const range = ci ? ["HEAD^1", "HEAD"] : ["--merge-base", "origin/main"];
+  const range = diffRange(Boolean(ci), process.argv[2]);
   const r = spawnSync("git", ["diff", "--numstat", ...range, "--", ".", ...EXCLUDE], { encoding: "utf8" });
   if (r.status !== 0) {
     console.error(`pr-size: git diff failed. ${r.stderr.trim()}`);
     return 1;
   }
   const lines = added(r.stdout);
-  const body = (): string => {
-    if (ci) return eventBody(JSON.parse(readFileSync(ci, "utf8")));
-    const b = fetchBody(null);
-    return b instanceof Error ? "" : b;
-  };
+  const body = (): string | Error => (ci ? ciBody(ci) : fetchBody(null));
   const message = sizeMessage(lines, body);
   if (message) console.error(message);
   else console.log(`pr-size: ${lines} added lines counted, limit ${LIMIT}.`);

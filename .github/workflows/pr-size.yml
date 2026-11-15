@@ -18,10 +18,11 @@ concurrency:
 jobs:
   pr-size:
     # Runs on drafts too, unlike the PR description check: the size is
-    # known when the draft opens, which is when splitting is cheapest.
+    # known when the draft opens, which is when splitting is cheapest. An
+    # edit reruns it when the description or the base branch changed.
     if: >-
       github.event.pull_request.user.login != 'dependabot[bot]' &&
-      (github.event.action != 'edited' || github.event.changes.body)
+      (github.event.action != 'edited' || github.event.changes.body || github.event.changes.base)
     runs-on: ubuntu-latest
     timeout-minutes: 2
     steps:

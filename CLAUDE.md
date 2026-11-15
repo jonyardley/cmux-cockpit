@@ -153,9 +153,8 @@ reliability"; this file keeps only the local detail:
   `.claude/settings.json`, `scripts/hooks/`, `scripts/pr-body.ts`,
   `scripts/pr-size.ts`, `.github/workflows/`, and the config the Never
   list protects (`tsconfig.json`, `biome.json`).
-- The `PR size` check fails a PR over 800 added lines (lock files,
-  fixtures, snapshots and generated files left out) unless its description
-  has a `## Size` section saying why. It runs on drafts too.
+- The `PR size` check (`scripts/pr-size.ts`) enforces the PR size rule
+  in ~/.claude/CLAUDE.md, "Speed and reliability". It runs on drafts too.
 
 Before ready, every CI check is green on the last commit and the
 description's `## Look at after reload` and `## Review` sections hold real
