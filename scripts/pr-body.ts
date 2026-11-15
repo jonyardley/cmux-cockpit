@@ -43,16 +43,20 @@ function lines(body: string): { text: string; heading: boolean }[] {
     });
 }
 
-export function missingSections(body: string): string[] {
+// True when the body's "## <name>" section holds real text by the rules
+// above. The size check reads its "## Size" section the same way.
+export function filled(body: string, name: string): boolean {
   const all = lines(body);
-  return REQUIRED.filter((name) => {
-    const at = all.findIndex((l) => l.heading && l.text.trim() === `## ${name}`);
-    if (at === -1) return true;
-    const rest = all.slice(at + 1);
-    const end = rest.findIndex((l) => l.heading);
-    const text = (end === -1 ? rest : rest.slice(0, end)).map((l) => l.text).join("\n");
-    return text.trim() === "" || isPlaceholder(text);
-  });
+  const at = all.findIndex((l) => l.heading && l.text.trim() === `## ${name}`);
+  if (at === -1) return false;
+  const rest = all.slice(at + 1);
+  const end = rest.findIndex((l) => l.heading);
+  const text = (end === -1 ? rest : rest.slice(0, end)).map((l) => l.text).join("\n");
+  return text.trim() !== "" && !isPlaceholder(text);
+}
+
+export function missingSections(body: string): string[] {
+  return REQUIRED.filter((name) => !filled(body, name));
 }
 
 // The message to fail with, or null to pass.
@@ -66,9 +70,14 @@ export function bodyMessage(body: string): string | null {
 // The same for a pull_request event. Takes the parsed event as unknown and
 // narrows it, so a null or odd payload fails cleanly.
 export function check(event: unknown): string | null {
+  return bodyMessage(eventBody(event));
+}
+
+// The PR description in a pull_request event, or "" when there is none.
+export function eventBody(event: unknown): string {
   const pr = typeof event === "object" && event !== null && "pull_request" in event ? event.pull_request : null;
   const body = typeof pr === "object" && pr !== null && "body" in pr ? pr.body : null;
-  return bodyMessage(typeof body === "string" ? body : "");
+  return typeof body === "string" ? body : "";
 }
 
 // The PR's live description from GitHub, via gh, or an Error saying why not.

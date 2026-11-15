@@ -2,7 +2,7 @@
 
 The agents panel, a cmux custom sidebar written in strict TypeScript and
 bundled into the flat script cmux loads, and the native Cockpit sidebar
-under `native/`, which replaced the TypeScript cockpit (issue #247).
+under `native/`, which replaced the TypeScript cockpit.
 README.md has the layout and commands.
 
 ## Never
@@ -138,16 +138,30 @@ or `Metrics`, and update it in the same PR when the look changes.
 
 ## Workflow
 
-Work on a branch and open a PR; main is protected by habit.
-`npm run hooks` once per clone installs the git hooks, including the
-pre-commit check. Before a PR is ready for review, every CI check is green
-on the last commit (`npm run check` locally covers most of them) and its
+Work on a branch and open a PR, as a draft first. `npm run hooks` once per
+clone installs the git hooks, including the pre-commit check.
+
+Review, models, effort, lane size, PR size and the pre-review gate follow
+~/.claude/CLAUDE.md, "Subagents, review and lane size" and "Speed and
+reliability"; this file keeps only the local detail:
+
+- Pre-review command: `npm run pre-review` (`npm run check`, then
+  `npm run pr-size`). Review starts only once it passes.
+- Reviewer: `/code-review medium`, run by the builder; a fresh Fix agent
+  fixes or answers each finding.
+- Sensitive surfaces (these also get the second reviewer):
+  `.claude/settings.json`, `scripts/hooks/`, `scripts/pr-body.ts`,
+  `scripts/pr-size.ts`, `.github/workflows/`, and the config the Never
+  list protects (`tsconfig.json`, `biome.json`).
+- The `PR size` check (`scripts/pr-size.ts`) enforces the PR size rule
+  in ~/.claude/CLAUDE.md, "Speed and reliability". It runs on drafts too.
+
+Before ready, every CI check is green on the last commit and the
 description's `## Look at after reload` and `## Review` sections hold real
-text, not empty or a placeholder: what to check on screen after reload,
-and who reviewed, what they found and what happened to each finding. The
-`PR description` check enforces both (it skips drafts), and
-`npm run pr-body` runs it on the live description. The maintainer reviews
-and merges. Agents never merge.
+text: what to check on screen after reload, and who reviewed, what they
+found and what happened to each finding. The `PR description` check
+enforces both (it skips drafts), and `npm run pr-body` runs it on the live
+description. The maintainer reviews and merges. Agents never merge.
 
 `.claude/settings.json` hooks block edits to the Never-list files, run
 Biome after each edit, and refuse `gh pr ready` while either section is
