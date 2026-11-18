@@ -203,25 +203,43 @@ impl Checkouts {
     }
 }
 
-/// The most of any one git file the chain reads: a config or pointer
-/// file is far smaller, so anything bigger is no git file of ours.
-const GIT_FILE_CAP: u64 = 64 * 1024;
+/// The most of a worktree pointer file (`.git` file, `commondir`,
+/// `gitdir`) the chain reads: a pointer is one line, so anything bigger
+/// is no pointer of ours.
+const POINTER_CAP: u64 = 64 * 1024;
 
-/// The text of `path` when it is a regular file, not a link, of at most
-/// `GIT_FILE_CAP` bytes; None otherwise, so a FIFO cannot block the
-/// watch thread and a huge file cannot bloat it.
-fn read_small(path: &Path) -> Option<String> {
-    let meta = fs::symlink_metadata(path).ok()?;
-    if !meta.is_file() || meta.len() > GIT_FILE_CAP {
+/// The most of a repo's config the chain reads: a long-lived repo's
+/// config can grow well past a pointer's size, so it gets more room.
+const CONFIG_CAP: u64 = 1024 * 1024;
+
+/// The text of a worktree pointer file at `path` when it is a regular
+/// file, not a link, of at most `POINTER_CAP` bytes; None otherwise.
+fn read_pointer(path: &Path) -> Option<String> {
+    read_capped(path, &fs::symlink_metadata(path).ok()?, POINTER_CAP)
+}
+
+/// The text of the config at `path` when it is, or links to, a regular
+/// file of at most `CONFIG_CAP` bytes; None otherwise. Links are
+/// followed, since dotfile managers link a repo's config.
+fn read_config(path: &Path) -> Option<String> {
+    read_capped(path, &fs::metadata(path).ok()?, CONFIG_CAP)
+}
+
+/// The text of `path`, whose metadata is `meta`, when that is a regular
+/// file of at most `cap` bytes; None otherwise, so a FIFO cannot block
+/// the watch thread and a huge file cannot bloat it. The read is
+/// bounded too, in case the file grows after `meta` was taken.
+fn read_capped(path: &Path, meta: &fs::Metadata, cap: u64) -> Option<String> {
+    if !meta.is_file() || meta.len() > cap {
         return None;
     }
     let mut text = String::new();
     fs::File::open(path)
         .ok()?
-        .take(GIT_FILE_CAP + 1)
+        .take(cap + 1)
         .read_to_string(&mut text)
         .ok()?;
-    (text.len() as u64 <= GIT_FILE_CAP).then_some(text)
+    (text.len() as u64 <= cap).then_some(text)
 }
 
 /// The config file of the repo `dir` is in, and whether `dir` is in a
@@ -250,15 +268,15 @@ fn main_config(dir: &Path) -> Option<(PathBuf, bool)> {
 /// submodule's git folder has no `commondir`, so it matches nothing.
 fn worktree_config(git: &Path) -> Option<PathBuf> {
     let folder = git.parent()?;
-    let text = read_small(git)?;
+    let text = read_pointer(git)?;
     let named = folder.join(text.lines().next()?.strip_prefix("gitdir:")?.trim());
     let own = fs::canonicalize(named).ok()?;
-    let back = read_small(&own.join("gitdir"))?;
+    let back = read_pointer(&own.join("gitdir"))?;
     let back = fs::canonicalize(own.join(back.lines().next()?.trim())).ok()?;
     if back != fs::canonicalize(git).ok()? {
         return None;
     }
-    let common = read_small(&own.join("commondir"))?;
+    let common = read_pointer(&own.join("commondir"))?;
     let common = fs::canonicalize(own.join(common.trim())).ok()?;
     let parent = own.parent()?;
     if parent.file_name()? != "worktrees" || parent.parent()? != common {
@@ -272,7 +290,7 @@ fn worktree_config(git: &Path) -> Option<PathBuf> {
 /// None for none.
 pub fn checkout_of(dir: &str) -> Option<Checkout> {
     let (config, worktree) = main_config(Path::new(dir))?;
-    let repo = checkout_repo(&read_small(&config)?)?;
+    let repo = checkout_repo(&read_config(&config)?)?;
     Some(Checkout { repo, worktree })
 }
 
@@ -657,22 +675,31 @@ mod tests {
         let own = worktree(&main, "linked", &linked);
         assert_eq!(look(&linked), in_worktree("example/app-one"));
 
-        // A config over the cap, its origin still in its first lines.
-        let big = format!(
-            "{}#{}\n",
-            origin("git@github.com:example/app-one.git"),
-            "x".repeat(GIT_FILE_CAP as usize)
-        );
-        fs::write(main.join(".git/config"), &big).unwrap();
+        // A config just over the pointer cap still matches; one over the
+        // config cap does not.
+        let config = |extra: u64| {
+            format!(
+                "{}#{}\n",
+                origin("git@github.com:example/app-one.git"),
+                "x".repeat(extra as usize)
+            )
+        };
+        fs::write(main.join(".git/config"), config(POINTER_CAP)).unwrap();
+        assert_eq!(look(&main), repo("example/app-one"), "a config over 64 KiB");
+        assert_eq!(look(&linked), in_worktree("example/app-one"));
+        fs::write(main.join(".git/config"), config(CONFIG_CAP)).unwrap();
         assert_eq!(look(&main), None, "a main checkout's config");
         assert_eq!(look(&linked), None, "through a worktree");
-        let fits = format!(
-            "{}#{}\n",
-            origin("git@github.com:example/app-one.git"),
-            "x".repeat(1000)
-        );
-        fs::write(main.join(".git/config"), &fits).unwrap();
+        fs::write(main.join(".git/config"), config(1000)).unwrap();
         assert_eq!(look(&main), repo("example/app-one"));
+
+        // A `.git` file over the pointer cap.
+        let pointer = fs::read_to_string(linked.join(".git")).unwrap();
+        let padded = format!("{pointer}{}\n", "x".repeat(POINTER_CAP as usize));
+        fs::write(linked.join(".git"), padded).unwrap();
+        assert_eq!(look(&linked), None, "a big `.git` file");
+        fs::write(linked.join(".git"), pointer).unwrap();
+        assert_eq!(look(&linked), in_worktree("example/app-one"));
 
         // A FIFO where `commondir` should be: refused, never opened, so
         // the check does not block.
@@ -692,5 +719,31 @@ mod tests {
         fs::create_dir_all(&link).unwrap();
         std::os::unix::fs::symlink(linked.join(".git"), link.join(".git")).unwrap();
         assert_eq!(look(&link), None, "a linked `.git` file");
+    }
+
+    #[test]
+    fn a_linked_config_is_read_through_its_link_and_a_fifo_config_is_not() {
+        let root = temp("linked-config");
+        let main = checkout(&root, "main", "");
+        let linked = root.join("linked");
+        worktree(&main, "linked", &linked);
+        // A dotfile manager's link where the config should be.
+        let real = root.join("dotfiles/config");
+        fs::create_dir_all(real.parent().unwrap()).unwrap();
+        fs::write(&real, origin("git@github.com:example/app-one.git")).unwrap();
+        fs::remove_file(main.join(".git/config")).unwrap();
+        std::os::unix::fs::symlink(&real, main.join(".git/config")).unwrap();
+        assert_eq!(look(&main), repo("example/app-one"), "a linked config");
+        assert_eq!(look(&linked), in_worktree("example/app-one"));
+
+        // A FIFO where the config should be: refused, never opened.
+        fs::remove_file(main.join(".git/config")).unwrap();
+        let made = std::process::Command::new("mkfifo")
+            .arg(main.join(".git/config"))
+            .status()
+            .unwrap();
+        assert!(made.success());
+        assert_eq!(look(&main), None, "a FIFO config");
+        assert_eq!(look(&linked), None, "a FIFO config through a worktree");
     }
 }
