@@ -325,9 +325,10 @@ pub struct Card {
     /// shell can show it the moment Jon right-clicks; a pick goes back as
     /// the menu opened on this card, then the item.
     pub menu: Vec<MenuItem>,
-    /// The Ostinato run on the project's main checkout, under the card's
-    /// own lines (issue #390, ostinato/card.rs); None on every other card
-    /// and on a row, which has no room for it.
+    /// The Ostinato run on the project's main checkout or one of its
+    /// linked worktrees, under the card's own lines (issue #390,
+    /// ostinato/card.rs); None on every other card and on a row, which
+    /// has no room for it.
     pub run: Option<Box<RunCard>>,
 }
 

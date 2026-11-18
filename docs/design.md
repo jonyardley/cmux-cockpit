@@ -672,8 +672,8 @@ dismissal, which lapses only with a new time.
 ### Ostinato waiting
 
 An Ostinato attempt that parked with a question waits on you (issue
-#390), as a [stopped](#stopped) session does: the card on the project's
-main checkout joins Needs you and takes Your turn's look whole, clay dot
+#390), as a [stopped](#stopped) session does: the card carrying the
+[run](#ostinato-run) joins Needs you and takes Your turn's look whole, clay dot
 with its halo, `clayText` words, the clay [waiting card](#waiting-card)
 edge, stripe and wash, and counts in the waiting count, lane order, the
 [late wait](#late-wait) chip and Dismiss needs you. Its status says
@@ -957,11 +957,15 @@ Where: `Views/CardView.swift:428-445`.
 
 An unattended Ostinato run on its card (issue #390), under the card's
 own lines on a full, compact or Projects card; a dense row has no room
-and draws none. Only the card of the workspace open on the project's
-main checkout carries it: the folder whose `.git` is a directory and
-whose `origin` is the record's GitHub repo (or a folder inside it). With
-two workspaces open there, the first awake one in tab order carries it
-(the first, when all sleep), so one park never waits twice. The core says every word and
+and draws none. Only the card of one workspace open on the project's
+main checkout or one of its linked worktrees carries it: the main
+checkout is the folder whose `.git` is a directory and whose `origin` is
+the record's GitHub repo, a linked worktree takes its main checkout's
+repo, and a folder inside either counts. With several workspaces open
+there, an awake one carries it before an asleep one, then one on the
+main checkout itself before one in a worktree, then the first in tab
+order, so one park never waits twice. The record does not say which
+workspace runs the loop, so this is the best guess, not a match. The core says every word and
 token (`native/core/src/ostinato/card.rs`); the view lays them out
 (`Views/RunView.swift`), 4 above, its lines 5 apart:
 

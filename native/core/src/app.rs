@@ -59,8 +59,8 @@ pub enum Event {
     /// last one in place.
     #[facet(skip)]
     Lanes(#[facet(opaque)] Vec<LaneConfig>),
-    /// The Ostinato run records and the folders that are main checkouts
-    /// of a GitHub repo, from the runner's watch of the records folder
+    /// The Ostinato run records and the folders in a main checkout, or
+    /// one of its linked worktrees, of a GitHub repo, from the runner's watch of the records folder
     /// (ostinato.rs). Only a record whose text changed is read again.
     #[facet(skip)]
     Ostinato(#[facet(opaque)] Box<OstinatoFeed>),

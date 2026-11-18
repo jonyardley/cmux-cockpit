@@ -158,8 +158,8 @@ impl Session {
         }
     }
 
-    /// Whether workspace `ws` is open on a main checkout whose own record,
-    /// not `record`, parked at `key` too.
+    /// Whether workspace `ws` is open on a checkout (main or linked
+    /// worktree) whose own record, not `record`, parked at `key` too.
     fn parked_elsewhere(&self, data: &Data, ws: &str, key: f64, record: &Record) -> bool {
         data.ws_by_id(ws)
             .and_then(|w| w.directory.as_deref())
@@ -334,6 +334,7 @@ mod tests {
                 "/dev/notes-app".to_string(),
                 "example/notes-app".to_string(),
             )]),
+            worktrees: Default::default(),
         }
     }
 

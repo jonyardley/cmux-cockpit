@@ -2,13 +2,15 @@
 //! kit (jonyardley/ostinato) writes a run record for each project, one
 //! JSON line per event of an unattended run; the runner watches the
 //! records folder and hands the core each record's text, with which
-//! folders are main checkouts of which GitHub repo (`Event::Ostinato`).
+//! folders are in a main checkout, or one of its linked worktrees, of
+//! which GitHub repo (`Event::Ostinato`).
 //! The core reads each record once, when its text changes (line.rs), and
 //! works out where its latest run stands at the frame's clock (run.rs).
 //!
-//! A record's card is the workspace open on its project's main checkout
-//! (remote.rs): the record's `owner/repo`, from its latest `run_started`
-//! or else its file name, matched to the folder's GitHub `origin`.
+//! A record's card is a workspace open on its project's main checkout
+//! or one of its linked worktrees (remote.rs): the record's `owner/repo`,
+//! from its latest `run_started` or else its file name, matched to the
+//! folder's GitHub `origin`.
 //!
 //! The runner hands on only what a card reads of each record (bound.rs).
 //! The card's words and tokens come from card.rs, and a parked attempt
@@ -21,7 +23,7 @@ pub mod remote;
 pub mod run;
 pub mod wait;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -37,17 +39,22 @@ use line::{Event, Heard, Line, read};
 use run::{Share, run_state, shares};
 
 /// What the runner hands the core: every record in the folder, and the
-/// folders open in cmux that are main checkouts of a GitHub repo.
+/// folders open in cmux that are in a main checkout, or one of its
+/// linked worktrees, of a GitHub repo.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct OstinatoFeed {
     /// Each record's text by its file's project, `owner/repo` in lower
     /// case (`owner__repo.jsonl`).
     #[serde(default)]
     pub records: BTreeMap<String, RecordText>,
-    /// Each main checkout's folder to its GitHub `owner/repo`, in lower
-    /// case.
+    /// Each folder in a main checkout or one of its linked worktrees to
+    /// its GitHub `owner/repo`, in lower case.
     #[serde(default)]
     pub checkouts: BTreeMap<String, String>,
+    /// The folders in `checkouts` that are in a linked worktree, not the
+    /// main checkout itself.
+    #[serde(default)]
+    pub worktrees: BTreeSet<String>,
 }
 
 /// One record as read.
@@ -116,6 +123,7 @@ pub struct Ostinato {
     /// By file project, as the feed keys them.
     records: BTreeMap<String, Record>,
     checkouts: BTreeMap<String, String>,
+    worktrees: BTreeSet<String>,
     /// A feed has come since the session began.
     fed: bool,
 }
@@ -137,6 +145,11 @@ impl Ostinato {
             .into_iter()
             .map(|(dir, repo)| (trim_slash(&dir).to_string(), repo))
             .collect();
+        self.worktrees = feed
+            .worktrees
+            .iter()
+            .map(|dir| trim_slash(dir).to_string())
+            .collect();
     }
 
     /// Whether a feed has come since the session began: until then no
@@ -145,12 +158,18 @@ impl Ostinato {
         self.fed
     }
 
-    /// The repo the folder `directory` is the main checkout of (or a
-    /// folder inside it), lower case; None for any other folder.
+    /// The repo the folder `directory` is in the main checkout or a
+    /// linked worktree of, lower case; None for any other folder.
     fn repo_of(&self, directory: &str) -> Option<&str> {
         self.checkouts
             .get(trim_slash(directory))
             .map(String::as_str)
+    }
+
+    /// Whether the folder `directory` is in a linked worktree, not the
+    /// main checkout itself.
+    fn in_worktree(&self, directory: &str) -> bool {
+        self.worktrees.contains(trim_slash(directory))
     }
 
     /// The record whose card `directory`, a workspace's folder, holds.
@@ -168,19 +187,26 @@ impl Ostinato {
 
 impl Session {
     /// Where the Ostinato run on `w`'s card stands at the frame's clock;
-    /// None when no record is about the repo it is the main checkout of.
-    /// One card shows a record: the first awake one in tab order of the
-    /// workspaces in that checkout, else the first, so two open there
-    /// never both draw the run or both wait on Jon for one park, and an
-    /// asleep one never keeps a park from an awake one.
+    /// None when no record is about the repo it is in a checkout of.
+    /// One card shows a record, of the workspaces in that repo's main
+    /// checkout or its linked worktrees: an awake one before an asleep
+    /// one, then one on the main checkout itself before one in a
+    /// worktree, then the first in tab order. So two open there never
+    /// both draw the run or both wait on Jon for one park, an asleep one
+    /// never keeps a park from an awake one, and the run stays on the
+    /// main checkout, where the loop runs, while one there is awake. The
+    /// record does not say which workspace runs the loop, so this is a
+    /// guess, not a match.
     pub fn ostinato_run(&self, data: &Data, w: &Workspace) -> Option<RecordState> {
         let directory = w.directory.as_deref()?;
         let there = self.in_checkout(data, w);
-        let first = there.first()?;
-        let carrier = there
-            .iter()
-            .find(|other| self.sleep_kind(&other.id).is_none())
-            .unwrap_or(first);
+        let carrier = there.iter().min_by_key(|other| {
+            let worktree = other
+                .directory
+                .as_deref()
+                .is_some_and(|d| self.ostinato.in_worktree(d));
+            (self.sleep_kind(&other.id).is_some(), worktree)
+        })?;
         if carrier.id != w.id {
             return None;
         }
@@ -188,9 +214,9 @@ impl Session {
         Some(record.state(now_epoch(data)))
     }
 
-    /// The workspaces open on the main checkout `w` is open on, `w`
-    /// among them, in tab order; none when `w`'s folder is no main
-    /// checkout.
+    /// The workspaces open on the repo `w` is open on, in its main
+    /// checkout or one of its linked worktrees, `w` among them, in tab
+    /// order; none when `w`'s folder is in no checkout.
     pub(crate) fn in_checkout<'d>(&self, data: &'d Data, w: &Workspace) -> Vec<&'d Workspace> {
         let Some(repo) = w
             .directory
@@ -518,6 +544,7 @@ mod tests {
                 ),
             ]),
             checkouts: BTreeMap::from([(checkout.to_string(), "example/app-one".to_string())]),
+            worktrees: BTreeSet::new(),
         }
     }
 
@@ -620,6 +647,48 @@ mod tests {
         };
         assert!(s.ostinato_run(&data, &a).is_some(), "first in tab order");
         assert_eq!(s.ostinato_run(&data, &b), None);
+    }
+
+    #[test]
+    fn the_main_checkout_carries_the_run_before_a_worktree() {
+        let mut f = feed("/dev/app-one");
+        f.checkouts
+            .insert("/dev/app-one-wt/feat".into(), "example/app-one".into());
+        f.worktrees.insert("/dev/app-one-wt/feat/".into());
+        let ws = |id: &str, dir: &str| Workspace {
+            id: id.into(),
+            directory: Some(dir.into()),
+            ..Workspace::default()
+        };
+        let (wt, main) = (ws("wt", "/dev/app-one-wt/feat"), ws("main", "/dev/app-one"));
+        let data = |list: Vec<Workspace>| Data {
+            epoch: Some(at("2026-11-13T15:00:00Z")),
+            workspaces: Some(list),
+            ..Data::default()
+        };
+        let mut s = Session::default();
+        s.ostinato.take(f);
+        let both = data(vec![wt.clone(), main.clone()]);
+        assert!(
+            s.ostinato_run(&both, &main).is_some(),
+            "the main checkout, though later in tab order"
+        );
+        assert_eq!(s.ostinato_run(&both, &wt), None);
+        // With no workspace on the main checkout, the worktree carries it.
+        let alone = data(vec![wt.clone()]);
+        assert!(s.ostinato_run(&alone, &wt).is_some(), "a worktree alone");
+        // Two worktrees: the first in tab order.
+        let mut s2 = Session::default();
+        let mut f2 = feed("/dev/app-one-wt/a");
+        f2.checkouts
+            .insert("/dev/app-one-wt/b".into(), "example/app-one".into());
+        f2.worktrees.insert("/dev/app-one-wt/a".into());
+        f2.worktrees.insert("/dev/app-one-wt/b".into());
+        s2.ostinato.take(f2);
+        let (a, b) = (ws("a", "/dev/app-one-wt/a"), ws("b", "/dev/app-one-wt/b"));
+        let two = data(vec![a.clone(), b.clone()]);
+        assert!(s2.ostinato_run(&two, &a).is_some(), "first in tab order");
+        assert_eq!(s2.ostinato_run(&two, &b), None);
     }
 
     #[test]

@@ -1,5 +1,5 @@
 //! Watches the Ostinato records folder (issue #390) on a thread of its
-//! own, and finds which open workspace folders are main checkouts of
+//! own, and finds which open workspace folders are in checkouts of
 //! which GitHub repo, then hands the core both (`Input::Ostinato`)
 //! whenever either changed.
 //!
@@ -12,18 +12,23 @@
 //! - Only what a card reads of a record is handed on, cut at the wall
 //!   clock of the read (cockpit_core::ostinato::bound): its latest run
 //!   and the day's spend, not the whole file, which only grows.
-//! - Only while there is a record, each open folder is looked up once
-//!   while it stays open (cached, and forgotten when its workspace
-//!   closes, so reopening it looks again): the nearest `.git` at or above it, a directory for a main
-//!   checkout, whose `config` names its `origin`
-//!   (cockpit_core::ostinato::remote). No git process runs, since git
-//!   run in a folder obeys that repo's own config, which can run
-//!   anything (`core.fsmonitor`, a pager). A `.git` file is a linked
-//!   worktree, which matches nothing.
+//! - Only while there is a record, each open folder is looked up: once
+//!   found in a checkout it stays cached until its workspace closes, and
+//!   one found in none is looked up again on each check. The nearest
+//!   `.git` at or above it, a directory for a main checkout, whose
+//!   `config` names its `origin` (cockpit_core::ostinato::remote). No
+//!   git process runs, since git run in a folder obeys that repo's own
+//!   config, which can run anything (`core.fsmonitor`, a pager). A
+//!   `.git` file is a linked worktree, which takes its main checkout's
+//!   repo, so a workspace whose terminal moves between the two keeps the
+//!   card; the feed marks it a worktree, so the core prefers a workspace
+//!   on the main checkout itself to carry the run. Each file read on the
+//!   way is a regular file under a size cap.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender};
 
@@ -146,53 +151,147 @@ impl Records {
     }
 }
 
-/// Each folder looked up: the repo it is the main checkout of, or None.
+/// What a folder was found to be in: its GitHub repo, and whether it
+/// is in a linked worktree of it rather than the main checkout itself.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Checkout {
+    pub repo: String,
+    pub worktree: bool,
+}
+
+/// Each folder looked up: the repo it is in the main checkout or a
+/// linked worktree of, or None.
 #[derive(Debug, Default)]
 pub struct Checkouts {
-    known: HashMap<String, Option<String>>,
+    known: HashMap<String, Option<Checkout>>,
 }
 
 impl Checkouts {
-    /// Looks up each folder in `open` not looked up yet, with `look`, and
-    /// forgets those no longer open, so a folder cloned into or given its
-    /// origin after it was looked up is looked up again once reopened.
-    pub fn learn(&mut self, open: &[String], look: impl Fn(&str) -> Option<String>) {
+    /// Looks up each folder in `open` with `look`, unless it was found
+    /// in a checkout already, and forgets those no longer open. A folder
+    /// found in none is looked up again on each check, so one cloned
+    /// into or given its origin after it opened is found then; one found
+    /// stays cached until it closes, so reopening it looks again.
+    pub fn learn(&mut self, open: &[String], look: impl Fn(&str) -> Option<Checkout>) {
         self.known.retain(|dir, _| open.contains(dir));
         for dir in open {
-            if !self.known.contains_key(dir) {
+            if !matches!(self.known.get(dir), Some(Some(_))) {
                 self.known.insert(dir.clone(), look(dir));
             }
         }
     }
 
-    /// The folders in `open` that are main checkouts, to their repos.
+    /// The folders in `open` in a main checkout or one of its linked
+    /// worktrees, to their repos.
     pub fn map(&self, open: &[String]) -> BTreeMap<String, String> {
-        open.iter()
-            .filter_map(|dir| Some((dir.clone(), self.known.get(dir)?.clone()?)))
+        self.found(open)
+            .map(|(dir, c)| (dir.clone(), c.repo.clone()))
             .collect()
+    }
+
+    /// The folders in `open` that are in a linked worktree.
+    pub fn worktrees(&self, open: &[String]) -> BTreeSet<String> {
+        self.found(open)
+            .filter(|(_, c)| c.worktree)
+            .map(|(dir, _)| dir.clone())
+            .collect()
+    }
+
+    fn found<'a>(&'a self, open: &'a [String]) -> impl Iterator<Item = (&'a String, &'a Checkout)> {
+        open.iter()
+            .filter_map(|dir| Some((dir, self.known.get(dir)?.as_ref()?)))
     }
 }
 
-/// The config file of the main checkout `dir` is in: the nearest `.git`
-/// at or above it, when that is a directory. None when it is a file (a
-/// linked worktree, or a submodule) or there is none.
-fn main_config(dir: &Path) -> Option<PathBuf> {
+/// The most of a worktree pointer file (`.git` file, `commondir`,
+/// `gitdir`) the chain reads: a pointer is one line, so anything bigger
+/// is no pointer of ours.
+const POINTER_CAP: u64 = 64 * 1024;
+
+/// The most of a repo's config the chain reads: a long-lived repo's
+/// config can grow well past a pointer's size, so it gets more room.
+const CONFIG_CAP: u64 = 1024 * 1024;
+
+/// The text of a worktree pointer file at `path` when it is a regular
+/// file, not a link, of at most `POINTER_CAP` bytes; None otherwise.
+fn read_pointer(path: &Path) -> Option<String> {
+    read_capped(path, &fs::symlink_metadata(path).ok()?, POINTER_CAP)
+}
+
+/// The text of the config at `path` when it is, or links to, a regular
+/// file of at most `CONFIG_CAP` bytes; None otherwise. Links are
+/// followed, since dotfile managers link a repo's config.
+fn read_config(path: &Path) -> Option<String> {
+    read_capped(path, &fs::metadata(path).ok()?, CONFIG_CAP)
+}
+
+/// The text of `path`, whose metadata is `meta`, when that is a regular
+/// file of at most `cap` bytes; None otherwise, so a FIFO cannot block
+/// the watch thread and a huge file cannot bloat it. The read is
+/// bounded too, in case the file grows after `meta` was taken.
+fn read_capped(path: &Path, meta: &fs::Metadata, cap: u64) -> Option<String> {
+    if !meta.is_file() || meta.len() > cap {
+        return None;
+    }
+    let mut text = String::new();
+    fs::File::open(path)
+        .ok()?
+        .take(cap + 1)
+        .read_to_string(&mut text)
+        .ok()?;
+    (text.len() as u64 <= cap).then_some(text)
+}
+
+/// The config file of the repo `dir` is in, and whether `dir` is in a
+/// linked worktree: the nearest `.git` at or above it, its `config` when
+/// that is a directory (a main checkout), or its main checkout's
+/// (`worktree_config`) when it is a file. None when there is none, or
+/// the file is no linked worktree's (a submodule's).
+fn main_config(dir: &Path) -> Option<(PathBuf, bool)> {
     for folder in dir.ancestors() {
         let git = folder.join(".git");
         match fs::metadata(&git) {
-            Ok(m) if m.is_dir() => return Some(git.join("config")),
-            Ok(_) => return None,
+            Ok(m) if m.is_dir() => return Some((git.join("config"), false)),
+            Ok(_) => return worktree_config(&git).map(|c| (c, true)),
             Err(_) => {}
         }
     }
     None
 }
 
-/// The GitHub repo `dir` is in the main checkout of, read from its
-/// `.git/config` with no git process; None for none.
-pub fn checkout_of(dir: &str) -> Option<String> {
-    let config = fs::read_to_string(main_config(Path::new(dir))?).ok()?;
-    checkout_repo(&config)
+/// The main checkout's config file for the linked worktree whose `.git`
+/// file is `git`. That file names the worktree's own git folder
+/// (`gitdir: <path>`, relative to the worktree or absolute), which must
+/// be `<common>/worktrees/<name>`, must name this `.git` file back in its
+/// own `gitdir` file (so a copied worktree matches nothing), and whose
+/// `commondir` must name `<common>`, the main checkout's `.git`. A
+/// submodule's git folder has no `commondir`, so it matches nothing.
+fn worktree_config(git: &Path) -> Option<PathBuf> {
+    let folder = git.parent()?;
+    let text = read_pointer(git)?;
+    let named = folder.join(text.lines().next()?.strip_prefix("gitdir:")?.trim());
+    let own = fs::canonicalize(named).ok()?;
+    let back = read_pointer(&own.join("gitdir"))?;
+    let back = fs::canonicalize(own.join(back.lines().next()?.trim())).ok()?;
+    if back != fs::canonicalize(git).ok()? {
+        return None;
+    }
+    let common = read_pointer(&own.join("commondir"))?;
+    let common = fs::canonicalize(own.join(common.trim())).ok()?;
+    let parent = own.parent()?;
+    if parent.file_name()? != "worktrees" || parent.parent()? != common {
+        return None;
+    }
+    Some(common.join("config"))
+}
+
+/// The GitHub repo `dir` is in the main checkout or a linked worktree
+/// of, read from the main checkout's `.git/config` with no git process;
+/// None for none.
+pub fn checkout_of(dir: &str) -> Option<Checkout> {
+    let (config, worktree) = main_config(Path::new(dir))?;
+    let repo = checkout_repo(&read_config(&config)?)?;
+    Some(Checkout { repo, worktree })
 }
 
 /// The watch's state between checks.
@@ -216,20 +315,24 @@ impl Watch {
 
     /// One check: the feed to hand on, when it moved since the last.
     /// Folders are looked up only while there is a record.
-    pub fn check(&mut self, look: impl Fn(&str) -> Option<String>) -> Option<OstinatoFeed> {
+    pub fn check(&mut self, look: impl Fn(&str) -> Option<Checkout>) -> Option<OstinatoFeed> {
         let moved = self.records.check();
-        let checkouts = if self.records.is_empty() {
-            BTreeMap::new()
+        let (checkouts, worktrees) = if self.records.is_empty() {
+            (BTreeMap::new(), BTreeSet::new())
         } else {
             self.checkouts.learn(&self.open, look);
-            self.checkouts.map(&self.open)
+            (
+                self.checkouts.map(&self.open),
+                self.checkouts.worktrees(&self.open),
+            )
         };
-        if !moved && checkouts == self.sent.checkouts {
+        if !moved && checkouts == self.sent.checkouts && worktrees == self.sent.worktrees {
             return None;
         }
         let feed = OstinatoFeed {
             records: self.records.texts(),
             checkouts,
+            worktrees,
         };
         if feed == self.sent {
             return None;
@@ -306,7 +409,7 @@ mod tests {
         let asked = Cell::new(0);
         let ask = |d: &str| {
             asked.set(asked.get() + 1);
-            (d == "/dev/app-one").then(|| "example/app-one".to_string())
+            (d == "/dev/app-one").then(|| found("example/app-one", false))
         };
         let mut w = Watch::new(Some(dir.clone()));
         w.open = vec!["/dev/app-one".into(), "/dev/feat".into()];
@@ -326,10 +429,11 @@ mod tests {
             feed.checkouts,
             BTreeMap::from([("/dev/app-one".into(), "example/app-one".into())])
         );
+        assert!(feed.worktrees.is_empty());
         assert_eq!(asked.get(), 2);
 
         assert_eq!(w.check(ask), None, "nothing moved");
-        assert_eq!(asked.get(), 2, "each folder asked once");
+        assert_eq!(asked.get(), 3, "the found folder is not asked again");
 
         fs::write(dir.join("example__app-one.jsonl"), format!("{line}{line}")).unwrap();
         let feed = w.check(ask).unwrap();
@@ -347,20 +451,34 @@ mod tests {
         assert_eq!(feed, OstinatoFeed::default());
     }
 
+    fn found(repo: &str, worktree: bool) -> Checkout {
+        Checkout {
+            repo: repo.into(),
+            worktree,
+        }
+    }
+
     #[test]
-    fn each_folder_is_looked_up_once() {
+    fn a_found_folder_is_looked_up_once_and_one_not_found_again() {
         let mut c = Checkouts::default();
         let open = vec!["/dev/a".to_string()];
-        c.learn(&open, |_| Some("example/a".into()));
+        c.learn(&open, |_| Some(found("example/a", false)));
         assert_eq!(c.map(&open)["/dev/a"], "example/a");
         c.learn(&open, |_| None);
         assert_eq!(c.map(&open)["/dev/a"], "example/a", "cached");
-        // Closed, then reopened once it has its origin: looked up again.
+        // Not found while open, then given its `.git`: found on the next
+        // check, with no need to close it.
         let mut c = Checkouts::default();
         c.learn(&open, |_| None);
+        assert!(c.map(&open).is_empty());
+        c.learn(&open, |_| Some(found("example/a", true)));
+        assert_eq!(c.map(&open)["/dev/a"], "example/a", "looked up again");
+        assert_eq!(c.worktrees(&open), BTreeSet::from(["/dev/a".to_string()]));
+        // Closed, then reopened: looked up again.
         c.learn(&[], |_| None);
-        c.learn(&open, |_| Some("example/a".into()));
-        assert_eq!(c.map(&open)["/dev/a"], "example/a", "forgotten on close");
+        c.learn(&open, |_| Some(found("example/b", false)));
+        assert_eq!(c.map(&open)["/dev/a"], "example/b", "forgotten on close");
+        assert!(c.worktrees(&open).is_empty());
     }
 
     #[test]
@@ -412,56 +530,220 @@ mod tests {
         format!("[core]\n\tbare = false\n[remote \"origin\"]\n\turl = {url}\n")
     }
 
+    fn path(p: &Path) -> String {
+        p.to_str().unwrap().to_string()
+    }
+
+    /// The repo `dir` is in a checkout of, and whether in a worktree.
+    fn look(dir: &Path) -> Option<(String, bool)> {
+        checkout_of(&path(dir)).map(|c| (c.repo, c.worktree))
+    }
+
+    fn repo(name: &str) -> Option<(String, bool)> {
+        Some((name.to_string(), false))
+    }
+
+    fn in_worktree(name: &str) -> Option<(String, bool)> {
+        Some((name.to_string(), true))
+    }
+
+    /// A linked worktree at `at` of the main checkout `main`, laid out
+    /// by hand as git lays it out: `at/.git` names `main/.git/worktrees/
+    /// <name>`, whose `commondir` names the main `.git` and whose
+    /// `gitdir` names `at/.git` back.
+    fn worktree(main: &Path, name: &str, at: &Path) -> PathBuf {
+        let own = main.join(".git/worktrees").join(name);
+        fs::create_dir_all(&own).unwrap();
+        fs::write(own.join("commondir"), "../..\n").unwrap();
+        fs::write(own.join("gitdir"), format!("{}\n", path(&at.join(".git")))).unwrap();
+        fs::create_dir_all(at).unwrap();
+        fs::write(at.join(".git"), format!("gitdir: {}\n", path(&own))).unwrap();
+        own
+    }
+
     #[test]
-    fn a_main_checkout_names_its_origin_and_a_worktree_nothing() {
+    fn a_checkout_or_its_worktree_names_its_origin() {
         let root = temp("checkouts");
-        let path = |p: &Path| p.to_str().unwrap().to_string();
         for (name, url) in [
             ("ssh", "git@github.com:Example/App-One.git"),
             ("https", "https://github.com/example/app-one"),
             ("dotgit", "https://github.com/example/APP-ONE.git"),
         ] {
             let dir = checkout(&root, name, &origin(url));
-            assert_eq!(
-                checkout_of(&path(&dir)).as_deref(),
-                Some("example/app-one"),
-                "{url}"
-            );
+            assert_eq!(look(&dir), repo("example/app-one"), "{url}");
         }
         let main = checkout(&root, "main", &origin("git@github.com:example/app-one.git"));
         let sub = main.join("src/deep");
         fs::create_dir_all(&sub).unwrap();
-        assert_eq!(
-            checkout_of(&path(&sub)).as_deref(),
-            Some("example/app-one"),
-            "a folder inside the checkout"
-        );
+        assert_eq!(look(&sub), repo("example/app-one"), "inside the checkout");
 
-        let linked = root.join("linked");
-        fs::create_dir_all(&linked).unwrap();
+        let linked = root.join("main-worktrees/linked");
+        worktree(&main, "linked", &linked);
+        fs::create_dir_all(linked.join("src")).unwrap();
+        assert_eq!(look(&linked), in_worktree("example/app-one"));
+        assert_eq!(
+            look(&linked.join("src")),
+            in_worktree("example/app-one"),
+            "a folder inside a linked worktree"
+        );
+        // A relative `gitdir`, inside the main checkout's folder, and an
+        // absolute `commondir`.
+        let nested = main.join("worktrees/feat");
+        let feat = worktree(&main, "feat", &nested);
+        fs::write(feat.join("commondir"), path(&main.join(".git"))).unwrap();
+        fs::write(nested.join(".git"), "gitdir: ../../.git/worktrees/feat\n").unwrap();
+        assert_eq!(look(&nested), in_worktree("example/app-one"));
+
+        // A submodule's git folder has no `commondir`; a gone one, nothing.
+        let module = main.join(".git/modules/lib");
+        fs::create_dir_all(&module).unwrap();
         fs::write(
-            linked.join(".git"),
-            "gitdir: /dev/app-one/.git/worktrees/linked\n",
+            module.join("config"),
+            origin("https://github.com/example/lib"),
         )
         .unwrap();
-        assert_eq!(checkout_of(&path(&linked)), None, "a linked worktree");
-        // A worktree inside the main checkout's folder is still a worktree.
-        let nested = main.join("worktrees/feat");
-        fs::create_dir_all(&nested).unwrap();
-        fs::write(nested.join(".git"), "gitdir: ../../.git/worktrees/feat\n").unwrap();
-        assert_eq!(checkout_of(&path(&nested)), None);
+        let sub_dir = main.join("lib");
+        fs::create_dir_all(&sub_dir).unwrap();
+        fs::write(sub_dir.join(".git"), "gitdir: ../.git/modules/lib\n").unwrap();
+        assert_eq!(look(&sub_dir), None, "a submodule");
+        let gone = root.join("gone");
+        fs::create_dir_all(&gone).unwrap();
+        fs::write(gone.join(".git"), "gitdir: /nowhere/.git/worktrees/gone\n").unwrap();
+        assert_eq!(look(&gone), None, "a removed worktree");
 
         let bare = checkout(&root, "no-origin", "[core]\n\tbare = false\n");
-        assert_eq!(checkout_of(&path(&bare)), None, "no origin");
+        assert_eq!(look(&bare), None, "no origin");
         let other = checkout(
             &root,
             "gitlab",
             &origin("https://gitlab.com/example/app-one"),
         );
-        assert_eq!(checkout_of(&path(&other)), None, "not GitHub");
+        assert_eq!(look(&other), None, "not GitHub");
         let plain = root.join("plain");
         fs::create_dir_all(&plain).unwrap();
-        assert_eq!(checkout_of(&path(&plain)), None);
-        assert_eq!(checkout_of(&path(&root.join("gone"))), None);
+        assert_eq!(look(&plain), None);
+    }
+
+    #[test]
+    fn a_copied_worktree_whose_git_folder_names_another_matches_nothing() {
+        let root = temp("copied");
+        let main = checkout(&root, "main", &origin("git@github.com:example/app-one.git"));
+        let real = root.join("real");
+        worktree(&main, "real", &real);
+        assert_eq!(look(&real), in_worktree("example/app-one"));
+        // A copy of the worktree folder, `.git` file and all: its git
+        // folder's `gitdir` still names the original.
+        let copy = root.join("copy");
+        fs::create_dir_all(&copy).unwrap();
+        fs::copy(real.join(".git"), copy.join(".git")).unwrap();
+        assert_eq!(look(&copy), None, "a stale copy");
+        // A git folder whose `gitdir` file is missing matches nothing.
+        let own = main.join(".git/worktrees/real");
+        fs::remove_file(own.join("gitdir")).unwrap();
+        assert_eq!(look(&real), None, "no back pointer");
+    }
+
+    #[test]
+    fn a_git_file_pointing_outside_a_worktrees_folder_matches_nothing() {
+        let root = temp("outside");
+        let main = checkout(&root, "main", &origin("git@github.com:example/app-one.git"));
+        // A git folder elsewhere on disk, with a `commondir` naming the
+        // main `.git` and a `gitdir` naming this `.git` back: not under
+        // `<common>/worktrees/`, so not a worktree of it.
+        let stray = root.join("stray/own");
+        fs::create_dir_all(&stray).unwrap();
+        fs::write(stray.join("commondir"), path(&main.join(".git"))).unwrap();
+        let at = root.join("at");
+        fs::create_dir_all(&at).unwrap();
+        fs::write(stray.join("gitdir"), path(&at.join(".git"))).unwrap();
+        fs::write(at.join(".git"), format!("gitdir: {}\n", path(&stray))).unwrap();
+        assert_eq!(look(&at), None, "not under worktrees");
+        // Under some `worktrees` folder, but not the common one's.
+        let other = root.join("other/.git/worktrees/own");
+        fs::create_dir_all(&other).unwrap();
+        fs::write(other.join("commondir"), path(&main.join(".git"))).unwrap();
+        fs::write(other.join("gitdir"), path(&at.join(".git"))).unwrap();
+        fs::write(at.join(".git"), format!("gitdir: {}\n", path(&other))).unwrap();
+        assert_eq!(look(&at), None, "another folder's worktrees");
+    }
+
+    #[test]
+    fn a_git_file_that_is_too_big_or_no_regular_file_is_not_read() {
+        let root = temp("bounded-git");
+        let main = checkout(&root, "main", &origin("git@github.com:example/app-one.git"));
+        let linked = root.join("linked");
+        let own = worktree(&main, "linked", &linked);
+        assert_eq!(look(&linked), in_worktree("example/app-one"));
+
+        // A config just over the pointer cap still matches; one over the
+        // config cap does not.
+        let config = |extra: u64| {
+            format!(
+                "{}#{}\n",
+                origin("git@github.com:example/app-one.git"),
+                "x".repeat(extra as usize)
+            )
+        };
+        fs::write(main.join(".git/config"), config(POINTER_CAP)).unwrap();
+        assert_eq!(look(&main), repo("example/app-one"), "a config over 64 KiB");
+        assert_eq!(look(&linked), in_worktree("example/app-one"));
+        fs::write(main.join(".git/config"), config(CONFIG_CAP)).unwrap();
+        assert_eq!(look(&main), None, "a main checkout's config");
+        assert_eq!(look(&linked), None, "through a worktree");
+        fs::write(main.join(".git/config"), config(1000)).unwrap();
+        assert_eq!(look(&main), repo("example/app-one"));
+
+        // A `.git` file over the pointer cap.
+        let pointer = fs::read_to_string(linked.join(".git")).unwrap();
+        let padded = format!("{pointer}{}\n", "x".repeat(POINTER_CAP as usize));
+        fs::write(linked.join(".git"), padded).unwrap();
+        assert_eq!(look(&linked), None, "a big `.git` file");
+        fs::write(linked.join(".git"), pointer).unwrap();
+        assert_eq!(look(&linked), in_worktree("example/app-one"));
+
+        // A FIFO where `commondir` should be: refused, never opened, so
+        // the check does not block.
+        fs::remove_file(own.join("commondir")).unwrap();
+        let made = std::process::Command::new("mkfifo")
+            .arg(own.join("commondir"))
+            .status()
+            .unwrap();
+        assert!(made.success());
+        assert_eq!(look(&linked), None, "a FIFO");
+        // A folder where the config should be.
+        fs::remove_file(main.join(".git/config")).unwrap();
+        fs::create_dir_all(main.join(".git/config")).unwrap();
+        assert_eq!(look(&main), None, "a folder");
+        // A link where the `.git` file should be.
+        let link = root.join("link");
+        fs::create_dir_all(&link).unwrap();
+        std::os::unix::fs::symlink(linked.join(".git"), link.join(".git")).unwrap();
+        assert_eq!(look(&link), None, "a linked `.git` file");
+    }
+
+    #[test]
+    fn a_linked_config_is_read_through_its_link_and_a_fifo_config_is_not() {
+        let root = temp("linked-config");
+        let main = checkout(&root, "main", "");
+        let linked = root.join("linked");
+        worktree(&main, "linked", &linked);
+        // A dotfile manager's link where the config should be.
+        let real = root.join("dotfiles/config");
+        fs::create_dir_all(real.parent().unwrap()).unwrap();
+        fs::write(&real, origin("git@github.com:example/app-one.git")).unwrap();
+        fs::remove_file(main.join(".git/config")).unwrap();
+        std::os::unix::fs::symlink(&real, main.join(".git/config")).unwrap();
+        assert_eq!(look(&main), repo("example/app-one"), "a linked config");
+        assert_eq!(look(&linked), in_worktree("example/app-one"));
+
+        // A FIFO where the config should be: refused, never opened.
+        fs::remove_file(main.join(".git/config")).unwrap();
+        let made = std::process::Command::new("mkfifo")
+            .arg(main.join(".git/config"))
+            .status()
+            .unwrap();
+        assert!(made.success());
+        assert_eq!(look(&main), None, "a FIFO config");
+        assert_eq!(look(&linked), None, "a FIFO config through a worktree");
     }
 }
