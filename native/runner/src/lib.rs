@@ -30,8 +30,8 @@
 //! - config/state.json, config/projects.json and config/lanes.json,
 //!   checked every 2 seconds.
 //! - The Ostinato records folder, checked every 2 seconds on a thread of
-//!   its own, with which open workspace folders are main checkouts of
-//!   which GitHub repo (ostinato.rs).
+//!   its own, with which open workspace folders are in a main checkout,
+//!   or one of its linked worktrees, of which GitHub repo (ostinato.rs).
 //! - Each directory's PR, when the core asks (pr_ask.rs): `git` then `gh`
 //!   on a thread per ask, the answer coming back as an input. The core
 //!   decides when (cockpit_core::pr_poll), and only an answer that moves
@@ -144,8 +144,8 @@ pub enum Input {
     Slept(Box<SleepAnswer>),
     /// The id cmux gave a notification the core posted (notify_ask.rs).
     Notified(Box<Notified>),
-    /// The Ostinato records and main checkouts, when either moved
-    /// (ostinato.rs).
+    /// The Ostinato records and checkouts (main or linked worktree), when
+    /// either moved (ostinato.rs).
     Ostinato(Box<OstinatoFeed>),
 }
 
@@ -1067,6 +1067,7 @@ mod tests {
                 "/dev/app-one".to_string(),
                 "example/app-one".to_string(),
             )]),
+            worktrees: Default::default(),
         };
         let before = feed.inputs.generation();
         let (changed, nudge, _) = feed.input(Input::Ostinato(Box::new(ostinato.clone())));

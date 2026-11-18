@@ -25,6 +25,7 @@ fn published() -> Value {
             RecordText::from_bytes(RECORD.as_bytes()),
         )]),
         checkouts: BTreeMap::from([("/dev/app-one".to_string(), "example/app-one".to_string())]),
+        worktrees: Default::default(),
     };
     let (changed, _, _) = feed.input(Input::Ostinato(Box::new(ostinato)));
     assert!(changed, "news for data.json");

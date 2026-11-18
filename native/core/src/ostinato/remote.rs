@@ -1,14 +1,14 @@
-//! Which GitHub repo a folder is the main checkout of, so a run record
+//! Which GitHub repo a folder is in a main checkout, or a linked
+//! worktree, of, so a run record
 //! (named by `owner/repo`) finds its workspace's card (issue #390,
 //! option a). No git process runs for it: git run in a folder obeys that
 //! repo's own config (`core.fsmonitor`, a pager, aliases), which a
 //! cloned repo may set to run anything. The runner instead finds the
-//! folder's `.git` itself, once per folder: a directory is a main
-//! checkout, whose `config` file it hands here (`checkout_repo`); a
-//! `.git` file is a linked worktree, which hands its main checkout's
-//! (a submodule's matches nothing). A folder with
-//! no `.git`, no `origin` or one that is not GitHub's matches no record
-//! either; none of that is an error.
+//! folder's `.git` itself: a directory is a main checkout, whose
+//! `config` file it hands here (`checkout_repo`); a `.git` file is a
+//! linked worktree, which hands its main checkout's (a submodule's
+//! matches nothing). A folder with no `.git`, no `origin` or one that is
+//! not GitHub's matches no record either; none of that is an error.
 //!
 //! Only the config file itself is read: an `include` or `includeIf`, or
 //! a `url.<base>.insteadOf` rewrite, is not followed, and an ssh host
