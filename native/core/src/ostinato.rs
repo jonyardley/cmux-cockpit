@@ -7,7 +7,7 @@
 //! works out where its latest run stands at the frame's clock (run.rs).
 //!
 //! A record's card is the workspace open on its project's main checkout
-//! (remote.rs): the record's `owner/repo`, from its latest `run_started`
+//! or one of its linked worktrees (remote.rs): the record's `owner/repo`, from its latest `run_started`
 //! or else its file name, matched to the folder's GitHub `origin`.
 //!
 //! The runner hands on only what a card reads of each record (bound.rs).

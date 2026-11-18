@@ -1,5 +1,5 @@
 //! Watches the Ostinato records folder (issue #390) on a thread of its
-//! own, and finds which open workspace folders are main checkouts of
+//! own, and finds which open workspace folders are in checkouts of
 //! which GitHub repo, then hands the core both (`Input::Ostinato`)
 //! whenever either changed.
 //!
@@ -19,7 +19,8 @@
 //!   (cockpit_core::ostinato::remote). No git process runs, since git
 //!   run in a folder obeys that repo's own config, which can run
 //!   anything (`core.fsmonitor`, a pager). A `.git` file is a linked
-//!   worktree, which matches nothing.
+//!   worktree, which takes its main checkout's repo, so a workspace
+//!   whose terminal moves between the two keeps the card.
 
 use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
@@ -173,19 +174,32 @@ impl Checkouts {
     }
 }
 
-/// The config file of the main checkout `dir` is in: the nearest `.git`
-/// at or above it, when that is a directory. None when it is a file (a
-/// linked worktree, or a submodule) or there is none.
+/// The config file of the repo `dir` is in: the nearest `.git` at or
+/// above it, its `config` when that is a directory (a main checkout), or
+/// its main checkout's (`worktree_config`) when it is a file. None when
+/// there is none, or the file is no linked worktree's (a submodule's).
 fn main_config(dir: &Path) -> Option<PathBuf> {
     for folder in dir.ancestors() {
         let git = folder.join(".git");
         match fs::metadata(&git) {
             Ok(m) if m.is_dir() => return Some(git.join("config")),
-            Ok(_) => return None,
+            Ok(_) => return worktree_config(folder, &git),
             Err(_) => {}
         }
     }
     None
+}
+
+/// The main checkout's config file for the linked worktree in `folder`,
+/// whose `.git` file `git` names its own git folder (`gitdir: <path>`,
+/// relative to `folder` or absolute). That folder's `commondir` names the
+/// main checkout's `.git` (relative to it or absolute); a submodule's git
+/// folder has no `commondir`, so it matches nothing, as before.
+fn worktree_config(folder: &Path, git: &Path) -> Option<PathBuf> {
+    let text = fs::read_to_string(git).ok()?;
+    let own = folder.join(text.lines().next()?.strip_prefix("gitdir:")?.trim());
+    let common = fs::read_to_string(own.join("commondir")).ok()?;
+    Some(own.join(common.trim()).join("config"))
 }
 
 /// The GitHub repo `dir` is in the main checkout of, read from its
@@ -413,7 +427,7 @@ mod tests {
     }
 
     #[test]
-    fn a_main_checkout_names_its_origin_and_a_worktree_nothing() {
+    fn a_checkout_or_its_worktree_names_its_origin() {
         let root = temp("checkouts");
         let path = |p: &Path| p.to_str().unwrap().to_string();
         for (name, url) in [
@@ -437,19 +451,53 @@ mod tests {
             "a folder inside the checkout"
         );
 
-        let linked = root.join("linked");
-        fs::create_dir_all(&linked).unwrap();
-        fs::write(
-            linked.join(".git"),
-            "gitdir: /dev/app-one/.git/worktrees/linked\n",
-        )
-        .unwrap();
-        assert_eq!(checkout_of(&path(&linked)), None, "a linked worktree");
-        // A worktree inside the main checkout's folder is still a worktree.
+        // A linked worktree names its main checkout's repo, as git lays
+        // it out: `.git` names the worktree's git folder, whose
+        // `commondir` names the main `.git`.
+        let own = main.join(".git/worktrees/linked");
+        fs::create_dir_all(&own).unwrap();
+        fs::write(own.join("commondir"), "../..\n").unwrap();
+        let linked = root.join("main-worktrees/linked");
+        fs::create_dir_all(linked.join("src")).unwrap();
+        fs::write(linked.join(".git"), format!("gitdir: {}\n", path(&own))).unwrap();
+        assert_eq!(
+            checkout_of(&path(&linked)).as_deref(),
+            Some("example/app-one"),
+            "a linked worktree"
+        );
+        assert_eq!(
+            checkout_of(&path(&linked.join("src"))).as_deref(),
+            Some("example/app-one"),
+            "a folder inside a linked worktree"
+        );
+        // A relative `gitdir`, inside the main checkout's folder.
+        let feat = main.join(".git/worktrees/feat");
+        fs::create_dir_all(&feat).unwrap();
+        fs::write(feat.join("commondir"), path(&main.join(".git"))).unwrap();
         let nested = main.join("worktrees/feat");
         fs::create_dir_all(&nested).unwrap();
         fs::write(nested.join(".git"), "gitdir: ../../.git/worktrees/feat\n").unwrap();
-        assert_eq!(checkout_of(&path(&nested)), None);
+        assert_eq!(
+            checkout_of(&path(&nested)).as_deref(),
+            Some("example/app-one"),
+            "a relative gitdir and an absolute commondir"
+        );
+        // A submodule's git folder has no `commondir`; a gone one, nothing.
+        let module = main.join(".git/modules/lib");
+        fs::create_dir_all(&module).unwrap();
+        fs::write(
+            module.join("config"),
+            origin("https://github.com/example/lib"),
+        )
+        .unwrap();
+        let sub_dir = main.join("lib");
+        fs::create_dir_all(&sub_dir).unwrap();
+        fs::write(sub_dir.join(".git"), "gitdir: ../.git/modules/lib\n").unwrap();
+        assert_eq!(checkout_of(&path(&sub_dir)), None, "a submodule");
+        let gone = root.join("gone");
+        fs::create_dir_all(&gone).unwrap();
+        fs::write(gone.join(".git"), "gitdir: /nowhere/.git/worktrees/gone\n").unwrap();
+        assert_eq!(checkout_of(&path(&gone)), None, "a removed worktree");
 
         let bare = checkout(&root, "no-origin", "[core]\n\tbare = false\n");
         assert_eq!(checkout_of(&path(&bare)), None, "no origin");

@@ -5,7 +5,8 @@
 //! cloned repo may set to run anything. The runner instead finds the
 //! folder's `.git` itself, once per folder: a directory is a main
 //! checkout, whose `config` file it hands here (`checkout_repo`); a
-//! `.git` file is a linked worktree, which matches nothing. A folder with
+//! `.git` file is a linked worktree, which hands its main checkout's
+//! (a submodule's matches nothing). A folder with
 //! no `.git`, no `origin` or one that is not GitHub's matches no record
 //! either; none of that is an error.
 //!
