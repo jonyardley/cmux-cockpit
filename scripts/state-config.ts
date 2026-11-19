@@ -75,6 +75,14 @@ export interface State {
    */
   waits?: Record<string, SavedWait[]>;
   /**
+   * wsId -> the Ostinato cycles the native Cockpit's card carries (#399),
+   * oldest first, the newest MAX_CYCLES kept: one attempt at one item
+   * each, with its stage times, for the agents panel's Details tab.
+   * Written only by scripts/cycles-save.ts, from the core's SaveCycles
+   * effect, never by a URL. Left out while nothing is saved.
+   */
+  cycles?: Record<string, SavedCycle[]>;
+  /**
    * Claude Code session id -> the name its agent row shows, recorded by
    * scripts/hooks/report-rename.ts because cmux's own agent title is the
    * first message, which it cannot read for every Claude folder. Oldest
@@ -355,6 +363,43 @@ export interface SavedRunning {
   counts: SavedCount[];
 }
 
+/** One stage of a saved cycle, or its park (persist.rs SavedStage). */
+interface SavedStage {
+  /** The record's stage name ("brief", "qa"), "draft" or "parked". */
+  name: string;
+  /** Epoch seconds it came. */
+  at: number;
+  /** Seconds since the milestone before it, the pick for the first. */
+  secs: number;
+  /** The sessions behind it: the line's own, else the cycle's. */
+  sessions?: string[];
+}
+
+/**
+ * One Ostinato cycle, one attempt at one item, a Cockpit card carries
+ * (native/core/src/cycles_save.rs). Nothing in it moves with the clock.
+ */
+export interface SavedCycle {
+  /** The item, as "repo#12". */
+  item: string;
+  url?: string;
+  attempt?: number;
+  /** How it ended, as the record's word; absent while it runs. */
+  outcome?: string;
+  /** Why it parked, as the record's code, and the question for Jon. */
+  reason?: string;
+  question?: string;
+  /** The draft pull request it opened, as "repo#12". */
+  pr?: string;
+  sessions?: string[];
+  /** Dollars, from its end line. */
+  cost?: number;
+  /** Epoch seconds it was picked; absent for an earlier run's cycle. */
+  started?: number;
+  ended?: number;
+  stages?: SavedStage[];
+}
+
 /** The kinds of wait the native core saves (persist.rs WaitKind). */
 export const WAIT_KINDS = ["stopped", "ci_stuck", "ci_failing", "merge_ready", "park"] as const;
 export type WaitKind = (typeof WAIT_KINDS)[number];
@@ -462,6 +507,15 @@ export const MAX_COUNTS = TASK_TYPES.length;
 
 /** The most waits saved for one workspace (persist.rs MAX_WAITS). */
 export const MAX_WAITS = 20;
+
+/** The most cycles saved for one workspace (persist.rs MAX_CYCLES). */
+export const MAX_CYCLES = 10;
+/** The most stages saved for one cycle (persist.rs MAX_STAGES). */
+const MAX_STAGES = 20;
+/** The most sessions saved for one cycle or stage (persist.rs MAX_CYCLE_SESSIONS). */
+const MAX_CYCLE_SESSIONS = 8;
+/** The longest item link kept (persist.rs MAX_URL). */
+const MAX_URL = 512;
 
 /** Agent tabs kept asleep per workspace, so a bad write cannot bloat the file. */
 export const MAX_ASLEEP = 10;
@@ -983,6 +1037,62 @@ function savedWaits(v: unknown): SavedWait[] | null {
   return waits.every((w) => w !== null) ? waits.filter((w) => w !== null) : null;
 }
 
+/** A cycle's or stage's sessions as serde reads them: absent, or up to MAX_CYCLE_SESSIONS ids; null refuses. */
+function cycleSessions(v: unknown): { ok: true; value: string[] } | { ok: false } {
+  if (v === undefined) return { ok: true, value: [] };
+  if (!Array.isArray(v) || v.length > MAX_CYCLE_SESSIONS || !v.every(isIdText)) return { ok: false };
+  return { ok: true, value: v };
+}
+
+const isAttempt = (v: unknown): v is number =>
+  typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 0xffffffff;
+const isUrlText = (v: unknown): v is string => isText(v, MAX_URL);
+
+/** A saved stage as persist.rs's SavedStage::fits holds it. */
+function savedStage(v: unknown): SavedStage | null {
+  if (!isRecord(v) || !isLabel(v.name) || !isEpoch(v.at) || !isEpoch(v.secs)) return null;
+  const sessions = cycleSessions(v.sessions);
+  if (!sessions.ok) return null;
+  return { name: v.name, at: v.at, secs: v.secs, ...(sessions.value.length ? { sessions: sessions.value } : {}) };
+}
+
+/** A saved cycle as persist.rs's SavedCycle::fits holds it: any part that does not fit refuses the whole. */
+function savedCycle(v: unknown): SavedCycle | null {
+  if (!isRecord(v) || !isLabel(v.item)) return null;
+  const sessions = cycleSessions(v.sessions);
+  if (!sessions.ok) return null;
+  if (v.stages !== undefined && (!Array.isArray(v.stages) || v.stages.length > MAX_STAGES)) return null;
+  const stages = (v.stages ?? []).map(savedStage);
+  if (!stages.every((s) => s !== null)) return null;
+  const opt = {
+    url: optional(v.url, isUrlText),
+    attempt: optional(v.attempt, isAttempt),
+    outcome: optional(v.outcome, isLabel),
+    reason: optional(v.reason, isLabel),
+    question: optional(v.question, isLabel),
+    pr: optional(v.pr, isLabel),
+    cost: optional(v.cost, isEpoch),
+    started: optional(v.started, isEpoch),
+    ended: optional(v.ended, isEpoch),
+  };
+  if (!Object.values(opt).every((o) => o.ok)) return null;
+  const out: SavedCycle = { item: v.item };
+  for (const [key, o] of Object.entries(opt)) {
+    if (o.ok && o.value !== undefined) Object.assign(out, { [key]: o.value });
+  }
+  if (sessions.value.length) out.sessions = sessions.value;
+  const kept = stages.filter((s) => s !== null);
+  if (kept.length) out.stages = kept;
+  return out;
+}
+
+/** A workspace's cycles as persist.rs's cycles_map reads them: dropped whole if any cycle does not fit. */
+function savedCycles(v: unknown): SavedCycle[] | null {
+  if (!Array.isArray(v) || v.length < 1 || v.length > MAX_CYCLES) return null;
+  const cycles = v.map(savedCycle);
+  return cycles.every((c) => c !== null) ? cycles.filter((c) => c !== null) : null;
+}
+
 function savedAsleep(v: unknown): SavedAsleep | null {
   if (!isRecord(v) || !Array.isArray(v.surfaces) || !isEpoch(v.since)) return null;
   const surfaces = v.surfaces.filter(isIdText);
@@ -1036,6 +1146,7 @@ export function validateState(raw: unknown): State {
   const background = cleanMap(v.background, savedTasks);
   const running = cleanMap(v.running, savedRunning);
   const waits = cleanMap(v.waits, savedWaits);
+  const cycles = cleanMap(v.cycles, savedCycles);
   const laneNames = cleanMap(v.laneNames, laneName);
   const asleep = cleanMap(v.asleep, savedAsleep);
   const notified = cleanMap(v.notified, savedNote);
@@ -1055,6 +1166,7 @@ export function validateState(raw: unknown): State {
     ...(Object.keys(background).length ? { background } : {}),
     ...(Object.keys(running).length ? { running } : {}),
     ...(Object.keys(waits).length ? { waits } : {}),
+    ...(Object.keys(cycles).length ? { cycles } : {}),
     ...(Object.keys(laneNames).length ? { laneNames } : {}),
     ...(Object.keys(asleep).length ? { asleep } : {}),
     ...(Object.keys(notified).length ? { notified } : {}),
@@ -1064,7 +1176,7 @@ export function validateState(raw: unknown): State {
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `waits`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
+// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `waits`, `cycles`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
 type MapName =

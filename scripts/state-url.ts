@@ -269,6 +269,23 @@ export function writeWaitEntries(
 }
 
 /**
+ * The native core's Ostinato cycles (scripts/cycles-save.ts, #399), the
+ * one writer of the `cycles` map, as writeWaitEntries writes the waits.
+ * `set` must already be clean (validateState's `cycles`).
+ */
+export function writeCycleEntries(
+  path: string,
+  set: NonNullable<State["cycles"]>,
+  remove: readonly string[],
+): ApplyResult {
+  return readUpdateWrite(path, (before) => {
+    const cycles = { ...before.cycles, ...set };
+    for (const id of remove) delete cycles[id];
+    return { ok: true, state: validateState({ ...before, cycles: sortedByKey(cycles) }) };
+  });
+}
+
+/**
  * The `prs` a poll writes: a whole map to replace it, or a function from
  * the map as it stands under the lock to the next one, so a write that
  * landed since the poll read the file is never undone.

@@ -63,5 +63,31 @@
       "body": "CI stuck 40m: rerun?"
     }
   },
-  { "DismissNotification": { "id": "74D64488-9CB8-4B8D-900F-1908FF44B8BB" } }
+  { "DismissNotification": { "id": "74D64488-9CB8-4B8D-900F-1908FF44B8BB" } },
+  {
+    "SaveCycles": {
+      "cycles": {
+        "W1": [
+          {
+            "item": "app#12",
+            "url": "https://github.com/o/app/issues/12",
+            "attempt": 1,
+            "outcome": "parked",
+            "reason": "needs_decision",
+            "question": "Rerun CI once main is green?",
+            "pr": "app#40",
+            "sessions": ["s1"],
+            "cost": 2.5,
+            "started": 1791229200.0,
+            "ended": 1791229800.0,
+            "stages": [
+              { "name": "brief", "at": 1791229260.0, "secs": 60.0, "sessions": ["s1"] },
+              { "name": "parked", "at": 1791229700.0, "secs": 440.0, "sessions": ["s1"] }
+            ]
+          }
+        ],
+        "W2": null
+      }
+    }
+  }
 ]

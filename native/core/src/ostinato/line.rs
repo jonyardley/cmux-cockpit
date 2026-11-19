@@ -143,6 +143,19 @@ pub enum Outcome {
 }
 
 impl Outcome {
+    /// Its word as the record writes it.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Outcome::Draft => "draft",
+            Outcome::Parked => "parked",
+            Outcome::Stalled => "stalled",
+            Outcome::Capped => "capped",
+            Outcome::Failed => "failed",
+            Outcome::Cancelled => "cancelled",
+            Outcome::Other(text) => text,
+        }
+    }
+
     fn of(text: &str) -> Outcome {
         match text {
             "draft" => Outcome::Draft,
@@ -179,12 +192,14 @@ pub enum Event {
         item: String,
         pr: String,
         attempt: Option<u32>,
+        sessions: Vec<String>,
     },
     Parked {
         item: String,
         reason: String,
         question: String,
         attempt: Option<u32>,
+        sessions: Vec<String>,
     },
     AttemptEnded {
         item: String,
@@ -523,6 +538,7 @@ fn event_of(name: &str, map: &Value) -> Result<Event, Broken> {
                 item: l.item,
                 pr: l.pr,
                 attempt: l.attempt,
+                sessions: l.sessions,
             })
         }
         "parked" => {
@@ -537,6 +553,7 @@ fn event_of(name: &str, map: &Value) -> Result<Event, Broken> {
                 reason: l.reason,
                 question: l.question,
                 attempt: l.attempt,
+                sessions: l.sessions,
             })
         }
         "attempt_ended" => {

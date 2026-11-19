@@ -746,6 +746,28 @@ no agent is left. The waits that land fill the Details tab's Waiting on
 you card. The panel has no Dismiss for them: dismissing in the Cockpit
 clears the saved wait, and the next build bakes the map without it.
 
+### The core's Ostinato cycles for the agents panel
+
+The native core also saves each Ostinato cycle the card carries (#399),
+one attempt at one item, in a `cycles` map for the agents panel's
+Details tab: workspace id to a list, oldest first, of the newest ten.
+Each holds `item` (`repo#12`) and, where known, `url`, `attempt`,
+`outcome` (the record's word, absent while it runs), `reason` and
+`question` when it parked, `pr` when a draft line names one, `sessions`,
+`cost` in dollars from its end line, `started` (the pick) and `ended`,
+and `stages`: each `{"name", "at", "secs"}` with the `sessions` behind
+it, `secs` the time since the milestone before (the pick for the first),
+a draft line adding `draft` and a park line a final `parked`. A stage
+line that names no session takes the cycle's. The runner hands on only
+the latest run whole (`native/core/src/ostinato/bound.rs`), so an earlier
+run's cycle has its end but no pick or stages. Text is cut to one line of
+at most 120 characters. Nothing in it moves with the clock, so an
+unchanged cycle is never written again, and the file's cycles are kept
+for a minute before the first Ostinato feed, as a park is. It goes the
+same way as `waits` (`native/core/src/cycles_save.rs`, its `SaveCycles`
+effect, `scripts/cycles-save.sh` and `scripts/cycles-save.ts`). No URL
+writes it.
+
 ## Published pages and docs
 
 cmux knows nothing about the pages and docs agents publish on claude.ai
