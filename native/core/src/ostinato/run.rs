@@ -247,6 +247,7 @@ pub fn waiting_parks(lines: &[Line]) -> Vec<Park> {
                 reason,
                 question,
                 attempt,
+                ..
             } => out.push(Park {
                 item: item.clone(),
                 attempt: *attempt,
@@ -345,7 +346,9 @@ impl Walk {
                 attempt,
                 ..
             } => self.stage(item, *attempt, Stage::of(stage), l.at),
-            Event::Draft { item, pr, attempt } => {
+            Event::Draft {
+                item, pr, attempt, ..
+            } => {
                 self.stage(item, *attempt, Stage::Draft, l.at);
                 self.drafts.push(DraftMade {
                     item: item.clone(),
@@ -357,6 +360,7 @@ impl Walk {
                 reason,
                 question,
                 attempt,
+                ..
             } => self.parks.push(Park {
                 item: item.clone(),
                 attempt: *attempt,

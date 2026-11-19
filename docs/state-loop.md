@@ -746,6 +746,38 @@ no agent is left. The waits that land fill the Details tab's Waiting on
 you card. The panel has no Dismiss for them: dismissing in the Cockpit
 clears the saved wait, and the next build bakes the map without it.
 
+### The core's Ostinato cycles for the agents panel
+
+The native core also saves each Ostinato cycle the card carries (#399),
+one attempt at one item, in a `cycles` map for the agents panel's
+Details tab: workspace id to a list, oldest first, of the newest ten.
+Each holds `item` (`repo#12`) and, where known, `url`, `attempt`,
+`outcome` (the record's word, absent while it runs), `reason` and
+`question` when it parked, `pr` when a draft line names one, `sessions`,
+`cost` in dollars, its end line's share as the card counts it (a
+session's rise since the last line that priced it, not its running total), `started` (the pick) and `ended`,
+and `stages`: each `{"name", "at", "secs"}` with the `sessions` behind
+it, `secs` the time since the milestone before (the pick for the first),
+a draft line adding `draft` and a park line a final `parked`. A stage
+line that names no session takes the cycle's. The runner hands on only
+the latest run whole (`native/core/src/ostinato/bound.rs`); from earlier
+runs it hands on their end lines from about a day before its clock, each
+session's latest older end line before those, and the parks still
+waiting. Each of those end lines makes a cycle with its end, and its park
+when one was handed on, but no pick or stages, so the earlier runs'
+cycles are not every attempt of the last day, and as the runner's clock
+moves the oldest drop out. A cycle whose run ends, or is followed by another run,
+with no end line of its own is closed then: `ended` is that line's time
+and `outcome` stays absent, so `outcome` absent with `ended` set reads
+"ended without an end line", and only both absent means still running.
+Text is cut to one line of at most 120 characters; a number or stage
+that will not fit is dropped on its own. Nothing in it moves with the clock, so an
+unchanged cycle is never written again, and the file's cycles are kept
+for a minute before the first Ostinato feed, as a park is. It goes the
+same way as `waits` (`native/core/src/cycles_save.rs`, its `SaveCycles`
+effect, `scripts/cycles-save.sh` and `scripts/cycles-save.ts`). No URL
+writes it.
+
 ## Published pages and docs
 
 cmux knows nothing about the pages and docs agents publish on claude.ai

@@ -143,6 +143,19 @@ pub enum Outcome {
 }
 
 impl Outcome {
+    /// Its word as the record writes it.
+    pub fn as_str(&self) -> &str {
+        match self {
+            Outcome::Draft => "draft",
+            Outcome::Parked => "parked",
+            Outcome::Stalled => "stalled",
+            Outcome::Capped => "capped",
+            Outcome::Failed => "failed",
+            Outcome::Cancelled => "cancelled",
+            Outcome::Other(text) => text,
+        }
+    }
+
     fn of(text: &str) -> Outcome {
         match text {
             "draft" => Outcome::Draft,
@@ -179,12 +192,14 @@ pub enum Event {
         item: String,
         pr: String,
         attempt: Option<u32>,
+        sessions: Vec<String>,
     },
     Parked {
         item: String,
         reason: String,
         question: String,
         attempt: Option<u32>,
+        sessions: Vec<String>,
     },
     AttemptEnded {
         item: String,
@@ -376,7 +391,7 @@ struct DraftLine {
     _url: Option<String>,
     pr: String,
     attempt: Option<u32>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_sessions")]
     sessions: Vec<String>,
 }
 
@@ -388,7 +403,7 @@ struct ParkedLine {
     reason: String,
     question: String,
     attempt: Option<u32>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_sessions")]
     sessions: Vec<String>,
 }
 
@@ -463,13 +478,32 @@ fn check_attempt(attempt: Option<u32>) -> Result<(), Broken> {
     )
 }
 
+fn is_session(s: &str) -> bool {
+    !s.is_empty() && !s.chars().any(char::is_whitespace)
+}
+
 fn check_sessions(sessions: &[String]) -> Result<(), Broken> {
     check(
-        sessions
-            .iter()
-            .all(|s| !s.is_empty() && !s.chars().any(char::is_whitespace)),
+        sessions.iter().all(|s| is_session(s)),
         "a session id is empty or has a space in it",
     )
+}
+
+/// A draft or park line's `sessions`, read as the format says a reader
+/// takes a missing list: absent, null or not a list is empty, and an
+/// entry that is not a session id is dropped, so the line, and every
+/// line after it, is still read.
+fn lenient_sessions<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    let Value::Array(items) = Value::deserialize(d)? else {
+        return Ok(Vec::new());
+    };
+    Ok(items
+        .into_iter()
+        .filter_map(|v| match v {
+            Value::String(s) if is_session(&s) => Some(s),
+            _ => None,
+        })
+        .collect())
 }
 
 fn non_negative(n: f64) -> bool {
@@ -518,11 +552,11 @@ fn event_of(name: &str, map: &Value) -> Result<Event, Broken> {
             check_item(&l.item)?;
             check(is_key(&l.pr), "`pr` is not a key such as repo#12")?;
             check_attempt(l.attempt)?;
-            check_sessions(&l.sessions)?;
             Ok(Event::Draft {
                 item: l.item,
                 pr: l.pr,
                 attempt: l.attempt,
+                sessions: l.sessions,
             })
         }
         "parked" => {
@@ -531,12 +565,12 @@ fn event_of(name: &str, map: &Value) -> Result<Event, Broken> {
             check(is_code(&l.reason), "`reason` is not a code")?;
             check(!l.question.is_empty(), "`question` is empty")?;
             check_attempt(l.attempt)?;
-            check_sessions(&l.sessions)?;
             Ok(Event::Parked {
                 item: l.item,
                 reason: l.reason,
                 question: l.question,
                 attempt: l.attempt,
+                sessions: l.sessions,
             })
         }
         "attempt_ended" => {
@@ -756,6 +790,45 @@ mod tests {
             r#"{"v":1,"at":"2026-11-13T14:24:00Z","run":"r-1","event":"attempt_ended","item":"app-one#1","outcome":"draft","cost_usd":9,"sessions":["s1","s1"],"session_costs":{"s2":1}}"#,
         ]));
         assert_eq!((r.lines.len(), r.error), (2, None));
+    }
+
+    #[test]
+    fn a_draft_or_park_with_bad_sessions_keeps_the_line_and_those_after_it() {
+        let ended = r#"{"v":1,"at":"2026-11-13T14:30:00Z","run":"r-1","event":"attempt_ended","item":"app-one#1","outcome":"parked","attempt":1}"#;
+        for bad in [
+            r#""sessions":null"#,
+            r#""sessions":"s1""#,
+            r#""sessions":["s1","a b",3,""]"#,
+        ] {
+            let draft = format!(
+                r#"{{"v":1,"at":"2026-11-13T14:23:00Z","run":"r-1","event":"draft","item":"app-one#1","pr":"app-one#2","attempt":1,{bad}}}"#
+            );
+            let park = format!(
+                r#"{{"v":1,"at":"2026-11-13T14:24:00Z","run":"r-1","event":"parked","item":"app-one#1","reason":"needs_decision","question":"Which?","attempt":1,{bad}}}"#
+            );
+            let r = read(&lines(&[STARTED, PICKED, &draft, &park, ended]));
+            assert_eq!(r.error, None, "{bad}");
+            assert_eq!(r.lines.len(), 5, "{bad}");
+            let kept: Vec<String> = if bad.contains('[') {
+                vec!["s1".into()]
+            } else {
+                Vec::new()
+            };
+            assert_eq!(
+                r.lines[2].event,
+                Event::Draft {
+                    item: "app-one#1".into(),
+                    pr: "app-one#2".into(),
+                    attempt: Some(1),
+                    sessions: kept.clone(),
+                },
+                "{bad}"
+            );
+            let Event::Parked { sessions, .. } = &r.lines[3].event else {
+                panic!("not a park: {bad}");
+            };
+            assert_eq!(sessions, &kept, "{bad}");
+        }
     }
 
     #[test]
