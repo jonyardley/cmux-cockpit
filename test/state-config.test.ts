@@ -9,6 +9,7 @@ import {
   MAX_ENTRIES,
   MAX_LABEL,
   MAX_SUBAGENTS,
+  MAX_UNPLACED,
   rebuildsOn,
   urlMaySet,
   validateState,
@@ -156,6 +157,19 @@ test("validateState keeps a published link with a session in place of a workspac
     "https://claude.ai/artifact/bad": { ...base, url: "https://claude.ai/artifact/bad", session: 3 },
   };
   assert.deepEqual(validateState({ published: raw }).published, { [both.url]: both, [loop.url]: loop });
+});
+
+test("validateState caps published links with no workspace apart from placed ones", () => {
+  const raw: Record<string, unknown> = {};
+  const add = (url: string, extra: Record<string, string>) => {
+    raw[url] = { url, title: "T", kind: "page", epoch: 5, ...extra };
+  };
+  for (let i = 0; i < MAX_ENTRIES; i++) add(`https://claude.ai/artifact/p${i}`, { workspace: "w1" });
+  for (let i = 0; i <= MAX_UNPLACED; i++) add(`https://claude.ai/artifact/u${i}`, { session: "s1" });
+  const keys = Object.keys(validateState({ published: raw }).published);
+  assert.equal(keys.filter((k) => k.includes("/p")).length, MAX_ENTRIES);
+  assert.equal(keys.filter((k) => k.includes("/u")).length, MAX_UNPLACED);
+  assert.equal(keys.includes("https://claude.ai/artifact/u0"), false, "the oldest goes");
 });
 
 test("applySet refuses to set published links from a URL", () => {

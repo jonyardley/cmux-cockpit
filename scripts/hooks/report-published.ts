@@ -18,9 +18,12 @@
 // edited it (the event's session_id), so work run outside any cmux
 // workspace, such as an Ostinato loop, can still be tied to what it made.
 // A session outside cmux saves its entry with no workspace, which Made here
-// leaves out; with neither a workspace nor a session nothing is saved. An
-// edit keeps whichever of the two it does not name, so a doc edited from
-// outside cmux still shows as the workspace's that made it.
+// leaves out; with neither a workspace nor a session nothing is saved. A
+// republish or an edit keeps whichever of the two it does not name, so a
+// page or doc worked on from outside cmux still shows as the workspace's
+// that made it. Entries with no workspace have a small cap of their own
+// (MAX_UNPLACED), so they never push out one Made here shows, and a write
+// that changes only them saves without rebuilding the sidebar.
 //
 // What tool_response holds for these tools is not documented, so the URL is
 // looked for in every string inside it (a plain string, MCP content blocks
@@ -38,10 +41,12 @@ import { basename, extname, join, resolve } from "node:path";
 import { isFresh } from "../../src/shared/published-age.ts";
 import { scheduleBuild } from "../hook-build.ts";
 import {
+  capPublished,
   isId,
   isPublishedUrl,
   labelFrom,
   type PublishedKind,
+  placeOf,
   type SavedPublished,
   type State,
 } from "../state-config.ts";
@@ -51,7 +56,8 @@ type PublishedMap = State["published"];
 
 const DOCS_BATCH = "mcp__claude_ai_Claude_Docs__batch";
 const DOCS_UPDATE = "mcp__claude_ai_Claude_Docs__update";
-// A touch this soon after the last, in the same workspace, is not saved:
+// A touch this soon after the last, from the same workspace and the same
+// session, is not saved:
 // filling a doc one section at a time would otherwise rebuild on every call.
 const TOUCH_QUIET_S = 60;
 const ARTIFACT_URL = /https:\/\/claude\.ai\/(?:code\/)?artifact\/[\w-]+/g;
@@ -155,6 +161,8 @@ function isPagePublish(input: unknown): boolean {
   return (action === undefined || action === "publish") && field(input, "asset") !== true;
 }
 
+type Found = { url: string; title: string; kind: PublishedKind };
+
 function artifactEntry(event: unknown, read: ReadFile): { url: string; title: string } | null {
   const input = field(event, "tool_input");
   if (!isPagePublish(input)) return null;
@@ -179,10 +187,20 @@ function kindOf(tool: unknown): PublishedKind | null {
   return tool === DOCS_BATCH ? "doc" : null;
 }
 
+// The page or doc one PostToolUse event publishes, before its place.
+function foundIn(event: unknown, read: ReadFile): Found | null {
+  if (field(event, "hook_event_name") !== "PostToolUse") return null;
+  const kind = kindOf(field(event, "tool_name"));
+  if (!kind) return null;
+  const found = kind === "page" ? artifactEntry(event, read) : docsEntry(event);
+  return found && { ...found, kind };
+}
+
 /**
  * The entry one PostToolUse event publishes, or null when it publishes
- * nothing this hook records. `read` fetches the published page to find its
- * <title>; it is a parameter so tests need no files.
+ * nothing this hook records or names neither a usable workspace nor a
+ * session. `read` fetches the published page to find its <title>; it is a
+ * parameter so tests need no files.
  */
 export function publishedFrom(
   event: unknown,
@@ -190,12 +208,9 @@ export function publishedFrom(
   now: number,
   read: ReadFile,
 ): SavedPublished | null {
-  if (field(event, "hook_event_name") !== "PostToolUse") return null;
-  const kind = kindOf(field(event, "tool_name"));
-  if (!kind) return null;
-  const found = kind === "page" ? artifactEntry(event, read) : docsEntry(event);
-  if (!found) return null;
-  return { ...found, kind, ...placeOf(wsId, sessionOf(event)), epoch: now };
+  const found = foundIn(event, read);
+  const place = placeOf(wsId, sessionOf(event));
+  return found && place && { ...place, ...found, epoch: now };
 }
 
 /** The event's session_id when it is a usable id, else undefined. */
@@ -204,12 +219,11 @@ export function sessionOf(event: unknown): string | undefined {
   return typeof session === "string" && isId(session) ? session : undefined;
 }
 
-// Only the fields that hold a usable id, so an absent one is no key at all.
-function placeOf(wsId: string | undefined, session: string | undefined): Pick<SavedPublished, "workspace" | "session"> {
-  const place: Pick<SavedPublished, "workspace" | "session"> = {};
-  if (wsId && isId(wsId)) place.workspace = wsId;
-  if (session) place.session = session;
-  return place;
+// `next` over `saved`: whichever of workspace and session `next` does not
+// name keeps its saved value.
+function placedOver(saved: SavedPublished, next: SavedPublished): SavedPublished {
+  if (next.workspace !== undefined || saved.workspace === undefined) return next;
+  return { ...next, workspace: saved.workspace };
 }
 
 // A doc's id is the <uuid> of its claude.ai/code/artifact/<uuid> link, the
@@ -242,12 +256,10 @@ export function touchedFrom(event: unknown): string | null {
 
 /**
  * Moves a saved, still fresh entry to `now`, to workspace `wsId` and to
- * `session`, last as the newest, title kept, pruning as applyPublished
- * does. Whichever of the two the touch does not name keeps its saved
- * value, so an edit from outside cmux never takes the entry off its
- * workspace. A link with no fresh entry only prunes, and a touch within
- * TOUCH_QUIET_S of the last one from the same workspace and session
- * changes nothing, so the file is not rewritten.
+ * `session`, last as the newest, title kept, as applyPublished does. A
+ * link with no fresh entry, or a touch naming neither, only prunes, and a
+ * touch within TOUCH_QUIET_S of the last one from the same workspace and
+ * session changes nothing, so the file is not rewritten.
  */
 export function applyTouch(
   map: PublishedMap,
@@ -258,8 +270,9 @@ export function applyTouch(
 ): PublishedMap {
   const saved = map[url];
   const live = saved && isFresh(saved.epoch, now) ? saved : undefined;
-  if (!live) return applyPublished(map, null, now);
-  const moved = { ...live, ...placeOf(wsId, session), epoch: now };
+  const place = placeOf(wsId, session);
+  if (!live || !place) return applyPublished(map, null, now);
+  const moved = placedOver(live, { ...live, ...place, epoch: now });
   const same = moved.workspace === live.workspace && moved.session === live.session;
   if (same && now - live.epoch < TOUCH_QUIET_S) return map;
   return applyPublished(map, moved, now);
@@ -267,12 +280,25 @@ export function applyTouch(
 
 /**
  * Adds or replaces one entry, moved last as the newest, and drops every
- * entry older than seven days (PUBLISHED_MAX_AGE_S). A null entry only prunes. The input is not
- * changed.
+ * entry older than seven days (PUBLISHED_MAX_AGE_S) and any past the caps
+ * (capPublished). An entry with no workspace over a fresh saved one keeps
+ * its workspace, so a republish from outside cmux never takes a page off
+ * its workspace. A null entry only prunes. The input is not changed.
  */
 export function applyPublished(map: PublishedMap, entry: SavedPublished | null, now: number): PublishedMap {
-  const kept = Object.entries(map).filter(([url, e]) => url !== entry?.url && isFresh(e.epoch, now));
-  return Object.fromEntries(entry ? [...kept, [entry.url, entry]] : kept);
+  const saved = entry ? map[entry.url] : undefined;
+  const next = entry && saved && isFresh(saved.epoch, now) ? placedOver(saved, entry) : entry;
+  const kept = Object.entries(map).filter(([url, e]) => url !== next?.url && isFresh(e.epoch, now));
+  return Object.fromEntries(capPublished(next ? [...kept, [next.url, next]] : kept));
+}
+
+/**
+ * Whether the entries Made here shows (those naming a workspace) differ
+ * between two maps, order included; a change to the rest needs no rebuild.
+ */
+export function placedChanged(before: PublishedMap, after: PublishedMap): boolean {
+  const placed = (map: PublishedMap) => JSON.stringify(Object.values(map).filter((e) => e.workspace !== undefined));
+  return placed(before) !== placed(after);
 }
 
 const STATE_PATH = join(import.meta.dirname, "..", "..", "config", "state.json");
@@ -287,26 +313,38 @@ function readEvent(): unknown {
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
+// Why a publish was not saved: it named no usable workspace or session.
+const unplacedNote = (wsId: string | undefined): string =>
+  wsId === undefined ? "skipped, not in a cmux workspace and no session" : "skipped, no usable workspace id or session";
+
 // Records the event, returning a note for stderr when something went wrong.
 function record(event: unknown, wsId: string | undefined): string | null {
   const now = Math.floor(Date.now() / 1000);
-  const entry = publishedFrom(event, wsId, now, readHead);
-  if (entry) {
-    if (!entry.workspace && !entry.session) return "skipped, not in a cmux workspace and no session";
+  const found = foundIn(event, readHead);
+  if (found) {
+    const place = placeOf(wsId, sessionOf(event));
+    if (!place) return unplacedNote(wsId);
+    const entry: SavedPublished = { ...place, ...found, epoch: now };
     return write((published) => applyPublished(published, entry, now));
   }
   // A touch with nothing to name is nothing worth a note: it would fire on every doc edit.
   const touched = touchedFrom(event);
   const session = sessionOf(event);
-  if (!touched || (!wsId && !session)) return null;
+  if (!touched || !placeOf(wsId, session)) return null;
   return write((published) => applyTouch(published, touched, wsId, session, now));
 }
 
-// Folds `update` into the saved map, rebuilding when it changed.
+// Folds `update` into the saved map, rebuilding only when what Made here
+// shows changed.
 function write(update: (published: PublishedMap) => PublishedMap): string | null {
-  const result = writePublished(STATE_PATH, update);
+  let visible = false;
+  const result = writePublished(STATE_PATH, (published) => {
+    const next = update(published);
+    visible = placedChanged(published, next);
+    return next;
+  });
   if (!result.ok) return result.error;
-  if (result.changed) scheduleBuild("report-published");
+  if (result.changed && visible) scheduleBuild("report-published");
   return null;
 }
 

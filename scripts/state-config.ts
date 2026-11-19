@@ -85,8 +85,9 @@ export interface State {
   /**
    * url -> a page or doc an agent published, recorded by
    * scripts/hooks/report-published.ts (issue #52), oldest first. Keyed by
-   * URL so a republish replaces its entry. Written only by the hook, never
-   * by a URL: a URL could plant a link.
+   * URL so a republish replaces its entry. Entries with no workspace are
+   * capped apart, at MAX_UNPLACED (capPublished). Written only by the hook,
+   * never by a URL: a URL could plant a link.
    */
   published: Record<string, SavedPublished>;
   /**
@@ -390,23 +391,36 @@ export interface SavedName {
 /** What an agent published: a claude.ai page (Artifact) or doc (Claude Docs). */
 export type PublishedKind = "page" | "doc";
 
+/**
+ * Where a published page or doc belongs: the cmux workspace it shows under
+ * in Made here, the Claude Code session that last published or edited it,
+ * or both. Never neither.
+ */
+export type PublishedPlace =
+  | {
+      /** The cmux workspace (CMUX_WORKSPACE_ID) that made it, or the last
+       * one that worked on it. A write from outside cmux keeps it. */
+      workspace: string;
+      /** The Claude Code session (the hook event's session_id) that last
+       * published or edited it. */
+      session?: string;
+    }
+  | {
+      /** Absent when no session inside cmux has published or edited it. */
+      workspace?: undefined;
+      session: string;
+    };
+
 /** A page or doc an agent published, as the hook saves it. */
-export interface SavedPublished {
+export type SavedPublished = PublishedPlace & {
   /** Its claude.ai artifact link, the map key too. */
   url: string;
   /** Its title, at most MAX_LABEL characters. */
   title: string;
   kind: PublishedKind;
-  /** The cmux workspace the agent ran in (CMUX_WORKSPACE_ID) when it last
-   * published it, or edited it (a doc). Absent when that session ran
-   * outside cmux and no earlier one named a workspace. */
-  workspace?: string;
-  /** The Claude Code session (the hook event's session_id) that last
-   * published or edited it. An entry names this, a workspace, or both. */
-  session?: string;
   /** Epoch seconds it was last published, or edited (a doc). */
   epoch: number;
-}
+};
 
 /** Which chat opened a PR, as the PR hook saves it. */
 export interface SavedPrOrigin {
@@ -720,15 +734,20 @@ export const isPublishedUrl = (v: unknown): v is string =>
 const KINDS: readonly unknown[] = ["page", "doc"];
 const isKind = (v: unknown): v is PublishedKind => KINDS.includes(v);
 
+/** The place two optional ids name, or null when neither is usable. */
+export function placeOf(workspace: unknown, session: unknown): PublishedPlace | null {
+  const ws = isIdText(workspace) ? workspace : undefined;
+  const sid = isIdText(session) ? session : undefined;
+  if (ws !== undefined) return sid === undefined ? { workspace: ws } : { workspace: ws, session: sid };
+  return sid === undefined ? null : { session: sid };
+}
+
 function savedPublished(v: unknown): SavedPublished | null {
   if (!isRecord(v) || !isPublishedUrl(v.url) || !isLabel(v.title) || !isKind(v.kind) || !isEpoch(v.epoch)) return null;
   const { workspace, session } = v;
   if (!isOptionalId(workspace) || !isOptionalId(session)) return null;
-  if (workspace === undefined && session === undefined) return null;
-  const entry: SavedPublished = { url: v.url, title: v.title, kind: v.kind, epoch: v.epoch };
-  if (isIdText(workspace)) entry.workspace = workspace;
-  if (isIdText(session)) entry.session = session;
-  return entry;
+  const place = placeOf(workspace, session);
+  return place && { ...place, url: v.url, title: v.title, kind: v.kind, epoch: v.epoch };
 }
 
 const isPrNumber = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 1;
@@ -1021,15 +1040,43 @@ function savedSubagents(v: unknown): SavedSubagent[] | null {
   return runs.length ? runs : null;
 }
 
-// Keeps the last MAX_ENTRIES valid entries, in insertion order. `clean` is
-// handed the key too, for a map whose value must agree with it.
-function cleanMap<T>(v: unknown, clean: (value: unknown, id: string) => T | null, validId = isId): Record<string, T> {
+const lastEntries = <T>(kept: [string, T][]): [string, T][] => kept.slice(-MAX_ENTRIES);
+
+// Keeps the valid entries, in insertion order, capped by `cap` (the last
+// MAX_ENTRIES unless a map needs its own). `clean` is handed the key too,
+// for a map whose value must agree with it.
+function cleanMap<T>(
+  v: unknown,
+  clean: (value: unknown, id: string) => T | null,
+  validId = isId,
+  cap: (kept: [string, T][]) => [string, T][] = lastEntries,
+): Record<string, T> {
   if (!isRecord(v)) return {};
   const kept = Object.entries(v).flatMap(([id, value]): [string, T][] => {
     const c = validId(id) ? clean(value, id) : null;
     return c === null ? [] : [[id, c]];
   });
-  return Object.fromEntries(kept.slice(-MAX_ENTRIES));
+  return Object.fromEntries(cap(kept));
+}
+
+/** Published entries with no workspace kept at most, the newest. */
+export const MAX_UNPLACED = 64;
+
+/**
+ * The newest MAX_ENTRIES entries that name a workspace and, apart from
+ * them, the newest MAX_UNPLACED that do not, order kept. Entries from
+ * sessions outside cmux have a cap of their own, so they never push out one
+ * that Made here shows.
+ */
+export function capPublished(kept: [string, SavedPublished][]): [string, SavedPublished][] {
+  const placed = kept.filter(([, e]) => e.workspace !== undefined).length;
+  const unplaced = kept.length - placed;
+  let placedSeen = 0;
+  let unplacedSeen = 0;
+  return kept.filter(([, e]) => {
+    if (e.workspace !== undefined) return ++placedSeen > placed - MAX_ENTRIES;
+    return ++unplacedSeen > unplaced - MAX_UNPLACED;
+  });
 }
 
 /**
@@ -1055,7 +1102,7 @@ export function validateState(raw: unknown): State {
     ownPrs: cleanMap(v.ownPrs, savedOwnPr, isPrUrl),
     subagents: cleanMap(v.subagents, savedSubagents),
     names: cleanMap(v.names, savedName),
-    published: cleanMap(v.published, savedPublished, isPublishedUrl),
+    published: cleanMap(v.published, savedPublished, isPublishedUrl, capPublished),
     prOrigins: cleanMap(v.prOrigins, originAt, isPrUrl),
     asking: cleanMap(v.asking, savedAsk),
     moves: cleanMap(v.moves, savedMove),
