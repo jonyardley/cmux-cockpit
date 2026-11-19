@@ -109,9 +109,12 @@ pub fn saved(c: &Cycle) -> Option<SavedCycle> {
     let skip = c.stages.len().saturating_sub(MAX_STAGES);
     let cycle = SavedCycle {
         item: text(&c.item)?,
+        // Trimmed as text() is, so a byte order mark at either end, which
+        // JS trim() takes off, never makes the script refuse the list.
         url: c
             .url
-            .clone()
+            .as_deref()
+            .map(|u| u.trim_matches(js_space).to_string())
             .filter(|u| is_text(u, crate::persist::MAX_URL)),
         attempt: c.attempt.filter(|n| *n >= 1),
         outcome: c.outcome.as_deref().and_then(text),
@@ -290,6 +293,26 @@ mod tests {
     fn a_byte_order_mark_at_either_end_is_trimmed_as_js_does() {
         assert_eq!(text("\u{FEFF}x#1\u{FEFF}").as_deref(), Some("x#1"));
         assert_eq!(text("\u{FEFF}"), None);
+    }
+
+    #[test]
+    fn a_byte_order_mark_round_a_url_is_trimmed_and_never_sent() {
+        let mut c = bare("x#1");
+        c.url = Some("\u{FEFF}https://github.com/example/x/issues/1\u{FEFF}".into());
+        let got = saved(&c).unwrap();
+        assert_eq!(
+            got.url.as_deref(),
+            Some("https://github.com/example/x/issues/1")
+        );
+        c.url = Some("\u{FEFF}".into());
+        assert_eq!(saved(&c).unwrap().url, None);
+        // What JS trim() would take off is refused, as the script does.
+        let mut bad = got.clone();
+        bad.url = Some("\u{FEFF}https://github.com/example/x/issues/1".into());
+        assert!(!bad.fits());
+        bad.url = None;
+        bad.pr = Some("x#2\u{FEFF}".into());
+        assert!(!bad.fits());
     }
 
     fn bare(item: &str) -> Cycle {

@@ -5,21 +5,28 @@
 //! shares are, never per frame.
 //!
 //! The runner hands on only what a card reads (bound.rs): the latest
-//! run whole, and from earlier runs only their `attempt_ended` lines of
-//! the last day and the parks still waiting. So the latest run's cycles
-//! have their stages, and an earlier one has only its end: outcome,
-//! sessions, cost and when, and its park when one was handed on. A park
-//! with no `picked` or `attempt_ended` beside it makes no cycle of its
-//! own; it waits on Jon in Needs you.
+//! run whole, and from earlier runs their `attempt_ended` lines from
+//! about a day before the runner's clock, each session's latest older
+//! end line before those (the base its next share counts from), and the
+//! parks still waiting. Every end line handed on makes a cycle, so an
+//! earlier run's cycles are those end lines, not every attempt of the
+//! last day, and as the runner's clock moves the oldest drop out of what
+//! is handed on. The latest run's cycles have their stages, and an
+//! earlier one has only its end: outcome, sessions, cost and when, and
+//! its park when one was handed on. A park with no `picked` or
+//! `attempt_ended` beside it makes no cycle of its own; it waits on Jon
+//! in Needs you.
 //!
 //! A run that ends, or is followed by another run, with a cycle still
 //! open closes it: `ended` is set to that line's time and `outcome` stays
 //! absent, so the panel reads "ended without an end line", never running.
 //!
-//! Nothing here moves with the clock: times are epochs and lengths are
-//! between two lines, never an age.
+//! Nothing worked out here moves with the clock: times are epochs and
+//! lengths are between two lines, never an age. Only which older lines
+//! the runner hands on does.
 
 use super::line::{Event, Line};
+use super::run::{Share, shares};
 
 /// One stage reached, or the park, as a milestone of a cycle.
 #[derive(Debug, Clone, PartialEq)]
@@ -176,7 +183,8 @@ impl Walk {
         });
     }
 
-    fn take(&mut self, l: &Line) {
+    /// Reads line `l`; `share` is its own when it is an end line.
+    fn take(&mut self, l: &Line, share: Option<&Share>) {
         let run = l.run.as_str();
         match &l.event {
             Event::Picked { item, url, attempt } => {
@@ -250,7 +258,6 @@ impl Walk {
             Event::AttemptEnded {
                 item,
                 outcome,
-                cost_usd,
                 attempt,
                 sessions,
                 ..
@@ -274,7 +281,9 @@ impl Walk {
                 };
                 if let Some(c) = self.cycles.get_mut(i) {
                     c.outcome = Some(outcome.as_str().to_string());
-                    c.cost_usd = *cost_usd;
+                    // Its share, as the card counts it, never the
+                    // session's running total `cost_usd` carries.
+                    c.cost_usd = share.filter(|s| s.known).map(|s| s.usd);
                     c.ended = Some(l.at);
                     c.sessions = sessions.clone();
                 }
@@ -308,8 +317,14 @@ impl Walk {
 /// Every cycle in `lines`, oldest first.
 pub fn cycles(lines: &[Line]) -> Vec<Cycle> {
     let mut walk = Walk::default();
+    // One share per end line, in file order, as the card counts spend.
+    let mut costs = shares(lines).into_iter();
     for l in lines {
-        walk.take(l);
+        let share = match l.event {
+            Event::AttemptEnded { .. } => costs.next(),
+            _ => None,
+        };
+        walk.take(l, share.as_ref());
     }
     walk.finish()
 }
@@ -338,6 +353,20 @@ mod tests {
 {"v":1,"at":"2026-11-18T08:09:42Z","run":"r-b","event":"attempt_ended","item":"app-two#2845","outcome":"stalled","cost_usd":2.9886,"attempt":1,"sessions":["s-b"],"session_costs":{"s-b":2.9886}}
 {"v":1,"at":"2026-11-18T08:09:42Z","run":"r-b","event":"run_ended","attempts":1}
 "#;
+
+    #[test]
+    fn two_attempts_on_one_session_each_cost_their_own_share() {
+        let all = of(
+            r#"{"v":1,"at":"2026-11-18T09:00:00Z","run":"r-1","event":"run_started","project":"example/app-one"}
+{"v":1,"at":"2026-11-18T09:01:00Z","run":"r-1","event":"picked","item":"app-one#1","attempt":1}
+{"v":1,"at":"2026-11-18T09:02:00Z","run":"r-1","event":"attempt_ended","item":"app-one#1","outcome":"failed","cost_usd":3.0,"attempt":1,"sessions":["s1"],"session_costs":{"s1":3.0}}
+{"v":1,"at":"2026-11-18T09:03:00Z","run":"r-1","event":"picked","item":"app-one#1","attempt":2}
+{"v":1,"at":"2026-11-18T09:04:00Z","run":"r-1","event":"attempt_ended","item":"app-one#1","outcome":"draft","cost_usd":5.0,"attempt":2,"sessions":["s1"],"session_costs":{"s1":5.0}}
+"#,
+        );
+        let costs: Vec<Option<f64>> = all.iter().map(|c| c.cost_usd).collect();
+        assert_eq!(costs, vec![Some(3.0), Some(2.0)]);
+    }
 
     fn of(text: &str) -> Vec<Cycle> {
         cycles(&read(&RecordText::from_bytes(text.as_bytes())).lines)

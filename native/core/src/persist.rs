@@ -17,6 +17,7 @@ use serde_json::{Map, Value};
 use crate::data::PrStatus;
 use crate::js::{encode_uri_component, utf16_len};
 use crate::saved::Stamped;
+use crate::text::js_space;
 
 /// The cockpit's view: "all" (lanes) or "projects".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -835,9 +836,15 @@ pub const MAX_MOVE: usize = 200;
 pub const MAX_DECISIONS: f64 = 9.0;
 
 /// Plain, single-line text with no leading, trailing or control characters, up to `max` long.
+/// Spaces are those JS trim() takes off (js_space), byte order marks
+/// too, as state-config.ts's isText holds them, so a text this passes the
+/// script never refuses.
 pub(crate) fn is_text(v: &str, max: usize) -> bool {
     let len = utf16_len(v);
-    v.trim() == v && len > 0 && len <= max && v.chars().all(|c| c >= ' ' && c != '\u{7f}')
+    v.trim_matches(js_space) == v
+        && len > 0
+        && len <= max
+        && v.chars().all(|c| c >= ' ' && c != '\u{7f}')
 }
 
 pub(crate) fn is_id(v: &str) -> bool {

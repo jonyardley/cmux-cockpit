@@ -754,14 +754,19 @@ Details tab: workspace id to a list, oldest first, of the newest ten.
 Each holds `item` (`repo#12`) and, where known, `url`, `attempt`,
 `outcome` (the record's word, absent while it runs), `reason` and
 `question` when it parked, `pr` when a draft line names one, `sessions`,
-`cost` in dollars from its end line, `started` (the pick) and `ended`,
+`cost` in dollars, its end line's share as the card counts it (a
+session's rise since the last line that priced it, not its running total), `started` (the pick) and `ended`,
 and `stages`: each `{"name", "at", "secs"}` with the `sessions` behind
 it, `secs` the time since the milestone before (the pick for the first),
 a draft line adding `draft` and a park line a final `parked`. A stage
 line that names no session takes the cycle's. The runner hands on only
-the latest run whole (`native/core/src/ostinato/bound.rs`), so an earlier
-run's cycle has its end, and its park when one was handed on, but no
-pick or stages. A cycle whose run ends, or is followed by another run,
+the latest run whole (`native/core/src/ostinato/bound.rs`); from earlier
+runs it hands on their end lines from about a day before its clock, each
+session's latest older end line before those, and the parks still
+waiting. Each of those end lines makes a cycle with its end, and its park
+when one was handed on, but no pick or stages, so the earlier runs'
+cycles are not every attempt of the last day, and as the runner's clock
+moves the oldest drop out. A cycle whose run ends, or is followed by another run,
 with no end line of its own is closed then: `ended` is that line's time
 and `outcome` stays absent, so `outcome` absent with `ended` set reads
 "ended without an end line", and only both absent means still running.
