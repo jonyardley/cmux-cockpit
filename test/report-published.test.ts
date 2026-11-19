@@ -11,11 +11,12 @@ import { describe, it } from "node:test";
 import {
   applyPublished,
   applyTouch,
+  placedChanged,
   publishedFrom,
   titleFromHtml,
   touchedFrom,
 } from "../scripts/hooks/report-published.ts";
-import type { SavedPublished } from "../scripts/state-config.ts";
+import { MAX_ENTRIES, MAX_UNPLACED, type SavedPublished } from "../scripts/state-config.ts";
 import { PUBLISHED_MAX_AGE_S as MAX_AGE_S } from "../src/shared/published-age.ts";
 
 const PAGE = "https://claude.ai/code/artifact/0b3c9e2a-1f4d-4c6e-9a8b-7d6e5f4a3b2c";
@@ -225,6 +226,84 @@ describe("applyPublished", () => {
     const map = applyPublished({ [DOC]: entry(DOC, NOW - MAX_AGE_S - 1) }, null, NOW);
     assert.deepEqual(map, {});
   });
+
+  it("keeps the saved workspace when a page is republished from outside cmux", () => {
+    const outside: SavedPublished = { url: PAGE, title: "New", kind: "page", session: "s2", epoch: NOW };
+    const map = applyPublished({ [PAGE]: entry(PAGE, NOW - 20, "Old") }, outside, NOW);
+    assert.deepEqual(map[PAGE], { url: PAGE, title: "New", kind: "page", workspace: "w1", session: "s2", epoch: NOW });
+  });
+
+  it("never takes the workspace from an entry already past seven days", () => {
+    const outside: SavedPublished = { url: PAGE, title: "New", kind: "page", session: "s2", epoch: NOW };
+    const map = applyPublished({ [PAGE]: entry(PAGE, NOW - MAX_AGE_S - 1) }, outside, NOW);
+    assert.deepEqual(map[PAGE], outside);
+  });
+
+  it("caps entries with no workspace apart, so they never push out placed ones", () => {
+    const link = (n: string) => `https://claude.ai/artifact/${n}`;
+    const start: Record<string, SavedPublished> = {};
+    for (let i = 0; i < MAX_ENTRIES; i++) {
+      // Interleaved, so order kept is checked as well as counts.
+      const placed = entry(link(`p${i}`), NOW - 1000 + i);
+      start[placed.url] = placed;
+      if (i < MAX_UNPLACED + 5) {
+        const loop: SavedPublished = {
+          url: link(`u${i}`),
+          title: "T",
+          kind: "page",
+          session: "s1",
+          epoch: NOW - 1000 + i,
+        };
+        start[loop.url] = loop;
+      }
+    }
+    const fresh: SavedPublished = { url: link("u-new"), title: "T", kind: "page", session: "s1", epoch: NOW };
+    const map = applyPublished(start, fresh, NOW);
+    const keys = Object.keys(map);
+    const placed = keys.filter((k) => k.includes("/p"));
+    const unplaced = keys.filter((k) => k.includes("/u"));
+    assert.equal(placed.length, MAX_ENTRIES, "every placed entry kept");
+    assert.equal(unplaced.length, MAX_UNPLACED);
+    assert.deepEqual(unplaced.slice(-2), [link(`u${MAX_UNPLACED + 4}`), link("u-new")], "the newest kept");
+    assert.equal(unplaced[0], link("u6"));
+    assert.deepEqual(
+      keys,
+      Object.keys(start)
+        .filter((k) => map[k] !== undefined)
+        .concat(link("u-new")),
+      "order kept",
+    );
+  });
+});
+
+describe("placedChanged", () => {
+  const placed: SavedPublished = { url: PAGE, title: "T", kind: "page", workspace: "w1", epoch: NOW - 100 };
+  const loop: SavedPublished = { url: DOC, title: "T", kind: "doc", session: "s1", epoch: NOW - 100 };
+  const start = { [PAGE]: placed, [DOC]: loop };
+
+  it("is false when only entries with no workspace change", () => {
+    const outside: SavedPublished = {
+      url: "https://claude.ai/artifact/new",
+      title: "T",
+      kind: "page",
+      session: "s2",
+      epoch: NOW,
+    };
+    assert.equal(placedChanged(start, applyPublished(start, outside, NOW)), false);
+    assert.equal(placedChanged(start, applyTouch(start, DOC, undefined, "s2", NOW)), false);
+  });
+
+  it("is true when an edit from outside cmux moves a placed entry", () => {
+    assert.equal(placedChanged(start, applyTouch(start, PAGE, undefined, "s2", NOW)), true);
+  });
+
+  it("is true when a workspace claims an entry with no workspace", () => {
+    assert.equal(placedChanged(start, applyTouch(start, DOC, "w2", undefined, NOW)), true);
+  });
+
+  it("is false when nothing changed", () => {
+    assert.equal(placedChanged(start, applyPublished(start, null, NOW)), false);
+  });
 });
 
 describe("touchedFrom", () => {
@@ -269,7 +348,7 @@ describe("applyTouch", () => {
 
   it("moves a saved entry to now and the touching workspace, last as the newest, title kept", () => {
     const start = { [DOC]: saved(DOC, NOW - 5000), [PAGE]: saved(PAGE, NOW - 10) };
-    const map = applyTouch(start, DOC, "w2", NOW);
+    const map = applyTouch(start, DOC, "w2", undefined, NOW);
     assert.deepEqual(Object.keys(map), [PAGE, DOC]);
     assert.deepEqual(map[DOC], { url: DOC, title: "Kept", kind: "doc", workspace: "w2", epoch: NOW });
     assert.equal(start[DOC]?.workspace, "old", "the input is not changed");
@@ -277,27 +356,98 @@ describe("applyTouch", () => {
 
   it("adds nothing for a link with no saved entry, but still prunes", () => {
     const start = { [PAGE]: saved(PAGE, NOW - MAX_AGE_S - 1) };
-    assert.deepEqual(applyTouch(start, DOC, "w2", NOW), {});
+    assert.deepEqual(applyTouch(start, DOC, "w2", undefined, NOW), {});
   });
 
   it("never brings back an entry already past seven days", () => {
-    assert.deepEqual(applyTouch({ [DOC]: saved(DOC, NOW - MAX_AGE_S - 1) }, DOC, "w2", NOW), {});
+    assert.deepEqual(applyTouch({ [DOC]: saved(DOC, NOW - MAX_AGE_S - 1) }, DOC, "w2", undefined, NOW), {});
   });
 
   it("leaves the map alone for a touch within a minute of the last from the same workspace", () => {
     const start = { [DOC]: saved(DOC, NOW - 59, "w2") };
-    assert.equal(applyTouch(start, DOC, "w2", NOW), start);
-    assert.equal(applyTouch(start, DOC, "w3", NOW)[DOC]?.workspace, "w3", "another workspace still moves it");
-    assert.equal(applyTouch({ [DOC]: saved(DOC, NOW - 60, "w2") }, DOC, "w2", NOW)[DOC]?.epoch, NOW);
+    assert.equal(applyTouch(start, DOC, "w2", undefined, NOW), start);
+    assert.equal(
+      applyTouch(start, DOC, "w3", undefined, NOW)[DOC]?.workspace,
+      "w3",
+      "another workspace still moves it",
+    );
+    assert.equal(applyTouch({ [DOC]: saved(DOC, NOW - 60, "w2") }, DOC, "w2", undefined, NOW)[DOC]?.epoch, NOW);
+  });
+});
+
+describe("the publishing session", () => {
+  const SESSION = "5f0c2a7e-1b3d-4e8f-9a6c-2d4b6e8f0a1c";
+  const publish = (extra: Record<string, unknown>) => ({ ...artifact({ file_path: "/w/p.html" }), ...extra });
+
+  it("saves the event's session_id beside the workspace", () => {
+    const entry = publishedFrom(publish({ session_id: SESSION }), "w1", NOW, noFile);
+    assert.equal(entry?.session, SESSION);
+    assert.equal(entry?.workspace, "w1");
+  });
+
+  it("keeps a publish from outside cmux with its session and no workspace key", () => {
+    const entry = publishedFrom(publish({ session_id: SESSION }), undefined, NOW, noFile);
+    assert.equal(entry?.session, SESSION);
+    assert.equal(entry !== null && "workspace" in entry, false);
+  });
+
+  it("saves nothing when session_id is missing or not an id and there is no workspace", () => {
+    for (const session_id of [undefined, 42, "", "x".repeat(129)]) {
+      assert.equal(publishedFrom(publish({ session_id }), undefined, NOW, noFile), null);
+      assert.equal(publishedFrom(publish({ session_id }), "x".repeat(129), NOW, noFile), null);
+    }
+  });
+
+  it("moves a doc a loop made to the cmux workspace that edits it", () => {
+    const start: Record<string, SavedPublished> = {
+      [DOC]: { url: DOC, title: "Kept", kind: "doc", session: "s1", epoch: NOW - 5000 },
+    };
+    assert.deepEqual(applyTouch(start, DOC, "w2", "s2", NOW)[DOC], {
+      url: DOC,
+      title: "Kept",
+      kind: "doc",
+      workspace: "w2",
+      session: "s2",
+      epoch: NOW,
+    });
+  });
+
+  it("on a touch keeps whichever of workspace and session the touch does not name", () => {
+    const start: Record<string, SavedPublished> = {
+      [DOC]: { url: DOC, title: "Kept", kind: "doc", workspace: "w1", session: "s1", epoch: NOW - 5000 },
+    };
+    assert.deepEqual(applyTouch(start, DOC, undefined, "s2", NOW)[DOC], {
+      url: DOC,
+      title: "Kept",
+      kind: "doc",
+      workspace: "w1",
+      session: "s2",
+      epoch: NOW,
+    });
+    assert.equal(applyTouch(start, DOC, "w2", undefined, NOW)[DOC]?.session, "s1");
+  });
+
+  it("moves a quiet touch from another session, but not one from the same session and workspace", () => {
+    const start: Record<string, SavedPublished> = {
+      [DOC]: { url: DOC, title: "Kept", kind: "doc", session: "s1", epoch: NOW - 10 },
+    };
+    assert.equal(applyTouch(start, DOC, undefined, "s1", NOW), start);
+    assert.equal(applyTouch(start, DOC, undefined, "s2", NOW)[DOC]?.session, "s2");
   });
 });
 
 describe("the hook as Claude Code runs it", () => {
-  // No CMUX_WORKSPACE_ID, so it can never write this checkout's state file.
+  // The script's state path is fixed to this checkout's file, so no event
+  // here may name a usable workspace id or session_id: with neither, the
+  // hook never writes.
   const env = { ...process.env };
   delete env.CMUX_WORKSPACE_ID;
-  const run = (stdin: string) =>
-    spawnSync(process.execPath, ["scripts/hooks/report-published.ts"], { input: stdin, env, encoding: "utf8" });
+  const run = (stdin: string, workspace?: string) =>
+    spawnSync(process.execPath, ["scripts/hooks/report-published.ts"], {
+      input: stdin,
+      env: workspace === undefined ? env : { ...env, CMUX_WORKSPACE_ID: workspace },
+      encoding: "utf8",
+    });
 
   it("exits 0 on junk, saying nothing", () => {
     const result = run("not json");
@@ -316,5 +466,11 @@ describe("the hook as Claude Code runs it", () => {
     const result = run(JSON.stringify(artifact({ file_path: "/nowhere/p.html" })));
     assert.equal(result.status, 0);
     assert.match(result.stderr, /report-published: skipped, not in a cmux workspace/);
+  });
+
+  it("exits 0 with an unusable workspace id, saying so", () => {
+    const result = run(JSON.stringify(artifact({ file_path: "/nowhere/p.html" })), "x".repeat(129));
+    assert.equal(result.status, 0);
+    assert.match(result.stderr, /report-published: skipped, no usable workspace id or session/);
   });
 });

@@ -35,6 +35,8 @@ const NOW = 1_000_000;
       entry("o4", "other", NOW - 80),
       // Past the seven days: dropped even though the file still holds it.
       entry("stale", "sel", NOW - 8 * 24 * 60 * 60),
+      // From a session outside cmux: no workspace, so no row and no count.
+      { url: "https://claude.ai/artifact/loop", title: "Loop", kind: "page", session: "s1", epoch: NOW - 10 },
     ].map((e) => [e.url, e]),
   ),
   ui: {},
@@ -93,6 +95,14 @@ describe("madeHere", () => {
       [false, true],
     );
     assert.equal(m.madeFoot(), "");
+  });
+
+  it("leaves out an entry with no workspace, from the rows and the count", () => {
+    whileOpen("made", () => assert.equal(ids().includes("loop"), false));
+    assert.equal(
+      m.madeOwn().some((e) => e.url.endsWith("/loop")),
+      false,
+    );
   });
 
   it("counts every fresh entry before the caps, and how many the caps leave out", () => {
