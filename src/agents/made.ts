@@ -44,7 +44,14 @@ const MADE_HERE_OWN = 5;
 /** Other workspaces' entries shown at most, the latest few. */
 const MADE_ELSEWHERE = 3;
 
-function madeEntry(e: SavedPublished, wsOf: (id: string) => MadeWs | undefined, here: boolean): MadeEntry {
+/** A saved entry that names the workspace it was made in. */
+type Placed = SavedPublished & { workspace: string };
+
+// An entry from a session outside cmux names no workspace, so it belongs
+// to no workspace's Made here and is left out, from the count too.
+const isPlaced = (e: SavedPublished): e is Placed => e.workspace !== undefined;
+
+function madeEntry(e: Placed, wsOf: (id: string) => MadeWs | undefined, here: boolean): MadeEntry {
   const w = wsOf(e.workspace);
   return {
     key: "m:" + e.url,
@@ -70,9 +77,9 @@ const freshMade = computed(() => {
   const now = nowEpoch();
   const workspaces = data.workspaces() ?? [];
   const selected = workspaces.find((w) => w.selected)?.id;
-  const fresh: SavedPublished[] = now ? savedPublished(now) : [];
-  const own: SavedPublished[] = [];
-  const others: SavedPublished[] = [];
+  const fresh: Placed[] = now ? savedPublished(now).filter(isPlaced) : [];
+  const own: Placed[] = [];
+  const others: Placed[] = [];
   for (const e of fresh) (e.workspace === selected ? own : others).push(e);
   const shown = Math.min(own.length, MADE_HERE_OWN) + Math.min(others.length, MADE_ELSEWHERE);
   return { count: fresh.length, own, others, over: fresh.length - shown, workspaces };

@@ -14,6 +14,14 @@
 // every write. It never fails the hook: every problem is a note on stderr
 // and exit 0.
 //
+// Each entry also names the Claude Code session that last published or
+// edited it (the event's session_id), so work run outside any cmux
+// workspace, such as an Ostinato loop, can still be tied to what it made.
+// A session outside cmux saves its entry with no workspace, which Made here
+// leaves out; with neither a workspace nor a session nothing is saved. An
+// edit keeps whichever of the two it does not name, so a doc edited from
+// outside cmux still shows as the workspace's that made it.
+//
 // What tool_response holds for these tools is not documented, so the URL is
 // looked for in every string inside it (a plain string, MCP content blocks
 // or an object all work), skipping any link the call's own input names (a
@@ -29,7 +37,14 @@ import { closeSync, openSync, readFileSync, readSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { isFresh } from "../../src/shared/published-age.ts";
 import { scheduleBuild } from "../hook-build.ts";
-import { isPublishedUrl, labelFrom, type PublishedKind, type SavedPublished, type State } from "../state-config.ts";
+import {
+  isId,
+  isPublishedUrl,
+  labelFrom,
+  type PublishedKind,
+  type SavedPublished,
+  type State,
+} from "../state-config.ts";
 import { writePublished } from "../state-url.ts";
 
 type PublishedMap = State["published"];
@@ -169,12 +184,32 @@ function kindOf(tool: unknown): PublishedKind | null {
  * nothing this hook records. `read` fetches the published page to find its
  * <title>; it is a parameter so tests need no files.
  */
-export function publishedFrom(event: unknown, wsId: string, now: number, read: ReadFile): SavedPublished | null {
+export function publishedFrom(
+  event: unknown,
+  wsId: string | undefined,
+  now: number,
+  read: ReadFile,
+): SavedPublished | null {
   if (field(event, "hook_event_name") !== "PostToolUse") return null;
   const kind = kindOf(field(event, "tool_name"));
   if (!kind) return null;
   const found = kind === "page" ? artifactEntry(event, read) : docsEntry(event);
-  return found ? { ...found, kind, workspace: wsId, epoch: now } : null;
+  if (!found) return null;
+  return { ...found, kind, ...placeOf(wsId, sessionOf(event)), epoch: now };
+}
+
+/** The event's session_id when it is a usable id, else undefined. */
+export function sessionOf(event: unknown): string | undefined {
+  const session = field(event, "session_id");
+  return typeof session === "string" && isId(session) ? session : undefined;
+}
+
+// Only the fields that hold a usable id, so an absent one is no key at all.
+function placeOf(wsId: string | undefined, session: string | undefined): Pick<SavedPublished, "workspace" | "session"> {
+  const place: Pick<SavedPublished, "workspace" | "session"> = {};
+  if (wsId && isId(wsId)) place.workspace = wsId;
+  if (session) place.session = session;
+  return place;
 }
 
 // A doc's id is the <uuid> of its claude.ai/code/artifact/<uuid> link, the
@@ -206,16 +241,28 @@ export function touchedFrom(event: unknown): string | null {
 }
 
 /**
- * Moves a saved, still fresh entry to `now` and to workspace `wsId`, last
- * as the newest, title kept, pruning as applyPublished does. A link with
- * no fresh entry only prunes, and a touch within TOUCH_QUIET_S of the last
- * one from the same workspace changes nothing, so the file is not rewritten.
+ * Moves a saved, still fresh entry to `now`, to workspace `wsId` and to
+ * `session`, last as the newest, title kept, pruning as applyPublished
+ * does. Whichever of the two the touch does not name keeps its saved
+ * value, so an edit from outside cmux never takes the entry off its
+ * workspace. A link with no fresh entry only prunes, and a touch within
+ * TOUCH_QUIET_S of the last one from the same workspace and session
+ * changes nothing, so the file is not rewritten.
  */
-export function applyTouch(map: PublishedMap, url: string, wsId: string, now: number): PublishedMap {
+export function applyTouch(
+  map: PublishedMap,
+  url: string,
+  wsId: string | undefined,
+  session: string | undefined,
+  now: number,
+): PublishedMap {
   const saved = map[url];
   const live = saved && isFresh(saved.epoch, now) ? saved : undefined;
-  if (live && live.workspace === wsId && now - live.epoch < TOUCH_QUIET_S) return map;
-  return applyPublished(map, live ? { ...live, workspace: wsId, epoch: now } : null, now);
+  if (!live) return applyPublished(map, null, now);
+  const moved = { ...live, ...placeOf(wsId, session), epoch: now };
+  const same = moved.workspace === live.workspace && moved.session === live.session;
+  if (same && now - live.epoch < TOUCH_QUIET_S) return map;
+  return applyPublished(map, moved, now);
 }
 
 /**
@@ -243,15 +290,16 @@ const errorText = (err: unknown): string => (err instanceof Error ? err.message 
 // Records the event, returning a note for stderr when something went wrong.
 function record(event: unknown, wsId: string | undefined): string | null {
   const now = Math.floor(Date.now() / 1000);
-  const entry = publishedFrom(event, wsId ?? "", now, readHead);
+  const entry = publishedFrom(event, wsId, now, readHead);
   if (entry) {
-    if (!wsId) return "skipped, not in a cmux workspace";
+    if (!entry.workspace && !entry.session) return "skipped, not in a cmux workspace and no session";
     return write((published) => applyPublished(published, entry, now));
   }
-  // A touch outside cmux is nothing worth a note: it would fire on every doc edit.
+  // A touch with nothing to name is nothing worth a note: it would fire on every doc edit.
   const touched = touchedFrom(event);
-  if (!touched || !wsId) return null;
-  return write((published) => applyTouch(published, touched, wsId, now));
+  const session = sessionOf(event);
+  if (!touched || (!wsId && !session)) return null;
+  return write((published) => applyTouch(published, touched, wsId, session, now));
 }
 
 // Folds `update` into the saved map, rebuilding when it changed.

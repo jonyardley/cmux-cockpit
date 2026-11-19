@@ -398,8 +398,12 @@ export interface SavedPublished {
   title: string;
   kind: PublishedKind;
   /** The cmux workspace the agent ran in (CMUX_WORKSPACE_ID) when it last
-   * published it, or edited it (a doc). */
-  workspace: string;
+   * published it, or edited it (a doc). Absent when that session ran
+   * outside cmux and no earlier one named a workspace. */
+  workspace?: string;
+  /** The Claude Code session (the hook event's session_id) that last
+   * published or edited it. An entry names this, a workspace, or both. */
+  session?: string;
   /** Epoch seconds it was last published, or edited (a doc). */
   epoch: number;
 }
@@ -718,9 +722,13 @@ const isKind = (v: unknown): v is PublishedKind => KINDS.includes(v);
 
 function savedPublished(v: unknown): SavedPublished | null {
   if (!isRecord(v) || !isPublishedUrl(v.url) || !isLabel(v.title) || !isKind(v.kind) || !isEpoch(v.epoch)) return null;
-  const { workspace } = v;
-  if (typeof workspace !== "string" || !isId(workspace)) return null;
-  return { url: v.url, title: v.title, kind: v.kind, workspace, epoch: v.epoch };
+  const { workspace, session } = v;
+  if (!isOptionalId(workspace) || !isOptionalId(session)) return null;
+  if (workspace === undefined && session === undefined) return null;
+  const entry: SavedPublished = { url: v.url, title: v.title, kind: v.kind, epoch: v.epoch };
+  if (isIdText(workspace)) entry.workspace = workspace;
+  if (isIdText(session)) entry.session = session;
+  return entry;
 }
 
 const isPrNumber = (v: unknown): v is number => typeof v === "number" && Number.isSafeInteger(v) && v >= 1;

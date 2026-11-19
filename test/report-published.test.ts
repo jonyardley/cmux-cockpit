@@ -269,7 +269,7 @@ describe("applyTouch", () => {
 
   it("moves a saved entry to now and the touching workspace, last as the newest, title kept", () => {
     const start = { [DOC]: saved(DOC, NOW - 5000), [PAGE]: saved(PAGE, NOW - 10) };
-    const map = applyTouch(start, DOC, "w2", NOW);
+    const map = applyTouch(start, DOC, "w2", undefined, NOW);
     assert.deepEqual(Object.keys(map), [PAGE, DOC]);
     assert.deepEqual(map[DOC], { url: DOC, title: "Kept", kind: "doc", workspace: "w2", epoch: NOW });
     assert.equal(start[DOC]?.workspace, "old", "the input is not changed");
@@ -277,18 +277,69 @@ describe("applyTouch", () => {
 
   it("adds nothing for a link with no saved entry, but still prunes", () => {
     const start = { [PAGE]: saved(PAGE, NOW - MAX_AGE_S - 1) };
-    assert.deepEqual(applyTouch(start, DOC, "w2", NOW), {});
+    assert.deepEqual(applyTouch(start, DOC, "w2", undefined, NOW), {});
   });
 
   it("never brings back an entry already past seven days", () => {
-    assert.deepEqual(applyTouch({ [DOC]: saved(DOC, NOW - MAX_AGE_S - 1) }, DOC, "w2", NOW), {});
+    assert.deepEqual(applyTouch({ [DOC]: saved(DOC, NOW - MAX_AGE_S - 1) }, DOC, "w2", undefined, NOW), {});
   });
 
   it("leaves the map alone for a touch within a minute of the last from the same workspace", () => {
     const start = { [DOC]: saved(DOC, NOW - 59, "w2") };
-    assert.equal(applyTouch(start, DOC, "w2", NOW), start);
-    assert.equal(applyTouch(start, DOC, "w3", NOW)[DOC]?.workspace, "w3", "another workspace still moves it");
-    assert.equal(applyTouch({ [DOC]: saved(DOC, NOW - 60, "w2") }, DOC, "w2", NOW)[DOC]?.epoch, NOW);
+    assert.equal(applyTouch(start, DOC, "w2", undefined, NOW), start);
+    assert.equal(
+      applyTouch(start, DOC, "w3", undefined, NOW)[DOC]?.workspace,
+      "w3",
+      "another workspace still moves it",
+    );
+    assert.equal(applyTouch({ [DOC]: saved(DOC, NOW - 60, "w2") }, DOC, "w2", undefined, NOW)[DOC]?.epoch, NOW);
+  });
+});
+
+describe("the publishing session", () => {
+  const SESSION = "5f0c2a7e-1b3d-4e8f-9a6c-2d4b6e8f0a1c";
+  const publish = (extra: Record<string, unknown>) => ({ ...artifact({ file_path: "/w/p.html" }), ...extra });
+
+  it("saves the event's session_id beside the workspace", () => {
+    const entry = publishedFrom(publish({ session_id: SESSION }), "w1", NOW, noFile);
+    assert.equal(entry?.session, SESSION);
+    assert.equal(entry?.workspace, "w1");
+  });
+
+  it("keeps a publish from outside cmux with its session and no workspace key", () => {
+    const entry = publishedFrom(publish({ session_id: SESSION }), undefined, NOW, noFile);
+    assert.equal(entry?.session, SESSION);
+    assert.equal(entry !== null && "workspace" in entry, false);
+  });
+
+  it("names no session when session_id is missing or not an id", () => {
+    for (const session_id of [undefined, 42, "", "x".repeat(129)]) {
+      const entry = publishedFrom(publish({ session_id }), undefined, NOW, noFile);
+      assert.equal(entry !== null && ("session" in entry || "workspace" in entry), false);
+    }
+  });
+
+  it("on a touch keeps whichever of workspace and session the touch does not name", () => {
+    const start: Record<string, SavedPublished> = {
+      [DOC]: { url: DOC, title: "Kept", kind: "doc", workspace: "w1", session: "s1", epoch: NOW - 5000 },
+    };
+    assert.deepEqual(applyTouch(start, DOC, undefined, "s2", NOW)[DOC], {
+      url: DOC,
+      title: "Kept",
+      kind: "doc",
+      workspace: "w1",
+      session: "s2",
+      epoch: NOW,
+    });
+    assert.equal(applyTouch(start, DOC, "w2", undefined, NOW)[DOC]?.session, "s1");
+  });
+
+  it("moves a quiet touch from another session, but not one from the same session and workspace", () => {
+    const start: Record<string, SavedPublished> = {
+      [DOC]: { url: DOC, title: "Kept", kind: "doc", session: "s1", epoch: NOW - 10 },
+    };
+    assert.equal(applyTouch(start, DOC, undefined, "s1", NOW), start);
+    assert.equal(applyTouch(start, DOC, undefined, "s2", NOW)[DOC]?.session, "s2");
   });
 });
 

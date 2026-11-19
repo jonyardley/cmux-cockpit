@@ -145,6 +145,19 @@ test("validateState keeps good published links and drops bad ones", () => {
   assert.deepEqual(badKey, {});
 });
 
+test("validateState keeps a published link with a session in place of a workspace, never with neither", () => {
+  const base = { url: "https://claude.ai/artifact/abc", title: "Plan", kind: "doc", epoch: 5 };
+  const both = { ...base, workspace: "w1", session: "s1" };
+  const loop = { ...base, url: "https://claude.ai/artifact/loop", session: "s1" };
+  const raw = {
+    [both.url]: both,
+    [loop.url]: loop,
+    "https://claude.ai/artifact/none": { ...base, url: "https://claude.ai/artifact/none" },
+    "https://claude.ai/artifact/bad": { ...base, url: "https://claude.ai/artifact/bad", session: 3 },
+  };
+  assert.deepEqual(validateState({ published: raw }).published, { [both.url]: both, [loop.url]: loop });
+});
+
 test("applySet refuses to set published links from a URL", () => {
   const value = JSON.stringify({
     url: "https://claude.ai/artifact/a",
