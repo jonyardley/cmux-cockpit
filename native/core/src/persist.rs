@@ -511,7 +511,7 @@ impl SavedCycle {
 }
 
 /// A number that is finite and not below zero: an epoch, a length, dollars.
-fn is_epoch(e: f64) -> bool {
+pub(crate) fn is_epoch(e: f64) -> bool {
     e.is_finite() && e >= 0.0
 }
 

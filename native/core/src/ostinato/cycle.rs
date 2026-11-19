@@ -8,8 +8,13 @@
 //! run whole, and from earlier runs only their `attempt_ended` lines of
 //! the last day and the parks still waiting. So the latest run's cycles
 //! have their stages, and an earlier one has only its end: outcome,
-//! sessions, cost and when. A park with no `picked` or `attempt_ended`
-//! beside it makes no cycle of its own; it waits on Jon in Needs you.
+//! sessions, cost and when, and its park when one was handed on. A park
+//! with no `picked` or `attempt_ended` beside it makes no cycle of its
+//! own; it waits on Jon in Needs you.
+//!
+//! A run that ends, or is followed by another run, with a cycle still
+//! open closes it: `ended` is set to that line's time and `outcome` stays
+//! absent, so the panel reads "ended without an end line", never running.
 //!
 //! Nothing here moves with the clock: times are epochs and lengths are
 //! between two lines, never an age.
@@ -64,18 +69,30 @@ pub struct Cycle {
     pub ended: Option<f64>,
 }
 
+/// A park whose cycle's `picked` line was not handed on, held for the
+/// `attempt_ended` line that makes its cycle.
+struct Held {
+    run: String,
+    item: String,
+    attempt: Option<u32>,
+    park: CyclePark,
+    sessions: Vec<String>,
+}
+
 /// The cycles being read, with the sessions the lines before the end
-/// named.
+/// named, and the parks that found no cycle yet.
 #[derive(Default)]
 struct Walk {
     cycles: Vec<Cycle>,
     named: Vec<Vec<String>>,
+    held: Vec<Held>,
 }
 
 impl Walk {
     /// The index of the cycle a line of `run` about `item` belongs to:
-    /// its own attempt number's, else the item's newest one still
-    /// running, else its newest, within the run.
+    /// its own attempt number's, else the item's newest one still open,
+    /// within the run. A line with no number never joins an ended cycle,
+    /// so two end lines never merge.
     fn find(&self, run: &str, item: &str, attempt: Option<u32>) -> Option<usize> {
         let mine = |c: &Cycle| c.run == run && c.item == item;
         match attempt {
@@ -86,8 +103,34 @@ impl Walk {
             None => self
                 .cycles
                 .iter()
-                .rposition(|c| mine(c) && c.outcome.is_none())
-                .or_else(|| self.cycles.iter().rposition(mine)),
+                .rposition(|c| mine(c) && c.ended.is_none()),
+        }
+    }
+
+    /// Closes each open cycle `which` picks at `at`, its outcome left
+    /// absent: the run ended without its end line.
+    fn close(&mut self, at: f64, which: impl Fn(&Cycle) -> bool) {
+        for c in &mut self.cycles {
+            if c.ended.is_none() && which(c) {
+                c.ended = Some(at);
+            }
+        }
+    }
+
+    /// Gives a new cycle `i` the park held for it, if one was.
+    fn attach_held(&mut self, i: usize) {
+        let Some(c) = self.cycles.get(i) else { return };
+        let Some(h) = self.held.iter().rposition(|h| {
+            h.run == c.run
+                && h.item == c.item
+                && (h.attempt.is_none() || c.attempt.is_none() || h.attempt == c.attempt)
+        }) else {
+            return;
+        };
+        let h = self.held.remove(h);
+        self.name(i, &h.sessions);
+        if let Some(c) = self.cycles.get_mut(i) {
+            c.park = Some(h.park);
         }
     }
 
@@ -95,6 +138,13 @@ impl Walk {
         self.cycles.push(cycle);
         self.named.push(Vec::new());
         self.cycles.len() - 1
+    }
+
+    /// Pushes a cycle made by its end line, with any park held for it.
+    fn fresh(&mut self, cycle: Cycle) -> usize {
+        let i = self.push(cycle);
+        self.attach_held(i);
+        i
     }
 
     /// Notes the sessions a line names for cycle `i`, each once.
@@ -175,14 +225,26 @@ impl Walk {
                 attempt,
                 sessions,
             } => {
-                if let Some(i) = self.find(run, item, *attempt) {
-                    self.mark(i, "parked", l.at, sessions);
-                    if let Some(c) = self.cycles.get_mut(i) {
-                        c.park = Some(CyclePark {
-                            reason: reason.clone(),
-                            question: question.clone(),
-                        });
+                let park = CyclePark {
+                    reason: reason.clone(),
+                    question: question.clone(),
+                };
+                match self.find(run, item, *attempt) {
+                    Some(i) => {
+                        self.mark(i, "parked", l.at, sessions);
+                        if let Some(c) = self.cycles.get_mut(i) {
+                            c.park = Some(park);
+                        }
                     }
+                    // An earlier run's park, its pick bounded away: held
+                    // for the end line that makes its cycle.
+                    None => self.held.push(Held {
+                        run: l.run.clone(),
+                        item: item.clone(),
+                        attempt: *attempt,
+                        park,
+                        sessions: sessions.clone(),
+                    }),
                 }
             }
             Event::AttemptEnded {
@@ -195,7 +257,7 @@ impl Walk {
             } => {
                 let i = match self.find(run, item, *attempt) {
                     Some(i) => i,
-                    None => self.push(Cycle {
+                    None => self.fresh(Cycle {
                         run: l.run.clone(),
                         item: item.clone(),
                         url: None,
@@ -217,7 +279,8 @@ impl Walk {
                     c.sessions = sessions.clone();
                 }
             }
-            Event::RunStarted { .. } | Event::RunEnded { .. } => {}
+            Event::RunEnded { .. } => self.close(l.at, |c| c.run == run),
+            Event::RunStarted { .. } => self.close(l.at, |c| c.run != run),
         }
     }
 
@@ -365,5 +428,77 @@ mod tests {
         assert_eq!(two.pr, None);
         assert_eq!(timing(two), [("brief", 120.0)], "no attempt: the open one");
         assert!(two.sessions.is_empty());
+    }
+
+    /// An earlier run that parks app-one#4 on a question, then stalls;
+    /// then a later run on another item.
+    const PARKED_EARLIER: &str = r#"{"v":1,"at":"2026-11-18T06:00:00Z","run":"r-a","event":"run_started","project":"example/app-one","caps":{}}
+{"v":1,"at":"2026-11-18T06:00:05Z","run":"r-a","event":"picked","item":"app-one#4","attempt":1}
+{"v":1,"at":"2026-11-18T06:10:00Z","run":"r-a","event":"parked","item":"app-one#4","reason":"needs_decision","question":"Which way?","attempt":1,"sessions":["s-p"]}
+{"v":1,"at":"2026-11-18T06:12:00Z","run":"r-a","event":"attempt_ended","item":"app-one#4","outcome":"stalled","cost_usd":1.0,"attempt":1}
+{"v":1,"at":"2026-11-18T06:12:00Z","run":"r-a","event":"run_ended","attempts":1}
+{"v":1,"at":"2026-11-18T07:00:00Z","run":"r-b","event":"run_started","project":"example/app-one","caps":{}}
+{"v":1,"at":"2026-11-18T07:00:05Z","run":"r-b","event":"picked","item":"app-one#5","attempt":1}
+"#;
+
+    #[test]
+    fn an_earlier_runs_park_survives_its_pick_being_bounded_away() {
+        let text = RecordText::from_bytes(PARKED_EARLIER.as_bytes());
+        let all = cycles(&read(&bound::bound(&text, at("2026-11-18T09:00:00Z"))).lines);
+        let first = all.first().unwrap();
+        assert_eq!(first.item, "app-one#4");
+        assert_eq!(first.started, None, "its picked line is not handed on");
+        assert_eq!(first.outcome.as_deref(), Some("stalled"));
+        assert_eq!(
+            first.park,
+            Some(CyclePark {
+                reason: "needs_decision".into(),
+                question: "Which way?".into()
+            })
+        );
+        assert_eq!(first.sessions, ["s-p"], "the park's session, no end's");
+    }
+
+    #[test]
+    fn a_park_with_no_cycle_or_end_makes_no_cycle() {
+        let lone = r#"{"v":1,"at":"2026-11-18T06:10:00Z","run":"r-a","event":"parked","item":"app-one#4","reason":"needs_decision","question":"Which?"}
+"#;
+        assert!(of(lone).is_empty());
+    }
+
+    #[test]
+    fn two_unnumbered_end_lines_make_two_cycles() {
+        let text = r#"{"v":1,"at":"2026-11-13T14:00:00Z","run":"r-1","event":"attempt_ended","item":"x#1","outcome":"abandoned","cost_usd":1.0}
+{"v":1,"at":"2026-11-13T15:00:00Z","run":"r-1","event":"attempt_ended","item":"x#1","outcome":"merged","cost_usd":2.0}
+"#;
+        let all = of(text);
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].outcome.as_deref(), Some("abandoned"));
+        assert_eq!(all[0].cost_usd, Some(1.0));
+        assert_eq!(all[1].outcome.as_deref(), Some("merged"));
+    }
+
+    #[test]
+    fn a_run_that_ends_without_an_end_line_closes_its_cycles() {
+        let text = r#"{"v":1,"at":"2026-11-13T14:00:00Z","run":"r-1","event":"picked","item":"x#1","attempt":1}
+{"v":1,"at":"2026-11-13T14:10:00Z","run":"r-1","event":"run_ended","attempts":1}
+{"v":1,"at":"2026-11-13T15:00:00Z","run":"r-2","event":"picked","item":"x#2","attempt":1}
+{"v":1,"at":"2026-11-13T16:00:00Z","run":"r-3","event":"run_started","project":"example/x","caps":{}}
+{"v":1,"at":"2026-11-13T16:00:05Z","run":"r-3","event":"picked","item":"x#3","attempt":1}
+"#;
+        let all = of(text);
+        let ends: Vec<_> = all
+            .iter()
+            .map(|c| (c.outcome.as_deref(), c.ended))
+            .collect();
+        assert_eq!(
+            ends,
+            [
+                (None, Some(at("2026-11-13T14:10:00Z"))),
+                (None, Some(at("2026-11-13T16:00:00Z"))),
+                (None, None),
+            ],
+            "closed by its run_ended, by the next run_started, still running"
+        );
     }
 }

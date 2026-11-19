@@ -760,8 +760,13 @@ it, `secs` the time since the milestone before (the pick for the first),
 a draft line adding `draft` and a park line a final `parked`. A stage
 line that names no session takes the cycle's. The runner hands on only
 the latest run whole (`native/core/src/ostinato/bound.rs`), so an earlier
-run's cycle has its end but no pick or stages. Text is cut to one line of
-at most 120 characters. Nothing in it moves with the clock, so an
+run's cycle has its end, and its park when one was handed on, but no
+pick or stages. A cycle whose run ends, or is followed by another run,
+with no end line of its own is closed then: `ended` is that line's time
+and `outcome` stays absent, so `outcome` absent with `ended` set reads
+"ended without an end line", and only both absent means still running.
+Text is cut to one line of at most 120 characters; a number or stage
+that will not fit is dropped on its own. Nothing in it moves with the clock, so an
 unchanged cycle is never written again, and the file's cycles are kept
 for a minute before the first Ostinato feed, as a park is. It goes the
 same way as `waits` (`native/core/src/cycles_save.rs`, its `SaveCycles`

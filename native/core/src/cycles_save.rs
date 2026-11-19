@@ -16,12 +16,12 @@ use std::collections::BTreeMap;
 use crate::data::Data;
 use crate::ostinato::cycle::{Cycle, Milestone};
 use crate::persist::{
-    MAX_CYCLE_SESSIONS, MAX_CYCLE_TEXT, MAX_CYCLES, MAX_STAGES, SavedCycle, SavedStage, is_id,
-    is_text,
+    MAX_CYCLE_SESSIONS, MAX_CYCLE_TEXT, MAX_CYCLES, MAX_STAGES, SavedCycle, SavedStage, is_epoch,
+    is_id, is_text,
 };
 use crate::running_save::Saves;
 use crate::session::Session;
-use crate::text::clip;
+use crate::text::{clip, js_space};
 use crate::waits_save::PARK_GRACE_SECS;
 
 /// What the core sent for the `cycles` map, and when its first frame came.
@@ -65,7 +65,8 @@ impl CycleSaves {
 }
 
 /// `t` as one line of plain text cut to fit a cycle, or None when
-/// nothing is left.
+/// nothing is left. Trimmed as JS trim() does (js_space), byte order
+/// marks too, so the script never refuses what the core sends.
 fn text(t: &str) -> Option<String> {
     let flat: String = t
         .split_whitespace()
@@ -74,7 +75,7 @@ fn text(t: &str) -> Option<String> {
         .chars()
         .filter(|c| *c >= ' ' && *c != '\u{7f}')
         .collect();
-    let cut = clip(flat.trim(), MAX_CYCLE_TEXT);
+    let cut = clip(flat.trim_matches(js_space), MAX_CYCLE_TEXT);
     is_text(&cut, MAX_CYCLE_TEXT).then_some(cut)
 }
 
@@ -88,7 +89,11 @@ fn sessions(sessions: &[String]) -> Vec<String> {
         .collect()
 }
 
+/// A stage as saved, or None when its name or either number will not fit.
 fn stage(m: &Milestone) -> Option<SavedStage> {
+    if !is_epoch(m.at) || !is_epoch(m.secs) {
+        return None;
+    }
     Some(SavedStage {
         name: text(&m.name)?,
         at: m.at,
@@ -97,8 +102,9 @@ fn stage(m: &Milestone) -> Option<SavedStage> {
     })
 }
 
-/// A cycle as saved, or None when it cannot fit: each text field that
-/// will not fit is dropped on its own, the item alone being needed.
+/// A cycle as saved, or None when it cannot fit: each text, number or
+/// stage that will not fit is dropped on its own, the item alone being
+/// needed.
 pub fn saved(c: &Cycle) -> Option<SavedCycle> {
     let skip = c.stages.len().saturating_sub(MAX_STAGES);
     let cycle = SavedCycle {
@@ -107,15 +113,15 @@ pub fn saved(c: &Cycle) -> Option<SavedCycle> {
             .url
             .clone()
             .filter(|u| is_text(u, crate::persist::MAX_URL)),
-        attempt: c.attempt,
+        attempt: c.attempt.filter(|n| *n >= 1),
         outcome: c.outcome.as_deref().and_then(text),
         reason: c.park.as_ref().and_then(|p| text(&p.reason)),
         question: c.park.as_ref().and_then(|p| text(&p.question)),
         pr: c.pr.as_deref().and_then(text),
         sessions: sessions(&c.sessions),
-        cost: c.cost_usd,
-        started: c.started,
-        ended: c.ended,
+        cost: c.cost_usd.filter(|n| is_epoch(*n)),
+        started: c.started.filter(|n| is_epoch(*n)),
+        ended: c.ended.filter(|n| is_epoch(*n)),
         stages: c.stages.iter().skip(skip).filter_map(stage).collect(),
     };
     cycle.fits().then_some(cycle)
@@ -129,13 +135,16 @@ pub fn cycles(session: &Session, data: &Data) -> Option<BTreeMap<String, Vec<Sav
     let list = data.workspaces.as_deref().filter(|l| !l.is_empty())?;
     let mut out = BTreeMap::new();
     for w in list.iter().filter(|w| is_id(&w.id)) {
-        let all: Vec<SavedCycle> = session
+        // Newest first, stopping at MAX_CYCLES that fit, so a frame
+        // never builds the older ones only to drop them.
+        let mut kept: Vec<SavedCycle> = session
             .ostinato_cycles(data, w)
             .iter()
+            .rev()
             .filter_map(saved)
+            .take(MAX_CYCLES)
             .collect();
-        let skip = all.len().saturating_sub(MAX_CYCLES);
-        let kept: Vec<SavedCycle> = all.into_iter().skip(skip).collect();
+        kept.reverse();
         if !kept.is_empty() {
             out.insert(w.id.clone(), kept);
         }
@@ -275,5 +284,60 @@ mod tests {
         assert!(t.starts_with("Why? a a"));
         assert!(is_text(&t, MAX_CYCLE_TEXT));
         assert_eq!(text(" \n "), None);
+    }
+
+    #[test]
+    fn a_byte_order_mark_at_either_end_is_trimmed_as_js_does() {
+        assert_eq!(text("\u{FEFF}x#1\u{FEFF}").as_deref(), Some("x#1"));
+        assert_eq!(text("\u{FEFF}"), None);
+    }
+
+    fn bare(item: &str) -> Cycle {
+        Cycle {
+            run: "r-1".into(),
+            item: item.into(),
+            url: None,
+            attempt: Some(1),
+            started: Some(10.0),
+            stages: Vec::new(),
+            pr: None,
+            park: None,
+            sessions: Vec::new(),
+            outcome: Some("merged".into()),
+            cost_usd: Some(1.0),
+            ended: Some(20.0),
+        }
+    }
+
+    #[test]
+    fn a_bad_number_drops_only_itself() {
+        let mut c = bare("x#1");
+        c.attempt = Some(0);
+        c.cost_usd = Some(-1.0);
+        c.started = Some(f64::NAN);
+        c.ended = Some(-5.0);
+        c.stages = vec![
+            Milestone {
+                name: "brief".into(),
+                at: -1.0,
+                secs: 0.0,
+                sessions: Vec::new(),
+            },
+            Milestone {
+                name: "built".into(),
+                at: 15.0,
+                secs: 5.0,
+                sessions: Vec::new(),
+            },
+        ];
+        let got = saved(&c).unwrap();
+        assert_eq!(got.item, "x#1");
+        assert_eq!(got.outcome.as_deref(), Some("merged"));
+        assert_eq!(
+            (got.attempt, got.cost, got.started, got.ended),
+            (None, None, None, None)
+        );
+        let names: Vec<&str> = got.stages.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["built"]);
     }
 }
