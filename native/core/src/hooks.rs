@@ -72,10 +72,10 @@ pub struct Hooked {
     /// nudge after a Stop keeps it closed (stopped.rs).
     pub turn_open: bool,
     /// Epoch seconds of the session's last Stop with no prompt or new
-    /// session since, else 0. A background helper's tool calls arrive as
+    /// session since, else None. A background helper's tool calls arrive as
     /// the chat's own hooks, so only a prompt reopens the chat's turn
     /// here; program.rs weighs it against Claude's report.
-    pub stopped_at: f64,
+    pub stopped_at: Option<f64>,
 }
 
 impl Hooked {
@@ -111,7 +111,7 @@ impl Hooked {
             last_hook: at,
             workspace: workspace.to_string(),
             turn_open,
-            stopped_at: prev.map_or(0.0, |p| p.stopped_at),
+            stopped_at: prev.and_then(|p| p.stopped_at),
         }
     }
 
@@ -121,8 +121,8 @@ impl Hooked {
     #[must_use]
     pub fn turn_hook(mut self, name: &str, at: f64) -> Hooked {
         match name {
-            "Stop" => self.stopped_at = at,
-            "UserPromptSubmit" | "SessionStart" => self.stopped_at = 0.0,
+            "Stop" => self.stopped_at = Some(at),
+            "UserPromptSubmit" | "SessionStart" => self.stopped_at = None,
             _ => {}
         }
         self
