@@ -78,9 +78,17 @@ pub fn status_of_records(records: &[Record<'_>]) -> Option<AgentStatus> {
         .and_then(|r| status_from_program(r.state))
 }
 
-/// Whether the records list any background task (a record with an id).
+/// Whether the records list a background task still running: a record
+/// with an id whose state is working or blocked. A finished helper's
+/// record does not count.
 pub fn lists_helpers(records: &[Record<'_>]) -> bool {
-    records.iter().any(|r| !r.id.is_empty())
+    records.iter().any(|r| {
+        !r.id.is_empty()
+            && matches!(
+                status_from_program(r.state),
+                Some(AgentStatus::Working | AgentStatus::NeedsInput)
+            )
+    })
 }
 
 /// Claude's latest word for a tab: the status its records add up to,
@@ -516,6 +524,26 @@ mod tests {
             status(Some(&ask), Some(&working)),
             Some(AgentStatus::NeedsInput)
         );
+    }
+
+    #[test]
+    fn only_working_or_blocked_helpers_count_as_listed() {
+        let finished = [rec("", "working"), rec("a1", "done")];
+        assert!(!lists_helpers(&finished));
+        assert!(lists_helpers(&[rec("", "working"), rec("a1", "working")]));
+        assert!(lists_helpers(&[rec("", "working"), rec("a1", "blocked")]));
+        assert!(!lists_helpers(&[rec("", "working")]));
+        // A Stop under a held working report with only a finished helper
+        // listed stays working, as in a plain turn.
+        let working = report(AgentStatus::Working, 50.0);
+        let held = Report::after(
+            Some(&working),
+            AgentStatus::Working,
+            lists_helpers(&finished),
+            100.5,
+        );
+        let stop = stopped(100.0);
+        assert_eq!(status(Some(&stop), Some(&held)), Some(AgentStatus::Working));
     }
 
     #[test]
