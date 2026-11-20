@@ -127,6 +127,7 @@ mod tests {
         let idle = Report {
             status: AgentStatus::Idle,
             since: 110.0,
+            helpers: false,
         };
         assert!(!gone_mid_turn(&h, Some(&idle), Some(true)));
     }

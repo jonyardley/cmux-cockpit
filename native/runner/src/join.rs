@@ -32,7 +32,7 @@ use std::collections::HashMap;
 
 use cockpit_core::data::{Agent, AgentStatus, Data, Workspace};
 use cockpit_core::hooks::{Hooked, moves_activity, status_from_hook};
-use cockpit_core::program::{Record, Report, resolve, status_of_records};
+use cockpit_core::program::{Record, Report, lists_helpers, resolve, status_of_records};
 use cockpit_core::stopped::{Stop, StopCause, gone_mid_turn, silent_since};
 use serde_json::Value;
 
@@ -501,8 +501,9 @@ impl Join {
     /// stands until Claude sends another. A tab whose records say nothing
     /// is forgotten, and its sessions fall back to their hooks. A report
     /// with no readable time is left out, since its order is unknown. Only
-    /// a change of status in a tab some session runs in is news for a
-    /// frame: a repeat, or a tab with no session, redraws nothing.
+    /// a change of status, or under working of whether background tasks
+    /// are listed, in a tab some session runs in is news for a frame: a
+    /// repeat, or a tab with no session, redraws nothing.
     fn program_status(&mut self, e: &Value, seq: u64) -> (bool, Option<Change>) {
         let p = &e["payload"];
         let Some(surface) = e["surface_id"].as_str() else {
@@ -524,8 +525,13 @@ impl Join {
             return (false, None);
         };
         let prev = self.program.get(surface);
-        let moved = prev.is_none_or(|s| s.status != status);
-        let next = Report::after(prev, status, at);
+        let helpers = lists_helpers(&records);
+        // Under working, whether helpers are listed changes how a Stop
+        // reads (program.rs rule 4), so it is news too.
+        let moved = prev.is_none_or(|s| {
+            s.status != status || (status == AgentStatus::Working && s.helpers != helpers)
+        });
+        let next = Report::after(prev, status, helpers, at);
         self.program.insert(surface.to_string(), next);
         let moved = moved && held;
         let change = moved.then(|| Change {
@@ -574,7 +580,7 @@ impl Join {
         let prev = self.sessions.get(&pid);
         let moved = prev.is_none_or(|s| s.status != status || s.workspace != ws);
         let at = at.or(prev.map(|s| s.last_activity)).unwrap_or_default();
-        let next = Hooked::after(prev, status, at, moves_activity(hook), ws);
+        let next = Hooked::after(prev, status, at, moves_activity(hook), ws).turn_hook(hook, at);
         let changed = prev != Some(&next) || surface_moved;
         self.sessions.insert(pid, next);
         (changed, moved)
@@ -843,6 +849,61 @@ mod tests {
         j.agents(view(&[(7, true, "s7")]));
         j.event(&hook_in(1, "Stop", 7, "A", "S1"));
         j
+    }
+
+    #[test]
+    fn a_turn_ending_while_helpers_run_reads_idle_until_the_next_prompt() {
+        // Live, 2026-11-20: the session's record stayed working from before
+        // the Stop on, and a helper's tool calls came as the chat's hooks.
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(1, "UserPromptSubmit", 7, "A", "S1"));
+        let helpers = [("", "working", "none"), ("a1", "working", "none")];
+        j.event(&program(2, "report", "S1", 90, &helpers));
+        j.event(&hook_in(3, "Stop", 7, "A", "S1"));
+        j.event(&program(4, "report", "S1", 101, &helpers));
+        let mut tool = hook(5, "PreToolUse", 7, "A", Some("Bash"));
+        tool["occurred_at"] = json!("1970-01-01T00:01:50Z");
+        j.event(&tool);
+        assert_eq!(status_at(&j, 120.0), Some(AgentStatus::Idle));
+        let mut prompt = hook(6, "UserPromptSubmit", 7, "A", None);
+        prompt["occurred_at"] = json!("1970-01-01T00:02:00Z");
+        j.event(&prompt);
+        assert_eq!(status_at(&j, 121.0), Some(AgentStatus::Working));
+    }
+
+    #[test]
+    fn the_last_helper_ending_after_a_stop_redraws_the_card_working() {
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(1, "UserPromptSubmit", 7, "A", "S1"));
+        let helpers = [("", "working", "none"), ("a1", "working", "none")];
+        j.event(&program(2, "report", "S1", 90, &helpers));
+        j.event(&hook_in(3, "Stop", 7, "A", "S1"));
+        assert_eq!(status_at(&j, 101.0), Some(AgentStatus::Idle));
+        let (changed, _) = j.event(&program(4, "report", "S1", 102, &[("", "working", "none")]));
+        assert!(changed, "the helpers going is news for a frame");
+        assert_eq!(status_at(&j, 103.0), Some(AgentStatus::Working));
+    }
+
+    #[test]
+    fn a_stop_in_a_plain_turn_stays_working_under_a_held_report() {
+        // No helpers listed: a blocking Stop hook's turn goes on, and the
+        // chat's own tool calls after it keep the card working.
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(1, "UserPromptSubmit", 7, "A", "S1"));
+        let own = [("", "working", "none")];
+        j.event(&program(2, "report", "S1", 90, &own));
+        j.event(&hook_in(3, "Stop", 7, "A", "S1"));
+        j.event(&program(4, "report", "S1", 101, &own));
+        let mut tool = hook(5, "PreToolUse", 7, "A", Some("Bash"));
+        tool["occurred_at"] = json!("1970-01-01T00:01:50Z");
+        j.event(&tool);
+        assert_eq!(status_at(&j, 120.0), Some(AgentStatus::Working));
     }
 
     #[test]
