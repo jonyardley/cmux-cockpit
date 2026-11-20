@@ -19,8 +19,13 @@
 //! 3. Blocked: needs input, whatever the hooks say.
 //! 4. Working: working, unless a hook asked (needs input) after Claude's
 //!    last report, which keeps a permission prompt in Needs you even if
-//!    Claude never reports it blocked. A Stop hook never ends a turn
-//!    Claude says is still running: the false hand-back the spike saw.
+//!    Claude never reports it blocked, or the chat stopped after Claude
+//!    last changed its word to working, with no prompt since: idle from
+//!    the Stop. While background tasks run, Claude keeps the session's
+//!    record at working across the turn's end and its helpers' tool calls
+//!    arrive as the chat's hooks, so neither says the turn ended. A turn
+//!    that does go on (the false hand-back the spike saw) comes back as a
+//!    prompt, which clears the Stop, or as Claude changing to working.
 //! 5. Done or idle: idle, unless a hook asked after Claude's last report
 //!    (the idle nudge a minute on, which needs.rs then judges as before),
 //!    or a hook said working more than `PROGRAM_GRACE_SECS` after it (a new
@@ -136,7 +141,9 @@ pub fn resolve(
 /// Rules 2 to 5: which of the hooks and the report wins.
 fn both(h: &Hooked, p: &Report) -> Resolved {
     let last_activity = h.last_activity.max(p.since);
-    let (status, since) = if hook_wins(h, p) {
+    let (status, since) = if stopped_under_working(h, p) {
+        (AgentStatus::Idle, h.stopped_at)
+    } else if hook_wins(h, p) {
         (h.status.clone(), h.since)
     } else {
         (p.status.clone(), p.since)
@@ -146,6 +153,15 @@ fn both(h: &Hooked, p: &Report) -> Resolved {
         since,
         last_activity,
     }
+}
+
+/// Rule 4's Stop: Claude says working, but the chat stopped after Claude
+/// last changed to working and no prompt has come since. A hook's ask
+/// still comes first, as do an ended session and a blocked report.
+fn stopped_under_working(h: &Hooked, p: &Report) -> bool {
+    p.status == AgentStatus::Working
+        && h.stopped_at > p.since
+        && !matches!(h.status, AgentStatus::Ended | AgentStatus::NeedsInput)
 }
 
 /// Rule 2 also holds here, not only in the runner (which hides an ended
@@ -426,6 +442,50 @@ mod tests {
         assert_eq!(
             status(Some(&ask), Some(&working)),
             Some(AgentStatus::Working)
+        );
+    }
+
+    #[test]
+    fn a_stop_under_a_held_working_report_reads_idle_until_a_prompt() {
+        // Live, 2026-11-20: a turn ended on a question while helpers ran.
+        // Claude kept the session at working, and the helpers' tool calls
+        // came as the chat's own hooks.
+        let working = report(AgentStatus::Working, 50.0);
+        let stop = hooked(AgentStatus::Idle, 100.0).turn_hook("Stop", 100.0);
+        let held = Report::after(Some(&working), AgentStatus::Working, 100.5);
+        let r = resolve(Some(&stop), Some(&held), None, 110.0);
+        assert_eq!(
+            r.map(|r| (r.status, r.since)),
+            Some((AgentStatus::Idle, 100.0))
+        );
+        let helper = Hooked::after(Some(&stop), AgentStatus::Working, 120.0, true, "w")
+            .turn_hook("PreToolUse", 120.0);
+        assert_eq!(status(Some(&helper), Some(&held)), Some(AgentStatus::Idle));
+        let prompt = Hooked::after(Some(&helper), AgentStatus::Working, 130.0, true, "w")
+            .turn_hook("UserPromptSubmit", 130.0);
+        assert_eq!(
+            status(Some(&prompt), Some(&held)),
+            Some(AgentStatus::Working)
+        );
+    }
+
+    #[test]
+    fn claude_changing_to_working_after_a_stop_still_wins() {
+        let done = report(AgentStatus::Idle, 90.0);
+        let stop = hooked(AgentStatus::Idle, 100.0).turn_hook("Stop", 100.0);
+        let back = Report::after(Some(&done), AgentStatus::Working, 101.0);
+        assert_eq!(status(Some(&stop), Some(&back)), Some(AgentStatus::Working));
+    }
+
+    #[test]
+    fn an_ask_after_the_stop_still_needs_input() {
+        let working = report(AgentStatus::Working, 50.0);
+        let stop = hooked(AgentStatus::Idle, 100.0).turn_hook("Stop", 100.0);
+        let ask = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 120.0, true, "w")
+            .turn_hook("PermissionRequest", 120.0);
+        assert_eq!(
+            status(Some(&ask), Some(&working)),
+            Some(AgentStatus::NeedsInput)
         );
     }
 }

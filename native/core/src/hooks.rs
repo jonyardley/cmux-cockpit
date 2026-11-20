@@ -71,6 +71,11 @@ pub struct Hooked {
     /// Stop or SessionEnd. A Notification leaves it as it was, so the idle
     /// nudge after a Stop keeps it closed (stopped.rs).
     pub turn_open: bool,
+    /// Epoch seconds of the session's last Stop with no prompt or new
+    /// session since, else 0. A background helper's tool calls arrive as
+    /// the chat's own hooks, so only a prompt reopens the chat's turn
+    /// here; program.rs weighs it against Claude's report.
+    pub stopped_at: f64,
 }
 
 impl Hooked {
@@ -106,7 +111,21 @@ impl Hooked {
             last_hook: at,
             workspace: workspace.to_string(),
             turn_open,
+            stopped_at: prev.map_or(0.0, |p| p.stopped_at),
         }
+    }
+
+    /// The session with hook `name` at epoch `at` marked on its turn: a
+    /// Stop ends the chat's turn, a prompt or a new session opens one, and
+    /// any other hook (a helper's tool call, say) leaves it as it was.
+    #[must_use]
+    pub fn turn_hook(mut self, name: &str, at: f64) -> Hooked {
+        match name {
+            "Stop" => self.stopped_at = at,
+            "UserPromptSubmit" | "SessionStart" => self.stopped_at = 0.0,
+            _ => {}
+        }
+        self
     }
 
     /// The status and its start once Agent View has had its say: working

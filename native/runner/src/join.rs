@@ -574,7 +574,7 @@ impl Join {
         let prev = self.sessions.get(&pid);
         let moved = prev.is_none_or(|s| s.status != status || s.workspace != ws);
         let at = at.or(prev.map(|s| s.last_activity)).unwrap_or_default();
-        let next = Hooked::after(prev, status, at, moves_activity(hook), ws);
+        let next = Hooked::after(prev, status, at, moves_activity(hook), ws).turn_hook(hook, at);
         let changed = prev != Some(&next) || surface_moved;
         self.sessions.insert(pid, next);
         (changed, moved)
@@ -843,6 +843,28 @@ mod tests {
         j.agents(view(&[(7, true, "s7")]));
         j.event(&hook_in(1, "Stop", 7, "A", "S1"));
         j
+    }
+
+    #[test]
+    fn a_turn_ending_while_helpers_run_reads_idle_until_the_next_prompt() {
+        // Live, 2026-11-20: the session's record stayed working from before
+        // the Stop on, and a helper's tool calls came as the chat's hooks.
+        let mut j = Join::default();
+        j.workspaces(vec![ws("A")], 0.0);
+        j.agents(view(&[(7, true, "s7")]));
+        j.event(&hook_in(1, "UserPromptSubmit", 7, "A", "S1"));
+        let helpers = [("", "working", "none"), ("a1", "working", "none")];
+        j.event(&program(2, "report", "S1", 90, &helpers));
+        j.event(&hook_in(3, "Stop", 7, "A", "S1"));
+        j.event(&program(4, "report", "S1", 101, &helpers));
+        let mut tool = hook(5, "PreToolUse", 7, "A", Some("Bash"));
+        tool["occurred_at"] = json!("1970-01-01T00:01:50Z");
+        j.event(&tool);
+        assert_eq!(status_at(&j, 120.0), Some(AgentStatus::Idle));
+        let mut prompt = hook(6, "UserPromptSubmit", 7, "A", None);
+        prompt["occurred_at"] = json!("1970-01-01T00:02:00Z");
+        j.event(&prompt);
+        assert_eq!(status_at(&j, 121.0), Some(AgentStatus::Working));
     }
 
     #[test]
