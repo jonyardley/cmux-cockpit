@@ -18,6 +18,7 @@
 
 pub mod bound;
 pub mod card;
+pub mod cycle;
 pub mod line;
 pub mod remote;
 pub mod run;
@@ -35,6 +36,7 @@ use crate::time::now_epoch;
 pub use line::{Broken, RecordError, RecordText};
 pub use run::RunState;
 
+use cycle::{Cycle, cycles};
 use line::{Event, Heard, Line, read};
 use run::{Share, run_state, shares};
 
@@ -67,6 +69,8 @@ pub struct Record {
     heard: Vec<Heard>,
     error: Option<RecordError>,
     shares: Vec<Share>,
+    /// Its cycles, oldest first (cycle.rs), worked out once per read.
+    cycles: Vec<Cycle>,
     /// The project it is about, lower case: the latest `run_started`'s,
     /// else the file's.
     project: String,
@@ -83,6 +87,7 @@ impl Record {
         let project = started.unwrap_or(file_project).to_ascii_lowercase();
         Record {
             shares: shares(&read.lines),
+            cycles: cycles(&read.lines),
             lines: read.lines,
             heard: read.heard,
             error: read.error,
@@ -198,6 +203,18 @@ impl Session {
     /// record does not say which workspace runs the loop, so this is a
     /// guess, not a match.
     pub fn ostinato_run(&self, data: &Data, w: &Workspace) -> Option<RecordState> {
+        let record = self.carried(data, w)?;
+        Some(record.state(now_epoch(data)))
+    }
+
+    /// The cycles of the record on `w`'s card, oldest first: empty when
+    /// it carries none (`ostinato_run`), so they land on one workspace.
+    pub fn ostinato_cycles(&self, data: &Data, w: &Workspace) -> &[Cycle] {
+        self.carried(data, w).map_or(&[], |r| r.cycles.as_slice())
+    }
+
+    /// The record `w`'s card carries, by `ostinato_run`'s rule.
+    fn carried(&self, data: &Data, w: &Workspace) -> Option<&Record> {
         let directory = w.directory.as_deref()?;
         let there = self.in_checkout(data, w);
         let carrier = there.iter().min_by_key(|other| {
@@ -210,8 +227,7 @@ impl Session {
         if carrier.id != w.id {
             return None;
         }
-        let record = self.ostinato.record_for(directory)?;
-        Some(record.state(now_epoch(data)))
+        self.ostinato.record_for(directory)
     }
 
     /// The workspaces open on the repo `w` is open on, in its main

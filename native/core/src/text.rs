@@ -89,7 +89,7 @@ pub fn clean_title(s: Option<&str>) -> String {
 
 /// What JS trim() takes off: Rust's whitespace, but the byte order mark
 /// too, and never U+0085, which JS keeps.
-fn js_space(c: char) -> bool {
+pub(crate) fn js_space(c: char) -> bool {
     c == '\u{FEFF}' || (c.is_whitespace() && c != '\u{85}')
 }
 

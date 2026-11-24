@@ -17,6 +17,7 @@ use serde_json::{Map, Value};
 use crate::data::PrStatus;
 use crate::js::{encode_uri_component, utf16_len};
 use crate::saved::Stamped;
+use crate::text::js_space;
 
 /// The cockpit's view: "all" (lanes) or "projects".
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -413,6 +414,131 @@ where
         .collect())
 }
 
+/// One stage of a saved Ostinato cycle, or its park (ostinato/cycle.rs
+/// `Milestone`): its name, when, how long since the one before, and the
+/// sessions behind it.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SavedStage {
+    pub name: String,
+    pub at: f64,
+    pub secs: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sessions: Vec<String>,
+}
+
+/// One Ostinato cycle on a workspace's card, one attempt at one item,
+/// saved for the agents panel's Details tab (#399, cycles_save.rs).
+/// Nothing in it moves with the clock: times are epochs and `secs` the
+/// time between two lines, so a cycle is written when it changes, not
+/// every minute.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SavedCycle {
+    /// The item, as `repo#12`.
+    pub item: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attempt: Option<u32>,
+    /// How it ended, as the record's word; absent while it runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outcome: Option<String>,
+    /// Why it parked, as the record's code, and the question for Jon.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub question: Option<String>,
+    /// The draft pull request it opened, as `repo#12`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sessions: Vec<String>,
+    /// What it cost in dollars, from its end line.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost: Option<f64>,
+    /// When it was picked; absent for an earlier run's cycle.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended: Option<f64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stages: Vec<SavedStage>,
+}
+
+/// The most cycles saved for one workspace, the newest kept.
+pub const MAX_CYCLES: usize = 10;
+/// The most stages saved for one cycle, the last kept.
+pub const MAX_STAGES: usize = 20;
+/// The most sessions saved for one cycle or stage.
+pub const MAX_CYCLE_SESSIONS: usize = 8;
+/// The longest text a cycle keeps (MAX_LABEL).
+pub const MAX_CYCLE_TEXT: usize = MAX_LABEL;
+/// The longest item link kept; a longer one is dropped, never cut.
+pub const MAX_URL: usize = 512;
+
+/// Whether `sessions` fits a cycle or stage: up to MAX_CYCLE_SESSIONS ids.
+fn sessions_fit(sessions: &[String]) -> bool {
+    sessions.len() <= MAX_CYCLE_SESSIONS && sessions.iter().all(|s| is_id(s))
+}
+
+impl SavedStage {
+    fn fits(&self) -> bool {
+        is_text(&self.name, MAX_CYCLE_TEXT)
+            && is_epoch(self.at)
+            && is_epoch(self.secs)
+            && sessions_fit(&self.sessions)
+    }
+}
+
+impl SavedCycle {
+    /// Every field within the bounds state-config.ts's savedCycle holds
+    /// it to. The core sends only a cycle that fits, so the script never
+    /// refuses one and leaves it to be sent again.
+    pub(crate) fn fits(&self) -> bool {
+        let text = |t: &Option<String>| t.as_deref().is_none_or(|t| is_text(t, MAX_CYCLE_TEXT));
+        is_text(&self.item, MAX_CYCLE_TEXT)
+            && self.url.as_deref().is_none_or(|u| is_text(u, MAX_URL))
+            && self.attempt.is_none_or(|n| n >= 1)
+            && text(&self.outcome)
+            && text(&self.reason)
+            && text(&self.question)
+            && text(&self.pr)
+            && sessions_fit(&self.sessions)
+            && self.cost.is_none_or(is_epoch)
+            && self.started.is_none_or(is_epoch)
+            && self.ended.is_none_or(is_epoch)
+            && self.stages.len() <= MAX_STAGES
+            && self.stages.iter().all(SavedStage::fits)
+    }
+}
+
+/// A number that is finite and not below zero: an epoch, a length, dollars.
+pub(crate) fn is_epoch(e: f64) -> bool {
+    e.is_finite() && e >= 0.0
+}
+
+/// Whether `cycles` fits as one workspace's list: one to MAX_CYCLES
+/// cycles, each of which fits.
+pub(crate) fn cycles_fit(cycles: &[SavedCycle]) -> bool {
+    (1..=MAX_CYCLES).contains(&cycles.len()) && cycles.iter().all(SavedCycle::fits)
+}
+
+/// The `cycles` map as validateState reads it: a workspace's list with
+/// any cycle that does not fit is dropped whole, as the waits are.
+fn cycles_map<'de, D>(d: D) -> Result<BTreeMap<String, Vec<SavedCycle>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let entries: BTreeMap<String, Value> = crate::lenient::map(d)?;
+    Ok(entries
+        .into_iter()
+        .filter(|(ws, _)| is_id(ws))
+        .filter_map(|(ws, v)| {
+            let c = serde_json::from_value::<Vec<SavedCycle>>(v).ok()?;
+            cycles_fit(&c).then_some((ws, c))
+        })
+        .collect())
+}
+
 /// The `notified` map, each entry kept only while it fits (`SavedNote::fits`).
 fn notes_map<'de, D>(d: D) -> Result<BTreeMap<String, SavedNote>, D::Error>
 where
@@ -579,6 +705,14 @@ pub struct SavedState {
         skip_serializing_if = "BTreeMap::is_empty"
     )]
     pub waits: BTreeMap<String, Vec<SavedWait>>,
+    /// wsId to the Ostinato cycles its card carries (#399), newest last,
+    /// which the core writes through the runner (cycles_save.rs) and the
+    /// agents panel's Details tab reads. Left out while empty.
+    #[serde(
+        deserialize_with = "cycles_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub cycles: BTreeMap<String, Vec<SavedCycle>>,
     #[serde(deserialize_with = "crate::lenient::map")]
     pub names: BTreeMap<String, Value>,
     #[serde(deserialize_with = "crate::lenient::map")]
@@ -702,9 +836,15 @@ pub const MAX_MOVE: usize = 200;
 pub const MAX_DECISIONS: f64 = 9.0;
 
 /// Plain, single-line text with no leading, trailing or control characters, up to `max` long.
+/// Spaces are those JS trim() takes off (js_space), byte order marks
+/// too, as state-config.ts's isText holds them, so a text this passes the
+/// script never refuses.
 pub(crate) fn is_text(v: &str, max: usize) -> bool {
     let len = utf16_len(v);
-    v.trim() == v && len > 0 && len <= max && v.chars().all(|c| c >= ' ' && c != '\u{7f}')
+    v.trim_matches(js_space) == v
+        && len > 0
+        && len <= max
+        && v.chars().all(|c| c >= ' ' && c != '\u{7f}')
 }
 
 pub(crate) fn is_id(v: &str) -> bool {
