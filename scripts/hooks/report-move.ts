@@ -100,12 +100,14 @@ const ASK_LAST = new RegExp(
   String.raw`^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?(?:\*\*|__|\*|_)?(?:jon,\s+)?(?:${ASK_VERB})\b`,
   "i",
 );
-// The same verbs as whole words anywhere: "Nothing needed from you yet;
-// merge #419 when CI is green" or "**Nothing ships until you pick a
-// letter.**" asks after all. After "my", "the", "next" and the like the
-// word is a noun, so "...that decision come in my next reply." asks nothing.
+// The same verbs where an instruction would start: at the start of the
+// text, or after a clause or sentence mark and a space, optionally after
+// "you", "please", "then", "and" or "so". "Nothing needed from you yet;
+// merge #419 when CI is green" asks after all. Mid clause the verb is no
+// instruction, so "...until the pull request is ready to merge" and
+// "...while the reviewers run" ask nothing.
 const ASK_WORD = new RegExp(
-  String.raw`(?<!\b(?:a|an|the|my|our|your|this|that|next|first|last)\s)\b(?:${ASK_VERB})\b`,
+  String.raw`(?:^\s*|[;,:.!?][*_)"']*\s+)(?:(?:you|please|then|and|so)\s+)?(?:${ASK_VERB})\b`,
   "i",
 );
 // A last line that opens "Nothing", bold, italic or plain, with the rest of
@@ -236,12 +238,21 @@ const quietRest = (rest: string): boolean =>
 // line below opens with no qualifier.
 const unqualified = ({ rest, next }: Rest): boolean => quietRest(rest) && !QUALIFIED_NEXT.test(next);
 
-// Whether the reply's last line asks: one that opens "Nothing" asks unless
-// the rest of it is quiet; any other asks when it opens with an ask verb or
-// on bold or italic.
+// A task left with Jon in a "Nothing" last line: "**Nothing else is needed
+// here. The email is still yours to send.**"
+const YOURS = /\byours\b/i;
+
+// Whether the reply's last line asks: one that opens "Nothing" asks when the
+// rest of it holds a qualifier, a task left as Jon's, or an ask verb where an
+// instruction starts (a sentence break alone is none: "Nothing is running.
+// Nothing needed from you."); any other asks when it opens with an ask verb
+// or on bold or italic.
 function lastAsks(last: string): boolean {
   const nothing = NOTHING_LAST.exec(last);
-  if (nothing) return !quietRest(nothing[1] ?? "");
+  if (nothing) {
+    const rest = nothing[1] ?? "";
+    return QUALIFIED.test(rest) || YOURS.test(rest) || ASK_WORD.test(rest);
+  }
   return ASK_LAST.test(last) || EMPHASIS_LAST.test(last);
 }
 

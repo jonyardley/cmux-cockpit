@@ -348,6 +348,36 @@ describe("moveFrom, a reply that says nothing is needed", () => {
     }
   });
 
+  it("reads an ask verb inside an 'until' or 'while' clause as quiet", () => {
+    const status = (s: string): string =>
+      `Jon, Cockpit quiet turns: the fix is on a branch.\n\n- **Hook** saves quiet replies as idle.\n\n**Status**\n${s}`;
+    for (const last of [
+      "**Nothing needed from you until the pull request is ready to merge.**",
+      "**Nothing needed from you until the fix is ready to merge.**",
+      "**Nothing needed from you until it's marked ready to merge.**",
+      "**Nothing needed from you until the reviews are back.**",
+    ]) {
+      assert.equal(moveFrom(status(`Build runs.\n\n${last}`), 5)?.idle, true, last);
+    }
+    for (const s of [
+      "Nothing needed from you while the reviewers run.",
+      "Nothing needed from you until I open the draft.",
+      "Nothing needed from you until the checks run.",
+      "Nothing needed from you until I send the plan.",
+    ]) {
+      assert.equal(moveFrom(status(s), 5)?.idle, true, s);
+    }
+  });
+
+  it("reads a plain last line of two quiet sentences as quiet", () => {
+    for (const last of [
+      "Nothing is running. Nothing needed from you.",
+      "Nothing else is running. Nothing needed from you.",
+    ]) {
+      assert.deepEqual(moveFrom(endingOn(last), 5), { text: last, epoch: 5, idle: true }, last);
+    }
+  });
+
   it("reads the phrase through markdown and after a sentence's full stop", () => {
     assert.equal(moveFrom("Done.\n\n> **Nothing needed from you.**", 5)?.idle, true);
     assert.equal(moveFrom("- Jon, nothing needed from you.", 5)?.idle, true);
@@ -506,6 +536,16 @@ describe("moveFrom, a reply that says nothing is needed yet asks", () => {
         `Jon, Cockpit quiet turns: the fix is on a branch.\n\n- **Hook** saves quiet replies as idle.\n\n**Status**\n${s}`,
       );
     }
+  });
+
+  it("lets an ask verb that starts a clause or sentence ask", () => {
+    waitsOnJon(endingOn("Nothing needed from you.\n\nNothing is running. Say go and I'll merge."));
+    waitsOnJon(
+      endingOn("Nothing needed from you.\n\n**Nothing else is needed here. The email is still yours to send.**"),
+    );
+    waitsOnJon(
+      "Jon, Cockpit quiet turns: the fix is on a branch.\n\n**Status**\nNothing needed from you until CI passes; merge when it is green.",
+    );
   });
 
   it("lets a decision or waiting title ask", () => {
