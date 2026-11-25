@@ -996,10 +996,11 @@ mod tests {
         assert!(s.needs_list(&data).is_empty());
     }
 
-    /// Jon's 25 November report (#418): a reply with no label said
-    /// "Nothing needed from you." while a helper ran, and the card joined
-    /// Needs you. The hook now saves such a reply idle, quoting its last
-    /// line, and the move reaches the core through the description.
+    /// A contract test for the read side of #418; the core did not change.
+    /// The hook now saves a reply with no label that says "Nothing needed
+    /// from you." as an idle move, and this pins how the core reads that
+    /// move block in a description while a helper runs: the card stays out
+    /// of Needs you. The hook's own test checks it writes this exact block.
     #[test]
     fn a_nothing_needed_turn_in_the_description_waits_not_on_jon_while_its_helper_runs() {
         let saved = SavedState::from_json(

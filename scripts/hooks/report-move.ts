@@ -61,23 +61,45 @@ const MOVE_LINE = new RegExp(
 );
 // Since 14 November 2026 Jon's rules end a reply on one bold ask, or say
 // "Nothing needed from you." with no label (#418). A reply with neither
-// label that says so at the start of a sentence asks nothing of Jon: at a
-// line's start, through the same markdown and "Jon, " the label allows, or
-// straight after a sentence's closing mark and a space ("...for your word.
-// Nothing needed from you."). Mid sentence ("There is nothing needed from
-// you") it is prose. The group holds the rest of the sentence, which
-// QUALIFIED reads.
+// label that says so at the start of a sentence may ask nothing of Jon: at
+// a line's start, through the same markdown and "Jon, " the label allows,
+// or straight after a sentence's closing mark and a space ("...for your
+// word. Nothing needed from you."). Mid sentence ("There is nothing needed
+// from you") it is prose. saysNothingNeeded reads the rest of the line.
 const NOTHING_NEEDED = new RegExp(
-  String.raw`(?:^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?|[.!?]${EMPH}\s+)${EMPH}nothing needed from you\b([^.!?]*)`,
+  String.raw`(?:^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?|[.!?]${EMPH}\s+)${EMPH}nothing needed from you\b`,
   "gi",
 );
-// A sentence that leaves Jon something after all: "Nothing needed from you
-// except the merge." It still waits on him.
-const QUALIFIED = /\b(?:except|beyond|but|besides|other than|apart from|aside from)\b/i;
-// A last line that asks: one bold line opening with an ask verb, "**Say go
-// and I'll push the fix.**". The verbs are reply-check.py's ASK_VERB.
-const BOLD_ASK =
-  /^\s*(?:>\s*)?(?:\*\*|__)(?:jon,\s+)?(?:say|reply|pick|paste|merge|open|run|check|tell|choose|review|approve|label|send|answer|confirm)\b.*(?:\*\*|__)\s*$/i;
+// Words that leave Jon something after all, in the rest of the phrase's
+// line: "Nothing needed from you except the merge", "...until you merge
+// it", "...now; next I need your pick". Any of them waits on him.
+const QUALIFIED =
+  /\b(?:except|beyond|but|besides|other than|apart from|aside from|unless|only|then|save for|needs?|please|your|(?:until|once|when|after) you)\b/i;
+// The same words opening the line below: "Nothing needed from you", then
+// "except the merge." on the next line.
+const QUALIFIED_NEXT =
+  /^\s*(?:>\s*)?(?:\*\*|__|\*|_)?(?:except|beyond|but|besides|other than|apart from|aside from|unless|only|then|save for|until|once|when|after|and|or)\b/i;
+// A sentence break: a closing mark, then a space and more text. "v1.2" and
+// "report-move.ts" hold no space after the dot, so they are no break.
+const SENTENCE_BREAK = /[.!?][*_)"']*\s+\S/;
+// A question: a question mark that ends a word, so a link's query string
+// ("?page=2") is none.
+const QUESTION = /\?[*_)"']*(?:\s|$)/;
+// A title over choices or other waits: "**Decision**", "**Options**",
+// "**Also waiting on you**", bold or as a heading.
+const ASK_TITLE = /^\s*(?:#{1,6}\s+)?(?:\*\*|__)?(?:decision|options|also waiting on you)\b/i;
+// A last line that opens with an ask verb, bold, italic or plain, after an
+// optional quote, list or step marker and "Jon, ": "**Say go and I'll push
+// the fix.**", "Paste that into the main checkout." The verbs are
+// reply-check.py's ASK_VERB and a few more.
+const ASK_LAST =
+  /^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?(?:\*\*|__|\*|_)?(?:jon,\s+)?(?:say|reply|pick|paste|merge|open|run|check|tell|choose|review|approve|label|send|answer|confirm|give|decide|look|type|let)\b/i;
+// A last line that opens on bold or italic: Jon's rules make that the ask,
+// unless it opens "Nothing" ("**Nothing to do until the screenshots
+// arrive.**"). The text after the marker is no marker itself, so "**" is
+// never read as "*" then "*Nothing".
+const EMPHASIS_LAST =
+  /^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?(?:\*\*|__|\*|_)(?!\s*(?:jon,\s+)?nothing\b)[^\s*_]/i;
 // A list or step marker at the start of a line: "1.", "2)", "-", "*", ">".
 const STEP_MARKER = /^\s*(?:>\s*)?(?:\d+[.)]|[-*])\s+/;
 // A decision's heading: "**1. Where the card gets the line**", or the same
@@ -160,24 +182,57 @@ const TABLE_ROW = /^\s*\|/;
 const QUOTE = /^\s*>\s?/;
 const ITALIC = /^([*_])(.+)\1$/;
 
+// Whether lastLine may quote a line: not blank, a rule, a heading or a
+// table row.
+const quotable = (l: string): boolean => l.trim() !== "" && !BREAK.test(l) && !TABLE_ROW.test(l);
+
 // The reply's last line outside a code fence as written, skipping rules,
 // headings and table rows.
-const lastRawLine = (text: string): string | undefined =>
-  unfenced(text)
-    .reverse()
-    .find((l) => l.trim() !== "" && !BREAK.test(l) && !TABLE_ROW.test(l));
+const lastRawLine = (text: string): string | undefined => unfenced(text).reverse().find(quotable);
+
+type Rest = { rest: string; next: string };
+
+// The rest of the line after each sentence that starts "Nothing needed
+// from you", with the line below it. A quoted line counts only as the
+// reply's last line: a quote higher up repeats something said before.
+function nothingNeededRests(lines: readonly string[]): Rest[] {
+  let last = -1;
+  lines.forEach((l, i) => {
+    if (quotable(l)) last = i;
+  });
+  return lines.flatMap((line, i) => {
+    if (QUOTE.test(line) && i !== last) return [];
+    return [...line.matchAll(NOTHING_NEEDED)].map((m) => ({
+      rest: line.slice(m.index + m[0].length),
+      next: lines[i + 1] ?? "",
+    }));
+  });
+}
+
+// A phrase that leaves Jon nothing: the rest of its line ends its sentence
+// and holds no qualifier, and the line below opens with none.
+const unqualified = ({ rest, next }: Rest): boolean =>
+  !SENTENCE_BREAK.test(rest) && !QUALIFIED.test(rest) && !QUALIFIED_NEXT.test(next);
+
+// Whether a reply asks Jon something however it is worded: a question, a
+// decision or waiting title, decisions laid out, or a last line that asks.
+function asksAnything(text: string, lines: readonly string[]): boolean {
+  if (lines.some((l) => QUESTION.test(l) || ASK_TITLE.test(l))) return true;
+  if (decisionsIn(text).count > 0) return true;
+  const last = lastRawLine(text) ?? "";
+  return ASK_LAST.test(last) || EMPHASIS_LAST.test(last);
+}
 
 /**
  * Whether a reply with no label asks nothing of Jon: a sentence outside a
- * code fence starts "Nothing needed from you", none of those sentences is
- * qualified, and the reply neither lays out decisions nor ends on a bold
- * ask. A real ask always wins.
+ * code fence starts "Nothing needed from you", every such sentence is
+ * unqualified, and the reply asks nothing anywhere else. A real ask always
+ * wins: a false quiet hides it, a false wait is only noise.
  */
 function saysNothingNeeded(text: string): boolean {
   const lines = unfenced(text);
-  const rests = lines.flatMap((l) => [...l.matchAll(NOTHING_NEEDED)].map((m) => m[1] ?? ""));
-  if (rests.length === 0 || rests.some((r) => QUALIFIED.test(r))) return false;
-  return decisionsIn(text).count === 0 && !BOLD_ASK.test(lastRawLine(text) ?? "");
+  const rests = nothingNeededRests(lines);
+  return rests.length > 0 && rests.every(unqualified) && !asksAnything(text, lines);
 }
 
 /**

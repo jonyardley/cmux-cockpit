@@ -400,6 +400,116 @@ describe("moveFrom, a reply that says nothing is needed", () => {
   it("still saves nothing for a headless run without a label", () => {
     assert.equal(moveFrom("Nothing needed from you.", 5, undefined, false), null);
   });
+
+  it("gives the #3012 reply the move block the core's contract test reads", () => {
+    const move = moveFrom(NOTHING_NEEDED_3012, 1000, "c");
+    assert.ok(move);
+    assert.equal(
+      moveDescription(move),
+      'Nothing to do until the screenshots arrive. ⟦move {"epoch":1000,"session":"c","idle":true}⟧',
+    );
+  });
+});
+
+// Replies that say the phrase yet ask Jon something: each must still wait
+// on him. A false quiet hides a real ask; a false wait is only noise.
+const waitsOnJon = (text: string): void => {
+  const move = moveFrom(text, 5);
+  assert.equal(move?.unlabelled, true, text);
+  assert.equal(move?.idle, undefined, text);
+};
+
+describe("moveFrom, a reply that says nothing is needed yet asks", () => {
+  it("lets any bold or italic last line that is no 'Nothing' line ask", () => {
+    for (const last of [
+      "**Say go and I'll push the fix**.",
+      "**Say go and I'll push.** (#419)",
+      "**Say go and I push.** ([PR](https://x/1))",
+      "**Say go** and I'll push the fix.",
+      "- **Say go and I'll push.**",
+      "Jon, **say go and I'll push.**",
+      "*Say go and I push.*",
+    ]) {
+      waitsOnJon(endingOn(`Nothing needed from you.\n\n${last}`));
+    }
+  });
+
+  it("lets a plain ask verb or a question ask", () => {
+    for (const text of [
+      endingOn("Nothing needed from you.\n\nSay go and I'll push the fix."),
+      endingOn("Nothing needed from you.\n\nShall I carry on?"),
+      "Nothing needed from you. Shall I also open the follow-up issue?",
+      "Nothing needed from you.\n\nWant me to carry on with the next issue?",
+      "Nothing needed from you.\n\n```\n! cmux sidebar reload\n```\n\nPaste that into the main checkout.",
+    ]) {
+      waitsOnJon(text);
+    }
+  });
+
+  it("lets a sentence after the phrase on the same line ask", () => {
+    for (const s of [
+      "Nothing needed from you for the build. Please approve the permission prompt in the other pane.",
+      "Nothing needed from you on the code. The guard blocked the push; I need your yes to push the branch.",
+      "Nothing needed from you. Except the merge.",
+      "Nothing needed from you, e.g. no reload. Except the merge.",
+    ]) {
+      waitsOnJon(endingOn(s));
+    }
+  });
+
+  it("reads a qualifier past a dot inside a word, and on the line below", () => {
+    for (const s of [
+      "Nothing needed from you for v1.2, but merge #419 later.",
+      "Nothing needed from you on report-move.ts, but merge it.",
+      "Nothing needed from you unless the screenshots look wrong.",
+      "Nothing needed from you, only a look at the picture.",
+      "Nothing needed from you until review; then a yes.",
+      "Nothing needed from you now; next I need your pick on the colour.",
+      "Nothing needed from you until CI passes, then say merge.",
+      "Nothing needed from you until you merge the first pull request.",
+      "Nothing needed from you\nexcept the merge.",
+    ]) {
+      waitsOnJon(endingOn(s));
+    }
+  });
+
+  it("lets a decision or waiting title ask", () => {
+    waitsOnJon(
+      [
+        "Jon, Cockpit card: one call.",
+        "",
+        "**Decision**",
+        "The card shows the old line.",
+        "",
+        "**Options**",
+        "**a)** Keep it. (lean)",
+        "**b)** Drop it.",
+        "",
+        "**Status**",
+        "Build runs. Nothing needed from you.",
+        "",
+        "**Give me the letter.**",
+      ].join("\n"),
+    );
+    waitsOnJon(
+      [
+        "Jon, Cockpit card: fixed.",
+        "",
+        "**Also waiting on you**",
+        "Merge the reload fix, #417.",
+        "",
+        "**Status**",
+        "Build runs. Nothing needed from you.",
+      ].join("\n"),
+    );
+  });
+
+  it("does not count the phrase in a quote above other text", () => {
+    waitsOnJon(
+      "Jon, Cockpit: fixed.\n\n> Nothing needed from you.\n\nThat line used to turn the card red. Which colour should it be instead?",
+    );
+    waitsOnJon("Your last reply said:\n> Nothing needed from you.\n\nThat was wrong; I need a look at the card.");
+  });
 });
 
 describe("lastLine", () => {
