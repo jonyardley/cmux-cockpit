@@ -996,6 +996,48 @@ mod tests {
         assert!(s.needs_list(&data).is_empty());
     }
 
+    /// A contract test for the read side of #418; the core did not change.
+    /// The hook now saves a reply with no label that says "Nothing needed
+    /// from you." as an idle move, and this pins how the core reads that
+    /// move block in a description while a helper runs: the card stays out
+    /// of Needs you. The hook's own test checks it writes this exact block.
+    #[test]
+    fn a_nothing_needed_turn_in_the_description_waits_not_on_jon_while_its_helper_runs() {
+        let saved = SavedState::from_json(
+            r#"{"background": {"w1": [{"id": "h1", "type": "subagent", "status": "running",
+                "description": "build the screen", "session": "c", "startedEpoch": 100,
+                "seenEpoch": 1000}]}}"#,
+        )
+        .unwrap();
+        let agent = Agent {
+            id: "c".into(),
+            kind: Some("claude".into()),
+            status: Some(AgentStatus::Idle),
+            since_epoch: Some(1000.0),
+            last_activity_at: Some(1000.0),
+            ..Agent::default()
+        };
+        let w = Workspace {
+            id: "w1".into(),
+            latest_at: Some(900.0),
+            description: Some(
+                r#"Nothing to do until the screenshots arrive. ⟦move {"epoch":1000,"session":"c","idle":true}⟧"#
+                    .into(),
+            ),
+            agents: Some(vec![Some(agent)]),
+            ..Workspace::default()
+        };
+        let data = Data {
+            epoch: Some(1100.0),
+            workspaces: Some(vec![w]),
+            ..Data::default()
+        };
+        let mut s = Session::new(Vec::new(), saved);
+        let w = data.ws_by_id("w1");
+        assert_eq!(s.status_kind(&data, w), StatusKind::Running);
+        assert!(s.needs_list(&data).is_empty());
+    }
+
     #[test]
     fn haloes_a_waiting_mark_as_its_status_dot_is() {
         assert_eq!(waiting_halo(true), StatusKind::Asking.style().halo);

@@ -20,6 +20,9 @@
 // A final reply with neither label is never sent back for one: its last
 // line is saved instead, marked unlabelled, and the card quotes it in grey,
 // so Jon still sees what the chat ended on without paying for a second turn.
+// When such a reply says "Nothing needed from you" and asks nothing else
+// (saysNothingNeeded), its last line is saved as idle instead, so the turn
+// end waits on the chat, as a "Nothing for you" line does.
 // It never fails the hook: every problem is a note on stderr and exit 0.
 
 import { readFileSync } from "node:fs";
@@ -56,6 +59,67 @@ const MOVE_LINE = new RegExp(
   String.raw`^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?${EMPH}(your move|nothing for you)${EMPH}\s*:\s*${EMPH}\s*(.*)$`,
   "i",
 );
+// Since 14 November 2026 Jon's rules end a reply on one bold ask, or say
+// "Nothing needed from you." with no label (#418). A reply with neither
+// label that says so at the start of a sentence may ask nothing of Jon: at
+// a line's start, through the same markdown and "Jon, " the label allows,
+// or straight after a sentence's closing mark and a space ("...for your
+// word. Nothing needed from you."). Mid sentence ("There is nothing needed
+// from you") it is prose. saysNothingNeeded reads the rest of the line.
+const NOTHING_NEEDED = new RegExp(
+  String.raw`(?:^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?|[.!?]${EMPH}\s+)${EMPH}nothing needed from you\b`,
+  "gi",
+);
+// Words that leave Jon something after all, in the rest of the phrase's
+// line: "Nothing needed from you except the merge", "...till you merge
+// it", "...now; next I need your pick", "...before your go". Any of them
+// waits on him. A bare "your" is none: "...while your other session
+// finishes" asks nothing.
+const QUALIFIED =
+  /\b(?:except|beyond|but|besides|other than|apart from|aside from|unless|only|just|then|save for|needs?|please|(?:until|till|once|when|after|before|while) you|(?:before|until|on|with|for) your (?:go|yes|word|pick|call|answer|say))\b/i;
+// The same words opening the line below: "Nothing needed from you", then
+// "except the merge." on the next line.
+const QUALIFIED_NEXT =
+  /^\s*(?:>\s*)?(?:\*\*|__|\*|_)?(?:except|beyond|but|besides|other than|apart from|aside from|unless|only|then|save for|until|once|when|after|and|or)\b/i;
+// A sentence break: a closing mark, then a space and more text. "v1.2" and
+// "report-move.ts" hold no space after the dot, so they are no break.
+const SENTENCE_BREAK = /[.!?][*_)"']*\s+\S/;
+// A question: a question mark that ends a word, so a link's query string
+// ("?page=2") is none.
+const QUESTION = /\?[*_)"']*(?:\s|$)/;
+// A title over choices or other waits: "**Decision**", "**Options**",
+// "**Also waiting on you**", bold or as a heading.
+const ASK_TITLE = /^\s*(?:#{1,6}\s+)?(?:\*\*|__)?(?:decision|options|also waiting on you)\b/i;
+// A last line that opens with an ask verb, bold, italic or plain, after an
+// optional quote, list or step marker and "Jon, ": "**Say go and I'll push
+// the fix.**", "Paste that into the main checkout." The verbs are
+// reply-check.py's ASK_VERB and a few more.
+const ASK_VERB =
+  "say|reply|pick|paste|merge|open|run|check|tell|choose|review|approve|label|send|answer|confirm|give|decide|look|type|let";
+const ASK_LAST = new RegExp(
+  String.raw`^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?(?:\*\*|__|\*|_)?(?:jon,\s+)?(?:${ASK_VERB})\b`,
+  "i",
+);
+// The same verbs where an instruction would start: at the start of the
+// text, or after a clause or sentence mark and a space, optionally after
+// "you", "please", "then", "and" or "so". "Nothing needed from you yet;
+// merge #419 when CI is green" asks after all. Mid clause the verb is no
+// instruction, so "...until the pull request is ready to merge" and
+// "...while the reviewers run" ask nothing.
+const ASK_WORD = new RegExp(
+  String.raw`(?:^\s*|[;,:.!?][*_)"']*\s+)(?:(?:you|please|then|and|so)\s+)?(?:${ASK_VERB})\b`,
+  "i",
+);
+// A last line that opens "Nothing", bold, italic or plain, with the rest of
+// the line after the word: asksAnything reads it as the phrase's line is
+// read, so "**Nothing merges until you say go.**" still asks.
+const NOTHING_LAST = /^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?(?:\*\*|__|\*|_)?(?:jon,\s+)?nothing\b(.*)$/i;
+// A last line that opens on bold or italic: Jon's rules make that the ask,
+// unless it opens "Nothing", which lastAsks reads first ("**Nothing to do
+// until the screenshots arrive.**"). The text after the marker is no marker itself, so "**" is
+// never read as "*" then "*Nothing".
+const EMPHASIS_LAST =
+  /^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?(?:\*\*|__|\*|_)(?!\s*(?:jon,\s+)?nothing\b)[^\s*_]/i;
 // A list or step marker at the start of a line: "1.", "2)", "-", "*", ">".
 const STEP_MARKER = /^\s*(?:>\s*)?(?:\d+[.)]|[-*])\s+/;
 // A decision's heading: "**1. Where the card gets the line**", or the same
@@ -138,15 +202,87 @@ const TABLE_ROW = /^\s*\|/;
 const QUOTE = /^\s*>\s?/;
 const ITALIC = /^([*_])(.+)\1$/;
 
+// Whether lastLine may quote a line: not blank, a rule, a heading or a
+// table row.
+const quotable = (l: string): boolean => l.trim() !== "" && !BREAK.test(l) && !TABLE_ROW.test(l);
+
+// The reply's last line outside a code fence as written, skipping rules,
+// headings and table rows.
+const lastRawLine = (text: string): string | undefined => unfenced(text).reverse().find(quotable);
+
+type Rest = { rest: string; next: string };
+
+// The rest of the line after each sentence that starts "Nothing needed
+// from you", with the line below it. A quoted line counts only as the
+// reply's last line: a quote higher up repeats something said before.
+function nothingNeededRests(lines: readonly string[]): Rest[] {
+  let last = -1;
+  lines.forEach((l, i) => {
+    if (quotable(l)) last = i;
+  });
+  return lines.flatMap((line, i) => {
+    if (QUOTE.test(line) && i !== last) return [];
+    return [...line.matchAll(NOTHING_NEEDED)].map((m) => ({
+      rest: line.slice(m.index + m[0].length),
+      next: lines[i + 1] ?? "",
+    }));
+  });
+}
+
+// Whether the rest of a line after "Nothing" leaves Jon nothing: it ends
+// its sentence and holds no qualifier and no ask verb.
+const quietRest = (rest: string): boolean =>
+  !SENTENCE_BREAK.test(rest) && !QUALIFIED.test(rest) && !ASK_WORD.test(rest);
+
+// A phrase that leaves Jon nothing: the rest of its line is quiet, and the
+// line below opens with no qualifier.
+const unqualified = ({ rest, next }: Rest): boolean => quietRest(rest) && !QUALIFIED_NEXT.test(next);
+
+// A task left with Jon in a "Nothing" last line: "**Nothing else is needed
+// here. The email is still yours to send.**"
+const YOURS = /\byours\b/i;
+
+// Whether the reply's last line asks: one that opens "Nothing" asks when the
+// rest of it holds a qualifier, a task left as Jon's, or an ask verb where an
+// instruction starts (a sentence break alone is none: "Nothing is running.
+// Nothing needed from you."); any other asks when it opens with an ask verb
+// or on bold or italic.
+function lastAsks(last: string): boolean {
+  const nothing = NOTHING_LAST.exec(last);
+  if (nothing) {
+    const rest = nothing[1] ?? "";
+    return QUALIFIED.test(rest) || YOURS.test(rest) || ASK_WORD.test(rest);
+  }
+  return ASK_LAST.test(last) || EMPHASIS_LAST.test(last);
+}
+
+// Whether a reply asks Jon something however it is worded: a question, a
+// decision or waiting title, decisions laid out, or a last line that asks.
+function asksAnything(text: string, lines: readonly string[]): boolean {
+  if (lines.some((l) => QUESTION.test(l) || ASK_TITLE.test(l))) return true;
+  if (decisionsIn(text).count > 0) return true;
+  return lastAsks(lastRawLine(text) ?? "");
+}
+
+/**
+ * Whether a reply with no label asks nothing of Jon: a sentence outside a
+ * code fence starts "Nothing needed from you", every such sentence is
+ * unqualified, and the reply asks nothing anywhere else. A real ask always
+ * wins: a false quiet hides it, a false wait is only noise.
+ */
+function saysNothingNeeded(text: string): boolean {
+  const lines = unfenced(text);
+  const rests = nothingNeededRests(lines);
+  return rests.length > 0 && rests.every(unqualified) && !asksAnything(text, lines);
+}
+
 /**
  * A reply's last line outside a code fence, marker and markdown stripped,
  * skipping rules, headings and table rows: what the card quotes when the
  * reply has no label. Null when nothing is left.
  */
 export function lastLine(text: string): string | null {
-  const line = unfenced(text)
-    .reverse()
-    .find((l) => l.trim() !== "" && !BREAK.test(l) && !TABLE_ROW.test(l));
+  const line = lastRawLine(text);
   if (line === undefined) return null;
   const plain = unmark(line.replace(STEP_MARKER, "").replace(QUOTE, ""));
   return cleanMove(plain.replace(ITALIC, "$2"));
@@ -178,9 +314,10 @@ export function decisionsIn(text: string): { count: number; leans: string } {
 
 /**
  * What the hook saves for a reply: its labelled line, else, in an
- * interactive chat (`attended`), its last line marked unlabelled; null for
- * a bare label, or a headless run (claude -p, the SDK) with no label, whose
- * output is no chat's move and must not replace one.
+ * interactive chat (`attended`), its last line, marked idle when the reply
+ * says nothing is needed from Jon (saysNothingNeeded) and unlabelled
+ * otherwise; null for a bare label, or a headless run (claude -p, the SDK)
+ * with no label, whose output is no chat's move and must not replace one.
  */
 export function moveFrom(text: string, now: number, session?: string, attended = true): SavedMove | null {
   const found = lastMove(text);
@@ -188,14 +325,15 @@ export function moveFrom(text: string, now: number, session?: string, attended =
   const line = found?.line ?? lastLine(text);
   if (!line) return null;
   const { count, leans } = decisionsIn(text);
+  const quiet = found === null && saysNothingNeeded(text);
   return {
     text: line,
     epoch: now,
     ...(session ? { session } : {}),
     ...(count ? { decisions: count } : {}),
     ...(leans ? { leans } : {}),
-    ...(found?.idle ? { idle: true } : {}),
-    ...(found ? {} : { unlabelled: true }),
+    ...(found?.idle || quiet ? { idle: true } : {}),
+    ...(found || quiet ? {} : { unlabelled: true }),
   };
 }
 

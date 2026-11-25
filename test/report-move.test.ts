@@ -301,6 +301,292 @@ describe("moveFrom", () => {
   });
 });
 
+// Jon's replies since 14 November 2026 carry no label: a quiet one says
+// "Nothing needed from you." (#418). The reply that put a card in Needs
+// you while its helper ran, word for word but for the project names, which stay out of tracked files.
+const NOTHING_NEEDED_3012 = [
+  "Jon, Notes app build: got it, I'll carry on. Your observation is noted for the retro.",
+  "",
+  "- The design rounds being slow is now on [the slow-build issue](https://github.com/example/notes/issues/3023), beside the slow core build, so the retro covers both.",
+  "",
+  "**Status**",
+  "The screen takes about 20 minutes more. Then the two small core fixes go in, then review and screenshots for your word. Nothing needed from you.",
+  "",
+  "**Nothing to do until the screenshots arrive.**",
+].join("\n");
+
+// A reply ending on `last`, with a Status block above it.
+const endingOn = (last: string): string => `Jon, Cockpit fix: on its way.\n\n**Status**\nThe build runs.\n${last}`;
+
+describe("moveFrom, a reply that says nothing is needed", () => {
+  it("saves the #3012 reply as idle, quoting its last line", () => {
+    assert.deepEqual(moveFrom(NOTHING_NEEDED_3012, 5, "s1"), {
+      text: "Nothing to do until the screenshots arrive.",
+      epoch: 5,
+      session: "s1",
+      idle: true,
+    });
+  });
+
+  it("reads each ending seen live as idle", () => {
+    for (const last of [
+      "Nothing needed from you.",
+      "Nothing needed from you until the other app's pull request is ready.",
+      "Nothing needed from you until the draft pull request is up.",
+      "Nothing needed from you yet; the draft and that decision come in my next reply.",
+    ]) {
+      assert.deepEqual(moveFrom(endingOn(last), 5), { text: last, epoch: 5, idle: true }, last);
+    }
+  });
+
+  it("reads a plain 'your' after the phrase as quiet", () => {
+    for (const s of [
+      "CI is running. Nothing needed from you until CI finishes on your pull request.",
+      "Nothing needed from you while your other session finishes.",
+    ]) {
+      assert.deepEqual(moveFrom(endingOn(s), 5), { text: s, epoch: 5, idle: true }, s);
+    }
+  });
+
+  it("reads an ask verb inside an 'until' or 'while' clause as quiet", () => {
+    const status = (s: string): string =>
+      `Jon, Cockpit quiet turns: the fix is on a branch.\n\n- **Hook** saves quiet replies as idle.\n\n**Status**\n${s}`;
+    for (const last of [
+      "**Nothing needed from you until the pull request is ready to merge.**",
+      "**Nothing needed from you until the fix is ready to merge.**",
+      "**Nothing needed from you until it's marked ready to merge.**",
+      "**Nothing needed from you until the reviews are back.**",
+    ]) {
+      assert.equal(moveFrom(status(`Build runs.\n\n${last}`), 5)?.idle, true, last);
+    }
+    for (const s of [
+      "Nothing needed from you while the reviewers run.",
+      "Nothing needed from you until I open the draft.",
+      "Nothing needed from you until the checks run.",
+      "Nothing needed from you until I send the plan.",
+    ]) {
+      assert.equal(moveFrom(status(s), 5)?.idle, true, s);
+    }
+  });
+
+  it("reads a plain last line of two quiet sentences as quiet", () => {
+    for (const last of [
+      "Nothing is running. Nothing needed from you.",
+      "Nothing else is running. Nothing needed from you.",
+    ]) {
+      assert.deepEqual(moveFrom(endingOn(last), 5), { text: last, epoch: 5, idle: true }, last);
+    }
+  });
+
+  it("reads the phrase through markdown and after a sentence's full stop", () => {
+    assert.equal(moveFrom("Done.\n\n> **Nothing needed from you.**", 5)?.idle, true);
+    assert.equal(moveFrom("- Jon, nothing needed from you.", 5)?.idle, true);
+    assert.equal(moveFrom("CI runs! Nothing needed from you.\n\nBack soon.", 5)?.idle, true);
+  });
+
+  it("lets a reply that lays out decisions wait on Jon", () => {
+    const move = moveFrom(`${DECISIONS.replace("Your move:", "Next:")}\n\nNothing needed from you.`, 5);
+    assert.equal(move?.unlabelled, true);
+    assert.equal(move?.idle, undefined);
+    assert.equal(move?.decisions, 2);
+  });
+
+  it("lets a bold last line that asks win", () => {
+    for (const ask of [
+      "**Say go and I'll push the fix. Nothing merges.**",
+      "**Reply with the letter.**",
+      "__Paste it into the main checkout.__",
+    ]) {
+      const text = `Jon, fix ready.\n\n**Status**\nNothing needed from you until then.\n\n${ask}`;
+      assert.deepEqual(moveFrom(text, 5), { text: ask.replaceAll(/\*\*|__/g, ""), epoch: 5, unlabelled: true }, ask);
+    }
+  });
+
+  it("lets a qualified sentence wait on Jon", () => {
+    for (const s of [
+      "Nothing needed from you except the merge.",
+      "Nothing needed from you beyond a look at the picture.",
+      "Nothing needed from you, but check the card after reload.",
+      "Nothing needed from you besides the label.",
+      "Nothing needed from you other than a yes.",
+      "Nothing needed from you apart from the paste.",
+      "Nothing needed from you aside from the reload.",
+    ]) {
+      assert.deepEqual(moveFrom(endingOn(s), 5), { text: s, epoch: 5, unlabelled: true }, s);
+    }
+  });
+
+  it("ignores the phrase inside a code fence", () => {
+    const text = "Jon, handover below.\n\n```\nNothing needed from you.\n```\n\nPaste it in the new chat.";
+    assert.deepEqual(moveFrom(text, 5), { text: "Paste it in the new chat.", epoch: 5, unlabelled: true });
+  });
+
+  it("counts the phrase only at a sentence's start, so prose around it stays unlabelled", () => {
+    for (const s of ["There is nothing needed from you.", "I said nothing needed from you earlier."]) {
+      assert.deepEqual(moveFrom(endingOn(s), 5), { text: s, epoch: 5, unlabelled: true }, s);
+    }
+  });
+
+  it("leaves a labelled reply as it was, phrase or not", () => {
+    assert.deepEqual(moveFrom("Nothing needed from you.\n\nYour move: go", 5), { text: "go", epoch: 5 });
+    assert.deepEqual(moveFrom("Nothing needed from you.\n\nNothing for you: CI runs.", 5), {
+      text: "CI runs.",
+      epoch: 5,
+      idle: true,
+    });
+  });
+
+  it("still saves nothing for a headless run without a label", () => {
+    assert.equal(moveFrom("Nothing needed from you.", 5, undefined, false), null);
+  });
+
+  it("gives the #3012 reply the move block the core's contract test reads", () => {
+    const move = moveFrom(NOTHING_NEEDED_3012, 1000, "c");
+    assert.ok(move);
+    assert.equal(
+      moveDescription(move),
+      'Nothing to do until the screenshots arrive. ⟦move {"epoch":1000,"session":"c","idle":true}⟧',
+    );
+  });
+});
+
+// Replies that say the phrase yet ask Jon something: each must still wait
+// on him. A false quiet hides a real ask; a false wait is only noise.
+const waitsOnJon = (text: string): void => {
+  const move = moveFrom(text, 5);
+  assert.equal(move?.unlabelled, true, text);
+  assert.equal(move?.idle, undefined, text);
+};
+
+describe("moveFrom, a reply that says nothing is needed yet asks", () => {
+  it("lets any bold or italic last line that is no 'Nothing' line ask", () => {
+    for (const last of [
+      "**Say go and I'll push the fix**.",
+      "**Say go and I'll push.** (#419)",
+      "**Say go and I push.** ([PR](https://x/1))",
+      "**Say go** and I'll push the fix.",
+      "- **Say go and I'll push.**",
+      "Jon, **say go and I'll push.**",
+      "*Say go and I push.*",
+    ]) {
+      waitsOnJon(endingOn(`Nothing needed from you.\n\n${last}`));
+    }
+  });
+
+  it("lets a plain ask verb or a question ask", () => {
+    for (const text of [
+      endingOn("Nothing needed from you.\n\nSay go and I'll push the fix."),
+      endingOn("Nothing needed from you.\n\nShall I carry on?"),
+      "Nothing needed from you. Shall I also open the follow-up issue?",
+      "Nothing needed from you.\n\nWant me to carry on with the next issue?",
+      "Nothing needed from you.\n\n```\n! cmux sidebar reload\n```\n\nPaste that into the main checkout.",
+    ]) {
+      waitsOnJon(text);
+    }
+  });
+
+  it("lets a sentence after the phrase on the same line ask", () => {
+    for (const s of [
+      "Nothing needed from you for the build. Please approve the permission prompt in the other pane.",
+      "Nothing needed from you on the code. The guard blocked the push; I need your yes to push the branch.",
+      "Nothing needed from you. Except the merge.",
+      "Nothing needed from you, e.g. no reload. Except the merge.",
+    ]) {
+      waitsOnJon(endingOn(s));
+    }
+  });
+
+  it("reads a qualifier past a dot inside a word, and on the line below", () => {
+    for (const s of [
+      "Nothing needed from you for v1.2, but merge #419 later.",
+      "Nothing needed from you on report-move.ts, but merge it.",
+      "Nothing needed from you unless the screenshots look wrong.",
+      "Nothing needed from you, only a look at the picture.",
+      "Nothing needed from you until review; then a yes.",
+      "Nothing needed from you now; next I need your pick on the colour.",
+      "Nothing needed from you until CI passes, then say merge.",
+      "Nothing needed from you until you merge the first pull request.",
+      "Nothing needed from you\nexcept the merge.",
+    ]) {
+      waitsOnJon(endingOn(s));
+    }
+  });
+
+  it("lets a 'Nothing' last line that asks or qualifies itself ask", () => {
+    for (const last of [
+      "**Nothing merges until you say go.**",
+      "**Nothing ships until you pick a letter.**",
+      "*Nothing happens until you paste the command above.*",
+      "**Nothing moves before your go.**",
+    ]) {
+      waitsOnJon(
+        `Jon, Cockpit quiet turns: the fix is on a branch.\n\n- **Hook** saves quiet replies as idle.\n\n**Status**\nNothing needed from you.\n\n${last}`,
+      );
+    }
+  });
+
+  it("reads 'just', 'till you', 'before you' and an ask verb on the phrase's line as qualifiers", () => {
+    for (const s of [
+      "Nothing needed from you, just a look at the picture.",
+      "Nothing needed from you yet; merge #419 when CI is green.",
+      "Nothing needed from you till you merge it.",
+      "Nothing needed from you before you merge.",
+    ]) {
+      waitsOnJon(
+        `Jon, Cockpit quiet turns: the fix is on a branch.\n\n- **Hook** saves quiet replies as idle.\n\n**Status**\n${s}`,
+      );
+    }
+  });
+
+  it("lets an ask verb that starts a clause or sentence ask", () => {
+    waitsOnJon(endingOn("Nothing needed from you.\n\nNothing is running. Say go and I'll merge."));
+    waitsOnJon(
+      endingOn("Nothing needed from you.\n\n**Nothing else is needed here. The email is still yours to send.**"),
+    );
+    waitsOnJon(
+      "Jon, Cockpit quiet turns: the fix is on a branch.\n\n**Status**\nNothing needed from you until CI passes; merge when it is green.",
+    );
+  });
+
+  it("lets a decision or waiting title ask", () => {
+    waitsOnJon(
+      [
+        "Jon, Cockpit card: one call.",
+        "",
+        "**Decision**",
+        "The card shows the old line.",
+        "",
+        "**Options**",
+        "**a)** Keep it. (lean)",
+        "**b)** Drop it.",
+        "",
+        "**Status**",
+        "Build runs. Nothing needed from you.",
+        "",
+        "**Give me the letter.**",
+      ].join("\n"),
+    );
+    waitsOnJon(
+      [
+        "Jon, Cockpit card: fixed.",
+        "",
+        "**Also waiting on you**",
+        "Merge the reload fix, #417.",
+        "",
+        "**Status**",
+        "Build runs. Nothing needed from you.",
+      ].join("\n"),
+    );
+  });
+
+  it("does not count the phrase in a quote above other text", () => {
+    waitsOnJon(
+      "Jon, Cockpit: fixed.\n\n> Nothing needed from you.\n\nThat line used to turn the card red. Which colour should it be instead?",
+    );
+    waitsOnJon("Your last reply said:\n> Nothing needed from you.\n\nThat was wrong; I need a look at the card.");
+  });
+});
+
 describe("lastLine", () => {
   it("is the reply's last line, marker and markdown stripped", () => {
     assert.equal(lastLine("Filed it.\n\n**Done:** nothing is running.\n"), "Done: nothing is running.");
