@@ -301,6 +301,107 @@ describe("moveFrom", () => {
   });
 });
 
+// Jon's replies since 14 November 2026 carry no label: a quiet one says
+// "Nothing needed from you." (#418). The reply that put a card in Needs
+// you while its helper ran, word for word but for the project names, which stay out of tracked files.
+const NOTHING_NEEDED_3012 = [
+  "Jon, Notes app build: got it, I'll carry on. Your observation is noted for the retro.",
+  "",
+  "- The design rounds being slow is now on [the slow-build issue](https://github.com/example/notes/issues/3023), beside the slow core build, so the retro covers both.",
+  "",
+  "**Status**",
+  "The screen takes about 20 minutes more. Then the two small core fixes go in, then review and screenshots for your word. Nothing needed from you.",
+  "",
+  "**Nothing to do until the screenshots arrive.**",
+].join("\n");
+
+// A reply ending on `last`, with a Status block above it.
+const endingOn = (last: string): string => `Jon, Cockpit fix: on its way.\n\n**Status**\nThe build runs.\n${last}`;
+
+describe("moveFrom, a reply that says nothing is needed", () => {
+  it("saves the #3012 reply as idle, quoting its last line", () => {
+    assert.deepEqual(moveFrom(NOTHING_NEEDED_3012, 5, "s1"), {
+      text: "Nothing to do until the screenshots arrive.",
+      epoch: 5,
+      session: "s1",
+      idle: true,
+    });
+  });
+
+  it("reads each ending seen live as idle", () => {
+    for (const last of [
+      "Nothing needed from you.",
+      "Nothing needed from you until the other app's pull request is ready.",
+      "Nothing needed from you until the draft pull request is up.",
+      "Nothing needed from you yet; the draft and that decision come in my next reply.",
+    ]) {
+      assert.deepEqual(moveFrom(endingOn(last), 5), { text: last, epoch: 5, idle: true }, last);
+    }
+  });
+
+  it("reads the phrase through markdown and after a sentence's full stop", () => {
+    assert.equal(moveFrom("Done.\n\n> **Nothing needed from you.**", 5)?.idle, true);
+    assert.equal(moveFrom("- Jon, nothing needed from you.", 5)?.idle, true);
+    assert.equal(moveFrom("CI runs! Nothing needed from you.\n\nBack soon.", 5)?.idle, true);
+  });
+
+  it("lets a reply that lays out decisions wait on Jon", () => {
+    const move = moveFrom(`${DECISIONS.replace("Your move:", "Next:")}\n\nNothing needed from you.`, 5);
+    assert.equal(move?.unlabelled, true);
+    assert.equal(move?.idle, undefined);
+    assert.equal(move?.decisions, 2);
+  });
+
+  it("lets a bold last line that asks win", () => {
+    for (const ask of [
+      "**Say go and I'll push the fix. Nothing merges.**",
+      "**Reply with the letter.**",
+      "__Paste it into the main checkout.__",
+    ]) {
+      const text = `Jon, fix ready.\n\n**Status**\nNothing needed from you until then.\n\n${ask}`;
+      assert.deepEqual(moveFrom(text, 5), { text: ask.replaceAll(/\*\*|__/g, ""), epoch: 5, unlabelled: true }, ask);
+    }
+  });
+
+  it("lets a qualified sentence wait on Jon", () => {
+    for (const s of [
+      "Nothing needed from you except the merge.",
+      "Nothing needed from you beyond a look at the picture.",
+      "Nothing needed from you, but check the card after reload.",
+      "Nothing needed from you besides the label.",
+      "Nothing needed from you other than a yes.",
+      "Nothing needed from you apart from the paste.",
+      "Nothing needed from you aside from the reload.",
+    ]) {
+      assert.deepEqual(moveFrom(endingOn(s), 5), { text: s, epoch: 5, unlabelled: true }, s);
+    }
+  });
+
+  it("ignores the phrase inside a code fence", () => {
+    const text = "Jon, handover below.\n\n```\nNothing needed from you.\n```\n\nPaste it in the new chat.";
+    assert.deepEqual(moveFrom(text, 5), { text: "Paste it in the new chat.", epoch: 5, unlabelled: true });
+  });
+
+  it("counts the phrase only at a sentence's start, so prose around it stays unlabelled", () => {
+    for (const s of ["There is nothing needed from you.", "I said nothing needed from you earlier."]) {
+      assert.deepEqual(moveFrom(endingOn(s), 5), { text: s, epoch: 5, unlabelled: true }, s);
+    }
+  });
+
+  it("leaves a labelled reply as it was, phrase or not", () => {
+    assert.deepEqual(moveFrom("Nothing needed from you.\n\nYour move: go", 5), { text: "go", epoch: 5 });
+    assert.deepEqual(moveFrom("Nothing needed from you.\n\nNothing for you: CI runs.", 5), {
+      text: "CI runs.",
+      epoch: 5,
+      idle: true,
+    });
+  });
+
+  it("still saves nothing for a headless run without a label", () => {
+    assert.equal(moveFrom("Nothing needed from you.", 5, undefined, false), null);
+  });
+});
+
 describe("lastLine", () => {
   it("is the reply's last line, marker and markdown stripped", () => {
     assert.equal(lastLine("Filed it.\n\n**Done:** nothing is running.\n"), "Done: nothing is running.");

@@ -20,6 +20,9 @@
 // A final reply with neither label is never sent back for one: its last
 // line is saved instead, marked unlabelled, and the card quotes it in grey,
 // so Jon still sees what the chat ended on without paying for a second turn.
+// When such a reply says "Nothing needed from you" and asks nothing else
+// (saysNothingNeeded), its last line is saved as idle instead, so the turn
+// end waits on the chat, as a "Nothing for you" line does.
 // It never fails the hook: every problem is a note on stderr and exit 0.
 
 import { readFileSync } from "node:fs";
@@ -56,6 +59,25 @@ const MOVE_LINE = new RegExp(
   String.raw`^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?${EMPH}(your move|nothing for you)${EMPH}\s*:\s*${EMPH}\s*(.*)$`,
   "i",
 );
+// Since 14 November 2026 Jon's rules end a reply on one bold ask, or say
+// "Nothing needed from you." with no label (#418). A reply with neither
+// label that says so at the start of a sentence asks nothing of Jon: at a
+// line's start, through the same markdown and "Jon, " the label allows, or
+// straight after a sentence's closing mark and a space ("...for your word.
+// Nothing needed from you."). Mid sentence ("There is nothing needed from
+// you") it is prose. The group holds the rest of the sentence, which
+// QUALIFIED reads.
+const NOTHING_NEEDED = new RegExp(
+  String.raw`(?:^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?|[.!?]${EMPH}\s+)${EMPH}nothing needed from you\b([^.!?]*)`,
+  "gi",
+);
+// A sentence that leaves Jon something after all: "Nothing needed from you
+// except the merge." It still waits on him.
+const QUALIFIED = /\b(?:except|beyond|but|besides|other than|apart from|aside from)\b/i;
+// A last line that asks: one bold line opening with an ask verb, "**Say go
+// and I'll push the fix.**". The verbs are reply-check.py's ASK_VERB.
+const BOLD_ASK =
+  /^\s*(?:>\s*)?(?:\*\*|__)(?:jon,\s+)?(?:say|reply|pick|paste|merge|open|run|check|tell|choose|review|approve|label|send|answer|confirm)\b.*(?:\*\*|__)\s*$/i;
 // A list or step marker at the start of a line: "1.", "2)", "-", "*", ">".
 const STEP_MARKER = /^\s*(?:>\s*)?(?:\d+[.)]|[-*])\s+/;
 // A decision's heading: "**1. Where the card gets the line**", or the same
@@ -138,15 +160,33 @@ const TABLE_ROW = /^\s*\|/;
 const QUOTE = /^\s*>\s?/;
 const ITALIC = /^([*_])(.+)\1$/;
 
+// The reply's last line outside a code fence as written, skipping rules,
+// headings and table rows.
+const lastRawLine = (text: string): string | undefined =>
+  unfenced(text)
+    .reverse()
+    .find((l) => l.trim() !== "" && !BREAK.test(l) && !TABLE_ROW.test(l));
+
+/**
+ * Whether a reply with no label asks nothing of Jon: a sentence outside a
+ * code fence starts "Nothing needed from you", none of those sentences is
+ * qualified, and the reply neither lays out decisions nor ends on a bold
+ * ask. A real ask always wins.
+ */
+function saysNothingNeeded(text: string): boolean {
+  const lines = unfenced(text);
+  const rests = lines.flatMap((l) => [...l.matchAll(NOTHING_NEEDED)].map((m) => m[1] ?? ""));
+  if (rests.length === 0 || rests.some((r) => QUALIFIED.test(r))) return false;
+  return decisionsIn(text).count === 0 && !BOLD_ASK.test(lastRawLine(text) ?? "");
+}
+
 /**
  * A reply's last line outside a code fence, marker and markdown stripped,
  * skipping rules, headings and table rows: what the card quotes when the
  * reply has no label. Null when nothing is left.
  */
 export function lastLine(text: string): string | null {
-  const line = unfenced(text)
-    .reverse()
-    .find((l) => l.trim() !== "" && !BREAK.test(l) && !TABLE_ROW.test(l));
+  const line = lastRawLine(text);
   if (line === undefined) return null;
   const plain = unmark(line.replace(STEP_MARKER, "").replace(QUOTE, ""));
   return cleanMove(plain.replace(ITALIC, "$2"));
@@ -178,9 +218,10 @@ export function decisionsIn(text: string): { count: number; leans: string } {
 
 /**
  * What the hook saves for a reply: its labelled line, else, in an
- * interactive chat (`attended`), its last line marked unlabelled; null for
- * a bare label, or a headless run (claude -p, the SDK) with no label, whose
- * output is no chat's move and must not replace one.
+ * interactive chat (`attended`), its last line, marked idle when the reply
+ * says nothing is needed from Jon (saysNothingNeeded) and unlabelled
+ * otherwise; null for a bare label, or a headless run (claude -p, the SDK)
+ * with no label, whose output is no chat's move and must not replace one.
  */
 export function moveFrom(text: string, now: number, session?: string, attended = true): SavedMove | null {
   const found = lastMove(text);
@@ -188,14 +229,15 @@ export function moveFrom(text: string, now: number, session?: string, attended =
   const line = found?.line ?? lastLine(text);
   if (!line) return null;
   const { count, leans } = decisionsIn(text);
+  const quiet = found === null && saysNothingNeeded(text);
   return {
     text: line,
     epoch: now,
     ...(session ? { session } : {}),
     ...(count ? { decisions: count } : {}),
     ...(leans ? { leans } : {}),
-    ...(found?.idle ? { idle: true } : {}),
-    ...(found ? {} : { unlabelled: true }),
+    ...(found?.idle || quiet ? { idle: true } : {}),
+    ...(found || quiet ? {} : { unlabelled: true }),
   };
 }
 
