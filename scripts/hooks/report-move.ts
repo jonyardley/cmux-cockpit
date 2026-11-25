@@ -71,10 +71,12 @@ const NOTHING_NEEDED = new RegExp(
   "gi",
 );
 // Words that leave Jon something after all, in the rest of the phrase's
-// line: "Nothing needed from you except the merge", "...until you merge
-// it", "...now; next I need your pick". Any of them waits on him.
+// line: "Nothing needed from you except the merge", "...till you merge
+// it", "...now; next I need your pick", "...before your go". Any of them
+// waits on him. A bare "your" is none: "...while your other session
+// finishes" asks nothing.
 const QUALIFIED =
-  /\b(?:except|beyond|but|besides|other than|apart from|aside from|unless|only|then|save for|needs?|please|your|(?:until|once|when|after) you)\b/i;
+  /\b(?:except|beyond|but|besides|other than|apart from|aside from|unless|only|just|then|save for|needs?|please|(?:until|till|once|when|after|before|while) you|(?:before|until|on|with|for) your (?:go|yes|word|pick|call|answer|say))\b/i;
 // The same words opening the line below: "Nothing needed from you", then
 // "except the merge." on the next line.
 const QUALIFIED_NEXT =
@@ -92,11 +94,27 @@ const ASK_TITLE = /^\s*(?:#{1,6}\s+)?(?:\*\*|__)?(?:decision|options|also waitin
 // optional quote, list or step marker and "Jon, ": "**Say go and I'll push
 // the fix.**", "Paste that into the main checkout." The verbs are
 // reply-check.py's ASK_VERB and a few more.
-const ASK_LAST =
-  /^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?(?:\*\*|__|\*|_)?(?:jon,\s+)?(?:say|reply|pick|paste|merge|open|run|check|tell|choose|review|approve|label|send|answer|confirm|give|decide|look|type|let)\b/i;
+const ASK_VERB =
+  "say|reply|pick|paste|merge|open|run|check|tell|choose|review|approve|label|send|answer|confirm|give|decide|look|type|let";
+const ASK_LAST = new RegExp(
+  String.raw`^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?(?:\*\*|__|\*|_)?(?:jon,\s+)?(?:${ASK_VERB})\b`,
+  "i",
+);
+// The same verbs as whole words anywhere: "Nothing needed from you yet;
+// merge #419 when CI is green" or "**Nothing ships until you pick a
+// letter.**" asks after all. After "my", "the", "next" and the like the
+// word is a noun, so "...that decision come in my next reply." asks nothing.
+const ASK_WORD = new RegExp(
+  String.raw`(?<!\b(?:a|an|the|my|our|your|this|that|next|first|last)\s)\b(?:${ASK_VERB})\b`,
+  "i",
+);
+// A last line that opens "Nothing", bold, italic or plain, with the rest of
+// the line after the word: asksAnything reads it as the phrase's line is
+// read, so "**Nothing merges until you say go.**" still asks.
+const NOTHING_LAST = /^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?(?:\*\*|__|\*|_)?(?:jon,\s+)?nothing\b(.*)$/i;
 // A last line that opens on bold or italic: Jon's rules make that the ask,
-// unless it opens "Nothing" ("**Nothing to do until the screenshots
-// arrive.**"). The text after the marker is no marker itself, so "**" is
+// unless it opens "Nothing", which lastAsks reads first ("**Nothing to do
+// until the screenshots arrive.**"). The text after the marker is no marker itself, so "**" is
 // never read as "*" then "*Nothing".
 const EMPHASIS_LAST =
   /^\s*(?:>\s*)?(?:(?:\d+[.)]|[-*])\s+)?(?:jon,\s+)?(?:\*\*|__|\*|_)(?!\s*(?:jon,\s+)?nothing\b)[^\s*_]/i;
@@ -209,18 +227,30 @@ function nothingNeededRests(lines: readonly string[]): Rest[] {
   });
 }
 
-// A phrase that leaves Jon nothing: the rest of its line ends its sentence
-// and holds no qualifier, and the line below opens with none.
-const unqualified = ({ rest, next }: Rest): boolean =>
-  !SENTENCE_BREAK.test(rest) && !QUALIFIED.test(rest) && !QUALIFIED_NEXT.test(next);
+// Whether the rest of a line after "Nothing" leaves Jon nothing: it ends
+// its sentence and holds no qualifier and no ask verb.
+const quietRest = (rest: string): boolean =>
+  !SENTENCE_BREAK.test(rest) && !QUALIFIED.test(rest) && !ASK_WORD.test(rest);
+
+// A phrase that leaves Jon nothing: the rest of its line is quiet, and the
+// line below opens with no qualifier.
+const unqualified = ({ rest, next }: Rest): boolean => quietRest(rest) && !QUALIFIED_NEXT.test(next);
+
+// Whether the reply's last line asks: one that opens "Nothing" asks unless
+// the rest of it is quiet; any other asks when it opens with an ask verb or
+// on bold or italic.
+function lastAsks(last: string): boolean {
+  const nothing = NOTHING_LAST.exec(last);
+  if (nothing) return !quietRest(nothing[1] ?? "");
+  return ASK_LAST.test(last) || EMPHASIS_LAST.test(last);
+}
 
 // Whether a reply asks Jon something however it is worded: a question, a
 // decision or waiting title, decisions laid out, or a last line that asks.
 function asksAnything(text: string, lines: readonly string[]): boolean {
   if (lines.some((l) => QUESTION.test(l) || ASK_TITLE.test(l))) return true;
   if (decisionsIn(text).count > 0) return true;
-  const last = lastRawLine(text) ?? "";
-  return ASK_LAST.test(last) || EMPHASIS_LAST.test(last);
+  return lastAsks(lastRawLine(text) ?? "");
 }
 
 /**

@@ -339,6 +339,15 @@ describe("moveFrom, a reply that says nothing is needed", () => {
     }
   });
 
+  it("reads a plain 'your' after the phrase as quiet", () => {
+    for (const s of [
+      "CI is running. Nothing needed from you until CI finishes on your pull request.",
+      "Nothing needed from you while your other session finishes.",
+    ]) {
+      assert.deepEqual(moveFrom(endingOn(s), 5), { text: s, epoch: 5, idle: true }, s);
+    }
+  });
+
   it("reads the phrase through markdown and after a sentence's full stop", () => {
     assert.equal(moveFrom("Done.\n\n> **Nothing needed from you.**", 5)?.idle, true);
     assert.equal(moveFrom("- Jon, nothing needed from you.", 5)?.idle, true);
@@ -470,6 +479,32 @@ describe("moveFrom, a reply that says nothing is needed yet asks", () => {
       "Nothing needed from you\nexcept the merge.",
     ]) {
       waitsOnJon(endingOn(s));
+    }
+  });
+
+  it("lets a 'Nothing' last line that asks or qualifies itself ask", () => {
+    for (const last of [
+      "**Nothing merges until you say go.**",
+      "**Nothing ships until you pick a letter.**",
+      "*Nothing happens until you paste the command above.*",
+      "**Nothing moves before your go.**",
+    ]) {
+      waitsOnJon(
+        `Jon, Cockpit quiet turns: the fix is on a branch.\n\n- **Hook** saves quiet replies as idle.\n\n**Status**\nNothing needed from you.\n\n${last}`,
+      );
+    }
+  });
+
+  it("reads 'just', 'till you', 'before you' and an ask verb on the phrase's line as qualifiers", () => {
+    for (const s of [
+      "Nothing needed from you, just a look at the picture.",
+      "Nothing needed from you yet; merge #419 when CI is green.",
+      "Nothing needed from you till you merge it.",
+      "Nothing needed from you before you merge.",
+    ]) {
+      waitsOnJon(
+        `Jon, Cockpit quiet turns: the fix is on a branch.\n\n- **Hook** saves quiet replies as idle.\n\n**Status**\n${s}`,
+      );
     }
   });
 
