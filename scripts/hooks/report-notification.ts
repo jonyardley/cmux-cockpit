@@ -5,8 +5,9 @@
 // this hook saves a short reason ("allow git push?") per workspace in
 // config/state.json's `asking` map (scripts/state-config.ts), and the
 // sidebars turn a needs_input that began with a fresh ask amber, "Asking"
-// (src/shared/needs.ts's askReason). An ask older than the agent's current
-// needs_input spell is ignored there, so nothing here has to clear it.
+// (the native core's ask_reason, saved for the agents panel). An ask older
+// than the agent's current needs_input spell is ignored there, so nothing
+// here has to clear it.
 //
 // Run by scripts/hooks/dispatch.ts on three Claude Code events, with the
 // matchers scripts/hooks/routes.ts lists:

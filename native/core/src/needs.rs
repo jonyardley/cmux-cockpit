@@ -1,4 +1,4 @@
-//! "Needs you", corrected as in the agents panel (src/shared/needs.ts).
+//! "Needs you", saved for the agents panel (agents_save.rs, #429).
 //! An agent's needs_input always waits on Jon unless he has dismissed it:
 //! Claude Code's idle reminder never sets it, in cmux 0.65.2 or in the
 //! Cockpit's own hook rule, which takes cmux's verdict (hooks.rs, #438).

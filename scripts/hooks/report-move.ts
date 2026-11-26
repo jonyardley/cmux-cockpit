@@ -15,7 +15,7 @@
 // sidebars. A turn with no move line clears a move's description (never
 // Jon's words) and drops any saved move. The sidebar
 // shows a move only while no prompt has come since it was saved (cmux's
-// latestAt, src/shared/move.ts), so nothing here has to clear a stale one.
+// latestAt, native/core/src/moves.rs), so nothing here has to clear a stale one.
 //
 // A final reply with neither label is never sent back for one: its last
 // line is saved instead, marked unlabelled, and the card quotes it in grey,
