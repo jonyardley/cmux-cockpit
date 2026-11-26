@@ -588,6 +588,17 @@ describe("moveFrom, a reply with no label that asks nothing", () => {
       "I'll start the next lane. Merge #12 first.",
       "The build is green, merge it.",
       "I push the fix, you merge it.",
+      "Once I push the fix, merge it.",
+      "When we land this, merge #12 first.",
+      "As I said, merge it when green.",
+      "CI is green. Once I push, review the diff.",
+      "Before I start the next lane, check the card.",
+      "Where I left it, run the gate.",
+      "I think it's fine, merge it.",
+      "Phase I tests pass, merge it.",
+      "I pushed, merge it when green.",
+      "Nothing needed from you; I pushed, merge it when green.",
+      "Once I push, merge it. Nothing needed from you.",
     ]) {
       const move = moveFrom(text, 5);
       assert.equal(move?.noAsk, undefined, text);

@@ -111,11 +111,19 @@ const ASK_WORD = new RegExp(
   String.raw`(?:^\s*|([;,:.!?])[*_)"']*\s+)(?:(you|please|then|and|so)\s+)?(?:${ASK_VERB})\b`,
   "gi",
 );
-// A clause I lead: "After it I push", "next I commit", "I'll open". On 26
+// A clause I lead, at its start after at most a short lead-in, in a
+// forward form: "After it I push", "next I commit", "I'll open". On 26
 // November "After it I push, open a draft pull request, and ask for your
-// word" read as orders to Jon. "I've pushed" and "I'm done" end my steps,
-// so an order after their comma is still his.
-const MY_CLAUSE = /(?<![\p{L}\p{N}'’])(?:I|[Ww]e)(?:['’]ll| will)?\s+(?!(?:have|had|am|was|were|did)\b)\p{L}/u;
+// word" read as orders to Jon. Anything else leaves the order after its
+// comma with Jon, since a false quiet hides an ask: "Once I push, merge
+// it", "I think it's fine, merge it", "I pushed, merge it", "I've pushed,
+// merge it", "Phase I tests pass, merge it".
+const NOT_MY_STEP =
+  "have|had|am|was|were|did|do|think|thought|believe|guess|need|want|hope|feel|expect|assume|know|mean|said|say|ran|made|sent|wrote|went|got|put|set|left|saw|told|found|took|gave|built|kept|let|read|can|could|should|would|might|must";
+const MY_CLAUSE = new RegExp(
+  String.raw`^[\s>*_]*(?:(?:next|then|now|first|after (?:it|that)),?\s+)?(?:I|we)(?:(?:['’]ll|\s+will)\s+\p{L}|\s+(?!(?:${NOT_MY_STEP})\b)(?!\p{L}+ed\b)\p{L})`,
+  "iu",
+);
 const CLAUSE_BREAK = /[;:.!?][*_)"']*\s/g;
 
 function clauseBefore(text: string, end: number): string {
@@ -125,12 +133,9 @@ function clauseBefore(text: string, end: number): string {
   return before.slice(start);
 }
 
-// A verb after a comma, bare or after "and" or "then", in a clause I lead
-// is my own next step.
 const myStep = (text: string, m: RegExpExecArray): boolean =>
   m[1] === "," && (m[2] === undefined || /^(?:and|then)$/i.test(m[2])) && MY_CLAUSE.test(clauseBefore(text, m.index));
 
-// Whether an ask verb sits where an instruction to Jon starts.
 const ordersJon = (text: string): boolean => [...text.matchAll(ASK_WORD)].some((m) => !myStep(text, m));
 // A last line that opens "Nothing", bold, italic or plain, with the rest of
 // the line after the word: asksAnything reads it as the phrase's line is
