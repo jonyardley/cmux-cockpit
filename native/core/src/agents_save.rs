@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use crate::data::{Agent, AgentStatus, Data, Workspace};
 use crate::needs::{ask_reason, waiting_turn};
 use crate::persist::{
-    MAX_AGENTS, MAX_LABEL, SavedAgent, SavedState, SavedStatus, WaitWhy, is_id, is_text,
+    MAX_AGENTS, MAX_LABEL, SavedAgent, SavedState, SavedStatus, Seen, WaitWhy, is_id, is_text,
 };
 use crate::quiet_save::whole_ms;
 use crate::running_save::Saves;
@@ -84,6 +84,19 @@ fn saved_agent(saved: &SavedState, a: &Agent, w: &Workspace) -> Option<SavedAgen
         since: whole_ms(a.since_epoch.unwrap_or(0.0)),
         why,
         reason,
+        seen: if a.stand_in { None } else { seen(&a.id, w) },
+    })
+}
+
+/// Agent `id` as `w`'s frame has it, before `agents_of` lays a turn, an
+/// ask, a dismissal, CI or a park on it: what the panel compares cmux's
+/// agent with. None for an id the frame lacks or a status the core does
+/// not know.
+fn seen(id: &str, w: &Workspace) -> Option<Seen> {
+    let raw = w.agent_list().find(|r| r.id == id)?;
+    Some(Seen {
+        status: saved_status(raw.status.as_ref())?,
+        since: whole_ms(raw.since_epoch.unwrap_or(0.0)),
     })
 }
 
@@ -179,7 +192,8 @@ mod tests {
         let mut m = core(&format!("{{{TURN}}}"), true);
         assert_eq!(
             one(&mut m, frame("idle")),
-            json!([{"id": "c", "status": "needs_input", "since": 1000.0, "why": "turn"}])
+            json!([{"id": "c", "status": "needs_input", "since": 1000.0, "why": "turn",
+                    "seen": {"status": "idle", "since": 1000.0}}])
         );
     }
 
@@ -190,7 +204,8 @@ mod tests {
         assert_eq!(
             one(&mut m, frame("needs_input")),
             json!([{"id": "c", "status": "needs_input", "since": 1000.0,
-                    "why": "ask", "reason": "allow git push?"}])
+                    "why": "ask", "reason": "allow git push?",
+                    "seen": {"status": "needs_input", "since": 1000.0}}])
         );
     }
 
@@ -200,7 +215,8 @@ mod tests {
         let mut m = core(state, true);
         assert_eq!(
             one(&mut m, frame("needs_input")),
-            json!([{"id": "c", "status": "idle", "since": 1000.0}])
+            json!([{"id": "c", "status": "idle", "since": 1000.0,
+                    "seen": {"status": "needs_input", "since": 1000.0}}])
         );
     }
 
@@ -220,8 +236,23 @@ mod tests {
         );
         assert_eq!(
             one(&mut m, frame("idle")),
-            json!([{"id": "c", "status": "idle", "since": 1000.0}])
+            json!([{"id": "c", "status": "idle", "since": 1000.0,
+                    "seen": {"status": "idle", "since": 1000.0}}])
         );
+    }
+
+    #[test]
+    fn an_entry_saved_before_seen_is_rewritten_once() {
+        let old = r#"{"agents": {"W": [{"id": "c", "status": "working", "since": 1000}]}}"#;
+        let mut m = core(old, true);
+        let healed = one(&mut m, frame("working"));
+        assert_eq!(
+            healed[0]["seen"],
+            json!({"status": "working", "since": 1000.0})
+        );
+        let shown = json!({"agents": {"W": healed}}).to_string();
+        assert!(saved(&mut m, Event::State(Box::new(read(&shown)))).is_empty());
+        assert!(saved(&mut m, frame("working")).is_empty(), "then holds");
     }
 
     #[test]
@@ -317,6 +348,47 @@ mod tests {
     }
 
     #[test]
+    fn a_park_on_a_working_lead_saves_it_seen_working() {
+        let raw = Agent {
+            status: Some(AgentStatus::Working),
+            since_epoch: Some(900.0004),
+            ..Agent::default()
+        };
+        let w = Workspace {
+            agents: Some(vec![Some(Agent {
+                id: "c".into(),
+                ..raw
+            })]),
+            ..ws(&[])
+        };
+        let park = Agent {
+            ostinato_park: true,
+            ..waiting("c")
+        };
+        assert_eq!(
+            why(&park, &w),
+            json!({"id": "c", "status": "needs_input", "since": 1000.25, "why": "park",
+                   "seen": {"status": "working", "since": 900.001}})
+        );
+        let unknown = Agent {
+            status: Some(AgentStatus::Other("napping".into())),
+            ..Agent::default()
+        };
+        let odd = Workspace {
+            agents: Some(vec![Some(Agent {
+                id: "c".into(),
+                ..unknown
+            })]),
+            ..ws(&[])
+        };
+        assert_eq!(
+            why(&park, &odd)["seen"],
+            Value::Null,
+            "a status the core does not know"
+        );
+    }
+
+    #[test]
     fn a_stand_in_is_saved_by_the_core_s_mark_not_its_id() {
         let none = ws(&[]);
         let stand_in = Agent {
@@ -344,7 +416,8 @@ mod tests {
         let mut m = core("{}", true);
         assert_eq!(
             one(&mut m, frame("needs_input")),
-            json!([{"id": "c", "status": "needs_input", "since": 1000.0, "why": "ask"}])
+            json!([{"id": "c", "status": "needs_input", "since": 1000.0, "why": "ask",
+                    "seen": {"status": "needs_input", "since": 1000.0}}])
         );
     }
 

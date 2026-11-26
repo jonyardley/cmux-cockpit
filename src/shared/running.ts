@@ -18,14 +18,6 @@ function savedVerdict(w: Workspace): SavedRunning | undefined {
 const helpersRun = (a: Agent, w: Workspace | undefined): boolean => w !== undefined && savedVerdict(w)?.agent === a.id;
 
 /**
- * Whether that verdict counts subagents for `a`'s chat: the only work that
- * holds a reply that asked nothing, as a shell, monitor or background
- * session can run for hours (moves.rs `asks_nothing_yet`).
- */
-export const agentsRun = (a: Agent, w: Workspace | undefined): boolean =>
-  w !== undefined && helpersRun(a, w) && (savedVerdict(w)?.counts ?? []).some((c) => c.type === "subagent" && c.n > 0);
-
-/**
  * What makes `a` read Running, as the card's rule has it: `a` is idle and
  * is the chat the core's verdict for `w` counts work for. Null otherwise,
  * so a working agent still reads Working and another idle agent in the

@@ -407,6 +407,19 @@ pub struct SavedAgent {
     /// The ask's words, only with `why` ask, which may have none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
+    /// The agent as the core's frame had it before any wait was laid on,
+    /// so the panel holds the entry only while cmux still shows that
+    /// spell. None for a stand-in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seen: Option<Seen>,
+}
+
+/// An agent's own status and its start, as the core's frame had it.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+pub struct Seen {
+    pub status: SavedStatus,
+    /// Epoch seconds; 0 when the frame had none.
+    pub since: f64,
 }
 
 /// The most agents saved for one workspace.
@@ -416,13 +429,14 @@ impl SavedAgent {
     /// Every field within the bounds state-config.ts's savedAgent holds it
     /// to: an id, an epoch, a why with needs_input and only there, and a
     /// reason of plain text only with an ask, which may have none (a
-    /// permission prompt saves no ask).
+    /// permission prompt saves no ask), and a seen start that is an epoch.
     pub(crate) fn fits(&self) -> bool {
         let waits = self.status == SavedStatus::NeedsInput;
         let ask = self.why == Some(WaitWhy::Ask);
+        let epoch = |t: f64| t.is_finite() && t >= 0.0;
         is_id(&self.id)
-            && self.since.is_finite()
-            && self.since >= 0.0
+            && epoch(self.since)
+            && self.seen.is_none_or(|s| epoch(s.since))
             && self.why.is_none_or(|_| waits)
             && self
                 .reason
@@ -1330,7 +1344,12 @@ mod tests {
             "w2": [{"id": "stand-in", "status": "needs_input", "since": 5, "why": "ci"}],
             "why when idle": [{"id": "s1", "status": "idle", "since": 1, "why": "turn"}],
             "reason on a turn": [{"id": "s1", "status": "needs_input", "since": 1, "why": "turn", "reason": "x"}],
-            "w3": [{"id": "s1", "status": "needs_input", "since": 1, "why": "ask"}],
+            "w3": [{"id": "s1", "status": "needs_input", "since": 1, "why": "ask",
+                    "seen": {"status": "idle", "since": 0.5, "extra": 1}},
+                   {"id": "s2", "status": "idle", "since": 1, "seen": null}],
+            "seen unknown status": [{"id": "s1", "status": "idle", "since": 1, "seen": {"status": "busy", "since": 1}}],
+            "seen no since": [{"id": "s1", "status": "idle", "since": 1, "seen": {"status": "idle"}}],
+            "seen negative": [{"id": "s1", "status": "idle", "since": 1, "seen": {"status": "idle", "since": -1}}],
             "unknown status": [{"id": "s1", "status": "busy", "since": 1}],
             "unknown why": [{"id": "s1", "status": "needs_input", "since": 1, "why": "nap"}],
             "one bad": [{"id": "s1", "status": "idle", "since": 1}, {"id": "", "status": "idle", "since": 1}],
@@ -1346,7 +1365,9 @@ mod tests {
                 "w1": [{"id": "s1", "status": "needs_input", "since": 100.5, "why": "ask", "reason": "allow?"},
                        {"id": "s2", "status": "working", "since": 0.0}],
                 "w2": [{"id": "stand-in", "status": "needs_input", "since": 5.0, "why": "ci"}],
-                "w3": [{"id": "s1", "status": "needs_input", "since": 1.0, "why": "ask"}]
+                "w3": [{"id": "s1", "status": "needs_input", "since": 1.0, "why": "ask",
+                        "seen": {"status": "idle", "since": 0.5}},
+                       {"id": "s2", "status": "idle", "since": 1.0}]
             })
         );
         let many = format!(

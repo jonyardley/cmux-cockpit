@@ -40,7 +40,13 @@ describe("the agents map's contract", () => {
         w2: [{ id: "stand-in", status: "needs_input", since: 5, why: "ci" }],
         "why when idle": [{ id: "s1", status: "idle", since: 1, why: "turn" }],
         "reason on a turn": [{ id: "s1", status: "needs_input", since: 1, why: "turn", reason: "x" }],
-        w3: [{ id: "s1", status: "needs_input", since: 1, why: "ask" }],
+        w3: [
+          { id: "s1", status: "needs_input", since: 1, why: "ask", seen: { status: "idle", since: 0.5, extra: 1 } },
+          { id: "s2", status: "idle", since: 1, seen: null },
+        ],
+        "seen unknown status": [{ id: "s1", status: "idle", since: 1, seen: { status: "busy", since: 1 } }],
+        "seen no since": [{ id: "s1", status: "idle", since: 1, seen: { status: "idle" } }],
+        "seen negative": [{ id: "s1", status: "idle", since: 1, seen: { status: "idle", since: -1 } }],
         "unknown status": [{ id: "s1", status: "busy", since: 1 }],
         "unknown why": [{ id: "s1", status: "needs_input", since: 1, why: "nap" }],
         "one bad": [
@@ -57,7 +63,10 @@ describe("the agents map's contract", () => {
         { id: "s2", status: "working", since: 0 },
       ],
       w2: [{ id: "stand-in", status: "needs_input", since: 5, why: "ci" }],
-      w3: [{ id: "s1", status: "needs_input", since: 1, why: "ask" }],
+      w3: [
+        { id: "s1", status: "needs_input", since: 1, why: "ask", seen: { status: "idle", since: 0.5 } },
+        { id: "s2", status: "idle", since: 1 },
+      ],
     });
     const many = Array.from({ length: MAX_AGENTS + 1 }, () => ({ id: "s", status: "idle", since: 1 }));
     assert.equal("agents" in validateState({ agents: { w: many } }), false, "too many");
@@ -74,8 +83,15 @@ describe("parseAgentsSave", () => {
     assert.equal(input.skipped, 0);
     assert.deepEqual(input.set, {
       W1: [
-        { id: "s1", status: "needs_input", since: 1791229800, why: "ask", reason: "allow git push?" },
-        { id: "s2", status: "working", since: 1791229200 },
+        {
+          id: "s1",
+          status: "needs_input",
+          since: 1791229800,
+          why: "ask",
+          reason: "allow git push?",
+          seen: { status: "needs_input", since: 1791229800 },
+        },
+        { id: "s2", status: "working", since: 1791229200, seen: { status: "working", since: 1791229200 } },
       ],
     });
   });

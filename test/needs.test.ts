@@ -16,15 +16,15 @@ beforeEach(() => {
   r.data.workspaces = [];
 });
 
-describe("effectiveAgent", () => {
+describe("with no saved entry", () => {
   it("shows every needs_input as it came, however long after the last activity (issue #422)", () => {
     for (const ask of [claude(1000, 1001), claude(1000, 1060), claude(1000, 5000)]) {
-      assert.equal(needs.effectiveAgent(ask), ask);
+      assert.deepEqual(needs.agentsOf(ws("late", { agents: [ask] })), [ask]);
     }
     const byMessage = agent("needs_input", { kind: "claude", sinceEpoch: 1060 });
-    assert.equal(needs.effectiveAgent(byMessage, ws("m", { latestAt: 1000 })), byMessage);
+    assert.deepEqual(needs.agentsOf(ws("m", { latestAt: 1000, agents: [byMessage] })), [byMessage]);
     const busy = agent("working");
-    assert.equal(needs.effectiveAgent(busy), busy);
+    assert.deepEqual(needs.agentsOf(ws("busy", { agents: [busy] })), [busy]);
   });
 });
 

@@ -1,5 +1,5 @@
 //! The one rule for when a hook's saved entry (an ask, a move) still
-//! explains an agent's state (src/shared/saved.ts).
+//! explains an agent's state.
 
 use crate::data::{Agent, Workspace};
 

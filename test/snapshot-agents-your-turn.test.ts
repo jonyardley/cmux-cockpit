@@ -16,6 +16,11 @@ const r = seed({
       here: { text: "answer yes or no once the left panel redraws.", epoch: ago(60), session: "c1" },
     },
     running: { here: { agent: "c1", since: ago(240), counts: [{ type: "shell", n: 1 }] } },
+    agents: {
+      here: [
+        { id: "c1", status: "needs_input", since: ago(60), why: "turn", seen: { status: "idle", since: ago(60) } },
+      ],
+    },
   },
 });
 const { agent, ws } = await import("./support/fixtures.ts");

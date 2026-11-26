@@ -262,7 +262,7 @@ function dismissButton(): View {
 // The question, when the agent needs you: its words (none when there is only
 // the generic fallback or they may be another agent's), or how many agents
 // ask, then Dismiss while any of them is the panel's own to dismiss: a
-// wait the Cockpit saved (shared/waits.ts) is dismissed there. No button to open the chat: the panel already shows
+// wait the Cockpit saved (a stop, CI, a park) is dismissed there. No button to open the chat: the panel already shows
 // the selected workspace, so its chat is the one on screen (#383). The
 // title is not repeated: the highlighted card on the left already shows it.
 function askBlock(): View {

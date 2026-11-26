@@ -97,8 +97,20 @@
     "SaveAgents": {
       "agents": {
         "W1": [
-          { "id": "s1", "status": "needs_input", "since": 1791229800.0, "why": "ask", "reason": "allow git push?" },
-          { "id": "s2", "status": "working", "since": 1791229200.0 }
+          {
+            "id": "s1",
+            "status": "needs_input",
+            "since": 1791229800.0,
+            "why": "ask",
+            "reason": "allow git push?",
+            "seen": { "status": "needs_input", "since": 1791229800.0 }
+          },
+          {
+            "id": "s2",
+            "status": "working",
+            "since": 1791229200.0,
+            "seen": { "status": "working", "since": 1791229200.0 }
+          }
         ],
         "W2": null
       }

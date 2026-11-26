@@ -1,5 +1,5 @@
 // The Cockpit's saved waits on Jon in the agents panel (#388): each lands
-// on the workspace's agents as the core lays it (a stop on its session, CI
+// on the agent the core saved as carrying it (#429: a stop on its session, CI
 // on a finished lead, a park on a lead not already waiting, a stand-in
 // with no agent), so the panel's Needs you and the Cockpit's agree, with
 // no wait counted twice. The saved state is seeded before the panel's
@@ -10,7 +10,7 @@ process.env.TZ = "UTC";
 
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import type { SavedWait } from "../scripts/state-config.ts";
+import type { SavedAgent, SavedWait, SeenAgent, WaitWhy } from "../scripts/state-config.ts";
 import { ago, EPOCH, seed } from "./support/snapshot.ts";
 
 const ci = (kind: SavedWait["kind"], since: number, extra: Partial<SavedWait> = {}): SavedWait => ({
@@ -40,6 +40,23 @@ const pr = (checks: { name: string; state: "pending" | "pass"; queued?: number; 
   checks,
 });
 
+// What the core saw of an agent: its own status and start.
+const saw = (status: SeenAgent["status"], since: number): SeenAgent => ({ status, since });
+// An agent the core saved as waiting on Jon for `why` since `since`.
+const waits = (id: string, why: WaitWhy, since: number, seen?: SeenAgent): SavedAgent => ({
+  id,
+  status: "needs_input",
+  since,
+  why,
+  ...(seen ? { seen } : {}),
+});
+const plain = (id: string, status: SavedAgent["status"], since: number): SavedAgent => ({
+  id,
+  status,
+  since,
+  seen: saw(status, since),
+});
+
 const r = seed({
   state: {
     prs: {
@@ -58,6 +75,28 @@ const r = seed({
       both: [failed, park],
       lone: [park],
       mix: [stop("m2")],
+      later: [failed],
+      back: [stop("x")],
+      two: [stop("q"), stop("p")],
+      nostand: [stop("x")],
+    },
+    agents: {
+      idle: [waits("i1", "ci", stuck.since, saw("idle", ago(200)))],
+      runs: [waits("r1", "ci", stuck.since, saw("idle", ago(200)))],
+      gone: [waits("g1", "ci", stuck.since, saw("idle", ago(200)))],
+      work: [plain("w1", "working", ago(60))],
+      ask: [waits("k1", "ask", ago(120), saw("needs_input", ago(120)))],
+      stop: [waits("s1", "stop", ago(300), saw("working", ago(900))), plain("s2", "idle", ago(200))],
+      none: [waits("stand-in", "park", park.since)],
+      both: [waits("b1", "ci", failed.since, saw("idle", ago(200)))],
+      lone: [waits("l1", "park", park.since, saw("working", ago(60)))],
+      mix: [
+        waits("m1", "ask", ago(120), saw("needs_input", ago(120))),
+        waits("m2", "stop", ago(300), saw("idle", ago(200))),
+      ],
+      later: [waits("k1", "ci", failed.since, saw("needs_input", ago(120)))],
+      back: [waits("x", "stop", ago(300), saw("idle", ago(300)))],
+      two: [waits("p", "stop", ago(300), saw("idle", ago(200))), waits("q", "stop", ago(300), saw("idle", ago(200)))],
     },
   },
 });
@@ -84,6 +123,11 @@ const AGENTS: Record<string, () => Agent[]> = {
   both: () => [idle("b1")],
   lone: () => [working("l1")],
   mix: () => [asking("m1"), idle("m2")],
+  // cmux still says needs_input after Jon dismissed the ask: the core's next save hands CI to it.
+  later: () => [asking("k1")],
+  back: () => [working("x")],
+  two: () => [idle("p"), idle("q")],
+  nostand: () => [],
 };
 
 function select(id: string): void {
@@ -159,10 +203,30 @@ describe("saved waits in Needs you", () => {
     assert.deepEqual(m.currentAsk(), { text: "2 things wait on you", count: 2, dismissLabel: "Dismiss" });
   });
 
-  it("shows the wait once Jon dismisses the agent's own ask, without Dismiss", () => {
+  it("clears the agent's own ask at once on Dismiss, and shows CI on it once the Cockpit saves that", () => {
     select("ask");
     dismissNeeds(r.data.workspaces?.find((x) => x.selected));
+    assert.equal(m.currentAsk(), null);
+    select("later");
     assert.deepEqual(m.currentAsk(), { text: "CI failed: Tabs", count: 1, dismissLabel: "" });
+  });
+
+  it("drops a stop its session has worked past, and keeps the saved order", () => {
+    select("back");
+    assert.equal(m.currentAsk(), null);
+    assert.equal(d.cardShows.waits(), false);
+    select("two");
+    assert.equal(m.currentAsk()?.text, "2 things wait on you");
+    assert.deepEqual(
+      d.waitRows().map((x) => x.key),
+      ["w:stopped:q", "w:stopped:p"],
+    );
+  });
+
+  it("stands nothing in when the core saved no stand-in", () => {
+    select("nostand");
+    assert.equal(m.currentAsk(), null);
+    assert.equal(d.cardShows.waits(), false);
   });
 });
 
@@ -183,36 +247,17 @@ describe("the Waiting on you card", () => {
   });
 });
 
-describe("withWaits", () => {
-  it("counts an ask and a wait together when both land", () => {
-    const out = w.withWaits([asking("x"), idle("y")], [stop("y")]);
-    assert.deepEqual(
-      out.agents.map((a) => a.status),
-      ["needs_input", "needs_input"],
-    );
-    assert.deepEqual(out.added, [stop("y")]);
-  });
-
-  it("drops a stop its session has worked past, and keeps the saved order", () => {
-    const back = agent("working", { id: "x", sinceEpoch: ago(60) });
-    assert.equal(w.withWaits([back], [stop("x")]).shown.length, 0);
-    const out = w.withWaits([idle("p"), idle("q")], [stop("q"), stop("p")]);
-    assert.deepEqual(
-      out.shown.map((v) => v.agent),
-      ["q", "p"],
-    );
-  });
-
-  it("does not add a stop on an agent already asking, though it shows", () => {
-    const out = w.withWaits([asking("x")], [stop("x")]);
-    assert.equal(out.shown.length, 1);
-    assert.equal(out.added.length, 0);
-  });
-
-  it("leaves a workspace with no agent and no CI or park as it is", () => {
-    const out = w.withWaits([], [stop("x")]);
-    assert.equal(out.standIn, false);
-    assert.equal(out.shown.length, 0);
+describe("waitOf", () => {
+  it("finds the wait the core laid by why: a stop by its session, CI and the park by kind", () => {
+    const list = [stop("x"), failed, park];
+    assert.equal(w.waitOf("stop", "x", list), list[0]);
+    assert.equal(w.waitOf("stop", "y", list), undefined, "another session's stop");
+    assert.equal(w.waitOf("ci", "y", list), failed);
+    assert.equal(w.waitOf("ci", "y", [ci("merge_ready", 1)])?.kind, "merge_ready");
+    assert.equal(w.waitOf("park", "stand-in", list), park);
+    assert.equal(w.waitOf("turn", "x", list), undefined);
+    assert.equal(w.waitOf(undefined, "x", list), undefined);
+    assert.equal(w.waitOf("park", "x", []), undefined, "the waits map lags the agents map");
   });
 });
 

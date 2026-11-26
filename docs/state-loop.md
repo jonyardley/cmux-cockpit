@@ -697,8 +697,8 @@ the same: workspace id to `{"agent", "since", "counts": [{"type", "n"}]}`,
 the card's agent, when its earliest running work started, and a count per
 kind in the card's order. It saves the record, never the status: the panel
 says Running while that agent is idle as the panel shows it
-(`src/shared/running.ts`), from cmux's live status with the card's own
-corrections applied (`agentsOf` in `src/shared/needs.ts`), so a turn that
+(`src/shared/running.ts`), with the core's saved status laid on cmux's
+(`agentsOf` in `src/shared/needs.ts`), so a turn that
 ended on a line asking something of Jon is Your turn there too, as on the
 card, and only a "Nothing for you" turn or a dismissed wait says Running.
 Only the core that draws the sidebar writes it, only an entry the file as
@@ -738,7 +738,8 @@ written, so a new quiet spell shows no suffix. It goes the same way as
 The native core also saves each workspace's agents as it shows them
 (#429), from `Session::agents_of`, so dismissals, the CI carrier, parks and
 stand-ins are already laid. The `agents` map holds workspace id to a list,
-in the core's order, of `{"id", "status", "since"}`: the agent's id, or
+in the core's order, of `{"id", "status", "since", "seen"}` (`seen`
+below): the agent's id, or
 `stand-in` for a CI or park stand-in; its status (`needs_input`,
 `working`, `idle` or `ended`, an unknown status left out); and `since`,
 when that began, in epoch seconds rounded to the millisecond, 0 meaning
@@ -752,9 +753,48 @@ none has no entry. Reading, a list with any agent that does not fit is
 dropped whole, as for `waits`. Nothing in it moves with the clock, so only a
 change is written. It goes the same way as `quiet`
 (`native/core/src/agents_save.rs`, its `SaveAgents` effect,
-`scripts/agents-save.sh` and `scripts/agents-save.ts`). No URL writes it,
-and nothing reads it yet: the agents panel moves onto it in the second
-half of #429.
+`scripts/agents-save.sh` and `scripts/agents-save.ts`). No URL writes it.
+
+The agents panel (`agentsOf` in `src/shared/needs.ts`) lays each entry on
+the cmux agent with the same id, so its Your turn, Asking and Needs you
+follow the core's rules rather than copies of them; a saved ask gives its
+`reason`, and a saved turn shows the workspace's move while that move is
+the agent's own and its epoch the turn's saved start. The map lags cmux
+by a rebuild with the Cockpit on, and nothing clears it on quit, so with
+the Cockpit closed the last entries stay in the file. So each real agent's
+entry also has `seen`, `{"status", "since"}`: the agent as the core's
+frame had it before any wait or dismissal was laid on (since rounded the
+same way, 0 for none). One rule decides whether an entry still speaks for
+the agent: it holds only while cmux shows that same status from a start
+within `HOOK_SLACK` (3 seconds, the gap between the core's stamp and
+cmux's for one event) of `seen.since`, or neither has a start. A
+`working` spell is the exception: it holds on status alone, and the panel
+shows cmux's own start for it, never the saved one. Claude's own status
+report wins in the core (`both()` in `program.rs`) and moves `since` only
+when its status changes, so on a replay of 95 minutes of cmux's event log
+working starts differed from cmux's by a median 29 seconds, while turn
+ends and permission prompts held within 0.44 seconds. So a stop, CI or
+park carried by a working agent keeps showing. Any other spell, a prompt,
+a resumed chat that idles again or a later permission prompt, reads as
+cmux sends it. An entry with no `seen`, written before the field, never
+holds; the core rewrites it on its next frame. Known limits: a status
+that flips and back inside 3 seconds is not seen, and with the Cockpit
+closed a saved working entry also holds over a later working spell. The stand-in has no `seen` and shows only for a workspace
+with no agent.
+The Cockpit's own waits (`stop`, `ci`, `park` and the stand-in) stay off
+the agent's status: the panel names them from the `waits` map, and a
+carrier whose wait is not in that map yet, which can lag the `agents`
+map, reads as having no entry, so cmux's own needs_input still gets a
+Dismiss. A Dismiss in the panel shows at once, keyed as the core keys it
+(a turn on its saved start, anything else on cmux's own start), and holds
+over a saved entry still saying needs_input until the core rewrites it.
+The core replaces its dismissals with the file's on each read
+(`Session::reseed`), so a Dismiss writes back the dismissals on file for
+keys that are no agent here (the Cockpit's own), for agents with no
+saved entry at all (the core leaves a dismissed lost session out of its
+list), and for agents whose entry still holds with a start within the slack of the dismissal's key,
+or an earlier one the core has since saved as idle would come back. Any
+other is dropped, so ended waits do not pile up in the file.
 
 ### The core's waits for the agents panel
 
@@ -776,12 +816,10 @@ feed. It goes the same way as `running` (`native/core/src/waits_save.rs`,
 its `SaveWaits` effect, `scripts/waits-save.sh` and
 `scripts/waits-save.ts`). No URL writes it.
 
-The agents panel (`src/shared/waits.ts`) lays each saved wait on the
-selected workspace's agents in the core's order, so its Needs you agrees
-with the Cockpit's and never counts a wait twice: a stop on its own
-session, CI on the most active agent once it has finished, the park on
-the most active agent not already waiting on Jon, and one stand-in when
-no agent is left. The waits that land fill the Details tab's Waiting on
+The agents panel (`src/shared/waits.ts`) finds each saved wait on the
+agent the `agents` map says carries it (`why` `stop` by its session, `ci`
+and `park` by kind, the stand-in's too), so its Needs you agrees with the
+Cockpit's and never counts a wait twice. The waits that land fill the Details tab's Waiting on
 you card. The panel has no Dismiss for them: dismissing in the Cockpit
 clears the saved wait, and the next build bakes the map without it.
 
@@ -954,7 +992,8 @@ It goes through `applySet` and `readApplyWrite` like a URL's set, but
 entry would read as the agent's own question. A new ask drops any other
 older than a day, and `MAX_ENTRIES` caps the map.
 
-The sidebars read it back through `src/shared/needs.ts`'s `askReason`: a
+The Cockpit reads it back through `ask_reason` in `native/core/src/needs.rs`
+(the agents panel reads the core's saved `reason`, #429): a
 needs_input agent is asking when the workspace's saved ask is at least as
 new as the start of its current needs_input spell (`sinceEpoch`), give or
 take `HOOK_SLACK` (3 seconds, since this hook and cmux's own fire on the
@@ -1077,21 +1116,24 @@ it. When cmux refuses or cuts the patched description, the patched move
 goes to the `moves` map, as the move hook's own fallback does. A failure,
 a malformed answer or no answer within 20s writes nothing, and the state
 log says which. A `"waits"` verdict overrides the wording in
-`asks_nothing` and `asks_nothing_yet` (native/core/src/moves.rs) and
-`asksNothing` and `asksNothingYet` (src/shared/move.ts). A `"quiet"`
+`asks_nothing` and `asks_nothing_yet` (native/core/src/moves.rs). A `"quiet"`
 verdict acts like `noAsk`: it holds the turn only while the chat's agents
 run, unless the wording also said idle, so a quiet chat never hides for
 good. A reply that laid out decisions still always asks.
 `node scripts/hooks/move-verdict.ts --replay <file>` prints the verdict
 for each JSON line of past replies, to set it against the wording rules.
 
-`src/shared/move.ts` shows the move while the agent is at a turn end and
+`native/core/src/moves.rs` shows the move while the agent is at a turn end and
 no prompt has come since it was saved: cmux says idle or needs_input (never
 working or ended), it is not an ask, and the move's `epoch` is no earlier
 than the workspace's `latestAt`, give or take `HOOK_SLACK`. With no
 `latestAt` (missing or 0) there is no telling how old the move is, so none
-shows. The slack rule is `savedFor` in `src/shared/needs.ts`, shared with
-asks.
+shows. The slack rule is `saved_for` in `native/core/src/saved.rs`, shared
+with asks. The agents panel shows the move only while the core saved its
+agent's `why` as `turn`, the move's session is that agent and its epoch is
+the saved start in whole seconds. A dismissed turn's move no longer shows
+in the Details tab: the core saves a dismissed turn as plain idle, so the
+panel cannot tell it from any other idle once it has.
 
 ### What cmux does (v0.65.2)
 
@@ -1156,9 +1198,8 @@ On 0.64.25 cmux itself said needs input only once the nudge landed, about
 end whose current move asks something of Jon (anything but "Nothing
 for you", a reply with no label included) reads as needs input from the
 turn end, ahead of Running (`waiting_turn` and
-`Session::effective_agent` in `native/core/src/needs.rs` for the Cockpit,
-`waitingTurn` and `effectiveAgent` in `src/shared/needs.ts` for the
-agents panel's This workspace card and its question block). In both a
+`Session::effective_agent` in `native/core/src/needs.rs`, which the
+agents panel reads from the saved `agents` map, #429). A
 turn end is an idle agent, since neither cmux 0.65.2 nor the Cockpit's
 runner raises needs input for the idle reminder, and Claude Code may
 send none while the chat's background work runs. A dismissal of that wait is keyed
