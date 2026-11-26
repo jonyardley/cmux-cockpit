@@ -485,9 +485,10 @@ impl Session {
         } else {
             running_work(&self.saved, data, Some(w), Some(&a)).is_some()
         };
-        // A "Nothing for you" turn has nothing to read while its work
-        // runs; one from before a /clear counts too (#359). A turn with no
-        // such line stays Ready, since its work may never end.
+        // A turn that asks nothing for now (a "Nothing for you" line, or a
+        // reply held on Running while its agents run) has nothing to read
+        // while its work runs; one from before a /clear counts too (#359).
+        // Any other turn stays Ready, since its work may never end.
         let runs_on = runs && chat_quiet_move(&self.saved, &a, w).is_some();
         (!runs_on).then_some(a)
     }
@@ -1036,6 +1037,46 @@ mod tests {
         let w = data.ws_by_id("w1");
         assert_eq!(s.status_kind(&data, w), StatusKind::Running);
         assert!(s.needs_list(&data).is_empty());
+    }
+
+    #[test]
+    fn a_reply_held_on_running_with_unread_output_is_not_ready_while_its_agents_run() {
+        let saved = SavedState::from_json(
+            r#"{
+                "moves": {"w1": {"text": "The reviewer still runs.", "unlabelled": true,
+                    "noAsk": true, "epoch": 1000, "session": "c"}},
+                "background": {"w1": [{"id": "h1", "type": "subagent", "status": "running",
+                    "description": "review", "session": "c", "startedEpoch": 100,
+                    "seenEpoch": 1000}]},
+                "running": {"w1": {"agent": "c", "since": 100,
+                    "counts": [{"type": "subagent", "n": 1}]}}
+            }"#,
+        )
+        .unwrap();
+        let agent = Agent {
+            id: "c".into(),
+            kind: Some("claude".into()),
+            status: Some(AgentStatus::Idle),
+            since_epoch: Some(1000.0),
+            last_activity_at: Some(1000.0),
+            ..Agent::default()
+        };
+        let w = Workspace {
+            id: "w1".into(),
+            latest_at: Some(900.0),
+            unread: Some(3.0),
+            agents: Some(vec![Some(agent)]),
+            ..Workspace::default()
+        };
+        let data = Data {
+            epoch: Some(1100.0),
+            workspaces: Some(vec![w]),
+            ..Data::default()
+        };
+        let mut s = Session::new(Vec::new(), saved);
+        let w = data.ws_by_id("w1");
+        assert_eq!(s.status_kind(&data, w), StatusKind::Running);
+        assert!(!s.is_ready(&data, w), "held on Running, so not Ready");
     }
 
     #[test]

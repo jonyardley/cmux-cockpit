@@ -510,6 +510,8 @@ export interface SavedMove {
   idle?: true;
   /** Set when the reply had neither label: `text` is its last line, which the card shows in grey. */
   unlabelled?: true;
+  /** Set beside `unlabelled` when the reply asked nothing at all: it waits on Jon only once the chat's helpers stop. */
+  noAsk?: true;
 }
 
 /** The longest "Your move" line kept; the hook cuts one to this. */
@@ -861,16 +863,16 @@ const isDecisions = (v: unknown): v is number =>
 
 // A move's optional fields: each absent or well formed, its flags only true.
 function movePartsOk(v: Record<string, unknown>): boolean {
-  const { session, decisions, leans, idle, unlabelled } = v;
+  const { session, decisions, leans, idle, unlabelled, noAsk } = v;
   if (session !== undefined && (typeof session !== "string" || !isId(session))) return false;
   if (decisions !== undefined && !isDecisions(decisions)) return false;
   if (leans !== undefined && !isLeans(leans)) return false;
-  return (idle === undefined || idle === true) && (unlabelled === undefined || unlabelled === true);
+  return [idle, unlabelled, noAsk].every((f) => f === undefined || f === true);
 }
 
 function savedMove(v: unknown): SavedMove | null {
   if (!isRecord(v) || !isText(v.text, MAX_MOVE) || !isEpoch(v.epoch) || !movePartsOk(v)) return null;
-  const { session, decisions, leans, idle, unlabelled } = v;
+  const { session, decisions, leans, idle, unlabelled, noAsk } = v;
   return {
     text: v.text,
     epoch: v.epoch,
@@ -879,6 +881,7 @@ function savedMove(v: unknown): SavedMove | null {
     ...(isLeans(leans) ? { leans } : {}),
     ...(idle === true ? { idle } : {}),
     ...(unlabelled === true ? { unlabelled } : {}),
+    ...(noAsk === true ? { noAsk } : {}),
   };
 }
 
@@ -1393,7 +1396,8 @@ export const MOVE_MAX_AGE_S = 7 * 24 * 60 * 60;
 // As askEntry: the move goes last, and moves a week older than it are dropped.
 function moveEntry(state: State, id: string, parsed: unknown): State | string {
   const move = savedMove(parsed);
-  if (!move) return "moves wants {text, epoch, session?, decisions?, leans?, idle?: true, unlabelled?: true}";
+  if (!move)
+    return "moves wants {text, epoch, session?, decisions?, leans?, idle?: true, unlabelled?: true, noAsk?: true}";
   const kept = Object.entries(state.moves).filter(([, m]) => m.epoch >= move.epoch - MOVE_MAX_AGE_S);
   return { ...state, moves: { ...Object.fromEntries(kept), [id]: move } };
 }

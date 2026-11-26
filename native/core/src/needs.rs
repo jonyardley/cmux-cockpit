@@ -18,7 +18,7 @@ use crate::activity::since_or_activity;
 use crate::ci_wait::{CI_KEY, ci_carrier};
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::js::{json_num, truthy};
-use crate::moves::{asks_nothing, waiting_move};
+use crate::moves::{asks_nothing_yet, waiting_move};
 use crate::ostinato::wait::OSTINATO_KEY;
 use crate::persist::{SavedAsk, SavedMove, SavedState};
 use crate::saved::saved_for;
@@ -56,10 +56,12 @@ fn fresh_ask<'s>(saved: &'s SavedState, a: &Agent, w: Option<&Workspace>) -> Opt
 /// The move `a`'s turn ended on when it waits on Jon: `a`'s own, current
 /// (no prompt since), not an ask, and asking something of him. A reply
 /// with no label counts, as a turn with no closing line still waits on
-/// him (#322); only "Nothing for you" does not. None otherwise.
+/// him (#322); only "Nothing for you" does not, nor one that asked
+/// nothing while its chat's helpers still run (`asks_nothing_yet`).
+/// None otherwise.
 pub fn waiting_turn(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Option<SavedMove> {
     let asking = fresh_ask(saved, a, w).is_some();
-    waiting_move(saved, Some(a), w, asking).filter(|m| !asks_nothing(m))
+    waiting_move(saved, Some(a), w, asking).filter(|m| !asks_nothing_yet(saved, m, a, w))
 }
 
 /// When `a`'s wait on Jon began, which a dismissal is keyed on: the end
@@ -466,6 +468,135 @@ mod tests {
             "Asking, not Your turn"
         );
         assert!(!waits(asks, "", AgentStatus::Working), "only at a turn end");
+    }
+
+    /// `c` as the sidebars show it, `status` from cmux, its turn ended at
+    /// 1000 on `move_json`, and its chat running a subagent by the core's
+    /// saved verdict when `helpers`.
+    fn shown(move_json: &str, helpers: bool, status: AgentStatus) -> Option<AgentStatus> {
+        shown_after(move_json, helpers, status, 900.0)
+    }
+
+    /// `shown`, with Jon's last prompt (or a task notification's) at `latest`.
+    fn shown_after(
+        move_json: &str,
+        helpers: bool,
+        status: AgentStatus,
+        latest: f64,
+    ) -> Option<AgentStatus> {
+        shown_running(move_json, helpers.then_some("subagent"), status, latest)
+    }
+
+    /// `shown_after`, its chat running one task of `kind` when there is one.
+    fn shown_running(
+        move_json: &str,
+        kind: Option<&str>,
+        status: AgentStatus,
+        latest: f64,
+    ) -> Option<AgentStatus> {
+        let running = kind.map_or(String::new(), |k| {
+            format!(r#""w": {{"agent": "c", "since": 950, "counts": [{{"type": "{k}", "n": 1}}]}}"#)
+        });
+        let saved = SavedState::from_json(&format!(
+            r#"{{"moves": {{"w": {move_json}}}, "running": {{{running}}}}}"#
+        ))
+        .unwrap();
+        let a = Agent {
+            id: "c".into(),
+            kind: Some("claude".into()),
+            status: Some(status),
+            since_epoch: Some(1000.0),
+            last_activity_at: Some(1000.0),
+            ..Agent::default()
+        };
+        let w = Workspace {
+            id: "w".into(),
+            latest_at: Some(latest),
+            agents: Some(vec![Some(a.clone())]),
+            ..Workspace::default()
+        };
+        Session::new(Vec::new(), saved)
+            .effective_agent(&a, Some(&w))
+            .status
+    }
+
+    const NO_ASK: &str = r#"{"text": "Still waiting on the reviewer.", "unlabelled": true,
+        "noAsk": true, "epoch": 1000, "session": "c"}"#;
+
+    #[test]
+    fn a_reply_that_asks_nothing_waits_on_jon_only_once_its_helpers_stop() {
+        let idle = || AgentStatus::Idle;
+        assert_eq!(
+            shown(NO_ASK, true, idle()),
+            Some(AgentStatus::Idle),
+            "idle, so the card says Running"
+        );
+        assert_eq!(
+            shown(NO_ASK, true, AgentStatus::NeedsInput),
+            Some(AgentStatus::NeedsInput),
+            "needs input is cmux's verdict of a real ask, so helpers never hold it"
+        );
+        assert_eq!(
+            shown(NO_ASK, false, idle()),
+            Some(AgentStatus::NeedsInput),
+            "nothing runs any more"
+        );
+    }
+
+    #[test]
+    fn only_running_agents_hold_a_reply_that_asks_nothing() {
+        for kind in ["shell", "monitor", "session"] {
+            assert_eq!(
+                shown_running(NO_ASK, Some(kind), AgentStatus::Idle, 900.0),
+                Some(AgentStatus::NeedsInput),
+                "{kind} can run for hours"
+            );
+        }
+        assert_eq!(
+            shown_running(NO_ASK, Some("subagent"), AgentStatus::Idle, 900.0),
+            Some(AgentStatus::Idle),
+            "the card says Running"
+        );
+    }
+
+    #[test]
+    fn a_task_notification_turn_never_reads_your_turn_while_helpers_run() {
+        // The runner's statuses through it (program.rs,
+        // a_stop_under_a_held_working_report_reads_idle_until_a_prompt and
+        // a_prompt_after_the_stop_reads_working_with_helpers_still_listed):
+        // idle from the Stop, then working from the notification's prompt,
+        // which also retires the move. Mid-turn it reads Working whatever
+        // the move asked; at each turn end a reply that asks nothing reads
+        // Running, as a plain turn end does.
+        let idle = AgentStatus::Idle;
+        assert_eq!(shown(NO_ASK, true, idle), Some(AgentStatus::Idle));
+        let asks =
+            r#"{"text": "Shall I go on?", "unlabelled": true, "epoch": 1000, "session": "c"}"#;
+        assert_eq!(
+            shown_after(asks, true, AgentStatus::Working, 1030.0),
+            Some(AgentStatus::Working)
+        );
+        assert_eq!(
+            shown_after(NO_ASK, true, AgentStatus::Working, 1030.0),
+            Some(AgentStatus::Working)
+        );
+    }
+
+    #[test]
+    fn a_real_ask_waits_on_jon_while_helpers_run() {
+        let asks = r#"{"text": "Say go and I'll push the fix.", "unlabelled": true,
+            "epoch": 1000, "session": "c"}"#;
+        assert_eq!(
+            shown(asks, true, AgentStatus::Idle),
+            Some(AgentStatus::NeedsInput)
+        );
+        let decided = r#"{"text": "Pick one.", "unlabelled": true, "noAsk": true,
+            "decisions": 1, "epoch": 1000, "session": "c"}"#;
+        assert_eq!(
+            shown(decided, true, AgentStatus::Idle),
+            Some(AgentStatus::NeedsInput),
+            "a decision laid out always asks"
+        );
     }
 
     #[test]
