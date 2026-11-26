@@ -461,6 +461,15 @@ export interface SavedAgent {
   why?: WaitWhy;
   /** The ask's words, at most MAX_LABEL characters, only with why "ask", which may have none. */
   reason?: string;
+  /** The agent as the core's frame had it before any wait was laid on; none for a stand-in. */
+  seen?: SeenAgent;
+}
+
+/** An agent's own status and start, as the native core's frame had it (persist.rs Seen). */
+export interface SeenAgent {
+  status: AgentStatusWord;
+  /** Epoch seconds; 0 when the frame had none. */
+  since: number;
 }
 
 /** The kinds of wait the native core saves (persist.rs WaitKind). */
@@ -1180,12 +1189,17 @@ function savedWaits(v: unknown): SavedWait[] | null {
 const isAgentStatus = (v: unknown): v is AgentStatusWord => AGENT_STATUSES.some((s) => s === v);
 const isWaitWhy = (v: unknown): v is WaitWhy => WAIT_WHYS.some((w) => w === v);
 
+// A seen as serde reads persist.rs's Seen: a known status and an epoch,
+// any other field dropped.
+const isSeen = (v: unknown): v is SeenAgent => isRecord(v) && isAgentStatus(v.status) && isEpoch(v.since);
+
 /** A shown agent as persist.rs's SavedAgent::fits holds it: a why with needs_input and only there, a reason only with an ask. */
 function savedAgent(v: unknown): SavedAgent | null {
   if (!isRecord(v) || !isIdText(v.id) || !isAgentStatus(v.status) || !isEpoch(v.since)) return null;
   const why = optional(v.why, isWaitWhy);
   const reason = optional(v.reason, isLabel);
-  if (!why.ok || !reason.ok) return null;
+  const seen = optional(v.seen, isSeen);
+  if (!why.ok || !reason.ok || !seen.ok) return null;
   if (why.value !== undefined && v.status !== "needs_input") return null;
   if (reason.value !== undefined && why.value !== "ask") return null;
   return {
@@ -1194,6 +1208,7 @@ function savedAgent(v: unknown): SavedAgent | null {
     since: v.since,
     ...(why.value !== undefined ? { why: why.value } : {}),
     ...(reason.value !== undefined ? { reason: reason.value } : {}),
+    ...(seen.value !== undefined ? { seen: { status: seen.value.status, since: seen.value.since } } : {}),
   };
 }
 

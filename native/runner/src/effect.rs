@@ -15,7 +15,7 @@
 //! {"SaveRunning": {"running": {"W1": {"agent": "s1", "since": 1791229800, "counts": [{"type": "shell", "n": 1}]}, "W2": null}}}
 //! {"SaveWaits": {"waits": {"W1": [{"kind": "ci_stuck", "since": 1791229800, "key": 1791229200, "detail": "Docs layout", "check": "build", "queued": 1791229200}], "W2": null}}}
 //! {"SaveQuiet": {"quiet": {"W1": {"agent": "s1", "since": 1791229800}, "W2": null}}}
-//! {"SaveAgents": {"agents": {"W1": [{"id": "s1", "status": "needs_input", "since": 1791229800, "why": "ask", "reason": "allow git push?"}], "W2": null}}}
+//! {"SaveAgents": {"agents": {"W1": [{"id": "s1", "status": "needs_input", "since": 1791229800, "why": "ask", "reason": "allow git push?", "seen": {"status": "needs_input", "since": 1791229800}}], "W2": null}}}
 //! {"SaveCycles": {"cycles": {"W1": [{"item": "app#12", "attempt": 1, "outcome": "draft", "pr": "app#40", "sessions": ["s1"], "cost": 2.5, "started": 1791229200, "ended": 1791229800, "stages": [{"name": "brief", "at": 1791229260, "secs": 60, "sessions": ["s1"]}]}], "W2": null}}}
 //! {"Notify": {"workspace": "W1", "since": 1791229800, "title": "Docs layout", "body": "CI stuck 40m: rerun?"}}
 //! {"DismissNotification": {"id": "74D64488-9CB8-4B8D-900F-1908FF44B8BB"}}
