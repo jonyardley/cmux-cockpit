@@ -16,10 +16,12 @@ const NOW = 1_000_000;
 // The turn ended a minute ago; the shell started four minutes ago.
 const END = NOW - 60;
 const SHELL = { since: NOW - 240, counts: [{ type: "shell", n: 1 }] };
-const IDS = ["turn", "nudged", "quiet", "closed", "dismiss", "reloaded"];
-// The core's save for a turn that waits on Jon, and for one that asks nothing.
-const turn = (id: string) => [{ id: "c-" + id, status: "needs_input", since: END, why: "turn" }];
-const idle = (id: string) => [{ id: "c-" + id, status: "idle", since: END }];
+const IDS = ["turn", "quiet", "closed", "dismiss", "reloaded"];
+// The core's save for a turn that waits on Jon, and for one that asks nothing,
+// each seen idle from the turn end.
+const SEEN = { status: "idle", since: END };
+const turn = (id: string) => [{ id: "c-" + id, status: "needs_input", since: END, why: "turn", seen: SEEN }];
+const idle = (id: string) => [{ id: "c-" + id, status: "idle", since: END, seen: SEEN }];
 
 (globalThis as Record<string, unknown>).__STATE__ = {
   dismissed: { reloaded: { "c-reloaded": END } },
@@ -34,7 +36,6 @@ const idle = (id: string) => [{ id: "c-" + id, status: "idle", since: END }];
   running: Object.fromEntries(IDS.map((id) => [id, { agent: "c-" + id, ...SHELL }])),
   agents: {
     turn: turn("turn"),
-    nudged: turn("nudged"),
     quiet: idle("quiet"),
     dismiss: turn("dismiss"),
     reloaded: turn("reloaded"),
@@ -52,9 +53,6 @@ const { T } = await import("../src/agents/theme.ts");
 // Claude's Stop leaves the agent idle, stamped at the turn end.
 const stopped = (id: string): Agent =>
   agent("idle", { id: "c-" + id, kind: "claude", sinceEpoch: END, lastActivityAt: END });
-// A needs_input about a minute on with no prompt between, both stamps at its arrival.
-const nudged = (id: string, at = NOW): Agent =>
-  agent("needs_input", { id: "c-" + id, kind: "claude", sinceEpoch: at, lastActivityAt: at });
 // The selected workspace, its last prompt before the turn ended.
 const selected = (id: string, a: Agent): Workspace => {
   const w = ws(id, { selected: true, latestAt: END - 300, agents: [a] });
@@ -88,11 +86,6 @@ describe("a turn that asks Jon something while its chat's work runs", () => {
     assert.equal(needs.askReason(model.cur().a, model.cur().ws), null, "a turn is never an ask");
   });
 
-  it("says the same, from the turn end, once a needs_input lands a minute on", () => {
-    selected("nudged", nudged("nudged"));
-    assert.deepEqual(head(), YOUR_TURN);
-  });
-
   it("says Running on a turn the Cockpit saved as asking nothing, or with no Cockpit", () => {
     selected("quiet", stopped("quiet"));
     assert.deepEqual(head(), RUNNING);
@@ -102,13 +95,11 @@ describe("a turn that asks Jon something while its chat's work runs", () => {
 });
 
 describe("dismissing that wait", () => {
-  it("says Running at once, and stays dismissed across reads, a later needs_input and the clock", () => {
+  it("says Running at once, and stays dismissed across reads and the clock", () => {
     const w = selected("dismiss", stopped("dismiss"));
     needs.dismissNeeds(w);
     assert.deepEqual(head(), RUNNING);
     assert.deepEqual(head(), RUNNING, "a second read does not prune it");
-    selected("dismiss", nudged("dismiss"));
-    assert.deepEqual(head(), RUNNING, "keyed on the turn end, so the restamp keeps it");
     r.data.epoch = NOW + 3600;
     assert.equal(model.cur().a?.status, "idle", "the saved entry still says needs_input an hour on");
     const saved = r.opened.find((u) => u.includes("dismissed.dismiss"));
@@ -116,7 +107,7 @@ describe("dismissing that wait", () => {
   });
 
   it("holds over a saved entry the core has not yet rewritten, after a reload", () => {
-    selected("reloaded", nudged("reloaded"));
+    selected("reloaded", stopped("reloaded"));
     assert.deepEqual(head(), RUNNING);
   });
 });

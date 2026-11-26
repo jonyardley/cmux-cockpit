@@ -48,10 +48,12 @@ const r = seed({
       shell: { text: "the dev server runs.", epoch: ago(60), session: "c1", unlabelled: true, noAsk: true },
     },
     agents: {
-      sel: [{ id: "c1", status: "needs_input", since: ago(60), why: "turn" }],
-      q: [{ id: "c1", status: "idle", since: ago(60) }],
-      held: [{ id: "c1", status: "idle", since: ago(60) }],
-      shell: [{ id: "c1", status: "needs_input", since: ago(60), why: "turn" }],
+      sel: [{ id: "c1", status: "needs_input", since: ago(60), why: "turn", seen: { status: "idle", since: ago(60) } }],
+      q: [{ id: "c1", status: "idle", since: ago(60), seen: { status: "idle", since: ago(60) } }],
+      held: [{ id: "c1", status: "idle", since: ago(60), seen: { status: "idle", since: ago(60) } }],
+      shell: [
+        { id: "c1", status: "needs_input", since: ago(60), why: "turn", seen: { status: "idle", since: ago(60) } },
+      ],
     },
     running: {
       held: { agent: "c1", since: ago(120), counts: [{ type: "subagent", n: 1 }] },

@@ -738,7 +738,8 @@ written, so a new quiet spell shows no suffix. It goes the same way as
 The native core also saves each workspace's agents as it shows them
 (#429), from `Session::agents_of`, so dismissals, the CI carrier, parks and
 stand-ins are already laid. The `agents` map holds workspace id to a list,
-in the core's order, of `{"id", "status", "since"}`: the agent's id, or
+in the core's order, of `{"id", "status", "since", "seen"}` (`seen`
+below): the agent's id, or
 `stand-in` for a CI or park stand-in; its status (`needs_input`,
 `working`, `idle` or `ended`, an unknown status left out); and `since`,
 when that began, in epoch seconds rounded to the millisecond, 0 meaning
@@ -760,29 +761,32 @@ follow the core's rules rather than copies of them; a saved ask gives its
 `reason`, and a saved turn shows the workspace's move while that move is
 the agent's own and its epoch the turn's saved start. The map lags cmux
 by a rebuild with the Cockpit on, and nothing clears it on quit, so with
-the Cockpit closed the last entries stay in the file; each retires once
-cmux shows something newer. A turn retires once a prompt comes after it
-(`latestAt` past its start, `HOOK_SLACK` aside), not on cmux's own start,
-which can move without one. An ask, idle or ended entry retires once
-cmux's start is past its own by more than the slack, so a later
-permission prompt shows over a saved idle, while a dismissed ask's idle,
-saved at the ask's start, holds. Any of these also retires once cmux
-says working, a turn or ask once cmux says ended, a saved `working` once cmux says
-otherwise, and a stop or CI carrier once its agent works in a spell that
-began after it. A park never retires here, since the core lays it on a
-working lead. An agent with no entry, or one whose entry has retired,
-reads as cmux sends it, so with the Cockpit closed its turns and asks
-read as plain statuses once each entry retires.
+the Cockpit closed the last entries stay in the file. So each real agent's
+entry also has `seen`, `{"status", "since"}`: the agent as the core's
+frame had it before any wait or dismissal was laid on (since rounded the
+same way, 0 for none). One rule decides whether an entry still speaks for
+the agent: it holds only while cmux shows that same status from a start
+within `HOOK_SLACK` (3 seconds, the gap between the core's stamp and
+cmux's for one event) of `seen.since`, or neither has a start. Any other
+spell, a prompt, a resumed chat that idles again, a new working spell or
+a later permission prompt, reads as cmux sends it. An entry with no
+`seen`, written before the field, never holds; the core rewrites it on its
+next frame. A status that flips and back inside 3 seconds is not seen, a
+known limit. The stand-in has no `seen` and shows only for a workspace
+with no agent.
 The Cockpit's own waits (`stop`, `ci`, `park` and the stand-in) stay off
-the agent's status: the panel names them from the `waits` map. A Dismiss
-in the panel shows at once, keyed as the core keys it (a turn on its
-saved start, anything else on cmux's own start), and holds over a saved
-entry still saying needs_input until the core rewrites it. The core
-replaces its dismissals with the file's on each read (`Session::reseed`),
-so a Dismiss writes back the workspace's dismissals already on file too,
-or an earlier one the core has since saved as idle would come back. A
-carrier counts in Needs you only once its wait is in the `waits` map too,
-which can lag the `agents` map.
+the agent's status: the panel names them from the `waits` map, and a
+carrier whose wait is not in that map yet, which can lag the `agents`
+map, reads as having no entry, so cmux's own needs_input still gets a
+Dismiss. A Dismiss in the panel shows at once, keyed as the core keys it
+(a turn on its saved start, anything else on cmux's own start), and holds
+over a saved entry still saying needs_input until the core rewrites it.
+The core replaces its dismissals with the file's on each read
+(`Session::reseed`), so a Dismiss writes back the dismissals on file for
+keys that are no agent here (the Cockpit's own) and for agents whose
+entry still holds with a start within the slack of the dismissal's key,
+or an earlier one the core has since saved as idle would come back. Any
+other is dropped, so ended waits do not pile up in the file.
 
 ### The core's waits for the agents panel
 

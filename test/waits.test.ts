@@ -10,7 +10,7 @@ process.env.TZ = "UTC";
 
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import type { SavedAgent, SavedWait, WaitWhy } from "../scripts/state-config.ts";
+import type { SavedAgent, SavedWait, SeenAgent, WaitWhy } from "../scripts/state-config.ts";
 import { ago, EPOCH, seed } from "./support/snapshot.ts";
 
 const ci = (kind: SavedWait["kind"], since: number, extra: Partial<SavedWait> = {}): SavedWait => ({
@@ -40,9 +40,22 @@ const pr = (checks: { name: string; state: "pending" | "pass"; queued?: number; 
   checks,
 });
 
+// What the core saw of an agent: its own status and start.
+const saw = (status: SeenAgent["status"], since: number): SeenAgent => ({ status, since });
 // An agent the core saved as waiting on Jon for `why` since `since`.
-const waits = (id: string, why: WaitWhy, since: number): SavedAgent => ({ id, status: "needs_input", since, why });
-const plain = (id: string, status: SavedAgent["status"], since: number): SavedAgent => ({ id, status, since });
+const waits = (id: string, why: WaitWhy, since: number, seen?: SeenAgent): SavedAgent => ({
+  id,
+  status: "needs_input",
+  since,
+  why,
+  ...(seen ? { seen } : {}),
+});
+const plain = (id: string, status: SavedAgent["status"], since: number): SavedAgent => ({
+  id,
+  status,
+  since,
+  seen: saw(status, since),
+});
 
 const r = seed({
   state: {
@@ -68,19 +81,22 @@ const r = seed({
       nostand: [stop("x")],
     },
     agents: {
-      idle: [waits("i1", "ci", stuck.since)],
-      runs: [waits("r1", "ci", stuck.since)],
-      gone: [waits("g1", "ci", stuck.since)],
+      idle: [waits("i1", "ci", stuck.since, saw("idle", ago(200)))],
+      runs: [waits("r1", "ci", stuck.since, saw("idle", ago(200)))],
+      gone: [waits("g1", "ci", stuck.since, saw("idle", ago(200)))],
       work: [plain("w1", "working", ago(60))],
-      ask: [waits("k1", "ask", ago(120))],
-      stop: [waits("s1", "stop", ago(300)), plain("s2", "idle", ago(200))],
+      ask: [waits("k1", "ask", ago(120), saw("needs_input", ago(120)))],
+      stop: [waits("s1", "stop", ago(300), saw("working", ago(900))), plain("s2", "idle", ago(200))],
       none: [waits("stand-in", "park", park.since)],
-      both: [waits("b1", "ci", failed.since)],
-      lone: [waits("l1", "park", park.since)],
-      mix: [waits("m1", "ask", ago(120)), waits("m2", "stop", ago(300))],
-      later: [waits("k1", "ci", failed.since)],
-      back: [waits("x", "stop", ago(300))],
-      two: [waits("p", "stop", ago(300)), waits("q", "stop", ago(300))],
+      both: [waits("b1", "ci", failed.since, saw("idle", ago(200)))],
+      lone: [waits("l1", "park", park.since, saw("working", ago(60)))],
+      mix: [
+        waits("m1", "ask", ago(120), saw("needs_input", ago(120))),
+        waits("m2", "stop", ago(300), saw("idle", ago(200))),
+      ],
+      later: [waits("k1", "ci", failed.since, saw("needs_input", ago(120)))],
+      back: [waits("x", "stop", ago(300), saw("idle", ago(300)))],
+      two: [waits("p", "stop", ago(300), saw("idle", ago(200))), waits("q", "stop", ago(300), saw("idle", ago(200)))],
     },
   },
 });

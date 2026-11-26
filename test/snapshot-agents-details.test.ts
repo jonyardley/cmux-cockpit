@@ -79,9 +79,9 @@ const r = seed({
     waits: { here: [{ kind: "stopped", since: ago(300), key: ago(300), agent: "x1", detail: "error" }] },
     agents: {
       here: [
-        { id: "c1", status: "needs_input", since: ago(60), why: "turn" },
-        { id: "x1", status: "needs_input", since: ago(300), why: "stop" },
-        { id: "c0", status: "ended", since: 0 },
+        { id: "c1", status: "needs_input", since: ago(60), why: "turn", seen: { status: "idle", since: ago(60) } },
+        { id: "x1", status: "needs_input", since: ago(300), why: "stop", seen: { status: "idle", since: ago(600) } },
+        { id: "c0", status: "ended", since: 0, seen: { status: "ended", since: 0 } },
       ],
     },
   },

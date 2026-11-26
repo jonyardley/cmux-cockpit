@@ -3,8 +3,10 @@
 // native/core/src/needs.rs: turns, asks, stops, the CI carrier, parks and
 // stand-ins) and saves it in the `agents` map (native/core/src/agents_save.rs,
 // #429), so the panel lays that on cmux's agents rather than keep rules of
-// its own. An agent with no saved entry, as with the Cockpit closed, reads
-// as cmux sends it.
+// its own. The map is baked in at build, so it lags cmux, and with the
+// Cockpit closed it is never rewritten: an entry holds only while cmux
+// still shows the spell the core saw (`holds`). Otherwise, and for an agent
+// with no entry, the agent reads as cmux sends it.
 //
 // The panel still holds its own dismissals, so one shows at once rather
 // than a rebuild later; a reload forgets them unless saved (issues #3 and #5).
@@ -12,6 +14,7 @@
 import type { SavedAgent, WaitWhy } from "../../scripts/state-config.ts";
 import { sinceOrActivity } from "./activity.ts";
 import { persistSet, SAVED_STATE } from "./persist.ts";
+import { waitOf, waitsFor } from "./waits.ts";
 
 /** The id the core saves a CI or park stand-in under (agents_save.rs STAND_IN). */
 export const STAND_IN = "stand-in";
@@ -40,34 +43,30 @@ function savedAgents(wsId: string): SavedAgent[] {
 // core's own HOOK_SLACK (native/core/src/saved.rs).
 const HOOK_SLACK = 3;
 
+// A start, 0 when there is none.
+const startOf = (t: number | undefined): number => (t !== undefined && t > 0 ? t : 0);
+
+// Whether `e` still speaks for `live`: cmux shows the status the core saw,
+// from a start within the slack of the core's, or both have no start. An
+// entry saved before the core kept what it saw never holds; the core
+// rewrites it on its next frame.
+function holds(e: SavedAgent, live: Agent): boolean {
+  if (!e.seen || e.seen.status !== live.status) return false;
+  const saw = startOf(e.seen.since);
+  const now = startOf(live.sinceEpoch);
+  return saw && now ? Math.abs(now - saw) <= HOOK_SLACK : !saw && !now;
+}
+
 /**
  * The core's saved entry for `live`, an agent as cmux sends it, while it
- * still holds. The map lags a rebuild behind, and with the Cockpit closed it
- * is never rewritten, so each entry retires once cmux shows something newer
- * (ownHolds); a park never does, since the core lays it on a working lead
- * too. A saved working only ever comes from a working agent, so it never
- * holds once cmux says otherwise.
+ * holds. A stop, CI or park whose wait the waits map does not hold yet is
+ * no entry, so the agent reads as cmux sends it, a needs_input with a
+ * working Dismiss.
  */
 function entryOf(live: Agent, w: Workspace): SavedAgent | undefined {
   const e = savedAgents(w.id).find((x) => x.id === live.id);
-  if (!e || e.why === "park") return e;
-  if (e.status === "working") return live.status === "working" ? e : undefined;
-  if (isCockpitWait(e.why)) return live.status === "working" && (live.sinceEpoch ?? 0) > e.since ? undefined : e;
-  return ownHolds(e, live, w) ? e : undefined;
-}
-
-// A saved turn, ask, idle or ended entry, none of which the core lays on a
-// working agent. A turn or ask only ever comes from an agent at a turn end
-// (idle or needs_input). A turn holds until a prompt
-// comes after it (latestAt): cmux's own start can move on without one. The
-// rest hold until cmux's start moves past theirs, so a later permission
-// prompt shows over a saved idle, while a dismissed ask's idle, saved at the
-// ask's start, holds.
-function ownHolds(e: SavedAgent, live: Agent, w: Workspace): boolean {
-  if (live.status === "working") return false;
-  if (e.status === "needs_input" && live.status !== "idle" && live.status !== "needs_input") return false;
-  if (e.why === "turn") return (w.latestAt ?? 0) <= e.since + HOOK_SLACK;
-  return (live.sinceEpoch ?? 0) <= e.since + HOOK_SLACK;
+  if (!e || !holds(e, live)) return undefined;
+  return isCockpitWait(e.why) && !waitOf(e.why, live.id, waitsFor(w.id)) ? undefined : e;
 }
 
 // Whether `why` is one of the Cockpit's waits (a stop, CI, a park), which
@@ -181,6 +180,19 @@ export function standInWhy(w: Workspace | undefined): WaitWhy | undefined {
   return e?.status === "needs_input" ? e.why : undefined;
 }
 
+// Whether a dismissal on file at `start` is still the one behind agent
+// `id`'s saved entry: the entry holds and the start is within the slack of
+// the entry's or of what the core saw. A turn is keyed on its move's epoch
+// while the core saves the dismissed turn idle at its own start, and an ask
+// on cmux's unrounded start while the entry is ceiled to the millisecond.
+function stillDismissed(w: Workspace, id: string, start: number): boolean {
+  const live = (w.agents ?? []).find((a) => a?.id === id);
+  const e = live ? entryOf(live, w) : undefined;
+  if (!e) return false;
+  const near = (t: number | undefined) => t !== undefined && t > 0 && Math.abs(start - t) <= HOOK_SLACK;
+  return near(e.since) || near(e.seen?.since);
+}
+
 /** Dismisses every own wait in the workspace; each comes back when that agent asks again. */
 export function dismissNeeds(w: Workspace | undefined): void {
   const list = asking(w);
@@ -193,7 +205,9 @@ export function dismissNeeds(w: Workspace | undefined): void {
   // The core replaces its dismissals with the file's (Session::reseed), and
   // prune drops one here once the core saves that agent idle, so the file's
   // own are written back too, else an earlier dismissal would come back.
-  const onFile = Object.entries((Object.hasOwn(SAVED_STATE.dismissed, w.id) && SAVED_STATE.dismissed[w.id]) || {});
+  const onFile = Object.entries(
+    (Object.hasOwn(SAVED_STATE.dismissed, w.id) && SAVED_STATE.dismissed[w.id]) || {},
+  ).filter(([id, start]) => !reported.has(id) || stillDismissed(w, id, start));
   const fresh = list.map((a): [string, number] => [a.id, waitStart(a, entryOf(a, w))]);
   const starts = new Map([...onFile, ...kept, ...fresh]);
   dismissed.set(w.id, starts);
