@@ -170,6 +170,7 @@ function fixButton(e: () => CheckRow): View {
     .background(T.clayButton)
     .hoverBackground(T.clayButtonHover)
     .cornerRadius(6)
+    .cursor("pointer")
     .onTap(() => sendFix(e()));
 }
 
