@@ -384,6 +384,74 @@ describe("moveFrom, a reply that says nothing is needed", () => {
     assert.equal(moveFrom("CI runs! Nothing needed from you.\n\nBack soon.", 5)?.idle, true);
   });
 
+  it("holds a bold closer with no ask verb on Running once the reply says the phrase", () => {
+    // Jon's live reply on 26 November, saved as waiting before the fix.
+    const text = [
+      "Jon, Cockpit review: option a is planned and building.",
+      "",
+      "**Status**",
+      "One builder running, roughly 15 minutes. A draft pull request, already reviewed, will appear. Nothing needed from you.",
+      "",
+      "**No action yet; I'll report when the pull request lands.**",
+    ].join("\n");
+    assert.deepEqual(moveFrom(text, 5), {
+      text: "No action yet; I'll report when the pull request lands.",
+      epoch: 5,
+      unlabelled: true,
+      noAsk: true,
+    });
+    const ask = text.replace(
+      "**No action yet; I'll report when the pull request lands.**",
+      "**Say go and I'll push the fix.**",
+    );
+    waitsOnJon(ask);
+    waitsOnJon(text.replace("lands.**", "lands; then merge it.**"));
+  });
+
+  it("never saves a bold or italic closer after the phrase as quiet for good", () => {
+    for (const [last, text] of [
+      ["**PR #437 is ready to merge.**", "PR #437 is ready to merge."],
+      ["_The second lane is up next._", "The second lane is up next."],
+    ] as const) {
+      assert.deepEqual(
+        moveFrom(`Lane done.\n\nNothing needed from you.\n\n${last}`, 5),
+        { text, epoch: 5, unlabelled: true, noAsk: true },
+        last,
+      );
+    }
+    assert.equal(moveFrom("Lane done.\n\nNothing needed from you.\n\nThe second lane is up next.", 5)?.idle, true);
+  });
+
+  it("sees a you-word inside single emphasis and right after the phrase", () => {
+    for (const text of [
+      "Lane A is done.\n\nWaiting on _your_ go.",
+      "Lane A is done.\n\nWaiting on *your* go.",
+      "Lane A is done.\n\nThe pick is _yours_.",
+      "Lane A is done.\n\nOver to _you_.",
+      "Lane done.\n\nNothing needed from you.\n\n**Nothing else here; the merge is _yours_.**",
+      "Lane done.\n\nNothing needed from your side, but the review is due.",
+      "Lane done.\n\nNothing needed from you.\n\n**The build is green, nothing needed from your side.**",
+    ]) {
+      const move = moveFrom(text, 5);
+      assert.equal(move?.unlabelled, true, text);
+      assert.equal(move?.noAsk, undefined, text);
+      assert.equal(move?.idle, undefined, text);
+    }
+  });
+
+  it("lets a bold closer that addresses Jon ask, after the phrase or not", () => {
+    for (const last of [
+      "**Your call: a or b.**",
+      "**The merge is yours once CI is green.**",
+      "**I'll push the fix once you say go.**",
+      "**Ready for your review on #437.**",
+      "**A yes from you merges it.**",
+    ]) {
+      waitsOnJon(`The build is green.\n\n**Status**\nNothing needed from you.\n\n${last}`);
+      waitsOnJon(`The build is green.\n\n${last}`);
+    }
+  });
+
   it("lets a reply that lays out decisions wait on Jon", () => {
     const move = moveFrom(`${DECISIONS.replace("Your move:", "Next:")}\n\nNothing needed from you.`, 5);
     assert.equal(move?.unlabelled, true);
@@ -423,7 +491,7 @@ describe("moveFrom, a reply that says nothing is needed", () => {
 
   it("counts the phrase only at a sentence's start, so prose around it stays unlabelled", () => {
     for (const s of ["There is nothing needed from you.", "I said nothing needed from you earlier."]) {
-      assert.deepEqual(moveFrom(endingOn(s), 5), { text: s, epoch: 5, unlabelled: true }, s);
+      assert.deepEqual(moveFrom(endingOn(s), 5), { text: s, epoch: 5, unlabelled: true, noAsk: true }, s);
     }
   });
 
@@ -457,6 +525,59 @@ const waitsOnJon = (text: string): void => {
   assert.equal(move?.unlabelled, true, text);
   assert.equal(move?.idle, undefined, text);
 };
+
+describe("moveFrom, a reply with no label that asks nothing", () => {
+  it("marks a progress reply noAsk, so it waits on Jon only once its helpers stop", () => {
+    for (const last of ["Still waiting on the reviewer; I'll carry on when it reports.", "The build runs."]) {
+      assert.deepEqual(moveFrom(`Done with the first lane.\n\n${last}`, 5), {
+        text: last,
+        epoch: 5,
+        unlabelled: true,
+        noAsk: true,
+      });
+    }
+  });
+
+  it("never marks one that addresses Jon or tells him to act anywhere", () => {
+    for (const text of [
+      "Merge #12 first, then I'll start the next lane.\n\nThe build runs.",
+      "Waiting on your approval to push.",
+      "Ready for your review once CI is green.",
+      "I need your pick on the colour.",
+      "Over to you for the merge.",
+      "Please merge #437 when green.\n\nThe second lane builds.",
+      "- Review the plan.\n\nThe second lane builds.",
+    ]) {
+      const move = moveFrom(text, 5);
+      assert.equal(move?.unlabelled, true, text);
+      assert.equal(move?.noAsk, undefined, text);
+      assert.equal(move?.idle, undefined, text);
+    }
+  });
+
+  it("marks plain progress noAsk, and a line opening with Jon's name is still progress", () => {
+    for (const text of [
+      "Lane A is done. Lane B is still running.",
+      "Jon, Cockpit hold: lane A is done.\n\nLane B runs.",
+    ]) {
+      assert.equal(moveFrom(text, 5)?.noAsk, true, text);
+    }
+  });
+
+  it("never marks one that asks, decides, or qualifies the phrase", () => {
+    for (const text of [
+      "The build runs.\n\nShall I carry on?",
+      "The build runs.\n\n**Say go and I'll push the fix.**",
+      "The build runs.\n\n**The fix is ready.**",
+      `${DECISIONS.replace("Your move:", "Next:")}`,
+      "Nothing needed from you until you merge the first pull request.\n\nThe build runs.",
+    ]) {
+      const move = moveFrom(text, 5);
+      assert.equal(move?.noAsk, undefined, text);
+      assert.equal(move?.idle, undefined, text);
+    }
+  });
+});
 
 describe("moveFrom, a reply that says nothing is needed yet asks", () => {
   it("lets any bold or italic last line that is no 'Nothing' line ask", () => {
