@@ -1,6 +1,7 @@
 //! What a Claude hook does to an agent's status, moved here from the R1.0
 //! spike so the pane and the R2 panel share one copy. The rules follow
-//! cmux 0.64.25 as docs/state-loop.md ("What cmux does") describes it.
+//! cmux as docs/state-loop.md ("What cmux does") describes it, which also
+//! lists where cmux 0.65.2 now differs.
 //!
 //! | Hook | Status |
 //! | --- | --- |

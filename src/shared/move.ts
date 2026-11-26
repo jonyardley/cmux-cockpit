@@ -36,7 +36,7 @@ function savedMoveFor(w: Workspace): SavedMove | undefined {
 // A turn end: Claude's Stop sets the agent idle, and the idle_prompt nudge
 // about 60s later moves it to needs_input, restamping sinceEpoch and
 // lastActivityAt. The cmux facts behind this and waitingMove are in
-// docs/state-loop.md, section "What cmux does (v0.64.25)".
+// docs/state-loop.md, section "What cmux does (v0.65.2)".
 const atTurnEnd = (a: Agent): boolean => a.status === "idle" || a.status === "needs_input";
 
 // A move is `a`'s only when `a` is the Claude session that saved it. A new

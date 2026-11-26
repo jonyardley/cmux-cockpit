@@ -1030,26 +1030,39 @@ than the workspace's `latestAt`, give or take `HOOK_SLACK`. With no
 shows. The slack rule is `savedFor` in `src/shared/needs.ts`, shared with
 asks.
 
-### What cmux does (v0.64.25)
+### What cmux does (v0.65.2)
 
-From the cmux source at that version:
+From the cmux source at that version. Line numbers were rechecked at
+v0.65.2 where given; the rest were seen on 0.64.25 and are marked so.
 
-- Claude's Stop sets the agent idle
-  (`Sources/Mobile/AgentChat/AgentChatSessionRegistry+Lifecycle.swift:98`).
-  The idle_prompt Notification about 60s later moves it to needs_input and
-  stamps `sinceEpoch` and `lastActivityAt` at its arrival (the same file,
-  lines 89 to 97, and `AgentChatSessionRegistry.swift:501`). Every hook
-  event stamps `lastActivityAt`, so neither says when the agent last worked,
-  and `isIdleNudge`'s gap check does not fire on this version (issue #4).
+- Claude's Stop sets the agent idle (`nextState` in
+  `Sources/Mobile/AgentChat/AgentChatSessionRegistry+Lifecycle.swift:79-127`).
+  On 0.64.25 the idle_prompt Notification about 60s later moved it to
+  needs_input and stamped `sinceEpoch` and `lastActivityAt` at its arrival.
+  On 0.65.2 a Notification carrying `isIdleReminder` keeps the previous
+  state (the same function, lines 109 to 115), so the reminder may no
+  longer move idle to needs_input; that is the source's word, not yet seen
+  live (issue #422). Every hook event stamps `lastActivityAt`
+  (`AgentChatSessionRegistry.swift:544`), so it does not say when the
+  agent last worked, and `isIdleNudge`'s gap check does not fire (issue #4).
+- A Claude PreToolUse for AskUserQuestion or ExitPlanMode sets needs_input
+  at once (lines 86 to 98, cmux PR #17454). On 0.64.25 cmux said needs
+  input for a mid-turn ask only once the nudge landed.
+- PreCompact and PostCompact keep the previous state (lines 105 to 108);
+  on 0.64.25 they set working.
 - `latestMessage`, `latestPrompt` and `latestAt` belong to the workspace
-  (`Workspace.swift:3052-3054`). UserPromptSubmit writes the prompt into
-  both `latestPrompt` and `latestMessage` and sets `latestAt`
-  (`Workspace.swift:6643-6648`). Stop writes `last_assistant_message` into
-  `latestMessage` and `latestAt` only in iMessage mode, which is off by
-  default (`WorkspacePromptSubmit.swift:6,75-81,200`). Notifications never
-  write them (`TerminalController.swift:6434`).
+  (`latestConversationMessage`, `latestSubmittedMessage` and
+  `latestSubmittedAt` in `Workspace.swift:3205-3207`). UserPromptSubmit
+  writes the prompt into both and sets `latestAt` (`recordSubmittedMessage`,
+  `Workspace.swift:7017-7022`). The prompt is still capped at 240
+  characters, and the published prompt now carries a `<key>_length` beside
+  each message key with the full length (`WorkspacePromptSubmit.swift:78-82`).
+  Stop writes `last_assistant_message` into `latestMessage` and `latestAt`
+  only in iMessage mode, which is off by default
+  (`WorkspacePromptSubmit.swift:5-6,199`). Notifications never write them
+  (seen on 0.64.25 at `TerminalController.swift:6434`, not rechecked).
 - Before an agent's first hook its id can be a `pending-claude-` alias
-  rather than the session id (`AgentChatSessionRegistry.swift:519-553`).
+  rather than the session id (`AgentChatSessionRegistry.swift:560-630`).
 
 So `latestAt` is, by default, when Jon last sent a prompt. A new prompt,
 a turn he interrupts and an ask in the middle of a turn all follow a
@@ -1063,8 +1076,9 @@ so the move is often the only reply text a card has. The Needs you row
 falls back to the message and then to "Waiting for your reply", the card
 to the message and then to the description.
 
-cmux itself says needs input only once the nudge lands, about 60s after
-the turn ends. Both sidebars read the move instead: an idle or nudged
+On 0.64.25 cmux itself said needs input only once the nudge landed, about
+60s after the turn ended; on 0.65.2 it may never say it after a Stop
+(issue #422). Both sidebars read the move instead: an idle or nudged
 agent whose current move asks something of Jon (anything but "Nothing
 for you", a reply with no label included) reads as needs input from the
 turn end, ahead of Running (`waiting_turn` and
