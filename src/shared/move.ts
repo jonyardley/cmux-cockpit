@@ -75,17 +75,24 @@ const NOTHING_FIRST = /^nothing[.:]/i;
  * True when the move asks nothing of Jon: the reply ended on "Nothing for
  * you:" (saved as idle), or on the older "Your move: nothing. Waiting until
  * X." or "nothing waits on you". "Nothing follows" is not one: it ends in
- * /clear. A reply that laid out decisions always asks something, whatever
- * its last line says.
+ * /clear. A reply that laid out decisions always asks something, and so
+ * does one a model's verdict says waits. A quiet verdict alone is not
+ * enough: like noAsk it only holds the turn while agents run (asksNothingYet).
  */
-export const asksNothing = (m: Pick<SavedMove, "text" | "idle" | "decisions">): boolean =>
-  !((m.decisions ?? 0) > 0) && (m.idle === true || NOTHING_WAITS.test(m.text) || NOTHING_FIRST.test(m.text));
+export const asksNothing = (m: Pick<SavedMove, "text" | "idle" | "decisions" | "verdict">): boolean => {
+  if ((m.decisions ?? 0) > 0 || m.verdict === "waits") return false;
+  return m.idle === true || NOTHING_WAITS.test(m.text) || NOTHING_FIRST.test(m.text);
+};
+
+// A reply that asked nothing by its wording (noAsk) or by the model's verdict.
+const quietReply = (m: SavedMove): boolean => (m.verdict === undefined ? m.noAsk === true : m.verdict === "quiet");
 
 /**
  * True when the move asks nothing of Jon for now: asksNothing, or a reply
- * that asked nothing at all (noAsk) while `a`'s chat still runs subagents
- * by the core's saved verdict. Once they stop the turn waits on him again.
- * The Cockpit's `asks_nothing_yet` (native/core/src/moves.rs).
+ * that asked nothing at all (noAsk, or a quiet verdict) while `a`'s chat
+ * still runs subagents by the core's saved verdict. Once they stop the turn
+ * waits on him again, so a quiet chat never hides for good. The Cockpit's
+ * `asks_nothing_yet` (native/core/src/moves.rs).
  */
 export const asksNothingYet = (m: SavedMove, a: Agent, w: Workspace | undefined): boolean =>
-  asksNothing(m) || (m.noAsk === true && !((m.decisions ?? 0) > 0) && agentsRun(a, w));
+  asksNothing(m) || (quietReply(m) && !((m.decisions ?? 0) > 0) && agentsRun(a, w));

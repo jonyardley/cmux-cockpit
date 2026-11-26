@@ -12,7 +12,7 @@ use regex::Regex;
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::js::positive;
 use crate::owner::owns;
-use crate::persist::{SavedMove, SavedState, TaskType, move_of_description};
+use crate::persist::{MoveVerdict, SavedMove, SavedState, TaskType, move_of_description};
 use crate::saved::saved_for;
 
 /// Descriptions parsed so far, at most PARSED_MAX: the move is read
@@ -146,32 +146,46 @@ fn test(re: &LazyLock<Option<Regex>>, s: &str) -> bool {
 
 /// True when the move asks nothing of Jon: saved as idle ("Nothing for
 /// you:"), or the older "Your move: nothing." or "nothing waits on you". A
-/// reply that laid out decisions always asks something.
+/// reply that laid out decisions always asks something, and so does one a
+/// model's verdict says waits. A quiet verdict alone is not enough: like
+/// `no_ask` it only holds the turn while agents run (`asks_nothing_yet`).
 pub fn asks_nothing(m: &SavedMove) -> bool {
-    !positive(m.decisions.unwrap_or(0.0))
-        && (m.idle == Some(true) || test(&NOTHING_WAITS, &m.text) || test(&NOTHING_FIRST, &m.text))
+    if positive(m.decisions.unwrap_or(0.0)) || m.verdict == Some(MoveVerdict::Waits) {
+        return false;
+    }
+    m.idle == Some(true) || test(&NOTHING_WAITS, &m.text) || test(&NOTHING_FIRST, &m.text)
 }
 
 /// Whether `m` asks nothing of Jon for now: `asks_nothing`, or a reply
-/// that asked nothing at all (`no_ask`) while `a`'s chat still runs
-/// subagents by the core's saved verdict (running_save.rs). Only agents
-/// hold it: a shell, monitor or background session can run for hours, so
-/// the turn would hide all that time. Once the agents stop the turn waits
-/// on him again, so a quiet chat never hides for good.
+/// that asked nothing at all (`no_ask`, or a quiet verdict from the model)
+/// while `a`'s chat still runs subagents by the core's saved verdict
+/// (running_save.rs). Only agents hold it: a shell, monitor or background
+/// session can run for hours, so the turn would hide all that time. Once
+/// the agents stop the turn waits on him again, so a quiet chat never
+/// hides for good. A verdict that it waits holds nothing.
 pub fn asks_nothing_yet(
     saved: &SavedState,
     m: &SavedMove,
     a: &Agent,
     w: Option<&Workspace>,
 ) -> bool {
-    let agents_run = w.and_then(|w| saved.running.get(&w.id)).is_some_and(|r| {
+    if asks_nothing(m) {
+        return true;
+    }
+    let quiet = match m.verdict {
+        Some(MoveVerdict::Waits) => false,
+        Some(MoveVerdict::Quiet) => true,
+        None => m.no_ask == Some(true),
+    };
+    if !quiet || positive(m.decisions.unwrap_or(0.0)) {
+        return false;
+    }
+    w.and_then(|w| saved.running.get(&w.id)).is_some_and(|r| {
         r.agent == a.id
             && r.counts
                 .iter()
                 .any(|c| c.kind == TaskType::Subagent && c.n > 0)
-    });
-    let no_ask = m.no_ask == Some(true) && !positive(m.decisions.unwrap_or(0.0));
-    asks_nothing(m) || (no_ask && agents_run)
+    })
 }
 
 /// How big answering a move is.
@@ -238,6 +252,84 @@ mod tests {
             ..quoted
         };
         assert_eq!(move_size(&deciding), Some(MoveSize::Decide));
+    }
+
+    fn verdict_saved(session: &str) -> SavedState {
+        SavedState::from_json(&format!(
+            r#"{{"running": {{"w": {{"agent": "{session}", "since": 950,
+                "counts": [{{"type": "subagent", "n": 1}}]}}}}}}"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn a_waits_verdict_overrides_idle_wording_but_quiet_alone_does_not() {
+        let idle = SavedMove {
+            text: "Nothing for you: tests run on".into(),
+            idle: Some(true),
+            ..SavedMove::default()
+        };
+        assert!(asks_nothing(&idle));
+        let waits = SavedMove {
+            verdict: Some(MoveVerdict::Waits),
+            ..idle.clone()
+        };
+        assert!(!asks_nothing(&waits));
+        let idle_quiet = SavedMove {
+            verdict: Some(MoveVerdict::Quiet),
+            ..idle.clone()
+        };
+        assert!(asks_nothing(&idle_quiet), "quiet and idle wording agree");
+        let quiet = SavedMove {
+            text: "Say go and I'll push.".into(),
+            unlabelled: Some(true),
+            verdict: Some(MoveVerdict::Quiet),
+            ..SavedMove::default()
+        };
+        assert!(!asks_nothing(&quiet), "quiet alone never hides for good");
+        let deciding = SavedMove {
+            decisions: Some(1.0),
+            ..idle_quiet.clone()
+        };
+        assert!(!asks_nothing(&deciding), "decisions always ask");
+    }
+
+    #[test]
+    fn a_quiet_verdict_holds_the_turn_only_while_agents_run() {
+        let a = claude("c", &[]);
+        let w = ws(std::slice::from_ref(&a), 950.0);
+        let agents = verdict_saved("c");
+        let none = SavedState::default();
+        let quiet = SavedMove {
+            text: "Say go and I'll push.".into(),
+            unlabelled: Some(true),
+            verdict: Some(MoveVerdict::Quiet),
+            ..SavedMove::default()
+        };
+        assert!(asks_nothing_yet(&agents, &quiet, &a, Some(&w)));
+        assert!(!asks_nothing_yet(&none, &quiet, &a, Some(&w)));
+        let deciding = SavedMove {
+            decisions: Some(1.0),
+            ..quiet.clone()
+        };
+        assert!(!asks_nothing_yet(&agents, &deciding, &a, Some(&w)));
+        let no_ask = SavedMove {
+            text: "Still waiting on CI.".into(),
+            unlabelled: Some(true),
+            no_ask: Some(true),
+            ..SavedMove::default()
+        };
+        assert!(asks_nothing_yet(&agents, &no_ask, &a, Some(&w)));
+        let waits = SavedMove {
+            verdict: Some(MoveVerdict::Waits),
+            ..no_ask.clone()
+        };
+        assert!(!asks_nothing_yet(&agents, &waits, &a, Some(&w)));
+        let idle_quiet = SavedMove {
+            idle: Some(true),
+            ..quiet.clone()
+        };
+        assert!(asks_nothing_yet(&none, &idle_quiet, &a, Some(&w)));
     }
 
     fn claude(id: &str, earlier: &[&str]) -> Agent {

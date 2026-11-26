@@ -631,6 +631,36 @@ pub struct SavedMove {
     /// waits on Jon only once the chat's helpers stop (needs.rs).
     #[serde(default, rename = "noAsk")]
     pub no_ask: Option<bool>,
+    /// A small model's reading of the whole reply, written after the move
+    /// (scripts/hooks/move-verdict.ts): "waits" overrides the wording
+    /// flags, "quiet" holds the turn like `no_ask` (moves.rs).
+    #[serde(default)]
+    pub verdict: Option<MoveVerdict>,
+}
+
+/// What the model said of a reply: it waits on Jon, or it does not.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MoveVerdict {
+    Waits,
+    Quiet,
+}
+
+impl MoveVerdict {
+    fn of(s: &str) -> Option<Self> {
+        match s {
+            "waits" => Some(Self::Waits),
+            "quiet" => Some(Self::Quiet),
+            _ => None,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Waits => "waits",
+            Self::Quiet => "quiet",
+        }
+    }
 }
 
 impl Stamped for SavedMove {
@@ -936,6 +966,11 @@ fn saved_move(fields: &Map<String, Value>, text: &str) -> Option<SavedMove> {
     let idle = flag(fields.get("idle"))?;
     let unlabelled = flag(fields.get("unlabelled"))?;
     let no_ask = flag(fields.get("noAsk"))?;
+    let verdict = match fields.get("verdict") {
+        None => None,
+        Some(Value::String(s)) => Some(MoveVerdict::of(s)?),
+        Some(_) => return None,
+    };
     Some(SavedMove {
         text: text.to_string(),
         epoch,
@@ -945,6 +980,7 @@ fn saved_move(fields: &Map<String, Value>, text: &str) -> Option<SavedMove> {
         idle,
         unlabelled,
         no_ask,
+        verdict,
     })
 }
 
@@ -1004,6 +1040,9 @@ pub fn move_description(m: &SavedMove) -> String {
     }
     if let Some(n) = m.no_ask {
         rest.insert("noAsk".into(), Value::from(n));
+    }
+    if let Some(v) = m.verdict {
+        rest.insert("verdict".into(), Value::from(v.as_str()));
     }
     format!("{} ⟦move {}⟧", m.text, Value::Object(rest))
 }
@@ -1405,6 +1444,33 @@ mod tests {
                 .and_then(|s| s.moves.get("w1").and_then(|m| m.no_ask)),
             Some(true)
         );
+    }
+
+    #[test]
+    fn round_trips_a_models_verdict() {
+        for (word, verdict) in [("waits", MoveVerdict::Waits), ("quiet", MoveVerdict::Quiet)] {
+            let d = format!(r#"go ⟦move {{"epoch":1,"unlabelled":true,"verdict":"{word}"}}⟧"#);
+            let m = move_of_description(Some(&d));
+            assert_eq!(m.as_ref().and_then(|m| m.verdict), Some(verdict));
+            assert_eq!(m.map(|m| move_description(&m)), Some(d));
+            let saved = SavedState::from_json(&format!(
+                r#"{{"moves": {{"w1": {{"text": "go", "epoch": 1, "verdict": "{word}"}}}}}}"#
+            ));
+            assert_eq!(
+                saved
+                    .ok()
+                    .and_then(|s| s.moves.get("w1").and_then(|m| m.verdict)),
+                Some(verdict)
+            );
+        }
+        for bad in [r#""maybe""#, "true", "1"] {
+            let d = format!(r#"go ⟦move {{"epoch":1,"verdict":{bad}}}⟧"#);
+            assert_eq!(move_of_description(Some(&d)), None, "{bad}");
+        }
+        let saved = SavedState::from_json(
+            r#"{"moves": {"w1": {"text": "go", "epoch": 1, "verdict": "maybe"}}}"#,
+        );
+        assert!(saved.is_ok_and(|s| s.moves.is_empty()));
     }
 
     #[test]
