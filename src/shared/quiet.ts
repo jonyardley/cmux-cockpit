@@ -7,6 +7,7 @@
 
 import type { SavedQuiet } from "../../scripts/state-config.ts";
 import { SAVED_STATE } from "./persist.ts";
+import { liveRunCount } from "./subagents.ts";
 import { ageSince } from "./time.ts";
 import { QUIET_WORD } from "./words.ts";
 
@@ -18,14 +19,15 @@ function savedVerdict(w: Workspace): SavedQuiet | undefined {
 
 /**
  * When `a` last showed activity, if the core's verdict for `w` says it is
- * quiet: the verdict is about `a`, `a` is still working, and it has shown
- * no activity since. Else 0, so a verdict the rebuild has not yet caught
- * up with never shows.
+ * quiet: the verdict is about `a`, `a` is still working, it has shown no
+ * activity since, and no helper of its own that the panel can see runs.
+ * Else 0, so a verdict the rebuild has not yet caught up with, or one a
+ * closed Cockpit left behind, never shows.
  */
 function quietSince(a: Agent | null | undefined, w: Workspace | undefined): number {
   if (!a || !w || a.status !== "working") return 0;
   const saved = savedVerdict(w);
-  if (!saved || saved.agent !== a.id) return 0;
+  if (!saved || saved.agent !== a.id || liveRunCount(w, a) > 0) return 0;
   return (a.lastActivityAt ?? 0) > saved.since ? 0 : saved.since;
 }
 

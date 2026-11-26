@@ -58,11 +58,18 @@ describe("a quiet agent", () => {
     assert.equal(head(scene("idle", "needs_input", { sinceEpoch: NOW - 60 })).includes("quiet"), false);
   });
 
-  it("follows the verdict, not the helpers the panel can see (#425)", () => {
-    // The core counts the chat's runs from before a /clear too, which the
-    // panel cannot see; its verdict stands whatever the rows show.
+  it("drops a verdict while a helper of its own the panel can see runs (#425)", () => {
+    // The core's removal can lag a paced rebuild, or never come with the
+    // Cockpit quit, so a running helper the panel can see ends quiet at once.
     const w = scene("helpers", "working", {
       children: [{ id: "h1", label: "explore", running: true, startedEpoch: NOW - 60 }],
+    });
+    assert.equal(head(w), "Working 42m");
+  });
+
+  it("keeps a verdict once the helper the panel can see has finished", () => {
+    const w = scene("helpers", "working", {
+      children: [{ id: "h1", label: "explore", running: false, startedEpoch: NOW - 60 }],
     });
     assert.equal(head(w), "Working 42m · quiet 17m");
   });

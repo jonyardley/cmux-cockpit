@@ -20,6 +20,15 @@ use crate::session::Session;
 /// The `quiet` map's sends.
 pub type QuietSaves = Saves<SavedQuiet>;
 
+/// `since` rounded up to a whole millisecond. serde_json without its
+/// float_roundtrip feature can read a long fraction back one bit off, and
+/// `Saves` compares exactly, so an unrounded verdict went out again every
+/// RESEND_SECS; a millisecond value reads back exactly. Up, never down,
+/// so the panel's "activity since" test never drops a verdict over it.
+fn whole_ms(since: f64) -> f64 {
+    (since * 1000.0).ceil() / 1000.0
+}
+
 /// Each workspace's quiet verdict in `data`: its card's agent and when
 /// that agent last showed activity, for every card whose agent reads
 /// quiet. None before the state file is read, since the chat's own runs
@@ -35,7 +44,7 @@ pub fn quiet(session: &mut Session, data: &Data) -> Option<BTreeMap<String, Save
         let Some(a) = session.card_running(data, Some(w)).agent else {
             continue;
         };
-        let since = session.quiet_since(data, Some(&a), Some(w));
+        let since = whole_ms(session.quiet_since(data, Some(&a), Some(w)));
         let v = SavedQuiet { agent: a.id, since };
         if since > 0.0 && v.fits() {
             out.insert(w.id.clone(), v);
@@ -125,6 +134,30 @@ mod tests {
             [serde_json::json!({"W": null})],
             "activity ends quiet"
         );
+    }
+
+    #[test]
+    fn a_fractional_since_read_back_from_the_file_is_not_resent() {
+        // 1794459510.1555533, which serde_json reads back one bit low.
+        let last = f64::from_bits(4_745_313_316_695_045_270);
+        let back: f64 = serde_json::from_str(&serde_json::to_string(&last).unwrap()).unwrap();
+        assert_ne!(back, last, "the value no longer shows the lossy read");
+        let mut m = core("{}", true);
+        let due = last + QUIET_SECS;
+        let sent = saved(&mut m, frame(due, working(last)));
+        let [map] = sent.as_slice() else {
+            panic!("one save, got {sent:?}");
+        };
+        let since = map["W"]["since"].as_f64().unwrap();
+        assert!(since >= last && since - last < 0.001, "{since}");
+        let shown = serde_json::json!({ "quiet": map }).to_string();
+        assert!(saved(&mut m, Event::State(Box::new(read(&shown)))).is_empty());
+        for later in [due + 60.0, due + 600.0, due + 7200.0] {
+            assert!(
+                saved(&mut m, frame(later, working(last))).is_empty(),
+                "{later}"
+            );
+        }
     }
 
     #[test]

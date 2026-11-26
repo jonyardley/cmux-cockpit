@@ -34,7 +34,7 @@
 // coalescing every write in that time into one redraw. How long depends on
 // who asked (Pace): subagent runs, which start and end every few seconds
 // while agents are busy and decide nothing on a card for minutes (only
-// the ten-minute quiet check reads them), first wait LATER_MS outside the
+// the helper rows and the core's quiet verdict read them), first wait LATER_MS outside the
 // lock (scheduleLateBuild) and then SLOW_GAP_MS; every other
 // hook and the PR poll wait REDRAW_GAP_MS, since what they save decides
 // what a card says now; a tap is Jon waiting on screen and waits
@@ -527,8 +527,8 @@ function spawnDetached(tag: string, args: string[], undo: () => void): void {
   }
 }
 
-// Subagent runs decide nothing on a card for minutes (only the ten-minute
-// quiet check and the helper rows read them), so they never redraw at their
+// Subagent runs decide nothing on a card for minutes (only the helper rows
+// and the core's quiet verdict read them), so they never redraw at their
 // own pace: each write rides along with the next build anyone asks for, and
 // the first write with none arranged sets up one build LATER_MS on, so no
 // run waits longer than that to show. The wait happens before the lock is

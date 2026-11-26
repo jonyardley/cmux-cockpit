@@ -41,7 +41,7 @@ lands in the one redraw. The gap depends on who wrote (`Pace` in
 - A subagent run asks for no build of its own (`scheduleLateBuild`).
   Runs start and end every few seconds while agents are busy and drove a
   large share of the 57 to 113 redraws an hour on 2026-10-02, yet only
-  the ten-minute quiet check and the helper rows read them. So a run's
+  the helper rows and the native core's quiet verdict read them. So a run's
   write rides along with the next build anyone asks for, and the first
   write with none arranged sets up one late build five minutes on
   (`LATER_MS`, flagged by `config/build-later`, taken like a lock so
