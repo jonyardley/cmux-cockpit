@@ -146,7 +146,7 @@ mod tests {
     }
 
     #[test]
-    fn leaves_out_the_r1_0_expected_differences_nothing_for_you_and_dismissed() {
+    fn leaves_out_a_dismissed_wait_and_keeps_a_needs_input_after_nothing_for_you() {
         let saved = SavedState::from_json(
             r#"{
                 "moves": {"quiet": {"text": "CI is running.", "epoch": 1000, "session": "s-quiet", "idle": true}},
@@ -179,7 +179,7 @@ mod tests {
             .collect();
         assert!(raw.iter().all(|st| *st == Some(AgentStatus::NeedsInput)));
         let mut s = Session::new(Vec::new(), saved);
-        assert_eq!(ids(&s.needs_list(&data)), ["real"]);
+        assert_eq!(ids(&s.needs_list(&data)), ["real", "quiet"]);
     }
 
     #[test]

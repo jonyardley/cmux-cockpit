@@ -31,7 +31,7 @@
 use std::collections::HashMap;
 
 use cockpit_core::data::{Agent, AgentStatus, Data, Workspace};
-use cockpit_core::hooks::{Hooked, moves_activity, status_from_hook};
+use cockpit_core::hooks::{Hooked, status_from_decision, status_from_hook};
 use cockpit_core::program::{Record, Report, lists_helpers, resolve, status_of_records};
 use cockpit_core::stopped::{Stop, StopCause, gone_mid_turn, silent_since};
 use serde_json::Value;
@@ -350,6 +350,46 @@ impl Join {
         (true, Some(change))
     }
 
+    /// cmux's verdict on a Notification (`status_from_decision`), naming
+    /// the tab but no pid: a real ask puts the tab's newest live session in
+    /// needs input. The Notification hook itself sets nothing, so either
+    /// may come first and the idle reminder never shows. Whether it
+    /// changed anything, and the status change.
+    fn verdict(&mut self, e: &Value, seq: u64) -> (bool, Option<Change>) {
+        let p = &e["payload"];
+        let kind = p["kind"].as_str().unwrap_or_default();
+        let Some(status) = status_from_decision(kind).filter(|_| p["agent"] == "claude") else {
+            return (false, None);
+        };
+        let Some(surface) = e["surface_id"].as_str() else {
+            return (false, None);
+        };
+        let newest = self
+            .surface_of
+            .iter()
+            .filter(|(_, (s, _))| s == surface)
+            .filter_map(|(pid, _)| self.sessions.get(pid).map(|h| (*pid, h)))
+            .filter(|(_, h)| h.status != AgentStatus::Ended)
+            .max_by(|a, b| a.1.last_hook.total_cmp(&b.1.last_hook));
+        let Some((pid, prev)) = newest else {
+            return (false, None);
+        };
+        let at = e["occurred_at"]
+            .as_str()
+            .and_then(iso_epoch)
+            .unwrap_or(prev.last_hook);
+        let next = Hooked::after(Some(prev), status, at, false, &prev.workspace);
+        let moved = prev.status != next.status;
+        let changed = *prev != next;
+        self.sessions.insert(pid, next);
+        let change = moved.then(|| Change {
+            seq,
+            hook: kind.to_string(),
+            at: Some(at),
+        });
+        (changed, change)
+    }
+
     /// A new session (`pid`'s SessionStart) in the tab `surface`: a
     /// stopped card another process left there gives way to it. Any other
     /// hook claims nothing, so a second process that shares the tab (a
@@ -386,6 +426,10 @@ impl Join {
             return self.program_status(e, seq);
         }
         if name == "agent.notification.decision" {
+            let (verdict, change) = self.verdict(e, seq);
+            if verdict {
+                return (true, change);
+            }
             return self.error_reported(e, seq);
         }
         if name == "workspace.selected" {
@@ -580,7 +624,7 @@ impl Join {
         let prev = self.sessions.get(&pid);
         let moved = prev.is_none_or(|s| s.status != status || s.workspace != ws);
         let at = at.or(prev.map(|s| s.last_activity)).unwrap_or_default();
-        let next = Hooked::after(prev, status, at, moves_activity(hook), ws).turn_hook(hook, at);
+        let next = Hooked::after(prev, status, at, true, ws).turn_hook(hook, at);
         let changed = prev != Some(&next) || surface_moved;
         self.sessions.insert(pid, next);
         (changed, moved)
@@ -1821,6 +1865,94 @@ mod tests {
         elsewhere["surface_id"] = json!("OTHER");
         assert_eq!(j.event(&elsewhere), (false, None));
         assert_eq!(agent_at(&j, ERROR_AT + 1.0).and_then(|a| a.stopped), None);
+    }
+
+    /// cmux's verdict of `kind` on a Notification in the error fixture's
+    /// tab at epoch `at`.
+    fn verdict(seq: u64, kind: &str, at: f64) -> Value {
+        let mut e = fixture("error");
+        e["seq"] = json!(seq);
+        e["payload"]["kind"] = json!(kind);
+        e["occurred_at"] = json!(iso(at));
+        e
+    }
+
+    /// A join with pid 7 idle in the error fixture's tab since `at`.
+    fn idle_from(at: f64) -> Join {
+        let mut j = working_from(at - 2.0);
+        j.agents(view(&[(7, false, "s7")]));
+        j.event(&tab_hook(3, "Stop", at));
+        j
+    }
+
+    #[test]
+    fn the_idle_reminder_leaves_an_idle_session_idle_whichever_comes_first() {
+        let t = ERROR_AT;
+        let mut hook_first = idle_from(t);
+        hook_first.event(&tab_hook(4, "Notification", t + 60.0));
+        assert_eq!(status_at(&hook_first, t + 60.0), Some(AgentStatus::Idle));
+        hook_first.event(&verdict(5, "agent.idle.observed", t + 60.005));
+        assert_eq!(status_at(&hook_first, t + 61.0), Some(AgentStatus::Idle));
+        let mut verdict_first = idle_from(t);
+        verdict_first.event(&verdict(4, "agent.idle.observed", t + 60.0));
+        verdict_first.event(&tab_hook(5, "Notification", t + 60.005));
+        assert_eq!(status_at(&verdict_first, t + 61.0), Some(AgentStatus::Idle));
+        let since = agent_at(&verdict_first, t + 61.0).and_then(|a| a.since_epoch);
+        assert_eq!(since, Some(t), "idle since the Stop");
+    }
+
+    #[test]
+    fn a_real_ask_cmux_raises_from_a_notification_needs_input_whichever_comes_first() {
+        let t = ERROR_AT;
+        let mut hook_first = idle_from(t);
+        hook_first.event(&tab_hook(4, "Notification", t + 1.0));
+        let (changed, change) =
+            hook_first.event(&verdict(5, "agent.approval.requested", t + 1.005));
+        assert!(changed);
+        assert_eq!(
+            change.map(|c| c.hook).as_deref(),
+            Some("agent.approval.requested")
+        );
+        assert_eq!(
+            status_at(&hook_first, t + 2.0),
+            Some(AgentStatus::NeedsInput)
+        );
+        let mut verdict_first = idle_from(t);
+        verdict_first.event(&verdict(4, "agent.approval.requested", t + 1.0));
+        verdict_first.event(&tab_hook(5, "Notification", t + 1.005));
+        assert_eq!(
+            status_at(&verdict_first, t + 2.0),
+            Some(AgentStatus::NeedsInput)
+        );
+        verdict_first.event(&tab_hook(6, "UserPromptSubmit", t + 30.0));
+        assert_eq!(
+            status_at(&verdict_first, t + 31.0),
+            Some(AgentStatus::Working)
+        );
+    }
+
+    #[test]
+    fn a_permission_request_needs_input_at_once_and_its_verdict_changes_nothing() {
+        let mut j = working_from(ERROR_AT);
+        j.event(&tab_hook(3, "PermissionRequest", ERROR_AT + 5.0));
+        assert_eq!(status_at(&j, ERROR_AT + 5.0), Some(AgentStatus::NeedsInput));
+        let since = agent_at(&j, ERROR_AT + 5.0).and_then(|a| a.since_epoch);
+        j.event(&verdict(4, "agent.approval.requested", ERROR_AT + 5.002));
+        let after = agent_at(&j, ERROR_AT + 6.0);
+        assert_eq!(
+            after.as_ref().and_then(|a| a.status.clone()),
+            Some(AgentStatus::NeedsInput)
+        );
+        assert_eq!(after.and_then(|a| a.since_epoch), since);
+    }
+
+    #[test]
+    fn a_verdict_in_no_sessions_tab_changes_nothing() {
+        let mut j = idle_from(ERROR_AT);
+        let mut elsewhere = verdict(4, "agent.approval.requested", ERROR_AT + 1.0);
+        elsewhere["surface_id"] = json!("OTHER");
+        assert_eq!(j.event(&elsewhere), (false, None));
+        assert_eq!(status_at(&j, ERROR_AT + 2.0), Some(AgentStatus::Idle));
     }
 
     /// The stop on workspace A's session `id` at epoch `now`.

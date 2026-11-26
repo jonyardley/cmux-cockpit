@@ -1,18 +1,13 @@
-//! "Needs you", corrected as in the agents panel (src/shared/needs.ts),
-//! with one rule more. An agent's needs_input reads as idle when Jon has
-//! dismissed it, and here also when it is Claude Code's idle nudge (issue
-//! #4) or follows a turn that ended on "Nothing for you". cmux 0.65.2 no
-//! longer raises needs_input for that reminder, so the agents panel
-//! dropped the rule (issue #422), but the Cockpit's own hook rule
-//! (hooks.rs) still does, since the hook event hides which Notification
-//! it was. Asking or your turn (issue #81) comes from the saved asks.
+//! "Needs you", corrected as in the agents panel (src/shared/needs.ts).
+//! An agent's needs_input always waits on Jon unless he has dismissed it:
+//! Claude Code's idle reminder never sets it, in cmux 0.65.2 or in the
+//! Cockpit's own hook rule, which takes cmux's verdict (hooks.rs, #438).
+//! Asking or your turn (issue #81) comes from the saved asks.
 //!
-//! The Cockpit also reads a turn end as Jon's turn from its closing line,
-//! not from the nudge: an idle or nudged agent whose turn ended on a move
-//! that asks something of him (`waiting_turn`) reads as needs_input from
-//! the moment the turn ended. The runner never moves the last activity on
-//! a Notification, so the nudge alone always reads as idle there, and
-//! Claude Code may send none while background work runs. Every rule that
+//! The Cockpit also reads a turn end as Jon's turn from its closing line:
+//! an idle agent whose turn ended on a move that asks something of him
+//! (`waiting_turn`) reads as needs_input from the moment the turn ended,
+//! as Claude Code may send nothing while background work runs. Every rule that
 //! asks whether a card waits on Jon reads the agent this gives, so Needs
 //! you, the status, the waiting look and the size chip cannot disagree.
 
@@ -23,39 +18,15 @@ use crate::activity::since_or_activity;
 use crate::ci_wait::{CI_KEY, ci_carrier};
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::js::{json_num, truthy};
-use crate::moves::{asks_nothing, quiet_turn, waiting_move};
+use crate::moves::{asks_nothing, waiting_move};
 use crate::ostinato::wait::OSTINATO_KEY;
 use crate::persist::{SavedAsk, SavedMove, SavedState};
 use crate::saved::saved_for;
 use crate::session::Session;
 use crate::stopped::{Stop, StopCause};
 
-/// Seconds between an agent's last activity and a needs_input that is only a
-/// nudge, as the Cockpit's own hook rule raises it (hooks.rs).
-pub const NUDGE_GAP: f64 = 45.0;
-
 fn needs_input(a: &Agent) -> bool {
     a.status == Some(AgentStatus::NeedsInput)
-}
-
-/// Whether `a`'s needs_input is Claude Code's idle nudge: it began well
-/// after the agent's last activity (or the workspace's latest prompt), with
-/// no fresh saved ask to say it is real.
-pub fn is_idle_nudge(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> bool {
-    if !needs_input(a) || a.kind.as_deref() != Some("claude") {
-        return false;
-    }
-    let Some(since) = truthy(a.since_epoch) else {
-        return false;
-    };
-    if fresh_ask(saved, a, w).is_some() {
-        return false;
-    }
-    let before = a
-        .last_activity_at
-        .unwrap_or(0.0)
-        .max(w.and_then(|w| w.latest_at).unwrap_or(0.0));
-    before > 0.0 && since - before >= NUDGE_GAP
 }
 
 /// Whether a saved entry can be `a`'s: when one of the workspace's agents
@@ -65,16 +36,6 @@ fn is_own_saved(saved: &SavedAsk, a: &Agent, w: &Workspace) -> bool {
     let session = saved.session.as_deref();
     let owned = session.is_some_and(|s| w.agent_list().any(|x| x.id == s));
     !owned || session == Some(a.id.as_str())
-}
-
-/// The move behind `a`'s nudge when that turn ended on "Nothing for you",
-/// unless a fresh saved ask says it is really asking.
-fn quiet_of(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Option<SavedMove> {
-    if needs_input(a) && fresh_ask(saved, a, w).is_none() {
-        quiet_turn(saved, a, w)
-    } else {
-        None
-    }
 }
 
 /// The saved ask that explains `a`'s current needs_input spell, if any.
@@ -102,8 +63,8 @@ pub fn waiting_turn(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Opt
 }
 
 /// When `a`'s wait on Jon began, which a dismissal is keyed on: the end
-/// of `turn`, the turn that waits on him, so the nudge landing a minute
-/// on keeps the dismissal, else the start of its needs_input spell.
+/// of `turn`, the turn that waits on him, so a later restamp of the agent
+/// keeps the dismissal, else the start of its needs_input spell.
 fn start_of(turn: Option<&SavedMove>, a: &Agent) -> f64 {
     turn.map_or_else(|| since_or_activity(a), |m| m.epoch)
 }
@@ -115,7 +76,7 @@ fn wait_start(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> f64 {
 
 /// Why the agent is asking ("allow git push?"), or None when its
 /// needs_input is only its turn. Pass the agent as the sidebars show it, so
-/// a nudge or a dismissal is never an ask.
+/// a dismissal is never an ask.
 pub fn ask_reason(saved: &SavedState, a: Option<&Agent>, w: Option<&Workspace>) -> Option<String> {
     let a = a?;
     // A stopped session asks nothing, whatever an old saved ask says, and
@@ -126,15 +87,10 @@ pub fn ask_reason(saved: &SavedState, a: Option<&Agent>, w: Option<&Workspace>) 
     fresh_ask(saved, a, w).map(|s| s.reason.clone())
 }
 
-/// A needs_input that is not Jon's: the idle nudge, or a quiet turn's nudge.
-fn not_jons(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> bool {
-    is_idle_nudge(saved, a, w) || quiet_of(saved, a, w).is_some()
-}
-
 /// Whether `a` waits on Jon, dismissals aside: a turn that ended on a move
-/// asking something of him, or a needs_input that is not a nudge.
+/// asking something of him, or any needs_input.
 fn waits_on_jon(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> bool {
-    waiting_turn(saved, a, w).is_some() || (needs_input(a) && !not_jons(saved, a, w))
+    waiting_turn(saved, a, w).is_some() || needs_input(a)
 }
 
 impl Session {
@@ -284,9 +240,8 @@ impl Session {
     }
 
     /// The agent as the sidebars show it: a turn that ended on a move
-    /// asking something of Jon reads as needs_input from its end, idle or
-    /// nudged; any other needs_input reads as idle when it is a nudge,
-    /// dismissed, or a turn that ended on "Nothing for you".
+    /// asking something of Jon reads as needs_input from its end; any
+    /// other needs_input reads as idle only when dismissed.
     /// A finished one carries its workspace's CI wait, when that shows
     /// (ci_wait.rs), and the one the card speaks through its Ostinato
     /// parks (ostinato/wait.rs).
@@ -330,30 +285,16 @@ impl Session {
                 ..a.clone()
             };
         }
-        if !needs_input(a) {
-            return a.clone();
-        }
-        let idle = |since: Option<f64>| Agent {
-            status: Some(AgentStatus::Idle),
-            since_epoch: since,
-            ..a.clone()
-        };
-        let nudge = is_idle_nudge(&self.saved, a, w);
-        // A nudge's idle spell began when the turn ended, not when it landed.
-        if nudge && let Some(last) = truthy(a.last_activity_at) {
-            return idle(Some(last));
-        }
-        // A turn that ended on "Nothing for you" waits on the agent.
-        if let Some(quiet) = quiet_of(&self.saved, a, w) {
-            return idle(Some(quiet.epoch));
-        }
-        if nudge || self.is_dismissed_with(w, a, turn.as_ref()) {
-            return idle(a.since_epoch);
+        if needs_input(a) && self.is_dismissed_with(w, a, turn.as_ref()) {
+            return Agent {
+                status: Some(AgentStatus::Idle),
+                ..a.clone()
+            };
         }
         a.clone()
     }
 
-    /// A workspace's agents with nudges and dismissals applied, in the
+    /// A workspace's agents with dismissals applied, in the
     /// app's order. An agent sent with no status is left out (issue #7),
     /// and so is a dismissed session whose process went mid-turn.
     /// A workspace with none left whose CI or Ostinato parks wait on Jon

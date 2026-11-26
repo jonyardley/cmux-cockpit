@@ -3,9 +3,7 @@
 //! card-chips.ts's, so those asserts are left for its lane.
 
 use cockpit_core::data::{Agent, Data, Workspace};
-use cockpit_core::moves::{
-    MoveSize, NUDGE_WINDOW, asks_nothing, move_size, move_size_text, waiting_move,
-};
+use cockpit_core::moves::{MoveSize, asks_nothing, move_size, move_size_text, waiting_move};
 use cockpit_core::persist::{SavedMove, move_description};
 use cockpit_core::session::Session;
 
@@ -34,7 +32,7 @@ fn setup() -> (Session, Data, Fx) {
     (session(STATE), frame(1060.0, vec![], vec![]), Fx::default())
 }
 
-/// The nudge about 60s after Stop, from the Claude session that saved `id`'s move.
+/// An ask after Stop with no prompt between, from the Claude session that saved `id`'s move.
 fn waiting(fx: &mut Fx, id: &str, since: f64) -> Agent {
     fx.agent(NeedsInput)
         .id(&format!("s-{id}"))
@@ -363,37 +361,18 @@ mod a_turn_that_ended_on_nothing_for_you {
         assert!(!asks_nothing(&line("say go.")));
     }
 
-    /// Partly ported: the chips list is card-chips.ts's; the size chip itself is checked.
     #[test]
-    fn reads_as_idle_once_the_nudge_lands_since_the_turn_ended_and_leaves_needs_you() {
+    fn still_needs_jon_when_a_needs_input_follows_as_the_idle_reminder_never_raises_one() {
         let (mut s, _, mut fx) = setup();
         let w = at("quiet", vec![waiting(&mut fx, "quiet", 1060.0)]);
-        let data = frame(1060.0, vec![], vec![w.clone()]);
         let a = s.agent_of(Some(&w));
-        assert_eq!(a.as_ref().and_then(|a| a.status.clone()), Some(Idle));
+        assert_eq!(a.as_ref().and_then(|a| a.status.clone()), Some(NeedsInput));
+        assert_eq!(a.and_then(|a| a.since_epoch), Some(1060.0));
+        let legacy = at("legacy", vec![waiting(&mut fx, "legacy", 1060.0)]);
         assert_eq!(
-            a.and_then(|a| a.since_epoch),
-            Some(1000.0),
-            "idle since the turn ended, not since the nudge"
+            s.agent_of(Some(&legacy)).and_then(|a| a.status),
+            Some(NeedsInput)
         );
-        assert!(!s.has_real_ask(Some(&w)));
-        assert!(s.needs_list(&data).is_empty());
-        assert_eq!(
-            s.card_detail(Some(&w)),
-            "CI is running on #2171. I report when it lands."
-        );
-        assert_eq!(
-            s.move_of(Some(&w)).as_ref().and_then(move_size),
-            None,
-            "no size chip"
-        );
-    }
-
-    #[test]
-    fn reads_the_older_your_move_nothing_line_the_same_way() {
-        let (mut s, _, mut fx) = setup();
-        let w = at("legacy", vec![waiting(&mut fx, "legacy", 1060.0)]);
-        assert_eq!(s.agent_of(Some(&w)).and_then(|a| a.status), Some(Idle));
     }
 
     #[test]
@@ -417,10 +396,7 @@ mod a_turn_that_ended_on_nothing_for_you {
     #[test]
     fn still_needs_jon_on_a_later_stop_with_no_prompt_between_or_with_decisions_laid_out() {
         let (mut s, _, mut fx) = setup();
-        let woke = at(
-            "quiet",
-            vec![waiting(&mut fx, "quiet", 1000.0 + NUDGE_WINDOW + 1.0)],
-        );
+        let woke = at("quiet", vec![waiting(&mut fx, "quiet", 1500.0)]);
         assert_eq!(
             s.agent_of(Some(&woke)).and_then(|a| a.status),
             Some(NeedsInput)
@@ -435,7 +411,7 @@ mod a_turn_that_ended_on_nothing_for_you {
     #[test]
     fn is_no_ask_ready_once_there_is_output_and_no_shell_runs_and_nothing_to_dismiss() {
         let (mut s, data, mut fx) = setup();
-        let w = at("quiet", vec![waiting(&mut fx, "quiet", 1060.0)]).unread(1.0);
+        let w = at("quiet", vec![stopped(&mut fx, "quiet", 1000.0)]).unread(1.0);
         assert!(!s.has_real_ask(Some(&w)));
         assert!(!s.is_needs_dismissed(Some(&w)));
         assert!(s.is_ready(&data, Some(&w)));

@@ -922,11 +922,7 @@ take `HOOK_SLACK` (3 seconds, since this hook and cmux's own fire on the
 same event). When one of the workspace's agents carries the asking
 session as its id (unconfirmed whether cmux agent ids are session ids, as
 for saved subagent runs), only that agent is asking; otherwise the ask
-belongs to the workspace. In the Cockpit a fresh ask also overrides the
-idle-nudge rule (issue #4), so an ask after a long quiet build is not read as idle.
-The agents panel has no such rule, so an ask that lands 45 seconds or
-more after the agent's last activity, with no saved ask, shows there but
-reads as idle in the Cockpit until issue #438. The cockpit then shows the card and its Needs you row amber,
+belongs to the workspace. The cockpit then shows the card and its Needs you row amber,
 "Asking", with the reason under the title; the agents panel heads the
 workspace "Asking" in amber and puts the reason over Dismiss. Any other
 needs_input is "Your turn" in clay, and red stays for failing checks. No
@@ -1057,11 +1053,11 @@ v0.65.2 where given; the rest were seen on 0.64.25 and are marked so.
 - PreCompact and PostCompact keep the previous state (lines 105 to 108);
   on 0.64.25 they set working.
 - PostToolUseFailure sets working, like PostToolUse. The Cockpit's own
-  rules (`native/core/src/hooks.rs`) match all of this except the idle
-  reminder, which still sets needs input there: the hook event cmux
-  passes on redacts the Notification's fields, so the runner cannot tell
-  the reminder from an ask, and `is_idle_nudge` in
-  `native/core/src/needs.rs` reads it back as idle by its gap.
+  rules (`native/core/src/hooks.rs`) match all of this. The hook event
+  redacts which Notification it was, so a Notification sets nothing by
+  itself; the runner takes cmux's `agent.notification.decision` for the
+  same tab instead, and only `agent.approval.requested` sets needs input
+  (issue #438).
 - `latestMessage`, `latestPrompt` and `latestAt` belong to the workspace
   (`latestConversationMessage`, `latestSubmittedMessage` and
   `latestSubmittedAt` in `Workspace.swift:3205-3207`). UserPromptSubmit
@@ -1081,8 +1077,8 @@ a turn he interrupts and an ask in the middle of a turn all follow a
 prompt, so each retires the move; in iMessage mode Stop moves `latestAt`
 at about the moment the hook saves, which the slack covers. The hook
 stamps the move when it starts, before it may wait for the reply to be
-flushed, so a prompt sent during that wait is still newer. The nudge
-leaves `latestAt` alone, so the move survives it. By default
+flushed, so a prompt sent during that wait is still newer. The idle
+reminder leaves `latestAt` alone, so the move survives it. By default
 `latestMessage` is Jon's own prompt, which `cardMessage` hides as an echo,
 so the move is often the only reply text a card has. The Needs you row
 falls back to the message and then to "Waiting for your reply", the card
@@ -1096,13 +1092,10 @@ for you", a reply with no label included) reads as needs input from the
 turn end, ahead of Running (`waiting_turn` and
 `Session::effective_agent` in `native/core/src/needs.rs` for the Cockpit,
 `waitingTurn` and `effectiveAgent` in `src/shared/needs.ts` for the
-agents panel's This workspace card and its question block). In the
-agents panel a turn end is an idle agent, since cmux 0.65.2 keeps the
-idle reminder out of needs_input. In the Cockpit it is idle or nudged:
-its own hook rule still raises needs input for the reminder (issue
-#438), its runner never moves the last activity on a Notification, so
-the nudge alone always reads as idle there, and Claude Code may send none
-while the chat's background work runs. A dismissal of that wait is keyed
+agents panel's This workspace card and its question block). In both a
+turn end is an idle agent, since neither cmux 0.65.2 nor the Cockpit's
+runner raises needs input for the idle reminder, and Claude Code may
+send none while the chat's background work runs. A dismissal of that wait is keyed
 on the turn end, so a later restamp of the agent keeps it. The size chip shows
 only while the card waits.
 

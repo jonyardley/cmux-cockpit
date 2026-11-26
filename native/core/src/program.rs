@@ -29,12 +29,12 @@
 //!    A turn that does go on comes back as a prompt, which clears the
 //!    Stop, or as Claude changing to working.
 //! 5. Done or idle: idle, unless a hook asked after Claude's last report
-//!    (the idle nudge a minute on, which needs.rs then judges as before),
+//!    (an ask cmux raised from a Notification a minute on, say),
 //!    or a hook said working more than `PROGRAM_GRACE_SECS` after it (a new
 //!    turn Claude has not reported yet).
 //!
 //! A turn that ends on a question in prose still reports done, so whether
-//! it waits on Jon stays with the closing line (moves.rs) and the nudge.
+//! it waits on Jon stays with the closing line (moves.rs).
 
 use crate::data::AgentStatus;
 use crate::hooks::{Hooked, status_without_hooks};
@@ -96,7 +96,7 @@ pub fn lists_helpers(records: &[Record<'_>]) -> bool {
 /// background task. Only a change of status moves `since`, so a
 /// repeated report, or a helper's progress under the same status, leaves
 /// it alone: it is the moment Claude last changed its mind, which is what
-/// the hooks are weighed against and what the nudge's gap is read from.
+/// the hooks are weighed against.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Report {
     pub status: AgentStatus,
@@ -340,12 +340,12 @@ mod tests {
     }
 
     #[test]
-    fn repeated_done_reports_leave_the_nudges_gap_alone() {
+    fn repeated_done_reports_leave_the_last_activity_alone() {
         let stop = stopped(100.0);
-        let nudge = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 160.0, false, "w");
+        let ask = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 160.0, false, "w");
         let done = report(AgentStatus::Idle, 100.0);
         let later = Report::after(Some(&done), AgentStatus::Idle, false, 130.0);
-        let r = resolve(Some(&nudge), Some(&later), None, 170.0);
+        let r = resolve(Some(&ask), Some(&later), None, 170.0);
         assert_eq!(r.map(|r| r.last_activity), Some(100.0));
     }
 
@@ -393,23 +393,23 @@ mod tests {
     }
 
     #[test]
-    fn done_then_the_nudge_a_minute_on_keeps_the_hooks_spell() {
+    fn done_then_an_ask_from_a_notification_a_minute_on_keeps_the_hooks_spell() {
         let stop = stopped(100.0);
-        let nudge = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 160.0, false, "w");
+        let ask = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 160.0, false, "w");
         let done = report(AgentStatus::Idle, 100.4);
         assert_eq!(
-            resolve(Some(&nudge), Some(&done), None, 170.0),
+            resolve(Some(&ask), Some(&done), None, 170.0),
             Some(Resolved {
                 status: AgentStatus::NeedsInput,
                 since: 160.0,
                 last_activity: 100.4
             }),
-            "the nudge's gap to the last activity still shows"
+            "the last activity stays the turn's end"
         );
     }
 
     #[test]
-    fn the_nudge_after_done_still_reads_as_idle_on_the_card_and_blocked_does_not() {
+    fn blocked_after_a_stop_reads_as_needs_input_on_the_card() {
         use crate::data::{Agent, Workspace};
         use crate::session::Session;
         let card = |r: Resolved| {
@@ -429,10 +429,6 @@ mod tests {
             Session::default().status_of(Some(&w))
         };
         let stop = stopped(100.0);
-        let nudge = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 160.0, false, "w");
-        let done = report(AgentStatus::Idle, 100.4);
-        let nudged = resolve(Some(&nudge), Some(&done), None, 170.0);
-        assert_eq!(nudged.map(card), Some(crate::status::Status::Idle));
         let blocked = report(AgentStatus::NeedsInput, 300.0);
         let asked = resolve(Some(&stop), Some(&blocked), None, 400.0);
         assert_eq!(asked.map(card), Some(crate::status::Status::NeedsInput));

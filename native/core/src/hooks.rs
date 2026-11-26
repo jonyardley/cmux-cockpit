@@ -4,17 +4,14 @@
 //!
 //! | Hook | Status |
 //! | --- | --- |
-//! | Notification (the idle nudge too), PermissionRequest, PreToolUse for AskUserQuestion or ExitPlanMode | needs input |
+//! | PermissionRequest, PreToolUse for AskUserQuestion or ExitPlanMode | needs input |
 //! | UserPromptSubmit, other PreToolUse, PostToolUse, PostToolUseFailure | working |
 //! | SessionStart, Stop | idle |
 //! | SessionEnd | ended |
 //!
 //! Any other hook (PreCompact, a subagent finishing) leaves the status as
-//! it was. One known difference: cmux 0.65.2 keeps the previous state for
-//! Claude's idle reminder, where this still sets needs input (issue #422).
-//! The hook event cmux passes on redacts the Notification's own fields
-//! (`notification_type` among them), so the reminder cannot be told from
-//! an ask here; needs.rs reads it back as idle by its gap.
+//! it was, a Notification too: the hook event redacts which Notification
+//! it was, so cmux's verdict on it decides (`status_from_decision`).
 
 use crate::data::AgentStatus;
 
@@ -22,7 +19,7 @@ use crate::data::AgentStatus;
 pub fn status_from_hook(name: &str, tool: Option<&str>) -> Option<AgentStatus> {
     match (name, tool) {
         ("PreToolUse", Some("AskUserQuestion" | "ExitPlanMode")) => Some(AgentStatus::NeedsInput),
-        ("Notification" | "PermissionRequest", _) => Some(AgentStatus::NeedsInput),
+        ("PermissionRequest", _) => Some(AgentStatus::NeedsInput),
         ("UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "PostToolUseFailure", _) => {
             Some(AgentStatus::Working)
         }
@@ -44,11 +41,11 @@ pub fn status_without_hooks(busy: Option<bool>) -> Option<AgentStatus> {
     })
 }
 
-/// Whether a hook counts as the agent doing something. A Notification
-/// does not: the idle nudge comes about 60 seconds after a Stop, and the
-/// core tells it from a real ask by that gap since the last activity.
-pub fn moves_activity(name: &str) -> bool {
-    name != "Notification"
+/// The status cmux's `agent.notification.decision` of `kind` sets: needs
+/// input for a real ask, nothing for Claude's idle reminder
+/// (`agent.idle.observed`), which keeps the state as it was, as cmux does.
+pub fn status_from_decision(kind: &str) -> Option<AgentStatus> {
+    (kind == "agent.approval.requested").then_some(AgentStatus::NeedsInput)
 }
 
 /// How long a working status may sit with no hook while Agent View says
@@ -62,19 +59,19 @@ pub struct Hooked {
     pub status: AgentStatus,
     /// Epoch seconds the status began: the hook that last changed it.
     pub since: f64,
-    /// Epoch seconds of the latest hook that set a status, a
-    /// Notification aside (`moves_activity`).
+    /// Epoch seconds of the latest hook that set a status, an ask cmux
+    /// raised from a Notification aside.
     pub last_activity: f64,
-    /// Epoch seconds of the latest hook that set a status, a
-    /// Notification too: when the hooks last had their say, which
+    /// Epoch seconds of the latest hook or verdict that set a status:
+    /// when the hooks last had their say, which
     /// program.rs weighs against Claude's own report.
     pub last_hook: f64,
     /// The workspace the hook named.
     pub workspace: String,
     /// Whether the session's turn is open: its last hook that moved
     /// activity was a prompt, a tool call or an ask, not a SessionStart,
-    /// Stop or SessionEnd. A Notification leaves it as it was, so the idle
-    /// nudge after a Stop keeps it closed (stopped.rs).
+    /// Stop or SessionEnd. cmux's ask from a Notification leaves it as it
+    /// was (stopped.rs).
     pub turn_open: bool,
     /// Epoch seconds of the session's last Stop with no prompt or new
     /// session since, else None. A background helper's tool calls arrive as
@@ -87,8 +84,8 @@ impl Hooked {
     /// The session after a hook at epoch `at` that sets `status`. A status
     /// that does not change keeps its start, so an agent working through
     /// many tool calls counts from the first one.
-    /// `activity` is false for a hook that is no sign of work
-    /// (`moves_activity`), which keeps the last activity where it was.
+    /// `activity` is false for cmux's verdict on a Notification, no sign of
+    /// work, which keeps the last activity and the turn where they were.
     pub fn after(
         prev: Option<&Hooked>,
         status: AgentStatus,
@@ -152,7 +149,6 @@ mod tests {
     #[test]
     fn asking_hooks_need_input() {
         for (name, tool) in [
-            ("Notification", None),
             ("PermissionRequest", Some("Bash")),
             ("PreToolUse", Some("AskUserQuestion")),
             ("PreToolUse", Some("ExitPlanMode")),
@@ -199,6 +195,11 @@ mod tests {
     fn other_hooks_leave_the_status_alone() {
         assert_eq!(status_from_hook("SubagentStop", None), None);
         assert_eq!(
+            status_from_hook("Notification", None),
+            None,
+            "cmux's verdict on it decides"
+        );
+        assert_eq!(
             status_from_hook("PreCompact", None),
             None,
             "compaction keeps the previous state, as cmux 0.65.2 does"
@@ -223,13 +224,21 @@ mod tests {
     }
 
     #[test]
-    fn a_notification_keeps_the_last_activity_so_the_idle_nudge_shows_its_gap() {
-        assert!(!moves_activity("Notification"));
-        assert!(moves_activity("PermissionRequest"));
+    fn only_cmuxs_ask_verdict_needs_input_and_the_idle_reminder_sets_nothing() {
+        assert_eq!(
+            status_from_decision("agent.approval.requested"),
+            Some(AgentStatus::NeedsInput)
+        );
+        assert_eq!(status_from_decision("agent.idle.observed"), None);
+        assert_eq!(status_from_decision("agent.turn.completed"), None);
+    }
+
+    #[test]
+    fn a_verdict_keeps_the_last_activity() {
         let stopped = Hooked::after(None, AgentStatus::Idle, 100.0, true, "w");
-        let nudge = Hooked::after(Some(&stopped), AgentStatus::NeedsInput, 160.0, false, "w");
-        assert_eq!((nudge.since, nudge.last_activity), (160.0, 100.0));
-        assert_eq!(nudge.last_hook, 160.0, "the hooks still had their say");
+        let asked = Hooked::after(Some(&stopped), AgentStatus::NeedsInput, 160.0, false, "w");
+        assert_eq!((asked.since, asked.last_activity), (160.0, 100.0));
+        assert_eq!(asked.last_hook, 160.0, "the hooks still had their say");
         let first = Hooked::after(None, AgentStatus::NeedsInput, 50.0, false, "w");
         assert_eq!(
             first.last_activity, 50.0,
@@ -245,8 +254,8 @@ mod tests {
         assert!(prompt.turn_open);
         let stop = Hooked::after(Some(&prompt), AgentStatus::Idle, 102.0, true, "w");
         assert!(!stop.turn_open);
-        let nudge = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 160.0, false, "w");
-        assert!(!nudge.turn_open, "the idle nudge opens nothing");
+        let verdict = Hooked::after(Some(&stop), AgentStatus::NeedsInput, 160.0, false, "w");
+        assert!(!verdict.turn_open, "cmux's verdict opens nothing");
         let asked = Hooked::after(Some(&prompt), AgentStatus::NeedsInput, 103.0, true, "w");
         assert!(asked.turn_open, "a permission ask is mid-turn");
     }

@@ -1,14 +1,8 @@
 //! test/needs.test.ts
 
-use cockpit_core::needs::{NUDGE_GAP, is_idle_nudge};
-use cockpit_core::persist::SavedState;
 use cockpit_core::status::Status;
 
 use crate::support::*;
-
-fn saved() -> SavedState {
-    SavedState::default()
-}
 
 /// A Claude turn that ended at `ended`, then flagged needs_input at `flagged`.
 fn claude(fx: &mut Fx, ended: f64, flagged: f64) -> cockpit_core::data::Agent {
@@ -18,106 +12,30 @@ fn claude(fx: &mut Fx, ended: f64, flagged: f64) -> cockpit_core::data::Agent {
         .since(flagged)
 }
 
-mod is_idle_nudge {
-    use super::*;
-
-    #[test]
-    fn reads_a_needs_input_a_minute_after_the_last_activity_as_the_idle_nudge() {
-        let mut fx = Fx::default();
-        assert!(is_idle_nudge(
-            &saved(),
-            &claude(&mut fx, 1000.0, 1060.0),
-            None
-        ));
-        assert!(is_idle_nudge(
-            &saved(),
-            &claude(&mut fx, 1000.0, 1000.0 + NUDGE_GAP),
-            None
-        ));
-    }
-
-    #[test]
-    fn keeps_a_real_ask_that_follows_the_agents_activity() {
-        let mut fx = Fx::default();
-        assert!(!is_idle_nudge(
-            &saved(),
-            &claude(&mut fx, 1000.0, 1002.0),
-            None
-        ));
-        assert!(!is_idle_nudge(
-            &saved(),
-            &claude(&mut fx, 1000.0, 1000.0 + NUDGE_GAP - 1.0),
-            None
-        ));
-    }
-
-    #[test]
-    fn closes_the_gap_when_the_workspaces_latest_message_is_newer() {
-        let mut fx = Fx::default();
-        let w = ws("w").latest_at(1058.0);
-        assert!(!is_idle_nudge(
-            &saved(),
-            &claude(&mut fx, 1000.0, 1060.0),
-            Some(&w)
-        ));
-    }
-
-    #[test]
-    fn fails_towards_needs_you_when_a_timestamp_is_missing_or_the_agent_is_not_claude() {
-        let mut fx = Fx::default();
-        let s = saved();
-        assert!(!is_idle_nudge(
-            &s,
-            &fx.agent(NeedsInput).kind("claude").activity(1000.0),
-            None
-        ));
-        assert!(!is_idle_nudge(
-            &s,
-            &fx.agent(NeedsInput).kind("claude").since(1060.0),
-            None
-        ));
-        let codex = fx
-            .agent(NeedsInput)
-            .kind("codex")
-            .activity(1000.0)
-            .since(1060.0);
-        assert!(!is_idle_nudge(&s, &codex, None));
-        let idle = fx.agent(Idle).kind("claude").activity(1000.0).since(1060.0);
-        assert!(!is_idle_nudge(&s, &idle, None));
-    }
-}
-
 mod effective_agent {
     use super::*;
 
     #[test]
-    fn shows_a_nudge_as_idle_and_leaves_other_agents_alone() {
+    fn shows_every_needs_input_as_it_came_however_long_after_the_last_activity() {
         let mut fx = Fx::default();
         let s = fresh();
-        let nudge = claude(&mut fx, 1000.0, 1060.0);
-        assert_eq!(s.effective_agent(&nudge, None).status, Some(Idle));
-        assert_eq!(
-            nudge.status,
-            Some(NeedsInput),
-            "the app's object is not changed"
-        );
-        let ask = claude(&mut fx, 1000.0, 1001.0);
-        assert_eq!(s.effective_agent(&ask, None), ask);
+        for flagged in [1001.0, 1060.0, 5000.0] {
+            let ask = claude(&mut fx, 1000.0, flagged);
+            assert_eq!(s.effective_agent(&ask, None), ask, "{flagged}");
+        }
+        let by_message = fx.agent(NeedsInput).kind("claude").since(1060.0);
+        let m = ws("m").latest_at(1000.0);
+        assert_eq!(s.effective_agent(&by_message, Some(&m)), by_message);
         let busy = fx.agent(Working);
         assert_eq!(s.effective_agent(&busy, None), busy);
     }
 
     #[test]
-    fn dates_a_nudges_idle_from_the_end_of_the_turn() {
+    fn leaves_an_idle_agent_idle_from_the_end_of_its_turn() {
         let mut fx = Fx::default();
         let s = fresh();
-        let nudge = claude(&mut fx, 1000.0, 1060.0);
-        assert_eq!(s.effective_agent(&nudge, None).since_epoch, Some(1000.0));
-        let by_message = fx.agent(NeedsInput).kind("claude").since(1060.0);
-        let m = ws("m").latest_at(1000.0);
-        let shown = s.effective_agent(&by_message, Some(&m));
-        assert_eq!(shown.status, Some(Idle));
-        assert_eq!(shown.since_epoch, Some(1060.0));
+        let idle = fx.agent(Idle).kind("claude").activity(1000.0).since(1000.0);
+        assert_eq!(s.effective_agent(&idle, None), idle);
     }
 }
 
@@ -194,12 +112,13 @@ mod dismissals {
     }
 
     #[test]
-    fn have_nothing_to_dismiss_when_the_only_ask_is_a_nudge() {
+    fn dismiss_a_needs_input_that_came_a_minute_after_the_last_activity() {
         let mut fx = Fx::default();
         let mut s = fresh();
         let w = ws("n").agents(vec![claude(&mut fx, 1000.0, 1060.0)]);
         s.dismiss_needs(Some(&w));
-        assert!(!s.is_needs_dismissed(Some(&w)));
+        assert!(s.is_needs_dismissed(Some(&w)));
+        assert_eq!(statuses(&mut s, &w), [Some(Idle)]);
     }
 
     #[test]
@@ -270,15 +189,15 @@ mod both_sidebars_apply_the_rule {
     use super::*;
 
     #[test]
-    fn the_cockpit_ranks_a_working_agent_over_a_nudge_beside_it() {
+    fn the_cockpit_reads_a_needs_input_as_an_ask_late_or_not() {
         let mut fx = Fx::default();
         let mut s = fresh();
+        let late = ws("late").agents(vec![claude(&mut fx, 1000.0, 1060.0)]);
+        assert_eq!(s.status_of(Some(&late)), Status::NeedsInput);
         let w = ws("c").agents(vec![
-            claude(&mut fx, 1000.0, 1060.0),
+            claude(&mut fx, 1000.0, 1001.0),
             fx.agent(Working).activity(900.0),
         ]);
-        assert_eq!(s.status_of(Some(&w)), Status::Working);
-        let n = ws("n").agents(vec![claude(&mut fx, 1000.0, 1060.0)]);
-        assert_eq!(s.status_of(Some(&n)), Status::Idle);
+        assert_eq!(s.status_of(Some(&w)), Status::NeedsInput);
     }
 }

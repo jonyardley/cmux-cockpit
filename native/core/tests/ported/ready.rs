@@ -138,17 +138,16 @@ mod is_ready {
     }
 
     #[test]
-    fn counts_claudes_idle_nudge_as_finished() {
+    fn counts_a_claude_idle_since_its_turn_ended_as_finished() {
         let (mut s, data, mut fx) = setup();
-        let nudge = fx
-            .agent(NeedsInput)
+        let stopped = fx
+            .agent(Idle)
             .kind("claude")
             .activity(NOW - 400.0)
-            .since(NOW - 340.0);
-        let w = ready_ws(&mut fx, "nudge").agents(vec![nudge]);
+            .since(NOW - 400.0);
+        let w = ready_ws(&mut fx, "stopped").agents(vec![stopped]);
         assert!(!s.has_real_ask(Some(&w)));
         assert!(s.is_ready(&data, Some(&w)));
-        // The idle spell began when the turn ended, not when the nudge landed.
         assert_eq!(s.status_line(&data, Some(&w)), "Finished 6m");
     }
 

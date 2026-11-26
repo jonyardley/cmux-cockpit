@@ -108,19 +108,14 @@ mod ask_reason {
     }
 
     #[test]
-    fn reads_a_fresh_ask_as_an_ask_even_after_a_long_quiet_spell_and_an_older_one_as_the_nudge() {
+    fn reads_a_fresh_ask_as_an_ask_even_after_a_long_quiet_spell() {
         let (mut s, _, mut fx) = setup();
         let quiet = fx
             .agent(NeedsInput)
             .kind("claude")
             .activity(900.0)
             .since(1000.0);
-        let w = ws("wA").agents(vec![quiet.clone()]);
-        assert!(!cockpit_core::needs::is_idle_nudge(
-            &s.saved,
-            &quiet,
-            Some(&w)
-        ));
+        let w = ws("wA").agents(vec![quiet]);
         let shown = s.agents_of(Some(&w));
         assert_eq!(
             ask_reason(&s.saved, shown.first(), Some(&w)),
@@ -129,16 +124,8 @@ mod ask_reason {
     }
 
     #[test]
-    fn never_reads_a_nudge_or_a_dismissal_as_an_ask_once_the_agent_is_as_the_sidebars_show_it() {
+    fn never_reads_a_dismissal_as_an_ask_once_the_agent_is_as_the_sidebars_show_it() {
         let (mut s, _, mut fx) = setup();
-        let nudge = fx
-            .agent(NeedsInput)
-            .kind("claude")
-            .activity(1000.0)
-            .since(1100.0);
-        let w = ws("wA").agents(vec![nudge]);
-        let shown = s.agents_of(Some(&w));
-        assert_eq!(ask_reason(&s.saved, shown.first(), Some(&w)), None);
         let d = ws("wA").agents(vec![waiting(&mut fx, 1000.0)]);
         s.dismiss_needs(Some(&d));
         let shown = s.agents_of(Some(&d));

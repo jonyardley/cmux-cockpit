@@ -10,7 +10,7 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use crate::data::{Agent, AgentStatus, Workspace};
-use crate::js::{positive, truthy};
+use crate::js::positive;
 use crate::owner::owns;
 use crate::persist::{SavedMove, SavedState, move_of_description};
 use crate::saved::saved_for;
@@ -56,8 +56,8 @@ fn saved_move_for(saved: &SavedState, w: &Workspace) -> Option<SavedMove> {
     }
 }
 
-/// A turn end: Claude's Stop sets the agent idle, and the nudge about 60s
-/// later moves it to needs_input.
+/// A turn end: Claude's Stop sets the agent idle, or a real ask since
+/// moved it to needs_input.
 fn at_turn_end(a: &Agent) -> bool {
     matches!(a.status, Some(AgentStatus::Idle | AgentStatus::NeedsInput))
 }
@@ -149,24 +149,6 @@ fn test(re: &LazyLock<Option<Regex>>, s: &str) -> bool {
 pub fn asks_nothing(m: &SavedMove) -> bool {
     !positive(m.decisions.unwrap_or(0.0))
         && (m.idle == Some(true) || test(&NOTHING_WAITS, &m.text) || test(&NOTHING_FIRST, &m.text))
-}
-
-/// How long after a saved turn end the idle nudge may turn it into needs_input.
-pub const NUDGE_WINDOW: f64 = 120.0;
-
-/// The move behind `a`'s needs_input when it asks nothing of Jon, or None:
-/// only the nudge that lands within NUDGE_WINDOW of that turn end.
-pub fn quiet_turn(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Option<SavedMove> {
-    if a.status != Some(AgentStatus::NeedsInput) {
-        return None;
-    }
-    let since = truthy(a.since_epoch)?;
-    quiet_move(saved, a, w).filter(|m| since - m.epoch <= NUDGE_WINDOW)
-}
-
-/// The move `a`'s turn ended on when it asks nothing of Jon, or None.
-pub fn quiet_move(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Option<SavedMove> {
-    waiting_move(saved, Some(a), w, false).filter(asks_nothing)
 }
 
 /// How big answering a move is.
