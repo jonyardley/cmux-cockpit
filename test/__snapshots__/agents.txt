@@ -76,6 +76,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                         Text "lint" .font(12) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                         Spacer minLength: 4
                         Text "failed" .font(11) .color(secondary|neutralChip.fg) .lineLimit(1)
+                        Text "Fix" .font(11) .weight(semibold) .color(panel|onClay) .lineLimit(1) .paddingHorizontal(8) .paddingVertical(2) .background(clayButton) .hoverBackground(clayButtonHover) .cornerRadius(6) .onTap()
                       HStack spacing: 9 .paddingVertical(5) .frame(maxWidth: infinity, alignment: leading) .fixed()
                         ZStack .frame(width: 13, height: 13)
                           Circle size: 13 .fill(clear)
@@ -307,6 +308,8 @@ blueText #2F5690
 chipEdge|neutralChip.edge #E2DFD3
 chipFace|neutralChip.bg #F1EFE8
 clay #D97757
+clayButton #B5532F
+clayButtonHover #9E4727
 countBg #E5E2D6
 grey #A09E95
 hover #7F7F7F0F

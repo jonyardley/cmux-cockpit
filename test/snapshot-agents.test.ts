@@ -82,7 +82,7 @@ it("the agents panel", () => {
         weekReset: ago(-3 * 86400),
       }),
       agents: [
-        agent("working", { id: "s1", name: "Claude", sinceEpoch: ago(900), lastActivityAt: ago(20) }),
+        agent("working", { id: "s1", name: "Claude", kind: "claude", sinceEpoch: ago(900), lastActivityAt: ago(20) }),
         agent("idle", { name: "Claude", title: "Check the chip colours", lastActivityAt: ago(240) }),
         agent("idle", { name: "Claude", lastActivityAt: ago(600) }),
       ],
