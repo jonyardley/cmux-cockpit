@@ -39,10 +39,10 @@ fn saved_status(s: Option<&AgentStatus>) -> Option<SavedStatus> {
     }
 }
 
-/// Why `a`, shown as needs_input, waits on Jon, in the order the card's
-/// status reads it (`Session::status_kind`): a stop, then CI, then a
-/// park, then an ask, else its turn. `ask_reason` already says nothing
-/// for the first three.
+/// Why `a`, shown as needs_input, waits on Jon: a stop, then CI, as the
+/// card's status reads them (`Session::status_kind`), then a park, then
+/// an ask, else its turn. The core lays the first three on different
+/// agents, and `ask_reason` says nothing for any of them.
 fn why_of(saved: &SavedState, a: &Agent, w: &Workspace) -> (WaitWhy, Option<String>) {
     if a.stopped.is_some() {
         return (WaitWhy::Stop, None);

@@ -742,8 +742,8 @@ in the core's order, of `{"id", "status", "since"}`: the agent's id, or
 `stand-in` for a CI or park stand-in; its status (`needs_input`,
 `working`, `idle` or `ended`, an unknown status left out); and when that
 began, in whole milliseconds, 0 when cmux sent none. One that waits on Jon
-also has `why`: `stop`, `ci`, `park`, `ask` or `turn`, in that order, the
-card's status order, and an ask carries its `reason`. A workspace showing
+also has `why`: `stop`, `ci`, `park`, `ask` or `turn`, the first that
+holds, and an ask carries its `reason`. A workspace showing
 no agent has no entry. A list with any agent that does not fit is dropped
 whole, as for `waits`. Nothing in it moves with the clock, so only a
 change is written. It goes the same way as `quiet`
