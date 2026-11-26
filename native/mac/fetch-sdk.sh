@@ -3,10 +3,10 @@
 # into a gitignored .sdk/. The SDK is GPL-3.0-or-later, so it is fetched,
 # never committed.
 set -eu
-# The tag of the cmux release this was built against (0.64.25), and the
+# The tag of the cmux release this was built against (0.65.2), and the
 # commit it pointed at, since a tag can be moved.
-TAG=v0.64.25
-COMMIT=b685a275c2e411799857155e37264daf84f7e4d6
+TAG=v0.65.2
+COMMIT=9d01f956c51cd895e10e7d56b6dd7b5f6fcce625
 cd "$(dirname "$0")"
 if [ -f .sdk/TAG ] && [ "$(cat .sdk/TAG)" = "$TAG" ]; then exit 0; fi
 rm -rf .sdk

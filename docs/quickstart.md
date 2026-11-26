@@ -14,7 +14,7 @@ out in [Doing it by hand](#doing-it-by-hand), if you would rather.
 ## Before you start
 
 - macOS with [cmux](https://github.com/manaflow-ai/cmux). Tested on cmux
-  0.64.25; highlighting a lane while you drag a card needs 0.65.0 or later.
+  0.65.2; highlighting a lane while you drag a card needs 0.65.0 or later.
   Custom sidebars are a cmux beta with no published schema, so a cmux
   update can break them. Check yours with `cmux --version`.
 - Node 24.2 or later (`node --version`).
@@ -291,7 +291,7 @@ window you are in; without it, cmux can switch another window's sidebar.
 Pick "Show agents panel", not cmux's own "Sidebar: agents": that one
 puts the agents panel in the left sidebar instead (run "Sidebar:
 Extension Sidebar" to put the Cockpit back). cmux calls actions a nightly feature;
-this was tested on 0.64.25. On a build that does not know them, cmux
+this was tested on 0.65.2. On a build that does not know them, cmux
 rejects the whole `cmux.json`, custom sidebars included, and the palette
 shows a "cmux.json Schema Error" row: take the `actions` entry out and
 run `cmux reload-config` again.

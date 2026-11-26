@@ -17,7 +17,7 @@ checks an install, and `npm run uninstall` takes the extras out again.
 This is a personal setup shared as is. The agents panel follows cmux's
 custom sidebar beta, which has no published schema yet, so a cmux update
 can break it.
-Tested on cmux 0.64.25.
+Tested on cmux 0.65.2.
 
 ## Requirements
 
@@ -45,7 +45,8 @@ Tested on cmux 0.64.25.
 - `sidebars/*.parked`: retired Swift sidebar experiments cmux does not
   load. Rename one to `.swift` to load it again. `probe.swift.parked`
   probes what the Swift renderer supports; on cmux 0.64.25 a `let` derived
-  from `data` renders empty, so filters go inline in the view.
+  from `data` rendered empty (not rechecked on 0.65.2), so filters go
+  inline in the view.
 - `cmux.example.json`: the minimum app settings, which switch on custom
   sidebars. Copy it to `cmux.json` (ignored by git) and add your own.
 - `dock.example.json`: a sample dock control. Copy it to `dock.json`

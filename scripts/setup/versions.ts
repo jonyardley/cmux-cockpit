@@ -4,7 +4,7 @@
 export type Version = readonly [number, number, number];
 
 export const NODE_MIN: Version = [24, 2, 0];
-/** What the sidebars are tested on. */
+/** The oldest cmux the sidebars support; they are tested on 0.65.2. */
 export const CMUX_MIN: Version = [0, 64, 25];
 /** Highlighting a lane while a card is dragged over it needs this. */
 export const CMUX_DRAG: Version = [0, 65, 0];
