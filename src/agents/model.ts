@@ -1,6 +1,6 @@
 // The agents panel's data: the selected workspace in detail (and its
-// question, when its agent needs you). Its lists sit beside it: lists.ts,
-// team.ts, checks.ts, pr-list.ts and made.ts.
+// question, when its agent needs you). Its lists and cards sit beside it,
+// in their own modules.
 // Who is working and who is idle lives on the cockpit's cards, not here.
 // Pure reads of `data`, so each is testable alone.
 
