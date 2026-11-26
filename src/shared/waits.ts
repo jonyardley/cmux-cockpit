@@ -2,23 +2,14 @@
 // session, CI stuck or failed with nobody on it, a change left merge-ready
 // four hours, parked Ostinato attempts. The native core alone decides
 // them and saves what its cards show (native/core/src/waits_save.rs, the
-// saved `waits` map), so the agents panel names and counts the same waits
-// rather than rules of its own.
-//
-// A saved wait lands on the workspace's agents in the core's order
-// (`Session::agents_of` in native/core/src/needs.rs): a stop on its own
-// session whatever it reads; then the CI wait on the most active agent,
-// only once it has finished (ci_wait.rs `with_ci`); then the park on the
-// most active agent not already waiting on Jon (ostinato/wait.rs
-// `park_carrier`). With no agent left, one stand-in carries the CI wait,
-// else the park. So a wait on an agent the panel already reads as
-// needs_input never counts twice.
+// saved `waits` map), and which agent carries each in the saved `agents`
+// map (shared/needs.ts), so the agents panel names and counts the same
+// waits rather than rules of its own.
 //
 // Dismissing stays in the Cockpit: its dismissal clears the saved wait,
 // and the next build bakes the map without it.
 
-import type { SavedWait, WaitKind } from "../../scripts/state-config.ts";
-import { mostActive } from "./activity.ts";
+import type { SavedWait, WaitWhy } from "../../scripts/state-config.ts";
 import { SAVED_STATE } from "./persist.ts";
 import { checksOf } from "./prs.ts";
 import { WAIT_WORD } from "./words.ts";
@@ -30,79 +21,15 @@ export function waitsFor(wsId: string): SavedWait[] {
   return (map && Object.hasOwn(map, wsId) ? map[wsId] : undefined) ?? [];
 }
 
-const isCi = (k: WaitKind): boolean => k === "ci_stuck" || k === "ci_failing" || k === "merge_ready";
-const finished = (a: Agent): boolean => a.status === "idle" || a.status === "ended";
-
-/** A workspace's agents with its saved waits laid on them, as the core lays them. */
-export interface Waited {
-  /** The agents as given, each carrying a wait reading needs_input from its start. */
-  agents: Agent[];
-  /** Whether a stand-in carries a wait, with no agent left to. */
-  standIn: boolean;
-  /** The waits that landed, in the saved order: what the card shows. */
-  shown: SavedWait[];
-  /** Of those, the ones that made an agent (or the stand-in) wait on Jon
-   * that the panel did not already read as needs_input. */
-  added: SavedWait[];
-}
-
-// `a` carrying `wait`: needs_input from the wait's start.
-const carrying = (a: Agent, wait: SavedWait): Agent => ({ ...a, status: "needs_input", sinceEpoch: wait.since });
-
-// Whether `a` has worked again since `stop`: a working spell that began
-// after it. The saved map lags a rebuild behind, and with the Cockpit
-// closed it is never rewritten, so a stop the session has left behind is
-// dropped here rather than kept until then.
-const resumed = (a: Agent, stop: SavedWait): boolean => a.status === "working" && (a.sinceEpoch ?? 0) > stop.since;
-
-// The workspace's stops on `agents`, each on its own session by id, in the
-// saved order.
-function withStops(agents: Agent[], waits: readonly SavedWait[], out: Waited): Agent[] {
-  const landed = new Map<string, SavedWait>();
-  for (const stop of waits) {
-    const a = stop.kind === "stopped" ? agents.find((x) => x.id === stop.agent) : undefined;
-    if (!a || resumed(a, stop)) continue;
-    landed.set(a.id, stop);
-    out.shown.push(stop);
-    if (a.status !== "needs_input") out.added.push(stop);
-  }
-  return agents.map((a) => {
-    const stop = landed.get(a.id);
-    return stop ? carrying(a, stop) : a;
-  });
-}
-
-// `agents` with `wait` on the one `carries` picks, if any.
-function onCarrier(agents: Agent[], wait: SavedWait | undefined, carries: (a: Agent) => boolean, out: Waited): Agent[] {
-  const lead = mostActive(agents);
-  if (!wait || !lead || !carries(lead)) return agents;
-  out.shown.push(wait);
-  out.added.push(wait);
-  return agents.map((a) => (a === lead ? carrying(a, wait) : a));
-}
-
-/**
- * `agents`, a workspace's as the panel reads them (agentsOf), with `waits`,
- * its saved ones, laid on in the core's order. Pure, so each rule is
- * testable alone.
- */
-export function withWaits(agents: Agent[], waits: readonly SavedWait[]): Waited {
-  const out: Waited = { agents, standIn: false, shown: [], added: [] };
-  const ci = waits.find((v) => isCi(v.kind));
-  const park = waits.find((v) => v.kind === "park");
-  if (!agents.length) {
-    const stand = ci ?? park;
-    if (stand) {
-      out.standIn = true;
-      out.shown.push(stand);
-      out.added.push(stand);
-    }
-    return out;
-  }
-  const stopped = withStops(agents, waits, out);
-  const ciDone = onCarrier(stopped, ci, finished, out);
-  out.agents = onCarrier(ciDone, park, (a) => a.status !== "needs_input", out);
-  return out;
+/** The saved wait an agent `id` carries for `why`, as the core saved it: a
+ * stop on its own session, else the workspace's CI or park wait. None for
+ * a turn or an ask, or when the waits map lags the agents map. */
+export function waitOf(why: WaitWhy | undefined, id: string, waits: readonly SavedWait[]): SavedWait | undefined {
+  if (why === "stop") return waits.find((v) => v.kind === "stopped" && v.agent === id);
+  if (why === "ci")
+    return waits.find((v) => v.kind === "ci_stuck" || v.kind === "ci_failing" || v.kind === "merge_ready");
+  if (why === "park") return waits.find((v) => v.kind === "park");
+  return undefined;
 }
 
 // Words

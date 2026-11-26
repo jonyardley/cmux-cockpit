@@ -1,75 +1,82 @@
-// "Needs you", corrected the same way as the native Cockpit does it. An
-// agent's needs_input always waits on Jon unless he has dismissed it: on
-// cmux 0.65.2 Claude Code's idle reminder no longer sets it (issue #422).
-// The agents panel holds its own dismissals, and a reload forgets them
-// (issues #3 and #5).
+// "Needs you", as the native Cockpit shows it. The core works out each
+// agent's status and why it waits on Jon (`Session::agents_of` in
+// native/core/src/needs.rs: turns, asks, stops, the CI carrier, parks and
+// stand-ins) and saves it in the `agents` map (native/core/src/agents_save.rs,
+// #429), so the panel lays that on cmux's agents rather than keep rules of
+// its own. An agent with no saved entry, as with the Cockpit closed, reads
+// as cmux sends it.
 //
-// A turn end is read from its closing line too, as the Cockpit reads it
-// (`waiting_turn` and `Session::effective_agent` in
-// native/core/src/needs.rs, #374): an idle agent whose turn ended on a
-// move asking something of Jon (waitingTurn) reads as needs_input from the
-// moment the turn ended. So the panel's This workspace card says Your
-// turn, not Running, while the chat's background work runs on, and only a
-// "Nothing for you" turn or a dismissed wait says Running there.
+// The panel still holds its own dismissals, so one shows at once rather
+// than a rebuild later; a reload forgets them unless saved (issues #3 and #5).
 
-import type { SavedAsk, SavedMove } from "../../scripts/state-config.ts";
+import type { SavedAgent, WaitWhy } from "../../scripts/state-config.ts";
 import { sinceOrActivity } from "./activity.ts";
-import { asksNothingYet, waitingMove } from "./move.ts";
 import { persistSet, SAVED_STATE } from "./persist.ts";
-import { savedFor } from "./saved.ts";
+
+/** The id the core saves a CI or park stand-in under (agents_save.rs STAND_IN). */
+export const STAND_IN = "stand-in";
 
 // A dismissal is keyed to the workspace, the agent and the start of that
-// needs_input spell, so a new ask (a new start) shows again. Plain Maps, so
-// reads call tick() and writes call bump(). Seeded from SAVED_STATE so a
-// dismissal made before the last reload still holds (issue #5); dismissNeeds
-// and restoreNeeds call persistSet so a new one survives the next reload.
-// wsId -> agent id -> needs_input start
+// wait, so a new ask (a new start) shows again. Plain Maps, so reads call
+// tick() and writes call bump(). Seeded from SAVED_STATE so a dismissal made
+// before the last reload still holds over a saved entry the core has not yet
+// rewritten (issue #5); dismissNeeds calls persistSet so a new one survives
+// the next reload.
+// wsId -> agent id -> wait start
 const dismissed = new Map<string, Map<string, number>>(
   Object.entries(SAVED_STATE.dismissed).map(([wsId, starts]) => [wsId, new Map(Object.entries(starts))]),
 );
 const [tick, setTick] = signal(0);
 const bump = () => setTick(tick() + 1);
 
-// Whether `a` waits on Jon, dismissals aside: a turn that ended on a move
-// asking something of him, or any needs_input.
-const waitsOnJon = (a: Agent, w: Workspace | undefined): boolean =>
-  waitingTurn(a, w) !== null || a.status === "needs_input";
-
-// The workspace's agents that wait on Jon, the ones a dismissal can hide.
-const asking = (w: Workspace | undefined): Agent[] => (w?.agents ?? []).filter((a) => waitsOnJon(a, w));
+// wsId's saved agents. A test can seed __STATE__ from before this map
+// existed, so it may be missing at runtime.
+function savedAgents(wsId: string): SavedAgent[] {
+  const map: Record<string, SavedAgent[]> | undefined = SAVED_STATE.agents;
+  return (map && Object.hasOwn(map, wsId) ? map[wsId] : undefined) ?? [];
+}
 
 /**
- * The move `a`'s turn ended on when it waits on Jon: `a`'s own, current (no
- * prompt since), not an ask, and asking something of him. A reply with no
- * label counts, as a turn with no closing line still waits on him (#322);
- * only "Nothing for you" does not, nor one that asked nothing while its
- * chat's helpers still run (asksNothingYet). Null otherwise. Pass `a` as
- * cmux sends it. The Cockpit's `waiting_turn` (native/core/src/needs.rs).
+ * The core's saved entry for `live`, an agent as cmux sends it, while it
+ * still holds. The map lags a rebuild behind, and with the Cockpit closed it
+ * is never rewritten, so an entry `live` has worked past (a working spell
+ * that began after it) is dropped, save a park, which the core lays on a
+ * working lead too. A saved working only ever comes from a working agent,
+ * so it never holds once cmux says otherwise.
  */
-function waitingTurn(a: Agent, w: Workspace | undefined): SavedMove | null {
-  const m = waitingMove(a, w, freshAsk(a, w) !== null);
-  return m && !asksNothingYet(m, a, w) ? m : null;
+function entryOf(live: Agent, w: Workspace): SavedAgent | undefined {
+  const e = savedAgents(w.id).find((x) => x.id === live.id);
+  if (!e) return undefined;
+  if (e.why !== "park" && live.status === "working" && (live.sinceEpoch ?? 0) > e.since) return undefined;
+  if (e.status === "working" && live.status !== "working") return undefined;
+  return e;
 }
 
-// When `a`'s wait on Jon began, which a dismissal is keyed on: the end of
-// `turn`, the turn that waits on him, so a later restamp of the agent keeps
-// the dismissal, else the start of its needs_input spell.
-const startOf = (turn: SavedMove | null, a: Agent): number => turn?.epoch ?? sinceOrActivity(a);
+// Whether `why` is one of the Cockpit's waits (a stop, CI, a park), which
+// only the Cockpit dismisses, rather than the agent's own turn or ask.
+const isCockpitWait = (why: WaitWhy | undefined): boolean => why === "stop" || why === "ci" || why === "park";
 
-// startOf, reading the turn.
-const waitStart = (a: Agent, w: Workspace | undefined): number => startOf(waitingTurn(a, w), a);
+// An agent's own wait Jon can dismiss here: its turn or ask, as the core
+// saved it, or cmux's needs_input with no entry.
+const ownWait = (live: Agent, e: SavedAgent | undefined): boolean =>
+  e ? e.status === "needs_input" && !isCockpitWait(e.why) : live.status === "needs_input";
 
-// Whether Jon dismissed `a`'s wait that began at `start`.
-function dismissedAt(w: Workspace | undefined, a: Agent, start: number): boolean {
+// When that wait began, as the core keys its dismissal: the end of the turn
+// (the saved start, the move's whole-second epoch), else cmux's own start.
+const waitStart = (live: Agent, e: SavedAgent | undefined): number =>
+  e?.why === "turn" ? e.since : sinceOrActivity(live);
+
+// The workspace's agents whose own wait a dismissal can hide.
+const asking = (w: Workspace | undefined): Agent[] =>
+  w ? (w.agents ?? []).filter((a) => !!a && ownWait(a, entryOf(a, w))) : [];
+
+// Whether Jon dismissed `live`'s own wait.
+function isDismissed(w: Workspace, live: Agent, e: SavedAgent | undefined): boolean {
   tick();
-  return !!w && dismissed.get(w.id)?.get(a.id) === start;
+  return ownWait(live, e) && dismissed.get(w.id)?.get(live.id) === waitStart(live, e);
 }
 
-// Whether `a`'s wait is dismissed, with its waiting turn already read.
-const isDismissed = (w: Workspace | undefined, a: Agent, turn: SavedMove | null): boolean =>
-  (a.status === "needs_input" || turn !== null) && dismissedAt(w, a, startOf(turn, a));
-
-// Drops dismissals whose spell has ended, so a later ask with the same start
+// Drops dismissals whose wait has ended, so a later ask with the same start
 // (or none) is not hidden. Only for agents the workspace reports: straight
 // after a reload cmux can report a workspace before its agents, and that must
 // not wipe a dismissal seeded from disk. Not a write anyone reads reactively:
@@ -80,94 +87,85 @@ function prune(w: Workspace): void {
   const byAgent = dismissed.get(w.id);
   if (!byAgent) return;
   const reported = new Set((w.agents ?? []).filter((a) => !!a).map((a) => a.id));
-  const live = new Map(asking(w).map((a) => [a.id, waitStart(a, w)]));
+  const live = new Map(asking(w).map((a) => [a.id, waitStart(a, entryOf(a, w))]));
   for (const [id, start] of byAgent) if (reported.has(id) && live.get(id) !== start) byAgent.delete(id);
   if (!byAgent.size) dismissed.delete(w.id);
 }
 
-/**
- * The agent as the sidebars show it: a turn that ended on a move asking
- * something of Jon reads as needs_input from its end; any other
- * needs_input reads as idle only when Jon dismissed it.
- */
-export function effectiveAgent(a: Agent, w?: Workspace): Agent {
-  // Ahead of Running too: background work never hides a turn that asks Jon
-  // something. A dismissed one reads as it would without it.
-  const turn = waitingTurn(a, w);
-  if (turn && !dismissedAt(w, a, turn.epoch)) return { ...a, status: "needs_input", sinceEpoch: turn.epoch };
-  if (a.status !== "needs_input") return a;
-  return isDismissed(w, a, turn) ? { ...a, status: "idle" } : a;
+// `live` as the panel shows it: the saved status and start laid on, or as
+// cmux sends it; a dismissed wait reads as it would without it. A
+// Cockpit's wait is left off the status, as before the core saved it: the
+// panel names it in the ask block and the Waiting on you card instead.
+function shown(live: Agent, w: Workspace): Agent {
+  const e = entryOf(live, w);
+  if (isDismissed(w, live, e)) return live.status === "needs_input" ? { ...live, status: "idle" } : live;
+  if (!e || isCockpitWait(e.why)) return live;
+  return e.since > 0 ? { ...live, status: e.status, sinceEpoch: e.since } : { ...live, status: e.status };
 }
 
-// --- Asking or your turn (issue #81) -----------------------------------------------------
-
-// wsId -> the last ask its agent made, fixed at build. A test can seed
-// __STATE__ from before this map existed, so it may be missing at runtime.
-function savedAskFor(wsId: string): SavedAsk | undefined {
-  const map: Record<string, SavedAsk> | undefined = SAVED_STATE.asking;
-  return map && Object.hasOwn(map, wsId) ? map[wsId] : undefined;
-}
-
-/**
- * Why the agent is asking ("allow git push?"), or null when its needs_input
- * is only its turn: it finished and waits for the next prompt. Pass the agent
- * as the sidebars show it (agentsOf), so a dismissal is never an
- * ask. An ask counts only while the saved one is at least as new as the
- * spell (HOOK_SLACK aside): once the agent works again and stops, that spell
- * starts after the ask and reads as its turn. Without a start time there is
- * no telling, so it reads as its turn.
- */
-export function askReason(a: Agent | null | undefined, w: Workspace | undefined): string | null {
-  return a ? (freshAsk(a, w)?.reason ?? null) : null;
-}
-
-/**
- * Whether a saved ask can be `a`'s. The entry is
- * saved per workspace with the Claude session that made it; when one of the
- * workspace's agents carries that session as its id (unconfirmed whether
- * cmux agent ids are session ids, as for saved subagent runs), only that
- * agent owns it, so another agent's turn end never borrows it. Otherwise it
- * belongs to the workspace as a whole.
- */
-function isOwnSaved(saved: { session?: string }, a: Agent, w: Workspace): boolean {
-  const { session } = saved;
-  const owned = session !== undefined && (w.agents ?? []).some((x) => x?.id === session);
-  return !owned || a.id === session;
-}
-
-// The saved ask that explains `a`'s current needs_input spell, if any. One
-// saved before the end of the turn `a` waits on was answered within that
-// turn: a turn that waits on Jon reads as needs_input from its end
-// (effectiveAgent), so the slack alone would let it through.
-function freshAsk(a: Agent, w: Workspace | undefined): SavedAsk | null {
-  if (!w || a.status !== "needs_input" || !a.sinceEpoch) return null;
-  const ask = savedFor(savedAskFor(w.id), a, w, a.sinceEpoch, isOwnSaved);
-  if (!ask) return null;
-  const end = waitingMove(a, w, false)?.epoch;
-  return end === undefined || ask.epoch >= end ? ask : null;
-}
-
-/** A workspace's agents with dismissals applied, in the app's order. */
+/** A workspace's agents as the Cockpit shows them, in the app's order. */
 // An agent cmux sends with no status is left out here, once, rather than at
 // each read: it could only draw as no agent yet count as live wherever a
 // read asks `status !== "ended"` (issue #7).
 export function agentsOf(w: Workspace | undefined): Agent[] {
-  if (w) prune(w);
-  return (w?.agents ?? []).filter((a) => !!a?.status).map((a) => effectiveAgent(a, w));
+  if (!w) return [];
+  prune(w);
+  return (w.agents ?? []).filter((a) => !!a?.status).map((a) => shown(a, w));
 }
 
-/** Dismisses every real ask in the workspace; each comes back when that agent asks again. */
+/**
+ * The saved entry behind `a`, one of `w`'s agents as agentsOf shows it,
+ * while it reads needs_input: what it waits on Jon for. None otherwise, so
+ * a dismissed or worked-past wait never speaks.
+ */
+function waitEntry(a: Agent | null | undefined, w: Workspace | undefined): SavedAgent | undefined {
+  if (!a || !w || a.status !== "needs_input") return undefined;
+  const live = (w.agents ?? []).find((x) => x?.id === a.id);
+  const e = live ? entryOf(live, w) : undefined;
+  return e?.status === "needs_input" ? e : undefined;
+}
+
+/** Why `a` (as agentsOf shows it) waits on Jon, as the core saved it; none
+ * without an entry, as with the Cockpit closed. */
+export const waitWhy = (a: Agent | null | undefined, w: Workspace | undefined): WaitWhy | undefined =>
+  waitEntry(a, w)?.why;
+
+/** The Cockpit's wait (a stop, CI, a park) the core laid on `a`, one of
+ * `w`'s agents; none otherwise. */
+export function cockpitWait(a: Agent | null | undefined, w: Workspace | undefined): WaitWhy | undefined {
+  const live = a && w ? (w.agents ?? []).find((x) => x?.id === a.id) : undefined;
+  const e = live && w ? entryOf(live, w) : undefined;
+  return e?.status === "needs_input" && isCockpitWait(e.why) ? e.why : undefined;
+}
+
+/**
+ * Why the agent is asking ("allow git push?"), or null when its needs_input
+ * is its turn, a wait the Cockpit saved, or an ask with no words. Pass the
+ * agent as agentsOf shows it, so a dismissal is never an ask.
+ */
+export function askReason(a: Agent | null | undefined, w: Workspace | undefined): string | null {
+  const e = waitEntry(a, w);
+  return e?.why === "ask" ? (e.reason ?? null) : null;
+}
+
+/** Why the core's stand-in waits on Jon in a workspace with no agent left
+ * to carry its CI or park; none otherwise. */
+export function standInWhy(w: Workspace | undefined): WaitWhy | undefined {
+  if (!w || (w.agents ?? []).some((a) => !!a?.status)) return undefined;
+  const e = savedAgents(w.id).find((x) => x.id === STAND_IN);
+  return e?.status === "needs_input" ? e.why : undefined;
+}
+
+/** Dismisses every own wait in the workspace; each comes back when that agent asks again. */
 export function dismissNeeds(w: Workspace | undefined): void {
   const list = asking(w);
   if (!w || !list.length) return;
   // A saved key that is no agent here keeps its dismissal, as prune keeps
   // it: the Cockpit's CI and Ostinato waits ("ci", "ostinato"), which this
-  // panel shows from the saved waits (shared/waits.ts) but never dismisses,
-  // so a dismissal here never brings those back. A Cockpit dismissal of a
-  // reported agent's stop is not kept this way (prune drops it).
+  // panel never dismisses, so a dismissal here never brings those back.
   const reported = new Set((w.agents ?? []).filter((a) => !!a).map((a) => a.id));
   const kept = [...(dismissed.get(w.id) ?? [])].filter(([id]) => !reported.has(id));
-  const starts = new Map([...kept, ...list.map((a): [string, number] => [a.id, waitStart(a, w)])]);
+  const starts = new Map([...kept, ...list.map((a): [string, number] => [a.id, waitStart(a, entryOf(a, w))])]);
   dismissed.set(w.id, starts);
   bump();
   // A start of 0 means the agent had no timestamp, so a later ask without one

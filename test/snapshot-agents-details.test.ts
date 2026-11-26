@@ -77,6 +77,13 @@ const r = seed({
     ),
     poll: { okEpoch: ago(60) },
     waits: { here: [{ kind: "stopped", since: ago(300), key: ago(300), agent: "x1", detail: "error" }] },
+    agents: {
+      here: [
+        { id: "c1", status: "needs_input", since: ago(60), why: "turn" },
+        { id: "x1", status: "needs_input", since: ago(300), why: "stop" },
+        { id: "c0", status: "ended", since: 0 },
+      ],
+    },
   },
 });
 const { agent, ws } = await import("./support/fixtures.ts");

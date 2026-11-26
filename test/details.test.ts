@@ -47,6 +47,12 @@ const r = seed({
       held: { text: "the reviewer runs.", epoch: ago(60), session: "c1", unlabelled: true, noAsk: true },
       shell: { text: "the dev server runs.", epoch: ago(60), session: "c1", unlabelled: true, noAsk: true },
     },
+    agents: {
+      sel: [{ id: "c1", status: "needs_input", since: ago(60), why: "turn" }],
+      q: [{ id: "c1", status: "idle", since: ago(60) }],
+      held: [{ id: "c1", status: "idle", since: ago(60) }],
+      shell: [{ id: "c1", status: "needs_input", since: ago(60), why: "turn" }],
+    },
     running: {
       held: { agent: "c1", since: ago(120), counts: [{ type: "subagent", n: 1 }] },
       shell: { agent: "c1", since: ago(120), counts: [{ type: "shell", n: 1 }] },
@@ -180,8 +186,8 @@ describe("sessions", () => {
     assert.deepEqual(
       rows.map((x) => [x.label, x.sub, x.last]),
       [
-        ["Pi", "pi, last activity just now", false],
         ["Build the tab", "Claude, last activity 1m ago", false],
+        ["Pi", "pi, last activity just now", false],
         ["codex", "Codex, last activity 2h ago", true],
       ],
     );
@@ -284,21 +290,19 @@ describe("your move", () => {
     assert.deepEqual(d.moveDetail(), { text: "pick one.", meta: "1 decision open, leaning 1a" });
   });
 
-  it("hides a move a newer prompt has retired", () => {
-    r.data.workspaces = [ws("sel", { selected: true, latestAt: ago(10), agents: [lead()] })];
+  it("hides the move once the agent works again, before the Cockpit saves it", () => {
+    const back = agent("working", { id: "c1", kind: "claude", sinceEpoch: ago(10), lastActivityAt: ago(5) });
+    r.data.workspaces = [ws("sel", { selected: true, latestAt: ago(10), agents: [back] })];
     assert.equal(d.moveDetail(), null);
   });
 
-  it("hides a turn that asks nothing of Jon", () => {
-    r.data.workspaces = [ws("q", { selected: true, latestAt: ago(900), agents: [lead()] })];
-    assert.equal(d.moveDetail(), null);
-  });
-
-  it("hides a reply that asked nothing while its agents run, as the status reads Running", () => {
-    r.data.workspaces = [ws("held", { selected: true, latestAt: ago(900), agents: [lead()] })];
-    assert.equal(d.moveDetail(), null);
+  it("hides a turn the Cockpit saved as asking nothing of Jon, and any with no saved entry", () => {
+    for (const id of ["q", "held", "plain"]) {
+      r.data.workspaces = [ws(id, { selected: true, latestAt: ago(900), agents: [lead()] })];
+      assert.equal(d.moveDetail(), null, id);
+    }
     r.data.workspaces = [ws("shell", { selected: true, latestAt: ago(900), agents: [lead()] })];
-    assert.deepEqual(d.moveDetail(), { text: "the dev server runs.", meta: "" }, "a shell holds nothing");
+    assert.deepEqual(d.moveDetail(), { text: "the dev server runs.", meta: "" }, "a turn the Cockpit saved");
   });
 });
 

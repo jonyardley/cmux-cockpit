@@ -4,9 +4,10 @@
 // Who is working and who is idle lives on the cockpit's cards, not here.
 // Pure reads of `data`, so each is testable alone.
 
-import { byActivity, mostActive } from "../shared/activity.ts";
+import type { SavedWait } from "../../scripts/state-config.ts";
+import { byActivity } from "../shared/activity.ts";
 import { prFreshness } from "../shared/freshness.ts";
-import { agentsOf, askReason } from "../shared/needs.ts";
+import { agentsOf, askReason, cockpitWait, STAND_IN, standInWhy } from "../shared/needs.ts";
 import { STATUS_TEXT } from "../shared/palette.ts";
 import { type PrTone, prTone, shownTone } from "../shared/pr-colors.ts";
 import { type Project, projectOf, savedProjectFor } from "../shared/projects.ts";
@@ -16,7 +17,7 @@ import { runningFor, shownStatus } from "../shared/running.ts";
 import { cardMessage, promptText } from "../shared/text.ts";
 import { ageSince, finishedAt, nowEpoch } from "../shared/time.ts";
 import { type HaloStatus, haloColor } from "../shared/ui.ts";
-import { type Waited, waitLine, waitsFor, withWaits } from "../shared/waits.ts";
+import { waitLine, waitOf, waitsFor } from "../shared/waits.ts";
 import { ASKING_WORD, NO_AGENT_WORD, RUNNING_WORD, runningText, STATUS_WORD, withAge } from "../shared/words.ts";
 import { STATUS_DOT, T } from "./theme.ts";
 
@@ -71,13 +72,31 @@ export interface Ask {
   dismissLabel: string;
 }
 
+/** The selected workspace's waits as the Cockpit saved them, as its card reads them. */
+export interface Waited {
+  /** Whether the core's stand-in carries a wait, with no agent left to. */
+  standIn: boolean;
+  /** The saved waits its agents (or the stand-in) carry, in the saved order. */
+  shown: SavedWait[];
+}
+
+/** The selected workspace's saved waits, each on the agent the core laid
+ * it on (shared/needs.ts), as its card reads them. */
+export const currentWaited = computed((): Waited => {
+  const { ws, agents } = cur();
+  const waits = waitsFor(ws.id);
+  const stand = standInWhy(ws);
+  const carried = new Set(agents.map((a) => waitOf(cockpitWait(a, ws), a.id, waits)));
+  carried.add(waitOf(stand, STAND_IN, waits));
+  return { standIn: stand !== undefined, shown: waits.filter((v) => carried.has(v)) };
+});
+
 // The workspace's latestMessage is workspace-wide (Agent carries no message
 // of its own), so it is the asker's words only when no other live agent
 // could have written it.
-function askText(c: Current, own: number, waited: Waited): string {
-  const count = own + waited.added.length;
+function askText(c: Current, own: number, count: number): string {
   if (count > 1) return own === count ? `${count} agents need you` : `${count} things wait on you`;
-  const wait = waited.added[0];
+  const wait = currentWaited().shown[0];
   if (wait) return waitLine(wait, c.ws);
   const reason = askReason(c.a, c.ws);
   if (reason) return reason;
@@ -85,26 +104,21 @@ function askText(c: Current, own: number, waited: Waited): string {
   return live === 1 ? cardMessage(c.ws) : "";
 }
 
-/** The selected workspace's agents with the Cockpit's saved waits laid on
- * them (shared/waits.ts), as its card reads them. */
-export const currentWaited = computed((): Waited => {
-  const c = cur();
-  return withWaits(c.agents, waitsFor(c.ws.id));
-});
-
 /** Whether the selected workspace needs you, by the Needs you strip's rule:
- * its most active agent reads needs_input once turn ends and dismissals are
- * applied (src/shared/needs.ts) and the Cockpit's saved waits laid on, or
- * a saved wait stands in for an agent it has none of. Null otherwise. */
+ * an agent reads needs_input as the Cockpit saved it, with dismissals
+ * applied (src/shared/needs.ts), or carries one of the Cockpit's waits, or
+ * the core's stand-in carries one for a workspace with no agent. Null
+ * otherwise. */
 export const currentAsk = computed((): Ask | null => {
   const c = current();
   if (!c) return null;
-  const waited = currentWaited();
-  if (!waited.standIn && mostActive(waited.agents)?.status !== "needs_input") return null;
-  const own = c.agents.filter((a) => a.status === "needs_input").length;
+  const carriers = c.agents.filter((a) => cockpitWait(a, c.ws) !== undefined).length;
+  const own = c.agents.filter((a) => a.status === "needs_input" && cockpitWait(a, c.ws) === undefined).length;
+  const count = own + carriers + (currentWaited().standIn ? 1 : 0);
+  if (count === 0) return null;
   return {
-    text: askText(c, own, waited),
-    count: own + waited.added.length,
+    text: askText(c, own, count),
+    count,
     dismissLabel: own === 0 ? "" : own > 1 ? "Dismiss all" : "Dismiss",
   };
 });
