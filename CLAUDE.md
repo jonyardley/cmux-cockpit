@@ -39,11 +39,9 @@ README.md has the layout and commands.
   tests, so it stays even with no TypeScript caller.
 - `src/agents/*.ts` other than `index.ts` and `theme.ts`: data and state.
   Reads `data`, returns plain values, no views. This is what the tests
-  cover. `model.ts` holds the selected workspace itself, and `lists.ts`
-  (caps and "+N more"), `team.ts` (agent rows and Helpers), `checks.ts`
-  (checks and Fix), `pr-list.ts` (Pull requests) and `made.ts` (Made
-  here) build on it. Never the other way round. A new module joins the
-  coverage list in `package.json`.
+  cover. `model.ts` holds the selected workspace itself, and the rest
+  build on it, each naming its section in its header. Never the other
+  way round. A new module joins the coverage list in `package.json`.
 - `src/agents/details.ts`: the Now and Details tab choice and every Details card's rows and show rule.
 - `src/agents/views/`: view builders only. Keep logic out; if a view
   needs a decision, put it in the model and test it there.
@@ -116,9 +114,11 @@ fixture scenes, now frozen fixtures the Rust and Swift tests read
 the same PR as the native code that reads it.
 
 `native/` is one Cargo workspace: `core` (the `cockpit_core` Crux app),
-`runner` (`cockpit_runner`, the live-data runner, with no terminal types)
-and `pane` (`cockpit_pane`, the terminal pane, a thin loop over the
-runner). `rust-toolchain.toml` at the root pins the toolchain, and
+`runner` (`cockpit_runner`, the live-data runner, with no terminal types),
+`pane` (`cockpit_pane`, the terminal pane, a thin loop over the runner),
+`ffi` (the core behind C calls for the Swift sidebar) and `typegen`
+(writes the panel model's Swift types to the gitignored
+`native/mac/Generated/`). `rust-toolchain.toml` at the root pins the toolchain, and
 `npm run rust` (part of `npm run check`) runs rustfmt, clippy with
 warnings denied, and the tests, from `native/`.
 
