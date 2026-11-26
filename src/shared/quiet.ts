@@ -1,30 +1,32 @@
 // A quiet agent: still working, but with no activity for a while, and no
-// helper of its own chat running for it. The native Cockpit keeps the same
-// rule (native/core/src/quiet.rs), so the same agent reads quiet on each
-// side: another chat's helpers in the workspace never hold it off, and nor
-// does the background record, which is written only when a turn ends.
+// helper of its own chat running for it. The native core decides it
+// (native/core/src/quiet.rs), since only it can see the runs a chat
+// started before a `/clear`, and saves its verdict in config/state.json's
+// `quiet` map (native/core/src/quiet_save.rs), which the agents panel
+// reads here. With no Cockpit running there is no verdict, so no suffix.
 
-import { liveRunCount } from "./subagents.ts";
-import { ageSince, nowEpoch } from "./time.ts";
+import type { SavedQuiet } from "../../scripts/state-config.ts";
+import { SAVED_STATE } from "./persist.ts";
+import { ageSince } from "./time.ts";
 import { QUIET_WORD } from "./words.ts";
 
-/**
- * How long a working agent may go without activity before it reads quiet.
- * Long enough for most builds and test runs; a hung command or a stalled
- * agent passes it.
- */
-export const QUIET_SECS = 10 * 60;
+/** The core's saved quiet verdict for `w`'s card. */
+function savedVerdict(w: Workspace): SavedQuiet | undefined {
+  const map = SAVED_STATE.quiet;
+  return map && Object.hasOwn(map, w.id) ? map[w.id] : undefined;
+}
 
 /**
- * When `a` last showed activity, if it is working, that was at least
- * QUIET_SECS ago, and none of its own chat's helpers is running in `w`
- * (an agent waiting on its helpers is busy, not stalled); else 0.
+ * When `a` last showed activity, if the core's verdict for `w` says it is
+ * quiet: the verdict is about `a`, `a` is still working, and it has shown
+ * no activity since. Else 0, so a verdict the rebuild has not yet caught
+ * up with never shows.
  */
-export function quietSince(a: Agent | null | undefined, w: Workspace | undefined): number {
-  if (a?.status !== "working") return 0;
-  const last = a.lastActivityAt ?? 0;
-  if (!(last > 0 && nowEpoch() - last >= QUIET_SECS)) return 0;
-  return liveRunCount(w, a) > 0 ? 0 : last;
+function quietSince(a: Agent | null | undefined, w: Workspace | undefined): number {
+  if (!a || !w || a.status !== "working") return 0;
+  const saved = savedVerdict(w);
+  if (!saved || saved.agent !== a.id) return 0;
+  return (a.lastActivityAt ?? 0) > saved.since ? 0 : saved.since;
 }
 
 /** " · quiet 17m" after a quiet agent's status, else "". */

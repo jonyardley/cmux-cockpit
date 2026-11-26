@@ -37,7 +37,8 @@ use std::sync::mpsc::Receiver;
 
 use cockpit_core::NotifyDismiss;
 use cockpit_core::app::{
-    AgentMessage, CmuxCall, CopyText, CyclesSave, OpenUrl, PrSave, RunningSave, StateSet, WaitsSave,
+    AgentMessage, CmuxCall, CopyText, CyclesSave, OpenUrl, PrSave, QuietSave, RunningSave,
+    StateSet, WaitsSave,
 };
 use cockpit_core::persist::is_uuid;
 use cockpit_core::session::Param;
@@ -63,6 +64,8 @@ pub enum Outgoing {
     SaveWaits(WaitsSave),
     /// The core's Ostinato cycles for the state file.
     SaveCycles(CyclesSave),
+    /// The core's quiet verdicts for the state file.
+    SaveQuiet(QuietSave),
     /// A desktop notification to dismiss.
     DismissNotification(NotifyDismiss),
 }
@@ -180,6 +183,15 @@ pub fn command_for(
                 vec![script.display().to_string(), json],
             ))
         }
+        Outgoing::SaveQuiet(save) => {
+            let json = serde_json::to_string(&save.quiet)
+                .map_err(|e| format!("quiet save not sent: {e}"))?;
+            let script = repo_script(config, "quiet-save.sh");
+            Ok((
+                "/bin/sh".to_string(),
+                vec![script.display().to_string(), json],
+            ))
+        }
         // Only an id in cmux's UUID shape reaches the command line.
         Outgoing::DismissNotification(d) if is_uuid(&d.id) => Ok((
             "cmux".to_string(),
@@ -209,6 +221,7 @@ fn describe(o: &Outgoing) -> String {
         Outgoing::SaveRunning(save) => format!("running save of {}", save.running.len()),
         Outgoing::SaveWaits(save) => format!("waits save of {}", save.waits.len()),
         Outgoing::SaveCycles(save) => format!("cycles save of {}", save.cycles.len()),
+        Outgoing::SaveQuiet(save) => format!("quiet save of {}", save.quiet.len()),
         Outgoing::DismissNotification(_) => "dismissing a notification".to_string(),
     }
 }
@@ -258,6 +271,7 @@ pub fn perform<L: Fn(String), F: Fn(String)>(
             | Outgoing::SaveRunning(_)
             | Outgoing::SaveWaits(_)
             | Outgoing::SaveCycles(_)
+            | Outgoing::SaveQuiet(_)
             | Outgoing::DismissNotification(_) => None,
         };
         match command_for(&o, token.as_deref(), config) {
@@ -433,6 +447,22 @@ mod tests {
             ["/u/.config/cmux/scripts/cycles-save.sh", r#"{"W2":null}"#]
         );
         assert_eq!(describe(&save), "cycles save of 1");
+        assert_eq!(workspace_of(&save), None);
+    }
+
+    #[test]
+    fn a_quiet_save_runs_the_repos_script_with_the_verdicts_as_json() {
+        let mut quiet = std::collections::BTreeMap::new();
+        quiet.insert("W2".to_string(), None);
+        let save = Outgoing::SaveQuiet(QuietSave { quiet });
+        let (program, args) =
+            command_for(&save, None, Path::new("/u/.config/cmux/config")).unwrap();
+        assert_eq!(program, "/bin/sh");
+        assert_eq!(
+            args,
+            ["/u/.config/cmux/scripts/quiet-save.sh", r#"{"W2":null}"#]
+        );
+        assert_eq!(describe(&save), "quiet save of 1");
         assert_eq!(workspace_of(&save), None);
     }
 

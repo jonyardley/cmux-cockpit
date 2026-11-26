@@ -312,6 +312,43 @@ where
         .collect())
 }
 
+/// The core's quiet verdict for a workspace's card (#425), saved so the
+/// agents panel, which cannot see the session ids before a `/clear`,
+/// reads quiet from the core's rule (quiet.rs) rather than its own: the
+/// card's agent and when it last showed activity. The panel drops it
+/// once that agent is not working or shows activity since.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SavedQuiet {
+    pub agent: String,
+    pub since: f64,
+}
+
+impl SavedQuiet {
+    /// An id and an epoch, as state-config.ts's savedQuiet holds it. The
+    /// core sends only a verdict that fits, so the script never refuses
+    /// one and leaves it to be sent again.
+    pub(crate) fn fits(&self) -> bool {
+        is_id(&self.agent) && self.since.is_finite() && self.since >= 0.0
+    }
+}
+
+/// The `quiet` map as validateState reads it: an entry that does not fit
+/// is dropped on its own.
+fn quiet_map<'de, D>(d: D) -> Result<BTreeMap<String, SavedQuiet>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let entries: BTreeMap<String, Value> = crate::lenient::map(d)?;
+    Ok(entries
+        .into_iter()
+        .filter(|(ws, _)| is_id(ws))
+        .filter_map(|(ws, v)| {
+            let q = serde_json::from_value::<SavedQuiet>(v).ok()?;
+            q.fits().then_some((ws, q))
+        })
+        .collect())
+}
+
 /// What kind of wait on Jon the core saved for a workspace (#388): a
 /// stopped session (stopped.rs), CI stuck or red with nobody on it, a
 /// change left merge-ready four hours (ci_wait.rs), or parked Ostinato
@@ -701,6 +738,14 @@ pub struct SavedState {
         skip_serializing_if = "BTreeMap::is_empty"
     )]
     pub running: BTreeMap<String, SavedRunning>,
+    /// wsId to the core's quiet verdict for its card (#425), which the
+    /// core writes through the runner (quiet_save.rs) and the agents panel
+    /// reads. Left out while empty.
+    #[serde(
+        deserialize_with = "quiet_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub quiet: BTreeMap<String, SavedQuiet>,
     /// wsId to the waits on Jon its card shows (#388), which the core
     /// writes through the runner (waits_save.rs) and the agents panel
     /// reads. Left out while empty.
@@ -1100,6 +1145,28 @@ mod tests {
         assert!(SavedState::from_json(&many).unwrap().waits.is_empty());
         let empty = serde_json::to_value(SavedState::default()).unwrap();
         assert!(empty.get("waits").is_none(), "left out while empty");
+    }
+
+    #[test]
+    fn reads_quiet_verdicts_as_validate_state_does() {
+        // The same sample as test/quiet-save.test.ts's validateState test.
+        let json = r#"{"quiet": {
+            "w1": {"agent": "s1", "since": 100.5, "extra": 1},
+            "bad since": {"agent": "s1", "since": -1},
+            "no since": {"agent": "s1"},
+            "no agent": {"agent": "", "since": 100},
+            "junk": "x",
+            "__proto__": {"agent": "s1", "since": 100}
+        }}"#;
+        let s = SavedState::from_json(json).unwrap();
+        assert_eq!(s.quiet.keys().collect::<Vec<_>>(), ["w1"]);
+        let out = serde_json::to_value(&s).unwrap();
+        assert_eq!(
+            out["quiet"]["w1"],
+            serde_json::json!({"agent": "s1", "since": 100.5})
+        );
+        let empty = serde_json::to_value(SavedState::default()).unwrap();
+        assert!(empty.get("quiet").is_none(), "left out while empty");
     }
 
     #[test]

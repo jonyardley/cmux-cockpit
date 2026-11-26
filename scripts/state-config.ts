@@ -66,6 +66,15 @@ export interface State {
    */
   running?: Record<string, SavedRunning>;
   /**
+   * wsId -> the native core's quiet verdict for its card (#425): the
+   * card's agent and when it last showed activity, while it has gone
+   * QUIET_SECS with nothing of its own running. The agents panel reads
+   * quiet from it, since it cannot see a chat's runs from before a
+   * `/clear`. Written only by scripts/quiet-save.ts, from the core's
+   * SaveQuiet effect, never by a URL. Left out while nothing is saved.
+   */
+  quiet?: Record<string, SavedQuiet>;
+  /**
    * wsId -> the waits on Jon the native Cockpit's card shows (#388): a
    * stopped session, CI stuck or red with nobody on it, a change left
    * merge-ready four hours, parked Ostinato attempts; each only while it
@@ -364,6 +373,14 @@ export interface SavedRunning {
   since: number;
   /** One to MAX_COUNTS counts, each 1 to MAX_TASKS. */
   counts: SavedCount[];
+}
+
+/** The native core's quiet verdict for a card (native/core/src/quiet_save.rs). */
+export interface SavedQuiet {
+  /** The card's agent: the chat that reads quiet. */
+  agent: string;
+  /** Epoch seconds it last showed activity. */
+  since: number;
 }
 
 /** One stage of a saved cycle, or its park (persist.rs SavedStage). */
@@ -1049,6 +1066,11 @@ function savedRunning(v: unknown): SavedRunning | null {
   return fits ? { agent: v.agent, since: v.since, counts: counts.filter((c) => c !== null) } : null;
 }
 
+/** A quiet verdict as persist.rs's quiet_map reads it. */
+function savedQuiet(v: unknown): SavedQuiet | null {
+  return isRecord(v) && isIdText(v.agent) && isEpoch(v.since) ? { agent: v.agent, since: v.since } : null;
+}
+
 const isWaitKind = (v: unknown): v is WaitKind => WAIT_KINDS.some((k) => k === v);
 
 /** An optional field as serde reads it: missing or null is absent, a value that fails `is` refuses the whole. */
@@ -1222,6 +1244,7 @@ export function validateState(raw: unknown): State {
   const poll = savedPoll(v.poll);
   const background = cleanMap(v.background, savedTasks);
   const running = cleanMap(v.running, savedRunning);
+  const quiet = cleanMap(v.quiet, savedQuiet);
   const waits = cleanMap(v.waits, savedWaits);
   const cycles = cleanMap(v.cycles, savedCycles);
   const laneNames = cleanMap(v.laneNames, laneName);
@@ -1242,6 +1265,7 @@ export function validateState(raw: unknown): State {
     ui: uiState(v.ui),
     ...(Object.keys(background).length ? { background } : {}),
     ...(Object.keys(running).length ? { running } : {}),
+    ...(Object.keys(quiet).length ? { quiet } : {}),
     ...(Object.keys(waits).length ? { waits } : {}),
     ...(Object.keys(cycles).length ? { cycles } : {}),
     ...(Object.keys(laneNames).length ? { laneNames } : {}),
@@ -1253,7 +1277,7 @@ export function validateState(raw: unknown): State {
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `waits`, `cycles`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
+// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `quiet`, `waits`, `cycles`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its keys are UI_KEYS and `tab.<wsId>`. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
 type MapName =

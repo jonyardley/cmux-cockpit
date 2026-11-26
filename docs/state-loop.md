@@ -717,6 +717,22 @@ settled; the hook's 12 hour prune bounds it. A task past its age (above)
 drops out of the core's verdict on the next paced rebuild, with no hook
 write, so a stale entry never holds the verdict either. No URL writes it.
 
+### The core's quiet verdict for the agents panel
+
+The native core also saves which card's agent reads quiet (#425): working,
+no activity for ten minutes, and nothing of its own chat running
+(`native/core/src/quiet.rs`), counted under every session id the chat ran
+under, which the agents panel cannot see after a `/clear`. The `quiet` map
+holds workspace id to `{"agent", "since"}`, the card's agent and when it
+last showed activity. An entry goes out when the agent passes ten minutes
+and a removal when it stops being quiet; nothing in it moves with the
+clock. The panel (`src/shared/quiet.ts`) draws "· quiet 17m" from its own
+clock, and drops the entry while that agent is not working, is another
+agent, or has shown activity since. With no Cockpit running nothing is
+written, so a new quiet spell shows no suffix. It goes the same way as
+`running` (`native/core/src/quiet_save.rs`, its `SaveQuiet` effect,
+`scripts/quiet-save.sh` and `scripts/quiet-save.ts`). No URL writes it.
+
 ### The core's waits for the agents panel
 
 The native core also saves the waits on Jon each card shows (#388), in a

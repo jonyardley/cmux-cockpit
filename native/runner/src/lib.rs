@@ -297,6 +297,7 @@ impl Feed {
                 Effect::SaveRunning(r) => Outgoing::SaveRunning(r.operation),
                 Effect::SaveWaits(r) => Outgoing::SaveWaits(r.operation),
                 Effect::SaveCycles(r) => Outgoing::SaveCycles(r.operation),
+                Effect::SaveQuiet(r) => Outgoing::SaveQuiet(r.operation),
                 Effect::DismissNotification(r) => Outgoing::DismissNotification(r.operation),
             };
             self.hand(out);
@@ -338,6 +339,7 @@ impl Feed {
             EffectFile::SaveRunning(r) => self.hand(Outgoing::SaveRunning(r)),
             EffectFile::SaveWaits(w) => self.hand(Outgoing::SaveWaits(w)),
             EffectFile::SaveCycles(c) => self.hand(Outgoing::SaveCycles(c)),
+            EffectFile::SaveQuiet(q) => self.hand(Outgoing::SaveQuiet(q)),
             EffectFile::Notify(p) => self.notify(p),
             EffectFile::DismissNotification(d) => self.hand(Outgoing::DismissNotification(d)),
         }
@@ -1273,6 +1275,7 @@ mod tests {
                 Outgoing::SaveRunning(r) => format!("save {} running", r.running.len()),
                 Outgoing::SaveWaits(w) => format!("save {} waits", w.waits.len()),
                 Outgoing::SaveCycles(c) => format!("save {} cycles", c.cycles.len()),
+                Outgoing::SaveQuiet(q) => format!("save {} quiet", q.quiet.len()),
                 Outgoing::DismissNotification(d) => format!("dismiss {}", d.id),
             })
             .collect()

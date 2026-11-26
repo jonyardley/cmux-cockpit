@@ -269,6 +269,23 @@ export function writeWaitEntries(
 }
 
 /**
+ * The native core's quiet verdicts (scripts/quiet-save.ts, #425), the one
+ * writer of the `quiet` map, as writeRunningEntries writes the running
+ * map. `set` must already be clean (validateState's `quiet`).
+ */
+export function writeQuietEntries(
+  path: string,
+  set: NonNullable<State["quiet"]>,
+  remove: readonly string[],
+): ApplyResult {
+  return readUpdateWrite(path, (before) => {
+    const quiet = { ...before.quiet, ...set };
+    for (const id of remove) delete quiet[id];
+    return { ok: true, state: validateState({ ...before, quiet: sortedByKey(quiet) }) };
+  });
+}
+
+/**
  * The native core's Ostinato cycles (scripts/cycles-save.ts, #399), the
  * one writer of the `cycles` map, as writeWaitEntries writes the waits.
  * `set` must already be clean (validateState's `cycles`).
