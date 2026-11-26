@@ -384,7 +384,7 @@ describe("moveFrom, a reply that says nothing is needed", () => {
     assert.equal(moveFrom("CI runs! Nothing needed from you.\n\nBack soon.", 5)?.idle, true);
   });
 
-  it("reads a bold closer with no ask verb as quiet once the reply says the phrase", () => {
+  it("holds a bold closer with no ask verb on Running once the reply says the phrase", () => {
     // Jon's live reply on 26 November, saved as waiting before the fix.
     const text = [
       "Jon, Cockpit review: option a is planned and building.",
@@ -397,7 +397,8 @@ describe("moveFrom, a reply that says nothing is needed", () => {
     assert.deepEqual(moveFrom(text, 5), {
       text: "No action yet; I'll report when the pull request lands.",
       epoch: 5,
-      idle: true,
+      unlabelled: true,
+      noAsk: true,
     });
     const ask = text.replace(
       "**No action yet; I'll report when the pull request lands.**",
@@ -405,6 +406,37 @@ describe("moveFrom, a reply that says nothing is needed", () => {
     );
     waitsOnJon(ask);
     waitsOnJon(text.replace("lands.**", "lands; then merge it.**"));
+  });
+
+  it("never saves a bold or italic closer after the phrase as quiet for good", () => {
+    for (const [last, text] of [
+      ["**PR #437 is ready to merge.**", "PR #437 is ready to merge."],
+      ["_The second lane is up next._", "The second lane is up next."],
+    ] as const) {
+      assert.deepEqual(
+        moveFrom(`Lane done.\n\nNothing needed from you.\n\n${last}`, 5),
+        { text, epoch: 5, unlabelled: true, noAsk: true },
+        last,
+      );
+    }
+    assert.equal(moveFrom("Lane done.\n\nNothing needed from you.\n\nThe second lane is up next.", 5)?.idle, true);
+  });
+
+  it("sees a you-word inside single emphasis and right after the phrase", () => {
+    for (const text of [
+      "Lane A is done.\n\nWaiting on _your_ go.",
+      "Lane A is done.\n\nWaiting on *your* go.",
+      "Lane A is done.\n\nThe pick is _yours_.",
+      "Lane A is done.\n\nOver to _you_.",
+      "Lane done.\n\nNothing needed from you.\n\n**Nothing else here; the merge is _yours_.**",
+      "Lane done.\n\nNothing needed from your side, but the review is due.",
+      "Lane done.\n\nNothing needed from you.\n\n**The build is green, nothing needed from your side.**",
+    ]) {
+      const move = moveFrom(text, 5);
+      assert.equal(move?.unlabelled, true, text);
+      assert.equal(move?.noAsk, undefined, text);
+      assert.equal(move?.idle, undefined, text);
+    }
   });
 
   it("lets a bold closer that addresses Jon ask, after the phrase or not", () => {

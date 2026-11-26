@@ -241,11 +241,13 @@ const unqualified = ({ rest, next }: Rest): boolean => quietRest(rest) && !QUALI
 
 // A task left with Jon in a "Nothing" last line: "**Nothing else is needed
 // here. The email is still yours to send.**"
-const YOURS = /\byours\b/i;
+// Bounded by letters and digits rather than `\b`, so italics ("_yours_")
+// still count: `_` is a word character.
+const YOURS = /(?<![\p{L}\p{N}])yours(?![\p{L}\p{N}])/iu;
 // Jon addressed anywhere: "Ready for your review", "A yes from you merges
 // it". "Jon," opening a line is his name, never this.
-const YOU = /\b(?:you|your|yours)\b/i;
-const PHRASE = /nothing needed from you/gi;
+const YOU = /(?<![\p{L}\p{N}])(?:you|your|yours)(?![\p{L}\p{N}])/iu;
+const PHRASE = /\bnothing needed from you\b/gi;
 
 // Whether the reply's last line asks: one that opens "Nothing" asks when the
 // rest of it holds a qualifier, a task left as Jon's, or an ask verb where an
@@ -254,8 +256,10 @@ const PHRASE = /nothing needed from you/gi;
 // or on bold or italic. Once the reply has said "Nothing needed from you"
 // (`saidNothing`), a bold line that never addresses Jon is no ask: on 26
 // November "**No action yet; I'll report when the pull request lands.**"
-// closed such a reply and was saved as waiting. Any "you", qualifier or ask
-// verb where an instruction starts still asks ("**Ready for your review.**").
+// closed such a reply and was saved as waiting. quietness holds such a reply
+// as noAsk, never idle, since the line may still be an ask in other words.
+// Any "you", qualifier or ask verb where an instruction starts still asks
+// ("**Ready for your review.**").
 function lastAsks(last: string, saidNothing: boolean): boolean {
   const nothing = NOTHING_LAST.exec(last);
   if (nothing) {
@@ -289,10 +293,11 @@ function asksAnything(text: string, lines: readonly string[], saidNothing: boole
 /**
  * How a reply with no label stands with Jon. "idle" when a sentence outside
  * a code fence starts "Nothing needed from you", every such sentence is
- * unqualified, and the reply asks nothing anywhere else. "noAsk" when it
- * never says so but asks nothing either and never addresses Jon: a progress
- * reply while the chat's subagents work, which the sidebars hold on Running
- * while they run.
+ * unqualified, and the reply asks nothing anywhere else, unless its last
+ * line is bold or italic and opens no "Nothing", which makes it "noAsk".
+ * "noAsk" also when it never says so but asks nothing either and never
+ * addresses Jon: a progress reply while the chat's subagents work, which
+ * the sidebars hold on Running while they run.
  * Null when it asks. A real ask always wins: a false quiet hides it, a
  * false wait is only noise.
  */
@@ -302,7 +307,7 @@ function quietness(text: string): "idle" | "noAsk" | null {
   if (!rests.every(unqualified)) return null;
   const said = rests.length > 0;
   if (asksAnything(text, lines, said)) return null;
-  if (said) return "idle";
+  if (said) return EMPHASIS_LAST.test(lastRawLine(text) ?? "") ? "noAsk" : "idle";
   return addressesJon(lines) ? null : "noAsk";
 }
 
