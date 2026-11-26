@@ -47,7 +47,7 @@ export function cmuxConfig(env: Env, paths: Paths): void {
 
 // Each open workspace's repo, as git's top level, in the order cmux lists them.
 function openRepos(env: Env): string[] {
-  const list = env.run("cmux", ["--json", "list-workspaces"]);
+  const list = env.run("cmux", ["--json", "workspace", "list"]);
   if (list.status !== 0) return [];
   let parsed: unknown;
   try {
