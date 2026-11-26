@@ -31,6 +31,10 @@ beforeEach(() => {
 describe("what a menu may copy", () => {
   it("keeps a plain branch name", () => {
     assert.equal(copyableBranch("feat/menus-1.2_x"), "feat/menus-1.2_x");
+    assert.equal(
+      copyableBranch("dependabot/npm_and_yarn/@types/node-20.11.0+x"),
+      "dependabot/npm_and_yarn/@types/node-20.11.0+x",
+    );
   });
 
   it("drops a branch with a newline, a space or $(...)", () => {
