@@ -50,7 +50,7 @@ function cmuxWith(home: string): Answers {
   }));
   return {
     "cmux --version": ok("cmux 0.65.1 (120) [abc]"),
-    "cmux --json list-workspaces": ok(JSON.stringify({ workspaces })),
+    "cmux --json workspace list": ok(JSON.stringify({ workspaces })),
     [`git -C ${home}/dev/app-one`]: ok(`${home}/dev/app-one\n`),
     [`git -C ${home}/work/two`]: ok(`${home}/work/two\n`),
     [`git -C ${home} `]: failed("not a git repository"),
@@ -98,12 +98,12 @@ describe("setup", () => {
       f.out.some((l) => l.includes("native/mac/README.md")),
       "points at the native Cockpit",
     );
-    assert.ok(!f.calls.some((c) => c.includes("list-workspaces")));
+    assert.ok(!f.calls.some((c) => c.includes("workspace list")));
   });
 
   it("falls back to the example table with no workspaces or no cmux list", async () => {
     const w = where();
-    const f = fakeEnv(w, { "cmux --version": ok("cmux 0.64.25"), "cmux --json list-workspaces": failed() });
+    const f = fakeEnv(w, { "cmux --version": ok("cmux 0.64.25"), "cmux --json workspace list": failed() });
     await setup(f.env, ["--no-extras"]);
     const p = pathsFor(w.home, w.repo, undefined);
     assert.equal(readFileSync(p.projects, "utf8"), readFileSync(p.projectsExample, "utf8"));
