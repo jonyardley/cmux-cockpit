@@ -41,8 +41,10 @@ export interface Renderer {
   /** Every cmux() dispatch, in order. */
   calls: { method: string; params: Record<string, unknown> }[];
   opened: string[];
-  /** Every menu item built, as "button:<label>". */
+  /** Every menu item built, as "button:<label>" or "divider". */
   menu: string[];
+  /** Every clipboard.write, in order. */
+  copied: string[];
   roots: (() => View)[];
   globals: Record<string, unknown>;
 }
@@ -166,15 +168,17 @@ function view(kind: string, args: unknown[] = [], children: readonly unknown[] =
 
 // MenuItem is an opaque brand the renderer never reads back; the fake keeps
 // a button's label and action on it so a test can press it (menuOf).
-const menuItem = (item: { label?: string; action?: () => void } = {}) => item as unknown as MenuItem;
+const menuItem = (item: { label?: string; action?: () => void; divider?: true } = {}) => item as unknown as MenuItem;
 
-/** A view's context menu buttons, as built: each label and its action. */
+/** A view's context menu items, as built: each button's label and action,
+ * and each divider as the label "divider" with an action that does nothing. */
 export function menuOf(node: ViewNode | undefined): { label: string; action: () => void }[] {
   const items: unknown = node?.handlers.contextMenu;
   if (!Array.isArray(items)) return [];
-  return items.flatMap((i: { label?: string; action?: () => void }) =>
-    i.label !== undefined && i.action ? [{ label: i.label, action: i.action }] : [],
-  );
+  return items.flatMap((i: { label?: string; action?: () => void; divider?: true }) => {
+    if (i.divider) return [{ label: "divider", action: () => {} }];
+    return i.label !== undefined && i.action ? [{ label: i.label, action: i.action }] : [];
+  });
 }
 
 const list =
@@ -215,6 +219,7 @@ export function createRenderer(): Renderer {
     calls: [],
     opened: [],
     menu: [],
+    copied: [],
     roots: [],
     globals: {},
   };
@@ -235,6 +240,17 @@ export function createRenderer(): Renderer {
       const text = typeof label === "function" ? label() : label;
       r.menu.push("button:" + text);
       return menuItem({ label: text, action });
+    },
+    Divider: () => {
+      r.menu.push("divider");
+      return menuItem({ divider: true });
+    },
+    // The fake takes every write; cmux refuses one outside a tap or menu item.
+    clipboard: {
+      write: (text: string) => {
+        r.copied.push(text);
+        return true;
+      },
     },
     signal: <T>(initial: T) => {
       let value = initial;

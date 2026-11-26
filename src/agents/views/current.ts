@@ -36,6 +36,7 @@ import {
 } from "../model.ts";
 import {
   type AgentRow,
+  agentMenu,
   agentRows,
   finishedLine,
   HELPER_PILL,
@@ -47,9 +48,17 @@ import {
   type SubagentRow,
 } from "../team.ts";
 import { STALE_OPACITY, STATUS_DOT, T } from "../theme.ts";
-import { agentDot, jump, panel, ruled } from "./parts.ts";
+import { agentDot, jump, panel, ruled, withMenu } from "./parts.ts";
 
 function agentLine(e: () => AgentRow): View {
+  const a = () => e().a;
+  return withMenu(
+    () => agentLineRow(e),
+    () => agentMenu(a(), cur().ws),
+  );
+}
+
+function agentLineRow(e: () => AgentRow): View {
   const a = () => e().a;
   return HStack({ spacing: 8 }, [
     agentDot(
@@ -70,6 +79,7 @@ function agentLine(e: () => AgentRow): View {
     .paddingVertical(7)
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
+    .cursor("pointer")
     .onTap(() => jump(cur().ws.id, a().surfaceId));
 }
 
@@ -243,6 +253,7 @@ function dismissButton(): View {
     .hoverBackground(T.hover)
     .cornerRadius(8)
     .layoutPriority(1)
+    .cursor("pointer")
     .onTap(() => dismissNeeds(cur().ws));
 }
 

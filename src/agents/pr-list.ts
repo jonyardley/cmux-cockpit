@@ -21,7 +21,7 @@ import {
 import { displayTitle } from "../shared/titles.ts";
 import { footText, isExpanded, markLastBefore, moreThan } from "./lists.ts";
 
-import { chatWs, dotFor, freshness, hollowDot, prStale } from "./model.ts";
+import { chatWs, dotFor, freshness, hollowDot, type MenuEntry, prStale } from "./model.ts";
 
 // ---- Pull requests ----------------------------------------------------------
 
@@ -40,14 +40,14 @@ export interface PrEntry {
   session: PrSession | undefined;
 }
 
-/** Where a row's Open chat goes: the workspace, and its lead agent's
+/** Where a row's chat item goes: the workspace, and its lead agent's
  * surface when it has one (views/parts.ts jump). */
 export interface ChatTarget {
   wsId: string;
   surfaceId: string | undefined;
 }
 
-/** Where Open chat jumps, read when it is chosen, so it focuses the agent the
+/** Where a row's chat item jumps, read when it is chosen, so it focuses the agent the
  * panel leads with then; none once the workspace has gone. */
 export function chatTarget(wsId: string): ChatTarget | undefined {
   const w = (data.workspaces() ?? []).find((x) => x.id === wsId);
@@ -57,7 +57,7 @@ export function chatTarget(wsId: string): ChatTarget | undefined {
 /** The chat a PR row names on its faint line, with that chat's status dot. */
 export interface PrSession {
   name: string;
-  /** The workspace the row's right-click Open chat goes to (chatWs). */
+  /** The workspace the row's right-click Go to its chat goes to (chatWs). */
   chat: string | undefined;
   dot: string;
   /** Idle or no agent: the dot draws as a hollow ring, as everywhere else in the panel. */
@@ -204,6 +204,24 @@ export const prs = computed((): Last<PrEntry>[] => {
 /** The faint line under the Pull requests heading when the saved data is old
  * or gh is down, "gh unavailable · last checked 2h ago"; "" when fresh. */
 export const prNote = computed((): string => freshness().line);
+
+/** A PR row's right-click menu: open it, copy its link and branch, then,
+ * set apart, go to the chat it belongs to while there is one to go to. */
+export function prMenu(e: Pick<PrEntry, "pr" | "session">): MenuEntry[] {
+  const url = e.pr.url ?? "";
+  const branch = e.pr.branch ?? "";
+  const chat = e.session?.chat;
+  return [
+    ...(url
+      ? [
+          { label: "Open pull request", does: { open: url } },
+          { label: "Copy link", does: { copy: url } },
+        ]
+      : []),
+    ...(branch ? [{ label: "Copy branch name", does: { copy: branch } }] : []),
+    ...(chat ? ["divider" as const, { label: "Go to its chat", does: { chat } }] : []),
+  ];
+}
 
 /** A PR row's chip dims while it is the poller's copy and that copy is stale. */
 export const prDim = (e: Pick<PrEntry, "saved">): boolean => e.saved && prStale();

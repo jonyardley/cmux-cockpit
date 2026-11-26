@@ -9,7 +9,7 @@ import { ageSince } from "../shared/time.ts";
 import { countTint, type PillColors } from "../shared/ui.ts";
 import { moreThan } from "./lists.ts";
 
-import { cur } from "./model.ts";
+import { cur, type MenuEntry } from "./model.ts";
 
 // ---- This workspace's agent list -------------------------------------------
 
@@ -61,6 +61,15 @@ export const agentRows = computed((): Last<AgentRow>[] => {
   const labels = agentLabels(inOrder);
   return markLast(live.slice(0, 6).map((a) => ({ key: "a:" + a.id, a, label: labels.get(a.id) ?? fallbackLabel(a) })));
 });
+
+/** An agent row's right-click menu: go to that agent, and copy the
+ * workspace's branch while it has one. */
+export function agentMenu(a: Agent, w: Workspace): MenuEntry[] {
+  return [
+    { label: "Go to this agent", does: { agent: { wsId: w.id, surfaceId: a.surfaceId } } },
+    ...(w.branch ? [{ label: "Copy branch name", does: { copy: w.branch } }] : []),
+  ];
+}
 
 // ---- Subagents ---------------------------------------------------------------
 

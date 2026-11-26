@@ -1,12 +1,12 @@
 VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(14)
   VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|neutralChip.edge) .cornerRadius(10)
     HStack spacing: 0 .padding(2) .frame(maxWidth: infinity, alignment: leading) .background(countBg) .cornerRadius(9)
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(7) .onTap()
+      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(7) .cursor(pointer) .onTap()
         HStack spacing: 0 .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(6) .hoverBackground(hover)
           Spacer minLength: 0
           Text "Now" .font(12) .weight(medium) .color(secondary|neutralChip.fg) .lineLimit(1) .frame(height: 24)
           Spacer minLength: 0
-      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(7) .onTap()
+      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(7) .cursor(pointer) .onTap()
         HStack spacing: 0 .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(6) .hoverBackground(panel|onClay)
           Spacer minLength: 0
           Text "Details" .font(12) .weight(medium) .color(text) .lineLimit(1) .frame(height: 24)
@@ -40,7 +40,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
           Reorderable spacing: 0
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                 HStack spacing: 9
                   ZStack .frame(width: 13, height: 13)
                     Circle size: 13 .fill(clayHalo)
@@ -51,7 +51,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 Text "Claude, last activity 1m ago" .font(11) .color(tertiary) .lineLimit(1) .truncation(tail) .paddingLeading(22)
               Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                 HStack spacing: 9
                   ZStack .frame(width: 13, height: 13)
                     Circle size: 13 .fill(clear)
@@ -62,7 +62,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                 Text "Codex, last activity 10m ago" .font(11) .color(tertiary) .lineLimit(1) .truncation(tail) .paddingLeading(22)
               Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                 HStack spacing: 9
                   ZStack .frame(width: 13, height: 13)
                     Circle size: 13 .fill(clear)
@@ -118,7 +118,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
       VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(12) .frame(maxWidth: infinity, alignment: leading)
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
           VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
-            VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+            VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
               HStack spacing: 9
                 Text "Now and Details tabs in the agents panel" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                 Spacer minLength: 4
@@ -128,7 +128,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
           VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .opacity(1)
             Reorderable spacing: 0
               VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                   HStack spacing: 9
                     ZStack .frame(width: 13, height: 13)
                       Circle size: 13 .fill(clear)
@@ -138,7 +138,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                     Text "failed, started 14m ago" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
                 Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
               VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                   HStack spacing: 9
                     ZStack .frame(width: 13, height: 13)
                       Circle size: 13 .fill(clear)
@@ -148,7 +148,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                     Text "running 3m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
                 Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
               VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                   HStack spacing: 9
                     ZStack .frame(width: 13, height: 13)
                       Circle size: 13 .fill(clear)
@@ -158,7 +158,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
                     Text "queued 1m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
                 Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
               VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+                VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                   HStack spacing: 9
                     ZStack .frame(width: 13, height: 13)
                       Circle size: 13 .fill(clear)
@@ -209,28 +209,28 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
           Reorderable spacing: 0
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                 HStack spacing: 9
                   Text ":5173" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                   Spacer minLength: 4
                   Text "localhost" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
               Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                 HStack spacing: 9
                   Text ":6006" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                   Spacer minLength: 4
                   Text "localhost" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
               Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                 HStack spacing: 9
                   Text ":8080" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                   Spacer minLength: 4
                   Text "localhost" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
               Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                 HStack spacing: 9
                   Text ":3000" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                   Spacer minLength: 4
@@ -245,14 +245,14 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
         VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(11)
           Reorderable spacing: 0
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                 HStack spacing: 9
                   Text "Tab switch mock-up" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                   Spacer minLength: 4
                   Text "15m" .font(11) .monospaced() .color(tertiary) .lineLimit(1) .layoutPriority(2)
               Rectangle .fill(rule) .frame(maxWidth: infinity, height: 1)
             VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .fixed()
-              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .onTap()
+              VStack spacing: 2, alignment: leading .paddingHorizontal(12) .paddingVertical(8) .hoverBackground(hover) .frame(maxWidth: infinity, alignment: leading) .cursor(pointer) .onTap()
                 HStack spacing: 9
                   Text "Details tab plan" .font(12.5) .color(text) .lineLimit(1) .truncation(tail) .layoutPriority(1)
                   Spacer minLength: 4

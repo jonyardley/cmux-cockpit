@@ -83,7 +83,7 @@ function detailRow(r: DetailRow, last: () => boolean): View {
     .paddingVertical(8);
   const tap = r.tap;
   const row = tap
-    ? body.hoverBackground(T.hover).frame({ maxWidth: "infinity", alignment: "leading" }).onTap(tap)
+    ? body.hoverBackground(T.hover).frame({ maxWidth: "infinity", alignment: "leading" }).cursor("pointer").onTap(tap)
     : body.frame({ maxWidth: "infinity", alignment: "leading" });
   return ruled(row, last);
 }

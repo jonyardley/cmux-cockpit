@@ -1,12 +1,12 @@
 VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(14)
   VStack spacing: 0, alignment: leading .padding(1) .background(chipEdge|neutralChip.edge) .cornerRadius(10)
     HStack spacing: 0 .padding(2) .frame(maxWidth: infinity, alignment: leading) .background(countBg) .cornerRadius(9)
-      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(7) .onTap()
+      VStack spacing: 0, alignment: leading .padding(1) .background(panelEdge) .cornerRadius(7) .cursor(pointer) .onTap()
         HStack spacing: 0 .frame(maxWidth: infinity, alignment: leading) .background(panel|onClay) .cornerRadius(6) .hoverBackground(panel|onClay)
           Spacer minLength: 0
           Text "Now" .font(12) .weight(medium) .color(text) .lineLimit(1) .frame(height: 24)
           Spacer minLength: 0
-      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(7) .onTap()
+      VStack spacing: 0, alignment: leading .padding(1) .background(clear) .cornerRadius(7) .cursor(pointer) .onTap()
         HStack spacing: 0 .frame(maxWidth: infinity, alignment: leading) .background(clear) .cornerRadius(6) .hoverBackground(hover)
           Spacer minLength: 0
           Text "Details" .font(12) .weight(medium) .color(secondary|neutralChip.fg) .lineLimit(1) .frame(height: 24)
@@ -31,7 +31,7 @@ VStack spacing: 18, alignment: leading .paddingHorizontal(14) .paddingVertical(1
               VStack spacing: 8, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(10)
                 Text "Your move: answer yes or no once the left panel redraws." .font(13) .color(text) .lineLimit(3) .truncation(tail) .frame(maxWidth: infinity, alignment: leading)
                 HStack spacing: 6 .frame(maxWidth: infinity)
-                  Text "Dismiss" .font(12) .color(secondary|neutralChip.fg) .lineLimit(1) .paddingHorizontal(8) .paddingVertical(4) .hoverBackground(hover) .cornerRadius(8) .layoutPriority(1) .onTap()
+                  Text "Dismiss" .font(12) .color(secondary|neutralChip.fg) .lineLimit(1) .paddingHorizontal(8) .paddingVertical(4) .hoverBackground(hover) .cornerRadius(8) .layoutPriority(1) .cursor(pointer) .onTap()
                   Spacer
               VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading)
                 VStack spacing: 0, alignment: leading .frame(maxWidth: infinity, alignment: leading) .paddingTop(16) .paddingBottom(12)

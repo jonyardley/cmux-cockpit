@@ -236,3 +236,16 @@ export const currentPrTone = computed((): PrTone => {
 export function chatWs(w: Workspace, lead: Agent | null): string | undefined {
   return w.selected && !lead?.surfaceId ? undefined : w.id;
 }
+
+// ---- Right-click menus ------------------------------------------------------
+
+/** What a menu item does: open a link, copy text, go to a chat (by
+ * workspace id, its lead agent read when chosen) or to one agent. */
+export type MenuAction =
+  | { open: string }
+  | { copy: string }
+  | { chat: string }
+  | { agent: { wsId: string; surfaceId: string | undefined } };
+
+/** One line of a row's right-click menu, or the rule between groups. */
+export type MenuEntry = { label: string; does: MenuAction } | "divider";

@@ -55,8 +55,9 @@ interface View {
    */
   showOnHover(on?: Reactive<boolean>): View;
   hideOnHover(on?: Reactive<boolean>): View;
-  // No tooltip and no pointer cursor: the runtime passes `help` through,
-  // but cmux's SceneNodeView never draws it, and sets no cursor on a tap.
+  // No tooltip: the runtime passes `help` through, but cmux's SceneNodeView never draws it.
+  /** The pointer's shape over the view; cmux 0.65.2's runtime passes it through. */
+  cursor(kind: "pointer"): View;
   onTap(action: () => void): View;
   contextMenu(items: MenuItem[]): View;
 }
@@ -106,6 +107,8 @@ declare function Reorderable<T>(options: ReorderableOptions<T>, render: (item: (
 // alike, so leave onSubmit undeclared (PR #146), and wrap it in ring().
 
 declare function Button(label: Reactive<string>, action: () => void): MenuItem;
+/** The rule between groups of a context menu's items. */
+declare function Divider(): MenuItem;
 // No Menu(): cmux drops submenus from a context menu without an error, so
 // leaving it undeclared makes the compiler refuse one (PR #26).
 
@@ -146,6 +149,9 @@ declare function cmux(method: "workspace.rename", params: { workspace_id: string
 /** Dispatches a cmux socket command, e.g. workspace.select. */
 declare function cmux(method: string, params: Record<string, string | number | boolean>): void;
 declare function openURL(url: string): void;
+/** Write-only: cmux writes only while it dispatches a tap or menu item, and
+ * returns false anywhere else. There is no read. */
+declare const clipboard: { write(text: string): boolean };
 
 type AgentStatus = "needs_input" | "working" | "idle" | "ended";
 type PrStatus = "open" | "merged" | "closed";

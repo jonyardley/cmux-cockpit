@@ -2,7 +2,18 @@
 
 import { prChipColors } from "../../shared/pr-colors.ts";
 import type { Project } from "../../shared/projects.ts";
-import { chipFrame, chipText, countPill, haloDot, projectBadge, ring, sectionTitle, when } from "../../shared/ui.ts";
+import {
+  chipFrame,
+  chipText,
+  countPill,
+  haloDot,
+  openIfUrl,
+  projectBadge,
+  ring,
+  sectionTitle,
+  when,
+} from "../../shared/ui.ts";
+import type { MenuAction, MenuEntry } from "../model.ts";
 import { chatTarget, type PrEntry, prChipText, prChipTone, prDim } from "../pr-list.ts";
 import { STALE_OPACITY, T } from "../theme.ts";
 
@@ -75,6 +86,34 @@ export function withChatMenu(row: () => View, chat: () => string | undefined): V
     ),
     when("plain", () => !chat(), row),
   ];
+}
+
+function runMenu(does: MenuAction): void {
+  if ("open" in does) openIfUrl(does.open);
+  else if ("copy" in does) clipboard.write(does.copy);
+  else if ("agent" in does) jump(does.agent.wsId, does.agent.surfaceId);
+  else {
+    const t = chatTarget(does.chat);
+    if (t) jump(t.wsId, t.surfaceId);
+  }
+}
+
+/** A row with the right-click menu its model lists (model.ts MenuEntry).
+ * A row's menu is fixed when it is built, so the row is keyed by its
+ * labels and rebuilt when they change; each item reads the list again
+ * when chosen, so it acts on the data as it is then. */
+export function withMenu(row: () => View, items: () => readonly MenuEntry[]): View {
+  const shape = () =>
+    items()
+      .map((i) => (i === "divider" ? "-" : i.label))
+      .join("|");
+  const choose = (n: number) => () => {
+    const now = items()[n];
+    if (now && now !== "divider") runMenu(now.does);
+  };
+  return ForEach({ items: () => [{ id: shape() }], key: (x) => x.id }, () =>
+    row().contextMenu(items().map((i, n) => (i === "divider" ? Divider() : Button(i.label, choose(n))))),
+  );
 }
 
 /** A PR's state chip, "draft": its words on a faint face of its tone's hue,
