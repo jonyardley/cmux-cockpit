@@ -766,8 +766,8 @@ cmux shows something newer. A turn retires once a prompt comes after it
 which can move without one. An ask, idle or ended entry retires once
 cmux's start is past its own by more than the slack, so a later
 permission prompt shows over a saved idle, while a dismissed ask's idle,
-saved at the ask's start, holds. A turn or ask also retires once cmux
-says anything but idle or needs_input, a saved `working` once cmux says
+saved at the ask's start, holds. Any of these also retires once cmux
+says working, a turn or ask once cmux says ended, a saved `working` once cmux says
 otherwise, and a stop or CI carrier once its agent works in a spell that
 began after it. A park never retires here, since the core lays it on a
 working lead. An agent with no entry, or one whose entry has retired,

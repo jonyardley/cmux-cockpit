@@ -56,16 +56,17 @@ function entryOf(live: Agent, w: Workspace): SavedAgent | undefined {
   return ownHolds(e, live, w) ? e : undefined;
 }
 
-// A saved turn, ask, idle or ended entry. A turn or ask only ever comes from
-// an agent at a turn end (idle or needs_input). A turn holds until a prompt
+// A saved turn, ask, idle or ended entry, none of which the core lays on a
+// working agent. A turn or ask only ever comes from an agent at a turn end
+// (idle or needs_input). A turn holds until a prompt
 // comes after it (latestAt): cmux's own start can move on without one. The
 // rest hold until cmux's start moves past theirs, so a later permission
 // prompt shows over a saved idle, while a dismissed ask's idle, saved at the
 // ask's start, holds.
 function ownHolds(e: SavedAgent, live: Agent, w: Workspace): boolean {
+  if (live.status === "working") return false;
   if (e.status === "needs_input" && live.status !== "idle" && live.status !== "needs_input") return false;
   if (e.why === "turn") return (w.latestAt ?? 0) <= e.since + HOOK_SLACK;
-  if (live.status === "working" && (live.sinceEpoch ?? 0) > e.since) return false;
   return (live.sinceEpoch ?? 0) <= e.since + HOOK_SLACK;
 }
 

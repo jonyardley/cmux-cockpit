@@ -156,10 +156,11 @@ describe("agentsOf with the Cockpit's saved agents", () => {
     assert.equal(one(slack)?.sinceEpoch, 1000);
   });
 
-  it("never keeps a saved turn on a working agent, even with no start", () => {
+  it("never keeps a saved turn or idle on a working agent, even with no start", () => {
     const w = ws("turn", { agents: [agent("working", { id: "t" })] });
     assert.equal(one(w)?.status, "working");
     assert.equal(needs.waitWhy(one(w), w), undefined);
+    assert.equal(one(ws("staleIdle", { agents: [agent("working", { id: "a" })] }))?.status, "working", "nor an idle");
   });
 
   it("leaves out an agent cmux sends with no status (issue #7)", () => {
