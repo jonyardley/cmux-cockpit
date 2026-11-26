@@ -146,42 +146,46 @@ fn test(re: &LazyLock<Option<Regex>>, s: &str) -> bool {
 
 /// True when the move asks nothing of Jon: saved as idle ("Nothing for
 /// you:"), or the older "Your move: nothing." or "nothing waits on you". A
-/// reply that laid out decisions always asks something. A model's verdict
-/// on the whole reply, once written, overrides the wording.
+/// reply that laid out decisions always asks something, and so does one a
+/// model's verdict says waits. A quiet verdict alone is not enough: like
+/// `no_ask` it only holds the turn while agents run (`asks_nothing_yet`).
 pub fn asks_nothing(m: &SavedMove) -> bool {
-    if positive(m.decisions.unwrap_or(0.0)) {
+    if positive(m.decisions.unwrap_or(0.0)) || m.verdict == Some(MoveVerdict::Waits) {
         return false;
-    }
-    if let Some(v) = m.verdict {
-        return v == MoveVerdict::Quiet;
     }
     m.idle == Some(true) || test(&NOTHING_WAITS, &m.text) || test(&NOTHING_FIRST, &m.text)
 }
 
 /// Whether `m` asks nothing of Jon for now: `asks_nothing`, or a reply
-/// that asked nothing at all (`no_ask`) while `a`'s chat still runs
-/// subagents by the core's saved verdict (running_save.rs). Only agents
-/// hold it: a shell, monitor or background session can run for hours, so
-/// the turn would hide all that time. Once the agents stop the turn waits
-/// on him again, so a quiet chat never hides for good. A model's verdict
-/// settles it alone.
+/// that asked nothing at all (`no_ask`, or a quiet verdict from the model)
+/// while `a`'s chat still runs subagents by the core's saved verdict
+/// (running_save.rs). Only agents hold it: a shell, monitor or background
+/// session can run for hours, so the turn would hide all that time. Once
+/// the agents stop the turn waits on him again, so a quiet chat never
+/// hides for good. A verdict that it waits holds nothing.
 pub fn asks_nothing_yet(
     saved: &SavedState,
     m: &SavedMove,
     a: &Agent,
     w: Option<&Workspace>,
 ) -> bool {
-    if m.verdict.is_some() {
-        return asks_nothing(m);
+    if asks_nothing(m) {
+        return true;
     }
-    let agents_run = w.and_then(|w| saved.running.get(&w.id)).is_some_and(|r| {
+    let quiet = match m.verdict {
+        Some(MoveVerdict::Waits) => false,
+        Some(MoveVerdict::Quiet) => true,
+        None => m.no_ask == Some(true),
+    };
+    if !quiet || positive(m.decisions.unwrap_or(0.0)) {
+        return false;
+    }
+    w.and_then(|w| saved.running.get(&w.id)).is_some_and(|r| {
         r.agent == a.id
             && r.counts
                 .iter()
                 .any(|c| c.kind == TaskType::Subagent && c.n > 0)
-    });
-    let no_ask = m.no_ask == Some(true) && !positive(m.decisions.unwrap_or(0.0));
-    asks_nothing(m) || (no_ask && agents_run)
+    })
 }
 
 /// How big answering a move is.
@@ -259,66 +263,73 @@ mod tests {
     }
 
     #[test]
-    fn a_models_verdict_overrides_the_wording_both_ways() {
+    fn a_waits_verdict_overrides_idle_wording_but_quiet_alone_does_not() {
         let idle = SavedMove {
             text: "Nothing for you: tests run on".into(),
             idle: Some(true),
             ..SavedMove::default()
         };
+        assert!(asks_nothing(&idle));
         let waits = SavedMove {
             verdict: Some(MoveVerdict::Waits),
             ..idle.clone()
         };
-        assert!(asks_nothing(&idle));
         assert!(!asks_nothing(&waits));
-        let asking = SavedMove {
+        let idle_quiet = SavedMove {
+            verdict: Some(MoveVerdict::Quiet),
+            ..idle.clone()
+        };
+        assert!(asks_nothing(&idle_quiet), "quiet and idle wording agree");
+        let quiet = SavedMove {
             text: "Say go and I'll push.".into(),
             unlabelled: Some(true),
-            no_ask: Some(true),
+            verdict: Some(MoveVerdict::Quiet),
             ..SavedMove::default()
         };
-        let quiet = SavedMove {
-            verdict: Some(MoveVerdict::Quiet),
-            ..asking.clone()
-        };
-        assert!(!asks_nothing(&asking));
-        assert!(asks_nothing(&quiet));
+        assert!(!asks_nothing(&quiet), "quiet alone never hides for good");
         let deciding = SavedMove {
             decisions: Some(1.0),
-            ..quiet.clone()
+            ..idle_quiet.clone()
         };
         assert!(!asks_nothing(&deciding), "decisions always ask");
     }
 
     #[test]
-    fn a_models_verdict_settles_asks_nothing_yet_while_helpers_run() {
+    fn a_quiet_verdict_holds_the_turn_only_while_agents_run() {
         let a = claude("c", &[]);
         let w = ws(std::slice::from_ref(&a), 950.0);
-        let saved = verdict_saved("c");
+        let agents = verdict_saved("c");
+        let none = SavedState::default();
+        let quiet = SavedMove {
+            text: "Say go and I'll push.".into(),
+            unlabelled: Some(true),
+            verdict: Some(MoveVerdict::Quiet),
+            ..SavedMove::default()
+        };
+        assert!(asks_nothing_yet(&agents, &quiet, &a, Some(&w)));
+        assert!(!asks_nothing_yet(&none, &quiet, &a, Some(&w)));
+        let deciding = SavedMove {
+            decisions: Some(1.0),
+            ..quiet.clone()
+        };
+        assert!(!asks_nothing_yet(&agents, &deciding, &a, Some(&w)));
         let no_ask = SavedMove {
             text: "Still waiting on CI.".into(),
             unlabelled: Some(true),
             no_ask: Some(true),
             ..SavedMove::default()
         };
-        assert!(asks_nothing_yet(&saved, &no_ask, &a, Some(&w)));
+        assert!(asks_nothing_yet(&agents, &no_ask, &a, Some(&w)));
         let waits = SavedMove {
             verdict: Some(MoveVerdict::Waits),
             ..no_ask.clone()
         };
-        assert!(!asks_nothing_yet(&saved, &waits, &a, Some(&w)));
-        let quiet = SavedMove {
-            text: "Say go and I'll push.".into(),
-            unlabelled: Some(true),
-            verdict: Some(MoveVerdict::Quiet),
-            ..SavedMove::default()
+        assert!(!asks_nothing_yet(&agents, &waits, &a, Some(&w)));
+        let idle_quiet = SavedMove {
+            idle: Some(true),
+            ..quiet.clone()
         };
-        assert!(asks_nothing_yet(
-            &SavedState::default(),
-            &quiet,
-            &a,
-            Some(&w)
-        ));
+        assert!(asks_nothing_yet(&none, &idle_quiet, &a, Some(&w)));
     }
 
     fn claude(id: &str, earlier: &[&str]) -> Agent {

@@ -595,7 +595,8 @@ pub struct SavedMove {
     #[serde(default, rename = "noAsk")]
     pub no_ask: Option<bool>,
     /// A small model's reading of the whole reply, written after the move
-    /// (scripts/hooks/move-verdict.ts); it overrides the wording flags.
+    /// (scripts/hooks/move-verdict.ts): "waits" overrides the wording
+    /// flags, "quiet" holds the turn like `no_ask` (moves.rs).
     #[serde(default)]
     pub verdict: Option<MoveVerdict>,
 }

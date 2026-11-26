@@ -515,7 +515,8 @@ export interface SavedMove {
   /**
    * A small model's reading of the whole reply, written after the move by
    * scripts/hooks/move-verdict.ts: "waits" when it waits on Jon, "quiet"
-   * when it does not. When present it overrides the wording flags.
+   * when it does not. "waits" overrides the wording flags; "quiet" holds
+   * the turn like noAsk, only while the chat's agents run.
    */
   verdict?: MoveVerdict;
 }

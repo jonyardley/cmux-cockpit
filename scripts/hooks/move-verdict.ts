@@ -1,18 +1,4 @@
-// A small model's verdict on a turn's final reply: does it wait on Jon?
-// The move hook (report-move.ts) saves the move from the reply's wording at
-// once, then starts this file detached with the reply, so the Stop hook
-// never waits on a model. Here `claude -p` with Haiku reads the reply, and
-// when it answers inside VERDICT_TIMEOUT_MS the verdict is written onto the
-// same saved move, in the cmux description or in config/state.json's
-// `moves`, whichever holds it, but only while that move is still the one
-// this run was started for. Any failure writes nothing, so the wording
-// flags stand. The core and the agents panel let a verdict override them
-// (asks_nothing in native/core/src/moves.rs, asksNothing in
-// src/shared/move.ts).
-//
-// `node scripts/hooks/move-verdict.ts --replay <file>` reads JSON lines of
-// replies (a string, or an object with `text`) and prints each verdict, to
-// set the model against the wording rules on past replies.
+// A small model's verdict on a turn's final reply, written onto its saved move (docs/state-loop.md).
 
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -34,14 +20,10 @@ import { readApplyWrite } from "../state-url.ts";
 import { type DescriptionRead, readDescription, withDescriptionLock, writeDescription } from "./description.ts";
 import { field } from "./gh-command.ts";
 
-/** Set on the model's own process, so its hooks, if any load, save no move of their own. */
 export const CHILD_ENV = "COCKPIT_VERDICT_CHILD";
-/** How long the model gets before the run gives up and writes nothing. */
 export const VERDICT_TIMEOUT_MS = 20_000;
-/** The most of a reply the model reads; the end is kept, where the ask sits. */
 export const REPLY_CAP = 6000;
 
-/** The move a run was started for: a verdict lands only on this move. */
 export interface VerdictTarget {
   wsId: string;
   epoch: number;
@@ -49,7 +31,6 @@ export interface VerdictTarget {
   text: string;
 }
 
-/** The target for a move just saved in workspace `wsId`. */
 export const verdictTarget = (wsId: string, m: SavedMove): VerdictTarget => ({
   wsId,
   epoch: m.epoch,
@@ -57,26 +38,46 @@ export const verdictTarget = (wsId: string, m: SavedMove): VerdictTarget => ({
   ...(m.session !== undefined ? { session: m.session } : {}),
 });
 
-const SCHEMA = '{"type":"object","properties":{"waiting":{"type":"boolean"}},"required":["waiting"]}';
+// The prompt
 
-/** What the model is asked, the reply cut to its last REPLY_CAP characters. */
+const SCHEMA = '{"type":"object","properties":{"waiting":{"type":"boolean"}},"required":["waiting"]}';
+const OPEN = "<<<REPLY";
+const CLOSE = "REPLY>>>";
+
+// Looped, since cutting one marker can join its neighbours into another.
+export function withoutMarkers(text: string): string {
+  let out = text;
+  for (;;) {
+    const next = out.split(OPEN).join("").split(CLOSE).join("");
+    if (next === out) return out;
+    out = next;
+  }
+}
+
+const cut = (reply: string): string => (reply.length > REPLY_CAP ? reply.slice(-REPLY_CAP) : reply);
+
 export function verdictPrompt(reply: string): string {
-  const cut = reply.length > REPLY_CAP ? reply.slice(-REPLY_CAP) : reply;
   return [
     "The text between the markers is a coding agent's reply to its human, at the end of the agent's turn.",
     'Answer "waiting": true when the reply waits on the human now: it asks a question, offers options or a decision,',
     "asks for approval, a go, a review or a paste, or tells the human to do something now.",
+    "A final line, often in bold, telling the human to do something now means waiting, even after",
+    '"Nothing needed from you": "Paste this into ...", "Merge it", "Approve ...", "Attach the file and send it",',
+    '"Name the next issue", "Reply with a letter". A line saying a pull request is ready for the human to merge',
+    "is also waiting.",
     'Answer "waiting": false when it reports progress or says nothing is needed, even when it describes the',
     'agent\'s own next steps ("After it I push, open a draft PR, and ask for your word") or an ask that comes later.',
+    'An action that is explicitly optional or for later is not waiting either: "Close this chat whenever you like",',
+    '"Type /exit to close", "Open the card when it asks for your word", "Leave this card alone".',
     "",
-    "<<<REPLY",
-    cut,
-    "REPLY>>>",
+    OPEN,
+    withoutMarkers(cut(reply)),
+    CLOSE,
   ].join("\n");
 }
 
-/** The `claude` arguments for one verdict. */
-export const claudeArgs = (prompt: string): string[] => [
+// The prompt goes on stdin, so a reply never reaches argv.
+export const claudeArgs = (): string[] => [
   "-p",
   "--model",
   "haiku",
@@ -90,32 +91,28 @@ export const claudeArgs = (prompt: string): string[] => [
   "json",
   "--json-schema",
   SCHEMA,
-  prompt,
 ];
 
-/**
- * The model's environment: marked as the verdict's child, and outside any
- * cmux workspace, so a Stop hook there could not touch the move it judges.
- */
+// `claude` resolves to the cmux shim, whose wrapper adds cmux's hooks when
+// CMUX_SURFACE_ID is set (cmux-claude-wrapper, "IN_CMUX"); its documented
+// opt-out is CMUX_CLAUDE_HOOKS_DISABLED=1.
+const CMUX_SURFACE = ["CMUX_WORKSPACE_ID", "CMUX_SURFACE_ID", "CMUX_TAB_ID", "CMUX_PANEL_ID", "CMUX_CLAUDE_PID"];
+
 export function childEnv(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const out: NodeJS.ProcessEnv = { ...env, [CHILD_ENV]: "1" };
-  delete out.CMUX_WORKSPACE_ID;
+  const out: NodeJS.ProcessEnv = { ...env, [CHILD_ENV]: "1", CMUX_CLAUDE_HOOKS_DISABLED: "1" };
+  for (const key of CMUX_SURFACE) delete out[key];
   return out;
 }
 
-/** True when this process is the model's own, where the move hook must do nothing. */
 export const isVerdictChild = (env: NodeJS.ProcessEnv): boolean => env[CHILD_ENV] === "1";
+
+// The model's answer
 
 const waitingOf = (v: unknown): MoveVerdict | null => {
   const w = field(v, "waiting");
   return typeof w === "boolean" ? (w ? "waits" : "quiet") : null;
 };
 
-/**
- * The verdict in `claude -p --output-format json`'s output: its
- * `structured_output`, else its `result` read as JSON; null for an error
- * result or anything else.
- */
 export function parseVerdict(stdout: string): MoveVerdict | null {
   let out: unknown;
   try {
@@ -135,28 +132,27 @@ export function parseVerdict(stdout: string): MoveVerdict | null {
   }
 }
 
-/** One run of `claude`: its exit status (null when killed), stdout, and whether the timeout killed it. */
 export interface RunResult {
   status: number | null;
   stdout: string;
   timedOut: boolean;
 }
-export type Runner = (args: string[], env: NodeJS.ProcessEnv, timeoutMs: number) => RunResult;
+export type Runner = (args: string[], input: string, env: NodeJS.ProcessEnv, timeoutMs: number) => RunResult;
 
-/** The model's verdict on `reply`, or null when it failed, timed out or answered nothing usable. */
 export function askModel(reply: string, run: Runner, env: NodeJS.ProcessEnv): MoveVerdict | null {
-  const r = run(claudeArgs(verdictPrompt(reply)), childEnv(env), VERDICT_TIMEOUT_MS);
+  const r = run(claudeArgs(), verdictPrompt(reply), childEnv(env), VERDICT_TIMEOUT_MS);
   return r.timedOut || r.status !== 0 ? null : parseVerdict(r.stdout);
 }
 
 // Runs from a temporary folder, so no project's CLAUDE.md or settings load.
-const runClaude: Runner = (args, env, timeoutMs) => {
+const runClaude: Runner = (args, input, env, timeoutMs) => {
   const r = spawnSync("claude", args, {
     cwd: tmpdir(),
     env,
+    input,
     timeout: timeoutMs,
     killSignal: "SIGKILL",
-    stdio: ["ignore", "pipe", "ignore"],
+    stdio: ["pipe", "pipe", "ignore"],
     encoding: "utf8",
     maxBuffer: 4 * 1024 * 1024,
   });
@@ -164,10 +160,8 @@ const runClaude: Runner = (args, env, timeoutMs) => {
   return { status: r.status, stdout: r.stdout ?? "", timedOut };
 };
 
-/**
- * `current` with the verdict, when it is still the move a run was started
- * for (same epoch, session and text); null when it is gone or newer.
- */
+// Writing the verdict
+
 export function withVerdict(
   current: SavedMove | null | undefined,
   target: VerdictTarget,
@@ -180,63 +174,84 @@ export function withVerdict(
 
 export interface VerdictDeps {
   read: (wsId: string) => DescriptionRead;
-  write: (wsId: string, description: string) => boolean;
+  /** Sets the description, or clears it for null; false when cmux refused. */
+  write: (wsId: string, description: string | null) => boolean;
   saved: (wsId: string) => SavedMove | undefined;
   save: (wsId: string, move: SavedMove) => { ok: true; changed: boolean } | { ok: false; error: string };
   build: () => void;
-  /** Runs `body` holding the workspace's description lock, `busy` when it stays taken. */
   locked: (wsId: string, body: () => string, busy: () => string) => string;
 }
 
-// Patches the description's move, keeping the context tail, and reads it
-// back: one cmux cut or changed is put back as it was, so the move stands.
-function patchDescription(wsId: string, before: string, move: SavedMove, d: VerdictDeps): string {
-  const body = moveDescription(move);
-  if (!d.write(wsId, withContext(body, splitContext(before).context))) return "cmux refused the description";
-  const back = d.read(wsId);
-  if (back.ok && splitContext(back.text).body === body) return "wrote the verdict to the description";
-  d.write(wsId, before);
-  return "cmux changed the description, so it was put back";
+// Asks again once when cmux does not answer, as report-move's readTwice does.
+function readTwice(wsId: string, d: VerdictDeps): DescriptionRead {
+  const first = d.read(wsId);
+  return !first.ok && first.why === "silent" ? d.read(wsId) : first;
 }
 
-/**
- * Writes `verdict` onto the workspace's move, under the description lock
- * the move hook also holds: on the description's move when that is the
- * target, else on the saved map's (rebuilding when that changed it), else
- * nowhere, as the move has moved on. Says what happened, for the state log.
- */
-export function applyVerdict(target: VerdictTarget, verdict: MoveVerdict, d: VerdictDeps): string {
-  return d.locked(
+// The saved map's move is read again just before the write, so a newer one
+// saved meanwhile stands.
+function saveMove(wsId: string, move: SavedMove, d: VerdictDeps, why: string): string {
+  const there = d.saved(wsId);
+  if (there && there.epoch > move.epoch) return `${why}, and a newer move is saved, so nothing was written`;
+  const result = d.save(wsId, move);
+  if (!result.ok) return `${why}, and it could not be saved: ${result.error}`;
+  if (result.changed) d.build();
+  return `${why}, so it went to the saved map`;
+}
+
+// The move hook's busy path writes without the lock and cmux has no
+// compare-and-set, so each write follows a fresh read: a newer move that
+// lands meanwhile is left alone. A cut description is taken off and the
+// move saved, as report-move's describeMove does, since both readers prefer
+// the description on equal epochs and a put-back move would hide the verdict.
+function patchDescription(wsId: string, before: string, patched: SavedMove, d: VerdictDeps): string {
+  const body = moveDescription(patched);
+  if (!d.write(wsId, withContext(body, splitContext(before).context)))
+    return saveMove(wsId, patched, d, "cmux refused the description");
+  const back = readTwice(wsId, d);
+  if (!back.ok) return "wrote the verdict to the description, unconfirmed: cmux did not answer the read-back";
+  if (splitContext(back.text).body === body) return "wrote the verdict to the description";
+  if (moveOfDescription(back.text) !== null) return "another move took the description, so it was left";
+  const now = readTwice(wsId, d);
+  if (!now.ok || now.text !== back.text) return "cmux changed the description, then it changed again, so it was left";
+  const context = splitContext(now.text).context ?? splitContext(before).context;
+  d.write(wsId, context ? withContext("", context) : null);
+  return saveMove(wsId, patched, d, "cmux changed the description");
+}
+
+function land(target: VerdictTarget, verdict: MoveVerdict, d: VerdictDeps): string {
+  const current = readTwice(target.wsId, d);
+  if (current.ok) {
+    const patched = withVerdict(moveOfDescription(current.text), target, verdict);
+    if (patched) return patchDescription(target.wsId, current.text, patched, d);
+  }
+  const patched = withVerdict(d.saved(target.wsId), target, verdict);
+  if (!patched)
+    return current.ok || current.why === "unlisted"
+      ? "the move is gone or newer"
+      : "cmux did not answer the read, twice, and the saved map does not hold the move";
+  const result = d.save(target.wsId, patched);
+  if (!result.ok) return `could not save: ${result.error}`;
+  if (result.changed) d.build();
+  return "wrote the verdict to the saved map";
+}
+
+export const applyVerdict = (target: VerdictTarget, verdict: MoveVerdict, d: VerdictDeps): string =>
+  d.locked(
     target.wsId,
-    () => {
-      const current = d.read(target.wsId);
-      if (current.ok) {
-        const patched = withVerdict(moveOfDescription(current.text), target, verdict);
-        if (patched) return patchDescription(target.wsId, current.text, patched, d);
-      }
-      const patched = withVerdict(d.saved(target.wsId), target, verdict);
-      if (!patched) return "the move is gone or newer";
-      const result = d.save(target.wsId, patched);
-      if (!result.ok) return `could not save: ${result.error}`;
-      if (result.changed) d.build();
-      return "wrote the verdict to the saved map";
-    },
+    () => land(target, verdict, d),
     () => "the description lock stayed taken",
   );
-}
 
-/** The arguments that start a verdict run for `target` on `reply`. */
-export const verdictJob = (target: VerdictTarget, reply: string): string[] => [
-  "--apply",
-  JSON.stringify({ target, reply: reply.length > REPLY_CAP ? reply.slice(-REPLY_CAP) : reply }),
-];
+// Starting a run
 
-/** The target and reply a verdict run was started with, or null for bad arguments. */
-export function jobOf(args: readonly string[]): { target: VerdictTarget; reply: string } | null {
-  if (args[0] !== "--apply" || args[1] === undefined) return null;
+export const verdictJob = (target: VerdictTarget, reply: string): string =>
+  JSON.stringify({ target, reply: cut(reply) });
+
+export function jobOf(input: string): { target: VerdictTarget; reply: string } | null {
   let v: unknown;
   try {
-    v = JSON.parse(args[1]);
+    v = JSON.parse(input);
   } catch {
     return null;
   }
@@ -249,23 +264,27 @@ export function jobOf(args: readonly string[]): { target: VerdictTarget; reply: 
   return { target: { wsId, epoch, text, ...(typeof session === "string" ? { session } : {}) }, reply };
 }
 
-/**
- * Starts a verdict run for the move just saved, detached in its own process
- * group and unreferenced, since dispatch.ts kills each hook's group at 30s.
- */
+// Detached in its own process group, since dispatch.ts kills each hook's
+// group at 30s. The job goes on stdin, so the reply never reaches argv.
 export function startVerdict(target: VerdictTarget, reply: string): void {
+  const failed = (err: unknown) =>
+    logLine(`move-verdict could not start: ${err instanceof Error ? err.message : String(err)}`);
   try {
-    const child = spawn(process.execPath, [import.meta.filename, ...verdictJob(target, reply)], {
+    const child = spawn(process.execPath, [import.meta.filename, "--apply"], {
       cwd: tmpdir(),
       detached: true,
-      stdio: "ignore",
+      stdio: ["pipe", "ignore", "ignore"],
     });
-    child.on("error", (err) => logLine(`move-verdict could not start: ${err.message}`));
+    child.on("error", failed);
+    child.stdin.on("error", failed);
+    child.stdin.end(verdictJob(target, reply));
     child.unref();
   } catch (err) {
-    logLine(`move-verdict could not start: ${err instanceof Error ? err.message : String(err)}`);
+    failed(err);
   }
 }
+
+// Running it
 
 const STATE_PATH = join(import.meta.dirname, "..", "..", "config", "state.json");
 
@@ -287,7 +306,6 @@ const REAL_DEPS: VerdictDeps = {
   locked: (wsId, body, busy) => withDescriptionLock(wsId, 3000, body, busy),
 };
 
-/** A replay file's replies: each line a JSON string, or an object with `text`; other lines are skipped. */
 export function repliesOf(file: string): string[] {
   const out: string[] = [];
   for (const line of file.split("\n")) {
@@ -304,6 +322,8 @@ export function repliesOf(file: string): string[] {
   return out;
 }
 
+// `--replay <file>`: JSON lines of past replies, each verdict printed, to
+// set the model against the wording rules.
 function replay(path: string): void {
   repliesOf(readFileSync(path, "utf8")).forEach((reply, i) => {
     const verdict = askModel(reply, runClaude, process.env) ?? "none";
@@ -312,10 +332,10 @@ function replay(path: string): void {
   });
 }
 
-function apply(args: readonly string[]): void {
-  const job = jobOf(args);
+function apply(): void {
+  const job = jobOf(readFileSync(0, "utf8"));
   if (!job) {
-    logLine("move-verdict got bad arguments");
+    logLine("move-verdict got a bad job");
     return;
   }
   const id = job.target.wsId.slice(0, 8);
@@ -331,7 +351,8 @@ if (import.meta.main) {
   const args = process.argv.slice(2);
   try {
     if (args[0] === "--replay" && args[1] !== undefined) replay(args[1]);
-    else apply(args);
+    else if (args[0] === "--apply") apply();
+    else logLine("move-verdict got bad arguments");
   } catch (err) {
     logLine(`move-verdict failed: ${err instanceof Error ? err.message : String(err)}`);
   }

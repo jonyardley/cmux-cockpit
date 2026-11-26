@@ -157,6 +157,12 @@ describe("a turn that ended on Nothing for you", () => {
     assert.equal(move.asksNothing({ text: "say go." }), false);
   });
 
+  it("lets a waits verdict override idle wording, but never hides on a quiet verdict alone", () => {
+    assert.equal(move.asksNothing({ text: "CI is running.", idle: true, verdict: "waits" }), false);
+    assert.equal(move.asksNothing({ text: "CI is running.", idle: true, verdict: "quiet" }), true);
+    assert.equal(move.asksNothing({ text: "say go.", verdict: "quiet" }), false);
+  });
+
   it("still needs Jon when a needs_input follows, since cmux 0.65.2 never raises one for the idle reminder", () => {
     const w = at("quiet", [waiting("quiet", 1060)]);
     r.data.workspaces = [w];
