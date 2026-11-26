@@ -37,7 +37,7 @@ export interface Page {
 type Opts = Record<string, unknown>;
 
 // Modifiers that change nothing a still picture shows.
-const INERT = new Set(["onTap", "contextMenu", "hoverBackground", "fixed", "hideOnHover", "value"]);
+const INERT = new Set(["onTap", "contextMenu", "hoverBackground", "fixed", "hideOnHover", "value", "cursor"]);
 
 // SF Symbols have no web font: a glyph near enough in shape and weight. A
 // project's icon can be any symbol, so a name not here draws as a diamond

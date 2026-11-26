@@ -232,18 +232,27 @@ describe("a right-click on the row", () => {
     const root = nodeOf(prRow(() => ({ ...entry(n), last: true })));
     return menuOf(root && taps(root)[0]);
   };
+  const labels = (n: number) => menu(n).map((i) => i.label);
+  const choose = (items: ReturnType<typeof menu>, label: string) => items.find((i) => i.label === label)?.action();
+  const goToChat = (n: number) => choose(menu(n), "Go to its chat");
 
-  it("offers Open chat, which selects the session's workspace and focuses its lead agent", () => {
+  it("opens the PR and copies its link and branch, then, set apart, goes to its chat", () => {
+    assert.deepEqual(labels(2), ["Open pull request", "Copy link", "Copy branch name", "divider", "Go to its chat"]);
+    r.copied.length = 0;
+    const items = menu(2);
+    choose(items, "Open pull request");
+    choose(items, "Copy link");
+    choose(items, "Copy branch name");
+    assert.deepEqual(r.opened, [pr(2)]);
+    assert.deepEqual(r.copied, [pr(2), "b"]);
+  });
+
+  it("goes to the session's workspace and focuses its lead agent", () => {
     r.data.workspaces = [
       ws("here", { selected: true }),
       ws("other", { title: "Socket contract", agents: [agent("working", { surfaceId: "s-other" })] }),
     ];
-    const items = menu(2);
-    assert.deepEqual(
-      items.map((i) => i.label),
-      ["Open chat"],
-    );
-    items[0]?.action();
+    goToChat(2);
     assert.deepEqual(r.calls, [
       { method: "workspace.select", params: { workspace_id: "other" } },
       { method: "surface.focus", params: { surface_id: "s-other", workspace_id: "other" } },
@@ -252,14 +261,23 @@ describe("a right-click on the row", () => {
   });
 
   it("selects the workspace alone when it has no agent to focus", () => {
-    menu(2)[0]?.action();
+    goToChat(2);
     assert.deepEqual(r.calls, [{ method: "workspace.select", params: { workspace_id: "other" } }]);
   });
 
   it("goes to the chat that opened an own PR while it is open", () => {
     r.data.workspaces = [...(r.data.workspaces ?? []), ws("gone", { title: "Back again" })];
-    menu(3)[0]?.action();
+    goToChat(3);
     assert.deepEqual(r.calls, [{ method: "workspace.select", params: { workspace_id: "gone" } }]);
+  });
+
+  it("does nothing once the chat's workspace has closed", () => {
+    const shown = { ...entry(2), last: true };
+    const root = nodeOf(prRow(() => shown));
+    const items = menuOf(root && taps(root)[0]);
+    r.data.workspaces = [ws("here", { selected: true })];
+    choose(items, "Go to its chat");
+    assert.deepEqual(r.calls, []);
   });
 
   it("focuses the lead agent as it is when chosen, not when the row was built", () => {
@@ -272,22 +290,41 @@ describe("a right-click on the row", () => {
       ws("here", { selected: true }),
       ws("other", { agents: [agent("working", { surfaceId: "s-b" })] }),
     ];
-    items[0]?.action();
+    choose(items, "Go to its chat");
     assert.deepEqual(r.calls.at(-1), { method: "surface.focus", params: { surface_id: "s-b", workspace_id: "other" } });
   });
 
-  it("has no menu on This chat's row with no terminal to focus, since it would do nothing", () => {
-    assert.deepEqual(menu(1), []);
+  it("leaves out Go to its chat on This chat's row with no terminal to focus, since it would do nothing", () => {
+    assert.deepEqual(labels(1), ["Open pull request", "Copy link", "Copy branch name"]);
     r.data.workspaces = [ws("here", { selected: true, agents: [agent("idle", { surfaceId: "s-here" })] })];
-    menu(1)[0]?.action();
+    goToChat(1);
     assert.deepEqual(r.calls.at(-1), {
       method: "surface.focus",
       params: { surface_id: "s-here", workspace_id: "here" },
     });
   });
 
-  it("has no menu when no chat holds or opened the PR", () => {
-    assert.deepEqual(menu(3), []);
-    assert.deepEqual(menu(4), []);
+  it("leaves out Go to its chat when no chat holds or opened the PR", () => {
+    assert.deepEqual(labels(3), ["Open pull request", "Copy link", "Copy branch name"]);
+    assert.deepEqual(labels(4), ["Open pull request", "Copy link", "Copy branch name"]);
+  });
+
+  it("leaves out what the PR does not have yet: a link, a branch", () => {
+    assert.deepEqual(m.prMenu({ pr: {}, session: undefined }), []);
+    assert.deepEqual(
+      m.prMenu({ pr: { url: pr(9) }, session: undefined }).map((i) => (i === "divider" ? i : i.label)),
+      ["Open pull request", "Copy link"],
+    );
+  });
+
+  it("rebuilds the menu when its items change, since a built menu is fixed", () => {
+    const shown = { ...entry(2), last: true };
+    const root = nodeOf(prRow(() => shown));
+    const items = root?.children[0]?.handlers.items;
+    assert.equal(typeof items, "function");
+    const keyOf = () => (typeof items === "function" ? JSON.stringify(items()) : "");
+    const before = keyOf();
+    shown.session = undefined;
+    assert.notEqual(keyOf(), before);
   });
 });

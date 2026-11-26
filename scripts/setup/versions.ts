@@ -4,10 +4,12 @@
 export type Version = readonly [number, number, number];
 
 export const NODE_MIN: Version = [24, 2, 0];
-/** The oldest cmux the sidebars support; they are tested on 0.65.2. */
-export const CMUX_MIN: Version = [0, 64, 25];
-/** Highlighting a lane while a card is dragged over it needs this. */
-export const CMUX_DRAG: Version = [0, 65, 0];
+/**
+ * The oldest cmux the sidebars support: 0.65.2, the first that keeps
+ * Claude's idle reminder out of needs_input, which the agents panel now
+ * relies on (issue #422).
+ */
+export const CMUX_MIN: Version = [0, 65, 2];
 
 /** The first x.y or x.y.z in `text` ("v24.2.0", "cmux 0.64.25 (106)"), or null. */
 export function parseVersion(text: string): Version | null {

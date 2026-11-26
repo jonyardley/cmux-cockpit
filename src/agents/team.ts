@@ -1,6 +1,7 @@
 // The selected workspace's agents and the subagents (Helpers) they run.
 // Pure reads of `data`, so each is testable alone.
 
+import { copyableBranch } from "../shared/copyable.ts";
 import { type Last, markLast } from "../shared/list.ts";
 import { SAVED_STATE } from "../shared/persist.ts";
 import { childRunning, pairLive, type SavedRun, savedRunning, savedRuns } from "../shared/subagents.ts";
@@ -9,6 +10,7 @@ import { ageSince } from "../shared/time.ts";
 import { countTint, type PillColors } from "../shared/ui.ts";
 import { moreThan } from "./lists.ts";
 
+import type { MenuEntry } from "./menus.ts";
 import { cur } from "./model.ts";
 
 // ---- This workspace's agent list -------------------------------------------
@@ -61,6 +63,14 @@ export const agentRows = computed((): Last<AgentRow>[] => {
   const labels = agentLabels(inOrder);
   return markLast(live.slice(0, 6).map((a) => ({ key: "a:" + a.id, a, label: labels.get(a.id) ?? fallbackLabel(a) })));
 });
+
+export function agentMenu(a: Agent, w: Workspace): MenuEntry[] {
+  const branch = copyableBranch(w.branch);
+  return [
+    { label: "Go to this agent", does: { agent: { wsId: w.id, surfaceId: a.surfaceId } } },
+    ...(branch ? [{ label: "Copy branch name", does: { copy: branch } }] : []),
+  ];
+}
 
 // ---- Subagents ---------------------------------------------------------------
 

@@ -16,50 +16,15 @@ beforeEach(() => {
   r.data.workspaces = [];
 });
 
-describe("isIdleNudge", () => {
-  it("reads a needs_input a minute after the last activity as the idle nudge", () => {
-    assert.equal(needs.isIdleNudge(claude(1000, 1060)), true);
-    assert.equal(needs.isIdleNudge(claude(1000, 1000 + needs.NUDGE_GAP)), true);
-  });
-
-  it("keeps a real ask that follows the agent's activity", () => {
-    assert.equal(needs.isIdleNudge(claude(1000, 1002)), false);
-    assert.equal(needs.isIdleNudge(claude(1000, 1000 + needs.NUDGE_GAP - 1)), false);
-  });
-
-  it("closes the gap when the workspace's latest message is newer", () => {
-    const w = ws("w", { latestAt: 1058 });
-    assert.equal(needs.isIdleNudge(claude(1000, 1060), w), false);
-  });
-
-  it("fails towards needs you when a timestamp is missing or the agent is not Claude", () => {
-    assert.equal(needs.isIdleNudge(agent("needs_input", { kind: "claude", lastActivityAt: 1000 })), false);
-    assert.equal(needs.isIdleNudge(agent("needs_input", { kind: "claude", sinceEpoch: 1060 })), false);
-    assert.equal(
-      needs.isIdleNudge(agent("needs_input", { kind: "codex", lastActivityAt: 1000, sinceEpoch: 1060 })),
-      false,
-    );
-    assert.equal(needs.isIdleNudge(agent("idle", { kind: "claude", lastActivityAt: 1000, sinceEpoch: 1060 })), false);
-  });
-});
-
 describe("effectiveAgent", () => {
-  it("shows a nudge as idle and leaves other agents alone", () => {
-    const nudge = claude(1000, 1060);
-    assert.equal(needs.effectiveAgent(nudge).status, "idle");
-    assert.equal(nudge.status, "needs_input", "the app's object is not mutated");
-    const ask = claude(1000, 1001);
-    assert.equal(needs.effectiveAgent(ask), ask);
+  it("shows every needs_input as it came, however long after the last activity (issue #422)", () => {
+    for (const ask of [claude(1000, 1001), claude(1000, 1060), claude(1000, 5000)]) {
+      assert.equal(needs.effectiveAgent(ask), ask);
+    }
+    const byMessage = agent("needs_input", { kind: "claude", sinceEpoch: 1060 });
+    assert.equal(needs.effectiveAgent(byMessage, ws("m", { latestAt: 1000 })), byMessage);
     const busy = agent("working");
     assert.equal(needs.effectiveAgent(busy), busy);
-  });
-
-  it("dates a nudge's idle from the end of the turn", () => {
-    assert.equal(needs.effectiveAgent(claude(1000, 1060)).sinceEpoch, 1000);
-    const byMessage = agent("needs_input", { kind: "claude", sinceEpoch: 1060 });
-    const shown = needs.effectiveAgent(byMessage, ws("m", { latestAt: 1000 }));
-    assert.equal(shown.status, "idle");
-    assert.equal(shown.sinceEpoch, 1060);
   });
 });
 
@@ -107,10 +72,10 @@ describe("dismissals", () => {
     );
   });
 
-  it("have nothing to dismiss when the only ask is a nudge", () => {
-    r.opened.length = 0;
-    needs.dismissNeeds(ws("n", { agents: [claude(1000, 1060)] }));
-    assert.deepEqual(r.opened, []);
+  it("dismiss a needs_input that came a minute after the last activity", () => {
+    const w = ws("n", { agents: [claude(1000, 1060)] });
+    needs.dismissNeeds(w);
+    assert.equal(needs.agentsOf(w)[0]?.status, "idle");
   });
 
   it("ignore a workspace with nothing to dismiss", () => {
@@ -159,10 +124,10 @@ describe("dismissals", () => {
 });
 
 describe("the agents panel applies the rule", () => {
-  it("the agents panel reads a nudge as idle and asks nothing", () => {
-    r.data.workspaces = [ws("n", { selected: true, agents: [claude(1000, 1060)] })];
-    assert.equal(agents.currentAsk(), null);
-    assert.equal(agents.current()?.a?.status, "idle");
+  it("the agents panel reads a needs_input as an ask, late or not", () => {
+    r.data.workspaces = [ws("late", { selected: true, agents: [claude(1000, 1060)] })];
+    assert.notEqual(agents.currentAsk(), null);
+    assert.equal(agents.current()?.a?.status, "needs_input");
     r.data.workspaces = [ws("real", { selected: true, agents: [claude(1000, 1001)] })];
     assert.notEqual(agents.currentAsk(), null);
     assert.equal(agents.current()?.a?.status, "needs_input");

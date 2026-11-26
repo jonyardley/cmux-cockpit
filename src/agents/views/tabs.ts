@@ -34,7 +34,9 @@ function tab(t: Tab, label: string): View {
     7,
     // Only the tab not chosen lights under the pointer.
     { hover: { face: () => (on() ? SWITCH.tab : SWITCH.hover) } },
-  ).onTap(() => chooseTab(t));
+  )
+    .cursor("pointer")
+    .onTap(() => chooseTab(t));
 }
 
 /** The two tabs on their track, the full width of the panel. */

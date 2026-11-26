@@ -34,7 +34,7 @@ Tested on cmux 0.65.2.
 - `src/agents/`: the agents panel, shown in the right sidebar.
 - `src/shared/`: helpers the agents panel builds on (text clean-up,
   projects, agent ranking, time, the lane table, and the "needs you"
-  rules: Claude Code's idle nudge reads as idle, and dismissals), plus the
+  rules: turn ends read from their closing line, and dismissals), plus the
   colours (`palette.ts`), the status words (`words.ts`, "Finished 3m") and
   the view builders for rings, chips, trailing times and headings
   (`ui.ts`). `symbols.ts` is the SF Symbols list the native core is tested

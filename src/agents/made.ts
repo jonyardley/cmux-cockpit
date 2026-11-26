@@ -10,6 +10,7 @@ import { type Project, savedProjectFor } from "../shared/projects.ts";
 import { savedPublished } from "../shared/published.ts";
 import { ageSince, nowEpoch } from "../shared/time.ts";
 import { footText, isExpanded, markLastBefore } from "./lists.ts";
+import type { MenuEntry } from "./menus.ts";
 
 import { chatWs, cur } from "./model.ts";
 import { subagents } from "./team.ts";
@@ -29,7 +30,7 @@ export interface MadeEntry {
   /** Made, or last edited, in the selected workspace. */
   here: boolean;
   epoch: number;
-  /** The workspace the row's right-click Open chat goes to (chatWs); none once it has gone. */
+  /** The workspace the row's right-click Go to its chat goes to (chatWs); none once it has gone. */
   chat: string | undefined;
 }
 
@@ -150,3 +151,6 @@ export const madeTitleColor = (e: MadeEntry): string => (e.here ? T.text : T.sec
 
 /** A Made here row's age, "3h" since it was last published or edited. */
 export const madeAge = (e: MadeEntry): string => ageSince(e.epoch);
+
+export const madeMenu = (e: Pick<MadeEntry, "chat">): MenuEntry[] =>
+  e.chat ? [{ label: "Go to its chat", does: { chat: e.chat } }] : [];

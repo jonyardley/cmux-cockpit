@@ -202,7 +202,7 @@ export function renamedTitle(words: string, current: string | null): string | nu
   return issue === null ? words : withIssue(words, issue);
 }
 
-/** A workspace's title in `cmux --json list-workspaces` output, or null when it is not there. */
+/** A workspace's title in `cmux --json workspace list` output, or null when it is not there. */
 export function titleFrom(json: string, wsId: string): string | null {
   let v: unknown;
   try {
@@ -453,7 +453,7 @@ function renameWorkspace(wsId: string, stamp: Stamp): string | null {
 
 // The workspace's current title, or a note for stderr when cmux cannot say.
 function currentTitle(wsId: string): { title: string } | { note: string } {
-  const res = cmux(["--json", "list-workspaces"]);
+  const res = cmux(["--json", "workspace", "list"]);
   if (!res.ok) return { note: `cmux workspace list failed: ${res.err}` };
   const title = titleFrom(res.out, wsId);
   return title === null ? { note: "the workspace is not in cmux's list" } : { title };

@@ -10,7 +10,7 @@ import { validateProjects } from "../projects-config.ts";
 import { linkState } from "./automations.ts";
 import { claudeDirNotes, claudeFolders, hooksState, loadSettings } from "./claude-settings.ts";
 import { type ClaudeFolder, type Env, type Paths, pathsFor } from "./env.ts";
-import { atLeast, CMUX_DRAG, CMUX_MIN, NODE_MIN, parseVersion, show } from "./versions.ts";
+import { atLeast, CMUX_MIN, NODE_MIN, parseVersion, show } from "./versions.ts";
 
 export interface Check {
   label: string;
@@ -52,13 +52,15 @@ export const cmuxCheck: Probe = (env) => {
   if (r.missing || r.status !== 0) {
     return fail("cmux", "not found on PATH", "install cmux and put its CLI on PATH (cmux's settings)", true);
   }
-  // On PATH is what is required; an old or unreadable version is a warning.
+  // An unreadable version is a warning; an old one is a stop, since the
+  // agents panel relies on 0.65.2 keeping Claude's idle reminder out of
+  // needs_input (issue #422).
   const v = parseVersion(r.stdout);
   if (!v) return fail("cmux", `could not read the version from ${JSON.stringify(r.stdout.trim())}`, "update cmux");
-  if (!atLeast(v, CMUX_MIN))
-    return fail("cmux", `${show(v)} is older than the tested ${show(CMUX_MIN)}`, "update cmux");
-  const drag = atLeast(v, CMUX_DRAG) ? "" : ` (lane highlight while dragging needs ${show(CMUX_DRAG)})`;
-  return pass("cmux", `${show(v)}${drag}`, true);
+  if (!atLeast(v, CMUX_MIN)) {
+    return fail("cmux", `${show(v)} is too old, the sidebars need ${show(CMUX_MIN)} or later`, "update cmux", true);
+  }
+  return pass("cmux", show(v), true);
 };
 
 export const ghCheck: Probe = (env) => {

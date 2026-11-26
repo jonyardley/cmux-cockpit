@@ -728,8 +728,8 @@ stop also carries `agent`, the stopped session (its dismissal's id); any
 wait may carry `detail`, a few words (the stop's cause, the PR's title or
 number, the park's words); stuck CI carries `check` and `queued`, the
 stuck check's name and when it was queued or started. Only waits that
-show are saved: not dismissed, the workspace awake. Asking, Your turn,
-the idle nudge and quiet are not: the panel reads those itself. Nothing
+show are saved: not dismissed, the workspace awake. Asking and Your
+turn are not: the agents panel reads those itself. Nothing
 in it moves with the clock, so an unchanged wait is never written again.
 A frame that cannot yet tell keeps what the file holds: a CI wait whose
 PR it cannot read, and a park for a minute before the first Ostinato
@@ -922,8 +922,11 @@ take `HOOK_SLACK` (3 seconds, since this hook and cmux's own fire on the
 same event). When one of the workspace's agents carries the asking
 session as its id (unconfirmed whether cmux agent ids are session ids, as
 for saved subagent runs), only that agent is asking; otherwise the ask
-belongs to the workspace. A fresh ask also overrides the idle-nudge rule
-(issue #4), so an ask after a long quiet build is not read as idle. The cockpit then shows the card and its Needs you row amber,
+belongs to the workspace. In the Cockpit a fresh ask also overrides the
+idle-nudge rule (issue #4), so an ask after a long quiet build is not read as idle.
+The agents panel has no such rule, so an ask that lands 45 seconds or
+more after the agent's last activity, with no saved ask, shows there but
+reads as idle in the Cockpit until issue #438. The cockpit then shows the card and its Needs you row amber,
 "Asking", with the reason under the title; the agents panel heads the
 workspace "Asking" in amber and puts the reason over Dismiss. Any other
 needs_input is "Your turn" in clay, and red stays for failing checks. No
@@ -1040,12 +1043,14 @@ v0.65.2 where given; the rest were seen on 0.64.25 and are marked so.
   On 0.64.25 the idle_prompt Notification about 60s later moved it to
   needs_input and stamped `sinceEpoch` and `lastActivityAt` at its arrival.
   On 0.65.2 a Notification carrying `isIdleReminder` keeps the previous
-  state (the same function, lines 109 to 115), so the reminder may no
-  longer move idle to needs_input; that is the source's word, not yet seen
-  live (issue #422). Keeping the state also means it no longer restamps
-  `sinceEpoch`. Every hook event stamps `lastActivityAt`
+  state (the same function, lines 109 to 115), so the reminder no longer
+  moves idle to needs_input, and cmux's `agent.notification.decision`
+  for it is `agent.idle.observed`, not `agent.approval.requested` (seen
+  live, issue #422). Keeping the state also means it no longer restamps
+  `sinceEpoch`. So the agents panel reads every needs_input as waiting on
+  Jon, unless he dismissed it. Every hook event stamps `lastActivityAt`
   (`AgentChatSessionRegistry.swift:544`), so it does not say when the
-  agent last worked, and `isIdleNudge`'s gap check does not fire (issue #4).
+  agent last worked.
 - A Claude PreToolUse for AskUserQuestion or ExitPlanMode sets needs_input
   at once (lines 86 to 98, cmux PR #17454). On 0.64.25 cmux said needs
   input for a mid-turn ask only once the nudge landed.
@@ -1053,7 +1058,10 @@ v0.65.2 where given; the rest were seen on 0.64.25 and are marked so.
   on 0.64.25 they set working.
 - PostToolUseFailure sets working, like PostToolUse. The Cockpit's own
   rules (`native/core/src/hooks.rs`) match all of this except the idle
-  reminder, which still sets needs input there until issue #422.
+  reminder, which still sets needs input there: the hook event cmux
+  passes on redacts the Notification's fields, so the runner cannot tell
+  the reminder from an ask, and `is_idle_nudge` in
+  `native/core/src/needs.rs` reads it back as idle by its gap.
 - `latestMessage`, `latestPrompt` and `latestAt` belong to the workspace
   (`latestConversationMessage`, `latestSubmittedMessage` and
   `latestSubmittedAt` in `Workspace.swift:3205-3207`). UserPromptSubmit
@@ -1081,18 +1089,21 @@ falls back to the message and then to "Waiting for your reply", the card
 to the message and then to the description.
 
 On 0.64.25 cmux itself said needs input only once the nudge landed, about
-60s after the turn ended; on 0.65.2 it may never say it after a Stop
-(issue #422). Both sidebars read the move instead: an idle or nudged
-agent whose current move asks something of Jon (anything but "Nothing
+60s after the turn ended; on 0.65.2 it never says it for a plain turn end
+(issue #422). Both sidebars read the move instead: an agent at a turn
+end whose current move asks something of Jon (anything but "Nothing
 for you", a reply with no label included) reads as needs input from the
 turn end, ahead of Running (`waiting_turn` and
 `Session::effective_agent` in `native/core/src/needs.rs` for the Cockpit,
 `waitingTurn` and `effectiveAgent` in `src/shared/needs.ts` for the
-agents panel's This workspace card and its question block). The runner
-never moves the last activity on a Notification, so the nudge alone
-always reads as idle there, and Claude Code may send none while the
-chat's background work runs. A dismissal of that wait is keyed on the
-turn end, so the nudge landing a minute on keeps it. The size chip shows
+agents panel's This workspace card and its question block). In the
+agents panel a turn end is an idle agent, since cmux 0.65.2 keeps the
+idle reminder out of needs_input. In the Cockpit it is idle or nudged:
+its own hook rule still raises needs input for the reminder (issue
+#438), its runner never moves the last activity on a Notification, so
+the nudge alone always reads as idle there, and Claude Code may send none
+while the chat's background work runs. A dismissal of that wait is keyed
+on the turn end, so a later restamp of the agent keeps it. The size chip shows
 only while the card waits.
 
 Ownership is stricter than for asks: the move shows only on a Claude agent
