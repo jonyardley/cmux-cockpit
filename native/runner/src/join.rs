@@ -1918,7 +1918,9 @@ mod tests {
             Some(AgentStatus::NeedsInput)
         );
         let mut verdict_first = idle_from(t);
-        verdict_first.event(&verdict(4, "agent.approval.requested", t + 1.0));
+        let mut delayed = verdict(4, "agent.approval.requested", t + 1.0);
+        delayed["payload"]["reason"] = json!("delayed");
+        verdict_first.event(&delayed);
         verdict_first.event(&tab_hook(5, "Notification", t + 1.005));
         assert_eq!(
             status_at(&verdict_first, t + 2.0),
