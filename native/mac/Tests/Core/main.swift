@@ -52,7 +52,7 @@ let outbox = folder.appendingPathComponent(Outbox.dirName)
 
 /// The names native/runner/src/effect.rs takes from outbox/.
 let taken: Set = [
-    "Cmux", "Persist", "PrPoll", "OpenUrl", "AgentMessage", "SavePrs", "SaveRunning", "SaveWaits", "Notify", "DismissNotification", "SaveCycles", "SaveQuiet",
+    "Cmux", "Persist", "PrPoll", "OpenUrl", "AgentMessage", "SavePrs", "SaveRunning", "SaveWaits", "Notify", "DismissNotification", "SaveCycles", "SaveQuiet", "SaveAgents",
 ]
 
 // MARK: Loading data.json

@@ -233,7 +233,7 @@ pub const MAX_TASKS: usize = 20;
 /// The longest status word kept (MAX_STATUS).
 pub const MAX_STATUS: usize = 32;
 /// The longest description kept (MAX_LABEL).
-const MAX_LABEL: usize = 120;
+pub(crate) const MAX_LABEL: usize = 120;
 
 impl SavedTask {
     /// Every field within the bounds state-config.ts's savedTask holds it to.
@@ -363,6 +363,92 @@ where
         .filter_map(|(ws, v)| {
             let q = serde_json::from_value::<SavedQuiet>(v).ok()?;
             q.fits().then_some((ws, q))
+        })
+        .collect())
+}
+
+/// An agent's status as the core shows it, saved for the agents panel
+/// (#429): cmux's own words, a status the core does not know left out.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SavedStatus {
+    NeedsInput,
+    Working,
+    Idle,
+    Ended,
+}
+
+/// Why a shown agent waits on Jon: its turn ended on a move asking
+/// something of him, it asks (a saved ask), its session stopped, it
+/// carries its workspace's CI wait, or its Ostinato parks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WaitWhy {
+    Turn,
+    Ask,
+    Stop,
+    Ci,
+    Park,
+}
+
+/// One agent a workspace shows, as the core shows it (#429), so the
+/// agents panel reads each agent's status, and why it waits on Jon, from
+/// the core's rules rather than copies of its own.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+pub struct SavedAgent {
+    /// The agent's id, or `stand-in` for a CI or park stand-in.
+    pub id: String,
+    pub status: SavedStatus,
+    /// When the status began, in epoch seconds; 0 when cmux sent none.
+    pub since: f64,
+    /// Only with needs_input.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub why: Option<WaitWhy>,
+    /// The ask's words, only with `why` ask.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// The most agents saved for one workspace.
+pub const MAX_AGENTS: usize = 20;
+
+impl SavedAgent {
+    /// Every field within the bounds state-config.ts's savedAgent holds it
+    /// to: an id, an epoch, a why with needs_input and only there, and a
+    /// reason of plain text with an ask and only there.
+    pub(crate) fn fits(&self) -> bool {
+        let waits = self.status == SavedStatus::NeedsInput;
+        let ask = self.why == Some(WaitWhy::Ask);
+        is_id(&self.id)
+            && self.since.is_finite()
+            && self.since >= 0.0
+            && self.why.is_none_or(|_| waits)
+            && match &self.reason {
+                Some(r) => ask && is_text(r, MAX_LABEL),
+                None => !ask,
+            }
+    }
+}
+
+/// Whether `agents` fits as one workspace's list: one to MAX_AGENTS
+/// agents, each of which fits.
+pub(crate) fn agents_fit(agents: &[SavedAgent]) -> bool {
+    (1..=MAX_AGENTS).contains(&agents.len()) && agents.iter().all(SavedAgent::fits)
+}
+
+/// The `agents` map as validateState reads it: a workspace's list with
+/// any agent that does not fit is dropped whole, as for `waits`.
+fn agents_map<'de, D>(d: D) -> Result<BTreeMap<String, Vec<SavedAgent>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let entries: BTreeMap<String, Value> = crate::lenient::map(d)?;
+    Ok(entries
+        .into_iter()
+        .filter(|(ws, _)| is_id(ws))
+        .filter_map(|(ws, v)| {
+            let a = serde_json::from_value::<Vec<SavedAgent>>(v).ok()?;
+            agents_fit(&a).then_some((ws, a))
         })
         .collect())
 }
@@ -794,6 +880,14 @@ pub struct SavedState {
         skip_serializing_if = "BTreeMap::is_empty"
     )]
     pub quiet: BTreeMap<String, SavedQuiet>,
+    /// wsId to the agents its workspace shows, as the core shows them
+    /// (#429), which the core writes through the runner (agents_save.rs).
+    /// Left out while empty.
+    #[serde(
+        deserialize_with = "agents_map",
+        skip_serializing_if = "BTreeMap::is_empty"
+    )]
+    pub agents: BTreeMap<String, Vec<SavedAgent>>,
     /// wsId to the waits on Jon its card shows (#388), which the core
     /// writes through the runner (waits_save.rs) and the agents panel
     /// reads. Left out while empty.
@@ -1224,6 +1318,42 @@ mod tests {
         );
         let empty = serde_json::to_value(SavedState::default()).unwrap();
         assert!(empty.get("quiet").is_none(), "left out while empty");
+    }
+
+    #[test]
+    fn reads_shown_agents_as_validate_state_does() {
+        // The same sample as test/agents-save.test.ts's validateState test.
+        let json = r#"{"agents": {
+            "w1": [{"id": "s1", "status": "needs_input", "since": 100.5, "why": "ask", "reason": "allow?", "extra": 1},
+                   {"id": "s2", "status": "working", "since": 0}],
+            "w2": [{"id": "stand-in", "status": "needs_input", "since": 5, "why": "ci"}],
+            "why when idle": [{"id": "s1", "status": "idle", "since": 1, "why": "turn"}],
+            "reason on a turn": [{"id": "s1", "status": "needs_input", "since": 1, "why": "turn", "reason": "x"}],
+            "ask with no reason": [{"id": "s1", "status": "needs_input", "since": 1, "why": "ask"}],
+            "unknown status": [{"id": "s1", "status": "busy", "since": 1}],
+            "unknown why": [{"id": "s1", "status": "needs_input", "since": 1, "why": "nap"}],
+            "one bad": [{"id": "s1", "status": "idle", "since": 1}, {"id": "", "status": "idle", "since": 1}],
+            "empty": [],
+            "__proto__": [{"id": "s1", "status": "idle", "since": 1}]
+        }}"#;
+        let s = SavedState::from_json(json).unwrap();
+        assert_eq!(s.agents.keys().collect::<Vec<_>>(), ["w1", "w2"]);
+        let out = serde_json::to_value(&s).unwrap();
+        assert_eq!(
+            out["agents"],
+            serde_json::json!({
+                "w1": [{"id": "s1", "status": "needs_input", "since": 100.5, "why": "ask", "reason": "allow?"},
+                       {"id": "s2", "status": "working", "since": 0.0}],
+                "w2": [{"id": "stand-in", "status": "needs_input", "since": 5.0, "why": "ci"}]
+            })
+        );
+        let many = format!(
+            r#"{{"agents": {{"w": [{}]}}}}"#,
+            vec![r#"{"id": "s", "status": "idle", "since": 1}"#; MAX_AGENTS + 1].join(",")
+        );
+        assert!(SavedState::from_json(&many).unwrap().agents.is_empty());
+        let empty = serde_json::to_value(SavedState::default()).unwrap();
+        assert!(empty.get("agents").is_none(), "left out while empty");
     }
 
     #[test]

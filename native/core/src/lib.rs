@@ -9,6 +9,7 @@
 //! between frames; each call takes the frame's cmux data.
 
 pub mod activity;
+pub mod agents_save;
 pub mod anchors;
 pub mod app;
 pub mod background;
@@ -70,8 +71,8 @@ pub mod waits_save;
 pub mod words;
 
 pub use app::{
-    AgentMessage, CmuxCall, Cockpit, CopyText, CyclesSave, Effect, Event, Model, OpenUrl, PrAsk,
-    PrSave, QuietSave, RunningSave, StateSet, ViewModel, WaitsSave,
+    AgentMessage, AgentsSave, CmuxCall, Cockpit, CopyText, CyclesSave, Effect, Event, Model,
+    OpenUrl, PrAsk, PrSave, QuietSave, RunningSave, StateSet, ViewModel, WaitsSave,
 };
 pub use data::{Data, Workspace};
 pub use edit::EditEvent;

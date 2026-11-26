@@ -17,6 +17,7 @@ use crux_core::{
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::agents_save::{AgentSaves, agents};
 use crate::cycles_save::CycleSaves;
 use crate::data::{Data, Workspace};
 use crate::edit::EditEvent;
@@ -28,7 +29,8 @@ use crate::notify::{Notified, NotifyDismiss, NotifyPost};
 use crate::ostinato::OstinatoFeed;
 use crate::panel::Panel;
 use crate::persist::{
-    SavedCycle, SavedPr, SavedQuiet, SavedRunning, SavedState, SavedWait, ViewMode, persist_url,
+    SavedAgent, SavedCycle, SavedPr, SavedQuiet, SavedRunning, SavedState, SavedWait, ViewMode,
+    persist_url,
 };
 use crate::pr_poll::{PrPolled, shown_in};
 use crate::projects::Project;
@@ -208,6 +210,8 @@ pub struct Model {
     pub running_saves: RunningSaves,
     /// The quiet verdicts sent for the state file (quiet_save.rs).
     pub quiet_saves: QuietSaves,
+    /// The shown agents sent for the state file (agents_save.rs).
+    pub agent_saves: AgentSaves,
     /// The waits sent for the state file (waits_save.rs).
     pub wait_saves: WaitSaves,
     /// The Ostinato cycles sent for the state file (cycles_save.rs).
@@ -414,6 +418,22 @@ impl Operation for QuietSave {
     type Output = ();
 }
 
+/// The agents each workspace shows, for config/state.json's `agents` map
+/// (#429), by workspace id: the list to set, or null to delete. The shell
+/// hands them to scripts/agents-save.ts, which writes them under the
+/// state file's lock and rebuilds the sidebars, so the agents panel shows
+/// each agent as the card does. Only what changed comes this way
+/// (agents_save.rs).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentsSave {
+    pub agents: BTreeMap<String, Option<Vec<SavedAgent>>>,
+}
+
+impl Operation for AgentsSave {
+    type Output = ();
+}
+
 /// The core's waits on Jon for config/state.json's `waits` map (#388),
 /// by workspace id: the card's waits to set, or null to delete. The shell
 /// hands them to scripts/waits-save.ts, which writes them under the state
@@ -498,6 +518,7 @@ pub enum Effect {
     SaveWaits(WaitsSave),
     SaveCycles(CyclesSave),
     SaveQuiet(QuietSave),
+    SaveAgents(AgentsSave),
     Notify(NotifyPost),
     DismissNotification(NotifyDismiss),
 }
@@ -700,6 +721,20 @@ impl Model {
         (!quiet.is_empty()).then(|| Command::notify_shell(QuietSave { quiet }).into())
     }
 
+    /// The shown agents the state file lacks, as one save, on the same
+    /// terms as `running_writes`.
+    fn agent_writes(&mut self) -> Option<Command<Effect, Event>> {
+        if !self.panel_on {
+            return None;
+        }
+        let data = self.data.as_ref()?;
+        let now = agents(&mut self.session, data)?;
+        let agents = self
+            .agent_saves
+            .writes(&self.session.saved.agents, &now, data.epoch);
+        (!agents.is_empty()).then(|| Command::notify_shell(AgentsSave { agents }).into())
+    }
+
     /// The waits the state file lacks, as one save, on the same terms as
     /// `running_writes`.
     fn wait_writes(&mut self) -> Option<Command<Effect, Event>> {
@@ -799,6 +834,7 @@ impl App for Cockpit {
                 s.reseed(*saved);
                 model.running_saves.file_read();
                 model.quiet_saves.file_read();
+                model.agent_saves.file_read();
                 model.wait_saves.file_read();
                 model.cycle_saves.file_read();
             }
@@ -838,6 +874,7 @@ impl App for Cockpit {
                 .chain(m.wait_writes())
                 .chain(m.cycle_writes())
                 .chain(m.quiet_writes())
+                .chain(m.agent_writes())
         });
         let now = model.data.as_ref().and_then(|d| d.epoch);
         let asks = model.asks(now);
@@ -989,10 +1026,12 @@ mod tests {
     }
 
     /// The effects of one event, in words: `render`, `pr <directory>` or
-    /// `save <workspace ids>`.
+    /// `save <workspace ids>`. The shown agents' saves, which almost every
+    /// frame here makes, are left out; agents_save.rs tests them.
     fn asked(app: &Cockpit, model: &mut Model, event: Event) -> Vec<String> {
         let mut cmd = app.update(event, model);
         cmd.effects()
+            .filter(|e| !matches!(e, Effect::SaveAgents(_)))
             .map(|e| match e {
                 Effect::Render(_) => "render".to_string(),
                 Effect::PrPoll(r) => format!("pr {}", r.operation.directory),
@@ -1017,6 +1056,7 @@ mod tests {
                     format!("quiet {}", ids.join(" "))
                 }
                 Effect::Cmux(_)
+                | Effect::SaveAgents(_)
                 | Effect::Persist(_)
                 | Effect::OpenUrl(_)
                 | Effect::Copy(_)
