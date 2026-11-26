@@ -79,7 +79,7 @@ describe("the pointing hand", () => {
       assert.ok(targets.length > 3, `the ${tab} tab has its tap targets`);
       if (tab === "now")
         assert.ok(
-          targets.some((n) => JSON.stringify(n).includes('"Fix"')),
+          targets.some((n) => n.kind === "Text" && n.args[0] === "Fix"),
           "Fix shows on the failing check",
         );
       for (const n of targets) assert.equal(modValue(n, "cursor"), "pointer", `a ${n.kind} on the ${tab} tab`);
