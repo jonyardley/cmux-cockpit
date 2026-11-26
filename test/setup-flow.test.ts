@@ -98,7 +98,7 @@ describe("setup", () => {
       f.out.some((l) => l.includes("native/mac/README.md")),
       "points at the native Cockpit",
     );
-    assert.ok(!f.calls.some((c) => c.includes("workspace list")));
+    assert.ok(!f.calls.some((c) => c.includes("workspace list") || c.includes("list-workspaces")));
   });
 
   it("falls back to the example table with no workspaces or no cmux list", async () => {
