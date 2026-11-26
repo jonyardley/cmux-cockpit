@@ -339,6 +339,12 @@ describe("moveFrom, a reply that says nothing is needed", () => {
     }
   });
 
+  it("reads the 26 November status line, my steps before the phrase, as idle", () => {
+    const s =
+      "Code review is running, about five minutes. After it I push, open a draft pull request with before and after pictures of those two changes, and ask for your word on them. Nothing needed from you yet.";
+    assert.deepEqual(moveFrom(endingOn(s), 5), { text: s, epoch: 5, idle: true });
+  });
+
   it("reads a plain 'your' after the phrase as quiet", () => {
     for (const s of [
       "CI is running. Nothing needed from you until CI finishes on your pull request.",
@@ -561,6 +567,31 @@ describe("moveFrom, a reply with no label that asks nothing", () => {
       "Jon, Cockpit hold: lane A is done.\n\nLane B runs.",
     ]) {
       assert.equal(moveFrom(text, 5)?.noAsk, true, text);
+    }
+  });
+
+  it("reads verbs after my own comma as my next steps, not orders", () => {
+    for (const text of [
+      "Re-recording nine snapshots in the background, about ten minutes; next I commit, run the pre-review checks and open a draft PR.",
+      "The build runs. I'll push, open a draft pull request, and check CI.",
+      "We'll rebase, then run the gate.",
+    ]) {
+      assert.equal(moveFrom(text, 5)?.noAsk, true, text);
+    }
+  });
+
+  it("still reads an order after a clause I closed, or with no I, as Jon's", () => {
+    for (const text of [
+      "I've pushed, merge it when green.",
+      "I'm done, review the diff.",
+      "I pushed it; merge it when green.",
+      "I'll start the next lane. Merge #12 first.",
+      "The build is green, merge it.",
+      "I push the fix, you merge it.",
+    ]) {
+      const move = moveFrom(text, 5);
+      assert.equal(move?.noAsk, undefined, text);
+      assert.equal(move?.idle, undefined, text);
     }
   });
 

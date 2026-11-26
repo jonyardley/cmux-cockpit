@@ -108,9 +108,30 @@ const ASK_LAST = new RegExp(
 // instruction, so "...until the pull request is ready to merge" and
 // "...while the reviewers run" ask nothing.
 const ASK_WORD = new RegExp(
-  String.raw`(?:^\s*|[;,:.!?][*_)"']*\s+)(?:(?:you|please|then|and|so)\s+)?(?:${ASK_VERB})\b`,
-  "i",
+  String.raw`(?:^\s*|([;,:.!?])[*_)"']*\s+)(?:(you|please|then|and|so)\s+)?(?:${ASK_VERB})\b`,
+  "gi",
 );
+// A clause I lead: "After it I push", "next I commit", "I'll open". On 26
+// November "After it I push, open a draft pull request, and ask for your
+// word" read as orders to Jon. "I've pushed" and "I'm done" end my steps,
+// so an order after their comma is still his.
+const MY_CLAUSE = /(?<![\p{L}\p{N}'’])(?:I|[Ww]e)(?:['’]ll| will)?\s+(?!(?:have|had|am|was|were|did)\b)\p{L}/u;
+const CLAUSE_BREAK = /[;:.!?][*_)"']*\s/g;
+
+function clauseBefore(text: string, end: number): string {
+  const before = text.slice(0, end);
+  let start = 0;
+  for (const b of before.matchAll(CLAUSE_BREAK)) start = b.index + b[0].length;
+  return before.slice(start);
+}
+
+// A verb after a comma, bare or after "and" or "then", in a clause I lead
+// is my own next step.
+const myStep = (text: string, m: RegExpExecArray): boolean =>
+  m[1] === "," && (m[2] === undefined || /^(?:and|then)$/i.test(m[2])) && MY_CLAUSE.test(clauseBefore(text, m.index));
+
+// Whether an ask verb sits where an instruction to Jon starts.
+const ordersJon = (text: string): boolean => [...text.matchAll(ASK_WORD)].some((m) => !myStep(text, m));
 // A last line that opens "Nothing", bold, italic or plain, with the rest of
 // the line after the word: asksAnything reads it as the phrase's line is
 // read, so "**Nothing merges until you say go.**" still asks.
@@ -232,8 +253,7 @@ function nothingNeededRests(lines: readonly string[]): Rest[] {
 
 // Whether the rest of a line after "Nothing" leaves Jon nothing: it ends
 // its sentence and holds no qualifier and no ask verb.
-const quietRest = (rest: string): boolean =>
-  !SENTENCE_BREAK.test(rest) && !QUALIFIED.test(rest) && !ASK_WORD.test(rest);
+const quietRest = (rest: string): boolean => !SENTENCE_BREAK.test(rest) && !QUALIFIED.test(rest) && !ordersJon(rest);
 
 // A phrase that leaves Jon nothing: the rest of its line is quiet, and the
 // line below opens with no qualifier.
@@ -264,11 +284,11 @@ function lastAsks(last: string, saidNothing: boolean): boolean {
   const nothing = NOTHING_LAST.exec(last);
   if (nothing) {
     const rest = nothing[1] ?? "";
-    return QUALIFIED.test(rest) || YOURS.test(rest) || ASK_WORD.test(rest);
+    return QUALIFIED.test(rest) || YOURS.test(rest) || ordersJon(rest);
   }
   if (ASK_LAST.test(last)) return true;
   const plain = unmark(last).replaceAll(PHRASE, "");
-  if (saidNothing && ASK_WORD.test(plain)) return true;
+  if (saidNothing && ordersJon(plain)) return true;
   if (!EMPHASIS_LAST.test(last)) return false;
   return !saidNothing || YOU.test(plain) || QUALIFIED.test(plain);
 }
@@ -279,7 +299,7 @@ function lastAsks(last: string, saidNothing: boolean): boolean {
 const addressesJon = (lines: readonly string[]): boolean =>
   lines.some((l) => {
     const plain = unmark(l.replace(STEP_MARKER, "").replace(QUOTE, "")).replaceAll(PHRASE, "");
-    return YOU.test(plain) || ASK_WORD.test(plain);
+    return YOU.test(plain) || ordersJon(plain);
   });
 
 // Whether a reply asks Jon something however it is worded: a question, a
