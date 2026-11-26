@@ -44,6 +44,12 @@ const r = seed({
     moves: {
       sel: { text: "pick one.", epoch: ago(60), session: "c1", decisions: 1, leans: "1a" },
       q: { text: "waiting until CI lands.", epoch: ago(60), session: "c1", idle: true },
+      held: { text: "the reviewer runs.", epoch: ago(60), session: "c1", unlabelled: true, noAsk: true },
+      shell: { text: "the dev server runs.", epoch: ago(60), session: "c1", unlabelled: true, noAsk: true },
+    },
+    running: {
+      held: { agent: "c1", since: ago(120), counts: [{ type: "subagent", n: 1 }] },
+      shell: { agent: "c1", since: ago(120), counts: [{ type: "shell", n: 1 }] },
     },
     published: {
       "https://claude.ai/artifact/p1": {
@@ -286,6 +292,13 @@ describe("your move", () => {
   it("hides a turn that asks nothing of Jon", () => {
     r.data.workspaces = [ws("q", { selected: true, latestAt: ago(900), agents: [lead()] })];
     assert.equal(d.moveDetail(), null);
+  });
+
+  it("hides a reply that asked nothing while its agents run, as the status reads Running", () => {
+    r.data.workspaces = [ws("held", { selected: true, latestAt: ago(900), agents: [lead()] })];
+    assert.equal(d.moveDetail(), null);
+    r.data.workspaces = [ws("shell", { selected: true, latestAt: ago(900), agents: [lead()] })];
+    assert.deepEqual(d.moveDetail(), { text: "the dev server runs.", meta: "" }, "a shell holds nothing");
   });
 });
 

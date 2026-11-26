@@ -281,7 +281,6 @@ describe("moveFrom", () => {
       text: "Nothing for you yet: CI runs.",
       epoch: 5,
       unlabelled: true,
-      noAsk: true,
     });
   });
 
@@ -408,6 +407,19 @@ describe("moveFrom, a reply that says nothing is needed", () => {
     waitsOnJon(text.replace("lands.**", "lands; then merge it.**"));
   });
 
+  it("lets a bold closer that addresses Jon ask, after the phrase or not", () => {
+    for (const last of [
+      "**Your call: a or b.**",
+      "**The merge is yours once CI is green.**",
+      "**I'll push the fix once you say go.**",
+      "**Ready for your review on #437.**",
+      "**A yes from you merges it.**",
+    ]) {
+      waitsOnJon(`The build is green.\n\n**Status**\nNothing needed from you.\n\n${last}`);
+      waitsOnJon(`The build is green.\n\n${last}`);
+    }
+  });
+
   it("lets a reply that lays out decisions wait on Jon", () => {
     const move = moveFrom(`${DECISIONS.replace("Your move:", "Next:")}\n\nNothing needed from you.`, 5);
     assert.equal(move?.unlabelled, true);
@@ -491,6 +503,32 @@ describe("moveFrom, a reply with no label that asks nothing", () => {
         unlabelled: true,
         noAsk: true,
       });
+    }
+  });
+
+  it("never marks one that addresses Jon or tells him to act anywhere", () => {
+    for (const text of [
+      "Merge #12 first, then I'll start the next lane.\n\nThe build runs.",
+      "Waiting on your approval to push.",
+      "Ready for your review once CI is green.",
+      "I need your pick on the colour.",
+      "Over to you for the merge.",
+      "Please merge #437 when green.\n\nThe second lane builds.",
+      "- Review the plan.\n\nThe second lane builds.",
+    ]) {
+      const move = moveFrom(text, 5);
+      assert.equal(move?.unlabelled, true, text);
+      assert.equal(move?.noAsk, undefined, text);
+      assert.equal(move?.idle, undefined, text);
+    }
+  });
+
+  it("marks plain progress noAsk, and a line opening with Jon's name is still progress", () => {
+    for (const text of [
+      "Lane A is done. Lane B is still running.",
+      "Jon, Cockpit hold: lane A is done.\n\nLane B runs.",
+    ]) {
+      assert.equal(moveFrom(text, 5)?.noAsk, true, text);
     }
   });
 

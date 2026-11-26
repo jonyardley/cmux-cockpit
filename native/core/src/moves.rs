@@ -12,7 +12,7 @@ use regex::Regex;
 use crate::data::{Agent, AgentStatus, Workspace};
 use crate::js::{positive, truthy};
 use crate::owner::owns;
-use crate::persist::{SavedMove, SavedState, move_of_description};
+use crate::persist::{SavedMove, SavedState, TaskType, move_of_description};
 use crate::saved::saved_for;
 
 /// Descriptions parsed so far, at most PARSED_MAX: the move is read
@@ -77,14 +77,15 @@ fn chat_owns_move(m: &SavedMove, a: &Agent, w: &Workspace) -> bool {
     a.kind.as_deref() == Some("claude") && m.session.as_deref().is_some_and(|s| owns(agents, a, s))
 }
 
-/// The move `a`'s chat's last turn ended on when it asks nothing of Jon,
-/// matched on any session id the chat ran under, with the same freshness
-/// rule as waiting_move. Only the Ready guard reads it: a turn that ended
-/// on "Nothing for you" before a /clear still keeps the card off Ready
-/// while its work runs. What a card shows as waiting stays on the current
-/// id, since a clear starts afresh.
+/// The move `a`'s chat's last turn ended on when it asks nothing of Jon
+/// for now (`asks_nothing_yet`, so a reply held on Running counts), matched
+/// on any session id the chat ran under, with the same freshness rule as
+/// waiting_move. Only the Ready guard reads it: a turn that ended on
+/// "Nothing for you" before a /clear still keeps the card off Ready while
+/// its work runs. What a card shows as waiting stays on the current id,
+/// since a clear starts afresh.
 pub fn chat_quiet_move(saved: &SavedState, a: &Agent, w: &Workspace) -> Option<SavedMove> {
-    turn_move(saved, a, w, chat_owns_move).filter(asks_nothing)
+    turn_move(saved, a, w, chat_owns_move).filter(|m| asks_nothing_yet(saved, m, a, Some(w)))
 }
 
 /// The move `a`'s last turn ended on, when `owns` gives it to `a`: only at
@@ -171,20 +172,24 @@ pub fn quiet_move(saved: &SavedState, a: &Agent, w: Option<&Workspace>) -> Optio
 
 /// Whether `m` asks nothing of Jon for now: `asks_nothing`, or a reply
 /// that asked nothing at all (`no_ask`) while `a`'s chat still runs
-/// background work by the core's saved verdict (running_save.rs). Once
-/// that work stops the turn waits on him again, so a quiet chat never
-/// hides for good.
+/// subagents by the core's saved verdict (running_save.rs). Only agents
+/// hold it: a shell, monitor or background session can run for hours, so
+/// the turn would hide all that time. Once the agents stop the turn waits
+/// on him again, so a quiet chat never hides for good.
 pub fn asks_nothing_yet(
     saved: &SavedState,
     m: &SavedMove,
     a: &Agent,
     w: Option<&Workspace>,
 ) -> bool {
-    let helpers_run = w
-        .and_then(|w| saved.running.get(&w.id))
-        .is_some_and(|r| r.agent == a.id);
+    let agents_run = w.and_then(|w| saved.running.get(&w.id)).is_some_and(|r| {
+        r.agent == a.id
+            && r.counts
+                .iter()
+                .any(|c| c.kind == TaskType::Subagent && c.n > 0)
+    });
     let no_ask = m.no_ask == Some(true) && !positive(m.decisions.unwrap_or(0.0));
-    asks_nothing(m) || (no_ask && helpers_run)
+    asks_nothing(m) || (no_ask && agents_run)
 }
 
 /// How big answering a move is.

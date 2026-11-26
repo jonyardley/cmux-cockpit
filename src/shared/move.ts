@@ -6,7 +6,7 @@
 
 import { moveOfDescription, type SavedMove } from "../../scripts/state-config.ts";
 import { SAVED_STATE } from "./persist.ts";
-import { helpersRun } from "./running.ts";
+import { agentsRun } from "./running.ts";
 import { savedFor } from "./saved.ts";
 
 // The move a description carries, parsed once per distinct description:
@@ -82,12 +82,12 @@ export const asksNothing = (m: Pick<SavedMove, "text" | "idle" | "decisions">): 
 
 /**
  * True when the move asks nothing of Jon for now: asksNothing, or a reply
- * that asked nothing at all (noAsk) while `a`'s chat still runs background
- * work by the core's saved verdict. Once that work stops the turn waits on
- * him again. The Cockpit's `asks_nothing_yet` (native/core/src/moves.rs).
+ * that asked nothing at all (noAsk) while `a`'s chat still runs subagents
+ * by the core's saved verdict. Once they stop the turn waits on him again.
+ * The Cockpit's `asks_nothing_yet` (native/core/src/moves.rs).
  */
 export const asksNothingYet = (m: SavedMove, a: Agent, w: Workspace | undefined): boolean =>
-  asksNothing(m) || (m.noAsk === true && !((m.decisions ?? 0) > 0) && helpersRun(a, w));
+  asksNothing(m) || (m.noAsk === true && !((m.decisions ?? 0) > 0) && agentsRun(a, w));
 
 /**
  * How long after a saved turn end the idle_prompt nudge may turn it into

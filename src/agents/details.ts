@@ -6,7 +6,7 @@
 import type { SavedCheck, SavedWait } from "../../scripts/state-config.ts";
 import type { Last } from "../shared/list.ts";
 import { markLast } from "../shared/list.ts";
-import { asksNothing, waitingMove } from "../shared/move.ts";
+import { asksNothingYet, waitingMove } from "../shared/move.ts";
 import { askReason } from "../shared/needs.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import { checksOf, diffText, prOf } from "../shared/prs.ts";
@@ -237,12 +237,13 @@ export interface MoveDetail {
  * What the selected workspace's chat ended its turn on, with its open
  * decisions and leans, read through waitingMove, so a move a newer prompt
  * or an ask has retired never shows. Null without a current move, or when
- * the turn asks nothing of Jon ("Nothing for you").
+ * the turn asks nothing of Jon for now (asksNothingYet), as the panel's
+ * status reads it.
  */
 export const moveDetail = computed((): MoveDetail | null => {
   const { a, ws } = cur();
   const m = waitingMove(a, ws, askReason(a, ws) !== null);
-  if (!m || asksNothing(m)) return null;
+  if (!m || !a || asksNothingYet(m, a, ws)) return null;
   const n = m.decisions ?? 0;
   const decisions = n > 0 ? (n === 1 ? "1 decision open" : n + " decisions open") : "";
   const leans = m.leans ? "leaning " + m.leans : "";

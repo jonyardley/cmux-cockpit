@@ -17,6 +17,7 @@ const NOW = 1_000_000;
 const END = NOW - 60;
 const SHELL = { since: NOW - 240, counts: [{ type: "shell", n: 1 }] };
 const running = (agent: string) => ({ agent, ...SHELL });
+const AGENT = { since: NOW - 240, counts: [{ type: "subagent", n: 1 }] };
 
 (globalThis as Record<string, unknown>).__STATE__ = {
   dismissed: {},
@@ -39,13 +40,17 @@ const running = (agent: string) => ({ agent, ...SHELL });
     dismiss: { text: "go", epoch: END, session: "c-dismiss" },
     noask: { text: "the reviewer still runs.", epoch: END, session: "c-noask", unlabelled: true, noAsk: true },
     noaskdone: { text: "the reviewer still runs.", epoch: END, session: "c-noaskdone", unlabelled: true, noAsk: true },
+    noaskshell: { text: "the dev server runs.", epoch: END, session: "c-noaskshell", unlabelled: true, noAsk: true },
   },
-  running: Object.fromEntries(
-    ["turn", "nudged", "bare", "quiet", "gone", "other", "answered", "dismiss", "noask"].map((id) => [
-      id,
-      running("c-" + id),
-    ]),
-  ),
+  running: {
+    ...Object.fromEntries(
+      ["turn", "nudged", "bare", "quiet", "gone", "other", "answered", "dismiss", "noaskshell"].map((id) => [
+        id,
+        running("c-" + id),
+      ]),
+    ),
+    noask: { agent: "c-noask", ...AGENT },
+  },
   ui: {},
 };
 
@@ -111,13 +116,19 @@ describe("a turn that asks Jon something while its chat's work runs", () => {
     assert.deepEqual(head(), RUNNING);
   });
 
-  it("says Running on a reply that asked nothing while its work runs, and Your turn once nothing runs", () => {
+  it("says Running on a reply that asked nothing while its agents run, and Your turn once nothing runs", () => {
+    const agentRunning = { ...RUNNING, status: "Running 4m · 1 agent" };
     selected("noask", stopped("noask"));
-    assert.deepEqual(head(), RUNNING);
+    assert.deepEqual(head(), agentRunning);
     selected("noask", nudged("noask"));
-    assert.deepEqual(head(), RUNNING);
+    assert.deepEqual(head(), agentRunning);
     selected("noaskdone", stopped("noaskdone"));
     assert.equal(head().status, "Your turn 1m");
+  });
+
+  it("says Your turn on a reply that asked nothing while only a shell runs, as it can run for hours", () => {
+    selected("noaskshell", stopped("noaskshell"));
+    assert.deepEqual(head(), YOUR_TURN);
   });
 
   it("says Running once a prompt retires the move, or when the move is another session's", () => {

@@ -539,11 +539,19 @@ mod tests {
         status: AgentStatus,
         latest: f64,
     ) -> Option<AgentStatus> {
-        let running = if helpers {
-            r#""w": {"agent": "c", "since": 950, "counts": [{"type": "subagent", "n": 1}]}"#
-        } else {
-            ""
-        };
+        shown_running(move_json, helpers.then_some("subagent"), status, latest)
+    }
+
+    /// `shown_after`, its chat running one task of `kind` when there is one.
+    fn shown_running(
+        move_json: &str,
+        kind: Option<&str>,
+        status: AgentStatus,
+        latest: f64,
+    ) -> Option<AgentStatus> {
+        let running = kind.map_or(String::new(), |k| {
+            format!(r#""w": {{"agent": "c", "since": 950, "counts": [{{"type": "{k}", "n": 1}}]}}"#)
+        });
         let saved = SavedState::from_json(&format!(
             r#"{{"moves": {{"w": {move_json}}}, "running": {{{running}}}}}"#
         ))
@@ -587,6 +595,22 @@ mod tests {
             shown(NO_ASK, false, idle()),
             Some(AgentStatus::NeedsInput),
             "nothing runs any more"
+        );
+    }
+
+    #[test]
+    fn only_running_agents_hold_a_reply_that_asks_nothing() {
+        for kind in ["shell", "monitor", "session"] {
+            assert_eq!(
+                shown_running(NO_ASK, Some(kind), AgentStatus::Idle, 900.0),
+                Some(AgentStatus::NeedsInput),
+                "{kind} can run for hours"
+            );
+        }
+        assert_eq!(
+            shown_running(NO_ASK, Some("subagent"), AgentStatus::Idle, 900.0),
+            Some(AgentStatus::Idle),
+            "the card says Running"
         );
     }
 
