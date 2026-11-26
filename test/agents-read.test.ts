@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 
 (globalThis as Record<string, unknown>).__STATE__ = {
-  dismissed: {},
+  dismissed: { pair: { a: 1000 } },
   projectOverride: {},
   projects: {},
   prs: {},
@@ -17,8 +17,22 @@ import { beforeEach, describe, it } from "node:test";
   subagents: {},
   published: {},
   prOrigins: {},
-  moves: {},
+  moves: {
+    mv: { text: "pick one", epoch: 1000, session: "t", decisions: 2, leans: "1b 2a" },
+    mvOld: { text: "pick one", epoch: 900, session: "t" },
+    mvOther: { text: "pick one", epoch: 1000, session: "x" },
+  },
   agents: {
+    staleIdle: [{ id: "a", status: "idle", since: 1000.124 }],
+    oldAsk: [{ id: "k", status: "needs_input", since: 1000, why: "ask", reason: "allow git push?" }],
+    pair: [
+      { id: "a", status: "idle", since: 1000 },
+      { id: "b", status: "needs_input", since: 1010, why: "ask" },
+    ],
+    mv: [{ id: "t", status: "needs_input", since: 1000, why: "turn" }],
+    mvOld: [{ id: "t", status: "needs_input", since: 1000, why: "turn" }],
+    mvOther: [{ id: "t", status: "needs_input", since: 1000, why: "turn" }],
+    lag: [{ id: "s", status: "needs_input", since: 1000, why: "stop" }],
     turn: [{ id: "t", status: "needs_input", since: 1000, why: "turn" }],
     asks: [{ id: "k", status: "needs_input", since: 1000.123, why: "ask", reason: "allow git push?" }],
     bare: [{ id: "b", status: "needs_input", since: 1000, why: "ask" }],
@@ -39,6 +53,7 @@ const r = installRenderer();
 const { agent, ws } = await import("./support/fixtures.ts");
 const needs = await import("../src/shared/needs.ts");
 const m = await import("../src/agents/model.ts");
+const details = await import("../src/agents/details.ts");
 const { T } = await import("../src/agents/theme.ts");
 
 const idle = (id: string, since = 1000) => agent("idle", { id, sinceEpoch: since, lastActivityAt: since });
@@ -114,6 +129,39 @@ describe("agentsOf with the Cockpit's saved agents", () => {
     assert.equal(one(ws("undated", { agents: [idle("u", 1003)] }))?.sinceEpoch, 1003);
   });
 
+  it("shows a permission prompt that came after a saved idle, and holds a dismissed ask's idle", () => {
+    const later = ws("staleIdle", { agents: [asking("a", 1040)] });
+    assert.equal(one(later)?.status, "needs_input");
+    assert.equal(one(later)?.sinceEpoch, 1040);
+    const same = ws("staleIdle", { agents: [asking("a", 1000.1234)] });
+    assert.equal(one(same)?.status, "idle", "saved at the ask's start, to the millisecond");
+  });
+
+  it("drops a saved ask's words once a later needs_input comes", () => {
+    const w = ws("oldAsk", { agents: [asking("k", 1040)] });
+    assert.equal(one(w)?.status, "needs_input");
+    assert.equal(one(w)?.sinceEpoch, 1040);
+    assert.equal(needs.askReason(one(w), w), null);
+  });
+
+  it("drops a saved turn once a prompt comes after it, and keeps it through a later start alone", () => {
+    const idleAfter = ws("turn", { latestAt: 1020, agents: [idle("t", 1030)] });
+    assert.equal(one(idleAfter)?.status, "idle");
+    assert.equal(needs.waitWhy(one(idleAfter), idleAfter), undefined);
+    const askAfter = ws("turn", { latestAt: 1020, agents: [asking("t", 1040)] });
+    assert.equal(one(askAfter)?.sinceEpoch, 1040, "a later spell keeps its own age");
+    assert.equal(needs.waitWhy(one(askAfter), askAfter), undefined);
+    const slack = ws("turn", { latestAt: 1002, agents: [idle("t", 1060)] });
+    assert.equal(needs.waitWhy(one(slack), slack), "turn", "a prompt within the slack is the turn's own");
+    assert.equal(one(slack)?.sinceEpoch, 1000);
+  });
+
+  it("never keeps a saved turn on a working agent, even with no start", () => {
+    const w = ws("turn", { agents: [agent("working", { id: "t" })] });
+    assert.equal(one(w)?.status, "working");
+    assert.equal(needs.waitWhy(one(w), w), undefined);
+  });
+
   it("leaves out an agent cmux sends with no status (issue #7)", () => {
     assert.deepEqual(needs.agentsOf(ws("turn", { agents: [{ id: "t" }] })), []);
   });
@@ -133,6 +181,27 @@ describe("dismissing over a saved entry", () => {
     assert.equal(one(w)?.status, "idle", "the saved entry still says needs_input");
     w.agents = [asking("k", 2000)];
     assert.equal(one(w)?.status, "needs_input", "a new ask shows again");
+  });
+
+  it("keeps an earlier dismissal the core has since saved as idle when another is dismissed", () => {
+    const w = ws("pair", { agents: [idle("a", 1000), asking("b", 1010)] });
+    assert.deepEqual(
+      needs.agentsOf(w).map((a) => a.status),
+      ["idle", "needs_input"],
+    );
+    needs.dismissNeeds(w);
+    assert.deepEqual(r.opened, [
+      `cmux-cockpit://set?key=dismissed.pair&value=${encodeURIComponent(JSON.stringify({ a: 1000, b: 1010 }))}`,
+    ]);
+  });
+
+  it("keys an undated saved turn on cmux's start, so the dismissal is saved", () => {
+    const w = ws("undated", { agents: [idle("u", 1003)] });
+    needs.dismissNeeds(w);
+    assert.equal(one(w)?.status, "idle");
+    assert.deepEqual(r.opened, [
+      `cmux-cockpit://set?key=dismissed.undated&value=${encodeURIComponent(JSON.stringify({ u: 1003 }))}`,
+    ]);
   });
 
   it("leaves the Cockpit's waits to the Cockpit", () => {
@@ -174,5 +243,22 @@ describe("the agents panel", () => {
     assert.equal(m.dotFor(null), T.grey);
     assert.equal(m.statusColor(null), T.secondary);
     assert.equal(m.haloFor(null), "clear");
+  });
+});
+
+describe("the move and the Cockpit's waits on the selected workspace", () => {
+  it("shows the move only for the agent's own saved turn, ending on it", () => {
+    r.data.workspaces = [ws("mv", { selected: true, agents: [idle("t", 1000)] })];
+    assert.deepEqual(details.moveDetail(), { text: "pick one", meta: "2 decisions open, leaning 1b 2a" });
+    r.data.workspaces = [ws("mvOld", { selected: true, agents: [idle("t", 1000)] })];
+    assert.equal(details.moveDetail(), null, "a move from an earlier turn");
+    r.data.workspaces = [ws("mvOther", { selected: true, agents: [idle("t", 1000)] })];
+    assert.equal(details.moveDetail(), null, "another session's move");
+  });
+
+  it("counts no carrier whose wait the waits map does not hold yet", () => {
+    r.data.workspaces = [ws("lag", { selected: true, agents: [idle("s", 1000)], latestMessage: "Done." })];
+    assert.equal(needs.cockpitWait(m.cur().a, m.cur().ws), "stop");
+    assert.equal(m.currentAsk(), null);
   });
 });

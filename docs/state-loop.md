@@ -757,16 +757,32 @@ change is written. It goes the same way as `quiet`
 The agents panel (`agentsOf` in `src/shared/needs.ts`) lays each entry on
 the cmux agent with the same id, so its Your turn, Asking and Needs you
 follow the core's rules rather than copies of them; a saved ask gives its
-`reason`, and a saved turn shows the workspace's move. It drops an entry
-once that agent is working again in a spell that began after it (a park
-aside, which the core lays on a working lead), and a saved `working` once
-cmux says otherwise. An agent with no entry reads as cmux sends it, as with
-the Cockpit closed, so its turns and asks then read as plain statuses.
+`reason`, and a saved turn shows the workspace's move while that move is
+the agent's own and its epoch the turn's saved start. The map lags cmux
+by a rebuild with the Cockpit on, and nothing clears it on quit, so with
+the Cockpit closed the last entries stay in the file; each retires once
+cmux shows something newer. A turn retires once a prompt comes after it
+(`latestAt` past its start, `HOOK_SLACK` aside), not on cmux's own start,
+which can move without one. An ask, idle or ended entry retires once
+cmux's start is past its own by more than the slack, so a later
+permission prompt shows over a saved idle, while a dismissed ask's idle,
+saved at the ask's start, holds. A turn or ask also retires once cmux
+says anything but idle or needs_input, a saved `working` once cmux says
+otherwise, and a stop or CI carrier once its agent works in a spell that
+began after it. A park never retires here, since the core lays it on a
+working lead. An agent with no entry, or one whose entry has retired,
+reads as cmux sends it, so with the Cockpit closed its turns and asks
+read as plain statuses once each entry retires.
 The Cockpit's own waits (`stop`, `ci`, `park` and the stand-in) stay off
 the agent's status: the panel names them from the `waits` map. A Dismiss
 in the panel shows at once, keyed as the core keys it (a turn on its
 saved start, anything else on cmux's own start), and holds over a saved
-entry still saying needs_input until the core rewrites it.
+entry still saying needs_input until the core rewrites it. The core
+replaces its dismissals with the file's on each read (`Session::reseed`),
+so a Dismiss writes back the workspace's dismissals already on file too,
+or an earlier one the core has since saved as idle would come back. A
+carrier counts in Needs you only once its wait is in the `waits` map too,
+which can lag the `agents` map.
 
 ### The core's waits for the agents panel
 
@@ -1102,7 +1118,10 @@ than the workspace's `latestAt`, give or take `HOOK_SLACK`. With no
 `latestAt` (missing or 0) there is no telling how old the move is, so none
 shows. The slack rule is `saved_for` in `native/core/src/saved.rs`, shared
 with asks. The agents panel shows the move only while the core saved its
-agent's `why` as `turn`.
+agent's `why` as `turn`, the move's session is that agent and its epoch is
+the saved start in whole seconds. A dismissed turn's move no longer shows
+in the Details tab: the core saves a dismissed turn as plain idle, so the
+panel cannot tell it from any other idle once it has.
 
 ### What cmux does (v0.65.2)
 

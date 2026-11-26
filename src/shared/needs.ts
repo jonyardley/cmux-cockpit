@@ -36,20 +36,37 @@ function savedAgents(wsId: string): SavedAgent[] {
   return (map && Object.hasOwn(map, wsId) ? map[wsId] : undefined) ?? [];
 }
 
+// Seconds between the core's stamp and cmux's for the same event, as the
+// core's own HOOK_SLACK (native/core/src/saved.rs).
+const HOOK_SLACK = 3;
+
 /**
  * The core's saved entry for `live`, an agent as cmux sends it, while it
  * still holds. The map lags a rebuild behind, and with the Cockpit closed it
- * is never rewritten, so an entry `live` has worked past (a working spell
- * that began after it) is dropped, save a park, which the core lays on a
- * working lead too. A saved working only ever comes from a working agent,
- * so it never holds once cmux says otherwise.
+ * is never rewritten, so each entry retires once cmux shows something newer
+ * (ownHolds); a park never does, since the core lays it on a working lead
+ * too. A saved working only ever comes from a working agent, so it never
+ * holds once cmux says otherwise.
  */
 function entryOf(live: Agent, w: Workspace): SavedAgent | undefined {
   const e = savedAgents(w.id).find((x) => x.id === live.id);
-  if (!e) return undefined;
-  if (e.why !== "park" && live.status === "working" && (live.sinceEpoch ?? 0) > e.since) return undefined;
-  if (e.status === "working" && live.status !== "working") return undefined;
-  return e;
+  if (!e || e.why === "park") return e;
+  if (e.status === "working") return live.status === "working" ? e : undefined;
+  if (isCockpitWait(e.why)) return live.status === "working" && (live.sinceEpoch ?? 0) > e.since ? undefined : e;
+  return ownHolds(e, live, w) ? e : undefined;
+}
+
+// A saved turn, ask, idle or ended entry. A turn or ask only ever comes from
+// an agent at a turn end (idle or needs_input). A turn holds until a prompt
+// comes after it (latestAt): cmux's own start can move on without one. The
+// rest hold until cmux's start moves past theirs, so a later permission
+// prompt shows over a saved idle, while a dismissed ask's idle, saved at the
+// ask's start, holds.
+function ownHolds(e: SavedAgent, live: Agent, w: Workspace): boolean {
+  if (e.status === "needs_input" && live.status !== "idle" && live.status !== "needs_input") return false;
+  if (e.why === "turn") return (w.latestAt ?? 0) <= e.since + HOOK_SLACK;
+  if (live.status === "working" && (live.sinceEpoch ?? 0) > e.since) return false;
+  return (live.sinceEpoch ?? 0) <= e.since + HOOK_SLACK;
 }
 
 // Whether `why` is one of the Cockpit's waits (a stop, CI, a park), which
@@ -64,7 +81,7 @@ const ownWait = (live: Agent, e: SavedAgent | undefined): boolean =>
 // When that wait began, as the core keys its dismissal: the end of the turn
 // (the saved start, the move's whole-second epoch), else cmux's own start.
 const waitStart = (live: Agent, e: SavedAgent | undefined): number =>
-  e?.why === "turn" ? e.since : sinceOrActivity(live);
+  e?.why === "turn" && e.since > 0 ? e.since : sinceOrActivity(live);
 
 // The workspace's agents whose own wait a dismissal can hide.
 const asking = (w: Workspace | undefined): Agent[] =>
@@ -130,6 +147,13 @@ function waitEntry(a: Agent | null | undefined, w: Workspace | undefined): Saved
 export const waitWhy = (a: Agent | null | undefined, w: Workspace | undefined): WaitWhy | undefined =>
   waitEntry(a, w)?.why;
 
+/** When `a`'s turn ended, as the core saved it, while `a` (as agentsOf
+ * shows it) waits on its turn; none otherwise. */
+export function turnStart(a: Agent | null | undefined, w: Workspace | undefined): number | undefined {
+  const e = waitEntry(a, w);
+  return e?.why === "turn" ? e.since : undefined;
+}
+
 /** The Cockpit's wait (a stop, CI, a park) the core laid on `a`, one of
  * `w`'s agents; none otherwise. */
 export function cockpitWait(a: Agent | null | undefined, w: Workspace | undefined): WaitWhy | undefined {
@@ -165,7 +189,12 @@ export function dismissNeeds(w: Workspace | undefined): void {
   // panel never dismisses, so a dismissal here never brings those back.
   const reported = new Set((w.agents ?? []).filter((a) => !!a).map((a) => a.id));
   const kept = [...(dismissed.get(w.id) ?? [])].filter(([id]) => !reported.has(id));
-  const starts = new Map([...kept, ...list.map((a): [string, number] => [a.id, waitStart(a, entryOf(a, w))])]);
+  // The core replaces its dismissals with the file's (Session::reseed), and
+  // prune drops one here once the core saves that agent idle, so the file's
+  // own are written back too, else an earlier dismissal would come back.
+  const onFile = Object.entries((Object.hasOwn(SAVED_STATE.dismissed, w.id) && SAVED_STATE.dismissed[w.id]) || {});
+  const fresh = list.map((a): [string, number] => [a.id, waitStart(a, entryOf(a, w))]);
+  const starts = new Map([...onFile, ...kept, ...fresh]);
   dismissed.set(w.id, starts);
   bump();
   // A start of 0 means the agent had no timestamp, so a later ask without one

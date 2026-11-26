@@ -13,9 +13,10 @@
 // holds Jon's own words, or cmux refuses or alters the write, the move is
 // saved in config/state.json's `moves` map instead, which rebuilds the
 // sidebars. A turn with no move line clears a move's description (never
-// Jon's words) and drops any saved move. The sidebar
-// shows a move only while no prompt has come since it was saved (cmux's
-// latestAt, native/core/src/moves.rs), so nothing here has to clear a stale one.
+// Jon's words) and drops any saved move. The Cockpit shows a move only
+// while no prompt has come since it was saved (cmux's latestAt,
+// native/core/src/moves.rs), and the agents panel only while the Cockpit's
+// saved turn ended on it, so nothing here has to clear a stale one.
 //
 // A final reply with neither label is never sent back for one: its last
 // line is saved instead, marked unlabelled, and the card quotes it in grey,

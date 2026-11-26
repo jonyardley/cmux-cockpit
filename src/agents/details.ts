@@ -3,11 +3,11 @@
 // tab shows is panel state, remembered per workspace and saved; the rest
 // are pure reads of `data` and the saved state, so each is testable alone.
 
-import type { SavedCheck, SavedWait } from "../../scripts/state-config.ts";
+import type { SavedCheck, SavedMove, SavedWait } from "../../scripts/state-config.ts";
 import type { Last } from "../shared/list.ts";
 import { markLast } from "../shared/list.ts";
 import { lastMove } from "../shared/move.ts";
-import { waitWhy } from "../shared/needs.ts";
+import { turnStart } from "../shared/needs.ts";
 import { persistSet, SAVED_STATE } from "../shared/persist.ts";
 import { checksOf, diffText, prOf } from "../shared/prs.ts";
 import { ageSince } from "../shared/time.ts";
@@ -233,16 +233,23 @@ export interface MoveDetail {
   meta: string;
 }
 
+// Whether `m` is the move `a`'s saved turn ended on: the core keys the
+// turn end on the move's whole-second epoch, saved to the millisecond.
+const isTurnOf = (m: SavedMove, a: Agent, since: number): boolean =>
+  m.session === a.id && Math.floor(m.epoch) === Math.floor(since);
+
 /**
  * What the selected workspace's chat ended its turn on, with its open
  * decisions and leans. Only while the Cockpit saved its agent as waiting
- * on its turn, so a move a newer prompt or an ask has retired, or one that
- * asks nothing of Jon for now, never shows. Null otherwise.
+ * on that turn: the move is the agent's own and its epoch the saved turn
+ * end, so a move a newer prompt or an ask has retired, or one that asks
+ * nothing of Jon for now, never shows. Null otherwise.
  */
 export const moveDetail = computed((): MoveDetail | null => {
   const { a, ws } = cur();
-  const m = waitWhy(a, ws) === "turn" ? lastMove(ws) : undefined;
-  if (!m) return null;
+  const since = turnStart(a, ws);
+  const m = since === undefined ? undefined : lastMove(ws);
+  if (!m || !a || since === undefined || !isTurnOf(m, a, since)) return null;
   const n = m.decisions ?? 0;
   const decisions = n > 0 ? (n === 1 ? "1 decision open" : n + " decisions open") : "";
   const leans = m.leans ? "leaning " + m.leans : "";

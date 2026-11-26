@@ -87,8 +87,9 @@ export const currentWaited = computed((): Waited => {
   const waits = waitsFor(ws.id);
   const stand = standInWhy(ws);
   const carried = new Set(agents.map((a) => waitOf(cockpitWait(a, ws), a.id, waits)));
-  carried.add(waitOf(stand, STAND_IN, waits));
-  return { standIn: stand !== undefined, shown: waits.filter((v) => carried.has(v)) };
+  const standing = waitOf(stand, STAND_IN, waits);
+  carried.add(standing);
+  return { standIn: standing !== undefined, shown: waits.filter((v) => carried.has(v)) };
 });
 
 // The workspace's latestMessage is workspace-wide (Agent carries no message
@@ -112,7 +113,10 @@ function askText(c: Current, own: number, count: number): string {
 export const currentAsk = computed((): Ask | null => {
   const c = current();
   if (!c) return null;
-  const carriers = c.agents.filter((a) => cockpitWait(a, c.ws) !== undefined).length;
+  // A carrier counts only once its wait is in the waits map too, which can
+  // lag the agents map, so the ask block never names a wait it cannot find.
+  const waits = waitsFor(c.ws.id);
+  const carriers = c.agents.filter((a) => waitOf(cockpitWait(a, c.ws), a.id, waits) !== undefined).length;
   const own = c.agents.filter((a) => a.status === "needs_input" && cockpitWait(a, c.ws) === undefined).length;
   const count = own + carriers + (currentWaited().standIn ? 1 : 0);
   if (count === 0) return null;
