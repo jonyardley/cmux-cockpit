@@ -12,44 +12,69 @@ const checks = [
   { name: "test", state: "pending" },
   { name: "build", state: "pass" },
 ];
-const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open", branch: "feat", checks };
+// Each entry carries the health and tone the native poll saves with it
+// (pr_poll.rs stamp_look); one with neither was saved before it did.
+const base = { number: 7, url: "https://github.com/o/r/pull/7", status: "open", branch: "feat", checks };
+const saved = { ...base, health: "failing", tone: "failing" };
+const ready = { health: "ready", tone: "ready" };
+const running = { health: "running", tone: "running" };
+const failing = { health: "failing", tone: "failing" };
+const conflicted = { health: "conflicts", tone: "conflicts" };
+const open = { health: "quiet", tone: "open" };
+const merged = { health: "quiet", tone: "merged" };
 (globalThis as Record<string, unknown>).__STATE__ = {
   dismissed: {},
   projectOverride: {},
   projects: {},
   prs: {
     w1: saved,
-    green: { ...saved, number: 8, mergeable: true, checks: [{ name: "build", state: "pass" }] },
+    green: { ...base, ...ready, number: 8, mergeable: true, checks: [{ name: "build", state: "pass" }] },
     // Merge-ready since the native poll first saw it so (#380).
     timed: {
-      ...saved,
+      ...base,
+      ...ready,
       number: 23,
       mergeable: true,
       readySince: 1794571200,
       checks: [{ name: "build", state: "pass" }],
     },
     // Saved before the poller kept draft or the merge verdict: never ready.
-    legacy: { ...saved, number: 13, checks: [{ name: "build", state: "pass" }] },
-    draft: { ...saved, number: 9, draft: true, mergeable: true, checks: [{ name: "build", state: "pass" }] },
-    draftFailing: { ...saved, number: 14, draft: true },
-    draftRunning: { ...saved, number: 15, draft: true, checks: [{ name: "test", state: "pending" }] },
+    legacy: { ...base, number: 13, checks: [{ name: "build", state: "pass" }] },
+    draft: {
+      ...base,
+      health: "quiet",
+      tone: "draft",
+      number: 9,
+      draft: true,
+      mergeable: true,
+      checks: [{ name: "build", state: "pass" }],
+    },
+    draftFailing: { ...base, ...failing, number: 14, draft: true },
+    draftRunning: { ...base, ...running, number: 15, draft: true, checks: [{ name: "test", state: "pending" }] },
     running: {
-      ...saved,
+      ...base,
+      ...running,
       number: 10,
       checks: [
         { name: "build", state: "pass" },
         { name: "test", state: "pending" },
       ],
     },
-    merged: { ...saved, number: 11, status: "merged", checks },
-    bare: { number: 12, url: "https://github.com/o/r/pull/12", status: "open", branch: "feat" },
+    merged: { ...base, ...merged, number: 11, status: "merged", checks },
+    bare: { ...open, number: 12, url: "https://github.com/o/r/pull/12", status: "open", branch: "feat" },
     // In conflict with passing checks, running ones, and failing ones.
-    conflicts: { ...saved, number: 16, conflicts: true, checks: [{ name: "build", state: "pass" }] },
-    conflictsRunning: { ...saved, number: 17, conflicts: true, checks: [{ name: "test", state: "pending" }] },
-    conflictsFailing: { ...saved, number: 18, conflicts: true },
-    conflictsMerged: { ...saved, number: 19, status: "merged", conflicts: true, checks: [] },
-    titled: { ...saved, number: 20, title: "✳ Show the PR title", checks: [] },
-    sized: { ...saved, number: 22, additions: 1234, deletions: 8, checks: [] },
+    conflicts: { ...base, ...conflicted, number: 16, conflicts: true, checks: [{ name: "build", state: "pass" }] },
+    conflictsRunning: {
+      ...base,
+      ...conflicted,
+      number: 17,
+      conflicts: true,
+      checks: [{ name: "test", state: "pending" }],
+    },
+    conflictsFailing: { ...base, ...failing, number: 18, conflicts: true },
+    conflictsMerged: { ...base, ...merged, number: 19, status: "merged", conflicts: true, checks: [] },
+    titled: { ...base, ...open, number: 20, title: "✳ Show the PR title", checks: [] },
+    sized: { ...base, ...open, number: 22, additions: 1234, deletions: 8, checks: [] },
     // The poller's copy of a PR cmux also sends, by url: cmux's record has
     // no draft, title, diff or checks, so those come from here.
     held: {
@@ -63,6 +88,7 @@ const saved = { number: 7, url: "https://github.com/o/r/pull/7", status: "open",
       additions: 280,
       deletions: 45,
       checks: [{ name: "build", state: "fail" }],
+      ...failing,
     },
     // Not in the poller's worst-first order, so a sort would show.
     unsorted: {
@@ -239,6 +265,31 @@ describe("a PR cmux sends that the poller also saved", () => {
     const pr = prOf(ws("held", { branch: "feat", pr: { ...cmuxPr, status: "merged" } }));
     assert.equal(pr?.status, "merged");
     assert.equal(pr?.draft, true);
+  });
+
+  it("takes the saved health and tone, but not once cmux's status moves past the saved one", () => {
+    const same = prOf(ws("held", { branch: "feat", pr: cmuxPr }));
+    assert.deepEqual([same?.health, same?.tone], ["failing", "failing"]);
+    const w = ws("held", { branch: "feat", pr: { ...cmuxPr, status: "merged" } });
+    const moved = prOf(w);
+    assert.deepEqual([moved?.health, moved?.tone], [undefined, undefined]);
+    const row = rowOf(w);
+    assert.equal(row && agents.prChipTone(row), "merged");
+    assert.equal(row && agents.prChipHealth(row), "quiet");
+  });
+
+  it("keeps the saved health and tone when cmux's PR sends its own", () => {
+    const sent = { ...cmuxPr, health: "ready" as const, tone: "ready" as const };
+    const pr = prOf(ws("held", { branch: "feat", pr: sent }));
+    assert.deepEqual([pr?.health, pr?.tone], ["failing", "failing"]);
+  });
+
+  it("colours a PR of cmux's own the poller never saved by its status alone", () => {
+    const other = { url: "https://github.com/o/r/pull/348", number: 348, status: "open" as const };
+    r.data.workspaces = [ws("held", { branch: "feat", prs: [other] })];
+    r.data.epoch++;
+    const row = agents.prs().find((e) => e.key === other.url);
+    assert.equal(row && agents.prChipTone(row), "open");
   });
 
   it("matches by number when cmux sends no url", () => {

@@ -21,7 +21,7 @@ it reads (`scripts/bundle.ts`), and a bundle whose bytes did not change is
 not rewritten (`scripts/write-if-changed.ts`), so cmux does not reload it.
 The cockpit's PRs are also cut to what its card shows (`cockpitPr`): their
 checks and merge flags only as the chip's health, rebuilt on the chip's own
-rule (`healthOf` in `src/shared/pr-health.ts`) as the fewest that keep it
+rule (`health_of` in `native/core/src/prs.rs`) as the fewest that keep it
 (one nameless check per failure, one running, one passed with the merge
 verdict for ready, the conflicts flag alone, nothing for quiet), and a PR
 that is not open keeps only its number, link, status, branch and title. A
@@ -858,7 +858,7 @@ tab, comment or upload, is not hooked, so it touches nothing.
 Nothing moves a card by itself: it stays in the lane Jon left it in, and
 he moves it from the card menu or by dragging it. When a workspace's PR
 turns ready to merge (the green chip, the ready test in
-src/shared/pr-health.ts), the chip says so and the lane's header counts it.
+native/core/src/prs.rs), the chip says so and the lane's header counts it.
 Before 2026-09-30 the cockpit moved the card itself, which lost cards; a
 state file from then may still hold a `prSeen` map, which the next read
 drops.

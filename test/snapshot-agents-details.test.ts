@@ -47,6 +47,8 @@ const r = seed({
           { name: "mac", state: "pending", queued: ago(75) },
           { name: "secrets", state: "pass", started: ago(3000) },
         ],
+        health: "failing",
+        tone: "failing",
       },
     },
     names: { c1: { name: "Build the Details tab", from: "prompt" } },

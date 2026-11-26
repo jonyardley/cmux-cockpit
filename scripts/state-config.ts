@@ -250,7 +250,22 @@ export interface SavedPr {
    * state is unsure, so going ready and leaving it are the only extra writes.
    */
   readySince?: number;
+  /** The chip's health as the native poll last worked it out (#426); never stuck. */
+  health?: PrHealth;
+  /** The tone the PR's words take, from its health, else its state (#426). */
+  tone?: PrTone;
 }
+
+const PR_HEALTHS = ["failing", "conflicts", "running", "ready", "quiet"] as const;
+/** A PR's worst state as its chip says it, or quiet. */
+export type PrHealth = (typeof PR_HEALTHS)[number];
+
+const PR_TONES = ["failing", "conflicts", "running", "ready", "draft", "open", "merged", "closed", "quiet"] as const;
+/**
+ * What colours a PR's words: its health when that has a hue, else its state.
+ * "draft" is an open draft; "quiet" is grey with nothing to say.
+ */
+export type PrTone = (typeof PR_TONES)[number];
 
 /**
  * One of Jon's own open PRs. Only what the Pull requests list shows is
@@ -706,6 +721,16 @@ export const isLineCount = (v: unknown): v is number => typeof v === "number" &&
 /** When a PR first read merge-ready: an epoch after 1970, never the zero time. */
 const isReadyTime = (v: unknown): v is number => isEpoch(v) && v > 0;
 
+const HEALTH_WORDS: readonly unknown[] = PR_HEALTHS;
+const isPrHealth = (v: unknown): v is PrHealth => HEALTH_WORDS.includes(v);
+const TONE_WORDS: readonly unknown[] = PR_TONES;
+const isPrTone = (v: unknown): v is PrTone => TONE_WORDS.includes(v);
+
+const savedLook = (v: Record<string, unknown>): Pick<SavedPr, "health" | "tone"> => ({
+  ...(isPrHealth(v.health) ? { health: v.health } : {}),
+  ...(isPrTone(v.tone) ? { tone: v.tone } : {}),
+});
+
 function savedPr(v: unknown): SavedPr | null {
   if (!isRecord(v) || !isPrUrl(v.url) || !isPrStatus(v.status)) return null;
   const { number, branch } = v;
@@ -723,6 +748,7 @@ function savedPr(v: unknown): SavedPr | null {
     ...(isLineCount(v.additions) ? { additions: v.additions } : {}),
     ...(isLineCount(v.deletions) ? { deletions: v.deletions } : {}),
     ...(isReadyTime(v.readySince) ? { readySince: v.readySince } : {}),
+    ...savedLook(v),
   };
   const checks = Array.isArray(v.checks) ? v.checks.flatMap(savedCheck).slice(0, MAX_CHECKS) : [];
   return checks.length ? { ...pr, checks } : pr;

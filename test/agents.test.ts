@@ -363,22 +363,22 @@ describe("prChipText", () => {
   });
 
   it("says the summary's state for a numbered PR, stale after it", () => {
-    const pr: PullRequest = { number: 3, status: "open", draft: true, stale: true };
+    const pr: PullRequest = { number: 3, status: "open", draft: true, stale: true, health: "running" };
     const summary = summaryOf(pr, [{ name: "test", state: "pending" }]);
     assert.equal(m.prChipText({ pr, summary }), "draft · running · stale");
     assert.equal(m.prChipHealth({ summary }), "running");
     assert.equal(m.prChipHealth({ summary: undefined }), "quiet");
   });
 
-  it("tones a row's chip by health, else by state", () => {
-    const tone = (pr: PullRequest, checks: { name: string; state: "pass" | "fail" | "pending" }[] = []) =>
-      m.prChipTone({ pr, summary: summaryOf(pr, checks), saved: false });
+  it("tones a row's chip by the tone the core saved, else by state", () => {
+    const tone = (pr: PullRequest) => m.prChipTone({ pr, saved: false });
     assert.equal(tone({ number: 1, status: "open", draft: true }), "draft");
-    assert.equal(tone({ number: 1, status: "open", draft: true }, [{ name: "t", state: "fail" }]), "failing");
+    assert.equal(tone({ number: 1, status: "open", draft: true, tone: "failing" }), "failing");
+    assert.equal(tone({ number: 1, status: "open", tone: "ready" }), "ready");
     assert.equal(tone({ number: 1, status: "open" }), "open");
     assert.equal(tone({ number: 1, status: "merged" }), "merged");
     assert.equal(tone({ number: 1, status: "closed" }), "closed");
-    assert.equal(m.prChipTone({ pr: { status: "open", draft: true }, summary: undefined, saved: false }), "draft");
+    assert.equal(tone({ status: "open", draft: true }), "draft");
   });
 });
 

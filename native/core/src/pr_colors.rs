@@ -10,7 +10,7 @@
 //! (pr_chip_colors) and the stale reading (shown_tone) wait for a shell
 //! that draws faces, and for the agents sidebar's port.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::data::{PrStatus, Workspace};
 use crate::persist::SavedState;
@@ -28,7 +28,7 @@ pub struct ChipColors {
 /// What colours a PR's words: its health when that has a hue, else its
 /// state. `Draft` is an open draft; `Quiet` is grey with nothing to say,
 /// a PR with no status the core knows or a stale ready (shown_tone).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PrTone {
     Failing,

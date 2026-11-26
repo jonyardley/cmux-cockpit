@@ -260,6 +260,24 @@ test("validateState keeps when a PR first read merge-ready, and drops a bad time
   }
 });
 
+test("validateState keeps a PR's saved health and tone only from their own words", () => {
+  const pr = (extra: Record<string, unknown>) => ({
+    prs: { w: { number: 7, url: "https://github.com/o/r/pull/7", status: "open", branch: "feat", ...extra } },
+  });
+  const ok = validateState(pr({ health: "conflicts", tone: "draft" })).prs.w;
+  assert.deepEqual([ok?.health, ok?.tone], ["conflicts", "draft"]);
+  for (const [health, tone] of [
+    ["stuck", "open "],
+    ["draft", "failing!"],
+    [1, null],
+    ["Ready", "stale"],
+  ]) {
+    const kept = validateState(pr({ health, tone })).prs.w;
+    assert.ok(kept, "the PR itself stays");
+    assert.equal("health" in kept || "tone" in kept, false, String([health, tone]));
+  }
+});
+
 test("applySet sets, replaces and deletes an entry without changing its input", () => {
   const start = emptyState();
   const set = applySet(start, "projectOverride.w1", '"alpha"');

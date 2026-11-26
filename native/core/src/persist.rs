@@ -16,6 +16,8 @@ use serde_json::{Map, Value};
 
 use crate::data::PrStatus;
 use crate::js::{encode_uri_component, utf16_len};
+use crate::pr_colors::PrTone;
+use crate::prs::PrHealth;
 use crate::saved::Stamped;
 use crate::text::js_space;
 
@@ -144,6 +146,22 @@ pub struct SavedPr {
         skip_serializing_if = "Option::is_none"
     )]
     pub ready_since: Option<f64>,
+    /// The chip's health and the words' tone as the poll last worked them
+    /// out (pr_poll.rs `stamp_look`), so the agents panel reads the core's
+    /// answer rather than its own copy of the rule (#426). Never stuck,
+    /// which needs the clock. An unknown word reads as none.
+    #[serde(
+        default,
+        deserialize_with = "crate::lenient::field",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub health: Option<PrHealth>,
+    #[serde(
+        default,
+        deserialize_with = "crate::lenient::field",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub tone: Option<PrTone>,
 }
 
 /// A subagent run as the hook saves it.

@@ -54,6 +54,8 @@ describe("parsePrSave", () => {
         deletions: 1,
         checks: [{ name: "check", state: "pass", started: 1794571140 }],
         readySince: 1794571200,
+        health: "ready",
+        tone: "ready",
       }),
     });
   });

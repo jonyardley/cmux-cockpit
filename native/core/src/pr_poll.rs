@@ -37,6 +37,7 @@ use crate::data::{Data, PrStatus, PullRequest, Workspace};
 use crate::js::non_empty;
 use crate::merge_wait::ready_time;
 use crate::persist::{SavedCheck, SavedPr, UNTIMED};
+use crate::pr_colors::pr_tone;
 use crate::prs::{PrHealth, health_of};
 
 /// The shortest wait between two asks for one directory.
@@ -352,6 +353,14 @@ fn stamp_ready(pr: &mut SavedPr, before: Option<&SavedPr>, now: f64) {
     };
 }
 
+/// Gives `pr` its time-free health and the tone its words take, so the
+/// agents panel reads them from the state file (#426).
+fn stamp_look(pr: &mut SavedPr) {
+    let health = saved_health(pr);
+    pr.health = Some(health);
+    pr.tone = Some(pr_tone(Some(pr.status), pr.draft == Some(true), health));
+}
+
 /// The wait after `failures` failed asks in a row: FLOOR_SECS doubled
 /// each time, up to BACKOFF_CAP_SECS.
 fn backoff(failures: u32) -> f64 {
@@ -471,6 +480,7 @@ impl PrPoll {
             };
             stamp_queued(pr, before, polled.epoch);
             stamp_ready(pr, before, polled.epoch);
+            stamp_look(pr);
         }
         t.record(answer);
     }
@@ -585,7 +595,15 @@ mod tests {
                     .collect(),
             ),
             ready_since: None,
+            health: None,
+            tone: None,
         }
+    }
+
+    /// `pr` as the poll saves it, health and tone stamped.
+    fn looked(mut pr: SavedPr) -> SavedPr {
+        stamp_look(&mut pr);
+        pr
     }
 
     /// The answer to the ask made at `asked`.
@@ -875,7 +893,7 @@ mod tests {
             ..answered("/a", Some(untimed), 0.0)
         });
         // The waiting check is written with when the poll first saw it.
-        let stamped = queued_at(pr(&["pending"]), &[Some(5.0)]);
+        let stamped = looked(queued_at(pr(&["pending"]), &[Some(5.0)]));
         let want: BTreeMap<String, Option<SavedPr>> = [
             ("a".to_string(), Some(stamped.clone())),
             ("b".to_string(), Some(stamped.clone())),
@@ -991,10 +1009,10 @@ mod tests {
         // After a restart the state file's time carries on, and an answer
         // the same as the file writes nothing.
         let mut fresh = on();
-        let stamped = SavedPr {
+        let stamped = looked(SavedPr {
             ready_since: Some(1000.0),
             ..pr(&["pass"])
-        };
+        });
         let text = serde_json::to_string(&file_of(&["a"], &stamped)).unwrap_or_default();
         let file: BTreeMap<String, SavedPr> = serde_json::from_str(&text).unwrap();
         fresh.file_read(&file, Some(&d));
@@ -1209,6 +1227,110 @@ mod tests {
     }
 
     #[test]
+    fn saves_a_long_waiting_check_as_running_never_stuck() {
+        use crate::prs::stuck;
+        let d = data(vec![ws("a", "/a")]);
+        let mut p = on();
+        let late = 100_000.0;
+        let answer = queued_at(pr(&["pending"]), &[Some(1.0)]);
+        assert!(stuck(answer.checks.as_deref().unwrap_or(&[]), late).is_some());
+        let _ = p.due(&d, late);
+        p.record(answered("/a", Some(answer), late));
+        let held = p.targets.get("/a").and_then(|t| t.known.clone().flatten());
+        assert_eq!(held.and_then(|pr| pr.health), Some(PrHealth::Running));
+    }
+
+    #[test]
+    fn saves_each_answer_with_its_health_and_tone_for_the_agents_panel() {
+        use crate::pr_colors::PrTone;
+        let d = data(vec![ws("a", "/a")]);
+        let mut p = on();
+        let held = |p: &PrPoll| p.targets.get("/a").and_then(|t| t.known.clone().flatten());
+        let look = |p: &PrPoll| held(p).map(|pr| (pr.health, pr.tone));
+        let mut at = 0.0;
+        let mut ask = |p: &mut PrPoll, pr: SavedPr| {
+            let _ = p.due(&d, at);
+            p.record(answered("/a", Some(pr), at));
+            at += IDLE_SECS;
+        };
+        let cases = [
+            (pr(&["pass", "fail"]), PrHealth::Failing, PrTone::Failing),
+            (
+                SavedPr {
+                    conflicts: Some(true),
+                    mergeable: None,
+                    ..pr(&["pass"])
+                },
+                PrHealth::Conflicts,
+                PrTone::Conflicts,
+            ),
+            (pr(&["pending"]), PrHealth::Running, PrTone::Running),
+            (pr(&["pass"]), PrHealth::Ready, PrTone::Ready),
+            (
+                SavedPr {
+                    draft: Some(true),
+                    ..pr(&["pass"])
+                },
+                PrHealth::Quiet,
+                PrTone::Draft,
+            ),
+            (
+                SavedPr {
+                    status: PrStatus::Merged,
+                    ..pr(&["fail"])
+                },
+                PrHealth::Quiet,
+                PrTone::Merged,
+            ),
+            (
+                SavedPr {
+                    mergeable: None,
+                    ..pr(&["pass"])
+                },
+                PrHealth::Quiet,
+                PrTone::Open,
+            ),
+            (
+                SavedPr {
+                    status: PrStatus::Closed,
+                    ..pr(&["pending"])
+                },
+                PrHealth::Quiet,
+                PrTone::Closed,
+            ),
+            (pr(&[]), PrHealth::Quiet, PrTone::Open),
+        ];
+        for (answer, health, tone) in cases {
+            ask(&mut p, answer);
+            assert_eq!(look(&p), Some((Some(health), Some(tone))));
+        }
+
+        // In the file as the TypeScript words, and an answer the file
+        // already holds writes nothing.
+        let saved = held(&p).unwrap();
+        let text = serde_json::to_string(&saved).unwrap();
+        assert!(text.contains(r#""health":"quiet""#) && text.contains(r#""tone":"open""#));
+        p.file_read(&file_of(&["a"], &saved), Some(&d));
+        assert!(p.writes(&d, "/a").is_empty());
+        ask(&mut p, pr(&[]));
+        assert!(
+            p.writes(&d, "/a").is_empty(),
+            "unchanged poll sends nothing"
+        );
+    }
+
+    #[test]
+    fn reads_an_entry_saved_before_health_or_with_a_word_it_does_not_know() {
+        let old = r#"{"number":1,"url":"u","status":"open","branch":"b"}"#;
+        let pr: SavedPr = serde_json::from_str(old).unwrap();
+        assert_eq!((pr.health, pr.tone), (None, None));
+        let odd =
+            r#"{"number":1,"url":"u","status":"open","branch":"b","health":"grand","tone":7}"#;
+        let pr: SavedPr = serde_json::from_str(odd).unwrap();
+        assert_eq!((pr.health, pr.tone), (None, None), "dropped, not the entry");
+    }
+
+    #[test]
     fn a_git_failure_keeps_what_is_known_whatever_its_branch() {
         // "keeps the previous PR as-is when git itself failed, regardless of branch"
         let d = data(vec![ws("a", "/a")]);
@@ -1231,13 +1353,13 @@ mod tests {
         // An answer held, then git fails: it is still held and shown.
         let _ = p.due(&d, 600.0);
         p.record(answered("/a", Some(pr(&[])), 600.0));
-        p.file_read(&file_of(&["a"], &pr(&[])), Some(&d));
+        p.file_read(&file_of(&["a"], &looked(pr(&[]))), Some(&d));
         let _ = p.due(&d, 900.0);
         p.record(polled(PollAnswer::GitFailed, 900.0));
         assert!(p.writes(&d, "/a").is_empty());
         let mut shown_now = BTreeMap::new();
         p.overlay(&mut shown_now, &d);
-        assert_eq!(shown_now.get("a"), Some(&pr(&[])));
+        assert_eq!(shown_now.get("a"), Some(&looked(pr(&[]))));
     }
 
     #[test]

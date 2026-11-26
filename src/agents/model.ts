@@ -224,11 +224,11 @@ export const prStale = (): boolean => freshness().stale;
 /** The workspace's PR chip dims while it is the poller's copy and that copy is stale. */
 export const currentPrDim = computed((): boolean => !!currentPr() && fromPoller(cur().ws) && prStale());
 
-/** The workspace's PR chip's tone, for its colour: its health, else its
- * state, the draft flag read off the PR itself; a stale ready goes grey. */
+/** The workspace's PR chip's tone, for its colour: the one the core saved,
+ * else its state; a stale ready goes grey. */
 export const currentPrTone = computed((): PrTone => {
-  const pr = currentPr();
-  return shownTone(prTone(pr?.status, prOf(cur().ws)?.draft, pr?.health ?? "quiet"), currentPrDim());
+  const pr = currentPr() ? prOf(cur().ws) : undefined;
+  return shownTone(pr?.tone ?? prTone(pr?.status, pr?.draft), currentPrDim());
 });
 
 /** The workspace a row's right-click Open chat goes to, by id; none for the

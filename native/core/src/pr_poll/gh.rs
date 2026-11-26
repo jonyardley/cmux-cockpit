@@ -442,6 +442,8 @@ fn listed(p: &Value) -> Option<Listed> {
         checks: (!checks.is_empty()).then_some(checks),
         // Stamped by the poll once it keeps the answer (pr_poll.rs).
         ready_since: None,
+        health: None,
+        tone: None,
     };
     Some(Listed {
         pr,

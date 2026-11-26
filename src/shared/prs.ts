@@ -5,12 +5,11 @@
 // are the same PR, cmux's status wins and the rest fills from the saved one.
 // Both sidebars read PRs through here (native/core/src/prs.rs mirrors it).
 
-import type { SavedCheck, SavedOwnPr, SavedPr, SavedPrOrigin } from "../../scripts/state-config.ts";
+import type { PrHealth, SavedCheck, SavedOwnPr, SavedPr, SavedPrOrigin } from "../../scripts/state-config.ts";
 import { SAVED_STATE } from "./persist.ts";
-import { healthOf, type PrHealth } from "./pr-health.ts";
 import { cleanTitle } from "./text.ts";
 
-export type { PrHealth } from "./pr-health.ts";
+export type { PrHealth } from "../../scripts/state-config.ts";
 
 // The saved PR, while the workspace's branch is not yet known (cmux has not
 // reported it) or still matches the branch it was found for.
@@ -33,8 +32,9 @@ function savedMatch(w: Workspace, pr: PullRequest | null | undefined): SavedPr |
 }
 
 // Every PullRequest field, so a new one cannot be missed when cmux's PR is
-// filled from the saved copy: the Record type fails the check until it is listed.
-const FIELDS: Record<keyof PullRequest, true> = {
+// filled from the saved copy: the Record type fails the check until it is
+// listed. Health and tone are false: only the core's saved entry supplies them.
+const FIELDS: Record<keyof PullRequest, boolean> = {
   url: true,
   number: true,
   status: true,
@@ -47,9 +47,11 @@ const FIELDS: Record<keyof PullRequest, true> = {
   label: true,
   branch: true,
   stale: true,
+  health: false,
+  tone: false,
 };
-// Object.keys of a Record<keyof PullRequest, true> literal is exactly those keys.
-const FIELD_NAMES = Object.keys(FIELDS) as (keyof PullRequest)[];
+// Object.keys of a Record<keyof PullRequest, boolean> literal is exactly those keys.
+const FIELD_NAMES = (Object.keys(FIELDS) as (keyof PullRequest)[]).filter((k) => FIELDS[k]);
 
 // Copies one field cmux sent; null and "" count as not sent, as the Rust core reads them.
 function copySent<K extends keyof PullRequest>(out: PullRequest, pr: PullRequest, k: K): void {
@@ -59,7 +61,9 @@ function copySent<K extends keyof PullRequest>(out: PullRequest, pr: PullRequest
 
 // cmux's PR over the saved one: each field cmux sends wins, so its status
 // does, and what it leaves out (draft, title, diff, merge verdict) is filled
-// from the saved copy. A hole in cmux's list passes through as it came.
+// from the saved copy. The saved health and tone hold only while cmux's
+// status agrees with the saved one, since the core worked them out from it.
+// A hole in cmux's list passes through as it came.
 function withSaved(pr: PullRequest, saved: SavedPr | undefined): PullRequest {
   if (!pr || !saved || !isSaved(pr, saved)) return pr;
   const {
@@ -68,7 +72,9 @@ function withSaved(pr: PullRequest, saved: SavedPr | undefined): PullRequest {
     ...out
   }: PullRequest & Pick<SavedPr, "checks" | "readySince"> = saved;
   for (const k of FIELD_NAMES) copySent(out, pr, k);
-  return out;
+  if (out.status === saved.status) return out;
+  const { health: _health, tone: _tone, ...moved } = out;
+  return moved;
 }
 
 // cmux's first PR: the head of its list, else its single one.
@@ -187,7 +193,7 @@ export function diffText(pr: Pick<PullRequest, "status" | "additions" | "deletio
 export function summaryOf(pr: PullRequest, checks: readonly SavedCheck[]): PrSummary | undefined {
   if (!pr.number) return undefined;
   const failing = checks.filter((c) => c.state === "fail").length;
-  const health = healthOf(pr, checks);
+  const health = pr.health ?? "quiet";
   const words = wordsOf(pr, health, failing);
   const tag = "#" + pr.number;
   const text = [tag, ...words].join(" · ");

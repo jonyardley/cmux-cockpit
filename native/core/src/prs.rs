@@ -1,5 +1,5 @@
-//! A workspace's pull requests and their health (src/shared/prs.ts and
-//! src/shared/pr-health.ts): cmux's own when it sends any, else the one
+//! A workspace's pull requests and their health (src/shared/prs.ts; the
+//! agents panel reads the health pr_poll.rs saves): cmux's own when it sends any, else the one
 //! the poller saved in config/state.json, and the summary a chip shows.
 //! cmux's record has no draft, title, diff, merge verdict or checks, so
 //! when it is the saved PR, its fields win and the saved copy fills the rest.
@@ -14,7 +14,7 @@ use crate::persist::{SavedCheck, SavedPr, SavedState};
 use crate::text::clean_title;
 
 /// What a PR's chip says about it: its worst state, or quiet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PrHealth {
     Failing,
