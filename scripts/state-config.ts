@@ -193,6 +193,8 @@ export interface UiState {
   collapsed?: Record<string, number>;
   /** The native sidebar's All view filter: a project's key, or "other" for the cards with no project. */
   filter?: string;
+  /** wsId -> "details" where the agents panel shows its Details tab; a workspace not in it shows Now. */
+  tab?: Record<string, "details">;
 }
 
 /** A project made or edited in the sidebar. Its first match is the key it is stored under. */
@@ -714,18 +716,30 @@ function foldFlags(v: unknown): Record<string, number> | null {
   return kept.length ? Object.fromEntries(kept.slice(-MAX_ENTRIES)) : null;
 }
 
+// The agents panel's tab per workspace, bounded like foldFlags. Only Details
+// is kept, since a workspace not in the map shows Now.
+function detailsTabs(v: unknown): Record<string, "details"> | null {
+  if (!isRecord(v)) return null;
+  const kept = Object.entries(v).flatMap(([id, t]): [string, "details"][] =>
+    isId(id) && t === "details" ? [[id, t]] : [],
+  );
+  return kept.length ? Object.fromEntries(kept.slice(-MAX_ENTRIES)) : null;
+}
+
 function uiState(v: unknown): UiState {
   if (!isRecord(v)) return {};
   const collapsed = foldFlags(v.collapsed);
   const filter = projectKey(v.filter);
+  const tab = detailsTabs(v.tab);
   return {
     ...(isViewMode(v.mode) ? { mode: v.mode } : {}),
     ...(collapsed ? { collapsed } : {}),
     ...(filter ? { filter } : {}),
+    ...(tab ? { tab } : {}),
   };
 }
 
-const UI_KEYS: readonly string[] = ["mode", "collapsed", "filter"];
+const UI_KEYS: readonly string[] = ["mode", "collapsed", "filter", "tab"];
 
 // Any name lanes.json takes (trimmed, not empty), bounded only so a flood
 // of URLs cannot bloat the file; a tighter rule would refuse a lane's own
@@ -1385,6 +1399,10 @@ function uiEntry(state: State, id: string, parsed: unknown): State | string {
   if (id === "filter") {
     const filter = projectKey(parsed);
     return filter ? { ...state, ui: { ...state.ui, filter } } : "ui.filter wants a project key string";
+  }
+  if (id === "tab") {
+    const tab = detailsTabs(parsed);
+    return tab ? { ...state, ui: { ...state.ui, tab } } : 'ui.tab wants {wsId: "details"}';
   }
   const collapsed = foldFlags(parsed);
   return collapsed ? { ...state, ui: { ...state.ui, collapsed } } : "ui.collapsed wants {section: 0 or 1}";

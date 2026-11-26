@@ -47,6 +47,13 @@ describe("each sidebar's saved state", () => {
     assert.ok("prs" in agents && "poll" in stateFor("agents", { ...state, poll: { okEpoch: 1 } }));
   });
 
+  it("gives the agents panel only ui.tab, so the native sidebar's view and folds never reload it", () => {
+    const ui = { mode: "projects" as const, collapsed: { "lane:main": 1 }, filter: "other" };
+    assert.ok(!("ui" in stateFor("agents", { ...emptyState(), ui })));
+    const tab = { w1: "details" as const };
+    assert.deepEqual(stateFor("agents", { ...emptyState(), ui: { ...ui, tab } }).ui, { tab });
+  });
+
   it("gives the agents panel the background tasks without their seenEpoch stamps", () => {
     const t = {
       id: "b1",

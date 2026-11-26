@@ -16,7 +16,15 @@ export type Entry = (typeof ENTRIES)[number];
 
 /** The saved-state maps each sidebar never reads, so a change to them never reloads it. */
 export const UNREAD: Record<Entry, readonly (keyof State)[]> = {
-  agents: ["projects", "ui", "laneNames"],
+  agents: ["projects", "laneNames"],
+};
+
+// The agents panel reads only ui.tab: the native sidebar's view, folds and
+// filter stay out, so a change to them never reloads it.
+const tabOnly = (state: BakedState): void => {
+  const tab = state.ui?.tab;
+  if (tab) state.ui = { tab };
+  else delete state.ui;
 };
 
 /** A saved background task as a sidebar is given it: without its seenEpoch stamp. */
@@ -43,6 +51,7 @@ export function stateFor(entry: Entry, state: State): BakedState {
     out.background = Object.fromEntries(Object.entries(background).map(([ws, tasks]) => [ws, unstamped(tasks)]));
   }
   for (const k of UNREAD[entry]) delete out[k];
+  tabOnly(out);
   return out;
 }
 

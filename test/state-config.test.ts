@@ -456,6 +456,25 @@ test("applySet refuses a bad ui key or value", () => {
   }
 });
 
+test("applySet sets, refuses and deletes the agents panel's tab under ui.tab, with no rebuild", () => {
+  const set = applySet(emptyState(), "ui.tab", '{"w1":"details","w2":"now","__proto__":"details"}');
+  assert.ok(set.ok);
+  if (set.ok) {
+    assert.deepEqual(set.state.ui, { tab: { w1: "details" } });
+    assert.deepEqual(validateState(JSON.parse(JSON.stringify(set.state))).ui, { tab: { w1: "details" } });
+    const cleared = applySet(set.state, "ui.tab", null);
+    assert.ok(cleared.ok && !("tab" in cleared.state.ui));
+  }
+  for (const value of ['{"w1":"now"}', "{}", '"details"', '["w1"]']) {
+    assert.deepEqual(applySet(emptyState(), "ui.tab", value), { ok: false, error: 'ui.tab wants {wsId: "details"}' });
+  }
+  const many = Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`w${i}`, "details"]));
+  const capped = validateState({ ui: { tab: { ...many, bad: 1 } } }).ui.tab ?? {};
+  assert.equal(Object.keys(capped).length, 256);
+  assert.equal(capped.w299, "details");
+  assert.equal(rebuildsOn("ui.tab"), false);
+});
+
 test("validateState keeps a good ui and drops bad modes and flags", () => {
   assert.deepEqual(validateState({ ui: { mode: "all", collapsed: { "lane:main": 1 } } }).ui, {
     mode: "all",

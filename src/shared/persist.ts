@@ -37,7 +37,10 @@ export const STATE_UNREADABLE: boolean = typeof __STATE_UNREADABLE__ === "boolea
  * last, so the handler accepts the link. With no handler installed,
  * openURL to the unclaimed cmux-cockpit:// scheme does nothing.
  */
-export function persistSet(key: string, value: string | number | Record<string, number> | SavedProject | null): void {
+export function persistSet(
+  key: string,
+  value: string | number | Record<string, number | string> | SavedProject | null,
+): void {
   const q = value === null ? "" : `&value=${encodeURIComponent(JSON.stringify(value))}`;
   const t = URL_TOKEN === "" ? "" : `&token=${encodeURIComponent(URL_TOKEN)}`;
   openURL(`cmux-cockpit://set?key=${encodeURIComponent(key)}${q}${t}`);
