@@ -767,12 +767,19 @@ frame had it before any wait or dismissal was laid on (since rounded the
 same way, 0 for none). One rule decides whether an entry still speaks for
 the agent: it holds only while cmux shows that same status from a start
 within `HOOK_SLACK` (3 seconds, the gap between the core's stamp and
-cmux's for one event) of `seen.since`, or neither has a start. Any other
-spell, a prompt, a resumed chat that idles again, a new working spell or
-a later permission prompt, reads as cmux sends it. An entry with no
-`seen`, written before the field, never holds; the core rewrites it on its
-next frame. A status that flips and back inside 3 seconds is not seen, a
-known limit. The stand-in has no `seen` and shows only for a workspace
+cmux's for one event) of `seen.since`, or neither has a start. A
+`working` spell is the exception: it holds on status alone, and the panel
+shows cmux's own start for it, never the saved one. Claude's own status
+report wins in the core (`both()` in `program.rs`) and moves `since` only
+when its status changes, so on a replay of 95 minutes of cmux's event log
+working starts differed from cmux's by a median 29 seconds, while turn
+ends and permission prompts held within 0.44 seconds. So a stop, CI or
+park carried by a working agent keeps showing. Any other spell, a prompt,
+a resumed chat that idles again or a later permission prompt, reads as
+cmux sends it. An entry with no `seen`, written before the field, never
+holds; the core rewrites it on its next frame. Known limits: a status
+that flips and back inside 3 seconds is not seen, and with the Cockpit
+closed a saved working entry also holds over a later working spell. The stand-in has no `seen` and shows only for a workspace
 with no agent.
 The Cockpit's own waits (`stop`, `ci`, `park` and the stand-in) stay off
 the agent's status: the panel names them from the `waits` map, and a
@@ -783,8 +790,9 @@ Dismiss. A Dismiss in the panel shows at once, keyed as the core keys it
 over a saved entry still saying needs_input until the core rewrites it.
 The core replaces its dismissals with the file's on each read
 (`Session::reseed`), so a Dismiss writes back the dismissals on file for
-keys that are no agent here (the Cockpit's own) and for agents whose
-entry still holds with a start within the slack of the dismissal's key,
+keys that are no agent here (the Cockpit's own), for agents with no
+saved entry at all (the core leaves a dismissed lost session out of its
+list), and for agents whose entry still holds with a start within the slack of the dismissal's key,
 or an earlier one the core has since saved as idle would come back. Any
 other is dropped, so ended waits do not pile up in the file.
 

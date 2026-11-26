@@ -47,11 +47,15 @@ const HOOK_SLACK = 3;
 const startOf = (t: number | undefined): number => (t !== undefined && t > 0 ? t : 0);
 
 // Whether `e` still speaks for `live`: cmux shows the status the core saw,
-// from a start within the slack of the core's, or both have no start. An
-// entry saved before the core kept what it saw never holds; the core
-// rewrites it on its next frame.
+// from a start within the slack of the core's, or both have no start. A
+// working spell is matched on status alone: Claude's own status report
+// wins in the core (program.rs `both`), so its start differs from cmux's by
+// a median 29 s on a replay of cmux's event log (PR #447). An entry saved
+// before the core kept what it saw never holds; the core rewrites it on
+// its next frame.
 function holds(e: SavedAgent, live: Agent): boolean {
   if (!e.seen || e.seen.status !== live.status) return false;
+  if (e.seen.status === "working") return true;
   const saw = startOf(e.seen.since);
   const now = startOf(live.sinceEpoch);
   return saw && now ? Math.abs(now - saw) <= HOOK_SLACK : !saw && !now;
@@ -117,6 +121,8 @@ function shown(live: Agent, w: Workspace): Agent {
   const e = entryOf(live, w);
   if (isDismissed(w, live, e)) return live.status === "needs_input" ? { ...live, status: "idle" } : live;
   if (!e || isCockpitWait(e.why)) return live;
+  // The core's start for a working spell is unreliable (`holds`).
+  if (e.seen?.status === "working") return { ...live, status: e.status };
   return e.since > 0 ? { ...live, status: e.status, sinceEpoch: e.since } : { ...live, status: e.status };
 }
 
@@ -141,11 +147,6 @@ function waitEntry(a: Agent | null | undefined, w: Workspace | undefined): Saved
   const e = live ? entryOf(live, w) : undefined;
   return e?.status === "needs_input" ? e : undefined;
 }
-
-/** Why `a` (as agentsOf shows it) waits on Jon, as the core saved it; none
- * without an entry, as with the Cockpit closed. */
-export const waitWhy = (a: Agent | null | undefined, w: Workspace | undefined): WaitWhy | undefined =>
-  waitEntry(a, w)?.why;
 
 /** When `a`'s turn ended, as the core saved it, while `a` (as agentsOf
  * shows it) waits on its turn; none otherwise. */
@@ -182,10 +183,12 @@ export function standInWhy(w: Workspace | undefined): WaitWhy | undefined {
 
 // Whether a dismissal on file at `start` is still the one behind agent
 // `id`'s saved entry: the entry holds and the start is within the slack of
-// the entry's or of what the core saw. A turn is keyed on its move's epoch
+// the entry's or of what the core saw. With no entry at all it is kept: the
+// core leaves a dismissed lost session out of its list (`is_dismissed_gone`). A turn is keyed on its move's epoch
 // while the core saves the dismissed turn idle at its own start, and an ask
 // on cmux's unrounded start while the entry is ceiled to the millisecond.
 function stillDismissed(w: Workspace, id: string, start: number): boolean {
+  if (!savedAgents(w.id).some((x) => x.id === id)) return true;
   const live = (w.agents ?? []).find((a) => a?.id === id);
   const e = live ? entryOf(live, w) : undefined;
   if (!e) return false;

@@ -14,6 +14,7 @@ const seen = (status: string, since: number) => ({ status, since });
 (globalThis as Record<string, unknown>).__STATE__ = {
   dismissed: {
     pair: { a: 1000 },
+    wbGone: { g: 900, b: 1010 },
     wbAsk: { a: 1000.1234, c: 900 },
     wbTurn: { t: 1000, o: 500, ci: 800 },
   },
@@ -33,6 +34,8 @@ const seen = (status: string, since: number) => ({ status, since });
     stop: [{ kind: "stopped", since: 1000, key: 1000, agent: "s", detail: "error" }],
     ci: [{ kind: "ci_failing", since: 900, key: 900, detail: "Tabs" }],
     park: [{ kind: "park", since: 900, key: 900, detail: "notes-app#42 needs a decision" }],
+    stopDrift: [{ kind: "stopped", since: 1000, key: 1000, agent: "s", detail: "error" }],
+    parkDrift: [{ kind: "park", since: 900, key: 900, detail: "notes-app#42 needs a decision" }],
   },
   agents: {
     staleIdle: [{ id: "a", status: "idle", since: 1000.124, seen: seen("needs_input", 1000.124) }],
@@ -83,6 +86,9 @@ const seen = (status: string, since: number) => ({ status, since });
     undated: [{ id: "u", status: "needs_input", since: 0, why: "turn", seen: seen("idle", 1003) }],
     nostart: [{ id: "n", status: "needs_input", since: 0, why: "turn", seen: seen("idle", 0) }],
     busy: [{ id: "w", status: "working", since: 1000, seen: seen("working", 1000) }],
+    stopDrift: [{ id: "s", status: "needs_input", since: 1000, why: "stop", seen: seen("working", 900) }],
+    parkDrift: [{ id: "p", status: "needs_input", since: 900, why: "park", seen: seen("working", 1000) }],
+    wbGone: [{ id: "b", status: "needs_input", since: 1010, why: "ask", seen: seen("needs_input", 1010) }],
     unseen: [{ id: "t", status: "needs_input", since: 1000, why: "turn" }],
     sel: [
       {
@@ -126,7 +132,7 @@ describe("agentsOf with the Cockpit's saved agents", () => {
     const w = ws("turn", { agents: [idle("t", 1002)] });
     assert.equal(one(w)?.status, "needs_input");
     assert.equal(one(w)?.sinceEpoch, 1000);
-    assert.equal(needs.waitWhy(one(w), w), "turn");
+    assert.equal(needs.turnStart(one(w), w), 1000);
     assert.equal(needs.askReason(one(w), w), null);
   });
 
@@ -145,7 +151,7 @@ describe("agentsOf with the Cockpit's saved agents", () => {
     const ci = ws("ci", { agents: [idle("c")] });
     assert.equal(one(ci)?.status, "idle");
     assert.equal(needs.cockpitWait(one(ci), ci), "ci");
-    assert.equal(needs.waitWhy(one(ci), ci), undefined, "a carrier's own status is not waiting");
+    assert.equal(needs.turnStart(one(ci), ci), undefined, "a carrier's own status is not waiting");
     const park = ws("park", { agents: [working("p", 1000)] });
     assert.equal(needs.cockpitWait(one(park), park), "park", "a park holds on a lead that works on");
     assert.equal(needs.cockpitWait(undefined, park), undefined);
@@ -161,14 +167,14 @@ describe("agentsOf with the Cockpit's saved agents", () => {
   it("drops an entry its agent has worked past, so a new prompt shows at once", () => {
     const w = ws("turn", { agents: [working("t", 1010)] });
     assert.equal(one(w)?.status, "working");
-    assert.equal(needs.waitWhy(one(w), w), undefined);
+    assert.equal(needs.turnStart(one(w), w), undefined);
     const back = ws("asks", { agents: [working("k", 1010)] });
     assert.equal(needs.askReason(one(back), back), null);
   });
 
   it("drops a saved working once cmux says the agent stopped", () => {
     assert.equal(one(ws("busy", { agents: [idle("w", 1100)] }))?.status, "idle");
-    assert.equal(one(ws("busy", { agents: [working("w", 1001)] }))?.sinceEpoch, 1000, "the same spell");
+    assert.equal(one(ws("busy", { agents: [working("w", 1001)] }))?.sinceEpoch, 1001, "cmux's own start");
   });
 
   it("shows cmux's plain status with no entry, as with the Cockpit closed", () => {
@@ -181,7 +187,7 @@ describe("agentsOf with the Cockpit's saved agents", () => {
   it("never holds an entry saved before the core kept what it saw, until the core rewrites it", () => {
     const w = ws("unseen", { agents: [idle("t", 1000)] });
     assert.equal(one(w)?.status, "idle");
-    assert.equal(needs.waitWhy(one(w), w), undefined);
+    assert.equal(needs.turnStart(one(w), w), undefined);
   });
 
   it("keeps cmux's own start when the core saved none", () => {
@@ -212,17 +218,17 @@ describe("agentsOf with the Cockpit's saved agents", () => {
   it("drops a saved turn once a prompt comes after it, whichever status follows", () => {
     const idleAfter = ws("turn", { latestAt: 1020, agents: [idle("t", 1030)] });
     assert.equal(one(idleAfter)?.status, "idle");
-    assert.equal(needs.waitWhy(one(idleAfter), idleAfter), undefined);
+    assert.equal(needs.turnStart(one(idleAfter), idleAfter), undefined);
     const askAfter = ws("turn", { latestAt: 1020, agents: [asking("t", 1040)] });
     assert.equal(one(askAfter)?.sinceEpoch, 1040, "a later spell keeps its own age");
-    assert.equal(needs.waitWhy(one(askAfter), askAfter), undefined);
+    assert.equal(needs.turnStart(one(askAfter), askAfter), undefined);
   });
 
   it("drops a saved turn when a task notification resumes the chat with no prompt and it idles again", () => {
     const w = ws("turn", { latestAt: 900, agents: [idle("t", 1120)] });
     assert.equal(one(w)?.status, "idle");
     assert.equal(one(w)?.sinceEpoch, 1120);
-    assert.equal(needs.waitWhy(one(w), w), undefined);
+    assert.equal(needs.turnStart(one(w), w), undefined);
   });
 
   it("keeps a new working spell's own start over a saved working's", () => {
@@ -238,14 +244,33 @@ describe("agentsOf with the Cockpit's saved agents", () => {
 
   it("holds a turn through a flap of status inside 3 seconds (a known limit)", () => {
     const w = ws("turn", { agents: [idle("t", 1002.5)] });
-    assert.equal(needs.waitWhy(one(w), w), "turn", "a spell from 1001 to 1002.5 is not seen");
+    assert.equal(needs.turnStart(one(w), w), 1000, "a spell from 1001 to 1002.5 is not seen");
   });
 
   it("never keeps a saved turn or idle on a working agent, even with no start", () => {
     const w = ws("turn", { agents: [agent("working", { id: "t" })] });
     assert.equal(one(w)?.status, "working");
-    assert.equal(needs.waitWhy(one(w), w), undefined);
+    assert.equal(needs.turnStart(one(w), w), undefined);
     assert.equal(one(ws("staleIdle", { agents: [agent("working", { id: "a" })] }))?.status, "working", "nor an idle");
+  });
+
+  it("holds a working entry on status alone and shows cmux's start, as the core's is unreliable", () => {
+    const w = ws("busy", { agents: [working("w", 1030)] });
+    assert.equal(one(w)?.status, "working");
+    assert.equal(one(w)?.sinceEpoch, 1030);
+    const stop = ws("stopDrift", { agents: [working("s", 930)] });
+    assert.equal(needs.cockpitWait(one(stop), stop), "stop", "a silent stop 30 s off the core's start");
+    const park = ws("parkDrift", { agents: [working("p", 1030)] });
+    assert.equal(needs.cockpitWait(one(park), park), "park", "a park on a lead 30 s off the core's start");
+  });
+
+  it("still needs a 3 second match for a turn or an ask", () => {
+    const turn = ws("turn", { agents: [idle("t", 1004)] });
+    assert.equal(one(turn)?.status, "idle");
+    assert.equal(needs.turnStart(one(turn), turn), undefined);
+    const ask = ws("asks", { agents: [asking("k", 1004)] });
+    assert.equal(one(ask)?.status, "needs_input");
+    assert.equal(needs.askReason(one(ask), ask), null);
   });
 
   it("leaves out an agent cmux sends with no status (issue #7)", () => {
@@ -291,6 +316,12 @@ describe("dismissing over a saved entry", () => {
     const w = ws("wbTurn", { agents: [idle("t", 1001.5), idle("o", 1200), asking("b", 1010)] });
     needs.dismissNeeds(w);
     assert.deepEqual(r.opened, [setUrl("wbTurn", { t: 1000, ci: 800, b: 1010 })]);
+  });
+
+  it("writes back a dismissal for an agent the core left out of its saved list", () => {
+    const w = ws("wbGone", { agents: [idle("g", 1200), asking("b", 1010)] });
+    needs.dismissNeeds(w);
+    assert.deepEqual(r.opened, [setUrl("wbGone", { g: 900, b: 1010 })]);
   });
 
   it("keys an undated saved turn on cmux's start, so the dismissal is saved", () => {
@@ -358,6 +389,15 @@ describe("the move and the Cockpit's waits on the selected workspace", () => {
     r.data.workspaces = [ws("stop", { selected: true, agents: [working("s", 900)] })];
     assert.equal(m.currentAsk()?.count, 1);
     assert.equal(m.currentAsk()?.dismissLabel, "");
+  });
+
+  it("counts a stop or park on a working agent whose start is 30 s off the core's", () => {
+    r.data.workspaces = [ws("stopDrift", { selected: true, agents: [working("s", 930)] })];
+    assert.equal(m.currentAsk()?.count, 1);
+    assert.equal(m.currentAsk()?.text, "Stopped: on an error");
+    assert.equal(needs.agentsOf(m.cur().ws)[0]?.sinceEpoch, 930);
+    r.data.workspaces = [ws("parkDrift", { selected: true, agents: [working("p", 1030)] })];
+    assert.equal(m.currentAsk()?.text, "Parked: notes-app#42 needs a decision");
   });
 
   it("reads a carrier whose wait the waits map lacks as cmux sends it, with a working Dismiss", () => {

@@ -23,7 +23,7 @@ function liveMove(d: string | undefined): SavedMove | undefined {
  * The move `w`'s chat last ended a turn on: the description's or the saved
  * one, whichever is newer, since a failed description write falls back to
  * the saved map and leaves an older description behind. Whether it still
- * waits on Jon is the Cockpit's call (shared/needs.ts waitWhy). The saved
+ * waits on Jon is the Cockpit's call (shared/needs.ts turnStart). The saved
  * map is fixed at build, and a test can seed __STATE__ from before it
  * existed, so it may be missing at runtime.
  */
