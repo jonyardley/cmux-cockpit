@@ -291,6 +291,7 @@ impl Session {
             since_epoch: Some(p.key),
             last_activity_at: Some(p.key),
             ostinato_park: true,
+            stand_in: true,
             ..Agent::default()
         })
     }
@@ -448,6 +449,7 @@ mod tests {
         assert_eq!(shown.len(), 1);
         assert_eq!(shown[0].id, OSTINATO_KEY);
         assert!(shown[0].ostinato_park);
+        assert!(shown[0].stand_in, "marked, not read by its id");
 
         // A session waiting on Jon itself keeps its own words.
         // Its last activity at the ask, so it is no idle nudge.
@@ -461,6 +463,7 @@ mod tests {
         let w = data.ws_by_id("w").cloned();
         let shown = m.session.agents_of(w.as_ref());
         assert!(!shown[0].ostinato_park, "its own wait goes first");
+        assert!(!shown[0].stand_in);
         assert!(m.session.has_real_ask(w.as_ref()));
     }
 

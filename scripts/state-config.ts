@@ -443,7 +443,6 @@ export interface SavedCycle {
   stages?: SavedStage[];
 }
 
-/** The kinds of wait the native core saves (persist.rs WaitKind). */
 /** An agent's status as the native core shows it (persist.rs SavedStatus). */
 export const AGENT_STATUSES = ["needs_input", "working", "idle", "ended"] as const;
 export type AgentStatusWord = (typeof AGENT_STATUSES)[number];
@@ -460,10 +459,11 @@ export interface SavedAgent {
   since: number;
   /** Only with needs_input. */
   why?: WaitWhy;
-  /** The ask's words, at most MAX_LABEL characters, only with why "ask". */
+  /** The ask's words, at most MAX_LABEL characters, only with why "ask", which may have none. */
   reason?: string;
 }
 
+/** The kinds of wait the native core saves (persist.rs WaitKind). */
 export const WAIT_KINDS = ["stopped", "ci_stuck", "ci_failing", "merge_ready", "park"] as const;
 export type WaitKind = (typeof WAIT_KINDS)[number];
 
@@ -1180,14 +1180,14 @@ function savedWaits(v: unknown): SavedWait[] | null {
 const isAgentStatus = (v: unknown): v is AgentStatusWord => AGENT_STATUSES.some((s) => s === v);
 const isWaitWhy = (v: unknown): v is WaitWhy => WAIT_WHYS.some((w) => w === v);
 
-/** A shown agent as persist.rs's SavedAgent::fits holds it: a why with needs_input and only there, a reason with an ask and only there. */
+/** A shown agent as persist.rs's SavedAgent::fits holds it: a why with needs_input and only there, a reason only with an ask. */
 function savedAgent(v: unknown): SavedAgent | null {
   if (!isRecord(v) || !isIdText(v.id) || !isAgentStatus(v.status) || !isEpoch(v.since)) return null;
   const why = optional(v.why, isWaitWhy);
   const reason = optional(v.reason, isLabel);
   if (!why.ok || !reason.ok) return null;
   if (why.value !== undefined && v.status !== "needs_input") return null;
-  if ((why.value === "ask") !== (reason.value !== undefined)) return null;
+  if (reason.value !== undefined && why.value !== "ask") return null;
   return {
     id: v.id,
     status: v.status,

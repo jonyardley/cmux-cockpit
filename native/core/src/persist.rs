@@ -404,7 +404,7 @@ pub struct SavedAgent {
     /// Only with needs_input.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub why: Option<WaitWhy>,
-    /// The ask's words, only with `why` ask.
+    /// The ask's words, only with `why` ask, which may have none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -415,7 +415,8 @@ pub const MAX_AGENTS: usize = 20;
 impl SavedAgent {
     /// Every field within the bounds state-config.ts's savedAgent holds it
     /// to: an id, an epoch, a why with needs_input and only there, and a
-    /// reason of plain text with an ask and only there.
+    /// reason of plain text only with an ask, which may have none (a
+    /// permission prompt saves no ask).
     pub(crate) fn fits(&self) -> bool {
         let waits = self.status == SavedStatus::NeedsInput;
         let ask = self.why == Some(WaitWhy::Ask);
@@ -423,16 +424,16 @@ impl SavedAgent {
             && self.since.is_finite()
             && self.since >= 0.0
             && self.why.is_none_or(|_| waits)
-            && match &self.reason {
-                Some(r) => ask && is_text(r, MAX_LABEL),
-                None => !ask,
-            }
+            && self
+                .reason
+                .as_ref()
+                .is_none_or(|r| ask && is_text(r, MAX_LABEL))
     }
 }
 
 /// Whether `agents` fits as one workspace's list: one to MAX_AGENTS
 /// agents, each of which fits.
-pub(crate) fn agents_fit(agents: &[SavedAgent]) -> bool {
+fn agents_fit(agents: &[SavedAgent]) -> bool {
     (1..=MAX_AGENTS).contains(&agents.len()) && agents.iter().all(SavedAgent::fits)
 }
 
@@ -1329,7 +1330,7 @@ mod tests {
             "w2": [{"id": "stand-in", "status": "needs_input", "since": 5, "why": "ci"}],
             "why when idle": [{"id": "s1", "status": "idle", "since": 1, "why": "turn"}],
             "reason on a turn": [{"id": "s1", "status": "needs_input", "since": 1, "why": "turn", "reason": "x"}],
-            "ask with no reason": [{"id": "s1", "status": "needs_input", "since": 1, "why": "ask"}],
+            "w3": [{"id": "s1", "status": "needs_input", "since": 1, "why": "ask"}],
             "unknown status": [{"id": "s1", "status": "busy", "since": 1}],
             "unknown why": [{"id": "s1", "status": "needs_input", "since": 1, "why": "nap"}],
             "one bad": [{"id": "s1", "status": "idle", "since": 1}, {"id": "", "status": "idle", "since": 1}],
@@ -1337,14 +1338,15 @@ mod tests {
             "__proto__": [{"id": "s1", "status": "idle", "since": 1}]
         }}"#;
         let s = SavedState::from_json(json).unwrap();
-        assert_eq!(s.agents.keys().collect::<Vec<_>>(), ["w1", "w2"]);
+        assert_eq!(s.agents.keys().collect::<Vec<_>>(), ["w1", "w2", "w3"]);
         let out = serde_json::to_value(&s).unwrap();
         assert_eq!(
             out["agents"],
             serde_json::json!({
                 "w1": [{"id": "s1", "status": "needs_input", "since": 100.5, "why": "ask", "reason": "allow?"},
                        {"id": "s2", "status": "working", "since": 0.0}],
-                "w2": [{"id": "stand-in", "status": "needs_input", "since": 5.0, "why": "ci"}]
+                "w2": [{"id": "stand-in", "status": "needs_input", "since": 5.0, "why": "ci"}],
+                "w3": [{"id": "s1", "status": "needs_input", "since": 1.0, "why": "ask"}]
             })
         );
         let many = format!(

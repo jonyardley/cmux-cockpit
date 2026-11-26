@@ -40,7 +40,7 @@ describe("the agents map's contract", () => {
         w2: [{ id: "stand-in", status: "needs_input", since: 5, why: "ci" }],
         "why when idle": [{ id: "s1", status: "idle", since: 1, why: "turn" }],
         "reason on a turn": [{ id: "s1", status: "needs_input", since: 1, why: "turn", reason: "x" }],
-        "ask with no reason": [{ id: "s1", status: "needs_input", since: 1, why: "ask" }],
+        w3: [{ id: "s1", status: "needs_input", since: 1, why: "ask" }],
         "unknown status": [{ id: "s1", status: "busy", since: 1 }],
         "unknown why": [{ id: "s1", status: "needs_input", since: 1, why: "nap" }],
         "one bad": [
@@ -57,6 +57,7 @@ describe("the agents map's contract", () => {
         { id: "s2", status: "working", since: 0 },
       ],
       w2: [{ id: "stand-in", status: "needs_input", since: 5, why: "ci" }],
+      w3: [{ id: "s1", status: "needs_input", since: 1, why: "ask" }],
     });
     const many = Array.from({ length: MAX_AGENTS + 1 }, () => ({ id: "s", status: "idle", since: 1 }));
     assert.equal("agents" in validateState({ agents: { w: many } }), false, "too many");
