@@ -10,7 +10,17 @@ const url = (n: number): string => `https://github.com/o/r/pull/${n}`;
 
 const r = seed({
   state: {
-    prs: { here: { url: url(12), number: 12, status: "open", branch: "menus", title: "Menus" } },
+    prs: {
+      here: {
+        url: url(12),
+        number: 12,
+        status: "open",
+        branch: "menus",
+        title: "Menus",
+        checks: [{ name: "lint", state: "fail" }],
+      },
+    },
+    poll: { okEpoch: ago(30) },
     published: {
       "https://claude.ai/artifact/a1": {
         url: "https://claude.ai/artifact/a1",
@@ -28,7 +38,7 @@ await import("../src/agents/index.ts");
 const { chooseTab } = await import("../src/agents/details.ts");
 const { agentMenu } = await import("../src/agents/team.ts");
 
-const lead = agent("working", { name: "Claude", surfaceId: "s-lead", lastActivityAt: ago(20) });
+const lead = agent("working", { kind: "claude", name: "Claude", surfaceId: "s-lead", lastActivityAt: ago(20) });
 const second = agent("idle", {
   name: "Claude",
   title: "Check the menus",
@@ -67,6 +77,11 @@ describe("the pointing hand", () => {
       chooseTab(tab);
       const targets = taps(panel());
       assert.ok(targets.length > 3, `the ${tab} tab has its tap targets`);
+      if (tab === "now")
+        assert.ok(
+          targets.some((n) => JSON.stringify(n).includes('"Fix"')),
+          "Fix shows on the failing check",
+        );
       for (const n of targets) assert.equal(modValue(n, "cursor"), "pointer", `a ${n.kind} on the ${tab} tab`);
     }
     chooseTab("now");
