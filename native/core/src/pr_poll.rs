@@ -1227,6 +1227,20 @@ mod tests {
     }
 
     #[test]
+    fn saves_a_long_waiting_check_as_running_never_stuck() {
+        use crate::prs::stuck;
+        let d = data(vec![ws("a", "/a")]);
+        let mut p = on();
+        let late = 100_000.0;
+        let answer = queued_at(pr(&["pending"]), &[Some(1.0)]);
+        assert!(stuck(answer.checks.as_deref().unwrap_or(&[]), late).is_some());
+        let _ = p.due(&d, late);
+        p.record(answered("/a", Some(answer), late));
+        let held = p.targets.get("/a").and_then(|t| t.known.clone().flatten());
+        assert_eq!(held.and_then(|pr| pr.health), Some(PrHealth::Running));
+    }
+
+    #[test]
     fn saves_each_answer_with_its_health_and_tone_for_the_agents_panel() {
         use crate::pr_colors::PrTone;
         let d = data(vec![ws("a", "/a")]);

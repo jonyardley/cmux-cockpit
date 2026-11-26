@@ -32,8 +32,9 @@ function savedMatch(w: Workspace, pr: PullRequest | null | undefined): SavedPr |
 }
 
 // Every PullRequest field, so a new one cannot be missed when cmux's PR is
-// filled from the saved copy: the Record type fails the check until it is listed.
-const FIELDS: Record<keyof PullRequest, true> = {
+// filled from the saved copy: the Record type fails the check until it is
+// listed. Health and tone are false: only the core's saved entry supplies them.
+const FIELDS: Record<keyof PullRequest, boolean> = {
   url: true,
   number: true,
   status: true,
@@ -46,11 +47,11 @@ const FIELDS: Record<keyof PullRequest, true> = {
   label: true,
   branch: true,
   stale: true,
-  health: true,
-  tone: true,
+  health: false,
+  tone: false,
 };
-// Object.keys of a Record<keyof PullRequest, true> literal is exactly those keys.
-const FIELD_NAMES = Object.keys(FIELDS) as (keyof PullRequest)[];
+// Object.keys of a Record<keyof PullRequest, boolean> literal is exactly those keys.
+const FIELD_NAMES = (Object.keys(FIELDS) as (keyof PullRequest)[]).filter((k) => FIELDS[k]);
 
 // Copies one field cmux sent; null and "" count as not sent, as the Rust core reads them.
 function copySent<K extends keyof PullRequest>(out: PullRequest, pr: PullRequest, k: K): void {

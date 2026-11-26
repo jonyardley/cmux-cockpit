@@ -278,6 +278,12 @@ describe("a PR cmux sends that the poller also saved", () => {
     assert.equal(row && agents.prChipHealth(row), "quiet");
   });
 
+  it("keeps the saved health and tone when cmux's PR sends its own", () => {
+    const sent = { ...cmuxPr, health: "ready" as const, tone: "ready" as const };
+    const pr = prOf(ws("held", { branch: "feat", pr: sent }));
+    assert.deepEqual([pr?.health, pr?.tone], ["failing", "failing"]);
+  });
+
   it("colours a PR of cmux's own the poller never saved by its status alone", () => {
     const other = { url: "https://github.com/o/r/pull/348", number: 348, status: "open" as const };
     r.data.workspaces = [ws("held", { branch: "feat", prs: [other] })];
