@@ -29,15 +29,9 @@ fn needs_input(a: &Agent) -> bool {
     a.status == Some(AgentStatus::NeedsInput)
 }
 
-/// Seconds an agent's own ask or turn may start from the start its
-/// dismissal was saved under. The agents panel keys a Dismiss on cmux's
-/// start, a fraction of a second from the core's: a 95 minute replay of
-/// cmux's event log put every ask within 0.44 s of it (PR #447).
+/// The panel keys a Dismiss on cmux's start, within 0.44 s of the core's on a 95 minute replay (PR #447).
 const ASK_SLACK: f64 = 1.0;
 
-/// Whether a dismissal saved at `saved` is the one for a wait that began
-/// at `start`: exactly, or within `ASK_SLACK` when `slack` and both are
-/// dated. An undated start only ever matches another.
 fn same_start(saved: f64, start: f64, slack: bool) -> bool {
     saved == start || (slack && saved > 0.0 && start > 0.0 && (saved - start).abs() <= ASK_SLACK)
 }
@@ -176,13 +170,11 @@ impl Session {
     }
 
     /// Whether Jon dismissed the wait saved under `key` (an agent's id, or
-    /// `CI_KEY`) in workspace `ws` that began exactly at `start`: one the
-    /// core keys itself, a stop, CI or a park.
+    /// `CI_KEY`) in workspace `ws` that began at `start`.
     pub(crate) fn dismissed_key(&self, ws: &str, key: &str, start: f64) -> bool {
         self.dismissed_within(ws, key, start, false)
     }
 
-    /// `dismissed_key`, matching within `ASK_SLACK` when `slack`.
     fn dismissed_within(&self, ws: &str, key: &str, start: f64, slack: bool) -> bool {
         self.dismissed
             .get(ws)
@@ -190,15 +182,10 @@ impl Session {
             .is_some_and(|s| same_start(*s, start, slack))
     }
 
-    /// Whether the wait under `key` in `w` (`waits`) that began at `start`
-    /// is dismissed: an agent's own ask or turn within `ASK_SLACK`, as the
-    /// agents panel may have saved it, anything else exactly.
     fn wait_dismissed(&self, w: &Workspace, key: &str, start: f64) -> bool {
         self.dismissed_within(&w.id, key, start, self.is_own_wait(w, key))
     }
 
-    /// Whether `key` is one of `w`'s agents waiting on its own ask or
-    /// turn, not on a stop, the one kind of wait the panel dismisses.
     fn is_own_wait(&self, w: &Workspace, key: &str) -> bool {
         w.agent_list()
             .any(|a| a.id == key && self.stop_of(a, Some(w)).is_none())
@@ -698,9 +685,6 @@ mod tests {
         );
     }
 
-    /// A session whose state file dismissed `c` in `w` at `dismissed`,
-    /// and `w` with `c` as cmux and the runner send it: needs_input since
-    /// 1000.07, stopped when `stop` is given.
     fn dismissed_near(dismissed: f64, stop: Option<Stop>) -> (Session, Workspace) {
         let saved = SavedState::from_json(&format!(
             r#"{{"dismissed": {{"w": {{"c": {dismissed}, "ci": 1000}}}}}}"#
@@ -745,6 +729,31 @@ mod tests {
         let (mut s, w) = dismissed_near(998.07, None);
         assert_eq!(statuses(&mut s, &w), [Some(AgentStatus::NeedsInput)]);
         assert!(!s.is_needs_dismissed(Some(&w)));
+        assert_eq!(s.dismissed.get("w").and_then(|d| d.get("c")), None);
+    }
+
+    #[test]
+    fn a_dismissal_goes_once_the_asks_start_drifts_past_the_slack() {
+        let (mut s, mut w) = dismissed_near(1000.0, None);
+        let drift = |s: &mut Session, w: &mut Workspace, since: f64| {
+            w.agents = w.agents.take().map(|list| {
+                list.into_iter()
+                    .map(|a| {
+                        a.map(|a| Agent {
+                            since_epoch: Some(since),
+                            ..a
+                        })
+                    })
+                    .collect()
+            });
+            statuses(s, w)
+        };
+        assert_eq!(drift(&mut s, &mut w, 1000.6), [Some(AgentStatus::Idle)]);
+        assert_eq!(s.dismissed.get("w").and_then(|d| d.get("c")), Some(&1000.0));
+        assert_eq!(
+            drift(&mut s, &mut w, 1001.2),
+            [Some(AgentStatus::NeedsInput)]
+        );
         assert_eq!(s.dismissed.get("w").and_then(|d| d.get("c")), None);
     }
 
