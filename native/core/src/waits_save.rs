@@ -9,8 +9,8 @@
 //! (stopped.rs), CI stuck or red with nobody on it and a change left
 //! merge-ready four hours (ci_wait.rs), and parked Ostinato attempts
 //! (ostinato/wait.rs), each only while it shows: waiting on Jon, not
-//! dismissed, the workspace awake. Asking, Your turn, the idle nudge and
-//! quiet the panel reads for itself. Nothing saved moves with the clock
+//! dismissed, the workspace awake. Asking, Your turn and the idle nudge
+//! the panel reads for itself, quiet from quiet_save.rs. Nothing saved moves with the clock
 //! (no ages), so an unchanged wait is never written again; only a change
 //! goes out, as for the running map (`Saves`).
 //!

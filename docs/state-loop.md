@@ -41,7 +41,7 @@ lands in the one redraw. The gap depends on who wrote (`Pace` in
 - A subagent run asks for no build of its own (`scheduleLateBuild`).
   Runs start and end every few seconds while agents are busy and drove a
   large share of the 57 to 113 redraws an hour on 2026-10-02, yet only
-  the ten-minute quiet check and the helper rows read them. So a run's
+  the helper rows and the native core's quiet verdict read them. So a run's
   write rides along with the next build anyone asks for, and the first
   write with none arranged sets up one late build five minutes on
   (`LATER_MS`, flagged by `config/build-later`, taken like a lock so
@@ -716,6 +716,22 @@ A `claude --bg` session is the gap, since only the runner can say it has
 settled; the hook's 12 hour prune bounds it. A task past its age (above)
 drops out of the core's verdict on the next paced rebuild, with no hook
 write, so a stale entry never holds the verdict either. No URL writes it.
+
+### The core's quiet verdict for the agents panel
+
+The native core also saves which card's agent reads quiet (#425): working,
+no activity for ten minutes, and nothing of its own chat running
+(`native/core/src/quiet.rs`), counted under every session id the chat ran
+under, which the agents panel cannot see after a `/clear`. The `quiet` map
+holds workspace id to `{"agent", "since"}`, the card's agent and when it
+last showed activity. An entry goes out when the agent passes ten minutes
+and a removal when it stops being quiet; nothing in it moves with the
+clock. The panel (`src/shared/quiet.ts`) draws "· quiet 17m" from its own
+clock, and drops the entry while that agent is not working, is another
+agent, or has shown activity since. With no Cockpit running nothing is
+written, so a new quiet spell shows no suffix. It goes the same way as
+`running` (`native/core/src/quiet_save.rs`, its `SaveQuiet` effect,
+`scripts/quiet-save.sh` and `scripts/quiet-save.ts`). No URL writes it.
 
 ### The core's waits for the agents panel
 

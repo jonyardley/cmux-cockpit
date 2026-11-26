@@ -28,10 +28,11 @@ use crate::notify::{Notified, NotifyDismiss, NotifyPost};
 use crate::ostinato::OstinatoFeed;
 use crate::panel::Panel;
 use crate::persist::{
-    SavedCycle, SavedPr, SavedRunning, SavedState, SavedWait, ViewMode, persist_url,
+    SavedCycle, SavedPr, SavedQuiet, SavedRunning, SavedState, SavedWait, ViewMode, persist_url,
 };
 use crate::pr_poll::{PrPolled, shown_in};
 use crate::projects::Project;
+use crate::quiet_save::{QuietSaves, quiet};
 use crate::running_save::{RunningSaves, verdicts};
 use crate::session::{Outbound, Param, Session};
 use crate::sleep::SleepAnswer;
@@ -205,6 +206,8 @@ pub struct Model {
     pub panel_on: bool,
     /// The background verdicts sent for the state file (running_save.rs).
     pub running_saves: RunningSaves,
+    /// The quiet verdicts sent for the state file (quiet_save.rs).
+    pub quiet_saves: QuietSaves,
     /// The waits sent for the state file (waits_save.rs).
     pub wait_saves: WaitSaves,
     /// The Ostinato cycles sent for the state file (cycles_save.rs).
@@ -396,6 +399,21 @@ impl Operation for RunningSave {
     type Output = ();
 }
 
+/// The core's quiet verdicts for config/state.json's `quiet` map (#425),
+/// by workspace id: a verdict to set, or null to delete. The shell hands
+/// them to scripts/quiet-save.ts, which writes them under the state
+/// file's lock and rebuilds the sidebars, so the agents panel reads quiet
+/// when the card does. Only what changed comes this way (quiet_save.rs).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct QuietSave {
+    pub quiet: BTreeMap<String, Option<SavedQuiet>>,
+}
+
+impl Operation for QuietSave {
+    type Output = ();
+}
+
 /// The core's waits on Jon for config/state.json's `waits` map (#388),
 /// by workspace id: the card's waits to set, or null to delete. The shell
 /// hands them to scripts/waits-save.ts, which writes them under the state
@@ -479,6 +497,7 @@ pub enum Effect {
     SaveRunning(RunningSave),
     SaveWaits(WaitsSave),
     SaveCycles(CyclesSave),
+    SaveQuiet(QuietSave),
     Notify(NotifyPost),
     DismissNotification(NotifyDismiss),
 }
@@ -667,6 +686,20 @@ impl Model {
         (!running.is_empty()).then(|| Command::notify_shell(RunningSave { running }).into())
     }
 
+    /// The quiet verdicts the state file lacks, as one save, on the same
+    /// terms as `running_writes`.
+    fn quiet_writes(&mut self) -> Option<Command<Effect, Event>> {
+        if !self.panel_on {
+            return None;
+        }
+        let data = self.data.as_ref()?;
+        let now = quiet(&mut self.session, data)?;
+        let quiet = self
+            .quiet_saves
+            .writes(&self.session.saved.quiet, &now, data.epoch);
+        (!quiet.is_empty()).then(|| Command::notify_shell(QuietSave { quiet }).into())
+    }
+
     /// The waits the state file lacks, as one save, on the same terms as
     /// `running_writes`.
     fn wait_writes(&mut self) -> Option<Command<Effect, Event>> {
@@ -765,6 +798,7 @@ impl App for Cockpit {
                 s.pr_poll.file_read(&saved.prs, model.data.as_ref());
                 s.reseed(*saved);
                 model.running_saves.file_read();
+                model.quiet_saves.file_read();
                 model.wait_saves.file_read();
                 model.cycle_saves.file_read();
             }
@@ -803,6 +837,7 @@ impl App for Cockpit {
                 .into_iter()
                 .chain(m.wait_writes())
                 .chain(m.cycle_writes())
+                .chain(m.quiet_writes())
         });
         let now = model.data.as_ref().and_then(|d| d.epoch);
         let asks = model.asks(now);
@@ -976,6 +1011,10 @@ mod tests {
                 Effect::SaveCycles(r) => {
                     let ids: Vec<&str> = r.operation.cycles.keys().map(String::as_str).collect();
                     format!("cycles {}", ids.join(" "))
+                }
+                Effect::SaveQuiet(r) => {
+                    let ids: Vec<&str> = r.operation.quiet.keys().map(String::as_str).collect();
+                    format!("quiet {}", ids.join(" "))
                 }
                 Effect::Cmux(_)
                 | Effect::Persist(_)

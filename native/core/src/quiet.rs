@@ -7,8 +7,8 @@
 //! before any Stop lists it). The background record is left out: it is
 //! written on Stop only, so during a turn it can still hold a task that
 //! has just finished and woken the chat, which would keep a hung turn from
-//! ever reading quiet. The agents panel's quiet.ts counts the same chat's
-//! own runs (#360), less the ids before a `/clear`, which it cannot see.
+//! ever reading quiet. The agents panel's quiet.ts cannot see the ids
+//! before a `/clear`, so it reads this verdict as saved (quiet_save.rs).
 
 use crate::data::{Agent, AgentStatus, Data, Workspace};
 use crate::session::Session;
