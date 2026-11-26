@@ -19,8 +19,7 @@ export const UNREAD: Record<Entry, readonly (keyof State)[]> = {
   agents: ["projects", "laneNames"],
 };
 
-// The agents panel reads only ui.tab: the native sidebar's view, folds and
-// filter stay out, so a change to them never reloads it.
+// The agents panel reads only ui.tab, so the native sidebar's view, folds and filter never reload it.
 const tabOnly = (state: BakedState): void => {
   const tab = state.ui?.tab;
   if (tab) state.ui = { tab };

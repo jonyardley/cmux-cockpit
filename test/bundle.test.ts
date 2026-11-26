@@ -29,6 +29,8 @@ describe("each sidebar's saved state", () => {
       const read = new Set([...text.matchAll(/SAVED_STATE\d*\.(\w+)/g)].map((m) => m[1]));
       assert.ok(read.size > 0, "the bundle reads saved state by name");
       for (const k of UNREAD[entry]) assert.ok(!read.has(k), `${entry} reads ${k}, which UNREAD leaves out`);
+      const ui = new Set([...text.matchAll(/SAVED_STATE\d*\.ui\??\.(\w+)/g)].map((m) => m[1]));
+      for (const k of ui) assert.equal(k, "tab", `${entry} reads ui.${k}, which stateFor leaves out`);
     });
 
     it(`reads ${entry}'s saved state only by name, so the scan sees every read`, async () => {

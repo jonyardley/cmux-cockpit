@@ -25,8 +25,7 @@ import { STATUS_DOT, T } from "./theme.ts";
 
 export type Tab = "now" | "details";
 
-// wsId -> the tab chosen there; a workspace not in it shows Now. Saved as
-// ui.tab, so a rebuild's reload keeps it; a ui write asks for no rebuild.
+// wsId -> the tab chosen there; a workspace not in it shows Now.
 const savedTabs = (): Map<string, Tab> =>
   new Map(Object.entries(SAVED_STATE.ui?.tab ?? {}).filter(([, t]) => t === "details"));
 const [chosen, setChosen] = signal<ReadonlyMap<string, Tab>>(savedTabs());
@@ -44,11 +43,12 @@ export function chooseTab(t: Tab): void {
   const c = current();
   if (!c) return;
   const id = c.ws.id;
+  if ((chosen().get(id) ?? "now") === t) return;
   const next = new Map(chosen());
   if (t === "now") next.delete(id);
   else next.set(id, t);
   setChosen(next);
-  persistSet("ui.tab", next.size ? Object.fromEntries(next) : null);
+  persistSet(`ui.tab.${id}`, t === "now" ? null : t);
 }
 
 // ---- Durations -------------------------------------------------------------------

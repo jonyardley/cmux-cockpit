@@ -716,8 +716,7 @@ function foldFlags(v: unknown): Record<string, number> | null {
   return kept.length ? Object.fromEntries(kept.slice(-MAX_ENTRIES)) : null;
 }
 
-// The agents panel's tab per workspace, bounded like foldFlags. Only Details
-// is kept, since a workspace not in the map shows Now.
+// Only Details is kept: a workspace not in the map shows Now.
 function detailsTabs(v: unknown): Record<string, "details"> | null {
   if (!isRecord(v)) return null;
   const kept = Object.entries(v).flatMap(([id, t]): [string, "details"][] =>
@@ -739,7 +738,13 @@ function uiState(v: unknown): UiState {
   };
 }
 
-const UI_KEYS: readonly string[] = ["mode", "collapsed", "filter", "tab"];
+const UI_KEYS: readonly string[] = ["mode", "collapsed", "filter"];
+
+// A ui.tab set names one workspace, `tab.<wsId>`, so a tap never rewrites another workspace's choice.
+const tabWs = (id: string): string | null => {
+  const ws = id.startsWith("tab.") ? id.slice(4) : "";
+  return isId(ws) ? ws : null;
+};
 
 // Any name lanes.json takes (trimmed, not empty), bounded only so a flood
 // of URLs cannot bloat the file; a tighter rule would refuse a lane's own
@@ -1246,7 +1251,7 @@ export function validateState(raw: unknown): State {
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
 // The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `waits`, `cycles`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
-// `ui` is not keyed by id: its only keys are UI_KEYS. `asking` and `moves` are
+// `ui` is not keyed by id: its keys are UI_KEYS and `tab.<wsId>`. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
 type MapName =
   | "dismissed"
@@ -1319,7 +1324,7 @@ function withoutEntry(state: State, map: MapName, id: string): State {
       return Object.keys(left).length ? { ...rest, notified: left } : rest;
     }
     case "ui":
-      return { ...state, ui: Object.fromEntries(Object.entries(state.ui).filter(([key]) => key !== id)) };
+      return withoutUi(state, id);
   }
 }
 
@@ -1393,16 +1398,26 @@ function moveEntry(state: State, id: string, parsed: unknown): State | string {
   return { ...state, moves: { ...Object.fromEntries(kept), [id]: move } };
 }
 
+function withoutUi(state: State, id: string): State {
+  const ws = tabWs(id);
+  if (ws === null) return { ...state, ui: Object.fromEntries(Object.entries(state.ui).filter(([key]) => key !== id)) };
+  const { tab, ...rest } = state.ui;
+  const left = without(tab ?? {}, ws);
+  return { ...state, ui: Object.keys(left).length ? { ...rest, tab: left } : rest };
+}
+
 function uiEntry(state: State, id: string, parsed: unknown): State | string {
+  const ws = tabWs(id);
+  if (ws !== null) {
+    return parsed === "details"
+      ? { ...state, ui: { ...state.ui, tab: { ...state.ui.tab, [ws]: parsed } } }
+      : 'ui.tab.<wsId> wants "details"';
+  }
   if (id === "mode")
     return isViewMode(parsed) ? { ...state, ui: { ...state.ui, mode: parsed } } : 'ui.mode wants "all" or "projects"';
   if (id === "filter") {
     const filter = projectKey(parsed);
     return filter ? { ...state, ui: { ...state.ui, filter } } : "ui.filter wants a project key string";
-  }
-  if (id === "tab") {
-    const tab = detailsTabs(parsed);
-    return tab ? { ...state, ui: { ...state.ui, tab } } : 'ui.tab wants {wsId: "details"}';
   }
   const collapsed = foldFlags(parsed);
   return collapsed ? { ...state, ui: { ...state.ui, collapsed } } : "ui.collapsed wants {section: 0 or 1}";
@@ -1412,7 +1427,7 @@ function uiEntry(state: State, id: string, parsed: unknown): State | string {
 // a workspace id for the rest.
 function isKeyFor(map: MapName, id: string): boolean {
   if (map === "projects") return isMatchKey(id);
-  if (map === "ui") return UI_KEYS.includes(id);
+  if (map === "ui") return UI_KEYS.includes(id) || tabWs(id) !== null;
   return isId(id);
 }
 

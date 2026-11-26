@@ -81,7 +81,7 @@ sidebars send on every set.
 | `dismissed`       | `{"<agentId>": <epoch>, ...}`  | #5    |
 | `projectOverride` | `"<project key>"`, its first match path, e.g. `"/dev/alpha"` | #8    |
 | `projects`        | `{"name", "color": "#rrggbb", "icon": "<SF Symbol>", "root"?}`, or `{"removed": true}` | #9    |
-| `ui`              | `ui.mode`: `"all"` or `"projects"`; `ui.collapsed`: `{"lane:<key>" or "project:<key>": 0 or 1}`; `ui.tab`: `{"<wsId>": "details"}`, the agents panel's tab per workspace |       |
+| `ui`              | `ui.mode`: `"all"` or `"projects"`; `ui.collapsed`: `{"lane:<key>" or "project:<key>": 0 or 1}`; `ui.tab`: `{"<wsId>": "details"}`, the agents panel's tab per workspace, set one entry at a time as `ui.tab.<wsId>` |       |
 | `asleep`          | `{"surfaces": ["<surface id>", ...], "since": <epoch>}`: the agent tabs the cockpit put to sleep when the card was parked, so it still reads Asleep after a reload; no rebuild | #328  |
 | `notified`        | `{"since": <epoch>, "ci"?: <epoch>, "id"?: "<uuid>", "down"?: <epoch>}`: the desktop notification the native core posted for the card's wait, keyed on when the wait began, with cmux's id until it is dismissed and when it was taken down, so a restart neither posts it again nor loses the id; no rebuild | #379  |
 
