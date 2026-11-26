@@ -222,7 +222,7 @@ describe("a right-click on a Made here row", () => {
   };
   const menu = (title: string) => menuOf(rowNode(title));
 
-  it("offers Open chat, which goes to the workspace that made it and focuses its lead agent", () => {
+  it("offers Go to its chat, which goes to the workspace that made it and focuses its lead agent", () => {
     r.data.workspaces = [
       ws("sel", { selected: true }),
       ws("other", { agents: [agent("idle", { surfaceId: "s-other" })] }),
@@ -230,7 +230,7 @@ describe("a right-click on a Made here row", () => {
     const items = menu("Title o1");
     assert.deepEqual(
       items.map((i) => i.label),
-      ["Open chat"],
+      ["Go to its chat"],
     );
     items[0]?.action();
     assert.deepEqual(r.calls, [
