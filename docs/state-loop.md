@@ -788,7 +788,10 @@ map, reads as having no entry, so cmux's own needs_input still gets a
 Dismiss. A Dismiss in the panel shows at once, keyed as the core keys it
 (a turn on its saved start, anything else on cmux's own start), and holds
 over a saved entry still saying needs_input until the core rewrites it.
-The core replaces its dismissals with the file's on each read
+The core matches an agent's own ask or turn to a dismissal whose start is
+within 1 s of its own (`ASK_SLACK`, needs.rs), since its start for an ask
+can be a fraction of a second off cmux's; a stop, CI or park matches only
+exactly. The core replaces its dismissals with the file's on each read
 (`Session::reseed`), so a Dismiss writes back the dismissals on file for
 keys that are no agent here (the Cockpit's own), for agents with no
 saved entry at all (the core leaves a dismissed lost session out of its

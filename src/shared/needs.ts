@@ -84,6 +84,8 @@ const ownWait = (live: Agent, e: SavedAgent | undefined): boolean =>
 
 // When that wait began, as the core keys its dismissal: the end of the turn
 // (the saved start, the move's whole-second epoch), else cmux's own start.
+// The core's own start for an ask can be a fraction of a second off cmux's,
+// so it matches an ask or turn within ASK_SLACK, 1 s (native/core/src/needs.rs).
 const waitStart = (live: Agent, e: SavedAgent | undefined): number =>
   e?.why === "turn" && e.since > 0 ? e.since : sinceOrActivity(live);
 
@@ -103,7 +105,7 @@ function isDismissed(w: Workspace, live: Agent, e: SavedAgent | undefined): bool
 // not wipe a dismissal seeded from disk. Not a write anyone reads reactively:
 // what shows is unchanged, so no bump(). Runs during render, so it never
 // persists: a stale saved entry is harmless (issue #5), since it can only
-// match its exact start, and the file caps entries.
+// match its own start here (within 1 s in the core), and the file caps entries.
 function prune(w: Workspace): void {
   const byAgent = dismissed.get(w.id);
   if (!byAgent) return;

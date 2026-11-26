@@ -29,6 +29,19 @@ fn needs_input(a: &Agent) -> bool {
     a.status == Some(AgentStatus::NeedsInput)
 }
 
+/// Seconds an agent's own ask or turn may start from the start its
+/// dismissal was saved under. The agents panel keys a Dismiss on cmux's
+/// start, a fraction of a second from the core's: a 95 minute replay of
+/// cmux's event log put every ask within 0.44 s of it (PR #447).
+const ASK_SLACK: f64 = 1.0;
+
+/// Whether a dismissal saved at `saved` is the one for a wait that began
+/// at `start`: exactly, or within `ASK_SLACK` when `slack` and both are
+/// dated. An undated start only ever matches another.
+fn same_start(saved: f64, start: f64, slack: bool) -> bool {
+    saved == start || (slack && saved > 0.0 && start > 0.0 && (saved - start).abs() <= ASK_SLACK)
+}
+
 /// Whether a saved entry can be `a`'s: when one of the workspace's agents
 /// carries the entry's session as its id, only that agent owns it;
 /// otherwise it belongs to the workspace as a whole.
@@ -126,7 +139,7 @@ impl Session {
     /// needs you".
     fn is_dismissed_gone(&self, a: &Agent, w: Option<&Workspace>) -> bool {
         self.stop_of(a, w).is_some_and(|stop| {
-            stop.cause == StopCause::Gone && self.dismissed_at(w, a, stop.since)
+            stop.cause == StopCause::Gone && self.stop_dismissed(w, a, stop.since)
         })
     }
 
@@ -136,7 +149,7 @@ impl Session {
     /// it only went silent; a process gone is left out (`agents_of`). A
     /// new stop has a new start, so it waits on Jon again.
     fn stopped_agent(&self, a: &Agent, w: Option<&Workspace>, stop: Stop) -> Agent {
-        if !self.dismissed_at(w, a, stop.since) {
+        if !self.stop_dismissed(w, a, stop.since) {
             return Agent {
                 status: Some(AgentStatus::NeedsInput),
                 since_epoch: Some(stop.since),
@@ -152,18 +165,43 @@ impl Session {
         shown
     }
 
-    /// Whether Jon dismissed `a`'s wait that began at `start`.
+    /// Whether Jon dismissed `a`'s own ask or turn that began at `start`.
     fn dismissed_at(&self, w: Option<&Workspace>, a: &Agent, start: f64) -> bool {
+        w.is_some_and(|w| self.dismissed_within(&w.id, &a.id, start, true))
+    }
+
+    /// Whether Jon dismissed `a`'s stop that began at `start`.
+    fn stop_dismissed(&self, w: Option<&Workspace>, a: &Agent, start: f64) -> bool {
         w.is_some_and(|w| self.dismissed_key(&w.id, &a.id, start))
     }
 
     /// Whether Jon dismissed the wait saved under `key` (an agent's id, or
-    /// `CI_KEY`) in workspace `ws` that began at `start`.
+    /// `CI_KEY`) in workspace `ws` that began exactly at `start`: one the
+    /// core keys itself, a stop, CI or a park.
     pub(crate) fn dismissed_key(&self, ws: &str, key: &str, start: f64) -> bool {
+        self.dismissed_within(ws, key, start, false)
+    }
+
+    /// `dismissed_key`, matching within `ASK_SLACK` when `slack`.
+    fn dismissed_within(&self, ws: &str, key: &str, start: f64, slack: bool) -> bool {
         self.dismissed
             .get(ws)
             .and_then(|starts| starts.get(key))
-            .is_some_and(|s| *s == start)
+            .is_some_and(|s| same_start(*s, start, slack))
+    }
+
+    /// Whether the wait under `key` in `w` (`waits`) that began at `start`
+    /// is dismissed: an agent's own ask or turn within `ASK_SLACK`, as the
+    /// agents panel may have saved it, anything else exactly.
+    fn wait_dismissed(&self, w: &Workspace, key: &str, start: f64) -> bool {
+        self.dismissed_within(&w.id, key, start, self.is_own_wait(w, key))
+    }
+
+    /// Whether `key` is one of `w`'s agents waiting on its own ask or
+    /// turn, not on a stop, the one kind of wait the panel dismisses.
+    fn is_own_wait(&self, w: &Workspace, key: &str) -> bool {
+        w.agent_list()
+            .any(|a| a.id == key && self.stop_of(a, Some(w)).is_none())
     }
 
     /// Every wait on Jon in the workspace, dismissed or not, by the key a
@@ -209,7 +247,14 @@ impl Session {
         if !self.dismissed.contains_key(&w.id) {
             return;
         }
-        let live = self.agent_waits(w);
+        let live: IndexMap<String, (f64, bool)> = self
+            .agent_waits(w)
+            .into_iter()
+            .map(|(id, start)| {
+                let own = self.is_own_wait(w, &id);
+                (id, (start, own))
+            })
+            .collect();
         // CI's dismissal holds while its trouble does, whoever is on it,
         // until a read shows the checks changed (ci_wait.rs).
         let ci_holds = self
@@ -234,7 +279,10 @@ impl Session {
                 return park_holds;
             }
             let reported = w.agent_list().any(|a| &a.id == id);
-            !reported || live.get(id) == Some(start)
+            !reported
+                || live
+                    .get(id)
+                    .is_some_and(|(live, own)| same_start(*start, *live, *own))
         });
         if by_agent.is_empty() {
             self.dismissed.shift_remove(&w.id);
@@ -358,7 +406,7 @@ impl Session {
         !waits.is_empty()
             && waits
                 .iter()
-                .all(|(key, start)| self.dismissed_key(&w.id, key, *start))
+                .all(|(key, start)| self.wait_dismissed(w, key, *start))
     }
 
     /// Dismisses every real ask in the workspace; each comes back when that
@@ -413,7 +461,7 @@ impl Session {
 
 #[cfg(test)]
 mod tests {
-    use super::waiting_turn;
+    use super::{CI_KEY, Stop, StopCause, same_start, waiting_turn};
     use crate::data::{Agent, AgentStatus, Workspace};
     use crate::persist::SavedState;
     use crate::session::Session;
@@ -648,5 +696,80 @@ mod tests {
             url.as_deref(),
             Some("cmux-cockpit://set?key=dismissed.w&value=%7B%22a2%22%3A600%2C%22a1%22%3A500%7D")
         );
+    }
+
+    /// A session whose state file dismissed `c` in `w` at `dismissed`,
+    /// and `w` with `c` as cmux and the runner send it: needs_input since
+    /// 1000.07, stopped when `stop` is given.
+    fn dismissed_near(dismissed: f64, stop: Option<Stop>) -> (Session, Workspace) {
+        let saved = SavedState::from_json(&format!(
+            r#"{{"dismissed": {{"w": {{"c": {dismissed}, "ci": 1000}}}}}}"#
+        ))
+        .unwrap();
+        let a = Agent {
+            id: "c".into(),
+            kind: Some("claude".into()),
+            status: Some(AgentStatus::NeedsInput),
+            since_epoch: Some(1000.07),
+            last_activity_at: Some(1000.07),
+            stopped: stop,
+            ..Agent::default()
+        };
+        let w = Workspace {
+            id: "w".into(),
+            agents: Some(vec![Some(a)]),
+            ..Workspace::default()
+        };
+        (Session::new(Vec::new(), saved), w)
+    }
+
+    fn statuses(s: &mut Session, w: &Workspace) -> Vec<Option<AgentStatus>> {
+        s.agents_of(Some(w)).into_iter().map(|a| a.status).collect()
+    }
+
+    #[test]
+    fn a_dismissal_at_cmuxs_start_hides_an_ask_the_core_dates_a_moment_later() {
+        let (mut s, w) = dismissed_near(1000.0, None);
+        assert_eq!(statuses(&mut s, &w), [Some(AgentStatus::Idle)]);
+        assert!(s.is_needs_dismissed(Some(&w)));
+        assert_eq!(
+            s.dismissed.get("w").and_then(|d| d.get("c")),
+            Some(&1000.0),
+            "prune keeps it"
+        );
+        assert_eq!(statuses(&mut s, &w), [Some(AgentStatus::Idle)], "and again");
+    }
+
+    #[test]
+    fn a_dismissal_two_seconds_off_is_another_asks_and_goes() {
+        let (mut s, w) = dismissed_near(998.07, None);
+        assert_eq!(statuses(&mut s, &w), [Some(AgentStatus::NeedsInput)]);
+        assert!(!s.is_needs_dismissed(Some(&w)));
+        assert_eq!(s.dismissed.get("w").and_then(|d| d.get("c")), None);
+    }
+
+    #[test]
+    fn a_stop_and_ci_match_their_dismissal_only_exactly() {
+        let stop = Stop {
+            cause: StopCause::Error,
+            since: 1000.07,
+        };
+        let (mut s, w) = dismissed_near(1000.0, Some(stop));
+        assert_eq!(statuses(&mut s, &w), [Some(AgentStatus::NeedsInput)]);
+        assert!(!s.is_needs_dismissed(Some(&w)));
+        assert_eq!(s.dismissed.get("w").and_then(|d| d.get("c")), None);
+        let (mut s, w) = dismissed_near(1000.07, Some(stop));
+        assert_eq!(statuses(&mut s, &w), [Some(AgentStatus::Idle)]);
+        assert!(s.dismissed_key("w", CI_KEY, 1000.0));
+        assert!(!s.dismissed_key("w", CI_KEY, 1000.07));
+    }
+
+    #[test]
+    fn an_undated_start_matches_only_an_undated_dismissal() {
+        assert!(same_start(0.0, 0.0, true));
+        assert!(!same_start(0.0, 0.5, true));
+        assert!(!same_start(0.5, 0.0, true));
+        assert!(same_start(1000.0, 1001.0, true));
+        assert!(!same_start(1000.0, 1000.5, false));
     }
 }

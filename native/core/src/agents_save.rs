@@ -221,6 +221,17 @@ mod tests {
     }
 
     #[test]
+    fn an_ask_dismissed_at_cmuxs_start_a_moment_off_the_cores_saves_idle() {
+        let state = r#"{"dismissed": {"W": {"c": 999.93}}}"#;
+        let mut m = core(state, true);
+        assert_eq!(
+            one(&mut m, frame("needs_input")),
+            json!([{"id": "c", "status": "idle", "since": 1000.0,
+                    "seen": {"status": "needs_input", "since": 1000.0}}])
+        );
+    }
+
+    #[test]
     fn an_unchanged_frame_sends_nothing_and_a_change_goes_out() {
         let mut m = core("{}", true);
         let first = one(&mut m, frame("working"));
