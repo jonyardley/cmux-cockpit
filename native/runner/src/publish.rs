@@ -150,8 +150,7 @@ pub fn write_atomic(dir: &Path, name: &str, bytes: &[u8]) -> io::Result<()> {
         .map_err(|e| with_removal(e, &tmp, fs::remove_file(&tmp)))
 }
 
-/// A failed write's error, naming its temp file too when that could not
-/// be removed. NotFound means the write never made it.
+// NotFound means the write never made it.
 fn with_removal(e: io::Error, tmp: &Path, removed: io::Result<()>) -> io::Error {
     match removed {
         Err(r) if r.kind() != ErrorKind::NotFound => {
@@ -262,25 +261,29 @@ fn alive(pid: u32) -> bool {
 
 /// Deletes the files in `dir` whose names start with `prefix` and a pid
 /// no longer running: a claim or a temp file a crash left. A live
-/// publisher's own are left alone, so two can run at once. Returns a
-/// log line for each that would not go.
-fn sweep(dir: &Path, prefix: &str, alive: &dyn Fn(u32) -> bool) -> Vec<String> {
+/// publisher's own are left alone, so two can run at once.
+fn sweep(dir: &Path, prefix: &str, alive: &dyn Fn(u32) -> bool, log: &mut dyn FnMut(String)) {
     let Ok(entries) = fs::read_dir(dir) else {
-        return Vec::new();
+        return;
     };
-    let mut failed = Vec::new();
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
         if pid_in(&name, prefix).is_some_and(|pid| !alive(pid))
-            && let Err(e) = fs::remove_file(entry.path())
+            && let Some(line) = sweep_failure(&entry.path(), fs::remove_file(entry.path()))
         {
-            failed.push(format!(
-                "sweep: {} not removed: {e}",
-                entry.path().display()
-            ));
+            log(line);
         }
     }
-    failed
+}
+
+// NotFound means another publisher swept it first.
+fn sweep_failure(path: &Path, removed: io::Result<()>) -> Option<String> {
+    match removed {
+        Err(e) if e.kind() != ErrorKind::NotFound => {
+            Some(format!("sweep: {} not removed: {e}", path.display()))
+        }
+        _ => None,
+    }
 }
 
 /// Writes the core's inputs out and takes its effects in, in one shared
@@ -301,30 +304,33 @@ pub struct Publisher {
     tally: Tally,
     /// Posts the "changed" signal; true when it went.
     signal: Box<dyn FnMut() -> bool>,
-    /// Lines from before there was a log to write them to.
-    held: Vec<String>,
 }
 
 impl Publisher {
     /// A publisher writing into `root`, which it makes with its outbox
     /// when missing. Claims and temp files a crashed publisher left are
     /// cleared: at most once means never applying its claims.
-    pub fn new(root: PathBuf, signal: Box<dyn FnMut() -> bool>) -> io::Result<Publisher> {
-        Publisher::new_with(root, signal, &alive)
+    pub fn new(
+        root: PathBuf,
+        signal: Box<dyn FnMut() -> bool>,
+        log: &mut dyn FnMut(String),
+    ) -> io::Result<Publisher> {
+        Publisher::new_with(root, signal, &alive, log)
     }
 
     fn new_with(
         root: PathBuf,
         signal: Box<dyn FnMut() -> bool>,
         alive: &dyn Fn(u32) -> bool,
+        log: &mut dyn FnMut(String),
     ) -> io::Result<Publisher> {
         let outbox = root.join(OUTBOX_DIR);
         fs::create_dir_all(&outbox)?;
-        let mut held = sweep(&outbox, TAKEN, alive);
+        sweep(&outbox, TAKEN, alive, log);
         let answers = root.join(INBOX_DIR);
         fs::create_dir_all(&answers)?;
-        held.extend(sweep(&answers, inbox::TMP, alive));
-        held.extend(sweep(&root, &tmp_prefix(DATA_FILE), alive));
+        sweep(&answers, inbox::TMP, alive, log);
+        sweep(&root, &tmp_prefix(DATA_FILE), alive, log);
         let inbox = Inbox::new(answers);
         inbox.prune(epoch_ms().saturating_sub(stale_ms()));
         Ok(Publisher {
@@ -336,7 +342,6 @@ impl Publisher {
             data_seq: 0,
             tally: Tally::new(Instant::now()),
             signal,
-            held,
         })
     }
 
@@ -486,9 +491,6 @@ impl Publisher {
     /// failed). The signal follows the inputs and the answers. The tally
     /// is logged when it is due.
     pub fn step(&mut self, feed: &mut Feed, fresh: bool, log: &mut dyn FnMut(String)) {
-        for line in self.held.drain(..) {
-            log(line);
-        }
         self.take_effects(feed, log);
         let mut changed = self.write_answers(feed, log);
         if fresh || self.last_inputs.is_none() {
@@ -601,7 +603,11 @@ mod tests {
             count.set(count.get() + 1);
             true
         });
-        (Publisher::new(root.clone(), signal).unwrap(), root, posted)
+        (
+            Publisher::new(root.clone(), signal, &mut |_| {}).unwrap(),
+            root,
+            posted,
+        )
     }
 
     fn quiet() -> impl FnMut(String) {
@@ -1083,7 +1089,13 @@ mod tests {
         fs::write(root.join(INBOX_DIR).join(".answer-7-1.tmp"), "{").unwrap();
         fs::write(root.join(INBOX_DIR).join(".answer-8-1.tmp"), "{").unwrap();
         // 7 crashed; 8 is another publisher, mid-claim and mid-write.
-        let p = Publisher::new_with(root.clone(), Box::new(|| true), &|pid| pid == 8).unwrap();
+        let p = Publisher::new_with(
+            root.clone(),
+            Box::new(|| true),
+            &|pid| pid == 8,
+            &mut |_| {},
+        )
+        .unwrap();
         assert!(
             !p.outbox().join(".taken-7-a.json").exists(),
             "never applied"
@@ -1097,18 +1109,32 @@ mod tests {
     }
 
     #[test]
-    fn a_leftover_that_will_not_go_is_logged_on_the_first_step() {
+    fn a_leftover_that_will_not_go_is_logged_at_start_up() {
         let root = temp_root("stuck-leftover");
         fs::create_dir_all(root.join(OUTBOX_DIR).join(".taken-7-a.json")).unwrap();
-        let mut p = Publisher::new_with(root.clone(), Box::new(|| true), &|_| false).unwrap();
         let mut lines = Vec::new();
-        p.step(&mut Feed::default(), false, &mut |l| lines.push(l));
+        Publisher::new_with(root.clone(), Box::new(|| true), &|_| false, &mut |l| {
+            lines.push(l)
+        })
+        .unwrap();
         assert!(
             lines
                 .iter()
                 .any(|l| l.starts_with("sweep: ") && l.contains(".taken-7-a.json"))
         );
         fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_leftover_another_publisher_swept_first_is_not_logged() {
+        let path = Path::new("/x/.taken-7-a.json");
+        let gone = io::Error::from(ErrorKind::NotFound);
+        assert_eq!(sweep_failure(path, Err(gone)), None);
+        assert_eq!(sweep_failure(path, Ok(())), None);
+        assert_eq!(
+            sweep_failure(path, Err(io::Error::other("busy"))).as_deref(),
+            Some("sweep: /x/.taken-7-a.json not removed: busy")
+        );
     }
 
     #[test]

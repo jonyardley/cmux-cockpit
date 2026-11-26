@@ -822,9 +822,7 @@ pub fn run_without_core(
     );
 }
 
-/// Sends `value`, logging only the first failure. The layout and Ostinato
-/// threads stop only when the runner does, so a closed channel mid-run
-/// means one of them died and its data has stopped.
+// Those threads end only with the runner, so a closed channel means one panicked.
 fn send_or_log<T>(
     tx: &Sender<T>,
     value: T,
@@ -834,7 +832,9 @@ fn send_or_log<T>(
 ) {
     if tx.send(value).is_err() && !*lost {
         *lost = true;
-        log(format!("{name}: thread gone, not sent"));
+        log(format!(
+            "{name}: thread stopped, likely panicked; its data will stay stale"
+        ));
     }
 }
 
@@ -1699,7 +1699,10 @@ mod tests {
         let mut lost = false;
         send_or_log(&tx, (), "layout poll", &mut lost, &mut |l| lines.push(l));
         send_or_log(&tx, (), "layout poll", &mut lost, &mut |l| lines.push(l));
-        assert_eq!(lines, ["layout poll: thread gone, not sent"]);
+        assert_eq!(
+            lines,
+            ["layout poll: thread stopped, likely panicked; its data will stay stale"]
+        );
     }
 
     #[test]
