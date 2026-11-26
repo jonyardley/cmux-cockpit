@@ -1,16 +1,17 @@
 //! What a Claude hook does to an agent's status, moved here from the R1.0
 //! spike so the pane and the R2 panel share one copy. The rules follow
-//! cmux as docs/state-loop.md ("What cmux does") describes it, which also
-//! lists where cmux 0.65.2 now differs.
+//! cmux 0.65.2 as docs/state-loop.md ("What cmux does") describes it.
 //!
 //! | Hook | Status |
 //! | --- | --- |
 //! | Notification (the idle nudge too), PermissionRequest, PreToolUse for AskUserQuestion or ExitPlanMode | needs input |
-//! | UserPromptSubmit, other PreToolUse, PostToolUse, PreCompact | working |
+//! | UserPromptSubmit, other PreToolUse, PostToolUse, PostToolUseFailure | working |
 //! | SessionStart, Stop | idle |
 //! | SessionEnd | ended |
 //!
-//! Any other hook (a subagent finishing, say) leaves the status as it was.
+//! Any other hook (PreCompact, a subagent finishing) leaves the status as
+//! it was. One known difference: cmux 0.65.2 keeps the previous state for
+//! Claude's idle reminder, where this still sets needs input (issue #422).
 
 use crate::data::AgentStatus;
 
@@ -19,7 +20,7 @@ pub fn status_from_hook(name: &str, tool: Option<&str>) -> Option<AgentStatus> {
     match (name, tool) {
         ("PreToolUse", Some("AskUserQuestion" | "ExitPlanMode")) => Some(AgentStatus::NeedsInput),
         ("Notification" | "PermissionRequest", _) => Some(AgentStatus::NeedsInput),
-        ("UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "PreCompact", _) => {
+        ("UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "PostToolUseFailure", _) => {
             Some(AgentStatus::Working)
         }
         ("SessionStart" | "Stop", _) => Some(AgentStatus::Idle),
@@ -168,7 +169,7 @@ mod tests {
             ("PreToolUse", Some("Bash")),
             ("PreToolUse", None),
             ("PostToolUse", Some("AskUserQuestion")),
-            ("PreCompact", None),
+            ("PostToolUseFailure", Some("Bash")),
         ] {
             assert_eq!(
                 status_from_hook(name, tool),
@@ -194,7 +195,11 @@ mod tests {
     #[test]
     fn other_hooks_leave_the_status_alone() {
         assert_eq!(status_from_hook("SubagentStop", None), None);
-        assert_eq!(status_from_hook("PostToolUseFailure", None), None);
+        assert_eq!(
+            status_from_hook("PreCompact", None),
+            None,
+            "compaction keeps the previous state, as cmux 0.65.2 does"
+        );
     }
 
     #[test]

@@ -1042,7 +1042,8 @@ v0.65.2 where given; the rest were seen on 0.64.25 and are marked so.
   On 0.65.2 a Notification carrying `isIdleReminder` keeps the previous
   state (the same function, lines 109 to 115), so the reminder may no
   longer move idle to needs_input; that is the source's word, not yet seen
-  live (issue #422). Every hook event stamps `lastActivityAt`
+  live (issue #422). Keeping the state also means it no longer restamps
+  `sinceEpoch`. Every hook event stamps `lastActivityAt`
   (`AgentChatSessionRegistry.swift:544`), so it does not say when the
   agent last worked, and `isIdleNudge`'s gap check does not fire (issue #4).
 - A Claude PreToolUse for AskUserQuestion or ExitPlanMode sets needs_input
@@ -1050,6 +1051,9 @@ v0.65.2 where given; the rest were seen on 0.64.25 and are marked so.
   input for a mid-turn ask only once the nudge landed.
 - PreCompact and PostCompact keep the previous state (lines 105 to 108);
   on 0.64.25 they set working.
+- PostToolUseFailure sets working, like PostToolUse. The Cockpit's own
+  rules (`native/core/src/hooks.rs`) match all of this except the idle
+  reminder, which still sets needs input there until issue #422.
 - `latestMessage`, `latestPrompt` and `latestAt` belong to the workspace
   (`latestConversationMessage`, `latestSubmittedMessage` and
   `latestSubmittedAt` in `Workspace.swift:3205-3207`). UserPromptSubmit
