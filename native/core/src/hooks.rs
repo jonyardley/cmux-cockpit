@@ -12,6 +12,9 @@
 //! Any other hook (PreCompact, a subagent finishing) leaves the status as
 //! it was. One known difference: cmux 0.65.2 keeps the previous state for
 //! Claude's idle reminder, where this still sets needs input (issue #422).
+//! The hook event cmux passes on redacts the Notification's own fields
+//! (`notification_type` among them), so the reminder cannot be told from
+//! an ask here; needs.rs reads it back as idle by its gap.
 
 use crate::data::AgentStatus;
 

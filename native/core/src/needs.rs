@@ -1,8 +1,11 @@
-//! "Needs you", corrected the same way in both sidebars
-//! (src/shared/needs.ts). An agent's needs_input reads as idle when it is
-//! Claude Code's idle nudge (issue #4), when Jon has dismissed it, or when
-//! the turn ended on "Nothing for you". Asking or your turn (issue #81)
-//! comes from the saved asks.
+//! "Needs you", corrected as in the agents panel (src/shared/needs.ts),
+//! with one rule more. An agent's needs_input reads as idle when Jon has
+//! dismissed it, and here also when it is Claude Code's idle nudge (issue
+//! #4) or follows a turn that ended on "Nothing for you". cmux 0.65.2 no
+//! longer raises needs_input for that reminder, so the agents panel
+//! dropped the rule (issue #422), but the Cockpit's own hook rule
+//! (hooks.rs) still does, since the hook event hides which Notification
+//! it was. Asking or your turn (issue #81) comes from the saved asks.
 //!
 //! The Cockpit also reads a turn end as Jon's turn from its closing line,
 //! not from the nudge: an idle or nudged agent whose turn ended on a move
@@ -27,7 +30,8 @@ use crate::saved::saved_for;
 use crate::session::Session;
 use crate::stopped::{Stop, StopCause};
 
-/// Seconds between an agent's last activity and a needs_input that is only a nudge.
+/// Seconds between an agent's last activity and a needs_input that is only a
+/// nudge, as the Cockpit's own hook rule raises it (hooks.rs).
 pub const NUDGE_GAP: f64 = 45.0;
 
 fn needs_input(a: &Agent) -> bool {

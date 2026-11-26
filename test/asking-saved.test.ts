@@ -71,17 +71,13 @@ describe("askReason", () => {
     assert.equal(needs.askReason(loose, ws("owned", { agents: [loose] })), "allow npm publish?");
   });
 
-  it("reads a fresh ask as an ask even after a long quiet spell, and an older one as the nudge", () => {
+  it("reads a fresh ask as an ask even after a long quiet spell", () => {
     const quiet = agent("needs_input", { kind: "claude", lastActivityAt: 900, sinceEpoch: 1000 });
     const w = ws("wA", { agents: [quiet] });
-    assert.equal(needs.isIdleNudge(quiet, w), false);
     assert.equal(needs.askReason(needs.agentsOf(w)[0], w), "allow git push?");
   });
 
-  it("never reads a nudge or a dismissal as an ask, once the agent is as the sidebars show it", () => {
-    const nudge = agent("needs_input", { kind: "claude", lastActivityAt: 1000, sinceEpoch: 1100 });
-    const w = ws("wA", { agents: [nudge] });
-    assert.equal(needs.askReason(needs.agentsOf(w)[0], w), null);
+  it("never reads a dismissal as an ask, once the agent is as the sidebars show it", () => {
     const asker = waiting(1000);
     const d = ws("wA", { agents: [asker] });
     needs.dismissNeeds(d);

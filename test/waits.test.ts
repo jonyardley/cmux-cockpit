@@ -67,7 +67,7 @@ const w = await import("../src/shared/waits.ts");
 const m = await import("../src/agents/model.ts");
 const d = await import("../src/agents/details.ts");
 
-// A real ask: needs_input with activity right up to it, so never a nudge.
+// A real ask: needs_input with activity right up to it.
 const asking = (id: string) => agent("needs_input", { id, sinceEpoch: ago(120), lastActivityAt: ago(120) });
 const idle = (id: string, at = 200) => agent("idle", { id, sinceEpoch: ago(at), lastActivityAt: ago(at) });
 const working = (id: string) => agent("working", { id, sinceEpoch: ago(60), lastActivityAt: ago(10) });

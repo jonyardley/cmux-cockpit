@@ -54,7 +54,7 @@ const { T } = await import("../src/agents/theme.ts");
 // Claude's Stop leaves the agent idle, stamped at the turn end.
 const stopped = (id: string): Agent =>
   agent("idle", { id: "c-" + id, kind: "claude", sinceEpoch: END, lastActivityAt: END });
-// The idle nudge about a minute on: needs_input, both stamps at its arrival.
+// A needs_input about a minute on with no prompt between, both stamps at its arrival.
 const nudged = (id: string, at = NOW): Agent =>
   agent("needs_input", { id: "c-" + id, kind: "claude", sinceEpoch: at, lastActivityAt: at });
 // The selected workspace, its last prompt before the turn ended.
@@ -89,7 +89,7 @@ describe("a turn that asks Jon something while its chat's work runs", () => {
     assert.deepEqual(head(), YOUR_TURN);
   });
 
-  it("says the same once the idle nudge lands a minute on", () => {
+  it("says the same once a needs_input lands a minute on", () => {
     selected("nudged", nudged("nudged"));
     assert.deepEqual(head(), YOUR_TURN);
   });
@@ -99,11 +99,12 @@ describe("a turn that asks Jon something while its chat's work runs", () => {
     assert.deepEqual(head(), YOUR_TURN);
   });
 
-  it("says Running on a Nothing for you turn, stopped or nudged", () => {
+  it("says Running on a stopped Nothing for you turn, and waits on Jon once it asks", () => {
     selected("quiet", stopped("quiet"));
     assert.deepEqual(head(), RUNNING);
     selected("quiet", nudged("quiet"));
-    assert.deepEqual(head(), RUNNING);
+    assert.deepEqual(head(), { ...YOUR_TURN, status: "Your turn <1m" });
+    assert.equal(model.cur().a?.status, "needs_input");
   });
 
   it("says Running once a prompt retires the move, or when the move is another session's", () => {
@@ -121,13 +122,13 @@ describe("a turn that asks Jon something while its chat's work runs", () => {
 });
 
 describe("dismissing that wait", () => {
-  it("says Running, and stays dismissed across reads and after the nudge lands", () => {
+  it("says Running, and stays dismissed across reads and after a later needs_input", () => {
     const w = selected("dismiss", stopped("dismiss"));
     needs.dismissNeeds(w);
     assert.deepEqual(head(), RUNNING);
     assert.deepEqual(head(), RUNNING, "a second read does not prune it");
     selected("dismiss", nudged("dismiss"));
-    assert.deepEqual(head(), RUNNING, "keyed on the turn end, so the nudge keeps it");
+    assert.deepEqual(head(), RUNNING, "keyed on the turn end, so the restamp keeps it");
     const saved = r.opened.find((u) => u.includes("dismissed.dismiss"));
     assert.ok(saved?.includes(encodeURIComponent(JSON.stringify({ "c-dismiss": END }))), "saved at the turn end");
   });
