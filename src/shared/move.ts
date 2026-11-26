@@ -33,9 +33,10 @@ function savedMoveFor(w: Workspace): SavedMove | undefined {
   return saved.epoch > live.epoch ? saved : live;
 }
 
-// A turn end: Claude's Stop sets the agent idle, and the idle_prompt nudge
-// about 60s later moves it to needs_input, restamping sinceEpoch and
-// lastActivityAt. The cmux facts behind this and waitingMove are in
+// A turn end: Claude's Stop sets the agent idle, and on cmux 0.65.2 the
+// idle reminder about 60s later keeps it so (issue #422). needs_input
+// counts too, for an ask that comes with no prompt since the turn ended,
+// which freshAsk (shared/needs.ts) reads against it. The cmux facts behind this and waitingMove are in
 // docs/state-loop.md, section "What cmux does (v0.65.2)".
 const atTurnEnd = (a: Agent): boolean => a.status === "idle" || a.status === "needs_input";
 
@@ -53,7 +54,7 @@ const ownsMove = (saved: SavedMove, a: Agent): boolean =>
  * while it is no older than the workspace's last prompt (latestAt, which
  * cmux moves on UserPromptSubmit and never on a notification), HOOK_SLACK
  * aside, so a new prompt, an interrupted turn and a mid-turn ask retire it
- * and the nudge does not. With no latestAt there is no telling how old the
+ * and a notification does not. With no latestAt there is no telling how old the
  * move is, so none shows. It must also be `a`'s own (ownsMove).
  */
 export function waitingMove(a: Agent | null | undefined, w: Workspace | undefined, asking: boolean): SavedMove | null {
@@ -78,29 +79,3 @@ const NOTHING_FIRST = /^nothing[.:]/i;
  */
 export const asksNothing = (m: Pick<SavedMove, "text" | "idle" | "decisions">): boolean =>
   !((m.decisions ?? 0) > 0) && (m.idle === true || NOTHING_WAITS.test(m.text) || NOTHING_FIRST.test(m.text));
-
-/**
- * How long after a saved turn end the idle_prompt nudge may turn it into
- * needs_input: about 60s on cmux 0.64.25 (docs/state-loop.md), doubled.
- */
-export const NUDGE_WINDOW = 120;
-
-/**
- * The move behind `a`'s needs_input when it asks nothing of Jon, or null.
- * Pass `a` as cmux sends it, and only when it is not asking: the idle nudge
- * lands about 60s after a turn that ended on "Nothing for you", and that
- * turn waits on the agent's own background work, not on Jon. Only that
- * nudge: a later needs_input with no prompt between (the agent woke on its
- * own and stopped to ask) is past NUDGE_WINDOW and still needs him.
- */
-export function quietTurn(a: Agent, w: Workspace | undefined): SavedMove | null {
-  if (a.status !== "needs_input" || !a.sinceEpoch) return null;
-  const m = quietMove(a, w);
-  return m && a.sinceEpoch - m.epoch <= NUDGE_WINDOW ? m : null;
-}
-
-/** The move `a`'s turn ended on when it asks nothing of Jon ("Nothing for you"), or null. */
-export function quietMove(a: Agent, w: Workspace | undefined): SavedMove | null {
-  const m = waitingMove(a, w, false);
-  return m && asksNothing(m) ? m : null;
-}

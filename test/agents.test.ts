@@ -239,10 +239,10 @@ describe("currentAsk", () => {
     assert.equal(m.current()?.a?.status, "needs_input");
   });
 
-  it("is null for the idle nudge and for a dismissed ask", () => {
-    const nudge = agent("needs_input", { kind: "claude", lastActivityAt: 1000, sinceEpoch: 1060 });
-    r.data.workspaces = [selected(nudge)];
-    assert.equal(m.currentAsk(), null);
+  it("is an ask a minute after the last activity, and null once dismissed", () => {
+    const late = agent("needs_input", { kind: "claude", lastActivityAt: 1000, sinceEpoch: 1060 });
+    r.data.workspaces = [selected(late)];
+    assert.notEqual(m.currentAsk(), null);
     const w = selected(agent("needs_input", { sinceEpoch: 700 }), { id: "dis" });
     r.data.workspaces = [w];
     dismissNeeds(w);

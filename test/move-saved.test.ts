@@ -49,7 +49,7 @@ const moveOf = (w: Workspace): SavedMove | null => {
 
 // The Claude session that saved workspace `id`'s move, as cmux reports it once hooked.
 const own = (id: string): Partial<Agent> => ({ id: "s-" + id, kind: "claude" });
-// The nudge about 60s after Stop: needs_input, with sinceEpoch and lastActivityAt stamped at its arrival.
+// An ask after Stop with no prompt between: needs_input, with sinceEpoch and lastActivityAt stamped at its arrival.
 const waiting = (id: string, since: number, extra: Partial<Agent> = {}) =>
   agent("needs_input", { ...own(id), sinceEpoch: since, lastActivityAt: since, ...extra });
 // Claude's Stop leaves the agent idle; cmux stamps its spell and activity then.
@@ -157,16 +157,13 @@ describe("a turn that ended on Nothing for you", () => {
     assert.equal(move.asksNothing({ text: "say go." }), false);
   });
 
-  it("reads as idle once the nudge lands, since the turn ended, and leaves Needs you", () => {
+  it("still needs Jon when a needs_input follows, since cmux 0.65.2 never raises one for the idle reminder", () => {
     const w = at("quiet", [waiting("quiet", 1060)]);
     r.data.workspaces = [w];
     const a = shown(w);
-    assert.equal(a?.status, "idle");
-    assert.equal(a?.sinceEpoch, 1000, "idle since the turn ended, not since the nudge");
-  });
-
-  it("reads the older Your move: nothing line the same way", () => {
-    assert.equal(shown(at("legacy", [waiting("legacy", 1060)]))?.status, "idle");
+    assert.equal(a?.status, "needs_input");
+    assert.equal(a?.sinceEpoch, 1060);
+    assert.equal(shown(at("legacy", [waiting("legacy", 1060)]))?.status, "needs_input");
   });
 
   it("still needs Jon on a Your move line, a new prompt since, or a real ask", () => {
@@ -177,8 +174,8 @@ describe("a turn that ended on Nothing for you", () => {
   });
 
   it("still needs Jon on a later stop with no prompt between, or with decisions laid out", () => {
-    // The agent woke on its own after CI and stopped to ask, well past the nudge.
-    assert.equal(shown(at("quiet", [waiting("quiet", 1000 + move.NUDGE_WINDOW + 1)]))?.status, "needs_input");
+    // The agent woke on its own after CI and stopped to ask.
+    assert.equal(shown(at("quiet", [waiting("quiet", 1500)]))?.status, "needs_input");
     assert.equal(shown(at("quietDecide", [waiting("quietDecide", 1060)]))?.status, "needs_input");
   });
 

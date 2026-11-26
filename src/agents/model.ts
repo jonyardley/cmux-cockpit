@@ -93,7 +93,7 @@ export const currentWaited = computed((): Waited => {
 });
 
 /** Whether the selected workspace needs you, by the Needs you strip's rule:
- * its most active agent reads needs_input once nudges and dismissals are
+ * its most active agent reads needs_input once turn ends and dismissals are
  * applied (src/shared/needs.ts) and the Cockpit's saved waits laid on, or
  * a saved wait stands in for an agent it has none of. Null otherwise. */
 export const currentAsk = computed((): Ask | null => {

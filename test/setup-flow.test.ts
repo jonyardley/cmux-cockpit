@@ -49,7 +49,7 @@ function cmuxWith(home: string): Answers {
     current_directory: d,
   }));
   return {
-    "cmux --version": ok("cmux 0.65.1 (120) [abc]"),
+    "cmux --version": ok("cmux 0.65.2 (120) [abc]"),
     "cmux --json list-workspaces": ok(JSON.stringify({ workspaces })),
     [`git -C ${home}/dev/app-one`]: ok(`${home}/dev/app-one\n`),
     [`git -C ${home}/work/two`]: ok(`${home}/work/two\n`),
@@ -108,7 +108,7 @@ describe("setup", () => {
     const p = pathsFor(w.home, w.repo, undefined);
     assert.equal(readFileSync(p.projects, "utf8"), readFileSync(p.projectsExample, "utf8"));
     assert.ok(f.out.some((l) => l.includes("copied the example")));
-    assert.ok(f.out.some((l) => l.includes("lane highlight while dragging needs 0.65.0")));
+    assert.ok(f.out.some((l) => l.includes("0.64.25 is older than the tested 0.65.2")));
   });
 
   it("stops before touching anything on old Node, no cmux, the wrong folder or no node_modules", async () => {
