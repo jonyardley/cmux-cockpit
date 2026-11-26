@@ -140,6 +140,11 @@ pub struct Agent {
     /// show it, never by cmux or the runner.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub ostinato_park: bool,
+    /// A stand-in the core lays for a workspace with no session left, to
+    /// show its CI wait or park by (`Session::agents_of`), so nothing
+    /// reads one by its id. Never sent or read.
+    #[serde(skip)]
+    pub stand_in: bool,
 }
 
 impl Agent {

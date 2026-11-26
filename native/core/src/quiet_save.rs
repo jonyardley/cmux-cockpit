@@ -25,7 +25,7 @@ pub type QuietSaves = Saves<SavedQuiet>;
 /// `Saves` compares exactly, so an unrounded verdict went out again every
 /// RESEND_SECS; a millisecond value reads back exactly. Up, never down,
 /// so the panel's "activity since" test never drops a verdict over it.
-fn whole_ms(since: f64) -> f64 {
+pub(crate) fn whole_ms(since: f64) -> f64 {
     (since * 1000.0).ceil() / 1000.0
 }
 

@@ -286,6 +286,23 @@ export function writeQuietEntries(
 }
 
 /**
+ * The agents each workspace shows (scripts/agents-save.ts, #429), the one
+ * writer of the `agents` map, as writeWaitEntries writes the waits. `set`
+ * must already be clean (validateState's `agents`).
+ */
+export function writeAgentsEntries(
+  path: string,
+  set: NonNullable<State["agents"]>,
+  remove: readonly string[],
+): ApplyResult {
+  return readUpdateWrite(path, (before) => {
+    const agents = { ...before.agents, ...set };
+    for (const id of remove) delete agents[id];
+    return { ok: true, state: validateState({ ...before, agents: sortedByKey(agents) }) };
+  });
+}
+
+/**
  * The native core's Ostinato cycles (scripts/cycles-save.ts, #399), the
  * one writer of the `cycles` map, as writeWaitEntries writes the waits.
  * `set` must already be clean (validateState's `cycles`).

@@ -302,6 +302,7 @@ impl Session {
             since_epoch: Some(ci.since),
             last_activity_at: Some(ci.since),
             ci: Some(ci.trouble),
+            stand_in: true,
             ..Agent::default()
         })
     }

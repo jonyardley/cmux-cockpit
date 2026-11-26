@@ -90,6 +90,7 @@ fn asked(app: &Cockpit, model: &mut Model, event: Event) -> Vec<String> {
             Effect::SaveWaits(r) => format!("save {} waits", r.operation.waits.len()),
             Effect::SaveCycles(r) => format!("save {} cycles", r.operation.cycles.len()),
             Effect::SaveQuiet(r) => format!("save {} quiet", r.operation.quiet.len()),
+            Effect::SaveAgents(r) => format!("save {} agents", r.operation.agents.len()),
             Effect::Notify(r) => format!("notify {} {}", r.operation.workspace, r.operation.since),
             Effect::DismissNotification(r) => format!("dismiss {}", r.operation.id),
         })

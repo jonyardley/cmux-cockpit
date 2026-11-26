@@ -15,6 +15,7 @@
 //! {"SaveRunning": {"running": {"W1": {"agent": "s1", "since": 1791229800, "counts": [{"type": "shell", "n": 1}]}, "W2": null}}}
 //! {"SaveWaits": {"waits": {"W1": [{"kind": "ci_stuck", "since": 1791229800, "key": 1791229200, "detail": "Docs layout", "check": "build", "queued": 1791229200}], "W2": null}}}
 //! {"SaveQuiet": {"quiet": {"W1": {"agent": "s1", "since": 1791229800}, "W2": null}}}
+//! {"SaveAgents": {"agents": {"W1": [{"id": "s1", "status": "needs_input", "since": 1791229800, "why": "ask", "reason": "allow git push?"}], "W2": null}}}
 //! {"SaveCycles": {"cycles": {"W1": [{"item": "app#12", "attempt": 1, "outcome": "draft", "pr": "app#40", "sessions": ["s1"], "cost": 2.5, "started": 1791229200, "ended": 1791229800, "stages": [{"name": "brief", "at": 1791229260, "secs": 60, "sessions": ["s1"]}]}], "W2": null}}}
 //! {"Notify": {"workspace": "W1", "since": 1791229800, "title": "Docs layout", "body": "CI stuck 40m: rerun?"}}
 //! {"DismissNotification": {"id": "74D64488-9CB8-4B8D-900F-1908FF44B8BB"}}
@@ -33,7 +34,7 @@ use cockpit_core::{
     AgentMessage, CmuxCall, NotifyDismiss, NotifyPost, OpenUrl, PrAsk, PrSave, RunningSave,
     StateSet, WaitsSave,
 };
-use cockpit_core::{CyclesSave, QuietSave};
+use cockpit_core::{AgentsSave, CyclesSave, QuietSave};
 use serde::{Deserialize, Serialize};
 
 /// An effect file's contents: every effect of the core but `Render` and
@@ -50,6 +51,7 @@ pub enum EffectFile {
     SaveWaits(WaitsSave),
     SaveCycles(CyclesSave),
     SaveQuiet(QuietSave),
+    SaveAgents(AgentsSave),
     Notify(NotifyPost),
     DismissNotification(NotifyDismiss),
 }
@@ -74,6 +76,7 @@ impl EffectFile {
             EffectFile::SaveWaits(_) => "SaveWaits",
             EffectFile::SaveCycles(_) => "SaveCycles",
             EffectFile::SaveQuiet(_) => "SaveQuiet",
+            EffectFile::SaveAgents(_) => "SaveAgents",
             EffectFile::Notify(_) => "Notify",
             EffectFile::DismissNotification(_) => "DismissNotification",
         }
@@ -110,9 +113,10 @@ mod tests {
             EffectFile::SaveWaits(_) => 9,
             EffectFile::SaveCycles(_) => 10,
             EffectFile::SaveQuiet(_) => 11,
+            EffectFile::SaveAgents(_) => 12,
         }
     }
-    const EFFECTS: usize = 12;
+    const EFFECTS: usize = 13;
 
     /// The core's own effect for a file, as the core's update makes it.
     fn as_core(file: EffectFile) -> Effect {
@@ -127,6 +131,7 @@ mod tests {
             EffectFile::SaveWaits(op) => Command::notify_shell(op).into(),
             EffectFile::SaveCycles(op) => Command::notify_shell(op).into(),
             EffectFile::SaveQuiet(op) => Command::notify_shell(op).into(),
+            EffectFile::SaveAgents(op) => Command::notify_shell(op).into(),
             EffectFile::Notify(op) => Command::notify_shell(op).into(),
             EffectFile::DismissNotification(op) => Command::notify_shell(op).into(),
         };
@@ -205,6 +210,7 @@ mod tests {
                 EffectFile::SaveWaits(w) => Outgoing::SaveWaits(w),
                 EffectFile::SaveCycles(c) => Outgoing::SaveCycles(c),
                 EffectFile::SaveQuiet(q) => Outgoing::SaveQuiet(q),
+                EffectFile::SaveAgents(a) => Outgoing::SaveAgents(a),
                 EffectFile::DismissNotification(d) => Outgoing::DismissNotification(d),
             };
             assert_eq!(serde_json::to_value(&out).unwrap(), want);
@@ -245,6 +251,8 @@ mod tests {
             r#"{"SaveCycles": {"cycles": {"W1": [{"attempt": 1}]}}}"#,
             r#"{"SaveQuiet": {"quiet": {}, "typo": 1}}"#,
             r#"{"SaveQuiet": {"quiet": {"W1": {"agent": "s1"}}}}"#,
+            r#"{"SaveAgents": {"agents": {}, "typo": 1}}"#,
+            r#"{"SaveAgents": {"agents": {"W1": [{"id": "s1", "status": "busy", "since": 1}]}}}"#,
             r#"{"Notify": {"workspace": "W1", "since": 1, "title": "t"}}"#,
             r#"{"Notify": {"workspace": "W1", "since": 1, "title": "t", "body": "b", "desktop": false}}"#,
             r#"{"DismissNotification": {"id": "x", "workspace": "W1"}}"#,

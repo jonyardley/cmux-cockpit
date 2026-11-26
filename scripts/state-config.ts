@@ -75,6 +75,14 @@ export interface State {
    */
   quiet?: Record<string, SavedQuiet>;
   /**
+   * wsId -> the agents its workspace shows, as the native core shows them
+   * (#429): each agent's status, when it began and why it waits on Jon,
+   * with dismissals, the CI carrier, parks and stand-ins laid. Written only
+   * by scripts/agents-save.ts, from the core's SaveAgents effect, never by
+   * a URL. Left out while nothing is saved.
+   */
+  agents?: Record<string, SavedAgent[]>;
+  /**
    * wsId -> the waits on Jon the native Cockpit's card shows (#388): a
    * stopped session, CI stuck or red with nobody on it, a change left
    * merge-ready four hours, parked Ostinato attempts; each only while it
@@ -435,6 +443,26 @@ export interface SavedCycle {
   stages?: SavedStage[];
 }
 
+/** An agent's status as the native core shows it (persist.rs SavedStatus). */
+export const AGENT_STATUSES = ["needs_input", "working", "idle", "ended"] as const;
+export type AgentStatusWord = (typeof AGENT_STATUSES)[number];
+/** Why a shown agent waits on Jon (persist.rs WaitWhy). */
+export const WAIT_WHYS = ["turn", "ask", "stop", "ci", "park"] as const;
+export type WaitWhy = (typeof WAIT_WHYS)[number];
+
+/** One agent a workspace shows, as the native core shows it (native/core/src/agents_save.rs). */
+export interface SavedAgent {
+  /** The agent's id, or "stand-in" for a CI or park stand-in. */
+  id: string;
+  status: AgentStatusWord;
+  /** Epoch seconds the status began; 0 when cmux sent none. */
+  since: number;
+  /** Only with needs_input. */
+  why?: WaitWhy;
+  /** The ask's words, at most MAX_LABEL characters, only with why "ask", which may have none. */
+  reason?: string;
+}
+
 /** The kinds of wait the native core saves (persist.rs WaitKind). */
 export const WAIT_KINDS = ["stopped", "ci_stuck", "ci_failing", "merge_ready", "park"] as const;
 export type WaitKind = (typeof WAIT_KINDS)[number];
@@ -572,6 +600,8 @@ export const MAX_COUNTS = TASK_TYPES.length;
 
 /** The most waits saved for one workspace (persist.rs MAX_WAITS). */
 export const MAX_WAITS = 20;
+/** The most agents saved for one workspace (persist.rs MAX_AGENTS). */
+export const MAX_AGENTS = 20;
 
 /** The most cycles saved for one workspace (persist.rs MAX_CYCLES). */
 export const MAX_CYCLES = 10;
@@ -1147,6 +1177,33 @@ function savedWaits(v: unknown): SavedWait[] | null {
   return waits.every((w) => w !== null) ? waits.filter((w) => w !== null) : null;
 }
 
+const isAgentStatus = (v: unknown): v is AgentStatusWord => AGENT_STATUSES.some((s) => s === v);
+const isWaitWhy = (v: unknown): v is WaitWhy => WAIT_WHYS.some((w) => w === v);
+
+/** A shown agent as persist.rs's SavedAgent::fits holds it: a why with needs_input and only there, a reason only with an ask. */
+function savedAgent(v: unknown): SavedAgent | null {
+  if (!isRecord(v) || !isIdText(v.id) || !isAgentStatus(v.status) || !isEpoch(v.since)) return null;
+  const why = optional(v.why, isWaitWhy);
+  const reason = optional(v.reason, isLabel);
+  if (!why.ok || !reason.ok) return null;
+  if (why.value !== undefined && v.status !== "needs_input") return null;
+  if (reason.value !== undefined && why.value !== "ask") return null;
+  return {
+    id: v.id,
+    status: v.status,
+    since: v.since,
+    ...(why.value !== undefined ? { why: why.value } : {}),
+    ...(reason.value !== undefined ? { reason: reason.value } : {}),
+  };
+}
+
+/** A workspace's shown agents as persist.rs's agents_map reads them: dropped whole if any does not fit. */
+function savedAgents(v: unknown): SavedAgent[] | null {
+  if (!Array.isArray(v) || v.length < 1 || v.length > MAX_AGENTS) return null;
+  const agents = v.map(savedAgent);
+  return agents.every((a) => a !== null) ? agents.filter((a) => a !== null) : null;
+}
+
 /** A cycle's or stage's sessions as serde reads them: absent, or up to MAX_CYCLE_SESSIONS ids; null refuses. */
 function cycleSessions(v: unknown): { ok: true; value: string[] } | { ok: false } {
   if (v === undefined) return { ok: true, value: [] };
@@ -1284,6 +1341,7 @@ export function validateState(raw: unknown): State {
   const background = cleanMap(v.background, savedTasks);
   const running = cleanMap(v.running, savedRunning);
   const quiet = cleanMap(v.quiet, savedQuiet);
+  const agents = cleanMap(v.agents, savedAgents);
   const waits = cleanMap(v.waits, savedWaits);
   const cycles = cleanMap(v.cycles, savedCycles);
   const laneNames = cleanMap(v.laneNames, laneName);
@@ -1305,6 +1363,7 @@ export function validateState(raw: unknown): State {
     ...(Object.keys(background).length ? { background } : {}),
     ...(Object.keys(running).length ? { running } : {}),
     ...(Object.keys(quiet).length ? { quiet } : {}),
+    ...(Object.keys(agents).length ? { agents } : {}),
     ...(Object.keys(waits).length ? { waits } : {}),
     ...(Object.keys(cycles).length ? { cycles } : {}),
     ...(Object.keys(laneNames).length ? { laneNames } : {}),
@@ -1316,7 +1375,7 @@ export function validateState(raw: unknown): State {
 
 export type SetResult = { ok: true; state: State } | { ok: false; error: string };
 
-// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `quiet`, `waits`, `cycles`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
+// The maps applySet takes. `prs`, `ownPrs`, `subagents`, `background`, `running`, `quiet`, `agents`, `waits`, `cycles`, `names`, `published`, `prOrigins` and `poll` are left out on purpose (see State).
 // `ui` is not keyed by id: its keys are UI_KEYS and `tab.<wsId>`. `asking` and `moves` are
 // set only by their hooks: the URL handler refuses them (urlMaySet).
 type MapName =

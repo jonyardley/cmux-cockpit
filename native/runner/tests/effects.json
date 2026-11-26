@@ -92,5 +92,16 @@
       }
     }
   },
-  { "SaveQuiet": { "quiet": { "W1": { "agent": "s1", "since": 1791229800.0 }, "W2": null } } }
+  { "SaveQuiet": { "quiet": { "W1": { "agent": "s1", "since": 1791229800.0 }, "W2": null } } },
+  {
+    "SaveAgents": {
+      "agents": {
+        "W1": [
+          { "id": "s1", "status": "needs_input", "since": 1791229800.0, "why": "ask", "reason": "allow git push?" },
+          { "id": "s2", "status": "working", "since": 1791229200.0 }
+        ],
+        "W2": null
+      }
+    }
+  }
 ]
