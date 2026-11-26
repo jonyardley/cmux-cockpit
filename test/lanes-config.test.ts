@@ -21,7 +21,7 @@ describe("lanes.json names", () => {
     assert.equal(names([]), BUILT_IN_LANE_NAMES);
   });
 
-  it("keeps the file's order, trims each name and ignores every other field", () => {
+  it("passes a bad colour, density or unknown field, a known limit: only the Cockpit refuses them", () => {
     assert.deepEqual(
       names([
         { name: " Ideas ", color: "#c63", density: "tall", colour: "laneMain" },
@@ -29,6 +29,13 @@ describe("lanes.json names", () => {
       ]),
       ["Ideas", "Main activity"],
     );
+  });
+
+  it("matches the native core's four built-in names, so a rename on one side alone fails", () => {
+    const rust = readFileSync("native/core/src/lanes.rs", "utf8");
+    const body = rust.slice(rust.indexOf("fn built_in()"), rust.indexOf("pub fn built_in_name"));
+    const rustNames = [...body.matchAll(/built_in_lane\("[^"]*", "([^"]*)"/g)].map((x) => x[1]);
+    assert.deepEqual(rustNames, BUILT_IN_LANE_NAMES);
   });
 
   it("reads the committed sample", () => {

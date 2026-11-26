@@ -1,7 +1,4 @@
-// config/lanes.json's lane names, for the build to bake in as __LANES__.
-// Only the names are checked here; the native core's Lanes::from_config
-// (native/core/src/lanes.rs) checks the other fields, so a file it refuses
-// for a bad colour or density can still pass the build.
+// config/lanes.json's lane names for __LANES__; native/core/src/lanes.rs checks the other fields
 
 import { isRecord } from "./state-config.ts";
 

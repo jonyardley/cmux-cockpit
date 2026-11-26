@@ -109,13 +109,7 @@ const LANE_KEYS: ReadonlySet<string> = new Set(
   (typeof __LANES__ === "undefined" ? BUILT_IN_LANE_NAMES : __LANES__).map(laneKey),
 );
 
-// A lane's placeholder is the empty workspace cmux makes to hold its group,
-// titled after it. The renderer's data has no flag for it (issue #7) and the
-// panel is sent no group list, so the title alone decides, agents running or
-// not. The Cockpit's own rule is native/core/src/anchors.rs. Wrong cases: a
-// real chat titled exactly after a lane drops out of the PR card and an own
-// PR opened from it names no chat, and a placeholder Jon renames shows as a
-// chat.
+// No group flag in renderer data (issue #7), so the title decides; see native/core/src/anchors.rs
 export function isLanePlaceholder(w: Workspace): boolean {
   return LANE_KEYS.has(laneKey(w.title));
 }
