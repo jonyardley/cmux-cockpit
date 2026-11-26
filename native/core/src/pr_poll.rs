@@ -1268,6 +1268,22 @@ mod tests {
                 PrHealth::Quiet,
                 PrTone::Merged,
             ),
+            (
+                SavedPr {
+                    mergeable: None,
+                    ..pr(&["pass"])
+                },
+                PrHealth::Quiet,
+                PrTone::Open,
+            ),
+            (
+                SavedPr {
+                    status: PrStatus::Closed,
+                    ..pr(&["pending"])
+                },
+                PrHealth::Quiet,
+                PrTone::Closed,
+            ),
             (pr(&[]), PrHealth::Quiet, PrTone::Open),
         ];
         for (answer, health, tone) in cases {

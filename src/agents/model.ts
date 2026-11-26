@@ -227,7 +227,7 @@ export const currentPrDim = computed((): boolean => !!currentPr() && fromPoller(
 /** The workspace's PR chip's tone, for its colour: the one the core saved,
  * else its state; a stale ready goes grey. */
 export const currentPrTone = computed((): PrTone => {
-  const pr = prOf(cur().ws);
+  const pr = currentPr() ? prOf(cur().ws) : undefined;
   return shownTone(pr?.tone ?? prTone(pr?.status, pr?.draft), currentPrDim());
 });
 
