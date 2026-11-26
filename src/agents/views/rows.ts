@@ -3,10 +3,10 @@
 
 import type { Last } from "../../shared/list.ts";
 import { META_FONT, meta, openIfUrl, when } from "../../shared/ui.ts";
-import { type MadeEntry, madeAge, madeTitleColor } from "../made.ts";
-import { isHerePr, type PrEntry, prNumberText } from "../pr-list.ts";
+import { type MadeEntry, madeAge, madeMenu, madeTitleColor } from "../made.ts";
+import { isHerePr, type PrEntry, prMenu, prNumberText } from "../pr-list.ts";
 import { HERE_FACE, HERE_HOVER, T } from "../theme.ts";
-import { glyph, prChip, ruled, withChatMenu } from "./parts.ts";
+import { glyph, prChip, ruled, withMenu } from "./parts.ts";
 
 /** The quiet row a capped list ends in: "+12 more", or "Show less" once
  * open. Tapping it opens or folds the card. */
@@ -16,6 +16,7 @@ export function footRow(text: () => string, onTap: () => void): View {
     .paddingVertical(8)
     .hoverBackground(T.hover)
     .frame({ maxWidth: "infinity", alignment: "leading" })
+    .cursor("pointer")
     .onTap(onTap);
   return ruled(row, () => true);
 }
@@ -23,8 +24,8 @@ export function footRow(text: () => string, onTap: () => void): View {
 /** A PR row: its project's tile, the title and its state chip, then a faint
  * line with the number and the session it belongs to. This chat's own row is
  * shaded, its title and "This chat" bold in ink (issue #183). A tap anywhere
- * on it, the chip included, opens the PR on GitHub; a right-click offers Open
- * chat while it has a session. */
+ * on it, the chip included, opens the PR on GitHub; a right-click offers
+ * what prMenu lists. */
 export function prRow(e: () => Last<PrEntry>): View {
   const here = () => isHerePr(e());
   // The tile and chip centre on the title's line, whether or not the session shows under it.
@@ -78,9 +79,10 @@ export function prRow(e: () => Last<PrEntry>): View {
       .background(() => (here() ? HERE_FACE : "clear"))
       .hoverBackground(() => (here() ? HERE_HOVER : T.hover))
       .frame({ maxWidth: "infinity", alignment: "leading" })
+      .cursor("pointer")
       .onTap(() => openIfUrl(e().pr.url));
   return ruled(
-    withChatMenu(row, () => e().session?.chat),
+    withMenu(row, () => prMenu(e())),
     () => e().last,
   );
 }
@@ -88,7 +90,7 @@ export function prRow(e: () => Last<PrEntry>): View {
 /** One page or doc an agent published: its project's tile (grey when the
  * workspace that made it is unknown), title and age; shaded with a bold title
  * when this chat made it, as its PR row is. Tap opens it on claude.ai; a
- * right-click offers Open chat while that workspace is open. */
+ * right-click offers Go to its chat while that workspace is open. */
 export function madeRow(e: () => Last<MadeEntry>): View {
   const row = () =>
     HStack({ spacing: 10 }, [
@@ -108,9 +110,10 @@ export function madeRow(e: () => Last<MadeEntry>): View {
       .background(() => (e().here ? HERE_FACE : "clear"))
       .hoverBackground(() => (e().here ? HERE_HOVER : T.hover))
       .frame({ maxWidth: "infinity", alignment: "leading" })
+      .cursor("pointer")
       .onTap(() => openIfUrl(e().url));
   return ruled(
-    withChatMenu(row, () => e().chat),
+    withMenu(row, () => madeMenu(e())),
     () => e().last,
   );
 }

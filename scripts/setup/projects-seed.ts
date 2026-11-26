@@ -6,7 +6,7 @@
 import { PROJECT_COLORS, PROJECT_ICONS } from "../../src/shared/project-sets.ts";
 import type { Project } from "../projects-config.ts";
 
-/** Every workspace's current_directory in `cmux --json list-workspaces` output, or [] for anything else. */
+/** Every workspace's current_directory in `cmux --json workspace list` output, or [] for anything else. */
 export function workspaceDirs(parsed: unknown): string[] {
   if (typeof parsed !== "object" || parsed === null || !("workspaces" in parsed)) return [];
   const list = parsed.workspaces;

@@ -184,7 +184,9 @@ export function linkBox(children: View[], color: Reactive<string>, url: () => st
     face: () => (live() ? P.linkHover : "clear"),
     edge: () => (live() ? P.linkEdge : "clear"),
   };
-  const box = ring(body, "clear", "clear", 1, 6, { hug: true, hover }).onTap(() => openIfUrl(url()));
+  const box = ring(body, "clear", "clear", 1, 6, { hug: true, hover })
+    .cursor("pointer")
+    .onTap(() => openIfUrl(url()));
   // A zero-width lead: the negative spacing after it puts the box LINK_INSET left of the column.
   return HStack({ spacing: -LINK_INSET }, [Rectangle().fill("clear").frame({ width: 0, height: 0 }), box]);
 }
@@ -238,7 +240,9 @@ export function tapChip(
     chipText(label, () => colors().fg, mono),
     colors,
     chipHover(colors, () => !!url()),
-  ).onTap(() => openIfUrl(url()));
+  )
+    .cursor("pointer")
+    .onTap(() => openIfUrl(url()));
 }
 
 /** A count pill's face and words. */

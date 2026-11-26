@@ -28,9 +28,10 @@ import {
   waitRows,
 } from "../details.ts";
 import { type MadeEntry, madeAge, madeOwn } from "../made.ts";
+import { jump } from "../menus.ts";
 import { cur, currentPr, currentPrDim, currentPrTone, dotFor, haloFor, hollowDot, statusLine } from "../model.ts";
 import { CHECK_DOT, STALE_OPACITY, T } from "../theme.ts";
-import { agentDot, jump, panel, ruled, sectionHeader } from "./parts.ts";
+import { agentDot, panel, ruled, sectionHeader } from "./parts.ts";
 import { faintNote, listSection } from "./sections.ts";
 
 // Small words in proportional type, one line: a row's faint line, the
@@ -83,7 +84,7 @@ function detailRow(r: DetailRow, last: () => boolean): View {
     .paddingVertical(8);
   const tap = r.tap;
   const row = tap
-    ? body.hoverBackground(T.hover).frame({ maxWidth: "infinity", alignment: "leading" }).onTap(tap)
+    ? body.hoverBackground(T.hover).frame({ maxWidth: "infinity", alignment: "leading" }).cursor("pointer").onTap(tap)
     : body.frame({ maxWidth: "infinity", alignment: "leading" });
   return ruled(row, last);
 }
