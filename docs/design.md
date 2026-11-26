@@ -751,8 +751,7 @@ working: blue dot with halo, `blueText`, and sorts with the working cards.
 Running never stands over a turn that waits on you. A turn that ended on
 a line asking something of you ("Your move:", decisions laid out, or a
 reply with no label, which still waits on you since #322) is Your turn
-from the moment it ended, whether or not its work runs on and whether or
-not Claude Code's idle nudge has come: clay, the waiting look, the size
+from the moment it ended, whether or not its work runs on: clay, the waiting look, the size
 chip, the waiting count on All and its age from the turn end, not from
 the earliest work. Only a "Nothing for you" turn says Running while its
 work runs. The rule is `waiting_turn` in `native/core/src/needs.rs`,

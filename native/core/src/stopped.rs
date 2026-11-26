@@ -76,7 +76,7 @@ pub fn gone_mid_turn(hook: &Hooked, program: Option<&Report>, busy: Option<bool>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hooks::{Hooked, moves_activity, status_from_hook};
+    use crate::hooks::{Hooked, status_from_hook};
 
     /// A session after `hooks` in order, one a second from 100s.
     fn after(hooks: &[&str]) -> Option<Hooked> {
@@ -86,13 +86,7 @@ mod tests {
                 continue;
             };
             let at = 100.0 + i as f64;
-            h = Some(Hooked::after(
-                h.as_ref(),
-                status,
-                at,
-                moves_activity(name),
-                "w",
-            ));
+            h = Some(Hooked::after(h.as_ref(), status, at, true, "w"));
         }
         h
     }
