@@ -109,65 +109,110 @@ export const checkDot = (c: CheckRow): string => CHECK_DOT[c.state];
 /** Where a Fix tap sends its message: the workspace's most active agent. */
 export interface FixTarget {
   wsId: string;
+  /** The agent's own terminal when known, so the message reaches the agent
+   * chosen here rather than whichever one cmux resolves the workspace to. */
+  target: string;
   pr: number;
-  /** The agent's current status spell, so one tap hides Fix until it ends. */
-  spell: string;
 }
 
 // The agent as cmux sends it, not as agentsOf shows it: a dismissed ask reads
-// idle there, so its spell would not change when the ask is answered.
+// idle there, yet it is still asking.
 function rawAgent(c: Current): Agent | undefined {
   const id = c.a?.id;
   return id === undefined ? undefined : (c.ws.agents ?? []).find((x) => x?.id === id);
 }
 
-// sinceEpoch alone: lastActivityAt moves on every hook event, a paste's
-// included, so it would end the hold before the agent starts working.
-const spellOf = (a: Agent): string => `${a.id}:${a.status}:${a.sinceEpoch ?? ""}`;
+// Only Claude sessions are known to take cmux agent messages, and only while
+// live: no status at all is an agent cmux has told us nothing about.
+const LIVE: ReadonlySet<string> = new Set(["idle", "working", "needs_input"]);
+const canMessage = (a: Agent): boolean => a.kind === "claude" && a.status !== undefined && LIVE.has(a.status);
 
 // cmux() reports nothing back, so a hold also lapses after this long: a
-// dropped message, or a spell with no start time, brings Fix back.
-const FIX_HOLD = 90;
+// dropped message, or an agent that never gets to it, brings Fix back.
+const FIX_HOLD = 15 * 60;
 
-// wsId -> the spell a Fix was sent in and when. Not reactive: reads call
-// fixTick(), writes set it.
-const fixSent = new Map<string, { spell: string; at: number }>();
+// One run of a check: a new run changes its queued or started time, a result
+// its state. A Fix holds until this moves, whatever the agent does meanwhile.
+const runOf = (c: { state: CheckState; queued?: number; started?: number }): string =>
+  `${c.state}:${c.queued ?? ""}:${c.started ?? ""}`;
+
+// "ws#pr#row key" -> the run a Fix was sent for and when. Not reactive:
+// reads call fixTick(), writes set it.
+const fixSent = new Map<string, { run: string; at: number }>();
 const [fixTick, setFixTick] = signal(0);
 
-function held(wsId: string, spell: string): boolean {
-  const sent = fixSent.get(wsId);
-  return !!sent && sent.spell === spell && nowEpoch() - sent.at < FIX_HOLD;
+const holdKey = (t: FixTarget, row: CheckRow): string => `${t.wsId}#${t.pr}#${row.key}`;
+
+// The saved run behind a row, found by the row's key.
+function runFor(row: CheckRow): string {
+  const saved = keyedChecks(checksOf(cur().ws)).find((k) => k.key === row.key);
+  return saved ? runOf(saved.check) : runOf(row);
+}
+
+// A hold seen past its run or its time is dropped as it is read, so a check
+// that goes from failed to running and back to failed shows Fix again even
+// when the poller kept the same run times.
+function held(t: FixTarget, row: CheckRow): boolean {
+  fixTick();
+  const key = holdKey(t, row);
+  const sent = fixSent.get(key);
+  if (!sent) return false;
+  if (sent.run === runFor(row) && nowEpoch() - sent.at < FIX_HOLD) return true;
+  fixSent.delete(key);
+  return false;
 }
 
 /**
  * The selected workspace's Fix target, or null while Fix must not show:
- * the PR not open or its checks stale, no agent or an ended one, or a Fix
- * sent in this spell less than FIX_HOLD ago. A working or asking agent still
- * shows it: the message waits for its next step or the open prompt to close.
+ * the PR not open or its checks stale, or no live Claude agent. A working or
+ * asking agent still shows it: the message waits for its next step or the
+ * open prompt to close.
  */
 export const fixTarget = computed((): FixTarget | null => {
-  fixTick();
   const c = current();
   const pr = currentPr();
   const a = c ? rawAgent(c) : undefined;
-  if (!c || pr?.status !== "open" || currentPrDim() || !a || a.status === "ended") return null;
-  const spell = spellOf(a);
-  return held(c.ws.id, spell) ? null : { wsId: c.ws.id, pr: pr.number, spell };
+  if (!c || pr?.status !== "open" || currentPrDim() || !a || !canMessage(a)) return null;
+  return { wsId: c.ws.id, target: a.surfaceId || c.ws.id, pr: pr.number };
 });
 
-/** Whether a check row shows Fix: failed, with an agent that can take it. */
-export const canFix = (c: CheckRow): boolean => c.state === "fail" && !!fixTarget();
+/** Whether a check row shows Fix: failed, with an agent that can take it,
+ * and no Fix yet sent for this run of the check. */
+export function canFix(c: CheckRow): boolean {
+  const t = fixTarget();
+  // held() before the state test, so a running check's read drops its hold.
+  return !!t && !held(t, c) && c.state === "fail";
+}
+
+const MAX_CHECK_LABEL = 100;
+
+/**
+ * A check's name made safe to quote in a prompt. A PR branch can set its
+ * workflow's check names, so only letters, digits, space and `._/:()-` stay,
+ * whitespace closes up, and it is cut to MAX_CHECK_LABEL characters.
+ */
+export function checkLabel(name: string): string {
+  const kept = name
+    .replace(/[^A-Za-z0-9 ._/:()-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return kept.slice(0, MAX_CHECK_LABEL).trim() || "unnamed";
+}
 
 /** What Fix sends the agent for a failed check on PR `pr`. */
 export const fixPrompt = (check: string, pr: number): string =>
-  `The ${check} check failed on PR #${pr}. Find its run with gh pr checks ${pr}, ` +
+  `The check named "${checkLabel(check)}" failed on PR #${pr}. Find its run with gh pr checks ${pr}, ` +
   `read the log with gh run view <run-id> --log-failed, fix the cause, push, and tell me what it was.`;
 
-/** Sends the Fix prompt for `check` to the agent as a cmux agent message. */
-export function sendFix(check: string): void {
+// The native Cockpit's sender name (native/runner/src/outbox.rs MESSAGE_FROM).
+const MESSAGE_FROM = "Cockpit";
+
+/** Sends the Fix prompt for `row` to the agent as a cmux agent message, and
+ * hides Fix for that check at once until its run changes. */
+export function sendFix(row: CheckRow): void {
   const t = fixTarget();
-  if (!t) return;
-  cmux("agent.message.send", { target: t.wsId, body: fixPrompt(check, t.pr), from: "cockpit" });
-  fixSent.set(t.wsId, { spell: t.spell, at: nowEpoch() });
+  if (!t || !canFix(row)) return;
+  cmux("agent.message.send", { target: t.target, body: fixPrompt(row.name, t.pr), from: MESSAGE_FROM });
+  fixSent.set(holdKey(t, row), { run: runFor(row), at: nowEpoch() });
   setFixTick(fixTick() + 1);
 }

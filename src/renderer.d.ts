@@ -119,8 +119,8 @@ declare function computed<T>(fn: () => T): () => T;
  * does not exist yet (#87).
  */
 declare function sidebar(root: () => View, options?: { surface?: "glass" }): void;
-/** Sends a message to the agent in `target` (a workspace resolves to its
- * agent's surface). It waits while a prompt is open and is never typed, so it
+/** Sends a message to the agent in `target`: a terminal surface, or a
+ * workspace, which cmux resolves to one of its agents' surfaces. It waits while a prompt is open and is never typed, so it
  * cannot answer one. `body` is at most 32 KiB, `from` one line of 64 chars. */
 declare function cmux(method: "agent.message.send", params: { target: string; body: string; from?: string }): void;
 /** Closes a whole workspace, its terminals and agents with it, as
